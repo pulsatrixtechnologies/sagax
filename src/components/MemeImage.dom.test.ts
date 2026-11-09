@@ -50,4 +50,13 @@ describe("MemeImage", () => {
     })));
     expect(container.querySelector("[data-meme-motion]")?.getAttribute("data-meme-motion")).toBe("reduced");
   });
+
+  it("shows the GIF whole: no cover crop, never squashed by a height cap", () => {
+    act(() => root.render(createElement(MemeImage, { src: "https://example.test/m.gif", attribution: "Via GIPHY" })));
+    const img = container.querySelector("[data-meme-img]") as HTMLImageElement;
+    expect(img.className).toContain("object-contain");
+    expect(img.className).not.toContain("object-cover");
+    expect(img.className).toContain("h-auto");
+    expect(container.querySelector("button")!.className).toContain("shrink-0");
+  });
 });

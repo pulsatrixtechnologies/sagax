@@ -78,13 +78,16 @@ export function MemeImage({
       <button
         type="button"
         onClick={onClick}
-        className="block max-w-full overflow-hidden rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60"
+        // shrink-0: a flex column must never squash the button below the image
+        // height (overflow-hidden lets it), which cropped a GIF to a strip
+        className="block max-w-[min(20rem,100%)] shrink-0 overflow-hidden rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60"
         aria-label={alt || t("memes.imageAria")}
       >
         <img
           src={shown}
           alt={alt || ""}
-          className="max-h-72 max-w-full object-contain"
+          data-meme-img=""
+          className="block h-auto max-h-72 w-auto max-w-full object-contain"
           draggable={false}
         />
       </button>

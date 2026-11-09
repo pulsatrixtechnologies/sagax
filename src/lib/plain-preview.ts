@@ -18,7 +18,10 @@ export function plainPreviewText(raw: string): string {
   // a reply stored before the server dropped a leaked chat-template token
   // (`<|eos|>`) never reads as that token
   const text = stripChatSpecialTokens(raw);
-  const out = markdownToPlainText(text, { isRichFence });
+  const out = markdownToPlainText(text, {
+    isRichFence,
+    attachmentLabels: { image: t("preview.attachment.image"), gif: t("preview.attachment.gif"), file: t("preview.attachment.file") },
+  });
   // a reply that is nothing but a rich view (a ```widget, chart, table...)
   // has no sentence to preview: name the view rather than show its source
   return out || (hasRichFence(text) ? t("sidebar.preview.richBlock") : out);

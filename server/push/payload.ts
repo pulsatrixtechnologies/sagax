@@ -12,6 +12,7 @@ import { CHOICE_BUTTONS_MAX, CHOICE_LABEL_MAX } from "../../shared/notification-
 
 import { botAvatarCropSchema, botAvatarUrlSchema, type BotAvatarCrop } from "../../shared/bot-avatar.ts";
 import { plainPreviewLine } from "../../shared/plain-text.ts";
+import { serverAttachmentLabels } from "../approvals/approval-words.ts";
 import { botMascotLook, type MascotLook } from "../../shared/mascot-look.ts";
 import { botMascotSkin, type MascotSkinId } from "../../shared/mascot-skins.ts";
 
@@ -270,7 +271,7 @@ export function bannerBody(message: Pick<PushMessage, "kind" | "ask" | "body"> &
   // #2909: an ask says it all, readable and multi-line: the question, the
   // detail (tables as text), what each answer does
   if (message.kind === "approval" && message.context?.trim() && contextMax > 0) return clipLines(message.context, contextMax);
-  const detail = plainPreviewLine(message.body ?? "", BODY_MAX);
+  const detail = plainPreviewLine(message.body ?? "", BODY_MAX, { dropCode: true, attachmentLabels: serverAttachmentLabels() });
   const ask = message.kind === "approval" && message.ask ? plainPreviewLine(message.ask, ASK_MAX) : "";
   if (!ask || ask === detail) return detail;
   if (!detail) return ask;

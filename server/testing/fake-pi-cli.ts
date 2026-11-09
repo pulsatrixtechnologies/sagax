@@ -8,6 +8,8 @@
 //   FAKE_PI_MODE   happy (default) | tooluse | mcpgateway | permission | interleave | question-select | question-input
 //                  | turn-error | no-models | exit-early | compaction | compaction-recovery
 //                  | compaction-recovery-upstream | prompt-reject | omp-chunk | stderr-flood
+//                  | extension-load-error (pi cannot load an extension and exits,
+//                  unless run with --no-extensions) | extension-load-error-always
 //   FAKE_PI_MODELS comma-separated provider/model pairs (default "ollama-cloud/glm-5.2,openai/gpt-4o")
 //   FAKE_PI_ERROR  the turn-error mode's errorMessage
 //   FAKE_PI_SET_MODEL_REFUSE refuse every set_model
@@ -74,6 +76,12 @@ if (argv[0] === "update" && argv.includes("--models")) {
 // runtime.error + failed turn, never a hang.
 if (mode === "exit-early") {
   process.stderr.write("fake-pi: simulated startup failure\n");
+  process.exit(1);
+}
+// #3063: pi parses every extension at startup and exits on the first that
+// fails, as it did on an AppleDouble `._voice-guard.ts`.
+if (mode === "extension-load-error-always" || (mode === "extension-load-error" && !argv.includes("--no-extensions"))) {
+  process.stderr.write("Failed to load extension ParseError Unexpected character '\\u0000' /data/principals/p/piAgent-key/extensions/._voice-guard.ts\n");
   process.exit(1);
 }
 if (mode === "stderr-flood") {

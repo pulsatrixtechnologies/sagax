@@ -15,7 +15,11 @@ import { attachPiRpc } from "./pi-send-rpc.ts";
 import { attachPiStdio } from "./pi-send-stdio.ts";
 import type { PiAskDecision, PiPrepared, PiSendCtx, PiSendDeps } from "./pi-turn-ctx.ts";
 
-export async function preparePiTurn(deps: PiSendDeps, turn: SendTurnInput): Promise<PiSendCtx> {
+/** #3063: a retry after pi failed to load an extension keeps the turn's id
+ * and runs pi with `--no-extensions` and none of the kit's `-e`. */
+export type PiPrepareOptions = { turnId?: string; withoutExtensions?: boolean };
+
+export async function preparePiTurn(deps: PiSendDeps, turn: SendTurnInput, options: PiPrepareOptions = {}): Promise<PiSendCtx> {
   const { hooks } = deps;
   const { threadId } = turn;
   const selection = parseToolScope(turn.toolScope);
@@ -32,7 +36,7 @@ export async function preparePiTurn(deps: PiSendDeps, turn: SendTurnInput): Prom
   if (controlsHost && fullAuto) {
     throw new Error("local computer control requires the interactive approval broker");
   }
-  const turnId = newId();
+  const turnId = options.turnId ?? newId();
   const pending = new Map<string, (decision: PiAskDecision) => void>();
   const askTimers = new Set<ReturnType<typeof setTimeout>>();
   // pi's RPC surface accepts image content directly. Read before spawning
@@ -55,7 +59,7 @@ export async function preparePiTurn(deps: PiSendDeps, turn: SendTurnInput): Prom
   // #2024: the operator's pi kit (SAGAX_PI_KIT_DIR), copied into this
   // turn's pi home and loaded with explicit `-e`, which pi keeps under
   // --no-extensions; host tools stay withheld by --exclude-tools.
-  const kitArgs = hooks.piKitArgs(homeEnv, turn.piKitIdentity);
+  const kitArgs = options.withoutExtensions ? [] : hooks.piKitArgs(homeEnv, turn.piKitIdentity);
 
   // integrations → stdio MCP servers for the pi-mcp-extension. The config
   // carries credentials (boat token, comms token), so it goes
@@ -74,6 +78,7 @@ export async function preparePiTurn(deps: PiSendDeps, turn: SendTurnInput): Prom
   const standbyArgs: string[] = [
     ...(turn.compactPrompt ? piArgs.filter((arg) => arg !== "--no-session") : piArgs),
     ...piHostToolArgs(turn.withholdHostTools === true),
+    ...(options.withoutExtensions && turn.withholdHostTools !== true ? ["--no-extensions"] : []),
     ...(mounts ? ["-e", SPAWNED_PROXIES.piMcpExtension] : []),
     ...kitArgs,
   ];
@@ -197,6 +202,7 @@ export async function preparePiTurn(deps: PiSendDeps, turn: SendTurnInput): Prom
     sessionFile: resumeCursor,
     sessionReady: false,
     stderr: "",
+    retired: false,
   };
   const ctx = attachPiRpc(prepared);
   attachPiEvents(ctx);

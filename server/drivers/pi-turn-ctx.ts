@@ -176,6 +176,12 @@ export type PiPrepared = {
   sessionFile: string | null;
   sessionReady: boolean;
   stderr: string;
+  /** #3063: set once the child failed to load an extension and the turn
+   * moved to a new child without extensions; this attempt then stays silent. */
+  retired: boolean;
+  /** #3063: called (first attempt only) when pi exits because an extension
+   * failed to load, with pi's line; the turn retries without extensions. */
+  onExtensionLoadFailure?: (line: string) => void;
 };
 
 export type PiRpcSlots = {
@@ -186,6 +192,8 @@ export type PiRpcSlots = {
   settle: (ok: boolean, stopReason?: string | null, usage?: PiUsage) => void;
   finishRun: () => void;
   stop: () => void;
+  /** #3063: end this attempt without a turn.completed (a retry follows). */
+  retire: () => void;
 };
 
 export type PiSendCtx = PiPrepared & PiRpcSlots;

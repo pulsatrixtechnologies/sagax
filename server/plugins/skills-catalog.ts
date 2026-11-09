@@ -7,6 +7,7 @@ import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, st
 import { basename, join, relative, sep } from "node:path";
 
 import { isSkillName, parseSkillMd, SKILL_FILE_MAX_BYTES } from "../../shared/skill-md.ts";
+import { withoutMacMetadata } from "../mac-metadata.ts";
 
 /** Folders read when the catalog names none. */
 export const DEFAULT_SKILL_DIRS = ["skills", "optional-skills"] as const;
@@ -90,8 +91,8 @@ export function synthesizeSkillsCatalog(root: string, info: { name: string; desc
   const plugins = skills.map((skill) => {
     const target = join(root, SYNTH_ROOT, skill.name, "skills", skill.name);
     mkdirSync(target, { recursive: true });
-    // no symlink leaves the clone
-    cpSync(join(root, skill.path), target, { recursive: true, filter: (src) => !lstatSync(src).isSymbolicLink() });
+    // no symlink leaves the clone, no macOS metadata reaches an engine (#3063)
+    cpSync(join(root, skill.path), target, { recursive: true, filter: (src) => withoutMacMetadata(src) && !lstatSync(src).isSymbolicLink() });
     return {
       name: skill.name,
       ...(skill.description ? { description: skill.description } : {}),

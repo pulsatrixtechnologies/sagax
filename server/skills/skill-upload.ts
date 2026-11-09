@@ -23,6 +23,7 @@ import { join } from "node:path";
 import { isSkillName, parseSkillMd, scanSkillText, SKILL_FILE_MAX_BYTES } from "../../shared/skill-md.ts";
 import { MAX_SKILLS_PER_IMPORT } from "./skill-fetch.ts";
 import { ZipError, ZipReader } from "../zip.ts";
+import { isMacMetadataPath } from "../mac-metadata.ts";
 
 /** At most this many files in one upload. */
 export const SKILL_UPLOAD_MAX_FILES = 10;
@@ -127,10 +128,10 @@ function candidate(text: string, path: string, skippedFiles: string[]): SkillUpl
   };
 }
 
-/** Archive noise that is no part of a skill: Finder's resource forks and
- * folder settings. */
+/** Archive noise that is no part of a skill: Finder's resource forks
+ * (`__MACOSX/`, AppleDouble `._*`, #3063) and folder settings. */
 function noise(entry: string): boolean {
-  return entry.startsWith("__MACOSX/") || entry.split("/").pop() === ".DS_Store";
+  return entry.startsWith("__MACOSX/") || isMacMetadataPath(entry);
 }
 
 function readZip(file: SkillUploadFile, item: SkillUploadItem): void {

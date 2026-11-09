@@ -15,6 +15,7 @@ import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, st
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { isSkillName } from "../../shared/skill-md.ts";
+import { withoutMacMetadata } from "../mac-metadata.ts";
 
 /** Where the converted plugins live inside the clone. */
 export const CURSOR_SYNTH_ROOT = "sagax-cursor";
@@ -73,6 +74,8 @@ function str(value: unknown, max: number): string | undefined {
 }
 
 const noLinks = (src: string) => {
+  // #3063: macOS metadata (`._*`, `.DS_Store`) never reaches an engine
+  if (!withoutMacMetadata(src)) return false;
   try {
     return !lstatSync(src).isSymbolicLink();
   } catch {

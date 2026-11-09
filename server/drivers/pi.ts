@@ -62,7 +62,7 @@ import {
   localHost,
   mergeLocalInject,
 } from "./local-inject.ts";
-import { installPiKit, piKitDir } from "./pi-kit.ts";
+import { cleanPiHomeMetadata, installPiKit, piKitDir } from "./pi-kit.ts";
 import type { PiActiveTurn, PiTurnHooks } from "./pi-turn-ctx.ts";
 import { createPiSendTurn } from "./pi-send-turn.ts";
 import { MODEL_SERVER_DEFAULT_CONTEXT, MODEL_SERVER_DEFAULT_MAX_TOKENS, MODEL_SERVER_KEY_ENV_PREFIX, writePiModelServers } from "./pi-model-servers.ts";
@@ -1193,6 +1193,8 @@ export const PiDriver: ProviderDriver<PiConfig> = {
       modelContextWindow: (modelId) => models.options.find((option) => option.id === modelId)?.contextWindow,
       piKitArgs: (homeEnv, identity) => {
         const kit = piKitDir(homeEnv);
+        // #3063: no macOS metadata in the folders pi loads, kit or not
+        if (!kit) cleanPiHomeMetadata(piAgentDir(homeEnv));
         // #3008: the PATH the child gets, to know whether pi could run npm
         return kit ? installPiKit(kit, piAgentDir(homeEnv), identity ?? {}, { ...homeEnv, PATH: augmentedPath() }).args : [];
       },

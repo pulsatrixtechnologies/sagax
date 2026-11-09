@@ -57,6 +57,7 @@ import { parseSkillMd } from "../../shared/skill-md.ts";
 import { officialCatalogFor } from "../../shared/skill-catalogs.ts";
 import { catalogNameFor, DEFAULT_SKILL_DIRS, synthesizeSkillsCatalog } from "./skills-catalog.ts";
 import { hasCursorMarketplace, synthesizeCursorCatalog } from "./cursor-catalog.ts";
+import { withoutMacMetadata } from "../mac-metadata.ts";
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const MAX_MARKETPLACES = 40;
@@ -880,6 +881,7 @@ function copyPlain(from: string, to: string): void {
   cpSync(from, to, {
     recursive: true,
     dereference: false,
-    filter: (path) => !lstatSync(path).isSymbolicLink() && !path.split(/[\\/]/).includes(".git"),
+    // #3063: macOS metadata (`._*`, `.DS_Store`) never reaches an engine
+    filter: (path) => withoutMacMetadata(path) && !lstatSync(path).isSymbolicLink() && !path.split(/[\\/]/).includes(".git"),
   });
 }

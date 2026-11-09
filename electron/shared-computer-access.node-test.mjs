@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import fs from "node:fs/promises";
-import os from "node:os";
 import { mkdtemp, mkdir, stat, realpath, writeFile, readFile, rm, symlink, link } from "node:fs/promises";
 import { tmpdir, homedir } from "node:os";
 import path from "node:path";
@@ -121,7 +120,7 @@ test("folder boundary rejects traversal, links, oversized files and unknown fold
   await writeFile(path.join(dir, "large.txt"), Buffer.alloc(262145));
   await assert.rejects(run({ action: "read_file", path: "large.txt" }), /256 KiB/);
   await assert.rejects(run({ action: "list_files", folder_id: randomUUID() }), /not been shared/);
-  await assert.rejects(validateSharedFolders([{ id: randomUUID(), path: path.parse(dir).root, write: false }]), /specific folders/);
+  assert.equal((await validateSharedFolders([{ id: randomUUID(), path: path.parse(dir).root, write: false }]))[0].path, await realpath(path.parse(dir).root));
 });
 
 test("terminal and computer control are separately off, and revocation fails closed", async t => {
@@ -265,59 +264,18 @@ test("a protected directory spelled in another Unicode normalization is still re
   await assert.rejects(run({ action: "write_file", path: `${decomposed}/planted.json`, content: "{}" }), /sharing settings/);
 });
 
-test("the picker refuses the home directory, anything above it, and volume roots", async t => {
-  const { dir } = await fixture(t);
-  const refuse = candidate => assert.rejects(validateSharedFolders([{ id: randomUUID(), path: candidate, write: true }]), /specific folders/, candidate);
-  const home = await realpath(homedir());
-  const homes = [home];
-  if (process.platform === "darwin") {
-    const alias = path.join("/System/Volumes/Data", path.resolve(homedir()));
-    try {
-      const actual = await stat(home, { bigint: true });
-      const alternate = await stat(alias, { bigint: true });
-      if (actual.dev === alternate.dev && actual.ino === alternate.ino) homes.push(await realpath(alias));
-    } catch (error) { if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error; }
-  }
-  for (let candidate of homes) {
-    for (;;) {
-      await refuse(candidate);
-      const parent = path.dirname(candidate);
-      if (parent === candidate) break;
-      candidate = parent;
-    }
-  }
-  await refuse(path.parse(dir).root);
-  // /home may be macOS autofs, a Linux home ancestor, or an unrelated ordinary
-  // folder on a custom-home host. Only an actual mount root is always refused.
-  if (process.platform !== "win32") {
-    for (const candidate of ["/home", "/System/Volumes/Data"]) {
-      try {
-        if ((await stat(candidate, { bigint: true })).dev !== (await stat(path.dirname(candidate), { bigint: true })).dev) await refuse(candidate);
-      } catch (error) { if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error; }
-    }
-  }
-});
-
-test("the picker fails closed when the home boundary cannot be inspected", async t => {
-  const { dir } = await fixture(t);
-  const parent = path.join(dir, "Users");
-  const home = path.join(parent, "person");
-  await mkdir(home, { recursive: true });
-  t.mock.method(os, "homedir", () => home);
-  // These errors stand in for an unavailable mounted home or a permission
-  // failure; all filesystem contents and candidates remain in the fixture.
-  for (const method of ["realpath", "stat"]) {
-    for (const inaccessible of [home, parent]) {
-      if (method === "realpath" && inaccessible === parent) continue;
-      const original = fs[method];
-      const failing = t.mock.method(fs, method, async (candidate, ...options) => {
-        if (candidate === inaccessible) throw Object.assign(new Error("fixture home boundary unavailable"), { code: "EACCES" });
-        return original(candidate, ...options);
-      });
-      try {
-        await assert.rejects(validateSharedFolders([{ id: randomUUID(), path: dir, write: true }]), /home boundary unavailable/);
-      } finally { failing.mock.restore(); }
-    }
+test("the picker accepts the home directory, anything above it, and volume roots", async () => {
+  const accepted = async candidate => {
+    const [shared] = await validateSharedFolders([{ id: randomUUID(), path: candidate, write: false }]);
+    assert.equal(shared.path, await realpath(candidate), candidate);
+    assert.equal(shared.write, false);
+  };
+  let candidate = await realpath(homedir());
+  for (;;) {
+    await accepted(candidate);
+    const parent = path.dirname(candidate);
+    if (parent === candidate) break;
+    candidate = parent;
   }
 });
 

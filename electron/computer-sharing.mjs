@@ -10,66 +10,13 @@ import { createLendingActivity, describeSharedOperation } from "./lending-activi
 import { ENVIRONMENT_PATH, LEGACY_ENVIRONMENT_PATH } from "./legacy-names.mjs";
 
 const uuid = value => typeof value === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(value);
-const DATA_VOLUME = "/System/Volumes/Data";
-const identify = async candidate => { const info = await fsp.stat(candidate, { bigint: true }); return `${info.dev}:${info.ino}`; };
-
-/** Every path that names the home directory itself. macOS reaches one home
- * through a firmlink and again under the data volume, and those two paths have
- * different ancestors, so both chains have to be walked. */
-function homeCandidates() {
-  const home = path.resolve(os.homedir());
-  const seeds = [home];
-  if (process.platform === "darwin" && !home.startsWith(`${DATA_VOLUME}${path.sep}`)) seeds.push(path.join(DATA_VOLUME, home));
-  return seeds;
-}
-
-/** The home directory and everything above it, as filesystem identities. Text
- * comparison misses a firmlink, a bind mount, a case-insensitive spelling, a
- * Unicode normalization and a Windows 8.3 or UNC name; {dev, ino} does not. */
-async function enclosingHomeIdentities() {
-  const identities = new Set();
-  const [home, ...aliases] = homeCandidates();
-  const canonicalHome = await fsp.realpath(home);
-  const homeIdentity = await identify(canonicalHome);
-  const roots = [canonicalHome];
-  for (const alias of aliases) {
-    try {
-      const canonical = await fsp.realpath(alias);
-      if ((await identify(canonical)) === homeIdentity) roots.push(canonical);
-    } catch (error) {
-      // The optional macOS data-volume spelling need not exist. Any other
-      // failure must not silently remove part of the home boundary.
-      if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
-    }
-  }
-  for (let current of roots) {
-    for (;;) {
-      identities.add(await identify(current));
-      const parent = path.dirname(current);
-      if (parent === current) break;
-      current = parent;
-    }
-  }
-  return identities;
-}
-
-/** A drive letter, a filesystem root, or any mount point: sharing one of those
- * shares a whole volume. Unreadable parents fail closed. */
-async function volumeRoot(canonical) {
-  const parent = path.dirname(canonical);
-  if (parent === canonical) return true;
-  try { return (await fsp.stat(parent, { bigint: true })).dev !== (await fsp.stat(canonical, { bigint: true })).dev; } catch { return true; }
-}
-
 export async function validateSharedFolders(folders) {
   if (!Array.isArray(folders) || folders.length > 20) throw new Error("Choose at most 20 shared folders");
   const result = [];
-  const enclosing = await enclosingHomeIdentities();
   for (const folder of folders) {
     if (!uuid(folder?.id) || typeof folder.path !== "string" || !path.isAbsolute(folder.path) || typeof folder.write !== "boolean") throw new Error("Choose folders using the desktop folder picker");
     const canonical = await fsp.realpath(folder.path);
     if (!(await fsp.stat(canonical)).isDirectory()) throw new Error("Choose a folder, not a file");
-    if (enclosing.has(await identify(canonical)) || (await volumeRoot(canonical))) throw new Error("Choose specific folders, not the entire computer or home folder");
     if (result.some(entry => entry.id === folder.id || entry.path === canonical)) continue;
     result.push({ id: folder.id, path: canonical, name: path.basename(canonical).slice(0, 120), write: folder.write });
   }

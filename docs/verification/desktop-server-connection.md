@@ -103,7 +103,7 @@ Older servers need updating before they advertise this capability.
 
 **Choose access**, or **Settings → Servers → Computer access**:
 
-- Pick specific folders. They start read-only; **Allow edits** permits create
+- Pick any folders, up to the whole computer. They start read-only; **Allow edits** permits create
   and hash-guarded overwrite, not delete. Paths stay inside the chosen folder;
   symbolic/hard links and the desktop's own credential/profile storage are
   refused. Files are limited to 256 KiB per operation. This is a file-transfer

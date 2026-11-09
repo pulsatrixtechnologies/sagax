@@ -61,8 +61,12 @@ export function ComposerShell({
 }) {
   const { bot, locked, dispatch, storeBots, config, remoteClient, threadId,
     sendState, sendBlock, busy, canSteer, composerTask,
-    approvals, approval, openQuestions, approvalBotFor, modeBot,
+    openQuestions, pinned, approvalBotFor, modeBot,
     perspicaxOrg, fullAccessAvailable } = session;
+  // the placeholder speaks of what is pinned right now: an approval, or a
+  // question that typing answers (#3214)
+  const pinnedApproval = pinned.current?.kind === "approval" ? pinned.current.pending : undefined;
+  const pinnedQuestions = pinned.current?.kind === "question" ? openQuestions : [];
   const { draftId: draftIdValue, text, attachments, attachmentPending, failedSends, channelMode,
     editText, editAttachments, addAttachments, removeAttachment, displayPasteInChatBox,
     attachmentNotice, setAttachmentNotice, engineSupportsImages } = draft;
@@ -162,9 +166,9 @@ export function ComposerShell({
         )}
         <ComposerPendingStrip
           bot={bot}
-          approval={approval}
-          approvals={approvals}
+          pinned={pinned}
           threadId={threadId}
+          storeBots={storeBots}
           approvalBotFor={approvalBotFor}
           onCancelTurn={interruptTurn}
         />
@@ -249,8 +253,8 @@ export function ComposerShell({
           onKeyDown={onKeyDown}
           micHold={voice.micHold}
           dictation={dictation}
-          approval={approval}
-          openQuestions={openQuestions}
+          approval={pinnedApproval}
+          openQuestions={pinnedQuestions}
           attachmentPending={attachmentPending}
           recording={recording}
           busy={busy}

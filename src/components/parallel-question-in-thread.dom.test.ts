@@ -20,6 +20,7 @@ vi.mock("@/state/store", () => ({
 
 import type { Bot, Message } from "@/state/store";
 import { ComposerPendingStrip } from "./Composer.tsx-parts/ComposerPendingStrip";
+import { usePinnedWaiting } from "./Composer.tsx-parts/PinnedWaitingCard";
 import { optionsCardRow } from "./OptionsCardRow";
 import { routineRunsWaiting, useParallelCards } from "./parallel-approvals";
 import { ParallelTaskCard } from "./ParallelTaskCard";
@@ -52,9 +53,10 @@ afterEach(() => {
 
 function OpenChat() {
   const cards = useParallelCards(bot);
+  const pinned = usePinnedWaiting([], []);
   return createElement(Fragment, null,
     createElement("output", { "data-questions": String((cards as { questions?: unknown[] }).questions?.length ?? 0), "data-pendings": String(cards.pendings.length) }),
-    createElement(ComposerPendingStrip, { bot, approvals: [], threadId: "main", approvalBotFor: () => bot, onCancelTurn: () => {} }));
+    createElement(ComposerPendingStrip, { bot, pinned, storeBots: [bot], threadId: "main", approvalBotFor: () => bot, onCancelTurn: () => {} }));
 }
 
 describe("a parallel task's question (#2082)", () => {

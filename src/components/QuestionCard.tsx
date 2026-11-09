@@ -154,6 +154,7 @@ export function QuestionCard({
   message,
   onAnswered,
   onAnswerFailed,
+  embedded = false,
 }: {
   /** answered by THREAD, so a question raised inside a room settles the
    * same way as one in a 1:1 chat */
@@ -165,6 +166,8 @@ export function QuestionCard({
   onAnswered?: () => void;
   /** the answer did not reach the bot: undo what onAnswered showed */
   onAnswerFailed?: () => void;
+  /** drawn inside the pinned card over the composer (#3214): no frame of its own */
+  embedded?: boolean;
 }) {
   const { dispatch } = useStore();
   const card = message.card;
@@ -332,6 +335,7 @@ export function QuestionCard({
       ariaLabel={t("question.aria.card")}
       title={title}
       meta={meta}
+      embedded={embedded}
       onKeyDown={sheetKeyHandler(choices.length, (index) => choose(choices[index]!.id ?? choices[index]!.label))}
     >
       {card.questionRequest?.origin === "output" && (

@@ -10,6 +10,7 @@ import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
 import { ComposerPendingStrip } from "../components/Composer.tsx-parts/ComposerPendingStrip";
+import { usePinnedWaiting } from "../components/Composer.tsx-parts/PinnedWaitingCard";
 import { optionsCardRow } from "../components/OptionsCardRow";
 import { ParallelTaskCard } from "../components/ParallelTaskCard";
 import { useParallelCards } from "../components/parallel-approvals";
@@ -105,10 +106,11 @@ function Shell() {
   const cards = useParallelCards(live) as { pendings: never[]; questions?: unknown[] };
   // before #2082 the strip also took the task's questions
   const strip = { parallelQuestions: cards.questions ?? [] } as Record<string, unknown>;
+  const pinned = usePinnedWaiting([], []);
   return (
     <div data-gallery-sample="parallel-question" className="flex overflow-hidden bg-app text-ink" style={{ width, height }}>
       <Pane sample="source" title="Orla" composer={live && (
-        <ComposerPendingStrip bot={live} approvals={[]} threadId="orla-thread" approvalBotFor={() => live} onCancelTurn={() => {}} {...strip} />
+        <ComposerPendingStrip bot={live} pinned={pinned} storeBots={[live]} threadId="orla-thread" approvalBotFor={() => live} onCancelTurn={() => {}} {...strip} />
       )}>
         {thread.map((message) => message.parallelTask
           ? <ParallelTaskCard key={message.id} message={message} botId="orla" />

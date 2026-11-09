@@ -1,0 +1,110 @@
+{
+  "question-1440-daylight-fr": {
+    "state": "open",
+    "title": "Orla attend ta réponse",
+    "stepper": null,
+    "choices": 3,
+    "afterScroll": 1,
+    "afterAnswer": 0,
+    "decisions": [
+      "cardSettled",
+      "decideRequest"
+    ]
+  },
+  "two-1440-daylight-fr": {
+    "state": "open",
+    "title": "Orla attend ta réponse",
+    "stepper": "1 sur 2",
+    "choices": 3
+  },
+  "collapsed-1440-daylight-fr": {
+    "state": "collapsed",
+    "title": "Orla attend ta réponse : Je mets en pause mes deux webhooks pendant la migration de ce soir ?",
+    "stepper": null,
+    "choices": 0
+  },
+  "approval-1440-daylight-fr": {
+    "state": "open",
+    "title": "Orla attend ta réponse",
+    "stepper": "1 sur 2",
+    "choices": 0
+  },
+  "question-390-daylight-fr": {
+    "state": "open",
+    "title": "Orla attend ta réponse",
+    "stepper": null,
+    "choices": 3
+  },
+  "two-390-daylight-fr": {
+    "state": "open",
+    "title": "Orla attend ta réponse",
+    "stepper": "1 sur 2",
+    "choices": 3
+  },
+  "collapsed-390-daylight-fr": {
+    "state": "collapsed",
+    "title": "Orla attend ta réponse : Je mets en pause mes deux webhooks pendant la migration de ce soir ?",
+    "stepper": null,
+    "choices": 0
+  },
+  "approval-390-daylight-fr": {
+    "state": "open",
+    "title": "Orla attend ta réponse",
+    "stepper": "1 sur 2",
+    "choices": 0
+  },
+  "question-1440-midnight-fr": {
+    "state": "open",
+    "title": "Orla attend ta réponse",
+    "stepper": null,
+    "choices": 3
+  },
+  "two-1440-midnight-fr": {
+    "state": "open",
+    "title": "Orla attend ta réponse",
+    "stepper": "1 sur 2",
+    "choices": 3
+  },
+  "collapsed-1440-midnight-fr": {
+    "state": "collapsed",
+    "title": "Orla attend ta réponse : Je mets en pause mes deux webhooks pendant la migration de ce soir ?",
+    "stepper": null,
+    "choices": 0
+  },
+  "approval-1440-midnight-fr": {
+    "state": "open",
+    "title": "Orla attend ta réponse",
+    "stepper": "1 sur 2",
+    "choices": 0
+  },
+  "question-390-midnight-fr": {
+    "state": "open",
+    "title": "Orla attend ta réponse",
+    "stepper": null,
+    "choices": 3
+  },
+  "two-390-midnight-fr": {
+    "state": "open",
+    "title": "Orla attend ta réponse",
+    "stepper": "1 sur 2",
+    "choices": 3
+  },
+  "collapsed-390-midnight-fr": {
+    "state": "collapsed",
+    "title": "Orla attend ta réponse : Je mets en pause mes deux webhooks pendant la migration de ce soir ?",
+    "stepper": null,
+    "choices": 0
+  },
+  "approval-390-midnight-fr": {
+    "state": "open",
+    "title": "Orla attend ta réponse",
+    "stepper": "1 sur 2",
+    "choices": 0
+  },
+  "two-1440-daylight-en": {
+    "state": "open",
+    "title": "Orla is waiting for your answer",
+    "stepper": "1 of 2",
+    "choices": 3
+  }
+}

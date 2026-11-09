@@ -62,6 +62,7 @@ export function QuestionSheet({
   onKeyDown,
   settled = false,
   tour,
+  embedded = false,
   children,
 }: {
   ariaLabel: string;
@@ -73,6 +74,9 @@ export function QuestionSheet({
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
   settled?: boolean;
   tour?: string;
+  /** inside another card (the pinned card over the composer, #3214): no
+   * frame, no width cap of its own; the host card draws them */
+  embedded?: boolean;
   children?: ReactNode;
 }) {
   return (
@@ -85,7 +89,7 @@ export function QuestionSheet({
       // focusable so A, B, C work as soon as the card is clicked
       tabIndex={settled ? undefined : -1}
       onKeyDown={onKeyDown}
-      className={cn(QUESTION_SHEET_WIDTH, "rounded-2xl bg-card p-4 text-start text-ink outline-none")}
+      className={cn(embedded ? "w-full" : cn(QUESTION_SHEET_WIDTH, "rounded-2xl bg-card p-4"), "text-start text-ink outline-none")}
     >
       {(title || meta || onDismiss) && (
         <div className="mb-2.5 flex min-w-0 items-start gap-2">

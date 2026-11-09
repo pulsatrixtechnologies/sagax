@@ -53,6 +53,7 @@ struct ComputerView: View {
         self.embeddedWidth = embeddedWidth
         self.onFullScreen = onFullScreen
         _controller = StateObject(wrappedValue: ComputerController(botId: bot.id, client: { nil }))
+        _screen = ObservedObject(wrappedValue: ScreenStore.shared.screen(bot.id))
     }
 
     /// Embedded in the bot panel the card follows the app's navy theme (the
@@ -66,8 +67,8 @@ struct ComputerView: View {
     private var fit: ComputerFit { ComputerFit(rawValue: fitRaw) ?? .fit }
     /// The screen from its own store, so a frame redraws only the views
     /// that draw it (#3017, L01).
-    @ObservedObject private var screenStore = ScreenStore.shared
-    private var streamFrame: ScreenFrame? { screenStore.frames[bot.id] ?? session.state.screens[bot.id] }
+    @ObservedObject private var screen: BotScreen
+    private var streamFrame: ScreenFrame? { screen.frame ?? session.state.screens[bot.id] }
     private var isEmbeddedPanel: Bool { embeddedWidth != nil }
 
     /// The bot as the stream last described it.
@@ -1314,18 +1315,33 @@ final class LocalVmComputerModel: ObservableObject {
 
 /// The bots' computer screens, apart from the session (#3017, L01). Each
 /// frame used to publish the whole session, which redrew the roster, the
-/// chat and every row while a screen was watched; only the views that draw
-/// a screen observe this store.
+/// chat and every row while a screen was watched. Each bot has its own
+/// store (#3029): a frame of one bot redraws only the views that draw
+/// that bot's screen, never another bot's computer card.
 @MainActor
-final class ScreenStore: ObservableObject {
+final class ScreenStore {
     static let shared = ScreenStore()
-    @Published private(set) var frames: [String: ScreenFrame] = [:]
+    private var screens: [String: BotScreen] = [:]
+
+    /// The bot's own store, made on first use and kept for the session.
+    func screen(_ botId: String) -> BotScreen {
+        if let existing = screens[botId] { return existing }
+        let made = BotScreen()
+        screens[botId] = made
+        return made
+    }
 
     func update(_ botId: String, _ frame: ScreenFrame) {
-        frames[botId] = frame
+        screen(botId).frame = frame
     }
 
     func clear() {
-        if !frames.isEmpty { frames = [:] }
+        for screen in screens.values where screen.frame != nil { screen.frame = nil }
     }
+}
+
+/// One bot's latest screen frame.
+@MainActor
+final class BotScreen: ObservableObject {
+    @Published fileprivate(set) var frame: ScreenFrame?
 }

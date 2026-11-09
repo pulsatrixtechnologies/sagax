@@ -45,6 +45,20 @@ final class MarkdownStreamSplitTests: XCTestCase {
             "> quoted\n\n> again\n\nplain",
             "| a | b |\n| - | - |\n| 1 | 2 |\n\nAfter the table",
             "Intro\n\n\n\nTwo blank lines above",
+            // #3029: the shapes a reply streams most, each cut at every byte
+            "1. a\n\n2. b\n\n3. c\n\nDone",
+            "- a\n  - nested\n\n- b\n\nAfter",
+            "- [ ] todo\n\n- [x] done\n\nText",
+            "Title\n=====\n\nBody\n\nSub\n---\n\nMore",
+            "Text\n\n---\n\nAfter the rule",
+            "> [!NOTE]\n> body\n\n> [!WARNING]\n> other\n\nPlain",
+            "| a | b |\n| - | - |\n| 1 | 2 |\n\n| c | d |\n| - | - |\n| 3 | 4 |",
+            "Para one\nstill one\n\n## Heading\n\n~~~\ncode\n\nmore\n~~~\n\nTail",
+            "Look: ![pic](https://x.y/a.png)\n\nNext line",
+            "<details>\n<summary>s</summary>\n\nbody\n\n</details>\n\nAfter",
+            "$$\nx^2\n\ny\n$$\n\nAfter math",
+            "* star\n\n+ plus\n\n1) paren\n\nEnd",
+            "Para\n\n    indented code\n\n    more code\n\nBack",
         ]
         for sample in samples {
             for end in stride(from: 1, through: sample.utf8.count, by: 1) {

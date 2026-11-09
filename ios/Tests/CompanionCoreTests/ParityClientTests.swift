@@ -591,6 +591,20 @@ final class HomeSelectionTests: XCTestCase {
         XCTAssertEqual(result, OffscreenUnread(above: 2, below: 2, nearestAbove: "b", nearestBelow: "e"))
     }
 
+    func testALazyListPlacesRowsItNeverLaidOutByTheirOrder() {
+        // Only c, d and e are laid out; a and b sit above them, f and g below.
+        let rows = [
+            UnreadRowBox(id: "c", top: -100, bottom: -40, unread: true),
+            UnreadRowBox(id: "d", top: 10, bottom: 70, unread: false),
+            UnreadRowBox(id: "e", top: 700, bottom: 760, unread: true),
+        ]
+        let result = OffscreenUnread.compute(
+            rows: rows, viewportTop: 0, viewportBottom: 600,
+            order: ["a", "b", "c", "d", "e", "f", "g"], unread: ["a", "c", "e", "g"]
+        )
+        XCTAssertEqual(result, OffscreenUnread(above: 2, below: 2, nearestAbove: "c", nearestBelow: "e"))
+    }
+
     func testARowHalfShownCountsAsSeen() {
         let rows = [UnreadRowBox(id: "a", top: -30, bottom: 30, unread: true)]
         XCTAssertEqual(OffscreenUnread.compute(rows: rows, viewportTop: 0, viewportBottom: 600).above, 0)

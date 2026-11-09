@@ -137,6 +137,12 @@ struct BotPanelComputerCard: View {
     let bot: Bot
     let open: () -> Void
 
+    init(bot: Bot, open: @escaping () -> Void) {
+        self.bot = bot
+        self.open = open
+        _screen = ObservedObject(wrappedValue: ScreenStore.shared.screen(bot.id))
+    }
+
     @State private var wakeRequestedAt: Date?
     @State private var vignetteImage: UIImage?
 
@@ -151,8 +157,8 @@ struct BotPanelComputerCard: View {
     }
     /// The screen from its own store, so a frame redraws only the views
     /// that draw it (#3017, L01).
-    @ObservedObject private var screens = ScreenStore.shared
-    private var frame: ScreenFrame? { screens.frames[bot.id] ?? session.state.screens[bot.id] }
+    @ObservedObject private var screen: BotScreen
+    private var frame: ScreenFrame? { screen.frame ?? session.state.screens[bot.id] }
 
     private var statusLine: String {
         switch phase {

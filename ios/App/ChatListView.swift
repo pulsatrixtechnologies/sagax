@@ -1419,7 +1419,10 @@ extension ChatListView {
             Theme.bg.skinTexture(Theme.palette.texture, ink: Theme.palette.textPrimary.uiColor).ignoresSafeArea()
             ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
+                // Lazy (#3029): an eager stack built and measured every row of
+                // the roster on each publish and reported each one's frame on
+                // every scroll frame.
+                LazyVStack(alignment: .leading, spacing: 0) {
                     Color.clear.frame(height: headerClearance)
                     StatusBanner()
                         .frame(maxWidth: .infinity)
@@ -1477,6 +1480,11 @@ extension ChatListView {
                 scrollProbe.unread = ids
                 publishOffscreenUnread()
             }
+            .onValueChange(of: homeRowOrder) { order in
+                scrollProbe.order = order
+                publishOffscreenUnread()
+            }
+            .onAppear { scrollProbe.order = homeRowOrder }
             .topScrollEdgeFade(height: headerClearance)
             .overlay {
                 if rosterIsEmpty {
@@ -1711,7 +1719,7 @@ extension ChatListView {
         @ViewBuilder rows: () -> Rows
     ) -> some View {
         let collapsed = isCollapsed(key)
-        return VStack(alignment: .leading, spacing: 0) {
+        return LazyVStack(alignment: .leading, spacing: 0) {
             HomeSectionHeader(title: title, collapsed: collapsed) { toggleSection(key) }
                 .contextMenu {
                     if let layout, let id = HomeSectionKey.sectionID(for: key) {
@@ -1793,11 +1801,33 @@ extension ChatListView {
         return scrollProbe.unread
     }
 
+    /// The rows `standardSections` shows, top to bottom (collapsed sections
+    /// left out), for the pills to place the rows the lazy list skipped.
+    private var homeRowOrder: [String] {
+        let layout = self.layout
+        var order: [String] = []
+        func add(_ key: String, _ chats: [Chat]) {
+            guard !isCollapsed(key) else { return }
+            let ids = Set(chats.map(\.id))
+            order += rosterSummaries.filter { ids.contains($0.chat.id) }.map(\.id)
+        }
+        for sidebar in layout.sections {
+            add(sidebar.name, sidebar.chiefs.map(Chat.bot) + sidebar.channels.filter { $0.pinned != true }.map(Chat.room) + sidebar.bots.map(Chat.bot))
+        }
+        add(HomeSectionKey.bots, layout.unsectionedBots.map(Chat.bot))
+        add(HomeSectionKey.groups, layout.unsectionedChannels.filter { $0.pinned != true }.map(Chat.room))
+        add(HomeSectionKey.botChats, layout.botChats.map(Chat.room))
+        return order
+    }
+
     /// Rows scrolled out of the visible window that still wait on a read.
     /// Reads the probe, so a scroll can call it without rebuilding previews.
     private func publishOffscreenUnread() {
         let boxes = scrollProbe.frames.map { UnreadRowBox(id: $0.key, top: $0.value.minY, bottom: $0.value.maxY, unread: scrollProbe.unread.contains($0.key)) }
-        let next = OffscreenUnread.compute(rows: boxes, viewportTop: scrollProbe.top, viewportBottom: scrollProbe.bottom)
+        let next = OffscreenUnread.compute(
+            rows: boxes, viewportTop: scrollProbe.top, viewportBottom: scrollProbe.bottom,
+            order: scrollProbe.order, unread: scrollProbe.unread
+        )
         if next != offscreenUnread { offscreenUnread = next }
     }
 
@@ -1935,6 +1965,9 @@ enum HomeChromeFocus: Hashable {
 /// rebuilding the list. The unread pills publish on their own.
 private final class RosterScrollProbe {
     var frames: [String: CGRect] = [:]
+    /// Every shown row, top to bottom: the lazy list reports frames only
+    /// for the rows it laid out, the others are placed by this order.
+    var order: [String] = []
     var top: CGFloat = 0
     var bottom: CGFloat = 0
     var unread: Set<String> = []

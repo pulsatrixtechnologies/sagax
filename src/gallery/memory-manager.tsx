@@ -9,6 +9,9 @@
  * "Not linked" hint; linked-menu / unlinked-menu: their ⋯ menus; delete: the
  * confirmation of Delete folder…; import / import-bot: the import window with
  * the preview of a vault (.zip), into My memory or into a bot's memory.
+ * review: Review with Approve and Deny on each row (a proposal of another team
+ * has none); review-after: the same list once one row is approved and one denied.
+ * Two more Perspicax teams (Field team, Back office) show one tier per team.
  */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -37,6 +40,11 @@ const H = 3600_000;
 const D = 24 * H;
 const now = Date.now();
 const iso = (ms: number) => new Date(now - ms).toISOString();
+// Proposals decided in this page (review ids and team-memory ids): they leave Review.
+const decided = new Set<string>();
+const pendingOf = (items: Array<{ review_id: string; title: string; topic: string; may_decide: boolean }>) => items
+  .filter((item) => !decided.has(item.review_id))
+  .map((item) => ({ ...item, kind: "new", risky: false, mine: false, created: iso(5 * H) }));
 
 // Atlas and Nova: two bots, their topics, a log, the bodies with [[links]].
 const BOT_FILES: Record<string, Record<string, { text: string; age: number }>> = {
@@ -115,10 +123,29 @@ const PX = {
       ],
     },
     {
-      scope: "team:ops", kind: "team", name: "Ops", may_write: true, may_manage: true, trashed: 0, archived: 0, edit_mode: "direct", pending: [{}],
+      scope: "team:ops", kind: "team", name: "Ops", may_write: true, may_manage: true, trashed: 0, archived: 0, edit_mode: "direct",
+      get pending() { return pendingOf([{ review_id: "rv1", title: "Patch window", topic: "runbooks", may_decide: true }]); },
       topics: [
         { topic: "runbooks", count: 1, entries: [
           { id: "p1", title: "Restore drill", topic: "runbooks", tags: ["area:backup"], updated: iso(1 * D), created: iso(45 * D), excerpt: "Restore one VM each month.", author_name: "Sam Okafor", links: 1 },
+        ] },
+      ],
+    },
+    {
+      scope: "team:field", kind: "team", name: "Field team", may_write: true, may_manage: false, trashed: 0, archived: 0, edit_mode: "review",
+      get pending() { return pendingOf([{ review_id: "rv2", title: "Site visit checklist", topic: "visits", may_decide: true }]); },
+      topics: [
+        { topic: "visits", count: 1, entries: [
+          { id: "q1", title: "Van stock", topic: "visits", tags: [], updated: iso(3 * D), created: iso(30 * D), excerpt: "Cables, spare switch, labels.", author_name: "Lee Park" },
+        ] },
+      ],
+    },
+    {
+      scope: "team:office", kind: "team", name: "Back office", may_write: true, may_manage: false, trashed: 0, archived: 0, edit_mode: "review",
+      get pending() { return pendingOf([{ review_id: "rv3", title: "Invoice wording", topic: "billing", may_decide: false }]); },
+      topics: [
+        { topic: "billing", count: 1, entries: [
+          { id: "b1", title: "Month-end close", topic: "billing", tags: [], updated: iso(4 * D), created: iso(60 * D), excerpt: "Close the books on the last business day.", author_name: "Sam Okafor" },
         ] },
       ],
     },
@@ -220,6 +247,13 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     return json({ path, text: BOT_FILES[bot]?.[path]?.text ?? "", hash: `h-${path}`, exists: true });
   }
   if (bot) return json(overview(bot));
+  const review = /\/api\/me\/memory\/reviews\/([^/?]+)(\/approve|\/refuse)?/.exec(url);
+  if (review && init?.method === "POST") { decided.add(decodeURIComponent(review[1]!)); return json({}); }
+  if (review) {
+    return json({ id: review[1], kind: "new", target: "team:ops", topic: "runbooks", title: "Patch window", tags: [], author_name: "Atlas", source: "bot", state: "pending", risky: false, created: iso(5 * H), body: "# Patch window\n\nPatch the servers on the first Tuesday, 22:00.\n", lang: "en", provenance: [{ kind: "bot", ref: "Atlas" }] });
+  }
+  const teamNote = /\/api\/team-memory\/([^/?]+)/.exec(url);
+  if (teamNote && init?.method && init.method !== "GET") { decided.add(decodeURIComponent(teamNote[1]!)); return json({}); }
   if (url.includes("/api/team-memory") && url.includes("section=dr-eggbot")) return json({ section: "dr-eggbot", label: "dr eggbot", entries: [] });
   if (url.includes("/api/team-memory")) {
     return json({
@@ -228,7 +262,7 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
       entries: [
         { id: "tm1", kind: "term", name: "OMB", detail: "Open MAUS Bot, the old name of the app.", aliases: [], status: "accepted", source: { botId: "atlas", botName: "Atlas", threadId: "t", at: now - 50 * D }, updatedAt: now - 10 * D },
         { id: "tm2", kind: "place", name: "Lab", detail: "The shared lab on the second floor.", aliases: [], status: "accepted", source: { botId: "nova", botName: "Nova", threadId: "t", at: now - 70 * D }, updatedAt: now - 30 * D },
-        { id: "tm3", kind: "decision", name: "Friday backups", detail: "Back up every Friday at 18:00.", aliases: [], status: "proposed", source: { botId: "atlas", botName: "Atlas", threadId: "t", at: now - 2 * D }, updatedAt: now - 2 * D },
+        ...(decided.has("tm3") ? [] : [{ id: "tm3", kind: "decision", name: "Friday backups", detail: "Back up every Friday at 18:00.", aliases: [], status: "proposed", source: { botId: "atlas", botName: "Atlas", threadId: "t", at: now - 2 * D }, updatedAt: now - 2 * D }]),
         { id: "tm4", kind: "person", name: "Front desk", detail: "Answers ext 100 on weekdays.", aliases: [], status: "accepted", source: { botId: "nova", botName: "Nova", threadId: "t", at: now - 15 * D }, updatedAt: now - 15 * D },
       ],
     });
@@ -298,6 +332,8 @@ function Shell() {
     const click = (selector: string) => document.querySelector<HTMLElement>(selector)?.click();
     const segment = (label: RegExp) => [...document.querySelectorAll<HTMLButtonElement>("[data-memory-views] button")].find((button) => label.test(button.getAttribute("title") ?? button.textContent ?? ""))?.click();
     void (async () => {
+      // A narrow window starts with the explorer folded into its strip: open it.
+      if (await waitFor("[data-memory-explorer-show]", 1_500)) click("[data-memory-explorer-show]");
       await waitFor("[data-memory-tiers]");
       await waitFor('[data-memory-note-row="o1"]');
       // let the bodies arrive (excerpts, links)
@@ -317,6 +353,17 @@ function Shell() {
       if (view === "collections") { click('[data-memory-nav="collections"]'); await waitFor("[data-memory-collection-row]"); click("[data-memory-collection-row]"); await waitFor("[data-memory-collection-items]"); }
       if (view === "tags") { segment(/Tags|Étiquettes/); await waitFor("[data-memory-tags-view]"); }
       if (view === "quality") { segment(/Quality|Qualité/); await waitFor("[data-memory-quality-view]"); }
+      if (view === "review" || view === "review-after") {
+        click('[data-memory-nav="review"]');
+        await waitFor("[data-memory-row-approve]");
+        if (view === "review-after" && !cancelled) {
+          click('[data-memory-row-key="perspicax-review|rv2"] [data-memory-row-approve]');
+          await new Promise((done) => setTimeout(done, 500));
+          const team = [...document.querySelectorAll<HTMLElement>("[data-memory-note-row]")].find((row) => row.textContent?.includes("Friday backups"));
+          team?.querySelector<HTMLElement>("[data-memory-row-deny]")?.click();
+          await new Promise((done) => setTimeout(done, 500));
+        }
+      }
       if (view === "trash") { click('[data-memory-nav="trash"]'); await waitFor("[data-memory-trash]"); }
       // StrictMode runs this effect twice: only the live run drives the page (a second click would close a menu)
       if (cancelled) return;

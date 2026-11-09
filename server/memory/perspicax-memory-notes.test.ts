@@ -9,7 +9,7 @@ describe("perspicax-memory-notes client", () => {
     expect(memoryReadPath("folder", { scope: "org", name: "ops" })).toBe(`${MEMORY_READ_PREFIX}/folder?scope=org&name=ops`);
   });
 
-  it("sends the person's access token as Bearer, never a link token", async () => {
+  it("without a link getter, sends the person's access token as Bearer", async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ tiers: [] }), { status: 200, headers: { "content-type": "application/json" } }));
     const accessToken = vi.fn(async () => "person-access-token");
     const client = new PerspicaxMemoryNotesClient({
@@ -28,6 +28,31 @@ describe("perspicax-memory-notes client", () => {
       headers: expect.objectContaining({ authorization: "Bearer person-access-token" }),
     });
     expect(JSON.stringify(call[1]?.headers)).not.toContain("link");
+  });
+
+  it("#3106: a linked server sends its link token as Bearer and the person's sign-in as the subject", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ tiers: [] }), { status: 200, headers: { "content-type": "application/json" } }));
+    const client = new PerspicaxMemoryNotesClient({
+      baseUrl: () => "https://px.example.test",
+      accessToken: async () => "person-access-token",
+      linkBearer: () => "server-link-token",
+      fetcher: fetcher as unknown as typeof fetch,
+    });
+    const result = await client.call("pr_alice", "GET", memoryReadPath("/tree"));
+    expect(result.ok).toBe(true);
+    const call = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(call[1]?.headers).toMatchObject({
+      authorization: "Bearer server-link-token",
+      "x-perspicax-subject-token": "person-access-token",
+    });
+    const unlinked = new PerspicaxMemoryNotesClient({
+      baseUrl: () => "https://px.example.test",
+      accessToken: async () => "person-access-token",
+      linkBearer: () => null,
+      fetcher: fetcher as unknown as typeof fetch,
+    });
+    expect(await unlinked.call("pr_alice", "GET", memoryReadPath("/tree"))).toEqual({ ok: false, error: "unreachable" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it("maps a missing token to unauthorized and a network failure to unreachable", async () => {

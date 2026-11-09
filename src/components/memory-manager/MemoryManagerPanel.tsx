@@ -14,7 +14,7 @@ import { isMacPlatform } from "@/lib/keyboard-shortcuts";
 import type { MemoryJournalRow } from "@/lib/memory";
 import { useStore } from "@/state/store";
 import type { MemoryBrowse, MemoryManagerSource, MemoryNoteDetail, MemoryNoteRow, MemoryVocabulary } from "@/lib/memory-manager";
-import type { PageRow } from "@/lib/memory-page";
+import { canDecideRow, type PageRow } from "@/lib/memory-page";
 import type { LinkBot } from "@/lib/memory-folders";
 import { useCaptionChrome } from "../DesktopCapabilities";
 import { PAGE_ACTION_BUTTON, PAGE_HEADER_BUTTON, PAGE_MENU_ITEM, PAGE_POPOVER, PageHeader, PageSegment, PageTopStrip, useDismissMenus } from "../content-page";
@@ -127,15 +127,15 @@ export function MemoryManagerPanel() {
   }, sources);
   useEffect(() => { void loadSources(); }, [loadSources]);
 
-  const { pxSource, pxTiers, botSources, teamSources, meTier, tiers, tierByKey, pxTierKey, factsByBot, rows, rowByKey, archivedRows, pxTrashRows, trashRows, counts, placeRows } = useMemoryRows({ sources, overviews, journals, bodies, archivedRaw, trashRaw, pins, place, openCollection, collections, collectionItems, overviewsReady, setBodies, bodiesRequested, mounted, setCollectionItems, setOpenCollection });
+  const { pxSource, pxTiers, botSources, teamSources, meTier, tiers, tierByKey, pxTierKey, factsByBot, rows, rowByKey, archivedRows, pxTrashRows, trashRows, counts, placeRows, reviewRows } = useMemoryRows({ sources, overviews, journals, bodies, archivedRaw, trashRaw, pins, place, openCollection, collections, collectionItems, overviewsReady, setBodies, bodiesRequested, mounted, setCollectionItems, setOpenCollection });
 
   const {
     goPlace, openPreview, previewKey, openNote, openKey, togglePin, saveNote,
-    deleteKeys, restoreKeys, emptyTrash, targets, defaultTarget, startCreate, createNote, startMove,
+    deleteKeys, decideKeys, restoreKeys, emptyTrash, targets, defaultTarget, startCreate, createNote, startMove,
     runMove, renamePxFolder, deletePxFolder, deleteBotFolder, folderMenu, linkTitle, reorder, collect
   } = useMemoryManagerActions({
     sources, overviews, pxSource, pxTiers, botSources, teamSources, meTier, rows, rowByKey,
-    archivedRows, trashRows, pxTrashRows, place, screen, note, noteEntry, createTarget, createFolder,
+    archivedRows, trashRows, pxTrashRows, reviewRows, place, screen, note, noteEntry, createTarget, createFolder,
     createTitle, createBody, moveTopic, moveScope, collections, pxTierKey, refresh,
     setPlace, setScreen, setView, setPreview, setNote, setNoteEntry, setBusy, setError, setNotice,
     setPins, setBodies, setCreateTarget, setCreateFolder, setCreateTitle, setCreateBody, setNewFolder,
@@ -344,7 +344,9 @@ export function MemoryManagerPanel() {
                       tiers={tiers}
                       bodies={bodies}
                       fixedView={place.kind === "archived" || place.kind === "trash"}
-                      canSelect={(entry) => (place.kind === "trash" ? entry.row.status !== "locked" : place.kind === "archived" ? true : entry.source.mayWrite)}
+                      canSelect={(entry) => (place.kind === "trash" ? entry.row.status !== "locked" : place.kind === "archived" ? true : place.kind === "review" ? canDecideRow(entry) : entry.source.mayWrite)}
+                      canDecide={place.kind === "review" ? canDecideRow : undefined}
+                      onDecide={place.kind === "review" ? (keys, decision) => void decideKeys(keys, decision) : undefined}
                       emptyText={loading ? t("memoryManager.loading") : place.kind === "trash" ? t("memoryManager.trashEmpty") : place.kind === "pinned" ? t("memoryManager.pinnedEmpty") : t("memoryManager.emptyView")}
                       onOpen={(entry) => { if (!entry.row.archived) void openPreview(entry); }}
                       onEdit={(entry) => void openNote(entry, true)}
@@ -352,7 +354,7 @@ export function MemoryManagerPanel() {
                       templates={templates}
                       onFromTemplate={canNewHere ? (template) => void fromTemplate(template) : undefined}
                       onDelete={place.kind === "archived" || place.kind === "trash" ? undefined : (keys) => void deleteKeys(keys)}
-                      onMove={place.kind === "archived" || place.kind === "trash" ? undefined : startMove}
+                      onMove={place.kind === "archived" || place.kind === "trash" || place.kind === "review" ? undefined : startMove}
                       onRestore={place.kind === "archived" || place.kind === "trash" ? (keys) => void restoreKeys(keys) : undefined}
                       headExtra={place.kind === "trash" && pxTrashRows.some((entry) => entry.row.status !== "locked") ? (
                         <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-full border border-hairline/60 px-2.5 text-[12.5px] text-ink hover:bg-hover" onClick={() => void emptyTrash()} data-memory-trash-empty="">
@@ -413,6 +415,7 @@ export function MemoryManagerPanel() {
               togglePin={togglePin}
               saveNote={saveNote}
               deleteKeys={deleteKeys}
+              decideKeys={decideKeys}
               startMove={startMove}
               createNote={createNote}
               runMove={runMove}

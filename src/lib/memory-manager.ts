@@ -57,6 +57,23 @@ export interface MemoryNoteRow {
   rank?: number | null;
   /** An archived Perspicax note (the Archived list). */
   archived?: boolean;
+  /** A Perspicax review waiting in a tier's queue (the Review list, #3106). */
+  reviewId?: string;
+  /** The viewer may approve or deny this proposal. */
+  mayDecide?: boolean;
+}
+
+/** One proposal waiting in a Perspicax tier's review queue (no text, no author id). */
+export interface MemoryPendingRow {
+  reviewId: string;
+  kind: string;
+  topic: string;
+  title: string;
+  editOf?: string;
+  risky: boolean;
+  mine: boolean;
+  mayDecide: boolean;
+  createdAt?: number;
 }
 
 export interface MemoryFolderRow {
@@ -79,6 +96,8 @@ export interface MemoryTierRow {
   archived?: number;
   /** Proposals waiting for a review in this tier. */
   pending?: number;
+  /** Those proposals, for the Review list. */
+  pendingItems?: MemoryPendingRow[];
   /** How an edit lands: "direct" or "review". */
   editMode?: string;
 }
@@ -315,7 +334,7 @@ export async function browsePerspicax(folder?: string, scope?: string): Promise<
       trashed?: number;
       archived?: number;
       edit_mode?: string;
-      pending?: unknown[];
+      pending?: Array<{ review_id?: string; kind?: string; topic?: string; title?: string; edit_of?: string; risky?: boolean; mine?: boolean; may_decide?: boolean; created?: string }>;
       topics: Array<{
         topic: string;
         count: number;
@@ -346,6 +365,19 @@ export async function browsePerspicax(folder?: string, scope?: string): Promise<
       folders: tierFolders,
       archived: tier.archived ?? 0,
       pending: Array.isArray(tier.pending) ? tier.pending.length : 0,
+      pendingItems: Array.isArray(tier.pending)
+        ? tier.pending.filter((item) => typeof item?.review_id === "string" && item.review_id).map((item) => ({
+          reviewId: item.review_id!,
+          kind: item.kind ?? "new",
+          topic: item.topic ?? "",
+          title: item.title ?? "",
+          editOf: item.edit_of || undefined,
+          risky: Boolean(item.risky),
+          mine: Boolean(item.mine),
+          mayDecide: Boolean(item.may_decide),
+          createdAt: item.created ? Date.parse(item.created) : undefined,
+        }))
+        : [],
       editMode: tier.edit_mode,
     });
     for (const topic of tier.topics) {
@@ -413,6 +445,47 @@ export async function openPerspicaxNote(scope: string, id: string): Promise<Memo
     linksOut: note.links_out?.map((link) => ({ scope: link.scope, id: link.id, title: link.title })),
     backlinks: note.backlinks?.map((link) => ({ scope: link.scope, id: link.id, title: link.title, context: link.context })),
   };
+}
+
+/** A pending Perspicax review with its text (the Review list preview, #3106). */
+export async function openPerspicaxReview(reviewId: string): Promise<MemoryNoteDetail> {
+  const item = await pxMemory<{
+    id: string;
+    title: string;
+    topic: string;
+    target: string;
+    tags?: string[];
+    body: string;
+    author_name?: string;
+    source?: string;
+    created?: string;
+    provenance?: Array<{ kind: string; ref?: string; reference?: string }>;
+  }>(`/reviews/${encodeURIComponent(reviewId)}`);
+  return {
+    id: item.id,
+    title: item.title,
+    body: item.body,
+    tags: item.tags ?? [],
+    folder: item.topic,
+    scope: item.target,
+    mayEdit: false,
+    bodyKind: detectBodyKind(item.body),
+    author: item.author_name || undefined,
+    createdAt: item.created ? Date.parse(item.created) : undefined,
+    provenance: item.provenance?.map((entry) => ({ kind: entry.kind, reference: entry.reference ?? entry.ref ?? "" })),
+    origin: item.source,
+  };
+}
+
+/** Why a proposal denied from Sagax was refused (Perspicax requires a reason). */
+export const SAGAX_DENY_REASON = "Denied in Sagax Memory review";
+
+/** Approve or deny one Perspicax review. */
+export function decidePerspicaxReview(reviewId: string, decision: "approve" | "deny"): Promise<unknown> {
+  const id = encodeURIComponent(reviewId);
+  return decision === "approve"
+    ? pxMemory(`/reviews/${id}/approve`, { method: "POST", body: JSON.stringify({}) })
+    : pxMemory(`/reviews/${id}/refuse`, { method: "POST", body: JSON.stringify({ reason: SAGAX_DENY_REASON }) });
 }
 
 export function filterNotes(notes: MemoryNoteRow[], query: string): MemoryNoteRow[] {

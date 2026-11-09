@@ -69,6 +69,22 @@ describe("me-memory-notes routes", () => {
     expect(upstreamOf("DELETE", "/api/me/memory/tree", url, undefined)).toBe("method");
   });
 
+  it("#3106: maps the review queue onto Perspicax /memory/reviews", async () => {
+    const url = new URL("http://x/api/me/memory/reviews/r1");
+    expect(upstreamOf("GET", "/api/me/memory/reviews/r1", url, undefined)).toEqual({ method: "GET", path: "/api/v1/memory/reviews/r1" });
+    expect(upstreamOf("POST", "/api/me/memory/reviews/r1/approve", url, {})).toEqual({ method: "POST", path: "/api/v1/memory/reviews/r1/approve", body: {} });
+    expect(upstreamOf("POST", "/api/me/memory/reviews/r1/refuse", url, { reason: "no" })).toEqual({ method: "POST", path: "/api/v1/memory/reviews/r1/refuse", body: { reason: "no" } });
+    expect(upstreamOf("POST", "/api/me/memory/reviews/bulk-approve", url, { ids: ["a"] })).toEqual({ method: "POST", path: "/api/v1/memory/reviews/bulk-approve", body: { ids: ["a"] } });
+    expect(upstreamOf("POST", "/api/me/memory/reviews/r%2F..%2Fx/approve", url, {})).toMatchObject({ path: "/api/v1/memory/reviews/r%2F..%2Fx/approve" });
+    expect(upstreamOf("GET", "/api/me/memory/reviews/r1/approve", url, undefined)).toBe("method");
+    expect(upstreamOf("DELETE", "/api/me/memory/reviews/r1", url, undefined)).toBe("method");
+    expect(upstreamOf("GET", "/api/me/memory/reviews/r1/other", url, undefined)).toBeNull();
+
+    const { invoke, call } = setup({ ok: true, status: 200, body: { review_id: "r1", status: "approved" } });
+    expect(await invoke(alice, { method: "POST", path: "/api/me/memory/reviews/r1/refuse", body: { reason: "Denied" } })).toMatchObject({ status: 200 });
+    expect(call).toHaveBeenCalledWith("pr_alice", "POST", "/api/v1/memory/reviews/r1/refuse", { reason: "Denied" });
+  });
+
   it("binds the session's own principal and refuses other callers", async () => {
     expect(memoryPrincipal(alice, ISSUER)).toEqual({ principalId: "pr_alice", sub: "A1" });
     expect(memoryPrincipal(session({ principalId: "pr_x" }), ISSUER)).toBeNull();

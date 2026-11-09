@@ -222,3 +222,51 @@ describe("feedback service (#2618)", () => {
     expect(store.threads.get(started.threadId)!.at(-1)?.text).toMatch(/nothing was sent/i);
   });
 });
+
+describe("feedback cards never stay pending once their source is dead (#3018)", () => {
+  const open = (messages: StoredMessage[]) => messages.filter((message) => message.card?.requestId && !message.card.answered && !message.card.dismissed);
+
+  it("reopening the flow several times leaves one open card in the thread", () => {
+    const { service, store } = setup();
+    let started = service.start("p1", { source: "sidebar", platform: "desktop", locale: "en" });
+    for (let index = 0; index < 8; index += 1) started = service.start("p1", { source: "sidebar", platform: "desktop", locale: "en" });
+    const thread = store.threads.get(started.threadId)!;
+    const cards = open(thread);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toBe(thread.at(-1));
+  });
+
+  it("retires cards of a cancelled or sent report", () => {
+    const { service, store } = setup();
+    const started = service.start("p1", { source: "sidebar", platform: "desktop", locale: "en" });
+    for (const answer of ["A bug", "Open settings, then click Save on the profile tab", "The new name is kept after a restart", "Nothing happens and the spinner never stops", "Blocking"]) {
+      say(service, started.botId, started.threadId, answer);
+    }
+    say(service, started.botId, started.threadId, "Cancel");
+    expect(open(store.threads.get(started.threadId)!)).toEqual([]);
+  });
+
+  it("sweeps cards left behind by older versions and expires untouched drafts", async () => {
+    let clock = 1_000_000;
+    const { store } = setup();
+    const dataDir = mkdtempSync(join(tmpdir(), "fb-sweep-"));
+    dirs.push(dataDir);
+    const service = createFeedbackService({
+      dataDir, store, now: () => clock,
+      config: () => ({ repo: "acme/app", source: null }),
+      threadFor: (bot) => bot.threadId,
+      names: () => ({ people: [], orgs: [], bots: [] }),
+      serverLines: () => [], spans: () => [], serverVersion: () => "0.8.70",
+    });
+    const started = service.start("p1", { source: "sidebar", platform: "desktop", locale: "en" });
+    // a stale card from an older build: its report is long gone
+    store.appendMessage(started.threadId, { role: "bot", kind: "options", feedback: { step: "kind", reportId: "gone" }, card: { title: "What would you like to report?", subtitle: "", options: ["A bug"], requestId: "fb-gone-kind-1" } } as Omit<StoredMessage, "id" | "at">);
+    const live = open(store.threads.get(started.threadId)!)[0]!.feedback?.reportId;
+    expect(open(store.threads.get(started.threadId)!)).toHaveLength(2);
+    await service.tick();
+    expect(open(store.threads.get(started.threadId)!).map((message) => message.feedback?.reportId)).toEqual([live]);
+    clock += 8 * 24 * 60 * 60_000;
+    await service.tick();
+    expect(open(store.threads.get(started.threadId)!)).toEqual([]);
+  });
+});

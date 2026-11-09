@@ -108,6 +108,8 @@ export interface FeedbackMessageInput {
 
 const RETRY_MS = 5 * 60_000;
 const POLL_WINDOW_MS = 60 * 24 * 60 * 60_000;
+/** #3018: an unfinished report nobody touched for this long is dropped and its card retired. */
+export const DRAFT_TTL_MS = 7 * 24 * 60 * 60_000;
 const MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024;
 
 const WORDS = {
@@ -228,6 +230,26 @@ export function createFeedbackService(deps: FeedbackDeps) {
     }
   }
 
+  /** #3018: a feedback card whose source is dead (report superseded,
+   * cancelled, sent or gone) or that a newer card of the same report replaced
+   * is retired (dismissed): it never stays pending in the approvals queue. */
+  function retireStaleCards(threadId: string): void {
+    if (!store.patchMessage) return;
+    const live = new Set<string>();
+    const path = store.activePath(threadId);
+    for (let index = path.length - 1; index >= 0; index -= 1) {
+      const message = path[index]!;
+      const card = message.card;
+      if (message.role !== "bot" || !message.feedback || !card?.requestId || card.answered || card.dismissed) continue;
+      const record = byId(message.feedback.reportId);
+      if (record && record.status === "draft" && !live.has(record.id)) {
+        live.add(record.id);
+        continue;
+      }
+      store.patchMessage(threadId, message.id, { card: { ...card, dismissed: true } });
+    }
+  }
+
   /** A feedback card answered through the respond route (app click or MCP
    * sagax_approve): same path as typing the option. Null when the card is not
    * the Feedback flow's. */
@@ -251,6 +273,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
     for (const record of records) {
       if (record.threadId === input.threadId && record.status === "draft" && !record.offer) record.status = "cancelled";
     }
+    retireStaleCards(input.threadId);
     const record: FeedbackRecord = {
       id: newReportId(),
       owner: input.owner,
@@ -285,6 +308,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
 
   /** The next question, or the preview card. */
   function advance(record: FeedbackRecord): void {
+    record.updatedAt = now();
     const step = nextFeedbackStep(record.lang, answersOf(record), record.id);
     if (step.kind === "ask") {
       post(record.threadId, step.marker, step.message);
@@ -349,6 +373,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
     record.status = "queued";
     record.updatedAt = now();
     save();
+    retireStaleCards(record.threadId);
     track(fileRecord(record));
   }
 
@@ -356,6 +381,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
     record.status = "cancelled";
     record.updatedAt = now();
     save();
+    retireStaleCards(record.threadId);
     post(record.threadId, { step: "status", reportId: record.id }, { kind: "text", text: WORDS[record.lang].cancelled });
   }
 
@@ -503,7 +529,26 @@ export function createFeedbackService(deps: FeedbackDeps) {
   }
 
   /** Retry the queue and read filed issues' status back (every 5 minutes). */
+  let swept = false;
   async function tick(): Promise<void> {
+    // #3018: drafts left unfinished expire; cards left behind by earlier
+    // versions (one per reopened flow) are retired once after a start.
+    const stale = new Set<string>();
+    for (const record of records) {
+      if (record.status === "draft" && now() - (record.updatedAt ?? record.createdAt) > DRAFT_TTL_MS) {
+        record.status = "cancelled";
+        record.updatedAt = now();
+        stale.add(record.threadId);
+      }
+      if (!swept) stale.add(record.threadId);
+    }
+    swept = true;
+    if (stale.size) {
+      save();
+      for (const threadId of stale) {
+        try { retireStaleCards(threadId); } catch { /* the next sweep */ }
+      }
+    }
     const target = filer();
     for (const record of records) {
       if (record.status === "queued" && record.report && (record.nextTryAt ?? 0) <= now() && target) {

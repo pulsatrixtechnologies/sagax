@@ -61,6 +61,9 @@
     "third_party/**",
     "apps/**",
     "dist*/**",
+    // #3031: imported only inside a string fixture of scripts/verify/dev/verify-organization-settings.mjs (branding=1), invisible to knip.
+    "src/components/OrganizationIdentity.tsx",
+    "src/lib/use-organization-branding.ts",
     "release/**",
     "deploy/**",
     "**/*.d.mts",

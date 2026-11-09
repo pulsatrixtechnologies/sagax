@@ -279,6 +279,7 @@ model.payer.orgKey
 model.payer.orgKeyOff
 model.payer.orgKeyOn
 model.payer.ownerKey
+model.payer.routine
 model.payer.signInHint
 model.payer.signInTitle
 model.payer.signedIn

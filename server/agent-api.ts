@@ -1,3 +1,5 @@
+import { ENGINE_EXITED_SENTENCE, isEngineExitedBeforeReply } from "../shared/engine-exit-words.ts";
+import { failedTurnCause, failedTurnRepeatsReply } from "../shared/failed-turn.ts";
 import { parseRoutineEffort } from "../shared/routine-effort.ts";
 import { parseRoutineGoal } from "../shared/routine-goal.ts";
 import { parseRoutineModel } from "../shared/routine-model.ts";
@@ -530,9 +532,11 @@ export interface TurnResult {
   agent_id: string;
   thread_id: string;
   finished: boolean;
-  status: "finished" | "running" | "waiting_for_approval" | "queued" | "still_working";
+  status: "finished" | "failed" | "running" | "waiting_for_approval" | "queued" | "still_working";
   /** The agent's words in this turn; empty with finished=true means it said nothing. */
   reply: string;
+  /** #3008: status failed: why the turn ended without its answer, in plain words. */
+  error?: string;
   /** When finished is false after a wait: progress so far and where to resume. */
   progress?: TurnProgress;
   /** Pass as cursor on the next await_turn so steps are not repeated. */
@@ -855,15 +859,25 @@ function turnAnchorIndex(messages: readonly StoredMessage[], anchor: { id: strin
   return -1;
 }
 
+/** #3008: a failed turn's cause as an AI client reads it: an engine that
+ * died before replying is one plain sentence, never its stderr tail. */
+function turnFailureWords(cause: string): string {
+  if (isEngineExitedBeforeReply(cause)) return ENGINE_EXITED_SENTENCE;
+  return cause || "The turn failed.";
+}
+
 /** The agent's final answer after the anchor, and whether its turn has
  * ended. #2579: the lines the agent says before a tool call ("Je cherche
  * d'abord…") are progress, kept in the steps: the reply is the last run of
  * text, the words after the turn's last tool call. */
-function turnReply(messages: readonly StoredMessage[], anchor: { id: string | null; at: number }): { reply: string; sawAnchor: boolean } {
+function turnReply(messages: readonly StoredMessage[], anchor: { id: string | null; at: number }): { reply: string; sawAnchor: boolean; failed: string | null } {
   const start = turnAnchorIndex(messages, anchor);
-  if (start < 0) return { reply: "", sawAnchor: false };
+  if (start < 0) return { reply: "", sawAnchor: false, failed: null };
   let run: string[] = [];
   let lastRun: string[] = [];
+  // #3008: the turn's last word is a failed-turn row (the engine died, a
+  // provider refused): the turn failed, even with words before it.
+  let failed: string | null = null;
   for (const message of messages.slice(start + 1)) {
     if (message.role === "user" && (message.kind ?? "text") === "text") {
       // #2922: the person's answer to a card is part of this turn: the reply
@@ -878,12 +892,23 @@ function turnReply(messages: readonly StoredMessage[], anchor: { id: string | nu
     if (kind === "activity") {
       if (run.length) lastRun = run;
       run = [];
+      const cause = message.tool?.ok === false && typeof message.tool.name === "string" ? failedTurnCause(message.tool.name) : null;
+      if (cause !== null) failed = cause;
       continue;
     }
-    if (kind === "text" && typeof message.text === "string" && message.text.trim()) run.push(message.text.trim());
+    if (kind === "text" && typeof message.text === "string" && message.text.trim()) {
+      run.push(message.text.trim());
+      failed = null;
+    }
   }
   const joined = (run.length ? run : lastRun).join("\n\n");
-  return { reply: joined.length > REPLY_MAX_CHARS ? `${joined.slice(0, REPLY_MAX_CHARS)}\n[...]` : joined, sawAnchor: true };
+  // a row that only repeats the reply (flagged after it answered) is no failure
+  if (failed !== null && joined && failedTurnRepeatsReply(failed, [joined])) failed = null;
+  return {
+    reply: joined.length > REPLY_MAX_CHARS ? `${joined.slice(0, REPLY_MAX_CHARS)}\n[...]` : joined,
+    sawAnchor: true,
+    failed: failed === null ? null : turnFailureWords(failed),
+  };
 }
 
 /** Visible steps of the turn after the anchor, optionally after a wait_cursor. */
@@ -1784,10 +1809,15 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         // raises right after its words lands between two polls. With no
         // time left for that look (timeout_ms 0), the reply is the answer.
         const lastLook = Boolean(signal?.aborted) || now() + POLL_MS > deadline;
-        if ((read.reply && (idleLooks >= 2 || lastLook)) || idleLooks >= IDLE_LOOKS_DONE) {
+        if (((read.reply || read.failed !== null) && (idleLooks >= 2 || lastLook)) || idleLooks >= IDLE_LOOKS_DONE) {
           // the reply is collected: an AI client's conversation leaves the
           // person's list (server/threads/background-sweep.ts)
           deps.collected?.(body.a, body.t);
+          // #3008: a turn that ended on a failed-turn row says so, never
+          // "finished" with an empty reply.
+          if (read.failed !== null) {
+            return { handle, agent_id: body.a, thread_id: body.t, finished: true, status: "failed", reply: read.reply, error: read.failed };
+          }
           return { handle, agent_id: body.a, thread_id: body.t, finished: true, status: "finished", reply: read.reply };
         }
       } else if (state === "idle") {

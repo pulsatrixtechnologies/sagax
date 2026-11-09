@@ -151,14 +151,20 @@ RUN npm install -g agent-browser@${AGENT_BROWSER_VERSION} \
 # A pi kit's packages (SAGAX_PI_KIT_DIR, docs/custom-engines.md "A pi kit"),
 # preinstalled while npm is still here: PI_KIT_PACKAGES lists the kit's
 # packages.txt npm sources, space separated ("npm:<name>@<version>" or a bare
-# spec). Empty by default, so a stock image installs nothing. A pi turn loads
-# a preinstalled package from SAGAX_PI_PACKAGES_DIR; one missing there is
-# passed to pi as written.
-ARG PI_KIT_PACKAGES=""
+# spec). #3008: the image has no npm at runtime, and pi installs a missing
+# npm package at startup, so a kit package the image lacks used to kill pi
+# (spawn npm ENOENT) before its first reply. The default carries the Sagax
+# pi kit's packages, pinned; "" installs nothing. A pi turn loads a
+# preinstalled package from SAGAX_PI_PACKAGES_DIR; one missing there is left
+# out with a warning (server/drivers/pi-kit.ts). --legacy-peer-deps as pi
+# itself installs: the peers (pi-ai, pi-tui...) come from pi at load time.
+ARG PI_KIT_PACKAGES="npm:pi-subagents@0.84.0"
 RUN mkdir -p /opt/sagax-pi-packages \
   && if [ -n "${PI_KIT_PACKAGES}" ]; then \
     specs=""; for spec in ${PI_KIT_PACKAGES}; do specs="${specs} ${spec#npm:}"; done; \
-    npm install --prefix /opt/sagax-pi-packages --omit=dev --no-audit --no-fund ${specs}; \
+    npm install --prefix /opt/sagax-pi-packages --omit=dev --no-audit --no-fund --legacy-peer-deps ${specs} \
+    && for spec in ${specs}; do name="${spec%@*}"; [ -n "${name}" ] || name="${spec}"; \
+      test -d "/opt/sagax-pi-packages/node_modules/${name}" || { echo "pi kit package ${spec} missing after install" >&2; exit 1; }; done; \
   fi
 ENV SAGAX_PI_PACKAGES_DIR=/opt/sagax-pi-packages/node_modules
 # Overlay again after agent-browser, then drop the npm CLI and the Node

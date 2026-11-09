@@ -1249,6 +1249,7 @@
   "chat.error.replyCutLength": "Réponse coupée : longueur maximale atteinte. Demande une suite.",
   "chat.error.replyCutFilter": "Réponse coupée par le fournisseur : filtre de contenu.",
   "chat.error.replyCut": "Réponse coupée par le fournisseur.",
+  "chat.error.engineExited": "Le moteur du bot s'est arrêté avant de répondre. Renvoie ton message ; si ça se répète, redémarre le moteur.",
   "chat.error.signedOut": "{name} n’est pas encore connecté. Connecte-toi ci-dessous, puis renvoie ton message.",
   "chat.exchange.empty": "Aucun message avec {name} pour l'instant.",
   "chat.exchange.loadError": "Impossible de charger cette conversation.",

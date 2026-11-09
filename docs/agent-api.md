@@ -96,7 +96,9 @@ at 16,000 characters, and a reply at 32,000.
 
 Results: `await_turn` and a `blocking` send answer `{finished, reply,
 status}`. An empty `reply` with `finished: true` means the turn ended without
-text. When the wait ends and the turn is still going, `status` is
+text. A turn that ended on a failure (its engine stopped before replying, a
+provider refused) answers `status: "failed"` with `finished: true` and a plain
+`error` (#3008), never `finished` with an empty reply. When the wait ends and the turn is still going, `status` is
 `still_working` (HTTP 200, not an error): `progress` holds a short summary,
 `turn_state` and the recent `steps`; `wait_cursor` and `recommended_wait_ms`
 tell the caller how to resume (`cursor` + `timeout_ms` on the next

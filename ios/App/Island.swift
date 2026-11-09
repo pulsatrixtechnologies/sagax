@@ -102,7 +102,7 @@ struct NeedsYouIsland: View {
                         // covers the first 37pt; the row sits clear of it.
                         Button { open(shown.chat) } label: {
                             HStack(spacing: 10) {
-                                ChatAvatarView(chat: shown.chat, size: 36, state: MausState.forChat(shown.chat, in: session.state), animated: attentionLive, comets: false)
+                                ChatAvatarView(chat: shown.chat, size: 36, state: MausState.forChat(shown.chat, in: session), animated: attentionLive, comets: false)
                                 Text(verbatim: shown.chat.name)
                                     .font(.system(size: 15, weight: .semibold))
                                     .foregroundStyle(MausPalette.color(shown.chat.color))

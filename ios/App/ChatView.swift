@@ -258,7 +258,7 @@ struct ChatView: View {
     }
 
     var messages: [Message] {
-        session.state.visibleTranscript(forThread: threadId)
+        session.visibleTranscript(forThread: threadId)
     }
 
     /// The focused message once this chat holds it (nil before): the jump's
@@ -757,7 +757,7 @@ struct ChatView: View {
                                 if let projected = session.state.bot(bot.id)?.projected(forThread: topic.threadId) {
                                     EarlierTopicSection(
                                         chat: .bot(projected),
-                                        rows: transcriptRows(session.state.visibleTranscript(forThread: topic.threadId), detail: toolCalls.detail, showThreads: false, threadBotId: bot.id, hidesPreSendRefusals: true),
+                                        rows: transcriptRows(session.visibleTranscript(forThread: topic.threadId), detail: toolCalls.detail, showThreads: false, threadBotId: bot.id, hidesPreSendRefusals: true),
                                         openLink: openLink, openThread: openThread, revealedMessageId: revealedMessageId,
                                         scrollToMessage: { proxy.scrollTo($0, anchor: .center) }
                                     )

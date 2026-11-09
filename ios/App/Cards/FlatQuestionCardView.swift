@@ -31,7 +31,7 @@ struct FlatQuestionCardView: View {
     }
 
     private var hidden: Bool {
-        OptionCardRules.hidesOnboardingCard(message, in: session.state.visibleTranscript(forThread: chat.threadId))
+        OptionCardRules.hidesOnboardingCard(message, in: session.visibleTranscript(forThread: chat.threadId))
     }
 
     var body: some View {

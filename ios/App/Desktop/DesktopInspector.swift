@@ -38,7 +38,7 @@ struct DesktopInspectorPanel: View {
         "M22 13h-4", "M17.2 17c2.1.1 3.8 1.9 3.8 4",
     ]
 
-    private var messages: [Message] { session.state.visibleTranscript(forThread: threadId) }
+    private var messages: [Message] { session.visibleTranscript(forThread: threadId) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {

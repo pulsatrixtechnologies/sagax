@@ -57,7 +57,40 @@ final class Session: ObservableObject {
     /// to `streamingStore` and `statePublisher`, never to the whole view tree.
     /// Every other write publishes at once, exactly as before.
     private(set) var state = CompanionState() {
-        didSet { stateDidChange() }
+        didSet {
+            stateGeneration &+= 1
+            stateDidChange()
+        }
+    }
+    /// Bumped on every write to `state`, published or not: the key of the
+    /// transcript memo below (#3017, L06).
+    private var stateGeneration = 0
+    private var transcriptMemoGeneration = -1
+    private var transcriptMemo: [String: [Message]] = [:]
+
+    /// The engine catalog, kept between profile opens (#3017, L17/G8): the
+    /// recap lines draw from it at once and a fresh read replaces it behind.
+    private(set) var cachedInstances: [Instance]?
+
+    /// A fresh read of the catalog, remembered for the next open.
+    func refreshInstancesCache() async -> [Instance]? {
+        guard let client else { return cachedInstances }
+        if let read = try? await client.instances() { cachedInstances = read }
+        return cachedInstances
+    }
+
+    /// `state.visibleTranscript(forThread:)`, walked once per state change
+    /// instead of once per reader: a chat body reads it dozens of times and
+    /// each walk builds a dictionary of the whole thread.
+    func visibleTranscript(forThread threadId: String) -> [Message] {
+        if transcriptMemoGeneration != stateGeneration {
+            transcriptMemo.removeAll(keepingCapacity: true)
+            transcriptMemoGeneration = stateGeneration
+        }
+        if let hit = transcriptMemo[threadId] { return hit }
+        let visible = state.visibleTranscript(forThread: threadId)
+        transcriptMemo[threadId] = visible
+        return visible
     }
     /// The live text, for the few views that draw it (`ChatLiveTail`).
     let streamingStore = StreamingStore()
@@ -70,7 +103,12 @@ final class Session: ObservableObject {
     }
     private let stateSubject = PassthroughSubject<CompanionState, Never>()
     private var foldingQuietly = false
+    /// A write that must reach nobody: the cursor, and frames that fold
+    /// nothing (#3017 L01).
+    private var foldingSilently = false
     private var streamPending = false
+    /// The badge last sent, so a frame that leaves it alone sends nothing (#3017 L12).
+    private var lastBadgeSent: Int?
     /// Bumped on every settled state write, not on a streaming token.
     /// `rosterFacts` walks the transcripts once per bump.
     private var rosterFactsGeneration = 0
@@ -78,7 +116,7 @@ final class Session: ObservableObject {
     private var rosterFactsActivity: ActivityDetail?
     private var rosterFactsSummaries: [ChatSummary] = []
     private var rosterFactsWaiting = Set<String>()
-    private lazy var streamFlush = FrameCoalescer { [weak self] in self?.flushStream() }
+    private lazy var streamFlush = FrameCoalescer(maxRate: 30) { [weak self] in self?.flushStream() }
     @Published private(set) var connection: Connection?
     @Published private(set) var connections: [Connection] = []
     let threadSelection = BotThreadSelection()
@@ -1104,6 +1142,7 @@ final class Session: ObservableObject {
     // MARK: - Publishing the state
 
     private func stateDidChange() {
+        if foldingSilently { return }
         if foldingQuietly {
             if !streamPending {
                 streamPending = true
@@ -1119,6 +1158,14 @@ final class Session: ObservableObject {
         publishStream()
     }
 
+    /// Fold a write that changes nothing anyone draws (the cursor, a frame
+    /// that folds nothing). No publish at all, not even the stream flush.
+    private func foldSilently(_ write: () -> Void) {
+        foldingSilently = true
+        defer { foldingSilently = false }
+        write()
+    }
+
     /// Fold a streamed token without telling the view tree. The change
     /// still reaches the state at once; `flushStream` announces it.
     private func foldQuietly(_ write: () -> Void) {
@@ -1132,11 +1179,11 @@ final class Session: ObservableObject {
         streamPending = false
         publishStream()
         // With no conversation on screen the home is what shows, and its
-        // Updates pill reads a working bot's line from the live text: keep
-        // it current, once per frame, as it was per token before. With a
-        // chat open the home is hidden under it and only the chat's live
-        // tail redraws.
-        if AttentionCenter.shared.viewingThreadId == nil { objectWillChange.send() }
+        // Updates pill reads a working bot's line from the live text. Only
+        // the pill hears about it, at about 4 Hz (#3017 L02): publishing the
+        // whole session per display frame rebuilt the home 120 times a
+        // second while any bot replied.
+        if AttentionCenter.shared.viewingThreadId == nil { RosterLiveStore.shared.bump() }
     }
 
     private func publishStream() {
@@ -1220,7 +1267,7 @@ final class Session: ObservableObject {
         let parked = takeParkedState(for: id)
         if let parked {
             state = parked
-            NotificationCoordinator.shared.setBadge(state.unreadCount)
+            sendBadge(state.unreadCount)
         }
         connect()
         log.info("switched accounts in \(Int(Date().timeIntervalSince(started) * 1000), privacy: .public) ms (\(parked == nil ? "first visit" : "its last state shown", privacy: .public))")
@@ -1291,7 +1338,7 @@ final class Session: ObservableObject {
         rotation = CandidateRotation(hosts: [])
         state = CompanionState()
         resetAvatarCache()
-        NotificationCoordinator.shared.setBadge(0)
+        sendBadge(0)
         restoreSelectedConnection()
         if connection != nil { connect() }
         if connections.isEmpty {
@@ -1346,7 +1393,7 @@ final class Session: ObservableObject {
         resetAvatarCache()
         resetAttachmentCache()
         attachmentSendIDs.removeAll()
-        NotificationCoordinator.shared.setBadge(0)
+        sendBadge(0)
         cancelAuthRecovery()
         sessionEndCode = nil
         status = .unpaired
@@ -1389,7 +1436,7 @@ final class Session: ObservableObject {
         if keepingAvatars { cancelAvatarFetches() } else { resetAvatarCache() }
         resetAttachmentCache()
         attachmentSendIDs.removeAll()
-        NotificationCoordinator.shared.setBadge(0)
+        sendBadge(0)
     }
 
     private func persistRegistry() {
@@ -1608,7 +1655,10 @@ final class Session: ObservableObject {
                         continue
                     }
                     let streamed = frame.frame.isStreamedText
-                    if streamed { foldQuietly { state.apply(frame) } } else { state.apply(frame) }
+                    // #3017 L01: a frame that folds nothing publishes nothing.
+                    if streamed { foldQuietly { state.apply(frame) } }
+                    else if frame.frame.foldsIntoState { state.apply(frame) }
+                    else { foldSilently { state.apply(frame) } }
                     // people: presence and labels (#167, #172)
                     PeopleDirectory.shared.apply(frame.frame)
                     // a bot asks this phone for a tool (Features/PhoneTools)
@@ -1665,9 +1715,11 @@ final class Session: ObservableObject {
                     if case let .notifyWithdraw(threadId, requestId) = frame.frame {
                         Task { await NotificationCoordinator.shared.withdraw(threadId: threadId.isEmpty ? nil : threadId, requestId: requestId) }
                     }
-                    NotificationCoordinator.shared.setBadge(state.unreadCount)
-                    withdrawSettledIfFewerUnread()
-                    if streamed { foldQuietly { state.advance(to: frame.seq) } } else { state.advance(to: frame.seq) }
+                    // #3017 L12: the badge walks every bot; only frames that
+                    // can move it pay for it, and only a new value is sent.
+                    if frame.frame.canChangeUnread { updateBadgeIfNeeded() }
+                    // The cursor never redraws anything (#3017 L01).
+                    foldSilently { state.advance(to: frame.seq) }
                 }
                 // Cancelled by us (leaving the screen, a restart for the
                 // screen view, pull to refresh): the sequence ends without
@@ -1737,7 +1789,7 @@ final class Session: ObservableObject {
             guard state.hydrate(snapshot.fleet, waitingThreads: snapshot.waitingThreads,
                                 ifCursorMatches: expectedCursor) else { continue }
             log.info("hydrated \(snapshot.fleet.bots.count, privacy: .public) bots, \(snapshot.fleet.groups.count, privacy: .public) rooms")
-            NotificationCoordinator.shared.setBadge(state.unreadCount)
+            sendBadge(state.unreadCount)
             badgedUnread = state.unreadCount
             let bots = state.bots
             let open = state.openRequestIds
@@ -3720,8 +3772,19 @@ final class Session: ObservableObject {
 
     /// Something was read (here or on another device): the banners for
     /// conversations that no longer need the person leave Notification Center.
-    private func withdrawSettledIfFewerUnread() {
+    private func sendBadge(_ count: Int) {
+        lastBadgeSent = count
+        NotificationCoordinator.shared.setBadge(count)
+    }
+
+    private func updateBadgeIfNeeded() {
         let count = state.unreadCount
+        if lastBadgeSent != count { sendBadge(count) }
+        withdrawSettledIfFewerUnread(count)
+    }
+
+    private func withdrawSettledIfFewerUnread(_ known: Int? = nil) {
+        let count = known ?? state.unreadCount
         defer { badgedUnread = count }
         guard let before = badgedUnread, count < before else { return }
         let bots = state.bots
@@ -4187,7 +4250,7 @@ final class Session: ObservableObject {
         }
         _ = await NotificationCoordinator.shared.requestAuthorization()
         await refreshNotificationAuthorization()
-        NotificationCoordinator.shared.setBadge(state.unreadCount)
+        sendBadge(state.unreadCount)
     }
 
     var notificationStatusText: String {
@@ -4506,6 +4569,18 @@ extension Session {
                     self.actionError = String(localized: "An attachment is waiting to resume. Open its conversation to retry.")
                 }
             }
+        }
+    }
+}
+
+extension MausState {
+    /// `forChat(_:in:)` through the session's transcript memo (#3017, L06/L16);
+    /// app only, the widget extension has no session.
+    @MainActor
+    static func forChat(_ chat: Chat, in session: Session) -> MausState {
+        switch chat {
+        case let .bot(bot): return forBot(bot, last: session.visibleTranscript(forThread: bot.threadId).last)
+        case .room: return .happy
         }
     }
 }

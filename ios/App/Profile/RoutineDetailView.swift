@@ -565,7 +565,7 @@ struct PictureFramingSheet: View {
             }
         }
         .task {
-            if let data = await session.avatarData(for: bot) { image = UIImage(data: data) }
+            if let data = await session.avatarData(for: bot) { image = await ImageDecoding.prepared(data) }
         }
     }
 

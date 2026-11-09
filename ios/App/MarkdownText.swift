@@ -120,22 +120,32 @@ struct MarkdownText: View {
     var body: some View {
         // A settled reply's blocks never change; the live one grows every
         // frame and would only fill the cache with drafts of itself.
-        let blocks = caret ? Markdown.blocks(source) : MarkdownParseCache.blocks(source)
+        // #3017 L03: the live reply parses only its open tail; the blocks
+        // above the last blank line are settled and come from the cache.
+        let parsed = caret ? MarkdownParseCache.streaming(source) : MarkdownParseCache.settled(source)
+        let blocks = parsed.blocks
         // A fence the message has not closed is still being written: charts,
         // widgets and email cards wait for it (ChatMarkdown `pendingAt`).
-        let openFence = RichBlocks.unclosedFenceOffset(source) >= 0
+        let openFence = parsed.openFence
         let lastCode = blocks.lastIndex { if case .code = $0 { return true }; return false }
         VStack(alignment: .leading, spacing: desktop == nil ? Theme.Chat.paragraphSpacing : 0) {
             let firstTable = blocks.firstIndex { if case .table = $0 { return true }; return false }
             ForEach(Array(blocks.enumerated()), id: \.offset) { item in
-                view(
-                    for: item.element,
-                    tail: caret && item.offset == blocks.count - 1,
-                    scrollIdentifier: item.offset == firstTable ? scrollIdentifier : nil,
-                    pending: caret || (openFence && item.offset == lastCode),
-                    identifier: richPrefix.map { "\($0)-\(item.offset)" }
-                )
-                .padding(.top, desktopGap(blocks, item.offset))
+                let isTail = caret && item.offset == blocks.count - 1
+                let gap = desktopGap(blocks, item.offset)
+                // A closed block of the live reply never changes: it skips
+                // its body while the tail grows below it.
+                StableMarkdownBlock(block: item.element, stable: caret && !isTail, gap: gap, revealed: revealed) {
+                    view(
+                        for: item.element,
+                        tail: isTail,
+                        scrollIdentifier: item.offset == firstTable ? scrollIdentifier : nil,
+                        pending: caret || (openFence && item.offset == lastCode),
+                        identifier: richPrefix.map { "\($0)-\(item.offset)" }
+                    )
+                    .padding(.top, gap)
+                }
+                .equatable()
             }
         }
         .environment(\.openURL, OpenURLAction { url in
@@ -436,10 +446,14 @@ struct MarkdownText: View {
     }
 
     private func styledInline(_ text: String, cacheable: Bool) -> AttributedString? {
-        // The iPad desktop styles from its theme value; only the phone's
-        // styling is fully described by the key.
-        let key = cacheable && desktop == nil
-            ? MarkdownParseCache.styleKey(text, mentions: mentions, everyone: mentionEveryone, revealed: revealed)
+        // The key holds everything the styling reads: on the iPad desktop
+        // shell its theme and the find highlight too (#3017 L07).
+        let findKey = findHighlight.map { needle in "\(needle)|\(source.hashValue)" } ?? ""
+        let desktopKey = desktop.map { theme in
+            "\(theme.skin)|\(theme.dark)|\(String(describing: theme.tint))|\(theme.depth)|\(theme.texture)|\(theme.face)|\(findKey)"
+        }
+        let key = cacheable
+            ? MarkdownParseCache.styleKey(text, mentions: mentions, everyone: mentionEveryone, revealed: revealed, desktop: desktopKey)
             : nil
         if let key, let hit = MarkdownParseCache.styled(key) { return hit.value }
         // the desktop drops a link whose address holds a raw backtick (not a
@@ -463,8 +477,7 @@ struct MarkdownText: View {
                         // slant a custom font: skew it, as the browser's
                         // synthesized oblique does
                         let upright = desktop.uiFont(DesktopChatMetrics.textSize, bold ? .bold : .regular)
-                        let slanted = upright.fontDescriptor.withMatrix(CGAffineTransform(a: 1, b: 0, c: 0.2, d: 1, tx: 0, ty: 0))
-                        font = Font(UIFont(descriptor: slanted, size: upright.pointSize) as CTFont)
+                        font = MarkdownParseCache.slanted(upright)
                     }
                     attributed[run.range].font = font
                 }
@@ -622,6 +635,45 @@ enum MarkdownParseCache {
         return cache
     }()
 
+    private static let fenceCache: NSCache<NSString, NSNumber> = {
+        let cache = NSCache<NSString, NSNumber>()
+        cache.countLimit = 400
+        return cache
+    }()
+    private static let slantCache = NSCache<UIFont, UIFont>()
+
+    /// A settled message's blocks and whether a fence is still open, once.
+    static func settled(_ source: String) -> (blocks: [MarkdownBlock], openFence: Bool) {
+        let key = source as NSString
+        let open: Bool
+        if let hit = fenceCache.object(forKey: key) {
+            open = hit.boolValue
+        } else {
+            open = RichBlocks.unclosedFenceOffset(source) >= 0
+            fenceCache.setObject(NSNumber(value: open), forKey: key)
+        }
+        return (blocks(source), open)
+    }
+
+    /// The live reply (#3017 L03): the stable prefix from the cache, the
+    /// open tail parsed fresh. The cut sits outside any fence, so the tail
+    /// alone says whether a fence is open.
+    static func streaming(_ source: String) -> (blocks: [MarkdownBlock], openFence: Bool) {
+        let (stable, tail) = MarkdownStreamSplit.split(source)
+        let head = stable.isEmpty ? [] : blocks(stable)
+        let rest = tail.isEmpty ? [] : Markdown.blocks(tail)
+        return (head + rest, RichBlocks.unclosedFenceOffset(tail) >= 0)
+    }
+
+    /// The synthesized oblique the desktop draws for italics, made once per face.
+    static func slanted(_ upright: UIFont) -> Font {
+        if let hit = slantCache.object(forKey: upright) { return Font(hit as CTFont) }
+        let descriptor = upright.fontDescriptor.withMatrix(CGAffineTransform(a: 1, b: 0, c: 0.2, d: 1, tx: 0, ty: 0))
+        let font = UIFont(descriptor: descriptor, size: upright.pointSize)
+        slantCache.setObject(font, forKey: upright)
+        return Font(font as CTFont)
+    }
+
     static func blocks(_ source: String) -> [MarkdownBlock] {
         let key = source as NSString
         if let hit = blockCache.object(forKey: key) { return hit.value }
@@ -645,8 +697,9 @@ enum MarkdownParseCache {
 
     /// The text plus everything the phone's styling reads: the skin (its
     /// colours and face), the mentions, and which spoilers are open.
-    static func styleKey(_ text: String, mentions: [MentionPeer], everyone: Bool, revealed: Set<String>) -> NSString {
+    static func styleKey(_ text: String, mentions: [MentionPeer], everyone: Bool, revealed: Set<String>, desktop: String? = nil) -> NSString {
         var style = Hasher()
+        style.combine(desktop)
         style.combine(ThemeRuntime.palette.id)
         style.combine(ThemeRuntime.palette.isDark)
         style.combine(ThemeRuntime.typeface.rawValue)
@@ -664,4 +717,22 @@ enum MarkdownParseCache {
     static func store(_ styled: AttributedString?, for key: NSString) {
         styledCache.setObject(Box(styled), forKey: key)
     }
+}
+
+
+/// One block of a reply that skips its body while it has not changed
+/// (#3017 L03). Only the closed blocks of a live reply are `stable`; any
+/// other block compares unequal and draws as before.
+private struct StableMarkdownBlock<Content: View>: View, Equatable {
+    let block: MarkdownBlock
+    let stable: Bool
+    let gap: CGFloat
+    let revealed: Set<String>
+    @ViewBuilder let content: () -> Content
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.stable && rhs.stable && lhs.block == rhs.block && lhs.gap == rhs.gap && lhs.revealed == rhs.revealed
+    }
+
+    var body: some View { content() }
 }

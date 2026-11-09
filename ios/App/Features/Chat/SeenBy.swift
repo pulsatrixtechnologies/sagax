@@ -66,7 +66,7 @@ struct SeenByRow: View {
     let chat: Chat
     @State private var showingNames = false
 
-    private var transcript: [Message] { session.state.visibleTranscript(forThread: chat.threadId) }
+    private var transcript: [Message] { session.visibleTranscript(forThread: chat.threadId) }
 
     var body: some View {
         content

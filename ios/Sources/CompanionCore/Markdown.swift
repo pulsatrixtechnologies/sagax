@@ -658,3 +658,62 @@ public enum Markdown {
         return count % 2 == 1
     }
 }
+
+/// Where a growing reply can be cut so the part above never changes again
+/// (#3017 L03): just after the last blank line that sits outside a code
+/// fence. Everything before it is settled Markdown and can be parsed once;
+/// only the tail after it is parsed again on each streamed frame.
+public enum MarkdownStreamSplit {
+    /// The UTF-8 offset where the stable prefix ends, or 0 when there is
+    /// none (no blank line yet, or every blank line is inside a fence).
+    public static func stablePrefixLength(_ source: String) -> Int {
+        let bytes = Array(source.utf8)
+        var fence: (char: UInt8, count: Int)?
+        var lineStart = 0
+        var lastBlankEnd = 0
+        var index = 0
+        let n = bytes.count
+        while lineStart < n {
+            index = lineStart
+            while index < n, bytes[index] != 0x0A { index += 1 }
+            let lineEnd = index
+            // the line, minus up to three leading spaces and any quote markers
+            var cursor = lineStart
+            var spaces = 0
+            while cursor < lineEnd, bytes[cursor] == 0x20, spaces < 3 { cursor += 1; spaces += 1 }
+            while cursor < lineEnd, bytes[cursor] == 0x3E { // '>'
+                cursor += 1
+                while cursor < lineEnd, bytes[cursor] == 0x20 { cursor += 1 }
+            }
+            var run = 0
+            let marker: UInt8? = cursor < lineEnd && (bytes[cursor] == 0x60 || bytes[cursor] == 0x7E) ? bytes[cursor] : nil
+            if let marker {
+                while cursor + run < lineEnd, bytes[cursor + run] == marker { run += 1 }
+            }
+            if let open = fence {
+                if let marker, marker == open.char, run >= open.count {
+                    // a closer: only the marker and trailing blanks on the line
+                    let rest = bytes[(cursor + run)..<lineEnd].allSatisfy { $0 == 0x20 || $0 == 0x09 || $0 == 0x0D }
+                    if rest { fence = nil }
+                }
+            } else if let marker, run >= 3 {
+                fence = (marker, run)
+            } else {
+                let blank = bytes[lineStart..<lineEnd].allSatisfy { $0 == 0x20 || $0 == 0x09 || $0 == 0x0D }
+                // a blank line that is not the very end of what has arrived
+                if blank, lineEnd < n { lastBlankEnd = lineEnd + 1 }
+            }
+            lineStart = lineEnd + 1
+        }
+        return lastBlankEnd
+    }
+
+    /// The stable prefix and the open tail of `source`.
+    public static func split(_ source: String) -> (stable: String, tail: String) {
+        let length = stablePrefixLength(source)
+        guard length > 0 else { return ("", source) }
+        let utf8 = source.utf8
+        let cut = utf8.index(utf8.startIndex, offsetBy: length)
+        return (String(source[..<cut]), String(source[cut...]))
+    }
+}

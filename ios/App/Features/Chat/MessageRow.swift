@@ -480,7 +480,7 @@ struct MessageRow: View {
     private var retryable: Bool {
         guard ErrorRowRules.isError(message), case let .bot(bot) = chat else { return false }
         return ErrorRowRules.retryableErrorId(
-            in: session.state.visibleTranscript(forThread: chat.threadId),
+            in: session.visibleTranscript(forThread: chat.threadId),
             busy: bot.busy == true,
             pendingId: session.state.pendingEdits[chat.threadId]?.placeholderId
         ) == message.id
@@ -528,8 +528,35 @@ struct MessageRow: View {
 extension MessageRow: Equatable {
     static func == (lhs: MessageRow, rhs: MessageRow) -> Bool {
         lhs.message == rhs.message
-            && lhs.chat == rhs.chat
+            && Self.sameChat(lhs.chat, rhs.chat)
             && lhs.endsRun == rhs.endsRun
             && (lhs.openThread == nil) == (rhs.openThread == nil)
+    }
+
+    /// The chat record without its transcript and task list: comparing the
+    /// whole `Chat` compared the entire conversation once per row on every
+    /// render (#3017, L05). A row reads the chat's identity, never its
+    /// messages (those come from the session).
+    static func sameChat(_ lhs: Chat, _ rhs: Chat) -> Bool {
+        switch (lhs, rhs) {
+        case let (.bot(a), .bot(b)):
+            guard a.id == b.id else { return false }
+            return slim(a) == slim(b)
+        case let (.room(a), .room(b)):
+            guard a.id == b.id else { return false }
+            var x = a, y = b
+            x.messages = nil
+            y.messages = nil
+            return x == y
+        default:
+            return false
+        }
+    }
+
+    private static func slim(_ bot: Bot) -> Bot {
+        var copy = bot
+        copy.messages = nil
+        copy.tasks = nil
+        return copy
     }
 }

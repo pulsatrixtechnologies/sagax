@@ -347,7 +347,7 @@ private struct BotPanelIdentity: View {
                 } label: {
                     // the desktop panel's Edit avatar: a 92 pt mascot in a
                     // 92x99 button at y 76 (1376x1032 reference, 2026-11-06)
-                    BotMascotView(bot: bot, size: 92, state: MausState.forChat(.bot(bot), in: session.state), animated: true, owlHandle: owlHandle)
+                    BotMascotView(bot: bot, size: 92, state: MausState.forChat(.bot(bot), in: session), animated: true, owlHandle: owlHandle)
                         .frame(width: 92, height: 99, alignment: .top)
                         .contentShape(Rectangle())
                 }

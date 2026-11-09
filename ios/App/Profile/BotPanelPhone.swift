@@ -397,7 +397,7 @@ private struct PhoneBotPanelContent: View {
     /// Centred mascot and name, then Activity / Library pills.
     private var identity: some View {
         VStack(spacing: 0) {
-            BotMascotView(bot: current, size: 112, state: MausState.forChat(.bot(current), in: session.state),
+            BotMascotView(bot: current, size: 112, state: MausState.forChat(.bot(current), in: session),
                           animated: true, owlHandle: owlHandle)
                 .contentShape(Rectangle())
                 .onTapGesture {

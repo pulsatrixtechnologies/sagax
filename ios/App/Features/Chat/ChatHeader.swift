@@ -6,7 +6,7 @@ import CompanionCore
 import UIKit
 
 extension ChatView {
-    var mascotState: MausState { MausState.forChat(current, in: session.state) }
+    var mascotState: MausState { MausState.forChat(current, in: session) }
 
     var headerBar: some View {
         ZStack {

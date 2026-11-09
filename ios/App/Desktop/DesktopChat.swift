@@ -452,7 +452,7 @@ struct DesktopChatHeader: View {
     private func botChatHeader(bot: Bot) -> some View {
         Button(action: openProfile) {
             HStack(spacing: 8) {
-                ChatAvatarView(chat: chat, size: 22, state: MausState.forChat(chat, in: session.state), background: theme.chrome)
+                ChatAvatarView(chat: chat, size: 22, state: MausState.forChat(chat, in: session), background: theme.chrome)
                     .frame(width: 22, height: 22)
                 nameAndLabel(bot: bot)
                 if ConfidentialBanner.shows(for: chat) {
@@ -504,7 +504,7 @@ struct DesktopChatHeader: View {
                 if case let .room(room) = chat, PeopleDirectory.shared.peer(room, session: session) == nil {
                     DesktopGroupAvatarStack(members: room.memberIds.compactMap { session.state.bot($0) }, size: 24)
                 } else {
-                    ChatAvatarView(chat: chat, size: 24, state: MausState.forChat(chat, in: session.state), background: theme.chrome)
+                    ChatAvatarView(chat: chat, size: 24, state: MausState.forChat(chat, in: session), background: theme.chrome)
                         .frame(width: 24, height: 24)
                 }
                 Text(verbatim: PeopleDirectory.shared.name(chat, session: session))

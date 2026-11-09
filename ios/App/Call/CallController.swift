@@ -240,7 +240,7 @@ final class CallController: ObservableObject {
         lastBusy = nil
         members = []
         if case let .room(room) = chat { members = room.memberIds.compactMap { session.state.bot($0) } }
-        conversation = CallConversation(existing: session.state.visibleTranscript(forThread: threadId), room: isRoom)
+        conversation = CallConversation(existing: session.visibleTranscript(forThread: threadId), room: isRoom)
         #if DEBUG
         if injecting { CallDebug.shared.reset() }
         #endif
@@ -366,11 +366,12 @@ final class CallController: ObservableObject {
         VoiceNoteCenter.shared.beginInputOwnership(.call)
         observeAudioSession()
 
-        stateSink = session.statePublisher.sink { [weak self] state in
-            // read the value handed over; streamed tokens arrive here at
-            // most once per display frame (Session.statePublisher)
-            DispatchQueue.main.async { self?.observe(state) }
-        }
+        // the call only needs the thread's latest words and busy flag: take
+        // the newest state at most ten times a second instead of rebuilding
+        // the transcript on every frame (#3017, L13)
+        stateSink = session.statePublisher
+            .throttle(for: .milliseconds(100), scheduler: DispatchQueue.main, latest: true)
+            .sink { [weak self] state in self?.observe(state) }
 
         // the server knows the thread is on a call: every send to it while
         // the call lasts is a call turn (typed words, a queued line, a retry)

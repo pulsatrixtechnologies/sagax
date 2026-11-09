@@ -57,10 +57,14 @@ final class WidgetSyncBridge {
     /// difference between answering from the home screen and opening a
     /// chat that has already moved on.
     func flush(_ state: CompanionState, connectionID: String?) {
-        sync(state, connectionID: connectionID)
+        sync(state, connectionID: connectionID, inBackground: false)
     }
 
-    private func sync(_ state: CompanionState, connectionID: String?) {
+    /// The snapshot's JSON encode and file write leave the main thread
+    /// (#3017, L21); the suspension flush stays synchronous.
+    private let writeQueue = DispatchQueue(label: "sagax.widget-sync.write", qos: .utility)
+
+    private func sync(_ state: CompanionState, connectionID: String?, inBackground: Bool = true) {
         guard let store else { return }
         guard let connectionID else {
             // Unpaired: no snapshot at all beats a stale one claiming a
@@ -85,6 +89,19 @@ final class WidgetSyncBridge {
         }
         sinceClock.forget(absentFrom: state.widgetUpdates.map(\.chat))
         guard snapshot != lastWritten else { return }
+        if inBackground {
+            lastWritten = snapshot
+            writeQueue.async { [weak self] in
+                do {
+                    try store.write(snapshot)
+                    WidgetCenter.shared.reloadAllTimelines()
+                } catch {
+                    // a failed write is retried on the next change
+                    Task { @MainActor in self?.lastWritten = nil }
+                }
+            }
+            return
+        }
         do {
             try store.write(snapshot)
             lastWritten = snapshot

@@ -138,6 +138,7 @@ struct BotPanelComputerCard: View {
     let open: () -> Void
 
     @State private var wakeRequestedAt: Date?
+    @State private var vignetteImage: UIImage?
 
     private var current: Bot { session.state.bot(bot.id) ?? bot }
     private var phase: BotComputerPhase {
@@ -195,7 +196,7 @@ struct BotPanelComputerCard: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Theme.cardRaised)
                 .frame(width: 72, height: 48)
-            if let data = frame?.data, let image = UIImage(data: data) {
+            if frame?.data != nil, let image = vignetteImage {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
@@ -210,6 +211,10 @@ struct BotPanelComputerCard: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Theme.hairline, lineWidth: 1)
         )
+        // the frame is decoded off the main thread (#3017, L20)
+        .task(id: frame?.data) {
+            vignetteImage = if let data = frame?.data { await ImageDecoding.prepared(data) } else { nil }
+        }
         .accessibilityHidden(true)
     }
 }

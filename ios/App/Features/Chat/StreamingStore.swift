@@ -39,8 +39,12 @@ final class StreamingStore: ObservableObject {
 final class FrameCoalescer {
     private let action: () -> Void
     private var link: CADisplayLink?
+    private let maxRate: Float
 
-    init(_ action: @escaping () -> Void) {
+    /// `maxRate` caps the display link: the live text runs at 30 Hz
+    /// (#3017 L03), which reads the same and costs a quarter of 120.
+    init(maxRate: Float = 120, _ action: @escaping () -> Void) {
+        self.maxRate = maxRate
         self.action = action
     }
 
@@ -55,7 +59,7 @@ final class FrameCoalescer {
             return
         }
         let link = CADisplayLink(target: Target(owner: self), selector: #selector(Target.tick))
-        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 120)
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: min(30, maxRate), maximum: maxRate, preferred: maxRate)
         link.add(to: .main, forMode: .common)
         self.link = link
     }
@@ -109,4 +113,35 @@ struct ObservingView<Model: ObservableObject, Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View { content() }
+}
+
+/// What the home hears while a bot streams and no conversation is open
+/// (#3017 L02): a tick at most four times a second, observed only by the
+/// Updates pill and sheet, which read the working line again on each tick.
+/// The whole session no longer publishes once per display frame for it.
+@MainActor
+final class RosterLiveStore: ObservableObject {
+    static let shared = RosterLiveStore()
+    @Published private(set) var tick = 0
+    private var last = Date.distantPast
+    private var scheduled = false
+    private let interval: TimeInterval = 0.25
+
+    func bump() {
+        let now = Date()
+        if now.timeIntervalSince(last) >= interval {
+            last = now
+            tick &+= 1
+            return
+        }
+        guard !scheduled else { return }
+        scheduled = true
+        let wait = interval - now.timeIntervalSince(last)
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+            guard let self else { return }
+            self.scheduled = false
+            self.last = Date()
+            self.tick &+= 1
+        }
+    }
 }

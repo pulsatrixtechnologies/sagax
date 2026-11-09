@@ -58,7 +58,7 @@ struct CardView: View {
 
     /// A first-run quiz goes once picked, dismissed or talked past.
     private var hidden: Bool {
-        OptionCardRules.hidesOnboardingCard(message, in: session.state.visibleTranscript(forThread: chat.threadId))
+        OptionCardRules.hidesOnboardingCard(message, in: session.visibleTranscript(forThread: chat.threadId))
     }
 
     var body: some View {

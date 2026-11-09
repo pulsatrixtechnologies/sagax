@@ -883,6 +883,9 @@ export const DIALOG = {
   body: "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 pb-5 pt-3",
   bodyWide: "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 pb-6 pt-3 sm:px-8",
   footer: "flex shrink-0 flex-wrap items-center justify-end gap-2 px-5 pb-5",
+  /** A footer under a long scrolling body: a hairline and the window's own
+   * surface, so the pills never float over cut-off content (#3134). */
+  footerDivided: "border-t border-hairline/50 bg-inherit pt-3",
 } as const;
 
 export type DialogWidth = keyof typeof DIALOG.width;
@@ -949,6 +952,7 @@ export function DialogFrame({
   frameProps,
   toolbar,
   footer,
+  footerDivider,
   children,
 }: {
   titleId: string;
@@ -971,6 +975,8 @@ export function DialogFrame({
   frameProps?: Record<string, string | boolean | undefined>;
   toolbar?: React.ReactNode;
   footer?: React.ReactNode;
+  /** A hairline above the footer, for a body long enough to scroll. */
+  footerDivider?: boolean;
   children?: React.ReactNode;
 }) {
   return (
@@ -994,8 +1000,8 @@ export function DialogFrame({
         </div>
         {toolbar && <div className="mt-3 flex flex-wrap items-center gap-2">{toolbar}</div>}
       </div>
-      {children && <div className={wide ? DIALOG.bodyWide : DIALOG.body}>{children}</div>}
-      {footer && <div className={DIALOG.footer}>{footer}</div>}
+      {children && <div data-dialog-body="" className={wide ? DIALOG.bodyWide : DIALOG.body}>{children}</div>}
+      {footer && <div data-dialog-footer="" className={cn(DIALOG.footer, footerDivider && DIALOG.footerDivided)}>{footer}</div>}
     </div>
   );
 }

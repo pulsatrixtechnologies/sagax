@@ -1,4 +1,4 @@
-// "Enrolled hosts" on the Remote Sessions page (docs/inscription-hote.md,
+// "Unattended computers" (was "Enrolled hosts") on the Remote Sessions page (docs/inscription-hote.md,
 // "Côté Sagax"): one list of the person's own devices (every Sagax install)
 // and the computers Perspicax enrolled for unattended access, as the same
 // card row (#2723, DeviceCardRow): "This device" first, then online, offline
@@ -12,6 +12,10 @@
 // names) and, for a colleague's computer, "Shared by <name>"; the menu adds
 // "Bots…" and "Share…" on the person's own hosts (Share only inside an
 // organization: an impossible option is hidden, never greyed).
+// #3134: two sections, "Unattended computers" (the enrolled hosts) and "My
+// devices" (the Sagax installs: this computer, a phone, a tablet), each card
+// the same height: bots, shares and "Bot computer" ride the card's line as
+// chips, and Details repeats them in full with the tags.
 import { useState } from "react";
 import { Bot as BotIcon, ChevronDown, Copy, KeyRound, Monitor, Network, Plus, Share2, ShieldOff } from "lucide-react";
 
@@ -31,12 +35,12 @@ import { copyText } from "@/lib/copy-text";
 import { activeLocale, t } from "@/lib/i18n";
 import type { MyDevice } from "@/lib/desktop-bridge";
 import { relativeTime } from "@/lib/memory";
-import { DeviceCardRow } from "./DeviceCardRow";
+import { DEVICE_CHIP, DeviceCardRow } from "./DeviceCardRow";
 import { DeviceRow, deviceRowKey } from "./MyDevicesList";
 import { setRemoteHostAccess, type UnattendedHostShare } from "./remote-hosts-client";
 import { HostBotsDialog, HostShareDialog, HostTeamDialog, hostBotsLabel, useHostBotChoices } from "./HostSharingControls";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
-import { HostBotComputerMenuItems, HostBotComputerTags } from "./HostBotComputerControls";
+import { HostBotComputerChips, HostBotComputerMenuItems, HostBotComputerTags } from "./HostBotComputerControls";
 import { useHostComputers } from "@/lib/host-computers";
 import {
   openUnattendedHost,
@@ -131,9 +135,35 @@ function HostRow({ row, os, busy, onOpen, onRevoke, onError, botComputer, onBotC
     [t("remoteSessionsAdmin.hosts.col.scope"), t(`remoteSessionsAdmin.hosts.scope.${row.scope}`)],
     [t("remoteSessionsAdmin.hosts.col.enrolled"), dateLabel(row.enrolledAt)],
     [t("remoteSessionsAdmin.hosts.col.expires"), dateLabel(row.expiresAt)],
+    // #3134: what the chips on the line say, in full.
+    [t("remoteSessionsAdmin.hosts.col.sharedBy"), row.sharedBy ?? ""],
+    [t("remoteSessionsAdmin.hosts.col.bots"), row.state === "enrolled" && mine ? hostBotsLabel(bots, botChoices) : ""],
+    [t("remoteSessionsAdmin.hosts.col.shares"), mine ? shares.map((share) => share.name).join(", ") : ""],
+    [t("remoteSessionsAdmin.hosts.col.role"), botComputer?.botComputer ? t("hostComputer.badge") : ""],
+    [t("remoteSessionsAdmin.hosts.col.tags"), (botComputer?.tags ?? []).join(", ")],
   ];
+  const enrolled = row.state === "enrolled";
   return (
     <DeviceCardRow kind="unattended-host" icon={Monitor} online={unattendedHostOnline(row)} line={hostLine(row, os)}
+      meta={(
+        <>
+          {enrolled && (row.sharedBy ? (
+            <span data-unattended-host-shared-by="" className={DEVICE_CHIP} title={t("remoteSessionsAdmin.hosts.share.sharedBy", { name: row.sharedBy })}>
+              <Share2 size={11} aria-hidden="true" className="shrink-0" /><span className="truncate">{t("remoteSessionsAdmin.hosts.share.sharedBy", { name: row.sharedBy })}</span>
+            </span>
+          ) : (
+            <span data-unattended-host-bots="" className={DEVICE_CHIP} title={hostBotsLabel(bots, botChoices)}>
+              <BotIcon size={11} aria-hidden="true" className="shrink-0" /><span className="truncate">{hostBotsLabel(bots, botChoices)}</span>
+            </span>
+          ))}
+          {enrolled && mine && shares.length > 0 && (
+            <span data-unattended-host-shares="" className={DEVICE_CHIP} title={shares.map((share) => share.name).join(", ")}>
+              <Share2 size={11} aria-hidden="true" className="shrink-0" /><span className="truncate">{t("remoteSessionsAdmin.hosts.share.count", { count: String(shares.length) })}</span>
+            </span>
+          )}
+          <HostBotComputerChips host={botComputer} />
+        </>
+      )}
       rowData={{ "data-unattended-host": "", "data-state": row.state, ...(row.sharedBy ? { "data-shared": "" } : {}) }}
       title={(
         <div className="flex min-w-0 items-center gap-1.5">
@@ -171,18 +201,6 @@ function HostRow({ row, os, busy, onOpen, onRevoke, onError, botComputer, onBotC
           <PageMenuItem icon={Copy} data-unattended-host-copy="" title={row.hostId} onClick={() => { close(); void copyText(row.hostId); }}>{t("remoteSessionsAdmin.hosts.copyId")}</PageMenuItem>
         </>,
       }}>
-      {row.state === "enrolled" && (
-        <p className="ml-12 flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] leading-[18px] text-ink-secondary">
-          {row.sharedBy ? (
-            <span data-unattended-host-shared-by="" className="inline-flex items-center gap-1"><Share2 size={12} aria-hidden="true" />{t("remoteSessionsAdmin.hosts.share.sharedBy", { name: row.sharedBy })}</span>
-          ) : (
-            <span data-unattended-host-bots="" className="inline-flex min-w-0 items-center gap-1"><BotIcon size={12} aria-hidden="true" className="shrink-0" /><span className="truncate">{hostBotsLabel(bots, botChoices)}</span></span>
-          )}
-          {mine && shares.length > 0 && (
-            <span data-unattended-host-shares="">· {t("remoteSessionsAdmin.hosts.share.count", { count: String(shares.length) })}</span>
-          )}
-        </p>
-      )}
       <HostBotComputerTags hostId={row.hostId} host={botComputer} editing={editingTags}
         onDone={() => setEditingTags(false)} onChanged={onBotComputerChanged} />
       {editingBots && <HostBotsDialog hostId={row.hostId} host={label} value={bots} onSaved={setBots} onClose={() => setEditingBots(false)} />}
@@ -239,16 +257,19 @@ export function UnattendedHostsSection({ state, devices = [], osByHost, onOpened
     setNotice({ kind: "revoked", host: unattendedHostLabel(row) });
     reload();
   };
-  const entries = sortDeviceEntries(devices, hosts);
+  // #3134: the unattended computers apart from the person's other devices.
+  const hostEntries = sortDeviceEntries([], hosts);
+  const deviceEntries = sortDeviceEntries(devices, []);
 
   return (
-    <PageSection title={t("remoteSessionsAdmin.hosts.title")} count={hosts.length + devices.length || undefined} data-unattended-hosts="">
+    <>
+    <PageSection title={t("remoteSessionsAdmin.hosts.unattendedTitle")} count={hosts.length || undefined} data-unattended-hosts="">
       {notice && (
         <p data-unattended-hosts-notice={notice.kind} role="status" className={cn("rounded-lg border px-3 py-2 text-[12.5px]", notice.kind === "error" ? "border-danger/30 bg-danger/10 text-danger" : "border-hairline/50 bg-panel text-ink-secondary")}>
           {notice.kind === "error" ? t(`remoteSessionsAdmin.hosts.error.${notice.error}`) : notice.kind === "access" ? t("remoteSessionsAdmin.hosts.accessFailed") : t(`remoteSessionsAdmin.hosts.${notice.kind}`, { host: notice.host })}
         </p>
       )}
-      {entries.length === 0 && (
+      {hostEntries.length === 0 && (
         <div data-unattended-hosts-empty="">
           <PageEmpty icon={Monitor} action={!loading && available && onAdd
             ? <button type="button" data-unattended-hosts-add="" onClick={onAdd} className={PAGE_ACTION_BUTTON}><Plus size={15} aria-hidden="true" />{t("remoteSessionsAdmin.addComputer")}</button>
@@ -258,10 +279,10 @@ export function UnattendedHostsSection({ state, devices = [], osByHost, onOpened
           </PageEmpty>
         </div>
       )}
-      {entries.length > 0 && (
-        <ul data-my-devices="" aria-label={t("myDevices.title")} className="flex flex-col gap-2">
-          {entries.map((entry) => entry.kind === "device"
-            ? <DeviceRow key={deviceRowKey(entry.device)} device={entry.device} />
+      {hostEntries.length > 0 && (
+        <ul data-unattended-hosts-list="" aria-label={t("remoteSessionsAdmin.hosts.unattendedTitle")} className="flex flex-col gap-2">
+          {hostEntries.map((entry) => entry.kind === "device"
+            ? null
             : <HostRow key={`${entry.host.hostId}:${entry.host.access ?? ""}`} row={entry.host} busy={busy === entry.host.hostId}
                 os={entry.host.os ?? (entry.host.hostname ? osByHost?.get(entry.host.hostname.toLowerCase()) : undefined)}
                 onOpen={(row) => void open(row)} onRevoke={(row) => { setReason(""); setConfirmRevoke(row); }}
@@ -296,5 +317,13 @@ export function UnattendedHostsSection({ state, devices = [], osByHost, onOpened
         />
       )}
     </PageSection>
+    {deviceEntries.length > 0 && (
+      <PageSection title={t("myDevices.title")} count={devices.length} data-my-devices-section="">
+        <ul data-my-devices="" aria-label={t("myDevices.title")} className="flex flex-col gap-2">
+          {deviceEntries.map((entry) => entry.kind === "device" ? <DeviceRow key={deviceRowKey(entry.device)} device={entry.device} /> : null)}
+        </ul>
+      </PageSection>
+    )}
+    </>
   );
 }

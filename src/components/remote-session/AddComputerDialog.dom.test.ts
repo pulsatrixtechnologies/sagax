@@ -126,9 +126,17 @@ describe("AddComputerDialog", () => {
     await click('[data-add-computer-os="linux"]');
     await click("[data-add-computer-next]");
     expect(document.querySelector("[data-add-computer-bots]")?.getAttribute("data-add-computer-bots")).toBe("all");
-    expect([...document.querySelectorAll("[data-host-bot]")].map((input) => input.getAttribute("data-host-bot"))).toEqual(["b-helper", "b-chief"]);
-    await click('[data-host-bot="b-helper"]');
+    // #3134: "All bots" hides the list; unchecking it opens it with every bot picked.
+    expect(document.querySelector("[data-host-bot]")).toBeNull();
+    await click("[data-host-bots-all]");
+    expect([...document.querySelectorAll<HTMLInputElement>("[data-host-bot]")].map((input) => [input.getAttribute("data-host-bot"), input.checked])).toEqual([["b-helper", true], ["b-chief", true]]);
+    await click('[data-host-bot="b-chief"]');
     expect(document.querySelector("[data-add-computer-bots]")?.getAttribute("data-add-computer-bots")).toBe("b-helper");
+    // The stepper stays under the title and the footer under a hairline, out of the scrolling body.
+    const body = document.querySelector("[data-dialog-body]")!;
+    expect(body.querySelector("[data-add-computer-steps]")).toBeNull();
+    expect(document.querySelector("[data-add-computer-steps]")).not.toBeNull();
+    expect(document.querySelector("[data-dialog-footer]")?.className).toContain("border-t");
     await click("[data-add-computer-generate]");
     expect(onIssued).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[data-add-computer-state="waiting"]')).not.toBeNull();

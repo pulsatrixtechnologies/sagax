@@ -57,7 +57,7 @@ export function newlyEnrolled(before: ReadonlySet<string>, hosts: readonly Unatt
 function Stepper({ step }: { step: Step }) {
   const index = STEPS.indexOf(step);
   return (
-    <ol data-add-computer-steps="" aria-label={t("addComputer.stepOf", { n: index + 1, total: STEPS.length })} className="flex items-center gap-1.5">
+    <ol data-add-computer-steps="" aria-label={t("addComputer.stepOf", { n: index + 1, total: STEPS.length })} className="flex w-full items-center gap-1.5">
       {STEPS.map((each, i) => {
         const done = i < index;
         const current = i === index;
@@ -222,9 +222,10 @@ export function AddComputerDialog({ available = true, hosts = [], onClose, onIss
     <DialogLayer onBackdropMouseDown={() => { if (!busy) onClose(); }}>
       <DialogFrame titleId="add-computer-title" title={t("remoteSessionsAdmin.addComputer")} subtitle={subtitle} width="md"
         closeLabel={t("common.close")} onClose={onClose} closeDisabled={busy} frameRef={dialogRef}
-        frameProps={{ "data-add-computer": step, ...(connected ? { "data-add-computer-connected": "" } : {}) }} footer={footer}>
+        frameProps={{ "data-add-computer": step, ...(connected ? { "data-add-computer-connected": "" } : {}) }} toolbar={<Stepper step={step} />} footer={footer} footerDivider>
+        {/* #3134: the stepper stays under the title and the footer stays put
+            while a long bot list scrolls between them. */}
         <div className="flex flex-col gap-4">
-          <Stepper step={step} />
           {error && <p role="alert" className="rounded-lg bg-danger/10 p-2 text-[12px] text-danger">{error}</p>}
           {step === "os" && (
             <div role="radiogroup" aria-label={t("addComputer.step.os")} className="grid grid-cols-3 gap-2.5">

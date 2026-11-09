@@ -63,7 +63,7 @@ describe("UnattendedHostsSection", () => {
   it("speaks French with the requested labels", () => {
     setLocale("fr");
     const html = render();
-    expect(html).toContain("Hôtes inscrits");
+    expect(html).toContain("Ordinateurs en accès non surveillé");
     expect(html).toContain("Détails");
     expect(html).toContain("Toujours permettre");
     expect(html).not.toContain("remoteSessionsAdmin.hosts.");

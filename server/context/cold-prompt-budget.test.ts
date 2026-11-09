@@ -50,7 +50,7 @@ describe("cold prompt section budgets", () => {
   });
 
   it("keeps the output-style rule on routine runs, without the old table default (#2949)", () => {
-    expect(COLD_RICH_OUTPUT_PROMPT).toContain("never a label and sentence or status table");
+    expect(COLD_RICH_OUTPUT_PROMPT).toContain("never a label and sentence, field and value (\"Champ | Valeur\") or status table");
     expect(COLD_RICH_OUTPUT_PROMPT).not.toContain("A Markdown table for records is fine");
   });
 

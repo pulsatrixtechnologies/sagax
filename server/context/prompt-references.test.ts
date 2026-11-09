@@ -27,7 +27,7 @@ describe("on-demand system references (#1997)", () => {
   });
   it("keeps the output-style rule in the short rich-output brief (#2949)", () => {
     const brief = onDemandPromptText(richOutputPrompt(), true);
-    expect(brief).toContain("never a label and sentence or status table");
+    expect(brief).toContain("never a label and sentence, field and value (\"Champ | Valeur\") or status table");
     expect(brief).not.toContain("otherwise use text or Markdown tables");
   });
   it("requires the actual help tool, respecting allow/deny and invalid scopes", () => {

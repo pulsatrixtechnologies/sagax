@@ -14,6 +14,14 @@ describe("waitingOnText", () => {
     expect(waitingOnText(card())).toBe("Which repo should I file it in?");
   });
 
+  it("reads a raised question card by its question, not its generic title (QA 0.8.77)", () => {
+    expect(waitingOnText(card({ title: "Your bot has a question", subtitle: "Which repo should I file it in?" }))).toBe("Which repo should I file it in?");
+    expect(waitingOnText(card({
+      title: "Ton bot a une question", subtitle: "Quel dépôt?",
+      questionRequest: { version: 1, questions: [{ question: "Dans quel dépôt dois-je le classer?", header: "", options: [], multiSelect: false }] },
+    } as Partial<OptionCardData>))).toBe("Dans quel dépôt dois-je le classer?");
+  });
+
   it("reads an approval by its plain sentence, else its summary", () => {
     expect(waitingOnText(card({ title: "Approval needed", subtitle: "rm -rf build", tool: "Bash", plain: { title: "Allow Ember to run a command?", line: "" } }))).toBe("Allow Ember to run a command?");
     expect(waitingOnText(card({ title: "Approval needed", subtitle: "rm -rf build", tool: "Bash" }))).toBe("rm -rf build");

@@ -183,6 +183,7 @@ export function createBotActService(deps: BotActDeps): BotActService {
     }
   };
 
+  const RETRY_NOTE = " Do not retry this call: say in your report that this setting could not be read or changed while the owner is signed out, and continue without it.";
   const refuse = (status: number, error: string): BotActResult => ({ status, body: { error } });
 
   return {
@@ -214,7 +215,9 @@ export function createBotActService(deps: BotActDeps): BotActService {
         scopes = ["admin", "client"];
       }
       if (input.target.kind === "route" && !scopes.includes(deps.neededScope(input.target.method, input.target.path))) {
-        return refuse(403, "This person cannot change that setting: it needs rights they do not have.");
+        // #3082: a routine that repeats a refused call is cut by the loop guard; say it is final.
+        return refuse(403, "This person cannot change that setting: it needs rights they do not have."
+          + (actor.kind === "person" && actor.routine ? RETRY_NOTE : ""));
       }
       if (input.plan.effect === "run") {
         // the registry and its policy decided: the route reads it as the
@@ -265,7 +268,7 @@ export function createBotActService(deps: BotActDeps): BotActService {
         scopes = ["admin", "client"];
       }
       const decision = decideBotAct({ raw: input.raw, mode: input.mode, scopes, neededScope: deps.neededScope });
-      if (!decision.ok) return refuse(decision.status, decision.error);
+      if (!decision.ok) return refuse(decision.status, decision.error + (actor.kind === "person" && actor.routine && decision.status === 403 ? RETRY_NOTE : ""));
       if (decision.effect === "run") return run(performActor, decision.target);
       const classes = actClassesOf(decision.target);
       const candidate = actRuleCandidate(decision.target, classes, describeOf);

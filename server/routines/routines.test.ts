@@ -5262,7 +5262,8 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     h.manager.runNow(routine.id); await h.manager.tick();
     say(h, "thread-1", "Cliché absent (premier passage). Je pagine les compétences.");
     for (const id of ["a", "b", "c", "d"]) tool(h, "thread-1", id, "mcp__agents__sagax_settings", false, "A routine cannot act as a person");
-    h.manager.noteLoopStop("thread-1", "stuck-loop: the same mcp__agents__sagax_settings call with the same input ran 5 times in a row");
+    expect(h.manager.noteLoopStop("thread-1", "stuck-loop: the same mcp__agents__sagax_settings call with the same input ran 5 times in a row")).toBe(true);
+    expect(h.manager.noteLoopStop("other-thread", "stuck-loop: x")).toBe(false);
     done(h, "thread-1");
     const run = runOf(h);
     expect(run.status).toBe("completed");

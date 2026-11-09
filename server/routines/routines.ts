@@ -4320,9 +4320,11 @@ export class RoutineManager {
 
   /** #3009: the loop guard stopped this thread's turn (its recorded reason).
    * The run that ends there says so instead of ending green. */
-  noteLoopStop(threadId: string, reason: string): void {
+  noteLoopStop(threadId: string, reason: string): boolean {
     const run = this.runs.find((r) => r.threadId === threadId && ["running", "waiting"].includes(r.status));
-    if (run && run.target !== "room-goal") this.troubleOf(run.id).loopStop = reason.slice(0, 300);
+    if (!run || run.target === "room-goal") return false;
+    this.troubleOf(run.id).loopStop = reason.slice(0, 300);
+    return true;
   }
 
   failThread(threadId: string, message: string, facts: RoutineFailureFacts = {}) {

@@ -351,6 +351,11 @@ interface RunTrouble {
   /** #3009: tool steps that failed after the bot's last words: those words
    * were a progress line, not the run's final message. */
   failedAfterText?: number;
+  /** Tool steps started and not yet ended, by item id. */
+  open?: Set<string>;
+  /** Tool steps already running when the bot last spoke: their failure
+   * landing after those words does not make them a progress line. */
+  openAtText?: Set<string>;
   /** #3009: the loop guard stopped the run (its reason, as recorded). */
   loopStop?: string;
 }
@@ -3847,12 +3852,21 @@ export class RoutineManager {
     ) return null;
     if (event.type === "item.started" && event.itemType === "tool") {
       // Not a durable transition: noted for the run's ending only.
-      if (event.itemId) this.troubleOf(run.id).tools.set(event.itemId, (event.title || "a tool").slice(0, 80));
+      if (event.itemId) {
+        const trouble = this.troubleOf(run.id);
+        trouble.tools.set(event.itemId, (event.title || "a tool").slice(0, 80));
+        (trouble.open ??= new Set()).add(event.itemId);
+      }
       return null;
     } else if (event.type === "item.completed" && event.itemType === "tool") {
       const trouble = this.troubleOf(run.id);
       const title = (event.itemId && trouble.tools.get(event.itemId)) || "a tool";
       const output = redactSecretsInText(event.output ?? "").trim();
+      const startedBeforeText = Boolean(event.itemId && trouble.openAtText?.has(event.itemId));
+      if (event.itemId) {
+        trouble.open?.delete(event.itemId);
+        trouble.openAtText?.delete(event.itemId);
+      }
       if (!trouble.flowBlocked) {
         const blocked = flowRunBlockedReason(output);
         if (blocked) trouble.flowBlocked = blocked;
@@ -3875,7 +3889,10 @@ export class RoutineManager {
         for (const [other, failure] of trouble.unresolved) if (failure.misrouted === native) trouble.unresolved.delete(other);
       } else {
         trouble.failedSteps = (trouble.failedSteps ?? 0) + 1;
-        trouble.failedAfterText = (trouble.failedAfterText ?? 0) + 1;
+        // A step already running when the bot gave its final words, whose
+        // failure lands after them, does not turn those words into a
+        // progress line: the run keeps its final message.
+        if (!startedBeforeText) trouble.failedAfterText = (trouble.failedAfterText ?? 0) + 1;
         const seen = trouble.unresolved.get(key);
         const misrouted = nativeToolMisroute(output);
         // The first line with words: a JSON result's first line is a lone "{" (2026-11-03).
@@ -3905,7 +3922,10 @@ export class RoutineManager {
     } else if (event.type === "item.completed" && event.itemType === "assistant_text") {
       run.output = redactSecretsInText(event.text).trim().slice(0, 2_000);
       const trouble = this.runTrouble.get(run.id);
-      if (trouble && run.output) delete trouble.failedAfterText;
+      if (trouble && run.output) {
+        delete trouble.failedAfterText;
+        trouble.openAtText = new Set(trouble.open);
+      }
     } else if (event.type === "runtime.error") {
       run.error = redactSecretsInText(event.message).slice(0, 500);
       this.failureFacts.set(run.id, engineFacts(event));

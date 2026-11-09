@@ -69,6 +69,28 @@ function primaryApprovals() {
       }
       return out;
     },
+    // #3221: the rest of the Today box (needs-you cards, proactive offers),
+    // so one sagax_approvals list answers "what is in my Today box"
+    waiting: (turn) => {
+      const auth = host.primaryListAuth(actorOf(turn));
+      if (!auth) return [];
+      const out = [];
+      for (const item of host.inboxPending(auth, { principalId: turn.person })) {
+        const attention = item.kind === "attention";
+        if (!attention && !item.proactiveId) continue;
+        if (host.store.isConfidentialThread(item.threadId)) continue;
+        const message = host.store.messagesFor(item.threadId).find((row) => row.id === item.messageId);
+        const text = attention
+          ? (message?.attention?.items ?? []).map((entry) => String(entry?.text ?? "")).filter(Boolean).join("; ")
+          : String(message?.card?.plain?.title ?? message?.card?.title ?? message?.text ?? "");
+        out.push({
+          botName: item.botName, kind: attention ? "needs-you" : "offer", at: item.at,
+          text: text.replace(/\s+/g, " ").slice(0, 240) || (attention ? "needs the person" : "an offer"),
+          ...(item.routineName ?? item.threadTitle ? { where: String(item.routineName ?? item.threadTitle) } : {})
+        });
+      }
+      return out;
+    },
     respond: (turn, card, body) => {
       if (card.requestId.startsWith("call_") || card.requestId.startsWith("pay_")) {
         const call = card.requestId.startsWith("call_");

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cardRef, createPrimaryApprovals, primaryAnswerable, type PrimaryCard, type PrimaryTurn } from "./primary-approvals.ts";
+import { cardRef, createPrimaryApprovals, primaryAnswerable, type PrimaryCard, type PrimaryTurn, type PrimaryWaiting } from "./primary-approvals.ts";
 
 const TURN: PrimaryTurn = { botId: "quasar", botName: "Quasar", person: "pr_owner", message: { id: "m1", text: "Oui vas-y, approuve-la. Toujours permettre pour Ottoline.", at: 20_000 } };
 const card = (over: Partial<PrimaryCard> = {}): PrimaryCard => ({
@@ -9,12 +9,13 @@ const card = (over: Partial<PrimaryCard> = {}): PrimaryCard => ({
   options: ["allow", "deny", "always_allow"], always: "rule", alwaysScope: "the command npm test", ...over,
 });
 
-function harness(cards: PrimaryCard[], gate: PrimaryTurn | { status: number; code: string; error: string } = TURN) {
+function harness(cards: PrimaryCard[], gate: PrimaryTurn | { status: number; code: string; error: string } = TURN, waiting?: PrimaryWaiting[]) {
   const calls: Array<{ kind: string; body?: Record<string, unknown> }> = [];
   const audits: string[] = [];
   const service = createPrimaryApprovals({
     turn: () => gate,
     pending: () => cards,
+    ...(waiting ? { waiting: () => waiting } : {}),
     respond: async (_turn, _card, body) => { calls.push({ kind: "respond", body }); return { status: 200, body: { ok: true } }; },
     customRule: async () => { calls.push({ kind: "rule" }); return { status: 201, body: { rule: { id: "rule-1" } } }; },
     dropCustomRule: async () => { calls.push({ kind: "drop" }); },
@@ -36,6 +37,23 @@ describe("sagax_approvals", () => {
     expect(text).toContain("Allow Ottoline to run a command?");
     expect(text).not.toContain("t-kat");
     expect(text).not.toContain("r1 ");
+  });
+
+  it("lists the whole Today box in one call: needs-you cards and offers after the cards (#3221)", async () => {
+    const waiting: PrimaryWaiting[] = [
+      { botName: "Ember", kind: "needs-you", text: "Choisis le créneau\nde jeudi", where: "Facturation", at: 5_000 },
+      { botName: "Echo", kind: "offer", text: "Je peux trier tes courriels", at: 9_000 },
+    ];
+    const both = String((await harness([card()], TURN, waiting).run({ action: "list" })).body.text);
+    expect(both).toContain("1 card waiting on the person:");
+    expect(both).toContain("Also in the Today box (2;");
+    expect(both).toContain("- needs you from Ember in Facturation");
+    expect(both).toContain("Choisis le créneau de jeudi");
+    expect(both.indexOf("offer from Echo")).toBeLessThan(both.indexOf("needs you from Ember"));
+    const only = String((await harness([], TURN, waiting).run({ action: "list" })).body.text);
+    expect(only).toMatch(/^No approval card is waiting on the person\./);
+    expect(only).toContain("offer from Echo");
+    expect((await harness([], TURN, []).run({ action: "list" })).body.text).toBe("Nothing is waiting on the person.");
   });
 
   it("answers as the click on the person's request, and journals it", async () => {

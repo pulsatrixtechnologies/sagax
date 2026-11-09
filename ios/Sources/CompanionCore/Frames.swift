@@ -336,6 +336,11 @@ extension Frame {
              .presenceChanged, .orgApprovals, .preferences, .threadRead, .botTasks,
              .serverRestarting, .connectorStatus, .unknown:
             return false
+        // A computer screen goes to its own store (ScreenStore in the app):
+        // each frame used to redraw the whole app while one was watched
+        // (#3017, L01).
+        case .screen:
+            return false
         case let .runtime(event):
             switch event.type {
             case "content.delta":

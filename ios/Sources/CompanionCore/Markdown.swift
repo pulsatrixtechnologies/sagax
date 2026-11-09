@@ -666,11 +666,20 @@ public enum Markdown {
 public enum MarkdownStreamSplit {
     /// The UTF-8 offset where the stable prefix ends, or 0 when there is
     /// none (no blank line yet, or every blank line is inside a fence).
+    ///
+    /// A blank line only cuts where parsing the two parts apart gives the
+    /// same blocks as parsing the whole (#3017): the line after it starts at
+    /// the margin (an indented line may continue a list item or a block
+    /// above), and the text holds no footnote or link definition, which
+    /// reach back over the cut.
     public static func stablePrefixLength(_ source: String) -> Int {
+        if source.contains("[^") || source.contains("]:") { return 0 }
         let bytes = Array(source.utf8)
         var fence: (char: UInt8, count: Int)?
         var lineStart = 0
         var lastBlankEnd = 0
+        /// The end of a blank line waiting for the line after it.
+        var pendingBlankEnd: Int?
         var index = 0
         let n = bytes.count
         while lineStart < n {
@@ -696,12 +705,18 @@ public enum MarkdownStreamSplit {
                     let rest = bytes[(cursor + run)..<lineEnd].allSatisfy { $0 == 0x20 || $0 == 0x09 || $0 == 0x0D }
                     if rest { fence = nil }
                 }
-            } else if let marker, run >= 3 {
-                fence = (marker, run)
             } else {
                 let blank = bytes[lineStart..<lineEnd].allSatisfy { $0 == 0x20 || $0 == 0x09 || $0 == 0x0D }
-                // a blank line that is not the very end of what has arrived
-                if blank, lineEnd < n { lastBlankEnd = lineEnd + 1 }
+                if blank {
+                    // a blank line that is not the very end of what has arrived
+                    if lineEnd < n { pendingBlankEnd = lineEnd + 1 }
+                } else {
+                    if let end = pendingBlankEnd, ![0x20, 0x09, 0x3E].contains(bytes[lineStart]) {
+                        lastBlankEnd = end
+                    }
+                    pendingBlankEnd = nil
+                }
+                if let marker, run >= 3 { fence = (marker, run) }
             }
             lineStart = lineEnd + 1
         }

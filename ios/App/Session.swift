@@ -62,11 +62,25 @@ final class Session: ObservableObject {
             stateDidChange()
         }
     }
-    /// Bumped on every write to `state`, published or not: the key of the
-    /// transcript memo below (#3017, L06).
+    /// Bumped on every write to `state`, published or not. A memo entry
+    /// checked at this generation is reused without looking at its inputs.
     private var stateGeneration = 0
-    private var transcriptMemoGeneration = -1
-    private var transcriptMemo: [String: [Message]] = [:]
+    /// One thread's visible transcript and the inputs it came from: its
+    /// messages, its active leaf and its edit in flight (#3017, L06). A
+    /// streamed token, the cursor or a bot status frame changes none of
+    /// them, so the walk is not redone; the messages compare in O(1) while
+    /// their storage is shared.
+    private struct TranscriptMemo {
+        var messages: [Message]
+        var leafId: String?
+        var pending: PendingEdit?
+        var visible: [Message]
+        var checkedAt: Int
+        /// User text lines grouped by parent, oldest first: the branch
+        /// switcher's versions, built once per transcript (#3017, L03).
+        var versions: [String: [Message]]?
+    }
+    private var transcriptMemo: [String: TranscriptMemo] = [:]
 
     /// The engine catalog, kept between profile opens (#3017, L17/G8): the
     /// recap lines draw from it at once and a fresh read replaces it behind.
@@ -79,19 +93,64 @@ final class Session: ObservableObject {
         return cachedInstances
     }
 
-    /// `state.visibleTranscript(forThread:)`, walked once per state change
-    /// instead of once per reader: a chat body reads it dozens of times and
-    /// each walk builds a dictionary of the whole thread.
-    func visibleTranscript(forThread threadId: String) -> [Message] {
-        if transcriptMemoGeneration != stateGeneration {
-            transcriptMemo.removeAll(keepingCapacity: true)
-            transcriptMemoGeneration = stateGeneration
+    /// The memo entry of a thread, rebuilt only when its inputs changed.
+    private func transcriptEntry(forThread threadId: String) -> TranscriptMemo {
+        if let hit = transcriptMemo[threadId], hit.checkedAt == stateGeneration { return hit }
+        let messages = state.messages[threadId] ?? []
+        let pending = state.pendingEdits[threadId]
+        let leafId = state.activeLeafIds[threadId] ?? state.bot(forThread: threadId)?.activeLeafId
+        if var hit = transcriptMemo[threadId], hit.leafId == leafId, hit.pending == pending, hit.messages == messages {
+            hit.checkedAt = stateGeneration
+            transcriptMemo[threadId] = hit
+            return hit
         }
-        if let hit = transcriptMemo[threadId] { return hit }
-        let visible = state.visibleTranscript(forThread: threadId)
-        transcriptMemo[threadId] = visible
-        return visible
+        let entry = TranscriptMemo(
+            messages: messages, leafId: leafId, pending: pending,
+            visible: state.visibleTranscript(forThread: threadId), checkedAt: stateGeneration)
+        transcriptMemo[threadId] = entry
+        return entry
     }
+
+    /// `state.visibleTranscript(forThread:)`, walked once per change of the
+    /// thread instead of once per reader or per state write.
+    func visibleTranscript(forThread threadId: String) -> [Message] {
+        transcriptEntry(forThread: threadId).visible
+    }
+
+    /// `state.versions(of:inThread:)` from an index built once per
+    /// transcript: a row reads it on every render, and the plain version
+    /// filtered and sorted the whole thread each time.
+    func versions(of message: Message, inThread threadId: String) -> [Message] {
+        guard message.role == .user, message.kind == .text else { return [] }
+        var entry = transcriptEntry(forThread: threadId)
+        if entry.versions == nil {
+            var index: [String: [Message]] = [:]
+            for line in entry.messages where line.role == .user && line.kind == .text {
+                index[line.parentId ?? "", default: []].append(line)
+            }
+            for key in index.keys {
+                index[key]?.sort { $0.at == $1.at ? $0.id < $1.id : $0.at < $1.at }
+            }
+            entry.versions = index
+            transcriptMemo[threadId] = entry
+        }
+        return entry.versions?[message.parentId ?? ""] ?? []
+    }
+
+    /// What every transcript row reads from the session besides its own
+    /// message, as one value. Rows no longer observe the session (#3017,
+    /// L02): the chat passes this in, and a row redraws when it changes.
+    func rowContext(forThread threadId: String) -> RowContext {
+        RowContext(
+            pendingPlaceholderId: state.pendingEdits[threadId]?.placeholderId,
+            lastVisibleId: visibleTranscript(forThread: threadId).last?.id,
+            blockedIds: blockedIds,
+            viewerId: account?.principalId,
+            demo: isDemo,
+            botNames: state.bots.map { "\($0.id)\u{1}\($0.name)" }
+        )
+    }
+
     /// The live text, for the few views that draw it (`ChatLiveTail`).
     let streamingStore = StreamingStore()
     /// Every state change, including streamed tokens at most once per
@@ -936,6 +995,7 @@ final class Session: ObservableObject {
             token: token
         )
         self.state = CompanionState()
+        ScreenStore.shared.clear()
         // A fresh pairing settles any restore that was still waiting on the
         // keychain — the token is in hand, so there is nothing left to retry.
         restorePending = false
@@ -1337,6 +1397,7 @@ final class Session: ObservableObject {
         token = nil
         rotation = CandidateRotation(hosts: [])
         state = CompanionState()
+        ScreenStore.shared.clear()
         resetAvatarCache()
         sendBadge(0)
         restoreSelectedConnection()
@@ -1388,6 +1449,7 @@ final class Session: ObservableObject {
         token = nil
         rotation = CandidateRotation(hosts: [])
         state = CompanionState()
+        ScreenStore.shared.clear()
         forgetParkedStates()
         showAccount(of: nil)
         resetAvatarCache()
@@ -1433,6 +1495,7 @@ final class Session: ObservableObject {
         client = nil
         token = nil
         state = CompanionState()
+        ScreenStore.shared.clear()
         if keepingAvatars { cancelAvatarFetches() } else { resetAvatarCache() }
         resetAttachmentCache()
         attachmentSendIDs.removeAll()
@@ -1659,6 +1722,9 @@ final class Session: ObservableObject {
                     if streamed { foldQuietly { state.apply(frame) } }
                     else if frame.frame.foldsIntoState { state.apply(frame) }
                     else { foldSilently { state.apply(frame) } }
+                    if case let .screen(botId, png, mime) = frame.frame {
+                        ScreenStore.shared.update(botId, ScreenFrame(png: png, mime: mime))
+                    }
                     // people: presence and labels (#167, #172)
                     PeopleDirectory.shared.apply(frame.frame)
                     // a bot asks this phone for a tool (Features/PhoneTools)

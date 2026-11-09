@@ -22,6 +22,8 @@ struct BotEditActions {
     /// with the Memory inside), the desktop's Rules and Folder rows (#3017, G3).
     var openRules: (() -> Void)? = nil
     var openFolder: (() -> Void)? = nil
+    /// A Permissions sub-page (When it acts alone, Advanced settings).
+    var openPermissions: ((BotPermissionsPart) -> Void)? = nil
 }
 
 extension LocalizedStringKey {

@@ -41,14 +41,19 @@ final class WidgetSyncBridge {
         return WidgetSyncBridge(store: container.map { WidgetSnapshotStore(directory: $0) })
     }
 
+    /// The session, for its transcript memo: a chat's mood reads the last
+    /// visible line, which the memo keeps instead of walking each thread.
+    private weak var session: Session?
+
     func attach(to session: Session) {
+        self.session = session
         // Both the fleet and the connection matter: an unpaired app must
         // clear the snapshot even when no state change would have said so.
         cancellable = Publishers.CombineLatest3(session.statePublisher, session.$connection, session.$isDemo)
             .debounce(for: .milliseconds(400), scheduler: DispatchQueue.main)
             .sink { [weak self] state, connection, isDemo in
                 // The demo never reaches the widgets: they show "not paired".
-                self?.sync(isDemo ? CompanionState() : state, connectionID: isDemo ? nil : connection?.id)
+                self?.sync(isDemo ? CompanionState() : state, connectionID: isDemo ? nil : connection?.id, memo: !isDemo)
             }
     }
 
@@ -57,33 +62,44 @@ final class WidgetSyncBridge {
     /// difference between answering from the home screen and opening a
     /// chat that has already moved on.
     func flush(_ state: CompanionState, connectionID: String?) {
+        // Let every queued write land first: the guard below then compares
+        // with what is really on disk, and nothing older lands after this.
+        writeQueue.sync {}
         sync(state, connectionID: connectionID, inBackground: false)
     }
 
     /// The snapshot's JSON encode and file write leave the main thread
-    /// (#3017, L21); the suspension flush stays synchronous.
+    /// (#3017, L21); the suspension flush stays synchronous. Every disk
+    /// operation, the removal on unpairing included, goes through this one
+    /// serial queue, so they land in the order they were asked for.
     private let writeQueue = DispatchQueue(label: "sagax.widget-sync.write", qos: .utility)
 
-    private func sync(_ state: CompanionState, connectionID: String?, inBackground: Bool = true) {
+    private func sync(_ state: CompanionState, connectionID: String?, inBackground: Bool = true, memo: Bool = false) {
         guard let store else { return }
         guard let connectionID else {
             // Unpaired: no snapshot at all beats a stale one claiming a
             // connection that no longer exists — the widgets fall back to
             // their pairing placeholder.
             guard !publishedUnpaired else { return }
-            store.remove()
+            // after any paired snapshot still queued, never before it
+            writeQueue.async {
+                store.remove()
+                WidgetCenter.shared.reloadAllTimelines()
+            }
+            if !inBackground { writeQueue.sync {} }
             lastWritten = nil
             // The clock dies with the session it measured: a re-paired
             // computer's work starts when it starts, not when the last
             // one did.
             sinceClock = WidgetSinceClock()
             publishedUnpaired = true
-            WidgetCenter.shared.reloadAllTimelines()
             return
         }
         publishedUnpaired = false
+        let session = memo ? self.session : nil
         let snapshot = state.widgetSnapshot(connectionID: connectionID) { chat in
-            MausState.forChat(chat, in: state).rawValue
+            if let session { return MausState.forChat(chat, in: session).rawValue }
+            return MausState.forChat(chat, in: state).rawValue
         } since: { update in
             sinceClock.stamp(for: update.chat, kind: update.kind)
         }
@@ -96,8 +112,11 @@ final class WidgetSyncBridge {
                     try store.write(snapshot)
                     WidgetCenter.shared.reloadAllTimelines()
                 } catch {
-                    // a failed write is retried on the next change
-                    Task { @MainActor in self?.lastWritten = nil }
+                    // a failed write is retried on the next change, unless a
+                    // newer snapshot has been asked for since
+                    Task { @MainActor in
+                        if self?.lastWritten == snapshot { self?.lastWritten = nil }
+                    }
                 }
             }
             return

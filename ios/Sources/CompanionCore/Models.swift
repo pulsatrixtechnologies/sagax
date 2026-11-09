@@ -1249,6 +1249,11 @@ public struct Bot: Codable, Hashable, Identifiable, Sendable {
     public var emailDrafts: Bool? = nil
     /// The loop guard for this bot's turns; absent or true is on.
     public var loopGuard: Bool? = nil
+    /// Meme replies (`WireBot.memeReplies`): "auto" or "off"; absent is auto.
+    public var memeReplies: String? = nil
+    /// Running conversations at once for this bot (`maxConcurrentThreads`);
+    /// absent follows the server's default.
+    public var maxConcurrentThreads: Int? = nil
     /// Prompt-cache keep-warm: true or false overrides the workspace setting,
     /// absent follows it.
     public var cacheKeepWarm: Bool? = nil

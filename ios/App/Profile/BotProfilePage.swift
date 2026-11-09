@@ -16,7 +16,7 @@ enum BotProfileTab: String, CaseIterable, Hashable, Identifiable {
 
     /// Visible pills, the desktop's BOT_PROFILE_TABS (#3017, G1): Settings
     /// is folded into General; Stats shows only where usage is reachable.
-    static var visible: [BotProfileTab] { [.general, .knowledge, .appearance, .stats] }
+    static var visible: [BotProfileTab] { [.general, .appearance, .knowledge, .stats] }
 
     var title: LocalizedStringKey {
         switch self {
@@ -583,31 +583,46 @@ struct BotProfilePage: View {
         context.sections.contains(.access) ? [sectionRow(.access, subtitle: summaries.value(.toolsApps))] : []
     }
 
-    /// General > More: Rules, Voice, Advanced settings, Versions.
+    /// General > More (the desktop's order): Rules, When it acts alone,
+    /// Voice, Advanced settings, Versions.
     private var moreRows: [LinkRow] {
         var rows: [LinkRow] = []
-        if context.sections.contains(.permissions), let rules {
-            let counts = BotEditSummary.ruleCounts(rules, botId: current.id)
-            let total = counts.ask + counts.deny + counts.allow
+        if context.sections.contains(.permissions) {
+            let total = rules.map { rules in
+                let counts = BotEditSummary.ruleCounts(rules, botId: current.id)
+                return counts.ask + counts.deny + counts.allow
+            }
             rows.append(LinkRow(
                 id: "bot-profile-more.rules",
                 title: "Rules",
-                subtitle: total == 0 ? String(localized: "No rule") : String(localized: "\(total) rules"),
+                subtitle: total.map { total in
+                    total == 0 ? String(localized: "No rule")
+                        : total == 1 ? String(localized: "1 rule") : String(localized: "\(total) rules")
+                },
                 symbol: "list.bullet.rectangle"
             ) {
                 // iPad opens the Rules document page; the phone, the rules list
                 if let openRules = actions.openRules { openRules() } else { actions.openSection(.permissions) }
             })
         }
+        if context.sections.contains(.permissions) {
+            rows.append(LinkRow(
+                id: "bot-profile-more.acts-alone",
+                title: "When it acts alone",
+                subtitle: String(localized: "Proactive, recipients, drafts"),
+                symbol: "figure.walk"
+            ) { openPermissions(.actsAlone) })
+        }
         if context.sections.contains(.voice) {
             rows.append(sectionRow(.voice))
         }
-        if context.sections.contains(.overview) {
+        if context.sections.contains(.permissions) {
             rows.append(LinkRow(
                 id: "bot-profile-settings.overview",
                 title: "Advanced settings",
+                subtitle: String(localized: "Limits, roles, tool access, hooks"),
                 symbol: settingsSymbol(.overview)
-            ) { actions.openSection(.overview) })
+            ) { openPermissions(.advanced) })
         }
         if context.sections.contains(.history) {
             rows.append(LinkRow(
@@ -617,6 +632,11 @@ struct BotProfilePage: View {
             ) { actions.openSection(.history) })
         }
         return rows
+    }
+
+    /// A Permissions sub-page; a host without the route opens all of Permissions.
+    private func openPermissions(_ part: BotPermissionsPart) {
+        if let open = actions.openPermissions { open(part) } else { actions.openSection(.permissions) }
     }
 
     private func sectionRow(_ section: DesktopPanelSection, subtitle: String? = nil) -> LinkRow {

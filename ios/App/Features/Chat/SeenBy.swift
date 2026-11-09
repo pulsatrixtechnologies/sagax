@@ -59,11 +59,13 @@ final class ReadReceiptsCenter: ObservableObject {
 
 /// Under a message: the faces of who read up to it, or the bot's "Seen".
 struct SeenByRow: View {
-    @EnvironmentObject private var session: Session
+    /// Not observed (#3017, L02): `rowContext` carries the session state.
+    private var session: Session { SessionHub.session }
     @ObservedObject private var center = ReadReceiptsCenter.shared
     @ObservedObject private var people = PeopleDirectory.shared
     let message: Message
     let chat: Chat
+    var rowContext: RowContext = .none
     @State private var showingNames = false
 
     private var transcript: [Message] { session.visibleTranscript(forThread: chat.threadId) }

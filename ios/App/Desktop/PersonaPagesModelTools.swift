@@ -179,6 +179,29 @@ struct PersonaModelPage: View {
 
 // MARK: - Permissions
 
+/// One sub-page of Permissions (PERMISSIONS_PARTS in PermissionsSection.tsx):
+/// `.all` is the whole page (its advanced rows behind the Advanced mode),
+/// a part shows only its own rows, always.
+enum BotPermissionsPart: String, Hashable, Sendable {
+    case all, beforeActing, actsAlone, advanced
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .all, .beforeActing: return "Approvals"
+        case .actsAlone: return "When it acts alone"
+        case .advanced: return "Advanced settings"
+        }
+    }
+
+    var intro: LocalizedStringKey? {
+        switch self {
+        case .actsAlone: return "What it may do on its own."
+        case .advanced: return "For the person who builds. Everything is here, nothing was removed."
+        case .all, .beforeActing: return nil
+        }
+    }
+}
+
 /// Permissions (bot-settings/PermissionsSection.tsx): the Primary Bot while
 /// the bot holds the role, the "Approvals" group (Approval level, Proactive,
 /// Ask me before contacting other bots, Allowed recipients, Email drafts,
@@ -190,10 +213,13 @@ struct PersonaPermissionsPage: View {
     @ObservedObject private var mode = DesktopInterfaceMode.shared
     let bot: Bot
     let slackURL: URL?
+    var part: BotPermissionsPart = .all
 
     @State private var confirmingFull = false
     @State private var confirmingLocalAuto = false
     @State private var notice: String?
+    @State private var memeReplies: String?
+    @State private var maxThreads: Int?
     @State private var emailDrafts: Bool?
     @State private var loopGuard: Bool?
     @State private var hooks: BotLifecycleHooks?
@@ -205,6 +231,11 @@ struct PersonaPermissionsPage: View {
     private var proactive: ProactiveMode { ProactiveMode.of(bot.proactiveMode) }
     private var tint: Color? { BubbleColors.user(botColor: bot.color)?.fill.color }
     private func edits(_ field: String) -> Bool { session.canEditBotField(bot, field) }
+    /// Whether rows of `group` show: the whole page gates them behind the
+    /// Advanced mode (`gated`), a sub-page shows its own rows only.
+    private func shows(_ group: BotPermissionsPart, gated: Bool = true) -> Bool {
+        part == .all ? (!gated || mode.advanced) : part == group
+    }
     private var sectionName: String {
         let name = bot.section?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return name.isEmpty ? AppStrings.localized("Unassigned") : name
@@ -213,14 +244,19 @@ struct PersonaPermissionsPage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             // one Primary Bot per person: shown while this bot holds the role
-            if mode.advanced, bot.chiefOfStaff == true {
+            if let intro = part.intro {
+                DesktopText(Text(intro), size: 13, line: 18, color: \.inkSecondary)
+            }
+            if shows(.advanced), bot.chiefOfStaff == true {
                 AnyView(BotPanelPrimaryCard(bot: bot, canEdit: edits("chiefOfStaff"), sectionName: sectionName))
             }
-            DesktopSettingsGroup(Text("Approvals"), identifier: "approvals") {
+            DesktopSettingsGroup(Text(part.title), identifier: "approvals") {
                 AnyView(approvalRows)
             }
-            PersonaOwnerRulesGroup(bot: bot)
-            if mode.advanced {
+            if shows(.beforeActing, gated: false) {
+                PersonaOwnerRulesGroup(bot: bot)
+            }
+            if shows(.advanced) {
                 AnyView(moreOptions)
             }
         }
@@ -251,10 +287,15 @@ struct PersonaPermissionsPage: View {
         .onChange(of: bot.id) { _ in
             emailDrafts = nil
             loopGuard = nil
+            memeReplies = nil
+            maxThreads = nil
             notice = nil
         }
         .task(id: bot.id) {
             hooks = try? await session.settingsClient?.botLifecycleHooks(botId: bot.id)
+            if shows(.advanced), bot.maxConcurrentThreads == nil {
+                maxThreads = (try? await session.settingsClient?.botRuntimeSettings(botId: bot.id))?.maxConcurrentThreads
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("persona-page.permissions")
@@ -262,7 +303,7 @@ struct PersonaPermissionsPage: View {
 
     @ViewBuilder
     private var approvalRows: some View {
-        if edits("approvalMode") {
+        if shows(.beforeActing, gated: false), edits("approvalMode") {
             DesktopDescribedRow(Text("Approval level"),
                                 help: Text("Applies to every thread of this bot at once: routines, delegated work and work another bot or an AI client sends here. A thread keeps its own level only when you chose one in it; Refresh permissions brings it back to this level."),
                                 identifier: "approvalLevel") {
@@ -279,56 +320,56 @@ struct PersonaPermissionsPage: View {
                     .padding(.horizontal, 14)
                     .padding(.bottom, 8)
             }
-            if mode.advanced {
-                DesktopDescribedRow(Text("Proactive"),
-                                    description: Text(verbatim: proactive.hint),
-                                    help: Text("Whether this bot may wake on its own on an email, a calendar entry, a failed run, a mention of the bot, or a webhook, and start work without being asked. On by default. When on, it acts at this bot's approval level and rules; before a write from a wake, a dry run is recorded on the wake, then ordinary approval runs it. The proactive layer adds no extra approval card. Your organization's Ask and Deny rules and person isolation still apply."),
-                                    identifier: "proactiveMode") {
-                    PanelSwitch(label: "Proactive", isOn: proactive == .proactive,
-                                disabled: bot.busy == true || !edits("proactiveMode"), onColor: tint) { on in
-                        Task { _ = await sendPanelPatch(BotPanelPatch(proactiveMode: (on ? ProactiveMode.proactive : .off).rawValue), bot: bot, session: session) }
-                    }
-                    .accessibilityIdentifier("persona-permissions.proactive")
+        }
+        if shows(.actsAlone), edits("approvalMode") || edits("proactiveMode") {
+            DesktopDescribedRow(Text("Proactive"),
+                                description: Text(verbatim: proactive.hint),
+                                help: Text("Whether this bot may wake on its own on an email, a calendar entry, a failed run, a mention of the bot, or a webhook, and start work without being asked. On by default. When on, it acts at this bot's approval level and rules; before a write from a wake, a dry run is recorded on the wake, then ordinary approval runs it. The proactive layer adds no extra approval card. Your organization's Ask and Deny rules and person isolation still apply."),
+                                identifier: "proactiveMode") {
+                PanelSwitch(label: "Proactive", isOn: proactive == .proactive,
+                            disabled: bot.busy == true || !edits("proactiveMode"), onColor: tint) { on in
+                    Task { _ = await sendPanelPatch(BotPanelPatch(proactiveMode: (on ? ProactiveMode.proactive : .off).rawValue), bot: bot, session: session) }
                 }
-                // #2048: remembered publish target (page / artifact surface).
-                if edits("pageTargetDefault") {
-                    DesktopDescribedRow(
-                        Text("Publish target"),
-                        description: Text(PageTargetDefaultChoice.summary(for: bot.pageTargetDefault)),
-                        help: Text("When this bot is asked to create a page or an artifact and more than one surface is available, which one to use. Ask each time shows a choice card."),
-                        identifier: "pageTargetDefault"
-                    ) {
-                        Menu {
-                            ForEach(PageTargetDefaultChoice.all, id: \.id) { choice in
-                                Button {
-                                    let current = bot.pageTargetDefault ?? ""
-                                    guard choice.id != current else { return }
-                                    Task {
-                                        _ = await sendPanelPatch(
-                                            BotPanelPatch(pageTargetDefault: choice.id.isEmpty ? "" : choice.id),
-                                            bot: bot, session: session
-                                        )
-                                    }
-                                } label: {
-                                    if (bot.pageTargetDefault ?? "") == choice.id {
-                                        Label(choice.label, systemImage: "checkmark")
-                                    } else {
-                                        Text(choice.label)
-                                    }
+                .accessibilityIdentifier("persona-permissions.proactive")
+            }
+            // #2048: remembered publish target (page / artifact surface).
+            if edits("pageTargetDefault") {
+                DesktopDescribedRow(
+                    Text("Publish target"),
+                    description: Text(PageTargetDefaultChoice.summary(for: bot.pageTargetDefault)),
+                    help: Text("When this bot is asked to create a page or an artifact and more than one surface is available, which one to use. Ask each time shows a choice card."),
+                    identifier: "pageTargetDefault"
+                ) {
+                    Menu {
+                        ForEach(PageTargetDefaultChoice.all, id: \.id) { choice in
+                            Button {
+                                let current = bot.pageTargetDefault ?? ""
+                                guard choice.id != current else { return }
+                                Task {
+                                    _ = await sendPanelPatch(
+                                        BotPanelPatch(pageTargetDefault: choice.id.isEmpty ? "" : choice.id),
+                                        bot: bot, session: session
+                                    )
+                                }
+                            } label: {
+                                if (bot.pageTargetDefault ?? "") == choice.id {
+                                    Label(choice.label, systemImage: "checkmark")
+                                } else {
+                                    Text(choice.label)
                                 }
                             }
-                        } label: {
-                            Text(PageTargetDefaultChoice.label(for: bot.pageTargetDefault ?? ""))
-                                .font(theme.font(13))
-                                .foregroundStyle(theme.ink)
                         }
-                        .disabled(bot.busy == true)
-                        .accessibilityIdentifier("persona-permissions.page-target")
+                    } label: {
+                        Text(PageTargetDefaultChoice.label(for: bot.pageTargetDefault ?? ""))
+                            .font(theme.font(13))
+                            .foregroundStyle(theme.ink)
                     }
+                    .disabled(bot.busy == true)
+                    .accessibilityIdentifier("persona-permissions.page-target")
                 }
             }
         }
-        if mode.advanced, edits("approvePeerComms") {
+        if shows(.advanced), edits("approvePeerComms") {
             DesktopDescribedRow(Text("Ask me before contacting other bots"),
                                 help: bot.approvePeerComms == true
                                     ? Text("On: this bot stops and asks before it reaches out to another bot.")
@@ -340,10 +381,10 @@ struct PersonaPermissionsPage: View {
                 .accessibilityIdentifier("persona-permissions.ask")
             }
         }
-        if mode.advanced, edits("allowedRecipients") {
+        if shows(.actsAlone), edits("allowedRecipients") {
             PersonaRecipientsRow(bot: bot)
         }
-        if mode.advanced, edits("emailDrafts") {
+        if shows(.actsAlone), edits("emailDrafts") {
             let on = emailDrafts ?? bot.emailDrafts ?? true
             DesktopDescribedRow(Text("Email drafts"),
                                 description: on ? nil : Text("Drafts are off for this bot."),
@@ -355,7 +396,49 @@ struct PersonaPermissionsPage: View {
                 .accessibilityIdentifier("persona-permissions.email-drafts")
             }
         }
-        if mode.advanced, edits("loopGuard") {
+        if shows(.actsAlone), edits("memeReplies") {
+            let auto = (memeReplies ?? bot.memeReplies) != "off"
+            DesktopDescribedRow(Text("Meme replies"),
+                                description: auto ? Text("The bot decides from the person's style.") : Text("Meme replies are off for this bot."),
+                                help: Text("When Auto, this bot may post a fitting reaction meme from the person's style. Off hides the tool. Never in serious or work contexts."),
+                                identifier: "memeReplies") {
+                Picker("Meme replies", selection: Binding(get: { auto ? "auto" : "off" }, set: { next in
+                    guard next != (auto ? "auto" : "off") else { return }
+                    Task { if await PersonaBotFields.patch(["memeReplies": .string(next)], bot: bot, session: session) { memeReplies = next } }
+                })) {
+                    Text("Auto").tag("auto")
+                    Text("Off").tag("off")
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
+                .accessibilityIdentifier("persona-permissions.meme-replies")
+            }
+        }
+        if shows(.advanced), edits("maxConcurrentThreads") {
+            let threads = maxThreads ?? bot.maxConcurrentThreads ?? 3
+            DesktopDescribedRow(Text("Maximum running conversations for this bot"),
+                                help: Text("Applies to this bot's 1:1 conversations. Extra messages wait for a free place. Delegated work and conversations waiting for an approval take a place too. Lowering the limit does not stop work in progress."),
+                                identifier: "parallelThreads") {
+                Menu {
+                    ForEach(1...16, id: \.self) { value in
+                        Button {
+                            guard value != threads, let client = session.settingsClient else { return }
+                            let botId = bot.id
+                            Task { if (try? await client.setBotMaxConcurrentThreads(botId: botId, value)) != nil { maxThreads = value } }
+                        } label: {
+                            if value == threads { Label(String(value), systemImage: "checkmark") } else { Text(verbatim: String(value)) }
+                        }
+                    }
+                } label: {
+                    Text(verbatim: String(threads))
+                        .font(theme.font(13))
+                        .foregroundStyle(theme.ink)
+                }
+                .disabled(bot.busy == true)
+                .accessibilityIdentifier("persona-permissions.parallel-threads")
+            }
+        }
+        if shows(.advanced), edits("loopGuard") {
             let on = loopGuard ?? bot.loopGuard ?? true
             DesktopDescribedRow(Text("Loop guard"),
                                 description: on ? nil : Text("Loop guard is off for this bot."),
@@ -367,7 +450,7 @@ struct PersonaPermissionsPage: View {
                 .accessibilityIdentifier("persona-permissions.loop-guard")
             }
         }
-        if edits("allowedRecipients") {
+        if shows(.advanced, gated: false), edits("allowedRecipients") {
             // LifecycleHooksRow: GET / PUT /api/bots/:id/lifecycle-hooks
             DesktopDescribedRow(Text("Lifecycle hooks"),
                                 description: hooks.map { $0.events.isEmpty ? Text("No plugin hooks installed.") : Text(verbatim: $0.events.joined(separator: ", ")) }

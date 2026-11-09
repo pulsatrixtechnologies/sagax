@@ -149,7 +149,10 @@ struct BotPanelComputerCard: View {
             now: Date()
         )
     }
-    private var frame: ScreenFrame? { session.state.screens[bot.id] }
+    /// The screen from its own store, so a frame redraws only the views
+    /// that draw it (#3017, L01).
+    @ObservedObject private var screens = ScreenStore.shared
+    private var frame: ScreenFrame? { screens.frames[bot.id] ?? session.state.screens[bot.id] }
 
     private var statusLine: String {
         switch phase {

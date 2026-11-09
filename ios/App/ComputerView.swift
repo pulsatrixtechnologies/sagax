@@ -64,7 +64,10 @@ struct ComputerView: View {
     private var panelInkSecondary: Color { isEmbeddedPanel ? Theme.textSecondary : Theme.Computer.inkSecondary }
 
     private var fit: ComputerFit { ComputerFit(rawValue: fitRaw) ?? .fit }
-    private var streamFrame: ScreenFrame? { session.state.screens[bot.id] }
+    /// The screen from its own store, so a frame redraws only the views
+    /// that draw it (#3017, L01).
+    @ObservedObject private var screenStore = ScreenStore.shared
+    private var streamFrame: ScreenFrame? { screenStore.frames[bot.id] ?? session.state.screens[bot.id] }
     private var isEmbeddedPanel: Bool { embeddedWidth != nil }
 
     /// The bot as the stream last described it.
@@ -1306,5 +1309,23 @@ final class LocalVmComputerModel: ObservableObject {
     private static func failed(_ error: Error) -> String {
         if let text = (error as? LocalizedError)?.errorDescription, !text.isEmpty { return text }
         return "That did not work. Try again in a moment."
+    }
+}
+
+/// The bots' computer screens, apart from the session (#3017, L01). Each
+/// frame used to publish the whole session, which redrew the roster, the
+/// chat and every row while a screen was watched; only the views that draw
+/// a screen observe this store.
+@MainActor
+final class ScreenStore: ObservableObject {
+    static let shared = ScreenStore()
+    @Published private(set) var frames: [String: ScreenFrame] = [:]
+
+    func update(_ botId: String, _ frame: ScreenFrame) {
+        frames[botId] = frame
+    }
+
+    func clear() {
+        if !frames.isEmpty { frames = [:] }
     }
 }

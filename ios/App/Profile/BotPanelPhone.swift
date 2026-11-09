@@ -119,6 +119,9 @@ private struct PhoneBotPanelContent: View {
                 .navigationDestination(for: PanelOverviewPage.self) { page in AnyView(overviewPage(page)) }
                 .navigationDestination(for: PanelProfileRoute.self) { route in AnyView(profilePage(route.tab)) }
                 .navigationDestination(for: PanelPersonaRoute.self) { _ in AnyView(profilePage(.settings)) }
+                .navigationDestination(for: BotPermissionsPart.self) { part in
+                    AnyView(BotPermissionsPartPage(bot: current, part: part))
+                }
                 .navigationDestination(for: BotEditPageID.self) { page in
                     AnyView(PhoneBotEditPage(page: page, bot: current, context: editContext, actions: editActions))
                 }
@@ -789,7 +792,8 @@ private struct PhoneBotPanelContent: View {
             editAvatar: { editingAvatar = true },
             archive: { confirmingArchive = true },
             delete: { confirmingDelete = true },
-            close: { if !path.isEmpty { path.removeLast() } }
+            close: { if !path.isEmpty { path.removeLast() } },
+            openPermissions: { path.append($0) }
         )
     }
 

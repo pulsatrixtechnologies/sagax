@@ -51,6 +51,7 @@ struct DesktopBotProfileHost: View {
             },
             openSection: { section in
                 withAnimation(.easeOut(duration: 0.15)) {
+                    model.permissionsPart = .all
                     model.panelSection = section
                     model.personaPage = DesktopPersonaPage(section: section)
                 }
@@ -70,7 +71,14 @@ struct DesktopBotProfileHost: View {
             delete: { confirmingDelete = true },
             close: { close() },
             openRules: { openPersona(.rules) },
-            openFolder: { openPersona(.files) }
+            openFolder: { openPersona(.files) },
+            openPermissions: { part in
+                withAnimation(.easeOut(duration: 0.15)) {
+                    model.permissionsPart = part
+                    model.panelSection = .permissions
+                    model.personaPage = DesktopPersonaPage(section: .permissions)
+                }
+            }
         )
     }
 
@@ -174,7 +182,13 @@ struct DesktopBotProfileHost: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("desktop-bot-profile-back")
-                Text(verbatim: page.label)
+                Group {
+                    if page == .permissions, model.permissionsPart != .all {
+                        Text(model.permissionsPart.title)
+                    } else {
+                        Text(verbatim: page.label)
+                    }
+                }
                     .font(theme.font(15, .semibold))
                     .foregroundStyle(theme.ink)
                     .lineLimit(1)
@@ -184,7 +198,7 @@ struct DesktopBotProfileHost: View {
             .padding(.trailing, 16)
             .padding(.top, 14)
             .padding(.bottom, 8)
-            DesktopPersonaPageHost(bot: current, page: page, slackURL: slackURL)
+            DesktopPersonaPageHost(bot: current, page: page, slackURL: slackURL, permissionsPart: model.permissionsPart)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // Page id on the body only: putting it on this VStack hid the
                 // window-close chip from UITests (#1939).
@@ -194,6 +208,7 @@ struct DesktopBotProfileHost: View {
 
     private func openPersona(_ page: DesktopPersonaPage) {
         withAnimation(.easeOut(duration: 0.15)) {
+            model.permissionsPart = .all
             model.panelSection = nil
             model.personaPage = page
         }
@@ -203,6 +218,7 @@ struct DesktopBotProfileHost: View {
         model.personaOpen = false
         model.panelSection = nil
         model.personaPage = .overview
+        model.permissionsPart = .all
     }
 }
 
@@ -213,6 +229,7 @@ struct DesktopPersonaPageHost: View {
     let bot: Bot
     let page: DesktopPersonaPage
     var slackURL: URL?
+    var permissionsPart: BotPermissionsPart = .all
 
     private var current: Bot { session.state.bot(bot.id) ?? bot }
 
@@ -252,7 +269,7 @@ struct DesktopPersonaPageHost: View {
                 }
             case .permissions:
                 ScrollView {
-                    PersonaPermissionsPage(bot: current, slackURL: slackURL)
+                    PersonaPermissionsPage(bot: current, slackURL: slackURL, part: permissionsPart)
                         .padding(.horizontal, 32)
                         .padding(.vertical, 16)
                 }

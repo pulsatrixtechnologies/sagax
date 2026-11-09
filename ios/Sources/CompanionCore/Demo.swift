@@ -146,6 +146,8 @@ public final class DemoServer: @unchecked Sendable {
             // Encoded rather than spelled out, so no upstream name sits in the
             // binary as a JSON literal (scripts/check-ios-bundle-names.sh).
             return encode(CompanionClient.HealthIdentity(app: CompanionClient.HealthIdentity.expectedApp))
+        case ("GET", ["api", "bots"]) where parts.count == 4 && parts[3] == "overview":
+            return overview(botId: parts[2])
         case ("GET", ["api", "routines"]):
             lock.lock(); defer { lock.unlock() }
             return encode(RoutinesResponse(routines: routines, runs: runs))
@@ -187,6 +189,16 @@ public final class DemoServer: @unchecked Sendable {
         default:
             return refusal(status: method == "GET" ? 404 : 403)
         }
+    }
+
+    // MARK: - Overview
+
+    /// `GET /api/bots/:id/overview`: the iPad Overview and Personality pages
+    /// and the iPhone "What it does" summary read it, as on a computer.
+    private func overview(botId: String) -> Response {
+        lock.lock(); defer { lock.unlock() }
+        guard let bot = bots.first(where: { $0.id == botId }) else { return refusal(status: 404) }
+        return encode(BotOverview.local(bot: bot, routines: routines, language: language))
     }
 
     // MARK: - Report, Block, terms (App Store 1.2)

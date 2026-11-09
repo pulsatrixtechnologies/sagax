@@ -148,7 +148,7 @@ final class DemoFilesTests: XCTestCase {
         let base = try server.startListening()
         defer { server.stop() }
 
-        let missing = try await http(base, "GET", "/api/bots/demo-atlas/overview")
+        let missing = try await http(base, "GET", "/api/bots/demo-atlas/no-such-route")
         XCTAssertEqual(missing.status, 404)
         XCTAssertEqual(missing.json["error"] as? String, DemoServer.unavailable)
         XCTAssertEqual(missing.json["code"] as? String, "demo")

@@ -135,11 +135,15 @@ struct BotOverviewView: View {
         }
         let loaded = await session.botOverview(for: bot)
         guard !Task.isCancelled, session.connection?.id == connectionID else { return }
-        if let loaded {
-            overview = loaded
+        switch loaded {
+        case let .loaded(value):
+            overview = value
             failed = false
-        } else {
+        case .failed:
             failed = true
+        case .hidden, .loading:
+            // nothing to read for this pairing: no error, nothing shown
+            failed = false
         }
     }
 
@@ -163,14 +167,23 @@ struct BotPersonalitySummary: View {
     @Environment(\.themePalette) var themePalette
     @EnvironmentObject private var session: Session
     let bot: Bot
-    @State private var overview: BotOverview?
+    @State private var load: BotOverviewLoad = .loading
 
     var body: some View {
+        Group {
+            // No overview for this pairing (no computer, 403, 404): the
+            // block goes away, as on the desktop, never a spinner forever.
+            if load != .hidden { summary }
+        }
+        .task(id: bot.id) { load = await session.botOverview(for: bot) }
+    }
+
+    private var summary: some View {
         VStack(alignment: .leading, spacing: 0) {
             ProfileSectionLabel(text: "What it does", margin: Theme.Profile.routineMargin)
             ProfileCard(margin: Theme.Profile.routineMargin) {
                 VStack(alignment: .leading, spacing: 6) {
-                    if let overview {
+                    if let overview = load.overview {
                         let blurb = overview.who.blurb.isEmpty ? overview.who.title : overview.who.blurb
                         if !blurb.isEmpty {
                             Text(verbatim: blurb)
@@ -188,6 +201,10 @@ struct BotPersonalitySummary: View {
                                     .foregroundStyle(Theme.textSecondary)
                             }
                         }
+                    } else if load == .failed {
+                        Text("Couldn’t load the overview.")
+                            .font(Theme.Profile.labelFont)
+                            .foregroundStyle(Theme.textSecondary)
                     } else {
                         ProgressView().frame(maxWidth: .infinity)
                     }
@@ -217,6 +234,5 @@ struct BotPersonalitySummary: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("personality-summary")
-        .task(id: bot.id) { overview = await session.botOverview(for: bot) }
     }
 }

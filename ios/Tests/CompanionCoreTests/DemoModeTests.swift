@@ -151,8 +151,10 @@ final class DemoModeTests: XCTestCase {
         defer { server.stop() }
         let client = server.makeClient()
         do {
-            _ = try await client.overview(botId: "demo-atlas")
-            XCTFail("no overview in the demo")
+            // The demo serves its own bots' overview; anything outside the
+            // demo fleet is refused with the demo message.
+            _ = try await client.overview(botId: "not-a-demo-bot")
+            XCTFail("no overview outside the demo fleet")
         } catch let APIError.status(code, message) {
             XCTAssertEqual(code, 404)
             XCTAssertEqual(message, DemoServer.unavailable)

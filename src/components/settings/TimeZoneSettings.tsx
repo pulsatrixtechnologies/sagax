@@ -42,6 +42,12 @@ export function timeZoneChoices(): string[] {
   }
 }
 
+/** The field's CSS width for a value: its characters plus the padding, at
+ * least the width the empty field always had (14rem). */
+export function timeZoneFieldWidth(value: string): string {
+  return `max(14rem, calc(${value.length}ch + 1.75rem))`;
+}
+
 export function TimeZoneRows() {
   const listId = useId();
   const [answer, setAnswer] = useState<BotSettingsAnswer | null>(null);
@@ -125,7 +131,10 @@ export function TimeZoneRows() {
           onChange={(event) => { setDraft(event.target.value); setError(""); }}
           onBlur={commit}
           onKeyDown={(event) => { if (event.key === "Enter") commit(); }}
-          className="h-8 w-56 max-w-full rounded-full bg-control px-3 text-right text-[13px] text-ink outline-none placeholder:text-ink-secondary focus-visible:ring-2 focus-visible:ring-accent/70"
+          // As wide as its value (Automatic (America/Toronto), a long zone
+          // name), never a fixed pill that cuts it (#3041); capped by the row.
+          style={{ width: timeZoneFieldWidth(shown) }}
+          className="h-8 max-w-full rounded-full bg-control px-3 text-right text-[13px] text-ink outline-none placeholder:text-ink-secondary focus-visible:ring-2 focus-visible:ring-accent/70"
         />
         <datalist id={listId}>
           <option value={t("settings.timeZone.autoOption", { zone: here })} />

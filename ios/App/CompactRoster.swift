@@ -104,7 +104,7 @@ struct CompactBotEntry: View {
                     UnreadDot(visible: row.showsUnreadDot, color: bot.color)
                     BotMascotView(
                         bot: bot, size: face,
-                        state: MausState.forChat(.bot(bot), in: session.state),
+                        state: MausState.forChat(.bot(bot), in: session),
                         animated: false,
                         sidebarTapReact: true
                     )

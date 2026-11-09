@@ -325,6 +325,48 @@ extension Frame {
         guard case let .runtime(event) = self else { return false }
         return event.type == "content.delta"
     }
+
+    /// Whether folding this frame can change what `CompanionState` holds
+    /// (#3017 L01). A presence ping, a read receipt, a config or an unknown
+    /// frame folds nothing: the app still runs `apply` for its side effects
+    /// but must not publish the whole session for it.
+    public var foldsIntoState: Bool {
+        switch self {
+        case .hello, .notifyWithdraw, .voiceCallEnded, .computer, .config, .nudge, .personLabel,
+             .presenceChanged, .orgApprovals, .preferences, .threadRead, .botTasks,
+             .serverRestarting, .connectorStatus, .unknown:
+            return false
+        // A computer screen goes to its own store (ScreenStore in the app):
+        // each frame used to redraw the whole app while one was watched
+        // (#3017, L01).
+        case .screen:
+            return false
+        case let .runtime(event):
+            switch event.type {
+            case "content.delta":
+                guard let delta = event.delta, !delta.isEmpty else { return false }
+                return event.streamKind == "assistant_text" || event.streamKind == "reasoning_text"
+            case "turn.started", "turn.completed", "turn.failed", "turn.aborted":
+                return true
+            default:
+                return false
+            }
+        default:
+            return true
+        }
+    }
+
+    /// Whether this frame can change the unread count (#3017 L12).
+    public var canChangeUnread: Bool {
+        switch self {
+        case .message, .messagePatch, .bot, .botDeleted, .room, .roomDeleted, .threadRead, .thread:
+            return true
+        case let .runtime(event):
+            return event.type.hasPrefix("turn.") && event.type != "turn.started"
+        default:
+            return false
+        }
+    }
 }
 
 /// A frame plus its position in the stream.

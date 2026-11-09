@@ -15,7 +15,11 @@ struct MessageRow: View {
     var openThread: ((ThreadRef) -> Void)? = nil
     /// After Resume on a routine that paused itself (the passing banner closes).
     var afterResume: (() -> Void)? = nil
-    @EnvironmentObject private var session: Session
+    /// What the row reads from the session, passed in by the chat (#3017,
+    /// L02). The row no longer observes the session: every frame used to
+    /// re-run the body of every row on screen.
+    var rowContext: RowContext = .none
+    private var session: Session { SessionHub.session }
     @State private var editingText = ""
     @State private var showingEdit = false
     /// The text being selected, and the sheet's presentation in one value.
@@ -47,7 +51,7 @@ struct MessageRow: View {
     }
 
     private var versions: [Message] {
-        session.state.versions(of: message, inThread: chat.threadId)
+        session.versions(of: message, inThread: chat.threadId)
     }
 
     /// The stand-in for an edit the computer has not answered yet. It has no
@@ -88,9 +92,9 @@ struct MessageRow: View {
             }
 
             // #270: chips in landing order, who reacted on a long press
-            ReactionChipsRow(message: message, chat: chat)
+            ReactionChipsRow(message: message, chat: chat, rowContext: rowContext)
             // #270: Seen by (faces in a room, "Seen" with a bot)
-            SeenByRow(message: message, chat: chat)
+            SeenByRow(message: message, chat: chat, rowContext: rowContext)
 
             if versions.count > 1, let index = versions.firstIndex(where: { $0.id == message.id }),
                case let .bot(bot) = chat {
@@ -480,7 +484,7 @@ struct MessageRow: View {
     private var retryable: Bool {
         guard ErrorRowRules.isError(message), case let .bot(bot) = chat else { return false }
         return ErrorRowRules.retryableErrorId(
-            in: session.state.visibleTranscript(forThread: chat.threadId),
+            in: session.visibleTranscript(forThread: chat.threadId),
             busy: bot.busy == true,
             pendingId: session.state.pendingEdits[chat.threadId]?.placeholderId
         ) == message.id
@@ -528,8 +532,62 @@ struct MessageRow: View {
 extension MessageRow: Equatable {
     static func == (lhs: MessageRow, rhs: MessageRow) -> Bool {
         lhs.message == rhs.message
-            && lhs.chat == rhs.chat
+            && Self.sameChat(lhs.chat, rhs.chat)
             && lhs.endsRun == rhs.endsRun
             && (lhs.openThread == nil) == (rhs.openThread == nil)
+            && lhs.rowContext.same(as: rhs.rowContext, for: lhs.message)
+    }
+
+    /// The chat record without its transcript and task list: comparing the
+    /// whole `Chat` compared the entire conversation once per row on every
+    /// render (#3017, L05). A row reads the chat's identity, never its
+    /// messages (those come from the session).
+    static func sameChat(_ lhs: Chat, _ rhs: Chat) -> Bool {
+        switch (lhs, rhs) {
+        case let (.bot(a), .bot(b)):
+            guard a.id == b.id else { return false }
+            return slim(a) == slim(b)
+        case let (.room(a), .room(b)):
+            guard a.id == b.id else { return false }
+            var x = a, y = b
+            x.messages = nil
+            y.messages = nil
+            return x == y
+        default:
+            return false
+        }
+    }
+
+    private static func slim(_ bot: Bot) -> Bot {
+        var copy = bot
+        copy.messages = nil
+        copy.tasks = nil
+        return copy
+    }
+}
+
+/// The session state a transcript row draws from besides its message: the
+/// edit in flight, blocked people, the viewer, demo mode and bot names. The
+/// chat builds it once per render and rows compare it, so a frame that
+/// changes none of it leaves every row alone (#3017, L02).
+struct RowContext: Equatable {
+    var pendingPlaceholderId: String?
+    var lastVisibleId: String?
+    var blockedIds: Set<String>
+    var viewerId: String?
+    var demo: Bool
+    var botNames: [String]
+
+    static let none = RowContext(pendingPlaceholderId: nil, lastVisibleId: nil, blockedIds: [], viewerId: nil, demo: false, botNames: [])
+
+    /// The last line only matters to an error row (its Retry button): a new
+    /// message would otherwise redraw every row above it.
+    func same(as other: RowContext, for message: Message) -> Bool {
+        pendingPlaceholderId == other.pendingPlaceholderId
+            && (!ErrorRowRules.isError(message) || lastVisibleId == other.lastVisibleId)
+            && blockedIds == other.blockedIds
+            && viewerId == other.viewerId
+            && demo == other.demo
+            && botNames == other.botNames
     }
 }

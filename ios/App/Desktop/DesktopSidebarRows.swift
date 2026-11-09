@@ -429,7 +429,7 @@ struct DesktopSidebarRow: View {
 
     /// `max-w-[46%]` of the name line.
     private var lastTime: String? {
-        guard let at = session.state.visibleTranscript(forThread: chat.threadId).last?.at, at > 0 else { return nil }
+        guard let at = session.visibleTranscript(forThread: chat.threadId).last?.at, at > 0 else { return nil }
         return Date(timeIntervalSince1970: at / 1000).formatted(date: .omitted, time: .shortened)
     }
 
@@ -452,7 +452,7 @@ struct DesktopSidebarRow: View {
             if case let .room(room) = chat, PeopleDirectory.shared.peer(room, session: session) == nil {
                 DesktopStackedMauses(members: room.memberIds.compactMap { session.state.bot($0) }, density: density)
             } else {
-                ChatAvatarView(chat: chat, size: size, state: MausState.forChat(chat, in: session.state), background: theme.sidebar, fillBox: true)
+                ChatAvatarView(chat: chat, size: size, state: MausState.forChat(chat, in: session), background: theme.sidebar, fillBox: true)
                     .frame(width: size, height: size)
             }
         }

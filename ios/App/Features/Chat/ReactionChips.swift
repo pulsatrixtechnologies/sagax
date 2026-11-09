@@ -8,10 +8,13 @@ import CompanionCore
 import SwiftUI
 
 struct ReactionChipsRow: View {
-    @EnvironmentObject private var session: Session
+    /// Not observed: the row above passes `rowContext` and redraws this
+    /// when what it reads changes (#3017, L02).
+    private var session: Session { SessionHub.session }
     @ObservedObject private var center = ReadReceiptsCenter.shared
     let message: Message
     let chat: Chat
+    var rowContext: RowContext = .none
     @State private var details: ReactionChip?
 
     static func selfIds(_ session: Session, threadId: String) -> Set<String> {

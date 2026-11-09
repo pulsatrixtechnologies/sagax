@@ -166,7 +166,7 @@ final class PeopleDirectory: ObservableObject {
         guard let path = BotSharerRules.personAvatarPath(path), photos[path] == nil, !photoReads.contains(path),
               let client = photoClient else { return }
         photoReads.insert(path)
-        if let data = try? await client.personAvatar(path: path), let image = UIImage(data: data) {
+        if let data = try? await client.personAvatar(path: path), let image = await ImageDecoding.prepared(data) {
             photos[path] = image
         }
     }

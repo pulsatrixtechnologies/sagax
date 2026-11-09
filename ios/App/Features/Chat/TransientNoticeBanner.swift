@@ -22,7 +22,7 @@ struct TransientNoticeBanner: View {
                 HStack(alignment: .top, spacing: 8) {
                     MessageRow(chat: chat, message: active, endsRun: true, openLink: openLink, openThread: openThread.map { open in
                         { ref in close(); open(ref) }
-                    }, afterResume: close)
+                    }, afterResume: close, rowContext: SessionHub.session.rowContext(forThread: chat.threadId))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     Button(action: close) {
                         Image(systemName: "xmark").font(.footnote.weight(.semibold))

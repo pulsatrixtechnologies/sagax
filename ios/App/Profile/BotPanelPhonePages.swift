@@ -243,9 +243,14 @@ struct BotModelSection: View {
 struct BotPermissionsSection: View {
     @Environment(\.themePalette) var themePalette
     let bot: Bot
+    /// A sub-page (When it acts alone, Advanced settings) shows its rows only.
+    var part: BotPermissionsPart = .all
     @EnvironmentObject private var session: Session
     @State private var confirmingFull = false
     @State private var viewerId = "local-owner"
+    @State private var maxThreads: Int?
+
+    private func shows(_ group: BotPermissionsPart) -> Bool { part == .all || part == group }
 
     private var current: Bot { session.state.bot(bot.id) ?? bot }
     private var canEdit: Bool { session.surfaceGate.allows(.botAccessEdit, bot: current) }
@@ -263,6 +268,25 @@ struct BotPermissionsSection: View {
     }
 
     var body: some View {
+        if let intro = part.intro {
+            Section { Text(intro).font(.footnote).foregroundStyle(Theme.textSecondary) }
+        }
+        if shows(.advanced) { primaryAndPeers }
+        if shows(.beforeActing) { approvalSection }
+        if shows(.actsAlone) { actsAloneSections }
+        if shows(.advanced) { advancedSections }
+        if !canEdit {
+            Section {
+                Text("These are changed by an administrator, or in Sagax on your computer.")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.textSecondary)
+                    .accessibilityIdentifier("permissions-read-only")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var primaryAndPeers: some View {
         Section {
             Toggle(isOn: Binding(get: { current.chiefOfStaff == true }, set: { on in send(BotPanelPatch(chiefOfStaff: on)) })) {
                 Label("Chief of Staff", systemImage: "crown")
@@ -287,6 +311,10 @@ struct BotPermissionsSection: View {
                  ? "This bot will stop and ask before it reaches out to another bot."
                  : "Let this bot talk to teammates on its own, without a confirmation step.")
         }
+    }
+
+    @ViewBuilder
+    private var approvalSection: some View {
         Section {
             Picker("Approval level", selection: Binding(get: { level }, set: { pick($0) })) {
                 ForEach([ApprovalLevel.ask, .edits, .auto, .full], id: \.self) { option in
@@ -328,6 +356,16 @@ struct BotPermissionsSection: View {
             }
         }
         .task(id: bot.id) { viewerId = PrimaryBotRules.viewerId(config: await session.configStatus()) }
+        .alert("Give this bot Full access?", isPresented: $confirmingFull) {
+            Button("Cancel", role: .cancel) {}
+            Button("Full access", role: .destructive) { send(.approval(.full)) }
+        } message: {
+            Text("It runs commands and edits files without asking, in every thread. Use only with bots you trust.")
+        }
+    }
+
+    @ViewBuilder
+    private var actsAloneSections: some View {
         // 2026-10-30: Proactive, as on the desktop (PermissionsSection.tsx)
         Section {
             Picker("Proactive", selection: Binding(get: { ProactiveMode.of(current.proactiveMode) }, set: { mode in
@@ -346,12 +384,6 @@ struct BotPermissionsSection: View {
                 Text("How this bot acts on its own on an email, a calendar entry, a failed run, another bot's post or a webhook.")
             }
         }
-        .alert("Give this bot Full access?", isPresented: $confirmingFull) {
-            Button("Cancel", role: .cancel) {}
-            Button("Full access", role: .destructive) { send(.approval(.full)) }
-        } message: {
-            Text("It runs commands and edits files without asking, in every thread. Use only with bots you trust.")
-        }
         // #2048: remembered publish target (page / artifact surface).
         if edits("pageTargetDefault") {
             Section {
@@ -369,14 +401,76 @@ struct BotPermissionsSection: View {
                 Text(PageTargetDefaultChoice.summary(for: current.pageTargetDefault))
             }
         }
-        if !canEdit {
+        if edits("emailDrafts") {
+            let on = current.emailDrafts ?? true
             Section {
-                Text("These are changed by an administrator, or in Sagax on your computer.")
-                    .font(.footnote)
-                    .foregroundStyle(Theme.textSecondary)
-                    .accessibilityIdentifier("permissions-read-only")
+                Toggle("Email drafts", isOn: Binding(get: { on }, set: { next in field("emailDrafts", .bool(next)) }))
+                    .tint(Theme.toggleOn)
+                    .accessibilityIdentifier("permissions-email-drafts")
+            } footer: {
+                Text("When off, this bot does not write email draft cards.")
             }
         }
+        if edits("memeReplies") {
+            let auto = current.memeReplies != "off"
+            Section {
+                Picker("Meme replies", selection: Binding(get: { auto ? "auto" : "off" }, set: { next in
+                    guard next != (auto ? "auto" : "off") else { return }
+                    field("memeReplies", .string(next))
+                })) {
+                    Text("Auto").tag("auto")
+                    Text("Off").tag("off")
+                }
+                .accessibilityIdentifier("permissions-meme-replies")
+            } footer: {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(auto ? "The bot decides from the person's style." : "Meme replies are off for this bot.")
+                    Text("When Auto, this bot may post a fitting reaction meme from the person's style. Off hides the tool. Never in serious or work contexts.")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var advancedSections: some View {
+        if edits("maxConcurrentThreads") {
+            let threads = maxThreads ?? current.maxConcurrentThreads ?? 3
+            Section {
+                Picker("Maximum running conversations for this bot", selection: Binding(get: { threads }, set: { value in
+                    guard value != threads, let client = session.settingsClient else { return }
+                    let botId = current.id
+                    Task { if (try? await client.setBotMaxConcurrentThreads(botId: botId, value)) != nil { maxThreads = value } }
+                })) {
+                    ForEach(1...16, id: \.self) { value in Text(verbatim: String(value)).tag(value) }
+                }
+                .disabled(current.busy == true)
+                .accessibilityIdentifier("permissions-parallel-threads")
+            } header: {
+                Text("Parallel conversations")
+            } footer: {
+                Text("Applies to this bot's 1:1 conversations. Extra messages wait for a free place. Delegated work and conversations waiting for an approval take a place too. Lowering the limit does not stop work in progress.")
+            }
+            .task(id: bot.id) {
+                if current.maxConcurrentThreads == nil {
+                    maxThreads = (try? await session.settingsClient?.botRuntimeSettings(botId: bot.id))?.maxConcurrentThreads
+                }
+            }
+        }
+        if edits("loopGuard") {
+            let on = current.loopGuard ?? true
+            Section {
+                Toggle("Loop guard", isOn: Binding(get: { on }, set: { next in field("loopGuard", .bool(next)) }))
+                    .tint(Theme.toggleOn)
+                    .accessibilityIdentifier("permissions-loop-guard")
+            } footer: {
+                Text("When off, this bot is not steered or stopped for a repeating shell failure.")
+            }
+        }
+    }
+
+    private func field(_ name: String, _ value: BulkValue) {
+        let target = current
+        Task { _ = await PersonaBotFields.patch([name: value], bot: target, session: session) }
     }
 
     private func pick(_ option: ApprovalLevel) {
@@ -634,6 +728,23 @@ struct BotVoiceSections: View {
             player = nil
             session.actionError = String(localized: "The generated audio could not be played.")
         }
+    }
+}
+
+// MARK: - Permissions sub-page
+
+/// A Permissions sub-page pushed from the More rows (When it acts alone,
+/// Advanced settings), as the desktop's PERMISSIONS_PARTS.
+struct BotPermissionsPartPage: View {
+    @Environment(\.themePalette) var themePalette
+    let bot: Bot
+    let part: BotPermissionsPart
+
+    var body: some View {
+        ThemedForm { BotPermissionsSection(bot: bot, part: part) }
+            .navigationTitle(Text(part.title))
+            .navigationBarTitleDisplayMode(.inline)
+            .accessibilityIdentifier("panel-page.permissions.\(part.rawValue)")
     }
 }
 

@@ -24,13 +24,15 @@ extension StepWords {
 
 struct StepRunRow: View {
     @Environment(\.themePalette) var themePalette
-    @EnvironmentObject private var session: Session
+    /// Not observed (#3017, L02): `rowContext` carries the session state.
+    private var session: Session { SessionHub.session }
     let run: StepRun
     let chat: Chat
     let openLink: (URL, Message) -> OpenURLAction.Result
     var openThread: ((ThreadRef) -> Void)? = nil
     var revealedMessageId: String? = nil
     var scrollToMessage: ((String) -> Void)? = nil
+    var rowContext: RowContext = .none
     @State private var expanded = false
 
     private var nameOf: StepNameOf {
@@ -72,7 +74,7 @@ struct StepRunRow: View {
                     ForEach(StepGroup.merge(run.messages, words: words, nameOf: nameOf)) { entry in
                         switch entry {
                         case let .message(message):
-                            MessageRow(chat: chat, message: message, endsRun: message.id == run.messages.last(where: { !StepGroup.isStep($0) })?.id, openLink: openLink, openThread: openThread)
+                            MessageRow(chat: chat, message: message, endsRun: message.id == run.messages.last(where: { !StepGroup.isStep($0) })?.id, openLink: openLink, openThread: openThread, rowContext: rowContext)
                                 .id(message.id)
                                 .onAppear {
                                     if revealedMessageId == message.id { scrollToMessage?(message.id) }

@@ -35,16 +35,24 @@ struct PhoneBotIdentityFields: View {
             avatar
             fieldLabel("Name")
             field(text: $name, prompt: nil, field: .name, id: "panel-edit-name")
+            limitNote(name.count, Self.nameLimit)
             fieldLabel("Role")
             field(text: $title, prompt: "Add a role", field: .title, id: "panel-edit-title")
+            limitNote(title.count, NewBotRules.titleLimit)
             fieldLabel("Description")
             descriptionField
+            limitNote(blurb.count, NewBotRules.descriptionLimit)
         }
         .onAppear {
             loadFromBot()
             registerCommit? { commitAll() }
         }
         .onValueChange(of: bot.id) { _ in loadFromBot() }
+        // a save normalised by the server, or a change from another device,
+        // shows here unless that field is being typed in (#3017, G6)
+        .onValueChange(of: current.name) { now in if focus != .name { name = now; refreshDirty() } }
+        .onValueChange(of: current.title) { now in if focus != .title { title = now; refreshDirty() } }
+        .onValueChange(of: current.description) { now in if focus != .description { blurb = now; refreshDirty() } }
         .onDisappear {
             if autosave { commitAll() }
         }
@@ -54,8 +62,14 @@ struct PhoneBotIdentityFields: View {
             if now != .title { commitTitle() }
             if now != .description { commitBlurb() }
         }
-        .onValueChange(of: name) { _ in refreshDirty() }
-        .onValueChange(of: title) { _ in refreshDirty() }
+        .onValueChange(of: name) { now in
+            if now.count > Self.nameLimit { name = String(now.prefix(Self.nameLimit)) }
+            refreshDirty()
+        }
+        .onValueChange(of: title) { now in
+            if now.count > NewBotRules.titleLimit { title = String(now.prefix(NewBotRules.titleLimit)) }
+            refreshDirty()
+        }
         .onValueChange(of: blurb) { _ in refreshDirty() }
     }
 
@@ -85,6 +99,23 @@ struct PhoneBotIdentityFields: View {
     }
 
     // MARK: Fields
+
+    /// The desktop's name limit (the server keeps 100 characters).
+    static let nameLimit = 100
+
+    /// Shown at the limit instead of cutting the text silently (#3017, G6).
+    @ViewBuilder
+    private func limitNote(_ count: Int, _ limit: Int) -> some View {
+        if count >= limit {
+            Text("Character limit reached")
+                .font(Theme.Font.profileLabel)
+                .foregroundStyle(Theme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, SettingsMetrics.cardMargin + Theme.Profile.textInset)
+                .padding(.top, 6)
+                .accessibilityIdentifier("panel-edit-limit")
+        }
+    }
 
     private func fieldLabel(_ text: LocalizedStringKey) -> some View {
         ProfileSectionLabel(text: text, margin: SettingsMetrics.cardMargin)
@@ -125,10 +156,11 @@ struct PhoneBotIdentityFields: View {
             .accessibilityIdentifier("panel-edit-description")
     }
 
-    private func loadFromBot() {
-        name = current.name
-        title = current.title
-        blurb = current.description
+    private func loadFromBot(_ source: Bot? = nil) {
+        let from = source ?? current
+        name = from.name
+        title = from.title
+        blurb = from.description
         refreshDirty()
     }
 
@@ -137,11 +169,24 @@ struct PhoneBotIdentityFields: View {
         if isDirty.wrappedValue != dirty { isDirty.wrappedValue = dirty }
     }
 
+    /// One combined patch for every changed field, so saves never race
+    /// each other (#3017, G5).
     private func commitAll() {
         focus = nil
-        commitName()
-        commitTitle()
-        commitBlurb()
+        var patch = BotProfilePatch()
+        var changed = false
+        if let next = DesktopInlineEdit.commit(draft: name, current: current.name, required: true) {
+            patch.name = next; changed = true
+        } else if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            name = current.name
+        }
+        if let next = DesktopInlineEdit.commit(draft: title, current: current.title, required: false) {
+            patch.title = next; changed = true
+        }
+        if let next = DesktopInlineEdit.commit(draft: blurb, current: current.description, required: false) {
+            patch.description = next; changed = true
+        }
+        if changed { save(patch) }
         refreshDirty()
     }
 
@@ -153,7 +198,7 @@ struct PhoneBotIdentityFields: View {
     }
 
     private func commitName() {
-        let draft = String(name.prefix(100))
+        let draft = String(name.prefix(Self.nameLimit))
         guard let next = DesktopInlineEdit.commit(draft: draft, current: current.name, required: true) else {
             if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { name = current.name }
             return
@@ -164,16 +209,21 @@ struct PhoneBotIdentityFields: View {
     }
 
     private func commitTitle() {
-        let draft = String(title.prefix(200))
+        let draft = String(title.prefix(NewBotRules.titleLimit))
         guard let next = DesktopInlineEdit.commit(draft: draft, current: current.title, required: false) else { return }
         var patch = BotProfilePatch()
         patch.title = next
         save(patch)
     }
 
+    /// Saves, then shows what the server kept; a failed save puts the
+    /// saved values back (the session reports the error).
     private func save(_ patch: BotProfilePatch) {
         let target = current
-        Task { _ = await session.updateProfile(patch, for: target) }
+        Task {
+            let saved = await session.updateProfile(patch, for: target)
+            if focus == nil { loadFromBot(saved ?? current) }
+        }
     }
 }
 

@@ -364,7 +364,7 @@ struct PanelFileThumbnail: View {
         .task(id: file.id) {
             guard kind == .image, file.available, image == nil, let client = session.profileClient else { return }
             if let data = try? await client.threadFileData(threadId: threadId, fileId: file.id, preview: true) {
-                image = UIImage(data: data)
+                image = await ImageDecoding.prepared(data)
             }
         }
         .accessibilityHidden(true)

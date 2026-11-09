@@ -236,20 +236,21 @@ struct DesktopSidebarList: View {
     @ObservedObject private var prefs = SidebarPrefsModel.shared
     @ObservedObject private var toolCalls = ToolCallsSetting.shared
     let layout: SidebarLayout
-    @State private var contentFrame: CGRect = .zero
+    /// Only the two fade flags live in state: the content frame changes on
+    /// every scroll frame, and writing it re-ran the whole list each time.
+    @State private var fadeTop = false
+    @State private var fadeBottom = false
     @State private var viewport: CGFloat = 0
 
     var body: some View {
         let icons = model.density == .icons
         let previews = previewMap()
         let sections = DesktopSidebarSections.visible(layout, session: session)
-        let fadeTop = contentFrame.minY < -1
-        let fadeBottom = contentFrame.maxY > viewport + 1
         return GeometryReader { outer in
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
+                LazyVStack(alignment: .leading, spacing: 0) {
                     AnyView(DesktopPinnedTiles(chats: pinnedChats))
-                    VStack(alignment: .leading, spacing: 4) {
+                    LazyVStack(alignment: .leading, spacing: 4) {
                         ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
                             AnyView(DesktopSidebarSection(
                                 section: section,
@@ -270,8 +271,8 @@ struct DesktopSidebarList: View {
                 .background(GeometryReader { inner in
                     let frame = inner.frame(in: .named("desktop-sidebar-list"))
                     Color.clear
-                        .onAppear { contentFrame = frame }
-                        .onValueChange(of: frame) { contentFrame = $0 }
+                        .onAppear { updateFades(frame) }
+                        .onValueChange(of: frame) { updateFades($0) }
                 })
             }
             .scrollIndicators(.never)
@@ -294,6 +295,15 @@ struct DesktopSidebarList: View {
     /// section), in the roster's order. The sections leave them out.
     private var pinnedChats: [Chat] {
         layout.pinnedBots.map(Chat.bot)
+    }
+
+    /// Writes a fade flag only when it flips, so scrolling does not
+    /// invalidate the list.
+    private func updateFades(_ frame: CGRect) {
+        let top = frame.minY < -1
+        let bottom = frame.maxY > viewport + 1
+        if top != fadeTop { fadeTop = top }
+        if bottom != fadeBottom { fadeBottom = bottom }
     }
 
     private func previewMap() -> [String: String] {

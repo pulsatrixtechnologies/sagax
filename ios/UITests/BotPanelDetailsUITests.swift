@@ -331,11 +331,10 @@ final class BotPanelDetailsUITests: XCTestCase {
         let app = launchProfile()
         // the gear opens the profile (#2157): Usage under Advanced
         openSettings(in: app)
-        // Usage sits in Advanced, closed by default
-        let advanced = element("bot-profile-settings-toggle", in: app)
-        for _ in 0..<10 where !(advanced.exists && advanced.isHittable) { app.swipeUp() }
-        XCTAssertTrue(advanced.waitForExistence(timeout: 10))
-        advanced.tap()
+        // Usage sits on the Stats tab, like the desktop (#3017)
+        let stats = element("bot-profile-tab.stats", in: app)
+        XCTAssertTrue(stats.waitForExistence(timeout: 10))
+        stats.tap()
         let usage = element("bot-profile-settings.usage", in: app)
         for _ in 0..<10 where !(usage.exists && usage.isHittable) { app.swipeUp() }
         XCTAssertTrue(usage.waitForExistence(timeout: 10))

@@ -11,9 +11,12 @@ import Foundation
 /// `GET /api/bots/:id/runtime-settings` `settings.automaticRecovery`.
 public struct BotRuntimeSettings: Decodable, Hashable, Sendable {
     public var automaticRecovery: BotAutomaticRecovery?
+    /// Maximum running 1:1 conversations for this bot (1 to 16).
+    public var maxConcurrentThreads: Int?
 
-    public init(automaticRecovery: BotAutomaticRecovery? = nil) {
+    public init(automaticRecovery: BotAutomaticRecovery? = nil, maxConcurrentThreads: Int? = nil) {
         self.automaticRecovery = automaticRecovery
+        self.maxConcurrentThreads = maxConcurrentThreads
     }
 }
 
@@ -116,6 +119,12 @@ public extension CompanionClient {
         }
         return try await send(makeRequest("PATCH", "/api/bots/\(botId)/runtime-settings", body: ["automaticRecovery": body]),
                               as: RuntimeSettingsBody.self).settings
+    }
+
+    /// `PATCH {maxConcurrentThreads}` (BotParallelSettings.tsx): 1 to 16.
+    func setBotMaxConcurrentThreads(botId: String, _ value: Int) async throws {
+        guard Self.validRouteID(botId), (1...16).contains(value) else { throw APIError.badURL }
+        try await send(makeRequest("PATCH", "/api/bots/\(botId)/runtime-settings", body: ["maxConcurrentThreads": value]))
     }
 
     func botLifecycleHooks(botId: String) async throws -> BotLifecycleHooks {

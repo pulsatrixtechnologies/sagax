@@ -5220,6 +5220,22 @@
         }
       }
     },
+    "1 rule": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 rule"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 règle"
+          }
+        }
+      }
+    },
     "1 run skipped": {
       "localizations": {
         "en": {
@@ -11988,6 +12004,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "S'applique à toutes les conversations de ce bot d'un coup : routines, travail délégué et travail qu'un autre bot ou un client IA envoie ici. Une conversation garde son propre niveau seulement si tu l'y as choisi ; Actualiser les permissions la ramène à ce niveau."
+          }
+        }
+      }
+    },
+    "Applies to this bot's 1:1 conversations. Extra messages wait for a free place. Delegated work and conversations waiting for an approval take a place too. Lowering the limit does not stop work in progress.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applies to this bot's 1:1 conversations. Extra messages wait for a free place. Delegated work and conversations waiting for an approval take a place too. Lowering the limit does not stop work in progress."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "S'applique aux conversations 1:1 de ce bot. Les messages de trop attendent une place libre. Le travail délégué et les conversations en attente d'une approbation prennent aussi une place. Baisser la limite n'arrête pas le travail en cours."
           }
         }
       }
@@ -33236,6 +33268,22 @@
         }
       }
     },
+    "For the person who builds. Everything is here, nothing was removed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For the person who builds. Everything is here, nothing was removed."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pour la personne qui construit. Tout est là, rien n'a été retiré."
+          }
+        }
+      }
+    },
     "For your own devices only. To add another person, invite them from Organization.": {
       "localizations": {
         "en": {
@@ -42116,6 +42164,22 @@
         }
       }
     },
+    "Limits, roles, tool access, hooks": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limits, roles, tool access, hooks"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limites, rôles, accès aux outils, hooks"
+          }
+        }
+      }
+    },
     "Lines": {
       "localizations": {
         "en": {
@@ -44582,6 +44646,22 @@
         }
       }
     },
+    "Maximum running conversations for this bot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maximum running conversations for this bot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversations simultanées max. pour ce bot"
+          }
+        }
+      }
+    },
     "Maximum running threads per bot": {
       "localizations": {
         "en": {
@@ -44766,6 +44846,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Membros, instruções, memória"
+          }
+        }
+      }
+    },
+    "Meme replies": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meme replies"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réponses en mèmes"
+          }
+        }
+      }
+    },
+    "Meme replies are off for this bot.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meme replies are off for this bot."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les réponses en mèmes sont éteintes pour ce bot."
           }
         }
       }
@@ -53548,6 +53660,38 @@
         }
       }
     },
+    "Parallel conversations": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parallel conversations"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversations parallèles"
+          }
+        }
+      }
+    },
+    "Proactive, recipients, drafts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proactive, recipients, drafts"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proactif, destinataires, brouillons"
+          }
+        }
+      }
+    },
     "Teammate": {
       "localizations": {
         "en": {
@@ -53570,6 +53714,22 @@
         }
       }
     },
+    "The bot decides from the person's style.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The bot decides from the person's style."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le bot décide selon le style de la personne."
+          }
+        }
+      }
+    },
     "Via MCP": {
       "localizations": {
         "en": {
@@ -53588,6 +53748,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Via MCP"
+          }
+        }
+      }
+    },
+    "What it may do on its own.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What it may do on its own."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce qu'il a le droit de faire de lui-même."
+          }
+        }
+      }
+    },
+    "When Auto, this bot may post a fitting reaction meme from the person's style. Off hides the tool. Never in serious or work contexts.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When Auto, this bot may post a fitting reaction meme from the person's style. Off hides the tool. Never in serious or work contexts."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En Auto, ce bot peut publier un mème de réaction adapté au style de la personne. Éteint cache l'outil. Jamais dans un contexte sérieux ou de travail."
+          }
+        }
+      }
+    },
+    "When it acts alone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When it acts alone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand il agit seul"
           }
         }
       }
@@ -114594,6 +114802,176 @@
           "stringUnit": {
             "state": "translated",
             "value": "Un modèle nomme tes nouveaux fils."
+          }
+        }
+      }
+    },
+    "Before acting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before acting"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avant d'agir"
+          }
+        }
+      }
+    },
+    "Versions": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Versions"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Versions"
+          }
+        }
+      }
+    },
+    "Advanced settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Advanced settings"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réglages avancés"
+          }
+        }
+      }
+    },
+    "Stats": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stats"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Statistiques"
+          }
+        }
+      }
+    },
+    "Mascot and colour": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mascot and colour"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mascotte et couleur"
+          }
+        }
+      }
+    },
+    "Mascot, colour and picture": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mascot, colour and picture"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mascotte, couleur et image"
+          }
+        }
+      }
+    },
+    "%lld rules": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld rules"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld règles"
+          }
+        }
+      }
+    },
+    "Character limit reached": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Character limit reached"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limite de caractères atteinte"
+          }
+        }
+      }
+    },
+    "Couldn't delete the bot": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't delete the bot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de supprimer le bot"
+          }
+        }
+      }
+    },
+    "Knowledge": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Knowledge"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connaissances"
           }
         }
       }

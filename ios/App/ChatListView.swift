@@ -686,7 +686,7 @@ struct ChatListView: View {
                         chat: summary.chat,
                         preview: summary.preview,
                         at: summary.lastActivity,
-                        state: MausState.forChat(summary.chat, in: session.state),
+                        state: MausState.forChat(summary.chat, in: session),
                         waiting: waitingChats.contains(summary.chat.id),
                         last: index == rows.count - 1
                     )
@@ -798,9 +798,12 @@ struct ChatListView: View {
     }
 
     private var updatesButton: some View {
-        UpdatesPill(updates: session.state.updates) {
-            Haptics.selection()
-            showingUpdates = true
+        // #3017 L02: the live working line redraws only the pill, at 4 Hz.
+        ObservingView(model: RosterLiveStore.shared) {
+            UpdatesPill(updates: session.state.updates) {
+                Haptics.selection()
+                showingUpdates = true
+            }
         }
         .frame(height: 52)
     }
@@ -1654,7 +1657,7 @@ extension ChatListView {
 
     private func pinnedButton(_ chat: Chat, mascot: CGFloat) -> some View {
         Button { openChat(chat) } label: {
-            HomePinnedCell(chat: chat, state: MausState.forChat(chat, in: session.state), mascot: mascot)
+            HomePinnedCell(chat: chat, state: MausState.forChat(chat, in: session), mascot: mascot)
         }
         .buttonStyle(.plain)
         .contextMenu { chatMenu(chat) }
@@ -1749,7 +1752,7 @@ extension ChatListView {
                     preview: summary.line,
                     stamp: RelativeStamp.list(summary.lastActivity),
                     status: status,
-                    state: MausState.forChat(chat, in: session.state),
+                    state: MausState.forChat(chat, in: session),
                     selection: selection.active && botId != nil ? .init(selected: botId.map(selection.contains) ?? false) : nil
                 )
             }
@@ -1914,11 +1917,12 @@ extension ChatListView {
                 .zIndex(5)
             }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.9), value: showingSearch)
-        .animation(.spring(response: 0.35, dampingFraction: 0.9), value: showingNewChat)
-        .animation(.spring(response: 0.35, dampingFraction: 0.9), value: showingNewGroup)
-        .animation(.spring(response: 0.35, dampingFraction: 0.9), value: showingCreateBot)
-        .animation(.spring(response: 0.35, dampingFraction: 0.9), value: showingSettings)
+        // one spring for the overlay sheets, keyed on which one is open
+        // (#3017, L09), instead of five animation modifiers on the root
+        .animation(
+            .spring(response: 0.35, dampingFraction: 0.9),
+            value: [showingSearch, showingNewChat, showingNewGroup, showingCreateBot, showingSettings]
+        )
     }
 }
 

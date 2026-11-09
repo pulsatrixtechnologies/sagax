@@ -100,6 +100,8 @@ final class DesktopShellModel: ObservableObject {
     @Published var panelSection: DesktopPanelSection?
     /// Deep-link page inside the profile host (Appearance, Access, …).
     @Published var personaPage: DesktopPersonaPage = .overview
+    /// Permissions opened as one of its sub-pages (When it acts alone, Advanced settings).
+    @Published var permissionsPart: BotPermissionsPart = .all
     /// A move the editor asks the panel's owl to play.
     @Published var avatarMove: OwlWingMove?
     /// A Shapes move the editor asks the panel's shape to play.

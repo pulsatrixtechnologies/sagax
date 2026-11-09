@@ -968,7 +968,7 @@ struct CallTranscriptPanel: View {
     }
 
     private var entries: [Entry] {
-        session.state.visibleTranscript(forThread: call.threadId)
+        session.visibleTranscript(forThread: call.threadId)
             .filter { $0.kind == .text && !($0.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .suffix(8)
             .map { message -> Entry in

@@ -10,6 +10,8 @@ struct UpdatesSheet: View {
     @Environment(\.themePalette) var themePalette
     let open: (Chat) -> Void
     @EnvironmentObject private var session: Session
+    /// The working lines move with the live text (#3017 L02).
+    @ObservedObject private var live = RosterLiveStore.shared
     @Environment(\.dismiss) private var dismiss
 
     private var updates: [ChatUpdate] { session.state.updates }
@@ -126,7 +128,7 @@ private struct TodayRow: View {
     var body: some View {
         Button(action: open) {
             HStack(alignment: .top, spacing: 12) {
-                ChatAvatarView(chat: chat, size: 40, state: MausState.forChat(chat, in: session.state))
+                ChatAvatarView(chat: chat, size: 40, state: MausState.forChat(chat, in: session))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.botName)
                         .font(.system(size: 15, weight: .semibold))
@@ -161,7 +163,7 @@ private struct UpdateRow: View {
     var body: some View {
         Button(action: open) {
             HStack(alignment: .top, spacing: 12) {
-                ChatAvatarView(chat: update.chat, size: 40, state: MausState.forChat(update.chat, in: session.state))
+                ChatAvatarView(chat: update.chat, size: 40, state: MausState.forChat(update.chat, in: session))
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(update.chat.name)

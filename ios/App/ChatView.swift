@@ -52,6 +52,8 @@ struct ChatView: View {
         return Binding(get: { model.text }, set: { if model.text != $0 { model.text = $0 } })
     }
     @State var revealedMessageId: String?
+    /// Rows and conversation lines kept between renders (#3017, L01).
+    @State var layoutMemo = TranscriptLayoutMemo()
     /// The row the "New" line sits above, set when an unread chat opens.
     @State var newDividerBefore: String?
     @State var showingTasks = false
@@ -258,7 +260,7 @@ struct ChatView: View {
     }
 
     var messages: [Message] {
-        session.state.visibleTranscript(forThread: threadId)
+        session.visibleTranscript(forThread: threadId)
     }
 
     /// The focused message once this chat holds it (nil before): the jump's
@@ -270,12 +272,45 @@ struct ChatView: View {
 
     /// The transcript as the reader has asked to see it: every chip, folded
     /// runs, or none at all.
+    /// Memoized on its inputs (#3017, L01): the folding pass ran over the
+    /// whole visible transcript on every render, streamed tokens included.
     var rows: [TranscriptRow] {
-        transcriptRows(
-            messages, detail: toolCalls.detail, showThreads: threadPrefs.threads.allows(.transcriptReceipts),
-            threadBotId: current.isBot ? current.id : "",
-            hidesPreSendRefusals: current.isBot
+        let key = TranscriptLayoutMemo.RowsKey(
+            messages: messages, detail: toolCalls.detail,
+            showThreads: threadPrefs.threads.allows(.transcriptReceipts),
+            botId: current.isBot ? current.id : "", hides: current.isBot)
+        if layoutMemo.rowsKey == key { return layoutMemo.rows }
+        let built = transcriptRows(
+            key.messages, detail: key.detail, showThreads: key.showThreads,
+            threadBotId: key.botId, hidesPreSendRefusals: key.hides
         )
+        layoutMemo.rowsKey = key
+        layoutMemo.rows = built
+        return built
+    }
+
+    /// The conversation lines between rows, memoized on the transcript and
+    /// the bot's conversation list (#3017, L01).
+    func conversationLayout(storedBot: Bot?, transcript: [TranscriptRow]) -> TranscriptLayoutMemo.Lines {
+        let hasMore = session.state.hasMore[threadId] == true
+        let key = TranscriptLayoutMemo.LinesKey(
+            messages: messages, conversations: storedBot?.botConversations ?? [],
+            threadId: threadId, mainThreadId: storedBot?.mainThreadId,
+            fallbackThreadId: storedBot?.threadId ?? threadId, hasMore: hasMore,
+            rowCount: transcript.count, firstStart: transcript.first?.head.at)
+        if layoutMemo.linesKey == key, let lines = layoutMemo.lines { return lines }
+        let visible = key.conversations.isEmpty ? [] : BotConversations.visible(
+            key.conversations,
+            openThreadId: threadId,
+            mainThreadId: key.mainThreadId,
+            fallbackThreadId: key.fallbackThreadId,
+            linkedThreadIds: BotConversations.linkedThreadIds(in: key.messages))
+        let split = BotConversations.split(visible, firstStart: key.firstStart, hasMore: hasMore)
+        let anchors = BotConversations.anchors(split.inline, rowStarts: transcript.map { $0.head.at }, hasMore: hasMore)
+        let lines = TranscriptLayoutMemo.Lines(split: split, anchors: anchors)
+        layoutMemo.linesKey = key
+        layoutMemo.lines = lines
+        return lines
     }
 
     /// The composer's chip row, as edited in Settings.
@@ -696,23 +731,16 @@ struct ChatView: View {
         // conversation stays one timeline on screen (the reference design).
         let fresh = false
         let transcript = rows
+        let rowContext = session.rowContext(forThread: threadId)
         let streamOn = !threadPrefs.showThreads && current.isBot && currentTopicIsSegment
         let readBack = session.state.hasMore[threadId] == false
         let topicsAbove = streamOn && readBack ? Array(earlierTopics.prefix(earlierTopicsShown).reversed()) : []
         let nextTopic = streamOn && readBack && earlierTopicsShown < earlierTopics.count ? earlierTopics[earlierTopicsShown] : nil
         let storedBot: Bot? = { if case let .bot(bot) = current { return session.state.bot(bot.id) }; return nil }()
-        let visibleConversations = BotConversations.visible(
-            storedBot?.botConversations ?? [],
-            openThreadId: threadId,
-            mainThreadId: storedBot?.mainThreadId,
-            fallbackThreadId: storedBot?.threadId ?? threadId,
-            linkedThreadIds: BotConversations.linkedThreadIds(in: messages))
+        let lines = conversationLayout(storedBot: storedBot, transcript: transcript)
         // Rows older than the first line fold behind "Earlier topics".
-        let conversationSplit = BotConversations.split(
-            visibleConversations, firstStart: transcript.first?.head.at, hasMore: session.state.hasMore[threadId] == true)
-        let conversationRows = conversationSplit.inline
-        let conversationAnchors = BotConversations.anchors(
-            conversationRows, rowStarts: transcript.map { $0.head.at }, hasMore: session.state.hasMore[threadId] == true)
+        let conversationSplit = lines.split
+        let conversationAnchors = lines.anchors
         // A VStack with the composer as a sibling, rather than a scroll view
         // with `.safeAreaInset`. The inset version sized itself to its
         // content, so a short transcript left the composer floating in the
@@ -757,7 +785,7 @@ struct ChatView: View {
                                 if let projected = session.state.bot(bot.id)?.projected(forThread: topic.threadId) {
                                     EarlierTopicSection(
                                         chat: .bot(projected),
-                                        rows: transcriptRows(session.state.visibleTranscript(forThread: topic.threadId), detail: toolCalls.detail, showThreads: false, threadBotId: bot.id, hidesPreSendRefusals: true),
+                                        rows: transcriptRows(session.visibleTranscript(forThread: topic.threadId), detail: toolCalls.detail, showThreads: false, threadBotId: bot.id, hidesPreSendRefusals: true),
                                         openLink: openLink, openThread: openThread, revealedMessageId: revealedMessageId,
                                         scrollToMessage: { proxy.scrollTo($0, anchor: .center) }
                                     )
@@ -847,7 +875,8 @@ struct ChatView: View {
                                         message: message,
                                         endsRun: endsRun(at: index, in: transcript),
                                         openLink: openLink,
-                                        openThread: openThread
+                                        openThread: openThread,
+                                        rowContext: rowContext
                                     )
                                     // Skips the row when only the screen
                                     // around it changed (a keystroke, the
@@ -858,7 +887,8 @@ struct ChatView: View {
                                     StepRunRow(
                                         run: run, chat: current, openLink: openLink, openThread: openThread,
                                         revealedMessageId: revealedMessageId,
-                                        scrollToMessage: { proxy.scrollTo($0, anchor: .center) }
+                                        scrollToMessage: { proxy.scrollTo($0, anchor: .center) },
+                                        rowContext: rowContext
                                     )
                                 case let .voiceCall(card):
                                     VoiceCallCard(
@@ -1523,6 +1553,7 @@ struct EarlierTopicSection: View {
     @Environment(\.desktopChatText) private var desktop
 
     var body: some View {
+        let rowContext = session.rowContext(forThread: chat.threadId)
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                 VStack(alignment: .leading, spacing: 0) {
@@ -1546,10 +1577,10 @@ struct EarlierTopicSection: View {
                     }
                     switch row {
                     case let .message(message):
-                        MessageRow(chat: chat, message: message, endsRun: true, openLink: openLink, openThread: openThread)
+                        MessageRow(chat: chat, message: message, endsRun: true, openLink: openLink, openThread: openThread, rowContext: rowContext)
                             .equatable()
                     case let .activityRun(run):
-                        StepRunRow(run: run, chat: chat, openLink: openLink, openThread: openThread, revealedMessageId: revealedMessageId, scrollToMessage: scrollToMessage)
+                        StepRunRow(run: run, chat: chat, openLink: openLink, openThread: openThread, revealedMessageId: revealedMessageId, scrollToMessage: scrollToMessage, rowContext: rowContext)
                     case let .voiceCall(card):
                         VoiceCallCard(chat: chat, card: card, forceOpen: card.messages.contains { $0.id == revealedMessageId }, live: session.streamingStore)
                     }
@@ -1584,4 +1615,35 @@ struct TopicDividerLine: View {
         .accessibilityLabel(Text(verbatim: "\(String(localized: "New topic")) · \(title)"))
         .accessibilityIdentifier("chat.topicDivider")
     }
+}
+
+/// The chat's derived transcript layout, kept between renders (#3017, L01).
+/// A reference held in `@State`, so filling it during a render changes no
+/// view state; each part is rebuilt only when its key changes.
+final class TranscriptLayoutMemo {
+    struct RowsKey: Equatable {
+        var messages: [Message]
+        var detail: ActivityDetail
+        var showThreads: Bool
+        var botId: String
+        var hides: Bool
+    }
+    struct LinesKey: Equatable {
+        var messages: [Message]
+        var conversations: [BotConversation]
+        var threadId: String
+        var mainThreadId: String?
+        var fallbackThreadId: String
+        var hasMore: Bool
+        var rowCount: Int
+        var firstStart: Double?
+    }
+    struct Lines {
+        var split: (leading: [BotConversation], inline: [BotConversation])
+        var anchors: (before: [Int: [BotConversation]], after: [BotConversation])
+    }
+    var rowsKey: RowsKey?
+    var rows: [TranscriptRow] = []
+    var linesKey: LinesKey?
+    var lines: Lines?
 }

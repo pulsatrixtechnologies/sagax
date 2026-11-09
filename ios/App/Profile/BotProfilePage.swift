@@ -11,16 +11,19 @@ import SwiftUI
 import UIKit
 
 enum BotProfileTab: String, CaseIterable, Hashable, Identifiable {
-    case general, knowledge, settings
+    case general, knowledge, appearance, stats, settings
     var id: String { rawValue }
 
-    /// Visible pills (#2136): Settings is folded into General.
-    static var visible: [BotProfileTab] { [.general, .knowledge] }
+    /// Visible pills, the desktop's BOT_PROFILE_TABS (#3017, G1): Settings
+    /// is folded into General; Stats shows only where usage is reachable.
+    static var visible: [BotProfileTab] { [.general, .appearance, .knowledge, .stats] }
 
     var title: LocalizedStringKey {
         switch self {
         case .general: "General"
         case .knowledge: "Knowledge"
+        case .appearance: "Appearance"
+        case .stats: "Stats"
         case .settings: "Settings"
         }
     }
@@ -79,6 +82,15 @@ struct BotProfilePage: View {
 
     private var current: Bot { session.state.bot(bot.id) ?? bot }
 
+    /// The mascot's face, read once through the session's transcript memo
+    /// (#3017, L16) instead of walking the whole thread per mascot.
+    private var mascotState: MausState { MausState.forChat(.bot(current), in: session) }
+
+    /// The pills this pairing shows: Stats only where usage is reachable.
+    private var visibleTabs: [BotProfileTab] {
+        BotProfileTab.visible.filter { $0 != .stats || context.sections.contains(.usage) }
+    }
+
     /// The bot's name alone; its title sits on the line under it.
     private var headline: String { current.name }
 
@@ -123,11 +135,14 @@ struct BotProfilePage: View {
                             .padding(.bottom, 48)
                     }
                     // Main-column profile: one centred column like the desktop's (#2313).
-                    .frame(maxWidth: fillsMain ? 1100 : .infinity)
+                    // the desktop's 760 pt column (#3017, G14)
+                    .frame(maxWidth: fillsMain ? 760 : .infinity)
                     .frame(maxWidth: .infinity)
                 }
             }
             .scrollIndicators(.visible)
+            // typing in the hero fields: drag the list to put the keyboard away (G17)
+            .scrollDismissesKeyboard(.interactively)
         }
         .background(Theme.bg.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
@@ -151,8 +166,6 @@ struct BotProfilePage: View {
     // MARK: Header
 
     private var banner: some View {
-        // Quiet grey gradient like the reference app (`bot-profile-banner`, #2141),
-        // not the mascot's colour.
         LinearGradient(
             colors: bannerColors,
             startPoint: .top,
@@ -164,8 +177,9 @@ struct BotProfilePage: View {
             BotMascotView(
                 bot: current,
                 size: 72,
-                state: MausState.forChat(.bot(current), in: session.state),
-                animated: true,
+                state: mascotState,
+                // a still banner mascot: only the hero animates (#3017, L16)
+                animated: false,
                 owlHandle: owlHandle
             )
             .padding(.leading, 20)
@@ -177,16 +191,12 @@ struct BotProfilePage: View {
     }
 
     private var bannerColors: [Color] {
-        // light-dark(#ececec, #3a3a3a) → light-dark(#e0e0e0, #2a2a2a)
-        if themePalette.isDark {
-            return [
-                Color(red: 0x3a / 255, green: 0x3a / 255, blue: 0x3a / 255),
-                Color(red: 0x2a / 255, green: 0x2a / 255, blue: 0x2a / 255),
-            ]
-        }
+        // the desktop's `.bot-profile-banner` wash in the mascot's colour
+        // (#3017, G13), over the phone's dark or light base
+        let base = themePalette.isDark ? Color(hex: "#2A2A2A") : Color.white
         return [
-            Color(red: 0xec / 255, green: 0xec / 255, blue: 0xec / 255),
-            Color(red: 0xe0 / 255, green: 0xe0 / 255, blue: 0xe0 / 255),
+            DesktopMemoryPage.mix(washColor, base, 0.58),
+            DesktopMemoryPage.mix(washColor, base, 0.36),
         ]
     }
 
@@ -240,17 +250,30 @@ struct BotProfilePage: View {
             .accessibilityLabel(Text("Close"))
             .accessibilityIdentifier("window-close")
             Spacer(minLength: 0)
-            HStack(spacing: 6) {
-                Image(systemName: privateBot ? "lock" : "person.2")
-                    .font(.system(size: 12, weight: .regular))
-                Text(privateBot ? "Private" : "Shared")
-                    .font(.system(size: 12, weight: .medium))
+            // the desktop's share button (#3017, G15): opens who uses and sees it
+            Button {
+                Haptics.selection()
+                if context.sections.contains(.sharing) {
+                    actions.openSection(.sharing)
+                } else if context.sections.contains(.visibility) {
+                    actions.openSection(.visibility)
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: privateBot ? "lock" : "person.2")
+                        .font(.system(size: 12, weight: .regular))
+                    Text(privateBot ? "Private" : "Shared")
+                        .font(.system(size: 12, weight: .medium))
+                }
+                .foregroundStyle(desktopTheme.ink)
+                .padding(.horizontal, 12)
+                .frame(height: 36)
+                .background(Capsule().fill(desktopTheme.elevated))
+                .overlay(Capsule().strokeBorder(desktopTheme.hairlineWeak, lineWidth: 1))
+                .contentShape(Capsule())
             }
-            .foregroundStyle(desktopTheme.ink)
-            .padding(.horizontal, 12)
-            .frame(height: 36)
-            .background(Capsule().fill(desktopTheme.elevated))
-            .overlay(Capsule().strokeBorder(desktopTheme.hairlineWeak, lineWidth: 1))
+            .buttonStyle(.plain)
+            .disabled(!context.sections.contains(.sharing) && !context.sections.contains(.visibility))
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("bot-profile-visibility")
         }
@@ -288,7 +311,7 @@ struct BotProfilePage: View {
                 BotMascotView(
                     bot: current,
                     size: 150,
-                    state: MausState.forChat(.bot(current), in: session.state),
+                    state: mascotState,
                     animated: true,
                     owlHandle: owlHandle
                 )
@@ -306,7 +329,7 @@ struct BotProfilePage: View {
             }
             .padding(.horizontal, 28)
             .padding(.vertical, 20)
-            .frame(height: 210)
+            .frame(minHeight: 210)
             .background(
                 // Desktop MascotLookPreview: radial-gradient(120% 140% at 20% 50%,
                 // 26% of the bot's colour in the panel, to the panel at 58%).
@@ -416,7 +439,7 @@ struct BotProfilePage: View {
     /// edge of the column, the selected one on the hover fill.
     private var mainTabs: some View {
         HStack(spacing: 4) {
-            ForEach(BotProfileTab.visible) { item in
+            ForEach(visibleTabs) { item in
                 let on = tab == item
                 Button {
                     Haptics.selection()
@@ -445,7 +468,7 @@ struct BotProfilePage: View {
 
     private var phoneTabPills: some View {
         HStack(spacing: 4) {
-            ForEach(BotProfileTab.visible) { item in
+            ForEach(visibleTabs) { item in
                 let on = tab == item
                 Button {
                     Haptics.selection()
@@ -477,6 +500,8 @@ struct BotProfilePage: View {
         switch tab {
         case .general, .settings: generalBody
         case .knowledge: knowledgeBody
+        case .appearance: appearanceBody
+        case .stats: statsBody
         }
     }
 
@@ -499,7 +524,9 @@ struct BotProfilePage: View {
         VStack(alignment: .leading, spacing: 24) {
             group("Profile", rows: profileRows, id: "bot-profile-group.profile")
             group("Settings", rows: settingsRows, id: "bot-profile-group.settings")
-            channelsGroup
+            if showsSlack || mailRow != nil || !audienceRows.isEmpty { channelsGroup }
+            group("Accounts", rows: accountRows, id: "bot-profile-group.accounts")
+            group("More", rows: moreRows, id: "bot-profile-group.more")
             advancedDisclosure
         }
     }
@@ -522,24 +549,94 @@ struct BotProfilePage: View {
         BotEditSummaries(bot: current, rules: rules, routines: nil, modelLabel: modelLabel)
     }
 
+    /// The desktop's General > Settings (persona-sections.ts TAB_GROUPS,
+    /// #3017, G2): Personality, Model (where it works beside it), Before acting.
     private var settingsRows: [LinkRow] {
         var rows: [LinkRow] = []
+        if context.sections.contains(.soul) {
+            rows.append(LinkRow(
+                id: "bot-profile-settings.soul",
+                title: "Personality",
+                subtitle: summaries.value(.personality),
+                symbol: "face.smiling"
+            ) { actions.openSection(.soul) })
+        }
         if context.sections.contains(.model) {
             rows.append(sectionRow(.model, subtitle: summaries.value(.model)))
-        }
-        if context.sections.contains(.permissions) {
-            rows.append(sectionRow(.permissions, subtitle: summaries.value(.approvals)))
-        }
-        if context.sections.contains(.access) {
-            rows.append(sectionRow(.access, subtitle: summaries.value(.toolsApps)))
         }
         if context.sections.contains(.worksOn) {
             rows.append(sectionRow(.worksOn))
         }
+        if context.sections.contains(.permissions) {
+            rows.append(LinkRow(
+                id: "bot-profile-settings.permissions",
+                title: "Before acting",
+                subtitle: summaries.value(.approvals),
+                symbol: settingsSymbol(.permissions)
+            ) { actions.openSection(.permissions) })
+        }
+        return rows
+    }
+
+    /// General > Accounts: the tools, apps and MCP servers it reaches.
+    private var accountRows: [LinkRow] {
+        context.sections.contains(.access) ? [sectionRow(.access, subtitle: summaries.value(.toolsApps))] : []
+    }
+
+    /// General > More (the desktop's order): Rules, When it acts alone,
+    /// Voice, Advanced settings, Versions.
+    private var moreRows: [LinkRow] {
+        var rows: [LinkRow] = []
+        if context.sections.contains(.permissions) {
+            let total = rules.map { rules in
+                let counts = BotEditSummary.ruleCounts(rules, botId: current.id)
+                return counts.ask + counts.deny + counts.allow
+            }
+            rows.append(LinkRow(
+                id: "bot-profile-more.rules",
+                title: "Rules",
+                subtitle: total.map { total in
+                    total == 0 ? String(localized: "No rule")
+                        : total == 1 ? String(localized: "1 rule") : String(localized: "\(total) rules")
+                },
+                symbol: "list.bullet.rectangle"
+            ) {
+                // iPad opens the Rules document page; the phone, the rules list
+                if let openRules = actions.openRules { openRules() } else { actions.openSection(.permissions) }
+            })
+        }
+        if context.sections.contains(.permissions) {
+            rows.append(LinkRow(
+                id: "bot-profile-more.acts-alone",
+                title: "When it acts alone",
+                subtitle: String(localized: "Proactive, recipients, drafts"),
+                symbol: "figure.walk"
+            ) { openPermissions(.actsAlone) })
+        }
         if context.sections.contains(.voice) {
             rows.append(sectionRow(.voice))
         }
+        if context.sections.contains(.permissions) {
+            rows.append(LinkRow(
+                id: "bot-profile-settings.overview",
+                title: "Advanced settings",
+                subtitle: String(localized: "Limits, roles, tool access, hooks"),
+                symbol: settingsSymbol(.overview)
+            ) { openPermissions(.advanced) })
+        }
+        if context.sections.contains(.history) {
+            rows.append(LinkRow(
+                id: "bot-profile-settings.history",
+                title: "Versions",
+                symbol: settingsSymbol(.history)
+            ) { actions.openSection(.history) })
+        }
         return rows
+    }
+
+    /// A Permissions sub-page; a host without the route opens all of Permissions.
+    private func openPermissions(_ part: BotPermissionsPart) {
+        if let open = actions.openPermissions { open(part) } else { actions.openSection(.permissions) }
     }
 
     private func sectionRow(_ section: DesktopPanelSection, subtitle: String? = nil) -> LinkRow {
@@ -598,6 +695,9 @@ struct BotProfilePage: View {
         VStack(alignment: .leading, spacing: 8) {
             groupLabel("Channels")
             ProfileCard {
+                // Slack shows only where it can be connected or opened; never
+                // a detour through Access (#3017, G12)
+                if showsSlack {
                 channelRow(
                     title: "Slack",
                     subtitle: slackURL == nil ? String(localized: "Not connected") : String(localized: "Connected"),
@@ -607,14 +707,13 @@ struct BotProfilePage: View {
                 ) {
                     if let slackURL {
                         UIApplication.shared.open(slackURL)
-                    } else if context.sections.contains(.slack) {
-                        actions.openSection(.slack)
                     } else {
-                        actions.openSection(.access)
+                        actions.openSection(.slack)
                     }
                 }
+                }
                 if let mailRow {
-                    ProfileDivider()
+                    if showsSlack { ProfileDivider() }
                     channelRow(
                         title: "Email",
                         subtitle: mailRow.address,
@@ -626,8 +725,8 @@ struct BotProfilePage: View {
                         Haptics.selection()
                     }
                 }
-                ForEach(audienceRows) { row in
-                    ProfileDivider()
+                ForEach(Array(audienceRows.enumerated()), id: \.element.id) { index, row in
+                    if index > 0 || showsSlack || mailRow != nil { ProfileDivider() }
                     linkRow(row)
                 }
             }
@@ -636,6 +735,8 @@ struct BotProfilePage: View {
         .accessibilityIdentifier("bot-profile-group.channels")
     }
 
+    private var showsSlack: Bool { slackURL != nil || context.sections.contains(.slack) }
+
     private var audienceRows: [LinkRow] {
         var rows: [LinkRow] = []
         if context.sections.contains(.sharing) { rows.append(sectionRow(.sharing)) }
@@ -643,11 +744,9 @@ struct BotProfilePage: View {
         return rows
     }
 
-    private var advancedRows: [LinkRow] {
-        [DesktopPanelSection.overview, .usage, .history]
-            .filter { context.sections.contains($0) }
-            .map { sectionRow($0) }
-    }
+    /// The technical pages moved to General > More and Stats (#3017, G1/G2);
+    /// the fold keeps Archive and Delete only.
+    private var advancedRows: [LinkRow] { [] }
 
     /// Advanced: the technical pages, then Archive and Delete when this
     /// pairing allows them (hidden, never greyed, otherwise).
@@ -769,28 +868,40 @@ struct BotProfilePage: View {
     }
 
     /// Recap lines: the model's catalog label, the approval rules.
+    /// Both reads run together (#3017, L17/G8); the model line draws from
+    /// the session's cached catalog first, so it never pops in on a re-open.
     private func loadSummaries() async {
+        if let cached = session.cachedInstances { modelLabel = label(in: cached) }
         guard let client = session.settingsClient else { return }
-        if context.sections.contains(.permissions) {
-            rules = (try? await client.customRules(botId: bot.id))?.rules
-        }
-        if let instances = try? await client.instances() {
-            let selection = current.modelSelection
-            modelLabel = instances.first { $0.instanceId == selection.instanceId }?
-                .models.options.first { $0.id == selection.model }?.label
-        }
+        let botId = bot.id
+        let wantsRules = context.sections.contains(.permissions)
+        async let readRules: [CustomRuleRow]? = wantsRules ? (try? await client.customRules(botId: botId))?.rules : nil
+        async let readInstances = session.refreshInstancesCache()
+        let (loadedRules, instances) = await (readRules, readInstances)
+        if wantsRules { rules = loadedRules }
+        if let instances { modelLabel = label(in: instances) }
+    }
+
+    private func label(in instances: [Instance]) -> String? {
+        let selection = current.modelSelection
+        return instances.first { $0.instanceId == selection.instanceId }?
+            .models.options.first { $0.id == selection.model }?.label
     }
 
     // MARK: Knowledge
 
     private var knowledgeRows: [LinkRow] {
         var rows: [LinkRow] = []
+        // the desktop's Knowledge order (#3017, G3): Routines, Skills, then the folder's Memory
+        rows.append(LinkRow(id: "bot-profile-knowledge.routines", title: "Routines", symbol: "clock.arrow.2.circlepath") {
+            actions.openRoutines()
+        })
         if context.sections.contains(.skills) {
             rows.append(LinkRow(id: "bot-profile-knowledge.skills", title: "Skills", symbol: "book") {
                 actions.openSection(.skills)
             })
         }
-        if context.sections.contains(.soul) {
+        if context.sections.contains(.soul), !context.sections.contains(.model) {
             rows.append(LinkRow(
                 id: "bot-profile-knowledge.instructions",
                 title: "Instructions",
@@ -798,7 +909,12 @@ struct BotProfilePage: View {
                 symbol: "text.alignleft"
             ) { actions.openSection(.soul) })
         }
-        if context.sections.contains(.memory) {
+        if let openFolder = actions.openFolder {
+            // iPad: the desktop's Folder, the workspace files with the Memory inside
+            rows.append(LinkRow(id: "bot-profile-knowledge.folder", title: "Folder", symbol: "folder") {
+                openFolder()
+            })
+        } else if context.sections.contains(.memory) {
             rows.append(LinkRow(id: "bot-profile-knowledge.memory", title: "Memory", symbol: "brain") {
                 actions.openSection(.memory)
             })
@@ -809,6 +925,34 @@ struct BotProfilePage: View {
     private var knowledgeBody: some View {
         // The pill already says Knowledge: no label over the card.
         group(nil, rows: knowledgeRows, id: "bot-profile-group.knowledge")
+    }
+
+    // MARK: Appearance and Stats (#3017, G1/G13)
+
+    /// iPad: the desktop's Appearance pane in the page. Phone: the mascot,
+    /// colour and picture editor, one tap away.
+    @ViewBuilder
+    private var appearanceBody: some View {
+        if fillsMain {
+            PersonaAppearancePane(bot: current)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(.horizontal, 24)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("bot-profile.appearance")
+        } else {
+            group(nil, rows: [
+                LinkRow(
+                    id: "bot-profile-appearance.avatar",
+                    title: "Mascot and colour",
+                    subtitle: String(localized: "Mascot, colour and picture"),
+                    symbol: "paintpalette"
+                ) { actions.editAvatar() },
+            ], id: "bot-profile-group.appearance")
+        }
+    }
+
+    private var statsBody: some View {
+        group(nil, rows: context.sections.contains(.usage) ? [sectionRow(.usage)] : [], id: "bot-profile-group.stats")
     }
 
     private func settingsSymbol(_ section: DesktopPanelSection) -> String {

@@ -15,6 +15,7 @@ struct DesktopBotProfileHost: View {
     @State private var mailRow: BotInboundMailRow?
     @State private var confirmingArchive = false
     @State private var confirmingDelete = false
+    @State private var deleteFailed = false
 
     private var current: Bot { session.state.bot(bot.id) ?? bot }
     private var gate: SurfaceGate { session.surfaceGate }
@@ -34,9 +35,23 @@ struct DesktopBotProfileHost: View {
 
     private var editActions: BotEditActions {
         BotEditActions(
-            openPage: { _ in },
+            // the tree's pages land on the matching persona page (#3017, G10)
+            openPage: { page in
+                let target: DesktopPersonaPage? = switch page {
+                case .root, .identity: nil
+                case .personality: .soul
+                case .toolsApps: .access
+                case .sharing: .sharing
+                case .advanced: .summary
+                }
+                withAnimation(.easeOut(duration: 0.15)) {
+                    model.panelSection = target?.section
+                    model.personaPage = target ?? .overview
+                }
+            },
             openSection: { section in
                 withAnimation(.easeOut(duration: 0.15)) {
+                    model.permissionsPart = .all
                     model.panelSection = section
                     model.personaPage = DesktopPersonaPage(section: section)
                 }
@@ -54,7 +69,16 @@ struct DesktopBotProfileHost: View {
             },
             archive: { confirmingArchive = true },
             delete: { confirmingDelete = true },
-            close: { close() }
+            close: { close() },
+            openRules: { openPersona(.rules) },
+            openFolder: { openPersona(.files) },
+            openPermissions: { part in
+                withAnimation(.easeOut(duration: 0.15)) {
+                    model.permissionsPart = part
+                    model.panelSection = .permissions
+                    model.personaPage = DesktopPersonaPage(section: .permissions)
+                }
+            }
         )
     }
 
@@ -66,14 +90,10 @@ struct DesktopBotProfileHost: View {
             } else {
                 profileRoot
             }
-            // The profile root carries its own X on its top bar (#2313).
-            if sectionPage != nil {
-                WindowCloseChip(action: close)
-                    .padding(.leading, 12)
-                    .padding(.top, 12)
-                    .zIndex(20)
-                    .accessibilitySortPriority(1000)
-            }
+            // The profile root carries its own X on its top bar (#2313); a
+            // sub-page shows the back chevron and its title only, like the
+            // desktop (#3017, G9).
+
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.app)
@@ -98,13 +118,22 @@ struct DesktopBotProfileHost: View {
         .alert("Delete this bot?", isPresented: $confirmingDelete) {
             Button("Delete", role: .destructive) {
                 Task {
-                    _ = await session.deleteBot(current)
-                    close()
+                    // close only once the bot is really gone (#3017, G11)
+                    if await session.deleteBot(current) {
+                        close()
+                    } else {
+                        deleteFailed = true
+                    }
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This cannot be undone.")
+        }
+        .alert("Couldn't delete the bot", isPresented: $deleteFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(verbatim: session.actionError ?? "")
         }
         .background(DesktopEscapeKey(action: close))
     }
@@ -153,17 +182,23 @@ struct DesktopBotProfileHost: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("desktop-bot-profile-back")
-                Text(verbatim: page.label)
+                Group {
+                    if page == .permissions, model.permissionsPart != .all {
+                        Text(model.permissionsPart.title)
+                    } else {
+                        Text(verbatim: page.label)
+                    }
+                }
                     .font(theme.font(15, .semibold))
                     .foregroundStyle(theme.ink)
                     .lineLimit(1)
                 Spacer(minLength: 8)
             }
-            .padding(.leading, 56)
+            .padding(.leading, 12)
             .padding(.trailing, 16)
             .padding(.top, 14)
             .padding(.bottom, 8)
-            DesktopPersonaPageHost(bot: current, page: page, slackURL: slackURL)
+            DesktopPersonaPageHost(bot: current, page: page, slackURL: slackURL, permissionsPart: model.permissionsPart)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // Page id on the body only: putting it on this VStack hid the
                 // window-close chip from UITests (#1939).
@@ -171,10 +206,19 @@ struct DesktopBotProfileHost: View {
         }
     }
 
+    private func openPersona(_ page: DesktopPersonaPage) {
+        withAnimation(.easeOut(duration: 0.15)) {
+            model.permissionsPart = .all
+            model.panelSection = nil
+            model.personaPage = page
+        }
+    }
+
     private func close() {
         model.personaOpen = false
         model.panelSection = nil
         model.personaPage = .overview
+        model.permissionsPart = .all
     }
 }
 
@@ -185,6 +229,7 @@ struct DesktopPersonaPageHost: View {
     let bot: Bot
     let page: DesktopPersonaPage
     var slackURL: URL?
+    var permissionsPart: BotPermissionsPart = .all
 
     private var current: Bot { session.state.bot(bot.id) ?? bot }
 
@@ -224,7 +269,7 @@ struct DesktopPersonaPageHost: View {
                 }
             case .permissions:
                 ScrollView {
-                    PersonaPermissionsPage(bot: current, slackURL: slackURL)
+                    PersonaPermissionsPage(bot: current, slackURL: slackURL, part: permissionsPart)
                         .padding(.horizontal, 32)
                         .padding(.vertical, 16)
                 }

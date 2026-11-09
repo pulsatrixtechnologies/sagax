@@ -39,7 +39,10 @@ struct BotPanelComputer: View {
         _remoteHosts = StateObject(wrappedValue: BotRemoteSessionsModel(botId: bot.id))
     }
 
-    private var streamFrame: ScreenFrame? { session.state.screens[bot.id] }
+    /// The screen from its own store, so a frame redraws only the views
+    /// that draw it (#3017, L01).
+    @ObservedObject private var screens = ScreenStore.shared
+    private var streamFrame: ScreenFrame? { screens.frames[bot.id] ?? session.state.screens[bot.id] }
     private var current: Bot { session.state.bot(bot.id) ?? bot }
     private var showsLocalVm: Bool {
         OrgLocalVmScreen.shows(worksOn: DesktopWorksOn.of(current), organization: session.surfaceGate.organization)

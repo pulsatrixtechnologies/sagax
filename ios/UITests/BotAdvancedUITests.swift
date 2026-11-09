@@ -135,13 +135,13 @@ final class BotAdvancedUITests: XCTestCase {
         return target.exists
     }
 
-    /// The bot profile's row for a section (#2157): Skills, Instructions
-    /// and Memory sit on Knowledge, the rest under General > Settings.
+    /// The bot profile's row for a section (#2157, #3017): Skills and Memory
+    /// sit on Knowledge, Usage on Stats, the rest (Personality included) on General.
     /// Any other id is a row of the page already open.
     private func profileRow(_ row: String) -> (tab: String, id: String)? {
         guard row.hasPrefix("panel-row.") else { return nil }
         switch row.replacingOccurrences(of: "panel-row.", with: "") {
-        case "soul": return ("knowledge", "bot-profile-knowledge.instructions")
+        case "usage": return ("stats", "bot-profile-settings.usage")
         case "skills": return ("knowledge", "bot-profile-knowledge.skills")
         case "memory": return ("knowledge", "bot-profile-knowledge.memory")
         case let section: return ("general", "bot-profile-settings.\(section)")

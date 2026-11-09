@@ -205,7 +205,7 @@ struct DesktopBotModelsTable: View {
         let mayEdit = session.surfaceGate.ownsBot(bot)
         let cells: [AnyView] = [
             AnyView(HStack(spacing: 8) {
-                ChatAvatarView(chat: .bot(bot), size: 24, state: MausState.forChat(.bot(bot), in: session.state), background: theme.panel)
+                ChatAvatarView(chat: .bot(bot), size: 24, state: MausState.forChat(.bot(bot), in: session), background: theme.panel)
                     .frame(width: 24, height: 24)
                 DesktopText(Text(verbatim: bot.name), weight: .semibold).lineLimit(1)
             }),

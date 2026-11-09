@@ -105,9 +105,13 @@ struct OutboundCardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("outbound-card-\(card.kind.rawValue)")
-        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
-            guard live else { return }
-            nowMs = Date().timeIntervalSince1970 * 1000
+        // the call clock ticks only while the call is live and the card is on
+        // screen; no timer for settled cards (#3017, L19)
+        .task(id: live) {
+            while live, !Task.isCancelled {
+                nowMs = Date().timeIntervalSince1970 * 1000
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
         }
     }
 

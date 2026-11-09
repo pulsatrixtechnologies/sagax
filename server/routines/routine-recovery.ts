@@ -70,7 +70,7 @@ const RATE_LIMIT_RETRY_MS = 60_000;
 export const ROUTINE_BUSY_RECHECK_MS = 30_000;
 export const ROUTINE_BUSY_WAIT_MS = 60 * 60_000;
 /** Past this, a usage limit fails the run instead: the routine's next scheduled runs come sooner. */
-const LIMIT_WAIT_MS = 12 * 60 * 60_000;
+export const ROUTINE_LIMIT_WAIT_MS = 12 * 60 * 60_000;
 const AFTER_RESET_MS = 60_000;
 const WEEK_MS = 7 * 24 * 60 * 60_000;
 /** startTurn's codes for a bot or thread that is busy for now. */
@@ -188,14 +188,14 @@ function takeOver(run: RoutineRun, limit: RoutineUsageLimit & { to: string }, no
   delete run.error;
 }
 
-/** Past this, a reset is not waited for (LIMIT_WAIT_MS), and an estimate never is: when the run starts again after a
+/** Past this, a reset is not waited for (ROUTINE_LIMIT_WAIT_MS), and an estimate never is: when the run starts again after a
  * limit nothing took it over from, and on which engine. The engine that refused was standing in for the bot's own
  * (`home`): the earlier of the two real resets, the bot's own engine on a tie; else the refused engine's. */
 function limitWait(limit: RoutineUsageLimit, now: number): { at: number; reset: number; home: boolean; on: string } | null {
   const resets = [
     ...(limit.home && !limit.home.estimated ? [{ reset: limit.home.resetsAt, home: true, on: limit.home.name }] : []),
     ...(!limit.estimated ? [{ reset: limit.resetsAt, home: false, on: limit.from }] : []),
-  ].filter(({ reset }) => reset + AFTER_RESET_MS > now && reset - now <= LIMIT_WAIT_MS)
+  ].filter(({ reset }) => reset + AFTER_RESET_MS > now && reset - now <= ROUTINE_LIMIT_WAIT_MS)
     .sort((left, right) => left.reset - right.reset || Number(right.home) - Number(left.home));
   const first = resets[0];
   return first ? { at: first.reset + AFTER_RESET_MS, reset: first.reset, home: first.home, on: first.on } : null;
@@ -270,7 +270,7 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
       return { queued: false, error: text, alert: first ? { detail: text } : null };
     }
     const reset = verdict.resetsAt;
-    if (reset && !nextCovers(reset, facts.nextScheduled) && reset > now && reset - now <= LIMIT_WAIT_MS) {
+    if (reset && !nextCovers(reset, facts.nextScheduled) && reset > now && reset - now <= ROUTINE_LIMIT_WAIT_MS) {
       const at = reset + AFTER_RESET_MS;
       const text = routineLimitUnknownEngineText(said, at);
       if (requeueOnce(run, "usage_limit", failure, now, at, text)) return { queued: true, ...(first ? { alert: { detail: text } } : {}) };

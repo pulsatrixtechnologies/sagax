@@ -82,10 +82,12 @@ import {
 } from "../engines/engine-reconnect-ahead.ts";
 import type { LoginDriver } from "../engines/principal-engine-logins.ts";
 import {
-  classifyRoutineFailure, firstOwnerNotice, dispatchRefusal, engineFacts, engineTakeovers, loadOwnerNotices, recoverRun, retryNote, ROUTINE_LIMIT_TAKEOVERS, weekRuns,
+  classifyRoutineFailure, firstOwnerNotice, dispatchRefusal, engineFacts, engineTakeovers, loadOwnerNotices, recoverRun, requeueOnce, retryNote, usedRetry, ROUTINE_LIMIT_TAKEOVERS, ROUTINE_LIMIT_WAIT_MS, weekRuns,
   type RoutineAlert, type RoutineFailureFacts, type RoutineOwnerNotice,
 } from "./routine-recovery.ts";
 import type { RoutineUsageLimit } from "./routine-limit-words.ts";
+import { routineLimitUnknownEngineText } from "./routine-limit-words.ts";
+import { hostTimeZone } from "../turns/turn-clock.ts";
 import { ROUTINE_DEFERRAL_NOTICE_MS, ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST, ROUTINE_TURN_LOST_MS, skipNeedsNotice, supersededBy } from "./routine-execution.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
@@ -3638,6 +3640,20 @@ export class RoutineManager {
             run.readiness = readiness.checks;
             if (!readiness.ok) {
               const blocker = readiness.checks.find(check => !check.ok)!;
+              // #3223: a usage limit with a reset in reach is waited out (the run starts again after it), as a limit
+              // met mid-run is, never a blocked run the person has to notice: one start after the reset.
+              const until = blocker.code === "engine_limit" && run.target === "bot" ? Date.parse(blocker.params?.until ?? "") : NaN;
+              if (Number.isFinite(until) && until > this.now() && until - this.now() <= ROUTINE_LIMIT_WAIT_MS && !usedRetry(run)) {
+                const who = { botId: run.botId, ...(run.runAs ? { runAs: run.runAs } : {}) };
+                const words = { language: this.options.languageFor?.(who), timeZone: this.options.timeZoneFor?.(who) };
+                const at = until + 60_000;
+                if (requeueOnce(run, "usage_limit", blocker.line, this.now(), at, routineLimitUnknownEngineText({ ...words, timeZone: words.timeZone ?? hostTimeZone() }, at))) {
+                  run.readiness = readiness.checks;
+                  this.saveLater();
+                  this.emitRun(run);
+                  continue;
+                }
+              }
               const cause = blocker.code === "engine_credits" ? "credits" : blocker.code === "engine_limit" ? "usage_limit"
                 : blocker.code === "engine_signed_out" ? "signed_out" : blocker.code === "ready" ? "probe_error" : blocker.code;
               const alert = firstOwnerNotice(this.ownerNotices, run.botId, cause, this.now()) ? { detail: `${routine.name}: "${blocker.line}"` } : null;

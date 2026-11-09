@@ -1136,6 +1136,8 @@ export interface InstanceInfo {
     };
   };
   models: { default: string; issue?: ModelListIssue; options: Array<{ id: string; label: string; custom?: boolean; loaded?: boolean; local?: boolean; anthropic?: boolean; server?: string; sharedBy?: string; provider?: string; contextWindow?: number; variants?: ModelVariantOption[];
+    /** #3085: a pi row the person's (or the organization's) key pays for. */
+    keyPaid?: boolean;
     /** Per-model reasoning levels and default (shared/model-capabilities.ts). */
     effortLevels?: EffortLevel[]; defaultEffort?: EffortLevel }> };
   capabilities?: {

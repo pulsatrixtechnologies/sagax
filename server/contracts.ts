@@ -757,6 +757,10 @@ export interface ModelCatalog {
      * it — the picker shows it as a muted badge so BYOK duplicates of the
      * same model id stay distinguishable. */
     provider?: string;
+    /** #3085: a pi row the viewer's payer holds a key for (their own
+     * Perspicax key, or the organization's when org-key serves them): offered
+     * in organization mode although `custom`. */
+    keyPaid?: boolean;
     /** total context window in tokens, when the driver knows it — sizes
      * the model-facing rebuild (server/context/context-rebuild.ts). Unknown falls
      * back to a pattern table over the model id, then a conservative default. */

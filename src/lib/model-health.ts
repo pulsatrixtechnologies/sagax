@@ -55,6 +55,8 @@ export function modelUsable(instance: InstanceInfo, modelId: string, context: He
   // #2963: a Perspicax model server's model (pi) runs with that server's
   // key, resolved per turn: no sign-in, never a model typed on this machine
   if (isModelServerOption(option)) return true;
+  // #3085: a pi model the payer's key (or the organization's) pays for
+  if (option.keyPaid === true) return true;
   // an organization server never offers its own custom models
   if (context.orgMode && option.custom && !localIds.has(option.id) && instance.access !== "api") return false;
   if (isLocalOption(option, context.orgMode, localIds)) {

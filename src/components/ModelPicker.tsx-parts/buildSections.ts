@@ -89,6 +89,8 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
     // are offered everywhere: the server resolves their key per turn.
     const offered = (orgMode ? options.filter((option) => !option.custom || isDesktopModelId(option.id)
       || isModelServerOption(option)
+      // #3085: a pi model a key of the person (or the organization's) pays for
+      || option.keyPaid === true
       || (endpointList && !option.local && !option.id.includes("::"))) : options).filter(runnable);
     const localOptions = offered.filter(isLocal);
     const signInFirst = !orgMode && needsSignIn(instance);

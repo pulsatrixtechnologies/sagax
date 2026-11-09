@@ -11,6 +11,7 @@
 // This is a reading aid, not a Markdown parser. It never needs to be exact,
 // only to never show syntax a person did not type to be read.
 
+import { replaceBareImageUrls } from "./bare-image-urls.ts";
 import { stripChatSpecialTokens } from "./chat-special-tokens.ts";
 
 export interface PlainTextOptions {
@@ -181,7 +182,9 @@ function flattenedTables(text: string): string {
 }
 
 function plainTextBody(rawText: string, options: PlainTextOptions): string {
-  const text = replaceAttachmentTags(rawText, options.attachmentLabels);
+  const labels = options.attachmentLabels ?? ENGLISH_ATTACHMENT_LABELS;
+  // a bot's own-line GIF / picture address reads as the label, never the URL
+  const text = replaceBareImageUrls(replaceAttachmentTags(rawText, options.attachmentLabels), (kind) => (kind === "gif" ? labels.gif : labels.image));
   const isRichFence = options.isRichFence ?? (() => false);
   // backslash escapes read as the character: park them out of the way so
   // no rule below takes an escaped * or _ (or a cell's \|) for markup

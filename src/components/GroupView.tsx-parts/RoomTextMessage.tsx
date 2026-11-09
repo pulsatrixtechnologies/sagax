@@ -105,6 +105,11 @@ export function RoomTextMessage({
   const cited = user && m.text ? splitTranscriptCitations(m.text) : null;
   const attachments = user && m.text ? splitTranscriptAttachments(cited?.display ?? m.text) : null;
   const display = attachments?.display ?? rawText;
+  // A person's line that is only a picture or a GIF has no bubble: the media
+  // is the message and sets its own width (iMessage / Grok Bot), never a
+  // coloured box stretched past it. With text the media sits above it, still
+  // as compact thumbnails, so the bubble hugs the widest of the two.
+  const mediaOnly = user && !m.replyToId && !display.trim() && Boolean(attachments && (attachments.images.length || attachments.files.length));
   const [expanded, setExpanded] = useState(false);
   const [viewRaw, setViewRaw] = useState(false);
   const speech = useSpeech();
@@ -220,7 +225,9 @@ export function RoomTextMessage({
                   : "w-fit max-w-[min(94%,780px,calc(100%-82px))] rounded-[18px] bg-bubble-bot px-3 py-[7px] text-ink")
               // A person keeps a rounded bubble: yours in the accent (--color-bubble-user),
               // another person's in the bot's grey.
-              : cn(
+              : mediaOnly
+                ? "w-fit max-w-[min(80%,560px,calc(100%-82px))] text-ink"
+                : cn(
                   "rounded-[18px] w-fit max-w-[min(80%,560px,calc(100%-82px))]",
                   mine
                     ? "chat-text whitespace-pre-wrap bg-bubble-user px-3 py-[7px] text-ink"
@@ -247,7 +254,17 @@ export function RoomTextMessage({
           })()}
           {user ? (
             <>
-              {attachments && <AttachmentGallery images={attachments.images} files={attachments.files} message={{ threadId: group.threadId, messageId: m.id }} eager={eager} className={!attachments.display ? "mb-0" : undefined} />}
+              {attachments && (
+                <AttachmentGallery
+                  beneath
+                  align={mine ? "end" : "start"}
+                  images={attachments.images}
+                  files={attachments.files}
+                  message={{ threadId: group.threadId, messageId: m.id }}
+                  eager={eager}
+                  className={mediaOnly ? "mt-0" : "mb-1.5 mt-0"}
+                />
+              )}
               <div
                 className={cn(collapsible && "max-h-40 overflow-hidden [mask-image:linear-gradient(to_bottom,black_60%,transparent)]")}
                 data-citation-source={m.id}

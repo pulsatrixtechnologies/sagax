@@ -20,6 +20,7 @@ import {
   routineWaitingLine,
   troubleToolKey,
   nativeToolMisroute,
+  routineNativeToolPrompt,
   RoutineScheduleError,
   RoutineInputError,
   type RoutineAdmission,
@@ -5410,6 +5411,9 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     tool(h, "thread-1", "a", "use_tool", false, refusal);
     tool(h, "thread-1", "b", "use_tool", false, refusal);
     done(h, "thread-1");
+    // #3065: the run goes on once; its continuation ends with no success.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    done(h, "thread-1");
     expect(runOf(h).problems).toContain("failed 2 times");
   });
 
@@ -5422,6 +5426,49 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     tool(h, "thread-1", "b", "use_tool", false, refusal);
     tool(h, "thread-1", "c", "read_file", true);
     done(h, "thread-1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    done(h, "thread-1");
+    expect(runOf(h).problems).toContain("failed 2 times");
+  });
+
+  it("a run whose turn ends on Grok's use_tool refusal of a native tool goes on once, told to call that tool directly (#3065)", async () => {
+    // In 0.8.69 five routines of one bot ended "use_tool failed N
+    // times: search_tool is a native tool"; the bot never called search_tool.
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const refusal = "search_tool is a native tool, not an MCP integration tool";
+    tool(h, "thread-1", "a", "use_tool", false, refusal);
+    tool(h, "thread-1", "b", "use_tool", false, refusal);
+    say(h, "thread-1", "I could not search the tools.");
+    done(h, "thread-1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(runOf(h).status).toBe("running");
+    expect(h.started).toHaveLength(2);
+    expect(h.started[1]!.threadId).toBe("thread-1");
+    expect(h.started[1]!.prompt).toBe(routineNativeToolPrompt(["search_tool"]));
+    expect(h.started[1]!.prompt).toContain("call search_tool directly");
+    // The continuation calls the native tool and finishes: a clean run.
+    tool(h, "thread-1", "c", "search_tool", true);
+    say(h, "thread-1", "Three tickets are waiting.");
+    done(h, "thread-1");
+    expect(runOf(h).status).toBe("completed");
+    expect(runOf(h).problems).toBeUndefined();
+  });
+
+  it("a run whose continuation misroutes again is not continued twice and reports it (#3065)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const refusal = "search_tool is a native tool, not an MCP integration tool";
+    tool(h, "thread-1", "a", "use_tool", false, refusal);
+    done(h, "thread-1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    tool(h, "thread-1", "b", "use_tool", false, refusal);
+    done(h, "thread-1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(h.started).toHaveLength(2);
+    expect(runOf(h).status).toBe("completed");
     expect(runOf(h).problems).toContain("failed 2 times");
   });
 

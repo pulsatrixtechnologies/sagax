@@ -35,7 +35,7 @@ describe("the desktop balloon wears the app's theme", () => {
       "--color-accent": "#ff6600",
       "--color-accent-border": "#ff6600",
       "--color-focus": "#ff6600",
-      "--color-accent-text": "#ff6600",
+      "--color-accent-text": "light-dark(#a64200, #ff6600)", // the brand's link step (#3035)
       "--color-accent-ink": accentInk("#ff6600"),
       ...brandSwitchVars("#ff6600"),
       ...brandBubbleVars("#ff6600"),

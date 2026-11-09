@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { useCopyFeedback } from "@/lib/copy-text";
 import { scrollMotion } from "@/lib/motion";
+import { remarkBareImages } from "@/lib/remark-bare-images";
 import { remarkSoftBreaks } from "@/lib/remark-soft-breaks";
 import { remarkMentions, type MentionPeer } from "@/lib/mentions";
 
@@ -59,7 +60,9 @@ import { useThreadLinkMenu } from "@/components/ThreadLinkMenu";
 import { looksLikeThreadRefUrl, parseThreadRefUrl, resolveThreadRefAddress, remarkThreadRefs } from "../lib/thread-refs";
 import { looksLikePermissionLink, parsePermissionLink } from "../lib/os-permissions";
 import { OsPermissionChatButton } from "./settings/OsPermissions";
-import { MarkdownImagePreview, MessageFolderFiles, OutsideWorkspaceFile, saveFailureText, useLocalFileSave, type MessageAttachmentContext } from "./AttachmentPreview";
+import type { PreviewImage } from "./AttachmentPreview";
+import { MemeImage } from "./MemeImage";
+import { AttachmentPreviewDialog, MarkdownImagePreview, MessageFolderFiles, OutsideWorkspaceFile, saveFailureText, useLocalFileSave, type MessageAttachmentContext } from "./AttachmentPreview";
 import { ThreadLink, ThreadRefsContext, threadLinkFromProps, type ThreadRefsValue } from "./ThreadRefs";
 import { t } from "../lib/i18n";
 import {
@@ -792,6 +795,19 @@ function LocalFileLink({ filePath, name, children, message }: { filePath: string
   );
 }
 
+/** A bare picture URL a bot wrote on its own line: the picture itself, the
+ * rendering a GIF a person sends gets, and a click opens it large. */
+export function BareImage({ src, name, openUrl }: { src: string; name: string; openUrl?: string }) {
+  const [open, setOpen] = useState(false);
+  const image: PreviewImage = { src, name, openUrl };
+  return (
+    <span className="my-2 block max-w-full" data-bare-image="">
+      <MemeImage src={src} alt={name} onClick={() => setOpen(true)} />
+      {open && <AttachmentPreviewDialog image={image} onClose={() => setOpen(false)} />}
+    </span>
+  );
+}
+
 export function markdownImageName(src: string, alt?: string): string {
   const supplied = alt?.trim();
   if (supplied) return supplied;
@@ -1317,6 +1333,13 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
         if (!src) {
           return <span className="text-[12px] text-danger" role="alert">{t("attach.imageUnavailable")}</span>;
         }
+        // a bare GIF / picture address on its own line is the picture, drawn as
+        // a GIF a person sends is (MemeImage: whole, animated, not cropped)
+        const bare = (props as Record<string, unknown>)["data-bare-image"];
+        if (bare === "gif" || bare === "image") {
+          const url = markdownImageOpenUrl(src);
+          return <BareImage src={src} name={markdownImageName(src, alt)} openUrl={url} />;
+        }
         const filePath = localFilePath(src) ?? undefined;
         const sourceOffset = (props as { node?: { position?: { start?: { offset?: number } } } })
           .node?.position?.start?.offset;
@@ -1529,7 +1552,7 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
     <div className={wideTable ? "chat-wide min-w-0" : "min-w-0"}>
     <div className="chat-md min-w-0 [&>*+*]:mt-2">
       <Markdown
-        remarkPlugins={[remarkGfm, remarkMath, remarkWindowsPathDestinations, unwrapLinkedImages, remarkCallouts, remarkGithubRefs, [remarkMentions, { peers: mentionPeers, everyone }], remarkThreadRefs(threads, currentBotId), remarkSoftBreaks]}
+        remarkPlugins={[remarkGfm, remarkMath, remarkWindowsPathDestinations, unwrapLinkedImages, remarkBareImages, remarkCallouts, remarkGithubRefs, [remarkMentions, { peers: mentionPeers, everyone }], remarkThreadRefs(threads, currentBotId), remarkSoftBreaks]}
         rehypePlugins={mathPlugin ? [mathPlugin] : []}
         remarkRehypeOptions={{ clobberPrefix: prefix }}
         urlTransform={chatUrlTransform}

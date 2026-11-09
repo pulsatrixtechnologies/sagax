@@ -127,7 +127,7 @@ export function DiscoverView({ items, loading = false, catalogPending = false, f
             link={{ label: t("connectApps.providers.manage", { provider: group.name }), onClick: () => openAccountManage(group.manageUrl), manage: group.id }} />
           {group.id === "grok" && rows.length > 0 && <p className={cn(PLUGINS.rowSub, "whitespace-normal")} data-harness-grok-note>{t("connectApps.capabilities.grokOrg")}</p>}
           <div className={PLUGINS.grid}>
-            {notice && <AccountNoticeRow group={notice} refreshing={accountsRefreshing} onRefresh={onAccountsRefresh} onSetUp={onAccountsSetUp} />}
+            {notice && <AccountNoticeRow group={notice} refreshing={accountsRefreshing} onRefresh={onAccountsRefresh} onSetUp={onAccountsSetUp} manageInHead />}
             {rows.map((row) => {
               const open = onOpenAccount?.(row);
               const body = <AccountConnectorBody row={row} />;

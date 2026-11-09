@@ -380,6 +380,21 @@ describe("The engine accounts' connectors as plugin rows (#2306)", () => {
     expect(html).toMatch(/data-harness-group="claude"[\s\S]*?From Claude[\s\S]*?Manage on Claude[\s\S]*?data-harness-notice="not_signed_in"[\s\S]*?not signed in to Claude[\s\S]*?data-harness-setup="claude"[^>]*>Connect Claude</);
     expect(html).toMatch(/data-harness-group="grok"[\s\S]*?data-harness-connector="grok:/);
   });
+
+  it("an account notice spans the whole grid row and never repeats the section head's Manage link (#3040)", () => {
+    const groups = connectorGroups({ claude: { available: true, connectors: [] }, grok: null });
+    const html = discover(groups);
+    // its own row, so the text is not squeezed a word per line by the action
+    expect(html).toMatch(/class="[^"]*col-span-full[^"]*"[^>]*data-harness-notice="empty"/);
+    expect(html).toMatch(/class="[^"]*col-span-full[^"]*"[^>]*data-harness-notice="no_account"/);
+    // the section head already links to the provider's page: once, not twice
+    expect(html.match(/Manage on Claude/g)).toHaveLength(1);
+    expect(html).not.toContain('data-harness-add="claude"');
+    // the Installed list keeps the notice's own way to manage, on a full row
+    const installed = renderToStaticMarkup(createElement(InstalledView, props({ entries: [], accounts: { sections: sections(groups), onSetUp: noop } })));
+    expect(installed).toMatch(/<li class="col-span-full"><div[^>]*data-harness-notice="empty"/);
+    expect(installed).toContain('data-harness-add="claude"');
+  });
 });
 
 describe("For which bots", () => {

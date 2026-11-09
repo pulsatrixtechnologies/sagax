@@ -230,7 +230,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
           <h3 className={PLUGINS.label}>{t("connectApps.manage.installed")}</h3>
           <ul className={cn(PLUGINS.grid, "mt-1")}>
             {shownLines.map((line) => (
-              <li key={line.key}>{renderLine(line)}</li>
+              <li key={line.key} className={cn(line.kind === "notice" && "col-span-full")}>{renderLine(line)}</li>
             ))}
           </ul>
           {lines.length > INSTALLED_PREVIEW && (

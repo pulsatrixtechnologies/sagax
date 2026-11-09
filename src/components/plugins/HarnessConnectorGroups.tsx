@@ -232,17 +232,23 @@ export function AccountConnectorBody({ row }: { row: AccountConnectorRow }) {
 
 /** A section with no connector to list: the engine's mark, why, and its
  * way out on the right, in the place of a row. */
-export function AccountNoticeRow({ group, refreshing, onRefresh, onSetUp }: { group: HarnessConnectorGroup; refreshing?: boolean; onRefresh?: () => void; onSetUp?: (engine: HarnessEngine) => void }) {
+/** One provider's account notice (not signed in, no connector yet, loading).
+ * In a connector grid it takes the whole row (`col-span-full`, #3040): one
+ * 264px cell left its text a word per line beside the action. When the cell
+ * is still narrow (a phone), the action drops under the text instead of
+ * squeezing it. `manageInHead`: the section head right above already links
+ * to the provider's page, so the row does not repeat that same link. */
+export function AccountNoticeRow({ group, refreshing, onRefresh, onSetUp, manageInHead = false, className }: { group: HarnessConnectorGroup; refreshing?: boolean; onRefresh?: () => void; onSetUp?: (engine: HarnessEngine) => void; manageInHead?: boolean; className?: string }) {
   const notice = group.notice!;
   const action = noticeAction(notice);
   const text = noticeText(group);
   return (
-    <div className="flex items-center gap-3 py-[13px]" data-harness-notice={notice.kind === "unavailable" ? notice.reason : notice.kind}
+    <div className={cn("col-span-full flex flex-wrap items-center gap-x-3 gap-y-2 py-[13px]", className)} data-harness-notice={notice.kind === "unavailable" ? notice.reason : notice.kind}
       role={notice.kind === "loading" ? "status" : undefined}>
       <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary">
         {notice.kind === "loading" ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <EngineMark id={group.id} />}
       </span>
-      <span className="min-w-0 flex-1">
+      <span className="min-w-[min(100%,12rem)] flex-1">
         <span className={PLUGINS.rowName}>{group.name}</span>
         <span className="block text-[12.5px] leading-5 text-ink-secondary">{text}</span>
       </span>
@@ -256,7 +262,7 @@ export function AccountNoticeRow({ group, refreshing, onRefresh, onSetUp }: { gr
           <RefreshCw size={12} className={cn(refreshing && "animate-spin")} /> {t("harnessConnectors.refresh")}
         </button>
       )}
-      {action === "manage" && (
+      {action === "manage" && !manageInHead && (
         <button type="button" className={pluginActionClass("fill")} data-harness-add={group.id} onClick={() => openManage(group.manageUrl)}>
           {t("connectApps.providers.manage", { provider: group.name })}
         </button>

@@ -79,6 +79,14 @@ export function gotoTargetOf(item: AnyItem): GotoTarget | null {
   return null;
 }
 
+/** Threads off: a thread receipt is a plain "Messaged" step (ThreadChip),
+ * never a go-to line, so it never folds into a group the single stream
+ * would not draw. */
+export function unifiedGotoTargetOf(item: AnyItem): GotoTarget | null {
+  const target = gotoTargetOf(item);
+  return target?.kind === "thread" ? null : target;
+}
+
 /** Build a goto group from consecutive bot-conversation rows (same quiet
  * "Go to conversation" lines). One row stays a lone line; two or more fold. */
 export function gotoGroupFromConversations(
@@ -159,12 +167,13 @@ export function dedupeGotoTargets(lines: readonly GotoTarget[]): GotoTarget[] {
 export function collapseGotoLines<T extends AnyItem>(
   items: readonly T[],
   silent: (item: T) => boolean,
+  targetOf: (item: T) => GotoTarget | null = gotoTargetOf,
 ): Array<T | GotoGroup> {
   const out: Array<T | GotoGroup> = [];
   let index = 0;
   while (index < items.length) {
     const first = items[index]!;
-    const firstTarget = gotoTargetOf(first);
+    const firstTarget = targetOf(first);
     if (!firstTarget) {
       out.push(first);
       index += 1;
@@ -175,7 +184,7 @@ export function collapseGotoLines<T extends AnyItem>(
     let cursor = index + 1;
     while (cursor < items.length) {
       const candidate = items[cursor]!;
-      const target = gotoTargetOf(candidate);
+      const target = targetOf(candidate);
       if (target) {
         lines.push(target);
         last = cursor;

@@ -14,7 +14,7 @@ import { withoutDeadThreadChips } from "@/lib/dead-thread-chips";
 import { isTransientChatNotice } from "../../../shared/transient-notices";
 import { BotConversationLine, conversationAnchors, splitLeadingConversations, visibleConversationRows } from "../BotConversations";
 import { GotoGroupChip } from "../GotoGroupChip";
-import { collapseGotoLines, gotoGroupFromConversations, silentChatItem } from "@/lib/goto-lines";
+import { collapseGotoLines, gotoGroupFromConversations, gotoTargetOf, silentChatItem, unifiedGotoTargetOf } from "@/lib/goto-lines";
 import { NewMessagesDivider } from "../NewMessagesDivider";
 import { unreadMessageIds } from "@/lib/unread-divider";
 import type { EffectivePlace } from "@/lib/place";
@@ -111,10 +111,10 @@ export const MessagesList = memo(function MessagesList({
     const seenIds = new Set<string>();
     // A stop the person asked for leaves no row, stored ones included.
     // Nor does the "On your computer" line, so it never splits a bot exchange.
-    // Threads off (the threads toggle): the single stream carries no thread
-    // receipt, so a lone chip never renders and a run of them never folds
-    // into a "N conversations" group (2026-10-22). ThreadChip also hides
-    // each one; dropping them here keeps the go-to grouping clean.
+    // Threads off (the threads toggle): a thread receipt stays a plain
+    // "Messaged <session>" step (ThreadChip), never a link, and a run of them
+    // never folds into a "N conversations" group (collapseBotExchanges gets
+    // showThreads false).
     // The same failure of this bot, repeated since it last answered, is
     // drawn once: the last one (shared/failure-dedup.ts).
     const repeats = repeatedFailureIds(messages, botId);
@@ -122,8 +122,7 @@ export const MessagesList = memo(function MessagesList({
       !repeats.has(message.id) && !isTurnStoppedNotice(message) && !isHiddenStatusActivity(message)
       // a failed routine run and a routine's access card pass as a banner
       // (TransientNotice), never a row (shared/transient-notices.ts)
-      && !isTransientChatNotice(message)
-      && (showThreads || !(message.threadRef && message.tool)));
+      && !isTransientChatNotice(message));
     const collapsed = collapseBotExchanges(shown, {
       selfBotId: botId,
       self: { id: botId, name: botName, color: selfColor },
@@ -152,7 +151,8 @@ export const MessagesList = memo(function MessagesList({
     }
     flush();
     // Two or more "Go to conversation" lines in a row become one chip.
-    return collapseGotoLines(listed, (item) => silentChatItem(item, showToolCalls)) as ListedItem[];
+    return collapseGotoLines(listed, (item) => silentChatItem(item, showToolCalls),
+      showThreads ? gotoTargetOf : unifiedGotoTargetOf) as ListedItem[];
   }, [messages, transcript, botId, botName, selfColor, locale, owners, showToolCalls, showThreads]);
   const windowIds = useMemo(() => new Set(messages.map((message) => message.id)), [messages]);
   const newestMessageId = messages.at(-1)?.id;

@@ -72,12 +72,22 @@ describe("ThreadChip", () => {
     ]);
   });
 
-  it("draws nothing when threads are off: the single stream shows no thread indicator in the chat", () => {
-    // Owner 2026-10-22: Threads off (Settings > Appearance) must leave no thread
-    // row or receipt in the chat. The thread stays reachable through the bot
-    // panel and the sidebar activity list, never a chip in the single stream.
+  it("threads off: draws the receipt as a plain \"Messaged\" step with the cube and session title, never a link (#3157)", () => {
+    // Owner 2026-10-22: threads off leaves no thread link in the chat. Owner
+    // 2026-11-09: nothing invisible, so the bot messaging a coding session
+    // still shows as "Messaged <session>", like before the regression.
     fixture.showThreads = false;
-    expect(renderToStaticMarkup(createElement(ThreadChip, { message: receipt() }))).toBe("");
+    const session = receipt();
+    session.tool = { name: "Opened thread #Recording tags, favorites API and stream merging", ok: true };
+    session.threadRef = { botId: "scout", threadId: "qa-245", title: "Recording tags, favorites API and stream merging" };
+    const markup = renderToStaticMarkup(createElement(ThreadChip, { message: session }));
+    expect(markup).toContain('data-testid="thread-receipt"');
+    expect(markup).toContain("Messaged");
+    expect(markup).toContain("Recording tags, favorites API and stream merging");
+    expect(markup).toContain("lucide-box");
+    expect(markup).not.toContain("Open the chat");
+    expect(markup).not.toContain("Open #");
+    expect(markup).not.toContain("data-thread-chip");
   });
 
   it("draws nothing when the thread was deleted", () => {

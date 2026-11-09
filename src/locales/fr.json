@@ -7323,6 +7323,7 @@
   "chat.newMessages": "Nouveaux",
   "chat.newMessagesAria": "Nouveaux messages",
   "chat.openThread": "Ouvrir #{title}",
+  "chat.messaged": "Écrit à",
   "chat.openThreadOn": "Ouvrir #{title} sur {name}",
   "chat.peer.asked": "a demandé via ask_bot",
   "chat.peer.delegated": "a délégué une tâche",

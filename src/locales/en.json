@@ -1994,6 +1994,7 @@
   "chat.openProfile": "Open agent profile",
   "chat.openProfileAria": "Open {name}'s profile",
   "chat.openThread": "Open #{title}",
+  "chat.messaged": "Messaged",
   "chat.openThreadOn": "Open #{title} on {name}",
   "chat.parallel.backgrounded": "Backgrounded agent",
   "chat.parallel.open": "Open",

@@ -25,7 +25,7 @@ import { foldCollapsedEntry, voiceCallPlan, voiceCallVisibleSpan } from "@/lib/v
 import { VoiceCallCard } from "../VoiceCallCard";
 import { BotExchangeChip, TranscriptDate } from "../BotExchangeChip";
 import { GotoGroupChip } from "../GotoGroupChip";
-import { collapseGotoLines, type GotoGroup } from "@/lib/goto-lines";
+import { collapseGotoLines, gotoTargetOf, unifiedGotoTargetOf, type GotoGroup } from "@/lib/goto-lines";
 import { ActivityRun } from "../ActivityRun";
 import { StepBoundary, stepFallbackText } from "../MessageBoundary";
 import { CwActivityWidgets, shownCwWidget } from "../cw/CwWidgetView";
@@ -120,8 +120,8 @@ export const Transcript = memo(function Transcript({
       !isTransientChatNotice(message) &&
       !folds.hiddenIds.has(message.id) &&
       (message.kind !== "digest" || showDigests) &&
-      // one conversation (#2081): an opened thread's receipt is no line, so no "Go to conversation" chip either
-      (showThreads || !(message.threadRef && message.tool)) &&
+      // one conversation (#2081): with threads off an opened thread's receipt
+      // is a plain "Messaged <session>" step, never a "Go to conversation" link
       (message.kind !== "activity" || (!isHiddenStatusActivity(message) && roomActivityVisible(message, showToolCalls))));
     const collapsed = collapseBotExchanges(visible, {
       pairChannel,
@@ -153,7 +153,8 @@ export const Transcript = memo(function Transcript({
     // Two or more "Go to conversation" lines in a row become one chip. Hidden
     // tool steps are already out; a folded run with Tool calls off draws nothing.
     return collapseGotoLines(listed, (item) =>
-      item.kind === "run" && !showToolCalls && !item.messages.some((step) => shownCwWidget(step.tool))) as RoomItem[];
+      item.kind === "run" && !showToolCalls && !item.messages.some((step) => shownCwWidget(step.tool)),
+      showThreads ? gotoTargetOf : unifiedGotoTargetOf) as RoomItem[];
   }, [messages, showToolCalls, showDigests, folds, pairChannel, members, transcript, owners, showThreads]);
   const windowIds = useMemo(() => new Set(messages.map((message) => message.id)), [messages]);
   // Seen by: each participant once, under the last line they have read.

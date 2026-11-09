@@ -7,10 +7,12 @@
 // row per teammate, always shown (owner 2026-11-08, #2947: no "Sent work
 // to ..." title and no fold, the line and the rows already say it all): the
 // task, then "bot · model" in grey, whole (nothing truncated), the live
-// state and the time, the result note under it. A click on a row shows
-// that teammate's work right there under the card, in this conversation
-// (unified chat: never a conversation switch, never "Open thread"); with
-// onOpen (threads shown) the click opens what it always did.
+// state and the time, the result note under it. A click on a row opens
+// that teammate's work as the bot-to-bot sheet over this chat column
+// (#3245: "Owner ⇄ Teammate" pill, bubbles, Close Chat; never a second chat
+// with an X and a composer), in this conversation (unified chat: never a
+// conversation switch, never "Open thread"); with onOpen (threads shown)
+// the click opens what it always did.
 import { lazy, Suspense, useState } from "react";
 import { Check, CircleAlert, CircleDashed, Loader2, Users, X } from "lucide-react";
 
@@ -24,7 +26,7 @@ import type { LocaleKey } from "@/locales";
 import { ThinkingSheen } from "./BotActivityIndicator";
 import { DottedSpinner } from "./bot-settings/CodingSessionRow";
 
-const ActivityConversation = lazy(() => import("./bot-settings/ActivityConversation"));
+const TeammateExchangeSheet = lazy(() => import("./TeammateExchangeSheet"));
 
 export interface DelegationEntry {
   botId: string;
@@ -110,20 +112,22 @@ function StateMark({ state }: { state: DelegationState }) {
 
 const ROW_BUTTON = "-mx-1.5 flex w-[calc(100%+0.75rem)] items-start gap-2.5 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-control/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent";
 
-export function DelegationList({ entries, botOf, modelOf, onOpen, inline = true }: {
+export function DelegationList({ entries, owner, botOf, modelOf, onOpen, inline = true }: {
   entries: ReadonlyArray<DelegationEntry>;
+  /** The bot that handed the work: the left end of a teammate's sheet. */
+  owner?: Pick<Bot, "id" | "name" | "color">;
   botOf?: (botId: string) => Bot | undefined;
   /** The model each teammate runs on, grey beside the name. */
   modelOf?: (botId: string, threadId: string) => string | undefined;
   /** What a click on a row opens when the conversation's threads are shown
    * (the teammate's work in its own column). Absent: see inline. */
   onOpen?: (botId: string, threadId: string) => void;
-  /** Without onOpen: a click on a row shows that teammate's work under the
-   * card, here. false: the rows are plain (a static listing). */
+  /** Without onOpen: a click on a row opens that teammate's work as the
+   * bot-to-bot sheet, here. false: the rows are plain (a static listing). */
   inline?: boolean;
 }) {
   const bubbleWidths = useChatBubbleWidthClasses();
-  // Which teammate's work is open under the card (one at a time).
+  // Which teammate's work is open (one sheet at a time).
   const [work, setWork] = useState<string | null>(null);
   if (entries.length === 0) return null;
   const rows = entries.map((entry) => {
@@ -150,7 +154,7 @@ export function DelegationList({ entries, botOf, modelOf, onOpen, inline = true 
   const names = rows.map((row) => row.name).join(", ");
   const revealing = !onOpen && inline;
   const shown = revealing ? rows.find((row) => row.entry.threadId === work) : undefined;
-  const width = bubbleWidths[chatBubbleWidth({ terminal: false, wide: Boolean(shown) })];
+  const width = bubbleWidths[chatBubbleWidth({ terminal: false, wide: false })];
   return (
     <section
       data-delegation-card
@@ -245,24 +249,17 @@ export function DelegationList({ entries, botOf, modelOf, onOpen, inline = true 
         </ul>
       </div>
       {shown && (
-        <div
-          data-delegation-work={shown.entry.threadId}
-          role="region"
-          aria-label={t("delegation.workOf", { name: shown.name })}
-          className={cn("relative mt-1 flex h-[min(60vh,440px)] min-h-0 flex-col overflow-hidden rounded-[14px] border-[0.5px] border-hairline bg-app", width)}
-        >
-          <Suspense
-            fallback={(
-              <div role="status" className="flex flex-1 items-center justify-center text-ink-secondary">
-                <Loader2 size={18} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-              </div>
-            )}
-          >
-            <ActivityConversation
+        // The sheet portals over the chat column (ExchangeSheet); the
+        // region only marks which teammate is open.
+        <div data-delegation-work={shown.entry.threadId} role="region" aria-label={t("delegation.workOf", { name: shown.name })} className="contents">
+          <Suspense fallback={null}>
+            <TeammateExchangeSheet
               key={shown.entry.threadId}
-              botId={shown.entry.botId}
+              owner={owner}
+              teammate={{ id: shown.entry.botId, name: shown.name, color: botOf?.(shown.entry.botId)?.color }}
               threadId={shown.entry.threadId}
-              title={shown.entry.task || shown.name}
+              task={shown.entry.task}
+              bots={[owner && (botOf?.(owner.id) ?? owner), botOf?.(shown.entry.botId)].filter(Boolean) as Bot[]}
               onClose={() => setWork(null)}
             />
           </Suspense>

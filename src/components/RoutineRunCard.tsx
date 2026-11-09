@@ -184,7 +184,7 @@ function useNow(active: boolean): number {
  * settles to Done. Unified chat: no thread link unless onOpenThread is set. */
 export function RoutineRunCard({
   message,
-  bot: _bot,
+  bot,
   botOf,
   onOpen,
   onResume,
@@ -397,7 +397,7 @@ export function RoutineRunCard({
           )}
         </div>
       )}
-      {handedTo.length > 0 && <DelegationList entries={handedTo} botOf={botOf} modelOf={modelOf} onOpen={onOpenThread} />}
+      {handedTo.length > 0 && <DelegationList entries={handedTo} owner={bot} botOf={botOf} modelOf={modelOf} onOpen={onOpenThread} />}
     </section>
   );
 }

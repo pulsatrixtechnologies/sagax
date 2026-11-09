@@ -61,6 +61,7 @@ function RoutineRunWindowSheet({ run, routine, bot, bots, detail, detailError, r
   ) : undefined;
   return (
     <ExchangeSheet
+      chrome="window"
       run={exchange}
       pinned={pinned}
       bots={[...bots]}
@@ -108,6 +109,7 @@ export function RoutineRunWindow({ target, bots, onClose, onStop }: {
   if (!run) {
     return (
       <ExchangeSheet
+        chrome="window"
         run={routineRunPendingExchange({ routineName: routine?.name ?? "", bot })}
         bots={[...bots]}
         showToolCalls

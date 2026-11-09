@@ -18082,6 +18082,8 @@ bus.subscribe(makeLoopStopSubscriber({
   config: () => cfg.loopDetector,
   ignore: shouldIgnoreProviderEvent,
   stop: (threadId, reason) => {
+    // #3009: a routine run cut here ends with the guard's reason, never green.
+    routines?.noteLoopStop(threadId, reason);
     const group = store.groupByThread(threadId);
     const botId = group ? undefined : store.botByThread(threadId)?.id;
     const note = () => {

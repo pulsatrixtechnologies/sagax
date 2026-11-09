@@ -140,3 +140,13 @@ export function statusState(status: RoutineRunStatus): MausState {
   if (status === "cancelled") return "sleeping";
   return "drowsy";
 }
+
+/** The time grid's columns. #3047 (QA 2026-11-08): on a phone (below 640px)
+ * a week was 64 + 7 x 88 px wide, so 3.5 days showed and the rest scrolled
+ * sideways; there the hour column narrows and a week's seven days fit the
+ * screen (40px each), three days and one day widen to match. */
+export function calendarGridColumns(days: number, phone: boolean): { gridTemplateColumns: string; minWidth: number; timeWidth: number; minDayWidth: number } {
+  const timeWidth = phone ? 44 : 64;
+  const minDayWidth = phone ? (days === 7 ? 40 : days === 3 ? 96 : 280) : days === 7 ? 88 : days === 3 ? 180 : 340;
+  return { gridTemplateColumns: `${timeWidth}px repeat(${days}, minmax(${minDayWidth}px, 1fr))`, minWidth: timeWidth + days * minDayWidth, timeWidth, minDayWidth };
+}

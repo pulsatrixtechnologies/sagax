@@ -57,7 +57,12 @@ describe("the Plugins panel's one list", () => {
   it("shows sections per category, one list for a search across apps and skills", () => {
     const items = buildPluginItems(sources);
     const sections = mainSections(items, "", "all");
-    expect(sections.map((section) => section.id)).toEqual(["recommended", "code", "mcp", "skills"]);
+    // #3047: Linear is recommended, so its Code section does not repeat it
+    expect(sections.map((section) => section.id)).toEqual(["recommended", "mcp", "skills"]);
+    const keys = sections.flatMap((section) => section.items.map((item) => item.key));
+    expect(new Set(keys).size).toBe(keys.length);
+    // the Code chip still lists it
+    expect(mainSections(items, "", "code")[0]!.items.map((item) => item.key)).toContain("featured:linear");
     const search = mainSections(items, "notes", "all");
     expect(search).toHaveLength(1);
     expect(search[0]!.items.map((item) => item.key).sort()).toEqual(["mcp:notes", "skill:release-notes"]);

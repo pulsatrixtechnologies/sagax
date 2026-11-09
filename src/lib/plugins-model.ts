@@ -495,8 +495,15 @@ export function mainSections(items: readonly PluginItem[], query: string, filter
     return [{ id: filter !== "all" ? filter : type, filter: null, items: sorted, total: sorted.length }];
   }
   const sections: PluginSection[] = [];
+  // #3047 (QA 2026-11-08): a row an earlier section already previews
+  // (Recommended) is not repeated further down (Tailscale sat in both); the
+  // total still counts it, so View all opens the whole category.
+  const shown = new Set<string>();
   const preview = (id: string, sectionFilter: PluginSection["filter"], list: PluginItem[]) => {
-    if (list.length) sections.push({ id, filter: sectionFilter, items: list.slice(0, SECTION_PREVIEW), total: list.length });
+    const fresh = list.filter((item) => !shown.has(item.key)).slice(0, SECTION_PREVIEW);
+    if (!fresh.length) return;
+    sections.push({ id, filter: sectionFilter, items: fresh, total: list.length });
+    if (id === "recommended") for (const item of fresh) shown.add(item.key);
   };
   // 2026-10-15: the apps a conversation needs (its Connect apps pill), in
   // the order it named them, ahead of everything else.

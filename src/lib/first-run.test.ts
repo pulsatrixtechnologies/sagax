@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   FIRST_RUN_STEPS,
+  conversationHistoryExists,
+  firstRunAlreadyDone,
   firstRunInitialStep,
   firstRunStepDone,
   firstRunStepIndex,
@@ -53,5 +55,18 @@ describe("firstRunStepDone", () => {
 
   it("never marks the message step done on its own", () => {
     expect(firstRunStepDone("message", { engineReady: true, botExists: true })).toBe(false);
+  });
+
+  it("closes as done over an existing conversation, never asks for a first message again (#3047)", () => {
+    expect(firstRunAlreadyDone({ engineReady: true, botExists: true, historyExists: true })).toBe(true);
+    expect(firstRunAlreadyDone({ engineReady: true, botExists: true, historyExists: false })).toBe(false);
+    // a step still to do (no engine) keeps the guide
+    expect(firstRunAlreadyDone({ engineReady: false, botExists: true, historyExists: true })).toBe(false);
+    const said = { role: "user" };
+    expect(conversationHistoryExists([{ messages: [said] }])).toBe(true);
+    expect(conversationHistoryExists([{ messages: [], hasMore: true }])).toBe(true);
+    // the starter bot's own greeting is not a conversation
+    expect(conversationHistoryExists([{ messages: [{ role: "bot" }] }])).toBe(false);
+    expect(conversationHistoryExists([{ hidden: true, messages: [said] }])).toBe(false);
   });
 });

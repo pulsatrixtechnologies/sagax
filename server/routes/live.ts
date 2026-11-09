@@ -64,6 +64,9 @@ async function bodyOf(req: IncomingMessage, readBody: RouteContext["readBody"]):
 
 export function createLiveRoutes(deps: LiveRouteDeps): RouteHandler {
   return async ({ req, res, path, method, auth, json, readBody }) => {
+    if (method === "GET" && path === "/api/live/call" && !deps.enabled()) return json(res, 200, { call: null });
+    // #3043 (QA 2026-11-08): with Live calls off, the app's load-time lookup
+    // of the running call (above) reads "no call" quietly, no 404 in the console.
     if (!path.startsWith("/api/live/")) return PASS;
     // Sagax: Live calls are off unless the server opted in (SAGAX_LIVE_CALLS=1).
     if (!deps.enabled()) return json(res, 404, { error: "Live calls are not available on this server." });

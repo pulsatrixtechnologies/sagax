@@ -547,13 +547,22 @@ export const NO_ORGANIZATION = {
   code: "no_organization",
 } as const;
 
+/** #3043 (QA 2026-11-08): the web app's load-time probe of the organization
+ * sends this header and reads a quiet 200 `{ org: null }` on a solo server,
+ * so the console stays clean. Without it the answer stays 404 no_organization
+ * (the phone app and older clients read that). */
+export const ORG_PROBE_HEADER = "x-sagax-org-probe";
+
 /** The organization and invitation routes of a solo server (after the auth gate). */
 export function createSoloOrgRoutes(deps: OrgRouteDeps): RouteHandler {
   const invites = createOrgRoutes(deps);
   return async (ctx) => {
-    const { res, path, method, json } = ctx;
+    const { req, res, path, method, json } = ctx;
     if (path === "/api/org") {
-      if (method === "GET") return json(res, 404, { ...NO_ORGANIZATION });
+      if (method === "GET") {
+        if (req.headers[ORG_PROBE_HEADER] === "1") return json(res, 200, { org: null, code: NO_ORGANIZATION.code });
+        return json(res, 404, { ...NO_ORGANIZATION });
+      }
       if (method === "POST" || method === "PATCH") return json(res, 410, { ...INTERIM_ORG_REMOVED });
       return json(res, 405, { error: "method not allowed" });
     }

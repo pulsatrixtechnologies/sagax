@@ -3,6 +3,7 @@
 // notification; the others are short tones drawn here with Web Audio (no
 // audio file), played by the page while the notification itself is sent
 // silent. Same on-by-default switch as before: muting sounds mutes these.
+import { webAudioAllowed } from "./audio-gate";
 import { localChoice } from "./local-choice";
 
 export const NOTIFICATION_SOUND_CHOICES = ["system", "tick", "double-tick", "chime-a", "chime-b", "blip"] as const;
@@ -30,6 +31,7 @@ export function playNotificationSound(choice: NotificationSound = notificationSo
   try {
     const Ctor: typeof AudioContext | undefined = globalThis.AudioContext ?? (globalThis as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Ctor) return false;
+    if (!context && !webAudioAllowed()) return false;
     context ??= new Ctor();
     const audio = context;
     if (audio.state === "suspended") void audio.resume().catch(() => {});

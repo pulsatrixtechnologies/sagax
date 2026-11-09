@@ -11,6 +11,7 @@ import { t } from "@/lib/i18n";
 import { approvalChime } from "@/lib/notification-preferences";
 import { api, type Message } from "@/state/store";
 import { readableError } from "./plain-error";
+import { webAudioAllowed } from "./audio-gate";
 
 /** Where a card was raised, in words: its room, else its routine (a
  * routine run's hidden task, 2026-11-04), else its conversation's title. */
@@ -111,7 +112,7 @@ export function playApprovalChime(): void {
   const Context = typeof window !== "undefined"
     ? (window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)
     : undefined;
-  if (!Context) return;
+  if (!Context || (!audio && !webAudioAllowed())) return;
   try {
     audio ??= new Context();
     const start = audio.currentTime + 0.01;

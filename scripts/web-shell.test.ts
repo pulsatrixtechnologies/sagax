@@ -20,4 +20,11 @@ describe("offline web shell", () => {
     // the skip comes before the worker answers anything
     expect(skip).toBeLessThan(worker.indexOf("event.respondWith"));
   });
+
+  it("leaves media range requests on the network and caches only whole answers (#3043)", () => {
+    const skip = worker.indexOf('event.request.headers.has("range")');
+    expect(skip).toBeGreaterThan(0);
+    expect(skip).toBeLessThan(worker.indexOf("event.respondWith"));
+    expect(worker).toContain("fresh.status === 200");
+  });
 });

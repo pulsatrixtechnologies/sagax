@@ -118,7 +118,13 @@ export function createDesktopBridgeRoutes(deps: {
     const publishMatch = LOCAL_MODELS_PUBLISH.exec(path);
     if (path !== "/api/me/desktop-bridge" && path !== "/api/desktop-bridge/connect" && path !== LOCAL_VM_ROUTE && !COMPUTER_ROUTE.test(path) && path !== LOCAL_MODELS_ROUTE && !publishMatch && !ID_ROUTE.test(path)) return PASS;
     res.setHeader("cache-control", "no-store");
-    if (!deps.organization()) return json(res, 404, { error: `no route: ${method} ${path}` });
+    if (!deps.organization()) {
+      // #3043 (QA 2026-11-08): the web app's load-time probe reads a quiet
+      // 200 on a solo server instead of a red 404 in the console. Without the
+      // probe header the answer stays 404 (the phone app reads that).
+      if (method === "GET" && path === "/api/me/desktop-bridge" && req.headers["x-sagax-org-probe"] === "1") return json(res, 200, { offered: false });
+      return json(res, 404, { error: `no route: ${method} ${path}` });
+    }
     const person = auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() : undefined;
     if (!person || auth.kind !== "session") return json(res, 403, { error: "Sign in with Pulsatrix to connect your computer.", code: "identity_perspicax" });
     if (path === "/api/me/desktop-bridge") {

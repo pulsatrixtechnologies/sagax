@@ -63,6 +63,8 @@ describe("RoutineRunCard", () => {
     expect(markup).not.toMatch(/>Routine</);
     expect(markup).toMatch(/data-routine-run-open[^>]*>Details/);
     expect(markup).toContain('aria-label="View run for Morning brief"');
+    // #3042 (QA 2026-11-08): the quiet line names the routine, visibly
+    expect(markup).toMatch(/data-routine-run-name[^>]*>Morning brief</);
     expect(markup).toContain('aria-label="Morning brief routine run: Done"');
     expect(markup).toMatch(/data-routine-run-bubble[^>]*class="[^"]*bg-bubble-bot/);
     expect(markup).not.toContain("rounded-2xl border bg-card");

@@ -59,10 +59,12 @@ describe("RoutineRunCard quiet line separators (pre-0.8.59)", () => {
     expect(host!.querySelector("[data-routine-run-provenance]")!.textContent).not.toMatch(/·\s*·/);
   });
 
-  it("reads Running · time · elapsed · Details · Stop, Stop without a square glyph", () => {
+  it("reads Running · name · time · elapsed · Details · Stop, Stop without a square glyph", () => {
     const el = line({ message: message("running", { startedAt: Date.now() - 4 * 60_000 }), onOpen: vi.fn(), onStop: vi.fn() });
     const parts = shape(el);
-    expect(parts.filter((part) => part === "·")).toHaveLength(4);
+    expect(parts.filter((part) => part === "·")).toHaveLength(5);
+    // #3042: the routine's name is on the line, not only in a tooltip
+    expect(el.querySelector("[data-routine-run-name]")?.textContent).toBe("dispatch-acme-pass");
     expect(parts.at(-1)).toBe("Stop");
     expect(parts.at(-2)).toBe("·");
     expect(parts.at(-3)).toMatch(/^Details/);

@@ -112,9 +112,13 @@ export function isPerspicaxOrg(body: unknown): body is PerspicaxOrg {
 
 let pending: Promise<PerspicaxOrg | null> | null = null;
 
+/** #3043: asks a solo server for a quiet 200 `{ org: null }` instead of a
+ * 404 that paints a red line in the console at every load. */
+export const ORG_PROBE_INIT = { headers: { "x-sagax-org-probe": "1" } } as const;
+
 export function loadPerspicaxOrg(force = false): Promise<PerspicaxOrg | null> {
   if (force) pending = null;
-  pending ??= api<unknown>("/api/org").then((body) => {
+  pending ??= api<unknown>("/api/org", ORG_PROBE_INIT).then((body) => {
     const org = isPerspicaxOrg(body) ? body : null;
     // #1098: a solo server lifts the attachment ceilings
     setAttachmentHostShared(org !== null);

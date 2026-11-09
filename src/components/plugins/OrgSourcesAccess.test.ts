@@ -2,7 +2,8 @@
 // Sources, its admin part; Settings > Organization keeps one link there. An
 // organization admin only, as before. Since 2026-10-28 the organization's
 // GitHub tokens are in the one list of the GitHub plugin's page, and the GitHub
-// OAuth App's client id in Settings > Organization.
+// OAuth App's client id in Settings > Organization. Since 2026-11-08 that
+// client id card sits in Settings > Developer (settingsPlacement.test.ts).
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -42,7 +43,7 @@ const org = (viewerRole: "admin" | "member"): PerspicaxOrg => ({
 });
 
 describe("Organization sources and access", () => {
-  it("Settings > Organization: sources are one read-only row for everyone, and the admin keeps the GitHub OAuth App's client id", () => {
+  it("Settings > Organization: sources are one read-only row for everyone; the GitHub OAuth App's client id moved to Developer", () => {
     // #2080 L3: sources are a read-only row for everyone, with no shortcut to Perspicax
     const admin = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org: org("admin"), onChanged: () => {} }));
     expect(admin).toContain('data-settings-row="orgSources"');
@@ -53,7 +54,8 @@ describe("Organization sources and access", () => {
     expect(admin.match(/data-external-link-pill/g)).toHaveLength(1);
     expect(admin).not.toContain("data-org-plugin-policy");
     expect(admin).not.toContain("data-github-token-add");
-    expect(admin).toContain('data-settings-card="organization.githubApp"');
+    // the client id card moved to Settings > Developer (the owner 2026-11-08)
+    expect(admin).not.toContain('data-settings-card="organization.githubApp"');
     expect(admin).not.toContain('data-settings-card="organization.plugins"');
     const member = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org: org("member"), onChanged: () => {} }));
     expect(member).toContain('data-settings-row="orgSources"');

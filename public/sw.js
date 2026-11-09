@@ -20,11 +20,14 @@ self.addEventListener("fetch", (event) => {
   // its frame and the sign-in redirects stay on the network, never cached
   // (they carry tokens), never answered with the app.
   if (url.pathname === "/pages" || url.pathname.startsWith("/pages/") || url.pathname.startsWith("/auth/")) return;
+  // A media range request (the nudge sound, #3043) stays on the network: its
+  // 206 answer cannot be cached, and putting it failed the whole request.
+  if (event.request.headers.has("range")) return;
   event.respondWith((async () => {
     const cache = await caches.open(CACHE);
     try {
       const fresh = await fetch(event.request);
-      if (fresh.ok) await cache.put(event.request, fresh.clone());
+      if (fresh.status === 200) await cache.put(event.request, fresh.clone()).catch(() => undefined);
       return fresh;
     } catch (error) {
       const cached = (await cache.match(event.request)) || (event.request.mode === "navigate" ? await cache.match("/index.html") : undefined);

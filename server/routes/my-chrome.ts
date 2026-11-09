@@ -56,14 +56,26 @@ export function myChromeStatusBody(status: MyChromeStatus, botFor: MyChromeRoute
 
 const PREFIX = "/api/my-chrome/";
 
+/** The status a viewer My Chrome is not offered to reads: nothing to show. */
+export const NOT_OFFERED: MyChromeStatusBody = {
+  offered: false, enabled: false, stopped: false, sites: [], chromeAddress: "", unavailable: null,
+  connected: false, lastActionAt: 0, shellBotIds: [], driving: [],
+};
+
 export function createMyChromeRoutes(deps: MyChromeRouteDeps): RouteHandler {
   return async ({ req, res, path, method, auth, json, readBody }) => {
     if (!path.startsWith("/api/my-chrome/")) return PASS;
     res.setHeader("cache-control", "no-store");
     if (method !== "POST") return json(res, 405, { error: "method not allowed" });
-    if (!deps.allowed(auth)) return json(res, 403, { error: "Only the person at this computer (or an admin) can change My Chrome." });
-    const service = deps.service();
     const action = path.slice(PREFIX.length);
+    if (!deps.allowed(auth)) {
+      // #3043 (QA 2026-11-08): a viewer My Chrome is not offered to (a
+      // member, a phone) reads a quiet "not offered" status instead of a 403
+      // in the console on every load; any change stays refused.
+      if (action === "status") return json(res, 200, NOT_OFFERED);
+      return json(res, 403, { error: "Only the person at this computer (or an admin) can change My Chrome." });
+    }
+    const service = deps.service();
     let body: Record<string, unknown> = {};
     try {
       const raw = await readBody(req, 4_096);

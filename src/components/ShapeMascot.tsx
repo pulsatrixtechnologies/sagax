@@ -83,9 +83,14 @@ export interface ShapeMascotProps {
   className?: string;
 }
 
-/** Resolve the live path body: explicit def, else the object preset for this shape id. */
+/**
+ * Resolve the live path body: a custom def, else the object preset for this
+ * shape id. A saved def that carries an object preset's id is a copy of that
+ * preset taken when the look was saved: the current preset wins, so every
+ * existing bot follows mascot-geometry.json (2026-11-09, stale sprout/say).
+ */
 export function avatarDefForShape(shape: MascotShape, avatarDef?: ShapeAvatarDef): ShapeAvatarDef | undefined {
-  if (avatarDef) return avatarDef;
+  if (avatarDef) return avatarDef.id && isObjectShapeId(avatarDef.id) ? OBJECT_SHAPE_BY_ID[avatarDef.id] : avatarDef;
   if (isObjectShapeId(shape)) return OBJECT_SHAPE_BY_ID[shape];
   return undefined;
 }

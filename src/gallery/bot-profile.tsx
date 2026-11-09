@@ -77,6 +77,8 @@ const bot = {
   alwaysAllow: ["mcp:mail:read_notes"],
   workFolder: "/workspace/bots/scout", ownerUserId: "pr_alex", turnPayerDefault: "owner",
   grants: [{ target: "user:pr_sam", level: "use" }, { target: "user:pr_jordan", level: "edit" }, { target: "user:pr_casey", level: "run" }],
+  // ?shape=sprout dresses Scout as that shape (header captures per mascot).
+  ...(params.get("shape") ? { mascotLook: { character: "shape", shape: params.get("shape") } } : {}),
 } as unknown as Bot;
 const neighbours = [
   { ...bot, id: "atlas", threadId: "t-atlas", name: "Atlas", title: "Planning", color: "blue", soul: "" },

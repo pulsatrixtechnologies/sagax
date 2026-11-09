@@ -688,21 +688,6 @@ export default function MascotLookEditor({
   return (
     <div data-mascot-look-editor="" className="flex flex-col gap-4">
       {slot ? portalTarget && createPortal(preview, portalTarget) : hero && preview}
-      {/* On the profile page the mascot is the page's bare hero: what it
-          shows, Use, the moves and Play a move head the Appearance tab. */}
-      {slot && hero && (
-        <MascotLookControls
-          shownName={shownName}
-          shownLock={shownLock}
-          summary={summary}
-          inUse={inUse}
-          disabled={disabled}
-          moves={moves}
-          onUse={() => setLook({ character: shown })}
-          onPlay={play}
-          onPlayNext={playNext}
-        />
-      )}
 
       {/* the tabs: each its current value under its label, the open one underlined in the bot's color; Reset and Randomize at the right */}
       <div className="flex min-w-0 items-center gap-2 border-b border-hairline-weak" data-appearance-tab-bar="">
@@ -859,6 +844,22 @@ export default function MascotLookEditor({
         )}
         {tab === "skin" && skinPicker}
       </div>
+      {/* On the profile page the mascot is the page's bare hero: what it
+          shows, Use, the moves and Play a move come after the picker, under
+          the tabs and their panel (the owner 2026-11-09), never above them. */}
+      {slot && hero && (
+        <MascotLookControls
+          shownName={shownName}
+          shownLock={shownLock}
+          summary={summary}
+          inUse={inUse}
+          disabled={disabled}
+          moves={moves}
+          onUse={() => setLook({ character: shown })}
+          onPlay={play}
+          onPlayNext={playNext}
+        />
+      )}
     </div>
   );
 }

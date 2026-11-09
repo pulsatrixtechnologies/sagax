@@ -1,7 +1,7 @@
 // The Appearance mascot editor's preview band: stage, name, summary, use /
 // unlock action, move chips, Play and Randomize. On the bot's profile page it
-// is the page's hero (Grok Bot, JC 2026-11-08): the mascot large and bare,
-// no card, the bot's name and label stacked and centred under it; the
+// is the page's hero (Grok Bot, the owner 2026-11-09): the mascot small and bare on
+// the left, no card, the bot's name and label stacked under it, aligned left; the
 // summary, Use, the moves and Play a move then sit in the Appearance tab
 // (MascotLookControls). A bot wearing a picture shows it on the stage,
 // without moves.
@@ -19,6 +19,9 @@ import type { OwlMove } from "./moves";
 
 const sectionHeading = "text-[10.5px] font-medium uppercase tracking-[0.08em] text-ink-secondary";
 const focusRing = "outline-none focus-visible:ring-2 focus-visible:ring-accent";
+/** The mascot's size in the profile page's hero (Grok Bot's avatar size,
+ * the owner 2026-11-09: smaller, on the left). */
+export const MASCOT_HERO_SIZE = 84;
 /** The preview card's right-hand buttons (Play a move, Randomize). */
 export const MASCOT_HERO_BUTTON = cn("inline-flex items-center justify-center gap-1.5 rounded-xl border border-hairline-weak bg-control/70 px-3.5 py-2 text-[13px] leading-4 text-ink hover:bg-raised-hover disabled:opacity-50", focusRing);
 
@@ -72,9 +75,15 @@ export function mascotSummaryLine(...parts: (string | null | undefined)[]): stri
 type StageProps = Pick<MascotLookPreviewProps, "bot" | "shown" | "shownName" | "shownLook" | "shownLock" | "owlSkin" | "previewSkin" | "moves" | "fxMove" | "onPlay" | "onPlayNext" | "picture" | "liveState"> & {
   motion: { kind: Exclude<MausMotion, "none">; nonce: number } | null;
   size: number;
+  /** The room around the mascot inside its button (20px in the editor's
+   * card, a thin 4px on the profile page's hero). */
+  pad?: number;
+  /** Clip the mascot to its frame (the profile hero: never spill over the
+   * banner or the text under it, the owner 2026-11-09). */
+  clip?: boolean;
 };
 
-function MascotStage({ bot, shown, shownName, shownLook, shownLock, owlSkin, previewSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, motion, size }: StageProps) {
+function MascotStage({ bot, shown, shownName, shownLook, shownLock, owlSkin, previewSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, motion, size, pad = 20, clip = false }: StageProps) {
   return (
     <button
       type="button"
@@ -82,8 +91,8 @@ function MascotStage({ bot, shown, shownName, shownLook, shownLock, owlSkin, pre
       aria-label={t("appearance.preview", { name: shownName })}
       onMouseEnter={() => { if (moves[0]) onPlay(moves[0]); }}
       onClick={onPlayNext}
-      style={{ width: size + 20, height: size + 20 }}
-      className={cn("relative grid shrink-0 place-items-center rounded-2xl", focusRing)}
+      style={{ width: size + pad, height: size + pad }}
+      className={cn("relative grid shrink-0 place-items-center rounded-2xl", clip && "overflow-hidden", focusRing)}
     >
       <span aria-hidden="true" className={cn("pointer-events-none", shownLock.locked && "opacity-60 grayscale")}>
         <BotAvatar
@@ -218,17 +227,18 @@ export function MascotLookPreview({
   const motion = owlMotion ?? liveMotion ?? null;
   const stage = { bot, shown, shownName, shownLook, shownLock, owlSkin, previewSkin, moves, fxMove, onPlay, onPlayNext, picture, liveState, motion };
   if (heading !== undefined) {
-    // The profile page's hero (Grok Bot): the mascot large and bare over
-    // the banner's lower edge, the name and label stacked and centred.
+    // The profile page's hero (Grok Bot, the owner 2026-11-09): the mascot small
+    // and bare on the left of the column, over the banner's lower edge, the
+    // name and label stacked under it, aligned left.
     return (
       <section
         data-mascot-detail={shown}
         data-mascot-hero=""
         aria-label={t("appearance.preview", { name: shownName })}
-        className="relative flex w-full flex-col items-center gap-2 text-center"
+        className="relative flex w-full flex-col items-start gap-1.5 text-left"
       >
-        <MascotStage {...stage} size={168} />
-        <div data-mascot-heading="" className="flex min-w-0 max-w-full flex-col items-center">
+        <MascotStage {...stage} size={MASCOT_HERO_SIZE} pad={4} clip />
+        <div data-mascot-heading="" className="flex min-w-0 max-w-full flex-col items-start">
           {heading}
           {subheading}
         </div>

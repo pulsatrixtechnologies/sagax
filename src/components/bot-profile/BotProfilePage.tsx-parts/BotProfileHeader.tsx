@@ -1,7 +1,8 @@
 // The page's header (#2313, split from BotProfilePage for #1383): the
-// mascot large over the banner's lower edge, no card around it (Grok Bot,
-// JC 2026-11-08), the bot's name with its label under it, centred, who sees
-// it, who owns it and its description edited in place. The mascot editor
+// mascot small on the left of the column over the banner's lower edge, no
+// card around it (Grok Bot, the owner 2026-11-09), the bot's name with its label
+// under it, who sees it, who owns it and its description edited in place,
+// all aligned left and tight. The mascot editor
 // itself is the Appearance tab.
 import { lazy, Suspense, useCallback, useState, type ReactNode } from "react";
 import { Lock, Star, Users } from "lucide-react";
@@ -34,7 +35,7 @@ type Derived = ReturnType<typeof useBotSectionContent>["derived"];
 // the same chunk the Appearance pane's editor loads.
 const MascotLookEditor = lazy(() => import("../../floating-bots/MascotLookEditor"));
 
-/** The header's hero: the mascot, large and bare over the banner, with the
+/** The header's hero: the mascot, small and bare over the banner, with the
  * name and label stacked under it. The Appearance tab's editor draws it
  * into this slot (so a character picked in its grid previews here), the
  * page draws it for the bot's own look otherwise. A picture dropped on it
@@ -58,26 +59,26 @@ export function useBotProfileHero({ bot, derived }: {
   const heroTitle = (
     // The name alone on its line at 28px, the label under it, smaller and
     // secondary (JC: never "Name · Label" on one line).
-    <h2 id="bot-profile-title" data-bot-profile-title="" className="flex min-w-0 max-w-full justify-center text-center text-[28px] font-normal leading-9 text-ink">
+    <h2 id="bot-profile-title" data-bot-profile-title="" className="-ml-1.5 flex min-w-0 max-w-[calc(100%+0.375rem)] justify-start text-left text-[28px] font-normal leading-9 text-ink">
       <InlineEditableText
         value={shown.name}
         required
         maxLength={BOT_PROFILE_LIMITS.name}
         ariaLabel={t("botPanel.name.edit")}
         onSave={canName ? (name) => derived.patch({ name, ...gluedTitle }) : undefined}
-        className="min-w-0 text-[28px] font-normal leading-9 text-ink"
+        className="min-w-0 justify-start text-left text-[28px] font-normal leading-9 text-ink"
       />
     </h2>
   );
   const heroLabel = (shown.title || canLabel) ? (
-    <div data-bot-profile-label="" className="flex min-w-0 max-w-full justify-center text-center text-[15px] leading-5 text-ink-secondary">
+    <div data-bot-profile-label="" className="-ml-1.5 flex min-w-0 max-w-[calc(100%+0.375rem)] justify-start text-left text-[15px] leading-5 text-ink-secondary">
       <InlineEditableText
         value={shown.title}
         maxLength={BOT_PROFILE_LIMITS.title}
         placeholder={t("botPanel.label.add")}
         ariaLabel={t("botPanel.label.edit")}
         onSave={canLabel ? (title) => derived.patch(shown.merged ? { title, name: shown.name } : { title }) : undefined}
-        className="min-w-0 text-[15px] leading-5 text-ink-secondary"
+        className="min-w-0 justify-start text-left text-[15px] leading-5 text-ink-secondary"
       />
     </div>
   ) : undefined;
@@ -148,7 +149,7 @@ export function useBotProfileHero({ bot, derived }: {
         }}
         title={t("botPanel.avatar.dropOrPaste")}
         data-avatar-dropping={heroDropping ? "" : undefined}
-        className={cn("relative -mt-[96px] flex flex-col items-center rounded-[18px]", heroDropping && "ring-2 ring-accent")}
+        className={cn("relative -mt-[46px] flex flex-col items-start rounded-[18px]", heroDropping && "ring-2 ring-accent")}
       >
         <div ref={setHeroTarget} data-bot-profile-hero-slot="" className={heroClaimed ? undefined : "hidden"} />
         {!heroClaimed && (
@@ -172,7 +173,8 @@ export function useBotProfileHero({ bot, derived }: {
 }
 
 /** The header: the bare mascot with the bot's name and label, then who
- * sees it and its description, edited in place, all centred (Grok Bot). */
+ * sees it and its description, edited in place, all aligned left on the
+ * column (Grok Bot, the owner 2026-11-09). */
 export function BotProfileHeader({ bot, derived, hero }: {
   bot: Bot;
   derived: Derived;
@@ -194,7 +196,7 @@ export function BotProfileHeader({ bot, derived, hero }: {
   return (
     <header data-bot-profile-header="" data-bot-profile-section="overview" data-persona-section="overview" data-open="" aria-label={sectionLabel("overview")} className="flex min-w-0 flex-col">
       {hero}
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[13.5px] leading-5 text-ink-secondary">
+      <div className="mt-2 flex flex-wrap items-center justify-start gap-x-3 gap-y-1 text-[13.5px] leading-5 text-ink-secondary">
         <span data-bot-profile-audience="" className="inline-flex items-center gap-1.5">
           <Lock size={13} aria-hidden="true" /> {audience}
         </span>
@@ -219,10 +221,10 @@ export function BotProfileHeader({ bot, derived, hero }: {
           aria-label={t("persona.overview.description")}
           value={bot.description}
           onChange={(event) => derived.patch({ description: event.target.value })}
-          className="mt-3 max-h-[12lh] w-full resize-none text-center rounded-lg bg-transparent px-0 py-0 text-[14px] leading-6 text-ink field-sizing-content placeholder:text-ink-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+          className="mt-1.5 max-h-[12lh] w-full resize-none text-left rounded-lg bg-transparent px-0 py-0 text-[14px] leading-6 text-ink field-sizing-content placeholder:text-ink-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
         />
       ) : (
-        <p data-bot-profile-description="" className="mt-3 whitespace-pre-wrap text-center text-[14px] leading-6 text-ink">
+        <p data-bot-profile-description="" className="mt-1.5 whitespace-pre-wrap text-left text-[14px] leading-6 text-ink">
           {bot.description.trim() || <span className="text-ink-secondary">{t("persona.overview.noDescription")}</span>}
         </p>
       )}

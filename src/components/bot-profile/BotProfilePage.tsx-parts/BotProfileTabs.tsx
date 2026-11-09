@@ -122,7 +122,7 @@ export function BotProfileTabBar({ tabs, tab, onTab, search }: {
   const { searchRef, searching, query, q, results, matching, changeQuery, openSearch, closeSearch, onSearchKey } = search;
   return (
     <>
-      <div className="mt-5 flex items-start gap-1">
+      <div className="mt-4 flex items-start gap-1">
         <div
           role="tablist"
           data-bot-profile-tabs=""

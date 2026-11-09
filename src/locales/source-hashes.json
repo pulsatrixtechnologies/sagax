@@ -18333,7 +18333,17 @@
       "remoteSessionsAdmin.hosts.col.bots": "f17c0acbd8e50c780760bb7c6493264736305603acae6f076b1eecb0e26f5118",
       "remoteSessionsAdmin.hosts.col.shares": "8f0085638354d9f3b35e8c8f963ea4bba427e0a4506057fe23723456053b0e28",
       "remoteSessionsAdmin.hosts.col.role": "14736a2eb9f4159f4b6b86f192c3c222243fd9659aadf2ecc0139e3d72bed85c",
-      "remoteSessionsAdmin.hosts.col.tags": "1331275bc537b4c2bf1e46f7275677967515342e30b572e6852fa6f51b831fe8"
+      "remoteSessionsAdmin.hosts.col.tags": "1331275bc537b4c2bf1e46f7275677967515342e30b572e6852fa6f51b831fe8",
+      "pages.share.bot.legend": "842770400afdaca2b018fe2b553be4126c45011f674ac6902c21406c98bb6b8a",
+      "pages.share.bot.personal": "845f9286400f42697fbb196d24c794efa933ce1d20e2b93a7cf770b69f96f6fc",
+      "pages.share.bot.personalHint": "e2c87e241231986fcf560c5da8bba8c1592bdc94eaec6651e9fca2871a65e64b",
+      "pages.share.bot.shared": "7f9e3d3a45a72b2553d616dfc4b62d5c40d793d3fbde4895bdff170c822dde3f",
+      "pages.share.bot.sharedHint": "65060d0e4181e6e48e50125ea8668fab71287f3eb521e072986b309dace53b01",
+      "botPanel.library.sharedPages": "ca89be818889b63aa790047d920ecf67dc7fc760a199dc422cda1a104bdad05d",
+      "pages.sharedBy": "1675e69d02c6755b1c40ab58e8183af58e59caa4bc0b577fce65346064202286",
+      "pages.refreshShared": "be748cc8a92b4b447e0237c537fe9fc282f1d771ab476a8fe0fee4f7633adccd",
+      "pages.refreshPrompt": "5a76085026882efa7c8577bc42181fec3ffa0ae68d91bea0434f95997534d9f7",
+      "pages.refreshAsked": "6bfe46f3e437aedd733f7d64feb98df384767b626bd165da30f3484eb0f50fbc"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

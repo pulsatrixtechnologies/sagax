@@ -18,7 +18,8 @@ export type ShareChange =
   | { kind: "link" }
   | { kind: "expiry"; hours: number }
   | { kind: "version" }
-  | { kind: "stop" };
+  | { kind: "stop" }
+  | { kind: "bot"; shared: boolean };
 
 /** The expiry a choice of hours stands for (0: never). Pure. */
 export function expiryFromHours(hours: number, now = Date.now()): number | null {
@@ -63,6 +64,10 @@ export function sharePlan(page: Pick<PublishedPageSummary, "status" | "access" |
       return shared ? [{ method: "PATCH", path: "", body: { expiresAt: expiryFromHours(change.hours, now) } }] : [];
     case "version":
       return shared && page.currentVersion !== version ? [publish(page.access)] : [];
+    case "bot":
+      // #3128: shared in the bot's Library, members read the published
+      // version: sharing a page not published yet publishes it first
+      return [...(change.shared && !shared ? [publish(page.access)] : []), { method: "PATCH", path: "", body: { botShared: change.shared } }];
     case "stop":
       return shared ? [{ method: "POST", path: "/revoke", body: {} }] : [];
   }

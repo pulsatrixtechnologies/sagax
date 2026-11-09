@@ -146,7 +146,7 @@ export type PageViewer = { principalId?: string; computerOwner: boolean } | null
  * shared with "People you invite" (`private`) reads for its person, its
  * editors (#1704), and the people and teams they invited (`teamsOf`: the
  * reader's teams). Pure. */
-export function pageReadable(page: Pick<PageRecord, "access" | "ownerId" | "invites" | "editors">, viewer: PageViewer, policy?: PagesPolicy, teamsOf?: (principalId: string) => readonly string[]): boolean {
+export function pageReadable(page: Pick<PageRecord, "access" | "ownerId" | "invites" | "editors"> & { botShared?: boolean; botId?: string }, viewer: PageViewer, policy?: PagesPolicy, teamsOf?: (principalId: string) => readonly string[], mayUseBot?: (principalId: string, botId: string) => boolean): boolean {
   if (page.access === "link" && policy?.linkSharing !== false) return true;
   if (!viewer) return false;
   if (page.access === "org" || page.access === "link") return true;
@@ -154,6 +154,8 @@ export function pageReadable(page: Pick<PageRecord, "access" | "ownerId" | "invi
   if ((viewer.principalId ?? "").toLowerCase() === page.ownerId.toLowerCase()) return true;
   const principalId = viewer.principalId;
   if (pageHasEditor(page.editors, principalId)) return true;
+  // #3128: a page shared in its bot's Library reads for whoever uses the bot
+  if (page.botShared === true && principalId && page.botId && mayUseBot?.(principalId, page.botId)) return true;
   return Boolean(principalId) && pageInvites(page.invites, principalId, principalId && teamsOf ? teamsOf(principalId) : []);
 }
 
@@ -170,7 +172,7 @@ export function pageMayEdit(page: Pick<PageRecord, "ownerId" | "editors">, viewe
 }
 
 const readableBy = (options: PublicPageOptions, page: PageRecord, viewer: PageViewer) =>
-  pageReadable(page, viewer, options.pages!.policy(), options.teamsOf ? (id) => options.teamsOf!(id) : undefined);
+  pageReadable(page, viewer, options.pages!.policy(), options.teamsOf ? (id) => options.teamsOf!(id) : undefined, options.mayUseBot);
 
 /** A viewer as a frame ticket carries it, and back. Pure. */
 export function viewerKey(viewer: PageViewer): string {
@@ -215,6 +217,8 @@ export interface PublicPageOptions {
   readerAssets?(): ReaderAssets | null;
   /** A signed-in reader's name, as the bar shows it. */
   personName?(principalId: string): string;
+  /** #3128: whether a person may use a bot (its shared pages read for them). */
+  mayUseBot?(principalId: string, botId: string): boolean;
   /** Where a reader who is not signed in signs in and comes back to this
    * reading link (an organization server's web sign-in), or nothing. */
   signInPath?(viewPath: string): string | undefined;
@@ -853,6 +857,12 @@ export interface PublishedPageRouteDeps {
   reader?(auth: RequestAuth): PageViewer;
   /** The teams a person is in, for pages shared with a team. */
   teamsOf?(principalId: string): readonly string[];
+  /** #3128: whether a person may use a bot (its shared pages read for them). */
+  mayUseBot?(principalId: string, botId: string): boolean;
+  /** #3128: whether the caller may remove a page someone shared (its creator, the bot's owner). */
+  mayRemoveShared?(auth: RequestAuth, page: PageRecord): boolean;
+  /** A person's name, for "Shared by". */
+  personName?(principalId: string): string;
   /** Names for the people and bots in a page's threads (by id). */
   names?(ids: readonly string[]): Record<string, string>;
   /** False when the page's person was disabled or deleted. */
@@ -877,6 +887,15 @@ export function createPublishedPageRoutes(deps: PublishedPageRouteDeps): RouteHa
     const owner = deps.owner(auth);
     return owner === undefined || (page.ownerId ?? "").toLowerCase() === owner.toLowerCase();
   };
+  // #3128: a page someone shared in the Library of a bot this person uses
+  const sharedWith = (auth: RequestAuth, page: PageRecord) => {
+    const owner = deps.owner(auth);
+    return Boolean(owner) && page.botShared === true && page.status === "published" && !mine(auth, page) && Boolean(deps.mayUseBot?.(owner!, page.botId));
+  };
+  const sharedFields = (auth: RequestAuth, page: PageRecord) => ({
+    sharedBy: (page.ownerId && deps.personName?.(page.ownerId)) || "?",
+    canRemove: Boolean(deps.mayRemoveShared?.(auth, page)),
+  });
   const wire = (page: PageRecord, req: IncomingMessage) => {
     const origin = deps.origin(req);
     return deps.pages.summary(page, origin, deps.reachable(origin));
@@ -927,7 +946,14 @@ export function createPublishedPageRoutes(deps: PublishedPageRouteDeps): RouteHa
     res.setHeader("cache-control", "no-store");
     if (!deps.isPerson(auth)) return json(res, 403, { error: "Only a signed-in person manages published pages.", code: "person_only" });
     if (path === "/api/pages" && method === "GET") {
-      return json(res, 200, { pages: deps.pages.list(deps.owner(auth)).map((page) => wire(page, req)) });
+      const owner = deps.owner(auth);
+      const shared = owner && deps.mayUseBot ? deps.pages.sharedFor(owner, (botId) => deps.mayUseBot!(owner, botId)) : [];
+      return json(res, 200, {
+        pages: [
+          ...deps.pages.list(owner).map((page) => wire(page, req)),
+          ...shared.map((page) => ({ ...wire(page, req), ...sharedFields(auth, page) })),
+        ],
+      });
     }
     if (path === "/api/pages/policy") return method === "GET" ? json(res, 200, deps.pages.policy()) : PASS;
     // the person's look (2026-10-29): their app sends it, a reading link of
@@ -983,7 +1009,18 @@ export function createPublishedPageRoutes(deps: PublishedPageRouteDeps): RouteHa
     if (!match) return PASS;
     const page = deps.pages.get(match[1]!);
     // Another person's page reads exactly like a missing one.
-    if (!page || !mine(auth, page)) return json(res, 404, { error: "This page does not exist.", code: "not_found" });
+    const shared = Boolean(page) && !mine(auth, page!) && sharedWith(auth, page!);
+    if (!page || (!mine(auth, page) && !shared)) return json(res, 404, { error: "This page does not exist.", code: "not_found" });
+    // #3128: a member of the share reads it; its creator and the bot's owner
+    // remove it; nothing else of another person's page is theirs to change
+    if (shared) {
+      if (method === "GET" && !match[2] && match[3] === undefined) return json(res, 200, { page: { ...wire(page, req), ...sharedFields(auth, page) } });
+      if (method === "DELETE" && !match[2] && match[3] === undefined && deps.mayRemoveShared?.(auth, page)) {
+        deps.pages.remove(page.id);
+        return json(res, 200, { ok: true });
+      }
+      return json(res, 403, { error: "This page is shared by someone else: you can read it and ask its bot to refresh it.", code: "shared_page" });
+    }
     const action = match[2];
     const versionPath = match[3];
     const answer = (result: PageRecord | PageError) => failed(result)
@@ -1005,7 +1042,7 @@ export function createPublishedPageRoutes(deps: PublishedPageRouteDeps): RouteHa
     const by = deps.owner(auth);
     if (!action && method === "PATCH") {
       const body = await readBody(req) as Record<string, unknown> | null;
-      if (!body || typeof body !== "object") return json(res, 400, { error: "Send { title?, access?, expiresAt?, readerComments?, pinned?, keepUpdated?, editors? }.", code: "bad_body" });
+      if (!body || typeof body !== "object") return json(res, 400, { error: "Send { title?, access?, expiresAt?, readerComments?, pinned?, keepUpdated?, botShared?, editors? }.", code: "bad_body" });
       // every field is checked before anything changes: a refused request
       // changes nothing, and nothing a person asked is ever dropped quietly
       let title: string | undefined;
@@ -1034,6 +1071,11 @@ export function createPublishedPageRoutes(deps: PublishedPageRouteDeps): RouteHa
         if (typeof body.keepUpdated !== "boolean") return json(res, 400, { error: "keepUpdated: true or false.", code: "bad_keep" });
         keepUpdated = body.keepUpdated;
       }
+      let botShared: boolean | undefined;
+      if ("botShared" in body) {
+        if (typeof body.botShared !== "boolean") return json(res, 400, { error: "botShared: true or false.", code: "bad_bot_shared" });
+        botShared = body.botShared;
+      }
       let editors: string[] | undefined;
       if ("editors" in body) {
         const parsed = parsePageEditors(body.editors, page.ownerId ?? by);
@@ -1051,6 +1093,7 @@ export function createPublishedPageRoutes(deps: PublishedPageRouteDeps): RouteHa
       if (!failed(result) && readerComments !== undefined) result = deps.pages.setReaderComments(page.id, readerComments, by);
       if (!failed(result) && pinned !== undefined) result = deps.pages.setPinned(page.id, pinned, by);
       if (!failed(result) && keepUpdated !== undefined) result = deps.pages.setKeepUpdated(page.id, keepUpdated, by);
+      if (!failed(result) && botShared !== undefined) result = deps.pages.setBotShared(page.id, botShared, by);
       if (!failed(result) && editors !== undefined) result = deps.pages.setEditors(page.id, editors, by);
       return answer(result);
     }

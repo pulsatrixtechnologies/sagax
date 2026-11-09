@@ -31,6 +31,13 @@ function publishedPageOptions() {
     },
     // a page shared with a team reads for that team's people (Share)
     teamsOf: (principalId) => host.IDENTITY.kind === "perspicax" ? (host.principals.byId(principalId)?.teams ?? []).map((team) => team.id) : [],
+    // #3128: a page shared in its bot's Library reads for whoever uses the bot
+    mayUseBot: (principalId, botId) => {
+      if (host.IDENTITY.kind !== "perspicax") return false;
+      const bot = host.store.bot(botId);
+      const viewer = host.authzViewerFromId(principalId);
+      return Boolean(bot && viewer && host.canOnBot(viewer, "bot.use", host.botFacts(bot)));
+    },
     // the reader's bar around a reading link: this server's built script
     readerAssets: () => readerAssetsFrom(host.STATIC_DIR),
     // its byline draws the publishing bot's mascot (2026-10-29)

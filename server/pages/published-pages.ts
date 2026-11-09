@@ -81,7 +81,7 @@ export interface PageVersionRecord {
 
 export interface PageHistoryEntry {
   at: number;
-  action: "propose" | "publish" | "decline" | "access" | "expiry" | "revoke" | "rename" | "edit" | "reader-comments" | "reader-comment" | "reader-comment-approve" | "reader-comment-remove" | "audience" | "pin" | "live" | "keep" | "invite" | "editors";
+  action: "propose" | "publish" | "decline" | "access" | "expiry" | "revoke" | "rename" | "edit" | "reader-comments" | "reader-comment" | "reader-comment-approve" | "reader-comment-remove" | "audience" | "pin" | "live" | "keep" | "invite" | "editors" | "bot-share";
   version?: number;
   by?: string;
 }
@@ -118,6 +118,10 @@ export interface PageRecord {
   /** The person allows the bot (and their own later edit) to replace the
    * published version. Never set by the bot. Off unless they turn it on. */
   keepUpdated?: boolean;
+  /** #3128: the person shares this page in the bot's Library. Everyone who
+   * may use the bot reads it and asks the bot to refresh it. Absent means
+   * personal, the default. */
+  botShared?: boolean;
   /** The people and teams the person invited to read it (Share). */
   invites?: PageInvites;
   /** People who may edit this page besides its person (#1704). */
@@ -507,7 +511,10 @@ export class PublishedPages {
     // A page of this conversation, or (2026-10-28, the page view) one of this
     // bot's pages for the same person, opened from another topic. Never
     // another bot's page, never another person's.
-    if (input.pageId && (!page || (page.threadId !== input.threadId && (page.botId !== input.botId || !sameOwner(page.ownerId, input.ownerId))))) {
+    // #3128: a page shared in the bot's Library is also refreshed by whoever
+    // uses that bot (the same bot, never another).
+    const sharedRefresh = Boolean(page && page.botShared === true && page.botId === input.botId);
+    if (input.pageId && (!page || (page.threadId !== input.threadId && !sharedRefresh && (page.botId !== input.botId || !sameOwner(page.ownerId, input.ownerId))))) {
       return refuse(404, "not_found", "page_id: no page of this conversation has that id. Leave it out to propose a new page.");
     }
     const sizeOf = (entry: PageRecord) => entry.versions.reduce((inner, version) => inner + version.bytes, 0);
@@ -919,6 +926,35 @@ export class PublishedPages {
     });
   }
 
+  /** #3128: share this page in the bot's Library, or keep it personal. */
+  setBotShared(id: string, shared: boolean, by?: string): PageRecord | PageError {
+    return this.mutate(id, (page, now) => {
+      if ((page.botShared === true) !== shared) {
+        if (shared) page.botShared = true;
+        else delete page.botShared;
+        page.history.push({ at: now, action: "bot-share", ...(by ? { by } : {}) });
+      }
+      return page;
+    });
+  }
+
+  /** The published pages shared in the Library of the bots this person may
+   * use (#3128), never their own. `mayUse` decides per bot. */
+  sharedFor(principalId: string, mayUse: (botId: string) => boolean): PageRecord[] {
+    const me = principalId.toLowerCase();
+    const now = this.clock();
+    const verdict = new Map<string, boolean>();
+    return this.load()
+      .filter((page) => page.botShared === true && page.status === "published" && (page.ownerId ?? "").toLowerCase() !== me
+        && (page.expiresAt === null || page.expiresAt > now))
+      .filter((page) => {
+        if (!verdict.has(page.botId)) verdict.set(page.botId, mayUse(page.botId));
+        return verdict.get(page.botId) === true;
+      })
+      .map((page) => structuredClone(page))
+      .sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || b.updatedAt - a.updatedAt);
+  }
+
   /** The person's Share > Add people or groups: who else reads the page
    * while it is shared with "People you invite". Replaces both lists. */
   setInvites(id: string, invites: PageInvites, by?: string): PageRecord | PageError {
@@ -1067,6 +1103,7 @@ export class PublishedPages {
       audience: pageAudienceOf(page.audience),
       pinned: page.pinned === true,
       keepUpdated: page.keepUpdated === true,
+      botShared: page.botShared === true,
       invites: { people: [...(page.invites?.people ?? [])], teams: [...(page.invites?.teams ?? [])] },
       editors: [...(page.editors ?? [])],
       versions,

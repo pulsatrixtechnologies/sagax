@@ -12839,7 +12839,6 @@
   "routineRun.blockedLine": "Bloquée : {reason}",
   "routineRun.blockedNoReason": "Bloquée : une étape a arrêté l'exécution. Ouvre l'exécution pour voir laquelle.",
   "routineRun.blockedWaitingFor": "Bloquée : en attente de {name}",
-  "routineRun.handedTo": "Travail envoyé à {name}",
   "routineRun.aTeammate": "un coéquipier",
   "routineRun.card.done": "Terminé",
   "routineResult.failed": "Non terminée : {reason}",

@@ -2,9 +2,9 @@
 // The work a bot handed to teammates, as one card of the coding job family
 // (#2719, owner 2026-11-08: "it should be in a card, otherwise it looks weird
 // in the chat"): a provenance line (Teammates · time · status with its
-// icon), one bubble with the "Sent work to ..." title and a row per
-// teammate (task, bot · model readable, state with its icon), folded once
-// every teammate finished, and a click on a row that opens that teammate's
+// icon), one bubble with a row per teammate (task, bot · model readable,
+// state with its icon), always shown: no "Sent work to ..." title and no
+// fold (#2947), and a click on a row that opens that teammate's
 // work right there under the card (no conversation switch, no "Open thread").
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -47,7 +47,7 @@ afterEach(() => {
   host.remove();
 });
 
-/** A different key mounts a fresh card (its folded/open state starts over). */
+/** A different key mounts a fresh card. */
 function render(props: Parameters<typeof DelegationList>[0], key = "card") {
   act(() => { root.render(createElement(DelegationList, { key, ...props })); });
 }
@@ -55,7 +55,7 @@ const click = (selector: string) => act(async () => { host.querySelector<HTMLBut
 const settle = () => act(async () => { await new Promise((done) => setTimeout(done, 0)); });
 
 describe("DelegationList", () => {
-  it("is one card of the coding job family: Teammates · status above one bubble with the title and every row", () => {
+  it("is one card of the coding job family: Teammates · status above one bubble with every row", () => {
     render({ entries, modelOf: (id) => (id === "harrie" ? "Opus High" : "Sonnet") });
     const card = host.querySelector("[data-delegation-card]")!;
     expect(card.tagName).toBe("SECTION");
@@ -67,7 +67,7 @@ describe("DelegationList", () => {
     const bubble = card.querySelector("[data-delegation-bubble]")!;
     expect(bubble.className).toMatch(/\bbg-bubble-bot\b/);
     expect(bubble.className).toMatch(/rounded-\[18px\]/);
-    expect(bubble.querySelector("[data-delegation-intro]")?.textContent).toBe("Sent work to Hollis, Orla");
+    expect(card.getAttribute("aria-label")).toBe("Hollis, Orla, Waiting for Orla");
     const rows = bubble.querySelectorAll("[data-run-handed-to] > li");
     expect(rows).toHaveLength(2);
     expect(rows[0]!.getAttribute("data-run-handoff")).toBe("harrie");
@@ -120,19 +120,18 @@ describe("DelegationList", () => {
     expect(host.querySelector("[data-delegation-card-status]")?.textContent).toBe("Needs your answer");
   });
 
-  it("folds once every teammate finished, stays open while one works, and the title toggles it", () => {
-    render({ entries: entries.map((entry) => ({ ...entry, status: "completed" })) }, "done");
-    const toggle = host.querySelector<HTMLButtonElement>("[data-delegation-toggle]")!;
-    expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(host.querySelector("[data-run-handed-to]")?.hasAttribute("hidden")).toBe(true);
-    // folded, the rows are still in the page (the names stay findable)
-    expect(host.querySelector('[data-run-handoff="harrie"]')).not.toBeNull();
-    act(() => toggle.click());
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    expect(host.querySelector("[data-run-handed-to]")?.hasAttribute("hidden")).toBe(false);
-    render({ entries }, "running");
-    expect(host.querySelector("[data-delegation-toggle]")?.getAttribute("aria-expanded")).toBe("true");
-    expect(host.querySelector("[data-run-handed-to]")?.hasAttribute("hidden")).toBe(false);
+  it("has no 'Sent work to' title and no fold: the rows always show, running or done (#2947)", () => {
+    for (const [key, list] of [["done", entries.map((entry) => ({ ...entry, status: "completed" }))], ["running", entries], ["one", [entries[0]!]]] as const) {
+      render({ entries: list }, key);
+      expect(host.textContent).not.toMatch(/Sent work to/i);
+      expect(host.querySelector("[data-delegation-toggle]")).toBeNull();
+      expect(host.querySelector("[data-delegation-intro]")).toBeNull();
+      expect(host.querySelector("[aria-expanded]:not([data-delegation-reveal])")).toBeNull();
+      expect(host.querySelector("[data-run-handed-to]")?.hasAttribute("hidden")).toBe(false);
+      expect(host.querySelectorAll("[data-run-handed-to] > li")).toHaveLength(list.length);
+      // the names still read in the rows (bot · model under the task)
+      expect(host.querySelector('[data-run-handoff="harrie"] [data-delegation-meta]')?.textContent).toContain("Hollis");
+    }
   });
 
   it("a click on a row opens that teammate's work right there under the card, one at a time, and Close puts it away", async () => {

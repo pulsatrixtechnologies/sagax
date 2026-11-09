@@ -1,6 +1,7 @@
 // Pulsatrix Flow watches (2026-11-09): the observe loop of a bot that holds a
 // Pulsatrix profile. Fixture: rows of `px_flow.py proactive` (Flow #186).
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -10,7 +11,7 @@ import {
   proposeTool, type FlowHelper, type FlowWatch, type FlowWatchLoopDeps, type ObserveSession,
 } from "./flow-watches.ts";
 import { ProactiveBudget, ProactiveEngine, classifyProactiveActionKind } from "./proactive.ts";
-import { proactiveWakePrompt, type ProactiveEvent } from "./proactive-wake.ts";
+import { ProactivePendingFile, proactiveWakePrompt, type ProactiveEvent } from "./proactive-wake.ts";
 
 const FIXTURE = readFileSync(join(import.meta.dirname, "fixtures", "flow-proactive.json"), "utf8");
 const ZONE = "America/New_York";
@@ -26,7 +27,9 @@ function watch(overrides: Partial<FlowWatch> = {}): FlowWatch {
   };
 }
 
-function harness(opts: { mode?: unknown; stored?: boolean; observed?: unknown; readOnly?: string[]; watches?: unknown[]; budget?: number; now?: () => number; facts?: string } = {}) {
+function harness(opts: { mode?: unknown; stored?: boolean; observed?: unknown; readOnly?: string[]; watches?: unknown[]; budget?: number; now?: () => number; facts?: string; memory?: WatchMemory } = {}) {
+  let access = true;
+  let sessions = 0;
   const offered: ProactiveEvent[] = [];
   const logs: string[] = [];
   const calls: Array<{ name: string; args: unknown }> = [];
@@ -55,7 +58,10 @@ function harness(opts: { mode?: unknown; stored?: boolean; observed?: unknown; r
     bots: () => [{ id: "b1", owner: "person-1" }],
     bot: (id) => (id === "b1" ? bot : undefined),
     helper: () => helper,
-    session: async (_owner, _bot, fn) => fn(session),
+    session: async (_owner, _bot, fn) => {
+      sessions += 1;
+      return access ? fn(session) : null;
+    },
     timeZone: () => ZONE,
     engine: new ProactiveEngine({
       bot: (id) => (id === "b1" ? bot : undefined),
@@ -67,11 +73,16 @@ function harness(opts: { mode?: unknown; stored?: boolean; observed?: unknown; r
       return "gathered";
     },
     log: (_bot, line) => logs.push(line),
-    memory: new WatchMemory(),
+    memory: opts.memory ?? new WatchMemory(),
     now: opts.now ?? (() => clock),
   };
   const loop = new FlowWatchLoop(deps);
-  return { loop, offered, logs, calls, helperCalls, advance: (ms: number) => { clock += ms; } };
+  return {
+    loop, offered, logs, calls, helperCalls,
+    advance: (ms: number) => { clock += ms; },
+    setAccess: (value: boolean) => { access = value; },
+    sessions: () => sessions,
+  };
 }
 
 describe("Flow watch listing", () => {
@@ -274,5 +285,91 @@ describe("the loop", () => {
     await h.loop.tick();
     const call = h.calls.find((row) => row.name === "cw_psa_service_query");
     expect(call?.args).toEqual({ owner: "pat", since: "2026-11-08T00:00:00" });
+  });
+
+  it("no Pulsatrix access: the ready watches wait for their next cadence, not every tick (#3140)", async () => {
+    const h = harness({ observed: { items: [] } });
+    await h.loop.tick();
+    h.setAccess(false);
+    h.advance(15 * 60_000);
+    await h.loop.tick();
+    const tried = h.sessions();
+    h.advance(60_000);
+    await h.loop.tick();
+    h.advance(60_000);
+    await h.loop.tick();
+    expect(h.sessions()).toBe(tried);
+    h.advance(15 * 60_000);
+    await h.loop.tick();
+    expect(h.sessions()).toBe(tried + 1);
+    expect(h.logs.filter((line) => line.includes("no Pulsatrix access"))).toHaveLength(1);
+  });
+
+  it("a skipped watch posts its line once per cause, then stays silent until the cause changes (#3140)", async () => {
+    const unresolved = watch({ observe: { tool: "cw_psa_service_query", args: { owner: "{{fact:team.operator_login}}" } } });
+    const h = harness({ watches: [unresolved] });
+    await h.loop.tick();
+    h.advance(15 * 60_000);
+    await h.loop.tick();
+    h.advance(15 * 60_000);
+    await h.loop.tick();
+    expect(h.logs.filter((line) => line.includes("w-open skipped"))).toHaveLength(1);
+  });
+
+  it("a cause that changes posts again; an observe that succeeds resets it (#3140)", async () => {
+    const h = harness({ observed: { items: [] } });
+    await h.loop.tick();
+    h.setAccess(false);
+    h.advance(15 * 60_000);
+    await h.loop.tick();
+    h.setAccess(true);
+    h.advance(15 * 60_000);
+    await h.loop.tick();
+    h.setAccess(false);
+    h.advance(15 * 60_000);
+    await h.loop.tick();
+    expect(h.logs.filter((line) => line.includes("no Pulsatrix access"))).toHaveLength(2);
+  });
+
+  it("a pending watch event carries a replay ref that survives a restart (#3140)", async () => {
+    const h = harness();
+    await h.loop.tick();
+    const event = h.offered[0]!;
+    expect(event.replay).toEqual({ kind: "watch", watchId: "w-open" });
+    const dir = mkdtempSync(join(tmpdir(), "watch-pending-"));
+    try {
+      new ProactivePendingFile(join(dir, "pending.json")).set("b1", [event]);
+      expect(new ProactivePendingFile(join(dir, "pending.json")).take()).toEqual([{ botId: "b1", key: event.key, ref: { kind: "watch", watchId: "w-open" } }]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a replayed watch is observed again at the next tick and fires again, even across a restart (#3140)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "watch-memory-"));
+    try {
+      const file = join(dir, "watches.json");
+      const first = harness({ memory: new WatchMemory(file) });
+      await first.loop.tick();
+      expect(first.offered).toHaveLength(1);
+      // the server restarts before the wake: the pending file replays the watch
+      const second = harness({ memory: new WatchMemory(file) });
+      second.loop.replay("b1", "w-open");
+      await second.loop.tick();
+      expect(second.offered).toHaveLength(1);
+      expect(new WatchMemory(file).get("b1", "w-open").due).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a dropped watch event is released: the condition may fire again (#3140)", async () => {
+    const h = harness();
+    await h.loop.tick();
+    expect(h.offered).toHaveLength(1);
+    h.loop.released("b1", "w-open");
+    h.advance(15 * 60_000);
+    await h.loop.tick();
+    expect(h.offered).toHaveLength(2);
   });
 });

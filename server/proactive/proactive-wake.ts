@@ -127,7 +127,9 @@ export interface ProactiveEvent {
 /** 2026-11-02: what a gathered event keeps on disk until its wake starts. */
 export type ProactiveReplayRef =
   | { kind: "peer"; noticeId: string }
-  | { kind: "room"; groupId: string; threadId: string; messageId: string; posterId: string; hops: number };
+  | { kind: "room"; groupId: string; threadId: string; messageId: string; posterId: string; hops: number }
+  /** #3140: a Flow watch; the replay observes it again (no observed data kept). */
+  | { kind: "watch"; watchId: string };
 
 /** The facts of a teammate's notice a person can be shown without a model. */
 export interface PeerNoticeFacts {
@@ -565,6 +567,15 @@ export class ProactiveWaker {
   }
 
   private drop(botId: string, events: readonly ProactiveEvent[]): void {
+    // #3140: a dropped watch is released by its loop and offered again at
+    // its cadence: its key must not read as a duplicate then
+    for (const event of events) {
+      if (event.source !== "watch") continue;
+      const key = `${event.botId}\u0000${event.key}`;
+      if (!this.keySet.delete(key)) continue;
+      const at = this.keys.indexOf(key);
+      if (at >= 0) this.keys.splice(at, 1);
+    }
     try {
       this.deps.dropped?.(botId, events);
     } catch {
@@ -962,5 +973,6 @@ function isPendingRow(row: unknown): row is { key: string; ref: ProactiveReplayR
   const { key, ref } = row as { key?: unknown; ref?: { kind?: unknown } & Record<string, unknown> };
   if (typeof key !== "string" || !ref || typeof ref !== "object") return false;
   if (ref.kind === "peer") return typeof ref.noticeId === "string";
+  if (ref.kind === "watch") return typeof ref.watchId === "string";
   return ref.kind === "room" && ["groupId", "threadId", "messageId", "posterId"].every((name) => typeof ref[name] === "string") && typeof ref.hops === "number";
 }

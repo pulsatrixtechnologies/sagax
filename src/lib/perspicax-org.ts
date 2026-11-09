@@ -250,6 +250,10 @@ export interface MyEngine {
    * Perspicax, or sealed for them on this server (engine-api-keys.enc).
    * Absent with no key of their own, and on an older server. */
   keyWhere?: "perspicax" | "server";
+  /** #3085, pi: the providers whose models a key pays for this person (their
+   * own keys, else the organization's when they serve them). Names only.
+   * Absent: not pi, or an older server. */
+  keyProviders?: string[];
   /** The server has a key for this engine (the organization's key) and it
    * serves this person. */
   orgKey: boolean;

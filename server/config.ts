@@ -2349,6 +2349,17 @@ function piOrgKeys(cfg: AppConfig): Partial<Record<(typeof PI_ORG_KEY_VARIABLES)
   return keys;
 }
 
+/** #3085: the providers the organization's pi keys serve (names only,
+ * never a key value), as pi names them. */
+export function piOrgKeyProviders(cfg: AppConfig): string[] {
+  const keys = piOrgKeys(cfg);
+  const names: Record<(typeof PI_ORG_KEY_VARIABLES)[number], string> = {
+    ANTHROPIC_API_KEY: "anthropic", OPENAI_API_KEY: "openai", XAI_API_KEY: "xai", MISTRAL_API_KEY: "mistral",
+    CEREBRAS_API_KEY: "cerebras", GROQ_API_KEY: "groq", OPENROUTER_API_KEY: "openrouter",
+  };
+  return PI_ORG_KEY_VARIABLES.filter((variable) => Boolean(keys[variable])).map((variable) => names[variable]);
+}
+
 /** The credential variables each key-backed driver reads. */
 const DRIVER_CREDENTIAL_VARIABLES: Record<string, readonly string[]> = {
   piAgent: PI_ORG_KEY_VARIABLES,

@@ -1699,6 +1699,8 @@ import { createPerformBotActRouteOutsideConfidential } from "./index-leaves/perf
 import { createPersistMcpServers } from "./index-leaves/persistMcpServers.ts";
 import { createPersonPaysEngine } from "./index-leaves/personPaysEngine.ts";
 import { createPersonRunsEngine } from "./index-leaves/personRunsEngine.ts";
+import { createPiKeyProviders } from "./index-leaves/piKeyProviders.ts";
+import { filterPiCatalogByProviders, piModelKeyProvider, piModelRefusal } from "./drivers/pi-key-filter.ts";
 import { createPersonalServerListing } from "./index-leaves/personalServerListing.ts";
 import { createPerspicaxReadAlone } from "./index-leaves/perspicaxReadAlone.ts";
 import { createProposalRuleCandidate } from "./index-leaves/proposalRuleCandidate.ts";
@@ -6137,6 +6139,7 @@ bindLeafHost({
   get headlessTasks() { return headlessTasks; },
   get memberDefaultSelection() { return memberDefaultSelection; },
   get personRunsEngine() { return personRunsEngine; },
+  get piKeyProviders() { return piKeyProviders; },
   get refreshUnsetModelSelectionsShared() { return refreshUnsetModelSelectionsShared; },
   get refreshUnsetModelSelectionsFrom() { return refreshUnsetModelSelectionsFrom; },
   get moveOffComputerEngine() { return moveOffComputerEngine; },
@@ -7545,6 +7548,7 @@ const syncHeadlessTeam = createSyncHeadlessTeam(getLeafHost);
 const defaultSelection = createDefaultSelection(getLeafHost);
 const memberDefaultSelection = createMemberDefaultSelection(getLeafHost);
 const personRunsEngine = createPersonRunsEngine(getLeafHost);
+const piKeyProviders = createPiKeyProviders(getLeafHost);
 const refreshUnsetModelSelectionsFrom = createRefreshUnsetModelSelectionsFrom(getLeafHost);
 const healBotEngine = createHealBotEngine(getLeafHost);
 const moveOffComputerEngine = createMoveOffComputerEngine(getLeafHost);
@@ -26526,6 +26530,7 @@ if (IDENTITY.kind === "perspicax" && engineLogins) {
   });
   ROUTES.push(createMeEnginesRoutes({
     IDENTITY,
+    get piKeyProviders() { return piKeyProviders; },
     localPrincipalId,
     isPrincipalId,
     principals,
@@ -29816,6 +29821,16 @@ const AGENT_API_GRANTS_FILE = join(DATA_DIR, "agent-api-grants.json");
 function agentApiMounted(bot: BotRecord): boolean {
   return agentApiBotScopes(bot).size > 0;
 }
+/** #3085: the pi rows a bot's payer (resolved like a turn for this speaker)
+ * holds a provider key for, from the engine's whole catalog. Null: no filter. */
+function botPiKeyOptions(bot: BotRecord, instanceId: string, principalId: string) {
+  const instance = registry.get(instanceId);
+  if (!instance) return null;
+  const providers = piKeyProviders.forBot(bot, { instanceId, driverKind: "piAgent" }, { origin: "person", principalId });
+  if (!providers) return null;
+  return filterPiCatalogByProviders(instance.models, providers).options.filter((option) => option.keyPaid);
+}
+
 function agentModelSummary(...args: any[]) {
   return (_agentModelSummaryImpl ??= createAgentModelSummary(getLeafHost) as any)(...args);
 }
@@ -30167,9 +30182,13 @@ const agentApi = createAgentApi({
       const instanceId = String(instance.instanceId ?? "").trim();
       if (!instanceId) return [];
       const label = String(instance.displayName ?? instance.driverKind ?? instanceId);
-      const modelBag = instance.models && typeof instance.models === "object" ? instance.models as { options?: Array<{ id?: string; label?: string }>; default?: string } : null;
-      const options = Array.isArray(modelBag?.options)
-        ? modelBag!.options!.filter((option) => typeof option?.id === "string" && option.id.trim()).map((option) => ({
+      const modelBag = instance.models && typeof instance.models === "object" ? instance.models as { options?: Array<{ id?: string; label?: string; keyPaid?: boolean }>; default?: string } : null;
+      // #3085: pi offers the providers this bot's payer holds a key for (its
+      // owner when the owner pays, else the caller), never another one
+      const piPaid = instance.driverKind === "piAgent" ? botPiKeyOptions(bot, instanceId, caller.id) : null;
+      const rows = piPaid ? [...(modelBag?.options ?? []).filter((option) => !option?.keyPaid && !piModelKeyProvider(String(option?.id ?? ""))), ...piPaid] : modelBag?.options;
+      const options = Array.isArray(rows)
+        ? rows!.filter((option) => typeof option?.id === "string" && option.id.trim()).map((option) => ({
           id: String(option.id).trim(),
           label: String(option.label ?? option.id).trim(),
         }))
@@ -30223,6 +30242,16 @@ const agentApi = createAgentApi({
       return agentRefuse(400, "bad_request", `instance_id and model are required (or auto true with a current model). Valid choices: ${choices || "call list_agent_models"}.`);
     }
     if (!model && selection.auto === true) model = current?.model || "auto";
+    // #3085: a pi model whose provider this bot's payer holds no key for is
+    // refused, never swapped for another provider
+    const piTarget = registry.get(instanceId);
+    if (piTarget?.driverKind === "piAgent" && model !== "auto") {
+      const refusal = piModelRefusal(model, piKeyProviders.forBot(bot, { instanceId, driverKind: "piAgent" }, { origin: "person", principalId: caller.id }));
+      if (refusal) {
+        const available = refusal.available.length ? `Providers with a key: ${refusal.available.join(", ")}.` : "No provider key is available to this agent's payer.";
+        return agentRefuse(400, "provider_key_missing", `No ${refusal.provider} key pays for this agent's turns, so ${model} cannot be used. ${available} Add a ${refusal.provider} key in Perspicax, or pick a model from list_agent_models.`);
+      }
+    }
     const modelSelection: Record<string, unknown> = {
       instanceId,
       model,

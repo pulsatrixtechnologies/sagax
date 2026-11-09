@@ -50,6 +50,9 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
       const personalServer = deps.personalProviderInstances.get(entry.instanceId)?.owner === principalId;
       const myTurns = !installed || person?.disabledAt !== undefined ? "none" : signedIn && !expired ? "subscription" : myKey || localKey || personalServer ? "key" : orgKey ? "org-key" : expired ? "expired" : "none";
       const live = deps.registry.get(entry.instanceId);
+      // #3085: pi runs only the models of the providers a key pays for this
+      // person (theirs, else the organization's when it serves them): names only
+      const piProviders = driver === "piAgent" ? deps.piKeyProviders?.forViewer(principalId, { instanceId: entry.instanceId, driverKind: driver }) : null;
       const notAvailable = installed ? undefined : deps.engineNotAvailableReason(entry.instanceId);
       return {
         instanceId: entry.instanceId,
@@ -68,6 +71,7 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
         ...(orgKeySet && !orgKey ? { orgKeyNotGiven: true } : {}),
         ...(orgNotAllowed ? { orgNotAllowed: true } : {}),
         myTurns,
+        ...(piProviders ? { keyProviders: [...piProviders].sort() } : {}),
         // 2026-10-29: a person's two Grok sign-ins (personal and team), each with what it brings through grok.com
         ...(supported && deps.secondLoginSupported(driver) ? { accounts: deps.grokAccountsFor(principalId, entry.instanceId) } : {})
       };

@@ -164,6 +164,44 @@ export function providerOfDriver(driver: string): ModelProvider | null {
   return providersOfDriver(driver)[0] ?? null;
 }
 
+/** #3085: the key provider behind one of pi's own provider names (the part
+ * before "/" in a pi model id), or null when no Perspicax key can pay for it
+ * (amazon-bedrock, github-copilot, vercel-ai-gateway...). */
+const PI_PROVIDER_ALIAS: Readonly<Record<string, ModelProvider>> = {
+  moonshotai: "moonshot",
+  "moonshotai-cn": "moonshot",
+  "kimi-coding": "kimi",
+  "opencode-go": "opencode",
+};
+
+export function piKeyProvider(piProvider: string | undefined): ModelProvider | null {
+  const name = piProvider?.trim().toLowerCase() ?? "";
+  if (!name) return null;
+  const alias = PI_PROVIDER_ALIAS[name];
+  if (alias) return alias;
+  return (DRIVER_PROVIDERS.piAgent as readonly string[]).includes(name) ? name as ModelProvider : null;
+}
+
+/** #3085: the providers whose pi models the turn's payer can really run,
+ * resolved like a turn (resolveEngineAccess): the payer's own keys, else the
+ * organization's keys (`orgKeyProviders`) when the org-key step serves them.
+ * Null: no filter (solo, where pi itself lists only what its keys serve).
+ * Names only, never a key value. */
+export function piPayerProviders(input: EngineCredentialInput, orgKeyProviders: readonly ModelProvider[]): ReadonlySet<ModelProvider> | null {
+  if (input.identity !== "perspicax") return null;
+  const plan = resolveEngineAccess(input);
+  if (!plan.ok) return new Set();
+  if (plan.via === "org-key") return new Set(orgKeyProviders.filter((provider) => DRIVER_PROVIDERS.piAgent.includes(provider)));
+  if (keyVia(plan.via) && plan.provider && plan.payerPrincipalId) {
+    const sub = payerFacts(input, plan.payerPrincipalId)?.sub;
+    if (!sub) return new Set();
+    return new Set(DRIVER_PROVIDERS.piAgent.filter((provider) => input.hasKey(sub, provider)));
+  }
+  // A personal endpoint or a file key: not a provider key; the model-server
+  // rows carry it.
+  return new Set();
+}
+
 /** The variable each provider's key reaches an engine as. Codex is apart: its
  * key rides SAGAX_OWNER_OPENAI_API_KEY through the pulsa_owner provider. */
 export const PROVIDER_KEY_ENV: Readonly<Record<Exclude<ModelProvider, `compat:${string}`>, string>> = {

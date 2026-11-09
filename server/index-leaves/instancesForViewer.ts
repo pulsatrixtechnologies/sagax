@@ -2,6 +2,7 @@
 /** instancesForViewer (#1388). Pure move from server/index.ts. */
 import { isCompatServerId } from "../config.ts";
 import { withoutRefusedModels } from "../models/model-access-refusals.ts";
+import { filterPiCatalogByProviders } from "../drivers/pi-key-filter.ts";
 export type Host = Record<string, any>;
 
 export function createInstancesForViewer(getHost: () => Host): any {
@@ -29,7 +30,12 @@ async function instancesForViewer(person: string | null) {
   // #2983: solo, pi lists the server's own model servers
   if (host.IDENTITY.kind !== "perspicax") return host.overlayModelServers(instances, await host.piModelServersForViewer(null).catch(() => []));
   // #2024: pi lists the viewer's Perspicax model servers with their thinking levels
-  const served = host.overlayModelServers(host.orgOfferedEngines(instances, person), await host.piModelServersForViewer(person).catch(() => []));
+  // #3085: pi offers only the providers the viewer's keys (or the
+  // organization's, when org-key serves them) really pay for
+  const keyed = host.orgOfferedEngines(instances, person).map((instance) => instance.driverKind === "piAgent"
+    ? { ...instance, models: filterPiCatalogByProviders(instance.models, host.piKeyProviders.forViewer(person, instance)) }
+    : instance);
+  const served = host.overlayModelServers(keyed, await host.piModelServersForViewer(person).catch(() => []));
   return host.desktopLocalModels.overlay(served, person);
 
 }

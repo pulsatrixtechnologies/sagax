@@ -703,11 +703,28 @@ export function approvalState(card: Record<string, unknown> | null, declined = f
 
 interface ThreadRead {
   messages: MemberMessage[];
-  steps: { count: number; recent: Array<{ tool: string; ok: boolean | null }> };
+  steps: { count: number; recent: MemberStep[] };
   approvals: MemberApproval[];
   cursor: string | null;
   /** The cursor was not in the page read: older messages may be missing. */
   gap: boolean;
+}
+
+/** One tool step as an AI client reads it; a failed step carries its own error (#3126). */
+export interface MemberStep { tool: string; ok: boolean | null; error?: string }
+
+const MEMBER_STEP_ERROR_MAX = 300;
+
+/** A failed step's error, redacted and cut, as the chat row shows it; absent otherwise. */
+function memberStep(tool: Record<string, unknown> | null): MemberStep {
+  const ok = typeof tool?.ok === "boolean" ? tool.ok : null;
+  const step: MemberStep = { tool: str(tool?.name) ?? "tool", ok };
+  const output = ok === false ? str(tool?.output)?.trim() : undefined;
+  if (output) {
+    const clean = redactSecretsInText(output);
+    step.error = clean.length > MEMBER_STEP_ERROR_MAX ? `${clean.slice(0, MEMBER_STEP_ERROR_MAX)}…` : clean;
+  }
+  return step;
 }
 
 /** Reads a Sagax message page (as the person saw it) after a cursor. */
@@ -717,14 +734,13 @@ export function readThreadPage(threadId: string, raw: unknown, since: string | n
   const index = since ? all.findIndex((m) => m.id === since) : -1;
   const after = since && index >= 0 ? all.slice(index + 1) : all;
   const messages: MemberMessage[] = [];
-  const recent: Array<{ tool: string; ok: boolean | null }> = [];
+  const recent: MemberStep[] = [];
   let count = 0;
   for (const m of after) {
     const kind = str(m.kind) ?? "text";
     if (kind === "activity") {
       count += 1;
-      const tool = objectOf(m.tool);
-      recent.push({ tool: str(tool?.name) ?? "tool", ok: typeof tool?.ok === "boolean" ? tool.ok : null });
+      recent.push(memberStep(objectOf(m.tool)));
       continue;
     }
     const text = str(m.text);
@@ -780,7 +796,7 @@ export interface SummaryApproval {
 /** The structured summary of a turn an AI client reads at the end. */
 export interface TurnSummary {
   text: string | null;
-  toolCalls: Array<{ tool: string; ok: boolean | null }>;
+  toolCalls: MemberStep[];
   toolCallCount: number;
   files: string[];
   /** Summed over the turns after the person's message; null when no turn
@@ -791,8 +807,8 @@ export interface TurnSummary {
 }
 
 /** The summary of what followed `anchor` (the person's message) in a raw
- * Sagax message page: the reply, the tool calls (name and outcome, never
- * input or output), the files the calls wrote, the usage of the finished
+ * Sagax message page: the reply, the tool calls (name, outcome and a failed call's error, never
+ * input or other output), the files the calls wrote, the usage of the finished
  * turns and every card with its outcome and answerer. */
 export function summarizeTurn(raw: unknown, anchor: string | null, threadUrl: string | null): TurnSummary {
   const list = Array.isArray(objectOf(raw)?.messages) ? (objectOf(raw)!.messages as unknown[]) : [];
@@ -800,7 +816,7 @@ export function summarizeTurn(raw: unknown, anchor: string | null, threadUrl: st
   const start = anchor ? all.findIndex((m) => m.id === anchor) : -1;
   const after = start >= 0 ? all.slice(start + 1) : all;
   const texts: MemberMessage[] = [];
-  const toolCalls: Array<{ tool: string; ok: boolean | null }> = [];
+  const toolCalls: MemberStep[] = [];
   const files = new Set<string>();
   const addFiles = (value: unknown) => {
     if (!Array.isArray(value)) return;
@@ -812,9 +828,9 @@ export function summarizeTurn(raw: unknown, anchor: string | null, threadUrl: st
     const kind = str(m.kind) ?? "text";
     if (kind === "activity") {
       const tool = objectOf(m.tool);
-      const ok = typeof tool?.ok === "boolean" ? tool.ok : null;
-      toolCalls.push({ tool: str(tool?.name) ?? "tool", ok });
-      if (ok !== false) addFiles(tool?.files);
+      const step = memberStep(tool);
+      toolCalls.push(step);
+      if (step.ok !== false) addFiles(tool?.files);
     } else if (kind === "digest") {
       const digest = objectOf(m.digest);
       const digestFiles = objectOf(digest?.files);

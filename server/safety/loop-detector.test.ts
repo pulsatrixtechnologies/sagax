@@ -151,6 +151,24 @@ describe("makeLoopStopSubscriber", () => {
     expect(stop).not.toHaveBeenCalled();
   });
 
+  // #3126: grok's use_tool sends its arguments after the start ("{}"); the completion carries them.
+  it("counts distinct late inputs as distinct calls, and the same late input as a loop", () => {
+    const stop = vi.fn();
+    const sub = makeLoopStopSubscriber({ config: () => undefined, stop });
+    const late = (itemId: string, input: string) =>
+      ({ ...base, itemId, type: "item.completed", itemType: "tool", ok: false, output: `failed ${itemId}`, input }) as unknown as RuntimeEvent;
+    for (let i = 0; i < 8; i++) {
+      sub(start(`d${i}`, "{}", "mcp__agents__sagax_settings"));
+      sub(late(`d${i}`, `{"op":"get","key":"rules.k${i}"}`));
+    }
+    expect(stop).not.toHaveBeenCalled();
+    for (let i = 0; i < 8; i++) {
+      sub(start(`s${i}`, "{}", "mcp__agents__sagax_settings"));
+      sub(late(`s${i}`, '{"op":"get","key":"rules.same"}'));
+    }
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
   it("keys a call on the tool name and the full title, not the title's first word", () => {
     expect(toolCallIdentity({ title: "Read a.txt" })).toEqual({ tool: "Read a.txt", input: "Read a.txt" });
     expect(toolCallIdentity({ title: "Read b.txt" })?.tool).toBe("Read b.txt");

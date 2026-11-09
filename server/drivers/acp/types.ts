@@ -83,6 +83,9 @@ export interface AcpTurn {
   };
   /** inputs of this turn's tool calls by id, for onToolCompleted */
   toolInputs?: Map<string, unknown>;
+  /** this turn's tool calls by id: the title and argument preview their start showed and
+   * the latest raw input, so late use_tool arguments reach the completion (#3126) */
+  toolCalls?: Map<string, { title?: string; start?: string; raw?: unknown }>;
   /** mail calls of this turn by id, so a vendor 403 can say to retry on /me (#1943) */
   mailboxCalls?: Map<string, { tool?: string; input?: unknown }>;
   /** ConnectWise calls of this turn by id, for their widget */

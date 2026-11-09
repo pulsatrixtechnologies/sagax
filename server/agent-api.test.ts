@@ -1234,6 +1234,16 @@ describe("transcripts", () => {
     expect((await w.api.call(bot("bot-y"), "read_transcript", { agent_id: "bot-a" })).body.entries).toEqual([]);
   });
 
+  it("a failed step carries its own error text, never a successful output (#3126)", async () => {
+    const { w, c } = await seeded();
+    const tid = [...w.threads.keys()][0]!;
+    w.add(tid, { role: "bot", kind: "activity", tool: { name: "mcp__agents__sagax_settings", ok: false, output: "Unknown setting key \"rules\".\nUse list first." } });
+    w.add(tid, { role: "bot", kind: "activity", tool: { name: "mcp__agents__sagax_settings", ok: true, output: "the whole result" } });
+    const r = await w.api.call(c, "read_latest_page", { agent_id: "bot-a", limit: 2 });
+    const texts = (r.body.entries as Array<{ text: string }>).map((e) => e.text);
+    expect(texts).toEqual(["mcp__agents__sagax_settings (failed): Unknown setting key \"rules\". Use list first.", "mcp__agents__sagax_settings"]);
+  });
+
   it("read_latest_page pages backwards with sequence cursors", async () => {
     const { w, c } = await seeded();
     const first = await w.api.call(c, "read_latest_page", { agent_id: "bot-a", limit: 4 });

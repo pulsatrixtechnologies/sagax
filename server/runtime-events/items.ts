@@ -44,7 +44,8 @@ export function handleItemEvents(event: any, ctx: any, host: any): void {
           // the whole tool object is replaced, so carry `spoken` across —
           // dropping it here would silently un-narrate every completed tool
           const row = host.store.messagesFor(event.threadId).find((m) => m.id === messageId);
-          const existing = row?.tool;
+          // #3126: arguments the engine sent after the start (grok's use_tool) replace the "{}" it showed
+          const existing = row?.tool && typeof event.input === "string" && event.input ? { ...row.tool, input: event.input } : row?.tool;
           toolName = existing?.name ?? "tool";
           const widget = event.ok && event.resultText ? cwToolRowWidget(toolName, existing?.input, event.resultText, host.latestPersonText(event.threadId)) : null;
           // How long the call ran, for the step row's quiet duration.

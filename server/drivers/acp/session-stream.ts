@@ -4,7 +4,7 @@ import { isMailboxTool } from "../../../shared/mailbox-user.ts";
 import { readUseToolCall } from "../../../shared/mcp-gateway-call.ts";
 import { cwToolResult, commandSummary, toolDetailPreview } from "../../tools/tool-summary.ts";
 import { acpWrittenFiles, filesField } from "../../threads/thread-files.ts";
-import { acpToolEndEvents } from "./tool-items.ts";
+import { acpLateToolInput, acpToolEndEvents } from "./tool-items.ts";
 import { allocUnkeyedToolSeq, nextUnkeyedToolId, trackRunningTool } from "./helpers.ts";
 import { noteTurnActivity } from "./turn-latency.ts";
 import type { AcpSession, AcpSupport, AcpTurn } from "./types.ts";
@@ -94,7 +94,19 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
             if (keyed) current.cwToolNames?.delete(keyed);
             const mailbox = keyed ? current.mailboxCalls?.get(keyed) : undefined;
             if (keyed) current.mailboxCalls?.delete(keyed);
-            for (const event of acpToolEndEvents(u, itemId, current.endedToolIds, fields, mailbox)) emit({ ...base(threadId, current.turnId), ...event });
+            // #3126: grok sends use_tool's arguments only on a later update, so the start
+            // read "{}". Carry the real arguments on the completion when they differ.
+            const lateInput = keyed ? lateToolInput(keyed) : undefined;
+            for (const event of acpToolEndEvents(u, itemId, current.endedToolIds, fields, mailbox)) {
+              const withInput = lateInput !== undefined && event.itemType === "tool" ? { ...event, ...lateInput } : event;
+              emit({ ...base(threadId, current.turnId), ...withInput });
+            }
+          };
+          // The arguments a call ended with, when they differ from what its start showed.
+          const lateToolInput = (keyed: string): { input: string; inputDigest: string } | undefined => {
+            const call = current.toolCalls?.get(keyed);
+            current.toolCalls?.delete(keyed);
+            return call ? acpLateToolInput(call, u.rawInput, u._meta) : undefined;
           };
           switch (u.sessionUpdate) {
             case "agent_message_chunk": {
@@ -146,6 +158,12 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
               // tool_call_update after it: end it here, and keep an unkeyed one out of the queue running calls pair by.
               const itemId = (typeof u.toolCallId === "string" && u.toolCallId) ? u.toolCallId
                 : finished ? `acp-tool-unkeyed-${allocUnkeyedToolSeq()}` : nextUnkeyedToolId(current);
+              const startInput = toolDetailPreview(useTool ? useTool.args : u.rawInput);
+              if (typeof u.toolCallId === "string" && u.toolCallId) {
+                (current.toolCalls ??= new Map()).set(u.toolCallId, {
+                  title: typeof u.title === "string" ? u.title : undefined, start: startInput, raw: u.rawInput,
+                });
+              }
               emit({
                 ...base(threadId, current.turnId),
                 type: "item.started",
@@ -153,7 +171,7 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
                 itemId,
                 title: String(useTool?.id ?? u.rawInput?.command ?? u.title ?? "tool").slice(0, 80),
                 summary: commandSummary(useTool ? useTool.args : u.rawInput),
-                input: toolDetailPreview(useTool ? useTool.args : u.rawInput),
+                input: startInput,
                 ...filesField(acpWrittenFiles(u)),
               });
               if (finished) toolEnded(itemId);
@@ -166,6 +184,10 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
               // them for the permission ask that may follow (#1931)
               if (!finished && support.onToolCompleted && typeof u.toolCallId === "string" && u.rawInput !== undefined) {
                 (current.toolInputs ??= new Map()).set(u.toolCallId, u.rawInput);
+              }
+              if (typeof u.toolCallId === "string" && u.rawInput !== undefined) {
+                const call = current.toolCalls?.get(u.toolCallId);
+                if (call) call.raw = u.rawInput;
               }
               if (finished) toolEnded((typeof u.toolCallId === "string" && u.toolCallId) ? u.toolCallId : current.unkeyedToolIds.shift());
               break;

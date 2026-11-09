@@ -8,9 +8,9 @@
 // to ..." title and no fold, the line and the rows already say it all): the
 // task, then "bot · model" in grey, whole (nothing truncated), the live
 // state and the time, the result note under it. A click on a row shows
-// that teammate's work right there under the card, in this conversation (unified chat: never a conversation switch,
-// never "Open thread"); with onOpen (threads shown) the click opens what it
-// always did.
+// that teammate's work right there under the card, in this conversation
+// (unified chat: never a conversation switch, never "Open thread"); with
+// onOpen (threads shown) the click opens what it always did.
 import { lazy, Suspense, useState } from "react";
 import { Check, CircleAlert, CircleDashed, Loader2, Users, X } from "lucide-react";
 

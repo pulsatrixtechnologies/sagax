@@ -8,7 +8,7 @@
 // middle of a word) with Copy inside the block, the install link, the time
 // left on the code, and "Waiting for the computer…" that turns into
 // "<host> is connected" as soon as the host appears in the enrolled list.
-// The team canvas keeps CanvasComputers for placing computers on a team.
+// The Team map opens this same modal from its computer button.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Apple, Check, ExternalLink, Headset, KeyRound, Loader2, Monitor, Terminal, type LucideIcon } from "lucide-react";
 

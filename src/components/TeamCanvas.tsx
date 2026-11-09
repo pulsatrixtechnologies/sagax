@@ -3,7 +3,7 @@ import { useStore, type Bot } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { TeamMapSection } from "@/lib/team-map";
-import { COMPUTER_DRAG_TYPE, fitTeams, layoutTeams, loadTeamCanvasLayout, orderBots, parseBotOrders, parsePositions, reorderBot, teamCanvasKeys, wheelCanvasDelta, zoomAt, type Point, type TeamCanvasKeys, type View } from "@/lib/team-canvas";
+import { fitTeams, layoutTeams, loadTeamCanvasLayout, orderBots, parseBotOrders, parsePositions, reorderBot, teamCanvasKeys, wheelCanvasDelta, zoomAt, type Point, type TeamCanvasKeys, type View } from "@/lib/team-canvas";
 import { loadPerspicaxOrg } from "@/lib/perspicax-org";
 import { fetchEnvironmentDescriptor } from "@/lib/environment-descriptor";
 import { readableError } from "@/lib/plain-error";
@@ -18,7 +18,7 @@ type Gesture = {
   moved: boolean;
 } & ({ kind: "pan" } | { kind: "team"; key: string; origin: Point } | { kind: "bot"; bot: Bot });
 
-export function TeamCanvas({ sections, canManage, onMove, onInstructions, onMemory, onEditTeam, onDeleteTeam, onComputer, onComputerDrop, onTeamComputer, teamComputers = {}, connectedBotIds = [] }: {
+export function TeamCanvas({ sections, canManage, onMove, onInstructions, onMemory, onEditTeam, onDeleteTeam, onComputer, onTeamComputer, teamComputers = {}, connectedBotIds = [] }: {
   sections: TeamMapSection<Bot>[];
   canManage: boolean;
   onMove: (bot: Bot, destination: string) => Promise<boolean | void>;
@@ -28,7 +28,6 @@ export function TeamCanvas({ sections, canManage, onMove, onInstructions, onMemo
   onDeleteTeam: (section: string) => void;
   isEmpty: (section: string) => boolean;
   onComputer?: (bot: Bot) => void;
-  onComputerDrop?: (resourceId: string, sectionKey: string) => void;
   onTeamComputer?: (sectionKey: string) => void;
   teamComputers?: Record<string, { name: string; state?: string }>;
   connectedBotIds?: string[];
@@ -47,7 +46,6 @@ export function TeamCanvas({ sections, canManage, onMove, onInstructions, onMemo
   const [view, setView] = useState<View>({ x: 40, y: 40, scale: 1 });
   const [dragged, setDragged] = useState<{ bot: Bot; point: Point } | null>(null);
   const [dropKey, setDropKey] = useState<string | null>(null);
-  const [computerDropKey, setComputerDropKey] = useState<string | null>(null);
   const [insertion, setInsertion] = useState<{ botId: string; after: boolean } | null>(null);
   const [moving, setMoving] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
@@ -303,8 +301,7 @@ export function TeamCanvas({ sections, canManage, onMove, onInstructions, onMemo
     if (bounds) setView(zoomAt(view, Math.max(0.3, Math.min(1.5, view.scale * factor)), { x: bounds.width / 2, y: bounds.height / 2 }));
   };
   const dropSection = sections.find((section) => section.key === dropKey);
-  const dropHint = computerDropKey !== null ? t("canvas.assignComputer", { team: sections.find((section) => section.key === computerDropKey)?.name ?? computerDropKey })
-    : dragged && dropSection ? (dragged.bot.section?.trim() ?? "") === dropSection.key
+  const dropHint = dragged && dropSection ? (dragged.bot.section?.trim() ?? "") === dropSection.key
       ? t("canvas.arrangeBot", { name: dragged.bot.name, team: dropSection.name }) : t("canvas.moveBot", { name: dragged.bot.name, team: dropSection.name })
       : null;
 
@@ -314,27 +311,6 @@ export function TeamCanvas({ sections, canManage, onMove, onInstructions, onMemo
     style={{ backgroundImage: "radial-gradient(circle, color-mix(in srgb, var(--color-ink-secondary) 18%, transparent) 1px, transparent 1px)", backgroundSize: `${24 * view.scale}px ${24 * view.scale}px`, backgroundPosition: `${view.x}px ${view.y}px` }}
     onPointerDown={start} onPointerMove={move} onPointerUp={(event) => finish(event)} onPointerCancel={(event) => finish(event, true)}
     onDragStart={(event) => event.preventDefault()}
-    onDragOver={(event) => {
-      if (!canManage || !onComputerDrop || !event.dataTransfer.types.includes(COMPUTER_DRAG_TYPE)) return;
-      const target = (event.target as HTMLElement).closest<HTMLElement>("[data-team-key]");
-      const key = target && event.currentTarget.contains(target) ? target.dataset.teamKey ?? null : null;
-      setComputerDropKey(key);
-      if (key !== null) { event.preventDefault(); event.dataTransfer.dropEffect = "link"; }
-    }}
-    onDragLeave={(event) => {
-      if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setComputerDropKey(null);
-    }}
-    onDrop={(event) => {
-      setComputerDropKey(null);
-      if (!canManage || !onComputerDrop || !event.dataTransfer.types.includes(COMPUTER_DRAG_TYPE)) return;
-      const target = (event.target as HTMLElement).closest<HTMLElement>("[data-team-key]");
-      const key = target && event.currentTarget.contains(target) ? target.dataset.teamKey : undefined;
-      const resourceId = event.dataTransfer.getData(COMPUTER_DRAG_TYPE);
-      if (key === undefined || !sections.some((section) => section.key === key) || !resourceId) return;
-      event.preventDefault();
-      onComputerDrop(resourceId, key);
-    }}
-    onDragEnd={() => setComputerDropKey(null)}
     onPointerDownCapture={(event) => {
       keyboardFocus.current = false;
       if (!(event.target as HTMLElement).closest("details")) event.currentTarget.querySelectorAll("details[open]").forEach((element) => element.removeAttribute("open"));
@@ -392,7 +368,6 @@ export function TeamCanvas({ sections, canManage, onMove, onInstructions, onMemo
         dragged={dragged}
         moving={moving}
         connectedBotIds={connectedBotIds}
-        computerDropKey={computerDropKey}
         dropKey={dropKey}
         dropHint={dropHint}
         insertion={insertion}

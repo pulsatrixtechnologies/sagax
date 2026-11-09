@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
-// The Computers panel is the person's own: a member without the admin scope
-// sees the button, the Unattended computer entry and the panel. Only the
-// Local VM entry (the server's own machine) stays with the admins.
+// The Team map computer button opens the same Add computer modal as Remote
+// sessions (AddComputerDialog). The old side panel is gone.
 import { createElement, act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,7 +15,8 @@ vi.mock("@/state/store", async (importOriginal) => {
   return { ...original, useStore: () => ({ state: { ...original.initialState, bots: [] }, dispatch: vi.fn() }), api: vi.fn(async () => ({ collaborations: [], queued: [], running: [] })) };
 });
 vi.mock("@/lib/perspicax-org", () => ({ usePerspicaxOrg: () => ({ id: "org" }) }));
-vi.mock("./CanvasComputers", () => ({ CanvasComputers: (props: { open: boolean; cloud?: boolean }) => props.open ? createElement("aside", { "data-computers-panel": "", "data-cloud": String(props.cloud) }) : null }));
+vi.mock("./remote-session/AddComputerDialog", () => ({ AddComputerDialog: (props: { onClose: () => void }) => createElement("div", { "data-add-computer-dialog": "", role: "dialog" }, createElement("button", { "data-close": "", onClick: props.onClose })) }));
+vi.mock("./remote-session/remote-hosts-client", async (importOriginal) => ({ ...(await importOriginal<typeof import("./remote-session/remote-hosts-client")>()), fetchRemoteHosts: async () => ({ available: true, hosts: [] }) }));
 vi.mock("./TeamCanvas", () => ({ TeamCanvas: () => null }));
 
 const { TeamMapPage } = await import("./TeamMapPage");
@@ -36,25 +36,28 @@ async function render() {
   return root;
 }
 
-describe("Team map Computers panel for a member", () => {
-  it("shows the Computers button, the Unattended computer entry and the panel without admin", async () => {
+describe("Team map computer button", () => {
+  it("opens the Add computer modal and renders no side panel", async () => {
     const root = await render();
-    const button = host.querySelector<HTMLButtonElement>(`button[aria-label="Computers"], button[aria-expanded]`);
+    const button = host.querySelector<HTMLButtonElement>(`button[aria-label="Computers"]`);
     expect(button).not.toBeNull();
-    expect(host.querySelector("[data-team-map-unattended]")).not.toBeNull();
+    expect(host.querySelector("[data-add-computer-dialog]")).toBeNull();
     await act(async () => { button!.click(); });
-    const panel = host.querySelector("[data-computers-panel]");
-    expect(panel).not.toBeNull();
-    expect(panel!.getAttribute("data-cloud")).toBe("false");
+    expect(host.querySelector("[data-add-computer-dialog]")).not.toBeNull();
+    expect(host.querySelector("[data-computers-panel]")).toBeNull();
+    expect(host.querySelector("aside")).toBeNull();
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-close]")!.click(); });
+    expect(host.querySelector("[data-add-computer-dialog]")).toBeNull();
     expect(initialState).toBeDefined();
     act(() => root.unmount());
   });
 
-  it("an admin also gets the server-wide cloud computers", async () => {
-    fixture.session = { kind: "session", id: "s", label: "Mac", scopes: ["admin", "client"], expiresAt: 1 };
+  it("the Add menu Unattended computer entry opens the same modal", async () => {
     const root = await render();
-    await act(async () => { host.querySelector<HTMLButtonElement>("button[aria-expanded]")!.click(); });
-    expect(host.querySelector("[data-computers-panel]")!.getAttribute("data-cloud")).toBe("true");
+    const entry = host.querySelector<HTMLElement>("[data-team-map-unattended]");
+    expect(entry).not.toBeNull();
+    await act(async () => { entry!.click(); });
+    expect(host.querySelector("[data-add-computer-dialog]")).not.toBeNull();
     act(() => root.unmount());
   });
 });

@@ -13,7 +13,7 @@
 // "Bots…" and "Share…" on the person's own hosts (Share only inside an
 // organization: an impossible option is hidden, never greyed).
 import { useState } from "react";
-import { Bot as BotIcon, ChevronDown, Copy, KeyRound, Monitor, Plus, Share2, ShieldOff } from "lucide-react";
+import { Bot as BotIcon, ChevronDown, Copy, KeyRound, Monitor, Network, Plus, Share2, ShieldOff } from "lucide-react";
 
 import {
   canOpenUnattendedHost,
@@ -34,7 +34,7 @@ import { relativeTime } from "@/lib/memory";
 import { DeviceCardRow } from "./DeviceCardRow";
 import { DeviceRow, deviceRowKey } from "./MyDevicesList";
 import { setRemoteHostAccess, type UnattendedHostShare } from "./remote-hosts-client";
-import { HostBotsDialog, HostShareDialog, hostBotsLabel, useHostBotChoices } from "./HostSharingControls";
+import { HostBotsDialog, HostShareDialog, HostTeamDialog, hostBotsLabel, useHostBotChoices } from "./HostSharingControls";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { HostBotComputerMenuItems, HostBotComputerTags } from "./HostBotComputerControls";
 import { useHostComputers } from "@/lib/host-computers";
@@ -114,6 +114,7 @@ function HostRow({ row, os, busy, onOpen, onRevoke, onError, botComputer, onBotC
   const [shares, setShares] = useState<UnattendedHostShare[]>(row.shares ?? []);
   const [editingBots, setEditingBots] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [placing, setPlacing] = useState(false);
   const mine = !row.sharedBy;
   const inOrg = usePerspicaxOrg() !== null;
   const choose = (next: UnattendedHostAccess) => {
@@ -156,6 +157,9 @@ function HostRow({ row, os, busy, onOpen, onRevoke, onError, botComputer, onBotC
           {mine && row.state === "enrolled" && (
             <PageMenuItem icon={BotIcon} data-unattended-host-bots-edit="" onClick={() => { close(); setEditingBots(true); }}>{t("remoteSessionsAdmin.hosts.bots.menu")}</PageMenuItem>
           )}
+          {mine && row.state === "enrolled" && (
+            <PageMenuItem icon={Network} data-unattended-host-team="" onClick={() => { close(); setPlacing(true); }}>{t("remoteSessionsAdmin.hosts.team.menu")}</PageMenuItem>
+          )}
           {mine && inOrg && row.state === "enrolled" && (
             <PageMenuItem icon={Share2} data-unattended-host-share="" trailing={shares.length > 0 ? String(shares.length) : undefined}
               onClick={() => { close(); setSharing(true); }}>{t("remoteSessionsAdmin.hosts.share.menu")}</PageMenuItem>
@@ -182,6 +186,7 @@ function HostRow({ row, os, busy, onOpen, onRevoke, onError, botComputer, onBotC
       <HostBotComputerTags hostId={row.hostId} host={botComputer} editing={editingTags}
         onDone={() => setEditingTags(false)} onChanged={onBotComputerChanged} />
       {editingBots && <HostBotsDialog hostId={row.hostId} host={label} value={bots} onSaved={setBots} onClose={() => setEditingBots(false)} />}
+      {placing && <HostTeamDialog hostId={row.hostId} host={label} onClose={() => setPlacing(false)} />}
       {sharing && <HostShareDialog hostId={row.hostId} host={label} shares={shares} onChanged={setShares} onClose={() => setSharing(false)} />}
       {details && (
         <dl data-unattended-host-facts="" className="ml-12 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[12px] leading-[18px]">

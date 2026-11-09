@@ -26,7 +26,6 @@ export function TeamSectionsLayer(props: {
   dragged: { bot: Bot; point: Point } | null;
   moving: string | null;
   connectedBotIds: string[];
-  computerDropKey: string | null;
   dropKey: string | null;
   dropHint: string | null;
   insertion: { botId: string; after: boolean } | null;
@@ -46,7 +45,7 @@ export function TeamSectionsLayer(props: {
 }) {
   const {
     sections, tiles, view, positions, layoutLoaded, canManage, selectedId, settingsOpen,
-    dragged, moving, connectedBotIds, computerDropKey, dropKey, dropHint, insertion, teamComputers,
+    dragged, moving, connectedBotIds, dropKey, dropHint, insertion, teamComputers,
     menuAbove, setMenuAbove, viewport, personalOrder, savePositions, arrangeBot, onComputer,
     onTeamComputer, onEditTeam, onInstructions, onMemory, onDeleteTeam,
   } = props;
@@ -56,7 +55,7 @@ export function TeamSectionsLayer(props: {
       {sections.map((section, index) => {
         const tile = tiles[index];
         const hierarchy = section.chiefs.length > 0 && section.members.length > 0;
-        const dropping = computerDropKey === section.key || (dragged && dropKey === section.key && (dragged.bot.section?.trim() ?? "") !== section.key);
+        const dropping = (dragged && dropKey === section.key && (dragged.bot.section?.trim() ?? "") !== section.key);
         const computer = Object.hasOwn(teamComputers, section.key) ? teamComputers[section.key] : undefined;
         const label = section.key ? section.name : t("sidebar.section.general");
         // A card far from the visible part of the canvas keeps its box and
@@ -70,7 +69,7 @@ export function TeamSectionsLayer(props: {
         </VirtualRow>;
         return <section key={section.key} data-team-key={section.key} aria-label={t("canvas.teamRegion", { name: label })}
           data-team-depth={section.depth ?? 0}
-          className={cn("absolute rounded-2xl border bg-panel/90 shadow-sm has-[details[open]]:z-20 data-[computer-dropping=true]:border-accent data-[computer-dropping=true]:ring-2 data-[computer-dropping=true]:ring-accent/25", dropping ? "border-accent ring-2 ring-accent/25" : "border-hairline/50", section.parent && "border-l-[3px] border-l-accent/40")}
+          className={cn("absolute rounded-2xl border bg-panel/90 shadow-sm has-[details[open]]:z-20", dropping ? "border-accent ring-2 ring-accent/25" : "border-hairline/50", section.parent && "border-l-[3px] border-l-accent/40")}
           style={{ left: tile.x, top: tile.y, width: tile.width, height: tile.height }}>
           <header className="flex h-16 items-center gap-2 px-5">
             <button data-arrange-team={section.key} disabled={!layoutLoaded} aria-label={t("canvas.arrange", { name: label })}

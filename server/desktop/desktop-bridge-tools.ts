@@ -86,12 +86,12 @@ export const DESKTOP_BRIDGE_TOOLS = [
   },
   {
     name: "computer_list_tools",
-    description: "List the computer-use tools of the person's screen (see windows, click, type). Use computer_use to call one.",
+    description: "List the computer-use tools of the person's screen (see windows, point, click, type). Use computer_use to call one.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "computer_use",
-    description: "Call one computer-use tool on the person's own screen (from computer_list_tools): it acts in front of them. Only when they asked for work on their screen or in their own browser, or no out-of-sight way (browse, fetch_url, web search) works; say so in one line in the chat before the first call.",
+    description: "Call one computer-use tool on the person's own screen (from computer_list_tools): it acts in front of them. Only when they asked for work on their screen or in their own browser, or no out-of-sight way (browse, fetch_url, web search) works; say so in one line in the chat before the first call. When they ask where something is or to show it on their screen (\"where is\", \"show me\", \"où est\", \"montre-moi\"), point at it: find it (get_window_state with a query, or a screenshot), call move_cursor with its x and y so the agent cursor glides onto it on their screen, then say where it is in one line. Never answer such a question in text only.",
     inputSchema: {
       type: "object",
       properties: { tool_name: { type: "string" }, arguments: { type: "object" } },

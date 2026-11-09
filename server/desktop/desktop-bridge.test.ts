@@ -239,6 +239,14 @@ describe("the sagax-desktop tools", () => {
     expect(write.inputSchema.properties.encoding?.description).toMatch(/only for a binary file/);
     expect(listed.tools.find((tool) => tool.name === "run_command")!.inputSchema.properties.command?.description).toMatch(/never encoded/);
   });
+  // "Where is X / show me X" ends with the agent cursor on X, never a text-only answer.
+  it("tells the model to point at an element with move_cursor when the person asks where it is", async () => {
+    const listed = await handleDesktopBridgeMcp("tools/list", {}, async () => null) as { tools: { name: string; description: string }[] };
+    const use = listed.tools.find((tool) => tool.name === "computer_use")!.description;
+    expect(use).toMatch(/where is/);
+    expect(use).toMatch(/move_cursor with its x and y/);
+    expect(use).toMatch(/Never answer such a question in text only/);
+  });
   it("lists the solo-mode set and turns a refusal into a tool error", async () => {
     const listed = await handleDesktopBridgeMcp("tools/list", {}, async () => null) as { tools: { name: string }[] };
     expect(listed.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(["run_command", "read_file", "write_file", "search_files", "fetch_url", "browse", "computer_use", "local_vm"]));

@@ -157,6 +157,7 @@ describe("Auto guidance (prompt fixture)", () => {
     expect(line.endsWith("</workplace>")).toBe(true);
     expect(text).toMatch(/^This bot's Workspace is Auto/);
     expect(text).toContain("switch again mid-task");
+    expect(text).toContain("point at it with move_cursor, never a text-only answer");
   });
 
   it("keeps the per-message line short and free of the rules (2026-10-20 perf parity)", () => {

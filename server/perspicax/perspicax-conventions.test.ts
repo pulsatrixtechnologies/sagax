@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { DRIVER_KIND as CLAUDE_KIND } from "../drivers/claude/config.ts";
 import { readFileSync } from "node:fs";
-import { CLAUDE_DRIVER_KIND, connectorConventionsPrompt, GROK_DRIVER_KIND, hasPerspicaxConventions, PERSPICAX_CONVENTIONS_PROMPT, perspicaxToolIdsPrompt } from "./perspicax-conventions.ts";
+import { CLAUDE_DRIVER_KIND, connectorConventionsPrompt, GATEWAY_FINDER_TOOLS, GROK_DRIVER_KIND, hasPerspicaxConventions, PERSPICAX_CONVENTIONS_PROMPT, perspicaxGatewayServer, perspicaxToolIdsPrompt } from "./perspicax-conventions.ts";
+import { PERSPICAX_TOOL_NAMES } from "../drivers/agents-tools/perspicax.ts";
+import { withholdForConnector } from "../mcp/agents-tool-priority.ts";
 
 describe("Perspicax tool conventions (#1209)", () => {
   it("names each convention", () => {
@@ -127,7 +129,8 @@ describe("perspicaxToolIdsPrompt", () => {
   });
   it("names Grok's use_tool ids and keeps search_tool native", () => {
     const text = perspicaxToolIdsPrompt("perspicax", "grokAgent");
-    expect(text).toContain("tool_name `perspicax__<tool>`");
+    expect(text).toContain("tool_name `<server>__<tool>`");
+    expect(text).toContain("`perspicax__api_search`");
     expect(text).toContain("search_tool is a native tool: call it directly, never through use_tool");
     expect(text).toContain("`perspicax__search_tools`");
     expect(text).not.toContain("mcp__");
@@ -136,5 +139,49 @@ describe("perspicaxToolIdsPrompt", () => {
     const text = perspicaxToolIdsPrompt("perspicax", "codex");
     expect(text).toContain("exact id your tool list shows");
     expect(text).not.toContain("mcp__perspicax__");
+  });
+});
+
+// QA pass 3 (#3019): the bot called mcp__perspicax__api_search (withheld on
+// the account mount, #2189), then a guessed search_tools, before
+// mcp__agents__api_search. The prompt names the server that lists each tool.
+describe("tool ids name the server that really lists each tool (#3019)", () => {
+  it("the finding tools are the agents server's gateway tools, withheld on the account mount", () => {
+    for (const tool of GATEWAY_FINDER_TOOLS) expect(PERSPICAX_TOOL_NAMES.has(tool)).toBe(true);
+    const withheld = withholdForConnector("perspicax", [...PERSPICAX_TOOL_NAMES]);
+    for (const tool of GATEWAY_FINDER_TOOLS) expect(withheld).toContain(tool);
+    expect(withheld).not.toContain("identity_switch");
+    expect(perspicaxGatewayServer("perspicax", true)).toBe("agents");
+    expect(perspicaxGatewayServer("perspicax", false)).toBeUndefined();
+    expect(perspicaxGatewayServer("solo", true)).toBeUndefined();
+  });
+  it("Claude Code: api_search on agents, the profile's tools on the mount", () => {
+    const text = perspicaxToolIdsPrompt("perspicax", CLAUDE_KIND, "agents");
+    expect(text).toContain("`mcp__agents__api_search`");
+    expect(text).toContain("`mcp__agents__api_result_query`");
+    expect(text).toContain("`mcp__perspicax__cw_psa_query`");
+    expect(text).toContain("`mcp__perspicax__identity_switch`");
+    expect(text).not.toContain("mcp__perspicax__api_search");
+    expect(text).not.toContain("mcp__perspicax__api_result_query");
+    expect(text).toContain("`perspicax` does not list them");
+    expect(text).toContain("never a server prefix your tool list does not show");
+    expect(text).not.toMatch(/[–—]/);
+  });
+  it("Grok: use_tool ids on the right server", () => {
+    const text = perspicaxToolIdsPrompt("perspicax", "grokAgent", "agents");
+    expect(text).toContain("`agents__api_search`");
+    expect(text).toContain("`perspicax__cw_psa_query`");
+    expect(text).not.toContain("`perspicax__api_search`");
+    expect(text).toContain("only when that server lists it");
+  });
+  it("without a gateway server, the mount lists its own finders as before", () => {
+    expect(perspicaxToolIdsPrompt("perspicax", CLAUDE_KIND, undefined)).toContain("`mcp__perspicax__api_search`");
+    expect(perspicaxToolIdsPrompt("perspicax", CLAUDE_KIND, "perspicax")).not.toContain("mcp__agents__");
+  });
+  it("discovery: api_search first, no guessed id, search_tools only where listed, objects stay objects", () => {
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("never guess a tool id");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/the first call is `api_search`/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("Only when a server lists `search_tools`");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("stays a JSON object, never a string");
   });
 });

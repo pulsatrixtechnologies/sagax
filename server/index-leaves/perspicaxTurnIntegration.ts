@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** perspicaxTurnIntegration (#1388). Pure move from server/index.ts. */
-import { perspicaxToolIdsPrompt } from "../perspicax/perspicax-conventions.ts";
+import { perspicaxGatewayServer, perspicaxToolIdsPrompt } from "../perspicax/perspicax-conventions.ts";
 import { perspicaxUnavailableRow, PERSPICAX_UNAVAILABLE_WHY } from "../perspicax/perspicax-mcp.ts";
 export type Host = Record<string, any>;
 
@@ -65,8 +65,10 @@ async function perspicaxTurnIntegration(input: {
   }
   // The calling conventions ride with the tools they are about (#1209).
   // QA 0.8.67 G8: and name the tools by the exact id this engine gives them.
+  // #3019: and by the server that really lists them (agents serves the
+  // gateway's finding tools on a server linked to Perspicax).
   const conventions = Object.keys(custom).length > 0
-    ? host.PERSPICAX_CONVENTIONS_PROMPT + perspicaxToolIdsPrompt(Object.keys(custom)[0], input.driverKind)
+    ? host.PERSPICAX_CONVENTIONS_PROMPT + perspicaxToolIdsPrompt(Object.keys(custom)[0], input.driverKind, perspicaxGatewayServer(host.IDENTITY?.kind, Boolean(host.perspicaxMcp)))
     : "";
   if (!plan.unavailable.length) return { custom, prompt: conventions };
   const lines = plan.unavailable.map((entry) => entry.reason === "no_delegation"

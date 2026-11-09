@@ -9,7 +9,7 @@ import { DRIVER_KIND as CLAUDE_CODE_DRIVER_KIND } from "../drivers/claude/config
 // win when they say otherwise.
 export const PERSPICAX_CONVENTIONS_PROMPT =
   "\n\nPerspicax tool conventions (the server's own instructions win if they differ):"
-  + "\n- Tool discovery: `api_search` and `api_describe` search vendor API operations only, never MCP tool names such as `identity_switch` or `memory_find`. If an account tool is not listed directly, find it with this server's `search_tools` and run it with `call_tool`; after `identity_switch`, search again for the selected role's vendor tools."
+  + "\n- Tool discovery (#3019): never guess a tool id. Call only an id your tool list shows (the Tool ids point below says which server lists which tool); a guessed id fails and costs a visible step. To find a vendor operation, the first call is `api_search` (a result names your tool for it and the resource or action to pass), then `api_describe` for its fields when needed, then the tool it named. `api_search` and `api_describe` search vendor API operations only, never MCP tool names such as `identity_switch` or `memory_find`. Only when a server lists `search_tools` (a large catalog) find its other account tools there and run them with `call_tool`; a server that does not list it has none. After `identity_switch`, search again for the selected role's vendor tools. Pass every argument in the shape the tool's schema gives: an object (a `filter`, `set`, `expect`) stays a JSON object, never a string."
   + "\n- Roles (2026-11-05): Sagax starts the turn under its role (the routine's \"Au nom de\", the person's pick, else the person's own access) and shows it on every step. Do not call `identity_switch` before each operation. Switch when the work needs another held role, and back again: switches go back and forth in a turn, one per call when needed (#2960). When the person names a role to use (\"lis-les comme Dispatch Agent\", \"avec le rôle Gestionnaire de service\"), that is their GO: call `identity_switch` with that role's profile, then the read; never refuse before trying it, even when an earlier turn ended on a STOP or a declined card for that read (a STOP holds for its own turn only). On a read refused with 403, Sagax tries each held role that may read it in turn: in the person's name by itself under a role, a saved rule by itself, else it names the next role: if the person already allowed it (conversation, a role they named, or a saved instruction), identity_switch to it for that one call; else call the same read again and Sagax asks with a card. Never \"no data\". A read refused under every held role, a declined card or a refused write is a block: report the API member and role that refused it and the missing permission, never route around it with other tools or connections (#2581). When Sagax's note says it read once under another role, or you switched to one for the read, say so to the person in one line, by the role's name, never an id (\"Lu avec le rôle Technicien\") (#2670)."
   // QA 0.8.66 F2/F10, moved here and corrected by #2912: `identity` searches
   // records; the held roles come from `identity_switch` without arguments,
@@ -57,17 +57,41 @@ export const GROK_DRIVER_KIND = "grokAgent";
 /** QA 0.8.67 G8 ("No such tool available: Api search"): a routine named a
  * Perspicax tool by its title or bare name, and the engine had no tool by
  * that name. Each engine exposes the mount's tools under its own exact id;
- * this names that id form for the engine the turn runs on, so the model
- * calls `mcp__perspicax__api_search` (Claude Code) or use_tool with
- * `perspicax__api_search` (Grok), never "Api search" or a bare `api_search`. */
-export function perspicaxToolIdsPrompt(server: string, driverKind: string | undefined): string {
-  const example = "api_search";
-  const never = `never a display title such as "Api search" and never a name from a routine's text without its prefix`;
+ * this names that id form for the engine the turn runs on.
+ *
+ * #3019: on a server linked to Perspicax, the agents server lists the
+ * gateway tools (PERSPICAX_TOOLS: api_search, api_describe, api_result_query,
+ * identity, flow...), and the account mount withholds its copy of them (#2189,
+ * agents-tool-priority.ts). Naming `mcp__perspicax__api_search` there sent the
+ * bot to a tool that does not exist, then to a guessed `search_tools`, before
+ * `mcp__agents__api_search`. `gatewayServer` names the server that really
+ * lists them; the profile's own tools (`cw_psa_query`, `identity_switch`)
+ * stay on the account mount. */
+export const GATEWAY_FINDER_TOOLS = ["api_search", "api_describe", "api_list", "api_result_query", "api_lookup", "identity", "flow"] as const;
+export function perspicaxToolIdsPrompt(server: string, driverKind: string | undefined, gatewayServer?: string): string {
+  const gateway = gatewayServer && gatewayServer !== server ? gatewayServer : server;
+  const finders = GATEWAY_FINDER_TOOLS.map((tool) => `\`${tool}\``).join(", ");
+  const never = `never a display title such as "Api search", never a name from a routine's text without its prefix, never a server prefix your tool list does not show`;
   if (driverKind === CLAUDE_DRIVER_KIND) {
-    return `\n- Tool ids: this server's tools are named \`mcp__${server}__<tool>\` (\`mcp__${server}__${example}\`, \`mcp__${server}__api_result_query\`, \`mcp__${server}__call_tool\`). Call them by that exact id, ${never}.`;
+    const id = (on: string, tool: string) => `\`mcp__${on}__${tool}\``;
+    const split = gateway !== server
+      ? ` The finding tools (${finders}) are on the \`${gateway}\` server: ${id(gateway, "api_search")}, ${id(gateway, "api_describe")}, ${id(gateway, "api_result_query")}; \`${server}\` does not list them. The account's own tools are on \`${server}\`: ${id(server, "cw_psa_query")}, ${id(server, "identity_switch")}, each product's \`<product>_query\`, \`_write\` and \`_action\`.`
+      : ` For example ${id(server, "api_search")}, ${id(server, "api_result_query")}.`;
+    return `\n- Tool ids: tools are named \`mcp__<server>__<tool>\`.${split} Call them by that exact id, ${never}. A tool your list shows as deferred is loaded with ToolSearch (select:<id>) before its first call.`;
   }
   if (driverKind === GROK_DRIVER_KIND) {
-    return `\n- Tool ids: reach this server's tools with use_tool and tool_name \`${server}__<tool>\` (\`${server}__${example}\`, \`${server}__api_result_query\`), the exact id, ${never}. search_tool is a native tool: call it directly, never through use_tool. This server's own \`search_tools\` is a different tool, reached with use_tool as \`${server}__search_tools\`.`;
+    const split = gateway !== server
+      ? ` The finding tools (${finders}) are \`${gateway}__<tool>\` (\`${gateway}__api_search\`, \`${gateway}__api_result_query\`); the account's own tools are \`${server}__<tool>\` (\`${server}__cw_psa_query\`, \`${server}__identity_switch\`).`
+      : ` For example \`${server}__api_search\`, \`${server}__api_result_query\`.`;
+    return `\n- Tool ids: reach this server's tools with use_tool and tool_name \`<server>__<tool>\`, the exact id.${split} ${never.charAt(0).toUpperCase()}${never.slice(1)}. search_tool is a native tool: call it directly, never through use_tool. A server's own \`search_tools\` is a different tool, reached with use_tool as \`${server}__search_tools\` and only when that server lists it.`;
   }
-  return `\n- Tool ids: call this server's tools by the exact id your tool list shows for them (the \`${server}\` server's \`${example}\`, with the prefix your tool list gives it), ${never}.`;
+  const split = gateway !== server ? ` (the finding tools ${finders} on the \`${gateway}\` server, the account's own tools such as \`cw_psa_query\` on \`${server}\`)` : ` (the \`${server}\` server's \`api_search\`, with the prefix your tool list gives it)`;
+  return `\n- Tool ids: call each tool by the exact id your tool list shows for it${split}, ${never}.`;
+}
+
+/** #3019: the server whose catalog lists the Perspicax gateway tools. The
+ * agents server serves them (SAGAX_PERSPICAX_TOOLS, agentsIntegration.ts) on a
+ * server linked to Perspicax; elsewhere the account mount lists its own. */
+export function perspicaxGatewayServer(identityKind: string | undefined, perspicaxLinked: boolean): string | undefined {
+  return identityKind === "perspicax" && perspicaxLinked ? "agents" : undefined;
 }

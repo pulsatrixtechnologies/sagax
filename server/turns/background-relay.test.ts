@@ -2,7 +2,7 @@
 // label (pulled out of server/index.ts so the mapping is tested).
 import { describe, expect, it, vi } from "vitest";
 
-import { backgroundCardHome, backgroundCardPeople, backgroundRelayAllowed, mcpThreadAnswerer, relayViaOf, type BackgroundRelayDeps, type RelayBot, type RelayTask } from "./background-relay.ts";
+import { backgroundCardHome, backgroundCardPeople, backgroundRelayAllowed, earlierThreadCardHome, mcpThreadAnswerer, relayViaOf, type BackgroundRelayDeps, type RelayBot, type RelayTask } from "./background-relay.ts";
 
 const BOT: RelayBot = { id: "bot" };
 
@@ -131,5 +131,32 @@ describe("backgroundRelayAllowed (#2915: mayRelay)", () => {
     const check = { readsSource: (p: string) => p === "member", ownsDestination: (p: string) => p === "member" };
     expect(backgroundRelayAllowed(priv(), BOT, "room", undefined, check)).toBe(false);
     expect(backgroundRelayAllowed(priv(), BOT, "own", undefined, check)).toBe(false);
+  });
+});
+
+describe("earlierThreadCardHome (2026-11-09)", () => {
+  it("shows a card left in the person's older thread in their conversation", () => {
+    expect(earlierThreadCardHome(deps(TASKS, { conversationFor: () => "main" }), BOT, "own", null)).toBe("main");
+  });
+
+  it("leaves the conversation's own card, rooms, background, confidential and parallel threads alone", () => {
+    const d = deps(TASKS, { conversationFor: () => "own" });
+    expect(earlierThreadCardHome(d, BOT, "own", null)).toBeUndefined();
+    for (const threadId of ["room", "mcp", "run", "handoff", "secret", "parallel", "missing"]) {
+      expect(earlierThreadCardHome(deps(TASKS, { conversationFor: () => "main" }), BOT, threadId, null)).toBeUndefined();
+    }
+  });
+
+  it("with private threads, uses the conversation of a person who reads the thread, never starts one", () => {
+    const conversationFor = vi.fn((_bot: RelayBot, person: string | undefined) => person === "member@x" ? "theirs" : undefined);
+    const conversationOrStart = vi.fn(() => "started");
+    const d = deps(TASKS, { privateThreads: () => true, threadPerson: () => "member@x", readable: (_b, _t, person) => person === "member@x", conversationFor, conversationOrStart });
+    expect(earlierThreadCardHome(d, BOT, "own", null)).toBe("theirs");
+    expect(earlierThreadCardHome(deps(TASKS, { privateThreads: () => true, readable: () => false, conversationFor }), BOT, "own", null)).toBeUndefined();
+    expect(conversationOrStart).not.toHaveBeenCalled();
+  });
+
+  it("never relays for a hidden bot", () => {
+    expect(earlierThreadCardHome(deps(TASKS, { conversationFor: () => "main" }), { id: "bot", hidden: true }, "own", null)).toBeUndefined();
   });
 });

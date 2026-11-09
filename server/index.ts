@@ -196,8 +196,8 @@ import { DataFailure } from "./data/types.ts";
 import { DATA_DOWNLOADS_DIR } from "./data/engine.ts";
 import { TeamComputers, teamComputerOwner, type TeamComputerRecord } from "./computer/team-computers.ts";
 import { instructionsLead } from "../shared/instructions-lead.ts";
-import { type BotVisibility, type RelayVia, type ResolvedSender, type WireAccessCard, type WireBot, type WireTask } from "../shared/wire.ts";
-import { backgroundCardHome as backgroundCardHomeOf, backgroundRelayAllowed, mcpThreadAnswerer, relayViaOf as backgroundRelayVia, type BackgroundRelayDeps } from "./turns/background-relay.ts";
+import { type BotVisibility, type RelayVia, type ResolvedSender, type WaitingOnCard, type WireAccessCard, type WireBot, type WireTask } from "../shared/wire.ts";
+import { backgroundCardHome as backgroundCardHomeOf, backgroundRelayAllowed, earlierThreadCardHome, mcpThreadAnswerer, relayViaOf as backgroundRelayVia, type BackgroundRelayDeps } from "./turns/background-relay.ts";
 import { isPersistentQuestionCard, shouldSettleRequestCard } from "../shared/ask-question.ts";
 import { TURN_CUT_BY_RESTART } from "../shared/restart-words.ts";
 import { closeRowsLeftByRestart, endedToolOutput } from "./threads/subagent-cleanup.ts";
@@ -2225,6 +2225,7 @@ import { createUsableCredential } from "./index-leaves/usableCredential.ts";
 import { createSettingsStepUpGate } from "./index-leaves/settingsStepUpGate.ts";
 import { createPagesSeparation } from "./index-leaves/pagesSeparation.ts";
 import { createOpenPersonCard } from "./index-leaves/openPersonCard.ts";
+import { teammateNames, waitingOnCard } from "./approvals/waiting-on.ts";
 import { cardAnswerIds, createAgentPendingApproval, createAgentPendingForCaller } from "./index-leaves/agentPendingApproval.ts";
 import { createLocateChannelMessage } from "./index-leaves/locateChannelMessage.ts";
 import { createBotSkillsRefusal } from "./index-leaves/botSkillsRefusal.ts";
@@ -13003,7 +13004,13 @@ const wireBot = (bot: BotRecord): WireBot => {
   const botConversations = interBotConversations(bot.id, store.bots, undefined, (ownerId, threadId) => threadBusy(ownerId, threadId), threadHasMessages);
   const coordinated = threadsWithActiveCoordination();
   const level = approvalLevelOf(bot.id, bot.threadId);
-  return { ...visible, waitingForTeammates: coordinated.has(bot.threadId) && !threadBusy(bot.id, bot.threadId),
+  const waitingForTeammates = coordinated.has(bot.threadId) && !threadBusy(bot.id, bot.threadId);
+  // 2026-11-09: what the bot waits on, named (server/approvals/waiting-on.ts)
+  const waitingOn = botWaitingOn(bot, visible.activity, tasks);
+  const waitingOnTeammates = botWaitingOnTeammates(bot, waitingForTeammates, tasks, coordinated);
+  return { ...visible, waitingForTeammates,
+    ...(waitingOn ? { waitingOn } : {}),
+    ...(waitingOnTeammates.length ? { waitingOnTeammates } : {}),
     ...(level ? { approvalSetting: level.setting, ...(level.applied ? { approvalApplied: level.applied } : {}) } : {}),
     ...(waitingApprovals.length ? { waitingApprovals } : {}),
     ...(botConversations.length ? { botConversations } : {}),
@@ -13013,6 +13020,24 @@ const wireBot = (bot: BotRecord): WireBot => {
     ...(IDENTITY.kind === "perspicax" ? { turnPayerDefault: defaultTurnPayerFor(bot) } : {}),
     avatarUrl: visible.avatarUrl ?? null, ...(lead ? { instructionsLead: lead } : {}), ...(tasks ? { tasks: tasks.map((task) => wireTask(task, bot.modelSelection, coordinated)) } : {}) };
 };
+
+/** The open card a waiting bot waits on: its selected thread first, then
+ * every listed thread that waits on the person (a routine run's own
+ * question is shown with the run). */
+function botWaitingOn(bot: BotRecord, activity: BotRecord["activity"], tasks: readonly TaskRecord[] | undefined): WaitingOnCard | undefined {
+  const waiting = (tasks ?? []).filter((task) => task.activity === "waiting-on-you" && task.hidden !== true && !task.routineRunId);
+  if (activity !== "waiting-on-you" && !waiting.length) return undefined;
+  const threads = [...(activity === "waiting-on-you" ? [bot.threadId] : []), ...waiting.map((task) => task.threadId)];
+  return waitingOnCard(threads, (threadId) => store.messagesFor(threadId), liveCardKind);
+}
+/** The teammates a bot's idle conversations wait on, by name. */
+function botWaitingOnTeammates(bot: BotRecord, selectedWaits: boolean, tasks: readonly TaskRecord[] | undefined, coordinated: ReadonlySet<string>): string[] {
+  const threads = [...(selectedWaits ? [bot.threadId] : []),
+    ...(tasks ?? []).filter((task) => coordinated.has(task.threadId) && !task.busy && task.hidden !== true).map((task) => task.threadId)];
+  if (!threads.length) return [];
+  const ids = [...new Set(threads)].flatMap((threadId) => coordinator.outstandingDirect(threadId).map((handoff) => handoff.botId)).filter((id) => id !== bot.id);
+  return teammateNames(ids, (id) => store.bot(id)?.name);
+}
 
 /** A bot-to-bot conversation is listed once its thread holds a message
  * (inter-bot-conversations.ts, #1502). One row read at most. */
@@ -14072,7 +14097,8 @@ const originApprovals = createOriginApprovals({
   store,
   rootFor: (threadId, message) => humanApprovalRoot(coordinator, threadId, root => Boolean(root.request
     && workOrigin(store.messagesFor(root.threadId).find(row => row.id === root.request)).kind === "user"), botForApproval(threadId, message)?.id)
-    ?? backgroundCardHome(threadId, message),
+    ?? backgroundCardHome(threadId, message)
+    ?? earlierThreadCardHome(backgroundRelayDeps, botForApproval(threadId, message), threadId, message.card),
   via: (threadId, message) => {
     const bot = botForApproval(threadId, message);
     return bot ? relayViaOf(bot.id, threadId) : undefined;
@@ -16042,6 +16068,17 @@ function settleWaitingActivity(threadId: string): void {
   const bot = store.botByThread(threadId);
   if (bot && store.taskByThread(bot.id, threadId)?.activity === "waiting-on-you") store.setTaskActivity(bot.id, threadId, next);
   if (bot && bot.threadId === threadId && bot.activity === "waiting-on-you") store.setActivity(bot.id, next);
+}
+
+/** 2026-11-09: a bot left on "Waiting for you" with no open card anywhere
+ * (a card expired or answered by a path that never settled the thread, or a
+ * state from an older version) waits on nobody: every such thread settles. */
+function settleStaleWaiting(): void {
+  for (const bot of store.bots) {
+    const threads = new Set((bot.tasks ?? []).filter((task) => task.activity === "waiting-on-you").map((task) => task.threadId));
+    if (bot.activity === "waiting-on-you") threads.add(bot.threadId);
+    for (const threadId of threads) settleWaitingActivity(threadId);
+  }
 }
 
 /** A card with a request that is no longer open: answered, dismissed or
@@ -33554,10 +33591,11 @@ try {
     }
   }
   if (aged > 0) console.log(`[approval] expired ${aged} pending approval(s) older than the configured age`);
+  settleStaleWaiting();
 } catch (error) {
   console.warn(`[approval] startup expiry of open approval cards failed: ${error instanceof Error ? error.message : String(error)}`);
 }
-setInterval(() => { runPendingApprovalExpirySweep(); }, 60 * 60_000).unref();
+setInterval(() => { runPendingApprovalExpirySweep(); settleStaleWaiting(); }, 60 * 60_000).unref();
 
 try {
   cleanupResumableUploads(Date.now(), recoverArchiveUpload);

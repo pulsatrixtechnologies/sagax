@@ -90,6 +90,25 @@ export function backgroundCardHome<B extends RelayBot>(deps: BackgroundRelayDeps
   return home && home !== threadId ? home : undefined;
 }
 
+/** 2026-11-09 (#3159: "Waiting for you…" with nothing to answer): a card left
+ * open in one of the person's own older threads (an earlier topic of the one
+ * conversation, an archived thread) is shown in their conversation, where the
+ * chat opens, rather than only up the stream where nobody scrolls. Undefined:
+ * a room, a background thread (backgroundCardHome), a confidential, parallel
+ * or hidden thread, or a card already in the conversation. */
+export function earlierThreadCardHome<B extends RelayBot>(deps: BackgroundRelayDeps<B>, bot: B | undefined, threadId: string, card: { destinationAnswerer?: unknown } | null | undefined): string | undefined {
+  if (!bot || bot.hidden || deps.inRoom(threadId)) return undefined;
+  const task = deps.task(bot.id, threadId);
+  if (!task || task.confidential || task.parallelOf || task.hidden || relayViaOf(deps, bot.id, threadId)) return undefined;
+  let person: string | undefined;
+  if (deps.privateThreads()) {
+    person = backgroundCardPeople(deps, bot, threadId, card).find((candidate) => deps.readable(bot, threadId, candidate));
+    if (!person) return undefined;
+  }
+  const home = deps.conversationFor(bot, person);
+  return home && home !== threadId ? home : undefined;
+}
+
 /** #2915: who answers a card raised in a person's own MCP conversation
  * (an AI client's send_prompt, private threads): that person. Their turn
  * runs as them, and the card is shown in their chat, so it is theirs to

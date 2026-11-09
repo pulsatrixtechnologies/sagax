@@ -151,7 +151,7 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
         // The slim deletion broadcast can arrive before the full snapshot.
         // Finish that switch once, replaying any events received in between.
         // Later duplicate HTTP snapshots must not overwrite newer messages.
-        return reduce(switching, { type: "taskSwitched", bot: { ...before, ...action.bot, computer: action.bot.computer, section: action.bot.section, toolScope: action.bot.toolScope, waitingApprovals: action.bot.waitingApprovals, botConversations: action.bot.botConversations, messages: action.bot.messages, browserProfile: action.bot.browserProfile } });
+        return reduce(switching, { type: "taskSwitched", bot: { ...before, ...action.bot, computer: action.bot.computer, section: action.bot.section, toolScope: action.bot.toolScope, waitingApprovals: action.bot.waitingApprovals, waitingOn: action.bot.waitingOn, waitingOnTeammates: action.bot.waitingOnTeammates, botConversations: action.bot.botConversations, messages: action.bot.messages, browserProfile: action.bot.browserProfile } });
       }
       const patched = updateBot(switching, action.bot.id, (b) => ({
         ...b,
@@ -172,6 +172,9 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
         section: action.bot.section,
         // A complete frame omits it once no bot-to-bot card waits.
         waitingApprovals: action.bot.waitingApprovals,
+        // 2026-11-09: absent once the bot waits on nothing
+        waitingOn: action.bot.waitingOn,
+        waitingOnTeammates: action.bot.waitingOnTeammates,
         botConversations: action.bot.botConversations,
         tasks: action.bot.tasks ? mergeTaskStamps(b.tasks, action.bot.tasks) : b.tasks,
         // Clear immediately on deletion: old approvals must never be sent

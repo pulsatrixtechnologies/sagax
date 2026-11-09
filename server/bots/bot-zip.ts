@@ -202,6 +202,8 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   workFolder: { drop: "derived from the server sandbox" },
   activity: { drop: "live state" },
   waitingForTeammates: { drop: "live state" },
+  waitingOnTeammates: { drop: "live state" },
+  waitingOn: { drop: "live state" },
   waitingApprovals: { drop: "derived from the bot's threads" },
   botConversations: { drop: "derived from the bot's threads and its peers' threads" },
   rewound: { drop: "live state" },

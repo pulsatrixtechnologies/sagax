@@ -67,13 +67,15 @@ const team: Bot[] = [
   bot("iris", "Iris", { title: "Full Stack, Dev Ops & ITSec", color: "orange", mascotBody: "drop", section: "My team" }, "J'ai fait le ménage de ma mémoire et gardé les règles actives.", minutes(42)),
   bot("milo", "Milo", {
     title: "Vérification", color: "teal", mascotBody: "blob", section: "My team",
+    // #3159: what Milo waits on, named in the sidebar
+    waitingOn: { threadId: "t-milo-2", messageId: "q-milo", text: "Which repo should I file the issue in?" },
     // two conversations waiting on the person: the Approvals count
     tasks: [
       task("t-milo", "Général", minutes(70), { activity: "waiting-on-you" } as Partial<Task>),
       task("t-milo-2", "Règle permanente", minutes(80), { activity: "waiting-on-you" } as Partial<Task>),
     ],
   }, "J'ai noté cette règle permanente. Une seule question avant de fermer.", minutes(70)),
-  bot("lina", "Lina", { title: "Juridique et marketing", color: "purple", mascotBody: "circle", section: "My team" }, "Les deux sont supprimées, il ne me reste aucune routine.", minutes(130)),
+  bot("lina", "Lina", { title: "Juridique et marketing", color: "purple", mascotBody: "circle", section: "My team", waitingForTeammates: true, waitingOnTeammates: ["Milo"] }, "Les deux sont supprimées, il ne me reste aucune routine.", minutes(130)),
   bot("forge", "Concepteur de bots", {
     color: "graphite", mascotBody: "capsule",
     installedPackage: { id: "designer", name: "Concepteur", release: "1.0.0", requiredApps: [], source: "org" },

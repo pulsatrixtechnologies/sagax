@@ -429,11 +429,26 @@ export interface WireBotConversation {
 export const helperModelAllowed = (bot: { helperModel?: unknown }): boolean =>
   bot.helperModel === undefined || bot.helperModel === true;
 
+/** An open card a bot waits on (WireBot.waitingOn). */
+export interface WaitingOnCard {
+  threadId: string;
+  messageId: string;
+  /** One line: the question, or the approval in plain words. */
+  text: string;
+}
+
 export interface WireBot {
   /** A bot the server runs for everyone (#2618: "feedback", the Feedback
    * bot every signed-in person may write to). Absent: an ordinary bot. */
   systemBot?: "feedback";
   waitingForTeammates?: boolean;
+  /** 2026-11-09: the teammates this bot's conversation waits on, by name.
+   * Absent: none, or a server before this field. */
+  waitingOnTeammates?: string[];
+  /** 2026-11-09: the open card a bot that waits on the person waits on:
+   * where the chat draws it and one line of what it asks. Absent: no open
+   * card (the bot does not wait on anyone), or an older server. */
+  waitingOn?: WaitingOnCard;
   /** Bot-to-bot conversations this viewer may read, both ends. Absent: none. */
   botConversations?: WireBotConversation[];
   /** Bot-to-bot conversations waiting on this viewer's approval. Absent:

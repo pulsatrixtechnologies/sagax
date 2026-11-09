@@ -1,7 +1,7 @@
 // The profile page's Share pill and its popover, Grok Bot style
 // (2026-11-06): "Share this Bot" with Copy link at the right, a field that
 // adds people or groups from the organization directory, then "Who has
-// access": the organization, the owner, and each person or team with its
+// access": the owner, and each person or team with its
 // level (the last choice removes the access). Same grants and calls as the
 // Sharing section (useBotSharing + useGrantEditor, GET/PUT/DELETE
 // /api/bots/:id/grants); the server decides who may change what.
@@ -79,15 +79,14 @@ function teamDetail(count: number): string {
   return `${t("botSettings.sharing.teams")} · ${t("botSettings.sharing.teamMembers", { count })}`;
 }
 
-/** The organization row's word: the bot's visibility when the server sends
- * it, else whether anyone holds a grant (there is no organization-wide
- * grant target). */
-function organizationAccess(bot: Pick<Bot, "visibility">, granted: boolean): string {
+/** The organization row's word, only when the access really is
+ * organization-wide (visibility "everyone" or "admins"): a grant to a
+ * person or a team never shows the organization as having access. */
+function organizationAccess(bot: Pick<Bot, "visibility">): string | null {
   const visibility = bot.visibility;
   if (visibility === "everyone") return t("botSettings.visibility.everyone");
   if (visibility === "admins") return t("botSettings.visibility.admins");
-  if (visibility && typeof visibility === "object") return t("botSettings.visibility.people");
-  return t(granted ? "botProfile.shared" : "botProfile.private");
+  return null;
 }
 
 function Row({ avatar, title, detail, children, ...data }: {
@@ -136,6 +135,7 @@ function SharePanel({ bot, directory, rows, administer, isOwner, mayShare, title
   const ownerDetail = owner ? personDetail(owner) : isOwner || !ownerId ? (viewer?.email || profile?.email || "") : "";
   const ownerAvatar = personAvatarSrc(owner?.avatarUrl) ?? (isOwner || !ownerId ? personAvatarSrc(profile?.avatarUrl) : undefined);
   const orgName = org?.org.name || t("botProfile.share.organization");
+  const orgAccess = organizationAccess(bot);
   const shown = grants.filter((grant) => grant.target.toLowerCase() !== `user:${ownerId ?? ""}`);
   const searchable = Boolean(rights) && canAdd && !(directory !== null && directory.people.length === 0 && !(directory.teams ?? []).length);
 
@@ -233,14 +233,16 @@ function SharePanel({ bot, directory, rows, administer, isOwner, mayShare, title
       <div className="flex flex-col gap-1">
         <div className="px-1 text-[13px] font-normal leading-[18px] text-ink-secondary">{t("botProfile.share.whoHasAccess")}</div>
         <ul className="flex flex-col" aria-label={t("botProfile.share.whoHasAccess")} data-bot-share-access>
-          <Row
-            data-bot-share-org
-            avatar={<span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-control text-[12px] text-ink-secondary">{initialsOf(orgName)}</span>}
-            title={orgName}
-          >
-            <span className="text-[13px] text-ink-secondary">{organizationAccess(bot, shown.length > 0)}</span>
-            <ChevronRight size={14} aria-hidden="true" className="text-ink-tertiary" />
-          </Row>
+          {orgAccess !== null && (
+            <Row
+              data-bot-share-org
+              avatar={<span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-control text-[12px] text-ink-secondary">{initialsOf(orgName)}</span>}
+              title={orgName}
+            >
+              <span className="text-[13px] text-ink-secondary">{orgAccess}</span>
+              <ChevronRight size={14} aria-hidden="true" className="text-ink-tertiary" />
+            </Row>
+          )}
           <Row
             {...(ownerId ? { "data-grant": `user:${ownerId}` } : {})}
             data-bot-share-owner

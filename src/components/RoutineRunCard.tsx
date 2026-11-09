@@ -87,7 +87,7 @@ function compactDetail(value: string | undefined): string {
 export function RunResultDetails({ details }: { details: string }) {
   return (
     <details data-run-result-details className="mt-1.5 text-[12px] text-ink-secondary">
-      <summary className="cursor-pointer select-none font-medium text-accent hover:text-ink">{t("routineResult.showDetails")}</summary>
+      <summary className="cursor-pointer select-none font-medium text-accent-text hover:text-ink">{t("routineResult.showDetails")}</summary>
       <pre className="mt-1.5 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-inset px-3 py-2 font-mono text-[11.5px] leading-relaxed text-ink">{details}</pre>
     </details>
   );

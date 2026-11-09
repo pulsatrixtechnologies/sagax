@@ -174,7 +174,7 @@ function AllowRuleInset({ rule }: { rule: string }) {
       <div className="mt-0.5">« {describeAllowRule(rule)} »</div>
       <button
         type="button"
-        className="mt-1 text-accent hover:underline"
+        className="mt-1 text-accent-text hover:underline"
         onClick={() => dispatch({ type: "toggleSettings", open: true, section: "access" })}
       >
         {t("approval.rule.edit")}
@@ -193,7 +193,7 @@ function OwnerRuleInset({ rule }: { rule: NonNullable<OptionCardData["ruleSaved"
       <div className="mt-0.5">« {rule.description} »</div>
       <button
         type="button"
-        className="mt-1 text-accent hover:underline"
+        className="mt-1 text-accent-text hover:underline"
         onClick={() => dispatch({ type: "toggleSettings", open: true, section: "permissions" })}
       >
         {t("approval.rule.edit")}
@@ -427,7 +427,7 @@ function AppliedChangeLine({
             type="button"
             onClick={undo}
             disabled={undoing}
-            className="rounded-md px-1.5 py-0.5 font-medium text-accent hover:bg-inset disabled:opacity-60"
+            className="rounded-md px-1.5 py-0.5 font-medium text-accent-text hover:bg-inset disabled:opacity-60"
           >
             {undoing ? t("approval.applied.undoing") : t("approval.applied.undo")}
           </button>

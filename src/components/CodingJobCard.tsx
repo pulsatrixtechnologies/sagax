@@ -95,7 +95,7 @@ export function CodingJobCard({ job, threadId, now, onStop }: {
                 title={job.pr.url}
                 onClick={() => void openExternalLink(job.pr!.url)}
                 aria-label={t("chat.codingJob.openPrAria", { name: prLabel })}
-                className="inline-flex items-center gap-1 rounded font-medium text-accent transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                className="inline-flex items-center gap-1 rounded font-medium text-accent-text transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
               >
                 <GitPullRequest aria-hidden="true" className="size-3.5" />
                 {prLabel}

@@ -33,7 +33,7 @@ import "../styles.css";
 const params = new URLSearchParams(location.search);
 const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
-await loadLocale("en");
+await loadLocale(new URLSearchParams(location.search).get("lang") === "fr" ? "fr" : "en");
 const width = Number(params.get("width") ?? 900);
 const height = Number(params.get("height") ?? 1500);
 /** ?scene=report: one finished run with a long report (headings, two tables, lists)

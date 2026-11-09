@@ -5254,6 +5254,66 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(h.manager.listRoutines()[0]!.weekRuns).toEqual({ ok: 0, total: 1 });
   });
 
+  // #3009: the stuck-loop guard killed a read-only review mid-run; it ended green.
+  it("a run the loop guard stopped completes with the guard's reason, never green, and keeps no progress line", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    say(h, "thread-1", "Cliché absent (premier passage). Je pagine les compétences.");
+    for (const id of ["a", "b", "c", "d"]) tool(h, "thread-1", id, "mcp__agents__sagax_settings", false, "A routine cannot act as a person");
+    h.manager.noteLoopStop("thread-1", "stuck-loop: the same mcp__agents__sagax_settings call with the same input ran 5 times in a row");
+    done(h, "thread-1");
+    const run = runOf(h);
+    expect(run.status).toBe("completed");
+    expect(run.output).toBeUndefined();
+    expect(run.problems).toContain("The loop guard stopped the run before it finished");
+    expect(run.problems).toContain("ran 5 times in a row");
+    expect(run.problems).toContain("4 tool steps failed and the run ended without a final message");
+    expect(run.problems).not.toContain("__");
+    expect(isRoutineProblemRun(run)).toBe(true);
+  });
+
+  it("a loop-stopped turn that ends not ok fails with the guard's reason", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "a", "search", true);
+    h.manager.noteLoopStop("thread-1", "stuck-loop: the same search call ran 5 times in a row");
+    send(h, { threadId: "thread-1", type: "turn.completed", ok: false, stopReason: "interrupted" });
+    const run = runOf(h);
+    expect(run.status).toBe("failed");
+    expect(run.error).toContain("The loop guard stopped the run");
+  });
+
+  it("failed steps of a run with no final message are problems even once; a later success leaves only the count", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    say(h, "thread-1", "Je lis les réglages.");
+    tool(h, "thread-1", "a", "crm_login", false, "401 Unauthorized");
+    tool(h, "thread-1", "b", "fetch", false, "timeout");
+    tool(h, "thread-1", "c", "fetch", true);
+    done(h, "thread-1");
+    const run = runOf(h);
+    expect(run.output).toBeUndefined();
+    expect(run.problems).toContain("crm_login failed: 401 Unauthorized");
+    expect(run.problems).toContain("2 tool steps failed and the run ended without a final message");
+  });
+
+  it("the final message after the last tool stays the run's output; one moved-past miss is no problem", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    say(h, "thread-1", "Je cherche.");
+    tool(h, "thread-1", "a", "search", false, "no match");
+    tool(h, "thread-1", "b", "search", true);
+    say(h, "thread-1", "Point de départ enregistré.");
+    done(h, "thread-1");
+    const run = runOf(h);
+    expect(run.output).toBe("Point de départ enregistré.");
+    expect(run.problems).toBeUndefined();
+  });
+
   // #2635: a webhook run whose last words were "I'll pull the invoices now".
   it("a run that ends on an announcement of what it would do completes with that problem", async () => {
     const h = harness(start);

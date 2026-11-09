@@ -346,6 +346,19 @@ interface RunTrouble {
   asks?: Map<string, string>;
   /** Actions whose approval nobody answered in time: they did not run. */
   unanswered?: string[];
+  /** #3009: tool steps that failed in the run, settled later or not. */
+  failedSteps?: number;
+  /** #3009: tool steps that failed after the bot's last words: those words
+   * were a progress line, not the run's final message. */
+  failedAfterText?: number;
+  /** #3009: the loop guard stopped the run (its reason, as recorded). */
+  loopStop?: string;
+}
+
+/** #3009: the loop guard's stop reason in words a person reads. */
+export function routineLoopStopProblem(reason: string): string {
+  const why = humanizeToolIds(reason.replace(/^\s*stuck-loop:\s*/i, "").trim());
+  return `The loop guard stopped the run before it finished${why ? `: ${why}` : ""}`;
 }
 
 /** What a run waiting on its person says, in the conversation and the run
@@ -3861,6 +3874,8 @@ export class RoutineManager {
         const native = nativeToolKey(title);
         for (const [other, failure] of trouble.unresolved) if (failure.misrouted === native) trouble.unresolved.delete(other);
       } else {
+        trouble.failedSteps = (trouble.failedSteps ?? 0) + 1;
+        trouble.failedAfterText = (trouble.failedAfterText ?? 0) + 1;
         const seen = trouble.unresolved.get(key);
         const misrouted = nativeToolMisroute(output);
         // The first line with words: a JSON result's first line is a lone "{" (2026-11-03).
@@ -3889,6 +3904,8 @@ export class RoutineManager {
       }
     } else if (event.type === "item.completed" && event.itemType === "assistant_text") {
       run.output = redactSecretsInText(event.text).trim().slice(0, 2_000);
+      const trouble = this.runTrouble.get(run.id);
+      if (trouble && run.output) delete trouble.failedAfterText;
     } else if (event.type === "runtime.error") {
       run.error = redactSecretsInText(event.message).slice(0, 500);
       this.failureFacts.set(run.id, engineFacts(event));
@@ -3908,9 +3925,12 @@ export class RoutineManager {
         // words from runtime.error (what refused and what to do) win over
         // it. A stop reason in words still stands as given.
         const codeStopReason = !event.stopReason || ROUTINE_STOP_CODE.test(event.stopReason);
+        // #3009: a turn the loop guard stopped fails with the guard's words.
+        const loopStop = this.runTrouble.get(run.id)?.loopStop;
         this.settleFailure(
           run,
-          (codeStopReason ? run.error : undefined) ??
+          (loopStop ? routineLoopStopProblem(loopStop) : undefined) ??
+            (codeStopReason ? run.error : undefined) ??
             stopCause(event.stopReason) ??
             run.error ??
             "The bot did not complete this run",
@@ -3971,7 +3991,12 @@ export class RoutineManager {
         this.failRun(run, `The teammates' work for this run did not finish: ${why}`);
         continue;
       }
-      if (root?.result.trim()) run.output = redactSecretsInText(root.result).trim().slice(0, 2_000);
+      if (root?.result.trim()) {
+        run.output = redactSecretsInText(root.result).trim().slice(0, 2_000);
+        // the teammates' result is the run's final message (#3009)
+        const trouble = this.runTrouble.get(run.id);
+        if (trouble) delete trouble.failedAfterText;
+      }
       if (!this.settleCompleted(run)) {
         this.saveLater();
         this.emitRun(run);
@@ -4107,6 +4132,13 @@ export class RoutineManager {
   }
 
   private settleCompleted(run: RoutineRun): boolean {
+    // #3009: the loop guard cut the run, or tool steps failed after the
+    // bot's last words (a progress line) with nothing said after them: there
+    // is no final message, and run.output never shows a mid-run line.
+    const cut = this.runTrouble.get(run.id);
+    const noFinalMessage = Boolean(cut?.loopStop || (cut?.failedAfterText ?? 0) > 0);
+   
+    if (noFinalMessage) run.output = undefined;
     // 2026-11-08 (QA 0.8.66 F4): the card the bot announced is drawn for
     // real and holds the run; the person's answer starts its next turn.
     // #2939: before the goal, the report and the turn's trouble are settled,
@@ -4163,6 +4195,7 @@ export class RoutineManager {
       return true;
     }
     const problems: string[] = [];
+    if (trouble?.loopStop) problems.push(routineLoopStopProblem(trouble.loopStop));
     if (goalProblem) problems.push(goalProblem);
     if (outcome.declared?.status === "partial") problems.push(outcome.declared.reason);
     for (const teammate of handed?.failed ?? []) {
@@ -4181,9 +4214,16 @@ export class RoutineManager {
       // is ordinary work, and engines that title a call by its command give
       // each command its own title. A single real failure is the bot's to
       // declare (RUN_STATUS, the report contract).
-      if (failure.count < 2) continue;
+      // #3009: with no final message, nobody reported it: every failure counts.
+      if (failure.count < 2 && !noFinalMessage) continue;
       // the tool in words, as its card names it (shared/tool-display-name.ts)
-      problems.push(`${humanizeToolIds(title)} failed ${failure.count} times and never succeeded after${failure.output ? `: ${failure.output}` : ""}`);
+      problems.push(failure.count < 2
+        ? `${humanizeToolIds(title)} failed${failure.output ? `: ${failure.output}` : ""}`
+        : `${humanizeToolIds(title)} failed ${failure.count} times and never succeeded after${failure.output ? `: ${failure.output}` : ""}`);
+    }
+    if (noFinalMessage && (trouble?.failedSteps ?? 0) > 0) {
+      const steps = trouble!.failedSteps!;
+      problems.push(`${steps} tool ${steps === 1 ? "step" : "steps"} failed and the run ended without a final message`);
     }
     if (trouble?.unanswered?.length) {
       const one = trouble.unanswered.length === 1;
@@ -4206,6 +4246,13 @@ export class RoutineManager {
     // A run that completes ends the owner's open notices for its bot.
     this.ownerNotices = this.ownerNotices.filter((notice) => notice.botId !== run.botId);
     return false;
+  }
+
+  /** #3009: the loop guard stopped this thread's turn (its recorded reason).
+   * The run that ends there says so instead of ending green. */
+  noteLoopStop(threadId: string, reason: string): void {
+    const run = this.runs.find((r) => r.threadId === threadId && ["running", "waiting"].includes(r.status));
+    if (run && run.target !== "room-goal") this.troubleOf(run.id).loopStop = reason.slice(0, 300);
   }
 
   failThread(threadId: string, message: string, facts: RoutineFailureFacts = {}) {

@@ -258,12 +258,22 @@ struct BotPanelDetails: View {
                 PanelAgentRows(items: items, launched: activity.launchedAgents,
                                now: activity.now.timeIntervalSince1970 * 1000,
                                stopping: activity.stopping,
-                               onOpen: { route = .detail($0) },
-                               onOpenLaunched: { route = .detail($0.asActivityItem()) },
+                               onOpen: { open($0) },
+                               onOpenLaunched: { open($0.asActivityItem()) },
                                onStop: { stop($0) })
             } else {
                 liveSectionBody(.coding, items: activity.coding, showsError: true)
             }
+        }
+    }
+
+    /// A coding task opens where the chat is (desktop openCodingChat,
+    /// 2026-11-03), any other entry in the activity sheet.
+    private func open(_ item: BotActivityItem) {
+        if DesktopCodingChat.opens(item) {
+            shell.codingChat = DesktopCodingChat(item: item, parent: activity)
+        } else {
+            route = .detail(item)
         }
     }
 
@@ -299,7 +309,7 @@ struct BotPanelDetails: View {
                     ForEach(items) { item in
                         PanelActivityCard(item: item, now: activity.now.timeIntervalSince1970 * 1000,
                                           stopping: activity.stopping.contains(item.id),
-                                          onOpen: { route = .detail($0) },
+                                          onOpen: { open($0) },
                                           onStop: { stop($0) })
                             .opacity(activity.fading(item) ? 0 : 1)
                             .animation(.easeOut(duration: 0.6), value: activity.fading(item))

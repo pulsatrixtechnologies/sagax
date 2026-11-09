@@ -345,7 +345,7 @@ describe("send_prompt file prompt (#1169)", () => {
 
 describe("agent API policy", () => {
   it("declares the agent tools, each with a scope, an access level and a read-only flag", () => {
-    expect(AGENT_TOOL_NAMES).toHaveLength(16);
+    expect(AGENT_TOOL_NAMES).toHaveLength(17);
     for (const name of AGENT_TOOL_NAMES) {
       const policy = AGENT_TOOL_POLICY[name];
       expect(policy.readOnly).toBe(policy.access === "read");
@@ -1336,6 +1336,61 @@ describe("transcripts", () => {
     const next = await w.api.call(c, "read_transcript_cold", { agent_id: "bot-a", cursor: page.body.next_cursor });
     expect((next.body.entries as unknown[]).length).toBe(66 - COLD_PAGE_SIZE);
     expect(w.turnStateCalls).toEqual([]);
+  });
+
+  // #3203: an image attached in one bot's conversation, read by another bot
+  // of the same person; never by a caller outside that conversation.
+  it("read_transcript_attachment hands over an image of a conversation the caller reads, never another's", async () => {
+    const { w, c } = await seeded();
+    const tid = [...w.threads.keys()][0]!;
+    const png = Buffer.from("png-bytes");
+    const asked: string[] = [];
+    w.deps.attachmentImage = async (name) => { asked.push(name); return name === "abc-1.png" ? { bytes: png, mime: "image/png" } : null; };
+    const saved: string[] = [];
+    w.deps.saveAttachment = (caller, name) => { saved.push(`${caller.id}:${name}`); return `inbox/attachments/${name}`; };
+    w.add(tid, {
+      role: "user", kind: "text", text: '<attached-image path="/data/attachments/abc-1.png" name="image.png" />',
+      attachments: [{ name: "image.png", path: "/data/attachments/abc-1.png", image: true, inline: true }],
+    });
+    w.add(tid, { role: "user", kind: "text", text: "a report", attachments: [{ name: "report.pdf", path: "/data/attachments/r.pdf" }] });
+
+    const page = await w.api.call(c, "read_latest_page", { agent_id: "bot-a" });
+    const entries = page.body.entries as Array<{ text: string; images?: unknown; files?: string[] }>;
+    const withImage = entries.find((entry) => entry.images)!;
+    expect(withImage.images).toEqual([{ ref: "abc-1.png", name: "image.png" }]);
+    expect(withImage.files).toBeUndefined();
+    expect(entries.find((entry) => entry.text === "a report")?.files).toEqual(["report.pdf"]);
+
+    for (const attachment of ["abc-1.png", "/data/attachments/abc-1.png", "/api/attachments/abc-1.png"]) {
+      const read = await w.api.call(c, "read_transcript_attachment", { agent_id: "bot-a", attachment });
+      expect(read.status).toBe(200);
+      expect(read.body).toMatchObject({ agent_id: "bot-a", thread_id: tid, attachment: "abc-1.png", mime: "image/png", bytes: png.length, image_base64: png.toString("base64") });
+      expect(read.body.saved_to).toBeUndefined();
+    }
+    const kept = await w.api.call(c, "read_transcript_attachment", { agent_id: "bot-a", attachment: "abc-1.png", save: true });
+    expect(kept.body.saved_to).toBe("inbox/attachments/abc-1.png");
+    expect(saved).toEqual(["bot-x:abc-1.png"]);
+
+    // Another caller (another person's bot, or a person) reads none of it,
+    // and its bytes are never read for it.
+    asked.length = 0;
+    for (const other of [bot("bot-y"), person("pr_other")]) {
+      const refused = await w.api.call(other, "read_transcript_attachment", { agent_id: "bot-a", attachment: "abc-1.png" });
+      expect(refused.status).toBe(404);
+      expect(refused.body.code).toBe("not_found");
+    }
+    expect(asked).toEqual([]);
+    // Not in that conversation, not an image of the transcript, not a name.
+    expect((await w.api.call(c, "read_transcript_attachment", { agent_id: "bot-a", attachment: "abc-1.png", thread_id: "t-elsewhere" })).status).toBe(404);
+    expect((await w.api.call(c, "read_transcript_attachment", { agent_id: "bot-a", attachment: "zzz-9.png" })).status).toBe(404);
+    expect((await w.api.call(c, "read_transcript_attachment", { agent_id: "bot-a", attachment: "../../etc/passwd" })).status).toBe(400);
+    expect((await w.api.call(c, "read_transcript_attachment", { agent_id: "bot-a" })).status).toBe(400);
+    // save copies into a bot's own workspace: a person caller has none.
+    const ana = person("pr_ana");
+    w.threads.set("t-ana", { agentId: "bot-a", owner: "person:pr_ana", title: "Ana", hidden: false });
+    w.add("t-ana", { role: "user", kind: "text", text: "", attachments: [{ path: "/data/attachments/abc-1.png", image: true }] });
+    expect((await w.api.call(ana, "read_transcript_attachment", { agent_id: "bot-a", attachment: "abc-1.png" })).status).toBe(200);
+    expect((await w.api.call(ana, "read_transcript_attachment", { agent_id: "bot-a", attachment: "abc-1.png", save: true })).status).toBe(400);
   });
 
   it("cursors round-trip and reject garbage", () => {

@@ -153,7 +153,7 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
     id: "transcripts",
     title: "Transcripts, workspace and threads",
     tools: [
-      "read_transcript", "read_transcript_cold", "read_transcript_page",
+      "read_transcript", "read_transcript_cold", "read_transcript_page", "read_transcript_attachment",
       "read_latest_page", "read_latest_page_with_threads",
       "workspace_read", "workspace_search", "session_read", "close_thread", "list_threads",
       "recall_topic",

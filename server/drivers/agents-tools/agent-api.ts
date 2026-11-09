@@ -8,8 +8,8 @@ import type { Json } from "../agents-client.ts";
 /** The agent-to-agent tools (server/agent-api.ts, docs/agent-api.md): the
  * names, parameters and limits of the reference design's own agent tools. Every send
  * lands in that agent's single chat with its person (#1170), the sender named. */
-const AGENT_ID = { type: "string", description: "The agent's id, exactly as list_agents or find_agents returned it." } as const;
-const AGENT_CURSOR = { type: "string", description: "next_cursor of the previous page: entries before it." } as const;
+const AGENT_ID = { type: "string", description: "Id from list_agents or find_agents." } as const;
+const AGENT_CURSOR = { type: "string", description: "next_cursor of the previous page." } as const;
 
 /** #2023: update_agent_settings accepts any Edit-bot / runtime / primary key
  * (AGENT_SETTINGS_FIELDS in fleet-agent-settings.ts). Enumerating all 61 keys
@@ -97,7 +97,7 @@ export const AGENT_API_TOOLS = [
     description: "Read the newest entries of the transcript; page back with next_cursor. With thread_id (a turn answer carries it) it reads that one conversation: the handle-free way to get a turn's result, even after its handle expired. Do not poll: use await_turn.",
     inputSchema: { type: "object", additionalProperties: false, properties: {
       agent_id: AGENT_ID, limit: { type: "integer", minimum: 1, maximum: 200, description: "Default 20." }, cursor: AGENT_CURSOR,
-      thread_id: { type: "string", description: "Optional: one of your conversations with this agent, the thread_id a turn answer gave." },
+      thread_id: { type: "string", description: "Optional: the thread_id a turn answer gave." },
     }, required: ["agent_id"] },
   },
   {
@@ -111,6 +111,13 @@ export const AGENT_API_TOOLS = [
     name: "read_transcript_cold",
     description: "Read the stored transcript, 50 entries per page from the newest, without touching the agent's live state.",
     inputSchema: { type: "object", additionalProperties: false, properties: { agent_id: AGENT_ID, cursor: AGENT_CURSOR }, required: ["agent_id"] },
+  },
+  {
+    name: "read_transcript_attachment",
+    description: "See the image of an entry's images[].ref; save copies it to your workspace.",
+    inputSchema: { type: "object", additionalProperties: false, properties: {
+      agent_id: AGENT_ID, attachment: { type: "string" }, thread_id: { type: "string" }, save: { type: "boolean" },
+    }, required: ["agent_id", "attachment"] },
   },
   {
     name: "list_agent_models",
@@ -192,11 +199,21 @@ export const DEF_RUN_WITH_ENGINE = {
     },
   };
 
+/** #3203: the image goes to the model as image content, the rest as text. */
+export function attachmentResult(body: unknown): ToolCallResult {
+  const answer = body && typeof body === "object" ? body as Record<string, unknown> : {};
+  const { image_base64: data, ...rest } = answer;
+  const text = JSON.stringify(rest);
+  if (typeof data !== "string" || !data || typeof rest.mime !== "string") return { text };
+  return { text, passthrough: { content: [{ type: "text", text }, { type: "image", data, mimeType: rest.mime }] } };
+}
+
 export async function callAgentApiTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
   const { depth: DEPTH } = context;
   const { api, apiResponse } = context.client;
   if (AGENT_API_TOOL_NAMES.has(name)) {
     const { ok, body } = await apiResponse(`/api/internal/agent-api/${name}`, { method: "POST", body: JSON.stringify(args ?? {}) });
+    if (ok && name === "read_transcript_attachment") return attachmentResult(body);
     return { text: JSON.stringify(body), ...(ok ? {} : { isError: true }) };
   }
   if (name !== "run_with_engine") return null;

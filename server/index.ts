@@ -50,7 +50,7 @@ import { groupOwnerId, ownsGroup, type GroupActor } from "./groups/group-ownersh
 import { groupLeftFrameAllowed } from "./groups/group-leave.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, hostname, userInfo } from "node:os";
 import { ToolGrantStore } from "./tools/tool-grants.ts";
 import { foreignToolSpelling, sagaxInternalSelfAnswers, sagaxInternalTool } from "./sagax-internal-tools.ts";
@@ -626,7 +626,7 @@ import { buildRecoveryText, buildTurnContext, engineIsFresh, replaysNatively } f
 import { ReplayBuffer } from "./streams/sse-replay.ts";
 import { Handoffs, handedStateUsable, isContextMessage, recordHanded, renderUnseen, sessionStart, unseenMessages, withUnseenMessages } from "./context/delta-context.ts";
 import { extractTurnImages, videoFramesWithin } from "./turns/turn-images.ts";
-import { fitTurnImagesForModel, modelImageCopyPath } from "./models/model-image.ts";
+import { fitImageForModel, fitTurnImagesForModel, MODEL_IMAGE_MAX_BYTES, modelImageCopyPath } from "./models/model-image.ts";
 import { callTitleExcerpt } from "./threads/thread-title.ts";
 import { stallLimitMs, TurnWatchdog } from "./turns/turn-watchdog.ts";
 import { TurnResources, type TurnOwner } from "./turns/turn-resources.ts";
@@ -30600,8 +30600,34 @@ const agentApi = createAgentApi({
         : {}),
       sender: message.from?.name ?? message.peerAsk?.name ?? message.sender?.name ?? null,
       tool: message.tool ? { name: message.tool.name, ok: message.tool.ok } : null,
-      attachments: (message.attachments ?? []).map((file) => ({ name: file.kind === "file" ? file.name : undefined, path: file.path }))
+      attachments: [
+        ...(message.attachments ?? []).map((file) => ({
+          name: file.kind === "file" ? file.name : undefined, path: file.path,
+          ...(file.kind === "image" && dirname(file.path) === ATTACHMENTS_DIR ? { image: true } : {}),
+        })),
+        // #3203: a composer image travels as a tag in the person's text
+        ...(message.role === "user" ? messageAttachmentTags(message.text ?? "") : [])
+          .filter((tag) => tag.kind === "image" && dirname(tag.path) === ATTACHMENTS_DIR)
+          .map((tag) => ({ name: tag.name, path: tag.path, image: true, inline: true })),
+      ],
     }));
+  },
+  // #3203: the handler has checked the caller reads a conversation with it
+  async attachmentImage(name) {
+    const stored = readAttachment(name);
+    if (!stored || !stored.mime.startsWith("image/")) return null;
+    const fitted = await fitImageForModel(stored.bytes, stored.mime as Parameters<typeof fitImageForModel>[1]).catch(() => null);
+    if (fitted) return { bytes: fitted.bytes, mime: fitted.mime };
+    // a format the fitter does not draw (GIF) still goes as stored when small
+    return stored.bytes.length <= MODEL_IMAGE_MAX_BYTES ? stored : null;
+  },
+  saveAttachment(caller, name) {
+    const stored = readAttachment(name);
+    if (!stored) return agentRefuse(404, "not_found", "That image is no longer stored.");
+    const folder = join(workspaceDir(caller.id), "inbox", "attachments");
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(join(folder, name), stored.bytes);
+    return ["inbox", "attachments", name].join("/");
   },
   turnState: agentTurnState,
   // #2922: the cards an awaited turn (since its handle's time) is blocked

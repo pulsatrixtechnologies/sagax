@@ -80,6 +80,7 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("transcript:latest", "read", "read_latest_page"),
   p("transcript:latest.threads", "read", "read_latest_page_with_threads"),
   p("transcript:cold", "read", "read_transcript_cold"),
+  p("transcript:attachment", "read", "read_transcript_attachment"),
   p("cloudagents:list", "read", "list_cloud_agents"),
   p("cloudagents:get", "read", "get_cloud_agent"),
   p("cloudagents:find", "read", "find_cloud_agent_by_pr"),

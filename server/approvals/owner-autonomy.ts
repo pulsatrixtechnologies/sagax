@@ -128,7 +128,7 @@ export function ownerModeForTurn(input: {
 const PERSPICAX_EXTRA_READS: ReadonlySet<string> = new Set([
   "api_list", "identity", "list_agents", "find_agents", "get_agent",
   "read_transcript", "read_transcript_cold", "read_transcript_page", "read_latest_page", "read_latest_page_with_threads",
-  "list_pending_approvals", "claim_list",
+  "read_transcript_attachment", "list_pending_approvals", "claim_list",
 ]);
 
 /** The reads a connector serves by name, after its `<api>_`: the generic

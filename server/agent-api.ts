@@ -69,6 +69,7 @@ export const AGENT_TOOL_NAMES = [
   "read_latest_page",
   "read_latest_page_with_threads",
   "read_transcript_cold",
+  "read_transcript_attachment",
   "list_agent_models",
   "update_agent_model",
   "update_agent_settings",
@@ -115,6 +116,8 @@ export const AGENT_TOOL_POLICY: Record<AgentToolName, AgentToolPolicy> = {
   read_latest_page: { scope: "agents.read", access: "read", readOnly: true, rate: 240 },
   read_latest_page_with_threads: { scope: "agents.read", access: "read", readOnly: true, rate: 240 },
   read_transcript_cold: { scope: "agents.read", access: "read", readOnly: true, rate: 240 },
+  // #3203: an image attached in a conversation the caller may read.
+  read_transcript_attachment: { scope: "agents.read", access: "read", readOnly: true, rate: 120 },
   // Fleet (#1944): person AI clients configure bots they may already edit in the app.
   list_agent_models: { scope: "agents.read", access: "read", readOnly: true, rate: 240 },
   update_agent_model: { scope: "agents.send", access: "write", readOnly: false, rate: 30 },
@@ -338,7 +341,10 @@ export interface StoredMessage {
   at: number;
   sender?: string | null;
   tool?: { name?: string; ok?: boolean; output?: string } | null;
-  attachments?: Array<{ name?: string; path?: string }> | null;
+  /** image: an attached image the agent API can hand over
+   * (read_transcript_attachment, #3203); inline: carried by a tag in the
+   * text, so it is not listed again in files. */
+  attachments?: Array<{ name?: string; path?: string; image?: boolean; inline?: boolean }> | null;
   /** A send that waited in the server queue: the id its 202 answered
    * (the handle's anchor), stored on the line when its own turn starts. */
   queueId?: string;
@@ -374,6 +380,9 @@ export interface TranscriptEntry {
   at: number;
   from: string | null;
   files?: string[];
+  /** #3203: the entry's attached images; read one with
+   * read_transcript_attachment (ref). */
+  images?: Array<{ ref: string; name: string }>;
 }
 
 export interface FileInput {
@@ -442,6 +451,13 @@ export interface AgentApiDeps {
   threads(caller: AgentCaller, agentId: string): TranscriptThread[];
   /** A conversation's stored messages, oldest first. Never wakes anything. */
   messages(threadId: string): StoredMessage[];
+  /** #3203: a stored attached image by its bare name, fitted for a model
+   * (or null when it is gone or unreadable). Absent: read_transcript_attachment
+   * is refused. The handler checks the caller may read it first. */
+  attachmentImage?(name: string): Promise<{ bytes: Buffer; mime: string } | null>;
+  /** #3203: copy a stored attached image into a bot caller's own workspace;
+   * answers the workspace-relative path. */
+  saveAttachment?(caller: AgentCaller, name: string): string | Refusal;
   /** The live state of one conversation. */
   turnState(agentId: string, threadId: string): TurnState;
   /** #2922: the cards the turn waits on (child threads included), filtered
@@ -796,7 +812,8 @@ export function toEntry(threadId: string, message: StoredMessage): TranscriptEnt
   const role = message.role === "user" ? "user" : message.role === "bot" ? "agent" : null;
   if (!role) return null;
   const kind = message.kind ?? "text";
-  const files = (message.attachments ?? []).map((file) => file?.name ?? file?.path?.split(/[\\/]/).at(-1) ?? "").filter(Boolean);
+  const files = (message.attachments ?? []).filter((file) => !file?.inline).map((file) => file?.name ?? file?.path?.split(/[\\/]/).at(-1) ?? "").filter(Boolean);
+  const images = imageRefs(message);
   const base = { cursor: encodeCursor({ at: message.at, threadId, id: message.id }), id: message.id, thread_id: threadId, role, at: message.at, from: message.sender ?? null } as const;
   if (kind === "activity") {
     const name = message.tool?.name?.trim();
@@ -809,9 +826,31 @@ export function toEntry(threadId: string, message: StoredMessage): TranscriptEnt
   if (kind === "text" || kind === "nudge" || kind === "access" || kind === "routine.run") {
     const text = typeof message.text === "string" ? message.text : "";
     if (!text.trim() && !files.length) return null;
-    return { ...base, kind: kind === "text" ? "text" : "note", text: text.length > ENTRY_TEXT_MAX ? `${text.slice(0, ENTRY_TEXT_MAX)}\n[...]` : text, ...(files.length ? { files } : {}) };
+    return { ...base, kind: kind === "text" ? "text" : "note", text: text.length > ENTRY_TEXT_MAX ? `${text.slice(0, ENTRY_TEXT_MAX)}\n[...]` : text, ...(files.length ? { files } : {}), ...(images.length ? { images } : {}) };
   }
   return null;
+}
+
+/** #3203: a stored attachment's bare name (the last path segment). */
+const attachmentRef = (path: string | undefined): string => (path ?? "").split(/[\\/]/).at(-1) ?? "";
+
+/** The attached images of a message, as read_transcript_attachment takes them. */
+function imageRefs(message: StoredMessage): Array<{ ref: string; name: string }> {
+  const out: Array<{ ref: string; name: string }> = [];
+  for (const file of message.attachments ?? []) {
+    if (!file?.image) continue;
+    const ref = attachmentRef(file.path);
+    if (ref && !out.some((item) => item.ref === ref)) out.push({ ref, name: file.name || ref });
+  }
+  return out;
+}
+
+/** The bare name an attachment argument names: a stored name, the tag's
+ * path or an /api/attachments/<name> link. */
+export function attachmentRefArg(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const ref = attachmentRef(value.trim().replace(/[?#].*$/, ""));
+  return /^[A-Za-z0-9-]+\.(png|jpg|jpeg|gif|webp)$/i.test(ref) ? ref : null;
 }
 
 function collectEntries(deps: AgentApiDeps, threads: readonly TranscriptThread[]): TranscriptEntry[] {
@@ -1062,7 +1101,7 @@ function createAgentApiHandlers(env: {
   latest: (caller: AgentCaller, args: Args, withThreads: boolean) => Promise<AgentApiAnswer | Refusal>;
 }): Pick<Record<AgentToolName, (caller: AgentCaller, args: Args, signal?: AbortSignal) => Promise<AgentApiAnswer | Refusal>>,
   "list_agents" | "find_agents" | "get_agent" | "delete_agent" | "create_agent" | "send_prompt" | "await_turn" |
-  "read_transcript" | "read_transcript_page" | "read_latest_page" | "read_latest_page_with_threads" | "read_transcript_cold"
+  "read_transcript" | "read_transcript_page" | "read_latest_page" | "read_latest_page_with_threads" | "read_transcript_cold" | "read_transcript_attachment"
 > {
   const { deps, now, startedBy, sendReceipts, sendsInFlight, ownsRunningTurn, ok, reachable, waitTurn, resultBody, latest } = env;
   return {
@@ -1565,6 +1604,42 @@ function createAgentApiHandlers(env: {
       // of the agent is started (turnState is never called).
       const page = pageBefore(collectEntries(deps, deps.threads(caller, agentId)), cursor, COLD_PAGE_SIZE);
       return ok({ agent_id: agentId, entries: page.entries, next_cursor: page.next_cursor, cold: true });
+    },
+
+    // #3203: an image attached in a conversation the caller may read
+    // (deps.threads: never another person's), handed over as its bytes so a
+    // bot outside the Sagax server sees it, and copied into a bot caller's
+    // workspace on save.
+    async read_transcript_attachment(caller, args) {
+      const bad = onlyKeys(args, ["agent_id", "attachment", "thread_id", "save"]);
+      if (bad) return bad;
+      const agentId = agentIdArg(args);
+      if (isRefusal(agentId)) return agentId;
+      const ref = attachmentRefArg(args.attachment);
+      if (!ref) return refuse(400, "bad_request", "attachment is required: the ref of an entry's images (read_latest_page), or the path of its attached-image tag.");
+      if (args.thread_id !== undefined && (typeof args.thread_id !== "string" || !args.thread_id.trim())) return refuse(400, "bad_request", "thread_id must be a conversation id.");
+      if (args.save !== undefined && typeof args.save !== "boolean") return refuse(400, "bad_request", "save is true or false.");
+      if (!deps.attachmentImage) return refuse(501, "not_supported", "This server does not hand over attachments.");
+      const agent = await reachable(caller, agentId);
+      if (isRefusal(agent)) return agent;
+      const threads = deps.threads(caller, agentId).filter((thread) => args.thread_id === undefined || thread.threadId === args.thread_id);
+      const found = threads.find((thread) => deps.messages(thread.threadId).some((message) => imageRefs(message).some((item) => item.ref === ref)));
+      const missing = refuse(404, "not_found", "No image with that ref in the conversations you may read with this agent. Take the ref from an entry's images.");
+      if (!found) return missing;
+      const image = await deps.attachmentImage(ref);
+      if (!image) return refuse(404, "not_found", "That image is no longer stored.");
+      let savedTo: string | undefined;
+      if (args.save === true) {
+        if (caller.kind !== "bot" || !deps.saveAttachment) return refuse(400, "bad_request", "save copies the image into a bot's own workspace: only a bot caller can use it.");
+        const saved = deps.saveAttachment(caller, ref);
+        if (isRefusal(saved)) return saved;
+        savedTo = saved;
+      }
+      return ok({
+        agent_id: agentId, thread_id: found.threadId, attachment: ref, mime: image.mime, bytes: image.bytes.length,
+        image_base64: image.bytes.toString("base64"),
+        ...(savedTo ? { saved_to: savedTo } : {}),
+      });
     },
   };
 }

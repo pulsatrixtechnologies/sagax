@@ -59,3 +59,11 @@ describe("coding job card in the chat", () => {
     expect(codingJobView(done)).toMatchObject({ branch: "fix/lexer", repo: "parser", pr: { number: 42 } });
   });
 });
+
+describe("PR link contrast (#2641)", () => {
+  it("uses the accent text token, not the accent fill, for small link text", () => {
+    const html = draw(done);
+    expect(html).toContain("data-coding-job-pr");
+    expect(html).not.toMatch(/data-coding-job-pr[^>]*class="[^"]*\btext-accent\b(?!-)/);
+  });
+});

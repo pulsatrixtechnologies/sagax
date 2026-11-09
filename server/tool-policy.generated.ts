@@ -431,6 +431,8 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"POST","kind":"pattern","route":"^\\/api\\/admin\\/pages\\/([\\w-]+)\\/revoke$","tier":"admin","readOnly":false,"scope":"admin:admin","defaultEnabled":false,"destructive":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/admin\\/remote-sessions\\/([a-f0-9]{12})\\/(logs|end)$","tier":"admin","readOnly":true,"scope":"admin:admin","defaultEnabled":false},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/admin\\/remote-sessions\\/hosts\\/(h_[0-9a-f]{32})\\/(open|revoke)$","tier":"admin","readOnly":false,"scope":"admin:admin","defaultEnabled":false},
+  {"method":"PUT","kind":"pattern","route":"^\\/api\\/admin\\/remote-sessions\\/hosts\\/(h_[0-9a-f]{32})\\/bots$","tier":"admin","readOnly":false,"scope":"admin:admin","defaultEnabled":false},
+  {"method":"ANY","kind":"pattern","route":"^\\/api\\/admin\\/remote-sessions\\/hosts\\/(h_[0-9a-f]{32})\\/shares(?:\\/(person|team)\\/([^/]{1,200}))?$","tier":"admin","readOnly":false,"scope":"admin:admin","defaultEnabled":false},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/admin\\/remote-sessions\\/hosts$","tier":"admin","readOnly":true,"scope":"admin:admin","defaultEnabled":false},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/admin\\/remote-sessions\\/unattended\\/revoke$","tier":"admin","readOnly":false,"scope":"admin:admin","defaultEnabled":false,"destructive":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/admin\\/remote-sessions\\/unattended$","tier":"admin","readOnly":false,"scope":"admin:admin","defaultEnabled":false},

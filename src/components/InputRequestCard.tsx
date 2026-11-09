@@ -52,7 +52,7 @@ export function InputRequestCard({ message }: { message: Message }) {
         ) : (
           <div className="mt-2 flex flex-col gap-2">
             <textarea
-              className="min-h-[3rem] w-full resize-y rounded-md border border-border bg-background p-2 text-sm"
+              className="min-h-[3rem] w-full resize-y rounded-md border border-border bg-background p-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
               value={answer}
               placeholder={t("chat.inputRequest.placeholder")}
               aria-label={t("chat.inputRequest.placeholder")}

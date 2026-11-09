@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { appliesNow, directApply, grantAfterQuote, reviewedSkillNeedsCard } from "./direct-apply.ts";
+import { appliesNow, directApply, grantAfterQuote, learnedSkillRuleCandidate, reviewedSkillNeedsCard } from "./direct-apply.ts";
 
 describe("appliesNow", () => {
   it("reports full-access or level, and null when the owner must confirm", () => {
@@ -58,5 +58,15 @@ describe("bypass keeps every own-work card away (2026-11-08)", () => {
     expect(reviewedSkillNeedsCard("create", "full-access")).toBe(false);
     expect(reviewedSkillNeedsCard("create", "self")).toBe(true);
     expect(reviewedSkillNeedsCard("update", "self")).toBe(false);
+  });
+});
+
+describe("learnedSkillRuleCandidate (#2641)", () => {
+  it("gives the learned skill card one Always allow rule, the same for every learned skill", () => {
+    const rule = learnedSkillRuleCandidate();
+    expect(rule.tool).toBe("sagax:skill");
+    expect(rule.scope).toEqual({ action: "create", source: "review" });
+    expect(rule.description.length).toBeGreaterThan(0);
+    expect(learnedSkillRuleCandidate()).toEqual(rule);
   });
 });

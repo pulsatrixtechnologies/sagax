@@ -49,6 +49,13 @@ export function reviewedSkillNeedsCard(action: "create" | "update", grant: Direc
   return action === "create" && grant !== "full-access";
 }
 
+/** #2641 (2026-11-08, every card offers Always allow): what Always allow
+ * keeps on the card of a skill learned by automatic review. One rule for
+ * every skill the bot learns from its conversations, not one per content. */
+export function learnedSkillRuleCandidate(): { tool: string; scope: Record<string, string>; description: string } {
+  return { tool: "sagax:skill", scope: { action: "create", source: "review" }, description: "Keep the skills this bot learns from its conversations" };
+}
+
 /** A bot applying its own routines directly keeps at most this many
  * enabled; past it, a create or resume shows today's card instead. */
 export const SELF_ROUTINE_CAP = 20;

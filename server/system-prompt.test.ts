@@ -423,7 +423,11 @@ describe("RICH_OUTPUT_PROMPT", () => {
     expect(richOutputPrompt(false)).toContain(OUTPUT_STYLE_RULE);
     expect(RICH_OUTPUT_PROMPT).not.toContain("with a Markdown table for records and comparisons");
     expect(RICH_OUTPUT_PROMPT).not.toContain("ConnectWise records go in a Markdown table by default");
-    expect(RICH_OUTPUT_PROMPT).toContain("one or two records read as a short list");
+    expect(RICH_OUTPUT_PROMPT).toContain("one or two records, or a handful of values, read as a short list");
+    // #2641 (2026-11-08): no prompt line sends data to a table by default
+    expect(RICH_OUTPUT_PROMPT).toContain("3 or more comparable fields");
+    expect(WIDGET_PROMPT).not.toContain("Put data and comparisons in a markdown table");
+    expect(WIDGET_PROMPT).toContain("a markdown table only for real tabular data");
   });
 });
 

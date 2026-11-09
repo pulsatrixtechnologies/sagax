@@ -760,7 +760,7 @@ function LocalFileLink({ filePath, name, children, message }: { filePath: string
         onClick={() => void save.save()}
         disabled={save.state === "saving"}
         title={t("chatMarkdown.saveCopy")}
-        className="inline-flex items-center gap-1 break-words text-start text-accent underline decoration-accent/40 hover:decoration-accent disabled:cursor-wait"
+        className="inline-flex items-center gap-1 break-words text-start text-accent-text underline decoration-accent/40 hover:decoration-accent disabled:cursor-wait"
       >
         {children}
         {save.state === "saving" ? (
@@ -1081,7 +1081,7 @@ function ExternalLink({ href, github, children }: { href: string; github: Return
   );
 }
 
-const LINK_CLASS = "break-words text-accent underline decoration-accent/40 hover:decoration-accent [unicode-bidi:isolate]";
+const LINK_CLASS = "break-words text-accent-text underline decoration-accent/40 hover:decoration-accent [unicode-bidi:isolate]";
 const GITHUB_REF_CLASS =
   "inline-flex items-baseline gap-1 whitespace-nowrap rounded-full bg-inset px-1.5 align-baseline font-mono text-[0.88em] text-ink underline decoration-ink/30 underline-offset-2 hover:decoration-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus [unicode-bidi:isolate]";
 
@@ -1359,7 +1359,7 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
               onClick={(event) => {
                 if (scrollToFragment(fragment, prefix)) event.preventDefault();
               }}
-              className="text-accent underline decoration-accent/40 hover:decoration-accent"
+              className="text-accent-text underline decoration-accent/40 hover:decoration-accent"
             >
               {children}
             </a>

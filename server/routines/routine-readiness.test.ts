@@ -169,6 +169,15 @@ describe("routine readiness", () => {
     expect((await checkRoutineReadiness(routine, run, deps({ now: () => 300, engine: () => ({ engine, name: "Grok", signedIn: true, signedInAt: 100 }) }))).ok).toBe(false);
     expect((await checkRoutineReadiness(routine, run, deps({ now: () => 400, engine: () => ({ engine, name: "Grok", signedIn: true, signedInAt: 301 }) }))).ok).toBe(true);
   });
+  it("does not call an engine whose sign-ins are still loading signed out, and never caches that probe (#3125)", async () => {
+    const engine = vi.fn(() => ({ engine: "starting-engine", name: "Claude", signedIn: false, starting: true }));
+    const shared = deps({ engine });
+    const first = (await checkRoutineReadiness(routine, run, shared)).checks[0];
+    expect(first).toMatchObject({ code: "engine_signed_out", ok: false, params: { starting: "true" } });
+    expect(first?.line).not.toMatch(/Reconnect/);
+    await checkRoutineReadiness(routine, run, shared);
+    expect(engine).toHaveBeenCalledTimes(2);
+  });
   it("blocks known sign-out before any provider turn", async () => {
     expect((await checkRoutineReadiness(routine, run, deps({ engine: () => ({ engine: "codex", name: "Codex", signedIn: false }) }))).checks[0]).toMatchObject({ code: "engine_signed_out", ok: false });
   });

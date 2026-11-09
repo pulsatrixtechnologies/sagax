@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { RoutineManager, PREWARM_ENGINE_LEAD_MS, ROUTINE_RESTARTED, type RoutineManagerOptions } from "./routines.ts";
+import { RoutineManager, PREWARM_ENGINE_LEAD_MS, ROUTINE_RESTARTED, ROUTINE_STARTING_MAX_ATTEMPTS, ROUTINE_STARTING_RETRY_MS, ROUTINE_STARTING_SKIPPED, type RoutineManagerOptions } from "./routines.ts";
 import { checkRoutineReadiness, type RoutineReadinessDeps } from "./routine-readiness.ts";
 import { activeEngineRefusal, noteEngineRefusal } from "../engines/engine-refusals.ts";
 import { createLimitFailoverHost } from "../usage/limit-failover-host.ts";
@@ -26,6 +26,34 @@ function fixture(over: Partial<RoutineManagerOptions> = {}) {
   return { manager, routine, options, probes, flush, createTask, startTurn, onRunFailed, advance: (ms: number) => { now += ms; }, now: () => now, engine: dir };
 }
 describe("routine reliability in an isolated journal", () => {
+  it("retries a scheduled run whose pre-flight ran before the sign-ins loaded, then starts it (#3125)", async () => {
+    const h = fixture();
+    let loaded = false;
+    const engine = vi.fn(() => (loaded ? { engine: h.engine, name: "Claude", signedIn: true } : { engine: `${h.engine}-boot`, name: "Claude", signedIn: false, starting: true }));
+    h.probes.engine = engine;
+    h.advance(60 * 60_000); await h.flush();
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "queued", startingAttempts: 1 });
+    expect(h.manager.listRuns()[0]?.error).toBeUndefined();
+    expect(h.createTask).not.toHaveBeenCalled(); expect(h.onRunFailed).not.toHaveBeenCalled();
+    loaded = true;
+    h.advance(ROUTINE_STARTING_RETRY_MS); await h.flush();
+    expect(h.manager.listRuns()[0]?.status).toBe("running");
+    expect(h.startTurn).toHaveBeenCalledTimes(1);
+  });
+  it("skips a run after bounded retries when the sign-ins never load, and still blocks a real sign-out at once (#3125)", async () => {
+    const h = fixture();
+    h.probes.engine = () => ({ engine: `${h.engine}-boot`, name: "Claude", signedIn: false, starting: true });
+    h.advance(60 * 60_000); await h.flush();
+    for (let i = 0; i < ROUTINE_STARTING_MAX_ATTEMPTS; i++) { h.advance(ROUTINE_STARTING_RETRY_MS); await h.flush(); }
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "blocked", error: ROUTINE_STARTING_SKIPPED });
+    expect(h.createTask).not.toHaveBeenCalled();
+    expect(h.onRunFailed).toHaveBeenCalledTimes(1);
+    const other = fixture();
+    other.probes.engine = () => ({ engine: `${other.engine}-out`, name: "Claude", signedIn: false });
+    other.advance(60 * 60_000); await other.flush();
+    expect(other.manager.listRuns()[0]).toMatchObject({ status: "blocked", readiness: expect.arrayContaining([expect.objectContaining({ code: "engine_signed_out" })]) });
+    expect(other.manager.listRuns()[0]?.startingAttempts).toBeUndefined();
+  });
   it("never runs a Flow shadow probe before a routine run: a routine called by name starts (2026-11-04)", async () => {
     const h = fixture();
     h.manager.update(h.routine.id, { prompt: "Use flow_run.", requires: { skills: ["running-px-flow"] } });

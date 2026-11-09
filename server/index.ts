@@ -5,7 +5,7 @@ import { applyHoldDirective, classifyHoldDirective, heldMemberLine, rememberHeld
 import { agentBrowserIntegration } from "./browser/browser-engine.ts";
 import { browserProfilePartitionTarget } from "./config.ts";
 import { masteryDelegationFacts } from "./achievements/achievements-mastery.ts";
-import { checkRoutineReadiness, routineEngineRefusal, routineFlowSkills, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer } from "./routines/routine-readiness.ts";
+import { checkRoutineReadiness, routineEngineRefusal, routineFlowSkills, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer, type ReadinessEngine } from "./routines/routine-readiness.ts";
 import { routineFlowInput } from "./routines/routine-flow-input.ts";
 import { noteEngineRefusal, clearEngineRefusal, activeEngineRefusal } from "./engines/engine-refusals.ts";
 import { PreSendRefusals } from "./engines/presend-refusals.ts";
@@ -19024,6 +19024,25 @@ function routineReadinessEngine(routine: ReadinessRoutine, run: ReadinessRun) {
 function refusalAccount(via: string, principal?: string, slot = "primary"): string {
   return JSON.stringify([via === "owner-key" || via === "speaker-key" ? "key" : via, principal ?? "organization", slot]);
 }
+/** #3125: right after a start the organization directory (the people's keys,
+ * the engines they may use) is not read yet, so every key-backed engine looks
+ * signed out. Wait for that first read inside the probe's time; still unread,
+ * the engine is reported as starting and the scheduler checks again. */
+const ROUTINE_DIRECTORY_WAIT_MS = 3_500;
+async function routineEngineOnceDirectoryLoaded(routine: ReadinessRoutine, run: ReadinessRun, engine: ReadinessEngine, signal: AbortSignal): Promise<ReadinessEngine | undefined> {
+  const directory = perspicaxDirectory;
+  if (!directory || directory.state().syncedAt !== undefined) return engine;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    directory.refresh("routine-readiness"),
+    new Promise<void>(resolve => {
+      timer = setTimeout(resolve, ROUTINE_DIRECTORY_WAIT_MS);
+      signal.addEventListener("abort", () => resolve(), { once: true });
+    }),
+  ]).finally(() => clearTimeout(timer));
+  if (directory.state().syncedAt !== undefined) return routineReadinessEngine(routine, run);
+  return { ...engine, starting: true };
+}
 let routineReadinessConfigRevision = 0;
 onConfigSaved(() => { routineReadinessConfigRevision += 1; });
 const routineReadinessDeps: RoutineReadinessDeps = {
@@ -19032,9 +19051,9 @@ const routineReadinessDeps: RoutineReadinessDeps = {
     const engine = routineReadinessEngine(routine, run);
     return JSON.stringify([routineReadinessConfigRevision, engine, bot?.modelSelection, bot?.mcpServers, bot?.toolScope, bot?.assignedSkills, bot?.computer, bot?.remoteHosts]);
   },
-  engine: async (routine, run) => {
+  engine: async (routine, run, signal) => {
     const engine = routineReadinessEngine(routine, run);
-    if (!engine || IDENTITY.kind === "perspicax") return engine;
+    if (!engine || IDENTITY.kind === "perspicax") return engine?.signedIn === false ? routineEngineOnceDirectoryLoaded(routine, run, engine, signal) : engine;
     // A settings write can replace a provider key or compatible endpoint
     // before the installation probe cache refreshes. Probe the current instance.
     const snapshot = await registry.get(engine.engine)?.snapshot();

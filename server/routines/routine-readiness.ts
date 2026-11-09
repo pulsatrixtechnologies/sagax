@@ -13,6 +13,9 @@ export interface ReadinessRun { botId: string; prompt?: string; runAs?: string; 
 export interface ReadinessEngine { engine: string; name: string; account?: string; signedIn?: boolean; signedInAt?: number; detail?: string;
   /** Resolved routing facts, not credentials. Absent means unknown. */
   driver?: string; accessVia?: string; keyBacked?: boolean;
+  /** #3125: the sign-in facts are not loaded yet (the server just started and
+   * has not read the organization directory). Not signed out: retried. */
+  starting?: boolean;
 }
 /** Refusal facts stay live even when the sign-in probe is cached. */
 export function routineEngineRefusal(engine: ReadinessEngine, now: number): EngineRefusal | undefined {
@@ -122,6 +125,8 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
       return boundedProbe(signal => deps.backup!(routine, run, primary, signal), Math.max(0, deadline - performance.now()));
     });
     const [probes, backup] = await Promise.all([Promise.all(pending), backupProbe]);
+    // #3125: a probe taken before the sign-in facts loaded is never reused.
+    if ((probes[0]?.value as ReadinessEngine | undefined)?.starting) memo.delete(`${context}:engine`);
     const checks: RoutineReadinessCheck[] = [];
     for (let i = 0; i < kinds.length; i++) {
       const kind = kinds[i]!;
@@ -156,7 +161,10 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
             }
             continue;
           }
-          if (refusal?.cause === "signed_out") {
+          if (refusal?.cause === "signed_out" && engine.starting) {
+            // #3125: not a sign-out. The scheduler retries the run (params.starting).
+            checks.push({ kind, ok: false, code: "engine_signed_out", params: { engine: engine.name, starting: "true" }, line: `${engine.name}'s sign-in is still loading after a server start. The run is retried in a moment.` });
+          } else if (refusal?.cause === "signed_out") {
             checks.push({ kind, ok: false, code: "engine_signed_out", params: { engine: engine.name }, line: `${engine.name} is signed out for this bot. Reconnect it in Settings > Model providers.`, ...(engine.detail ? { detail: clean(engine.detail) } : {}) });
           } else if (refusal) {
             const at = new Date(refusal.at).toISOString();

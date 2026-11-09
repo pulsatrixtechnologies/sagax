@@ -279,6 +279,11 @@ export const ROUTINE_RATE_LIMITED_SKIPPED = "Perspicax is rate limiting this ser
  * window) instead of skipping the run at once. */
 export const ROUTINE_UNREACHABLE_RETRY_MS = 30_000;
 export const ROUTINE_UNREACHABLE_RETRIED = "Perspicax is unreachable for now; this run is retried in a moment";
+/** #3125: a run whose pre-flight ran before the server loaded the sign-ins
+ * (a restart) waits and is checked again, at most this many times. */
+export const ROUTINE_STARTING_RETRY_MS = 20_000;
+export const ROUTINE_STARTING_MAX_ATTEMPTS = 9;
+export const ROUTINE_STARTING_SKIPPED = "The model provider sign-ins could not be loaded after the server started; this run is skipped and the next one tries again";
 export const ROUTINE_UNREACHABLE_SKIPPED = "Perspicax stayed unreachable for several minutes; this run is skipped and the next one tries again";
 
 /** The wait before the next admission of a rate-limited run: the larger of
@@ -3606,6 +3611,21 @@ export class RoutineManager {
             if (!readiness) { this.startReadiness(routine, run); continue; }
             this.readinessSettled.delete(run.id);
             if (run.status !== "queued") continue;
+            if (!readiness.ok && readiness.checks.some(check => !check.ok && check.params?.starting === "true")) {
+              // #3125: the sign-ins are still loading after a restart, not
+              // signed out: the run waits and checks again (bounded).
+              const attempts = run.startingAttempts ?? 0;
+              if (attempts < ROUTINE_STARTING_MAX_ATTEMPTS) {
+                run.startingAttempts = attempts + 1;
+                run.admitAfter = this.now() + ROUTINE_STARTING_RETRY_MS;
+                this.saveLater();
+                this.emitRun(run);
+                continue;
+              }
+              run.readiness = readiness.checks;
+              this.blockRun(run, ROUTINE_STARTING_SKIPPED, firstOwnerNotice(this.ownerNotices, run.botId, "probe_error", this.now()) ? { detail: `${routine.name}: "${ROUTINE_STARTING_SKIPPED}"` } : null);
+              continue;
+            }
             run.readiness = readiness.checks;
             if (!readiness.ok) {
               const blocker = readiness.checks.find(check => !check.ok)!;

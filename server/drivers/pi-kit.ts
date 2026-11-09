@@ -11,6 +11,9 @@
 //   packages.txt      pi package sources, one a line ("#" starts a comment),
 //                     loaded with `-e` too; the image preinstalls them
 //                     (Dockerfile PI_KIT_PACKAGES, SAGAX_PI_PACKAGES_DIR)
+//   guards.txt        extension file names or package sources, one a line,
+//                     that are guards: a turn never runs without one (#3063).
+//                     A name with "guard" or "policy" in it is a guard too.
 // #3008: pi installs a missing `npm:` package with npm at startup, and the
 // image has no npm: pi then dies before its first reply. An `npm:` source
 // (packages.txt or settings.json "packages") loads from the image's
@@ -19,8 +22,8 @@
 // The kit is copied into the turn's pi home (PI_CODING_AGENT_DIR), so each
 // person's home carries it; host tools stay withheld as they are without it.
 // Sagax holds no kit content: the folder is the operator's.
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { delimiter, isAbsolute, join, resolve } from "node:path";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, delimiter, isAbsolute, join, resolve } from "node:path";
 import { isMacMetadataName, removeMacMetadata, withoutMacMetadata } from "../mac-metadata.ts";
 
 export const PI_KIT_DIR_ENV = "SAGAX_PI_KIT_DIR";
@@ -199,6 +202,35 @@ export function resolvePiSettingsPackages(
 export interface PiKitInstall {
   /** The `-e` arguments, in order: the kit's extensions, then its packages. */
   args: string[];
+  /** #3063: the `-e` values (of args) that are guards, never left out. */
+  guards: string[];
+  /** #3063: the `-e` values left out this turn because pi failed to load them. */
+  skipped: string[];
+}
+
+/** #3063: whether a kit extension (its `-e` path) or package source is
+ * left out of this turn; `source` is the kit's own file or source. */
+export type PiKitSkip = (arg: string, source: string) => boolean;
+
+/** #3063: a name with "guard" or "policy" in it is a guard. */
+const GUARD_NAME = /guard|policy/i;
+
+/** #3063: the guards a kit names in guards.txt (file names or package
+ * sources, "#" starts a comment). */
+export function readPiKitGuards(kitDir: string): Set<string> {
+  const path = join(kitDir, "guards.txt");
+  const out = new Set<string>();
+  if (!existsSync(path)) return out;
+  for (const raw of readFileSync(path, "utf8").split(/\r?\n/)) {
+    const line = raw.replace(/#.*$/, "").trim();
+    if (line) out.add(line);
+  }
+  return out;
+}
+
+/** #3063: whether a kit extension file name or package source is a guard. */
+export function isPiKitGuard(name: string, listed: ReadonlySet<string>): boolean {
+  return listed.has(name) || GUARD_NAME.test(basename(name.replace(/\\/g, "/")));
 }
 
 /** #3063: remove macOS metadata (`._*`, `.DS_Store`) from the folders pi
@@ -210,9 +242,18 @@ export function cleanPiHomeMetadata(home: string): number {
 /** Copy the kit into a pi home and return the `-e` arguments that load it.
  * Every turn copies again, so a kit updated in place reaches the next turn,
  * and the identity in APPEND_SYSTEM.md is always the turn's own person. */
-export function installPiKit(kitDir: string, home: string, identity: PiKitIdentity, env: Record<string, string | undefined> = process.env): PiKitInstall {
+export function installPiKit(
+  kitDir: string,
+  home: string,
+  identity: PiKitIdentity,
+  env: Record<string, string | undefined> = process.env,
+  skip: PiKitSkip = () => false,
+): PiKitInstall {
   mkdirSync(home, { recursive: true, mode: 0o700 });
   const args: string[] = [];
+  const guards: string[] = [];
+  const skipped: string[] = [];
+  const listedGuards = readPiKitGuards(kitDir);
   // #3063: a kit made on a Mac carries AppleDouble `._*.ts` files pi would
   // load as extensions; they are never copied, never loaded, and those an
   // earlier release copied are removed
@@ -221,12 +262,24 @@ export function installPiKit(kitDir: string, home: string, identity: PiKitIdenti
   const extensions = join(kitDir, "extensions");
   if (existsSync(extensions) && statSync(extensions).isDirectory()) {
     const target = join(home, "extensions");
-    cpSync(extensions, target, { recursive: true, force: true, filter: withoutMacMetadata });
+    // #3063: an extension pi failed to load is left out by itself (never a
+    // guard): not copied, its earlier copy removed, so pi cannot find it
+    const left = new Set<string>();
     for (const name of readdirSync(extensions).sort()) {
       if (isMacMetadataName(name) || !/\.(ts|js|mjs)$/.test(name)) continue;
       if (!statSync(join(extensions, name)).isFile()) continue;
-      args.push("-e", join(target, name));
+      const arg = join(target, name);
+      const guard = isPiKitGuard(name, listedGuards);
+      if (!guard && skip(arg, join(extensions, name))) {
+        left.add(join(extensions, name));
+        skipped.push(arg);
+        rmSync(arg, { force: true });
+        continue;
+      }
+      args.push("-e", arg);
+      if (guard) guards.push(arg);
     }
+    cpSync(extensions, target, { recursive: true, force: true, filter: (source) => withoutMacMetadata(source) && !left.has(source) });
   }
 
   const tools = join(kitDir, "tools");
@@ -242,7 +295,14 @@ export function installPiKit(kitDir: string, home: string, identity: PiKitIdenti
       warnSkipped(source);
       continue;
     }
-    args.push("-e", piKitPackageArg(source, kitDir, env));
+    const arg = piKitPackageArg(source, kitDir, env);
+    const guard = isPiKitGuard(source, listedGuards);
+    if (!guard && skip(arg, source)) {
+      skipped.push(arg);
+      continue;
+    }
+    args.push("-e", arg);
+    if (guard) guards.push(arg);
     const name = npmPackageName(source);
     if (name) loaded.add(name);
   }
@@ -265,5 +325,5 @@ export function installPiKit(kitDir: string, home: string, identity: PiKitIdenti
   if (existsSync(template)) {
     writeFileSync(join(home, "APPEND_SYSTEM.md"), renderPiKitTemplate(readFileSync(template, "utf8"), identity), { mode: 0o600 });
   }
-  return { args };
+  return { args, guards, skipped };
 }

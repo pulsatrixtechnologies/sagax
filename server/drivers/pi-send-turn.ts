@@ -1,31 +1,35 @@
 /** pi sendTurn orchestration across prepare, rpc, events, and session (#1383). */
 import type { SendTurnInput } from "../contracts.ts";
+import { leaveOutPiExtension, piSkippedNotice } from "./pi-extension-failures.ts";
 import { preparePiTurn } from "./pi-send-prepare.ts";
 import { runPiSession } from "./pi-send-session.ts";
 import type { PiSendDeps } from "./pi-turn-ctx.ts";
 
-/** #3063: each failing extension is logged once per process, not per turn. */
-const loggedExtensionFailures = new Set<string>();
+/** #3063: at most this many kit extensions are left out in one turn; past
+ * that the kit is broken and the turn fails in the chat. */
+const MAX_EXTENSION_RETRIES = 3;
 
 export function createPiSendTurn(deps: PiSendDeps): (turn: SendTurnInput) => Promise<{ turnId: string }> {
-  /** One attempt. The first runs with the kit's extensions; when pi exits
-   * because one failed to load, the turn moves to a second attempt, under
-   * the same turn id, with `--no-extensions` (#3063). */
-  async function attempt(turn: SendTurnInput, retryOf?: string): Promise<{ turnId: string; done: Promise<void> }> {
+  /** One attempt. When pi exits because one kit extension (not a guard)
+   * failed to load, the turn moves to a new attempt, under the same turn
+   * id, without that one extension; the process remembers it, so the next
+   * turns start pi once (#3063). */
+  async function attempt(turn: SendTurnInput, retryOf?: string, retries = 0): Promise<{ turnId: string; done: Promise<void> }> {
     let retired = false;
     // a retired attempt's late events (its close, a handshake error) stay silent
     const scoped: PiSendDeps = { ...deps, emit: (event) => { if (!retired) deps.emit(event); } };
-    const ctx = await preparePiTurn(scoped, turn, retryOf ? { turnId: retryOf, withoutExtensions: true } : {});
+    const ctx = await preparePiTurn(scoped, turn, retryOf ? { turnId: retryOf } : {});
     let retry: Promise<void> | null = null;
-    if (!retryOf) {
-      deps.emit({ ...deps.base(ctx.threadId, ctx.turnId), type: "turn.started" });
-      ctx.onExtensionLoadFailure = (line) => {
+    if (!retryOf) deps.emit({ ...deps.base(ctx.threadId, ctx.turnId), type: "turn.started" });
+    // nothing invisible: a turn that runs without a kit extension says so in the chat
+    if (ctx.kit.skipped.length) {
+      deps.emit({ ...deps.base(ctx.threadId, ctx.turnId), type: "runtime.notice", message: piSkippedNotice(ctx.kit.skipped) });
+    }
+    if (retries < MAX_EXTENSION_RETRIES) {
+      ctx.onExtensionLoadFailure = (arg, line) => {
         retired = true;
-        if (!loggedExtensionFailures.has(line)) {
-          loggedExtensionFailures.add(line);
-          console.warn(`[pi] an extension failed to load; the turn runs again without extensions: ${line}`);
-        }
-        retry = attempt(turn, ctx.turnId)
+        leaveOutPiExtension(arg, line);
+        retry = attempt(turn, ctx.turnId, retries + 1)
           .then((next) => next.done)
           .catch((error: unknown) => {
             const message = error instanceof Error ? error.message : String(error);

@@ -7,6 +7,9 @@ import { killCliTree } from "../procs.ts";
 import type { PiPrepared, PiSendCtx } from "./pi-turn-ctx.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
+/** #3063: how long a broken stdin waits for pi's close before the turn fails. */
+export const PI_CLOSE_GRACE_MS = 5_000;
+
 export function attachPiRpc(ctx: PiPrepared): PiSendCtx {
   const { hooks, emit, base } = ctx.deps;
   // resolve one-shot RPC responses (new_session / switch_session / set_model)
@@ -24,9 +27,14 @@ export function attachPiRpc(ctx: PiPrepared): PiSendCtx {
   };
   const awaitResponse = (command: string, timeoutMs = 20_000, key = command) =>
     new Promise<unknown>((resolve, reject) => {
-      // #3063: a retired attempt's child is gone; nothing will answer
+      // #3063: a retired attempt's child is gone, and a broken stdin
+      // carried nothing: nothing will answer
       if (ctx.retired) {
-        reject(new Error("pi restarted without extensions"));
+        reject(new Error("pi restarted without an extension"));
+        return;
+      }
+      if (ctx.stdinClosed) {
+        reject(new Error("pi stdin closed"));
         return;
       }
       const timer = setTimeout(() => {
@@ -36,7 +44,10 @@ export function attachPiRpc(ctx: PiPrepared): PiSendCtx {
       timer.unref?.();
       ctx.responseWaiters.set(key, { resolve, reject, timer });
     });
-  ctx.child.stdin.on("error", () => rejectWaiters(new Error("pi stdin closed")));
+  ctx.child.stdin.on("error", () => {
+    ctx.stdinClosed = true;
+    rejectWaiters(new Error("pi stdin closed"));
+  });
   const send = (obj: Record<string, unknown>) => {
     if (ctx.retired) return;
     appendNative(ctx.threadId, { dir: "out", source: "pi.rpc", msg: hooks.piNativeLogMessage(obj) });
@@ -56,9 +67,14 @@ export function attachPiRpc(ctx: PiPrepared): PiSendCtx {
     emit({ ...base(ctx.threadId, ctx.turnId), type: "item.completed", itemType: "assistant_text", text });
   };
 
+  const clearCloseTimer = () => {
+    if (ctx.closeTimer) clearTimeout(ctx.closeTimer);
+    ctx.closeTimer = null;
+  };
   const settle = (ok: boolean, stopReason?: string | null, usage?: { input?: number; output?: number }) => {
     if (ctx.settled) return;
     ctx.settled = true;
+    clearCloseTimer();
     // #1276: once this pi has exited (its session file then holds the
     // whole turn), start the thread's next pi, its session resumed.
     if (ok && ctx.turn.compactPrompt && ctx.standbySession && (stopReason ?? "end_turn") === "end_turn") {
@@ -203,6 +219,7 @@ export function attachPiRpc(ctx: PiPrepared): PiSendCtx {
     if (ctx.settled) return;
     ctx.retired = true;
     ctx.settled = true;
+    clearCloseTimer();
     if (ctx.agentEndTimer) {
       clearTimeout(ctx.agentEndTimer);
       ctx.agentEndTimer = null;
@@ -210,7 +227,7 @@ export function attachPiRpc(ctx: PiPrepared): PiSendCtx {
     for (const timer of ctx.askTimers) clearTimeout(timer);
     ctx.askTimers.clear();
     ctx.pending.clear();
-    rejectWaiters(new Error("pi restarted without extensions"));
+    rejectWaiters(new Error("pi restarted without an extension"));
     try {
       killCliTree(ctx.child);
     } catch {
@@ -225,7 +242,27 @@ export function attachPiRpc(ctx: PiPrepared): PiSendCtx {
     }
     if (ctx.deps.active.get(ctx.threadId)?.turnId === ctx.turnId) ctx.deps.active.delete(ctx.threadId);
   };
+  // #3063 (review 0.8.70, section 3): when pi dies at startup, its stdin can
+  // break before it closes, and a failure settled here would beat the close
+  // that retries the turn without the extension pi could not load. Once
+  // stdin broke, the close decides; the fallback covers a pi that closed
+  // its stdin and kept running.
+  const failTurn = (message: string) => {
+    if (ctx.settled) return;
+    if (ctx.stdinClosed) {
+      ctx.closeTimer ??= setTimeout(() => {
+        ctx.closeTimer = null;
+        if (ctx.settled) return;
+        emit({ ...base(ctx.threadId, ctx.turnId), type: "runtime.error", message });
+        settle(false);
+      }, PI_CLOSE_GRACE_MS);
+      ctx.closeTimer.unref?.();
+      return;
+    }
+    emit({ ...base(ctx.threadId, ctx.turnId), type: "runtime.error", message });
+    settle(false);
+  };
   ctx.deps.active.set(ctx.threadId, { stop, turnId: ctx.turnId, pending: ctx.pending, child: ctx.child, steer: steerActiveTurn });
 
-  return Object.assign(ctx, { rejectWaiters, awaitResponse, send, flushAssistantText, settle, finishRun, stop, retire });
+  return Object.assign(ctx, { rejectWaiters, awaitResponse, send, flushAssistantText, settle, finishRun, stop, retire, failTurn });
 }

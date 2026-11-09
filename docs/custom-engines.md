@@ -192,6 +192,7 @@ service. Every pi turn copies it into the person's pi home:
 | `APPEND_SYSTEM.md` | a template: `{{USER_NAME}} {{CW_MEMBER}} {{TIMEZONE}} {{LANG_NAME}} {{USER_ORG}} {{MAX_PARALLEL}}` filled from the person; a line naming a variable with no value is dropped |
 | `tools/` | copied as is, for the extensions that read it |
 | `packages.txt` | one pi package source a line (`#` starts a comment), each loaded with `-e` |
+| `guards.txt` | one extension file name or package source a line (`#` starts a comment) that is a guard; a name with `guard` or `policy` in it is one too |
 
 Values: `USER_NAME` the person's display name, `TIMEZONE` their time zone,
 `LANG_NAME` their language in English, `USER_ORG` from `SAGAX_ORG_NAME`,
@@ -213,6 +214,14 @@ passed to pi only when npm is on the server's PATH; without npm it is left out
 with a warning in the server log, since pi would try to install it at startup
 and stop before replying (#3008). Other sources (local paths, `git:`) are
 passed as written.
+
+When pi stops because one kit extension or package failed to load, the turn
+runs again without that one; the others and every guard stay loaded. The chat
+says which one was left out and what pi said, on every turn that runs without
+it. The server remembers it until it restarts or the kit file changes, so the
+next turns start pi once. A guard, the Sagax extension, or an extension Sagax
+cannot name (one in the person's own pi home) never runs without: the turn
+fails with pi's words in the chat (#3063).
 
 ## Notes
 

@@ -6,7 +6,7 @@
 // The fake CLI is a shebang script Windows cannot exec directly; spawnCli
 // resolves it to `node <script>`, so these run everywhere.
 import { randomUUID } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,6 +44,7 @@ import {
 } from "./pi.ts";
 import { STABLE_END_MARKER } from "./pi-mcp-extension.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
+import { resetPiExtensionFailures } from "./pi-extension-failures.ts";
 
 const FAKE_CLI = join(dirname(fileURLToPath(import.meta.url)), "..", "testing", "fake-pi-cli.ts");
 const MODELS_LINE =
@@ -897,12 +898,26 @@ describe("PiDriver turns (fake CLI)", () => {
     });
   });
 
-  // #3063: an extension pi cannot load (an AppleDouble ._voice-guard.ts)
-  // retries the turn once without extensions instead of failing it.
-  it("retries a turn without extensions when pi cannot load one", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "omb-pi-ext-retry-"));
-    const dump = join(dir, "dump.jsonl");
-    await create("extension-load-error", { FAKE_PI_DUMP: dump });
+  // #3063: only the kit extension pi cannot load is left out; a guard, or an
+  // extension Sagax cannot name, fails the turn in the chat.
+  const extensionKit = () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-pi-ext-kit-"));
+    const kit = join(dir, "kit");
+    mkdirSync(join(kit, "extensions"), { recursive: true });
+    for (const name of ["voice.ts", "tone.ts", "audit-guard.ts"]) writeFileSync(join(kit, "extensions", name), "export default () => {};\n");
+    return { kit, home: join(dir, "home"), dump: join(dir, "dump.jsonl") };
+  };
+  const turnRuns = (dump: string) => readFileSync(dump, "utf8").split("\n").filter(Boolean)
+    .map((line) => JSON.parse(line) as { argv?: string[] })
+    // the turn's children carry the Sagax MCP extension (a model probe does not)
+    .filter((row) => row.argv?.includes("-e"))
+    .map((row) => row.argv ?? []);
+  const loads = (argv: string[], name: string) => argv.some((value, index) => argv[index - 1] === "-e" && value.endsWith(`/${name}`));
+
+  it("leaves out only the kit extension pi cannot load, and says so in the chat", async () => {
+    resetPiExtensionFailures();
+    const { kit, home, dump } = extensionKit();
+    await create("extension-load-error", { FAKE_PI_DUMP: dump, SAGAX_PI_KIT_DIR: kit, PI_CODING_AGENT_DIR: home, FAKE_PI_BAD_EXTENSION: "voice.ts" });
     const threadId = "t-ext-retry-" + randomUUID();
     const { turnId } = await instance.adapter.sendTurn({ threadId, text: "hi" });
     const done = await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
@@ -911,17 +926,53 @@ describe("PiDriver turns (fake CLI)", () => {
     expect(own.filter((e) => e.type === "turn.started")).toHaveLength(1);
     expect(own.filter((e) => e.type === "turn.completed")).toHaveLength(1);
     expect(own.filter((e) => e.type === "runtime.error")).toEqual([]);
-    const runs = readFileSync(dump, "utf8").split("\n").filter(Boolean)
-      .map((line) => JSON.parse(line) as { argv?: string[] })
-      // the turn's children carry the Sagax MCP extension (a model probe does not)
-      .filter((row) => row.argv?.includes("-e"));
+    expect(own.filter((e) => e.type === "runtime.notice")).toEqual([
+      expect.objectContaining({ message: expect.stringContaining("voice.ts") }),
+    ]);
+    const runs = turnRuns(dump);
     expect(runs).toHaveLength(2);
-    expect(runs[0]?.argv).not.toContain("--no-extensions");
-    expect(runs[1]?.argv).toContain("--no-extensions");
-    expect(instance.adapter.hasSession(threadId)).toBe(false);
+    expect(loads(runs[0]!, "voice.ts")).toBe(true);
+    expect(loads(runs[1]!, "voice.ts")).toBe(false);
+    expect(loads(runs[1]!, "tone.ts")).toBe(true);
+    expect(loads(runs[1]!, "audit-guard.ts")).toBe(true);
+    expect(runs[1]).not.toContain("--no-extensions");
+    // pi cannot find it by itself either
+    expect(existsSync(join(home, "extensions", "voice.ts"))).toBe(false);
+
+    // the process remembers: the next turn starts pi once, still in the open
+    const next = await instance.adapter.sendTurn({ threadId: threadId + "-2", text: "again" });
+    expect(await recorder.until((e) => e.type === "turn.completed" && e.turnId === next.turnId)).toMatchObject({ ok: true });
+    expect(turnRuns(dump)).toHaveLength(3);
+    expect(recorder.events.filter((e) => e.turnId === next.turnId && e.type === "runtime.notice")).toHaveLength(1);
+
+    // a fixed extension is loaded again
+    writeFileSync(join(kit, "extensions", "voice.ts"), "export default () => { /* fixed */ };\n");
+    recorder.stop();
+    await instance.dispose();
+    await create("happy", { FAKE_PI_DUMP: dump, SAGAX_PI_KIT_DIR: kit, PI_CODING_AGENT_DIR: home });
+    const fixed = await instance.adapter.sendTurn({ threadId: threadId + "-3", text: "fixed" });
+    expect(await recorder.until((e) => e.type === "turn.completed" && e.turnId === fixed.turnId)).toMatchObject({ ok: true });
+    expect(loads(turnRuns(dump).at(-1)!, "voice.ts")).toBe(true);
+    resetPiExtensionFailures();
   });
 
-  it("fails once, with pi's words, when the turn without extensions fails too", async () => {
+  it("fails the turn in the chat when a guard does not load, without running it", async () => {
+    resetPiExtensionFailures();
+    const { kit, home, dump } = extensionKit();
+    await create("extension-load-error", { FAKE_PI_DUMP: dump, SAGAX_PI_KIT_DIR: kit, PI_CODING_AGENT_DIR: home, FAKE_PI_BAD_EXTENSION: "audit-guard.ts" });
+    const { turnId } = await instance.adapter.sendTurn({ threadId: "t-ext-guard-" + randomUUID(), text: "hi" });
+    const done = await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+    expect(done).toMatchObject({ ok: false, stopReason: "failed" });
+    const own = recorder.events.filter((e) => e.turnId === turnId);
+    expect(own.filter((e) => e.type === "turn.completed")).toHaveLength(1);
+    expect(own.filter((e) => e.type === "runtime.error")).toEqual([
+      expect.objectContaining({ message: expect.stringMatching(/guard audit-guard\.ts.*did not run/) }),
+    ]);
+    expect(turnRuns(dump)).toHaveLength(1);
+  });
+
+  it("fails once, with pi's words, when Sagax cannot name the extension", async () => {
+    resetPiExtensionFailures();
     await create("extension-load-error-always");
     const threadId = "t-ext-retry-fail-" + randomUUID();
     const { turnId } = await instance.adapter.sendTurn({ threadId, text: "hi" });
@@ -930,7 +981,7 @@ describe("PiDriver turns (fake CLI)", () => {
     const own = recorder.events.filter((e) => e.turnId === turnId);
     expect(own.filter((e) => e.type === "turn.completed")).toHaveLength(1);
     expect(own.filter((e) => e.type === "runtime.error")).toEqual([
-      expect.objectContaining({ message: expect.stringContaining("Failed to load extension") }),
+      expect.objectContaining({ message: expect.stringMatching(/cannot tell which one[\s\S]*Failed to load extension/) }),
     ]);
   });
 

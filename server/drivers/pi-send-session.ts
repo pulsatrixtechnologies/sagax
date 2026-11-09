@@ -61,6 +61,8 @@ export async function runPiSession(ctx: PiSendCtx): Promise<void> {
     // ahead: without its switch it has another folder and no MCP servers.
     if (ctx.ahead) {
       const message = "pi could not open this conversation; send the message again";
+      // #3063: pi is exiting; its close says why (and may retry the turn)
+      if (ctx.stdinClosed) return ctx.failTurn(message);
       emit({ ...base(threadId, turnId), type: "runtime.error", message });
       ctx.settle(false);
       throw new Error(message);
@@ -82,6 +84,7 @@ export async function runPiSession(ctx: PiSendCtx): Promise<void> {
       if (isLocalModelId(turn.model)) {
         const reason = String((err as Error)?.message ?? err).slice(0, 300);
         const message = `pi could not switch to the local model ${chosen.modelId}, so it did not answer on another model. Check that the computer that serves it is online and shares it, then try again. (pi said: "${reason}")`;
+        if (ctx.stdinClosed) return ctx.failTurn(message);
         emit({ ...base(threadId, turnId), type: "runtime.error", message });
         ctx.settle(false);
         throw new Error(message);
@@ -110,6 +113,7 @@ export async function runPiSession(ctx: PiSendCtx): Promise<void> {
     } catch { /* Missing or malformed readiness is never a grant. */ }
     if (!ready) {
       const message = "Pi tool selection enforcement is unavailable. Update Pi and check the Sagax extension before retrying.";
+      if (ctx.stdinClosed) return ctx.failTurn(message);
       emit({ ...base(threadId, turnId), type: "runtime.error", message });
       ctx.settle(false);
       throw new Error(message);
@@ -180,22 +184,9 @@ export async function runPiSession(ctx: PiSendCtx): Promise<void> {
           /* an unwritten receipt only re-delivers the full prompt next turn */
         }
       },
-      (err: Error) => {
-        if (ctx.settled) return;
-        emit({
-          ...base(threadId, turnId),
-          type: "runtime.error",
-          message: String(err?.message ?? err).slice(0, 2_000),
-        });
-        ctx.settle(false);
-      },
+      (err: Error) => ctx.failTurn(String(err?.message ?? err).slice(0, 2_000)),
     );
   } catch (err) {
-    emit({
-      ...base(threadId, turnId),
-      type: "runtime.error",
-      message: String((err as Error)?.message ?? err).slice(0, 2_000),
-    });
-    ctx.settle(false);
+    ctx.failTurn(String((err as Error)?.message ?? err).slice(0, 2_000));
   }
 }

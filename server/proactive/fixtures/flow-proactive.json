@@ -1,0 +1,177 @@
+{
+  "watches": [
+    {
+      "skill": "reporting-backup-health",
+      "products": [
+        "axcient-x360",
+        "connectwise"
+      ],
+      "domain": "backup",
+      "id": "x360-appliance-hors-ligne",
+      "summary": "Une appliance Axcient x360 semble hors ligne.",
+      "observe": {
+        "tool": "axcient_x360recover_query",
+        "args": {
+          "resource": "appliance",
+          "limit": 100
+        }
+      },
+      "when": "length(items[?contains(to_string(@), 'ffline')]) > `0`",
+      "cadence": "daily@07:30",
+      "propose": {
+        "skill": "reporting-backup-health"
+      },
+      "kind": "read",
+      "prompt": "Utilise le skill reporting-backup-health pour vérifier les appliances hors ligne, puis les sauvegardes en échec ou périmées et les échecs AutoVerify, par client, et propose les billets à ouvrir."
+    },
+    {
+      "skill": "choosing-dispatch-techs",
+      "products": [
+        "connectwise"
+      ],
+      "domain": "dispatch",
+      "id": "trou-de-capacite",
+      "summary": "Aucun technicien n'a de créneau libre demain pour les billets en attente de répartition.",
+      "observe": {
+        "action": "dispatch-day-listing",
+        "params": {
+          "tn_board": "{{fact:team.hr_board_id}}",
+          "si_board": "{{fact:team.hr_board_id}}"
+        }
+      },
+      "when": "n_undispatched > `0`",
+      "cadence": "daily@16:00",
+      "propose": {
+        "skill": "choosing-dispatch-techs"
+      },
+      "kind": "read",
+      "prompt": "Utilise le skill choosing-dispatch-techs pour dire qui peut prendre les billets non répartis de demain et dans quel trou, sans rien écrire."
+    },
+    {
+      "skill": "classifying-unreadable-references",
+      "products": [
+        "connectwise"
+      ],
+      "domain": "dispatch",
+      "id": "references-illisibles",
+      "summary": "Des billets récents ont une référence illisible (aucun client ni type clair).",
+      "observe": {
+        "tool": "cw_psa_service_query",
+        "args": {
+          "resource": "tickets",
+          "filter": {
+            "closedFlag": false,
+            "dateEntered": {
+              "gte": "{{days_ago:1}}"
+            },
+            "contact": {
+              "null": true
+            }
+          },
+          "fields": [
+            "id",
+            "summary",
+            "board/name"
+          ],
+          "limit": 25
+        }
+      },
+      "when": "length(items) > `0`",
+      "cadence": "1h",
+      "propose": {
+        "skill": "classifying-unreadable-references"
+      },
+      "kind": "read",
+      "prompt": "Utilise le skill classifying-unreadable-references pour classer les billets récents sans contact reconnu et dire à quel client ou type ils se rattachent."
+    },
+    {
+      "skill": "auditing-tailscale-devices",
+      "products": [
+        "tailscale",
+        "connectwise"
+      ],
+      "domain": "network",
+      "id": "tailscale-appareils-perimes",
+      "summary": "Des appareils Tailscale ne se sont pas connectés depuis plus de 30 jours.",
+      "observe": {
+        "tool": "tailscale_query",
+        "args": {
+          "resource": "tailnet_devices",
+          "limit": 200
+        }
+      },
+      "when": "length(items[?connectedToControl == `false` && lastSeen <= '{{days_ago:30}}']) > `0`",
+      "cadence": "weekly:fri@10:00",
+      "propose": {
+        "skill": "auditing-tailscale-devices"
+      },
+      "kind": "read",
+      "prompt": "Utilise le skill auditing-tailscale-devices pour lister les appareils périmés ou dont la clé expire, par client, et propose lesquels retirer."
+    },
+    {
+      "skill": "authoring-bookstack-pages",
+      "products": [
+        "bookstack"
+      ],
+      "domain": "documentation",
+      "id": "bookstack-pages-perimees",
+      "summary": "Des pages BookStack n'ont pas été modifiées depuis plus d'un an.",
+      "observe": {
+        "tool": "bookstack_query",
+        "args": {
+          "resource": "pages",
+          "filter": {
+            "updated_at": {
+              "lte": "{{days_ago:365}}"
+            }
+          },
+          "limit": 25
+        }
+      },
+      "when": "length(items) > `0`",
+      "cadence": "weekly:fri@14:00",
+      "propose": {
+        "skill": "authoring-bookstack-pages"
+      },
+      "kind": "read",
+      "prompt": "Utilise le skill authoring-bookstack-pages pour lister les pages BookStack non modifiées depuis un an et propose lesquelles réviser en premier, sans rien écrire."
+    },
+    {
+      "skill": "dispatching-tickets",
+      "products": [
+        "connectwise"
+      ],
+      "domain": "dispatch",
+      "id": "billets-nouveaux-a-repartir",
+      "summary": "De nouveaux billets sont arrivés et attendent une répartition.",
+      "observe": {
+        "tool": "cw_psa_service_query",
+        "args": {
+          "resource": "tickets",
+          "filter": {
+            "closedFlag": false,
+            "owner": {
+              "null": true
+            },
+            "dateEntered": {
+              "gte": "{{hours_ago:1}}"
+            }
+          },
+          "fields": [
+            "id",
+            "summary",
+            "board/name"
+          ],
+          "limit": 25
+        }
+      },
+      "when": "length(items) > `0`",
+      "cadence": "15m",
+      "propose": {
+        "skill": "dispatching-tickets"
+      },
+      "kind": "write",
+      "prompt": "Utilise le skill dispatching-tickets pour répartir les billets arrivés dans la dernière heure vers un technicien et un créneau, selon les règles de dispatch du locataire."
+    }
+  ]
+}

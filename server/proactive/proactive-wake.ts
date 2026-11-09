@@ -55,7 +55,25 @@ import { directWakeVerdict, type DirectTriggers } from "../../shared/direct-trig
  * else than its owner, when no Bot phone trigger took it. */
 /** #2699: "screen" is a moment the person stayed on (front app and window),
  * when they turned screen context on (server/proactive/screen-context.ts). */
-export type ProactiveSource = "mail" | "calendar" | "run" | "bot" | "peer" | "webhook" | "sms" | "suggestion" | "screen";
+/** 2026-11-09: "watch" is a Pulsatrix Flow watch of a bot that holds a
+ * Pulsatrix profile whose condition turned true (server/proactive/flow-watches.ts). */
+export type ProactiveSource = "mail" | "calendar" | "run" | "bot" | "peer" | "webhook" | "sms" | "suggestion" | "screen" | "watch";
+
+/** 2026-11-09: what a Flow watch asks of the wake it fired. It comes from
+ * the organization's Flow plugin (the watch's own consigne), never from the
+ * observed data, which stays in the event's fenced detail. */
+export interface WatchWakeFacts {
+  id: string;
+  summary: string;
+  skill?: string;
+  /** The consigne of the turn, from the watch. */
+  prompt: string;
+  /** What the watch proposes: a skill, a routine or a Flow action. */
+  propose: string;
+  /** The server's gate: "auto" runs a read now; "defer" is a write, planned
+   * as a dry run and then sent through the ordinary approval path. */
+  disposition: "auto" | "defer";
+}
 
 export interface ProactiveEvent {
   botId: string;
@@ -102,6 +120,8 @@ export interface ProactiveEvent {
   /** Set by offer: the channel's own direct trigger let it in, so it wakes
    * the bot even when the proactive switch is off. */
   direct?: boolean;
+  /** 2026-11-09: a Flow watch's consigne (source watch). */
+  watch?: WatchWakeFacts;
 }
 
 /** 2026-11-02: what a gathered event keeps on disk until its wake starts. */
@@ -178,6 +198,8 @@ export function proactiveRelevance(event: ProactiveEvent): string | null {
       return "a daily suggestion the person accepted";
     case "screen":
       return "the person stayed on something on their screen";
+    case "watch":
+      return event.watch?.prompt.trim() ? "a Pulsatrix watch condition turned true" : null;
   }
 }
 
@@ -599,7 +621,7 @@ export const DM_WAKE_RULES = [
 /** Whether a wake of these events must always report (never quiet):
  * a teammate's message or a post in a two-bot DM. */
 export function wakeAlwaysReports(events: readonly ProactiveEvent[]): boolean {
-  return events.some((event) => event.source === "peer" || event.source === "suggestion" || (event.source === "bot" && event.dm === true));
+  return events.some((event) => event.source === "peer" || event.source === "suggestion" || event.source === "watch" || (event.source === "bot" && event.dm === true));
 }
 
 /** #2693: a daily suggestion the person accepted with one gesture. */
@@ -624,6 +646,27 @@ export const SCREEN_WAKE_RULES = [
   "then say it in ONE short message. Otherwise end with NOTHING_TO_REPORT. Never comment on what they do or for how long.",
 ].join(" ");
 
+/** 2026-11-09: a wake on Pulsatrix Flow watches. Each watch's consigne
+ * comes from the organization's Flow plugin; the observed data is fenced. */
+export const WATCH_WAKE_RULES = [
+  "Pulsatrix watches: a watch of the organization's Pulsatrix Flow saw its condition turn true on data you read as the person (below, fenced).",
+  "Follow each watch's consigne. A read step runs now. A write, send or contact step: plan it in one short line (the dry run), then call it; the ordinary approval path asks the person in this conversation when their level and rules say so.",
+  "ALWAYS tell the person in one short report what the watch saw and what you did or propose; a watch wake never ends with NOTHING_TO_REPORT.",
+].join(" ");
+
+const WATCH_PROMPT_MAX = 1_500;
+
+/** The consignes of the watches of a batch, outside the data fence. */
+export function watchConsignes(events: readonly ProactiveEvent[]): string[] {
+  return events.flatMap((event) => {
+    const watch = event.watch;
+    if (event.source !== "watch" || !watch) return [];
+    const prompt = watch.prompt.length > WATCH_PROMPT_MAX ? `${watch.prompt.slice(0, WATCH_PROMPT_MAX)} [cut]` : watch.prompt;
+    const step = watch.disposition === "auto" ? "read: run it now" : "write: dry run first, then the ordinary approval path";
+    return [`- Watch ${defang(watch.id)}${watch.skill ? ` (skill ${defang(watch.skill)})` : ""}: ${defang(watch.summary)}. Proposes ${defang(watch.propose)} (${step}). Consigne: ${defang(prompt)}`];
+  });
+}
+
 /** What a wake run is told to do before the fenced events. `screen` is
  * the fenced screen context (#2699), when the person turned it on. */
 export function proactiveWakePrompt(batch: Pick<ProactiveWakeBatch, "mode" | "events" | "more">, opts: { accepted?: boolean; screen?: string } = {}): string {
@@ -642,6 +685,7 @@ export function proactiveWakePrompt(batch: Pick<ProactiveWakeBatch, "mode" | "ev
     ...(batch.events.some((event) => event.source === "suggestion") ? ["", SUGGESTION_WAKE_RULES] : []),
     ...(batch.events.some((event) => event.source === "bot" && event.dm === true) ? ["", DM_WAKE_RULES] : []),
     ...(batch.events.some((event) => event.source === "screen") ? ["", SCREEN_WAKE_RULES] : []),
+    ...(batch.events.some((event) => event.source === "watch") ? ["", WATCH_WAKE_RULES, ...watchConsignes(batch.events)] : []),
     "",
     proactiveEventsBlock(batch.events, batch.more),
     ...(opts.screen ? ["", opts.screen] : []),
@@ -655,7 +699,7 @@ export function proactivePrompt(mode: ProactiveMode): string {
     case "off":
       return "";
     case "proactive":
-      return "\nProactive mode: on. Emails, calendar entries, failed runs, bots' posts, teammates' messages and webhooks that concern you wake you in the background. You act at your usual approval level and rules, as for any request. Before a write from a wake, plan it (a dry run is recorded on the wake); then the ordinary approval path runs it. A wake reports in this conversation only when it has something for the person.";
+      return "\nProactive mode: on. Emails, calendar entries, failed runs, bots' posts, teammates' messages, webhooks and the Pulsatrix Flow watches of the profiles you hold wake you in the background. You act at your usual approval level and rules, as for any request. Before a write from a wake, plan it (a dry run is recorded on the wake); then the ordinary approval path runs it. A wake reports in this conversation only when it has something for the person.";
   }
 }
 

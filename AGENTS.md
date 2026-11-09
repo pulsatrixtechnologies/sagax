@@ -1289,6 +1289,18 @@ iOS sets the mode in Permissions (`ProactiveMode`: `off` | `proactive`).
 Tests: `server/proactive/proactive-wake.test.ts`, `server/proactive/proactive-wake.e2e.test.ts`,
 `shared/proactive-mode.test.ts`, `ProactiveModeTests.swift`.
 
+## Pulsatrix watches (2026-11-09, #3135)
+
+A bot holding a Pulsatrix profile is proactive by default and watches the
+Flow `px-proactive` watches of its products (`server/proactive/flow-watches.ts`,
+`server/proactive/watch-tokens.ts`, `docs/proactive.md`). Loop every minute
+on Perspicax servers: products from `api_list`, watches from the org Flow
+plugin (`px_flow.py proactive --product`), cadence in local time, tokens
+resolved (unset fact = skipped), observe as a read with the owner's routine
+credentials (`PerspicaxMcp.withRoutineSession`), JMESPath `when`, dedup per
+watch + result key, `ProactiveEngine.consider`, then a wake with source
+`watch` in the bot's one conversation. Writes go through ordinary approval.
+
 ## A reply shows as it is written (2026-10-29)
 
 Settings > Appearance > Conversation > "Show replies as they are written"

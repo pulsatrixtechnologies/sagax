@@ -448,6 +448,15 @@ export type PerspicaxToolAnswer =
   | { ok: true; isError: boolean; value: unknown }
   | { ok: false; code: "profile_not_mounted" | "access_ended" | "unreachable" | "rpc_error"; error: string };
 
+/** One short-lived routine connection (withRoutineSession). */
+export interface PerspicaxRoutineSession {
+  /** Every tool the connection serves. */
+  tools: ReadonlySet<string>;
+  /** The served tools Perspicax marks read-only (readOnlyHint, or known reads). */
+  readOnly: ReadonlySet<string>;
+  call(name: string, args: Record<string, unknown>): Promise<PerspicaxToolAnswer>;
+}
+
 const key = (threadId: string, generation: string) => `${threadId}\u0000${generation}\u0000perspicax`;
 const initKey = (threadId: string) => threadId;
 /** Bounds the kept initialize params (one per thread). */
@@ -1007,6 +1016,67 @@ export class PerspicaxMcp {
       const body = await rpc("tools/call", { name: describe, arguments: { command: "describe", args: { name: recipe } } });
       if (isObject(body.error) || (isObject(body.result) && body.result.isError === true)) return { held, flowError: `Flow could not describe ${recipe}.` };
       return { held, card: identityValue(body) };
+    } finally {
+      if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${exchanged.token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(reportBackgroundError);
+      void link.revokeExchanged(exchanged.token).catch(reportBackgroundError);
+    }
+  }
+
+  /** 2026-11-09 (Flow watches, server/proactive/flow-watches.ts): one
+   * private short-lived account connection backed by the bot owner's routine
+   * delegation (the credentials a routine of the bot runs with), for the
+   * proactive observe loop. `fn` gets the served tools, the tools Perspicax
+   * marks read-only, and a call; the connection is closed and its token
+   * revoked afterwards. Returns null when the person has no Perspicax access
+   * (no link, no subject, no delegation). No token is logged or returned. */
+  async withRoutineSession<T>(principalId: string, botId: string, signal: AbortSignal, fn: (session: PerspicaxRoutineSession) => Promise<T>): Promise<T | null> {
+    const principal = principalId.trim();
+    const link = this.options.link();
+    const subject = principal ? this.options.subjectOf(principal) : null;
+    if (!link || !subject || subject.disabled || subject.iss !== this.options.issuer) return null;
+    signal.throwIfAborted();
+    const source = await this.subjectFor("delegation", principal, subject);
+    if (!source.ok) return null;
+    const exchanged = await link.exchangeToken(source.token);
+    if (!exchanged.ok) return null;
+    let session: string | null = null;
+    const rpc = async (method: string, params: Json): Promise<Json> => {
+      signal.throwIfAborted();
+      const id = `sagax-watch-${++this.nativeCalls}`;
+      const response = await this.fetcher(link.mcpEndpoint(), { method: "POST", redirect: "error", signal,
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${exchanged.token}`, ...(session ? { "mcp-session-id": session } : {}) },
+        body: JSON.stringify({ jsonrpc: "2.0", ...(method === "notifications/initialized" ? {} : { id }), method, params }) });
+      session = response.headers.get("mcp-session-id") ?? session;
+      const text = await response.text();
+      if (!response.ok) throw new Error(`Perspicax watch HTTP ${response.status}`);
+      if (method === "notifications/initialized") return {};
+      const body = parseMcpBody(text, id);
+      if (!isObject(body)) throw new Error("Perspicax watch returned an invalid MCP response.");
+      return body;
+    };
+    try {
+      await rpc("initialize", { protocolVersion: PERSPICAX_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: `Sagax proactive watch (${botId}; ${randomUUID()})`, version: this.options.version } });
+      await rpc("notifications/initialized", {});
+      const listed = await rpc("tools/list", {});
+      const tools = new Set(isObject(listed.result) && Array.isArray(listed.result.tools) ? listed.result.tools.filter(isObject).map((tool) => String(tool.name)) : []);
+      const readOnly = new Set([...perspicaxReadOnlyToolsOf(listed), ...[...tools].filter((name) => PERSPICAX_READ_ONLY_TOOLS.has(name))]);
+      const call = async (name: string, args: Json): Promise<PerspicaxToolAnswer> => {
+        try {
+          const body = await rpc("tools/call", { name: servedSpelling(name, tools), arguments: args });
+          if (isObject(body.error)) return { ok: false, code: "rpc_error", error: typeof body.error.message === "string" ? body.error.message : "Perspicax refused the call" };
+          const result = isObject(body.result) ? body.result : {};
+          let value: unknown = result.structuredContent;
+          if (value === undefined && Array.isArray(result.content)) {
+            const block = result.content.find((item): item is Json => isObject(item) && item.type === "text");
+            try { value = typeof block?.text === "string" ? (JSON.parse(block.text) as unknown) : null; } catch { value = block?.text ?? null; }
+          }
+          return { ok: true, isError: result.isError === true, value: value ?? null };
+        } catch (error) {
+          if (signal.aborted) throw error;
+          return { ok: false, code: "unreachable", error: error instanceof Error ? error.message.slice(0, 160) : "Perspicax is unavailable" };
+        }
+      };
+      return await fn({ tools, readOnly, call });
     } finally {
       if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${exchanged.token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(reportBackgroundError);
       void link.revokeExchanged(exchanged.token).catch(reportBackgroundError);

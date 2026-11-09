@@ -18,6 +18,8 @@ const ROOMS: PersonLibraryRoom[] = [
   { id: "mine", name: "Me alone", threadId: "t-mine", humanIds: ["pr_me"] },
   { id: "hidden", name: "Left room", threadId: "t-hidden", humanIds: ["pr_me", "pr_ada"] },
   { id: "old", name: "Archived", threadId: "t-old", humanIds: ["pr_me", "pr_ada"], archivedAt: 1 },
+  { id: "ada-bot", name: "Ada and her bot", threadId: "t-ada-bot", humanIds: ["pr_ada"], dm: true },
+  { id: "ada-dm-bob", name: "Ada, Bob", threadId: "t-ada-dm-bob", humanIds: ["pr_ada", "pr_bob"], peopleDm: true },
 ];
 
 const file = (threadId: string, at: number, name: string): ThreadFile => ({
@@ -32,6 +34,8 @@ const FILES: Record<string, ThreadFile[]> = {
   "t-mine": [file("t-mine", 9, "mine.pdf")],
   "t-hidden": [file("t-hidden", 9, "hidden.pdf")],
   "t-old": [file("t-old", 9, "old.pdf")],
+  "t-ada-bot": [file("t-ada-bot", 9, "ada-private.pdf")],
+  "t-ada-dm-bob": [file("t-ada-dm-bob", 9, "ada-bob.pdf")],
 };
 
 const member = (who: string): RequestAuth => ({
@@ -78,6 +82,18 @@ describe("person library route", () => {
     for (const name of ["secret.pdf", "mine.pdf", "hidden.pdf", "old.pdf"]) expect(names).not.toContain(name);
     const bob = await (await fetch(`${base}/api/people/pr_bob/library`)).json() as { files: unknown[] };
     expect(bob.files).toEqual([]);
+  });
+
+  it("#3096: someone with no room in common with that person gets an empty list, never their private files", async () => {
+    const base = await serve(member("pr_eve"));
+    for (const person of ["pr_ada", "pr_bob", "PR_ADA"]) {
+      const body = await (await fetch(`${base}/api/people/${person}/library`)).json() as { files: unknown[] };
+      expect(body.files).toEqual([]);
+    }
+    // Ada's own bot direct and her direct conversation with Bob stay hers, even for a viewer who shares a room with her
+    const mine = await (await fetch(`${await serve(member("pr_me"))}/api/people/pr_ada/library`)).json() as { files: Array<{ name: string }> };
+    expect(mine.files.map((entry) => entry.name)).not.toContain("ada-private.pdf");
+    expect(mine.files.map((entry) => entry.name)).not.toContain("ada-bob.pdf");
   });
 
   it("answers an empty list to a caller without a person, and for yourself", async () => {

@@ -40,6 +40,21 @@ describe("ResultStore", () => {
     expect(store.get("r1")).toBeUndefined();
   });
 
+  it("names the tool that reads a handle another result family minted (#3127)", () => {
+    const store = new ResultStore({ server: "files", tag: "ab12" });
+    const upstream = store.missing("res_58e88a3adbc84612");
+    expect(upstream).toContain("api_result_query");
+    expect(upstream).toContain('"handle": "res_58e88a3adbc84612"');
+    const saved = store.missing("r-0b6f1c2e-1111-4222-8333-444455556666");
+    expect(saved).toContain("tool_result_read");
+    expect(saved).not.toContain("api_result_query");
+  });
+
+  it("describes which handles query_result takes and which it does not (#3127)", () => {
+    expect(QUERY_TOOL.description).toContain("api_result_query");
+    expect(QUERY_TOOL.description).toContain("tool_result_read");
+  });
+
   it("drops the oldest result once the held bytes pass its capacity", () => {
     const store = new ResultStore({ maxBytes: 2_000 });
     const first = store.put("a", { blurb: "x".repeat(900) });

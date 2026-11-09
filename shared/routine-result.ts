@@ -128,6 +128,28 @@ export function meaningfulLine(text: string | undefined): string {
   return "";
 }
 
+/** The most of one failure's text a run's problem line carries: two such
+ * lines and their tool names fit the 1,000 characters a run's problems keep. */
+export const FAILURE_DETAIL_MAX = 300;
+
+/** `text` within `max` characters (#3127): whole when it fits, else cut at
+ * the last line, sentence or word that fits and marked with "…", never in
+ * the middle of a word (a hint the person and the bot act on). */
+export function clipReadable(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const head = text.slice(0, max - 1);
+  const line = head.lastIndexOf("\n");
+  const sentence = Math.max(head.lastIndexOf(". "), head.lastIndexOf(": "));
+  const word = head.search(/\s\S*$/);
+  const end = line > max / 2 ? line : sentence > max / 2 ? sentence + 1 : word > max / 2 ? word : head.length;
+  return `${head.slice(0, end).trimEnd()}…`;
+}
+
+/** A failure's meaningful line for a problem line, clipped readably. */
+export function failureDetail(text: string | undefined, max = FAILURE_DETAIL_MAX): string {
+  return clipReadable(meaningfulLine(text), max);
+}
+
 function excerptOf(value: Record<string, unknown> | unknown[]): string {
   if (Array.isArray(value)) return list(value).slice(0, 3).join(" · ");
   return Object.entries(value).filter(([, inner]) => inner !== null && typeof inner !== "object")

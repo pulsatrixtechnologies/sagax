@@ -31,7 +31,9 @@ export const QUERY_TOOL = {
     + "the fields and rows you need, e.g. items[?price < `200`].{name: name, price: price} | [0:30], length(items), "
     + "sort_by(items, &price)[0:5].name, or items[?contains(name, `pizza`)].id. Big answers are cut too, so narrow "
     + "the query rather than asking for everything. A query that selects one long string (a document's text) comes back "
-    + "as a window; pass from (the offset the window names) to read the next part. Read-only: it never calls the original tool again.",
+    + "as a window; pass from (the offset the window names) to read the next part. Read-only: it never calls the original tool again. "
+    + "Only for handles shaped by Sagax (\"<server>:r<n>.<tag>\"). A handle the server returned itself (res_ and 16 hex) belongs to that server's "
+    + "api_result_query; a saved result id (r- and a UUID) belongs to tool_result_read on agents.",
   inputSchema: {
     type: "object",
     properties: {
@@ -102,6 +104,25 @@ interface Held { tool: string; value: unknown; bytes: number }
  * restarted gate's old handle from a live one. */
 const NAMED_HANDLE = /^([A-Za-z0-9_.-]{1,64}):r(\d+)\.([a-z0-9]{1,16})$/;
 
+/** #3127: a handle the upstream server minted itself (Perspicax:
+ * `res_<16 hex>`, read with its own api_result_query). The gate forwards a
+ * query_result call carrying one to that tool instead of refusing it. */
+const UPSTREAM_HANDLE = /^res_[0-9a-f]{16}$/;
+/** The upstream's own query tool for its `res_` handles, and its arguments. */
+export const UPSTREAM_QUERY_TOOL_NAME = "api_result_query";
+/** The agents server's saved result id (tool_result_read, agents-result.ts). */
+const SAVED_RESULT_ID = /^r-[0-9a-f-]{36}$/;
+
+/** Whether `handle` was minted by the upstream server, not by a gate. */
+export function isUpstreamHandle(handle: unknown): handle is string {
+  return typeof handle === "string" && UPSTREAM_HANDLE.test(handle);
+}
+
+/** Whether `handle` is a gate's handle (`<server>:r<n>.<tag>`). */
+export function isNamedHandle(handle: unknown): handle is string {
+  return typeof handle === "string" && NAMED_HANDLE.test(handle);
+}
+
 export class ResultStore {
   readonly #entries = new Map<string, Held>();
   readonly #maxBytes: number;
@@ -129,6 +150,12 @@ export class ResultStore {
     const named = NAMED_HANDLE.exec(handle);
     if (this.#server && named && named[1] !== this.#server) {
       return `Result "${handle}" is held by the "${named[1]}" server, not this one ("${this.#server}"): call the ${QUERY_TOOL_NAME} tool of the "${named[1]}" server with it.`;
+    }
+    if (SAVED_RESULT_ID.test(handle)) {
+      return `"${handle}" is a saved result id, not a shaped result: read it with the tool_result_read tool of the agents server, with that id and the offset its notice named.`;
+    }
+    if (UPSTREAM_HANDLE.test(handle)) {
+      return `"${handle}" is a handle the server returned itself: read it with that server's ${UPSTREAM_QUERY_TOOL_NAME} tool, {"handle": "${handle}", "expression": "<JMESPath>"}.`;
     }
     if (this.#server && !named) {
       return `"${handle}" is not a handle of this server ("${this.#server}"): its handles look like "${this.#server}:r1.${this.#tag}". Pass the whole handle the shaped result named, to the ${QUERY_TOOL_NAME} tool of the server that returned it.`;

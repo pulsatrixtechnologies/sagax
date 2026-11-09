@@ -23,7 +23,7 @@ import {
 
 export const DEF_TOOL_RESULT_READ = {
     name: "tool_result_read",
-    description: "Read a missing portion of an oversized agents-tool result using the saved id and next offset from its notice. Returns at most 16,000 characters, only from this bot in this conversation. Use only when the preview is insufficient; do not load every page by default. Results expire after one hour, on app restart, or under cache pressure. This never reruns the original action.",
+    description: "Read a missing portion of an oversized agents-tool result using the saved id (r- and a UUID) and next offset from its notice. Returns at most 16,000 characters, only from this bot in this conversation. Use only when the preview is insufficient; do not load every page by default. Results expire after one hour, on app restart, or under cache pressure. This never reruns the original action. A connector's handle (\"server:r1.tag\" or res_…) is read by that connector's query tool, not here.",
     inputSchema: {
       type: "object", additionalProperties: false,
       properties: {
@@ -399,6 +399,17 @@ export const DEF_ACT = {
 
 export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set(['tool_result_read', 'list_room_targets', 'coordinate_bots', 'assignment_status', 'send_to_bot', 'list_bots', 'ask_bot', 'delegate_bot', 'check_delegation', 'wait_delegation', 'select_computer', 'attach_file', 'react_to_message', 'send_meme', 'request_credential', 'memory_update', 'memory_log', 'session_search', 'route_message', 'answer_approval', 'act', 'set_reply_notify'] as const);
 
+/** #3127: why tool_result_read refused an id, naming the tool that reads
+ * it when it is a connector's handle rather than a saved result id. */
+export function savedResultMisuse(id: unknown): string {
+  if (typeof id === "string") {
+    const shaped = /^([A-Za-z0-9_.-]{1,64}):r\d+\.[a-z0-9]{1,16}$/.exec(id);
+    if (shaped) return `"${id}" is a result handle of the "${shaped[1]}" server, not a saved result id: read it with that server's query_result tool, {"result": "${id}", "query": "<JMESPath>"}.`;
+    if (/^res_[0-9a-f]{16}$/.test(id)) return `"${id}" is a handle the connector returned itself, not a saved result id: read it with that connector's api_result_query tool, {"handle": "${id}", "expression": "<JMESPath>"}.`;
+  }
+  return "Use the saved result id (r- and a UUID) and a non-negative integer offset from its notice.";
+}
+
 /** Handle a tool of this family, or return null when the name is not ours. */
 export async function callCoreTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
   const { externalRuntime: EXTERNAL_RUNTIME } = context;
@@ -440,7 +451,7 @@ export async function callCoreTool(name: string, args: Json, context: ToolCallCo
   if (name === "tool_result_read") {
     if (typeof args.id !== "string" || !/^r-[0-9a-f-]{36}$/.test(args.id) ||
       (args.offset !== undefined && (!Number.isSafeInteger(args.offset) || Number(args.offset) < 0))) {
-      return { text: "Use the saved result id and a non-negative integer offset from its notice.", isError: true };
+      return { text: savedResultMisuse(args.id), isError: true };
     }
     const r = await api(`/api/internal/tool-result?id=${encodeURIComponent(args.id)}&offset=${args.offset ?? 0}`, { signal: AbortSignal.timeout(3_000) });
     const text = String(r.text ?? "");

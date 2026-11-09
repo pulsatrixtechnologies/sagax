@@ -21,7 +21,7 @@ import { OwnedFile } from "../atomic.ts";
 import { saveSoon } from "../save-batch.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { flowRunBlockedReason, routineReportOutcome, type RoutineReportOutcome } from "./routine-report.ts";
-import { meaningfulLine } from "../../shared/routine-result.ts";
+import { clipReadable, failureDetail } from "../../shared/routine-result.ts";
 import { stopCause } from "../drivers/engine-errors.ts";
 import {
   evaluateRoutinePrecheck,
@@ -3908,7 +3908,7 @@ export class RoutineManager {
         const seen = trouble.unresolved.get(key);
         const misrouted = nativeToolMisroute(output);
         // The first line with words: a JSON result's first line is a lone "{" (2026-11-03).
-        trouble.unresolved.set(key, { title: seen?.title ?? title, count: (seen?.count ?? 0) + 1, output: meaningfulLine(output).slice(0, 160), ...(misrouted ? { misrouted } : {}) });
+        trouble.unresolved.set(key, { title: seen?.title ?? title, count: (seen?.count ?? 0) + 1, output: failureDetail(output), ...(misrouted ? { misrouted } : {}) });
       }
       return null;
     } else if (event.type === "turn.started") {
@@ -4308,7 +4308,7 @@ export class RoutineManager {
       // Plain text before the cut: a teammate's quoted last message never
       // reaches the person as JSON escapes and markdown (shared/routine-problems.ts).
       const readable = readableRoutineProblems(redactSecretsInText(problems.join("\n")));
-      run.problems = readable.length > 1_000 ? `${readable.slice(0, 999).trimEnd()}…` : readable;
+      run.problems = clipReadable(readable, 1_000);
       delete run.quiet;
     } else delete run.problems;
     const engine = this.readinessEngines.get(run.id) ?? this.options.engineForRun?.(run);

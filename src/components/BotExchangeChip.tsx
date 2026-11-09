@@ -215,7 +215,7 @@ export function ExchangeSheet({
       {windowed ? (
         /* The same floating bar as the bot chat (ChatHeaderBar): the X at the
            left, the 40px pill centered, the transcript scrolling under both
-           with the chat's top fade (JC 2026-11-06, hotfix 0.8.57). */
+           with the chat's top fade (2026-11-06, hotfix 0.8.57). */
         <ChatHeaderBar
           data-exchange-header=""
           className="pl-14 sm:pl-14"

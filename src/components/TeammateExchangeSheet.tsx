@@ -1,5 +1,5 @@
 // A teammate's work, opened from its row in the Teammates card
-// (DelegationList), as the bot-to-bot sheet it is (#3245, JC 2026-11-09):
+// (DelegationList), as the bot-to-bot sheet it is (#3245, 2026-11-09):
 // the "Owner ⇄ Teammate" pill on an opaque header, the lines as the
 // bubbles of a 1:1 chat, one "Close Chat" pill at the bottom. Never a
 // second chat with its own X and "Message <bot>" composer: the person

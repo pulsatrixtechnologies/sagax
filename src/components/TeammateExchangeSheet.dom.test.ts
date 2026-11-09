@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // A teammate's work from the Teammates card is the bot-to-bot sheet (#3245,
-// JC 2026-11-09): "Owner ⇄ Teammate" on an opaque header, the asks credited
+// 2026-11-09): "Owner ⇄ Teammate" on an opaque header, the asks credited
 // to the owner and the answers to the teammate, one Close Chat pill, no X,
 // no "Message <bot>" composer.
 import { act, createElement } from "react";

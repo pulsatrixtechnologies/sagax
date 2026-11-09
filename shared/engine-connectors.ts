@@ -213,20 +213,82 @@ export function connectorCallReads(name: string): boolean {
 
 // ── what a request needs ───────────────────────────────────────────────
 
-const NEEDS: Array<{ capability: ConnectorCapability; pattern: RegExp; hints?: Array<[RegExp, string]> }> = [
-  { capability: "sharepoint", pattern: /\b(sharepoint|onedrive)\b/i, hints: [[/sharepoint/i, "SharePoint"], [/onedrive/i, "OneDrive"]] },
-  { capability: "teams", pattern: /\bteams\b/i, hints: [[/teams/i, "Teams"]] },
-  { capability: "calendar", pattern: /\b(calendrier|calendar|agenda|r[ée]union|meeting|rendez-vous|invitation|invite[rz]?)\b/i, hints: [[/google calendar/i, "Google Calendar"]] },
-  { capability: "mail", pattern: /\b(courriels?|e-?mails?|mails?|gmail|outlook|bo[iî]te de r[ée]ception|inbox)\b/i, hints: [[/gmail/i, "Gmail"], [/outlook/i, "Outlook"]] },
+// #3149: a word alone is not a need. "aucun courriel", "no email", or an
+// agenda mentioned in passing moved bots to another engine. A mail or calendar
+// word counts only when it is not negated just before it and an action or a
+// possessive ("envoie", "check", "mes", "my") stands just before it in the
+// same clause; Teams and SharePoint only need not to be negated.
+type NeedRule = { capability: ConnectorCapability; nouns: ReadonlySet<string>; selfCued?: ReadonlySet<string>; cues?: ReadonlySet<string>; hints?: Array<[RegExp, string]> };
+
+const wordSet = (words: string) => new Set(words.split(/\s+/).filter(Boolean));
+
+const OWN = "my our mes mon ma nos notre";
+const NEEDS: NeedRule[] = [
+  { capability: "sharepoint", nouns: wordSet("sharepoint onedrive"), hints: [[/sharepoint/i, "SharePoint"], [/onedrive/i, "OneDrive"]] },
+  { capability: "teams", nouns: wordSet("teams"), hints: [[/teams/i, "Teams"]] },
+  {
+    capability: "calendar",
+    nouns: wordSet("calendrier calendriers calendar calendars agenda réunion réunions reunion reunions meeting meetings rendezvous invitation invitations"),
+    selfCued: wordSet("invite inviter invitez"),
+    cues: wordSet(`${OWN} book schedule reschedule cancel move add create set accept decline invite plan check show list open free available next upcoming
+      réserve réserver reserve planifie planifier cédule céduler cedule ceduler annule annuler déplace déplacer deplace ajoute ajouter crée créer cree creer
+      accepte accepter refuse refuser décline décliner decline invite inviter vérifie vérifier verifie consulte consulter montre liste ouvre libre disponible
+      disponibilités prochaine prochain prochaines prochains`),
+    hints: [[/google calendar/i, "Google Calendar"]],
+  },
+  {
+    capability: "mail",
+    nouns: wordSet("courriel courriels email emails mail mails gmail outlook inbox"),
+    cues: wordSet(`${OWN} send reply respond answer forward read check search find look summarize summarise archive delete draft write compose open triage sort clean list show new unread latest last
+      envoie envoies envoyer envoyez écris écrire écrivez ecris ecrire rédige rédiger redige réponds répondre répondez reponds repondre transfère transférer transfere
+      lis lire lisez vérifie vérifier verifie consulte consulter cherche chercher trouve trouver résume résumer resume archive archiver supprime supprimer
+      trie trier classe ouvre montre liste nouveaux nouveau nouvelles derniers dernier`),
+    hints: [[/gmail/i, "Gmail"], [/outlook/i, "Outlook"]],
+  },
 ];
+
+const NEGATIONS = wordSet("aucun aucune aucuns aucunes pas sans ni jamais non ne n no not without never nor none zero");
+const CLAUSE_BREAKS = wordSet("and et or ou then puis if si but mais");
+const NEGATION_REACH = 3;
+const CUE_REACH = 5;
+
+/** A text's clauses as lowercase words: sentence marks and commas split
+ * clauses, an elision or a hyphen splits its word ("l'agenda", "résume-les"),
+ * "don't" reads "do not". */
+function clauses(text: string): string[][] {
+  const plain = text.slice(0, 4_000).toLowerCase()
+    .replace(/n['\u2019]t\b/g, " not")
+    .replace(/bo[iî]tes? de r[ée]ception/g, "inbox")
+    .replace(/rendez-vous/g, "rendezvous")
+    .replace(/\be-mail/g, "email");
+  return plain.split(/[.!?;:,\n()[\]"\u00ab\u00bb\u201c\u201d]+/).map((clause) => clause.split(/[^\p{L}\p{N}]+/u).filter(Boolean));
+}
+
+function clauseNeeds(words: string[], rule: NeedRule): boolean {
+  for (let index = 0; index < words.length; index++) {
+    const word = words[index]!;
+    const self = rule.selfCued?.has(word) ?? false;
+    if (!self && !rule.nouns.has(word)) continue;
+    let start = index;
+    while (start > 0 && !CLAUSE_BREAKS.has(words[start - 1]!)) start--;
+    const before = words.slice(start, index);
+    if (before.slice(-NEGATION_REACH).some((entry) => NEGATIONS.has(entry))) continue;
+    if (self || !rule.cues) return true;
+    // "Email Ana the notes": the word itself opens the clause, as a verb
+    if (index === start && rule.capability === "mail" && words.length > index + 1 && word !== "gmail" && word !== "outlook" && word !== "inbox") return true;
+    if (before.slice(-CUE_REACH).some((entry) => rule.cues!.has(entry))) return true;
+  }
+  return false;
+}
 
 /** The connector a person's request needs (mail, calendar, Teams,
  * SharePoint), and the service it names when it names one. Words only:
  * the switch it drives (server/connector-switch.ts) never runs a tool. */
 export function connectorNeed(text: string): { capability: ConnectorCapability; hint?: string } | null {
-  const plain = text.slice(0, 4_000);
+  const parts = clauses(text);
   for (const need of NEEDS) {
-    if (!need.pattern.test(plain)) continue;
+    if (!parts.some((words) => clauseNeeds(words, need))) continue;
+    const plain = text.slice(0, 4_000);
     const hint = need.hints?.find(([pattern]) => pattern.test(plain))?.[1];
     return { capability: need.capability, ...(hint ? { hint } : {}) };
   }

@@ -91,5 +91,9 @@ describe("switching a request to the engine that has its connector (Owner 2026-1
 
   it("one line, in plain words", () => {
     expect(connectorSwitchText({ engine: "Claude", connector: "Gmail" })).toBe("Switched to Claude for Gmail.");
+    // #3149: the line follows the conversation's language
+    expect(connectorSwitchText({ engine: "Claude", connector: "Gmail" }, "fr")).toBe("Passé à Claude pour Gmail.");
+    expect(connectorSwitchText({ engine: "Claude", connector: "Gmail" }, "fr-CA")).toBe("Passé à Claude pour Gmail.");
+    expect(connectorSwitchText({ engine: "Claude", connector: "Gmail" }, "en")).toBe("Switched to Claude for Gmail.");
   });
 });

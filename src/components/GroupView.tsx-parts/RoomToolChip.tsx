@@ -15,6 +15,7 @@ import { FailedTurnRow, PreSendRefusalLine } from "../ChatView.tsx-parts/ErrorRo
 import { InputRequestCard } from "../InputRequestCard";
 import { StepRow } from "../StepRow";
 import { ThreadChip } from "../ThreadChip";
+import { SendReceiptRow } from "../SendReceiptRow";
 import { ToolActivity, botNames } from "../ToolActivity";
 import { stepLabel } from "@/lib/step-label";
 import { botEngine, failedTurnCause, isEngineLimitFailure, isPreSendRefusal } from "@/lib/failed-turn";
@@ -29,6 +30,7 @@ export function RoomToolChip({ message, roomId, live = false }: { message: Messa
   const tool = message.tool;
   if (!tool) return null;
   if (message.inputRequest) return <InputRequestCard message={message} />;
+  if (message.sendReceipt) return <SendReceiptRow message={message} />;
   if (message.threadRef) return <ThreadChip message={message} />;
   if (failedTurnCause(tool.name) !== null) {
     // #2013: refused before any prompt went out: a quiet line, not a red card

@@ -63,6 +63,7 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("delegation:wait", "read", "wait_delegation"),
   // the runtime's read of a hand-off (docs/runtime-contract.md §9)
   p("assignment:status", "read", "assignment_status"),
+  p("sends:status", "read", "send_status"),
   p("sessions:search", "read", "session_search"),
   p("sessions:read", "read", "session_read"),
   p("topics:recall", "read", "recall_topic"),

@@ -14566,6 +14566,13 @@
   "pages.refreshShared": "Ask the bot to refresh",
   "pages.refreshPrompt": "Please refresh the Page \"{title}\" with up-to-date information.",
   "pages.refreshAsked": "Refresh requested from the bot.",
+  "sendReceipt.open": "Open the exchange with {name}",
+  "sendReceipt.sentTo": "Sent to {name}",
+  "sendReceipt.state.done": "done",
+  "sendReceipt.state.failed": "failed",
+  "sendReceipt.state.queued": "queued",
+  "sendReceipt.state.read": "read",
+  "sendReceipt.state.waiting": "waiting on you",
   "systemBot.feedback.title": "Bugs, ideas, questions",
   "systemBot.feedback.description": "Report a bug, suggest an idea or ask the Sagax team a question."
 }

@@ -2695,7 +2695,7 @@ describe("coordinate_bots arguments (room turn)", () => {
       expect(lastThreadBody).toMatchObject({
         toBotId: "bot-helper", title: "Ship it", message: "Ship the reviewed patch.", oneWay: true,
       });
-      expect(result.result.content[0].text).toContain("nothing there will resume you");
+      expect(result.result.content[0].text).toContain("will not resume you: read it later with send_status");
     } finally {
       threadResponse = previous;
     }

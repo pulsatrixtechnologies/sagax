@@ -18348,7 +18348,14 @@
       "preview.attachment.gif": "76c664ef152e065922fed4727315d065b8fb1aed61015cdaef7bcfea3c58d5ab",
       "preview.attachment.file": "50009ce1da4d15e1c4a04024df691eed5f0d598e2c4c67092f205366d0adf99e",
       "systemBot.feedback.title": "72a95f56cf067529ce1981bb3e0214922d44db0310a0399e7f2c9f5dbb82ccf2",
-      "systemBot.feedback.description": "6a9c9606320f69d0ef96187293406879a4836540db7f029ef881cf76601b587e"
+      "systemBot.feedback.description": "6a9c9606320f69d0ef96187293406879a4836540db7f029ef881cf76601b587e",
+      "sendReceipt.open": "feb316612bbe2377d85013d712ab1af3a6a2d30026473d53f01ea5811e0f9297",
+      "sendReceipt.sentTo": "9bbf3006995ead3f98cea1b86aa764bba883d5d518dc98853d5de835e29291bd",
+      "sendReceipt.state.done": "a4c3ed04a95a3da14a9d235c83d868bed7c0f45cf7f3faa751ee8f50598d2211",
+      "sendReceipt.state.failed": "5d28a90f4498a81461efbaf6f628a19d9778390bb5c81a393dd936181cc3d826",
+      "sendReceipt.state.queued": "d36be6494248ee06ac18f38ea1119dfe4699fdcfcbbcc30a2e4f1ccbce68dfac",
+      "sendReceipt.state.read": "3316348dbadfb7b11c7c2ea235949419e23f9fa898ad2c198f999617912a9925",
+      "sendReceipt.state.waiting": "40fd9e27fced4d3fe3774f01d021b80bf2dc5a6e6a36532f47c85215dc0962f6"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

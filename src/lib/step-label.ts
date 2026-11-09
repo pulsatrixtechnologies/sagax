@@ -96,7 +96,7 @@ const BARE: Record<string, Kind> = {
   ask_bot: "ask", send_bot_message: "ask",
   delegate_bot: "delegate",
   send_to_bot: "sendTo", send_prompt: "sendTo",
-  check_delegation: "checkDelegation", wait_delegation: "checkDelegation", await_turn: "checkDelegation",
+  check_delegation: "checkDelegation", wait_delegation: "checkDelegation", await_turn: "checkDelegation", send_status: "checkDelegation",
   list_bots: "whosAround", list_room_targets: "whosAround", list_agents: "whosAround", find_agents: "whosAround", list_team_setup: "whosAround",
   list_rooms: "rooms",
   post_to_room: "postRoom",

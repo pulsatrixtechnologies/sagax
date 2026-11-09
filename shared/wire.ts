@@ -73,6 +73,7 @@ import { EFFORT_LEVELS, isEffortLevel, type EffortLevel, type ModelSelection } f
 
 import type { CwPermission, ToolRole } from "./perspicax-roles.ts";
 import type { LiveCallState, LiveCallRecord } from "./wire-live.ts";
+import type { SendReceipt } from "./send-receipt.ts";
 export type { LiveClient, LiveCallStatus, LiveEndReason, LiveCallState, LiveCallRecord, LiveSettings } from "./wire-live.ts";
 
 /** A role fact as a banner row (visible roles, 2026-11-05). */
@@ -153,6 +154,9 @@ export interface TaskOpenedBy {
   /** The opener's own conversation this "work" thread was opened from.
    * Everything that conversation later sends this bot continues here. */
   threadId?: string;
+  /** send_to_bot reply "resume" (#3246): the recipient's settled turn
+   * wakes the sender in `threadId` with a short return line. */
+  reply?: "resume";
   at: number;
 }
 
@@ -1178,6 +1182,9 @@ export interface WireMessage extends WaitLineField {
   /** thread chips: "Opened thread #Title on @X". */
   /** `gone` is stamped at read time when the target thread no longer exists. */
   threadRef?: { botId: string; threadId: string; title: string; gone?: boolean };
+  /** A send_to_bot receipt in the sender's conversation (#3246): « Sent to
+   * <Bot> » with the state of the recipient's thread. */
+  sendReceipt?: SendReceipt;
   /** A teammate parked on a question for the person (server park/remind,
    * 2026-10-19): the whole question, answered from the card in place (the
    * answer is a person's message into `threadId`, the waiting work). */

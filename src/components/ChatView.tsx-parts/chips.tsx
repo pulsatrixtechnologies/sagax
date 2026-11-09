@@ -10,6 +10,7 @@ import { toolPlace, type EffectivePlace } from "@/lib/place";
 import { StepRow } from "../StepRow";
 import { stepLabel } from "@/lib/step-label";
 import { ThreadChip } from "../ThreadChip";
+import { SendReceiptRow } from "../SendReceiptRow";
 import { InputRequestCard } from "../InputRequestCard";
 import { RenameTitle } from "../RenameTitle";
 import { delegateModelLabel } from "../DelegationList";
@@ -67,6 +68,7 @@ export const ActivityChip = memo(function ActivityChip({ message, place = "auto"
   const tool = message.tool;
   if (!tool) return null;
   if (message.inputRequest) return <InputRequestCard message={message} />;
+  if (message.sendReceipt) return <SendReceiptRow message={message} />;
   if (message.threadRef) return <ThreadChip message={message} />;
   // bot⇄bot comm chip: a DM is read in this column (the exchange sheet), not
   // by selecting that channel. A Posted-in-room receipt still opens the room.

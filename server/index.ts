@@ -110,6 +110,7 @@ import { failedTurnCause, failedTurnTool } from "../shared/failed-turn.ts";
 import { STOPPED_TURN_NAME, assistantTranscript, errorTranscript } from "../shared/client-cancel.ts";
 import { SafePointPreempts } from "./safe-point-preempt.ts";
 import { atThreadCapacity, interruptKeepsTeammates } from "./team/teammate-replies.ts";
+import { createSendReceipts } from "./team/send-receipts.ts";
 
 import { canWorkOnCloud, type CloudEngine } from "../shared/cloud-computer.ts";
 import { approvalModeFor,
@@ -7868,6 +7869,37 @@ const routineWatchCallTool = createRoutineWatchCallTool(getLeafHost);
 const routineEngineForBot = createRoutineEngineForBot(getLeafHost);
 const noteWakeDryRun = createNoteWakeDryRun(getLeafHost);
 const offerPeerNotice = createOfferPeerNotice(getLeafHost);
+// #3246: a send_to_bot's receipt in the sender's chat, kept current, and
+// the return line that resumes a sender who asked reply "resume".
+const sendReceipts = createSendReceipts({
+  messagesFor: (threadId) => store.messagesFor(threadId),
+  patchMessage: (threadId, messageId, patch) => store.patchMessage(threadId, messageId, patch),
+  openerOf: (botId, threadId) => store.taskByThread(botId, threadId)?.openedBy,
+  botName: (botId) => store.bot(botId)?.name,
+  resume: ({ senderId, senderThreadId, replierId, replierThreadId, text }) => {
+    const sender = store.bot(senderId);
+    const replier = store.bot(replierId);
+    // a direct conversation of the sender's only: a room's sender reads the
+    // receipt on its chip there
+    if (!sender || !replier || !store.taskByThread(senderId, senderThreadId)) return;
+    const line = redactSecretsInText(text);
+    const peerAsk = { botId: replier.id, name: replier.name, unattended: true };
+    const speaker = peerSpeaker(replier.id, replierThreadId);
+    // the sender's own turn may still run: the line waits in its queue
+    const decision = admit("peer", {}, {
+      threadBusy: threadBusy(senderId, senderThreadId),
+      atCapacity: botAtThreadCapacity(senderId, senderThreadId),
+      groupTurn: Boolean(activeGroupTurnForBot(senderId)),
+    });
+    if (decision.action !== "start") {
+      queueSteeredMessage(senderId, senderThreadId, line, { ...(decision.action === "queue" && decision.reason ? { reason: decision.reason } : {}), unattended: true, peerAsk, speaker, origin: OUTSIDE });
+      return;
+    }
+    void startTurn(senderId, line, { threadId: senderThreadId, unattended: true, peerAsk, speaker, origin: OUTSIDE }).catch((error) => {
+      console.error(`send_to_bot resume failed on ${senderThreadId}: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  },
+});
 const surfacePeerNotice = createSurfacePeerNotice(getLeafHost);
 const replayPendingProactive = createReplayPendingProactive(getLeafHost);
 const offerProactive = createOfferProactive(getLeafHost);
@@ -13696,6 +13728,10 @@ const coordinator: Coordinator = createCoordinator({
         settleTrackedRequest(threadId);
         const bot = store.botByThread(threadId);
         if (bot) broadcast({ kind: "bot", bot: wireBot(bot) });
+        // #3246: a send's receipt follows its recipient thread
+        const sendId = bot ? store.taskByThread(bot.id, threadId)?.openedBy?.delegationId : undefined;
+        const sent = sendId ? coordinator.node(sendId) : undefined;
+        if (sent?.oneWay) sendReceipts.changed(sent);
       }
       // #1194: when a direct coordination's last node settles, no later
       // turn.completed arrives to release messages parked behind it — the
@@ -13710,6 +13746,8 @@ const coordinator: Coordinator = createCoordinator({
       if (child.oneWay) {
         // the receiver owns it: a proactive one is woken to tell its person
         if (child.result !== THREAD_DELETED) offerPeerNotice(child, parent);
+        // #3246: the sender's receipt settles, and a reply "resume" wakes it
+        if (child.result !== THREAD_DELETED) sendReceipts.settled(child, parent?.threadId);
         if (child.status === "completed") return;
         if (child.result !== THREAD_DELETED && store.taskByThread(child.botId, child.threadId)) {
           // Named by its runtime id: a restart's recovery finds it was told.

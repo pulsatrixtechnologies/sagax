@@ -84,14 +84,25 @@ export const DEF_ASSIGNMENT_STATUS = {
 
 export const DEF_SEND_TO_BOT = {
     name: "send_to_bot",
-    description: "Send work one way to another bot in a fresh thread. This is cross-bot only: use start_thread to send independent work to yourself. The recipient owns the new thread; its results, failures and questions stay there and never resume you. Use coordinate_bots when you need the result returned here. Optional priority now wakes an idle recipient immediately or moves the message to the front of its queue, and never interrupts a running turn. The answer includes {threadId, handle} for await_turn.",
+    description: "Send work one way to another bot in a fresh thread. This is cross-bot only: use start_thread to send independent work to yourself. When you need the answer back here to continue, use coordinate_bots instead: it returns the result and resumes you. The recipient owns the new thread; its results and questions stay there. Read what became of a send with send_status, or pass reply \"resume\" to be woken here when it finishes. Optional priority now wakes an idle recipient immediately or moves the message to the front of its queue, and never interrupts a running turn. The answer includes {threadId, handle} for await_turn.",
     inputSchema: { type: "object", additionalProperties: false, properties: {
       bot_id: { type: "string", description: "One reachable teammate id from list_bots or list_room_targets." },
       title: { type: "string", description: "A short one-line title, at most 80 characters." },
       message: { type: "string", description: "Complete instructions; the recipient does not inherit this conversation." },
       priority: { type: "string", enum: ["now", "normal"], description: "now wakes an idle recipient at once or moves this to the front of its queue. It never interrupts a running turn. Default normal. At most 10 now sends per sender per hour; past that it is delivered as normal." },
       notify: { ...BOT_NOTIFY_PARAM, description: "Default true. false: the teammate's reply there is shown and unread, but no desktop notification or phone push." },
+      reply: { type: "string", enum: ["none", "resume"], description: "Default none: read it with send_status. resume: wake this conversation with a short summary when the recipient finishes." },
     }, required: ["bot_id", "title", "message"] },
+  };
+
+/** What became of this bot's send_to_bot sends (#3246). */
+export const DEF_SEND_STATUS = {
+    name: "send_status",
+    description: "Read-only: what became of your send_to_bot sends (queued, read, waiting on the person, done, failed) with a short summary of the reply. No thread_id: this conversation's sends. Only sends you made for this same person.",
+    inputSchema: { type: "object", additionalProperties: false, properties: {
+      thread_id: { type: "string", description: "The threadId send_to_bot returned. Omit to list this conversation's recent sends." },
+      wait_ms: { type: "integer", minimum: 0, maximum: 240_000, description: "With thread_id: wait up to this long for the send to settle." },
+    } },
   };
 
 export const DEF_SET_REPLY_NOTIFY = {
@@ -397,7 +408,7 @@ export const DEF_ACT = {
     },
   };
 
-export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set(['tool_result_read', 'list_room_targets', 'coordinate_bots', 'assignment_status', 'send_to_bot', 'list_bots', 'ask_bot', 'delegate_bot', 'check_delegation', 'wait_delegation', 'select_computer', 'attach_file', 'react_to_message', 'send_meme', 'request_credential', 'memory_update', 'memory_log', 'session_search', 'route_message', 'answer_approval', 'act', 'set_reply_notify'] as const);
+export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set(['tool_result_read', 'list_room_targets', 'coordinate_bots', 'assignment_status', 'send_to_bot', 'send_status', 'list_bots', 'ask_bot', 'delegate_bot', 'check_delegation', 'wait_delegation', 'select_computer', 'attach_file', 'react_to_message', 'send_meme', 'request_credential', 'memory_update', 'memory_log', 'session_search', 'route_message', 'answer_approval', 'act', 'set_reply_notify'] as const);
 
 /** #3127: why tool_result_read refused an id, naming the tool that reads
  * it when it is a connector's handle rather than a saved result id. */
@@ -464,6 +475,20 @@ export async function callCoreTool(name: string, args: Json, context: ToolCallCo
     return { text: JSON.stringify(r), ...(r.error ? { isError: true } : {}) };
   }
   if (name === "assignment_status") return assignmentStatus(args, context);
+  if (name === "send_status") {
+    const threadId = typeof args.thread_id === "string" ? args.thread_id.trim() : "";
+    const wait = args.wait_ms;
+    if (wait !== undefined && (!Number.isInteger(wait) || Number(wait) < 0 || Number(wait) > 240_000)) {
+      return { text: "send_status wait_ms must be a whole number of milliseconds from 0 to 240000.", isError: true };
+    }
+    const query = new URLSearchParams();
+    if (threadId) query.set("thread_id", threadId);
+    if (threadId && wait !== undefined) query.set("wait_ms", String(wait));
+    const r = await api(`/api/internal/send-status${query.size ? `?${query.toString()}` : ""}`,
+      threadId && wait ? { signal: AbortSignal.timeout(Number(wait) + 15_000) } : {});
+    if (r.error) return { text: `Couldn't read that send: ${String(r.error)}`, isError: true };
+    return { text: sendStatusText(r) };
+  }
   if (name === "coordinate_bots") {
     // The tool's arguments are snake_case, but the harness wire they land on
     // is camelCase, and a caller can reach for that spelling. Map the aliases
@@ -532,10 +557,13 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
     }
     const asked = parseWakePriority(args.priority);
     if (asked === "invalid") return { text: "priority is now or normal.", isError: true };
+    if (args.reply !== undefined && args.reply !== "none" && args.reply !== "resume") return { text: "reply is none or resume.", isError: true };
+    const resume = args.reply === "resume";
     const r = await api("/api/internal/threads", { method: "POST", body: JSON.stringify({
       fromBotId: context.botId, fromThreadId: context.threadId, toBotId: botId,
       title, message, depth: context.depth, oneWay: true, notify: botNotifyArg(args.notify),
       ...(asked === "now" || asked === "normal" ? { priority: asked } : {}),
+      ...(resume ? { reply: "resume" } : {}),
     }) });
     if (r.error) return { text: `Couldn't send to that bot: ${String(r.error)}`, isError: true };
     const destination = `@${String(r.botName ?? "that bot")} in #${String(r.title ?? title)} [thread id: ${String(r.threadId ?? "")}]`;
@@ -550,7 +578,10 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
     const handle = typeof r.threadId === "string" && typeof r.handle === "string"
       ? `\n${JSON.stringify({ threadId: r.threadId, handle: r.handle })}`
       : "";
-    return { text: `${state}${note} Its result stays in that thread; nothing there will resume you.${handle}` };
+    const after = resume
+      ? " Its result stays in that thread; when the recipient finishes, a short return line resumes you here."
+      : " Its result stays in that thread and will not resume you: read it later with send_status.";
+    return { text: `${state}${note}${after}${handle}` };
   }
   if (name === "list_bots") {
     const r = await api(`/api/internal/agents?self=${encodeURIComponent(BOT_ID)}`);
@@ -901,6 +932,27 @@ async function requestCustomSecret(args: Json, context: ToolCallContext): Promis
   };
 }
 
+
+// ── send_status rendering ──────────────────────────────────────────────────
+
+function sendLine(send: Json): string {
+  const state = String(send.state ?? "queued");
+  const words: Record<string, string> = { queued: "queued, not read yet", read: "read, in progress", waiting: "waiting on the person", done: "done", failed: "failed" };
+  const head = `@${String(send.botName ?? send.botId ?? "teammate")} in #${String(send.title ?? "thread")} [thread id: ${String(send.threadId ?? "")}]: delivered, ${words[state] ?? state}`;
+  const question = send.question ? `\n  Its question: ${String(send.question)}` : "";
+  const summary = send.summary ? `\n  Reply: ${String(send.summary)}` : "";
+  const resume = send.reply === "resume" ? "\n  Resumes you when it finishes." : "";
+  return `${head}${question}${summary}${resume}`;
+}
+
+export function sendStatusText(r: Json): string {
+  if (Array.isArray(r.sends)) {
+    const sends = r.sends as Json[];
+    return sends.length ? `Your sends from this conversation:\n${sends.map(sendLine).join("\n")}` : "No send_to_bot from this conversation yet.";
+  }
+  const send = (r.send ?? {}) as Json;
+  return `${sendLine(send)}${r.note ? `\n${String(r.note)}` : ""}`;
+}
 
 // ── assignment_status rendering ────────────────────────────────────────────
 /** The runtime's status words as a person would say them (runtime/types.ts). */

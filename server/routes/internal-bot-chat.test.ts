@@ -369,3 +369,75 @@ describe("peer receipts never name a teammate made private during a wait", () =>
     expect(JSON.stringify(sent)).not.toContain(PRIVATE);
   });
 });
+
+// send_status (#3246): the sender reads what became of its sends, and only
+// the sends it made for the same person.
+describe("GET /send-status", () => {
+  const sentFrom = (threadId: string, extra: Record<string, unknown> = {}) => ({
+    botId: BOT.id, threadId, delegationId: `d-${threadId}`, at: 1000, ...extra,
+  });
+  function depsWith(tasks: Array<{ threadId: string; title: string; openedBy?: Record<string, unknown>; ownerPrincipalId?: string }>, own: Record<string, string | undefined> = {}) {
+    const base = baseDeps();
+    return baseDeps({
+      store: {
+        ...base.store,
+        taskByThread: (botId, threadId) => {
+          if (botId === BOT.id) return { threadId, title: "mine", ownerPrincipalId: own[threadId] } as never;
+          return (botId === PEER.id ? tasks.find((t) => t.threadId === threadId) : undefined) as never;
+        },
+        tasks: (botId: string) => (botId === PEER.id ? tasks : []) as never,
+        messagesFor: (threadId: string) => (threadId === "t-a" ? [{ id: "r", role: "bot", kind: "text", text: "Booked." }] : []) as never,
+      },
+    });
+  }
+
+  it("lists this conversation's sends with their state and reply", async () => {
+    const route = createInternalBotChatRoutes(depsWith([
+      { threadId: "t-a", title: "Book", openedBy: sentFrom("t-1", { delegationId: "d-a" }) },
+      { threadId: "t-b", title: "Other chat", openedBy: sentFrom("t-main", { delegationId: "d-b" }) },
+    ]));
+    const { sent, run } = call(route, { path: "/api/internal/send-status", method: "GET" });
+    await run();
+    expect(sent[0]?.status).toBe(200);
+    const sends = (sent[0]!.body as { sends: Array<Record<string, unknown>> }).sends;
+    expect(sends).toHaveLength(1);
+    expect(sends[0]).toMatchObject({ threadId: "t-a", botName: PEER.name, state: "done", summary: "Booked.", delivered: true });
+  });
+
+  it("reads one send by thread id", async () => {
+    const route = createInternalBotChatRoutes(depsWith([{ threadId: "t-a", title: "Book", openedBy: sentFrom("t-1") }]));
+    const { sent, run } = call(route, { path: "/api/internal/send-status", method: "GET", query: "thread_id=t-a" });
+    await run();
+    expect(sent[0]).toMatchObject({ status: 200, body: { send: { threadId: "t-a", state: "done" } } });
+  });
+
+  it("refuses a send made for another person", async () => {
+    const route = createInternalBotChatRoutes(depsWith(
+      [{ threadId: "t-a", title: "Book", openedBy: sentFrom("t-main") }],
+      { "t-1": "person-a", "t-main": "person-b" },
+    ));
+    const { sent, run } = call(route, { path: "/api/internal/send-status", method: "GET", query: "thread_id=t-a" });
+    await run();
+    expect(sent[0]?.status).toBe(403);
+  });
+
+  it("reads a send of the same person from another conversation", async () => {
+    const route = createInternalBotChatRoutes(depsWith(
+      [{ threadId: "t-a", title: "Book", openedBy: sentFrom("t-main") }],
+      { "t-1": "person-a", "t-main": "Person-A" },
+    ));
+    const { sent, run } = call(route, { path: "/api/internal/send-status", method: "GET", query: "thread_id=t-a" });
+    await run();
+    expect(sent[0]?.status).toBe(200);
+  });
+
+  it("refuses a thread another bot opened, and an unknown one", async () => {
+    const route = createInternalBotChatRoutes(depsWith([{ threadId: "t-a", title: "Book", openedBy: sentFrom("t-1", { botId: "someone" }) }]));
+    const refused = call(route, { path: "/api/internal/send-status", method: "GET", query: "thread_id=t-a" });
+    await refused.run();
+    expect(refused.sent[0]?.status).toBe(403);
+    const unknown = call(route, { path: "/api/internal/send-status", method: "GET", query: "thread_id=nope" });
+    await unknown.run();
+    expect(unknown.sent[0]?.status).toBe(404);
+  });
+});

@@ -32,6 +32,9 @@ import { redactSecretsInText } from "../redact.ts";
 import { queuedThreadPosition } from "../turns/steer-queue.ts";
 import type { InternalCapabilityView, InternalRouteContext } from "./internal-route.ts";
 import { PASS } from "./table.ts";
+import type { WireMessage as Message, TaskOpenedBy } from "../../shared/wire.ts";
+import { isSettledSend } from "../../shared/send-receipt.ts";
+import { sendStatusView, type SendNode } from "../team/send-receipts.ts";
 
 const MAX_COMMS_DEPTH = 1;
 const ASK_BOT_TIMEOUT_MS = Math.max(5_000, Number(process.env.SAGAX_ASK_BOT_TIMEOUT_MS) || 15_000);
@@ -63,6 +66,9 @@ export interface InternalBotChatTask {
   threadId: string;
   title: string;
   confidential?: boolean;
+  /** Who opened the thread: a send_to_bot names its sender (#3246). */
+  openedBy?: TaskOpenedBy;
+  ownerPrincipalId?: string;
 }
 
 export interface InternalBotChatMessage {
@@ -82,6 +88,8 @@ export interface InternalBotChatStore {
   groupByThread(threadId: string): InternalBotChatGroup | null | undefined;
   readonly groups: readonly InternalBotChatGroup[];
   taskByThread(botId: string, threadId: string): InternalBotChatTask | null | undefined;
+  /** A bot's threads (send_status lists this conversation's sends). */
+  tasks?(botId: string): readonly InternalBotChatTask[];
   activePath(threadId: string): ReadonlyArray<{ turnSucceeded?: boolean; at?: number }>;
   appendMessage(threadId: string, message: Record<string, unknown>): unknown;
   messagesFor(threadId: string): readonly InternalBotChatMessage[];
@@ -1007,6 +1015,66 @@ export async function handleAssignmentStatus(opened: OpenedBotChat): Promise<typ
       }
       const current = coordinator.status(id) ?? status;
       return json(res, 200, { assignment: shape(current.assignment), children: current.children.map(shape), inbox: current.inbox });
+    }
+    await new Promise((wake) => setTimeout(wake, 500));
+  }
+}
+
+/**
+ * send_status (#3246): read-only. What became of this bot's send_to_bot
+ * sends: delivered, read, waiting on the person, done or failed, with a
+ * short summary of the reply. No thread_id lists this conversation's
+ * recent sends; a thread_id reads one recipient thread the caller opened
+ * for the same person, long-polled with wait_ms until it settles.
+ */
+export async function handleSendStatus(opened: OpenedBotChat): Promise<typeof PASS | void> {
+  const { res, json, internalCapability, store, coordinator, connectorThread, internalSender, url, requireActiveInternalCapability } = opened;
+  const fromThreadId = internalCapability.threadId;
+  if (!connectorThread(internalSender.id, fromThreadId)) return json(res, 403, { error: "source conversation does not belong to sender" });
+  const sender = store.bot(internalSender.id);
+  if (!sender) return json(res, 403, { error: "unknown sender" });
+  const owner = (threadId: string | undefined) => (threadId ? store.taskByThread(sender.id, threadId)?.ownerPrincipalId : undefined)?.trim().toLowerCase() ?? "";
+  const personOfCaller = owner(fromThreadId);
+  // a send of this bot, for the person this conversation belongs to
+  const mine = (task: InternalBotChatTask | null | undefined): task is InternalBotChatTask & { openedBy: TaskOpenedBy } => {
+    const by = task?.openedBy;
+    if (!by || by.botId !== sender.id || !by.delegationId || !by.threadId || by.kind === "work") return false;
+    return by.threadId === fromThreadId || owner(by.threadId) === personOfCaller;
+  };
+  const view = (bot: InternalBotChatBot, task: InternalBotChatTask & { openedBy: TaskOpenedBy }) => sendStatusView({
+    threadId: task.threadId, botId: bot.id, botName: bot.name, title: task.title, opener: task.openedBy,
+    node: (coordinator.node(task.openedBy.delegationId!) ?? undefined) as SendNode | undefined,
+    thread: store.messagesFor(task.threadId) as readonly Message[],
+  });
+  const threadId = url.searchParams.get("thread_id")?.trim() ?? "";
+  if (!threadId) {
+    const sends: Array<ReturnType<typeof view>> = [];
+    for (const bot of store.bots) {
+      if (bot.id === sender.id || !canReachPeer(sender, bot)) continue;
+      for (const task of store.tasks?.(bot.id) ?? []) {
+        if (mine(task) && task.openedBy.threadId === fromThreadId) sends.push(view(bot, task));
+      }
+    }
+    sends.sort((a, b) => b.sentAt - a.sentAt);
+    return json(res, 200, { sends: sends.slice(0, 20) });
+  }
+  const waitMs = Math.min(Math.max(Number(url.searchParams.get("wait_ms")) || 0, 0), 240_000);
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    requireActiveInternalCapability();
+    const bot = store.bots.find((candidate) => candidate.id !== sender.id && store.taskByThread(candidate.id, threadId));
+    const task = bot ? store.taskByThread(bot.id, threadId) : undefined;
+    if (!bot || !task) return json(res, 404, { error: "unknown thread_id: pass the threadId send_to_bot returned" });
+    if (!mine(task)) return json(res, 403, { error: "that thread was not opened by your send_to_bot for this person" });
+    if (!canReachPeer(sender, bot)) return json(res, 403, { error: "Status withheld: team access changed" });
+    const send = view(bot, task);
+    // a normal send starts once the caller's turn ends: waiting on it now
+    // would only spend the wait
+    const node = coordinator.node(task.openedBy.delegationId!);
+    const parent = typeof node?.parentId === "string" ? coordinator.node(node.parentId) : undefined;
+    const heldByThisTurn = send.state === "queued" && parent?.threadId === fromThreadId && ["source", "running"].includes(parent.status);
+    if (isSettledSend(send.state) || send.state === "waiting" || heldByThisTurn || Date.now() >= deadline) {
+      return json(res, 200, { send, ...(heldByThisTurn ? { note: "It starts once your turn ends: finish your reply, then read it in a later turn (or send with reply \"resume\" to be woken)." } : {}) });
     }
     await new Promise((wake) => setTimeout(wake, 500));
   }

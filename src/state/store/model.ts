@@ -175,6 +175,8 @@ export interface Message extends Pick<import("../../../shared/wire").WireMessage
   comm?: { groupId: string; threadId?: string; withBotId: string; withName: string; withColor: MausColor; gone?: boolean; direction?: "sent" | "received"; text?: string };
   /** thread chips: "Opened thread #Title on Bot" linking to that thread */
   threadRef?: { botId: string; threadId: string; title: string; gone?: boolean };
+  /** send_to_bot receipt (#3246, WireMessage.sendReceipt). */
+  sendReceipt?: import("../../../shared/wire").WireMessage["sendReceipt"];
   /** A teammate parked on a question for the person (WireMessage.inputRequest). */
   inputRequest?: import("../../../shared/wire").WireMessage["inputRequest"];
   /** 2026-11-05: what a bot's turn elsewhere left for the person (WireMessage.attention). */

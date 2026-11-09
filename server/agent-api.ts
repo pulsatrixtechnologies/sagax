@@ -194,6 +194,11 @@ const IDLE_LOOKS_DONE = 3;
  * reports finished anyway. Once the answer is in the conversation and the
  * turn is idle, the turn is over: no wait. */
 const FOLLOW_UP_LOOKS = 50;
+/** #3056: how long after an ask_choice answer line its own turn may take to
+ * start. Until that turn is seen running (or leaves a row), an idle
+ * conversation is the gap before it, not its end. Counted from the answer
+ * line's time, so a later await_turn call does not restart it. */
+const ANSWER_TURN_START_MS = 5_000;
 /** Refusal codes a caller can usefully retry (same args or after a short wait). */
 const RETRYABLE_REFUSAL_CODES = new Set([
   "busy",
@@ -879,9 +884,9 @@ function turnFailureWords(cause: string): string {
  * ended. #2579: the lines the agent says before a tool call ("Je cherche
  * d'abord…") are progress, kept in the steps: the reply is the last run of
  * text, the words after the turn's last tool call. */
-function turnReply(messages: readonly StoredMessage[], anchor: { id: string | null; at: number }): { reply: string; sawAnchor: boolean; failed: string | null; followUp: "answer" | "text" | null } {
+function turnReply(messages: readonly StoredMessage[], anchor: { id: string | null; at: number }): { reply: string; sawAnchor: boolean; failed: string | null; followUp: "answer" | "text" | null; answerNotStartedAt: number | null } {
   const start = turnAnchorIndex(messages, anchor);
-  if (start < 0) return { reply: "", sawAnchor: false, failed: null, followUp: null };
+  if (start < 0) return { reply: "", sawAnchor: false, failed: null, followUp: null, answerNotStartedAt: null };
   let run: string[] = [];
   let lastRun: string[] = [];
   // #3008: the turn's last word is a failed-turn row (the engine died, a
@@ -891,6 +896,9 @@ function turnReply(messages: readonly StoredMessage[], anchor: { id: string | nu
   // person's line still to come ("answer", a late question) or the bot's
   // words after it ("text"). Until then the turn is not finished.
   let followUp: "answer" | "text" | null = null;
+  // #3056: the time of an ask_choice answer line with no bot row after it
+  // yet: the answer's own turn may not have started.
+  let answerNotStartedAt: number | null = null;
   for (const message of messages.slice(start + 1)) {
     if (message.role === "user" && (message.kind ?? "text") === "text") {
       // #2922: the person's answer to a card is part of this turn: the reply
@@ -898,10 +906,14 @@ function turnReply(messages: readonly StoredMessage[], anchor: { id: string | nu
       if (!message.replyToId) break;
       if (run.length) lastRun = run;
       run = [];
-      if (followUp === "answer") followUp = "text";
+      if (followUp === "answer") {
+        followUp = "text";
+        answerNotStartedAt = message.at;
+      }
       continue;
     }
     if (message.role !== "bot") continue;
+    answerNotStartedAt = null;
     const kind = message.kind ?? "text";
     if (message.question?.answered) {
       // the words before an answered question (the lead-in, a marker) are
@@ -932,6 +944,7 @@ function turnReply(messages: readonly StoredMessage[], anchor: { id: string | nu
     sawAnchor: true,
     failed: failed === null ? null : turnFailureWords(failed),
     followUp,
+    answerNotStartedAt: followUp === "text" ? answerNotStartedAt : null,
   };
 }
 
@@ -1805,6 +1818,8 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
     const deadline = now() + timeoutMs;
     let idleLooks = 0;
     let followUpLooks = 0;
+    // #3056: the answer line (by time) whose own turn this call saw running
+    let answerTurnSeen: number | null = null;
     for (;;) {
       const raw = deps.turnState(body.a, body.t);
       const messages = deps.messages(body.t);
@@ -1825,6 +1840,10 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         return { ...result, approval: pending.approvals[0]!, approvals: pending.approvals };
       }
       const reviewing = pending?.reviewing === true;
+      if (read.answerNotStartedAt !== null && state !== "idle") answerTurnSeen = read.answerNotStartedAt;
+      const answerTurnAhead = read.answerNotStartedAt !== null
+        && answerTurnSeen !== read.answerNotStartedAt
+        && now() - read.answerNotStartedAt < ANSWER_TURN_START_MS;
       if (state === "idle" && read.sawAnchor && reviewing) {
         // a reviewer still decides a card of this turn: not finished
         idleLooks = 0;
@@ -1835,6 +1854,11 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         // the turn is idle with no words after it, the turn is over: the
         // idle looks below end the wait at once.
         followUpLooks += 1;
+        idleLooks = 0;
+      } else if (state === "idle" && read.sawAnchor && answerTurnAhead) {
+        // #3056: the answer is recorded but its own turn has not started
+        // yet: an idle conversation now is the gap before it, never a
+        // finished turn with no words. Bounded by ANSWER_TURN_START_MS.
         idleLooks = 0;
       } else if (state === "idle" && read.sawAnchor) {
         idleLooks += 1;

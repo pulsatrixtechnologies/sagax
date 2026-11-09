@@ -14217,7 +14217,7 @@
   "grokBridge.keyPlaceholder": "Colle le secret partagé",
   "grokBridge.bots": "Étiquettes des pairs Grok",
   "grokBridge.botsHelp": "Étiquettes séparées par des virgules que tes bots Sagax peuvent joindre. Vide : toute étiquette de ton lien.",
-  "grokBridge.botsPlaceholder": "cryptic, ember",
+  "grokBridge.botsPlaceholder": "scout, writer",
   "grokBridge.mayCall": "Grok Bot peut m'appeler",
   "grokBridge.mayCallHelp": "Activé, phone.call_owner de ton pair Grok saute la carte d'approbation. Les appels à un tiers demandent toujours.",
   "grokBridge.mayText": "Grok Bot peut m'écrire",

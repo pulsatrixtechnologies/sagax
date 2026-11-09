@@ -152,5 +152,23 @@
     "files": "^ios/(?:App|Sources|parity)/",
     "context": "Import (?:a|from) Grok Bot|Bring a (?:shared Grok Bot|bot you use in Grok Bot) into|Grok Bot link|Grok Bot\\'s reply|your own Grok Bot\\.|to your Grok Bot|From Grok Bot|Depuis Grok Bot|Import(?:er)? (?:an|un) agent \\(Grok Bot, Claude Code|Importer (?:un|depuis|de) Grok Bot|Grok Bot (?:or|ou) Claude Code|Paste a Grok Bot link|or a Grok Bot marketplace page|Collez un lien de Grok Bot|marketplace Grok Bot\\.|Faites entrer un Grok Bot|Lien du Grok Bot|ponse du Grok Bot|votre (?:propre )?Grok Bot|dans Grok Bot\\. Il arrive|started from the Grok Bot \\\\\"",
     "reason": "iOS wording of the bot import (the same strings as the desktop locales above): the screen names the product the person imports a bot from; the import reads x.ai share links (shared/grok-import.ts)."
+  },
+  {
+    "term": "grok-bot",
+    "files": "^(?:dist-server/index\\.js|dist-server/src/locales/(?:en|fr)\\.json|dist/assets/(?:i18n|fr)-[^/]+\\.js)$",
+    "context": "(?:[Ll]ink with|Lier (?:à|\\\\xE0)|lien avec) Grok Bot|(?:to your|of your|ton propre|ton|webhook|lien de|entrer un) Grok Bot|Grok Bot (?:posts here|publie ici|may call me|peut m'appeler|may text me|peut m'(?:écrire|\\\\xE9crire))",
+    "reason": "The Link with Grok Bot strings (grokBridge.*, organization.grokBridge.*) and the grokImport lines of the en and fr catalogs: Grok Bot is the public name of the third-party x.ai product the feature links to, already named in the public repo and accepted by check:terms. Phrase by phrase, only in the server locale embed and the web i18n and fr chunks."
+  },
+  {
+    "term": "grok-bot",
+    "files": "^(?:dist-server/self-knowledge/knowledge\\.generated\\.json|dist/assets/(?:SettingsModal|ProvidersSettings)-[^/]+\\.js)$",
+    "context": "[Ll]inked ?[Gg]rok ?[Bb]ot|(?:link with|lier à|searxng,|searxng ) ?grok bot|`grok bot`",
+    "reason": "The settings card id and the search keywords of the Link with Grok Bot card (Settings and Providers chunks, and the help index built from them): Grok Bot is the public name of the third-party x.ai product."
+  },
+  {
+    "term": "grok-bot",
+    "files": "^(?:dist-server/self-knowledge/knowledge\\.generated\\.json|dist/assets/index-[^/]+\\.js)$",
+    "context": "(?:matches|follows the|Link to|Lier à|Lier \\\\xE0|mise en page de|as in|comme dans|closer to|bot de|size of|alignée sur|ceux de|Loops\\*\\*:|Loops:|\\bA) Grok [Bb]ot",
+    "reason": "Release notes (docs/releases) that name the third-party x.ai product as a design or behaviour reference or as the target of Link with Grok Bot, phrase by phrase, embedded in the web bundle and the help index."
   }
 ]

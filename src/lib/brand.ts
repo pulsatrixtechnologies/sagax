@@ -3,7 +3,8 @@
 // the first paint. The default name is Sagax.
 // Pure helpers live here so they can be unit-tested without a DOM.
 import { BRAND_BUBBLE_VARS, accentInk, brandBubbleVars } from "./bubble-colors";
-import { BRAND_SWITCH_VARS, brandSwitchVars } from "./switch-colors";
+import { BRAND_SURFACES, BRAND_SWITCH_VARS, brandSwitchVars } from "./switch-colors";
+import { relativeLuminance, toneForSurface } from "./color-contrast";
 
 export interface Brand {
   name: string;
@@ -54,6 +55,36 @@ export function luminance(hex: string): number {
  * (bubble-colors.ts), so a button and the person's bubble share their ink. */
 export { accentInk };
 
+/** WCAG 1.4.3, normal text: what a link in the brand's colour must reach. */
+export const BRAND_TEXT_MIN_CONTRAST = 4.5;
+
+/**
+ * The brand's colour as text (links, accent labels), per scheme (#3035). The
+ * raw accent is a fill colour: an orange brand measured 2.16:1 as a link on
+ * a light skin's grey bubble. Each scheme gets the accent's own hue at the
+ * lightness closest to it that reads at 4.5:1 on the lightest and the
+ * darkest surface text sits on (BRAND_SURFACES), the way the built-in skins
+ * darken their accent for --color-accent-text. An accent that already reads
+ * is kept as is.
+ */
+export function brandAccentText(accent: string): { light: string; dark: string } {
+  // the hardest ground of a scheme is the one nearest mid grey: the darkest
+  // light surface, the lightest dark one; clearing it clears the other end
+  const fit = (grounds: readonly string[]) => {
+    const worst = grounds.reduce((a, b) => (Math.abs(relativeLuminance(a) - 0.18) <= Math.abs(relativeLuminance(b) - 0.18) ? a : b));
+    return toneForSurface(accent.toLowerCase(), worst, BRAND_TEXT_MIN_CONTRAST);
+  };
+  return { light: fit(BRAND_SURFACES.light), dark: fit(BRAND_SURFACES.dark) };
+}
+
+/** The brand's text colour as one CSS value: `light-dark()` resolves it per
+ * element from the skin's color-scheme. A runtime value is not rewritten by
+ * the build (lightningcss), so light-dark() stays native here. */
+export function accentTextValue(accent: string): string {
+  const { light, dark } = brandAccentText(accent);
+  return light === dark ? light : `light-dark(${light}, ${dark})`;
+}
+
 /** CSS custom properties a brand overrides on the root element. */
 export function brandVars(b: Brand): Record<string, string> {
   if (!b.accent || !HEX.test(b.accent)) return {};
@@ -61,7 +92,7 @@ export function brandVars(b: Brand): Record<string, string> {
     "--color-accent": b.accent,
     "--color-accent-border": b.accent,
     "--color-focus": b.accent,
-    "--color-accent-text": b.accent,
+    "--color-accent-text": accentTextValue(b.accent),
     "--color-accent-ink": accentInk(b.accent),
     // the switch's on track, at a lightness that carries its white thumb
     ...brandSwitchVars(b.accent),

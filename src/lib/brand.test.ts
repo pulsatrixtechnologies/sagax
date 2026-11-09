@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { brandBubbleVars } from "./bubble-colors";
 import { brandSwitchVars } from "./switch-colors";
-import { accentInk, applyBrand, bootstrapBrand, brand, brandVars, DEFAULT_BRAND, iconType, luminance } from "./brand";
+import { contrastRatio } from "./color-contrast";
+import { accentInk, applyBrand, brandAccentText, bootstrapBrand, brand, brandVars, DEFAULT_BRAND, iconType, luminance } from "./brand";
 
 describe("brand", () => {
   it("derives readable ink for light and dark accents", () => {
@@ -24,13 +25,26 @@ describe("brand", () => {
       "--color-accent": "#1D4ED8",
       "--color-accent-border": "#1D4ED8",
       "--color-focus": "#1D4ED8",
-      "--color-accent-text": "#1D4ED8",
+      "--color-accent-text": "light-dark(#1d4ed8, #7191ec)",
       "--color-accent-ink": "#ffffff",
       ...brandSwitchVars("#1D4ED8"),
       ...brandBubbleVars("#1D4ED8"),
     });
     // the switch keeps its one on colour whatever the brand
     expect(brandVars({ name: "X", accent: "#1D4ED8" })["--brand-switch-on-light"]).toBeUndefined();
+  });
+
+  it("derives a link colour that reads at 4.5:1 in light and dark (#3035)", () => {
+    // an orange brand measured 2.16:1 as a link on a light skin's grey bubble
+    expect(contrastRatio("#f97316", "#e2e2e2")).toBeLessThan(2.2);
+    for (const accent of ["#f97316", "#1D4ED8", "#ffd400", "#22c55e", "#8b5cf6", "#e11d48", "#000000", "#ffffff", "#777777"]) {
+      const { light, dark } = brandAccentText(accent);
+      for (const ground of ["#ffffff", "#e2e2e2", "#dcdcdc", "#dfe6f2"]) expect(contrastRatio(light, ground)).toBeGreaterThanOrEqual(4.5);
+      for (const ground of ["#000000", "#121212", "#252525", "#2e2e2e"]) expect(contrastRatio(dark, ground)).toBeGreaterThanOrEqual(4.5);
+    }
+    // an accent that already reads stays itself
+    expect(brandAccentText("#f97316").dark).toBe("#f97316");
+    expect(brandVars({ name: "X", accent: "#f97316" })["--color-accent-text"]).toBe("light-dark(#a24504, #f97316)");
   });
 
   it("keeps the default brand when the server is old, slow, or refuses", async () => {

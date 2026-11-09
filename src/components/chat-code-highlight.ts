@@ -1,4 +1,6 @@
-import type { HighlighterCore } from "shiki/core";
+import type { HighlighterCore, ThemeRegistration } from "shiki/core";
+import { BRAND_SURFACES } from "../lib/switch-colors";
+import { contrastRatio, toneForSurface } from "../lib/color-contrast";
 
 // Shiki's package entry registers every grammar and theme (hundreds of
 // chunks). Chat only ever asks for the two GitHub themes and the languages
@@ -83,6 +85,36 @@ function grammarFile(lang: string): GrammarFile | undefined {
   return Object.prototype.hasOwnProperty.call(grammarLoaders, lang) ? lang as GrammarFile : undefined;
 }
 
+/** WCAG 1.4.3: a code block is 12 px text. */
+const CODE_MIN_CONTRAST = 4.5;
+/** The darkest ground a light code block can sit on: every light skin's
+ * inset (the block's fill, #d5e8e5 the darkest, measured 2026-11-08) is
+ * lighter than this grey, so a token that clears it clears them all. */
+export const LIGHT_CODE_GROUND = BRAND_SURFACES.light[1];
+
+const HEX6 = /^#[0-9a-f]{6}$/i;
+
+/** One token colour of the light theme, deepened along its hue until it
+ * reads at 4.5:1 on the darkest light inset. github-light-default's red,
+ * purple and grey measured 4.0 to 4.27:1 on Pulsatrix Light's block (#3035). */
+export function readableLightToken(color: string): string {
+  if (!HEX6.test(color)) return color;
+  const hex = color.toLowerCase();
+  return contrastRatio(hex, LIGHT_CODE_GROUND) >= CODE_MIN_CONTRAST ? hex : toneForSurface(hex, LIGHT_CODE_GROUND, CODE_MIN_CONTRAST);
+}
+
+/** The light theme with every token colour readable on a light skin's code
+ * block. Only the token colours move; the dark theme is left as shipped. */
+export function readableLightTheme(theme: ThemeRegistration): ThemeRegistration {
+  const tokenColors = (theme.tokenColors ?? theme.settings ?? []).map((rule) => {
+    const fg = rule.settings?.foreground;
+    return fg ? { ...rule, settings: { ...rule.settings, foreground: readableLightToken(fg) } } : rule;
+  });
+  const colors = { ...theme.colors };
+  if (colors["editor.foreground"]) colors["editor.foreground"] = readableLightToken(colors["editor.foreground"]);
+  return { ...theme, colors, settings: tokenColors, tokenColors, ...(theme.fg ? { fg: readableLightToken(theme.fg) } : {}) };
+}
+
 function getHighlighter(): Promise<HighlighterCore> {
   if (highlighterPromise) return highlighterPromise;
   const created = (async () => {
@@ -90,7 +122,7 @@ function getHighlighter(): Promise<HighlighterCore> {
     const { createJavaScriptRegexEngine } = await import("shiki/engine/javascript");
     return createHighlighterCore({
       themes: [
-        import("shiki/themes/github-light-default.mjs").then((mod) => mod.default),
+        import("shiki/themes/github-light-default.mjs").then((mod) => readableLightTheme(mod.default)),
         import("shiki/themes/github-dark-default.mjs").then((mod) => mod.default),
       ],
       langs: [],

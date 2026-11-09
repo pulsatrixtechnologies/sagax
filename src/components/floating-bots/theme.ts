@@ -6,7 +6,7 @@
 // storage (server mode), so it never reads the skin from storage itself.
 // Trombi keeps its own Hibou 98 look whatever the theme (FloatingBotView).
 import { useEffect, useState } from "react";
-import { accentInk } from "@/lib/brand";
+import { accentInk, accentTextValue } from "@/lib/brand";
 import { SKIN_IDS, type SkinId } from "@/lib/skins";
 import { BRAND_BUBBLE_VARS, brandBubbleVars } from "@/lib/bubble-colors";
 import { BRAND_SWITCH_VARS, brandSwitchVars } from "@/lib/switch-colors";
@@ -71,7 +71,7 @@ export function themeVars(theme: FloatingTheme | undefined): Record<string, stri
     "--color-accent": theme.accent,
     "--color-accent-border": theme.accent,
     "--color-focus": theme.accent,
-    "--color-accent-text": theme.accent,
+    "--color-accent-text": accentTextValue(theme.accent),
     "--color-accent-ink": accentInk(theme.accent),
     ...brandSwitchVars(theme.accent),
     ...brandBubbleVars(theme.accent),

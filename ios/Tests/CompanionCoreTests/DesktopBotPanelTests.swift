@@ -72,8 +72,11 @@ final class DesktopBotPanelTests: XCTestCase {
 
     func testThereIsNoMoreTab() {
         // Activity + Library shown; computer kept for deep-link resolve only (#2127).
-        XCTAssertEqual(DesktopPanelTab.allCases.map(\.rawValue), ["activity", "library", "computer"])
+        XCTAssertEqual(DesktopPanelTab.allCases.map(\.rawValue), ["activity", "library", "computer", "coding"])
         XCTAssertEqual(DesktopPanelTab.visible(gate: SurfaceGate(scope: .serverAdmin)), [.activity, .library])
+        XCTAssertEqual(DesktopPanelTab.visible(gate: SurfaceGate(scope: .serverAdmin), coding: true), [.activity, .library, .coding])
+        XCTAssertEqual(DesktopPanelTab.parse("coding"), .coding)
+        XCTAssertEqual(DesktopPanelTab.resolve(.coding), .coding)
     }
 
     func testWorksOnIsListedOnlyOnAnOrganizationServer() {

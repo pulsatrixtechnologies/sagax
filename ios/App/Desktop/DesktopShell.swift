@@ -171,7 +171,19 @@ final class DesktopShellModel: ObservableObject {
     /// A coding task opened from the bot panel's Activity, drawn where the
     /// chat is (desktop `state.codingChat`, ChatViewSheets.tsx), never in a
     /// sheet over the panel. Leaving for another chat or page closes it.
-    @Published var codingChat: DesktopCodingChat?
+    @Published var codingChat: DesktopCodingChat? {
+        didSet {
+            if codingChat != nil {
+                panelTab = .coding
+                panelOpen = true
+            } else {
+                codingPanel.input = nil
+                if panelTab == .coding { panelTab = .activity }
+            }
+        }
+    }
+    /// The open coding chat's panel content, drawn in the bot panel's Coding tab.
+    let codingPanel = CodingPanelBridge()
     /// The chat column's notice (`state.notice`, ChatErrorBanner.tsx
     /// ChatNotice): a dead thread link, a bot that is gone; it clears
     /// itself after 6 s, as the desktop's store does.
@@ -685,7 +697,7 @@ struct DesktopCodingChatHost: View {
 
     var body: some View {
         NavigationStack {
-            CodingChatView(target: coding.target, parent: coding.parent) { model.codingChat = nil }
+            CodingChatView(target: coding.target, parent: coding.parent, bridge: model.codingPanel) { model.codingChat = nil }
         }
     }
 }

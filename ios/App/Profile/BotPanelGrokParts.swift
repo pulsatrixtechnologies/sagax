@@ -48,6 +48,7 @@ struct PanelTabBar: View {
         case .activity: "Activity"
         case .library: "Library"
         case .computer: "Computer"
+        case .coding: "Coding"
         }
     }
 }

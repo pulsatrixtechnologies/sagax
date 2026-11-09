@@ -404,7 +404,7 @@ struct ReachMeSettingsPage: View {
                 .disabled(model.busy)
             if limited {
                 CardHairline(leadingInset: SettingsMetrics.rowInset)
-                SettingsRow(title: "Time zone", accessory: .valueChevron((draft.settings.hours.timeZone ?? "").replacingOccurrences(of: "_", with: " ")),
+                SettingsRow(title: "Time zone", accessory: .valueChevron(TimeZoneLabel.human(draft.settings.hours.timeZone ?? "")),
                             identifier: "reach-me-time-zone") { pickingZone = true }
                 ForEach(Array(draft.settings.hours.rangeList.enumerated()), id: \.offset) { index, range in
                     CardHairline(leadingInset: SettingsMetrics.rowInset)

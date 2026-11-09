@@ -441,7 +441,7 @@ private struct PhoneBotPanelContent: View {
             switch panelTab {
             case .library:
                 AnyView(libraryBody)
-            case .activity, .computer:
+            case .activity, .computer, .coding:
                 AnyView(activityBody)
             }
         }

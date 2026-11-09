@@ -32,28 +32,61 @@ struct CodingChatPanel: View {
     let input: CodingPanelInput
     /// Scroll the transcript to a message.
     var showMessage: (String) -> Void
+    /// Inside the bot panel's Coding tab (its own scroll and background).
+    var embedded = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                CodingSessionCard(input: input)
-                if let bot = input.bot {
-                    CodingPodsStack(
-                        bot: bot,
-                        task: bot.tasks?.first { $0.threadId == input.threadId },
-                        threadId: input.threadId,
-                        messages: input.messages,
-                        repo: input.repo,
-                        showMessage: showMessage
-                    )
-                }
+        if embedded {
+            content
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("coding.panel")
+        } else {
+            ScrollView {
+                content
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 16)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.bg)
+            .accessibilityIdentifier("coding.panel")
         }
-        .background(Theme.bg)
-        .accessibilityIdentifier("coding.panel")
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            CodingSessionCard(input: input)
+            if let bot = input.bot {
+                CodingPodsStack(
+                    bot: bot,
+                    task: bot.tasks?.first { $0.threadId == input.threadId },
+                    threadId: input.threadId,
+                    messages: input.messages,
+                    repo: input.repo,
+                    showMessage: showMessage
+                )
+            }
+        }
+    }
+}
+
+/// The coding chat hands its panel input to the shell's bot panel through
+/// this bridge (desktop: CodingChat renders no column, the bot panel's
+/// Coding tab holds "This session" and the connectors).
+final class CodingPanelBridge: ObservableObject {
+    @Published var input: CodingPanelInput?
+    var onReveal: ((String) -> Void)?
+}
+
+/// The bot panel's Coding tab.
+struct CodingPanelTab: View {
+    @ObservedObject var bridge: CodingPanelBridge
+
+    var body: some View {
+        if let input = bridge.input {
+            CodingChatPanel(input: input, showMessage: { bridge.onReveal?($0) }, embedded: true)
+        }
     }
 }
 

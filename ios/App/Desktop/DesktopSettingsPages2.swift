@@ -939,23 +939,24 @@ struct DesktopTimeZoneRows: View {
                         Button {
                             Task { await model.setTimeZone(zone) }
                         } label: {
-                            if zone == current { Label(zone, systemImage: "checkmark") } else { Text(verbatim: zone) }
+                            if zone == current { Label(TimeZoneLabel.detailed(zone), systemImage: "checkmark") } else { Text(verbatim: TimeZoneLabel.detailed(zone)) }
                         }
                     }
                 } label: {
-                    Text(verbatim: current)
+                    Text(verbatim: TimeZoneLabel.human(current))
                         .font(theme.font(13))
                         .foregroundStyle(theme.ink)
                         .lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .padding(.horizontal, 12)
-                        .frame(width: 224, height: 32)
+                        .frame(minWidth: 224, maxWidth: 320, minHeight: 32, maxHeight: 32)
+                        .fixedSize(horizontal: true, vertical: false)
                         .background(theme.control, in: Capsule())
                 }
                 .disabled(model.timeZoneAuto)
                 .opacity(model.timeZoneAuto ? 0.6 : 1)
                 .accessibilityLabel(Text("Time zone"))
-                .accessibilityValue(Text(verbatim: current))
+                .accessibilityValue(Text(verbatim: TimeZoneLabel.human(current)))
                 .accessibilityIdentifier("desktop-settings.time-zone")
             }
         }

@@ -36,6 +36,7 @@ extension DesktopPanelTab: Identifiable {
         case .activity: "Activity"
         case .library: "Library"
         case .computer: "Computer"
+        case .coding: "Coding"
         }
     }
 }
@@ -71,7 +72,7 @@ private struct BotPanelContent: View {
     @State private var inlineEditing = false
 
     private var current: Bot { session.state.bot(bot.id) ?? bot }
-    private var tabs: [DesktopPanelTab] { DesktopPanelTab.visible(gate: session.surfaceGate, slack: slackURL != nil) }
+    private var tabs: [DesktopPanelTab] { DesktopPanelTab.visible(gate: session.surfaceGate, slack: slackURL != nil, coding: model.codingChat != nil) }
     private var tab: DesktopPanelTab {
         let resolved = DesktopPanelTab.resolve(model.panelTab)
         return tabs.contains(resolved) ? resolved : .activity
@@ -311,6 +312,8 @@ private struct BotPanelContent: View {
             AnyView(BotPanelDetails(bot: current))
         case .library:
             AnyView(BotPanelLibrary(bot: current, docked: docked))
+        case .coding:
+            AnyView(CodingPanelTab(bridge: model.codingPanel))
         }
     }
 }

@@ -18,12 +18,15 @@ public enum DesktopPanelTab: String, CaseIterable, Hashable, Sendable {
     case library
     /// Kept for deep-link doors only; `resolve` sends them to Activity.
     case computer
+    /// The open coding session's "This session" and connectors (desktop
+    /// `coding` panel tab); shown only while a coding chat is open.
+    case coding
 
     /// The tabs the panel shows: Activity and Library. Computer is a card
     /// inside Activity (reference app parity, #2127); the persona editor holds
     /// everything else.
-    public static func visible(gate: SurfaceGate, slack: Bool = false) -> [DesktopPanelTab] {
-        [.activity, .library]
+    public static func visible(gate: SurfaceGate, slack: Bool = false, coding: Bool = false) -> [DesktopPanelTab] {
+        coding ? [.activity, .library, .coding] : [.activity, .library]
     }
 
     /// Map a stored, deep-linked or legacy tab onto a shown one. Legacy
@@ -32,6 +35,7 @@ public enum DesktopPanelTab: String, CaseIterable, Hashable, Sendable {
         switch tab {
         case .activity, .computer: .activity
         case .library: .library
+        case .coding: .coding
         }
     }
 
@@ -40,6 +44,7 @@ public enum DesktopPanelTab: String, CaseIterable, Hashable, Sendable {
         switch raw {
         case "activity", "details": .activity
         case "library": .library
+        case "coding": .coding
         case "computer": .activity
         default: nil
         }

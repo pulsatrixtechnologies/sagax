@@ -1,5 +1,6 @@
 // Plugin priority is shared by execution and the capabilities receipt.
 // A declaration without a current folder never claims a plugin name.
+import { mcpServerRunsHere } from "../mcp/mcp-platform.ts";
 import type { McpServerSpec } from "../contracts.ts";
 import { parseStoredMcpServer } from "../mcp/mcp-registry.ts";
 import { SANDBOX_PLUGINS_DIR } from "../sandbox/sandbox-plugins.ts";
@@ -24,14 +25,20 @@ export function selectPluginScopes<T extends PluginFolder>(input: {
   return selected;
 }
 
-export type PluginMcpSkip = "name_taken" | "reserved" | "invalid" | "no_environment";
+/** `not_here`: a command server that only runs on macOS (the iMessage
+ * plugin) where its command would start on Linux or Windows (#3181). Hidden,
+ * never shown as a disabled option. */
+export type PluginMcpSkip = "name_taken" | "reserved" | "invalid" | "no_environment" | "not_here";
 
 /** The exact name check used by the runtime and its read-only receipt. */
 export function pluginMcpPrecheck(name: string, spec: McpServerSpec, input: {
   taken: (name: string) => boolean;
   organization: boolean;
   hasEnvironment: boolean;
+  /** This computer's platform for a solo desktop; tests pass one. */
+  platform?: NodeJS.Platform;
 }): PluginMcpSkip | null {
+  if (!mcpServerRunsHere(name, spec, input)) return "not_here";
   if (input.taken(name)) return "name_taken";
   const parsed = parseStoredMcpServer(name, spec);
   if (!parsed.ok) return /reserved/i.test(parsed.error) ? "reserved" : "invalid";

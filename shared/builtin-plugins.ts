@@ -33,7 +33,9 @@ export interface BuiltinPlugin {
 /** Non-interactive by construction:
  * - `npx -y` answers npm's install prompt;
  * - npm_config_yes, update notifier off: no other npm prompt on stdout;
- * - the compact schema profiles keep the tool list and results small;
+ * - the compact input schema profile keeps the tool list small; the output
+ *   profile stays at its default: 6.8.0 accepts only "full" or "off", exits
+ *   at start on "compact", and "off" fails at start as well (#3181);
  * - the Hopper first-run demo/license dialog is a macOS GUI window, never a
  *   stdio prompt: REA waits for it a bounded time
  *   (REA_HOPPER_DEMO_DIALOG_TIMEOUT_MS) and answers the tool call with an
@@ -52,7 +54,6 @@ export const REA_PLUGIN: BuiltinPlugin = {
     args: ["-y", `rea-agents@${REA_VERSION}`, "mcp"],
     env: {
       REA_MCP_INPUT_SCHEMA_PROFILE: "compact",
-      REA_MCP_OUTPUT_SCHEMA_PROFILE: "compact",
       REA_HOPPER_DEMO_DIALOG_TIMEOUT_MS: "10000",
       npm_config_yes: "true",
       npm_config_update_notifier: "false",

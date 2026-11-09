@@ -23,6 +23,8 @@ async function mountPluginMcp(   integrations: NonNullable<SendTurnInput["integr
     if ("url" in spec) {
       if (host.IDENTITY.kind === "perspicax" && await host.personalHostRefusalCached(spec.url)) continue;
     } else if (host.IDENTITY.kind === "perspicax") {
+      // stopped before answering anything in the last 30 min (#3181): not mounted
+      if (host.stdioRelay?.startFailed(person, server.name, { argv: [spec.command, ...spec.args], env: spec.env })) continue;
       spec = host.personalStdioIntegration(input.botId, input.threadId, input.generation, person, server.name, { scope: server.scope, key: server.key, name: server.name });
     } else spec = pluginSpecOnComputer(spec, { name: server.plugin, dir: server.dir });
     integrations.custom = { ...integrations.custom, [server.name]: spec };

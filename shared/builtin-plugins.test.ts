@@ -10,10 +10,12 @@ describe("built-in plugins", () => {
     expect(REA_PLUGIN.spec.args.join(" ")).not.toMatch(/@latest|setup/);
     expect(REA_PLUGIN.spec.env).toMatchObject({
       REA_MCP_INPUT_SCHEMA_PROFILE: "compact",
-      REA_MCP_OUTPUT_SCHEMA_PROFILE: "compact",
       npm_config_yes: "true",
       npm_config_update_notifier: "false",
     });
+    // rea-agents 6.8.0 accepts only "full" or "off" here and exits at start
+    // on anything else; "off" fails at start too (#3181): left at its default
+    expect(REA_PLUGIN.spec.env).not.toHaveProperty("REA_MCP_OUTPUT_SCHEMA_PROFILE");
     // the Hopper demo dialog wait is bounded: a turn is never blocked
     expect(Number(REA_PLUGIN.spec.env.REA_HOPPER_DEMO_DIALOG_TIMEOUT_MS)).toBeGreaterThan(0);
     expect(BUILTIN_PLUGINS).toContain(REA_PLUGIN);

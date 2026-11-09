@@ -6,6 +6,7 @@
 // exactly what the list says", server/capabilities/capabilities.test.ts).
 import type { McpServerSpec } from "../contracts.ts";
 import { githubServersAsPerson, withGithubToken } from "../github/github-mcp-token.ts";
+import { mcpServerRunsHere } from "../mcp/mcp-platform.ts";
 import { personalAuthHeaders, type GithubConnection, type PersonalMcpServer } from "../people/person-connections.ts";
 import { claudePluginDirs } from "./plugin-turn.ts";
 import { reservedMcpName } from "../../shared/mcp-reserved-names.ts";
@@ -46,7 +47,10 @@ export function serverMcpAsPerson<T extends Record<string, McpServerSpec>>(serve
 
 // ── the person's own MCP servers (organization server) ────────────────────
 
-export type PersonalMcpSkip = "off" | "name_taken" | "reserved" | "no_environment" | "needs_github" | "needs_token";
+/** `not_here`: a command server that only runs on macOS (the iMessage
+ * plugin): a personal command server always starts in the person's Linux
+ * server environment, so it is hidden there (#3181). */
+export type PersonalMcpSkip = "off" | "name_taken" | "reserved" | "no_environment" | "needs_github" | "needs_token" | "not_here";
 
 export type PersonalMcpCheck =
   | { mount: "stdio" }
@@ -67,6 +71,7 @@ export function personalMcpPrecheck(name: string, server: PersonalMcpServer, ctx
   if (!server.enabled) return { skip: "off" };
   if (ctx.taken(name)) return { skip: "name_taken" };
   if (reservedMcpName(name)) return { skip: "reserved" };
+  if (server.kind === "stdio" && !mcpServerRunsHere(name, server, { organization: true })) return { skip: "not_here" };
   if (server.kind === "stdio") return ctx.hasEnvironment ? { mount: "stdio" } : { skip: "no_environment" };
   const headers = personalAuthHeaders(server, ctx.github);
   if (headers === null) return { skip: server.auth === "github" ? "needs_github" : "needs_token" };

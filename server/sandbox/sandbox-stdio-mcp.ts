@@ -28,6 +28,15 @@ const MAX_LINE_BYTES = 16 * 1024 * 1024;
 const DEFAULT_IDLE_MS = 10 * 60_000;
 const CALL_TIMEOUT_MS = 10 * 60_000;
 const OTHER_TIMEOUT_MS = 2 * 60_000;
+/** A server that stopped before its first answer is not started again for
+ * this long (same command and variables); a changed spec retries at once. */
+export const START_FAILURE_MS = 30 * 60_000;
+/** Closes that say something about the server itself: its process ended
+ * (or broke the stream) before any answer, or the environment refused this
+ * command as such. A refusal of the environment (busy, capacity, paused,
+ * not_running, image_missing, egress_policy, pool_full, internal) passes and
+ * is never remembered: the next frame tries again (#3181). */
+const START_FAILURE_REASONS = new Set(["exited", "error", "a line too long", "bad_stdio", "too_large"]);
 
 export class StdioRelayError extends Error {
   readonly code: string;
@@ -45,6 +54,10 @@ interface Session {
   lastUsed: number;
   closed: boolean;
   firstLine: boolean;
+  /** The server answered at least one frame: it started. */
+  answered: boolean;
+  principalId: string;
+  server: string;
   /** Why it closed, for a frame that arrives just after. */
   failure?: StdioRelayError;
 }
@@ -53,6 +66,8 @@ export interface SandboxStdioRelayOptions {
   open: (principalId: string, spec: SandboxStdioSpec, botId?: string) => Promise<Duplex>;
   idleMs?: number;
   now?: () => number;
+  /** Told once when a server stops before its first answer (#3181). */
+  onStartFailure?: (input: { principalId: string; server: string; error: StdioRelayError }) => void;
 }
 
 const idKey = (id: unknown) => `${typeof id}:${String(id)}`;
@@ -66,6 +81,10 @@ export class SandboxStdioRelay {
   private readonly options: SandboxStdioRelayOptions;
   private readonly sessions = new Map<string, Session>();
   private readonly opening = new Map<string, Promise<Session>>();
+  /** principal\0server\0fingerprint: a start that failed, kept
+   * START_FAILURE_MS (#3181). Two servers of the same name with different
+   * commands keep a mark each. */
+  private readonly startFailures = new Map<string, { at: number; error: StdioRelayError }>();
   private readonly now: () => number;
   private sweeper: ReturnType<typeof setInterval> | null = null;
 
@@ -97,12 +116,44 @@ export class SandboxStdioRelay {
     if (session.closed) return;
     session.closed = true;
     session.failure ??= new StdioRelayError(why === "idle" ? "The MCP server was stopped." : `The MCP server in your server environment stopped (${why}).`, "stopped");
+    if (!session.answered && START_FAILURE_REASONS.has(why)) {
+      // It died before answering anything: remembered, so the next turns do
+      // not start it again and again (#3181). Old marks (another command
+      // that is no longer asked for) go once expired.
+      for (const [old, mark] of this.startFailures) {
+        if (this.now() - mark.at >= START_FAILURE_MS) this.startFailures.delete(old);
+      }
+      this.startFailures.set(this.failureKey(session.principalId, session.server, session.fingerprint), { at: this.now(), error: session.failure });
+      this.options.onStartFailure?.({ principalId: session.principalId, server: session.server, error: session.failure });
+    }
     for (const { reject, timer } of session.pending.values()) {
       clearTimeout(timer);
       reject(session.failure);
     }
     session.pending.clear();
     session.stream.destroy();
+  }
+
+  private failureKey(principalId: string, server: string, fingerprint: string): string {
+    return `${principalId}\u0000${server}\u0000${fingerprint}`;
+  }
+
+  private recentStartFailure(principalId: string, server: string, fingerprint: string): StdioRelayError | undefined {
+    const key = this.failureKey(principalId, server, fingerprint);
+    const failed = this.startFailures.get(key);
+    if (!failed) return undefined;
+    if (this.now() - failed.at >= START_FAILURE_MS) {
+      this.startFailures.delete(key);
+      return undefined;
+    }
+    return failed.error;
+  }
+
+  /** Whether this server, with this command and these variables, stopped
+   * before its first answer in the last START_FAILURE_MS: a turn does not
+   * mount it (#3181). */
+  startFailed(principalId: string, server: string, spec: SandboxStdioSpec): boolean {
+    return this.recentStartFailure(principalId, server, stdioFingerprint(spec)) !== undefined;
   }
 
   /** The latest frame of one person's open session, for an admin's list. */
@@ -119,6 +170,10 @@ export class SandboxStdioRelay {
 
   /** Every session of one person (they removed or changed a server, or signed out). */
   closePerson(principalId: string, server?: string): void {
+    for (const key of this.startFailures.keys()) {
+      const [person, name] = key.split("\u0000");
+      if (person === principalId && (!server || name === server)) this.startFailures.delete(key);
+    }
     for (const [key, session] of this.sessions) {
       const [person, , , name] = key.split("\u0000");
       if (person === principalId && (!server || name === server)) this.close(key, session, "removed");
@@ -136,7 +191,7 @@ export class SandboxStdioRelay {
     return this.sessions.size;
   }
 
-  private async session(key: string, principalId: string, spec: SandboxStdioSpec, fresh: boolean, botId?: string): Promise<Session> {
+  private async session(key: string, principalId: string, server: string, spec: SandboxStdioSpec, fresh: boolean, botId?: string): Promise<Session> {
     const fingerprint = stdioFingerprint(spec);
     const current = this.sessions.get(key);
     if (current && !current.closed && current.fingerprint === fingerprint && !fresh) return current;
@@ -145,7 +200,7 @@ export class SandboxStdioRelay {
     if (inFlight && !fresh) return inFlight;
     const opening = (async () => {
       const stream = await this.options.open(principalId, spec, botId);
-      const session: Session = { stream, fingerprint, pending: new Map(), buffer: Buffer.alloc(0), lastUsed: this.now(), closed: false, firstLine: true };
+      const session: Session = { stream, fingerprint, pending: new Map(), buffer: Buffer.alloc(0), lastUsed: this.now(), closed: false, firstLine: true, answered: false, principalId, server };
       stream.on("data", (chunk: Buffer) => this.onData(key, session, chunk));
       stream.on("close", () => this.close(key, session, "exited"));
       stream.on("error", () => this.close(key, session, "error"));
@@ -162,6 +217,8 @@ export class SandboxStdioRelay {
   }
 
   private onData(key: string, session: Session, chunk: Buffer): void {
+    // a closed session reads nothing more: a late frame never counts as an answer
+    if (session.closed) return;
     session.buffer = session.buffer.length ? Buffer.concat([session.buffer, chunk]) : chunk;
     let newline: number;
     while ((newline = session.buffer.indexOf(10)) !== -1) {
@@ -177,6 +234,10 @@ export class SandboxStdioRelay {
         return;
       }
       session.firstLine = false;
+      if (!session.answered) {
+        session.answered = true;
+        this.startFailures.delete(this.failureKey(session.principalId, session.server, session.fingerprint));
+      }
       const hasId = frame.id !== undefined && frame.id !== null;
       if (hasId && typeof frame.method === "string") {
         // The server asks something of its client: not supported here.
@@ -205,7 +266,9 @@ export class SandboxStdioRelay {
     const fresh = frame.method === "initialize" && this.sessions.has(key);
     const isRequest = typeof frame.method === "string" && frame.id !== undefined && frame.id !== null;
     if (isRequest && typeof frame.id !== "string" && typeof frame.id !== "number") throw new StdioRelayError("Invalid request.", "invalid");
-    const session = await this.session(key, input.principalId, input.spec, fresh, input.botId);
+    const failed = this.recentStartFailure(input.principalId, input.server, stdioFingerprint(input.spec));
+    if (failed) throw failed;
+    const session = await this.session(key, input.principalId, input.server, input.spec, fresh, input.botId);
     if (session.closed) throw session.failure ?? new StdioRelayError("The MCP server stopped.", "stopped");
     session.lastUsed = this.now();
     const line = `${JSON.stringify(frame)}\n`;

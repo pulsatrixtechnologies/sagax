@@ -22,6 +22,8 @@ async function mountPersonalMcp(   integrations: NonNullable<SendTurnInput["inte
     const check = personalMcpPrecheck(name, server, { taken: (taken) => Object.hasOwn(integrations.custom ?? {}, taken) || orgClaimed.has(taken), hasEnvironment: Boolean(host.userSandbox), github });
     if ("skip" in check) continue;
     if (check.mount === "stdio") {
+      // stopped before answering anything in the last 30 min (#3181): not mounted
+      if (server.kind === "stdio" && host.stdioRelay?.startFailed(principalId, name, { argv: [server.command, ...server.args], env: server.env })) continue;
       integrations.custom = { ...integrations.custom, [name]: host.personalStdioIntegration(input.botId, input.threadId, input.generation, principalId, name) };
       continue;
     }

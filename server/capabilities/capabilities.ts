@@ -481,6 +481,9 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
       let state: CapabilityState = "on";
       let reason: CapabilityReason | undefined;
       let connect: Capability["connect"] | undefined;
+      // a macOS-only command server in the Linux server environment: hidden,
+      // never a row (#3181)
+      if ("skip" in check && check.skip === "not_here") continue;
       if ("skip" in check) {
         switch (check.skip) {
           case "off": state = "off"; reason = "disabled"; break;
@@ -548,6 +551,12 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
       taken: (name) => taken.has(name), organization: inputs.organization,
       hasEnvironment: inputs.pluginEnvironment ?? inputs.personal?.hasEnvironment ?? !inputs.organization,
     });
+    // a macOS-only command server where it cannot start: hidden, its name
+    // leaves what the plugin brings (#3181)
+    if (check === "not_here") {
+      if (row.brings) row.brings = { ...row.brings, mcpServers: row.brings.mcpServers.filter((name) => name !== candidate.name) };
+      continue;
+    }
     const allowed = Object.hasOwn(inputs.filterPolicy({ [candidate.name]: candidate.spec }), candidate.name);
     const privateAddress = "url" in candidate.spec && inputs.organization && inputs.pluginHostRefused?.(candidate.spec.url);
     if (check || !allowed || privateAddress || !engine.customMcp) {

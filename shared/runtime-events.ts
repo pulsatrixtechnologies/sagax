@@ -145,6 +145,12 @@ export type RuntimeEvent = RuntimeEventBase &
         itemType: "tool";
         ok: boolean;
         output?: string;
+        /** The call's argument preview, when the engine sent its arguments after
+         * the start (grok's use_tool, #3126): same shape as item.started's input. */
+        input?: string;
+        /** A short digest of those arguments, unredacted, for the loop guards: two calls
+         * whose previews redact to the same text still count as distinct (#3126). */
+        inputDigest?: string;
         /** A ConnectWise call's whole result (server/tools/tool-summary.ts
          * cwToolResult), read once for its widget. Never broadcast, never
          * written to the event log. */

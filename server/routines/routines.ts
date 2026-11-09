@@ -1,4 +1,5 @@
 import type { EffortLevel } from "../../shared/model-selection.ts";
+import { routineLoopStopNotice } from "./loop-stop-notice.ts";
 import { loadRoutineReadiness } from "./routine-readiness.ts";
 import { noteEngineRefusal, clearEngineRefusal } from "../engines/engine-refusals.ts";
 import type { RoutineRequirements, RoutineReadinessAnswer, RoutineReadinessResult } from "../../shared/routine-readiness.ts";
@@ -4325,6 +4326,19 @@ export class RoutineManager {
     if (!run || run.target === "room-goal") return false;
     this.troubleOf(run.id).loopStop = reason.slice(0, 300);
     return true;
+  }
+
+  /** #3126: the loop guard's stop notice of the run on `threadId`, in the
+   * language of the person it runs for, and every thread that says it: the
+   * run's own thread and the bot's chat with the person (its results
+   * thread), so the stop is never seen only in a separate thread. */
+  loopStopNotice(threadId: string, reason: string): { text: string; threadIds: string[] } | null {
+    const run = this.runs.find((r) => r.threadId === threadId && ["running", "waiting"].includes(r.status));
+    if (!run || run.target === "room-goal") return null;
+    const who = { botId: run.botId, ...(run.runAs ? { runAs: run.runAs } : {}) };
+    const text = routineLoopStopNotice(this.options.languageFor?.(who), reason);
+    const threadIds = [threadId, ...(run.resultsThreadId && run.resultsThreadId !== threadId ? [run.resultsThreadId] : [])];
+    return { text, threadIds };
   }
 
   failThread(threadId: string, message: string, facts: RoutineFailureFacts = {}) {

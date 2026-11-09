@@ -2,7 +2,7 @@
 // view (2026-11-02, shapes Grok wrote for the prod runs that day).
 import { describe, expect, it } from "vitest";
 
-import { acpFailedToolText, acpToolEndEvents } from "./tool-items.ts";
+import { acpFailedToolText, acpLateToolInput, acpToolEndEvents } from "./tool-items.ts";
 
 const GRAPH_404 = "Managed MCP gateway tool call failed: Microsoft Graph API error: 404 Not Found: {\"error\":{\"code\":\"ErrorItemNotFound\",\"message\":\"The specified object was not found in the store.\"}}";
 
@@ -56,5 +56,19 @@ describe("acpToolEndEvents", () => {
     const [done] = acpToolEndEvents({ status: "completed", rawOutput: { output: "two bots" } }, "t3", new Set());
     expect(done).toMatchObject({ ok: true });
     expect((done as { output?: string }).output).toContain("two bots");
+  });
+});
+
+// #3126: grok's use_tool start reads "{}"; the arguments come on a later update.
+describe("acpLateToolInput", () => {
+  it("reads the arguments a use_tool call ended with when its start had none", () => {
+    const call = { title: "use_tool", start: "{}", raw: { variant: "UseTool", tool_name: "agents__sagax_settings", tool_input: {} } };
+    const late = acpLateToolInput(call, { variant: "UseTool", tool_name: "agents__sagax_settings", tool_input: { op: "get", key: "rules.owner" } });
+    expect(late?.input).toContain('"op": "get"');
+    const other = acpLateToolInput(call, { variant: "UseTool", tool_name: "agents__sagax_settings", tool_input: { op: "get", key: "rules.admin" } });
+    // same redacted preview ("key" is masked by length), distinct digests
+    expect(other?.input).toBe(late?.input);
+    expect(other?.inputDigest).not.toBe(late?.inputDigest);
+    expect(acpLateToolInput(call, undefined)).toBeUndefined();
   });
 });

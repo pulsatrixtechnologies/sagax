@@ -1083,3 +1083,42 @@ describe("sagax_settings: several bots in one call (2026-10-29, Edit N bots)", (
     expect(h.planned).toEqual([]);
   });
 });
+
+describe("sagax_settings: reads a routine makes of a whole family (#3126)", () => {
+  const answer = (path: string) =>
+    path === "/api/custom-rules" ? { rules: [{ id: "cr1", when: "a read", behavior: "allow" }] }
+      : path === "/api/approval-rules" ? { rules: [{ id: "ar1", behavior: "allow" }] }
+        : {};
+
+  it("a get of a rule kind with no target reads every rule instead of refusing", async () => {
+    const h = harness({ answer });
+    const owner = await h.call({ action: "get", key: "rules.owner" });
+    expect(owner.status).toBe(200);
+    expect(JSON.parse(String(owner.body.text))).toMatchObject({ key: "rules.owner", value: { rules: [{ id: "ar1" }] } });
+    const custom = await h.call({ action: "get", key: "rules.customUpdate" });
+    expect(custom.status).toBe(200);
+    expect(JSON.parse(String(custom.body.text))).toMatchObject({ key: "rules.customUpdate", value: [{ id: "cr1" }] });
+  });
+
+  it("a get with a target still reads that one rule", async () => {
+    const h = harness({ answer });
+    const one = await h.call({ action: "get", key: "rules.customUpdate", target: "cr1" });
+    expect(JSON.parse(String(one.body.text))).toMatchObject({ value: { id: "cr1", behavior: "allow" } });
+    expect((await h.call({ action: "get", key: "rules.customUpdate", target: "nope" })).status).toBe(404);
+  });
+
+  it("a get naming the family reads every value it holds", async () => {
+    for (const args of [{ action: "get", key: "rules" }, { action: "get", family: "rules" }]) {
+      const result = await harness({ answer }).call(args);
+      expect(result.status).toBe(200);
+      const body = JSON.parse(String(result.body.text));
+      expect(body.family).toBe("rules");
+      expect(Object.keys(body.values)).toEqual(expect.arrayContaining(["rules.custom", "rules.owner", "rules.customUpdate"]));
+    }
+  });
+
+  it("a record read whose route names the record still needs its target", async () => {
+    const result = await harness({ answer }).call({ action: "get", key: "routine.name" });
+    expect(result.status).toBe(400);
+  });
+});

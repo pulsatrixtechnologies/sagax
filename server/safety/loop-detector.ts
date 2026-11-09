@@ -439,7 +439,11 @@ export function makeLoopStopSubscriber(options: LoopStopOptions): (event: Runtim
       detector = thresholds ? new LoopDetector(thresholds) : null;
       detectors.set(threadId, detector);
     }
-    const verdict = detector?.observe({ tool: call.tool, input: call.input, result: event.output, error: !event.ok });
+    // #3126: an engine that sends the arguments after the start (grok's use_tool) reports them
+    // on the completion; distinct calls must not count as one call repeated with "{}".
+    const late = event as { input?: unknown; inputDigest?: unknown };
+    const input = typeof late.inputDigest === "string" ? late.inputDigest : typeof late.input === "string" ? late.input : call.input;
+    const verdict = detector?.observe({ tool: call.tool, input, result: event.output, error: !event.ok });
     if (verdict) options.stop(threadId, stuckLoopStopReason(verdict), verdict);
   };
 }

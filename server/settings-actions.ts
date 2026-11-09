@@ -296,6 +296,29 @@ export function finalRefusal(result: BotActResult): BotActResult {
   return { ...result, body: { ...result.body, error: said ? `${said} ${note}` : note } };
 }
 
+/** The family a get names instead of a key: key "rules", or no key with family "rules" (#3126). */
+function familyOfGet(args: Record<string, unknown>): string | undefined {
+  const isFamily = (name: unknown): name is string => typeof name === "string" && (SETTING_FAMILIES as readonly string[]).includes(name);
+  if (isFamily(args.key) && !settingSpec(args.key)) return args.key;
+  if ((args.key === undefined || args.key === "") && isFamily(args.family)) return args.family;
+  return undefined;
+}
+
+/** A get of a rule with no target: the person's whole rule list, not one rule (#3126). Other
+ * record kinds (engines, groups) keep their own list keys and their id requirement. */
+function readsWhole(spec: SettingSpec, target: unknown): boolean {
+  if (typeof target === "string" && target.trim()) return false;
+  if (!spec.read || spec.target !== "rule") return false;
+  // only a read whose route does not name the record: the collection it is found in
+  try {
+    const read = spec.read({}, undefined);
+    if (read.preference || read.device || !read.path) return false;
+    return ![read.path, read.field ?? "", ...Object.values(read.query ?? {})].some((part) => part.includes("undefined"));
+  } catch {
+    return false;
+  }
+}
+
 function listText(family: unknown): string {
   const families = typeof family === "string" && (SETTING_FAMILIES as readonly string[]).includes(family) ? [family] : SETTING_FAMILIES;
   const lines: string[] = [];
@@ -475,16 +498,38 @@ export function createSettingsActions(deps: SettingsActionDeps) {
     return text(200, JSON.stringify({ key: spec.key, value: shaped === undefined ? null : shaped, ...(typeof parsed.device === "string" ? { device: parsed.device } : {}), ...(decoded === undefined ? { note: "Not set on that device: the app's default applies." } : {}) }).slice(0, 8000));
   }
 
+  /** Every readable value of one family, each as its own get answers it (#3126). */
+  async function familyRead(input: SettingsActionInput, family: string): Promise<BotActResult> {
+    const values: Record<string, unknown> = {};
+    const refused: Record<string, string> = {};
+    for (const spec of SETTINGS) {
+      if (spec.family !== family || !spec.read) continue;
+      if (!["none", "self", "bot"].includes(spec.target) && !readsWhole(spec, undefined)) continue;
+      const answer = await handle({ ...input, args: { action: "get", key: spec.key } });
+      if (answer.status < 400) {
+        try { values[spec.key] = (JSON.parse(String(answer.body.text ?? "")) as { value?: unknown }).value ?? null; } catch { values[spec.key] = answer.body.text ?? null; }
+      } else refused[spec.key] = String(answer.body.error ?? "").slice(0, 200);
+    }
+    if (!Object.keys(values).length && !Object.keys(refused).length) return text(400, `The ${family} family has no value to read; action list with family "${family}" shows its keys.`);
+    return text(200, JSON.stringify({ family, values, ...(Object.keys(refused).length ? { refused } : {}) }).slice(0, 8000));
+  }
+
   async function handle(input: SettingsActionInput): Promise<BotActResult> {
     const args = input.args;
     const action = args.action;
     if (action === "list") return text(200, listText(args.family));
+    // #3126: a read of a whole family ("get" with key "rules", or with only a family)
+    // answers every value that family can read, instead of a refusal the bot retries
+    const familyName = action === "get" ? familyOfGet(args) : undefined;
+    if (familyName) return familyRead(input, familyName);
     const spec = settingSpec(args.key);
     if (!spec) return text(400, "Unknown setting key. Call sagax_settings with action list (and a family) to see them.");
     const facts = deps.facts(input.threadId, input.generation);
     const actor = actorForTurn(facts);
     const speaker = actor.kind === "person" ? actor.personKey : actor.kind === "operator" ? deps.operatorId() : null;
-    const ids = resolve(spec, args.target, input, speaker);
+    // #3126: a get of a record kind (a rule, a group...) without a target reads them all
+    const wholeRead = action === "get" && readsWhole(spec, args.target);
+    const ids = wholeRead ? {} : resolve(spec, args.target, input, speaker);
     if (typeof ids === "string") return text(400, ids);
 
     if (action === "get") {
@@ -513,12 +558,14 @@ export function createSettingsActions(deps: SettingsActionDeps) {
       if (!acceptablePath(read.path)) return text(400, `${spec.key}: that target cannot name a record.`);
       let value: unknown;
       try {
-        value = await readValue(facts, input, read.path, read.query, read.list, spec.target === "thread" ? ids.botId : ids.target, read.field, read.match, read.method);
+        value = wholeRead
+          ? await readValue(facts, input, read.path, read.query, undefined, undefined, read.list ?? read.field, read.match, read.method)
+          : await readValue(facts, input, read.path, read.query, read.list, spec.target === "thread" ? ids.botId : ids.target, read.field, read.match, read.method);
       } catch (error) {
         const status = (error as { status?: number }).status ?? 502;
         return text(status, error instanceof Error ? error.message : "The setting could not be read.");
       }
-      if (value === undefined && read.list) return text(404, `No such ${spec.target} for this person, or no value.`);
+      if (value === undefined && read.list && !wholeRead) return text(404, `No such ${spec.target} for this person, or no value.`);
       // 2026-10-28 (one source of truth): the approval level is the bot's own
       // setting, as Permissions shows it, never the level of whichever
       // conversation the read landed on; this conversation's real level is
@@ -532,8 +579,9 @@ export function createSettingsActions(deps: SettingsActionDeps) {
           }));
         }
       }
-      const shaped = read.shape && value !== undefined ? read.shape(value, args.value) : value;
-      return text(200, JSON.stringify({ key: spec.key, value: shaped === undefined ? null : shaped }).slice(0, read.maxChars ?? 8000));
+      // a whole read is the collection, not one record the shape is written for
+      const shaped = read.shape && value !== undefined && !wholeRead ? read.shape(value, args.value) : value;
+      return text(200, JSON.stringify({ key: spec.key, value: shaped === undefined ? null : shaped, ...(wholeRead ? { note: `Every ${spec.target} this person has; pass target to read one.` } : {}) }).slice(0, read.maxChars ?? 8000));
     }
 
     if (action !== "set") return text(400, "action is list, get or set.");

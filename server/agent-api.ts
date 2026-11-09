@@ -1,5 +1,6 @@
 import { ENGINE_EXITED_SENTENCE, isEngineExitedBeforeReply } from "../shared/engine-exit-words.ts";
 import { failedTurnCause, failedTurnRepeatsReply } from "../shared/failed-turn.ts";
+import { redactSecretsInText } from "../shared/redact.ts";
 import { parseRoutineEffort } from "../shared/routine-effort.ts";
 import { parseRoutineGoal } from "../shared/routine-goal.ts";
 import { parseRoutineModel } from "../shared/routine-model.ts";
@@ -336,7 +337,7 @@ export interface StoredMessage {
   text?: string;
   at: number;
   sender?: string | null;
-  tool?: { name?: string; ok?: boolean } | null;
+  tool?: { name?: string; ok?: boolean; output?: string } | null;
   attachments?: Array<{ name?: string; path?: string }> | null;
   /** A send that waited in the server queue: the id its 202 answered
    * (the handle's anchor), stored on the line when its own turn starts. */
@@ -788,7 +789,8 @@ export class AgentRateLimiter {
 
 /** A stored message as a transcript entry; null for what a caller never
  * reads (reasoning, cards' internals, empty rows). Tool rows keep the tool's
- * name and outcome only, never its input or output. */
+ * name and outcome, and a failed call's own error as the chat shows it (#3126);
+ * never its input or a successful output. */
 export function toEntry(threadId: string, message: StoredMessage): TranscriptEntry | null {
   if (!message || typeof message.id !== "string" || typeof message.at !== "number") return null;
   const role = message.role === "user" ? "user" : message.role === "bot" ? "agent" : null;
@@ -799,7 +801,9 @@ export function toEntry(threadId: string, message: StoredMessage): TranscriptEnt
   if (kind === "activity") {
     const name = message.tool?.name?.trim();
     if (!name) return null;
-    return { ...base, kind: "tool", text: `${name}${message.tool?.ok === false ? " (failed)" : ""}`.slice(0, 300) };
+    const failed = message.tool?.ok === false;
+    const error = failed && typeof message.tool?.output === "string" ? redactSecretsInText(message.tool.output.trim().replace(/\s+/g, " ")) : "";
+    return { ...base, kind: "tool", text: `${name}${failed ? (error ? ` (failed): ${error}` : " (failed)") : ""}`.slice(0, 300) };
   }
   if (kind === "text" || kind === "nudge" || kind === "access") {
     const text = typeof message.text === "string" ? message.text : "";

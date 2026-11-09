@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { extractMcpImages } from "../../mcp/mcp-tool-images.ts";
 import { foreignMailboxAccessDenied } from "../../../shared/mailbox-user.ts";
 import { toolFailureText } from "../../../shared/tool-failure-text.ts";
 import { toolDetailPreview } from "../../tools/tool-summary.ts";
+import { readUseToolCall } from "../../../shared/mcp-gateway-call.ts";
 
 export type AcpToolEndEvent = { type: "item.completed" } & (
   | { itemType: "tool"; itemId: string | undefined; ok: boolean; output?: string; [field: string]: unknown }
@@ -60,4 +62,31 @@ export function acpToolEndEvents(
     ...extractMcpImages(update.content ?? update.rawOutput).map((img): AcpToolEndEvent =>
       ({ type: "item.completed", itemType: "assistant_image", data: img.data })),
   ];
+}
+
+/** #3126: the arguments a call ended with, when they differ from what its start
+ * showed. Grok's use_tool sends them only on a later tool_call_update, so the
+ * start read "{}" and distinct calls looked like one call repeated. */
+export function acpLateToolInput(
+  call: { title?: string; start?: string; raw?: unknown },
+  updateRaw: unknown,
+  meta?: unknown,
+): { input: string; inputDigest: string } | undefined {
+  const raw = updateRaw !== undefined ? updateRaw : call.raw;
+  if (raw === undefined) return undefined;
+  const useTool = readUseToolCall(raw, { title: call.title, meta });
+  const args = useTool ? useTool.args : raw;
+  const preview = toolDetailPreview(args);
+  if (preview === undefined || preview === call.start) return undefined;
+  // The preview redacts values (a settings "key" among them); the digest tells calls apart.
+  const inputDigest = createHash("sha256").update(stableJson(args)).digest("hex").slice(0, 16);
+  return { input: preview, inputDigest };
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson((value as Record<string, unknown>)[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
 }

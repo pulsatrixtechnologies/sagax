@@ -5275,6 +5275,22 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(isRoutineProblemRun(run)).toBe(true);
   });
 
+  // #3126: the stop notice is in the person's language and in the bot's chat with the person, not only the run's thread.
+  it("the loop guard's stop notice is translated and names the run's thread and the bot's chat with the person", async () => {
+    const h = harness(start);
+    h.options.resolveResultsThread = () => ({ threadId: "chat-1" });
+    h.options.languageFor = () => "fr-CA";
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const reason = "stuck-loop: the same search call ran 5 times in a row";
+    const notice = h.manager.loopStopNotice("thread-1", reason)!;
+    expect(notice.threadIds).toEqual(["thread-1", "chat-1"]);
+    expect(notice.text).toBe(`La routine a été arrêtée avant la fin : elle répétait la même étape. ${reason}`);
+    h.options.languageFor = () => "de";
+    expect(h.manager.loopStopNotice("thread-1", reason)!.text).toBe(`The routine was stopped before it finished: it kept repeating the same step. ${reason}`);
+    expect(h.manager.loopStopNotice("other-thread", reason)).toBeNull();
+  });
+
   it("a loop-stopped turn that ends not ok fails with the guard's reason", async () => {
     const h = harness(start);
     const routine = h.manager.create(input());

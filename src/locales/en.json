@@ -14544,5 +14544,6 @@
   "piServers.provider": "pi provider",
   "piServers.checkedAt": "Last test",
   "piServers.context": "context {count} tokens",
-  "piServers.contextDefault": "context not reported, default used"
+  "piServers.contextDefault": "context not reported, default used",
+  "routines.loopStop.notice": "The routine was stopped before it finished: it kept repeating the same step. {reason}"
 }

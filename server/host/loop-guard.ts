@@ -353,7 +353,11 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
       if (!earlier && !counted.onFailure) chip(counted);
     }
     if (event.type === "item.completed" && event.itemType === "tool" && event.itemId) {
-      const call = callOfItem.get(threadId)?.get(event.itemId);
+      const started = callOfItem.get(threadId)?.get(event.itemId);
+      // #3126: an MCP call whose arguments came after its start (grok's use_tool) counts by
+      // the arguments its completion carries, not by the "{}" its start showed.
+      const late = typeof event.inputDigest === "string" ? event.inputDigest : typeof event.input === "string" ? oneLine(event.input) : "";
+      const call = started?.onFailure && late ? { ...started, key: `tool:${JSON.stringify([started.args, late])}` } : started;
       if (call) {
         callOfItem.get(threadId)!.delete(event.itemId);
         let errors = lastError.get(threadId);

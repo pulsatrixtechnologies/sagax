@@ -602,6 +602,9 @@ export function AttachmentThumbnail({
   const galleryId = useId();
   const frameRef = useRef<HTMLSpanElement>(null);
   const { src, name, downloadUrl, downloadName, openUrl } = image;
+  // a GIF or meme is shown whole at its own ratio, never cropped to the
+  // clamp below (a wide strip showed only the top of a head)
+  const whole = /\.gif(?:$|[?#])/i.test(name) || /\.gif(?:$|[?#])/i.test(src);
   useEffect(() => {
     if (!gallery || !src) return;
     return gallery.register(galleryId, { element: frameRef.current, image: { src, name, downloadUrl, downloadName, openUrl } });
@@ -675,7 +678,7 @@ export function AttachmentThumbnail({
             fetchPriority={eager ? "high" : undefined}
             onLoad={(event) => {
               const { naturalWidth, naturalHeight } = event.currentTarget;
-              if (naturalWidth > 0 && naturalHeight > 0) setRatio(Math.min(Math.max(naturalWidth / naturalHeight, 0.6), 2.4));
+              if (naturalWidth > 0 && naturalHeight > 0) setRatio(whole ? naturalWidth / naturalHeight : Math.min(Math.max(naturalWidth / naturalHeight, 0.6), 2.4));
               setState("ready");
             }}
             onError={() => {
@@ -683,7 +686,7 @@ export function AttachmentThumbnail({
               if (explainRefusal) void messageImageOutsideWorkspace(image.src).then(setOutsideWorkspace);
             }}
             className={cn(
-              "block size-full object-cover transition duration-200 group-hover/image:scale-[1.015]",
+              whole ? "block size-full object-contain" : "block size-full object-cover transition duration-200 group-hover/image:scale-[1.015]",
               state === "ready" ? "opacity-100" : "opacity-0",
             )}
           />

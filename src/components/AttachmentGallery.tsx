@@ -624,7 +624,6 @@ export function AttachmentGallery({ images = [], files = [], message, eager = fa
                     attribution={item.memeAttribution}
                     caption={item.memeCaption}
                     onClick={() => setSelected(item.image)}
-                    className="max-h-24"
                   />
                 ) : (
                   <AttachmentThumbnail key={item.image.src} image={item.image} eager={eager} onPreview={() => setSelected(item.image)} className="h-24 w-auto max-w-48 rounded-2xl border-0" />

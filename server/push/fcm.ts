@@ -21,6 +21,7 @@ import { createSign } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import { markdownToPlainText } from "../../shared/plain-text.ts";
+import { serverAttachmentLabels } from "../approvals/approval-words.ts";
 
 import { maskSecret } from "./config.ts";
 import type { PushMessage } from "./payload.ts";
@@ -97,7 +98,7 @@ export function buildFcmMessage(input: { message: PushMessage; token: string; ki
   if (input.kind !== "read") {
     put("title", message.title);
     // Android draws no Markdown either (shared/plain-text.ts)
-    put("body", markdownToPlainText(message.body ?? "", { dropCode: true }));
+    put("body", markdownToPlainText(message.body ?? "", { dropCode: true, attachmentLabels: serverAttachmentLabels() }));
     put("botId", message.botId);
     put("groupId", message.groupId);
     put("requestId", message.requestId);

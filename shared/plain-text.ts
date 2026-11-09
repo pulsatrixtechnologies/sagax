@@ -21,6 +21,33 @@ export interface PlainTextOptions {
   /** Drop every fenced code block instead of reading it as its code (a lock
    * screen has no room for code). Inline `code` still reads as its text. */
   dropCode?: boolean;
+  /** What an attachment tag reads as in a preview (default: English). */
+  attachmentLabels?: AttachmentLabels;
+}
+
+/** The words a preview shows in place of a stored `<attached-image .../>` or
+ * `<attached-file .../>` transport tag: never the raw tag or its path. */
+export interface AttachmentLabels {
+  image: string;
+  gif: string;
+  file: string;
+}
+
+export const ENGLISH_ATTACHMENT_LABELS: AttachmentLabels = { image: "Image", gif: "GIF", file: "File" };
+
+// A whole tag, or one a clipped body cut off (no closing bracket): quoted
+// values may hold a ">" and an unterminated quote runs to the end.
+const ATTACHMENT_TAG = /<attached-(image|file)\b(?:"[^"]*"?|[^>"])*(?:\/?>|$)/gi;
+
+/** Swap each stored attachment tag for its human label (Image, GIF, File). A
+ * meme (meme-provider / meme-attribution) or a .gif is a GIF. */
+export function replaceAttachmentTags(text: string, labels: AttachmentLabels = ENGLISH_ATTACHMENT_LABELS): string {
+  if (!/<attached-/i.test(text)) return text;
+  return text.replace(ATTACHMENT_TAG, (tag, kind: string) => {
+    if (kind.toLowerCase() === "file") return ` ${labels.file} `;
+    const gif = /\bmeme-(?:provider|attribution)=/i.test(tag) || /\.gif\b/i.test(tag);
+    return ` ${gif ? labels.gif : labels.image} `;
+  });
 }
 
 /** One line of plain text: Markdown gone, whitespace collapsed. */
@@ -153,7 +180,8 @@ function flattenedTables(text: string): string {
   return out;
 }
 
-function plainTextBody(text: string, options: PlainTextOptions): string {
+function plainTextBody(rawText: string, options: PlainTextOptions): string {
+  const text = replaceAttachmentTags(rawText, options.attachmentLabels);
   const isRichFence = options.isRichFence ?? (() => false);
   // backslash escapes read as the character: park them out of the way so
   // no rule below takes an escaped * or _ (or a cell's \|) for markup

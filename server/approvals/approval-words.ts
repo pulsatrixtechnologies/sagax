@@ -3,6 +3,7 @@
 // the app's language; phones show these fields as sent, so the server picks:
 // SAGAX_APPROVAL_LOCALE, then the server's UI language setting, then English.
 import fr from "../../src/locales/fr.json" with { type: "json" };
+import { ENGLISH_ATTACHMENT_LABELS, type AttachmentLabels } from "../../shared/plain-text.ts";
 import { ENGLISH_WORDS, type ApprovalWords } from "../../shared/approval-describe.ts";
 
 const CATALOGS: Readonly<Record<string, Readonly<Record<string, string>>>> = { fr };
@@ -25,4 +26,17 @@ export function serverApprovalWords(language?: string, env: NodeJS.ProcessEnv = 
  * as the MCP payload and the phones show it as sent. */
 export function questionCardTitle(language?: string, env: NodeJS.ProcessEnv = process.env): string {
   return serverApprovalWords(language, env).t("question.card.title");
+}
+
+/** The words a push banner or notification shows for an attachment tag, in
+ * the server's language (same choice as the approval words). */
+export function serverAttachmentLabels(language?: string, env: NodeJS.ProcessEnv = process.env): AttachmentLabels {
+  const tag = (env.SAGAX_APPROVAL_LOCALE?.trim() || language?.trim() || "").toLowerCase();
+  const catalog = CATALOGS[tag.split("-")[0] ?? ""];
+  if (!catalog) return ENGLISH_ATTACHMENT_LABELS;
+  return {
+    image: catalog["preview.attachment.image"] ?? ENGLISH_ATTACHMENT_LABELS.image,
+    gif: catalog["preview.attachment.gif"] ?? ENGLISH_ATTACHMENT_LABELS.gif,
+    file: catalog["preview.attachment.file"] ?? ENGLISH_ATTACHMENT_LABELS.file,
+  };
 }

@@ -21,6 +21,7 @@
 import type { Notification, NotifyKind } from "../shared/notification.ts";
 import { buildNotificationContext, notificationChoiceLabels } from "../shared/notification-context.ts";
 import { plainPreviewLine } from "../shared/plain-text.ts";
+import { serverAttachmentLabels } from "./approvals/approval-words.ts";
 
 // The notification wire shape lives in shared/notification.ts now (part of
 // the wire model); re-exported here so existing importers keep working.
@@ -32,7 +33,7 @@ export { botNotifyArg, notificationAlerts, withBotNotify } from "../shared/notif
  * gone), then the newlines flattened and the line cut at a word. Flattening
  * first left `| Champ | Valeur | | --- |` on a phone (2026-11-08). */
 export function summarize(text: string, max = 140): string {
-  return plainPreviewLine(text ?? "", max);
+  return plainPreviewLine(text ?? "", max, { dropCode: true, attachmentLabels: serverAttachmentLabels() });
 }
 
 export interface NotifyBot {

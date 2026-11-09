@@ -84,3 +84,19 @@ describe("plainPreviewText", () => {
     });
   });
 });
+
+describe("plainPreviewText attachment tags (#sidebar-preview)", () => {
+  it("reads an image tag as a label, never the raw tag or its path", () => {
+    expect(plainPreviewText('<attached-image path="/data/.openmaus/uploads/a.png" name="a.png" />')).toBe("Image");
+  });
+  it("reads a meme or a .gif as GIF", () => {
+    expect(plainPreviewText('<attached-image path="/data/.openmaus/u/x.gif" name="x.gif" meme-provider="giphy" meme-attribution="Via GIPHY" />')).toBe("GIF");
+    expect(plainPreviewText('<attached-image path="/data/u/y.gif" name="y.gif" />')).toBe("GIF");
+  });
+  it("reads a file tag as File and keeps the caption", () => {
+    expect(plainPreviewText('look\n<attached-file path="/data/u/r.pdf" name="r.pdf" />')).toBe("look File");
+  });
+  it("never leaks a tag a clipped body cut off", () => {
+    expect(plainPreviewText('<attached-image path="/data/.openmaus')).toBe("Image");
+  });
+});

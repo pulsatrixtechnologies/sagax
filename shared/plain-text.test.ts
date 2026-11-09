@@ -72,3 +72,14 @@ describe("a table flattened on a line of its own", () => {
     expect(markdownToPlainText("**Publier ?**\n| a | b | | --- | --- | | x | y |")).toBe("Publier ? x : y");
   });
 });
+
+describe("replaceAttachmentTags", () => {
+  const fr = { image: "Image", gif: "GIF", file: "Fichier" };
+  it("uses the given labels for push and notification previews", () => {
+    expect(markdownToPlainText('<attached-file path="/data/u/r.pdf" name="r.pdf" />', { attachmentLabels: fr })).toBe("Fichier");
+    expect(markdownToPlainText('Voici <attached-image path="/data/u/a.png" />', { attachmentLabels: fr })).toBe("Voici Image");
+  });
+  it("defaults to English", () => {
+    expect(plainPreviewLine('<attached-image path="/data/.openmaus/a.png" name="a.png" />', 80)).toBe("Image");
+  });
+});

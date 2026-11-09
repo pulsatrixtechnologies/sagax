@@ -485,9 +485,9 @@ const bridge = {
     ipcRenderer.on("desktop:notification-reply", listener);
     return () => ipcRenderer.removeListener("desktop:notification-reply", listener);
   },
-  /** The menu bar's bot list (macOS, Windows): [{id, name, color, working, unread}], at most nine. */
-  setTrayRoster: (roster, labels) => ipcRenderer.send("desktop:tray-roster", Array.isArray(roster) ? roster : [], labels && typeof labels === "object" ? labels : undefined),
-  /** A bot picked in the menu bar list or by its Cmd+Shift+N shortcut. */
+  /** The visible bots in shortcut order: [{id, name, color, working, unread}], at most nine. */
+  setBotRoster: (roster) => ipcRenderer.send("desktop:bot-roster", Array.isArray(roster) ? roster : []),
+  /** A bot opened by its Cmd+Shift+N shortcut. */
   onOpenBot: (cb) => {
     const listener = (_event, value) => { if (value && typeof value.botId === "string") cb(value.botId); };
     ipcRenderer.on("desktop:open-bot", listener);

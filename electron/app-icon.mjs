@@ -122,10 +122,9 @@ export function createAppIconStore(userData, { fsImpl = fs, now = () => Date.now
 /**
  * Put an icon on screen. `saved` null restores the default. macOS sets the
  * Dock tile (null hands it back to the bundle's own icon, Liquid Glass
- * included); Windows and Linux set every window, so the taskbar follows,
- * and the notification-area icon (`tray`) when there is one.
+ * included); Windows and Linux set every window, so the taskbar follows.
  */
-export function applyAppIcon(saved, { platform, app, windows, nativeImage, defaultIconPath, defaultDockIcon = null, tray = null }) {
+export function applyAppIcon(saved, { platform, app, windows, nativeImage, defaultIconPath, defaultDockIcon = null }) {
   if (platform === "darwin") {
     if (!app?.dock) return "none";
     if (saved?.png) app.dock.setIcon(nativeImage.createFromPath(saved.png));
@@ -136,12 +135,11 @@ export function applyAppIcon(saved, { platform, app, windows, nativeImage, defau
   }
   const image = windowIconImage(saved, platform, nativeImage, defaultIconPath);
   for (const win of windows) if (win && !win.isDestroyed?.()) win.setIcon(image);
-  if (tray) tray.setIcon(image);
   return "windows";
 }
 
 /**
- * The image Windows and Linux windows (and the tray) wear. Windows reads the
+ * The image Windows and Linux windows wear. Windows reads the
  * .ico; when that file cannot be decoded (Electron then hands back an empty
  * image, and setIcon(empty) silently keeps the old icon) the largest PNG
  * stands in, and the app's own icon is the last resort.

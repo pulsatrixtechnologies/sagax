@@ -7,7 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-// the chords of electron/system-tray.mjs HOTKEY_MODIFIERS
+// the chords of electron/bot-roster.mjs HOTKEY_MODIFIERS
 const HOTKEY_MODIFIER_NAMES = ["cmd-shift", "cmd-alt", "ctrl-alt"];
 const FILE = "desktop-shell-preferences.json";
 export const DEFAULT_SHELL_PREFERENCES = Object.freeze({ hardwareAcceleration: true, spellcheck: true, botHotkeys: true, botHotkeyModifier: "cmd-shift" });

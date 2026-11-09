@@ -40,7 +40,7 @@ describe("tailcat stage 1", () => {
   it("never shows a Computer tab: the panel has Activity and Library, and Simple or a bot that works nowhere has no Computer card", () => {
     expect(visiblePanelTabs({ advanced: false, computerOff: false })).toEqual(["activity", "library"]);
     expect(visiblePanelTabs({ advanced: true, computerOff: false })).toEqual(["activity", "library"]);
-    expect(showsComputer({ advanced: false, computerOff: false })).toBe(false);
+    expect(showsComputer({ advanced: false, computerOff: false })).toBe(true);
     expect(showsComputer({ advanced: true, computerOff: true })).toBe(false);
     expect(showsComputer({ advanced: true, computerOff: false })).toBe(true);
   });

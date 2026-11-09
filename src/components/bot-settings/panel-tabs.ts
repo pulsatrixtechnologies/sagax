@@ -18,15 +18,16 @@ export const PANEL_TABS = ["activity", "library", "coding"] as const;
 export type PanelTab = (typeof PANEL_TABS)[number];
 
 /** The tabs the panel shows: Activity and Library in every mode, Coding only
- * while this bot's coding chat is open or it has code work to show. Simple and a bot that works nowhere
- * lose only the Computer card. A remote session's screen is in the chat
+ * while this bot's coding chat is open or it has code work to show. Simple keeps
+ * the Computer card (#3092). A remote session's screen is in the chat
  * (RemoteScreenCard), never in this panel. */
 export function visiblePanelTabs(input: { advanced: boolean; computerOff: boolean; coding?: boolean }): PanelTab[] {
   return PANEL_TABS.filter((tab) => tab !== "coding" || input.coding === true);
 }
 
 /** Whether Activity shows the Computer card (and the computer view opens in
- * the panel): Advanced, and a bot that works somewhere. */
+ * the panel): every mode, Simple included (JC 2026-11-09, #3092), for a bot
+ * that works somewhere. `advanced` stays in the signature for the callers. */
 export function showsComputer(input: { advanced: boolean; computerOff: boolean }): boolean {
-  return input.advanced && !input.computerOff;
+  return !input.computerOff;
 }

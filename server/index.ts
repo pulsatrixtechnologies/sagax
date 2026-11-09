@@ -13767,6 +13767,7 @@ const coordinator: Coordinator = createCoordinator({
           withName: shown?.name ?? "Teammate", withColor: shown?.color ?? "blue" } }
           : { threadRef: { botId: child.botId, threadId: child.threadId, title: (shown ? store.taskByThread(child.botId, child.threadId)?.title : undefined) ?? "Teammate work" } })
       });
+      if (!group && !child.groupId && bot && !problem) noteIncomingHandoffResult(child, bot);
       if (group) store.patchGroup(group.id, { unread: true });
       else {
         // fd0c41c04: an ordinary consultation is recorded without calling
@@ -13863,6 +13864,7 @@ const coordinator: Coordinator = createCoordinator({
           text: `${request.botIds.map(id => `@${store.bot(id)?.name ?? "Teammate"}`).join(" ")} ${node.text}`
         });
       }
+      if (!goalWorker && !resumed && !group && sender) noteIncomingHandoff(node, bot, sender);
       markInternalTurn(node.threadId);
       // The settle itself is quiet by design: both the delegated turn and
       // this resume are internal, so turn.completed raises neither the unread
@@ -18718,6 +18720,39 @@ function routineRunReceiptFacts(routine: Pick<Routine, "botId" | "name">, run: R
 function botMainThread(botId: string): string | undefined {
   const bot = store.bot(botId);
   return bot ? conversationThreadFor(bot) : undefined;
+}
+
+/** The teammate's side of a hand-off (unified chat, 2026-11-09, #2901). A
+ * work thread a bot opened is not part of its recipient's stream, so the
+ * recipient's chat showed nothing of the ask. Its conversation gets a
+ * receipt: who asked (their avatar and name), the brief, and, once the work
+ * settles, what it answered, drawn as one row (HandoffRow). Never in the
+ * work thread itself, never twice. */
+function incomingHandoffHome(recipient: BotRecord, workThreadId: string): string | undefined {
+  const work = store.taskByThread(recipient.id, workThreadId);
+  if (!work || isStreamSegment(work)) return undefined;
+  const home = conversationThreadFor(recipient, achievementThreadPerson(workThreadId) ?? undefined);
+  return home && home !== workThreadId ? home : undefined;
+}
+function noteIncomingHandoff(node: { id: string; threadId: string; text: string }, recipient: BotRecord, sender: BotRecord): void {
+  const home = incomingHandoffHome(recipient, node.threadId);
+  if (!home || store.messagesFor(home).some(m => m.tool?.handoffId === node.id && !m.roomRequest)) return;
+  store.appendMessage(home, { role: "bot", kind: "activity",
+    from: { botId: sender.id, name: sender.name, color: sender.color },
+    tool: { name: `Asked by ${sender.name}`, ok: true, input: redactSecretsInText(node.text), handoffId: node.id },
+    threadRef: { botId: recipient.id, threadId: node.threadId, title: store.taskByThread(recipient.id, node.threadId)?.title ?? "Teammate work" } });
+}
+function noteIncomingHandoffResult(child: { id: string; threadId: string; status: string; result: string }, recipient: BotRecord): void {
+  const home = incomingHandoffHome(recipient, child.threadId);
+  if (!home || !store.messagesFor(home).some(m => m.tool?.handoffId === child.id && !m.roomRequest)) return;
+  if (store.messagesFor(home).some(m => m.roomRequest?.id === child.id && m.roomRequest.phase === "result")) return;
+  const done = child.status === "completed";
+  store.appendMessage(home, { role: "bot", kind: "activity",
+    roomRequest: { id: child.id, phase: "result" },
+    from: { botId: recipient.id, name: recipient.name, color: recipient.color },
+    tool: { name: done ? `${recipient.name} replied` : `${recipient.name} — ${child.status}: ${child.result.split("\n", 1)[0]!.slice(0, 180)}`,
+      ok: done, ...(done && child.result.trim() ? { output: redactSecretsInText(child.result.trim()).slice(0, 2_000) } : {}) },
+    threadRef: { botId: recipient.id, threadId: child.threadId, title: store.taskByThread(recipient.id, child.threadId)?.title ?? "Teammate work" } });
 }
 
 /** THE one conversation a person has with a bot (shared/single-stream.ts,

@@ -6,6 +6,7 @@
 // room with a task list). Otherwise (an organization server, another
 // person's bot) the server's read-time `gone` mark on the chip decides.
 import type { Message } from "@/state/store";
+import { isHandoff } from "./handoff-row";
 
 interface Owner {
   id: string;
@@ -47,6 +48,9 @@ export function navigationTargetGone(message: Message, owners: ThreadOwners): bo
  * grouping so no fold or exchange is left holding an empty slot. */
 export function withoutDeadThreadChips(messages: Message[], owners: ThreadOwners): Message[] {
   if (!messages.some((message) => message.threadRef || message.comm)) return messages;
-  const kept = messages.filter((message) => !navigationTargetGone(message, owners));
+  // A hand-off keeps its row: in the unified chat it reads the brief and the
+  // teammate's verdict in place, with no link to the thread (HandoffRow).
+  // With threads shown, ThreadChip still leaves out a link that leads nowhere.
+  const kept = messages.filter((message) => isHandoff(message) || !navigationTargetGone(message, owners));
   return kept.length === messages.length ? messages : kept;
 }

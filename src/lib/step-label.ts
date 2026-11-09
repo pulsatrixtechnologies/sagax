@@ -219,6 +219,19 @@ function isHostComputerTool(name: string): boolean {
   return bare === "host_computer";
 }
 
+/** A call that hands work to a teammate bot (coordinate, ask, delegate, send to). */
+export function isTeammateStep(name: string | undefined): boolean {
+  if (!name) return false;
+  const kind = kindOf(name);
+  return kind === "coordinate" || kind === "ask" || kind === "delegate" || kind === "sendTo";
+}
+
+/** A teammate hand-off that failed: shown even with tool calls off, so the
+ * person sees why the teammate never answered (2026-11-09). */
+export function isFailedTeammateStep(step: { kind?: string; tool?: { name?: string; ok?: boolean } }): boolean {
+  return step.kind === "activity" && step.tool?.ok === false && isTeammateStep(step.tool.name);
+}
+
 function kindOf(name: string): Kind | undefined {
   const builtin = BUILTIN[name];
   if (builtin) return builtin;

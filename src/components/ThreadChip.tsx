@@ -10,6 +10,8 @@ import { useShowThreads } from "@/lib/thread-preferences";
 import { t } from "@/lib/i18n";
 import { navigationTargetGone } from "@/lib/dead-thread-chips";
 import { ConversationLink } from "./ConversationLink";
+import { HandoffRow } from "./HandoffRow";
+import { isHandoff } from "@/lib/handoff-row";
 import type { MausColor } from "@/lib/mascot";
 
 export function ThreadChip({ message }: { message: Message }) {
@@ -19,9 +21,11 @@ export function ThreadChip({ message }: { message: Message }) {
   const tool = message.tool;
   if (!ref || !tool) return null;
   // Threads off (Settings > Appearance): the single stream shows no thread
-  // row or receipt in the chat (2026-10-22). The thread stays reachable
-  // from the bot panel and the sidebar's activity list, never a chip here.
-  if (!showThreads) return null;
+  // row or link in the chat (2026-10-22). A hand-off to a teammate still
+  // shows, in place: "Asked <teammate>" with its brief and the teammate's
+  // verdict folded under it (HandoffRow, 2026-11-09, #2901: nothing
+  // invisible). Its thread stays reachable from the bot panel.
+  if (!showThreads) return isHandoff(message) ? <HandoffRow message={message} /> : null;
   if (navigationTargetGone(message, state)) return null;
   const bot = state.bots.find((candidate) => candidate.id === ref.botId);
   const group = bot ? undefined : state.groups.find((candidate) => candidate.id === ref.botId);
@@ -38,3 +42,4 @@ export function ThreadChip({ message }: { message: Message }) {
     />
   );
 }
+

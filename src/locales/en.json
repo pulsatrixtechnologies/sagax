@@ -14545,5 +14545,6 @@
   "piServers.checkedAt": "Last test",
   "piServers.context": "context {count} tokens",
   "piServers.contextDefault": "context not reported, default used",
-  "routines.loopStop.notice": "The routine was stopped before it finished: it kept repeating the same step. {reason}"
+  "routines.loopStop.notice": "The routine was stopped before it finished: it kept repeating the same step. {reason}",
+  "routines.preflight.notice": "The routine \"{name}\" did not start: {reason}"
 }

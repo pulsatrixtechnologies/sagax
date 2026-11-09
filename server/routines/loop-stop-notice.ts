@@ -12,3 +12,14 @@ export function routineLoopStopNotice(language: string | undefined, reason: stri
   const text = CATALOGS[tag]?.[KEY] ?? en[KEY];
   return text.replace("{reason}", reason.trim());
 }
+
+const PREFLIGHT_KEY = "routines.preflight.notice";
+
+/** #3130: a run blocked or skipped at pre-flight (signed out, the engine
+ * still starting after the retries, Perspicax unreachable), as one line in
+ * the bot's chat with the person, in their language. */
+export function routinePreflightNotice(language: string | undefined, name: string, reason: string): string {
+  const tag = (language ?? "").trim().toLowerCase().split("-")[0] ?? "";
+  const text = CATALOGS[tag]?.[PREFLIGHT_KEY] ?? en[PREFLIGHT_KEY];
+  return text.replace("{name}", name.trim()).replace("{reason}", reason.trim());
+}

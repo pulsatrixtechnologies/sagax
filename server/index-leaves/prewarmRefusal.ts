@@ -26,10 +26,12 @@ function prewarmRefusal(botId: string, threadId: string) {
   // Perspicax: for Claude its turn capability rides a file
   // the bridge reads on every frame (spawn-contract.ts warmPerspicaxEnv), so
   // the next turn reuses the warm process; the Perspicax tokens stay in
-  // perspicaxMcp. Other engines still carry it in their launch, where a warm
-  // would only be relaunched.
+  // perspicaxMcp. pi's warm (#1276) hands its process to the next new
+  // conversation, which writes that turn's own servers. Other engines still
+  // carry it in their launch, where a warm would only be relaunched.
+  const warmKind = host.registry.get(bot.modelSelection.instanceId)?.driverKind;
   if (host.IDENTITY.kind === "perspicax" && host.perspicaxMcp
-    && host.registry.get(bot.modelSelection.instanceId)?.driverKind !== "claudeAgent") return "perspicax";
+    && warmKind !== "claudeAgent" && warmKind !== "piAgent") return "perspicax";
   return null;
 
 }

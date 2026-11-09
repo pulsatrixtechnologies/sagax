@@ -61,6 +61,11 @@ interface McpConfig {
   warmPath?: string;
   /** The request a standby pi sends once its session is resumed. */
   warm?: Record<string, unknown>;
+  /** #1276: a warm before the conversation's first message (the person
+   * opened it or is typing): each request sends only the stable part for one
+   * token, so the local server computes it ahead and the real turn reads it
+   * cached. */
+  warmOnly?: boolean;
 }
 
 /** #1276: Sagax writes this between its prompt's stable and volatile parts.
@@ -752,6 +757,10 @@ export default async function (pi: PiExtensionApi): Promise<void> {
         warmWritten = true;
         const { stream: _stream, stream_options: _options, max_completion_tokens: _max, ...rest } = payload as Record<string, unknown>;
         try { writeFileSync(config.warmPath, JSON.stringify({ ...rest, messages: split.stable, max_tokens: 1, stream: false }), { mode: 0o600 }); } catch { /* no warm then */ }
+      }
+      if (config.warmOnly === true) {
+        const { max_completion_tokens: _max, ...rest } = payload as Record<string, unknown>;
+        return { ...rest, messages: split.stable, max_tokens: 1 };
       }
       return { ...payload, messages: split.messages };
     });

@@ -1871,3 +1871,73 @@ describe("a pi started ahead for the next new conversation (#1276)", () => {
     }
   });
 });
+
+describe("a warm before a new conversation's first message (#1276)", () => {
+  let warmed: ProviderInstance | undefined;
+  afterEach(async () => {
+    await warmed?.dispose();
+    warmed = undefined;
+  });
+
+  it("sends the shared prompt ahead, unseen, then hands its pi to the conversation", async () => {
+    ensureDirs();
+    chmodSync(FAKE_CLI, 0o755);
+    const dir = mkdtempSync(join(tmpdir(), "omb-pi-warm-"));
+    const cwd = mkdtempSync(join(tmpdir(), "omb-pi-warm-cwd-"));
+    const dump = join(dir, "rpc.jsonl");
+    const sessions = join(dir, "sessions");
+    try {
+      warmed = await PiDriver.create({
+        instanceId: "pi-warm", displayName: "pi", enabled: true, config: { cli: FAKE_CLI, fullAuto: false },
+        environment: { FAKE_PI_DUMP: dump, FAKE_PI_SESSIONS: sessions },
+      });
+      const recorder = recordEvents(warmed.adapter);
+      const turn = {
+        botId: "b-warm", cwd, compactPrompt: { agents: { core: "used" as const, pinned: [] }, pinned: {} },
+        system: "STABLEREACH|CWD", systemStable: "STABLE", systemVolatile: "REACH|CWD",
+        systemVolatileSections: [{ id: "reach", text: "REACH|" }, { id: "files-cwd", text: "CWD" }],
+        integrations: { custom: { ops: { command: "node", args: ["ops"], env: {} } } },
+      };
+      const rows = () => readFileSync(dump, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+      await warmed.adapter.sendTurn({ ...turn, threadId: "t-warm", text: "", warmOnly: true });
+      // no turn is shown for a warm
+      expect(recorder.events).toEqual([]);
+      const warm = rows().find((row) => row.prompt);
+      expect(warm.warmOnly).toBe(true);
+      expect(warm.prompt.message).toContain(`STABLEREACH|${STABLE_END_MARKER}`);
+      // its throwaway session and its credentials leave the disk
+      expect(() => readFileSync(warm.session)).toThrow();
+      const { turnId } = await warmed.adapter.sendTurn({ ...turn, threadId: "t-real", text: "hi" });
+      await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
+      const real = rows().filter((row) => row.prompt).at(-1);
+      expect(real.warmOnly).toBe(false);
+      expect(real.prompt.message).toContain("hi");
+      // the warm's pi, moved to a new session in this conversation's folder
+      expect(String(real.session).startsWith(join(sessions, piSessionDirName(cwd)))).toBe(true);
+    } finally {
+      await warmed?.dispose();
+      warmed = undefined;
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("does nothing for a turn on another model, or in a conversation under way", async () => {
+    ensureDirs();
+    chmodSync(FAKE_CLI, 0o755);
+    const dir = mkdtempSync(join(tmpdir(), "omb-pi-warm-off-"));
+    const dump = join(dir, "rpc.jsonl");
+    try {
+      warmed = await PiDriver.create({ instanceId: "pi-warm-off", displayName: "pi", enabled: true, config: { cli: FAKE_CLI, fullAuto: false }, environment: { FAKE_PI_DUMP: dump } });
+      expect(warmed.adapter.capabilities.warmSession).toBe(true);
+      await warmed.adapter.sendTurn({ threadId: "t-off", text: "", warmOnly: true, cwd: dir });
+      // nor for a conversation already under way: its standby pi stays its own
+      await warmed.adapter.sendTurn({ threadId: "t-on", text: "", warmOnly: true, cwd: dir, resumeCursor: join(dir, "s.jsonl"),
+        compactPrompt: { agents: { core: "used", pinned: [] }, pinned: {} }, integrations: { custom: { ops: { command: "node", args: ["ops"], env: {} } } } });
+      const rows = (() => { try { return readFileSync(dump, "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line)); } catch { return []; } })();
+      expect(rows.some((row) => row.prompt)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

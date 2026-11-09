@@ -382,7 +382,7 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "save_artifact", "update_artifact", "delete_artifact", "list_artifacts", "claude_artifact", "choose_page_target",
   "manage_settings", "sagax_settings", "manage_pairing", "offer_shell_terminal", "list_terminal_resources", "resource_usage", "vm_exec",
   "shared_computer", "list_shared_computers", "nudge_person", "remove_reaction", "retry_thread",
-  "read_transcript", "read_transcript_cold", "read_transcript_page", "read_latest_page", "read_latest_page_with_threads",
+  "read_transcript", "read_transcript_cold", "read_transcript_page", "read_latest_page", "read_latest_page_with_threads", "read_transcript_attachment",
   "find_agents", "get_agent", "list_agents", "send_prompt", "await_turn", "create_agent", "delete_agent",
   // #2023 / #1944: fleet Edit-bot writes are occasional; keep them behind ToolSearch.
   "list_agent_models", "update_agent_model", "update_agent_settings", "update_routine",

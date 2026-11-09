@@ -119,6 +119,18 @@ export const RELAY_GROUP_MS = 60_000;
 /** How many of the chat's newest rows the mirror reads (dedupe, burst). */
 export const RELAY_RECENT_ROWS = 50;
 
+/** QA 0.8.77: the bracketed notes the server puts before a request the bot
+ * wrote itself (a thread it opened, a parallel task, a hand-off to another
+ * engine, a message sent while it works, a read-only task). They are for the
+ * model: the person reads the request alone. */
+const OWN_REQUEST_NOTE = /^\[(?:Thread you opened yourself|Parallel task you started yourself|Part of your own work you handed to yourself|Sent while you work|Read-only task:)[\s\S]*?\]\s*/;
+
+export function askedWords(text: string): string {
+  let words = text;
+  for (let next = words.replace(OWN_REQUEST_NOTE, ""); next !== words; next = words.replace(OWN_REQUEST_NOTE, "")) words = next;
+  return words;
+}
+
 /** #2915: what was asked of the bot for this turn: the last line written to
  * it before the turn's first answer (an AI client's send_prompt, a
  * teammate's ask), and who asked. */
@@ -129,7 +141,7 @@ export function turnAsk(messages: readonly WireMessage[], turnId: string | undef
     // an earlier turn's answer: what came before it was asked of that turn
     if (message.role === "bot" && message.kind === "text" && !message.from && message.turnId && message.turnId !== turnId) return undefined;
     const asked = message.role === "user" || (message.role === "bot" && Boolean(message.from));
-    const text = asked && typeof message.text === "string" ? message.text.replace(/\s+/g, " ").trim() : "";
+    const text = asked && typeof message.text === "string" ? askedWords(message.text).replace(/\s+/g, " ").trim() : "";
     if (!text) continue;
     const by = (message.from?.name || message.sender?.name || opener?.name || "").trim();
     return { text: text.length > RELAY_ASK_MAX ? `${text.slice(0, RELAY_ASK_MAX - 1).trimEnd()}…` : text, ...(by ? { by } : {}) };

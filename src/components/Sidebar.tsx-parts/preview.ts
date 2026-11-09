@@ -9,11 +9,24 @@ import { plainPreviewText } from "@/lib/plain-preview";
 import { isClientCancellation } from "../../../shared/client-cancel";
 import type { Bot, InstanceInfo, Message } from "@/state/store";
 
+/** 2026-11-09: "Waiting for you" says on what (the card's question or
+ * approval, WireBot.waitingOn); a server without it keeps the plain line. */
+export function waitingLine(bot: Pick<Bot, "waitingOn">): string {
+  const text = bot.waitingOn?.text.trim();
+  return text ? t("sidebar.preview.waitingFor", { text }) : t("sidebar.preview.waiting");
+}
+
+/** "Waiting on a teammate" names who (WireBot.waitingOnTeammates). */
+export function teammateWaitLine(bot: Pick<Bot, "waitingOnTeammates">): string {
+  const names = (bot.waitingOnTeammates ?? []).filter((name) => name.trim());
+  return names.length ? t("sidebar.preview.waitingOnNamed", { names: names.join(", ") }) : t("sidebar.preview.waitingOnTeammate");
+}
+
 /** `visible` is the bot's visible branch (visibleMessages), which the row
  * already works out once per transcript. */
 export function preview(bot: Bot, visible: Message[], instances: InstanceInfo[]): string {
-  if (bot.activity === "waiting-on-you") return t("sidebar.preview.waiting");
-  if (bot.waitingForTeammates) return t("sidebar.preview.waitingOnTeammate");
+  if (bot.activity === "waiting-on-you") return waitingLine(bot);
+  if (bot.waitingForTeammates) return teammateWaitLine(bot);
   if (bot.busy) return t("sidebar.preview.working");
   // the visible branch's tail — bot.messages holds every fork, so its last
   // entry can belong to a version the user switched away from — read past

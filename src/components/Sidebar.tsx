@@ -49,6 +49,7 @@ import {
   visibleMessages,
   currentTaskBot,
   openBot,
+  openNotificationTarget,
   startNewTopic,
   type AppState,
   type Bot,
@@ -175,7 +176,7 @@ import {
   roomDeleteCopy,
   type BotConfirmKind,
 } from "./Sidebar.tsx-parts/helpers";
-import { preview } from "./Sidebar.tsx-parts/preview";
+import { preview, teammateWaitLine, waitingLine } from "./Sidebar.tsx-parts/preview";
 import { sidebarListedBots } from "./Sidebar.tsx-parts/sidebarListedBots";
 import { TeamMenuItems } from "./Sidebar.tsx-parts/TeamMenuItems";
 import type { MenuState } from "./Sidebar.tsx-parts/types";
@@ -1973,7 +1974,7 @@ export function BotListItem({
         {working && <StatusDot tone="success" testId="working-dot" className={cn("absolute -right-0.5", dotCorner)} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
         {waiting && <StatusDot tone="warning" testId="waiting-dot" role="status" label={t("sidebar.preview.waiting")} className={cn("absolute -right-0.5", dotCorner)} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
         {sharer && !primary && <SidebarSharerBadge sharer={sharer} avatarSize={avatarSize} />}
-        {teammateWait && <StatusDot tone="accent" testId="teammate-wait-dot" role="status" label={t("sidebar.preview.waitingOnTeammate")} className={cn("absolute -right-0.5", dotCorner)} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
+        {teammateWait && <StatusDot tone="accent" testId="teammate-wait-dot" role="status" label={teammateWaitLine(bot)} className={cn("absolute -right-0.5", dotCorner)} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
         {!teammateWait && !waiting && !working && queued && <StatusDot tone="queued" testId="queued-dot" role="status" label={t("task.queued")} className={cn("absolute -right-0.5", dotCorner)} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
       </span>
       <div data-sidebar-row-name className={cn("flex min-w-0 flex-1 flex-col", iconOnly && "hidden", trailingDot && "mr-4 group-hover:mr-0 group-focus-within:mr-0 max-md:mr-0 touch:mr-0")}>
@@ -2021,7 +2022,7 @@ export function BotListItem({
                   <span className="sr-only">{t("sidebar.preview.working")}</span>
                 </span>
               ) : (
-                <span dir="auto" className="truncate">{waiting ? t("sidebar.preview.waiting") : teammateWait ? t("sidebar.preview.waitingOnTeammate") : queued ? t("task.queued") : preview(routineOnlyWork ? { ...bot, busy: false } : bot, visible, instances)}</span>
+                <span dir="auto" className="truncate">{waiting ? waitingLine(bot) : teammateWait ? teammateWaitLine(bot) : queued ? t("task.queued") : preview(routineOnlyWork ? { ...bot, busy: false } : bot, visible, instances)}</span>
               )}
             </span>
           )}
@@ -2037,7 +2038,10 @@ export function BotListItem({
   // With threads hidden a server that names the bot's main thread decides
   // (openBot, server/threads/main-thread.ts); an older one without it keeps that rule.
   const openConversation = () => navigate(() => {
-    if (showThreads || bot.mainThreadId) openBot(dispatch, bot, showThreads);
+    // 2026-11-09: a bot that waits on the person opens on the card it waits
+    // on, wherever in the conversation it sits (openNotificationTarget, #2909)
+    if (waiting && bot.waitingOn) openNotificationTarget(dispatch, { botId: bot.id, threadId: bot.waitingOn.threadId, cardId: bot.waitingOn.messageId }, { bots: [bot], groups: [] }, showThreads, { runDetail: false });
+    else if (showThreads || bot.mainThreadId) openBot(dispatch, bot, showThreads);
     else for (const action of openBotConversationActions(bot, showThreads)) dispatch(action);
   });
   const onSelect = (event: React.MouseEvent) => {
@@ -2065,7 +2069,7 @@ export function BotListItem({
           !renaming && iconOnly
             ? deleting
               ? t("sidebar.bot.deletingAria", { name: bot.name })
-              : `${bot.name}${share ? ` · ${botShareLabel(share).replace("\n", ", ")}` : ""}${waiting ? ` · ${t("sidebar.preview.waiting")}` : working ? ` · ${t("chat.activity.working")}` : teammateWait ? ` · ${t("sidebar.preview.waitingOnTeammate")}` : queued ? ` · ${t("task.queued")}` : ""}${unread ? ` · ${t("task.unread")}` : ""}`
+              : `${bot.name}${share ? ` · ${botShareLabel(share).replace("\n", ", ")}` : ""}${waiting ? ` · ${waitingLine(bot)}` : working ? ` · ${t("chat.activity.working")}` : teammateWait ? ` · ${teammateWaitLine(bot)}` : queued ? ` · ${t("task.queued")}` : ""}${unread ? ` · ${t("task.unread")}` : ""}`
             : undefined
         }
         aria-busy={deleting || undefined}

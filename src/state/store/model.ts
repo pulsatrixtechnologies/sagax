@@ -7,7 +7,7 @@ import { withoutLeakedTokens } from "@/lib/leaked-tokens";
 import { citationAttachment, CITATION_MAX_QUOTE_LENGTH } from "@/lib/citations";
 import type { AppSettingsSection, BotSettingsSection } from "../settings-section";
 import type { BotUpdatePatch } from "../bot-patch-queue";
-import type { BotVisibility, CloudBackend, EffortLevel, InstalledPackageMetadata, LiveCallState, LiveSettings, GroupThreadUsage, SteerQueueReason, VoiceCallMark, WireBotConversation, WireWaitingApproval } from "../../../shared/wire";
+import type { BotVisibility, CloudBackend, EffortLevel, InstalledPackageMetadata, LiveCallState, LiveSettings, GroupThreadUsage, SteerQueueReason, VoiceCallMark, WaitingOnCard, WireBotConversation, WireWaitingApproval } from "../../../shared/wire";
 import { type DataSheet, type DataTable } from "../../../shared/data-surface";
 import type { ModelListIssue } from "../../../shared/azure-openai";
 import type { TurnDigest } from "../../../shared/digest";
@@ -463,6 +463,10 @@ export interface Bot {
   /** Owner selection, independent of engine approval mode. */
   toolScope?: ToolScope;
   waitingForTeammates?: boolean;
+  /** WireBot.waitingOnTeammates: who "Waiting on a teammate" waits on. */
+  waitingOnTeammates?: string[];
+  /** WireBot.waitingOn: the open card "Waiting for you" waits on. */
+  waitingOn?: WaitingOnCard;
   /** Bot-to-bot conversations waiting on the viewer's approval
    * (WireBot.waitingApprovals): never listed, their cards join the open
    * conversation's approval box (parallel-approvals.ts). */

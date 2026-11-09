@@ -59,4 +59,12 @@ describe("MemeImage", () => {
     expect(img.className).toContain("h-auto");
     expect(container.querySelector("button")!.className).toContain("shrink-0");
   });
+  it("caps its width with a fixed length so a shrink-to-fit bubble stays flush right", () => {
+    act(() => root.render(createElement(MemeImage, { src: "https://example.test/m.gif", attribution: "Via GIPHY" })));
+    const cls = container.querySelector("button")!.className;
+    // a percentage cap is ignored when the bubble sizes itself to its content,
+    // so a wide GIF widened the bubble and sat on its left edge
+    expect(cls).toContain("max-w-80");
+    expect(cls).not.toMatch(/max-w-\[[^\]]*%/);
+  });
 });

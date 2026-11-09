@@ -80,7 +80,7 @@ export function MemeImage({
         onClick={onClick}
         // shrink-0: a flex column must never squash the button below the image
         // height (overflow-hidden lets it), which cropped a GIF to a strip
-        className="block max-w-[min(20rem,100%)] shrink-0 overflow-hidden rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60"
+        className="block max-w-80 shrink-0 overflow-hidden rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60"
         aria-label={alt || t("memes.imageAria")}
       >
         <img

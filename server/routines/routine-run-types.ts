@@ -113,6 +113,9 @@ export interface RoutineRun {
   /** Times a restart cut this run and the next start resumed it in place
    * (at most once; a second cut fails it with ROUTINE_RESTARTED). */
   restartResumes?: number;
+  /** #3065: the run went on once in its own thread after a turn that ended
+   * on Grok refusing use_tool for one of its native tools (search_tool). */
+  nativeToolContinued?: true;
   /** Why this receipt exists. Kept optional so version-1 files migrate in place. */
   triggerSource?: RoutineRunTrigger;
   /** "app": a connected-app event started it; "wait": a wait's follow-up did

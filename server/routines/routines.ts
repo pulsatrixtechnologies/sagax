@@ -327,6 +327,18 @@ export function nativeToolMisroute(output: string): string | undefined {
   return name ? nativeToolKey(name) : undefined;
 }
 
+/** #3065: the turn that continues a run whose turn ended on Grok refusing
+ * use_tool for its own native tools: call them directly this time. */
+export function routineNativeToolPrompt(tools: readonly string[]): string {
+  const names = tools.join(", ");
+  const one = tools.length === 1;
+  return `use_tool refused ${names} because ${one ? "it is one of your own native tools" : "they are your own native tools"}, not an MCP integration tool. This turn continues the same routine run: call ${names} directly by ${one ? "its" : "their"} own name, never through use_tool, then finish the routine and report as usual. Do not redo steps that already succeeded.`;
+}
+
+/** Tries of the continuation's start while the run's turn is still settling. */
+const NATIVE_TOOL_CONTINUE_TRIES = 10;
+const NATIVE_TOOL_CONTINUE_RETRY_MS = 1_000;
+
 /** A tool title as a native tool key: "Search tool" and "search_tool" match. */
 function nativeToolKey(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
@@ -4151,7 +4163,45 @@ export class RoutineManager {
       && !this.options.cardRaisedSince(run.threadId, this.claimWindowStart(run as RoutineRun & { startedAt: number })));
   }
 
+  /** #3065: Grok refuses use_tool aimed at one of its native tools and a
+   * Grok turn cannot be steered, so a turn that ended with such a refusal
+   * never settled goes on once in the run's own thread, told to call the
+   * native tool directly. The run keeps running; its trouble carries over,
+   * so a second refusal is reported when that turn ends. */
+  private continueNativeToolMisroute(run: RoutineRun): boolean {
+    if (run.target === "room-goal" || run.nativeToolContinued || !run.threadId) return false;
+    const trouble = this.runTrouble.get(run.id);
+    if (!trouble || trouble.loopStop || trouble.flowBlocked) return false;
+    const tools = [...new Set([...trouble.unresolved.values()].flatMap((failure) => failure.misrouted ? [failure.misrouted] : []))];
+    if (!tools.length) return false;
+    if (routineReportOutcome(run.output).declared?.status === "failed") return false;
+    run.nativeToolContinued = true;
+    // The continuation's words are the run's final message.
+    delete trouble.failedAfterText;
+    const threadId = run.threadId;
+    const prompt = routineNativeToolPrompt(tools);
+    const attempt = (left: number) => {
+      const current = this.runs.find((candidate) => candidate.id === run.id);
+      if (!current || current.status !== "running" || current.threadId !== threadId) return;
+      this.options.startTurn(
+        current.botId, threadId, prompt, current.runOn ?? "maus", current.triggerSource ?? (current.manual ? "manual" : "schedule"),
+        (message) => this.failThread(threadId, message), cloneRun(current),
+      ).catch((error) => {
+        const code = (error as { code?: unknown } | null)?.code;
+        if (typeof code === "string" && BUSY_START.has(code) && left > 1) {
+          setTimeout(() => attempt(left - 1), NATIVE_TOOL_CONTINUE_RETRY_MS).unref?.();
+          return;
+        }
+        this.failThread(threadId, error instanceof Error ? error.message : String(error), dispatchRefusal(error));
+      });
+    };
+    // After the event that ended the turn is folded everywhere.
+    setTimeout(() => attempt(NATIVE_TOOL_CONTINUE_TRIES), 0).unref?.();
+    return true;
+  }
+
   private settleCompleted(run: RoutineRun): boolean {
+    if (this.continueNativeToolMisroute(run)) return false;
     // #3009: the loop guard cut the run, or tool steps failed after the
     // bot's last words (a progress line) with nothing said after them: there
     // is no final message, and run.output never shows a mid-run line.

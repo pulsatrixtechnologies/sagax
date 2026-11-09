@@ -401,6 +401,7 @@ describe("org admin API: the console routes (2026-10-08)", () => {
   it("usage rows carry their engine; audit filters by category and target", async () => {
     const usage = await call("/api/org/admin/usage?from=2026-09-01&to=2026-09-30", assertion("alice", "admin"));
     expect(usage.body.rows.every((row: { engine: string | null }) => row.engine === "claude")).toBe(true);
+    expect(usage.body.rows.every((row: { model: string | null; payerPrincipalId: string | null }) => row.model === "m" && row.payerPrincipalId === null)).toBe(true);
     expect((await call("/api/org/admin/audit?category=bot&target=x", assertion("alice", "admin"))).status).toBe(200);
     expect(auditCalls.at(-1)).toMatchObject({ categories: ["bot"], target: "x" });
     expect(await call("/api/org/admin/audit?category=nope", assertion("alice", "admin"))).toMatchObject({ status: 400, body: { code: "bad_request" } });

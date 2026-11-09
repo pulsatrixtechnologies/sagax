@@ -11305,3 +11305,11 @@ for 30 minutes, usage limits until their reset (30 minutes when unknown),
 sign-out until a verified sign-in. A newer completed turn clears that account.
 Admission skips are blocked, and interrupted runs marked `ROUTINE_RESTARTED`
 never count in failure streaks. Reconnect waits survive restarts.
+
+## Org admin usage: model and payer dimensions (2026-10-30)
+
+`GET /api/org/admin/usage` retains the settled `model` and
+`payerPrincipalId` in its day/bot/speaker/engine aggregates. Both are nullable
+for old ledger rows; each distinct model and payer keeps its own group so
+Perspicax can regroup and filter without attributing another person's cost.
+Visibility is still checked before aggregation (`server/usage/usage-ledger.ts`).

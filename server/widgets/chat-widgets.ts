@@ -18,6 +18,8 @@ import { createOptionsCard } from "./options-card.ts";
 import { ASK_CHOICE_TOOL, parseAskChoiceInput } from "../../shared/options-card.ts";
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import { fullAccessChoiceAnswer } from "../approvals/full-access-gate.ts";
+import { questionCardTitle } from "../approvals/approval-words.ts";
+import { lastPersonText, turnLanguage } from "../turns/turn-language.ts";
 import { choiceOptionsFor } from "../approvals/final-confirmation.ts";
 import { isSecretName, mask, redactSecretsInText } from "../redact.ts";
 import type { AgentCardResult, AgentCardStore } from "./chat-card-types.ts";
@@ -146,6 +148,10 @@ export function createAgentCard(args: {
   /** #1905: the level the calling turn runs at (index.ts sourceApprovalMode),
    * so a may-I ask_choice under Full access is answered, not drawn. */
   approvalLevel?: ApprovalMode;
+  /** The language setting of the person the card asks (index.ts
+   * languageOfPerson): the card's default title falls back to it when the
+   * conversation has no line of theirs yet. */
+  personLanguage?: string | null;
   /** 2026-11-03 (a routine's choice card reached nobody): where the person
    * is not watching the conversation (a routine run's hidden task, an AI
    * client's hidden conversation), ask_choice is raised as a real question
@@ -221,11 +227,18 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   // keeps the card instead of taking the first path for the person.
   const twoPaths = parsed.value.options !== given;
   const from = args.store.groupByThread(args.threadId) ? { from: { botId: args.bot.id, name: args.bot.name, color: args.bot.color } } : {};
+  // QA 0.8.77: a card drawn in the conversation (passive or settled) shows
+  // its title as is, so the default one is worded in the conversation's
+  // language, like a raised question card (#3158). The raised path keeps the
+  // English default: raiseHarnessQuestion tells it apart from a given title.
+  const shownCard = input.title === undefined
+    ? { ...parsed.value, title: questionCardTitle(turnLanguage(lastPersonText(args.store.messagesFor(args.threadId)), args.personLanguage)) || parsed.value.title }
+    : parsed.value;
   const answered = twoPaths ? null : fullAccessChoiceAnswer(args.approvalLevel, { title: parsed.value.title, question: parsed.value.subtitle, options: parsed.value.options });
   if (answered) {
     // full-access: ask-choice
     const settled = args.store.appendMessage(args.threadId, {
-      role: "bot", kind: "options", card: { ...parsed.value, answered: "answer", answeredText: answered.choice, autoApplied: true },
+      role: "bot", kind: "options", card: { ...shownCard, answered: "answer", answeredText: answered.choice, autoApplied: true },
       ...from,
     });
     args.authored?.(settled.id);
@@ -251,7 +264,7 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   // a direct thread replays a bot row that carries `from` as another bot's line
   // full-access: ask-choice
   const message = args.store.appendMessage(args.threadId, {
-    role: "bot", kind: "options", card: parsed.value,
+    role: "bot", kind: "options", card: shownCard,
     ...from,
   });
   args.authored?.(message.id);

@@ -122,7 +122,7 @@ const WORDS = {
     previewTitle: "Envoyer ce signalement?",
     previewSubtitle: "Écrivez un détail pour l'ajouter, ou envoyez tel quel. La capture d'écran reste sur le serveur.",
     cancelled: "Annulé : rien n'a été envoyé.",
-    queuedNoToken: (manual: string) => `En file d'attente : signalement prêt et gardé ici. Ce serveur n'a pas de jeton GitHub pour l'envoyer à l'équipe : un administrateur du serveur doit définir la variable SAGAX_FEEDBACK_GITHUB_TOKEN (ou l'enregistrer par PUT /api/admin/feedback-config). Je réessaie toutes les 5 minutes. En attendant, vous pouvez ${manual}.`,
+    queuedNoToken: (manual: string) => `En file d'attente : signalement prêt et gardé ici. Ce serveur n'a pas de jeton GitHub pour l'envoyer à l'équipe : un administrateur du serveur doit définir la variable SAGAX_FEEDBACK_GITHUB_TOKEN (ou l'enregistrer par PUT /api/admin/feedback-config). Il part dès que le jeton est défini. En attendant, vous pouvez ${manual}.`,
     manualLink: (url: string) => `[ouvrir le signalement sur GitHub](${url}) vous-même (il est déjà rempli)`,
     queuedError: "L'envoi n'a pas passé pour l'instant; le signalement est gardé ici et je réessaie automatiquement.",
     sent: (link: string) => `Envoyé à l'équipe : ${link}. Je vous tiens au courant ici.`,
@@ -137,7 +137,7 @@ const WORDS = {
     previewTitle: "Send this report?",
     previewSubtitle: "Type a detail to add it, or send it as is. The screenshot stays on the server.",
     cancelled: "Cancelled: nothing was sent.",
-    queuedNoToken: (manual: string) => `Queued: report ready and kept here. This server has no GitHub token to send it to the team: a server admin must set the SAGAX_FEEDBACK_GITHUB_TOKEN environment variable (or save it with PUT /api/admin/feedback-config). I retry every 5 minutes. Meanwhile you can ${manual}.`,
+    queuedNoToken: (manual: string) => `Queued: report ready and kept here. This server has no GitHub token to send it to the team: a server admin must set the SAGAX_FEEDBACK_GITHUB_TOKEN environment variable (or save it with PUT /api/admin/feedback-config). It goes out as soon as the token is set. Meanwhile you can ${manual}.`,
     manualLink: (url: string) => `[open the report on GitHub](${url}) yourself (it is already filled in)`,
     queuedError: "Sending did not go through for now; the report is kept here and I retry on my own.",
     sent: (link: string) => `Sent to the team: ${link}. I'll keep you posted here.`,
@@ -350,8 +350,9 @@ export function createFeedbackService(deps: FeedbackDeps) {
     const target = filer();
     const words = WORDS[record.lang];
     if (!target) {
+      // #3218: nothing to retry without a token: no timer, the report goes out once one is set
       record.status = "queued";
-      record.nextTryAt = now() + RETRY_MS;
+      delete record.nextTryAt;
       if (!record.queuedNoticed) postStatus(record, words.queuedNoToken(words.manualLink(manualIssueUrl(deps.config().repo, record.report!))));
       record.queuedNoticed = true;
       save();
@@ -524,7 +525,10 @@ export function createFeedbackService(deps: FeedbackDeps) {
       .filter((message) => message.role === "user" && message.kind === "text" && message.text && message.text.trim() !== input.text.trim())
       .map((message) => message.text!);
     const signal = frustrationSignal(input.text, earlier);
-    if (!signal) return;
+    // #3218: the same prompt again is not frustration, and no offer when
+    // sending is not set up on this server.
+    if (!signal || signal === "repeat") return;
+    if (!filer()) return;
     // #3218: the card follows the conversation's language (the words of the
     // person's messages), before the app setting.
     const spoken = textLanguage([...earlier.slice(-3), input.text].join("\n"));

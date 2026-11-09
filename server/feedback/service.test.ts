@@ -203,8 +203,30 @@ describe("feedback service (#2618)", () => {
     expect(store.threads.get("t-other")).toBeUndefined();
   });
 
+  it("never offers the card on a near-duplicate prompt (#3218 repeat signal)", () => {
+    const { service, store } = setup({ token: "server-token" });
+    store.appendMessage("t-main", { role: "user", kind: "text", text: "Combien de billets ouverts sur le tableau IT Ops presentement?" });
+    service.maybeOffer({ botId: "b-main", threadId: "t-main", text: "Combien de billets ouverts sur le tableau IT Ops présentement ?", principalId: "p1" });
+    expect(store.threads.get("t-main")!.filter((message) => message.feedback?.step === "offer")).toHaveLength(0);
+  });
+
+  it("makes no offer when sending is not configured (#3218)", () => {
+    const { service, store } = setup();
+    service.maybeOffer({ botId: "b-main", threadId: "t-main", text: "ça marche toujours pas, tabarnak", principalId: "p1" });
+    expect(store.threads.get("t-main")?.filter((message) => message.feedback?.step === "offer") ?? []).toHaveLength(0);
+  });
+
+  it("sets no retry timer and promises none when no token is set (#3218)", async () => {
+    const { service, store } = setup();
+    const started = service.start("p1", { source: "menu", platform: "web", locale: "en" });
+    for (const answer of ["A question", "How do I share a bot with my whole team?", "Send"]) say(service, started.botId, started.threadId, answer);
+    await service.flush();
+    const text = store.threads.get(started.threadId)!.at(-1)?.text ?? "";
+    expect(text).not.toMatch(/retry every 5 minutes/);
+  });
+
   it("words the offer and the /feedback flow in the person's app language, not the guessed language of the message", () => {
-    const french = setup({ language: () => "fr-CA" });
+    const french = setup({ token: "t", language: () => "fr-CA" });
     french.service.maybeOffer({ botId: "b-main", threadId: "t-main", text: "fuck, nothing works again", principalId: "p1" });
     const offer = french.store.threads.get("t-main")!.at(-1)!;
     expect(offer.card?.title).toBe("On dirait que quelque chose ne marche pas.");
@@ -212,13 +234,13 @@ describe("feedback service (#2618)", () => {
     expect(say(french.service, "b-main", "t-other", "/feedback")).not.toBeNull();
     expect(french.store.threads.get("t-other")!.at(-1)!.card?.title).toBe("Qu'est-ce qu'on signale?");
 
-    const english = setup({ language: () => "en-US" });
+    const english = setup({ token: "t", language: () => "en-US" });
     english.service.maybeOffer({ botId: "b-main", threadId: "t-main", text: "this is still not working and I am angry, damn", principalId: "p1" });
     expect(english.store.threads.get("t-main")!.at(-1)!.card?.title).toBe("Looks like something isn't working.");
   });
 
   it("follows the conversation's language over the app setting (#3218)", () => {
-    const mixed = setup({ language: () => "en-US" });
+    const mixed = setup({ token: "t", language: () => "en-US" });
     mixed.service.maybeOffer({ botId: "b-main", threadId: "t-main", text: "ça marche toujours pas, tabarnak", principalId: "p1" });
     expect(mixed.store.threads.get("t-main")!.at(-1)!.card?.title).toBe("On dirait que quelque chose ne marche pas.");
   });

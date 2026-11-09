@@ -5500,6 +5500,17 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(runOf(h).problems).toBeUndefined();
   });
 
+  it("a flow_run that failed marks the run failed, never completed (#3218)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "a", "mcp__perspicax__flow_run", false, "upstream_error: 500");
+    say(h, "thread-1", "Done, everything went fine.");
+    done(h, "thread-1");
+    expect(runOf(h).status).toBe("failed");
+    expect(runOf(h).error).toContain("flow_run failed");
+  });
+
   it("a tool that kept failing under its alias still names the title it was first called by", async () => {
     const h = harness(start);
     const routine = h.manager.create(input());

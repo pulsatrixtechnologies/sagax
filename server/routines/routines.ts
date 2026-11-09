@@ -4301,6 +4301,14 @@ export class RoutineManager {
       queueMicrotask(() => this.tickInBackground());
       return true;
     }
+    // #3218: a flow_run that failed and never succeeded after is a failed
+    // run, never a completed one.
+    const failedFlow = [...(trouble?.unresolved.values() ?? [])].find((failure) => /flow_run/i.test(failure.title));
+    if (failedFlow) {
+      this.failRun(run, `flow_run failed${failedFlow.output ? `: ${failedFlow.output}` : ""}`.slice(0, 500));
+      queueMicrotask(() => this.tickInBackground());
+      return true;
+    }
     // 2026-11-03: "La carte est affichée" with no card anywhere is a failure
     // the person must hear, not a success that sends them looking for it
     // (when the host could not draw it above).

@@ -127,6 +127,14 @@ struct BotComputerSleepCard: View {
         }
         .frame(maxWidth: .infinity, minHeight: 220)
         .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous))
+        .onTapGesture {
+            // Desktop parity: the whole asleep screen wakes the computer; the
+            // Wake up and Open buttons keep their own taps.
+            guard phase == .asleep else { return }
+            Haptics.selection()
+            wake()
+        }
         .padding(.horizontal, Theme.Profile.cardMargin)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("panel-computer-\(phase.rawValue)")

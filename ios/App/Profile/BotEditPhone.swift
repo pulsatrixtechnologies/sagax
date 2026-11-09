@@ -18,8 +18,8 @@ struct BotEditActions {
     var archive: () -> Void
     var delete: () -> Void
     var close: () -> Void
-    /// iPad only: the bot's Rules document and its Folder (workspace files
-    /// with the Memory inside), the desktop's Rules and Folder rows (#3017, G3).
+    /// The bot's rule sets and its Folder (workspace files), the desktop's
+    /// Rules and Folder rows (#3017, G3; #3030 on the phone too).
     var openRules: (() -> Void)? = nil
     var openFolder: (() -> Void)? = nil
     /// A Permissions sub-page (When it acts alone, Advanced settings).

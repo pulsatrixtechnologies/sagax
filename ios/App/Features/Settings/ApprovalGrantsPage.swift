@@ -16,6 +16,8 @@ struct ApprovalGrantsPage: View {
     /// Permissions, where the bot is already known.
     var botId: String?
     var showsDone = false
+    /// The phone's "Allowed recipients" row (When it acts alone): only that list.
+    var recipientsOnly = false
 
     @State private var picked: String?
     @State private var role: String?
@@ -54,12 +56,12 @@ struct ApprovalGrantsPage: View {
 
     var body: some View {
         if settingsPop != nil {
-            SettingsPage(title: "Approval rules", scrollable: false) {
+            SettingsPage(title: recipientsOnly ? "Allowed recipients" : "Approval rules", scrollable: false) {
                 list.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         } else {
             list
-                .navigationTitle("Approval rules")
+                .navigationTitle(recipientsOnly ? "Allowed recipients" : "Approval rules")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     if showsDone {
@@ -90,9 +92,13 @@ struct ApprovalGrantsPage: View {
                 }
             }
             if let bot {
-                rulesSection(bot)
-                recipientsSection(bot)
-                alwaysSection(bot)
+                if recipientsOnly {
+                    recipientsSection(bot)
+                } else {
+                    rulesSection(bot)
+                    recipientsSection(bot)
+                    alwaysSection(bot)
+                }
             }
             // this iPhone's phone tools and their "Toujours permettre" (Features/PhoneTools)
             if botId == nil { PhoneToolsSettingsSections() }

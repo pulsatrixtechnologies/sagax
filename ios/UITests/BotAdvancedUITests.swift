@@ -144,6 +144,7 @@ final class BotAdvancedUITests: XCTestCase {
         case "usage": return ("stats", "bot-profile-settings.usage")
         case "skills": return ("knowledge", "bot-profile-knowledge.skills")
         case "memory": return ("knowledge", "bot-profile-knowledge.memory")
+        case "access": return ("general", "bot-profile-accounts.engine")
         case let section: return ("general", "bot-profile-settings.\(section)")
         }
     }
@@ -155,11 +156,6 @@ final class BotAdvancedUITests: XCTestCase {
             target = place.id
             let tab = element("bot-profile-tab.\(place.tab)", in: app)
             if !element(target, in: app).exists, tab.waitForExistence(timeout: 10) { tab.tap() }
-            if place.tab == "general", !element(target, in: app).waitForExistence(timeout: 2) {
-                let toggle = element("bot-profile-settings-toggle", in: app)
-                reveal(toggle, in: app)
-                toggle.tap()
-            }
         }
         let link = element(target, in: app)
         reveal(link, in: app)

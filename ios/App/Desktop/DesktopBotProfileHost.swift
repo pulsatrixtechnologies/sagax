@@ -12,7 +12,8 @@ struct DesktopBotProfileHost: View {
     let bot: Bot
 
     @State private var slackURL: URL?
-    @State private var mailRow: BotInboundMailRow?
+    /// Knowledge > Routines opens in place, the desktop's routines sub-page.
+    @State private var routinesOpen = false
     @State private var confirmingArchive = false
     @State private var confirmingDelete = false
     @State private var deleteFailed = false
@@ -42,9 +43,11 @@ struct DesktopBotProfileHost: View {
                 case .personality: .soul
                 case .toolsApps: .access
                 case .sharing: .sharing
-                case .advanced: .summary
+                // Advanced is the Permissions "Advanced settings" part (#3030).
+                case .advanced: .permissions
                 }
                 withAnimation(.easeOut(duration: 0.15)) {
+                    model.permissionsPart = page == .advanced ? .advanced : .all
                     model.panelSection = target?.section
                     model.personaPage = target ?? .overview
                 }
@@ -57,9 +60,7 @@ struct DesktopBotProfileHost: View {
                 }
             },
             openRoutines: {
-                model.personaOpen = false
-                model.panelSection = nil
-                model.show(.automations)
+                withAnimation(.easeOut(duration: 0.15)) { routinesOpen = true }
             },
             editAvatar: {
                 withAnimation(.easeOut(duration: 0.15)) {
@@ -85,7 +86,9 @@ struct DesktopBotProfileHost: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             theme.app.ignoresSafeArea()
-            if let sectionPage {
+            if routinesOpen {
+                routinesHost
+            } else if let sectionPage {
                 sectionHost(sectionPage)
             } else {
                 profileRoot
@@ -103,7 +106,6 @@ struct DesktopBotProfileHost: View {
             if gate.allows(.botSlack) {
                 slackURL = await session.profileClient?.slackManagementURL(botId: bot.id)
             }
-            mailRow = await session.profileClient?.botInboundMail(botId: bot.id)
         }
         .alert("Archive this bot?", isPresented: $confirmingArchive) {
             Button("Archive", role: .destructive) {
@@ -148,7 +150,6 @@ struct DesktopBotProfileHost: View {
                 context: editContext,
                 actions: editActions,
                 slackURL: slackURL,
-                mailRow: mailRow,
                 fillsMain: true,
                 openAppearance: model.personaPage == .appearance && model.panelSection == nil,
                 onAppearanceOpened: {
@@ -158,6 +159,48 @@ struct DesktopBotProfileHost: View {
             )
         }
         .environment(\.desktopTheme, theme)
+    }
+
+    /// The bot's routines in the main column, back to the profile.
+    private var routinesHost: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Button {
+                    withAnimation(.easeOut(duration: 0.15)) { routinesOpen = false }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("Profile")
+                            .font(theme.font(13, .medium))
+                    }
+                    .foregroundStyle(theme.inkSecondary)
+                    .padding(.horizontal, 10)
+                    .frame(height: 32)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("desktop-bot-profile-back")
+                Text("Routines")
+                    .font(theme.font(15, .semibold))
+                    .foregroundStyle(theme.ink)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+            }
+            .padding(.leading, 12)
+            .padding(.trailing, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 8)
+            ScrollView {
+                BotPanelRoutines(bot: current)
+                    .frame(maxWidth: 760)
+                    .padding(.horizontal, 32)
+                    .padding(.vertical, 16)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("desktop-bot-profile-routines")
     }
 
     private func sectionHost(_ page: DesktopPersonaPage) -> some View {
@@ -198,12 +241,49 @@ struct DesktopBotProfileHost: View {
             .padding(.trailing, 16)
             .padding(.top, 14)
             .padding(.bottom, 8)
+            if let intro = subpageIntro(page) {
+                Text(intro)
+                    .font(theme.font(13))
+                    .foregroundStyle(theme.inkSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 4)
+                    .accessibilityIdentifier("desktop-bot-profile-intro")
+            }
+            if let lock = lockNote(page) {
+                Label { Text(lock) } icon: { Image(systemName: "lock") }
+                    .font(theme.font(13))
+                    .foregroundStyle(theme.inkSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 4)
+                    .accessibilityIdentifier("desktop-bot-profile-locked")
+            }
             DesktopPersonaPageHost(bot: current, page: page, slackURL: slackURL, permissionsPart: model.permissionsPart)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // Page id on the body only: putting it on this VStack hid the
                 // window-close chip from UITests (#1939).
                 .accessibilityIdentifier("desktop-persona-window.page.\(page.rawValue)")
         }
+    }
+
+    /// The one line of intro under the title (desktop SubPage, #3030); the
+    /// Permissions parts and Rules draw their own.
+    private func subpageIntro(_ page: DesktopPersonaPage) -> LocalizedStringKey? {
+        switch page {
+        case .permissions, .rules, .overview, .appearance, .usage, .summary: nil
+        case .files: DesktopPanelSection.memory.subpageIntro
+        default: page.section?.subpageIntro
+        }
+    }
+
+    /// The page's `botSectionLock` note: Rules and the Bot folder follow the soul.
+    private func lockNote(_ page: DesktopPersonaPage) -> LocalizedStringKey? {
+        let section: DesktopPanelSection? = switch page {
+        case .rules, .files: .soul
+        default: page.section
+        }
+        return section.flatMap { session.sectionLock(current, $0) }
     }
 
     private func openPersona(_ page: DesktopPersonaPage) {
@@ -215,6 +295,7 @@ struct DesktopBotProfileHost: View {
     }
 
     private func close() {
+        routinesOpen = false
         model.personaOpen = false
         model.panelSection = nil
         model.personaPage = .overview
@@ -252,7 +333,16 @@ struct DesktopPersonaPageHost: View {
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
             case .soul:
-                PersonaPersonalityPage(bot: current, slackURL: slackURL)
+                // Personality = "What it does" then the soul (desktop
+                // `personality: ["summary", "soul"]`, #3030).
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        BotPanelMore(bot: current, slackURL: slackURL, only: .overview)
+                        PersonaPersonalityPage(bot: current, slackURL: slackURL)
+                    }
+                    .padding(.horizontal, 32)
+                    .padding(.vertical, 16)
+                }
             case .skills:
                 PersonaSkillsPage(bot: current, slackURL: slackURL)
             case .access:
@@ -262,10 +352,14 @@ struct DesktopPersonaPageHost: View {
                         .padding(.vertical, 16)
                 }
             case .model:
+                // Model and Works on on one page (desktop `model: ["model", "worksOn"]`).
                 ScrollView {
-                    PersonaModelPage(bot: current, slackURL: slackURL)
-                        .padding(.horizontal, 32)
-                        .padding(.vertical, 16)
+                    VStack(alignment: .leading, spacing: 20) {
+                        PersonaModelPage(bot: current, slackURL: slackURL)
+                        BotPanelMore(bot: current, slackURL: slackURL, only: .worksOn)
+                    }
+                    .padding(.horizontal, 32)
+                    .padding(.vertical, 16)
                 }
             case .permissions:
                 ScrollView {
@@ -292,9 +386,7 @@ struct DesktopPersonaPageHost: View {
                         .padding(.vertical, 16)
                 }
             case .rules:
-                NavigationStack {
-                    BotWorkspaceDocEditor(bot: current, path: BotWorkspaceFiles.rulesPath)
-                }
+                NavigationStack { BotRuleSetsPage(bot: current) }
             case .files:
                 if PersonaBotFolderPage.replacesStack {
                     PersonaBotFolderPage(bot: current, slackURL: slackURL, memory: true)

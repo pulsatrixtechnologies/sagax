@@ -463,6 +463,8 @@ struct RuleTestRunner: View {
 
 struct MyToolAccessSections: View {
     @EnvironmentObject private var session: Session
+    /// A bot's own grants (`BotToolAccess.tsx`); nil: the person's.
+    var botId: String? = nil
 
     @State private var data: MyToolGrants?
     @State private var area = ""
@@ -486,7 +488,7 @@ struct MyToolAccessSections: View {
                 ProgressView().tint(Theme.textSecondary)
             }
             if let data, data.grants.isEmpty {
-                Text("No access granted yet.")
+                Text(botId == nil ? "No access granted yet." : "No grants: this bot has the default tool access.")
                     .foregroundStyle(Theme.textSecondary)
             }
             ForEach(data?.sorted ?? []) { grant in
@@ -535,9 +537,11 @@ struct MyToolAccessSections: View {
                     .foregroundStyle(Theme.textTertiary)
             }
         } header: {
-            Text("My tool access")
+            Text(botId == nil ? "My tool access" : "Tool access")
         } footer: {
-            Text("What your own bots may use beyond the defaults. You grant and revoke it yourself.")
+            Text(botId == nil
+                 ? "What your own bots may use beyond the defaults. You grant and revoke it yourself."
+                 : "What this bot may do through tools beyond the defaults. The person it works for needs the same access.")
         }
         .task { await load() }
     }
@@ -558,7 +562,11 @@ struct MyToolAccessSections: View {
     private func load() async {
         guard let client = session.settingsClient else { return }
         do {
-            data = try await client.myToolGrants()
+            if let botId {
+                data = try await client.botToolGrants(botId: botId)
+            } else {
+                data = try await client.myToolGrants()
+            }
         } catch {
             data = MyToolGrants()
             self.error = error.localizedDescription
@@ -574,7 +582,11 @@ struct MyToolAccessSections: View {
             saving = true
             defer { saving = false }
             do {
-                try await client.grantMyToolAccess(scope: request.scope, expiresAt: request.expiresAt)
+                if let botId {
+                    try await client.grantBotToolAccess(botId: botId, scope: request.scope, expiresAt: request.expiresAt)
+                } else {
+                    try await client.grantMyToolAccess(scope: request.scope, expiresAt: request.expiresAt)
+                }
                 area = ""
                 days = ""
                 error = nil
@@ -590,7 +602,11 @@ struct MyToolAccessSections: View {
         saving = true
         defer { saving = false }
         do {
-            try await client.revokeMyToolGrant(id: grant.id)
+            if let botId {
+                try await client.revokeBotToolGrant(botId: botId, id: grant.id)
+            } else {
+                try await client.revokeMyToolGrant(id: grant.id)
+            }
             error = nil
             await load()
         } catch {

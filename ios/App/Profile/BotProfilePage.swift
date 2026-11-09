@@ -1,11 +1,12 @@
-// Bot profile page (reference app panel A, #2127): banner, overlapping mascot,
-// the name with its title under it (never "Name · Title"), privacy line,
-// pill tabs General / Knowledge / Settings. Replaces the Edit bot root as
-// the destination of the panel's gear. In the iPad main column (desktop
-// 2021a8785a, #2313) the header is the mascot hero card: an opaque top bar
-// with X and Private / Shared that never scrolls, a wash of the mascot's
-// colour, then the big mascot on a tinted stage, the name at 28 with the
-// title under it, Play a move and Appearance.
+// Bot profile page, the desktop's BotProfilePage (#2127, #2313, #3030) on
+// iPhone and iPad: the mascot's colour wash, the bare mascot centred on it
+// (a tap plays a move), the name with its title under it (never
+// "Name · Title"), who sees it, the owner, the Primary badge and the
+// description, all edited in place. A top bar that condenses on scroll
+// (mascot 26, name 14), Private / Shared as a label, Share and the "…"
+// menu (Archive, Delete) only where this pairing allows them (hidden, never
+// greyed). Pill tabs General / Appearance / Knowledge / Stats with a search
+// beside them.
 import CompanionCore
 import SwiftUI
 import UIKit
@@ -29,30 +30,56 @@ enum BotProfileTab: String, CaseIterable, Hashable, Identifiable {
     }
 }
 
+/// Where the name sits in the scroll: the bar condenses once it passes under it.
+private struct BotProfileNameEdgeKey: PreferenceKey {
+    static var defaultValue: CGFloat = .greatestFiniteMagnitude
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+/// The desktop's Appearance pane on the phone: its own shell model, the way
+/// the bot wizard hosts the engines sheet.
+private struct PhoneAppearancePane: View {
+    @StateObject private var shell = DesktopShellModel()
+    let bot: Bot
+
+    var body: some View {
+        PersonaAppearancePane(bot: bot)
+            .environmentObject(shell)
+    }
+}
+
 struct BotProfilePage: View {
     @Environment(\.themePalette) var themePalette
     @Environment(\.desktopTheme) private var desktopTheme
     @EnvironmentObject private var session: Session
+    @ObservedObject private var interfaceMode = DesktopInterfaceMode.shared
     let bot: Bot
     var startTab: BotProfileTab = .general
     let context: BotEditContext
     let actions: BotEditActions
     var slackURL: URL?
-    var mailRow: BotInboundMailRow?
     /// iPad main column (#2136): X sits on the banner; no navigation back.
     var fillsMain = false
-    /// Unfold Appearance in the page (an avatar click, Edit bot > Appearance):
+    /// Open the Appearance tab (an avatar click, Edit bot > Appearance):
     /// the desktop's `personaCategoryForSection(section) === "appearance"`.
     var openAppearance = false
-    /// Told once the page has unfolded Appearance for `openAppearance`.
+    /// Told once the page has opened Appearance for `openAppearance`.
     var onAppearanceOpened: (() -> Void)?
 
     @State private var tab: BotProfileTab
-    /// Advanced (overview, usage, history, archive, delete): closed until asked.
-    @State private var advancedOpen = false
     @State private var modelLabel: String?
-    @State private var rules: [CustomRuleRow]?
-    @State private var appearanceOpen: Bool
+    @State private var ruleCount: Int?
+    @State private var reach: ReachMeView?
+    @State private var reachLoaded = false
+    @State private var reachOpen = false
+    @State private var mail: BotInboundMail?
+    @State private var mailLoaded = false
+    @State private var capabilities: BotCapabilityList?
+    @State private var capabilitiesFailed = false
+    @State private var condensed = false
+    @State private var searching = false
+    @State private var query = ""
+    @FocusState private var searchFocused: Bool
     @StateObject private var owlHandle = OwlMascotHandle()
 
     init(
@@ -61,7 +88,6 @@ struct BotProfilePage: View {
         context: BotEditContext,
         actions: BotEditActions,
         slackURL: URL? = nil,
-        mailRow: BotInboundMailRow? = nil,
         fillsMain: Bool = false,
         openAppearance: Bool = false,
         onAppearanceOpened: (() -> Void)? = nil
@@ -71,13 +97,12 @@ struct BotProfilePage: View {
         self.context = context
         self.actions = actions
         self.slackURL = slackURL
-        self.mailRow = mailRow
         self.fillsMain = fillsMain
         self.openAppearance = openAppearance
         self.onAppearanceOpened = onAppearanceOpened
-        _appearanceOpen = State(initialValue: fillsMain && openAppearance)
         // Settings is no longer a tab (#2136); land on General.
-        _tab = State(initialValue: startTab == .settings ? .general : startTab)
+        let start: BotProfileTab = openAppearance ? .appearance : (startTab == .settings ? .general : startTab)
+        _tab = State(initialValue: start)
     }
 
     private var current: Bot { session.state.bot(bot.id) ?? bot }
@@ -89,14 +114,6 @@ struct BotProfilePage: View {
     /// The pills this pairing shows: Stats only where usage is reachable.
     private var visibleTabs: [BotProfileTab] {
         BotProfileTab.visible.filter { $0 != .stats || context.sections.contains(.usage) }
-    }
-
-    /// The bot's name alone; its title sits on the line under it.
-    private var headline: String { current.name }
-
-    private var titleLine: String? {
-        let title = current.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return title.isEmpty ? nil : title
     }
 
     private var sharedWithOthers: Bool {
@@ -112,37 +129,50 @@ struct BotProfilePage: View {
     }
 
     private var privacy: String {
-        let shared = !(current.grants ?? []).isEmpty || !(current.directGrants ?? []).isEmpty
-        return BotPrivacyLabel.text(
+        BotPrivacyLabel.text(
             visibility: current.visibility,
-            sharedWithOthers: shared,
+            sharedWithOthers: sharedWithOthers,
             organization: session.surfaceGate.organization
         )
     }
 
+    /// Share opens who uses it, else who sees it; hidden when neither is here.
+    private var canShare: Bool { context.sections.contains(.sharing) || context.sections.contains(.visibility) }
+
+    private func openShare() {
+        Haptics.selection()
+        actions.openSection(context.sections.contains(.sharing) ? .sharing : .visibility)
+    }
+
+    private var mascotSize: CGFloat { fillsMain ? 150 : 110 }
+
     var body: some View {
-        VStack(spacing: 0) {
-            if fillsMain { topBar }
+        ZStack(alignment: .top) {
             ScrollView {
                 VStack(spacing: 0) {
-                    if fillsMain { bannerWash } else { banner }
+                    banner
                     VStack(spacing: 0) {
-                        if fillsMain { heroHeader } else { identityBlock }
-                        tabPills
+                        hero
+                        tabRow
                             .padding(.top, 16)
                             .padding(.bottom, 12)
                         tabBody
                             .padding(.bottom, 48)
                     }
-                    // Main-column profile: one centred column like the desktop's (#2313).
                     // the desktop's 760 pt column (#3017, G14)
                     .frame(maxWidth: fillsMain ? 760 : .infinity)
                     .frame(maxWidth: .infinity)
                 }
             }
+            .coordinateSpace(name: "botProfileScroll")
+            .onPreferenceChange(BotProfileNameEdgeKey.self) { edge in
+                let now = edge < (fillsMain ? 56 : 0)
+                if now != condensed { withAnimation(.easeOut(duration: 0.15)) { condensed = now } }
+            }
             .scrollIndicators(.visible)
             // typing in the hero fields: drag the list to put the keyboard away (G17)
             .scrollDismissesKeyboard(.interactively)
+            if fillsMain { topBar }
         }
         .background(Theme.bg.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
@@ -151,88 +181,183 @@ struct BotProfilePage: View {
                 ToolbarItem(placement: .topBarLeading) {
                     ProfileBackButton { actions.close() }
                 }
+                ToolbarItem(placement: .principal) {
+                    condensedTitle.opacity(condensed ? 1 : 0)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    headerActions
+                }
             }
         }
+        .toolbarBackground(condensed ? AnyShapeStyle(.bar) : AnyShapeStyle(bannerTop), for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .navigationBarHidden(fillsMain)
         // One back button: ours, not the system one beside it.
         .navigationBarBackButtonHidden(true)
-        .onAppear { unfoldAppearanceIfAsked(openAppearance) }
+        .onAppear { openAppearanceIfAsked(openAppearance) }
         .task(id: bot.id) { await loadSummaries() }
-        .onValueChange(of: openAppearance) { unfoldAppearanceIfAsked($0) }
-        // Keep children queryable for UITests (tabs, Settings disclosure).
+        .onValueChange(of: openAppearance) { openAppearanceIfAsked($0) }
+        .onValueChange(of: query) { _ in followSearch() }
+        .sheet(isPresented: $reachOpen, onDismiss: { Task { await loadReach() } }) {
+            NavigationStack {
+                ReachMeSettingsPage(startBotId: current.id)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { reachOpen = false }
+                        }
+                    }
+            }
+            .environmentObject(session)
+        }
+        // Keep children queryable for UITests (tabs, groups).
         .accessibilityIdentifier("bot-profile-page")
     }
 
     // MARK: Header
 
+    /// `.bot-profile-banner`: the mascot's colour mixed into the base,
+    /// 58 % at the top (the bar's colour), 36 % at the bottom.
+    private var washColor: Color { MausPalette.color(current.color) }
+    private var washBase: Color {
+        if fillsMain { return themePalette.isDark ? Color(hex: "#F4F4F4") : .white }
+        return themePalette.isDark ? Color(hex: "#2A2A2A") : .white
+    }
+    private var bannerTop: Color { DesktopMemoryPage.mix(washColor, washBase, 0.58) }
+
     private var banner: some View {
         LinearGradient(
-            colors: bannerColors,
+            colors: [bannerTop, DesktopMemoryPage.mix(washColor, washBase, 0.36)],
             startPoint: .top,
             endPoint: .bottom
         )
-        .frame(height: fillsMain ? 90 : 120)
+        // iPad: the bar floats over the wash, so the wash runs under it
+        .frame(height: fillsMain ? 152 : 104)
         .frame(maxWidth: .infinity)
-        .overlay(alignment: .bottomLeading) {
-            BotMascotView(
-                bot: current,
-                size: 72,
-                state: mascotState,
-                // a still banner mascot: only the hero animates (#3017, L16)
-                animated: false,
-                owlHandle: owlHandle
-            )
-            .padding(.leading, 20)
-            .offset(y: 28)
-            .accessibilityIdentifier("bot-profile-mascot")
-        }
         .accessibilityIdentifier("bot-profile-banner")
         .accessibilityHidden(true)
     }
 
-    private var bannerColors: [Color] {
-        // the desktop's `.bot-profile-banner` wash in the mascot's colour
-        // (#3017, G13), over the phone's dark or light base
-        let base = themePalette.isDark ? Color(hex: "#2A2A2A") : Color.white
-        return [
-            DesktopMemoryPage.mix(washColor, base, 0.58),
-            DesktopMemoryPage.mix(washColor, base, 0.36),
-        ]
-    }
-
-    private var identityBlock: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(verbatim: headline)
-                .font(Theme.Font.profileName)
-                .foregroundStyle(Theme.textPrimary)
-                .lineLimit(2)
-                .accessibilityIdentifier("bot-profile-name")
-            if let titleLine {
-                Text(verbatim: titleLine)
-                    .font(Theme.Profile.labelFont)
-                    .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(2)
-                    .accessibilityIdentifier("bot-profile-title")
-            }
-            HStack(spacing: 6) {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.textSecondary)
-                Text(verbatim: privacy)
-                    .font(Theme.Profile.labelFont)
-                    .foregroundStyle(Theme.textSecondary)
-            }
-            .accessibilityIdentifier("bot-profile-privacy")
+    /// The desktop's header: no card, the bare mascot over the banner's
+    /// lower edge, the name and title centred under it, then the facts.
+    private var hero: some View {
+        VStack(spacing: 10) {
+            BotMascotView(
+                bot: current,
+                size: mascotSize,
+                state: mascotState,
+                animated: true,
+                owlHandle: owlHandle
+            )
+            .frame(width: mascotSize + 20, height: mascotSize + 20)
+            .contentShape(Rectangle())
+            .onTapGesture { playMove() }
+            .accessibilityElement()
+            .accessibilityLabel(Text("Play a move"))
+            .accessibilityAddTraits(.isButton)
+            .accessibilityIdentifier("bot-profile-mascot")
+            BotProfileHeroIdentity(bot: current, centered: true)
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: BotProfileNameEdgeKey.self,
+                            value: geo.frame(in: .named("botProfileScroll")).maxY
+                        )
+                    }
+                )
+            BotProfileHeroDetails(bot: current, audience: privacy, centered: true)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 20)
-        .padding(.top, 36)
+        .frame(maxWidth: .infinity)
+        // The hero's inks follow the page's palette on the phone too (light or dark).
+        .environment(\.desktopTheme, fillsMain ? desktopTheme : DesktopTheme.of(themePalette))
+        .padding(.horizontal, 24)
+        .padding(.top, -(mascotSize * 0.55))
+        // A picture dropped on the hero, or pasted from its menu, becomes the avatar.
+        .botProfileHeroImageTarget(current)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("bot-profile-hero")
     }
 
-    // MARK: Main-column header (#2313)
+    /// The condensed title: mascot 26, name 14.
+    private var condensedTitle: some View {
+        HStack(spacing: 8) {
+            BotMascotView(bot: current, size: 26, state: mascotState, animated: false)
+                .frame(width: 26, height: 26)
+            Text(verbatim: current.name)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(fillsMain ? desktopTheme.ink : Theme.textPrimary)
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("bot-profile-condensed-title")
+    }
 
-    /// The opaque bar over the scroll: X on the left, Private / Shared on the
-    /// right, 36 pt circles centred like the sidebar head's.
+    /// Private / Shared (a label, never a button), Share, then the "…" menu.
+    private var headerActions: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 5) {
+                Image(systemName: privateBot ? "lock" : "person.2")
+                    .font(.system(size: 11, weight: .regular))
+                Text(privateBot ? "Private" : "Shared")
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            .foregroundStyle(fillsMain ? desktopTheme.inkSecondary : Theme.textSecondary)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("bot-profile-visibility")
+            if canShare {
+                Button(action: openShare) {
+                    Text("Share")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(fillsMain ? desktopTheme.ink : Theme.textPrimary)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.horizontal, 12)
+                        .frame(height: fillsMain ? 36 : 30)
+                        .background(Capsule().fill(fillsMain ? desktopTheme.elevated : Theme.cardRaised))
+                        .overlay(Capsule().strokeBorder(fillsMain ? desktopTheme.hairlineWeak : Theme.hairline, lineWidth: 1))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("bot-profile-share")
+            }
+            if context.archive || context.delete {
+                Menu {
+                    if context.archive {
+                        Button {
+                            Haptics.selection()
+                            actions.archive()
+                        } label: {
+                            Label("Archive…", systemImage: "archivebox")
+                        }
+                        .accessibilityIdentifier("bot-profile-archive")
+                    }
+                    if context.delete {
+                        Button(role: .destructive) {
+                            Haptics.selection()
+                            actions.delete()
+                        } label: {
+                            Label("Delete bot…", systemImage: "trash")
+                        }
+                        .accessibilityIdentifier("bot-profile-delete")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(fillsMain ? desktopTheme.ink : Theme.textPrimary)
+                        .frame(width: fillsMain ? 36 : 30, height: fillsMain ? 36 : 30)
+                        .background(Circle().fill(fillsMain ? desktopTheme.elevated : Theme.cardRaised))
+                        .overlay(Circle().strokeBorder(fillsMain ? desktopTheme.hairlineWeak : Theme.hairline, lineWidth: 1))
+                        .contentShape(Circle())
+                }
+                .accessibilityLabel(Text("More actions"))
+                .accessibilityIdentifier("bot-profile-actions")
+            }
+        }
+    }
+
+    /// iPad: the bar floats over the wash, clear until the name passes
+    /// under it, then a material with a hairline and the condensed title.
     private var topBar: some View {
         HStack(spacing: 8) {
             Button {
@@ -249,177 +374,28 @@ struct BotProfilePage: View {
             .buttonStyle(.plain)
             .accessibilityLabel(Text("Close"))
             .accessibilityIdentifier("window-close")
+            if condensed { condensedTitle.transition(.opacity) }
             Spacer(minLength: 0)
-            // the desktop's share button (#3017, G15): opens who uses and sees it
-            Button {
-                Haptics.selection()
-                if context.sections.contains(.sharing) {
-                    actions.openSection(.sharing)
-                } else if context.sections.contains(.visibility) {
-                    actions.openSection(.visibility)
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: privateBot ? "lock" : "person.2")
-                        .font(.system(size: 12, weight: .regular))
-                    Text(privateBot ? "Private" : "Shared")
-                        .font(.system(size: 12, weight: .medium))
-                }
-                .foregroundStyle(desktopTheme.ink)
-                .padding(.horizontal, 12)
-                .frame(height: 36)
-                .background(Capsule().fill(desktopTheme.elevated))
-                .overlay(Capsule().strokeBorder(desktopTheme.hairlineWeak, lineWidth: 1))
-                .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .disabled(!context.sections.contains(.sharing) && !context.sections.contains(.visibility))
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("bot-profile-visibility")
+            headerActions
         }
         .padding(.horizontal, 12)
         .frame(height: 56)
         .frame(maxWidth: .infinity)
-        .background(washTop.ignoresSafeArea(edges: .top))
+        .background {
+            if condensed {
+                Rectangle().fill(.bar)
+                    .overlay(alignment: .bottom) { desktopTheme.hairlineWeak.frame(height: 1) }
+                    .ignoresSafeArea(edges: .top)
+            }
+        }
         .zIndex(1)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("bot-profile-topbar")
     }
 
-    /// `.bot-profile-banner`: the mascot's colour mixed into a pale base,
-    /// 58 % at the top (the bar's colour), 36 % at the bottom.
-    private var washColor: Color { MausPalette.color(current.color) }
-    private var washBase: Color { themePalette.isDark ? Color(hex: "#F4F4F4") : .white }
-    private var washTop: Color { DesktopMemoryPage.mix(washColor, washBase, 0.58) }
-
-    private var bannerWash: some View {
-        LinearGradient(
-            colors: [washTop, DesktopMemoryPage.mix(washColor, washBase, 0.36)],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .frame(height: 96)
-        .frame(maxWidth: .infinity)
-        .accessibilityIdentifier("bot-profile-banner")
-        .accessibilityHidden(true)
-    }
-
-    /// The hero card over the banner's lower edge, then who sees the bot.
-    private var heroHeader: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 28) {
-                BotMascotView(
-                    bot: current,
-                    size: 150,
-                    state: mascotState,
-                    animated: true,
-                    owlHandle: owlHandle
-                )
-                .frame(width: 170, height: 170)
-                .contentShape(Rectangle())
-                .onTapGesture { playMove() }
-                .accessibilityIdentifier("bot-profile-mascot")
-                // The name at 28 and the label under it, edited in place.
-                BotProfileHeroIdentity(bot: current)
-                VStack(spacing: 8) {
-                    heroButton("sparkles", "Play a move", id: "bot-profile-play") { playMove() }
-                    appearanceToggle
-                }
-                .fixedSize()
-            }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 20)
-            .frame(minHeight: 210)
-            .background(
-                // Desktop MascotLookPreview: radial-gradient(120% 140% at 20% 50%,
-                // 26% of the bot's colour in the panel, to the panel at 58%).
-                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(
-                    EllipticalGradient(
-                        colors: [DesktopMemoryPage.mix(washColor, desktopTheme.panel, 0.26), desktopTheme.panel],
-                        center: UnitPoint(x: 0.2, y: 0.5),
-                        startRadiusFraction: 0,
-                        endRadiusFraction: 0.75
-                    )
-                )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(desktopTheme.hairlineWeak, lineWidth: 1)
-            )
-            // A picture dropped on the hero, or pasted from its menu, becomes the avatar.
-            .botProfileHeroImageTarget(current)
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("bot-profile-hero")
-            // Who sees it, the owner, then the description typed in place.
-            BotProfileHeroDetails(bot: current, audience: privacy)
-            // Appearance unfolds here, in the page (never a sheet or a window).
-            if appearanceOpen {
-                PersonaAppearancePane(bot: current)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .padding(.top, 4)
-                    .accessibilityElement(children: .contain)
-                    // The id the Edit bot page used, so its deep links still find it.
-                    .accessibilityIdentifier("desktop-persona-window.page.appearance")
-                    .transition(.opacity)
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("bot-profile.hero.appearance")
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, -40)
-    }
-
-    private func heroButton(_ icon: String, _ title: LocalizedStringKey, id: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: icon).font(.system(size: 12))
-                Text(title).font(.system(size: 13))
-            }
-            .foregroundStyle(desktopTheme.ink)
-            .padding(.horizontal, 14)
-            .frame(height: 34)
-            .frame(maxWidth: .infinity)
-            .background(desktopTheme.control.opacity(0.7), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(desktopTheme.hairlineWeak, lineWidth: 1))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(id)
-    }
-
-    /// Where Randomize was (#2313): unfolds the Appearance pane under the
-    /// header, the chevron turning, the pill lit while it is open.
-    private var appearanceToggle: some View {
-        Button {
-            Haptics.selection()
-            withAnimation(.snappy(duration: 0.2)) { appearanceOpen.toggle() }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "paintpalette").font(.system(size: 12))
-                Text("Appearance").font(.system(size: 13))
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 11, weight: .semibold))
-                    .rotationEffect(.degrees(appearanceOpen ? 180 : 0))
-            }
-            .foregroundStyle(desktopTheme.ink)
-            .padding(.horizontal, 14)
-            .frame(height: 34)
-            .frame(maxWidth: .infinity)
-            .background(
-                appearanceOpen ? desktopTheme.raisedHover : desktopTheme.control.opacity(0.7),
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-            )
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(desktopTheme.hairlineWeak, lineWidth: 1))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityValue(Text(appearanceOpen ? "Expanded" : "Collapsed"))
-        .accessibilityAddTraits(appearanceOpen ? [.isSelected, .isButton] : .isButton)
-        .accessibilityIdentifier("bot-profile.hero.appearance-toggle")
-    }
-
-    private func unfoldAppearanceIfAsked(_ asked: Bool) {
-        guard asked, fillsMain else { return }
-        withAnimation(.snappy(duration: 0.2)) { appearanceOpen = true }
+    private func openAppearanceIfAsked(_ asked: Bool) {
+        guard asked else { return }
+        withAnimation(.snappy(duration: 0.2)) { tab = .appearance }
         onAppearanceOpened?()
     }
 
@@ -430,14 +406,22 @@ struct BotProfilePage: View {
         if let shape = ShapeMove.allCases.randomElement() { owlHandle.shape(shape) }
     }
 
-    @ViewBuilder
+    // MARK: Tabs and search
+
+    private var tabRow: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 8) {
+                tabPills
+                if fillsMain { Spacer(minLength: 0) }
+                searchButton
+            }
+            .frame(maxWidth: .infinity, alignment: fillsMain ? .leading : .center)
+            .padding(.horizontal, fillsMain ? 24 : Theme.Profile.cardMargin)
+            if searching { searchField }
+        }
+    }
+
     private var tabPills: some View {
-        if fillsMain { mainTabs } else { phoneTabPills }
-    }
-
-    /// The desktop's tab row (`data-bot-profile-tabs`): pills on the left
-    /// edge of the column, the selected one on the hover fill.
-    private var mainTabs: some View {
         HStack(spacing: 4) {
             ForEach(visibleTabs) { item in
                 let on = tab == item
@@ -446,62 +430,148 @@ struct BotProfilePage: View {
                     withAnimation(.snappy(duration: 0.2)) { tab = item }
                 } label: {
                     Text(item.title)
-                        .font(.system(size: 14))
-                        .foregroundStyle(on ? desktopTheme.ink : desktopTheme.inkSecondary)
-                        .padding(.horizontal, 14)
+                        .font(fillsMain ? .system(size: 14) : Theme.Font.body)
+                        .foregroundStyle(on ? ink : inkSecondary)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.horizontal, fillsMain ? 14 : 12)
                         .frame(height: 32)
-                        .background(Capsule().fill(on ? desktopTheme.hover : Color.clear))
+                        .background(Capsule().fill(on ? (fillsMain ? desktopTheme.hover : Theme.cardRaised) : Color.clear))
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                // a tab with nothing for the search dims to 40 %
+                .opacity(tabMatches(item) ? 1 : 0.4)
                 .accessibilityLabel(Text(item.title))
                 .accessibilityAddTraits(on ? [.isSelected, .isButton] : .isButton)
                 .accessibilityIdentifier("bot-profile-tab.\(item.rawValue)")
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 24)
-        .padding(.top, 4)
+        .padding(fillsMain ? 0 : 4)
+        .background(fillsMain ? Color.clear : Theme.card.opacity(0.55), in: Capsule())
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("bot-profile-tabs")
     }
 
-    private var phoneTabPills: some View {
-        HStack(spacing: 4) {
-            ForEach(visibleTabs) { item in
-                let on = tab == item
+    private var ink: Color { fillsMain ? desktopTheme.ink : Theme.textPrimary }
+    private var inkSecondary: Color { fillsMain ? desktopTheme.inkSecondary : Theme.textSecondary }
+
+    private var searchButton: some View {
+        Button {
+            Haptics.selection()
+            withAnimation(.snappy(duration: 0.2)) {
+                searching.toggle()
+                if !searching { query = "" }
+            }
+            searchFocused = searching
+        } label: {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(searching ? ink : inkSecondary)
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(searching ? (fillsMain ? desktopTheme.hover : Theme.cardRaised) : Color.clear))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("Search the categories"))
+        .accessibilityIdentifier("bot-profile-search")
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.textTertiary)
+            TextField("Search", text: $query)
+                .font(Theme.Font.body)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .focused($searchFocused)
+                .accessibilityLabel(Text("Search the categories"))
+                .accessibilityIdentifier("bot-profile-search-field")
+            if !query.isEmpty {
                 Button {
-                    Haptics.selection()
-                    withAnimation(.snappy(duration: 0.2)) { tab = item }
+                    query = ""
                 } label: {
-                    Text(item.title)
-                        .font(Theme.Font.body)
-                        .foregroundStyle(on ? Theme.textPrimary : Theme.textSecondary)
-                        .padding(.horizontal, 14)
-                        .frame(height: 32)
-                        .background(Capsule().fill(on ? Theme.cardRaised : Color.clear))
-                        .contentShape(Capsule())
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(Theme.textTertiary)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(Text(item.title))
-                .accessibilityAddTraits(on ? [.isSelected, .isButton] : .isButton)
-                .accessibilityIdentifier("bot-profile-tab.\(item.rawValue)")
+                .accessibilityLabel(Text("Clear"))
             }
         }
-        .padding(4)
-        .background(Theme.card.opacity(0.55), in: Capsule())
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("bot-profile-tabs")
+        .padding(.horizontal, 12)
+        .frame(height: 36)
+        .background(Theme.card, in: Capsule())
+        .padding(.horizontal, fillsMain ? 24 : Theme.Profile.cardMargin)
+        .transition(.opacity)
+    }
+
+    private static func fold(_ text: String) -> String {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+    }
+
+    private var needle: String { Self.fold(query.trimmingCharacters(in: .whitespacesAndNewlines)) }
+
+    /// The English key and the translated text, so either language finds it.
+    private static func words(_ key: LocalizedStringKey) -> String {
+        let source = key.sourceText
+        return source + " " + String(localized: String.LocalizationValue(source))
+    }
+
+    private func hit(_ text: String) -> Bool {
+        needle.isEmpty || Self.fold(text).contains(needle)
+    }
+
+    private func hit(_ row: LinkRow) -> Bool {
+        hit(Self.words(row.title) + " " + (row.subtitle ?? ""))
+    }
+
+    private static let appearanceWords: [LocalizedStringKey] = ["Appearance", "Mascot", "Colour", "Picture", "Avatar", "Play a move"]
+    private static let statsWords: [LocalizedStringKey] = ["Stats", "Usage", "Turns", "Tokens", "Cost", "By account", "By model", "By source", "By person", "This month"]
+
+    private func tabMatches(_ item: BotProfileTab) -> Bool {
+        guard !needle.isEmpty else { return true }
+        switch item {
+        case .general, .settings:
+            return hit(Self.words("General")) || generalHasHits
+        case .knowledge:
+            return hit(Self.words("Knowledge")) || knowledgeRows.contains(where: hit)
+        case .appearance:
+            return Self.appearanceWords.contains { hit(Self.words($0)) }
+        case .stats:
+            return Self.statsWords.contains { hit(Self.words($0)) }
+        }
+    }
+
+    /// The current tab has nothing for the search: open the first that does.
+    private func followSearch() {
+        guard !needle.isEmpty, !tabMatches(tab),
+              let first = visibleTabs.first(where: tabMatches) else { return }
+        withAnimation(.snappy(duration: 0.2)) { tab = first }
+    }
+
+    private var noMatch: some View {
+        Text("No match")
+            .font(Theme.Font.body)
+            .foregroundStyle(Theme.textSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 32)
+            .accessibilityIdentifier("bot-profile-search-empty")
     }
 
     @ViewBuilder
     private var tabBody: some View {
-        switch tab {
-        case .general, .settings: generalBody
-        case .knowledge: knowledgeBody
-        case .appearance: appearanceBody
-        case .stats: statsBody
+        if !tabMatches(tab) {
+            noMatch
+        } else {
+            switch tab {
+            case .general, .settings: generalBody
+            case .knowledge: knowledgeBody
+            case .appearance: appearanceBody
+            case .stats: statsBody
+            }
         }
     }
 
@@ -517,40 +587,28 @@ struct BotProfilePage: View {
     }
 
     /// General, grouped like the desktop's profile (V6, #2612): a grey label
-    /// over one card per group, rows split by hairlines, the same 24 pt
-    /// margins for the labels and the cards. Technical pages and the
-    /// destructive actions wait in Advanced, closed by default.
+    /// over one card per group, rows split by hairlines.
     private var generalBody: some View {
         VStack(alignment: .leading, spacing: 24) {
-            group("Profile", rows: profileRows, id: "bot-profile-group.profile")
             group("Settings", rows: settingsRows, id: "bot-profile-group.settings")
-            if showsSlack || mailRow != nil || !audienceRows.isEmpty { channelsGroup }
-            group("Accounts", rows: accountRows, id: "bot-profile-group.accounts")
+            channelsGroup
+            accountsGroup
             group("More", rows: moreRows, id: "bot-profile-group.more")
-            advancedDisclosure
         }
     }
 
-    /// Phone only: the iPad hero edits the name, role and description in place.
-    private var profileRows: [LinkRow] {
-        guard !fillsMain else { return [] }
-        let role = BotEditSummary.role(current)
-        return [
-            LinkRow(
-                id: "bot-profile-settings.identity",
-                title: "Identity",
-                subtitle: role.isEmpty ? String(localized: "Name, role and description") : role,
-                symbol: "person.text.rectangle"
-            ) { actions.openPage(.identity) },
-        ]
+    private var generalHasHits: Bool {
+        settingsRows.contains(where: hit) || moreRows.contains(where: hit)
+            || channelsHit || accountsHit
     }
 
     private var summaries: BotEditSummaries {
-        BotEditSummaries(bot: current, rules: rules, routines: nil, modelLabel: modelLabel)
+        BotEditSummaries(bot: current, rules: nil, routines: nil, modelLabel: modelLabel)
     }
 
-    /// The desktop's General > Settings (persona-sections.ts TAB_GROUPS,
-    /// #3017, G2): Personality, Model (where it works beside it), Before acting.
+    /// The desktop's General > Settings (persona-sections.ts TAB_GROUPS):
+    /// Personality (summary and soul), Model (where it works inside),
+    /// Before acting.
     private var settingsRows: [LinkRow] {
         var rows: [LinkRow] = []
         if context.sections.contains(.soul) {
@@ -562,10 +620,12 @@ struct BotProfilePage: View {
             ) { actions.openSection(.soul) })
         }
         if context.sections.contains(.model) {
-            rows.append(sectionRow(.model, subtitle: summaries.value(.model)))
-        }
-        if context.sections.contains(.worksOn) {
-            rows.append(sectionRow(.worksOn))
+            rows.append(LinkRow(
+                id: "bot-profile-settings.model",
+                title: "Model",
+                subtitle: modelLabel ?? summaries.value(.model),
+                symbol: settingsSymbol(.model)
+            ) { actions.openSection(.model) })
         }
         if context.sections.contains(.permissions) {
             rows.append(LinkRow(
@@ -578,33 +638,21 @@ struct BotProfilePage: View {
         return rows
     }
 
-    /// General > Accounts: the tools, apps and MCP servers it reaches.
-    private var accountRows: [LinkRow] {
-        context.sections.contains(.access) ? [sectionRow(.access, subtitle: summaries.value(.toolsApps))] : []
-    }
-
     /// General > More (the desktop's order): Rules, When it acts alone,
-    /// Voice, Advanced settings, Versions.
+    /// Voice, Advanced settings (advanced mode only), Versions.
     private var moreRows: [LinkRow] {
         var rows: [LinkRow] = []
-        if context.sections.contains(.permissions) {
-            let total = rules.map { rules in
-                let counts = BotEditSummary.ruleCounts(rules, botId: current.id)
-                return counts.ask + counts.deny + counts.allow
-            }
-            rows.append(LinkRow(
-                id: "bot-profile-more.rules",
-                title: "Rules",
-                subtitle: total.map { total in
-                    total == 0 ? String(localized: "No rule")
-                        : total == 1 ? String(localized: "1 rule") : String(localized: "\(total) rules")
-                },
-                symbol: "list.bullet.rectangle"
-            ) {
-                // iPad opens the Rules document page; the phone, the rules list
-                if let openRules = actions.openRules { openRules() } else { actions.openSection(.permissions) }
-            })
-        }
+        rows.append(LinkRow(
+            id: "bot-profile-more.rules",
+            title: "Rules",
+            subtitle: ruleCount.map { total in
+                total == 0 ? String(localized: "No rule")
+                    : total == 1 ? String(localized: "1 rule") : String(localized: "\(total) rules")
+            },
+            symbol: "list.bullet.rectangle"
+        ) {
+            if let openRules = actions.openRules { openRules() } else { actions.openSection(.permissions) }
+        })
         if context.sections.contains(.permissions) {
             rows.append(LinkRow(
                 id: "bot-profile-more.acts-alone",
@@ -616,7 +664,7 @@ struct BotProfilePage: View {
         if context.sections.contains(.voice) {
             rows.append(sectionRow(.voice))
         }
-        if context.sections.contains(.permissions) {
+        if context.sections.contains(.permissions), interfaceMode.advanced {
             rows.append(LinkRow(
                 id: "bot-profile-settings.overview",
                 title: "Advanced settings",
@@ -648,13 +696,16 @@ struct BotProfilePage: View {
         ) { actions.openSection(section) }
     }
 
+    /// A grouped card; the search keeps the rows that match (all of them
+    /// when the group's own name matches) and hides an empty group.
     @ViewBuilder
     private func group(_ title: LocalizedStringKey?, rows: [LinkRow], id: String) -> some View {
-        if !rows.isEmpty {
+        let shown = title.map { hit(Self.words($0)) } == true ? rows : rows.filter(hit)
+        if !shown.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 if let title { groupLabel(title) }
                 ProfileCard {
-                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, row in
                         if index > 0 { ProfileDivider() }
                         linkRow(row)
                     }
@@ -690,196 +741,319 @@ struct BotProfilePage: View {
         .accessibilityIdentifier(row.id)
     }
 
-    /// Slack, the inbox, then who uses and who sees the bot.
-    private var channelsGroup: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            groupLabel("Channels")
-            ProfileCard {
-                // Slack shows only where it can be connected or opened; never
-                // a detour through Access (#3017, G12)
-                if showsSlack {
-                channelRow(
-                    title: "Slack",
-                    subtitle: slackURL == nil ? String(localized: "Not connected") : String(localized: "Connected"),
-                    systemImage: "number",
-                    pill: slackURL == nil ? "Connect" : "Manage",
-                    id: "bot-profile-channel.slack"
-                ) {
-                    if let slackURL {
-                        UIApplication.shared.open(slackURL)
-                    } else {
-                        actions.openSection(.slack)
-                    }
-                }
-                }
-                if let mailRow {
-                    if showsSlack { ProfileDivider() }
-                    channelRow(
-                        title: "Email",
-                        subtitle: mailRow.address,
-                        systemImage: "envelope",
-                        pill: "Copy",
-                        id: "bot-profile-channel.email"
-                    ) {
-                        UIPasteboard.general.string = mailRow.address
-                        Haptics.selection()
-                    }
-                }
-                ForEach(Array(audienceRows.enumerated()), id: \.element.id) { index, row in
-                    if index > 0 || showsSlack || mailRow != nil { ProfileDivider() }
-                    linkRow(row)
-                }
-            }
+    // MARK: Channels
+
+    /// One channel line: what it is, its state, and a pill only when it does something.
+    private struct ChannelLine: Identifiable {
+        let id: String
+        let title: LocalizedStringKey
+        let subtitle: String
+        let symbol: String
+        var pill: LocalizedStringKey?
+        var action: (() -> Void)?
+    }
+
+    private static func reachLabel(_ id: ReachChannelID) -> String {
+        switch id {
+        case .push: String(localized: "Phone notifications")
+        case .sms: String(localized: "Text message")
+        case .teams: String(localized: "Microsoft Teams")
+        case .telegram: String(localized: "Telegram")
+        case .whatsapp: String(localized: "WhatsApp")
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("bot-profile-group.channels")
     }
 
-    private var showsSlack: Bool { slackURL != nil || context.sections.contains(.slack) }
-
-    private var audienceRows: [LinkRow] {
-        var rows: [LinkRow] = []
-        if context.sections.contains(.sharing) { rows.append(sectionRow(.sharing)) }
-        if context.sections.contains(.visibility) { rows.append(sectionRow(.visibility, subtitle: privacy)) }
-        return rows
-    }
-
-    /// The technical pages moved to General > More and Stats (#3017, G1/G2);
-    /// the fold keeps Archive and Delete only.
-    private var advancedRows: [LinkRow] { [] }
-
-    /// Advanced: the technical pages, then Archive and Delete when this
-    /// pairing allows them (hidden, never greyed, otherwise).
-    @ViewBuilder
-    private var advancedDisclosure: some View {
-        if !advancedRows.isEmpty || context.archive || context.delete {
-            VStack(alignment: .leading, spacing: 8) {
-                Button {
+    /// The desktop's Channels: Reach me, Slack, Email, Shared with.
+    /// Messages stays off the phone and the iPad.
+    private var channelLines: [ChannelLine] {
+        var lines: [ChannelLine] = []
+        let on = (reach?.settings.channels ?? []).compactMap(ReachChannelID.init(rawValue:))
+        lines.append(ChannelLine(
+            id: "bot-profile-channel.reach-me",
+            title: "Reach me",
+            subtitle: on.isEmpty
+                ? (reachLoaded ? String(localized: "Not connected") : " ")
+                : on.map(Self.reachLabel).joined(separator: ", "),
+            symbol: "bell.badge",
+            pill: reachLoaded ? (on.isEmpty ? "Connect" : "Manage") : nil,
+            action: reachLoaded ? { reachOpen = true } : nil
+        ))
+        if let slackURL {
+            lines.append(ChannelLine(
+                id: "bot-profile-channel.slack",
+                title: "Slack",
+                subtitle: String(localized: "Managed in Admin"),
+                symbol: "number",
+                pill: "Manage",
+                action: { UIApplication.shared.open(slackURL) }
+            ))
+        } else {
+            lines.append(ChannelLine(
+                id: "bot-profile-channel.slack",
+                title: "Slack",
+                subtitle: String(localized: "Not offered here"),
+                symbol: "number"
+            ))
+        }
+        if mailLoaded, mail == nil || mail?.available == true {
+            let address = mail?.address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            lines.append(ChannelLine(
+                id: "bot-profile-channel.email",
+                title: "Email",
+                subtitle: address.isEmpty ? String(localized: "No address yet") : address,
+                symbol: "envelope",
+                pill: address.isEmpty ? nil : "Copy",
+                action: address.isEmpty ? nil : {
+                    UIPasteboard.general.string = address
                     Haptics.selection()
-                    withAnimation(.snappy(duration: 0.2)) { advancedOpen.toggle() }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text("Advanced")
-                            .font(Theme.Font.label)
-                            .foregroundStyle(Theme.textTertiary)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(Theme.textTertiary)
-                            .rotationEffect(.degrees(advancedOpen ? 0 : -90))
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, Theme.Profile.cardMargin + 4)
-                    .frame(minHeight: 28)
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .accessibilityValue(Text(advancedOpen ? "Expanded" : "Collapsed"))
-                .accessibilityAddTraits(advancedOpen ? [.isSelected, .isButton] : .isButton)
-                // The id the Settings fold had, so UITests and deep links still find it.
-                .accessibilityIdentifier("bot-profile-settings-toggle")
-                if advancedOpen {
-                    VStack(alignment: .leading, spacing: 16) {
-                        if !advancedRows.isEmpty {
-                            ProfileCard {
-                                ForEach(Array(advancedRows.enumerated()), id: \.element.id) { index, row in
-                                    if index > 0 { ProfileDivider() }
-                                    linkRow(row)
-                                }
-                            }
-                        }
-                        dangerCard
+            ))
+        }
+        if canShare {
+            lines.append(ChannelLine(
+                id: "bot-profile-channel.sharing",
+                title: "Shared with",
+                subtitle: privacy,
+                symbol: "person.2",
+                pill: "Manage",
+                action: openShare
+            ))
+        }
+        return lines
+    }
+
+    private func hit(_ line: ChannelLine) -> Bool { hit(Self.words(line.title) + " " + line.subtitle) }
+
+    private var channelsHit: Bool { hit(Self.words("Channels")) || channelLines.contains(where: hit) }
+
+    @ViewBuilder
+    private var channelsGroup: some View {
+        let lines = hit(Self.words("Channels")) ? channelLines : channelLines.filter(hit)
+        if !lines.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                groupLabel("Channels")
+                ProfileCard {
+                    ForEach(Array(lines.enumerated()), id: \.element.id) { index, line in
+                        if index > 0 { ProfileDivider() }
+                        channelRow(line)
                     }
-                    .transition(.opacity)
                 }
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("bot-profile-group.channels")
         }
+    }
+
+    private func pill(_ title: LocalizedStringKey) -> some View {
+        Text(title)
+            .font(Theme.Font.label)
+            .foregroundStyle(Theme.textPrimary)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(Capsule().fill(fillsMain ? desktopTheme.elevated : Theme.cardRaised))
+            // The outline keeps the pill visible where the card and the pill share a fill.
+            .overlay(Capsule().strokeBorder(fillsMain ? desktopTheme.hairlineWeak : Theme.hairline, lineWidth: 1))
+            .padding(.trailing, Theme.Profile.textInset)
     }
 
     @ViewBuilder
-    private var dangerCard: some View {
-        if context.archive || context.delete {
-            ProfileCard {
-                if context.archive {
-                    Button {
-                        Haptics.selection()
-                        actions.archive()
-                    } label: {
-                        ProfileRow(
-                            icon: ProfileRowIcon(systemImage: "archivebox", size: 16),
-                            title: Text("Archive…"),
-                            titleColor: Theme.textPrimary,
-                            height: Theme.Profile.singleRow
-                        )
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("bot-profile-archive")
-                }
-                if context.archive, context.delete { ProfileDivider() }
-                if context.delete {
-                    Button {
-                        Haptics.selection()
-                        actions.delete()
-                    } label: {
-                        ProfileRow(
-                            icon: ProfileRowIcon(systemImage: "trash", size: 16, color: Theme.danger),
-                            title: Text("Delete bot…"),
-                            titleColor: Theme.danger,
-                            height: Theme.Profile.singleRow
-                        )
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("bot-profile-delete")
-                }
+    private func channelRow(_ line: ChannelLine) -> some View {
+        let row = ProfileRow(
+            icon: ProfileRowIcon(systemImage: line.symbol, size: 16),
+            title: Text(line.title),
+            subtitle: Text(verbatim: line.subtitle),
+            height: Theme.Profile.routineRow
+        ) {
+            if let title = line.pill { pill(title) }
+        }
+        if let action = line.action {
+            Button {
+                Haptics.selection()
+                action()
+            } label: {
+                row.contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier(line.id)
+        } else {
+            row
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier(line.id)
         }
     }
 
-    private func channelRow(
-        title: LocalizedStringKey,
-        subtitle: String,
-        systemImage: String,
-        pill: LocalizedStringKey,
-        id: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            ProfileRow(
-                icon: ProfileRowIcon(systemImage: systemImage, size: 16),
-                title: Text(title),
-                subtitle: Text(verbatim: subtitle),
-                height: Theme.Profile.routineRow
-            ) {
-                Text(pill)
-                    .font(Theme.Font.label)
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(1)
-                    .fixedSize()
-                    .padding(.horizontal, 12)
-                    .frame(height: 28)
-                    .background(Theme.cardRaised, in: Capsule())
-                    .padding(.trailing, Theme.Profile.textInset)
+    // MARK: Accounts
+
+    /// The desktop's AccountsCard: the apps and MCP servers, by scope then name.
+    private var accounts: [BotCapability] {
+        let order: [BotCapability.Scope] = [.bot, .me, .organization, .installation, .account, .other]
+        return (capabilities?.items ?? [])
+            .filter { $0.form == .connector || $0.form == .mcp }
+            .sorted {
+                let a = order.firstIndex(of: $0.scope) ?? order.count
+                let b = order.firstIndex(of: $1.scope) ?? order.count
+                if a != b { return a < b }
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
             }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(id)
     }
 
-    /// Recap lines: the model's catalog label, the approval rules.
-    /// Both reads run together (#3017, L17/G8); the model line draws from
-    /// the session's cached catalog first, so it never pops in on a re-open.
+    private static func accountName(_ item: BotCapability) -> String {
+        let name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { return name }
+        return item.form == .role ? String(localized: "Removed Role") : String(localized: "Unnamed")
+    }
+
+    /// The desktop's state words (`bot-profile.accounts.state.*`).
+    private static func stateWord(_ state: BotCapability.State) -> String {
+        switch state {
+        case .on: String(localized: "On")
+        case .off: String(localized: "Off")
+        case .toConnect: String(localized: "To connect")
+        case .imposed: String(localized: "Set by the organization")
+        case .notHeld: String(localized: "Role not held")
+        case .notServed: String(localized: "Not served by this engine")
+        case .reserved: String(localized: "Reserved name")
+        case .unverifiable, .other: String(localized: "Cannot be checked")
+        }
+    }
+
+    private var accountsHit: Bool {
+        guard context.sections.contains(.access) else { return false }
+        return hit(Self.words("Accounts")) || hit(capabilities?.engine.label ?? "")
+            || accounts.contains { hit(Self.accountName($0)) }
+    }
+
+    @ViewBuilder
+    private var accountsGroup: some View {
+        if context.sections.contains(.access), accountsHit {
+            let whole = hit(Self.words("Accounts"))
+            let shown = whole ? accounts : accounts.filter { hit(Self.accountName($0)) }
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    groupLabel("Accounts")
+                    Spacer(minLength: 0)
+                    Menu {
+                        Button("Apps") { actions.openSection(.access) }
+                        Button("MCP servers") { actions.openSection(.access) }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus").font(.system(size: 11, weight: .semibold))
+                            Text("Add").font(Theme.Font.label)
+                        }
+                        .foregroundStyle(Theme.textPrimary)
+                        .padding(.horizontal, 10)
+                        .frame(height: 26)
+                        .background(Theme.cardRaised, in: Capsule())
+                    }
+                    .accessibilityIdentifier("bot-profile-accounts.add")
+                    .padding(.trailing, Theme.Profile.cardMargin)
+                }
+                ProfileCard {
+                    if capabilitiesFailed {
+                        HStack(spacing: 8) {
+                            Text("Couldn't load the accounts")
+                                .font(Theme.Profile.labelFont)
+                                .foregroundStyle(Theme.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Button {
+                                Task { await loadCapabilities() }
+                            } label: {
+                                pill("Try again")
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("bot-profile-accounts.retry")
+                        }
+                        .padding(.leading, Theme.Profile.textInset)
+                        .frame(minHeight: Theme.Profile.singleRow)
+                    } else if let capabilities {
+                        if whole || hit(capabilities.engine.label) {
+                            Button {
+                                Haptics.selection()
+                                actions.openSection(.access)
+                            } label: {
+                                ProfileRow(
+                                    icon: ProfileRowIcon(systemImage: "cpu", size: 16),
+                                    title: Text(verbatim: capabilities.engine.label),
+                                    subtitle: Text("Engine"),
+                                    height: Theme.Profile.routineRow
+                                ) { pill("Manage") }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("bot-profile-accounts.engine")
+                        }
+                        ForEach(shown) { item in
+                            ProfileDivider()
+                            ProfileRow(
+                                icon: ProfileRowIcon(systemImage: item.form == .mcp ? "server.rack" : "square.grid.2x2", size: 16),
+                                title: Text(verbatim: Self.accountName(item)),
+                                subtitle: Text(verbatim: Self.stateWord(item.state)),
+                                height: Theme.Profile.routineRow
+                            )
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier("bot-profile-accounts.item.\(item.key)")
+                        }
+                        if accounts.isEmpty {
+                            ProfileDivider()
+                            Text("No accounts connected to this bot yet.")
+                                .font(Theme.Profile.labelFont)
+                                .foregroundStyle(Theme.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, Theme.Profile.textInset)
+                                .padding(.vertical, 12)
+                        }
+                    } else {
+                        Text("Loading accounts…")
+                            .font(Theme.Profile.labelFont)
+                            .foregroundStyle(Theme.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, Theme.Profile.textInset)
+                            .frame(minHeight: Theme.Profile.singleRow)
+                    }
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("bot-profile-group.accounts")
+        }
+    }
+
+    // MARK: Loading
+
+    /// Every recap line reads together (#3017, L17/G8); the model line
+    /// draws from the session's cached catalog first.
     private func loadSummaries() async {
         if let cached = session.cachedInstances { modelLabel = label(in: cached) }
         guard let client = session.settingsClient else { return }
         let botId = bot.id
-        let wantsRules = context.sections.contains(.permissions)
-        async let readRules: [CustomRuleRow]? = wantsRules ? (try? await client.customRules(botId: botId))?.rules : nil
+        async let readRules = try? await client.ruleSets(botId: botId)
+        async let readMail = client.botInboundMailAnswer(botId: botId)
         async let readInstances = session.refreshInstancesCache()
-        let (loadedRules, instances) = await (readRules, readInstances)
-        if wantsRules { rules = loadedRules }
+        async let readReach: Void = loadReach()
+        async let readCapabilities: Void = loadCapabilities()
+        let (rules, mailAnswer, instances) = await (readRules, readMail, readInstances)
+        ruleCount = rules?.enabledRuleCount ?? (ruleCount ?? 0)
+        mail = mailAnswer
+        mailLoaded = true
         if let instances { modelLabel = label(in: instances) }
+        _ = await (readReach, readCapabilities)
+    }
+
+    private func loadReach() async {
+        guard let client = session.settingsClient else { return }
+        reach = try? await client.reachMe(botId: bot.id)
+        reachLoaded = true
+    }
+
+    private func loadCapabilities() async {
+        guard context.sections.contains(.access), let client = session.settingsClient else { return }
+        capabilitiesFailed = false
+        do {
+            capabilities = try await client.botCapabilities(botId: bot.id)
+        } catch {
+            capabilitiesFailed = capabilities == nil
+        }
     }
 
     private func label(in instances: [Instance]) -> String? {
@@ -890,9 +1064,10 @@ struct BotProfilePage: View {
 
     // MARK: Knowledge
 
+    /// The desktop's Knowledge order (#3017, G3): Routines, Skills, the
+    /// Folder (the workspace files), then the Memory page.
     private var knowledgeRows: [LinkRow] {
         var rows: [LinkRow] = []
-        // the desktop's Knowledge order (#3017, G3): Routines, Skills, then the folder's Memory
         rows.append(LinkRow(id: "bot-profile-knowledge.routines", title: "Routines", symbol: "clock.arrow.2.circlepath") {
             actions.openRoutines()
         })
@@ -901,20 +1076,14 @@ struct BotProfilePage: View {
                 actions.openSection(.skills)
             })
         }
-        if context.sections.contains(.soul), !context.sections.contains(.model) {
-            rows.append(LinkRow(
-                id: "bot-profile-knowledge.instructions",
-                title: "Instructions",
-                subtitle: BotEditSummary.soulWritten(current) ? String(localized: "Written") : String(localized: "Not written yet"),
-                symbol: "text.alignleft"
-            ) { actions.openSection(.soul) })
-        }
         if let openFolder = actions.openFolder {
-            // iPad: the desktop's Folder, the workspace files with the Memory inside
             rows.append(LinkRow(id: "bot-profile-knowledge.folder", title: "Folder", symbol: "folder") {
                 openFolder()
             })
-        } else if context.sections.contains(.memory) {
+        }
+        // the iPad's Folder holds the Memory (the desktop's); the phone's
+        // file list does not, so the Memory page sits under it there
+        if context.sections.contains(.memory), !(fillsMain && actions.openFolder != nil) {
             rows.append(LinkRow(id: "bot-profile-knowledge.memory", title: "Memory", symbol: "brain") {
                 actions.openSection(.memory)
             })
@@ -924,35 +1093,32 @@ struct BotProfilePage: View {
 
     private var knowledgeBody: some View {
         // The pill already says Knowledge: no label over the card.
-        group(nil, rows: knowledgeRows, id: "bot-profile-group.knowledge")
+        group(nil, rows: hit(Self.words("Knowledge")) ? knowledgeRows : knowledgeRows.filter(hit), id: "bot-profile-group.knowledge")
     }
 
-    // MARK: Appearance and Stats (#3017, G1/G13)
+    // MARK: Appearance and Stats
 
-    /// iPad: the desktop's Appearance pane in the page. Phone: the mascot,
-    /// colour and picture editor, one tap away.
+    /// The desktop's Appearance pane in the page, on the iPad and the phone.
     @ViewBuilder
     private var appearanceBody: some View {
-        if fillsMain {
-            PersonaAppearancePane(bot: current)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .padding(.horizontal, 24)
-                .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("bot-profile.appearance")
-        } else {
-            group(nil, rows: [
-                LinkRow(
-                    id: "bot-profile-appearance.avatar",
-                    title: "Mascot and colour",
-                    subtitle: String(localized: "Mascot, colour and picture"),
-                    symbol: "paintpalette"
-                ) { actions.editAvatar() },
-            ], id: "bot-profile-group.appearance")
+        Group {
+            if fillsMain {
+                PersonaAppearancePane(bot: current)
+            } else {
+                PhoneAppearancePane(bot: current)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(.horizontal, fillsMain ? 24 : Theme.Profile.cardMargin)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("bot-profile.appearance")
     }
 
     private var statsBody: some View {
-        group(nil, rows: context.sections.contains(.usage) ? [sectionRow(.usage)] : [], id: "bot-profile-group.stats")
+        VStack(alignment: .leading, spacing: 24) {
+            BotUsageBreakdownView(bot: current)
+            group(nil, rows: context.sections.contains(.usage) ? [sectionRow(.usage)] : [], id: "bot-profile-group.stats")
+        }
     }
 
     private func settingsSymbol(_ section: DesktopPanelSection) -> String {

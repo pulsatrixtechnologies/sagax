@@ -712,4 +712,24 @@ public extension CompanionClient {
         guard Self.validRouteID(id) else { throw APIError.badURL }
         try await send(makeRequest("POST", "/api/me/tool-grants/\(id)/revoke"))
     }
+
+    /// `GET /api/bots/<id>/tool-grants`: a bot's own grants (`BotToolAccess.tsx`).
+    func botToolGrants(botId: String) async throws -> MyToolGrants {
+        guard Self.validRouteID(botId) else { throw APIError.badURL }
+        return try await send(makeRequest("GET", "/api/bots/\(botId)/tool-grants"), as: MyToolGrants.self)
+    }
+
+    /// `POST /api/bots/<id>/tool-grants` `{scope, expiresAt?}`.
+    func grantBotToolAccess(botId: String, scope: String, expiresAt: Double?) async throws {
+        guard Self.validRouteID(botId) else { throw APIError.badURL }
+        var body: [String: Any] = ["scope": scope]
+        if let expiresAt { body["expiresAt"] = expiresAt }
+        try await send(makeRequest("POST", "/api/bots/\(botId)/tool-grants", body: body))
+    }
+
+    /// `POST /api/bots/<id>/tool-grants/<grantId>/revoke`.
+    func revokeBotToolGrant(botId: String, id: String) async throws {
+        guard Self.validRouteID(botId), Self.validRouteID(id) else { throw APIError.badURL }
+        try await send(makeRequest("POST", "/api/bots/\(botId)/tool-grants/\(id)/revoke"))
+    }
 }

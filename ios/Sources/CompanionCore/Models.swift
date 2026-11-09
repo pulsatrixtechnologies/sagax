@@ -1254,6 +1254,11 @@ public struct Bot: Codable, Hashable, Identifiable, Sendable {
     /// Running conversations at once for this bot (`maxConcurrentThreads`);
     /// absent follows the server's default.
     public var maxConcurrentThreads: Int? = nil
+    /// The bot's tool scope (`WireBot.toolScope`); present only when one is
+    /// set. Read only here: it hides the Grok account connectors switch.
+    public var toolScope: WidgetJSON? = nil
+    /// Grok account connectors (`WireBot.grokAccountConnectors`); absent is off.
+    public var grokAccountConnectors: Bool? = nil
     /// Prompt-cache keep-warm: true or false overrides the workspace setting,
     /// absent follows it.
     public var cacheKeepWarm: Bool? = nil

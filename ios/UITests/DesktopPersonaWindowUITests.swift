@@ -140,10 +140,9 @@ final class DesktopPersonaWindowUITests: XCTestCase {
         XCTAssertTrue(element(app, "bot-profile-page").waitForExistence(timeout: 5), "the bot profile page")
         let general = element(app, "bot-profile-tab.general")
         let knowledge = element(app, "bot-profile-tab.knowledge")
-        let settingsToggle = element(app, "bot-profile-settings-toggle")
         let name = element(app, "bot-profile-name")
-        try eventually("profile root shows General / Knowledge (or the Settings fold)", timeout: 10) {
-            (general.exists && knowledge.exists) || settingsToggle.exists || name.exists
+        try eventually("profile root shows General / Knowledge", timeout: 10) {
+            (general.exists && knowledge.exists) || name.exists
         }
         XCTAssertFalse(element(app, "bot-profile-tab.settings").exists, "Settings is folded into General")
     }

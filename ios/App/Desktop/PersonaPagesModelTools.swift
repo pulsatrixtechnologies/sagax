@@ -197,7 +197,8 @@ enum BotPermissionsPart: String, Hashable, Sendable {
         switch self {
         case .actsAlone: return "What it may do on its own."
         case .advanced: return "For the person who builds. Everything is here, nothing was removed."
-        case .all, .beforeActing: return nil
+        case .beforeActing: return "How far it goes without you. Written rules are in Rules."
+        case .all: return nil
         }
     }
 }
@@ -226,6 +227,9 @@ struct PersonaPermissionsPage: View {
     @State private var moreOpen = false
     @State private var allowlist = false
     @State private var grants = false
+    @State private var toolAccess = false
+    @State private var grokConnectors: Bool?
+    @State private var engineKind: String?
 
     private var level: ApprovalLevel { ApprovalLevel.of(approvalMode: bot.approvalSettingMode, autoApprove: bot.autoApprove) }
     private var proactive: ProactiveMode { ProactiveMode.of(bot.proactiveMode) }
@@ -279,6 +283,19 @@ struct PersonaPermissionsPage: View {
         .sheet(isPresented: $allowlist) {
             NavigationStack { CommandAllowlistPage(bot: bot) }
                 .environmentObject(session)
+        }
+        .sheet(isPresented: $toolAccess) {
+            NavigationStack {
+                Form { MyToolAccessSections(botId: bot.id) }
+                    .navigationTitle("Tool access")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { toolAccess = false } } }
+            }
+            .environmentObject(session)
+        }
+        .task(id: bot.modelSelection.instanceId) {
+            let instances = await DesktopModelCatalog.shared.instances(session)
+            engineKind = instances.first { $0.instanceId == bot.modelSelection.instanceId }?.driverKind
         }
         .sheet(isPresented: $grants) {
             NavigationStack { ApprovalGrantsPage(botId: bot.id, showsDone: true) }
@@ -463,6 +480,27 @@ struct PersonaPermissionsPage: View {
                     Task { if let saved = try? await client.setBotLifecycleHooks(botId: botId, enabled: next) { hooks = saved } }
                 }
                 .accessibilityIdentifier("persona-permissions.lifecycle-hooks")
+            }
+        }
+        if shows(.advanced), edits("grokAccountConnectors"), engineKind == "grokAgent", bot.toolScope == nil {
+            let on = grokConnectors ?? bot.grokAccountConnectors ?? false
+            DesktopDescribedRow(Text("Grok account connectors"),
+                                description: on ? Text("This bot loads your grok.com connectors on your own Grok sign-in.") : nil,
+                                help: Text("When on, this bot also loads the connectors of your own grok.com account. A write through them asks first, unless an Always allow rule covers it or the bot is on Full access."),
+                                identifier: "grokAccountConnectors") {
+                PanelSwitch(label: "Grok account connectors", isOn: on, onColor: tint) { next in
+                    Task { if await PersonaBotFields.patch(["grokAccountConnectors": .bool(next)], bot: bot, session: session) { grokConnectors = next } }
+                }
+                .accessibilityIdentifier("persona-permissions.grok-connectors")
+            }
+        }
+        if shows(.advanced), edits("toolScope") {
+            DesktopDescribedRow(Text("Tool access"),
+                                help: Text("What this bot may do through tools beyond the defaults. The person it works for needs the same access."),
+                                identifier: "toolAccess") {
+                Button("Manage") { toolAccess = true }
+                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .accessibilityIdentifier("persona-permissions.tool-access")
             }
         }
     }

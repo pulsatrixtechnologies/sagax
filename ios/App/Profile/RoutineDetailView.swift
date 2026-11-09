@@ -411,6 +411,9 @@ struct TextCardView: View {
 struct InstructionView: View {
     @Environment(\.themePalette) var themePalette
     let bot: Bot
+    /// The bot panel's Personality sub-page (#3030): titled "Personality",
+    /// with "What it does" above the soul, as on the desktop.
+    var personality = false
     @EnvironmentObject private var session: Session
     @State private var soul: String?
     @State private var problem: String?
@@ -420,7 +423,7 @@ struct InstructionView: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        RoutineScreen(title: String(localized: "Instructions")) {
+        RoutineScreen(title: personality ? String(localized: "Personality") : String(localized: "Instructions")) {
             if editing {
                 HStack(spacing: Theme.Metric.controlGap) {
                     GlassCircleButton(systemImage: "xmark", accessibilityLabel: "Cancel", glyphSize: 16) {
@@ -456,6 +459,17 @@ struct InstructionView: View {
                     .padding(.vertical, 10)
                 }
             } else if let soul {
+                if personality {
+                    Text("Its standing instructions. Write as you would talk to it.")
+                        .font(Theme.Profile.labelFont)
+                        .foregroundStyle(Theme.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, Theme.Profile.routineMargin + 4)
+                        .padding(.bottom, 12)
+                        .accessibilityIdentifier("panel-page.soul.intro")
+                    BotPersonalitySummary(bot: bot).padding(.bottom, 12)
+                    ProfileSectionLabel(text: "Personality", margin: Theme.Profile.routineMargin)
+                }
                 TextCardBody(text: soul.isEmpty ? String(localized: "No instructions yet.") : soul)
                 // RULES.md and docs/ beside the soul (#269)
                 BotWorkspaceShortcuts(bot: bot)

@@ -293,6 +293,12 @@ public extension CompanionClient {
 
     /// `GET /api/bots/:id/inbound-mail`: the bot's own email address row,
     /// or nil when there is none to show (or the read fails).
+    /// The raw answer: `available` decides whether the Email row shows,
+    /// the address may still be missing ("No address yet").
+    func botInboundMailAnswer(botId: String) async -> BotInboundMail? {
+        try? await send(botRequest("GET", botId, "/inbound-mail"), as: BotInboundMail.self)
+    }
+
     func botInboundMail(botId: String) async -> BotInboundMailRow? {
         guard let answer = try? await send(botRequest("GET", botId, "/inbound-mail"), as: BotInboundMail.self) else { return nil }
         return BotInboundMailRules.row(answer)

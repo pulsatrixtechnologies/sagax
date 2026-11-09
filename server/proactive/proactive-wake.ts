@@ -567,6 +567,15 @@ export class ProactiveWaker {
   }
 
   private drop(botId: string, events: readonly ProactiveEvent[]): void {
+    // #3140: a dropped watch is released by its loop and offered again at
+    // its cadence: its key must not read as a duplicate then
+    for (const event of events) {
+      if (event.source !== "watch") continue;
+      const key = `${event.botId}\u0000${event.key}`;
+      if (!this.keySet.delete(key)) continue;
+      const at = this.keys.indexOf(key);
+      if (at >= 0) this.keys.splice(at, 1);
+    }
     try {
       this.deps.dropped?.(botId, events);
     } catch {

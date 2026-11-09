@@ -523,6 +523,32 @@ describe("teammates' messages, second pass (production, 2026-11-02)", () => {
   });
 });
 
+describe("a dropped watch event can be offered again (#3140)", () => {
+  const event = (botId: string): ProactiveEvent => ({
+    botId, source: "watch", key: "watch:w-open:k1", label: "Pulsatrix watch: Open tickets.", detail: "Watch w-open observed:\n[]", hops: 0,
+    replay: { kind: "watch", watchId: "w-open" },
+    watch: { id: "w-open", summary: "Open tickets.", prompt: "Look.", propose: "skill reporting-x", disposition: "auto" },
+  });
+
+  it("the waker forgets the key of a dropped watch event, so the released watch wakes the bot later", () => {
+    const h = harness({ wren: "proactive" });
+    expect(h.waker.offer(event("wren"))).toBe("gathered");
+    h.setMode("wren", "off");
+    h.advance(60_000);
+    expect(h.dropped.at(-1)!.events.map((row) => row.key)).toEqual(["watch:w-open:k1"]);
+    h.setMode("wren", "proactive");
+    expect(h.waker.offer(event("wren"))).toBe("gathered");
+    h.advance(60_000);
+    expect(h.woken).toHaveLength(1);
+  });
+
+  it("the pending file keeps a watch event by its ids", () => {
+    const h = harness({ wren: "proactive" });
+    h.waker.offer(event("wren"));
+    expect(h.changes.at(-1)).toEqual({ botId: "wren", keys: ["watch:w-open:k1"] });
+  });
+});
+
 describe("pending wakes survive a restart; a two-bot DM post always reports (2026-11-02)", () => {
   const notice = (receiverId: string, n: number) => peerNoticeEvent({
     receiverId, noticeId: `node-${n}`, threadId: `th-${n}`, title: `Urgent Northwind ${n}`, status: "completed",

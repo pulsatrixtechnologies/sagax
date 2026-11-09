@@ -44,4 +44,13 @@ describe("ChatEdgeFade", () => {
     expect(cls).not.toMatch(/\bbg-/);
     expect(read("./GroupView.tsx-parts/GroupRoomTranscriptPane.tsx")).toContain('"pt-14"');
   });
+
+  it("stays off the flat navy header band of Pulsatrix Light (#3039)", () => {
+    // There the header is a band with its own ground, not a pill floating over
+    // the transcript: the fade would smear the light chat ground over it.
+    const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+    expect(css).toMatch(/\[data-skin="pulsatrix-light"\] \.content-topbar > \[data-chat-edge-fade="top"\] \{\s*display: none;/);
+    // The phone drawer button over that band takes the band's ink.
+    expect(css).toMatch(/\[data-skin="pulsatrix-light"\] \.app-shell-row:has\(\.content-topbar\) > \[data-drawer-button\] \{\s*color: var\(--color-sidebar-ink-secondary\);/);
+  });
 });

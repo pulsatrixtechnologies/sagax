@@ -1779,11 +1779,75 @@ describe("await_turn and a pending card (#2922)", () => {
     const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "ask me", mode: "async" });
     const threadId = String(sent.body.thread_id);
     const cardRow = w.add(threadId, { role: "bot", kind: "options", text: "", question: { answered: true, late: true } });
+    await w.settle();
     w.add(threadId, { role: "user", kind: "text", text: "B", replyToId: cardRow.id });
+    // the answer's own turn runs (one poll) and ends with no words
+    w.state.set(threadId, "running");
+    // waited time counts this call's own polls only (the async send's
+    // notification waiter shares the clock)
+    let waited = 0;
+    const api = createAgentApi({ ...w.deps, sleep: async (ms) => { waited += ms; await w.deps.sleep!(ms); w.state.set(threadId, "idle"); } });
+    const r = await api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 30_000 });
+    expect(r.body).toMatchObject({ finished: true, status: "finished" });
+    expect(waited).toBeLessThan(3_000);
+  });
+
+  it("an ask_choice answer recorded a while ago with a silent answer turn already over returns at once (#3056)", async () => {
+    const w = world({ replyAfterPolls: 1, replyRows: () => [] });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "ask me", mode: "async" });
+    const threadId = String(sent.body.thread_id);
+    const cardRow = w.add(threadId, { role: "bot", kind: "options", text: "", question: { answered: true, late: true } });
+    w.add(threadId, { role: "user", kind: "text", text: "B", replyToId: cardRow.id });
+    w.advance(10_000);
     const startedAt = w.deps.now!();
     const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 30_000 });
     expect(r.body).toMatchObject({ finished: true, status: "finished" });
     expect(w.deps.now!() - startedAt).toBeLessThan(3_000);
+  });
+
+  /** A world whose ask_choice answer line is recorded while the answer's own
+   * turn has not started yet: it starts after `startAfterMs` (never when
+   * null) and says `words` one poll later. */
+  const answeredNotStarted = async (startAfterMs: number | null, words: string) => {
+    const w = world({ replyAfterPolls: 1, replyRows: () => [] });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "ask me", mode: "async" });
+    const threadId = String(sent.body.thread_id);
+    const cardRow = w.add(threadId, { role: "bot", kind: "options", text: "", question: { answered: true, late: true } });
+    await w.settle();
+    expect(w.state.get(threadId)).toBe("idle");
+    const answerAt = w.deps.now!();
+    w.add(threadId, { role: "user", kind: "text", text: "B", replyToId: cardRow.id });
+    let phase: "before" | "running" | "done" = "before";
+    const api = createAgentApi({
+      ...w.deps,
+      sleep: async (ms) => {
+        await w.deps.sleep!(ms);
+        if (phase === "before" && startAfterMs !== null && w.deps.now!() - answerAt >= startAfterMs) {
+          phase = "running";
+          w.state.set(threadId, "running");
+        } else if (phase === "running") {
+          phase = "done";
+          w.add(threadId, { role: "bot", kind: "text", text: words });
+          w.state.set(threadId, "idle");
+        }
+      },
+    });
+    return { w, c, api, sent, answerAt };
+  };
+
+  it("an ask_choice answer recorded before its turn starts: never finished empty before that turn runs and ends", async () => {
+    const { c, api, sent } = await answeredNotStarted(2_000, "Option B retenue.");
+    const r = await api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 30_000 });
+    expect(r.body).toMatchObject({ finished: true, status: "finished", reply: "Option B retenue." });
+  });
+
+  it("an ask_choice answer whose turn never starts: the wait is bounded, finished without text", async () => {
+    const { w, c, api, sent, answerAt } = await answeredNotStarted(null, "");
+    const r = await api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 55_000 });
+    expect(r.body).toMatchObject({ finished: true, status: "finished" });
+    expect(w.deps.now!() - answerAt).toBeLessThan(7_000);
   });
 
   it("an engine-held question answered mid-turn: the reply is the words after the card (#3007)", async () => {

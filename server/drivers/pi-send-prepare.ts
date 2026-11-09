@@ -10,6 +10,7 @@ import { piHostToolArgs } from "./host-tools.ts";
 import { allowsTool, parseToolScope } from "../../shared/tool-scope.ts";
 import { ASK_USER_TOOL } from "../../shared/ask-question.ts";
 import type { SendTurnInput } from "../contracts.ts";
+import { promptHalves, splitSessionPrompt } from "./prompt-split.ts";
 import { attachPiEvents } from "./pi-send-events.ts";
 import { attachPiRpc } from "./pi-send-rpc.ts";
 import { attachPiStdio } from "./pi-send-stdio.ts";
@@ -19,7 +20,10 @@ import type { PiAskDecision, PiPrepared, PiSendCtx, PiSendDeps } from "./pi-turn
  * id; the kit then leaves that one extension out (piKit). */
 export type PiPrepareOptions = { turnId?: string };
 
-export async function preparePiTurn(deps: PiSendDeps, turn: SendTurnInput, options: PiPrepareOptions = {}): Promise<PiSendCtx> {
+/** #1276: a warm turn shows nothing; it only leaves a pi ready ahead. */
+export type PiWarmed = { warmed: true; turnId: string };
+
+export async function preparePiTurn(deps: PiSendDeps, turn: SendTurnInput, options: PiPrepareOptions = {}): Promise<PiSendCtx | PiWarmed> {
   const { hooks } = deps;
   const { threadId } = turn;
   const selection = parseToolScope(turn.toolScope);
@@ -90,8 +94,10 @@ export async function preparePiTurn(deps: PiSendDeps, turn: SendTurnInput, optio
   });
   // #1276: only a session of this turn's own pi home is ever resumed
   const resumeCursor = hooks.piResumableSession(turn.resumeCursor, turn.access?.engineHome);
-  if (turn.compactPrompt && !turn.sessionReset && resumeCursor) await hooks.settledPiStandby(threadId);
-  const standby = turn.compactPrompt && !turn.sessionReset && resumeCursor
+  // a warm leaves the thread's standby to its next turn (#1276)
+  const warming = turn.warmOnly === true;
+  if (!warming && turn.compactPrompt && !turn.sessionReset && resumeCursor) await hooks.settledPiStandby(threadId);
+  const standby = warming ? undefined : turn.compactPrompt && !turn.sessionReset && resumeCursor
     ? hooks.takePiStandby(threadId, standbyKey, resumeCursor)
     : (hooks.dropPiStandby(threadId), undefined);
   // #1276: a new conversation takes the pi started ahead for this bot's
@@ -101,7 +107,7 @@ export async function preparePiTurn(deps: PiSendDeps, turn: SendTurnInput, optio
     bot: turn.botId ?? null, cli: deps.config.cli, args: standbyArgs,
     environment: deps.environment ?? null, person: turn.principalId ?? null, access: turn.access ?? null, command: turn.commandEnvironment ?? null,
   });
-  const ahead = !standby && turn.compactPrompt && typeof turn.resumeCursor !== "string" && turn.cwd && mounts ? hooks.takePiFresh(freshKey) : undefined;
+  const ahead = !standby && !warming && turn.compactPrompt && typeof turn.resumeCursor !== "string" && turn.cwd && mounts ? hooks.takePiFresh(freshKey) : undefined;
   if (standby) {
     mcpTempDir = standby.dir;
     scopeReadyPath = standby.scopeReadyPath;
@@ -133,6 +139,27 @@ export async function preparePiTurn(deps: PiSendDeps, turn: SendTurnInput, optio
     ...deps.environment,
     ...(mcpTempDir ? { SAGAX_MCP_CONFIG: join(mcpTempDir, "mcp.json") } : {}),
   }), turn.access, deps.environment), turn.commandEnvironment);
+
+  // #1276: a warm (the person opened a new conversation or is typing) on
+  // a local model: its prompt's stable part is computed now, no turn shown
+  if (warming) {
+    if (turn.compactPrompt && typeof turn.resumeCursor !== "string" && turn.cwd && mounts && mcpTempDir && !turn.warmSignal?.aborted) {
+      const halves = promptHalves(turn);
+      const composed = halves.stable !== null
+        ? splitSessionPrompt(halves.stable, halves.volatile, null, turn.system, turn.text, false, 0, turn.systemVolatileSections).text
+        : turn.system ? `${turn.system}\n\n${turn.text}` : turn.text;
+      const chosen = typeof turn.model === "string" ? hooks.splitPiModel(turn.model) : null;
+      await hooks.prefillPiFresh({
+        person: hooks.warmPerson(turn), key: freshKey, cli: deps.config.cli, args: childArgs, cwd: turn.cwd, env: spawnEnv, dir: mcpTempDir,
+        config: { ...mcpConfig, scopeReadyPath }, message: hooks.markSharedPrompt(composed, halves, turn.systemVolatileSections),
+        model: chosen ? { provider: chosen.provider, modelId: chosen.modelId } : null,
+      });
+    } else if (mcpTempDir) {
+      try { rmSync(mcpTempDir, { recursive: true, force: true }); } catch { /* best effort */ }
+    }
+    // a warm that could not run only leaves the first message cold
+    return { warmed: true, turnId };
+  }
 
   // spawnCli can throw synchronously (unresolvable CLI); if it does, the
   // 0600 temp file with the boat token / comms token must

@@ -23,7 +23,8 @@
 //   FAKE_PI_STEER_OUT_OF_ORDER hold the first steer's refusal until a second
 //                  frame arrives, then answer refusal-for-first / success-for-second
 
-import { appendFileSync, closeSync, readFileSync } from "node:fs";
+import { appendFileSync, closeSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 const mode = process.env.FAKE_PI_MODE ?? "happy";
 const modelPairs = (process.env.FAKE_PI_MODELS ?? "ollama-cloud/glm-5.2,openai/gpt-4o")
@@ -156,6 +157,10 @@ if (ompChunkMode) {
   send({ type: "ready", protocolVersion: 1, supportedProtocolVersions: [1, 2], maxFrameBytes: 1048576, maxReassembledFrameBytes: 67108864 });
 }
 let sessionCounter = 0;
+/** The MCP configuration as it reads now (a warm rewrites it). */
+const readConfig = (): { warmOnly?: unknown } | null => {
+  try { return process.env.SAGAX_MCP_CONFIG ? JSON.parse(readFileSync(process.env.SAGAX_MCP_CONFIG, "utf8")) : null; } catch { return null; }
+};
 let currentSessionFile: string | null = null;
 // FAKE_PI_STEER_OUT_OF_ORDER parks the first steer frame until a second one
 // arrives, so a test can force both waiters to exist before any response.
@@ -418,6 +423,17 @@ function handle(cmd: any) {
       currentSessionFile = `/fake/pi-session-${sessionCounter}.json`;
       send({ type: "response", command: "new_session", success: true, data: { sessionId: `s-${sessionCounter}`, sessionFile: currentSessionFile } });
       return;
+    case "get_state": {
+      // FAKE_PI_SESSIONS: like pi, a boot session in its sessions folder
+      if (process.env.FAKE_PI_SESSIONS && !currentSessionFile) {
+        const dir = join(process.env.FAKE_PI_SESSIONS, "--boot--");
+        mkdirSync(dir, { recursive: true });
+        currentSessionFile = join(dir, `boot-${process.pid}.jsonl`);
+        writeFileSync(currentSessionFile, "");
+      }
+      send({ type: "response", command: "get_state", success: true, data: { sessionFile: currentSessionFile } });
+      return;
+    }
     case "switch_session":
       if (mode === "session-error") {
         send({ type: "response", command: "switch_session", success: false, error: "fake pi: session unavailable" });
@@ -463,7 +479,7 @@ function handle(cmd: any) {
         try {
           appendFileSync(
             process.env.FAKE_PI_DUMP,
-            JSON.stringify({ prompt: { message: cmd.message, ...(Array.isArray(cmd.images) ? { images: cmd.images } : {}) } }) + "\n",
+            JSON.stringify({ prompt: { message: cmd.message, ...(Array.isArray(cmd.images) ? { images: cmd.images } : {}) }, session: currentSessionFile, warmOnly: readConfig()?.warmOnly === true }) + "\n",
           );
         } catch {
           /* never let dumping break a run */

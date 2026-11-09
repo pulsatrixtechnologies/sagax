@@ -63,6 +63,25 @@ export function compactVolatileOrder<T extends { volatile: string; volatileSecti
   return { ...prompt, volatileSections: sections, volatile: sections.map((section) => section.text).join("") };
 }
 
+/** Stable sections that differ from one bot to the next (its identity, its
+ * standing instructions, its folders): on a local model they go last in the
+ * stable half, so a bot's first conversation reads every other section from
+ * the cache another bot of the server left. */
+export const COMPACT_BOT_LAST: readonly string[] = ["persona", "soul", "rules", "finish-until", "setup", "files", "skills"];
+
+/** The stable half with the bot's own sections last (COMPACT_BOT_LAST order
+ * kept as built). Nothing is dropped or changed. */
+export function compactBotLast<T extends { stable: string; sections: Array<{ id: string; text: string }>; volatileSections: Array<{ id: string }> }>(prompt: T): T {
+  const volatile = new Set(prompt.volatileSections.map((section) => section.id));
+  const stable = prompt.sections.filter((section) => !volatile.has(section.id));
+  const own = stable.filter((section) => COMPACT_BOT_LAST.includes(section.id));
+  if (!own.length) return prompt;
+  const shared = stable.filter((section) => !COMPACT_BOT_LAST.includes(section.id));
+  // a moved section keeps a paragraph break before it
+  const text = own.map((section) => (/^\s/.test(section.text) ? section.text : `\n\n${section.text}`)).join("");
+  return { ...prompt, stable: shared.map((section) => section.text).join("") + text };
+}
+
 /** Stable prefix for every engine. Off only when the bot or the server says
  * "full", which also restores the full tool list on Claude Code. */
 export function usesStablePrompt(input: { bot?: LocalPromptMode; engine?: LocalPromptMode }): boolean {

@@ -8,6 +8,7 @@ import {
   COMPACT_VOLATILE_LAST,
   COMPACT_VOLATILE_SECTIONS,
   KNOWN_USE_CALLS,
+  compactBotLast,
   adoptLegacyAutoMemory,
   claudeProjectKey,
   compactMemoryDir,
@@ -186,5 +187,24 @@ describe("usesCompactPrompt on pi (#1276)", () => {
     expect(usesCompactPrompt({ driverKind: "piAgent", model: "omlx/Some-Model" })).toBe(true);
     expect(usesCompactPrompt({ driverKind: "piAgent", model: "anthropic/claude-sonnet-5" })).toBe(false);
     expect(usesCompactPrompt({ driverKind: "piAgent", model: "omlx/Some-Model", bot: "full" })).toBe(false);
+  });
+});
+
+describe("bot's own sections last on a local model", () => {
+  it("moves the bot's identity, instructions and folders after what bots share, and drops nothing", () => {
+    const sections = [
+      { id: "misuse-policy", text: "policy." },
+      { id: "persona", text: "You are Ada." },
+      { id: "soul", text: "\n\nsoul" },
+      { id: "shell", text: "\n\nshell" },
+      { id: "files", text: "\n\nfiles" },
+      { id: "memory", text: "\n\nmemory" },
+    ];
+    const volatileSections = [{ id: "memory", text: "\n\nmemory" }];
+    const out = compactBotLast({ stable: "policy.You are Ada.\n\nsoul\n\nshell\n\nfiles", sections, volatileSections });
+    expect(out.stable).toBe("policy.\n\nshell\n\nYou are Ada.\n\nsoul\n\nfiles");
+    // a prompt without such sections is returned as is
+    const plain = { stable: "x", sections: [{ id: "shell", text: "x" }], volatileSections: [] };
+    expect(compactBotLast(plain)).toBe(plain);
   });
 });

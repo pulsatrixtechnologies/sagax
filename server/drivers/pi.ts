@@ -208,6 +208,8 @@ async function runPiStandby(input: {
       env: { ...input.env, SAGAX_MCP_CONFIG: join(dir, "mcp.json") },
     }, "bot");
     const started = child;
+    // a pi that cannot start (its folder gone) answers nothing: no crash
+    started.on("error", () => { /* the wait below gives up */ });
     budget = warmResources.register({
       person: input.person, kind: "pi", bytes: 256 * MiB,
       pids: () => started.pid ? [started.pid] : [],
@@ -323,6 +325,8 @@ async function startPiFresh(input: { person: string; key: string; cli: string; a
     writeFileSync(join(dir, "mcp.json"), JSON.stringify({ mcpServers: {} }), { mode: 0o600 });
     child = spawnCli(input.cli, input.args, { stdio: ["pipe", "pipe", "pipe"], cwd: input.cwd, env: { ...input.env, SAGAX_MCP_CONFIG: join(dir, "mcp.json") } }, "bot");
     const started = child;
+    // a pi that cannot start (its folder gone) answers nothing: no crash
+    started.on("error", () => { /* the wait below gives up */ });
     budget = warmResources.register({
       person: input.person, kind: "pi", bytes: 256 * MiB,
       pids: () => started.pid ? [started.pid] : [],
@@ -370,6 +374,127 @@ async function startPiFresh(input: { person: string; key: string; cli: string; a
     if (child) { try { killCliTree(child); } catch { /* already gone */ } }
     if (dir) { try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } }
   } finally {
+    piFreshStarting.delete(input.key);
+  }
+}
+
+/** #1276: the warm before a new conversation's first message (the person
+ * opened it or is typing). The bot's pi started ahead, or a new one, opens a
+ * throwaway session with this conversation's MCP servers and sends the
+ * prompt; the extension (warmOnly) sends only its stable part, for one token,
+ * so the local server computes it now and the first message reads it cached.
+ * The pi then waits as the bot's pi started ahead, its credentials off disk. */
+export async function prefillPiFresh(input: {
+  person: string; key: string; cli: string; args: string[]; cwd: string; env: Record<string, string | undefined>;
+  dir: string; config: Record<string, unknown>; message: string; model: { provider: string; modelId: string } | null;
+}): Promise<boolean> {
+  if (piFreshStarting.has(input.key)) {
+    try { rmSync(input.dir, { recursive: true, force: true }); } catch { /* best effort */ }
+    return false;
+  }
+  piFreshStarting.add(input.key);
+  // the pi already started ahead for this bot reads its own folder's file
+  const ahead = takePiFresh(input.key);
+  const dir = ahead ? ahead.dir : input.dir;
+  if (ahead) { try { rmSync(input.dir, { recursive: true, force: true }); } catch { /* best effort */ } }
+  const config = join(dir, "mcp.json");
+  let child: ReturnType<typeof spawnCli> | null = ahead ? ahead.child : null;
+  let budget: WarmResourceLease | undefined = ahead?.budget;
+  let throwaway: string | null = null;
+  let ok = false;
+  try {
+    // the scope file sits in the folder this pi reads
+    const scoped = input.config.scopeReadyPath ? { scopeReadyPath: join(dir, "scope-ready.json") } : {};
+    writeFileSync(config, JSON.stringify({ ...input.config, ...scoped, warmOnly: true }), { mode: 0o600 });
+    if (!child) {
+      child = spawnCli(input.cli, input.args, { stdio: ["pipe", "pipe", "pipe"], cwd: input.cwd, env: { ...input.env, SAGAX_MCP_CONFIG: config } }, "bot");
+      const spawned = child;
+      spawned.on("error", () => { /* the waits below give up */ });
+      budget = warmResources.register({
+        person: input.person, kind: "pi", bytes: 256 * MiB,
+        pids: () => spawned.pid ? [spawned.pid] : [],
+        evict: () => {
+          const entry = piFresh.get(input.key);
+          if (entry?.child === spawned) { piFresh.delete(input.key); clearTimeout(entry.timer); }
+          return killCliTree(spawned).then(stopped => {
+            if (stopped) rmSync(dir, { recursive: true, force: true });
+            return stopped;
+          });
+        },
+      });
+      const lease = budget;
+      spawned.once("close", () => retireClosedWarmProcess(lease, spawned));
+      watchPiStandbyExit();
+      spawned.stderr?.resume();
+      spawned.stdin.on("error", () => { /* closed with the process */ });
+    } else {
+      budget?.touch();
+    }
+    const started = child;
+    piStandbyChildren.add(started);
+    started.once("close", () => piStandbyChildren.delete(started));
+    const chunks = new PiRpcChunks();
+    type Frame = { success?: boolean; data?: { sessionFile?: unknown } } | null;
+    const waiters = new Map<string, (frame: Frame) => void>();
+    const wait = (name: string, ms: number) => new Promise<Frame>((resolve) => {
+      const t = setTimeout(() => { waiters.delete(name); resolve(null); }, ms);
+      t.unref?.();
+      waiters.set(name, (frame) => { clearTimeout(t); waiters.delete(name); resolve(frame); });
+    });
+    const onData = piLineReader((line) => {
+      const frame = decodePiFrame(line, chunks) as { type?: string; command?: string; success?: boolean; data?: { sessionFile?: unknown } } | null;
+      if (frame?.type === "response" && frame.command) waiters.get(frame.command)?.(frame);
+      else if (frame?.type === "agent_end") waiters.get("agent_end")?.(frame);
+    });
+    started.stdout.setEncoding("utf8");
+    started.stdout.on("data", onData);
+    started.on("close", () => { for (const answer of waiters.values()) answer(null); });
+    const send = (obj: Record<string, unknown>) => started.stdin.write(JSON.stringify(obj) + "\n");
+    if (!ahead) send(PI_NEGOTIATE_FRAME);
+    let sessionsRoot = ahead?.sessionsRoot;
+    if (!sessionsRoot) {
+      const state = wait("get_state", 20_000);
+      send({ type: "get_state" });
+      const bootSession = (await state)?.data?.sessionFile;
+      if (typeof bootSession !== "string") throw new Error("pi did not answer");
+      sessionsRoot = dirname(dirname(bootSession));
+    }
+    throwaway = writePiSession(sessionsRoot, input.cwd);
+    const switched = wait("switch_session", 20_000);
+    send({ type: "switch_session", sessionPath: throwaway });
+    const switchedFrame = await switched;
+    if (!switchedFrame || switchedFrame.success === false) throw new Error("pi did not open the warm session");
+    if (input.model) {
+      const set = wait("set_model", 20_000);
+      send({ type: "set_model", provider: input.model.provider, modelId: input.model.modelId });
+      if ((await set)?.success === false) throw new Error("pi did not take the model");
+    }
+    const done = wait("agent_end", 180_000);
+    send({ type: "prompt", message: input.message });
+    if (!(await done)) throw new Error("the warm did not finish");
+    // the turn's credentials leave the disk; the real turn writes its own
+    writeFileSync(config, JSON.stringify({ mcpServers: {} }), { mode: 0o600 });
+    const entry: PiFresh = {
+      budget, child: started, dir, sessionsRoot, onData,
+      timer: setTimeout(() => { if (piFresh.get(input.key) === entry) { piFresh.delete(input.key); closePiFresh(entry); } }, PI_STANDBY_MS),
+    };
+    entry.timer.unref?.();
+    started.on("close", () => { if (piFresh.get(input.key) === entry) { piFresh.delete(input.key); closePiFresh(entry); } });
+    ok = true;
+    // a turn may have started another pi meanwhile: never keep two
+    if (piFresh.has(input.key) || started.exitCode !== null) { closePiFresh(entry); return true; }
+    piFresh.set(input.key, entry);
+    budget?.idle();
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (throwaway) { try { rmSync(throwaway, { force: true }); } catch { /* best effort */ } }
+    if (!ok) {
+      budget?.retiring();
+      if (child) { try { killCliTree(child); } catch { /* already gone */ } }
+      try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
+    }
     piFreshStarting.delete(input.key);
   }
 }
@@ -1186,6 +1311,7 @@ export const PiDriver: ProviderDriver<PiConfig> = {
       takePiFresh,
       startPiStandby,
       startPiFresh,
+      prefillPiFresh,
       readPiToolCache,
       writePiSession,
       readPiPromptImages,
@@ -1302,6 +1428,9 @@ export const PiDriver: ProviderDriver<PiConfig> = {
           computerMcp: true,
           phoneMcp: true,
           customMcp: true,
+          // #1276: a warm on a local model computes the shared prompt ahead
+          // (prefillPiFresh); on any other model it does nothing
+          warmSession: true,
           browserMcp: true,
           dataMcp: true,
           // Host control (the user's real Mac) rides the pi-native permission

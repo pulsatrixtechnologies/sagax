@@ -6,6 +6,7 @@ import { turnTracePayloadHash } from "./turn-trace.ts";
 import { FEEDBACK_PROMPT, IMAGE_PROMPT } from "../system-prompt.ts";
 import { hasPerspicaxConventions } from "../perspicax/perspicax-conventions.ts";
 import { onDemandPromptParts, promptReferencesAvailable } from "../context/prompt-references.ts";
+import { compactBotLast } from "../context/compact-prompt.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 
@@ -257,7 +258,9 @@ export function createPromptStartTurn(host: StartTurnHost) {
         ...(state.stablePrompt ? COMPACT_VOLATILE_SECTIONS : []),
       ])
       : undefined);
-    state.prompt = state.stablePrompt ? compactVolatileOrder(state.builtPrompt) : state.builtPrompt;
+    const ordered = state.stablePrompt ? compactVolatileOrder(state.builtPrompt) : state.builtPrompt;
+    // #1276: on a local model a new bot shares the cache of the others
+    state.prompt = state.compactPrompt && state.instance.driverKind === "piAgent" ? compactBotLast(ordered) : ordered;
     turnPromptBytes.set(state.threadId, { stable: Buffer.byteLength(state.prompt.stable), volatile: Buffer.byteLength(state.prompt.volatile) });
     const catalogBytes = toolDefinitionBytes(state.integrations.agents?.env);
     const buckets = measureContextBuckets({

@@ -823,6 +823,19 @@ describe("stable split and warm request (#1276)", () => {
     expect(JSON.parse(readFileSync(warmPath, "utf8")).messages).toEqual([{ role: "system", content: "sys" }, { role: "user", content: "shared" }]);
   });
 
+  it("on a warm, sends only the stable part for one token", async () => {
+    const dir = tempDir();
+    process.env.SAGAX_MCP_CONFIG = join(dir, "mcp.json");
+    writeFileSync(process.env.SAGAX_MCP_CONFIG, JSON.stringify({ splitStable: true, warmOnly: true }));
+    const handlers = new Map<string, (event?: any, context?: any) => any>();
+    await extension({ registerTool() {}, on(event, handler) { handlers.set(event, handler); } });
+    const sent = await handlers.get("before_provider_request")!({ payload: { model: "local", stream: true, max_completion_tokens: 900, messages: [
+      { role: "system", content: "sys" },
+      { role: "user", content: `shared${STABLE_END_MARKER}question` },
+    ] } });
+    expect(sent).toEqual({ model: "local", stream: true, max_tokens: 1, messages: [{ role: "system", content: "sys" }, { role: "user", content: "shared" }] });
+  });
+
   it("sends the warm request once when a standby resumes its session, through the session's provider", async () => {
     const dir = tempDir();
     const warm = { model: "local", messages: [{ role: "user", content: "shared" }], max_tokens: 1, stream: false };

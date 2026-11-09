@@ -18,7 +18,10 @@ export function createPiSendTurn(deps: PiSendDeps): (turn: SendTurnInput) => Pro
     let retired = false;
     // a retired attempt's late events (its close, a handshake error) stay silent
     const scoped: PiSendDeps = { ...deps, emit: (event) => { if (!retired) deps.emit(event); } };
-    const ctx = await preparePiTurn(scoped, turn, retryOf ? { turnId: retryOf } : {});
+    const prepared = await preparePiTurn(scoped, turn, retryOf ? { turnId: retryOf } : {});
+    // #1276: a warm shows no turn
+    if ("warmed" in prepared) return { turnId: prepared.turnId, done: Promise.resolve() };
+    const ctx = prepared;
     let retry: Promise<void> | null = null;
     if (!retryOf) deps.emit({ ...deps.base(ctx.threadId, ctx.turnId), type: "turn.started" });
     // nothing invisible: a turn that runs without a kit extension says so in the chat

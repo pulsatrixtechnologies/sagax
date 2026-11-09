@@ -82,6 +82,11 @@ export type PiTurnHooks = {
   takePiFresh: (key: string) => PiFreshTake | undefined;
   startPiStandby: (input: PiStandbyStart) => Promise<void>;
   startPiFresh: (input: { person: string; key: string; cli: string; args: string[]; cwd: string | undefined; env: Record<string, string | undefined> }) => Promise<void>;
+  /** #1276: the warm before a new conversation's first message (local model). */
+  prefillPiFresh: (input: {
+    person: string; key: string; cli: string; args: string[]; cwd: string; env: Record<string, string | undefined>;
+    dir: string; config: Record<string, unknown>; message: string; model: { provider: string; modelId: string } | null;
+  }) => Promise<boolean>;
   readPiToolCache: (dir: string | null, file?: string) => Record<string, unknown> | undefined;
   writePiSession: (sessionsRoot: string, cwd: string) => string;
   readPiPromptImages: (turn: SendTurnInput) => PiPromptImage[];

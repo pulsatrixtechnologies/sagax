@@ -1,5 +1,5 @@
 // Internal harness routes for bot-to-bot chat (#1388 slice I5a):
-// ask-bot, delegations status, retry-thread, delegate-bot, room-targets, coordinate-bots, assignment-status.
+// ask-bot, delegations status, retry-thread, delegate-bot, room-targets, coordinate-bots, assignment-status, send-status.
 //
 // Answers only behind the per-turn capability the internal block of
 // server/index.ts checks first. Capability gate and refusal checks stay there.
@@ -14,6 +14,7 @@ import {
   handleDelegationStatus,
   handleRetryThread,
   handleRoomCoordination,
+  handleSendStatus,
   openInternalBotChat,
 } from "./internal-bot-chat-handlers.ts";
 
@@ -38,6 +39,7 @@ export function createInternalBotChatRoutes(deps: InternalBotChatDeps): Internal
     if (method === "POST" && path === "/api/internal/retry-thread") return handleRetryThread(opened);
     if (method === "POST" && path === "/api/internal/delegate-bot") return handleDelegateBot(opened);
     if (method === "GET" && path === "/api/internal/assignment-status") return handleAssignmentStatus(opened);
+    if (method === "GET" && path === "/api/internal/send-status") return handleSendStatus(opened);
     if (method === "GET" && path === "/api/internal/room-targets") return handleRoomCoordination(opened);
     if (method === "POST" && path === "/api/internal/coordinate-bots") return handleRoomCoordination(opened);
     return PASS;

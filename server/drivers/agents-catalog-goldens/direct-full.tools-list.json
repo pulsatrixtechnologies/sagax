@@ -378,7 +378,7 @@
         "properties": {
           "title": {
             "type": "string",
-            "description": "The thread's name: one short line, at most 80 characters, specific enough to tell it apart from the others (for example \"QA: PR #412 login fix\")."
+            "description": "The thread's name: one short line, at most 80 characters, telling it apart from the others (e.g. \"QA: PR #412 login fix\")."
           },
           "message": {
             "type": "string",

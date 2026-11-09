@@ -10,6 +10,7 @@ import { CONFIDENTIAL_PEER_REFUSED } from "../threads/confidential-threads.ts";
 import { resumeOpening, resumeRefusal, subagentRequest } from "../threads/subagent-threads.ts";
 import { MAX_COMMS_DEPTH, type InternalRoomsCall } from "./internal-rooms-types.ts";
 import { PASS } from "./table.ts";
+import { sendStateOf } from "../../shared/send-receipt.ts";
 
 export async function handleInternalThreads(call: InternalRoomsCall): Promise<typeof PASS | void> {
   const {
@@ -97,6 +98,9 @@ export async function handleInternalThreads(call: InternalRoomsCall): Promise<ty
     return json(res, 400, { error: "workspace is only for a thread on yourself: a teammate works where its own Workspace says" });
   }
   const oneWay = body.oneWay === true;
+  // send_to_bot reply "resume" (#3246): the recipient's settled turn wakes
+  // the sender here with a short return line. Anything else stays one-way.
+  const resumeSender = oneWay && body.reply === "resume";
   const wakeAsked = parseWakePriority(body.priority);
   if (wakeAsked === "invalid") return json(res, 400, { error: "priority is now or normal." });
   if (oneWay && target.id === from.id) {
@@ -308,12 +312,20 @@ export async function handleInternalThreads(call: InternalRoomsCall): Promise<ty
     const chip: Omit<Message, "id" | "at"> = {
       role: "bot",
       kind: "activity",
-      tool: { name: `Opened thread #${openedTitle} on ${target.name}`, ok: true },
+      tool: { name: `Opened thread #${openedTitle} on ${target.name}`, ok: true, ...(oneWay ? { input: message } : {}) },
       threadRef: { botId: target.id, threadId, title: openedTitle },
+      // #3246: « Sent to <Bot> » with the state of its thread, kept current
+      // by the runtime (server/team/send-receipts.ts).
+      ...(oneWay ? { sendReceipt: { id: node.id, senderId: from.id, botId: target.id, threadId,
+        state: sendStateOf(node.status), ...(resumeSender ? { resume: true as const } : {}) } } : {}),
     };
     if (owner.group && !owner.group.dm) chip.from = { botId: from.id, name: from.name, color: from.color };
     store.appendMessage(fromThreadId, chip);
-    store.setTaskOpenedBy(target.id, threadId, { botId: from.id, name: from.name, delegationId: node.id, at: task.openedBy?.at ?? Date.now() });
+    store.setTaskOpenedBy(target.id, threadId, { botId: from.id, name: from.name, delegationId: node.id,
+      // #3246: where the send came from, so send_status and reply "resume"
+      // find the sender's conversation once its own turn is gone.
+      ...(oneWay ? { threadId: fromThreadId, ...(resumeSender ? { reply: "resume" as const } : {}) } : {}),
+      at: task.openedBy?.at ?? Date.now() });
     internalCapability.openedThreads += 1;
   }
   delegatedThisTurn(node.id);
@@ -346,6 +358,7 @@ export async function handleInternalThreads(call: InternalRoomsCall): Promise<ty
     limit,
     ...(current.status === "running" ? { state: "running" } : position > limit ? { state: "queued", position: position - limit } : { state: "pending" }),
     ...(oneWay ? { handle } : {}),
+    ...(resumeSender ? { reply: "resume" } : {}),
     ...priorityFields,
   });
 }

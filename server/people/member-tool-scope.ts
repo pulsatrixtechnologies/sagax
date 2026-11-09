@@ -51,6 +51,7 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   run_with_engine: "conversation",
   coordinate_bots: "conversation",
   assignment_status: "read",
+  send_status: "read",
   post_to_room: "conversation",
   message_person: "conversation",
   react_to_message: "conversation",

@@ -189,6 +189,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   externalRuntime ? coreTools.DEF_COORDINATE_BOTS_EXTERNAL : coreTools.DEF_COORDINATE_BOTS,
   ...(externalRuntime ? [coreTools.DEF_ASSIGNMENT_STATUS] : []),
   coreTools.DEF_SEND_TO_BOT,
+  coreTools.DEF_SEND_STATUS,
   coreTools.DEF_LIST_BOTS,
   roomsTools.DEF_LIST_ROOMS,
   coreTools.DEF_ASK_BOT(externalRuntime),
@@ -329,7 +330,7 @@ function creatorCreateBot<T extends { name: string; description: string; inputSc
 // One teamwork path in room turns; keep all unrelated integrations available.
 // Ordinary direct chats use this same bounded coordinator. Goal-owned turns
 // retain their independent loop and cannot start a second coordinator.
-const ROOM_ONLY_TOOLS = new Set(["list_room_targets", "coordinate_bots", "send_to_bot"]);
+const ROOM_ONLY_TOOLS = new Set(["list_room_targets", "coordinate_bots", "send_to_bot", "send_status"]);
 const ROOM_REPLACED_TOOLS = new Set(["ask_bot", "delegate_bot", "check_delegation", "wait_delegation", "start_thread"]);
 // Absent from a real room only (profile.room), never from a person's direct
 // chat, which coordinates too: a page belongs to one person's conversation,
@@ -345,7 +346,7 @@ const ROOM_ABSENT_TOOLS = new Set(["propose_page", "page_comments", "choose_page
 // or an agent-API prompt. The routes refuse these past one hop
 // (server/index.ts MAX_COMMS_DEPTH); everything else stays.
 export const PEER_HOP_ABSENT_TOOLS: ReadonlySet<string> = new Set([
-  "list_room_targets", "coordinate_bots", "send_to_bot", "ask_bot", "delegate_bot", "check_delegation", "wait_delegation",
+  "list_room_targets", "coordinate_bots", "send_to_bot", "send_status", "ask_bot", "delegate_bot", "check_delegation", "wait_delegation",
   "start_thread", "route_message", "send_prompt", "await_turn", "create_agent", "delete_agent",
   // a part run on another engine is one hop already (server/run-with-engine.ts)
   "run_with_engine",

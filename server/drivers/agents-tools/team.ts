@@ -22,7 +22,7 @@ export const DEF_START_THREAD = {
       type: "object",
       additionalProperties: false,
       properties: {
-        title: { type: "string", description: "The thread's name: one short line, at most 80 characters, specific enough to tell it apart from the others (for example \"QA: PR #412 login fix\")." },
+        title: { type: "string", description: "The thread's name: one short line, at most 80 characters, telling it apart from the others (e.g. \"QA: PR #412 login fix\")." },
         message: { type: "string", description: "The complete first message of the thread — everything the run needs, since it will not see this conversation." },
         bot_id: { type: "string", description: "Optional: the teammate's id from list_bots. Leave out to open the thread on yourself." },
         folder: { type: "string", description: "Optional: the name of one of that bot's existing folders to file the thread under. Leave out unless the person named one." },

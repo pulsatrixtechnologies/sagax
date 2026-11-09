@@ -4,7 +4,8 @@
  * steps inside, the same step merged with a count). Not shipped in the app.
  * ?skin=<id>&lang=<code>&view=before|after|after-open|after-live|handoff|handoff-open
  * handoff: a bot-to-bot hand-off in the unified chat (2026-11-09), the
- * sender's row (asked, answered with a verdict, failed) and the teammate's. */
+ * sender's row (asked, answered with a verdict, failed) and the teammate's.
+ * send: send_to_bot receipts in the sender's chat (#3246). */
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { ActivityRun } from "../components/ActivityRun";
@@ -13,6 +14,7 @@ import { DigestChip } from "../components/DigestChip";
 import { StepRow } from "../components/StepRow";
 import { ToolActivity } from "../components/ToolActivity";
 import { HandoffRow } from "../components/HandoffRow";
+import { SendReceiptRow } from "../components/SendReceiptRow";
 import { ChatRowsContext, type ChatRows } from "../components/ChatView.tsx-parts/types";
 import { createStoreSource, StoreSourceContext } from "../state/store-selector";
 import { initialState, type AppState, type Bot } from "../state/store";
@@ -216,12 +218,36 @@ function Handoff() {
   );
 }
 
+// send_to_bot receipts (#3246): « Envoyé à Olive » with the state.
+const sendRow = (id: string, state: "done" | "waiting" | "queued" | "failed", summary?: string): Message => ({
+  id, at: 1, role: "bot", kind: "activity", from: { botId: "wren", name: "Wren", color: "green" },
+  tool: { name: "agents_send_to_bot", ok: true, input: brief },
+  sendReceipt: { id: `d-${id}`, senderId: "wren", botId: "olive", threadId: `olive-${id}`, state, ...(summary ? { summary } : {}) },
+});
+const sends = [
+  sendRow("s1", "done", "FAIL : la connexion passe, l'envoi d'un message échoue (erreur 500 sur /api/send), la carte d'approbation s'affiche."),
+  sendRow("s2", "waiting"),
+  sendRow("s3", "queued"),
+  sendRow("s4", "failed", "Le serveur de staging ne répond pas."),
+];
+function Sends() {
+  return (
+    <StoreSourceContext.Provider value={handSource as never}>
+      <Section title="Chat de Wren (expéditeur)">
+        <ChatRowsContext.Provider value={rowsFor("wren")}>
+          {sends.map((message) => <SendReceiptRow key={message.id} message={message} />)}
+        </ChatRowsContext.Provider>
+      </Section>
+    </StoreSourceContext.Provider>
+  );
+}
+
 function Gallery() {
   return (
     <div className="min-h-screen bg-app p-8 text-ink">
       <div className="mx-auto flex max-w-xl flex-col gap-5" data-gallery={view}>
         <div className="self-end rounded-[18px] bg-bubble-user px-3 py-2 text-[13px] text-ink">Résume le billet #296221</div>
-        {view === "before" ? <Before /> : view.startsWith("handoff") ? <Handoff /> : <After />}
+        {view === "before" ? <Before /> : view === "send" ? <Sends /> : view.startsWith("handoff") ? <Handoff /> : <After />}
         <div className="self-start rounded-[18px] bg-card px-3 py-2 text-[13px] text-ink">Voici le résumé du billet #296221 : gabarit de courriel dans Bamboo, 4 notes.</div>
       </div>
     </div>

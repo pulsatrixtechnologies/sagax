@@ -169,6 +169,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"POST","kind":"exact","route":"/api/internal/sandbox/mcp","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/internal/self-knowledge","tier":"read","readOnly":false,"scope":"internal:read","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/internal/send-dtmf","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
+  {"method":"GET","kind":"exact","route":"/api/internal/send-status","tier":"read","readOnly":true,"scope":"internal:read","defaultEnabled":true},
   {"method":"GET","kind":"exact","route":"/api/internal/session-read","tier":"read","readOnly":true,"scope":"internal:read","defaultEnabled":true},
   {"method":"GET","kind":"exact","route":"/api/internal/session-search","tier":"read","readOnly":true,"scope":"internal:read","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/internal/settings","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},

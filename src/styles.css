@@ -2305,6 +2305,21 @@
   --color-raised: var(--color-sidebar-hover);
   --color-raised-hover: var(--color-sidebar-selected);
 }
+/* The chat header's top fade (ChatEdgeFade) belongs to skins where the
+   header floats over the transcript. Here the header is the flat navy band,
+   so that fade would paint the light chat ground over the band (#3039). */
+[data-skin="pulsatrix-light"] .content-topbar > [data-chat-edge-fade="top"] {
+  display: none;
+}
+/* The phone drawer button sits on that navy band whenever the page has one,
+   so it takes the band's ink, not the light page's (#3039). */
+[data-skin="pulsatrix-light"] .app-shell-row:has(.content-topbar) > [data-drawer-button] {
+  color: var(--color-sidebar-ink-secondary);
+}
+[data-skin="pulsatrix-light"] .app-shell-row:has(.content-topbar) > [data-drawer-button]:hover {
+  color: var(--color-sidebar-ink);
+  background: var(--color-sidebar-hover);
+}
 /* Chat's banner stack still reserves the 52px its floating header used to
    float over; the header is a normal block now, so that reservation would
    double the gap. */

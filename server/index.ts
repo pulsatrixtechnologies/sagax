@@ -6750,6 +6750,7 @@ bindLeafHost({
   get proactiveMetrics() { return proactiveMetrics; },
   get proactiveEngine() { return proactiveEngine; },
   get proactivePending() { return proactivePending; },
+  get flowWatchLoop() { return flowWatchLoop; },
   get proactiveWaker() { return proactiveWaker; },
   get directChatOf() { return directChatOf; },
   get routineEngineForBot() { return routineEngineForBot; },
@@ -18999,7 +19000,11 @@ const proactiveWaker = new ProactiveWaker({
   wake: (batch) => startProactiveWake(batch, false, batch.runAs),
   // 2026-11-02: a teammate's notice no wake will run for is still shown
   dropped: (botId, events) => {
-    for (const event of events) if (event.peer) surfacePeerNotice(botId, event.peer);
+    for (const event of events) {
+      if (event.peer) surfacePeerNotice(botId, event.peer);
+      // #3140: a dropped watch event is not marked as sent
+      if (event.watch) flowWatchLoop.released(botId, event.watch.id);
+    }
   },
   // Cheap expired marker: do not start another wake that would fail the same way.
   engineExpired: (botId) => {

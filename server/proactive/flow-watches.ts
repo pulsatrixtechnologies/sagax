@@ -374,6 +374,8 @@ export function watchEvent(input: { botId: string; runAs?: string; watch: FlowWa
     detail: `Watch ${watch.id} observed:\n${observed}`,
     hops: 0,
     ...(input.runAs ? { runAs: input.runAs } : {}),
+    // #3140: ids only; a restart before the wake observes the watch again
+    replay: { kind: "watch", watchId: watch.id },
     watch: {
       id: watch.id,
       summary: watch.summary,
@@ -392,6 +394,12 @@ interface WatchState {
   last?: number;
   /** The key of the condition that already fired and is still true. */
   fired?: string;
+  /** #3140: the cause of the skip already posted in the chat; the same
+   * cause stays silent until it changes or an observe succeeds. */
+  skip?: string;
+  /** #3140: observe at the next tick, whatever the cadence (a pending wake
+   * replayed after a restart). */
+  due?: true;
 }
 
 /** Per bot and watch: when it last ran and which true condition already
@@ -415,6 +423,8 @@ export class WatchMemory {
             kept[watchId] = {
               ...(typeof row.last === "number" ? { last: row.last } : {}),
               ...(typeof row.fired === "string" ? { fired: row.fired } : {}),
+              ...(typeof row.skip === "string" ? { skip: row.skip } : {}),
+              ...(row.due === true ? { due: true as const } : {}),
             };
           }
           this.items[botId] = kept;
@@ -434,7 +444,30 @@ export class WatchMemory {
   }
 
   noteRun(botId: string, watchId: string, at: number): void {
-    this.set(botId, watchId, { ...this.get(botId, watchId), last: at });
+    const { due: _due, ...state } = this.get(botId, watchId);
+    this.set(botId, watchId, { ...state, last: at });
+  }
+
+  /** #3140: true the first time a cause is seen (post its line), false
+   * while the same cause repeats. */
+  skipped(botId: string, watchId: string, cause: string): boolean {
+    const state = this.get(botId, watchId);
+    if (state.skip === cause) return false;
+    this.set(botId, watchId, { ...state, skip: cause });
+    return true;
+  }
+
+  /** An observe went through: the next skip posts again. */
+  observed(botId: string, watchId: string): void {
+    const { skip: _skip, ...state } = this.get(botId, watchId);
+    this.set(botId, watchId, state);
+  }
+
+  /** #3140: a fired condition whose wake never started (a restart): it
+   * is observed again at the next tick and may fire again. */
+  replay(botId: string, watchId: string): void {
+    const { fired: _fired, ...state } = this.get(botId, watchId);
+    this.set(botId, watchId, { ...state, due: true });
   }
 
   /** The condition's verdict: "fire" the first time a key is true, then
@@ -442,7 +475,10 @@ export class WatchMemory {
   settle(botId: string, watchId: string, holds: boolean, key: string): "fire" | "duplicate" | "clear" {
     const state = this.get(botId, watchId);
     if (!holds) {
-      if (state.fired !== undefined) this.set(botId, watchId, state.last !== undefined ? { last: state.last } : {});
+      if (state.fired !== undefined) {
+        const { fired: _fired, ...rest } = state;
+        this.set(botId, watchId, rest);
+      }
       return "clear";
     }
     if (state.fired === key) return "duplicate";
@@ -452,8 +488,8 @@ export class WatchMemory {
 
   /** A fired condition that could not start: let it fire again. */
   unfire(botId: string, watchId: string): void {
-    const state = this.get(botId, watchId);
-    this.set(botId, watchId, state.last !== undefined ? { last: state.last } : {});
+    const { fired: _fired, ...state } = this.get(botId, watchId);
+    this.set(botId, watchId, state);
   }
 
   forget(botId: string): void {
@@ -623,8 +659,8 @@ export class FlowWatchLoop {
     const due: FlowWatch[] = [];
     for (const watch of watchesForProducts(listing.watches, products)) {
       const cadence = parseCadence(watch.cadence)!;
-      const last = this.deps.memory.get(botId, watch.id).last;
-      if (cadenceDue(cadence, last, now, zone)) due.push(watch);
+      const { last, due: replayed } = this.deps.memory.get(botId, watch.id);
+      if (replayed || cadenceDue(cadence, last, now, zone)) due.push(watch);
       else if (last === undefined) this.deps.memory.noteRun(botId, watch.id, now);
     }
     if (!due.length) return;
@@ -641,25 +677,60 @@ export class FlowWatchLoop {
       }
       // never a call with a raw template: skipped until the tenant sets it
       this.deps.memory.noteRun(botId, watch.id, now);
-      this.deps.log(botId, `Pulsatrix watch ${watch.id} skipped: ${resolved.unresolved.join(", ").slice(0, 200)} not set for this organization.`);
+      const tokens = resolved.unresolved.join(", ").slice(0, 200);
+      this.skip(botId, watch.id, `unresolved:${tokens}`, `Pulsatrix watch ${watch.id} skipped: ${tokens} not set for this organization.`);
     }
     if (!ready.length) return;
-    await this.deps.session(owner, botId, async (session) => {
+    // #3140: marked before the connection, so a missing access waits for
+    // the next cadence instead of retrying on every tick
+    for (const watch of ready) this.deps.memory.noteRun(botId, watch.id, now);
+    let failure: string | undefined;
+    const reached = await this.deps.session(owner, botId, async (session) => {
       for (const watch of ready) {
-        this.deps.memory.noteRun(botId, watch.id, now);
         const call = observeCall(watch.observe, session);
         if ("refused" in call) {
-          this.deps.log(botId, `Pulsatrix watch ${watch.id} skipped: ${call.refused}.`);
+          this.skip(botId, watch.id, `refused:${call.refused}`, `Pulsatrix watch ${watch.id} skipped: ${call.refused}.`);
           continue;
         }
         const answer = await session.call(call.name, call.args);
         if (!answer.ok || answer.isError) {
-          this.deps.log(botId, `Pulsatrix watch ${watch.id} could not observe${answer.ok ? "" : `: ${answer.error.slice(0, 120)}`}.`);
+          const error = answer.ok ? "" : answer.error.slice(0, 120);
+          this.skip(botId, watch.id, `observe:${error}`, `Pulsatrix watch ${watch.id} could not observe${error ? `: ${error}` : ""}.`);
           continue;
         }
+        this.deps.memory.observed(botId, watch.id);
         this.consider(botId, owner, watch, answer.value);
       }
+      return true;
+    }).catch((error: unknown) => {
+      failure = error instanceof Error ? error.message.slice(0, 160) : "error";
+      return null;
     });
+    if (reached) return;
+    for (const watch of ready) {
+      if (failure === undefined) this.skip(botId, watch.id, "access", `Pulsatrix watch ${watch.id} skipped: no Pulsatrix access for this person.`);
+      else this.skip(botId, watch.id, `failed:${failure}`, `Pulsatrix watch ${watch.id} could not run: ${failure}`);
+    }
+  }
+
+  /** #3140: a skip posts its line in the chat once per cause; the same
+   * cause stays silent until it changes or an observe succeeds. */
+  private skip(botId: string, watchId: string, cause: string, line: string): void {
+    if (this.deps.memory.skipped(botId, watchId, cause)) this.deps.log(botId, line);
+  }
+
+  /** #3140: a pending wake of this watch was lost to a restart: observe it
+   * again at the next tick, so the condition fires again if it still holds. */
+  replay(botId: string, watchId: string): void {
+    this.deps.memory.replay(botId, watchId);
+    this.deps.memory.save();
+  }
+
+  /** #3140: a gathered watch event no wake will run for (dropped): the
+   * condition is no longer marked as sent and fires again at its cadence. */
+  released(botId: string, watchId: string): void {
+    this.deps.memory.unfire(botId, watchId);
+    this.deps.memory.save();
   }
 
   /** A watch observed: its condition, then the gate, then the wake. */

@@ -49,7 +49,19 @@ Every minute, for each bot whose mode is not off:
    when the person's level and rules say so. The proactive layer never runs
    a write on its own and adds no card of its own.
 
-Memory of runs and fired conditions: `DATA_DIR/proactive-watches.json`.
+A skipped watch (a token not set, no Pulsatrix access, an observe that is
+not a read or that failed) posts its line in the chat once per cause, then
+stays silent until the cause changes or an observe succeeds. Without
+Pulsatrix access the watch waits for its next cadence, never every tick.
+
+A fired watch waiting for its wake is kept in
+`DATA_DIR/proactive-pending.json` (replay ref `{kind: "watch", watchId}`,
+no observed data). After a restart the watch is observed again at the next
+tick and fires again if its condition still holds. A gathered watch event
+no wake runs for (dropped) is released and fires again at its cadence.
+
+Memory of runs, fired conditions and posted skip causes:
+`DATA_DIR/proactive-watches.json`.
 The helper runs only from an organization plugin folder on a Perspicax
 server, isolated (`python3 -I`, minimal environment, 20 s timeout), with the
 organization's tenant plugins in `PX_FLOW_TENANTS`.

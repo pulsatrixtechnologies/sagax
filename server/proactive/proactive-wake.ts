@@ -127,7 +127,9 @@ export interface ProactiveEvent {
 /** 2026-11-02: what a gathered event keeps on disk until its wake starts. */
 export type ProactiveReplayRef =
   | { kind: "peer"; noticeId: string }
-  | { kind: "room"; groupId: string; threadId: string; messageId: string; posterId: string; hops: number };
+  | { kind: "room"; groupId: string; threadId: string; messageId: string; posterId: string; hops: number }
+  /** #3140: a Flow watch; the replay observes it again (no observed data kept). */
+  | { kind: "watch"; watchId: string };
 
 /** The facts of a teammate's notice a person can be shown without a model. */
 export interface PeerNoticeFacts {
@@ -962,5 +964,6 @@ function isPendingRow(row: unknown): row is { key: string; ref: ProactiveReplayR
   const { key, ref } = row as { key?: unknown; ref?: { kind?: unknown } & Record<string, unknown> };
   if (typeof key !== "string" || !ref || typeof ref !== "object") return false;
   if (ref.kind === "peer") return typeof ref.noticeId === "string";
+  if (ref.kind === "watch") return typeof ref.watchId === "string";
   return ref.kind === "room" && ["groupId", "threadId", "messageId", "posterId"].every((name) => typeof ref[name] === "string") && typeof ref.hops === "number";
 }

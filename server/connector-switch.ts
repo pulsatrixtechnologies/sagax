@@ -13,6 +13,7 @@
 import { claudeAiConnectorCapabilities, type ConnectorCapability, GROK_CONNECTOR_CAPABILITY_BY_NAME } from "../shared/engine-connectors.ts";
 import { effortAcceptedByEngine } from "../shared/ultracode-effort.ts";
 import type { EffortLevel } from "../shared/wire.ts";
+import fr from "../src/locales/fr.json" with { type: "json" };
 
 export interface SwitchEngine {
   instanceId: string;
@@ -114,7 +115,11 @@ export function pickConnectorSwitch(input: {
   return null;
 }
 
-/** The English line, for clients that do not draw `tool.connectorSwitch`. */
-export function connectorSwitchText(line: { engine: string; connector: string }): string {
-  return `Switched to ${line.engine} for ${line.connector}.`;
+/** The line for clients that do not draw `tool.connectorSwitch` (the MCP
+ * thread, phones), in the conversation's language (#3149): French when the
+ * turn speaks French, English otherwise. */
+export function connectorSwitchText(line: { engine: string; connector: string }, language?: string | null): string {
+  const french = (language ?? "").trim().toLowerCase().split("-")[0] === "fr" ? (fr as Record<string, string>)["chat.connectorSwitch"] : undefined;
+  const text = french ? french.replace("{engine}", line.engine).replace("{connector}", line.connector) : `Switched to ${line.engine} for ${line.connector}`;
+  return `${text}.`;
 }

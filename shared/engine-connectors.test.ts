@@ -197,6 +197,31 @@ describe("what a request needs", () => {
   ])("%s", (text, capability, hint) => {
     expect(connectorNeed(text)).toEqual({ capability, ...(hint ? { hint } : {}) });
   });
+  it.each([
+    ["Lis-moi mes courriels non lus", "mail", undefined],
+    ["Résume les derniers courriels de Bob", "mail", undefined],
+    ["Email Ana the meeting notes", "mail", undefined],
+    ["Don't forget, check my inbox for the quote", "mail", undefined],
+    ["Ajoute une réunion à mon agenda vendredi", "calendar", undefined],
+    ["Book a meeting with Bob on Friday", "calendar", undefined],
+    ["Déplace mon rendez-vous de 14 h", "calendar", undefined],
+  ])("#3149 a real need still moves: %s", (text, capability, hint) => {
+    expect(connectorNeed(text)).toEqual({ capability, ...(hint ? { hint } : {}) });
+  });
+  it.each([
+    "Liste mes billets ouverts dans CW, aucun courriel, n'écris rien.",
+    "Fais le point sur le billet 1234 sans courriel ni réunion",
+    "Ne m'envoie pas de courriel, réponds ici",
+    "Pas de réunion cette semaine, résume les billets",
+    "List my open tickets, no email, do not write anything.",
+    "Don't send any email, just answer here",
+    "Never book a meeting for this, summarize the ticket",
+    "Le client a mentionné l'agenda du projet dans le billet 4521",
+    "The ticket says the client sent an email about the printer",
+    "Regarde le billet 77, le client parle de son calendrier de paie",
+  ])("#3149 a negated or passing word moves nothing: %s", (text) => {
+    expect(connectorNeed(text)).toBeNull();
+  });
   it("needs nothing for other work", () => {
     expect(connectorNeed("Corrige le test qui échoue")).toBeNull();
     expect(connectorNeed("")).toBeNull();

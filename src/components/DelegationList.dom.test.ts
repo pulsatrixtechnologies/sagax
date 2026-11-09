@@ -5,7 +5,8 @@
 // icon), one bubble with a row per teammate (task, bot · model readable,
 // state with its icon), always shown: no "Sent work to ..." title and no
 // fold (#2947), and a click on a row that opens that teammate's
-// work right there under the card (no conversation switch, no "Open thread").
+// work as the bot-to-bot sheet (#3245: no conversation switch, no "Open
+// thread", no second chat with an X and a composer).
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,15 +15,19 @@ import { DelegationList, delegationState, type DelegationEntry } from "./Delegat
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-// The teammate's live conversation is the real one (ActivityConversation);
-// here a stub that only shows which conversation it was given.
-vi.mock("./bot-settings/ActivityConversation", async () => {
+// The teammate's sheet is the real bot-to-bot sheet (TeammateExchangeSheet,
+// ExchangeSheet); here a stub that only shows what it was given.
+vi.mock("./TeammateExchangeSheet", async () => {
   const { createElement: h } = await import("react");
   return {
-    default: (props: { botId: string; threadId: string; title: string; onClose?: () => void }) =>
-      h("div", { "data-test-conversation": props.threadId, "data-test-title": props.title },
-        h("button", { type: "button", "data-test-close": "", onClick: props.onClose }, "close")),
+    default: (props: { owner?: { id: string }; teammate: { id: string; name: string }; threadId: string; task?: string; onClose: () => void }) =>
+      h("div", { "data-test-conversation": props.threadId, "data-test-title": props.task, "data-test-ends": `${props.owner?.id ?? ""}>${props.teammate.id}` },
+        h("button", { type: "button", "data-test-close": "", onClick: props.onClose }, "Close Chat")),
   };
+});
+// Never the old in-card chat (header, X, "Message <bot>" composer).
+vi.mock("./bot-settings/ActivityConversation", () => {
+  throw new Error("DelegationList must not load ActivityConversation (#3245)");
 });
 
 const bot = (id: string, name: string, tasks: Bot["tasks"] = []): Bot => ({
@@ -134,8 +139,8 @@ describe("DelegationList", () => {
     }
   });
 
-  it("a click on a row opens that teammate's work right there under the card, one at a time, and Close puts it away", async () => {
-    render({ entries });
+  it("a click on a row opens that teammate's work as the bot-to-bot sheet, one at a time, and Close Chat puts it away (#3245)", async () => {
+    render({ entries, owner: { id: "boss", name: "Boss", color: "blue" } });
     const row = host.querySelector<HTMLButtonElement>('[data-delegation-reveal="orla-work"]')!;
     expect(row.tagName).toBe("BUTTON");
     expect(row.getAttribute("aria-label")).toBe("See Orla's work, Planning next moves");
@@ -148,7 +153,9 @@ describe("DelegationList", () => {
     expect(work).not.toBeNull();
     expect(work.getAttribute("role")).toBe("region");
     expect(work.getAttribute("aria-label")).toBe("Orla's work");
-    expect(work.querySelector('[data-test-conversation="orla-work"]')?.getAttribute("data-test-title")).toBe("Draft the client summary");
+    const sheet = work.querySelector('[data-test-conversation="orla-work"]')!;
+    expect(sheet.getAttribute("data-test-title")).toBe("Draft the client summary");
+    expect(sheet.getAttribute("data-test-ends")).toBe("boss>orla");
     expect(row.getAttribute("aria-expanded")).toBe("true");
     expect(host.textContent).not.toMatch(/Open thread|Go to conversation|Open the chat/i);
     // the other row takes the same place: never two conversations at once
@@ -157,7 +164,7 @@ describe("DelegationList", () => {
     expect(host.querySelectorAll("[data-delegation-work]")).toHaveLength(1);
     expect(host.querySelector('[data-delegation-work="harrie-work"] [data-test-conversation="harrie-work"]')).not.toBeNull();
     expect(row.getAttribute("aria-expanded")).toBe("false");
-    // Close in the conversation's header puts it away; the row again closes it too
+    // Close Chat puts it away; the row again closes it too
     await click("[data-test-close]");
     expect(host.querySelector("[data-delegation-work]")).toBeNull();
     await click('[data-delegation-reveal="harrie-work"]');

@@ -1,8 +1,8 @@
 /** Isolated gallery for headless screenshots of an open bot-to-bot
- * conversation ("A ⇆ B", Close Chat pill) over the whole chat column, so its
+ * conversation ("A ⇆ B" header pill, Close Chat pill, #3245) over the whole chat column, so its
  * layout can be compared with a 1:1 chat at any window width. Neutral bot
  * names. Not shipped in the app. ?skin=<id>&lang=<code>&routine=1
- * (routine=1: a routine run's window, its meta line and a pinned card). */
+ * (routine=1: a routine run's window, its X, meta line and pinned card). */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ExchangeColumnProvider, ExchangeSheet, useExchangeColumn } from "../components/BotExchangeChip";
@@ -18,8 +18,8 @@ applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? ski
 await loadLocale(params.get("lang") ?? "en");
 
 const bots = [
-  { id: "nova", name: "Nova", color: "blue" },
-  { id: "pixel", name: "Pixel", color: "orange" },
+  { id: "nova", name: "Nova", color: "blue", title: "Coordinator" },
+  { id: "pixel", name: "Pixel", color: "orange", title: "Reports analyst" },
 ] as unknown as Bot[];
 const nova = { botId: "nova", name: "Nova" };
 const pixel = { botId: "pixel", name: "Pixel" };
@@ -57,6 +57,7 @@ function Gallery() {
         <ExchangeColumnProvider node={column.node}>
           {column.node && (routine
             ? <ExchangeSheet
+                chrome="window"
                 run={{ ...run, ends: [{ id: "nova", name: "Nova" }] }}
                 bots={bots}
                 showToolCalls

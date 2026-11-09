@@ -25,6 +25,13 @@ vi.mock("@/lib/desktop-bridge", async (importOriginal) => {
 });
 
 vi.mock("@/lib/perspicax-org", () => ({ usePerspicaxOrg: () => env.org }));
+
+// The bot's marked hosts (#2726), per test (none by default).
+const hostEnv = vi.hoisted(() => ({ hosts: [] as unknown[] }));
+vi.mock("@/lib/host-computers", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/host-computers")>();
+  return { ...actual, useBotHostComputer: () => ({ hostId: null, hosts: hostEnv.hosts, select: async () => {} }) };
+});
 vi.mock("@/lib/is-mac-platform", () => ({ isMacPlatform: () => true }));
 
 // The thumbnail endpoint: the capture time of each computer (null: none yet),
@@ -66,6 +73,7 @@ beforeEach(() => {
   captures.cloud = { configured: true, box: { state: "running" } };
   env.bridge = null;
   env.org = null;
+  hostEnv.hosts = [];
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
@@ -146,6 +154,41 @@ describe("ComputerCard", () => {
     act(() => option!.click());
     expect(onPatch).toHaveBeenCalledWith({ computer: "local" });
     expect(document.querySelector("[data-computer-card-menu]")).toBeNull();
+  });
+
+  it("draws every menu row the same: a leading mark, the name, a grey line and the check slot", () => {
+    env.org = { id: "org-1" };
+    env.bridge = {
+      connected: true,
+      tunnel: false,
+      workplace: { place: "computer", routines: false, network: "all" },
+      activity: [],
+      desktops: [{ id: "desk-1", name: "Studio Mac", platform: "darwin", online: true, busy: false, lastSeenAt: Date.now(), capabilities: { localVm: true } }],
+    };
+    hostEnv.hosts = [{ hostId: "h-1", name: "Build box", os: "linux", online: true, shellOnly: false, tags: [] }];
+    act(() => root!.render(createElement(ComputerCard, { bot: { ...bot, computer: "local" } as Bot, onPatch: vi.fn() })));
+    act(() => host!.querySelector<HTMLButtonElement>("[data-computer-card-more]")!.click());
+    const rows = [...document.querySelectorAll<HTMLElement>('[data-computer-card-menu] [role="menuitemradio"]')];
+    expect(rows.map((row) => row.getAttribute("data-computer-card-option") ?? `host:${row.getAttribute("data-computer-card-host")}`))
+      .toEqual(["auto", "local", "cloud", "host:online"]);
+    for (const row of rows) {
+      expect(row.className).toBe(rows[0]!.className);
+      // lead mark, name over grey line, then the check (or its empty slot)
+      expect(row.children).toHaveLength(3);
+      expect(row.children[0]!.hasAttribute("data-computer-menu-lead")).toBe(true);
+      expect(row.children[2]!.getAttribute("aria-hidden")).toBe("true");
+      expect(row.querySelector("[data-computer-menu-lead]")).toBeTruthy();
+      expect(row.querySelector("[data-computer-menu-name]")!.textContent!.length).toBeGreaterThan(0);
+      expect(row.querySelector("[data-computer-menu-detail]")!.textContent!.length).toBeGreaterThan(0);
+    }
+    const text = (value: string, part: string) => document.querySelector(`[data-computer-card-option="${value}"] [data-computer-menu-${part}]`)!.textContent;
+    expect(text("auto", "name")).toBe("Auto");
+    expect(text("auto", "detail")).toBe("Picks per task");
+    expect(text("local", "name")).toBe("Studio Mac");
+    expect(text("local", "detail")).toBe("macOS \u00b7 This computer");
+    expect(text("cloud", "detail")).toBe("Server environment");
+    expect(document.querySelector('[data-computer-card-option="local"]')!.getAttribute("aria-checked")).toBe("true");
+    expect(document.querySelector('[data-computer-card-host] [data-computer-menu-detail]')!.textContent).toBe("Linux");
   });
 
   it("has a ... button that opens the same menu as the right click", () => {

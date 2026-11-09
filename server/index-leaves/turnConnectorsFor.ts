@@ -4,10 +4,13 @@ import { basename } from "node:path";
 export type Host = Record<string, any>;
 
 export function createTurnConnectorsFor(getHost: () => Host): any {
-function turnConnectorsFor(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string; driverKind: string }, speaker: TurnSpeaker,   integrations: NonNullable<SendTurnInput["integrations"]>, principal: string | null, customMcp: boolean) {
+function turnConnectorsFor(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string; driverKind: string }, speaker: TurnSpeaker,   integrations: NonNullable<SendTurnInput["integrations"]>, principal: string | null, customMcp: boolean, threadId?: string) {
   const host = getHost();
   const { claudeAiConnectorsForTurn, scopedPluginFolders } = host;
-  const account = host.accountConnectorInput(bot, instance, speaker);
+  const account = {
+    ...host.accountConnectorInput(bot, instance, speaker),
+    ...(threadId && host.isRelayPart?.(threadId) ? { engineRelay: true } : {}),
+  };
   const claudeAi = claudeAiConnectorsForTurn(account);
   const claudeConnectors = claudeAi ? host.claudeAiConnectorRows(account) : undefined;
   const remote = host.remoteMcpServers();

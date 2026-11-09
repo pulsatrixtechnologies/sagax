@@ -88,6 +88,9 @@ export interface ClaudeAiTurnInput extends ConnectorPrincipalInput {
   /** #2747: the bot opted in to its Grok account's grok.com connectors
    * (bot setting grokAccountConnectors, off by default). */
   grokAccountConnectors?: boolean;
+  /** This turn is a run_with_engine part on the person's own Grok CLI.
+   * Loads the account's managed connectors without the bot opt-in. */
+  engineRelay?: boolean;
 }
 
 const ACCOUNT_CONNECTOR_DRIVERS = new Set(["claudeAgent", "grokAgent", "grok"]);
@@ -132,9 +135,13 @@ export function grokCloudConnectorsForTurn(input: ClaudeAiTurnInput): boolean {
   // bot sees only the tools Sagax mounts for it, so no bot turn loads the
   // account's managed MCP unless the bot opted in (grokAccountConnectors,
   // a bot setting off by default), and then only on the person's own sign-in.
+  // A run_with_engine part is the exception (2026-11-09): that part exists
+  // to reach this person's Outlook, Teams and SharePoint, so it loads the
+  // gateway without the opt-in. Someone else's sign-in still never does.
   // Only the Grok CLI (grokAgent) loads them: the xAI API engine ("grok",
   // drivers/grok.ts chat-completions) has no use_tool and no grok.com MCP.
-  return input.grokAccountConnectors === true && input.driver === GROK_CLI_DRIVER && accountConnectorsForTurn(input) === "own";
+  const load = input.grokAccountConnectors === true || input.engineRelay === true;
+  return load && input.driver === GROK_CLI_DRIVER && accountConnectorsForTurn(input) === "own";
 }
 
 /** The system note for a turn that keeps them: what they are and whose. */

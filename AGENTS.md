@@ -8048,7 +8048,10 @@ these rules, each covered by `server/harness-connectors.test.ts` or
   server Sagax did not mount keeps its card. A solo turn forces
   `GROK_MANAGED_MCPS_ENABLED=false`: in `--permission-mode default` Grok can
   call those servers with no prompt. Gateway tools stay off. A tool
-  selection turns the connectors off too.
+  selection turns the connectors off too. A run_with_engine part on the
+  person's own Grok CLI loads them even when grokAccountConnectors is off
+  (2026-11-09). Any other bot turn still needs that opt-in. Someone else's
+  sign-in never loads them.
 
 ## Mail, Teams, calendar and SharePoint through the engines' connectors (parité R9 + R11, 2026-10-21)
 

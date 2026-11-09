@@ -188,7 +188,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       { id: "mcp", label: "MCP servers", text: customMcpPrompt(Object.keys(state.integrations.custom ?? {}), mcpServersOff(state.bot)) + githubWithheldPrompt(state.githubWithheld) },
       { id: "perspicax", label: "Perspicax", text: state.perspicaxPrompt },
       // run_with_engine is shown to a person's own direct turn only (not one hop away)
-      { id: "claude-ai", label: "Claude connectors", text: engineConnectorsPromptFor(state.liveBot ?? state.bot, state.instance, state.speaker, { level: promptApprovalLevel, relay: Boolean(state.integrations.agents) && state.commsDepth === 0, perspicaxConventions: hasPerspicaxConventions(state.perspicaxPrompt) }) },
+      { id: "claude-ai", label: "Claude connectors", text: engineConnectorsPromptFor(state.liveBot ?? state.bot, state.instance, state.speaker, { level: promptApprovalLevel, relay: Boolean(state.integrations.agents) && state.commsDepth === 0, perspicaxConventions: hasPerspicaxConventions(state.perspicaxPrompt), threadId: state.threadId }) },
       // the level this turn really runs at (approvalModeForTurn), so Full never asks for a typed GO
       { id: "approval-level", label: "Approval level", text: approvalLevelPrompt(promptApprovalLevel) },
       // #1819: effective ask-before-contact (Full skips the Sagax peer card)

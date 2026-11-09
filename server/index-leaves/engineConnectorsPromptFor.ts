@@ -5,11 +5,14 @@ import { connectorConventionsPrompt } from "../perspicax/perspicax-conventions.t
 export type Host = Record<string, any>;
 
 export function createEngineConnectorsPromptFor(getHost: () => Host): any {
-function engineConnectorsPromptFor(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string }, speaker: TurnSpeaker,   turn: { level?: ApprovalMode; relay?: boolean; perspicaxConventions?: boolean } = {}) {
+function engineConnectorsPromptFor(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string }, speaker: TurnSpeaker,   turn: { level?: ApprovalMode; relay?: boolean; perspicaxConventions?: boolean; threadId?: string } = {}) {
   const host = getHost();
   const { claudeAiConnectorsForTurn } = host;
 
-  const input = host.accountConnectorInput(bot, instance, speaker);
+  const input = {
+    ...host.accountConnectorInput(bot, instance, speaker),
+    ...(turn.threadId && host.isRelayPart?.(turn.threadId) ? { engineRelay: true } : {}),
+  };
   const account = accountConnectorsForTurn(input);
   const claudeAi = claudeAiConnectorsForTurn(input);
   // Review of #2912: ConnectWise reached through a claude.ai connector, with

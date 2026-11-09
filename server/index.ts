@@ -2705,6 +2705,7 @@ bindLeafHost({
   get piModelServersForViewer() { return piModelServersForViewer; },
   get claudeAiConnectorRows() { return claudeAiConnectorRows; },
   get grokCloudOnTurn() { return grokCloudOnTurn; },
+  get isRelayPart() { return isRelayPart; },
   get claudeAiConnectorsFor() { return claudeAiConnectorsFor; },
   get catalogPrice() { return catalogPrice; },
   get perspicaxKeysUrl() { return perspicaxKeysUrl; },
@@ -17655,6 +17656,9 @@ function noteRelayParent(threadId: string, parentThreadId: string): void {
   relayParentThreads.set(threadId, parentThreadId);
   if (relayParentThreads.size > 500) relayParentThreads.delete(relayParentThreads.keys().next().value!);
 }
+function isRelayPart(threadId: string): boolean {
+  return relayParentThreads.has(threadId);
+}
 const delegationWatch = new Map<string, {
   channelId?: string;
   toBotId: string;
@@ -23004,7 +23008,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       openedThreadOwner(from as unknown as BotRecord, fromThreadId, target as unknown as BotRecord),
     openerFrom,
     noteRelayParent,
-    isRelayPart: (threadId) => relayParentThreads.has(threadId),
+    isRelayPart,
     askBotAndWait: (targetBotId, message, depth, fromBotId, fromThreadId, targetThreadId, opts) =>
       askBotAndWait(targetBotId, message, depth, fromBotId, fromThreadId, targetThreadId, opts) as Promise<{ status: string; text?: string }>,
     mcpCallTimeoutMinutes: () => mcpCallTimeoutMinutes(cfg),
@@ -33159,6 +33163,7 @@ const startTurnRunner = createStartTurn({
   generateThreadTitle,
   githubWithheldPrompt,
   grokCloudConnectorsForTurn,
+  isRelayPart,
   guardTurnDispatch,
   guestDrivenTurns,
   guestEngineRefusal,

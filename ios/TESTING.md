@@ -71,6 +71,23 @@ before suspecting the model: re-capture with
 `node scripts/capture/companion-fixtures.mjs` from the repo root and read the
 diff.
 
+**Stack frames of the transcript rows (#3108).** 0.8.71 crashed the instant a
+chat opened: the Release body getters of `MessageRow` had grown 58 KB and
+31 KB stack frames and blew the main thread's 1 MB stack. Before a TestFlight
+cut, run the check on a Release archive (it reads the prologues, no device
+needed):
+
+```sh
+xcodebuild archive -project ios/Sagax.xcodeproj -scheme Sagax \
+  -destination 'generic/platform=iOS' -archivePath /tmp/Sagax.xcarchive \
+  CODE_SIGNING_ALLOWED=NO
+scripts/check-ios-stack-frames.sh /tmp/Sagax.xcarchive
+```
+
+It fails when a `MessageRow`-family body getter reserves more than 64 KB. Keep
+each message kind in its own small view (`MessageKindContent` and friends in
+`MessageRow.swift`) rather than growing one `@ViewBuilder` switch.
+
 ---
 
 ## Stage 2 — the desktop side, on its own

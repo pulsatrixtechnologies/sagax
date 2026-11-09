@@ -277,207 +277,29 @@ struct MessageRow: View {
         }
     }
 
-    @ViewBuilder
+    /// The message's content by kind, drawn by its own view (#3108). One
+    /// `@ViewBuilder` switch holding every card made Swift -O build the whole
+    /// `_ConditionalContent` tree in a single body getter: 0.8.71 (build 140)
+    /// overflowed the main thread's stack on the first row drawn when a chat
+    /// opened. A child view's body is evaluated after this one returns, so
+    /// each frame stays small.
     private var kindContent: some View {
-        switch message.kind {
-        case .text:
-            if let ref = message.parallelTask, ref.part == .result {
-                ParallelResultLabel(ref: ref)
-            }
-            if message.role != .user, let via = message.relayVia {
-                RelayViaLabel(via: via)
-            }
-            TextBubble(message: message, chat: chat, tailed: endsRun, showingSource: showingSource, openLink: openLink, cwAsk: askCw)
-        case .options:
-            // A structured ask draws its own card: its answers are the
-            // model's questions, not an allow/deny a tap could stand for.
-            if let via = message.relayVia {
-                RelayViaLabel(via: via)
-            }
-            if message.card?.roleTransition != nil {
-                // 2026-11-05 (the owner): no "Agit comme" card in the chat
-                EmptyView()
-            } else if message.card?.phoneCallConsent != nil {
-                // one-time phone-call consent (PhoneCallConsentCard.tsx)
-                PhoneCallConsentCardView(
-                    chat: chat,
-                    message: message,
-                    accent: Theme.readable(MausPalette.color(chat.color))
-                )
-            } else if message.card?.questions.isEmpty == false {
-                QuestionCardView(chat: chat, message: message)
-            } else if let card = message.card, FlatQuestionCardView.draws(card) {
-                // a bot's flat ask: the same question card (QuestionSheet)
-                FlatQuestionCardView(chat: chat, message: message)
-            } else {
-                CardView(chat: chat, message: message)
-            }
-        case .secret:
-            if let secret = message.secret {
-                // A decline that resumed leaves nothing to show (SecretRequestCard.tsx).
-                if VaultLoginCard.isVaultLogin(secret) {
-                    // a bot's sign-in request: saved logins and 1Password (parité R10)
-                    VaultLoginCardView(chat: chat, message: message, secret: secret)
-                } else if !SecretCardRules.isHidden(secret) {
-                    CredentialRequestCardView(chat: chat, message: message, secret: secret)
-                }
-            } else if let text = message.text, !text.isEmpty {
-                TextBubble(message: message, chat: chat, tailed: endsRun, openLink: openLink, cwAsk: askCw)
-            }
-        case .activity:
-            if message.tool?.roleNotice != nil {
-                // 2026-11-05 (the owner): no role notice in the chat
-                EmptyView()
-            } else if let widget = message.tool?.widget, widget.isKnown, CwWidgets.isViewTool(message.tool?.name) {
-                CwWidgetCard(widget: widget, threadId: chat.threadId, botId: message.from?.botId, brand: message.tool?.product) { action in
-                    Task { await session.requestCwAction(action, threadId: chat.threadId, botId: message.from?.botId) }
-                }
-            } else if let line = message.tool?.finishUntil {
-                // #1329: relaunch x/N, met, bound (FinishUntilEditor.swift)
-                FinishUntilRow(line: line)
-            } else if let ref = message.parallelTask, ref.isCard {
-                ParallelTaskCardView(chat: chat, message: message, ref: ref, openThread: openThread)
-            } else if let refusal = PreSendRefusal.kind(of: message) {
-                // #2013: an engine refusal before any prompt went out. A 1:1
-                // chat never draws it (the composer says it); a room keeps a
-                // quiet line, never the red error row.
-                PreSendRefusalLine(kind: refusal)
-                    .accessibilityIdentifier("presend-refusal-\(message.id)")
-            } else {
-                ActivityChip(
-                    tool: message.tool, threadRef: message.threadRef?.live, openThread: openThread,
-                    outputIsProse: message.isTeammateReport
-                )
-            }
-            // A failed turn on the conversation's last row: Retry sends the
-            // last user line again (ChatView.tsx ErrorRow).
-            if retryable, PreSendRefusal.kind(of: message) == nil, case let .bot(bot) = chat {
-                ErrorRetryButton { await session.regenerate(for: bot) }
-                    .accessibilityIdentifier("error-retry-\(message.id)")
-            }
-            // A turn that failed because Claude Code is too old for the
-            // model: offer to run the updater for the engine this thread uses.
-            if message.tool?.claudeUpdate == true, case let .bot(bot) = chat {
-                ClaudeUpdateCard(
-                    instanceId: bot.currentTaskModelSelection.instanceId,
-                    tint: MausPalette.color(chat.color)
-                )
-            }
-        case .compaction:
-            ReceiptChip(icon: "square.3.layers.3d", label: message.compaction?.chipText ?? message.text ?? "") {
-                selecting = SelectableText(text: message.compaction?.summary ?? message.text ?? "")
-            }
-        case .screen:
-            // Views on request only (shared/requested-views.ts).
-            if message.requested == true {
-                ScreenShot(threadId: chat.threadId, message: message)
-            }
-        case .video:
-            if let video = message.video, message.requested == true {
-                VideoWidgetView(video: video, onRequestRefresh: { text in
-                    Task { await session.send(text, to: chat) }
-                })
-            }
-        case .widget:
-            // A bot's card, list or form (show_widget); its text when there is
-            // no tree to draw, or in a room, where widgets are refused.
-            ChatWidgetMessageView(
-                chat: chat, message: message,
-                fallback: AnyView(Group {
-                    if let text = message.text, !text.isEmpty {
-                        TextBubble(message: message, chat: chat, tailed: endsRun, openLink: openLink, cwAsk: askCw)
-                    }
-                })
-            )
-        case .digest:
-            // Not a bubble: a chip saying the turn did something, opening
-            // onto what. No "Paid with" any more (#201): who paid stays in
-            // the model picker.
-            let summary = DigestSummary(text: message.text ?? "")
-            if !summary.isEmpty && activityDetail != ActivityDetail.hidden.rawValue {
-                ReceiptChip(icon: "checklist", label: summary.chipLabel, hint: "Shows what this turn did") {
-                    digest = summary
-                }
-                .accessibilityIdentifier("digest-chip-\(message.id)")
-            }
-        case .routineRun:
-            if let card = message.routineRun {
-                // 2026-11-05 (#2008): the bot that ran it leads the card; a
-                // room card falls back to the message's sender when listed.
-                let runBot: Bot? = {
-                    if case let .bot(bot) = chat { return session.state.bot(bot.id) ?? bot }
-                    if let id = message.from?.botId { return session.state.bot(id) }
-                    return nil
-                }()
-                RoutineRunCardView(
-                    card: card,
-                    at: message.date,
-                    tint: MausPalette.color(chat.color),
-                    bot: runBot,
-                    openRun: routineRunOpener(card),
-                    // #2096: Stop on the muted line while the run is live (queued, running, waiting)
-                    stop: { Task { await session.cancelRoutineRun(id: card.runId) } },
-                    resume: card.autoPausedAfter == nil ? nil : {
-                        // 2026-10-26: back on, the failure count from zero
-                        Task {
-                            if await session.resumeRoutine(id: card.routineId) != nil { afterResume?() }
-                        }
-                    },
-                    openThread: threadsShown ? openThread : nil
-                )
-                // 2026-11-05: items only the person can do, each with its ticket
-                if let attention = message.attention, !attention.items.isEmpty, card.knownStatus == .completed {
-                    AttentionItemsView(items: attention.items)
-                }
-            } else if let text = message.text, !text.isEmpty {
-                // A computer that sent the kind without its card: the text
-                // is written for exactly this reader.
-                TextBubble(message: message, chat: chat, tailed: endsRun, openLink: openLink, cwAsk: askCw)
-            }
-        case .connector:
-            // The connect-an-app card is gone; a message of this kind still
-            // carries text written for this reader, so show it.
-            if let text = message.text, !text.isEmpty {
-                TextBubble(message: message, chat: chat, tailed: endsRun, openLink: openLink, cwAsk: askCw)
-            }
-        case .access:
-            if let access = message.access {
-                AccessCardView(access: access)
-            } else if let text = message.text, !text.isEmpty {
-                TextBubble(message: message, chat: chat, tailed: endsRun, openLink: openLink, cwAsk: askCw)
-            }
-        case .goalRun:
-            if let run = message.goalRun {
-                GoalRunCardView(run: run)
-            } else if let text = message.text, !text.isEmpty {
-                TextBubble(message: message, chat: chat, tailed: endsRun, openLink: openLink, cwAsk: askCw)
-            }
-        case .roster:
-            // #1480: one neutral centred line (RosterLine.tsx), never a bubble
-            if let note = message.roster {
-                Text(String(localized: "\(note.name) left the group"))
-                    .font(.footnote)
-                    .foregroundStyle(Theme.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 4)
-                    .accessibilityIdentifier("roster-line-\(message.id)")
-            } else if let text = message.text, !text.isEmpty {
-                Text(verbatim: text)
-                    .font(.footnote)
-                    .foregroundStyle(Theme.textSecondary)
-                    .frame(maxWidth: .infinity)
-            }
-        case .unknown:
-            // A message kind from a newer computer. Almost everything the
-            // harness sends carries `text`, so showing it is usually the
-            // whole message and always better than a gap in the transcript.
-            // When there is nothing to show, show nothing — a placeholder
-            // saying "unsupported" is a worse gap than the gap.
-            if let text = message.text, !text.isEmpty {
-                TextBubble(message: message, chat: chat, tailed: endsRun, openLink: openLink, cwAsk: askCw)
-            }
-        }
+        MessageKindContent(
+            message: message,
+            chat: chat,
+            endsRun: endsRun,
+            showingSource: showingSource,
+            retryable: retryable,
+            hideDigests: activityDetail == ActivityDetail.hidden.rawValue,
+            openLink: openLink,
+            openThread: openThread,
+            threadOpener: threadsShown ? openThread : nil,
+            afterResume: afterResume,
+            askCw: askCw,
+            openRun: routineRunOpener,
+            select: { selecting = SelectableText(text: $0) },
+            openDigest: { digest = $0 }
+        )
     }
 
     /// This failed turn is the conversation's last row and its bot is idle.
@@ -589,5 +411,328 @@ struct RowContext: Equatable {
             && viewerId == other.viewerId
             && demo == other.demo
             && botNames == other.botNames
+    }
+}
+
+
+// MARK: - Content by kind
+//
+// Each kind draws from a small view of its own. The switch used to live in
+// `MessageRow.kindContent` with every card inline; see that property.
+
+/// The switch over `Message.kind`, one small view per case.
+private struct MessageKindContent: View {
+    let message: Message
+    let chat: Chat
+    let endsRun: Bool
+    let showingSource: Bool
+    /// This failed turn is the conversation's last row and its bot is idle.
+    let retryable: Bool
+    /// Activity detail set to hidden: no digest chip.
+    let hideDigests: Bool
+    let openLink: (URL, Message) -> OpenURLAction.Result
+    /// Where an "Opened thread" chip goes (a receipt when nil).
+    let openThread: ((ThreadRef) -> Void)?
+    /// `openThread` only while the threads setting shows threads (#2081).
+    let threadOpener: ((ThreadRef) -> Void)?
+    let afterResume: (() -> Void)?
+    let askCw: (CwActionBody) -> Void
+    let openRun: (RoutineRunCard) -> (() -> Void)?
+    /// The text-selection sheet with this text.
+    let select: (String) -> Void
+    /// The digest sheet with this summary.
+    let openDigest: (DigestSummary) -> Void
+    private var session: Session { SessionHub.session }
+
+    var body: some View {
+        switch message.kind {
+        case .text:
+            TextKindRow(message: message, chat: chat, endsRun: endsRun, showingSource: showingSource, openLink: openLink, askCw: askCw)
+        case .options:
+            OptionsKindRow(message: message, chat: chat)
+        case .secret:
+            SecretKindRow(message: message, chat: chat, endsRun: endsRun, openLink: openLink, askCw: askCw)
+        case .activity:
+            ActivityKindRow(message: message, chat: chat, openThread: openThread, retryable: retryable)
+        case .compaction:
+            ReceiptChip(icon: "square.3.layers.3d", label: message.compaction?.chipText ?? message.text ?? "") {
+                select(message.compaction?.summary ?? message.text ?? "")
+            }
+        case .screen:
+            // Views on request only (shared/requested-views.ts).
+            if message.requested == true {
+                ScreenShot(threadId: chat.threadId, message: message)
+            }
+        case .video:
+            if let video = message.video, message.requested == true {
+                VideoWidgetView(video: video, onRequestRefresh: { text in
+                    Task { await session.send(text, to: chat) }
+                })
+            }
+        case .widget:
+            // A bot's card, list or form (show_widget); its text when there is
+            // no tree to draw, or in a room, where widgets are refused.
+            ChatWidgetMessageView(
+                chat: chat, message: message,
+                fallback: AnyView(TextFallbackRow(message: message, chat: chat, endsRun: endsRun, openLink: openLink, askCw: askCw))
+            )
+        case .digest:
+            DigestKindRow(message: message, hidden: hideDigests, open: openDigest)
+        case .routineRun:
+            RoutineRunKindRow(
+                message: message, chat: chat, endsRun: endsRun, openLink: openLink, askCw: askCw,
+                threadOpener: threadOpener, afterResume: afterResume, openRun: openRun
+            )
+        case .connector:
+            // The connect-an-app card is gone; a message of this kind still
+            // carries text written for this reader, so show it.
+            TextFallbackRow(message: message, chat: chat, endsRun: endsRun, openLink: openLink, askCw: askCw)
+        case .access:
+            if let access = message.access {
+                AccessCardView(access: access)
+            } else {
+                TextFallbackRow(message: message, chat: chat, endsRun: endsRun, openLink: openLink, askCw: askCw)
+            }
+        case .goalRun:
+            if let run = message.goalRun {
+                GoalRunCardView(run: run)
+            } else {
+                TextFallbackRow(message: message, chat: chat, endsRun: endsRun, openLink: openLink, askCw: askCw)
+            }
+        case .roster:
+            RosterKindRow(message: message)
+        case .unknown:
+            // A message kind from a newer computer. Almost everything the
+            // harness sends carries `text`, so showing it is usually the
+            // whole message and always better than a gap in the transcript.
+            // When there is nothing to show, show nothing — a placeholder
+            // saying "unsupported" is a worse gap than the gap.
+            TextFallbackRow(message: message, chat: chat, endsRun: endsRun, openLink: openLink, askCw: askCw)
+        }
+    }
+}
+
+/// The message's text as a bubble when there is any; nothing otherwise.
+private struct TextFallbackRow: View {
+    let message: Message
+    let chat: Chat
+    let endsRun: Bool
+    let openLink: (URL, Message) -> OpenURLAction.Result
+    let askCw: (CwActionBody) -> Void
+
+    var body: some View {
+        if let text = message.text, !text.isEmpty {
+            TextBubble(message: message, chat: chat, tailed: endsRun, openLink: openLink, cwAsk: askCw)
+        }
+    }
+}
+
+private struct TextKindRow: View {
+    let message: Message
+    let chat: Chat
+    let endsRun: Bool
+    let showingSource: Bool
+    let openLink: (URL, Message) -> OpenURLAction.Result
+    let askCw: (CwActionBody) -> Void
+
+    var body: some View {
+        if let ref = message.parallelTask, ref.part == .result {
+            ParallelResultLabel(ref: ref)
+        }
+        if message.role != .user, let via = message.relayVia {
+            RelayViaLabel(via: via)
+        }
+        TextBubble(message: message, chat: chat, tailed: endsRun, showingSource: showingSource, openLink: openLink, cwAsk: askCw)
+    }
+}
+
+/// A structured ask draws its own card: its answers are the model's
+/// questions, not an allow/deny a tap could stand for.
+private struct OptionsKindRow: View {
+    let message: Message
+    let chat: Chat
+
+    var body: some View {
+        if let via = message.relayVia {
+            RelayViaLabel(via: via)
+        }
+        if message.card?.roleTransition != nil {
+            // 2026-11-05 (the owner): no "Agit comme" card in the chat
+            EmptyView()
+        } else if message.card?.phoneCallConsent != nil {
+            // one-time phone-call consent (PhoneCallConsentCard.tsx)
+            PhoneCallConsentCardView(
+                chat: chat,
+                message: message,
+                accent: Theme.readable(MausPalette.color(chat.color))
+            )
+        } else if message.card?.questions.isEmpty == false {
+            QuestionCardView(chat: chat, message: message)
+        } else if let card = message.card, FlatQuestionCardView.draws(card) {
+            // a bot's flat ask: the same question card (QuestionSheet)
+            FlatQuestionCardView(chat: chat, message: message)
+        } else {
+            CardView(chat: chat, message: message)
+        }
+    }
+}
+
+private struct SecretKindRow: View {
+    let message: Message
+    let chat: Chat
+    let endsRun: Bool
+    let openLink: (URL, Message) -> OpenURLAction.Result
+    let askCw: (CwActionBody) -> Void
+
+    var body: some View {
+        if let secret = message.secret {
+            // A decline that resumed leaves nothing to show (SecretRequestCard.tsx).
+            if VaultLoginCard.isVaultLogin(secret) {
+                // a bot's sign-in request: saved logins and 1Password (parité R10)
+                VaultLoginCardView(chat: chat, message: message, secret: secret)
+            } else if !SecretCardRules.isHidden(secret) {
+                CredentialRequestCardView(chat: chat, message: message, secret: secret)
+            }
+        } else {
+            TextFallbackRow(message: message, chat: chat, endsRun: endsRun, openLink: openLink, askCw: askCw)
+        }
+    }
+}
+
+private struct ActivityKindRow: View {
+    let message: Message
+    let chat: Chat
+    let openThread: ((ThreadRef) -> Void)?
+    let retryable: Bool
+    private var session: Session { SessionHub.session }
+
+    var body: some View {
+        if message.tool?.roleNotice != nil {
+            // 2026-11-05 (the owner): no role notice in the chat
+            EmptyView()
+        } else if let widget = message.tool?.widget, widget.isKnown, CwWidgets.isViewTool(message.tool?.name) {
+            CwWidgetCard(widget: widget, threadId: chat.threadId, botId: message.from?.botId, brand: message.tool?.product) { action in
+                Task { await session.requestCwAction(action, threadId: chat.threadId, botId: message.from?.botId) }
+            }
+        } else if let line = message.tool?.finishUntil {
+            // #1329: relaunch x/N, met, bound (FinishUntilEditor.swift)
+            FinishUntilRow(line: line)
+        } else if let ref = message.parallelTask, ref.isCard {
+            ParallelTaskCardView(chat: chat, message: message, ref: ref, openThread: openThread)
+        } else if let refusal = PreSendRefusal.kind(of: message) {
+            // #2013: an engine refusal before any prompt went out. A 1:1
+            // chat never draws it (the composer says it); a room keeps a
+            // quiet line, never the red error row.
+            PreSendRefusalLine(kind: refusal)
+                .accessibilityIdentifier("presend-refusal-\(message.id)")
+        } else {
+            ActivityChip(
+                tool: message.tool, threadRef: message.threadRef?.live, openThread: openThread,
+                outputIsProse: message.isTeammateReport
+            )
+        }
+        // A failed turn on the conversation's last row: Retry sends the
+        // last user line again (ChatView.tsx ErrorRow).
+        if retryable, PreSendRefusal.kind(of: message) == nil, case let .bot(bot) = chat {
+            ErrorRetryButton { await session.regenerate(for: bot) }
+                .accessibilityIdentifier("error-retry-\(message.id)")
+        }
+        // A turn that failed because Claude Code is too old for the
+        // model: offer to run the updater for the engine this thread uses.
+        if message.tool?.claudeUpdate == true, case let .bot(bot) = chat {
+            ClaudeUpdateCard(
+                instanceId: bot.currentTaskModelSelection.instanceId,
+                tint: MausPalette.color(chat.color)
+            )
+        }
+    }
+}
+
+/// Not a bubble: a chip saying the turn did something, opening onto what.
+/// No "Paid with" any more (#201): who paid stays in the model picker.
+private struct DigestKindRow: View {
+    let message: Message
+    let hidden: Bool
+    let open: (DigestSummary) -> Void
+
+    var body: some View {
+        let summary = DigestSummary(text: message.text ?? "")
+        if !summary.isEmpty && !hidden {
+            ReceiptChip(icon: "checklist", label: summary.chipLabel, hint: "Shows what this turn did") {
+                open(summary)
+            }
+            .accessibilityIdentifier("digest-chip-\(message.id)")
+        }
+    }
+}
+
+private struct RoutineRunKindRow: View {
+    let message: Message
+    let chat: Chat
+    let endsRun: Bool
+    let openLink: (URL, Message) -> OpenURLAction.Result
+    let askCw: (CwActionBody) -> Void
+    let threadOpener: ((ThreadRef) -> Void)?
+    let afterResume: (() -> Void)?
+    let openRun: (RoutineRunCard) -> (() -> Void)?
+    private var session: Session { SessionHub.session }
+
+    /// 2026-11-05 (#2008): the bot that ran it leads the card; a room card
+    /// falls back to the message's sender when listed.
+    private var runBot: Bot? {
+        if case let .bot(bot) = chat { return session.state.bot(bot.id) ?? bot }
+        if let id = message.from?.botId { return session.state.bot(id) }
+        return nil
+    }
+
+    var body: some View {
+        if let card = message.routineRun {
+            RoutineRunCardView(
+                card: card,
+                at: message.date,
+                tint: MausPalette.color(chat.color),
+                bot: runBot,
+                openRun: openRun(card),
+                // #2096: Stop on the muted line while the run is live (queued, running, waiting)
+                stop: { Task { await session.cancelRoutineRun(id: card.runId) } },
+                resume: card.autoPausedAfter == nil ? nil : {
+                    // 2026-10-26: back on, the failure count from zero
+                    Task {
+                        if await session.resumeRoutine(id: card.routineId) != nil { afterResume?() }
+                    }
+                },
+                openThread: threadOpener
+            )
+            // 2026-11-05: items only the person can do, each with its ticket
+            if let attention = message.attention, !attention.items.isEmpty, card.knownStatus == .completed {
+                AttentionItemsView(items: attention.items)
+            }
+        } else {
+            // A computer that sent the kind without its card: the text
+            // is written for exactly this reader.
+            TextFallbackRow(message: message, chat: chat, endsRun: endsRun, openLink: openLink, askCw: askCw)
+        }
+    }
+}
+
+/// #1480: one neutral centred line (RosterLine.tsx), never a bubble.
+private struct RosterKindRow: View {
+    let message: Message
+
+    var body: some View {
+        if let note = message.roster {
+            Text(String(localized: "\(note.name) left the group"))
+                .font(.footnote)
+                .foregroundStyle(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
+                .accessibilityIdentifier("roster-line-\(message.id)")
+        } else if let text = message.text, !text.isEmpty {
+            Text(verbatim: text)
+                .font(.footnote)
+                .foregroundStyle(Theme.textSecondary)
+                .frame(maxWidth: .infinity)
+        }
     }
 }

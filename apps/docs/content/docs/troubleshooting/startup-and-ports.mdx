@@ -6,17 +6,15 @@ icon: Power
 
 The Electron app starts a local harness and serves the interface from the same machine. The normal port is `8799`. If another process already owns it, packaged builds may select a fallback port automatically.
 
-## Loading screen and system tray
+## Loading screen
 
 A loading screen appears while the desktop workspace starts. It gives way to the main window after the interface mounts.
 
-On Windows, **X** hides Sagax to the system tray, including during startup. Bots and scheduled routines can continue running. To reopen it, click its tray icon (which Windows may place behind the **Show hidden icons** arrow), choose **Open Sagax** from the tray menu, or launch Sagax again. To exit completely, right-click the tray icon and choose **Quit Sagax**.
-
-Closing the loading screen on macOS or Linux quits startup. Their existing main-window close behavior is unchanged.
+Closing the window on Windows or Linux quits Sagax. On macOS the red button hides the window; click the Dock icon to reopen it, and use Cmd+Q to quit.
 
 ## App opens but never becomes ready
 
-1. Quit Sagax. On Windows, use **Quit Sagax** in the system tray; closing the window only hides it.
+1. Quit Sagax (Cmd+Q on macOS, closing the window on Windows and Linux).
 2. Confirm no old Sagax process remains.
 3. Start the app once and wait for the local harness.
 4. If it still fails, inspect the desktop log.

@@ -3,7 +3,6 @@ import { openNotificationTarget, type AppSettingsSection } from "@/state/store";
 import { shallowEqual, useStoreSelector } from "@/state/store-selector";
 import { useOrgMemoryAuto } from "@/lib/org-memory";
 import { reportAchievement } from "@/lib/achievements";
-import { t } from "@/lib/i18n";
 import { normalizeInboxDeepLink } from "@/lib/inbox-deep-link";
 import { openThreadVisible, pageOpenThreadTarget, type OpenThreadTarget } from "@/lib/open-thread-hash";
 import { clearLeftViewHash, watchViewHash } from "@/lib/view-hash";
@@ -143,10 +142,10 @@ export function useShellEffects(shell: ShellNavigation) {
   useEffect(() => {
     window.ogb?.setUnreadCount?.(badgeCount(unreadCount, { badge: showBadge }));
   }, [unreadCount, showBadge]);
-  // The menu bar's bot list (macOS, Windows): the visible bots in the order
-  // of the Cmd+1..9 shortcuts, with their mascot color, whether they work and
-  // how many conversations are unread. A pick there opens the bot.
-  const trayRoster = useStoreSelector(
+  // The visible bots in the order of the Cmd+Shift+1..9 shortcuts (macOS),
+  // with their mascot color, whether they work and how many conversations
+  // are unread. A shortcut opens the bot.
+  const botRoster = useStoreSelector(
     (current) => current.bots.filter((bot) => !bot.hidden).slice(0, 9).map((bot) => ({
       id: bot.id, name: bot.name,
       color: MAUS_COLORS[bot.color as keyof typeof MAUS_COLORS] ?? "#8E8E93",
@@ -154,23 +153,11 @@ export function useShellEffects(shell: ShellNavigation) {
     })),
     (a, b) => a.length === b.length && a.every((row, index) => shallowEqual(row, b[index])),
   );
-  // the menu's words follow the app's language (the shell has no locale files)
-  const trayLabels = {
-    bots: t("tray.bots"),
-    botsUnread: t("tray.botsUnread", { count: "{count}" }),
-    working: t("tray.working"),
-    unread: t("tray.unread"),
-    unreadMany: t("tray.unreadMany", { count: "{count}" }),
-    open: t("tray.open"),
-    quit: t("tray.quit"),
-    tooltipUnread: t("tray.tooltipUnread", { count: "{count}" }),
-    tooltipWorking: t("tray.tooltipWorking", { count: "{count}" }),
-  };
-  const trayKey = JSON.stringify([trayRoster, trayLabels]);
+  const botRosterKey = JSON.stringify(botRoster);
   useEffect(() => {
-    window.ogb?.setTrayRoster?.(trayRoster, trayLabels);
+    window.ogb?.setBotRoster?.(botRoster);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trayKey]);
+  }, [botRosterKey]);
   // The capture key (bots' chord with 0): a picture of the screen in the
   // open bot's composer (parity R7, system 12).
   useScreenCaptureToBot(showThreads);

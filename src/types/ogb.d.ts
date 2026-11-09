@@ -514,8 +514,8 @@ const __BASE_VERSION__: string;
       onNotificationClick?(cb: (id: string, target?: { botId?: string; threadId?: string; groupId?: string; routineRunId?: string } | null) => void): () => void;
       /** Inline reply from the OS banner: open that chat and send the text. */
       onNotificationReply?(cb: (id: string, reply: string, target?: { botId?: string; threadId?: string; groupId?: string; routineRunId?: string } | null) => void): () => void;
-      /** The menu bar's bot list (electron/system-tray.mjs). */
-      setTrayRoster?(roster: Array<{ id: string; name: string; color: string; working: boolean; unread: number }>, labels?: Record<string, string>): void;
+      /** The visible bots in shortcut order (electron/bot-roster.mjs). */
+      setBotRoster?(roster: Array<{ id: string; name: string; color: string; working: boolean; unread: number }>): void;
       /** A bot chosen in the menu bar list or by its global shortcut. */
       onOpenBot?(cb: (botId: string) => void): () => void;
       /** A picture of the screen from the bots' chord with 0 (base64 PNG), or why there is none. */

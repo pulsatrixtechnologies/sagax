@@ -339,7 +339,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Text size (default, large, extra large) | Settings > Appearance > Accessibility | `sagax_settings` get, set `appearance.textSize` | simple |
 | Use hardware acceleration (desktop app; needs a restart) | Settings > Appearance > Desktop | `sagax_settings` get, set `appearance.hardwareAcceleration` | simple |
 | Check spelling while typing (desktop app) | Settings > Appearance > Desktop | `sagax_settings` get, set `appearance.spellcheck` | simple |
-| Global shortcuts that open a bot (macOS menu bar list) | Settings > Appearance > Desktop | `sagax_settings` get, set `appearance.botHotkeys` | simple |
+| Global shortcuts that open a bot (macOS) | Settings > Appearance > Desktop | `sagax_settings` get, set `appearance.botHotkeys` | simple |
 | Chord of the bots' global shortcuts (Cmd+Shift, Cmd+Option, Ctrl+Option, then the slot number) | Settings > Appearance > Desktop | `sagax_settings` get, set `appearance.botHotkeyChord` | simple |
 | Send key | Settings > Appearance | `sagax_settings` get, set `appearance.sendKey` | simple |
 | This run card | Settings > Appearance | `sagax_settings` get, set `appearance.runCard` | simple |

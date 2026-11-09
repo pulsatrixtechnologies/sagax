@@ -10,7 +10,7 @@
 // for the app itself (main.mjs "screen:frame" explains why there is no
 // pre-grant). Linux has no key: a capture there needs the portal's own
 // prompt each time.
-import { HOTKEY_MODIFIERS, DEFAULT_HOTKEY_MODIFIER } from "./system-tray.mjs";
+import { HOTKEY_MODIFIERS, DEFAULT_HOTKEY_MODIFIER } from "./bot-roster.mjs";
 
 /** A picture's longest edge, in pixels: enough to read text, bounded for the upload. */
 export const CAPTURE_MAX_EDGE = 4096;

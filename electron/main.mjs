@@ -1,6 +1,6 @@
 // First: SAGAX_* settings onto the names the code reads (legacy-names.mjs).
 import "./legacy-env-boot.mjs";
-import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, Notification, Tray, WebContentsView, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, net, powerMonitor, powerSaveBlocker, safeStorage, screen, session, shell, systemPreferences, utilityProcess } from "electron";
+import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, Notification, WebContentsView, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, net, powerMonitor, powerSaveBlocker, safeStorage, screen, session, shell, systemPreferences, utilityProcess } from "electron";
 import { createRequire } from "node:module";
 import { randomBytes, randomUUID } from "node:crypto";
 import { createCompanionKeepAwake } from "./companion-keep-awake.mjs";
@@ -57,8 +57,7 @@ import { createAllWindowsClosedQuit } from "./window-all-closed.mjs";
 import { createPageContexts } from "./page-contexts.mjs";
 import { createLoadRecovery, isAppPage, loadErrorPage, loadingPage, loadOutcome, uiBundleState, waitForUiBundle } from "./load-recovery.mjs";
 import { confirmLanguage } from "./update-confirm.mjs";
-import { createSystemTray, normalizeBotHotkeyConfig, normalizeRoster, slotAccelerator } from "./system-tray.mjs";
-let desktopTray = null;
+import { normalizeBotHotkeyConfig, normalizeRoster, slotAccelerator } from "./bot-roster.mjs";
 import { collisionFreeDownloadPath, defaultSaveName, localFilesExist, openLocalFile, revealDownloadWhenDone, revealInFolder, withSavableFile } from "./save-file.mjs";
 import { openPdfInDefaultApp } from "./open-pdf.mjs";
 import { desktopViewerPermissionAllowed } from "./desktop-viewer-permissions.mjs";
@@ -204,7 +203,6 @@ function showAppIcon(saved) {
     windows: BrowserWindow.getAllWindows(),
     nativeImage,
     defaultIconPath: APP_ICON,
-    tray: desktopTray,
     // A runtime Dock image drops the Liquid Glass rendering of the bundle
     // icon, so the default is the bundle's own (null), except in an
     // unpackaged run without a compiled icon, which shows the flat PNG.
@@ -462,7 +460,6 @@ let openWindowForLink = null;
  * closed, and open-url does not fire activate there, so a link that finds no
  * window opens one; its pending link is delivered when that page loads. */
 function revealForLink() {
-  if (desktopTray?.show()) return;
   // The app window, where the link opens, even when another window (a
   // desktop viewer) had focus.
   const appWindow = mainWindow && !mainWindow.isDestroyed() ? [mainWindow] : BrowserWindow.getAllWindows();
@@ -3362,7 +3359,7 @@ const organizationEntry = createOrganizationEntry({
 function queueOrganizationEntry(link) {
   if (!isOrganizationDeepLink(link)) return false;
   pendingOrganizationEntry = true;
-  if (!desktopTray?.show()) activateExistingWindow(BrowserWindow.getAllWindows());
+  activateExistingWindow(BrowserWindow.getAllWindows());
   void deliverOrganizationEntry();
   return true;
 }
@@ -3679,7 +3676,7 @@ function wireAccountPage(win, contents) {
     // page opens them again when it is back
     artifactWindows.mainWindowGone();
     mascotHotkey.disable();
-    clearTrayRoster();
+    clearBotRoster();
   });
 
   contents.setWindowOpenHandler(({ url }) => {
@@ -3862,14 +3859,8 @@ function createWindow({ deferNavigation = false } = {}) {
   for (const event of ["resize", "maximize", "unmaximize", "enter-full-screen", "leave-full-screen", "restore"]) {
     win.on(event, () => contexts.layout());
   }
-  win.on("show", () => desktopTray?.windowShown(win));
   win.on("focus", () => desktopAttention.settle());
   win.on("close", (event) => {
-    if (process.platform === "win32" && !desktopShutdownStarted && desktopTray) {
-      event.preventDefault();
-      desktopTray.hide(win);
-      return;
-    }
     // macOS: the red button hides the window, as a chat app does, so its
     // page keeps the live stream and a nudge or a message still reaches
     // this computer. Quit (Cmd+Q, the Dock menu) closes it for real.
@@ -3890,7 +3881,7 @@ function createWindow({ deferNavigation = false } = {}) {
     // is ready (backgroundColor above avoids a white flash). Some Wayland
     // compositors never paint a hidden window, so a loaded page shows it too.
     const showWindow = () => {
-      if (win.isDestroyed() || win.isVisible() || desktopShutdownStarted || desktopTray?.isHidden()) return;
+      if (win.isDestroyed() || win.isVisible() || desktopShutdownStarted) return;
       win.show();
     };
     win.once("ready-to-show", showWindow);
@@ -3921,7 +3912,7 @@ function createWindow({ deferNavigation = false } = {}) {
     // behind to keep the app from quitting
     artifactWindows.mainWindowGone();
     mascotHotkey.disable();
-    clearTrayRoster();
+    clearBotRoster();
   });
   wireAccountPage(win, win.webContents);
 
@@ -4709,11 +4700,11 @@ const mascotHotkey = createMascotHotkey({
   },
   log: (line) => slog(line),
 });
-// The menu bar's bot list and the Cmd+Shift+N shortcuts (electron/system-tray.mjs,
+// The Cmd+Shift+N bot shortcuts (electron/bot-roster.mjs,
 // createBotHotkeys in mascot-hotkey.mjs). The main page is the brain: it sends
-// the roster; a click or a shortcut brings the window up and tells it which
+// the roster; a shortcut brings the window up and tells it which
 // bot to open.
-let trayRoster = [];
+let botRoster = [];
 function openBotFromShell(botId) {
   const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
   if (!win) return;
@@ -4734,9 +4725,8 @@ function botHotkeyConfig() {
 }
 function applyBotHotkeyConfig() {
   const config = botHotkeyConfig();
-  desktopTray?.setHotkeys(config);
   botHotkeys.dispose();
-  if (process.platform === "darwin") botHotkeys.sync(trayRoster.length, config.enabled);
+  if (process.platform === "darwin") botHotkeys.sync(botRoster.length, config.enabled);
   applyCaptureHotkey();
 }
 // The bots' chord with 0: one picture of the screen under the pointer, put
@@ -4765,14 +4755,13 @@ const botHotkeys = createBotHotkeys({
   globalShortcut,
   slotFor: (slot) => slotAccelerator(slot, process.platform, botHotkeyConfig().modifier),
   onSlot: (slot) => {
-    const bot = trayRoster[slot - 1];
+    const bot = botRoster[slot - 1];
     if (bot) openBotFromShell(bot.id);
   },
   log: (line) => slog(line),
 });
-function clearTrayRoster() {
-  trayRoster = [];
-  desktopTray?.setRoster([]);
+function clearBotRoster() {
+  botRoster = [];
   botHotkeys.sync(0);
 }
 /** This app's own UI on any account's page, on screen or hidden: Personal's
@@ -4784,27 +4773,25 @@ function fromOwnUiPage(event) {
   if (!own || (own !== rendererOrigin() && !bundledOriginsNow.includes(own))) return false;
   try { return new URL(event.senderFrame.url).origin === own; } catch { return false; }
 }
-// Each account's page keeps its own bot list; the menu bar shows the one on screen.
+// Each account's page keeps its own bot list; the shortcuts follow the one on screen.
 const pageRosters = new WeakMap();
-function applyTrayRoster(value, labels) {
-  trayRoster = normalizeRoster(value);
-  if (labels) desktopTray?.setLabels(labels);
-  desktopTray?.setRoster(trayRoster);
-  // the shortcuts exist only where a menu bar list exists
-  if (process.platform === "darwin") botHotkeys.sync(trayRoster.length, botHotkeyConfig().enabled);
+function applyBotRoster(value) {
+  botRoster = normalizeRoster(value);
+  // the shortcuts exist on macOS only
+  if (process.platform === "darwin") botHotkeys.sync(botRoster.length, botHotkeyConfig().enabled);
 }
 function showPageRoster(page) {
   const kept = page ? pageRosters.get(page) : null;
-  if (kept) applyTrayRoster(kept.value, kept.labels);
-  else applyTrayRoster([], null);
+  if (kept) applyBotRoster(kept.value);
+  else applyBotRoster([]);
 }
-ipcMain.on("desktop:tray-roster", (event, value, labels) => {
+ipcMain.on("desktop:bot-roster", (event, value) => {
   if (!isDesktopUiSender(event) && !fromOwnUiPage(event)) return;
   const sender = BrowserWindow.fromWebContents(event.sender);
   if (!sender || sender !== mainWindow || sender.isDestroyed()) return;
-  if (isMainWindowPage(event.sender)) pageRosters.set(event.sender, { value, labels });
+  if (isMainWindowPage(event.sender)) pageRosters.set(event.sender, { value });
   if (event.sender !== mainPage()) return;
-  applyTrayRoster(value, labels);
+  applyBotRoster(value);
 });
 
 ipcMain.handle("floating-bots:hotkey", (event, config) => {
@@ -5663,21 +5650,6 @@ app.whenReady().then(async () => {
     clearCache: () => session.defaultSession.clearCache(),
     log: slog,
   });
-  if (process.platform === "win32" || process.platform === "darwin") {
-    try {
-      desktopTray = createSystemTray({
-        Tray, Menu, nativeImage, iconPath: APP_ICON,
-        getWindow: () => mainWindow,
-        onQuit: () => app.quit(),
-        onOpenBot: openBotFromShell,
-        templatePath: path.join(__dirname, "resources/trayTemplate.png"),
-      });
-      desktopTray.setHotkeys(botHotkeyConfig());
-    } catch (error) {
-      // A missing tray must leave a working close/quit path.
-      slog(`system tray unavailable: ${error?.message ?? error}`);
-    }
-  }
   applyCaptureHotkey();
   if (desktopShutdownStarted) return;
   // Opened while an update was still copying its files (a silent Windows
@@ -5984,7 +5956,6 @@ app.whenReady().then(async () => {
     if (!mainWindow || mainWindow.isDestroyed()) createWindow();
   };
   app.on("activate", () => {
-    if (desktopTray?.show()) return;
     // the window the red button hid (macOS) comes back as it was
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) mainWindow.restore();
@@ -6100,7 +6071,6 @@ function releaseDesktopDataDirLease() {
 // helpers shut down. will-quit is the final Electron lifecycle boundary; the
 // process hook covers app.exit()/fatal exits that bypass it.
 app.on("will-quit", releaseDesktopDataDirLease);
-app.on("will-quit", () => desktopTray?.destroy());
 // the global key goes with the app, whatever path the quit took
 app.on("will-quit", () => { mascotHotkey.dispose(); botHotkeys.dispose(); captureHotkey.dispose(); });
 process.once("exit", releaseDesktopDataDirLease);

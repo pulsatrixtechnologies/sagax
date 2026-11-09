@@ -39,4 +39,19 @@ describe("PageBoundary", () => {
     root.unmount();
     host.remove();
   });
+
+  it("tells its owner what broke, so the launch can drop a drawing that cannot render", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    const onError = vi.fn();
+    flushSync(() => root.render(createElement(PageBoundary, { onError, children: null }, createElement(Broken))));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][0]).toBeInstanceOf(TypeError);
+    expect(onError.mock.calls[0][0].message).toBe("desktop.shown is not a function");
+    root.unmount();
+    host.remove();
+  });
 });

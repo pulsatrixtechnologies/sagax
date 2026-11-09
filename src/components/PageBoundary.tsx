@@ -4,11 +4,17 @@ import { t } from "@/lib/i18n";
 
 // React unmounts everything below a root that has no error boundary when a render or an effect throws (react.dev,
 // "Catching rendering errors with an error boundary"), which left a page showing only the body's background.
-export class PageBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+// onError lets the launch drop a drawing that cannot render (main.tsx) and
+// start the page again from the server instead of showing this screen.
+export class PageBoundary extends Component<{ children: ReactNode; onError?: (error: Error) => void }, { error: Error | null }> {
   state: { error: Error | null } = { error: null };
 
   static getDerivedStateFromError(error: unknown) {
     return { error: error instanceof Error ? error : new Error(String(error)) };
+  }
+
+  componentDidCatch(error: unknown) {
+    this.props.onError?.(error instanceof Error ? error : new Error(String(error)));
   }
 
   render() {

@@ -78,6 +78,8 @@ export interface RoutineRun {
    * time (ms), retried at most ROUTINE_ADMIT_MAX_ATTEMPTS times. */
   admitAfter?: number;
   admitAttempts?: number;
+  /** #3125: pre-flights taken while the server was still loading sign-ins. */
+  startingAttempts?: number;
   /** First tick a queued run was skipped because its target bot or room was
    * busy. Deferral behind a busy target is unbounded, so this timestamp is
    * what surfaces the wait instead of leaving the run looking freshly queued. */

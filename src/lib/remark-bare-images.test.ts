@@ -57,7 +57,7 @@ function run(md: string) {
 
 describe("remarkBareImages", () => {
   it("turns an own-line GIF URL into an image and keeps the text above", () => {
-    const tree = run(`Jean-Christophe t'envoie ce salut.\n\n${GIF}`);
+    const tree = run(`Alex t'envoie ce salut.\n\n${GIF}`);
     expect(tree.children).toHaveLength(2);
     expect(tree.children[0]!.children![0]!.value).toContain("salut");
     const picture = tree.children[1]!;

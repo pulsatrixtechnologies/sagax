@@ -6206,7 +6206,8 @@ bindLeafHost({
   get githubSyncedGenerations() { return githubSyncedGenerations; },
   get syncGithubForTurn() { return syncGithubForTurn; },
   get pluginSyncedGenerations() { return pluginSyncedGenerations; },
-  get pluginSyncChains() { return pluginSyncChains; },
+  get pluginSyncInFlight() { return pluginSyncInFlight; },
+  get pluginSyncSlots() { return pluginSyncSlots; },
   get syncPluginsForTurn() { return syncPluginsForTurn; },
   get syncPluginFoldersForTurn() { return syncPluginFoldersForTurn; },
   get githubReplaced() { return githubReplaced; },
@@ -12097,7 +12098,9 @@ const githubSyncedGenerations = new Set<string>();
  * Never in another person's environment: a plugin may come from a private
  * marketplace only its owner reads. Best effort. */
 const pluginSyncedGenerations = new Map<string, Promise<void>>();
-const pluginSyncChains = new Map<string, Promise<void>>();
+// #3083: one running copy per person and bot, and a few command slots per person.
+const pluginSyncInFlight = new Map<string, Promise<void>>();
+const pluginSyncSlots = new Map<string, { active: number; waiting: Array<() => void> }>();
 const githubReplaced = new Map<string, { token: string; login: string }>();
 // #2109: the sign-in cards connect_github posts in a bot's chat.
 const githubConnectCards = new GithubConnectCards({

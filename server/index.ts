@@ -30077,9 +30077,16 @@ ROUTES.push(createToolGrantRoutes({
 // (server/routes/my-tool-grants.ts).
 ROUTES.push(createMyToolGrantRoutes({
   person: (auth) => inboxViewer(auth)?.principalId ?? null,
-  // #3151: a bot acting as its person (a routine run as its owner) reads
-  // that person's grants; it still never writes them.
-  reader: (auth) => auth.kind === "session" && isBotActSession(auth.session) ? auth.session.principalId?.trim() || null : inboxViewer(auth)?.principalId ?? null,
+  // #3151/#3196: a bot acting as its person reads that person's grants; it
+  // still never writes them. Every act copy counts: a live session's "Bot
+  // act" copy, a routine's one-request "Routine act" session while its owner
+  // is signed out (performBotActRoute, actAs), and this computer's owner on
+  // a personal server, where a routine acts through loopback.
+  reader: (auth) => {
+    if (auth.kind === "session" && auth.session.ephemeral) return auth.session.principalId?.trim() || null;
+    if (auth.kind === "loopback") return approvalCallerUserId(auth) || null;
+    return inboxViewer(auth)?.principalId ?? null;
+  },
   isAdmin: (auth) => auth.kind === "loopback" ? auth.trust !== "service" : auth.scopes.includes("admin"),
   grants: toolGrants,
   audit: (action, auth, req, detail) => appendAdminAction(DATA_DIR, {

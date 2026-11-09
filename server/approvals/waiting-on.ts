@@ -15,7 +15,11 @@ export const WAITING_ON_TEXT_MAX = 120;
  * approval's plain sentence, else its summary. */
 export function waitingOnText(card: OptionCardData): string {
   const question = !card.tool && !card.plain;
-  const raw = question ? card.title || card.subtitle : card.plain?.title || card.subtitle || card.title;
+  // A question card's title is the generic "Your bot has a question"; its
+  // words are the question itself (the subtitle), QA 0.8.77.
+  const raw = question
+    ? card.questionRequest?.questions?.[0]?.question?.trim() || card.subtitle || card.title
+    : card.plain?.title || card.subtitle || card.title;
   const line = (raw ?? "").replace(/\s+/g, " ").trim();
   return line.length > WAITING_ON_TEXT_MAX ? `${line.slice(0, WAITING_ON_TEXT_MAX - 1).trimEnd()}…` : line;
 }

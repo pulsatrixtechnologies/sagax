@@ -10,7 +10,7 @@
 // changes the bot's Works on and refreshes the card.
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { Check, MonitorOff, MoreHorizontal } from "lucide-react";
+import { Check, Cloud, Laptop, MonitorOff, MoreHorizontal, Sparkles } from "lucide-react";
 
 import type { Bot } from "@/state/store";
 import { PANEL_CARD, PANEL_LABEL, PANEL_ROW } from "@/lib/grouped-card";
@@ -36,7 +36,7 @@ import {
   type DesktopBridgeStatus,
 } from "@/lib/desktop-bridge";
 import { DEFAULT_BOT_WORKPLACE } from "../../../shared/bot-workplace";
-import { osLabel, type BotComputerHostView } from "../../../shared/bot-computer-host";
+import { osLabel, parseHostOs, type BotComputerHostView } from "../../../shared/bot-computer-host";
 import { useBotHostComputer } from "@/lib/host-computers";
 import { api } from "@/state/store";
 import type { PillOption } from "../SettingsPrimitives";
@@ -74,34 +74,42 @@ export function computerSelectValue(computer: Bot["computer"] | null | undefined
   return mode;
 }
 
+/** One row of the computer row's context menu. Every row has the same
+ * shape (JC 2026-11-09: "they should all be looking the same"): a leading
+ * mark (an icon, or a status dot for a real machine), the name, a grey line
+ * under it, and the check on the right. */
+export type ComputerMenuOption = PillOption<ComputerSelectValue> & {
+  /** The grey line under the name. */
+  detail: string;
+  /** The leading mark: an icon, or a dot for a connected computer. */
+  lead: "auto" | "cloud" | "computer" | "online";
+};
+
+/** The grey line of a named computer: its OS, then that it is this one. */
+function desktopDetail(platform: string): string {
+  const os = parseHostOs(platform);
+  return os ? `${osLabel(os)} \u00b7 ${t("place.local")}` : t("place.local");
+}
+
 /** Options for the computer row's context menu: Cloud + each online local computer from
  * `computerChoices` (chat Computer menu / OrgComputerTab), plus Auto so the
  * bot's Works on can follow. Never Off: it hid the card. Solo (no bridge desktops) falls back to
- * the Works on set alone. */
+ * the Works on set alone. Auto's "picks per task" is its grey line, not its name. */
 export function computerSelectOptions(
   bridge: DesktopBridgeStatus | null,
   organization: boolean,
-): Array<PillOption<ComputerSelectValue>> {
+): ComputerMenuOption[] {
   const choices = computerChoices(bridge);
   const localChoices = choices.filter((choice): choice is Extract<ComputerChoice, { source: "local" }> => choice.source === "local");
-  const hasNamedLocals = localChoices.length > 0;
-  const auto: PillOption<ComputerSelectValue> = { value: "auto", label: t(placeLabelKey("auto", organization)) };
-  if (!hasNamedLocals) {
-    return [
-      auto,
-      { value: "local", label: t(placeLabelKey("local", organization)) },
-      { value: "cloud", label: t(placeLabelKey("cloud", organization)) },
-    ];
-  }
-  const cloudLabel = placeLabel("server", t("orgComputer.choice.cloud"));
-  const localLabel = localChoices.length === 1
-    ? placeLabel(localChoices[0]!.key, localChoices[0]!.name)
-    : t(placeLabelKey("local", organization));
-  return [
-    auto,
-    { value: "local", label: localLabel },
-    { value: "cloud", label: cloudLabel },
-  ];
+  const auto: ComputerMenuOption = { value: "auto", label: t("place.auto"), detail: t("computerMenu.autoDetail"), lead: "auto" };
+  const cloud: ComputerMenuOption = organization
+    ? { value: "cloud", label: placeLabel("server", t("orgComputer.choice.cloud")), detail: t("computerMenu.cloudOrgDetail"), lead: "cloud" }
+    : { value: "cloud", label: t("place.cloud"), detail: t("computerMenu.cloudDetail"), lead: "cloud" };
+  const only = localChoices.length === 1 ? localChoices[0]! : null;
+  const local: ComputerMenuOption = only
+    ? { value: "local", label: placeLabel(only.key, only.name), detail: desktopDetail(only.platform), lead: "online" }
+    : { value: "local", label: t(placeLabelKey("local", organization)), detail: t("computerMenu.localDetail"), lead: "computer" };
+  return [auto, local, cloud];
 }
 
 /** Card title for the current Works on (named local PC when the bridge knows one). */
@@ -153,20 +161,43 @@ function useAutoSurface(botId: string, threadId: string | undefined, enabled: bo
   return surface;
 }
 
+/** The menu's one row: leading mark, name over a grey line, check. */
+function ComputerMenuRow({ lead, label, detail, checked, dim = false, onPick, autoFocus, ...data }: {
+  lead: ComputerMenuOption["lead"] | "offline";
+  label: string;
+  detail: string;
+  checked: boolean;
+  dim?: boolean;
+  onPick: () => void;
+  autoFocus?: boolean;
+  "data-computer-card-option"?: string;
+  "data-computer-card-host"?: string;
+}) {
+  const LeadIcon = lead === "auto" ? Sparkles : lead === "cloud" ? Cloud : lead === "computer" ? Laptop : null;
+  return (
+    <button type="button" role="menuitemradio" aria-checked={checked} autoFocus={autoFocus} {...data}
+      data-computer-menu-row={lead}
+      onClick={onPick} className={cn(MENU_ITEM, dim && "text-ink-tertiary")}>
+      <span aria-hidden="true" data-computer-menu-lead={lead} className="flex size-4 shrink-0 items-center justify-center text-ink-secondary">
+        {LeadIcon
+          ? <LeadIcon size={14} />
+          : <span className={cn("size-1.5 rounded-full", lead === "online" ? "bg-success" : "bg-ink-tertiary/60")} />}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span data-computer-menu-name="" className="truncate">{label}</span>
+        <span data-computer-menu-detail="" className="truncate text-[11.5px] leading-4 text-ink-tertiary">{detail}</span>
+      </span>
+      {checked ? <Check size={14} aria-hidden="true" className="shrink-0 text-ink-secondary" /> : <span aria-hidden="true" className="w-[14px] shrink-0" />}
+    </button>
+  );
+}
+
 /** One marked host in the row's menu: name, OS and a status dot; offline last and greyed. */
 function HostChoiceItem({ host, checked, onPick }: { host: BotComputerHostView; checked: boolean; onPick: () => void }) {
+  const detail = `${host.shellOnly ? `${osLabel(host.os)} \u00b7 ${t("hostComputer.shellOnly")}` : osLabel(host.os)}${host.online ? "" : ` \u00b7 ${t("hostComputer.offline")}`}`;
   return (
-    <button type="button" role="menuitemradio" aria-checked={checked} data-computer-card-host={host.online ? "online" : "offline"}
-      onClick={onPick} className={cn(MENU_ITEM, !host.online && "text-ink-tertiary")}>
-      <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", host.online ? "bg-success" : "bg-ink-tertiary/60")} />
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate">{host.name}</span>
-        <span className="truncate text-[11.5px] leading-4 text-ink-tertiary">
-          {host.shellOnly ? `${osLabel(host.os)} \u00b7 ${t("hostComputer.shellOnly")}` : osLabel(host.os)}{host.online ? "" : ` \u00b7 ${t("hostComputer.offline")}`}
-        </span>
-      </span>
-      {checked && <Check size={14} aria-hidden="true" className="shrink-0 text-ink-secondary" />}
-    </button>
+    <ComputerMenuRow lead={host.online ? "online" : "offline"} label={host.name} detail={detail} checked={checked} dim={!host.online}
+      onPick={onPick} data-computer-card-host={host.online ? "online" : "offline"} />
   );
 }
 
@@ -332,17 +363,13 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
               navigateThreadMenu(event);
             }}>
             {options.map((option, index) => (
-              <button key={option.value} type="button" role="menuitemradio" aria-checked={option.value === selectValue}
-                data-computer-card-option={option.value} autoFocus={index === 0}
-                onClick={() => {
+              <ComputerMenuRow key={option.value} lead={option.lead} label={option.label} detail={option.detail}
+                checked={option.value === selectValue} data-computer-card-option={option.value} autoFocus={index === 0}
+                onPick={() => {
                   closeMenu();
                   if (chosenHost) void hostComputer.select(null);
                   if (option.value !== selectValue) onPatch?.(modeToPatch(option.value));
-                }}
-                className={MENU_ITEM}>
-                <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                {option.value === selectValue && <Check size={14} aria-hidden="true" className="shrink-0 text-ink-secondary" />}
-              </button>
+                }} />
             ))}
             {hostComputer.hosts.length > 0 && <div role="separator" className="my-1 h-px bg-hairline/50" />}
             {hostComputer.hosts.map((host) => (

@@ -103,7 +103,7 @@ export function lentScreenArguments(name, input) {
   if (typeof given !== "object" || Array.isArray(given)) return { error: "Tool arguments must be an object" };
   const forwarded = {};
   for (const key of Object.keys(given)) {
-    if (!Object.hasOwn(allowed, key)) return { error: `${name}: ${key.slice(0, 100)} is not allowed on a lent screen` };
+    if (!Object.hasOwn(allowed, key)) return { error: `${name}: ${key.slice(0, 100)} is not allowed on a lent screen; it takes ${Object.keys(allowed).join(", ") || "no arguments"}${name === "get_desktop_state" && key === "query" ? " (to find an element by name, call get_window_state with pid, window_id and query)" : ""}` };
     if (!acceptable(allowed[key], given[key])) return { error: `${name}: ${key} has a value a lent screen does not accept` };
     forwarded[key] = given[key];
   }

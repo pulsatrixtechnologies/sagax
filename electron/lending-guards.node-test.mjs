@@ -274,6 +274,12 @@ test("every lent screen argument is one the driver itself defines, with the same
     "launch_app.additional_arguments", "launch_app.webkit_inspector_port", "set_agent_cursor_style.image_path"]);
   assert.equal(lentScreenArguments("get_desktop_state", undefined).arguments !== undefined, true);
   assert.match(lentScreenArguments("get_desktop_state", { screenshot_out_file: "/tmp/x" }).error, /not allowed/);
+  // A refusal names what the tool does take, so the model can retry: a
+  // query sent to get_desktop_state points to get_window_state.
+  const refused = lentScreenArguments("get_desktop_state", { query: "Start" }).error;
+  assert.match(refused, /it takes session/);
+  assert.match(refused, /get_window_state with pid, window_id and query/);
+  assert.match(lentScreenArguments("move_cursor", { button: "left" }).error, /it takes x, y, cursor_id, scope, session/);
 });
 
 test("malformed jobs are refused before anything runs, and the connector keeps serving", async t => {

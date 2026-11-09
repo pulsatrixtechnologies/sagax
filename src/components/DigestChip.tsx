@@ -25,7 +25,7 @@ export function DigestChip({ message }: { message: Message }) {
         label={used}
         target={changed}
         duration={stepDuration(digest.durationMs)}
-        title={message.text ?? t("chat.digestTitle")}
+        title={t("chat.digestTitle")}
       >
         {() => <DigestDetail message={message} />}
       </StepRow>
@@ -33,7 +33,10 @@ export function DigestChip({ message }: { message: Message }) {
   );
 }
 
-function DigestDetail({ message }: { message: Message }) {
+/** The digest opened: the tools and files it counted. message.text is the
+ * server's "[digest] · tools … · reply …" line, kept for the model and
+ * search only: never shown to the person. */
+export function DigestDetail({ message }: { message: Message }) {
   const digest = message.digest!;
   const files = digest.files ? [...digest.files.added, ...digest.files.changed, ...digest.files.deleted] : [];
   return (
@@ -55,7 +58,6 @@ function DigestDetail({ message }: { message: Message }) {
           {files.slice(0, 12).map((file) => <li key={file} className="truncate">{file}</li>)}
         </ul>
       )}
-      {message.text && <p className="whitespace-pre-wrap break-words text-ink-tertiary">{message.text}</p>}
     </div>
   );
 }

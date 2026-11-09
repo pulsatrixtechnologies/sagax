@@ -6264,7 +6264,7 @@ Two surfaces, one list (2026-10-12, after Cursor's composer menu):
 
 Thread scope stays out of both. On an organization server the window shows
 the speaker's engine card, the same minimal one as Settings
-(`ModelPickerPayers.tsx` around `EngineConnect.tsx`, 2026-10-08): one "Pays
+(the former `ModelPickerPayers.tsx`, removed in #3031, around `EngineConnect.tsx`, 2026-10-08): one "Pays
 with" line from the server's `myTurns` (the order of
 `server/engines/engine-credentials.ts`, never recomputed and no longer drawn as a
 list; a routine thread shows the owner's credentials), one Connect button or

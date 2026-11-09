@@ -1699,6 +1699,8 @@ export class RoutineManager {
   private startupLaunchId: string | undefined;
   private dueWake: ReturnType<typeof setTimeout> | null = null;
   private paused = false;
+  /** #3148: set by pause() (the shutdown drain); a failure then is the restart's. */
+  private shuttingDown = false;
   /** Run ids the constructor kept running after a restart (takeRestartResumes). */
   private readonly restartResumes: string[] = [];
   private ticking = false;
@@ -3029,14 +3031,17 @@ export class RoutineManager {
     return this.runs.filter((run) => ids.includes(run.id) && run.status === "running").map(cloneRun);
   }
 
-  /** Shutdown: dispatch nothing more; runs already going keep going. */
+  /** Shutdown: dispatch nothing more; runs already going keep going, and a
+   * run the teardown cuts is left for the next start to resume (#3148). */
   pause() {
     this.paused = true;
+    this.shuttingDown = true;
     this.stop();
   }
 
   start() {
     this.paused = false;
+    this.shuttingDown = false;
     if (this.timer) return;
     // Repair: a wall-clock routine whose next run was stored in the wrong
     // zone (a default that was the host's UTC) is recomputed once, here.
@@ -4372,6 +4377,17 @@ export class RoutineManager {
   /** A failed attempt becomes a second start, a wait for a busy target or a
    * usage limit, a Claude reconnect wait, or a failure (server/routines/routine-recovery.ts). */
   private settleFailure(run: RoutineRun, failure: string, facts: RoutineFailureFacts) {
+    // #3148: once the server is shutting down, a turn the teardown cuts ends
+    // with the engine's interrupt ("The person stopped this turn.") or a
+    // provider closing. That is the restart, not the routine: the run stays
+    // as it was (running or waiting) so the next start resumes it once, marked
+    // retried (or fails it as restarted), and it never counts toward the auto-pause.
+    if (this.shuttingDown && run.target === "bot") {
+      this.failureFacts.delete(run.id);
+      delete run.error;
+      this.saveLater();
+      return;
+    }
     this.failureFacts.delete(run.id);
     this.runTrouble.delete(run.id);
     delete run.waitingOn;

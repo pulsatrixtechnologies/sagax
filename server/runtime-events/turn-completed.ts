@@ -1,6 +1,7 @@
 // @ts-nocheck
 /** handleTurnCompleted (#1388). Pure move from server/index.ts bus.subscribe. */
 import { INCIDENTS_THREAD_TITLE } from "../peers/incidents.ts";
+import { isShuttingDown } from "../process/http-shutdown.ts";
 import { isEngineEmptyFailure } from "../peers/incidents.ts";
 import { withBotNotify } from "../../shared/notification.ts";
 import { retireSafetyHolds } from "../safety/safety-review.ts";
@@ -370,7 +371,9 @@ function settleTurnTask(event: any, ctx: any, host: any, turn: any): void {
       relayFinishedTurn({
         attention: () => host.relayPersonAttention(attentionInput, host.personAttentionDeps),
         lateRun: () => host.mirrorLateRunReply(attentionInput, host.personAttentionDeps),
-        background: () => host.mirrorBackgroundReply(attentionInput, host.personAttentionDeps),
+        // #3148: a turn the shutdown cut resumes at the next start; no
+        // "did not finish (error)" trace in the chat for the restart.
+        background: () => (!event.ok || stopped) && isShuttingDown() ? false : host.mirrorBackgroundReply(attentionInput, host.personAttentionDeps),
       }, incidentsCopied);
     } catch (error) {
       console.error(`[attention] not relayed: ${error instanceof Error ? error.message.slice(0, 160) : "error"}`);

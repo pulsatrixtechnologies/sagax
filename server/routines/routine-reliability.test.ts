@@ -229,6 +229,27 @@ describe("routine reliability in an isolated journal", () => {
     expect(reloaded.getRoutine(h.routine.id)?.enabled).toBe(true);
     expect(reloaded.listRoutines()[0]?.failureStreak).toBeUndefined();
   });
+  it("keeps a run the shutdown teardown cuts for the next start to resume, never failed nor counted (#3148)", async () => {
+    const h = fixture();
+    h.manager.runNow(h.routine.id); await h.flush();
+    h.manager.pause();
+    // The teardown kills the engine: its interrupt reads "The person stopped this turn."
+    h.manager.handleRuntimeEvent({ eventId: "cut-t-1", provider: "fake", threadId: "t-1", createdAt: new Date().toISOString(), type: "turn.completed", ok: false, stopReason: "interrupted" });
+    h.manager.failThread("t-1", "Provider settings changed while this thread was running");
+    const cut = h.manager.listRuns().find(run => run.threadId === "t-1");
+    expect(cut).toMatchObject({ status: "running" });
+    expect(cut?.error).toBeUndefined();
+    expect(h.onRunFailed).not.toHaveBeenCalled();
+    const reloaded = new RoutineManager(h.options);
+    const resumed = reloaded.takeRestartResumes();
+    expect(resumed).toEqual([expect.objectContaining({ threadId: "t-1", status: "running", retried: "restarted", restartResumes: 1 })]);
+    expect(reloaded.getRoutine(h.routine.id)?.enabled).toBe(true);
+    expect(reloaded.listRoutines()[0]?.failureStreak).toBeUndefined();
+    // After the restart a real failure settles as before.
+    reloaded.start(); reloaded.stop();
+    reloaded.handleRuntimeEvent({ eventId: "fail-t-1", provider: "fake", threadId: "t-1", createdAt: new Date().toISOString(), type: "turn.completed", ok: false, stopReason: "interrupted" });
+    expect(reloaded.listRuns().find(run => run.threadId === "t-1")?.status).not.toBe("running");
+  });
   it("never counts restarted failures in the failure streak, now or at the next real failure", async () => {
     const h = fixture();
     h.manager.update(h.routine.id, { autoPauseAfter: 2 });

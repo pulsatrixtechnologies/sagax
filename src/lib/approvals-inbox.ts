@@ -8,6 +8,7 @@ import { inboxKey, type InboxApproval, type InboxPayload } from "../../shared/ap
 import type { PersonAttentionCard } from "../../shared/person-attention";
 import { approvalAction } from "@/lib/approval-describe";
 import { t } from "@/lib/i18n";
+import { questionCardTitle } from "@/lib/question-card-title";
 import { approvalChime } from "@/lib/notification-preferences";
 import { api, type Message } from "@/state/store";
 import { readableError } from "./plain-error";
@@ -169,7 +170,7 @@ export function inboxTitle(entry: InboxApproval): string {
   }
   const card = cardOf(entry);
   if (entry.kind === "question") {
-    const question = card?.questionRequest?.questions?.[0]?.question ?? card?.title;
+    const question = card?.questionRequest?.questions?.[0]?.question ?? (card ? questionCardTitle(card) : undefined);
     return question?.trim() ? withoutIds(question) : t("approvals.kind.question");
   }
   if (entry.kind === "proposal") {

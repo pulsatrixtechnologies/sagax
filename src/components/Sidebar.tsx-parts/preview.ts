@@ -3,6 +3,7 @@ import { approvalCardOutcome } from "../ApprovalCard";
 import { peerLine } from "@/lib/peer-message";
 import { activityPreview, botEngine } from "@/lib/failed-turn";
 import { t } from "@/lib/i18n";
+import { questionCardTitle } from "@/lib/question-card-title";
 import { lastSpokenLine } from "@/lib/receipts";
 import { citationPreviewText } from "@/lib/citations";
 import { plainPreviewText } from "@/lib/plain-preview";
@@ -43,7 +44,7 @@ export function preview(bot: Bot, visible: Message[], instances: InstanceInfo[])
   // a settled approval card says what happened, as the card itself does;
   // its title is the question it asked, which nobody is waiting on now
   if (last.kind === "options" && last.card) {
-    return (last.card.requestId && last.card.tool && !last.card.questionRequest && approvalCardOutcome(last.card)) || last.card.title;
+    return (last.card.requestId && last.card.tool && !last.card.questionRequest && approvalCardOutcome(last.card)) || questionCardTitle(last.card);
   }
   // a failed turn reads as the chat row says it, never "error: …"
   if (last.kind === "activity" && last.tool) return activityPreview(last.tool, botEngine(bot, instances), last.dataResult);

@@ -269,4 +269,18 @@ describe("feedback cards never stay pending once their source is dead (#3018)", 
     await service.tick();
     expect(open(store.threads.get(started.threadId)!)).toEqual([]);
   });
+
+  it("retires a pre-fix card in a thread that has no report record at all (#3081)", () => {
+    const { service, store } = setup();
+    const started = service.start("p1", { source: "sidebar", platform: "desktop", locale: "en" });
+    const feedbackBot = store.bots.find((bot) => bot.systemBot === "feedback")!;
+    // a person's own thread, with a card whose report never existed on disk
+    (feedbackBot as { tasks?: Array<{ threadId: string }> }).tasks = [{ threadId: "t-person" }];
+    store.appendMessage("t-person", { role: "bot", kind: "options", feedback: { step: "kind", reportId: "lost" }, card: { title: "What would you like to report?", subtitle: "", options: ["A bug"], requestId: "fb-lost-kind-1" } } as Omit<StoredMessage, "id" | "at">);
+    expect(open(store.threads.get("t-person")!)).toHaveLength(1);
+    service.sweepOrphanCards();
+    expect(open(store.threads.get("t-person")!)).toEqual([]);
+    expect(open(store.threads.get(started.threadId)!)).toHaveLength(1);
+  });
 });
+

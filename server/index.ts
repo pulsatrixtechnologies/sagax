@@ -31259,6 +31259,7 @@ const feedbackService = createFeedbackService({
 });
 try {
   feedbackService.ensureBot();
+  feedbackService.sweepOrphanCards();
 } catch (error) {
   console.warn(`[feedback] the Feedback bot could not be created: ${error instanceof Error ? error.message : String(error)}`);
 }

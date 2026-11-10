@@ -33,6 +33,35 @@ public struct HarnessConnectorsAnswer: Decodable, Hashable, Sendable {
 
     public struct Codex: Decodable, Hashable, Sendable {
         public var available: Bool
+        /// The ChatGPT apps of the person's Codex sign-in (#3358).
+        public var connectors: [Connector]?
+    }
+
+    /// #3358: one of the person's own Grok sign-ins, as the server's
+    /// connector registry knows it (server/harness-connectors.ts
+    /// HarnessGrokAccount).
+    public struct GrokAccount: Decodable, Hashable, Sendable {
+        public struct Connector: Decodable, Hashable, Sendable {
+            /// The catalog id when the connector is a known one ("outlook").
+            public var id: String?
+            public var name: String
+            /// connected, needs_auth, failed, unknown.
+            public var status: String
+        }
+
+        /// "Grok", "Grok (personal account)".
+        public var label: String
+        /// primary or second.
+        public var slot: String
+        /// subscription, key, none, unknown (not read yet).
+        public var auth: String
+        public var connectors: [Connector]
+    }
+
+    /// #3358: the person's Grok sign-ins (an organization server); nil from
+    /// an older or solo server, which lists none.
+    public struct Grok: Decodable, Hashable, Sendable {
+        public var accounts: [GrokAccount]
     }
 
     public var manageUrl: String
@@ -40,6 +69,7 @@ public struct HarnessConnectorsAnswer: Decodable, Hashable, Sendable {
     public var enabled: Bool
     public var claude: Claude
     public var codex: Codex
+    public var grok: Grok?
 
     /// Where "Manage on claude.ai" goes: the server's address when it is an
     /// https page, the connectors page otherwise.

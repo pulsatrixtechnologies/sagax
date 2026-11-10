@@ -3,7 +3,7 @@ import type { MarketplaceVisibility } from "@/lib/my-connections";
 import type { PluginItem } from "@/lib/plugins-model";
 import type { PluginScope } from "@/lib/plugin-scope";
 import type { PluginDetailProps } from "../plugins/PluginDetailView";
-import type { ClaudeUnavailable, HarnessConnectorStatus } from "../plugins/HarnessConnectorGroups";
+import type { ClaudeUnavailable, HarnessConnectorStatus, RegistryGrokAccount } from "../plugins/HarnessConnectorGroups";
 import type { McpServers } from "../McpServersPanel";
 import type { DataCenter } from "../plugins/DataCenterDialog";
 
@@ -56,6 +56,9 @@ export interface HarnessAnswer {
   manageUrl?: string;
   claude?: { available: boolean; reason?: ClaudeUnavailable; connectors?: Array<{ name: string; status: HarnessConnectorStatus }> };
   codex?: { available: boolean; connectors?: Array<{ name: string; status: HarnessConnectorStatus }>; manageUrl?: string };
+  /** #3358: the person's own Grok sign-ins as the connector registry knows
+   * them (an organization server); absent: an older or solo server. */
+  grok?: { accounts: RegistryGrokAccount[] };
 }
 
 export interface DetailContext {

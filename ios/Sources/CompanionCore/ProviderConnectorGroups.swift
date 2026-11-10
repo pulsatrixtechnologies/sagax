@@ -2,8 +2,10 @@
 // HarnessConnectorGroups.tsx `connectorGroups`, AccountsView.tsx
 // `accountServices`): Claude and Grok always have their section (their
 // connectors, or why there are none and how to connect), ChatGPT when the
-// server lists its connectors; the pills are All and each engine, only
-// when there are two or more.
+// person has a ChatGPT sign-in; the pills are All and each engine, only
+// when there are two or more. #3358: they read the server's registry of
+// the person's connectors: each Grok sign-in's connectors with their real
+// state; a server that lists no Grok sign-in keeps the xAI catalog.
 import Foundation
 
 public enum ProviderEngine: String, CaseIterable, Hashable, Sendable {
@@ -84,13 +86,47 @@ public enum ProviderConnectorGroups {
         else { notice = .unavailable(claude!.reason ?? "unknown") }
         groups.append(ProviderConnectorGroup(engine: .claude, name: "Claude", manageUrl: claudeUrl,
                                              connectors: connectors.map { ProviderConnector(name: $0.name, status: $0.status) }, notice: notice))
-        if grokConfigured {
+        if let grok = answer?.grok {
+            let (connectors, notice) = registryGrok(grok.accounts)
+            groups.append(ProviderConnectorGroup(engine: .grok, name: "Grok", manageUrl: grokConnectorsUrl, connectors: connectors, notice: notice))
+        } else if grokConfigured {
             groups.append(ProviderConnectorGroup(engine: .grok, name: "Grok", manageUrl: grokConnectorsUrl,
                                                  connectors: grokCloudConnectors.map { ProviderConnector(name: $0.name, grokId: $0.id) }, notice: nil))
         } else {
             groups.append(ProviderConnectorGroup(engine: .grok, name: "Grok", manageUrl: grokConnectorsUrl, connectors: [], notice: .noAccount))
         }
+        if let codex = answer?.codex, codex.available {
+            let apps = (codex.connectors ?? []).filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
+            groups.append(ProviderConnectorGroup(engine: .codex, name: "ChatGPT", manageUrl: "https://chatgpt.com/#settings/Connectors",
+                                                 connectors: apps.map { ProviderConnector(name: $0.name, status: $0.status) },
+                                                 notice: apps.isEmpty ? .empty : nil))
+        }
         return groups
+    }
+
+    private static let statusRank: [String: Int] = ["connected": 3, "needs_auth": 2, "failed": 1, "unknown": 0]
+
+    /// `registryGrokGroup`: every connector of the person's Grok sign-ins
+    /// once (its best state across them); with none, why.
+    public static func registryGrok(_ accounts: [HarnessConnectorsAnswer.GrokAccount]) -> ([ProviderConnector], ProviderGroupNotice?) {
+        if accounts.isEmpty { return ([], .noAccount) }
+        var order: [String] = []
+        var byKey: [String: ProviderConnector] = [:]
+        for account in accounts where account.auth == "subscription" {
+            for connector in account.connectors where !connector.name.trimmingCharacters(in: .whitespaces).isEmpty {
+                let key = (connector.id ?? connector.name).trimmingCharacters(in: .whitespaces).lowercased()
+                if let known = byKey[key], statusRank[known.status ?? "unknown", default: 0] >= statusRank[connector.status, default: 0] { continue }
+                if byKey[key] == nil { order.append(key) }
+                byKey[key] = ProviderConnector(name: connector.name, grokId: connector.id, status: connector.status)
+            }
+        }
+        let connectors = order.compactMap { byKey[$0] }
+        if !connectors.isEmpty { return (connectors, nil) }
+        let auths = Set(accounts.map(\.auth))
+        if auths.contains("subscription") { return ([], .empty) }
+        if auths.contains("unknown") { return ([], .unavailable("unknown")) }
+        if auths.contains("key") { return ([], .unavailable("key")) }
+        return ([], .unavailable("not_signed_in"))
     }
 
     /// `accountServices`: All and each engine, with the person's own servers

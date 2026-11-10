@@ -209,6 +209,8 @@ export interface RoutineRunProactive {
   /** 2026-11-02: never quiet (a teammate's message or a post in a two-bot
    * DM: server/proactive/proactive-wake.ts wakeAlwaysReports). */
   alwaysReport?: true;
+  /** #3423: the Pulsatrix watches this wake reports, with their domain. */
+  watches?: Array<{ id: string; domain: string }>;
 }
 
 /** Similar work the organization memory knew of before a run (organization

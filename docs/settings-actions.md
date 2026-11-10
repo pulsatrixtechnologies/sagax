@@ -373,6 +373,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Show when online | Settings > Notifications > Privacy | `sagax_settings` get, set `notifications.presence` | simple |
 | Analytics opt-out | Settings > Privacy | `sagax_settings` get, set `notifications.analyticsOptOut` | simple |
 | People you blocked ({block: {id, name}} or {unblock: id}; get lists them) | Settings > Notifications > Privacy > Blocked people | `sagax_settings` get, set `notifications.blocks` | simple |
+| What the server watches for you, by domain ({domain, state, botId?} with state on, off or never turns a domain on for one of your bots, off, or never; {domain, watch, on} switches one watch; get lists your choices (domains) and the domains you can choose (available: domain slug, label, eligible, each watch with its summary and cadence); use a slug from available; absent = off) | No screen yet: ask any of your bots | `sagax_settings` get, set `notifications.proactiveChoices` | simple |
 
 ### Modèles et voix
 

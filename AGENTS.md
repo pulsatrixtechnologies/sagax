@@ -1292,20 +1292,29 @@ iOS sets the mode in Permissions (`ProactiveMode`: `off` | `proactive`).
 Tests: `server/proactive/proactive-wake.test.ts`, `server/proactive/proactive-wake.e2e.test.ts`,
 `shared/proactive-mode.test.ts`, `ProactiveModeTests.swift`.
 
-## Pulsatrix watches (2026-11-09, #3135)
+## Pulsatrix watches (2026-11-09, #3135; the person's choice since #3423)
 
-A bot holding a Pulsatrix profile is proactive by default and watches the
-Flow `px-proactive` watches of its products (`server/proactive/flow-watches.ts`,
-`server/proactive/watch-tokens.ts`, `docs/proactive.md`). Loop every minute
-on Perspicax servers: products from `api_list`, watches from the org Flow
-plugin (`px_flow.py proactive --product`), cadence in local time, tokens
-resolved (unset fact = skipped), observe as a read with the owner's routine
-credentials (`PerspicaxMcp.withRoutineSession`), JMESPath `when`, dedup per
-watch + result key, `ProactiveEngine.consider`, then a wake with source
-`watch` in the bot's one conversation. Writes go through ordinary approval.
-A watch is the organization's, so one bot per person watches it (#3394): the
-Primary Bot when it watches, else the person's first bot that does; one
-event wakes one bot, once.
+A watch is ambient (the server goes looking on the person's behalf): it never
+runs until the person turned its domain on for one of their bots. The choice
+store is `server/proactive/proactive-choices.ts` (`DATA_DIR/proactive-choices.json`,
+0600, one row per person; shape in `shared/proactive-choices.ts`), read and
+changed with `GET`/`PUT /api/me/proactive` (client scope, the person only)
+and `sagax_settings` `notifications.proactiveChoices`. `GET` also lists the
+domains the person can choose (`available`, from `FlowWatchLoop.offered`);
+`PUT` answers an unknown domain (404) or one that cannot run on the bot (409)
+instead of storing it, and a chosen domain Flow does not have pauses with a
+line (`unknown-domain`). No screen yet: the person asks a bot. Absent is off; a stored
+`proactiveMode` is never read as consent (`createBot` and the startup both
+write `proactive`); the switch now records who set it (`proactiveModeSet`).
+The loop (`server/proactive/flow-watches.ts`, `docs/proactive.md`) walks the
+choices, not the bots: no choice, no session, no helper call, no read.
+Eligibility: the carrying bot is the person's own, visible, not temporary,
+on a Perspicax server; the connection serves every product a watch names;
+the bot holds its skill. Products are read once a day per person; watch
+memory is per person (`DATA_DIR/proactive-watch-memory.json`). A chosen watch
+passes the bot's switch, as a direct trigger. A paused domain says so once
+in the carrying bot's chat. A watch alert's "never" stops those watches in
+the person's choices. One domain, one bot, by construction (#3394).
 
 ## A reply shows as it is written (2026-10-29)
 

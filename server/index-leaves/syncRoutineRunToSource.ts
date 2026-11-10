@@ -10,6 +10,9 @@ export type Host = Record<string, any>;
 /** #2694: the person's feedback on this run's attention cards (thumbs-down,
  * "less", "never"), read as on the relayed card: muted, quiet or normal. */
 export function routineAttentionLevel(host: Host, run: Pick<RoutineRun, "botId" | "webhookId" | "proactive">): "muted" | "quiet" | "normal" {
+  // #3423: a chosen watch's alert is what the person asked for; its exits
+  // are the person's choice, never an old mute of every watch of the bot
+  if (run.proactive?.watches?.length) return "normal";
   const level = host.backgroundBriefs?.wakeLevel?.(run.botId, wakeTopicOf(run) ?? "attention");
   return level === "muted" || level === "quiet" ? level : "normal";
 }

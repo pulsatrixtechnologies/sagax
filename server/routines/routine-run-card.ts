@@ -33,7 +33,9 @@ export function pickRoutineFullReport(recorded: string, taskReport: string): str
 
 /** #2694: the kind of proactive wake a run is, for feedback from the chat:
  * "heartbeat" (HEARTBEAT.md), or the wake's first source (mail, calendar,
- * screen, ...). Undefined for a routine or a webhook of the person's own. */
+ * screen, ...). Undefined for a routine or a webhook of the person's own.
+ * #3423: a watch wake's "never" is not a mute of every watch of the bot:
+ * the card carries its watches, and the "never" stops those. */
 export function wakeTopicOf(run: Pick<RoutineRun, "webhookId" | "proactive">): string | undefined {
   if (run.webhookId?.startsWith("heartbeat:")) return "heartbeat";
   const source = run.proactive?.sources[0];
@@ -81,6 +83,7 @@ export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullRepor
   if (run.startedAt) card.startedAt = run.startedAt;
   const wakeTopic = wakeTopicOf(run);
   if (wakeTopic) card.wakeTopic = wakeTopic;
+  if (run.proactive?.watches?.length) card.watches = run.proactive.watches.map((entry) => ({ id: entry.id, domain: entry.domain }));
   if (run.handedTo?.length) card.handedTo = run.handedTo.map((entry) => ({
     botId: entry.botId, threadId: entry.threadId, status: entry.status,
     ...(entry.name ? { name: redactSecretsInText(entry.name) } : {}),

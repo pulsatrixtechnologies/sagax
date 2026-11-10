@@ -205,6 +205,32 @@ describe("createInternalEnvironmentsRoutes", () => {
     });
   });
 
+  it("computer/select lists the bot's hosts by name and switches to one without a turn restart", async () => {
+    const picked: string[] = [];
+    const route = createInternalEnvironmentsRoutes(baseDeps({
+      computerSelection: () => undefined,
+      selectableHosts: async (botId, threadId) => (botId === BOT.id && threadId === "t-1"
+        ? [{ name: "Build-Box", os: "linux", online: true, shellOnly: true, access: "always", current: false }]
+        : []),
+      selectHost: async (_botId, _threadId, name) => {
+        if (name !== "Build-Box") return { ok: false as const, error: "No host named that. Use one of: Build-Box." };
+        picked.push(name);
+        return { ok: true as const, name, asked: false };
+      },
+    }));
+    const get = await call(route, { path: "/api/internal/computer/select", method: "GET" });
+    expect(get.sent[0]?.status).toBe(200);
+    expect(get.sent[0]).toMatchObject({ body: { hosts: expect.anything() } });
+    expect((get.sent[0]!.body as { hosts?: unknown }).hosts).toEqual([{ name: "Build-Box", os: "linux", online: true, shellOnly: true, access: "always", current: false }]);
+    // no direct request is selecting (computerSelection undefined): a host pick still works
+    const post = await call(route, { path: "/api/internal/computer/select", method: "POST", body: { host: "Build-Box" } });
+    expect(post.sent[0]).toMatchObject({ status: 200, body: { status: "ready", host: "Build-Box" } });
+    expect(picked).toEqual(["Build-Box"]);
+    const other = await call(route, { path: "/api/internal/computer/select", method: "POST", body: { host: "Elsewhere" } });
+    expect(other.sent[0]?.status).toBe(409);
+    expect(picked).toEqual(["Build-Box"]);
+  });
+
   it("computer/select 403 when there is no project bot", async () => {
     const route = createInternalEnvironmentsRoutes(baseDeps({
       projectBotForTask: () => undefined,

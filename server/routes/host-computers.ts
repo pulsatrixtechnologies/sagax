@@ -29,6 +29,7 @@ const toolBody = z.object({
   command: z.string().max(8000).optional(),
   timeout_seconds: z.number().int().min(1).max(120).optional(),
   mode: z.enum(["isolated", "as_is"]).optional(),
+  host: z.string().trim().min(1).max(200).optional(),
 }).strict();
 
 export function createHostComputersRoutes(deps: {
@@ -103,7 +104,7 @@ export function createHostComputerInternalRoutes(deps: {
     const principalId = deps.speaker(capability.threadId)?.trim().toLowerCase();
     if (!principalId) return json(res, 403, { error: "No person speaks in this turn, so no host is theirs." });
     const parsed = toolBody.safeParse(await readBody());
-    if (!parsed.success) return json(res, 400, { error: "Send action (exec, screenshot, vm_status, vm_provision, vm_delete, vm_rebuild, set_mode, ask_mode), and command for exec." });
+    if (!parsed.success) return json(res, 400, { error: "Send action (exec, screenshot, vm_status, vm_provision, vm_delete, vm_rebuild, set_mode, ask_mode), command for exec, and host by name when several hosts are yours to use." });
     const out = await deps.router.call({
       principalId,
       botId: capability.botId,
@@ -112,6 +113,7 @@ export function createHostComputerInternalRoutes(deps: {
       ...(parsed.data.command ? { command: parsed.data.command } : {}),
       ...(parsed.data.timeout_seconds ? { timeoutMs: parsed.data.timeout_seconds * 1000 } : {}),
       ...(parsed.data.mode ? { mode: parsed.data.mode } : {}),
+      ...(parsed.data.host ? { host: parsed.data.host } : {}),
     });
     if ("image" in out) return json(res, 200, { text: out.text, image: out.image.toString("base64"), mimeType: "image/png" });
     return json(res, 200, { text: out.text, ...(out.isError ? { isError: true } : {}) });

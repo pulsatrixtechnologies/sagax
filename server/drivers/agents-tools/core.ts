@@ -200,10 +200,12 @@ export const SELECT_COMPUTER_REFUSAL_HINT = "If a computer_select tool is listed
 export const DEF_SELECT_COMPUTER = {
     name: "select_computer",
     description:
-      "Choose where this conversation does computer work. Call with no arguments to inspect actual available choices and the current place. For a task needing computer interaction, select the requested place, or auto to choose a suitable configured computer without asking the user to use menus. Sagax reuses an existing computer first, or provisions one with a configured provider when needed; not for ordinary chat or just to inspect. A pending result means end this turn at once: Sagax switches the selector and resumes the request with that computer's tools. Do not use the old tools, repeat the task, or claim it is done. This cannot change permissions, override Off, or switch a teammate/routine/channel.",
+      "Choose where this conversation does computer work. No arguments: list the choices, the current place, and hosts (the person's hosts you may use; host picks one at once, then use host_computer). For computer work, select the requested place, or auto for a suitable configured computer, without asking the user to use menus. Sagax reuses an existing computer or provisions one with a configured provider when needed; not for ordinary chat or just to inspect. A pending result means end this turn at once: Sagax switches the selector and resumes the request with that computer's tools. Do not use the old tools, repeat the task, or claim it is done. This cannot change permissions, override Off, or switch a teammate/routine/channel.",
     inputSchema: { type: "object", additionalProperties: false, properties: {
       surface: { type: "string", enum: ["auto", "cloud", "vm", "local", "browser"],
         description: "auto = suitable configured computer, cloud = the bot's cloud computer or self-hosted VPS, vm = isolated Local VM, local = user's own desktop, browser = built-in browser. Omit to list." },
+      host: { type: "string", maxLength: 200,
+        description: "A name from hosts." },
     } },
   };
 
@@ -743,6 +745,17 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
     return { text: `Task ${taskId} ended without a reply — ${String(r.status ?? "unknown")}${r.result ? `: ${String(r.result)}` : ""}.`, isError: true };
   }
   if (name === "select_computer") {
+    if (args.host !== undefined) {
+      if (typeof args.host !== "string" || !args.host.trim() || args.surface !== undefined) {
+        return { text: "Pass host with one name from the hosts list, without surface.", isError: true };
+      }
+      try {
+        const result = await api("/api/internal/computer/select", { method: "POST", body: JSON.stringify({ host: args.host.trim() }) });
+        return { text: JSON.stringify(result) };
+      } catch (err) {
+        return { text: err instanceof Error ? err.message : String(err), isError: true };
+      }
+    }
     if (args.surface !== undefined && (typeof args.surface !== "string" || !["auto", "cloud", "vm", "local", "browser"].includes(args.surface))) {
       return { text: "Choose auto, cloud, vm, local or browser; omit surface to inspect connected choices.", isError: true };
     }

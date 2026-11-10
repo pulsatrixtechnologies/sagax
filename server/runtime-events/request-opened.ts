@@ -190,7 +190,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
       // that does more than read waits for this card (Always allow runs it).
       const hostCommand = permission && asker && event.requestId ? host.hostComputerExecCommand(event.mcpTool ?? event.tool, remoteInput) : undefined;
       const hostPrincipal = hostCommand ? host.remoteSessionSpeaker(event.threadId) : undefined;
-      if (hostCommand && hostPrincipal && asker && host.hostComputers.needsCard(hostPrincipal, asker.id, hostCommand)) {
+      if (hostCommand && hostPrincipal && asker && host.hostComputers.needsCard(hostPrincipal, asker.id, hostCommand, host.hostComputerHostName(remoteInput))) {
         event.requiresExplicitApproval = true;
         host.noteRemoteExecRequest(event.threadId, event.requestId!, remoteInput);
       }

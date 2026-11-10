@@ -39,7 +39,6 @@ import type { RemoteExecResult } from "./remote-sessions.ts";
 export const HOST_COMPUTER_ACTIONS = ["exec", "screenshot", "vm_status", "vm_provision", "vm_delete", "vm_rebuild", "set_mode", "ask_mode"] as const;
 export type HostComputerAction = typeof HOST_COMPUTER_ACTIONS[number];
 
-/** Idle sessions close after this long without a call. */
 /** The command of a host_computer exec call, for the approval gate
  * (server/runtime-events/request-opened.ts); undefined for any other call. */
 export function hostComputerExecCommand(tool: string | undefined, input: string | undefined): string | undefined {
@@ -54,6 +53,18 @@ export function hostComputerExecCommand(tool: string | undefined, input: string 
   return runCommandOf(input)?.trim() || undefined;
 }
 
+/** The host a host_computer call names (its `host` argument), if any. */
+export function hostComputerHostName(input: string | undefined): string | undefined {
+  try {
+    const args = JSON.parse(input ?? "") as Record<string, unknown> | null;
+    const raw = args && typeof args === "object" ? (args.host ?? (args.arguments as Record<string, unknown> | undefined)?.host) : undefined;
+    return typeof raw === "string" && raw.trim() ? raw.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Idle sessions close after this long without a call. */
 export const HOST_SESSION_IDLE_MS = 10 * 60_000;
 const CONNECT_WAIT_MS = 60_000;
 const CONNECT_POLL_MS = 1_500;
@@ -71,6 +82,8 @@ export interface HostComputerCallInput {
   command?: string;
   timeoutMs?: number;
   mode?: BotComputerHostMode;
+  /** The host by name (or id) when the bot may use several. */
+  host?: string;
 }
 
 export type HostComputerCallResult =
@@ -99,6 +112,11 @@ export function createHostComputerRouter(deps: {
   botThread(botId: string): string | null;
   botName(botId: string): string;
   ownerSub?(principalId: string): string | null;
+  /** The bots the person allowed on one of their hosts (Remote sessions,
+   * "Which bots"): null = All bots. Default: All bots. */
+  botScope?(principalId: string, hostId: string): string[] | null;
+  /** The bot is this person's own (All bots means their bots). Default: yes. */
+  ownsBot?(principalId: string, botId: string): boolean;
   /** The host's access rule; default: the row's own `access`, else Always allow. */
   access?(principalId: string, hostId: string, row: UnattendedHostRow | null): BotComputerHostAccess;
   /** The person's yes for this exact command in that conversation, once. */
@@ -133,6 +151,8 @@ export function createHostComputerRouter(deps: {
 
   // the last host list per person, for the turn's prompt (synchronous)
   const lastViews = new Map<string, BotComputerHostView[]>();
+  // the hosts in that list that the person owns (not shared with them by a colleague)
+  const lastOwned = new Map<string, Set<string>>();
   // the last access rule seen per host, for the approval gate (synchronous)
   const accessSeen = new Map<string, BotComputerHostAccess>();
   const viewOf = (principalId: string, row: UnattendedHostRow): BotComputerHostView => {
@@ -159,14 +179,78 @@ export function createHostComputerRouter(deps: {
     const { rows, error } = await ownedRows(principalId);
     // a VM a bot made is a sub-computer of its host: not a choice of its own
     const vmNames = new Set(Object.values(deps.store.hosts(principalId)).map((s) => s.vm?.name).filter(Boolean));
-    const hosts = sortHostChoices(rows.filter((row) => !vmNames.has(row.hostname ?? "")).map((row) => viewOf(principalId, row)));
-    if (!error) lastViews.set(principalId.trim().toLowerCase(), hosts);
+    const kept = rows.filter((row) => !vmNames.has(row.hostname ?? ""));
+    const hosts = sortHostChoices(kept.map((row) => viewOf(principalId, row)));
+    if (!error) {
+      lastViews.set(principalId.trim().toLowerCase(), hosts);
+      lastOwned.set(principalId.trim().toLowerCase(), new Set(kept.filter((row) => !row.sharedBy).map((row) => row.hostId)));
+    }
     return error ? { hosts, error } : { hosts };
   }
 
   /** The hosts marked "Use as a bot computer": the Computer menu choices. */
   async function choices(principalId: string): Promise<BotComputerHostView[]> {
     return (await views(principalId)).hosts.filter((host) => host.botComputer);
+  }
+
+  /** True when this bot may work on that host of the person without anyone
+   * picking it: the person's own host, marked as a bot computer, shared with
+   * All bots (and the bot is theirs) or with this bot by name. A host a
+   * colleague shared with the person never qualifies. */
+  const botMayUse = (principalId: string, botId: string, host: BotComputerHostView, owned: ReadonlySet<string>): boolean => {
+    if (!host.botComputer || !owned.has(host.hostId)) return false;
+    const scope = deps.botScope?.(principalId, host.hostId) ?? null;
+    if (scope) return scope.includes(botId);
+    return deps.ownsBot?.(principalId, botId) ?? true;
+  };
+
+  /** The hosts this bot may use without a pick (fresh list). */
+  async function botHosts(principalId: string, botId: string): Promise<{ hosts: BotComputerHostView[]; error?: string }> {
+    const out = await views(principalId);
+    const owned = lastOwned.get(principalId.trim().toLowerCase()) ?? new Set<string>();
+    const hosts = out.hosts.filter((host) => botMayUse(principalId, botId, host, owned));
+    return out.error ? { hosts, error: out.error } : { hosts };
+  }
+
+  /** The same, from the last list (synchronous: prompt and approval gate). */
+  const botHostsSeen = (principalId: string, botId: string): BotComputerHostView[] => {
+    const key = principalId.trim().toLowerCase();
+    const owned = lastOwned.get(key) ?? new Set<string>();
+    return (lastViews.get(key) ?? []).filter((host) => botMayUse(principalId, botId, host, owned));
+  };
+
+  const sameHost = (host: Pick<BotComputerHostView, "hostId" | "name">, wanted: string) =>
+    host.hostId === wanted.trim() || host.name.trim().toLowerCase() === wanted.trim().toLowerCase();
+  const namesOf = (hosts: readonly Pick<BotComputerHostView, "name">[]) => hosts.map((host) => host.name).join(", ");
+
+  /** Which host a call goes to: the one it names, else the one picked in the
+   * Computer menu, else the only host this bot may use. */
+  function pickHost(principalId: string, botId: string, usable: BotComputerHostView[], wanted: string | undefined, all: BotComputerHostView[]): { hostId: string } | { error: string } {
+    const picked = deps.store.botHost(principalId, botId);
+    if (wanted) {
+      const pickedView = picked ? all.find((host) => host.hostId === picked) : undefined;
+      const match = usable.find((host) => sameHost(host, wanted)) ?? (pickedView && sameHost(pickedView, wanted) ? pickedView : undefined);
+      if (match) return { hostId: match.hostId };
+      return { error: usable.length ? `No host named "${wanted}" is a bot computer you may use. Use one of: ${namesOf(usable)}.` : `No host named "${wanted}" is a bot computer you may use.` };
+    }
+    if (picked) return { hostId: picked };
+    if (usable.length === 1) return { hostId: usable[0]!.hostId };
+    if (usable.length > 1) return { error: `Several hosts are bot computers you may use: ${namesOf(usable)}. Call host_computer again with host set to one of these names.` };
+    return { error: "No host is a bot computer for this bot. The person marks a host \"Use as a bot computer\" in Remote sessions and shares it with All bots or with this bot; then call host_computer again." };
+  }
+
+  /** The bot switches its own computer to one of the hosts it may use: the
+   * same effect as the person picking it in the Computer menu. */
+  async function selectByBot(principalId: string, botId: string, wanted: string): Promise<{ ok: true; host: BotComputerHostView; asked: boolean } | { ok: false; error: string; hosts: string[] }> {
+    const { hosts, error } = await botHosts(principalId, botId);
+    const host = hosts.find((candidate) => sameHost(candidate, wanted));
+    if (!host) {
+      const names = hosts.map((candidate) => candidate.name);
+      return { ok: false, hosts: names, error: error ?? (names.length ? `No host named "${wanted}" is a bot computer you may use. Use one of: ${names.join(", ")}.` : "No host is a bot computer for this bot.") };
+    }
+    deps.store.setBotHost(principalId, botId, host.hostId);
+    const asked = deps.store.mode(principalId, host.hostId, botId) ? false : ask(principalId, botId, host.hostId, host.name).asked;
+    return { ok: true, host, asked };
   }
 
   /** Open (or reuse) the quiet session of this bot on that host. */
@@ -371,8 +455,10 @@ export function createHostComputerRouter(deps: {
   /** One host_computer tool call. */
   async function call(input: HostComputerCallInput): Promise<HostComputerCallResult> {
     const { principalId, botId } = input;
-    const hostId = deps.store.botHost(principalId, botId);
-    if (!hostId) return { text: "This bot's computer is not a host. Pick one in the Computer menu, or use your usual computer tools.", isError: true };
+    const usable = await botHosts(principalId, botId);
+    const target = pickHost(principalId, botId, usable.hosts, input.host, lastViews.get(principalId.trim().toLowerCase()) ?? []);
+    if ("error" in target) return { text: usable.error ?? target.error, isError: true };
+    const hostId = target.hostId;
     const { rows, error } = await ownedRows(principalId);
     const row = rows.find((candidate) => candidate.hostId === hostId) ?? null;
     if (!row) return { text: error ?? "That host is no longer enrolled for you.", isError: true };
@@ -450,31 +536,38 @@ export function createHostComputerRouter(deps: {
 
   /** The approval gate: this exec on the bot's host needs the person's yes
    * (its access rule is Ask and the command does more than read). */
-  function needsCard(principalId: string, botId: string, command: string): boolean {
-    const hostId = deps.store.botHost(principalId, botId);
-    if (!hostId) return false;
+  function needsCard(principalId: string, botId: string, command: string, hostName?: string): boolean {
+    const usable = botHostsSeen(principalId, botId);
+    const target = pickHost(principalId, botId, usable, hostName, lastViews.get(principalId.trim().toLowerCase()) ?? []);
+    if ("error" in target) return false;
+    const hostId = target.hostId;
     return accessSeen.get(`${principalId.trim().toLowerCase()}|${hostId}`) === "ask" && !isReadOnlyCommand(command);
   }
 
   /** The turn's workplace line about host computers, from the last list
-   * (refreshed in the background for the next turn): the chosen host, or in
-   * Auto the marked hosts with the ones whose tags the request names first. */
-  function turnNote(principalId: string, botId: string, text: string, auto: boolean): string | null {
+   * (refreshed in the background for the next turn): the chosen host, or the
+   * hosts this bot may use without a pick, the ones whose tags the request
+   * names first (whatever the Computer setting: the host is extra). */
+  function turnNote(principalId: string, botId: string, text: string, _auto: boolean): string | null {
     const key = principalId.trim().toLowerCase();
     void views(principalId).catch(() => undefined);
     const marked = (lastViews.get(key) ?? []).filter((host) => host.botComputer);
     if (!marked.length) return null;
     const chosen = promptPart(principalId, botId, marked);
     if (chosen) return chosen;
-    if (!auto) return null;
-    const matching = hostsMatchingTags(marked, text);
-    const ordered = [...matching, ...marked.filter((host) => !matching.includes(host))];
-    const list = ordered.map((host) => `${host.name} (${osLabel(host.os)}${host.online ? "" : ", offline"}${host.shellOnly ? ", shell only" : ""}${host.tags.length ? `; tags: ${host.tags.join(", ")}` : ""})`).join("; ");
+    const usable = botHostsSeen(principalId, botId);
+    if (!usable.length) return null;
+    const matching = hostsMatchingTags(usable, text);
+    const ordered = [...matching, ...usable.filter((host) => !matching.includes(host))];
+    const list = ordered.map((host) => `${host.name} (${osLabel(host.os)}${host.online ? "" : ", offline"}${host.shellOnly ? ", shell only" : ""}${host.access === "ask" ? ", asks before a change" : ""}${host.tags.length ? `; tags: ${host.tags.join(", ")}` : ""})`).join("; ");
     const hint = matching.length ? ` The request names the tags of ${matching.map((host) => host.name).join(", ")}: prefer it.` : "";
-    return `The person also marked these hosts as bot computers: ${list}.${hint} To work on one, the person picks it in the Computer menu; when a step clearly needs one, say which in one line and ask them to pick it.`;
+    const how = usable.length === 1
+      ? "Run shell commands there with host_computer action exec; nobody needs to pick it first."
+      : "Run shell commands on one with host_computer action exec and host set to its name; nobody needs to pick it first.";
+    return `The person shared these hosts with you as bot computers: ${list}.${hint} ${how} select_computer with host makes one your computer.`;
   }
 
-  return { views, choices, select, answer, ask, call, needsCard, turnNote, provision, refreshVm, sweep, promptPart, sessionOn };
+  return { views, choices, botHosts, select, selectByBot, answer, ask, call, needsCard, turnNote, provision, refreshVm, sweep, promptPart, sessionOn };
 }
 
 function engineLabel(engine: BotComputerVmEngine): string {

@@ -887,7 +887,7 @@ import { createUnattendedConsentStore } from "./remote-support/remote-session-co
 import { createRemoteSessionsAdmin } from "./remote-support/remote-sessions-admin.ts";
 import { createUnattendedHosts } from "./remote-support/remote-unattended-hosts.ts";
 import { createHostComputerStore } from "./remote-support/host-computer-store.ts";
-import { createHostComputerRouter, hostComputerExecCommand } from "./remote-support/host-computer-router.ts";
+import { createHostComputerRouter, hostComputerExecCommand, hostComputerHostName } from "./remote-support/host-computer-router.ts";
 import { createRemoteSessionRegistrar } from "./remote-support/remote-session-register.ts";
 import { handleRemoteSupportCall, recallSupportSession } from "./remote-support/remote-support-local.ts";
 import { guardRemoteSupportOpen } from "./remote-support/remote-support-open-guard.ts";
@@ -14950,6 +14950,16 @@ const hostComputers = createHostComputerRouter({
       ? person.subject.sub
       : null;
   },
+  // "Which bots" on the host row: All bots (no scope) is every bot the
+  // person owns; a named list is those bots. Either makes the host usable by
+  // the bot without a Computer menu pick (host_computer, select_computer).
+  botScope: (principalId, hostId) => remoteHostSharing.botScope(principalId, hostId),
+  ownsBot: (principalId, botId) => {
+    const bot = store.bot(botId);
+    if (!bot) return false;
+    if (IDENTITY.kind !== "perspicax") return true;
+    return effectiveBotOwner(bot).trim().toLowerCase() === principalId.trim().toLowerCase();
+  },
   consumeApproval: (threadId, command) => consumeRemoteExecApproval(threadId, command),
   raiseQuestion: (threadId, question) => raiseHarnessQuestion(threadId, {
     title: question.title,
@@ -17496,6 +17506,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get handoffs() { return handoffs; },
   get holdSignInRefusal() { return holdSignInRefusal; },
   get hostComputerExecCommand() { return hostComputerExecCommand; },
+  get hostComputerHostName() { return hostComputerHostName; },
   get hostComputers() { return hostComputers; },
   get hostScreenTurn() { return hostScreenTurn; },
   get isAgentConversation() { return isAgentConversation; },
@@ -22695,6 +22706,20 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     autoVmClaim: (threadId) => autoVmClaims.get(threadId),
     selectableComputers: (bot) => selectableComputers(bot as BotRecord),
     computerPreviewSurface: (bot, threadId) => computerPreviewSurface(bot as BotRecord, threadId),
+    // #2726: the person's hosts this bot may use (bot computer, All bots or this bot)
+    selectableHosts: async (botId, threadId) => {
+      const principalId = remoteSessionSpeaker(threadId);
+      if (!principalId) return [];
+      const picked = hostComputerStore.botHost(principalId, botId);
+      const { hosts } = await hostComputers.botHosts(principalId, botId);
+      return hosts.map((host) => ({ name: host.name, os: host.os, online: host.online, shellOnly: host.shellOnly, access: host.access, current: host.hostId === picked }));
+    },
+    selectHost: async (botId, threadId, name) => {
+      const principalId = remoteSessionSpeaker(threadId);
+      if (!principalId) return { ok: false as const, error: "No person speaks in this turn, so no host is theirs." };
+      const out = await hostComputers.selectByBot(principalId, botId, name);
+      return out.ok ? { ok: true as const, name: out.host.name, asked: out.asked } : { ok: false as const, error: out.error };
+    },
     builtInBrowserEnabled: () => builtInBrowserEnabled(cfg),
     effectiveBrowserProfile,
     myChromeUnavailable: () => myChrome.unavailable(),

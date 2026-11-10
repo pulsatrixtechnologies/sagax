@@ -87,7 +87,7 @@ export const DEF_REMOTE_SESSION_EXEC = {
 
 export const DEF_HOST_COMPUTER = {
     name: "host_computer",
-    description: "Work on this bot's computer when it is one of the person's enrolled hosts (chosen in the Computer menu). No Remote session card. Actions: exec runs one command (sh on macOS/Linux, PowerShell on Windows); screenshot shows the screen (not on a shell-only host such as unRAID); ask_mode asks the person in this chat whether to work in an isolated VM on the host or on the host as-is (asked by itself the first time); set_mode records their answer; vm_status, vm_provision, vm_delete, vm_rebuild manage the isolated VM. The host's own access rule applies: Ask waits for the person's yes before a command that changes something, Never refuses.",
+    description: "Work on the person's enrolled host as your computer: the one picked in the Computer menu or, with no pick, a bot computer host shared with All bots or with you (several: pass host; a refusal lists names). No Remote session card. Actions: exec runs one command (sh, or PowerShell on Windows); screenshot (not on a shell-only host); ask_mode asks the person here: isolated VM on the host or the host as-is (asked by itself the first time); set_mode records it; vm_status, vm_provision, vm_delete, vm_rebuild manage the VM. The host's access rule applies: Ask waits for the person's yes before a change, Never refuses.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -96,6 +96,7 @@ export const DEF_HOST_COMPUTER = {
         command: { type: "string", maxLength: 8000, description: "exec: the command line." },
         timeout_seconds: { type: "integer", minimum: 1, maximum: 120 },
         mode: { type: "string", enum: ["isolated", "as_is"], description: "set_mode: the person's answer." },
+        host: { type: "string", maxLength: 200, description: "Host name, when several." },
       },
       required: ["action"],
     },
@@ -175,6 +176,7 @@ export async function callComputersTool(name: string, args: Json, context: ToolC
       ...(typeof args.command === "string" ? { command: args.command } : {}),
       ...(typeof args.timeout_seconds === "number" ? { timeout_seconds: args.timeout_seconds } : {}),
       ...(typeof args.mode === "string" ? { mode: args.mode } : {}),
+      ...(typeof args.host === "string" && args.host.trim() ? { host: args.host.trim() } : {}),
     };
     const { ok, body: r } = await apiResponse("/api/internal/host-computer", { method: "POST", body: JSON.stringify(body) });
     if (!ok || r.error) return { text: String(r.error ?? "The host did not answer."), isError: true };

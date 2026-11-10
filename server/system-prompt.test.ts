@@ -597,4 +597,17 @@ describe("work style: arithmetic and drafts (QA 0.8.66 F9 F12, #2912)", () => {
     // 0.8.66 shipped 2005 characters; #2905 added about 2040. Stay under half of that surplus.
     expect(WORK_STYLE_PROMPT.length).toBeLessThan(2005 + 1020);
   });
+
+  it("fits the cap without dropping the first calls of #3221 / #3222 or the one table rule (#3373)", () => {
+    // #3230 added the known first calls and pushed the prompt to 3317
+    // characters; the cap stays, the wording got shorter.
+    expect(WORK_STYLE_PROMPT).toMatch(/what waits on the person \(the Today box\) is one sagax_approvals list/);
+    expect(WORK_STYLE_PROMPT).toMatch(/Sagax Remote Access \(the person's computers: install, status, open\) is one remote_support_hosts/);
+    expect(WORK_STYLE_PROMPT).toContain("independent parts together in one step; answer each in a short paragraph");
+    expect(WORK_STYLE_PROMPT).toContain("Do arithmetic inline (a rate times hours, a percentage), never through a shell command");
+    expect(WORK_STYLE_PROMPT).toContain("tables per the output style rule");
+    expect(WORK_STYLE_PROMPT).not.toMatch(/never a table for a short answer|3 or more columns/);
+    expect(WORK_STYLE_PROMPT).not.toMatch(/\(#\d+\)/);
+    expect(WORK_STYLE_PROMPT.length).toBeLessThan(2005 + 1020);
+  });
 });

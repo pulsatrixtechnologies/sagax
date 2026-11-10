@@ -154,6 +154,8 @@ try {
     await askPage.waitForSelector("[data-cap-approval]");
     await askPage.waitForTimeout(300);
     await shoot(askPage, `reader-ask-first-${scheme}`);
+    // a card ignores clicks for 600 ms after it appears
+    await askPage.waitForTimeout(700);
     await askPage.locator("[data-cap-allow]").click();
     await askPage.frameLocator("iframe").locator("#data", { hasText: "To do: 2" }).waitFor({ timeout: 15_000 });
     await ask.close();

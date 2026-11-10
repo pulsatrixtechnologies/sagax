@@ -284,3 +284,30 @@ describe("a gateway tool name reads as its connector and tool", () => {
     expect(stepToolName({ name: "mcp__wren__step_12" })).toBe("Step 12");
   });
 });
+
+describe("a hub call names its connector, tool and account (#3349)", () => {
+  const mail = { to: "a@example.com", subject: "Hi" };
+  const hub = (ok?: boolean, output?: string) => ({
+    name: "mcp__agents__call_connector", ok,
+    input: JSON.stringify({ connector: "Microsoft 365", tool: "outlook_send_mail", arguments: mail }),
+    ...(output ? { output } : {}),
+  });
+  const native = (ok?: boolean) => ({ name: "mcp__claude_ai_Microsoft_365__outlook_send_mail", ok, input: JSON.stringify(mail) });
+
+  it("reads a call_connector row as the act it ran, with the native row's label", () => {
+    for (const ok of [true, undefined]) {
+      expect(readStep(hub(ok)).label).toBe(readStep(native(ok)).label);
+      expect(readStep(hub(ok)).label).toContain("Microsoft 365");
+      expect(stepLabel(hub(ok))).not.toMatch(/call_connector|Agents|mcp__/);
+    }
+  });
+
+  it("names the account the route answered with, never a guessed one", () => {
+    const answered = hub(true, JSON.stringify({ account: "Claude", result: { ok: true } }));
+    expect(readStep(answered).target).toBe("“Hi”, to a@example.com · Account: Claude");
+    expect(readStep(hub(true)).target).not.toContain("Account");
+    setLocale("fr");
+    expect(readStep(answered).target).toContain("Compte : Claude");
+    expect(readStep(answered).label).toBe(readStep(native(true)).label);
+  });
+});

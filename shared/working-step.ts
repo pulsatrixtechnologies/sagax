@@ -10,6 +10,7 @@
 // The detail is a file name, an app, a web host or a program name. Never
 // the arguments, a query, a path or a whole command line: the server passes
 // it through its redaction before it leaves (server/working-step.ts).
+import { readConnectorCall } from "./connector-call.ts";
 
 export type WorkingStepKey =
   | "readMail"
@@ -193,6 +194,15 @@ const WRITE_VERB = /(send|reply|forward|draft|compose|create|update|delete|move|
 export function workingStepFor(call: WorkingStepCall): WorkingStep | null {
   const raw = call.name.trim();
   if (!raw || /^(auto-approved|error):/i.test(raw)) return null;
+  // #3349 (L6): a call through the hub (call_connector) reads as the
+  // connector and the tool it reached, as the same call made natively
+  const hubCall = readConnectorCall(raw, call.input);
+  if (hubCall) {
+    const server = hubCall.connector.replace(/[^A-Za-z0-9-]+/g, "_").replace(/^_+|_+$/g, "") || "connector";
+    const args = parseInput(call.input);
+    const inner = args && !Array.isArray(args) && args.arguments && typeof args.arguments === "object" ? JSON.stringify(args.arguments) : undefined;
+    return workingStepFor({ name: `mcp__${server}__${hubCall.tool.replace(/^mcp__/i, "")}`, ...(inner ? { input: inner } : {}), product: call.product ?? hubCall.connector });
+  }
   const input = parseInput(call.input);
   const { server, tool } = splitName(raw);
   const bare = tool.toLowerCase();

@@ -210,3 +210,29 @@ export function createConnectorPlanForTurn<Bot extends PlanBot, Instance extends
 export function connectorPlanAt(plan: ConnectorTurnPlan & { at?(via: AccessVia | undefined): ConnectorTurnPlan }, via: AccessVia | undefined): ConnectorTurnPlan {
   return plan.at ? plan.at(via) : plan;
 }
+
+/** #3349 (L6): per thread, whether the turn last dispatched there mounted
+ * the speaker's own claude.ai connectors (plan.claudeAi). The bus reads it to
+ * give a native `claude_ai_` ask the connector facts a hub call carries.
+ * Bounded: the oldest threads are forgotten first. */
+const CLAUDE_AI_OWN_MAX = 5_000;
+const claudeAiOwnByThread = new Map<string, boolean>();
+
+/** The plan a dispatch materialized (connectorPlanAt), remembered for its
+ * thread. */
+export function dispatchedConnectorPlan(threadId: string, plan: ConnectorTurnPlan & { at?(via: AccessVia | undefined): ConnectorTurnPlan }, via: AccessVia | undefined): ConnectorTurnPlan {
+  const at = connectorPlanAt(plan, via);
+  claudeAiOwnByThread.delete(threadId);
+  claudeAiOwnByThread.set(threadId, at.claudeAi === true);
+  while (claudeAiOwnByThread.size > CLAUDE_AI_OWN_MAX) {
+    const oldest = claudeAiOwnByThread.keys().next().value;
+    if (oldest === undefined) break;
+    claudeAiOwnByThread.delete(oldest);
+  }
+  return at;
+}
+
+/** The turn on this thread mounted the speaker's own claude.ai connectors. */
+export function claudeAiConnectorsOwn(threadId: string): boolean {
+  return claudeAiOwnByThread.get(threadId) === true;
+}

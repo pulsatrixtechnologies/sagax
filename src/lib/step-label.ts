@@ -19,6 +19,7 @@ import { isOpaqueId, isOpaqueValue } from "../../shared/human-id";
 import { readMcpGatewayCall, readUseToolCall, type McpGatewayCall } from "../../shared/mcp-gateway-call";
 import { humanPath } from "@/lib/short-path";
 import { gatewayToolId, toolDisplayName } from "../../shared/tool-display-name";
+import { readConnectorCall } from "../../shared/connector-call";
 
 export type StepPhase = "running" | "done" | "failed" | "unverified";
 
@@ -503,6 +504,26 @@ function grokMetaTool(tool: StepTool, phase: StepPhase): StepReading | undefined
   return named ?? { label: t(`step.useTool.${tense}` as LocaleKey) };
 }
 
+/** #3349 (L6): a call through the hub (call_connector) reads as the same
+ * call made natively: the connector, the tool in words, and the account
+ * the route answered with (from the result, never guessed). */
+function connectorCallStep(tool: StepTool, phase: StepPhase): StepReading | undefined {
+  const call = readConnectorCall(tool.name, tool.input ?? tool.summary, tool.output);
+  if (!call) return undefined;
+  const args = parseArgs(tool.input) ?? parseArgs(tool.summary);
+  const inner = args?.arguments && typeof args.arguments === "object" && !Array.isArray(args.arguments) ? JSON.stringify(args.arguments) : undefined;
+  const id = call.tool.replace(/^mcp__/i, "");
+  const server = call.connector.replace(/[^A-Za-z0-9-]+/g, "_").replace(/^_+|_+$/g, "") || "connector";
+  const name = gatewayToolId(id) ?? (id.includes("__") ? id : `${server}__${id}`);
+  const reading = mcpLabel({ ...tool, name: `mcp__${name}`, input: inner, summary: undefined, product: tool.product?.trim() || call.connector }, phase);
+  const label = reading?.label ?? capitalize(t(`step.use.${labelTense(phase)}` as LocaleKey, { name: call.connector }));
+  const summary = reading?.target;
+  const target = call.account
+    ? summary ? t("step.connectorCall.summaryAccount", { summary, account: call.account }) : t("step.connectorCall.account", { account: call.account })
+    : summary;
+  return { label, ...(target ? { target } : {}) };
+}
+
 /** True when the name is already a sentence (a server row), not a tool id. */
 function isSentence(name: string): boolean {
   return /\s/.test(name.trim());
@@ -528,6 +549,8 @@ export function readStep(tool: StepTool, nameOf?: StepNameOf, live?: boolean): S
   const sentence = serverSentence(name);
   if (sentence) return { label: sentence };
   if (isSentence(name)) return { label: name };
+  const hubCall = connectorCallStep(tool, phase);
+  if (hubCall) return hubCall;
   // rows stored before the driver named the tool a gateway call ran
   const gateway = readMcpGatewayCall(name, tool.input ?? tool.summary);
   if (gateway?.kind === "admin") return gatewayLabel(gateway, phase);

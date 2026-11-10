@@ -6,7 +6,7 @@ import { ATTACHMENTS_DIR } from "../attachments/attachments.ts";
 import { DATA_DIR } from "../config.ts";
 import { claudeUserSkillsDir, claudeUserSkillsEnabled, forgetClaudeUserSkillsDir } from "../turn-settings.ts";
 import { deferConnectorsPatch } from "./defer-connectors-patch.ts";
-import { connectorPlanAt } from "../connectors/turn-plan.ts";
+import { dispatchedConnectorPlan } from "../connectors/turn-plan.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 import { warmCachePrime } from "./warm-cache-prime.ts";
@@ -219,7 +219,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       // the plan of turn setup, for the access this dispatch materialized
       // (a run_with_engine part loads this person's grok.com connectors)
       ...(() => {
-        const plan = connectorPlanAt(state.connectorPlan ?? connectorPlanForTurn(state.bot, state.instance, state.speaker, state.threadId), turnAccess?.via);
+        const plan = dispatchedConnectorPlan(state.threadId, state.connectorPlan ?? connectorPlanForTurn(state.bot, state.instance, state.speaker, state.threadId), turnAccess?.via);
         return { claudeAiConnectors: plan.claudeAi, grokCloudConnectors: plan.grokCloud };
       })(),
       ...pluginDirsFor(state.bot, state.instance, orgSpeakerPrincipal(state.bot, state.speaker)),

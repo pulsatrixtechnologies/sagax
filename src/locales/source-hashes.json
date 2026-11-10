@@ -18379,7 +18379,9 @@
       "feedback.server.detailQuestion": "93276328265dd396df80ee2fcc63817d5541c79aa02e0c7296b6c1ec0986bc09",
       "feedback.server.previewIntro": "a5644c22fb4a6b694f64dc178bf46cc21f459becd97dc8fa494a3575f4da1c0d",
       "feedback.server.previewTitle": "c11d50bbd0ba07e2db9f690d0cdb2e587c5375a6e4bc3806b5e58c36131fb2b5",
-      "feedback.server.previewSubtitle": "723821f105f31030e9f03b85b36d0595d082bbbf960324d4a708294de48784ec"
+      "feedback.server.previewSubtitle": "723821f105f31030e9f03b85b36d0595d082bbbf960324d4a708294de48784ec",
+      "step.connectorCall.account": "33d1814e96c1f3f6f73da13b1f54a75eb81e75837489625dbbbb9f6a6ed7d2ae",
+      "step.connectorCall.summaryAccount": "ec4b65dddcf443aff53f71b7848167e080db17dc19c668befa1d812a3b96d80d"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

@@ -25,6 +25,7 @@ import { newId, type ProviderInstance, type RuntimeEvent, type RuntimeEventListe
 import { reportBackgroundError } from "../background-error.ts";
 import { SpecialTokenFilter } from "./special-token-filter.ts";
 import { isHeldRequestId, type HeldRequests } from "./held-requests.ts";
+import { claudeAiConnectorCall, connectorCallActs } from "../../shared/connector-call.ts";
 
 /** Marks an adapter whose respondToRequest already answers held ids. */
 const HELD_WRAPPED = Symbol("sagax.heldRequestsWrapped");
@@ -142,6 +143,29 @@ export class EventBus {
     this.heldRequests = held;
   }
 
+  /** #3349 (L6): whether the turn on a thread mounted the speaker's own
+   * claude.ai connectors (its connector plan, connectors/turn-plan.ts). */
+  private claudeAiOwn: ((threadId: string) => boolean) | null = null;
+
+  setConnectorPlanLookup(lookup: ((threadId: string) => boolean) | null): void {
+    this.claudeAiOwn = lookup;
+  }
+
+  /** #3349 (L6): a native ask of the speaker's own claude.ai connector
+   * carries the facts a hub call of it carries (held-requests.ts): the
+   * provider's own id of the call as its rule key, a connector of the
+   * person's own account, and outbound when it does more than read. So the
+   * person's approval settings decide it as they decide the same call
+   * through call_connector, from any engine. Only on a turn whose plan
+   * mounted that person's own connectors; any other ask is left as is. */
+  private withConnectorFacts(event: RuntimeEvent): RuntimeEvent {
+    if (event.type !== "request.opened" || event.requestType !== "permission" || event.questions?.length) return event;
+    const call = claudeAiConnectorCall(event.mcpTool ?? event.tool);
+    if (!call || !this.claudeAiOwn?.(event.threadId)) return event;
+    const acts = event.outbound === true || connectorCallActs(call.id);
+    return { ...event, mcpTool: call.id, engineConnector: true, accountConnector: true, ...(acts ? { outbound: true } : {}) };
+  }
+
   attach(instances: ProviderInstance[]) {
     for (const instance of instances) {
       this.detach(instance.instanceId);
@@ -159,6 +183,7 @@ export class EventBus {
           const { connectorHub: _dropped, ...clean } = event;
           event = clean as RuntimeEvent;
         }
+        event = this.withConnectorFacts(event);
         this.publish({ ...event, providerInstanceId: instance.instanceId });
       });
       this.unsubscribes.set(instance.instanceId, unsub);

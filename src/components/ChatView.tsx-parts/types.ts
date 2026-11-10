@@ -2,6 +2,7 @@ import { createContext, useContext, useRef, type Dispatch } from "react";
 import type { Action, AppState, Bot, ConfigStatus, Message } from "@/state/store";
 import type { ExchangeRun } from "@/lib/bot-exchange";
 import type { GotoGroup } from "@/lib/goto-lines";
+import type { MessagedLineItem } from "@/lib/messaged-line";
 import type { TranscriptItem } from "@/lib/activity-runs";
 
 export const USER_COLLAPSE_CHARS = 600;
@@ -11,7 +12,8 @@ export type ListedItem =
   | TranscriptItem
   | { kind: "exchange"; run: ExchangeRun }
   | { kind: "voiceCall"; callId: string; messages: Message[] }
-  | GotoGroup;
+  | GotoGroup
+  | MessagedLineItem;
 
 /** What every row of the open chat reads besides its own message. The value
  * changes only when one of these does, so the memoized rows skip store

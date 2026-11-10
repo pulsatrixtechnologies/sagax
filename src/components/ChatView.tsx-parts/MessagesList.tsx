@@ -15,6 +15,7 @@ import { isTransientChatNotice } from "../../../shared/transient-notices";
 import { BotConversationLine, conversationAnchors, splitLeadingConversations, visibleConversationRows } from "../BotConversations";
 import { GotoGroupChip } from "../GotoGroupChip";
 import { collapseGotoLines, gotoGroupFromConversations, gotoTargetOf, silentChatItem, unifiedGotoTargetOf } from "@/lib/goto-lines";
+import { collapseMessagedLines } from "@/lib/messaged-line";
 import { NewMessagesDivider } from "../NewMessagesDivider";
 import { unreadMessageIds } from "@/lib/unread-divider";
 import type { EffectivePlace } from "@/lib/place";
@@ -81,7 +82,7 @@ export const MessagesList = memo(function MessagesList({
   const config = useStoreSelector((current) => current.config);
   // read when a chip is clicked, so a store event does not render the list
   const getState = useStoreGetter();
-  const { botId, threadId, botName, busy, hasMore, bots, focus, showToolCalls, locale, dispatch } = useChatRows();
+  const { botId, threadId, botName, busy, hasMore, bots, focus, showToolCalls, locale, dispatch, botDmIds } = useChatRows();
   const showThreads = useShowThreads();
   const appleMobileWeb = isAppleMobileWebClient();
   const selfColor = bots.find((candidate) => candidate.id === botId)?.color;
@@ -150,10 +151,13 @@ export const MessagesList = memo(function MessagesList({
       }
     }
     flush();
+    // A run of "Messaged" chips of one turn is one centered line, Tool
+    // calls hidden or not (#3270): the only trace of the send.
+    const messaged = collapseMessagedLines(listed, botDmIds, (item) => silentChatItem(item, showToolCalls)) as ListedItem[];
     // Two or more "Go to conversation" lines in a row become one chip.
-    return collapseGotoLines(listed, (item) => silentChatItem(item, showToolCalls),
+    return collapseGotoLines(messaged, (item) => silentChatItem(item, showToolCalls),
       showThreads ? gotoTargetOf : unifiedGotoTargetOf) as ListedItem[];
-  }, [messages, transcript, botId, botName, selfColor, locale, owners, showToolCalls, showThreads]);
+  }, [messages, transcript, botId, botName, selfColor, locale, owners, showToolCalls, showThreads, botDmIds]);
   const windowIds = useMemo(() => new Set(messages.map((message) => message.id)), [messages]);
   const newestMessageId = messages.at(-1)?.id;
   let newestUserMessageId: string | undefined;

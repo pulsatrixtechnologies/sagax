@@ -53,7 +53,7 @@ afterEach(() => {
 
 const ok = (stdout: string): CommandResult => ({ code: 0, stdout, stderr: "" });
 
-function harness(answer: (command: string, argv: string[]) => CommandResult | Promise<CommandResult>, options: { tunnel?: boolean; ssh?: boolean; audit?: RemoteSessionActionEvent[] } = {}) {
+function harness(answer: (command: string, argv: string[], signal?: AbortSignal) => CommandResult | Promise<CommandResult>, options: { tunnel?: boolean; ssh?: boolean; audit?: RemoteSessionActionEvent[]; tunnelWaitMaxMs?: number } = {}) {
   const dataDir = mkdtempSync(path.join(tmpdir(), "sagax-inv-"));
   const home = mkdtempSync(path.join(tmpdir(), "sagax-inv-flow-"));
   roots.push(dataDir, home);
@@ -67,10 +67,10 @@ function harness(answer: (command: string, argv: string[]) => CommandResult | Pr
   const commands: string[] = [];
   const messages: Message[] = [];
   let clock = Date.parse("2026-10-22T15:00:00.000Z");
-  const run: RunCommand = async (argv) => {
+  const run: RunCommand = async (argv, _timeoutMs, extra) => {
     const command = argv.at(-1) ?? "";
     commands.push(command);
-    return answer(command, argv);
+    return answer(command, argv, extra?.signal);
   };
   const store = {
     bot: () => ({ id: BOT, name: "Wren", color: "#336699" }),
@@ -96,6 +96,7 @@ function harness(answer: (command: string, argv: string[]) => CommandResult | Pr
     home: () => home,
     now: () => clock,
     systemSsh: () => (options.ssh === false ? null : "/usr/bin/ssh"),
+    ...(options.tunnelWaitMaxMs ? { tunnelWaitMaxMs: options.tunnelWaitMaxMs } : {}),
     ...(options.audit ? { actionsAudit: { write: (event: RemoteSessionActionEvent) => { options.audit!.push(event); } } as never } : {}),
   });
   return { service, commands, messages, placeTunnel, tick: (ms: number) => { clock += ms; } };
@@ -275,6 +276,123 @@ describe("commands for the bot", () => {
     await service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "whoami" });
     const execs = audit.filter((event) => event.kind === "exec");
     expect(execs.map((event) => [event.command, event.botId])).toEqual([["uptime", "bot-ember"], ["whoami", BOT]]);
+  });
+
+  it("runs the commands of several bots on one session one after the other, so none resets another's tunnel (#3430)", async () => {
+    // Every tailcat process is its own WireGuard endpoint with the session's
+    // client key. A second one with the same key started while the first
+    // still runs makes the host drop the first one's connection: ssh 255.
+    const live = new Map<string, number>();
+    let most = 0;
+    const { service, commands } = harness(async (command, argv) => {
+      if (command === OS_PROBE_UNIX) return ok("Darwin");
+      if (command === inventoryCommand("macos")) return ok(MAC_INVENTORY);
+      const keyPath = argv[argv.indexOf("--key") + 1] ?? "";
+      const start = (live.get(keyPath) ?? 0) + 1;
+      live.set(keyPath, start);
+      most = Math.max(most, start);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      const reset = (live.get(keyPath) ?? 0) > 1;
+      live.set(keyPath, (live.get(keyPath) ?? 1) - 1);
+      return reset ? { code: 255, stdout: "", stderr: "" } : ok(`${command} done\n`);
+    });
+    await service.publish(open);
+    const bots = ["bot-1", "bot-ember", "bot-server", "bot-core"];
+    const results = await Promise.all(bots.map((actor, index) =>
+      service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: `echo ${index}`, actor })));
+    expect(results.map((result) => ("stdout" in result ? result.stdout : result.error))).toEqual(bots.map((_, index) => `echo ${index} done\n`));
+    expect(most).toBe(1);
+    // each command went out once
+    for (const index of bots.keys()) expect(commands.filter((command) => command === `echo ${index}`)).toHaveLength(1);
+  });
+
+  // A build that runs until it is stopped (the session closes) or 300 ms pass.
+  const holding = (signal?: AbortSignal) => new Promise<CommandResult>((resolve) => {
+    const timer = setTimeout(() => resolve(ok("built\n")), 300);
+    signal?.addEventListener("abort", () => { clearTimeout(timer); resolve({ code: 255, stdout: "", stderr: "" }); }, { once: true });
+  });
+
+  it("closing the session refuses the commands still waiting (never sent) and stops the running one at once (#3430)", async () => {
+    const { service, commands } = harness(async (command, _argv, signal) => {
+      if (command === OS_PROBE_UNIX) return ok("Darwin");
+      if (command === inventoryCommand("macos")) return ok(MAC_INVENTORY);
+      if (command === "make build") return holding(signal);
+      return ok(`${command} done\n`);
+    });
+    await service.publish(open);
+    const build = service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "make build", actor: "bot-a" });
+    const waitingB = service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "echo b", actor: "bot-b" });
+    const waitingC = service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "echo c", actor: "bot-c" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const started = Date.now();
+    await service.close(PERSON, BOT, ID);
+    expect(Date.now() - started).toBeLessThan(250);
+    for (const waiting of [await waitingB, await waitingC]) {
+      expect(waiting).toEqual({ error: expect.stringMatching(/^No remote session is connected any more: .*not sent/) });
+    }
+    expect(commands).not.toContain("echo b");
+    expect(commands).not.toContain("echo c");
+    // the running build was cut: it may have run, never a success
+    expect(await build).toEqual({ error: expect.stringContaining("did not answer") });
+    // the session's stop command still went out, after the build stopped
+    expect(commands.at(-1)).toBe(stopCommand(ID, "macos"));
+  });
+
+  it("a command whose session passed its end time while it waited is never sent (#3430)", async () => {
+    let clockTick: (ms: number) => void = () => undefined;
+    const { service, commands, tick } = harness(async (command, _argv, signal) => {
+      if (command === OS_PROBE_UNIX) return ok("Darwin");
+      if (command === inventoryCommand("macos")) return ok(MAC_INVENTORY);
+      if (command === "make build") {
+        const out = await holding(signal);
+        clockTick(3 * 60 * 60_000);
+        return out;
+      }
+      return ok("late\n");
+    });
+    clockTick = tick;
+    await service.publish(open);
+    const build = service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "make build" });
+    const late = service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "echo late", actor: "bot-b" });
+    expect(await build).toMatchObject({ exitCode: 0 });
+    expect(await late).toEqual({ error: expect.stringMatching(/^No remote session is connected any more/) });
+    expect(commands).not.toContain("echo late");
+  });
+
+  it("a command that waits past the queue limit is refused as busy and never sent (#3430)", async () => {
+    const { service, commands } = harness(async (command, _argv, signal) => {
+      if (command === OS_PROBE_UNIX) return ok("Darwin");
+      if (command === inventoryCommand("macos")) return ok(MAC_INVENTORY);
+      if (command === "make build") return holding(signal);
+      return ok("quick\n");
+    }, { tunnelWaitMaxMs: 50 });
+    await service.publish(open);
+    const build = service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "make build" });
+    const quick = await service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "echo quick", actor: "bot-b" });
+    expect(quick).toEqual({ error: expect.stringMatching(/busy.*not sent/) });
+    expect(commands).not.toContain("echo quick");
+    expect(await build).toMatchObject({ exitCode: 0, stdout: "built\n" });
+    // the tunnel is free again: the next command runs
+    expect(await service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "echo quick" })).toMatchObject({ exitCode: 0 });
+  });
+
+  it("keeps the queue moving after a command that failed or threw (#3430)", async () => {
+    let calls = 0;
+    const { service } = harness(async (command) => {
+      if (command === OS_PROBE_UNIX) return ok("Darwin");
+      if (command === inventoryCommand("macos")) return ok(MAC_INVENTORY);
+      calls += 1;
+      if (command === "boom") throw new Error("spawn failed");
+      return ok("fine\n");
+    });
+    await service.publish(open);
+    const [first, second] = await Promise.allSettled([
+      service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "boom" }),
+      service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "uptime" }),
+    ]);
+    expect(first.status).toBe("rejected");
+    expect(second).toMatchObject({ status: "fulfilled", value: { exitCode: 0, stdout: "fine\n" } });
+    expect(calls).toBe(2);
   });
 
   it("runs nothing on a computer whose OS is still not known, and says so", async () => {

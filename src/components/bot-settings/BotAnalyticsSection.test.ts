@@ -126,15 +126,15 @@ describe("BotAnalyticsView: the cards", () => {
     expect(card).toContain("Nov 6 · 4");
   });
 
-  it("shows the hours saved with one decimal, or \"Still being estimated...\" without a basis", () => {
-    const card = slice(render(), 'data-bot-analytics-card="hoursSaved"', 'data-settings-group="botUsage"');
+  it("shows the hours saved with one decimal, or \"Still being estimated…\" without a basis", () => {
+    const card = slice(render(), 'data-bot-analytics-card="hoursSaved"', 'data-settings-group="botTopUsers"');
     expect(card).toContain(">Hours saved<");
     expect(card).toContain(">5.5 h<");
     expect(card).toContain("data-bot-analytics-chart");
 
-    const estimating = slice(render({ data: analytics({ hoursSavedBasis: null }) }), 'data-bot-analytics-card="hoursSaved"', 'data-settings-group="botUsage"');
+    const estimating = slice(render({ data: analytics({ hoursSavedBasis: null }) }), 'data-bot-analytics-card="hoursSaved"', 'data-settings-group="botTopUsers"');
     expect(estimating).toContain("data-bot-analytics-estimating");
-    expect(estimating).toContain("Still being estimated...");
+    expect(estimating).toContain("Still being estimated\u2026");
     expect(estimating).not.toContain("data-bot-analytics-chart");
   });
 
@@ -151,7 +151,7 @@ describe("BotAnalyticsView: the cards", () => {
 
 describe("BotAnalyticsView: usage", () => {
   it("lists turns, tokens, cost, conversations and routines, with All bots", () => {
-    const usage = slice(render(), 'data-settings-group="botUsage"', 'data-settings-group="botTopUsers"');
+    const usage = slice(render(), 'data-settings-group="botUsage"');
     for (const label of ["Usage", "Turns", "Tokens", "Cost", "Conversations", "Routines run", "Routines failed"]) {
       expect(usage).toContain(`>${label}<`);
     }
@@ -209,5 +209,37 @@ describe("BotAnalyticsSection", () => {
     expect(html).toContain('aria-busy="true"');
     expect(html).toContain('data-bot-analytics-days="7" aria-pressed="true"');
     expect(html).toContain("data-bot-analytics-all-bots");
+  });
+});
+
+// #3401: the reference block first (range and day switch, Messages and
+// Hours saved, Top users), then our groups (Usage, Proactivity); money in
+// the reader's language; the ellipsis character while hours are estimated.
+describe("BotAnalyticsView: the Analytics tab (#3401)", () => {
+  it("draws the range, the two cards and Top users before Usage and Proactivity", () => {
+    const html = render({ proactive: createElement("section", { "data-test-proactive": "" }) });
+    const order = [
+      "data-bot-analytics-range=",
+      'data-bot-analytics-card="messages"',
+      'data-bot-analytics-card="hoursSaved"',
+      'data-settings-group="botTopUsers"',
+      'data-settings-group="botUsage"',
+      "data-test-proactive",
+    ].map((marker) => html.indexOf(marker));
+    expect(order.every((at) => at >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+
+  it("writes the cost in the reader's language and currency", () => {
+    setLocale("fr");
+    const usage = slice(render(), 'data-settings-group="botUsage"').replace(/[  ]/g, " ");
+    expect(usage).toContain(">0,44 $<");
+    expect(usage).not.toContain("$0.44");
+  });
+
+  it("ends \"still being estimated\" with the ellipsis character", () => {
+    const html = render({ data: analytics({ hoursSavedBasis: null }) });
+    expect(html).toContain("Still being estimated…");
+    expect(html).not.toContain("Still being estimated...");
   });
 });

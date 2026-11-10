@@ -1,8 +1,9 @@
-// Analytics: the bot profile page's Analytics tab, drawn like Grok Bot's:
-// the range at the left and a 7 / 30 / 90 days switch at the right, two
-// cards side by side (Messages, Hours saved) with a per-day area chart, the
-// usage figures of the range (turns, tokens, cost, conversations, routines),
-// then the people who use the bot most. Everything comes from
+// Analytics: the bot profile page's Analytics tab, in the order of the
+// reference app (#3401): the range at the left and a 7 / 30 / 90 days switch
+// at the right, two cards side by side (Messages, Hours saved) with a
+// per-day area chart, the people who use the bot most, then our own groups:
+// the usage figures of the range (turns, tokens, cost, conversations,
+// routines) and Proactivity. The day switch drives every one of them. Everything comes from
 // GET /api/bots/:id/analytics (shared/bot-analytics.ts): nothing is
 // estimated here, a value the ledger does not carry stays "...".
 //
@@ -12,7 +13,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
-import { botUsage, costCaption, formatTokens, formatUsd, hasFiniteCost } from "@/lib/usage";
+import { botUsage, costCaption, formatMoney, formatTokens, hasFiniteCost } from "@/lib/usage";
 import type { LocaleKey } from "@/locales";
 import { api, useStore, type Bot } from "@/state/store";
 import { analyticsRange, BOT_ANALYTICS_DAYS, type BotAnalytics, type BotAnalyticsDays, type BotAnalyticsUser } from "../../../shared/bot-analytics";
@@ -181,7 +182,7 @@ export interface BotAnalyticsViewProps {
   neverUsed?: boolean;
   /** The clock the loading range label reads (tests pin it). */
   now?: number;
-  /** #2698: the Proactivity group, drawn under Usage (BotProactiveMetricsGroup). */
+  /** #2698: the Proactivity group, drawn last, under Usage (BotProactiveMetricsGroup). */
   proactive?: ReactNode;
 }
 
@@ -195,11 +196,12 @@ export function BotAnalyticsView({ data, days, onDays, sort, onSort, loading = f
     <HelpTip label={t("settings.moreAbout", { title: hoursLabel })}>{t("botProfile.analytics.hoursSavedHelp")}</HelpTip>
   );
   const figure = (value: string | null) => (totals && value !== null ? value : PENDING);
+  const money = (amount: number) => formatMoney(amount, data?.currency);
   const cost = totals
     ? totals.turns === 0
-      ? { shown: formatUsd(0), caption: t("botPanel.usage.costCaption", { caption: costCaption(billing) }) }
+      ? { shown: money(0), caption: t("botPanel.usage.costCaption", { caption: costCaption(billing) }) }
       : hasFiniteCost(totals.costUsd)
-        ? { shown: formatUsd(totals.costUsd), caption: t("botPanel.usage.costCaption", { caption: costCaption(billing) }) }
+        ? { shown: money(totals.costUsd), caption: t("botPanel.usage.costCaption", { caption: costCaption(billing) }) }
         : { shown: "-", caption: t("botPanel.usage.noPrice") }
     : { shown: PENDING, caption: t("botPanel.usage.costCaption", { caption: costCaption(billing) }) };
   const users = data ? sortTopUsers(data.topUsers, sort) : [];
@@ -259,43 +261,6 @@ export function BotAnalyticsView({ data, days, onDays, sort, onSort, loading = f
       </div>
 
       <SettingsGroup
-        title={t("botPanel.usage.title")}
-        groupId="botUsage"
-        accessory={
-          <button type="button" data-bot-analytics-all-bots="" className={cn(PILL, "ml-auto shrink-0")} onClick={onAllBots}>
-            {t("botPanel.usage.allBots")}
-          </button>
-        }
-      >
-        {empty ? (
-          <div data-bot-analytics-empty="" className="flex min-h-[44px] items-center px-4 py-2 text-[13px] leading-[18px] text-ink-secondary">{t("botPanel.usage.empty")}</div>
-        ) : (
-          <>
-            <CompactRow label={t("botPanel.usage.turns")}>
-              <span className={FIGURE}>{figure(totals ? formatCount(totals.turns) : null)}</span>
-            </CompactRow>
-            <CompactRow label={t("botPanel.usage.tokens")}>
-              <span className={FIGURE} title={totals ? formatCount(totals.tokens) : undefined}>{figure(totals ? formatTokens(totals.tokens) : null)}</span>
-            </CompactRow>
-            <DescribedRow label={t("botPanel.usage.cost")} description={cost.caption}>
-              <span className="tabular-nums text-[13px] leading-[18px] text-ink">{cost.shown}</span>
-            </DescribedRow>
-            <CompactRow label={t("botProfile.analytics.conversations")}>
-              <span className={FIGURE}>{figure(totals ? formatCount(totals.conversations) : null)}</span>
-            </CompactRow>
-            <CompactRow label={t("botProfile.analytics.routinesRun")}>
-              <span className={FIGURE}>{figure(totals ? formatCount(totals.routinesRun) : null)}</span>
-            </CompactRow>
-            <CompactRow label={t("botProfile.analytics.routinesFailed")}>
-              <span className={FIGURE}>{figure(totals ? formatCount(totals.routinesFailed) : null)}</span>
-            </CompactRow>
-          </>
-        )}
-      </SettingsGroup>
-
-      {proactive}
-
-      <SettingsGroup
         title={t("botProfile.analytics.topUsers")}
         groupId="botTopUsers"
         accessory={
@@ -340,6 +305,43 @@ export function BotAnalyticsView({ data, days, onDays, sort, onSort, loading = f
           })
         )}
       </SettingsGroup>
+
+      <SettingsGroup
+        title={t("botPanel.usage.title")}
+        groupId="botUsage"
+        accessory={
+          <button type="button" data-bot-analytics-all-bots="" className={cn(PILL, "ml-auto shrink-0")} onClick={onAllBots}>
+            {t("botPanel.usage.allBots")}
+          </button>
+        }
+      >
+        {empty ? (
+          <div data-bot-analytics-empty="" className="flex min-h-[44px] items-center px-4 py-2 text-[13px] leading-[18px] text-ink-secondary">{t("botPanel.usage.empty")}</div>
+        ) : (
+          <>
+            <CompactRow label={t("botPanel.usage.turns")}>
+              <span className={FIGURE}>{figure(totals ? formatCount(totals.turns) : null)}</span>
+            </CompactRow>
+            <CompactRow label={t("botPanel.usage.tokens")}>
+              <span className={FIGURE} title={totals ? formatCount(totals.tokens) : undefined}>{figure(totals ? formatTokens(totals.tokens) : null)}</span>
+            </CompactRow>
+            <DescribedRow label={t("botPanel.usage.cost")} description={cost.caption}>
+              <span className="tabular-nums text-[13px] leading-[18px] text-ink">{cost.shown}</span>
+            </DescribedRow>
+            <CompactRow label={t("botProfile.analytics.conversations")}>
+              <span className={FIGURE}>{figure(totals ? formatCount(totals.conversations) : null)}</span>
+            </CompactRow>
+            <CompactRow label={t("botProfile.analytics.routinesRun")}>
+              <span className={FIGURE}>{figure(totals ? formatCount(totals.routinesRun) : null)}</span>
+            </CompactRow>
+            <CompactRow label={t("botProfile.analytics.routinesFailed")}>
+              <span className={FIGURE}>{figure(totals ? formatCount(totals.routinesFailed) : null)}</span>
+            </CompactRow>
+          </>
+        )}
+      </SettingsGroup>
+
+      {proactive}
     </div>
   );
 }

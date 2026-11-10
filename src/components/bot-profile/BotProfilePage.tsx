@@ -625,8 +625,9 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
               {tab === "stats"
                 ? (
                     <>
-                      <BotUsageBreakdownSection bot={bot} />
+                      {/* #3401: the reference block first, our cost breakdown after it */}
                       {block("usage")}
+                      <BotUsageBreakdownSection bot={bot} />
                     </>
                   )
                 : tab === "appearance"

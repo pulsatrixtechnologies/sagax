@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { botUsage, cachedInput, cachedUsageNote, headlineTokens, tokensColumnLabel, contextValue, contextDetail, contextShare, costCaption, formatTaskTokens, formatTokens, formatUsd, uncachedInput, lastTurnDetail, sumUsage, usageChip, usageDetail } from "./usage";
+import { botUsage, cachedInput, cachedUsageNote, headlineTokens, tokensColumnLabel, contextValue, contextDetail, contextShare, costCaption, formatTaskTokens, formatMoney, formatTokens, formatUsd, uncachedInput, lastTurnDetail, sumUsage, usageChip, usageDetail } from "./usage";
 
 describe("usage formatting", () => {
   it("keeps output independent of the input headline, including a fully cached turn", () => {
@@ -174,5 +174,17 @@ describe("usage formatting", () => {
     expect(lastTurnDetail({ input: 0, output: 0, costUsd: null, turns: 0 })).toBeNull();
     expect(lastTurnDetail({ input: 500_000, output: 5_000, costUsd: null, turns: 3, lastTurn: { input: 210_000, output: 1_200, cachedInput: 209_000, costUsd: null } }))
       .toBe("Last message: 1k uncached input · 209k cached input · 1.2k output");
+  });
+});
+
+describe("formatMoney (#3401)", () => {
+  const plain = (text: string) => text.replace(/[  ]/g, " ");
+  it("writes money in the reader's language and currency", () => {
+    expect(formatMoney(9.59, null, "en")).toBe("$9.59");
+    expect(plain(formatMoney(9.59, null, "fr-CA"))).toBe("9,59 $");
+    expect(plain(formatMoney(9.59, "EUR", "fr"))).toBe("9,59 €");
+    expect(formatMoney(0, null, "en")).toBe("$0");
+    expect(formatMoney(0.004, null, "en")).toBe("$0.004");
+    expect(formatMoney(Number.NaN, null, "en")).toBe("");
   });
 });

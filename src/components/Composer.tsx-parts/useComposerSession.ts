@@ -4,7 +4,8 @@ import { visibleMessages, currentTaskBot, type Bot, type Group } from "@/state/s
 import { orgFullAccessFor } from "@/lib/full-access";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { useBoundedLock } from "@/lib/composer-lock";
-import { pendingQuestions } from "@/lib/pending-question";
+import { pendingQuestions, pendingRequests } from "@/lib/pending-question";
+import { useTopicPending } from "@/lib/use-topic-pending";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { sendKeyLabel, useSendKey } from "@/lib/send-key";
@@ -90,10 +91,17 @@ export function useComposerSession({
   // A bot's question waits in the chat; the composer stays free. Writing
   // about something else leaves it open (the bot never picks for the
   // person, and there is no X on a waiting question, #885).
-  const openQuestions = pendingQuestions(group ? group.messages : bot ? visibleMessages(bot) : []);
+  const shownMessages = group ? group.messages : bot ? visibleMessages(bot) : [];
+  const openQuestions = pendingQuestions(shownMessages);
+  // #3438: the questions in words the bot's work left for the person (a
+  // hand-off's question card, a parked teammate's input request), and what
+  // the earlier topics of the one conversation still wait on: the store
+  // holds the topic on screen only.
+  const openRequests = pendingRequests(shownMessages);
+  const topics = useTopicPending(group ? undefined : bot);
   // #3214: the pinned card over the box, approvals and questions together,
   // and which one the person is on (typing answers that question).
-  const pinned = usePinnedWaiting(approvals, openQuestions);
+  const pinned = usePinnedWaiting(approvals, openQuestions, openRequests, topics);
   const approvalBotFor = (pending: Pending) => pending.message.card?.approvalOrigin
     ? storeBots.find(candidate => candidate.id === pending.message.from?.botId)
     : group

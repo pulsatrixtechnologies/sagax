@@ -130,7 +130,7 @@ export function useComposerSend({
   refocusInput: () => void;
   /** #3214: the pinned question the typed text answers, when one waits
    * and takes a free answer (src/lib/pending-question.ts). */
-  pinnedQuestion: { requestId: string; answer: string } | null;
+  pinnedQuestion: { requestId: string; answer: string; threadId?: string } | null;
 }) {
   const uploadImage = useCallback(async (file: File): Promise<Attachment | null> => {
     await startAttachmentUpload(draftId, file, true);
@@ -256,18 +256,20 @@ export function useComposerSend({
     // settles at once, and comes back unanswered with the words restored
     // if the server refuses (unless it was answered elsewhere meanwhile).
     if (pinnedQuestion && attachments.length === 0) {
+      // #3438: a question of an earlier topic is answered in its own thread
       const { requestId, answer } = pinnedQuestion;
+      const askedIn = pinnedQuestion.threadId ?? threadId;
       const typed = text;
-      dispatch({ type: "cardSettled", threadId, requestId, patch: { answered: "answer", answeredText: answer } });
+      dispatch({ type: "cardSettled", threadId: askedIn, requestId, patch: { answered: "answer", answeredText: answer } });
       dispatch({
         type: "decideRequest",
-        threadId,
+        threadId: askedIn,
         requestId,
         behavior: "answer",
         message: answer,
         onError: (_message, settledElsewhere) => {
           if (settledElsewhere) return;
-          dispatch({ type: "cardSettled", threadId, requestId, patch: { answered: undefined, answeredText: undefined } });
+          dispatch({ type: "cardSettled", threadId: askedIn, requestId, patch: { answered: undefined, answeredText: undefined } });
           setText(typed);
         },
       });

@@ -93,12 +93,16 @@ function AttentionSheet({
   title,
   provenance,
   onReply,
+  embedded = false,
+  settledNote,
 }: {
   card: PersonAttentionCard;
   bot?: Bot;
   title: string;
   provenance: ReactNode;
   onReply: (text: string) => Promise<void>;
+  embedded?: boolean;
+  settledNote?: string;
 }) {
   const choices = useMemo(() => attentionChoices(card), [card]);
   const [draft, setDraft] = useState("");
@@ -128,6 +132,7 @@ function AttentionSheet({
     <QuestionSheet
       ariaLabel={title}
       settled={settled}
+      embedded={embedded}
       onKeyDown={settled || !choices.length ? undefined : sheetKeyHandler(choices.length, (index) => pick(choices[index]!))}
     >
       <div data-attention-head className="mb-2.5 flex min-w-0 items-center gap-2.5">
@@ -171,7 +176,7 @@ function AttentionSheet({
       {settled && (
         <div data-attention-answered>
           {answer && !answer.picked ? <SheetNote>{answer.text}</SheetNote> : null}
-          {!answer || answer.picked ? <SheetNote>{t("chat.inputRequest.answered")}</SheetNote> : null}
+          {!answer || answer.picked ? <SheetNote>{!answer && settledNote ? settledNote : t("chat.inputRequest.answered")}</SheetNote> : null}
         </div>
       )}
     </QuestionSheet>
@@ -184,8 +189,14 @@ export function AttentionCard({
   onOpenThread,
   onOpenRun,
   onReply,
+  embedded,
+  settledNote,
 }: {
   card: PersonAttentionCard;
+  /** Inside the pinned card over the composer (#3438): no frame of its own. */
+  embedded?: boolean;
+  /** What a card closed without the person's answer says (an input request that expired). */
+  settledNote?: string;
   /** The bot that asks: its mascot heads the answerable card (one conversation). */
   bot?: Bot;
   /** Threads shown only: the thread the bot said it in. */
@@ -245,7 +256,7 @@ export function AttentionCard({
   if (onReply) {
     return (
       <section data-attention-card data-attention-kind={card.kind} data-attention-sheet aria-label={title} className="relative w-full">
-        <AttentionSheet card={card} bot={bot} title={title} provenance={provenance(true)} onReply={onReply} />
+        <AttentionSheet card={card} bot={bot} title={title} provenance={provenance(true)} onReply={onReply} embedded={embedded} settledNote={settledNote} />
       </section>
     );
   }

@@ -8,6 +8,7 @@ import { useShowThreads } from "@/lib/thread-preferences";
 import { isAppleMobileWebClient } from "@/lib/tool-activity-rows";
 import { repeatedFailureIds } from "../../../shared/failure-dedup";
 import { groupTranscript, isHiddenStatusActivity, isTurnStoppedNotice } from "@/lib/activity-runs";
+import { inputRequestsDrawnElsewhere } from "@/lib/pending-question";
 import { collapseBotExchanges } from "@/lib/bot-exchange";
 import { foldCollapsedEntry, voiceCallPlan } from "@/lib/voice-call-transcript";
 import { withoutDeadThreadChips } from "@/lib/dead-thread-chips";
@@ -120,8 +121,11 @@ export const MessagesList = memo(function MessagesList({
     // The same failure of this bot, repeated since it last answered, is
     // drawn once: the last one (shared/failure-dedup.ts).
     const repeats = repeatedFailureIds(messages, botId);
+    // #3438: one card per request: a hand-off's question card and the parked
+    // work's input request ask the same thing; the card is the one drawn
+    const drawnElsewhere = inputRequestsDrawnElsewhere(transcript);
     const shown = withoutDeadThreadChips(messages, owners).filter((message) =>
-      !repeats.has(message.id) && !isTurnStoppedNotice(message) && !isHiddenStatusActivity(message)
+      !repeats.has(message.id) && !drawnElsewhere.has(message.id) && !isTurnStoppedNotice(message) && !isHiddenStatusActivity(message)
       // a failed routine run and a routine's access card pass as a banner
       // (TransientNotice), never a row (shared/transient-notices.ts)
       && !isTransientChatNotice(message));

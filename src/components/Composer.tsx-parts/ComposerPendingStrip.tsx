@@ -21,12 +21,16 @@ export function ComposerPendingStrip({
 }) {
   // #3214: everything this conversation's bots wait on from the person,
   // pinned over the box until answered: its approvals (this turn's and its
-  // parallel tasks') and its open questions, oldest first, one at a time.
+  // parallel tasks'), its open questions and its questions in words (#3438),
+  // in this topic and the earlier ones, oldest first, one at a time.
   // #2082 still holds for questions: a parallel task's or a run's question
   // stays inline in its own conversation, never over another's thread.
+  // #3438: a question in words names the bot whose work asks it
   const nameFor = (item: PinnedItem) => item.kind === "approval"
     ? approvalBotFor(item.pending)?.name ?? bot?.name ?? ""
-    : storeBots.find((candidate) => candidate.id === item.message.from?.botId)?.name ?? bot?.name ?? "";
+    : item.kind === "request"
+      ? item.card.botName || bot?.name || ""
+      : storeBots.find((candidate) => candidate.id === item.message.from?.botId)?.name ?? bot?.name ?? "";
   return (
     <PinnedWaitingCard
       pinned={pinned}

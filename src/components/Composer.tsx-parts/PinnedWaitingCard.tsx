@@ -21,19 +21,20 @@ import { useState } from "react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { pinnedItems, type PinnedItem } from "@/lib/pending-question";
+import { pinnedItems, type PersonRequest, type PinnedItem, type TopicPending } from "@/lib/pending-question";
 import { useStore, type Bot, type Message } from "@/state/store";
 import { approvalCardStaysInChat } from "../ApprovalCard";
 import { PendingApprovalActions, PendingApprovalPanel, readOnlyApprovals, Stepper, type Pending } from "../PendingApproval";
 import { QuestionCard } from "../QuestionCard";
+import { PersonRequestCard } from "../InputRequestCard";
 
 /** How much of the question the folded line keeps. */
 const FOLDED_TEXT_MAX = 72;
 
 /** The pinned card's own state, kept by the composer session so the box
  * knows which item the person is on (typing answers that one). */
-export function usePinnedWaiting(approvals: readonly Pending[], questions: readonly Message[]) {
-  const items = pinnedItems(approvals, questions);
+export function usePinnedWaiting(approvals: readonly Pending[], questions: readonly Message[], requests: readonly PersonRequest[] = [], topics: readonly TopicPending[] = []) {
+  const items = pinnedItems(approvals, questions, requests, topics);
   // the item is remembered by key, not by position: one answered ahead of
   // it must not move the person to another request
   const [key, setKey] = useState<string | undefined>(undefined);
@@ -56,17 +57,20 @@ export type PinnedWaiting = ReturnType<typeof usePinnedWaiting>;
 export function pinnedItemText(item: PinnedItem): string {
   const raw = item.kind === "question"
     ? item.message.card?.questionRequest?.questions[0]?.question ?? item.message.card?.title ?? ""
-    : item.pending.message.card?.title || item.pending.detail || item.pending.tool;
+    : item.kind === "request"
+      ? item.card.items[0]?.text ?? ""
+      : item.pending.message.card?.title || item.pending.detail || item.pending.tool;
   const text = raw.replace(/\s+/g, " ").trim();
   return text.length > FOLDED_TEXT_MAX ? `${text.slice(0, FOLDED_TEXT_MAX - 1).trimEnd()}…` : text;
 }
 
 /** The message this item came from, when it is in this conversation's
- * transcript: a parallel task's approval, or one whose card never stays in
- * the chat, has nothing to scroll to. */
+ * transcript (this topic or an earlier one, #3438): a parallel task's
+ * approval, or one whose card never stays in the chat, has nothing to
+ * scroll to. An approval of an earlier topic sits in that topic. */
 export function pinnedItemMessageId(item: PinnedItem, threadId: string): string | undefined {
-  if (item.kind === "question") return item.message.id;
-  if (item.pending.threadId && item.pending.threadId !== threadId) return undefined;
+  if (item.kind === "question" || item.kind === "request") return item.message.id;
+  if (!item.threadId && item.pending.threadId && item.pending.threadId !== threadId) return undefined;
   return approvalCardStaysInChat(item.pending.message.card) ? item.pending.message.id : undefined;
 }
 
@@ -95,6 +99,8 @@ export function PinnedWaitingCard({
   if (!current) return null;
   const name = nameFor(current);
   const messageId = pinnedItemMessageId(current, threadId);
+  // #3438: an item of an earlier topic lives in that topic's thread
+  const askedIn = current.threadId ?? threadId;
   const stepper = items.length > 1
     ? <Stepper index={index} count={items.length} onPrevious={index > 0 ? () => go(index - 1) : undefined} onNext={index < items.length - 1 ? () => go(index + 1) : undefined} />
     : null;
@@ -116,7 +122,7 @@ export function PinnedWaitingCard({
   const jumpButton = messageId ? (
     <button
       type="button"
-      onClick={() => dispatch({ type: "focusMessage", threadId, messageId })}
+      onClick={() => dispatch({ type: "focusMessage", threadId: askedIn, messageId })}
       className="flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-1 text-[12px] text-ink-secondary underline-offset-2 hover:text-ink hover:underline"
       aria-label={t("pinned.seeInConversation")}
       title={t("pinned.seeInConversation")}
@@ -160,7 +166,16 @@ export function PinnedWaitingCard({
       data-pinned-waiting="open"
       className={frame}
     >
-      {current.kind === "question" ? (
+      {current.kind === "request" ? (
+        <div className="px-4 pb-3 pt-2.5" data-pinned-body="request">
+          <div className="mb-2 flex min-w-0 items-center gap-2">
+            {mark}
+            <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink-secondary" data-pinned-title="">{t("pinned.waiting", { name })}</span>
+            {controls}
+          </div>
+          <PersonRequestCard key={current.key} message={current.message} card={current.card} threadId={askedIn} conversationBotId={bot?.id} embedded />
+        </div>
+      ) : current.kind === "question" ? (
         <div className="px-4 pb-3 pt-2.5" data-pinned-body="question">
           <div className="mb-2 flex min-w-0 items-center gap-2">
             {mark}
@@ -169,7 +184,7 @@ export function PinnedWaitingCard({
           </div>
           <QuestionCard
             key={current.key}
-            threadId={threadId}
+            threadId={askedIn}
             bot={questionBot(current.message, bot, name)}
             message={current.message}
             embedded
@@ -191,12 +206,13 @@ export function PinnedWaitingCard({
           <PendingApprovalActions
             key={`${current.key}-actions`}
             pending={current.pending}
-            threadId={threadId}
+            threadId={askedIn}
             bot={botFor(current.pending)}
             // a parallel task's "cancel" stops that task, a bot-to-bot
-            // conversation's stops that conversation's turn, never this one's
+            // conversation's stops that conversation's turn, an earlier
+            // topic's stops that topic's turn, never this one's
             onCancelTurn={current.pending.threadId && current.pending.threadId !== threadId && botFor(current.pending)
-              ? current.pending.askedBy !== undefined
+              ? current.pending.askedBy !== undefined || current.threadId
                 ? () => dispatch({ type: "interrupt", botId: botFor(current.pending)!.id, threadId: current.pending.threadId! })
                 : () => dispatch({ type: "stopParallelTask", botId: botFor(current.pending)!.id, threadId: current.pending.threadId! })
               : onCancelTurn}

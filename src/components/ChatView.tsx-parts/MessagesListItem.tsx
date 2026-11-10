@@ -340,7 +340,7 @@ export function MessagesListItem({
     }
     // 2026-11-05: what a bot's turn elsewhere left for the person (src/components/AttentionCard.tsx)
     if (m.attention && m.role === "bot" && m.kind === "text") {
-      return <MessageBoundary fallbackText={m.text ?? ""}><AttentionRow message={m} threadId={threadId} /></MessageBoundary>;
+      return <MessageBoundary fallbackText={m.text ?? ""}><AttentionRow message={m} threadId={threadId} botId={botId} /></MessageBoundary>;
     }
     // a bot's page proposal: its approval card (src/components/PublishedPages.tsx)
     if (m.pagePublish && m.role === "bot") {

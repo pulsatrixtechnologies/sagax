@@ -6,12 +6,12 @@ import { describe, expect, it } from "vitest";
 
 import type { ProviderAuthenticationStatus } from "../contracts.ts";
 import { grokAccountReach } from "../drivers/acp/grok-tool-catalog.ts";
-import { LOGIN_MARKER, loginCliFor, PrincipalEngineLogins, readGrokAccountIdentity, type LoginController } from "./principal-engine-logins.ts";
+import { LOGIN_MARKER, loginCliFor, PrincipalEngineLogins, readGrokAccountIdentity, type ConnectorAccountChange, type LoginController } from "./principal-engine-logins.ts";
 
 const A = "pr_00000000-0000-4000-8000-00000000000a";
 const B = "pr_00000000-0000-4000-8000-00000000000b";
 
-function harness(options: { onClaudeLinked?: (principalId: string) => void; probeModels?: (cli: string, env: Record<string, string | undefined>) => Promise<Array<{ id: string }> | null>; probeReach?: (cli: string, env: Record<string, string | undefined>) => Promise<unknown> } = {}) {
+function harness(options: { onClaudeLinked?: (principalId: string) => void; probeModels?: (cli: string, env: Record<string, string | undefined>) => Promise<Array<{ id: string }> | null>; probeReach?: (cli: string, env: Record<string, string | undefined>) => Promise<unknown>; onConnectorAccountChanged?: (principalId: string, change: ConnectorAccountChange) => void; onSignInChanged?: (principalId: string, change: ConnectorAccountChange) => void } = {}) {
   const dataDir = mkdtempSync(join(tmpdir(), "engine-logins-"));
   const made: Array<{ driver: string; home: string; env: Record<string, string | undefined>; finish: () => Promise<void>; signedOut: boolean }> = [];
   const logins = new PrincipalEngineLogins({
@@ -42,6 +42,8 @@ function harness(options: { onClaudeLinked?: (principalId: string) => void; prob
     ...(options.onClaudeLinked ? { onClaudeLinked: options.onClaudeLinked } : {}),
     ...(options.probeModels ? { probeModels: options.probeModels } : {}),
     probeReach: options.probeReach ?? (async () => null),
+    ...(options.onConnectorAccountChanged ? { onConnectorAccountChanged: options.onConnectorAccountChanged } : {}),
+    ...(options.onSignInChanged ? { onSignInChanged: options.onSignInChanged } : {}),
   });
   return { dataDir, logins, made };
 }
@@ -165,6 +167,33 @@ describe("2026-10-29: a second Grok sign-in per person", () => {
     expect(logins.expired(A, "grokAgent")).toBe(false);
     expect(logins.clearAll(A)).toBe(2);
     expect(existsSync(join(dataDir, "principals", A, "grok-2"))).toBe(false);
+  });
+
+  it("#3357: says a real sign-in change (sign-in, sign-out, reset) apart from a reach probe's notice", async () => {
+    const reach: ConnectorAccountChange[] = [];
+    const changes: ConnectorAccountChange[] = [];
+    const { logins, made } = harness({
+      probeReach: async () => ({ sessionMcpResolved: true, servers: [] }),
+      onConnectorAccountChanged: (_principal, change) => { reach.push(change); },
+      onSignInChanged: (_principal, change) => { changes.push(change); },
+    });
+    await logins.start(A, "grok", "session-a", "second");
+    await made[0]!.finish();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(changes).toEqual([{ driver: "grokAgent", slot: "second", instanceId: "grok", signedIn: true }]);
+    await logins.start(A, "claude", "session-a");
+    await made[1]!.finish();
+    expect(changes.at(-1)).toEqual({ driver: "claudeAgent", slot: "primary", instanceId: "claude", signedIn: true });
+    // a reach probe tells the registry, never the sign-in change
+    const seen = reach.length;
+    await logins.readReach(A, "grok", "second", true);
+    expect(reach).toHaveLength(seen + 1);
+    expect(changes).toHaveLength(2);
+    await logins.signOut(A, "grok", "session-a", "second");
+    expect(changes.at(-1)).toEqual({ driver: "grokAgent", slot: "second", instanceId: "grok", signedIn: false });
+    logins.clearAll(A);
+    expect(changes.at(-1)).toEqual({ cleared: true });
+    expect(changes).toHaveLength(4);
   });
 
   it("reads what a sign-in brings through grok.com once it is signed in, by its folder", async () => {

@@ -9,7 +9,10 @@
 // host is not callable, and the connectors list says so.
 import { connectorCallActs, connectorCallId } from "../../shared/connector-call.ts";
 import type { ConnectorEntry, ConnectorProvider } from "./types.ts";
+import type { ConnectorHostPoolStats } from "./host-pool.ts";
 import type { ConnectorHost, ConnectorHostCall, ConnectorHostResult } from "./hosts/types.ts";
+import type { ConnectorAccountChange } from "../engines/principal-engine-logins.ts";
+import type { ConnectorRegistry } from "./registry.ts";
 
 /** Counters of one engine and provider (P7, for the dev panel). */
 export interface ConnectorHubStat {
@@ -21,6 +24,16 @@ export interface ConnectorHubStat {
   lastOkAt?: number;
   lastError?: string;
   lastErrorAt?: number;
+  /** #3357: calls that ran on a process the pool already kept warm. */
+  warm?: number;
+  /** #3357: the model rounds those calls spent, as the CLIs reported them. */
+  input?: number;
+  output?: number;
+}
+
+/** #3357: one provider's warm pool, for the dev panel. */
+export interface ConnectorHubPool extends ConnectorHostPoolStats {
+  provider: ConnectorProvider;
 }
 
 export const CONNECTOR_HUB_ERROR_MAX = 300;
@@ -46,7 +59,29 @@ export interface ConnectorHub {
   /** Run one approved call. A provider with no host answers a plain error. */
   call(call: ConnectorHostCall): Promise<ConnectorHostResult>;
   stats(): ConnectorHubStat[];
+  /** #3357: the warm processes each provider keeps. */
+  pools(): ConnectorHubPool[];
+  /** #3357: retire this person's warm processes on one account (its
+   * provider and key: its sign-out, a new sign-in on it), or on every
+   * provider without one (a reset of the person's sign-ins). A call in
+   * progress finishes with its real result. */
+  stopPrincipal(principalId: string, account?: { provider: ConnectorProvider; accountKey: string }): Promise<void>;
   close(): Promise<void>;
+}
+
+/** #3357: retire the warm hosts of the sign-in that changed (principal-engine-logins.ts
+ * onSignInChanged: a new sign-in, a sign-out, a reset; never a reach
+ * probe), only that account's, or all of the person's on a reset. A call
+ * still running finishes with its real result. */
+export async function retireConnectorHosts(
+  hub: Pick<ConnectorHub, "stopPrincipal">,
+  registry: Pick<ConnectorRegistry, "accountsOfSignIn">,
+  principalId: string,
+  change: ConnectorAccountChange,
+): Promise<void> {
+  const accounts = registry.accountsOfSignIn(change);
+  if (accounts === null) return hub.stopPrincipal(principalId);
+  await Promise.all(accounts.map((account) => hub.stopPrincipal(principalId, account)));
 }
 
 export function createConnectorHub(hosts: readonly ConnectorHost[], now: () => number = Date.now): ConnectorHub {
@@ -58,6 +93,11 @@ export function createConnectorHub(hosts: readonly ConnectorHost[], now: () => n
     const key = `${engine}\u0000${provider}`;
     const stat = counters.get(key) ?? { engine, provider, calls: 0, ok: 0, errors: 0 };
     stat.calls += 1;
+    if (result.warm) stat.warm = (stat.warm ?? 0) + 1;
+    if (result.usage) {
+      stat.input = (stat.input ?? 0) + result.usage.input;
+      stat.output = (stat.output ?? 0) + result.usage.output;
+    }
     if (result.isError) {
       stat.errors += 1;
       stat.lastError = result.text.slice(0, CONNECTOR_HUB_ERROR_MAX);
@@ -95,6 +135,11 @@ export function createConnectorHub(hosts: readonly ConnectorHost[], now: () => n
       return result;
     },
     stats: () => [...counters.values()].map((stat) => ({ ...stat })).sort((a, b) => `${a.engine} ${a.provider}`.localeCompare(`${b.engine} ${b.provider}`)),
+    pools: () => hosts.flatMap((host) => (host.poolStats ? [{ provider: host.provider, ...host.poolStats() }] : [])),
+    async stopPrincipal(principalId, account) {
+      const targets = account ? hosts.filter((host) => host.provider === account.provider) : hosts;
+      await Promise.all(targets.map(async (host) => { try { await host.stopPrincipal?.(principalId, account?.accountKey); } catch { /* the next call starts fresh */ } }));
+    },
     async close() {
       await Promise.all(hosts.map(async (host) => { try { await host.close?.(); } catch { /* a host that cannot stop is gone with the process */ } }));
     },

@@ -67,7 +67,7 @@ posixOnly("Codex connector host (#3353)", () => {
     cli: FAKE_CODEX,
     env: { ...process.env, CODEX_HOME: home, OPENAI_API_KEY: "sk-must-not-reach", FAKE_CODEX_CONNECTOR_REPLAY: REPLAY, FAKE_CODEX_METHOD_LOG: methodLog, FAKE_CODEX_DUMP: dumpFile, ...extra },
   });
-  const host = () => createCodexConnectorHost({ launch: (principalId) => (principalId === "ana" ? launchFor() : undefined), gate: (_label, run) => run(), timeoutMs: 15_000, listTimeoutMs: 15_000 });
+  const host = () => createCodexConnectorHost({ launch: (principalId) => (principalId === "ana" ? launchFor() : undefined), gate: (_label, run) => run(), timeoutMs: 15_000, listTimeoutMs: 15_000, pool: { idleMs: 0 } });
 
   async function listed(): Promise<ConnectorAccount> {
     const listing = await host().listApps(launchFor());

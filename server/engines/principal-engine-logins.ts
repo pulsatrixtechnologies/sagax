@@ -156,6 +156,12 @@ export interface PrincipalEngineLoginsOptions {
    * forgets it (server/connectors/registry.ts). A Grok sign-in is said
    * once its reach was probed. */
   onConnectorAccountChanged?: (principalId: string, change: ConnectorAccountChange) => void;
+  /** #3357: a real change of one of the person's sign-ins only: a new
+   * sign-in, a sign-out, or all of them cleared. Unlike
+   * onConnectorAccountChanged it never fires after a reach probe, so what
+   * runs on a sign-in (a warm connector host) is retired only when that
+   * sign-in itself changed. */
+  onSignInChanged?: (principalId: string, change: ConnectorAccountChange) => void;
 }
 
 export type ConnectorAccountChange =
@@ -327,6 +333,7 @@ export class PrincipalEngineLogins {
       };
       const onAuthenticated = async () => {
         this.markSignedIn(principalId, driver, slot, instanceId);
+        this.signInChanged(principalId, { driver, slot, instanceId, signedIn: true });
         if (driver === "claudeAgent") this.options.onClaudeLinked?.(principalId);
         try { this.options.onEngineSignedIn?.(principalId, driver); } catch { /* best effort */ }
         // what this Grok sign-in brings through grok.com, known before its
@@ -354,6 +361,7 @@ export class PrincipalEngineLogins {
           // The marker follows the CLI's verdict even when the callback raced.
           if (status.phase === "succeeded" && (!this.signedIn(principalId, driver, slot, instanceId) || this.expired(principalId, driver, slot, instanceId))) {
             this.markSignedIn(principalId, driver, slot, instanceId);
+            this.signInChanged(principalId, { driver, slot, instanceId, signedIn: true });
             try { this.options.onEngineSignedIn?.(principalId, driver); } catch { /* best effort */ }
             if (driver === "grokAgent") this.warmReach(principalId, instanceId, slot, true);
             else this.connectorAccountChanged(principalId, { driver, slot, instanceId, signedIn: true });
@@ -376,6 +384,7 @@ export class PrincipalEngineLogins {
           // #3344: that sign-in's connectors are no longer this person's
           if (driver === "grokAgent") forgetGrokAccountReach(home);
           this.connectorAccountChanged(principalId, { driver, slot, instanceId, signedIn: false });
+          this.signInChanged(principalId, { driver, slot, instanceId, signedIn: false });
         },
       },
     };
@@ -480,6 +489,10 @@ export class PrincipalEngineLogins {
     try { this.options.onConnectorAccountChanged?.(principalId, change); } catch (error) { reportBackgroundError(error); }
   }
 
+  private signInChanged(principalId: string, change: ConnectorAccountChange): void {
+    try { this.options.onSignInChanged?.(principalId, change); } catch (error) { reportBackgroundError(error); }
+  }
+
   async start(principalId: string, instanceId: string, sessionId: string, slot: LoginSlot = "primary"): Promise<ProviderAuthenticationStart> {
     const { instance } = this.loginInstance(principalId, instanceId, slot);
     return this.sessions.start(instance, sessionId);
@@ -530,6 +543,7 @@ export class PrincipalEngineLogins {
     for (const key of this.knownModels.keys()) if (key.startsWith(`${principalId}/`)) this.knownModels.delete(key);
     for (const key of this.reachRead) if (key.startsWith(`${principalId}/`)) this.reachRead.delete(key);
     this.connectorAccountChanged(principalId, { cleared: true });
+    this.signInChanged(principalId, { cleared: true });
     return cleared;
   }
 

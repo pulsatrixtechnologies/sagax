@@ -14,9 +14,11 @@
 // provider's own tool id, the exact arguments, read or send), the person's
 // approval settings decide it as they decide a native connector call, and
 // only an allowed call reaches the provider's host (server/connectors/hub.ts).
-// A declined call reaches no host.
+// A declined call reaches no host. #3357: a call that ran is handed on
+// (`ran`), so its model round is recorded as usage on the calling thread.
 import { z } from "zod";
 import type { ConnectorHub } from "../connectors/hub.ts";
+import type { ConnectorHostResult } from "../connectors/hosts/types.ts";
 import type { ConnectorAccount, ConnectorEntry } from "../connectors/types.ts";
 import type { HeldDecision } from "../harness/held-requests.ts";
 import type { InternalRouteHandler } from "./internal-route.ts";
@@ -154,6 +156,23 @@ export interface CallConnectorRouteDeps extends Omit<ConnectorsRouteDeps, "calla
    * the calling person, when the host answers that its sign-in is missing
    * or expired. True when the card was posted. */
   signInCard?(input: { botId: string; threadId: string; principalId: string; account: ConnectorAccount }): boolean | void;
+  /** #3357: a call reached its host: its model round is recorded as usage on
+   * this calling thread, and the conversation's Connectors record counts it
+   * (the dev panel). Never fails the call. */
+  ran?(input: CallConnectorRan): void;
+}
+
+/** #3357: one call a host ran, as the route hands it on. */
+export interface CallConnectorRan {
+  botId: string;
+  threadId: string;
+  principalId: string;
+  account: ConnectorAccount;
+  connector: ConnectorEntry;
+  tool: string;
+  /** the calling turn's driver kind */
+  engine: string;
+  result: ConnectorHostResult;
 }
 
 const callBody = z.object({
@@ -222,6 +241,9 @@ export function createCallConnectorInternalRoute(deps: CallConnectorRouteDeps): 
       return json(res, 200, { ok: false, declined: true, error: decision.message?.trim() || `The call to ${entry.name} (${toolId}) was declined, so it was not run.` });
     }
     const result = await hub.call({ principalId, account, connector: entry, tool: toolId, arguments: args, engine: held.engine });
+    try {
+      deps.ran?.({ botId: capability.botId, threadId: capability.threadId, principalId, account, connector: entry, tool: toolId, engine: held.engine, result });
+    } catch { /* bookkeeping never fails the call */ }
     if (result.needsSignIn) {
       const posted = deps.signInCard ? deps.signInCard({ botId: capability.botId, threadId: capability.threadId, principalId, account }) !== false : false;
       return json(res, 200, {

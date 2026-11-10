@@ -3,7 +3,7 @@
 // the person set up that this turn could not use (to reconnect). Pure: the
 // caller hands every list it already holds when it builds the turn.
 import { PERSPICAX_MCP_PREFIX as PERSPICAX, reservedMcpName } from "../../shared/mcp-reserved-names.ts";
-import { TURN_CONNECTORS_MAX, type TurnConnector, type TurnConnectors } from "../../shared/turn-connectors.ts";
+import { normalizeHubRows, TURN_CONNECTOR_HUB_MAX, TURN_CONNECTORS_MAX, type TurnConnector, type TurnConnectorHubProvider, type TurnConnectorHubRow, type TurnConnectors } from "../../shared/turn-connectors.ts";
 
 export interface TurnConnectorsInput {
   at: number;
@@ -75,4 +75,52 @@ export function turnConnectorsRecord(input: TurnConnectorsInput): TurnConnectors
     connectors: sorted.slice(0, TURN_CONNECTORS_MAX),
     ...(claudeAccount ? { claudeAccount: true as const } : {}),
   };
+}
+
+/** #3357: one call_connector call that reached its host. */
+export interface TurnConnectorHubCall {
+  provider: TurnConnectorHubProvider;
+  /** the connector's name, as the person's registry lists it */
+  name: string;
+  isError: boolean;
+  warm: boolean;
+  /** the provider's small model round, when one ran and was reported */
+  input?: number;
+  output?: number;
+  at: number;
+}
+
+/** A new turn's record keeps the conversation's hub counters: they count the
+ * whole conversation, and a call of this turn may land before the turn's own
+ * record is written (the deferred patch). */
+export function keepHubRows(previous: TurnConnectors | undefined, next: TurnConnectors): TurnConnectors {
+  const hub = normalizeHubRows(previous?.hub);
+  return hub.length ? { ...next, hub } : next;
+}
+
+/** The conversation's record with one more hub call counted (the dev panel's
+ * Connectors card). Without a record yet (the call came before the turn's
+ * record was written), one is started with no mounted connector. */
+export function withHubCall(record: TurnConnectors | undefined, call: TurnConnectorHubCall): TurnConnectors {
+  const base: TurnConnectors = record ?? { at: call.at, connectors: [] };
+  const rows: TurnConnectorHubRow[] = normalizeHubRows(base.hub);
+  const key = call.name.trim().toLowerCase();
+  const at = rows.findIndex((row) => row.provider === call.provider && row.name.toLowerCase() === key);
+  const clean = (value: number | undefined) => (typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0);
+  const prev: TurnConnectorHubRow = at >= 0 ? rows[at]! : { provider: call.provider, name: call.name.trim(), calls: 0, errors: 0, warm: 0, input: 0, output: 0, at: call.at, last: "ok" };
+  const next: TurnConnectorHubRow = {
+    ...prev,
+    calls: prev.calls + 1,
+    errors: prev.errors + (call.isError ? 1 : 0),
+    warm: prev.warm + (call.warm ? 1 : 0),
+    input: prev.input + clean(call.input),
+    output: prev.output + clean(call.output),
+    at: call.at,
+    last: call.isError ? "error" : "ok",
+  };
+  if (at >= 0) rows[at] = next;
+  else rows.push(next);
+  const order = (row: TurnConnectorHubRow) => `${row.provider} ${row.name.toLowerCase()}`;
+  const hub = rows.sort((a, b) => order(a).localeCompare(order(b))).slice(0, TURN_CONNECTOR_HUB_MAX);
+  return { ...base, hub };
 }

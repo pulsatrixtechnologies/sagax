@@ -4,13 +4,15 @@
 // own Claude and Grok accounts, Perspicax, their own MCP servers, this
 // server's MCP servers and the bot's plugins. Each row says Connected or
 // To reconnect. Before the first recorded turn, the servers this bot is set
-// to mount stand in, and the card says so.
+// to mount stand in, and the card says so. #3357: below, the connectors this
+// conversation called through call_connector, with their calls, failures,
+// calls served by a warm host and the provider's model tokens.
 import { useCallback, useState } from "react";
 import { Plug } from "lucide-react";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { dedupeConnectors, mcpServersForBot, useMcpServers } from "@/lib/mcp-servers";
-import { normalizeTurnConnectors, type TurnConnector, type TurnConnectorSource } from "../../../../shared/turn-connectors";
+import { normalizeTurnConnectors, type TurnConnector, type TurnConnectorHubProvider, type TurnConnectorHubRow, type TurnConnectorSource } from "../../../../shared/turn-connectors";
 import { Github, Slack } from "../../brand-icons";
 import { ClaudeMark, GrokMark } from "../../ProviderIcons";
 import { registerDevPod, type DevPodContext } from "../registry";
@@ -23,7 +25,16 @@ export interface ConnectorsData {
   claudeAccount: boolean;
   /** From the bot's settings, not from a turn (no turn recorded yet). */
   configured: boolean;
+  /** #3357: the connectors this conversation called through call_connector,
+   * with their counters (calls, failed, on a warm host, model tokens). */
+  hub: TurnConnectorHubRow[];
 }
+
+const HUB_PROVIDER_LABEL: Record<TurnConnectorHubProvider, LocaleKey> = {
+  "claude-ai": "devPods.connectors.hub.provider.claudeAi",
+  "grok-com": "devPods.connectors.hub.provider.grokCom",
+  "chatgpt-apps": "devPods.connectors.hub.provider.chatgptApps",
+};
 
 const SOURCE_LABEL: Record<TurnConnectorSource, LocaleKey> = {
   claude: "devPods.connectors.source.claude",
@@ -40,8 +51,9 @@ const SOURCES: readonly TurnConnectorSource[] = ["claude", "grok", "perspicax", 
 export function connectorsData(ctx: Pick<DevPodContext, "task" | "bot">, servers: ReturnType<typeof useMcpServers>["servers"]): ConnectorsData | null {
   const record = normalizeTurnConnectors(ctx.task?.connectors);
   if (record) {
-    if (!record.connectors.length && !record.claudeAccount) return null;
-    return { connectors: record.connectors, claudeAccount: record.claudeAccount === true, configured: false };
+    const hub = record.hub ?? [];
+    if (!record.connectors.length && !record.claudeAccount && !hub.length) return null;
+    return { connectors: record.connectors, claudeAccount: record.claudeAccount === true, configured: false, hub };
   }
   if (!servers) return null;
   const mounted = dedupeConnectors(mcpServersForBot(servers, ctx.bot.mcpServers));
@@ -54,12 +66,50 @@ export function connectorsData(ctx: Pick<DevPodContext, "task" | "bot">, servers
     })),
     claudeAccount: false,
     configured: true,
+    hub: [],
   };
 }
 
-/** Every connector the card counts, the account line included. */
+/** Every connector the card counts, the account line and the called ones included. */
 export function connectorsCount(data: ConnectorsData): number {
-  return data.connectors.length + (data.claudeAccount ? 1 : 0);
+  return data.connectors.length + (data.claudeAccount ? 1 : 0) + data.hub.length;
+}
+
+/** #3357: one called connector's counters, in a short line. */
+function hubCounters(row: TurnConnectorHubRow): string {
+  const parts = [t("devPods.connectors.hub.calls", { count: String(row.calls) })];
+  if (row.errors) parts.push(t("devPods.connectors.hub.errors", { count: String(row.errors) }));
+  if (row.warm) parts.push(t("devPods.connectors.hub.warm", { count: String(row.warm) }));
+  const tokens = row.input + row.output;
+  if (tokens) parts.push(t("devPods.connectors.hub.tokens", { count: tokens.toLocaleString() }));
+  return parts.join(" · ");
+}
+
+function HubRows({ rows }: { rows: TurnConnectorHubRow[] }) {
+  if (!rows.length) return null;
+  return (
+    <section data-connector-hub="" className="flex flex-col">
+      <h4 className="pb-0.5 text-[11px] font-medium uppercase tracking-[0.04em] text-ink-tertiary">{t("devPods.connectors.hub.title")}</h4>
+      <ul className="flex flex-col">
+        {rows.map((row) => (
+          <li key={`${row.provider}:${row.name}`} data-connector-hub-row={row.name} data-connector-hub-provider={row.provider} data-connector-hub-last={row.last} className="flex min-h-[40px] items-center gap-2 py-0.5">
+            {row.provider === "claude-ai" ? <ClaudeMark size={14} className="shrink-0" /> : row.provider === "grok-com" ? <GrokMark size={14} className="shrink-0 text-ink" /> : (
+              <span aria-hidden="true" className="flex size-[16px] shrink-0 items-center justify-center rounded-[5px] bg-hover text-[10px] font-semibold uppercase text-ink-secondary">
+                {row.name.trim().charAt(0) || "?"}
+              </span>
+            )}
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="flex min-w-0 items-baseline gap-2">
+                <span className="min-w-0 flex-1 break-words text-ink [overflow-wrap:anywhere]">{row.name}</span>
+                <span className="shrink-0 text-[12px] text-ink-secondary">{t(HUB_PROVIDER_LABEL[row.provider])}</span>
+              </span>
+              <span data-connector-hub-counters="" className={`text-[12px] tabular-nums ${row.last === "error" ? "text-warning" : "text-ink-secondary"}`}>{hubCounters(row)}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 function ConnectorIcon({ connector }: { connector: TurnConnector }) {
@@ -128,6 +178,7 @@ function ConnectorsBody({ data, ctx }: { data: ConnectorsData; ctx: DevPodContex
           </section>
         );
       })}
+      <HubRows rows={data.hub} />
       <div className="-mx-1 flex flex-col items-start">
         {rows.length > CONNECTORS_SHOWN && (
           <button type="button" data-connectors-more="" onClick={() => setAll((value) => !value)} className="rounded-md px-1 py-0.5 text-[12px] text-ink-secondary hover:bg-hover hover:text-ink">

@@ -152,7 +152,9 @@
 //                   {tool, input, pid, grokHome, cwd} in FAKE_ACP_PINNED_CALLS,
 //                   a completed result, then the prompt stays open until
 //                   session/cancel. A refused ask runs nothing and ends the
-//                   prompt. As the real CLI, the managed gateway (and so the
+//                   prompt. Both ends carry a model round's usage in _meta
+//                   (modelId, inputTokens, outputTokens), as grok 1.0.77's
+//                   cancelled prompt does (#3357). As the real CLI, the managed gateway (and so the
 //                   connector tool) exists only with both GROK_MANAGED_*
 //                   variables "true": without them use_tool fails with no ask
 //                   and nothing runs.
@@ -164,7 +166,10 @@
 //                   leader's env, never this process's (#2747)
 //   FAKE_ACP_LAUNCH_COUNT_FILE  read-increment-write a process counter at
 //                       startup, so a test can tell a reused pooled session
-//                       (one launch) from a fresh child per turn (many)
+//                       (one launch) from a fresh child per turn (many).
+//                       A connector host's process (SAGAX_GROK_CONNECTOR_CALL)
+//                       is counted only with FAKE_ACP_COUNT_CONNECTOR_CALLS=1
+//                       (#3357: the warm host pool's launches)
 //   FAKE_ACP_RPC_DUMP   rewrite, after every request, this process's full
 //                       method list as a JSON array — per process, so a
 //                       pooled child keeps one dump and a replacement child
@@ -545,7 +550,8 @@ const launchTraceFile = process.env.FAKE_ACP_LAUNCH_TRACE_FILE;
 // probe, memory/review one-shots, and bare --version.
 const connectorCall = process.env.SAGAX_GROK_CONNECTOR_CALL === "1";
 const countLaunch = Boolean(launchCountFile)
-  && !modelProbe && !reachProbe && !backgroundText && !versionOnly && !connectorCall;
+  && !modelProbe && !reachProbe && !backgroundText && !versionOnly
+  && (!connectorCall || process.env.FAKE_ACP_COUNT_CONNECTOR_CALLS === "1");
 if (process.env.FAKE_ACP_DUMP && !modelProbe) {
   writeFileSync(process.env.FAKE_ACP_DUMP, JSON.stringify(dumpState, null, 2));
 }
@@ -766,21 +772,29 @@ function playPinned(msg: any): void {
   }
   update({ sessionUpdate: "tool_call", toolCallId, title: "use_tool", kind: "other", status: "pending", rawInput: { tool_name: tool, tool_input: askedInput } });
   pendingPermissionId = 9500;
+  const roundMeta = { modelId: "grok-fixture-fast", inputTokens: 120, outputTokens: 12, totalTokens: 132 };
   onPermissionAnswered = (allowed) => {
     if (!allowed) {
       update({ sessionUpdate: "tool_call_update", toolCallId, status: "failed" });
-      result(msg.id, { stopReason: "end_turn", _meta: {} });
+      result(msg.id, { stopReason: "end_turn", _meta: roundMeta });
       return;
     }
+    replayCancelMeta = roundMeta;
     if (process.env.FAKE_ACP_PINNED_CALLS) {
       appendFileSync(process.env.FAKE_ACP_PINNED_CALLS, `${JSON.stringify({ tool, input: askedInput, pid: process.pid, grokHome: process.env.GROK_HOME ?? null, cwd: process.cwd() })}\n`);
     }
-    update({
-      sessionUpdate: "tool_call_update", toolCallId, status: "completed",
-      rawOutput: { type: "MCP", tool_name: tool, server_name: "managed_gateway:cursor", output: `pinned result of ${tool} for ${JSON.stringify(askedInput)}`, is_error: false },
-    });
-    hangingPromptId = msg.id;
-    hangKeepAlive = setInterval(() => {}, 1_000);
+    // #3357: FAKE_ACP_PINNED_HOLD_FILE holds the call's answer until that file exists
+    const answer = () => {
+      update({
+        sessionUpdate: "tool_call_update", toolCallId, status: "completed",
+        rawOutput: { type: "MCP", tool_name: tool, server_name: "managed_gateway:cursor", output: `pinned result of ${tool} for ${JSON.stringify(askedInput)}`, is_error: false },
+      });
+      hangingPromptId = msg.id;
+      hangKeepAlive = setInterval(() => {}, 1_000);
+    };
+    const hold = process.env.FAKE_ACP_PINNED_HOLD_FILE;
+    if (!hold) { answer(); return; }
+    const wait = setInterval(() => { if (existsSync(hold)) { clearInterval(wait); answer(); } }, 20);
   };
   out({ jsonrpc: "2.0", id: pendingPermissionId, method: "session/request_permission", params: {
     sessionId,

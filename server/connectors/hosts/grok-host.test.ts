@@ -77,7 +77,8 @@ posixOnly("Grok connector host (#3350)", () => {
       },
     };
   };
-  const host = createGrokConnectorHost({ launch, gate: (_label, run) => run(), timeoutMs: 30_000 });
+  // one process per call here (the warm pool has its own test, host-pool.test.ts)
+  const host = createGrokConnectorHost({ launch, gate: (_label, run) => run(), timeoutMs: 30_000, pool: { idleMs: 0 } });
   const reset = (variant: string) => {
     pinned = variant;
     rmSync(callsFile, { force: true });

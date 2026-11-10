@@ -2,7 +2,8 @@
  * a chat laid out like ChatView (floating header, centered 960px
  * transcript, composer dock). Sample transcript, no server. Not shipped in
  * the app.
- * ?skin=<id>&lang=<code>&pods=on|off&overlay=1&context=high */
+ * ?skin=<id>&lang=<code>&pods=on|off&overlay=1&context=high&hub=1
+ * (hub=1: connectors this conversation called through call_connector, #3357) */
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { MoreHorizontal } from "lucide-react";
@@ -51,6 +52,12 @@ const messages: Message[] = [
 messages.push(say("bot", "Sous-tâche A terminée : 3 fichiers vérifiés.", { parallelTask: { threadId: "bg-a", title: "Sous-tâche de test A", requestMessageId: "m1", role: "result" } } as Partial<Message>));
 const now = Date.now();
 const high = params.get("context") === "high";
+const hub = params.get("hub") === "1"
+  ? [
+    { provider: "grok-com", name: "Gmail", calls: 4, errors: 0, warm: 3, input: 480, output: 48, at: now - 20_000, last: "ok" },
+    { provider: "chatgpt-apps", name: "Drive", calls: 2, errors: 1, warm: 1, input: 0, output: 0, at: now - 5_000, last: "error" },
+  ]
+  : undefined;
 
 const bot = {
   id: "dev", threadId: "gallery", name: "Dev", title: "", description: "", color: "blue", notifications: true, unread: false, busy: false,
@@ -72,7 +79,7 @@ const bot = {
         { name: "github", source: "server", state: "connected" },
         { name: "twilio-docs", source: "server", state: "connected" },
         { name: "code-review", source: "plugin", state: "connected" },
-      ] } },
+      ], ...(hub ? { hub } : {}) } },
     { threadId: "bg-a", title: "Sous-tâche de test A", createdAt: 2, busy: false, activity: "idle",
       parallelOf: { threadId: "gallery", messageId: "m1", at: now - 65_000, outcome: "done", reportedAt: now - 60_000 } },
     { threadId: "bg-b", title: "Sous-tâche de test B", createdAt: 3, busy: false, activity: "idle",

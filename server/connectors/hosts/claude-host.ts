@@ -14,6 +14,11 @@
 // the approved arguments; any other ask is refused, so nothing but the
 // approved call runs. The result is read from the tool's own frame. No
 // token is read or kept: the CLI uses the sign-in it already has.
+//
+// #3357 (L14): the round's usage (the result line's tokens and cost) is
+// handed back for the calling thread. This host keeps no warm process: each
+// call's settings name its one approved tool, and `claude -p` reads its
+// settings once, at its start.
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
 import { randomBytes } from "node:crypto";
@@ -27,7 +32,7 @@ import { killCliTree } from "../../procs.ts";
 import { SPAWNED_PROXIES } from "../../proxy-paths.ts";
 import { claudeAiCallIsApproved, claudeAiCallResult, claudeAiPinnedPrompt, claudeAiServerStatus, claudeAiToolId } from "../providers/claude-ai.ts";
 import type { ConnectorAccount, ConnectorEntry } from "../types.ts";
-import type { ConnectorHost, ConnectorHostCall, ConnectorHostResult } from "./types.ts";
+import type { ConnectorHost, ConnectorHostCall, ConnectorHostResult, ConnectorHostUsage } from "./types.ts";
 
 /** The person's own Claude CLI on one sign-in: its command and environment
  * (CLAUDE_CONFIG_DIR in that sign-in's folder). */
@@ -143,6 +148,30 @@ function pinnedBroker(path: string, decide: (ask: Ask) => { behavior: "allow" | 
   });
 }
 
+/** #3357: the model round of one pinned `claude -p` call, from its stream:
+ * the model its init names, the result line's usage (input is the whole
+ * prompt: fresh, cache reads and cache writes; cachedInput the reads) and
+ * its reported cost. Undefined when the stream has no result line. */
+export function claudePinnedUsage(stdout: string, fallbackModel: string): ConnectorHostUsage | undefined {
+  let model: string | undefined;
+  let usage: ConnectorHostUsage | undefined;
+  const count = (value: unknown) => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : 0);
+  for (const line of stdout.split("\n")) {
+    if (!line.trim().startsWith("{")) continue;
+    let frame: { type?: unknown; subtype?: unknown; model?: unknown; usage?: Record<string, unknown>; total_cost_usd?: unknown };
+    try { frame = JSON.parse(line); } catch { continue; }
+    if (frame.type === "system" && frame.subtype === "init" && typeof frame.model === "string" && frame.model.trim()) model = frame.model.trim();
+    if (frame.type === "result" && frame.usage && typeof frame.usage === "object") {
+      const fresh = count(frame.usage.input_tokens);
+      const reads = count(frame.usage.cache_read_input_tokens);
+      const writes = count(frame.usage.cache_creation_input_tokens);
+      const cost = typeof frame.total_cost_usd === "number" && Number.isFinite(frame.total_cost_usd) && frame.total_cost_usd >= 0 ? frame.total_cost_usd : null;
+      usage = { model: "", input: fresh + reads + writes, output: count(frame.usage.output_tokens), ...(reads ? { cachedInput: reads } : {}), costUsd: cost };
+    }
+  }
+  return usage ? { ...usage, model: model ?? fallbackModel } : undefined;
+}
+
 export function createClaudeConnectorHost(deps: ClaudeConnectorHostDeps): ConnectorHost {
   const gate = deps.gate ?? (<T>(label: string, run: () => Promise<T>) => engineStartGate.run("probe", label, run));
   const timeoutMs = deps.timeoutMs ?? CALL_TIMEOUT_MS;
@@ -207,13 +236,16 @@ export function createClaudeConnectorHost(deps: ClaudeConnectorHostDeps): Connec
         onChild: (child, alive) => { if (alive) running.add(child); else running.delete(child); },
       }));
       const read = claudeAiCallResult(stdout.out, toolId);
+      // #3357: the pinned round's own usage, for the calling thread
+      const usage = claudePinnedUsage(stdout.out, deps.model ?? CLAUDE_CONNECTOR_MODEL);
       if (read.ran && allowed) {
         const result = read.result;
         if (result.isError && connectorReauthFailure(toolId, result.text)) return { ...signIn(name), text: `${signIn(name).text}\n${result.text}` };
-        return result;
+        return usage ? { ...result, usage } : result;
       }
       if (refused) {
         return {
+          ...(usage ? { usage } : {}),
           text: refused.altered
             ? `Claude asked to run ${toolId} with other input than the approved call, so it was not run and nothing was sent.`
             : `Claude asked to run ${refused.tool ?? "another tool"} instead of the approved ${toolId}, so it was not run and nothing was sent.`,
@@ -222,7 +254,7 @@ export function createClaudeConnectorHost(deps: ClaudeConnectorHostDeps): Connec
       }
       if (read.ran) {
         // ran without passing the check: never reported as the approved call
-        return { text: `Claude ran ${toolId} without the check of the approved call, so its result is not used.`, isError: true };
+        return { ...(usage ? { usage } : {}), text: `Claude ran ${toolId} without the check of the approved call, so its result is not used.`, isError: true };
       }
       if (stdout.error && stdout.error.endsWith("timed out")) return { text: `${name} did not answer in time, so its result is unknown.`, isError: true };
       const status = claudeAiServerStatus(read.reading.servers, name);
@@ -230,7 +262,7 @@ export function createClaudeConnectorHost(deps: ClaudeConnectorHostDeps): Connec
       if ((status && /needs.?auth/i.test(status)) || connectorReauthFailure(toolId, said) || /not logged in|please run \/login|invalid api key/i.test(said)) return signIn(name);
       if (status && /fail/i.test(status)) return { text: `${name} failed to connect on Claude, so nothing was run.`, isError: true };
       if (stdout.error) return { text: `Claude could not run ${name}: ${stdout.error}`, isError: true };
-      return { text: `Claude ended without calling ${toolId}, so nothing was run.${said ? ` It said: ${said.slice(0, 500)}` : ""}`, isError: true };
+      return { ...(usage ? { usage } : {}), text: `Claude ended without calling ${toolId}, so nothing was run.${said ? ` It said: ${said.slice(0, 500)}` : ""}`, isError: true };
     } catch (error) {
       return { text: `${name} failed: ${error instanceof Error ? error.message : String(error)}`, isError: true };
     } finally {

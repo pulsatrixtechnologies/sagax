@@ -74,7 +74,8 @@ describe("code work of a conversation", () => {
     const acp = (command: string, output = ""): CodeWorkToolCall => ({ name: command.slice(0, 80), ok: true, summary: commandSummary({ command }), input: toolDetailPreview({ command }), output });
     const origin = { repo: "acme/app", url: "https://github.com/acme/app" };
     const comment = acp("gh issue comment 1905 --body \"Steps to reproduce:\ngit checkout -b check\ngit push origin check\nThen approve once and the card shows twice, which is what the screenshot attached to the issue shows as well, on a clean checkout of main.\"");
-    expect(codeWork(at([comment]), origin)).toEqual({ pullRequests: [], branches: [], commits: [] });
+    // the comment itself is work on #1905 (#3409); the quoted git lines are not branches
+    expect(codeWork(at([comment]), origin)).toEqual({ pullRequests: [], branches: [], commits: [], issues: [{ repo: "acme/app", number: 1905, action: "commented", at: 1_000 }] });
     const push = acp("cd \"/Users/someone/Library/Mobile Documents/com~apple~CloudDocs/Projects/acme/app\" && git push origin fix/card", "To github.com:acme/app.git\n * [new branch]      fix/card -> fix/card");
     expect(codeWork(at([push]), origin).branches.map((branch) => [branch.name, branch.pushed])).toEqual([["fix/card", true]]);
   });
@@ -119,6 +120,43 @@ describe("code work of a conversation", () => {
       bash("git push", "Everything up-to-date"),
     ]), { repo: "acme/parser", url: "https://github.com/acme/parser" });
     expect(bare.branches).toEqual([{ name: "docs/readme", repo: "acme/parser", pushed: true, url: "https://github.com/acme/parser/tree/docs/readme", at: 1_001 }]);
+  });
+});
+
+describe("issues a conversation touched (#3409, the Team board's Design column)", () => {
+  it("records gh issue view, comment, create, develop and edit with their repository and number", () => {
+    const work = codeWork(at([
+      bash("gh issue view 3409 --repo acme/parser --comments", "title:\tTeam board\nstate:\tOPEN"),
+      bash("gh issue comment 3409 --repo acme/parser --body-file note.md", "https://github.com/acme/parser/issues/3409#issuecomment-1"),
+      bash("gh issue create --repo acme/parser --title \"Split the lexer\" --body x", "https://github.com/acme/parser/issues/51\n"),
+      bash("gh issue develop https://github.com/acme/other/issues/8 --checkout", "github.com/acme/other/tree/8-fix"),
+      bash("gh issue edit 12 --add-label design", "https://github.com/acme/parser/issues/12"),
+    ]), { repo: "acme/parser", url: "https://github.com/acme/parser" });
+    expect(work.issues).toEqual([
+      { repo: "acme/parser", number: 12, action: "edited", at: 1_004 },
+      { repo: "acme/other", number: 8, action: "developed", at: 1_003 },
+      { repo: "acme/parser", number: 51, action: "created", at: 1_002 },
+      { repo: "acme/parser", number: 3409, action: "commented", at: 1_001 },
+    ]);
+  });
+
+  it("reads GitHub tool calls on issues, and nothing from a failed call, a list or a close", () => {
+    const work = codeWork(at([
+      { name: "mcp__github__add_issue_comment", input: { owner: "acme", repo: "parser", issue_number: 7, body: "note" }, output: "{}", ok: true },
+      { name: "mcp__github__issue_read", input: { owner: "acme", repo: "parser", issue_number: 9 }, output: "{}", ok: true },
+      bash("gh issue view 3 --repo acme/parser", "not found", false),
+      bash("gh issue list --repo acme/parser", "1 open"),
+      bash("gh issue close 4 --repo acme/parser", "closed"),
+    ]));
+    expect(work.issues?.map(({ repo, number, action }) => ({ repo, number, action }))).toEqual([
+      { repo: "acme/parser", number: 9, action: "viewed" },
+      { repo: "acme/parser", number: 7, action: "commented" },
+    ]);
+  });
+
+  it("adds no issues field when the conversation touched none", () => {
+    const work = codeWork(at([bash("git checkout -b fix/a", "")]));
+    expect(work).not.toHaveProperty("issues");
   });
 });
 

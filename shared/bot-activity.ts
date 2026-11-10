@@ -105,6 +105,18 @@ export interface BotCodeCommit {
   at: number;
 }
 
+/** What the bot did to an issue (#3409), read off its own `gh issue` and
+ * GitHub issue tool calls. Not GitHub's live state. */
+export type BotCodeIssueAction = "viewed" | "commented" | "created" | "developed" | "edited";
+
+export interface BotCodeIssue {
+  /** owner/name, when known. */
+  repo?: string;
+  number: number;
+  action: BotCodeIssueAction;
+  at: number;
+}
+
 export interface BotCodeWork {
   /** The folder its turns run in, when it is a git repository on the
    * server (a folder on the person's computer is not read). */
@@ -117,6 +129,9 @@ export interface BotCodeWork {
   pullRequests: BotCodePullRequest[];
   branches: BotCodeBranch[];
   commits: BotCodeCommit[];
+  /** The issues its calls read, commented, created, developed or edited
+   * (#3409: a design note posted on an issue). Absent when none. */
+  issues?: BotCodeIssue[];
 }
 
 /** GET /api/bots/:id/activity: the entries (`?filter=coding|other`), and

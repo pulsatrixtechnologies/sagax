@@ -10,7 +10,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
-import type { BotCodeBranch, BotCodeCommit, BotCodePullAction, BotCodePullRequest, BotCodeWork } from "../../shared/bot-activity.ts";
+import type { BotCodeBranch, BotCodeCommit, BotCodeIssue, BotCodeIssueAction, BotCodePullAction, BotCodePullRequest, BotCodeWork } from "../../shared/bot-activity.ts";
 import { commandTexts, gitArgs, runCommands, shellProgram } from "./activity-coding.ts";
 
 export interface CodeWorkToolCall {
@@ -31,6 +31,9 @@ const PR_URL = /\bhttps?:\/\/([\w.-]*github[\w.-]*)\/([\w.-]+\/[\w.-]+)\/pull\/(
 const COMMIT_LINE = /^\[([^\]\s]+)(?: \([^)]*\))? ([0-9a-f]{7,40})\] (.+)$/gm;
 const PUSH_TO = /^To (\S+)\s*$/m;
 const PUSH_REF = /^\s*[*+ !=-]?\s*(?:\[new branch\]|[0-9a-f]{7,40}\.{2,3}[0-9a-f]{7,40})\s+(\S+)\s+->\s+(\S+)/gm;
+const ISSUE_URL = /\bhttps?:\/\/([\w.-]*github[\w.-]*)\/([\w.-]+\/[\w.-]+)\/issues\/(\d+)\b/gi;
+/** GitHub's issue tools (#3409): what a design note or a triage leaves. */
+const GITHUB_ISSUE_TOOL = /(?:^|__|[_-])(add_issue_comment|create_issue|update_issue|get_issue|issue_read|issue_write)$/i;
 const GITHUB_TOOL = /(?:^|__|[_-])(create_pull_request|merge_pull_request|update_pull_request|create_branch|push_files|create_or_update_file|create_commit)$/i;
 
 /** A remote address as a web page and owner/name, credentials left out
@@ -123,6 +126,13 @@ function str(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+/** `gh issue <verb>` a team bot runs on an issue (#3409). `list`, `close`
+ * and the others are not work on one issue's design. */
+const ISSUE_ACTIONS: Record<string, BotCodeIssueAction> = {
+  view: "viewed", comment: "commented", create: "created", develop: "developed", edit: "edited",
+};
+const GH_ISSUE_VALUE_FLAGS = new Set([...GH_VALUE_FLAGS, "--add-label", "--remove-label", "--add-assignee", "--remove-assignee", "--add-project", "--remove-project", "-n", "--name", "--branch-repo", "--base", "--editor"]);
+
 const PR_ACTIONS: Record<string, BotCodePullAction> = {
   create: "opened", merge: "merged", close: "closed", reopen: "opened", edit: "updated", ready: "updated", comment: "updated", review: "updated",
 };
@@ -132,6 +142,7 @@ export class CodeWorkCollector {
   private readonly pulls = new Map<string, BotCodePullRequest>();
   private readonly branches = new Map<string, BotCodeBranch>();
   private readonly commits = new Map<string, BotCodeCommit>();
+  private readonly issues = new Map<string, BotCodeIssue>();
   private current?: string;
   private remote?: { repo: string; url?: string };
 
@@ -143,6 +154,11 @@ export class CodeWorkCollector {
     // Only work that was done: a refused or failed call, or one still
     // running, produced nothing yet.
     if (tool.setup || tool.ok !== true || SUBAGENT_TOOLS.has(tool.name)) return;
+    const issueTool = GITHUB_ISSUE_TOOL.exec(tool.name);
+    if (issueTool) {
+      this.githubIssueTool(issueTool[1]!.toLowerCase(), tool, at);
+      return;
+    }
     const github = GITHUB_TOOL.exec(tool.name);
     if (github) {
       this.githubTool(github[1]!.toLowerCase(), tool, at);
@@ -170,6 +186,8 @@ export class CodeWorkCollector {
         else this.gitBranch(sub, at);
       } else if (program === "gh" && args[1] === "pr" && args[2]) {
         this.ghPr(args[2], args.slice(3), output, at);
+      } else if (program === "gh" && args[1] === "issue" && args[2]) {
+        this.ghIssue(args[2], args.slice(3), output, at);
       }
     }
     if (committed) this.commitOutput(output, at);
@@ -178,7 +196,54 @@ export class CodeWorkCollector {
 
   result(): Omit<BotCodeWork, "folder" | "branch" | "repo" | "repoUrl"> {
     const newest = <T extends { at: number }>(values: Iterable<T>) => [...values].sort((a, b) => b.at - a.at).slice(0, CODE_WORK_MAX);
-    return { pullRequests: newest(this.pulls.values()), branches: newest(this.branches.values()), commits: newest(this.commits.values()) };
+    const issues = newest(this.issues.values());
+    return { pullRequests: newest(this.pulls.values()), branches: newest(this.branches.values()), commits: newest(this.commits.values()), ...(issues.length ? { issues } : {}) };
+  }
+
+  private issue(repo: string | undefined, number: number, action: BotCodeIssueAction, at: number): void {
+    if (!Number.isSafeInteger(number) || number <= 0) return;
+    // `gh issue comment 12` with no repository named is the #12 seen before.
+    const same = !repo ? [...this.issues.entries()].find(([, issue]) => issue.number === number)?.[0] : undefined;
+    const key = same ?? `${repo ?? ""}#${number}`;
+    const known = this.issues.get(key)?.repo ?? repo;
+    this.issues.set(key, { ...(known ? { repo: known } : {}), number, action, at });
+  }
+
+  private githubIssueTool(kind: string, tool: CodeWorkToolCall, at: number): void {
+    const input = jsonArgs(tool.input);
+    const owner = str(input.owner);
+    const name = str(input.repo);
+    const found = [...text(tool.output).matchAll(ISSUE_URL)][0];
+    const repo = found?.[2] ?? (owner && name ? `${owner}/${name}` : this.remote?.repo);
+    const number = Number(input.issue_number ?? input.issueNumber ?? found?.[3] ?? Number.NaN);
+    const method = str(input.method);
+    const action: BotCodeIssueAction = kind === "add_issue_comment" ? "commented"
+      : kind === "create_issue" || (kind === "issue_write" && method === "create") ? "created"
+      : kind === "update_issue" || kind === "issue_write" ? "edited"
+      : "viewed";
+    this.issue(repo, number, action, at);
+  }
+
+  private ghIssue(verb: string, args: string[], output: string, at: number): void {
+    const action = ISSUE_ACTIONS[verb];
+    if (!action) return;
+    const flagRepo = flagValue(args, ["-R", "--repo"]);
+    const named = flagRepo ? remoteRepo(flagRepo.includes("://") || flagRepo.includes("@") ? flagRepo : `https://github.com/${flagRepo}`) : undefined;
+    const repo = named?.repo ?? this.remote?.repo;
+    if (verb === "create") {
+      const found = [...output.matchAll(ISSUE_URL)].at(-1);
+      if (found) this.issue(found[2], Number(found[3]), action, at);
+      return;
+    }
+    const target = positionals(args, GH_ISSUE_VALUE_FLAGS)[0];
+    if (!target) return;
+    const url = new RegExp(ISSUE_URL.source, "i").exec(target);
+    if (url) {
+      this.issue(url[2], Number(url[3]), action, at);
+      return;
+    }
+    const number = /^#?(\d+)$/.exec(target);
+    if (number) this.issue(repo, Number(number[1]), action, at);
   }
 
   private pull(entry: Omit<BotCodePullRequest, "at">, at: number): void {

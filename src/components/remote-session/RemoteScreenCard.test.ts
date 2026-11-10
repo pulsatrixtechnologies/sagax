@@ -202,7 +202,9 @@ describe("Take control: the bot computer's window over the live control socket",
     await click("[data-take-control]");
     const dialog = $("[data-sandbox-takeover]")!;
     expect(dialog).not.toBeNull();
-    expect(dialog.querySelector("[role=dialog]")!.getAttribute("aria-label")).toBe("Écran de POSTE-02");
+    // #3386: the full window is itself the dialog
+    expect(dialog.getAttribute("role")).toBe("dialog");
+    expect(dialog.getAttribute("aria-label")).toBe("Écran de POSTE-02");
     expect(dialog.getAttribute("data-power")).toBe("running");
     expect(dialog.textContent).toContain(t("sandboxDesktop.controlling"));
     expect(dialog.textContent).toContain(t("sandboxDesktop.watching"));

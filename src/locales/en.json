@@ -6268,7 +6268,7 @@
   "sandboxDesktop.busy": "Every server environment slot is in use. Try again in a few minutes.",
   "sandboxDesktop.closeWindow": "Close and release control (Cmd/Ctrl+Shift+Esc)",
   "sandboxDesktop.closed": "Your server environment is closed.",
-  "sandboxDesktop.connecting": "Starting the desktop…",
+  "sandboxDesktop.connecting": "Starting desktop",
   "sandboxDesktop.controlHint": "You have control. Your bots' clicks wait until you release it.",
   "sandboxDesktop.controlling": "You have control",
   "sandboxDesktop.help": "Bots working for you in your server environment use this desktop for computer use. Only you can see it. Show it to watch them live.",

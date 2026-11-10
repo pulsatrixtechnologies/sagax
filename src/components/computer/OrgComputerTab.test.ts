@@ -345,11 +345,13 @@ describe("the bot's Works on", () => {
 });
 
 describe("taking control of the server environment desktop", () => {
-  it("opens large, calm chrome, Watching | You have control, and one full screen button", () => {
+  it("opens over the whole app window, calm chrome, Watching | You have control", () => {
     const markup = renderToStaticMarkup(createElement(SandboxDesktopModal, { title: "Luna's screen", state: "running", onClose: () => {} }));
     expect(markup).toContain('role="dialog"');
     expect(markup).toContain('aria-modal="true"');
-    expect(markup).toContain("h-[88vh] w-[92vw]");
+    // #3386: the whole app window, no modal frame
+    expect(markup).toContain('data-takeover-layout="full-window"');
+    expect(markup).not.toContain("h-[88vh] w-[92vw]");
     expect(markup).toContain("Luna&#x27;s screen");
     expect(markup).toContain('data-power="running"');
     expect(markup).toContain('data-takeover-segments=""');

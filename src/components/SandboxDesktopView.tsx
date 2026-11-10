@@ -9,12 +9,13 @@
 // environment idles out.
 import { useEffect, useRef, useState } from "react";
 import type RFB from "@novnc/novnc";
-import { ExternalLink, Eye, Hand, Loader2, Monitor, RefreshCw } from "lucide-react";
+import { ExternalLink, Eye, Hand, Monitor, RefreshCw } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { sandboxViewerPath, sandboxViewerProblem, type SandboxViewerProblem } from "@/lib/sandbox-desktop";
 import { REVEALED_CONTROL } from "./computer/ComputerScreen";
+import { DesktopStarting } from "./computer/DesktopStarting";
 
 /** "Take control" in the middle of a view-only screen, shown on intent
  * (REVEALED_CONTROL). The bot's server environment and a Tailcat remote
@@ -39,9 +40,10 @@ type ViewState = "idle" | "connecting" | "connected" | "stopped" | SandboxViewer
  * tab's square, which draws the frame and the controls), connecting at once.
  * `onTakeControl`: the embedded square stays view-only and its "Take
  * control" opens the large window instead (SandboxDesktopModal).
- * `control`: set by that window, which owns taking and releasing control. */
-export function SandboxDesktopView({ onConnected, embedded = false, onTakeControl, control: controlled }: {
-  onConnected?: () => void; embedded?: boolean; onTakeControl?: () => void; control?: boolean;
+ * `control`: set by that window, which owns taking and releasing control.
+ * `dark`: drawn on that window's black screen (light text in any theme). */
+export function SandboxDesktopView({ onConnected, embedded = false, onTakeControl, control: controlled, dark = false }: {
+  onConnected?: () => void; embedded?: boolean; onTakeControl?: () => void; control?: boolean; dark?: boolean;
 } = {}) {
   const screen = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<ViewState>("idle");
@@ -98,10 +100,10 @@ export function SandboxDesktopView({ onConnected, embedded = false, onTakeContro
     if (attempt === 0) show();
   };
   const message = state === "idle" ? t("sandboxDesktop.help")
-    : state === "connecting" ? t("sandboxDesktop.connecting")
     : state === "connected" ? t(control ? "sandboxDesktop.controlling" : "sandboxDesktop.watching")
     : t(`sandboxDesktop.${state}`);
   const live = state === "connected";
+  const starting = state === "connecting" || state === "idle";
 
   if (embedded) {
     return (
@@ -119,16 +121,21 @@ export function SandboxDesktopView({ onConnected, embedded = false, onTakeContro
             {t("sandboxDesktop.releaseControl")}
           </button>
         )}
-        {!live && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center text-[12px] text-ink-secondary">
-            {state === "connecting" && <Loader2 size={16} aria-hidden="true" className="animate-spin" />}
+        {starting && (
+          // #3386: the app's activity dots and "Starting desktop" until the
+          // first frame, never a still black area (idle is the first render,
+          // before the connection starts).
+          <div className={cn("absolute inset-0 flex items-center justify-center", dark ? "text-white/75" : "text-ink-secondary")}>
+            <DesktopStarting />
+          </div>
+        )}
+        {!live && !starting && (
+          <div className={cn("absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center text-[12px]", dark ? "text-white/75" : "text-ink-secondary")}>
             <p role="status">{message}</p>
-            {state !== "connecting" && (
-              <button type="button" onClick={show} className="ui-button flex min-h-[44px] items-center gap-2 md:min-h-0">
-                <RefreshCw size={14} aria-hidden="true" />
-                {t("sandboxDesktop.show")}
-              </button>
-            )}
+            <button type="button" onClick={show} className="ui-button flex min-h-[44px] items-center gap-2 md:min-h-0">
+              <RefreshCw size={14} aria-hidden="true" />
+              {t("sandboxDesktop.show")}
+            </button>
           </div>
         )}
       </div>
@@ -145,13 +152,14 @@ export function SandboxDesktopView({ onConnected, embedded = false, onTakeContro
         <div ref={screen} role="application" aria-label={t("sandboxDesktop.screen")} className="h-full w-full" />
         {!live && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4 text-center text-[12.5px] leading-relaxed text-ink-secondary">
-            {state === "connecting" && <Loader2 size={16} aria-hidden="true" className="animate-spin" />}
-            <p role="status">{message}</p>
-            {state !== "connecting" && (
-              <button type="button" onClick={show} className="ui-button flex min-h-[44px] items-center gap-2 md:min-h-0">
-                {state === "idle" ? <Monitor size={14} aria-hidden="true" /> : <RefreshCw size={14} aria-hidden="true" />}
-                {t("sandboxDesktop.show")}
-              </button>
+            {state === "connecting" ? <DesktopStarting /> : (
+              <>
+                <p role="status">{message}</p>
+                <button type="button" onClick={show} className="ui-button flex min-h-[44px] items-center gap-2 md:min-h-0">
+                  {state === "idle" ? <Monitor size={14} aria-hidden="true" /> : <RefreshCw size={14} aria-hidden="true" />}
+                  {t("sandboxDesktop.show")}
+                </button>
+              </>
             )}
           </div>
         )}

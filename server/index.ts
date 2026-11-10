@@ -24362,7 +24362,7 @@ if (screenContext && !process.env.VITEST) screenContext.start();
 const flowWatchLoop = new FlowWatchLoop({
   bots: () => store.bots
     .filter((bot) => !bot.hidden && !bot.temporary)
-    .map((bot) => ({ id: bot.id, owner: effectiveBotOwner(bot) || "" })),
+    .map((bot) => ({ id: bot.id, owner: effectiveBotOwner(bot) || "", primary: bot.chiefOfStaff === true })),
   bot: (botId) => store.bot(botId) ?? undefined,
   // the organization's Flow plugin only: no person's or bot's plugin code
   // runs on the shared server (a local server runs its own)

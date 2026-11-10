@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeGitEnv, stampPathFor } from "./verify-merge.mjs";
+import { areaTests, sanitizeGitEnv, stampPathFor } from "./verify-merge.mjs";
 
 describe("sanitizeGitEnv", () => {
   it("strips every GIT_* key and leaves the rest", () => {
@@ -38,5 +38,18 @@ describe("stampPathFor", () => {
     expect(stampPathFor("/repo/.git", "abc123", "/repo")).toBe(
       "/repo/.git/sagax-verify-merge/ok-abc123",
     );
+  });
+});
+
+describe("areaTests (#3354)", () => {
+  const matrix = ["server/connectors/connector-matrix.e2e.test.ts", "server/connectors/launch-profile.contract.test.ts"];
+  it("runs the connector matrix and the launch contract for any path a connector call crosses", () => {
+    for (const file of ["server/connectors/hub.ts", "server/drivers/acp/grok.ts", "server/turns/start-turn-setup.ts", "server/approvals/auto-approve.ts",
+      "server/runtime-events/request-opened.ts", "server/harness/bus.ts", "shared/engine-connectors.ts"]) {
+      expect(areaTests([file]), file).toEqual(matrix);
+    }
+  });
+  it("runs nothing more for a change elsewhere", () => {
+    expect(areaTests(["src/App.tsx", "server/routes/bots.ts", "shared/engine-connectors.test.ts", "docs/releasing.md"])).toEqual([]);
   });
 });

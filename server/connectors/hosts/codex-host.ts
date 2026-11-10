@@ -64,6 +64,23 @@ const MESSAGE_MAX = 4 * 1024 * 1024;
 /** Signs that Codex's own answer is about the sign-in, not the tool. */
 const SIGN_IN_ERROR = /auth|sign.?in|log.?in|expired|unauthori[sz]ed|credential|refresh.?token/i;
 
+/** The argv of one call: Codex's app-server, nothing else (no model runs). */
+export function codexConnectorHostArgs(): string[] {
+  return ["app-server"];
+}
+
+/** The environment of one call: the sign-in's own (CODEX_HOME), never an
+ * API key, which carries no ChatGPT apps. */
+export function codexConnectorHostEnv(base: Record<string, string | undefined>): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = { ...base };
+  delete env.OPENAI_API_KEY;
+  return env;
+}
+
+/** The app-server methods the host sends, in order (M6), and the one it
+ * never sends: no `turn/start`, so no model runs. */
+export const CODEX_CONNECTOR_HOST_METHODS = ["initialize", "initialized", "account/read", "thread/start", "mcpServerStatus/list", "mcpServer/tool/call"] as const;
+
 type RpcMessage = { id?: unknown; method?: unknown; params?: unknown; result?: unknown; error?: { message?: unknown } };
 
 class RpcError extends Error {}
@@ -100,15 +117,13 @@ export function createCodexConnectorHost(deps: CodexConnectorHostDeps): CodexCon
   /** Run `work` on a fresh app-server of this sign-in; the process is gone
    * before the answer returns. Rejects on a timeout or an early exit. */
   function withAppServer<T>(launch: CodexConnectorLaunch, limitMs: number, work: (server: AppServer) => Promise<T>): Promise<T> {
-    const env: Record<string, string | undefined> = { ...launch.env };
-    // the ChatGPT sign-in only: a key carries no apps
-    delete env.OPENAI_API_KEY;
+    const env = codexConnectorHostEnv(launch.env);
     const home = codexHome(env);
     const cwd = home && isAbsolute(home) ? home : env.HOME && isAbsolute(env.HOME) ? env.HOME : homedir();
     return new Promise<T>((resolve, reject) => {
       let child: ReturnType<typeof spawnCli>;
       try {
-        child = spawnCli(launch.cli, ["app-server"], { cwd, env: env as NodeJS.ProcessEnv, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+        child = spawnCli(launch.cli, codexConnectorHostArgs(), { cwd, env: env as NodeJS.ProcessEnv, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
       } catch (error) {
         reject(error instanceof Error ? error : new Error(String(error)));
         return;

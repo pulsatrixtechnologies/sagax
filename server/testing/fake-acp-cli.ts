@@ -101,7 +101,10 @@
 //                     default mode), and reply one line per call:
 //                     "server:tool -> <first text block>" or "-> error <why>";
 //                     FAKE_ACP_MCP_CALL_ARGS='{"server:tool":{...}}' gives a
-//                     call its arguments, default {"note":"fake"})
+//                     call its arguments, default {"note":"fake"};
+//                     FAKE_ACP_MCP_ROWS=1 also streams each call as a
+//                     tool_call then its tool_call_update, as an ACP agent
+//                     reports an MCP call, so the chat holds one tool row)
 //                   | lend-question (call list_shared_computers through the
 //                     injected agents MCP, ask a question card, call it again
 //                     once the card is answered, and reply
@@ -145,7 +148,10 @@
 //                   {tool, input, pid, grokHome, cwd} in FAKE_ACP_PINNED_CALLS,
 //                   a completed result, then the prompt stays open until
 //                   session/cancel. A refused ask runs nothing and ends the
-//                   prompt.
+//                   prompt. As the real CLI, the managed gateway (and so the
+//                   connector tool) exists only with both GROK_MANAGED_*
+//                   variables "true": without them use_tool fails with no ask
+//                   and nothing runs.
 //   FAKE_ACP_GROK_LEADER=1  grok's leader: an `agent` run without
 //                   `--no-leader` whose leader socket exists
 //                   ($GROK_LEADER_SOCKET, else $GROK_HOME/leader.sock; the
@@ -747,6 +753,13 @@ function playPinned(msg: any): void {
   const askedInput = variant === "alter-input" ? { ...input, to: "someone-else@example.com" } : input;
   const toolCallId = "pinned-call-1";
   const update = (value: Record<string, unknown>) => out({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: value } });
+  // no managed gateway without both variables: the connector tool is unknown
+  if (process.env.GROK_MANAGED_MCPS_ENABLED !== "true" || process.env.GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED !== "true") {
+    update({ sessionUpdate: "tool_call", toolCallId, title: "use_tool", kind: "other", status: "pending", rawInput: { tool_name: tool, tool_input: askedInput } });
+    update({ sessionUpdate: "tool_call_update", toolCallId, status: "failed", rawOutput: { type: "MCP", tool_name: tool, output: `unknown tool ${tool}`, is_error: true } });
+    result(msg.id, { stopReason: "end_turn", _meta: {} });
+    return;
+  }
   update({ sessionUpdate: "tool_call", toolCallId, title: "use_tool", kind: "other", status: "pending", rawInput: { tool_name: tool, tool_input: askedInput } });
   pendingPermissionId = 9500;
   onPermissionAnswered = (allowed) => {
@@ -1202,6 +1215,8 @@ function handle(msg: any) {
       if (process.env.FAKE_ACP_DUMP) {
         writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.json`, JSON.stringify(msg.params?.mcpServers ?? []));
       }
+      // a resume reconnects the MCP servers it is given, as a load does
+      if (Array.isArray(msg.params?.mcpServers)) sessionMcp = msg.params.mcpServers;
       const opts = configOptions();
       const mdls = sessionModels();
       liveSession = typeof msg.params?.sessionId === "string" ? msg.params.sessionId : liveSession;
@@ -1752,11 +1767,18 @@ function handle(msg: any) {
               });
               if (!allowed) { results.push(`${call} -> refused at the agent's prompt`); continue; }
             }
+            const rowId = `mcp-row-${results.length}`;
+            const rows = process.env.FAKE_ACP_MCP_ROWS === "1";
+            const rowUpdate = (value: Record<string, unknown>) => out({ jsonrpc: "2.0", method: "session/update", params: { sessionId: msg.params?.sessionId, update: value } });
+            if (rows) rowUpdate({ sessionUpdate: "tool_call", toolCallId: rowId, title: tool, kind: "other", status: "in_progress", rawInput: mcpCallArgs[call] ?? { note: "fake" } });
+            let line: string;
             try {
-              results.push(`${call} -> ${await driveMcp({ command: entry.command, args: entry.args, env: entry.env }, [{ name: tool, args: () => mcpCallArgs[call] ?? { note: "fake" } }])}`);
+              line = `${call} -> ${await driveMcp({ command: entry.command, args: entry.args, env: entry.env }, [{ name: tool, args: () => mcpCallArgs[call] ?? { note: "fake" } }])}`;
             } catch (error) {
-              results.push(`${call} -> error ${(error as Error).message}`);
+              line = `${call} -> error ${(error as Error).message}`;
             }
+            results.push(line);
+            if (rows) rowUpdate({ sessionUpdate: "tool_call_update", toolCallId: rowId, status: line.startsWith(`${call} -> error`) ? "failed" : "completed", rawOutput: line.slice(call.length + 4) });
           }
           out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: results.join("\n") } } } });
           complete();

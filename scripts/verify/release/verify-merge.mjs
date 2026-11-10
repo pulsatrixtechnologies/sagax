@@ -15,7 +15,9 @@
 //      main silently when another PR lands (about 30 s)
 //   3. the tests of the diff: every changed test file, the tests beside a
 //      changed source (same folder, same stem: foo.test.ts, foo.*.test.ts,
-//      foo.e2e.test.ts), and the tests beside a changed route's module
+//      foo.e2e.test.ts), the tests beside a changed route's module, and the
+//      tests of an area the diff touches (AREA_TESTS: the connector matrix
+//      and the hosts' launch contract for the connector paths)
 //   4. iOS, only when ios/ or shared/ changed: `swift test` and the Debug
 //      build of the Sagax scheme for the generic simulator (no device boots,
 //      no window)
@@ -88,6 +90,28 @@ const GUARD_TESTS = [
   // #2085 / #2125 (Refs #2086): the bot panel has only Activity and Library (no Roles tab)
   "src/components/bot-settings/panel-tabs.guard.test.ts",
 ];
+
+/** Tests that hold a whole area: they run when the diff touches any of its
+ * paths (a folder ending with "/", or a file). #3354: the connector matrix
+ * (every engine row by every provider, on fakes) and the hosts' launch
+ * contract, for any change to the paths a connector call crosses. */
+export const AREA_TESTS = [
+  {
+    paths: ["server/connectors/", "server/drivers/", "server/turns/", "server/approvals/", "server/runtime-events/", "server/harness/", "shared/engine-connectors.ts"],
+    tests: ["server/connectors/connector-matrix.e2e.test.ts", "server/connectors/launch-profile.contract.test.ts"],
+  },
+];
+
+/** The area tests a set of changed files needs. */
+export function areaTests(changed, areas = AREA_TESTS) {
+  const out = new Set();
+  for (const area of areas) {
+    if (changed.some((file) => area.paths.some((path) => (path.endsWith("/") ? file.startsWith(path) : file === path)))) {
+      for (const test of area.tests) out.add(test);
+    }
+  }
+  return [...out].sort();
+}
 
 const LIGHT_CHECKS = [
   ["lint", ["pnpm", "lint"]],
@@ -169,6 +193,7 @@ function plan(options) {
       else if (isVitestFile(test)) tests.add(test);
     }
   }
+  for (const test of areaTests(changed)) if (existsSync(join(ROOT, test))) tests.add(test);
   const ios = options.ios || changed.some((file) => file.startsWith("ios/") || file.startsWith("shared/"));
   return { changed, tests: [...tests].sort(), electronTests: [...electronTests].sort(), ios };
 }

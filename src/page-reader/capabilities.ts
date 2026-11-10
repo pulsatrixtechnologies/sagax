@@ -34,6 +34,7 @@ import {
   CAP_READY_MESSAGE,
   CAP_RESULT_MESSAGE,
   pageCapGranted,
+  normalizePageLinkOrigin,
   pageLinkOpensDirectly,
   parsePageCapabilities,
   parsePageCapRequest,
@@ -91,7 +92,7 @@ export interface PendingApproval { id: number; name: string; label: string; at: 
 /** A link the page asked to open: `host` apart, `rest` (path, query and
  * fragment, as is) under it; `always` when "Always allow this site" can be
  * offered (an http(s) site, not an e-mail address). */
-export interface PendingLink { id: number; url: string; host: string; rest: string; always: boolean; at: number }
+export interface PendingLink { id: number; url: string; host: string; rest: string; always: boolean; at: number; origin?: string }
 export type LinkChoice = "open" | "always" | "cancel";
 
 /** The address in two parts for the card: the host, then everything after
@@ -299,13 +300,18 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
   const askLink = async (url: string): Promise<boolean> => {
     if ([...pendingLinks.values()].includes(url)) return false;
     const { host, rest } = splitAddress(url);
+    // the approval is kept per origin (scheme, host and port), never per host
+    let origin: string | null = null;
+    try {
+      origin = normalizePageLinkOrigin(new URL(url).origin);
+    } catch { /* not an address with an origin */ }
     // "Always allow this site" is offered only when the server answered the
     // question (`allowed: false`): where the route is missing or fails the
     // option would do nothing, so it is not shown
     let always = false;
-    if (/^https?:/i.test(url) && deps.pageId) {
+    if (origin && deps.pageId) {
       try {
-        const known = await deps.api<{ allowed?: unknown }>(linkRoute(`?${new URLSearchParams({ host })}`));
+        const known = await deps.api<{ allowed?: unknown }>(linkRoute(`?${new URLSearchParams({ origin })}`));
         if (known.allowed === true) {
           deps.openUrl(url);
           return true;
@@ -315,7 +321,7 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
     }
     const id = ++seq;
     pendingLinks.set(id, url);
-    set({ links: [...state.links, { id, url, host, rest, always, at: now() }] });
+    set({ links: [...state.links, { id, url, host, rest, always, at: now(), ...(origin ? { origin } : {}) }] });
     return false;
   };
 
@@ -407,9 +413,9 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
       pendingLinks.delete(id);
       set({ links: state.links.filter((card) => card.id !== id) });
       if (choice === "cancel") return true;
-      if (choice === "always" && entry.always) {
-        // kept on the server for this reader, page and site; this link opens either way
-        void deps.api(linkRoute(), { method: "POST", body: { host: entry.host, answer: "always" } }).catch(() => undefined);
+      if (choice === "always" && entry.always && entry.origin) {
+        // kept on the server for this reader, page and origin; this link opens either way
+        void deps.api(linkRoute(), { method: "POST", body: { origin: entry.origin, answer: "always" } }).catch(() => undefined);
       }
       deps.openUrl(entry.url);
       return true;

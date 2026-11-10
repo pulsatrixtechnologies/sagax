@@ -3,7 +3,7 @@
 // a reader not signed in or who may not read the page gets the same refusal
 // as for data; an approval never covers a subdomain or another host; revoke
 // forgets them.
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -215,5 +215,47 @@ describe("normalizePageLinkOrigin", () => {
     for (const bad of ["example.com", "https://example.com/a", "https://example.com/?x", "https://example.com/#x", "https://u:p@example.com", "ftp://example.com", "mailto:a@example.com", "", 42]) {
       expect(normalizePageLinkOrigin(bad), String(bad)).toBeNull();
     }
+  });
+});
+
+describe("link approvals journal: a cut line (third review)", () => {
+  function cutJournal() {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-link-approvals-"));
+    dirs.push(dir);
+    const file = join(dir, "page-link-approvals.jsonl");
+    const first = new PageLinkApprovals(file, () => NOW);
+    first.allow("person-b", "page-1", "https://a.example");
+    first.allow("person-b", "page-1", "https://b.example");
+    // a crash or a full disk cut the next append: no new line at the end
+    appendFileSync(file, '{"op":"allow","person":"person-b","pageId":"page-1","origin":"https://c.exa');
+    return file;
+  }
+
+  it("keeps a DELETE after a cut line across a restart", () => {
+    const file = cutJournal();
+    const after = new PageLinkApprovals(file, () => NOW);
+    expect(after.allowed("person-b", "page-1", "https://a.example")).toBe(true);
+    after.forget("person-b", "page-1", "https://a.example");
+    const restarted = new PageLinkApprovals(file, () => NOW);
+    expect(restarted.allowed("person-b", "page-1", "https://a.example")).toBe(false);
+    expect(restarted.allowed("person-b", "page-1", "https://b.example")).toBe(true);
+    expect(readFileSync(file, "utf8").endsWith("\n")).toBe(true);
+  });
+
+  it("keeps a page's revoke after a cut line across a restart", () => {
+    const file = cutJournal();
+    const after = new PageLinkApprovals(file, () => NOW);
+    after.forgetPage("page-1");
+    const restarted = new PageLinkApprovals(file, () => NOW);
+    expect(restarted.allowed("person-b", "page-1", "https://a.example")).toBe(false);
+    expect(restarted.allowed("person-b", "page-1", "https://b.example")).toBe(false);
+  });
+
+  it("skips an unreadable line without losing the ones after it", () => {
+    const file = cutJournal();
+    appendFileSync(file, '\n{"op":"allow","person":"person-b","pageId":"page-1","origin":"https://d.example","at":1}\n');
+    const restarted = new PageLinkApprovals(file, () => NOW);
+    expect(restarted.allowed("person-b", "page-1", "https://d.example")).toBe(true);
+    expect(restarted.allowed("person-b", "page-1", "https://a.example")).toBe(true);
   });
 });

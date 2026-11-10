@@ -12,9 +12,11 @@
 //
 // Storage: an append-only journal (one JSON line per answer: allow, forget,
 // forget page), so an answer writes one short line instead of the whole
-// file. Read back by replaying it. When the journal holds many more lines
-// than live rows, it is compacted on that write: written to a temporary file
-// then renamed (atomic). No timer.
+// file. Read back by replaying it; an unreadable line is skipped, the ones
+// after it still count. When the journal holds many more lines than live
+// rows, or ends in a line a crash cut (no new line at its end), the next
+// write compacts it: the live rows written to a temporary file then renamed
+// (atomic), so nothing is ever appended to a cut line. No timer.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -43,6 +45,9 @@ const keyOf = (person: string, pageId: string, origin: string) => `${person.toLo
 export class PageLinkApprovals {
   private rows: Map<string, Row> | null = null;
   private journalLines = 0;
+  /** The journal ends in a cut line (a crash or a full disk mid append):
+   * the next write compacts it instead of appending to that line. */
+  private cut = false;
   private readonly file: string | null;
   private readonly now: () => number;
 
@@ -62,6 +67,7 @@ export class PageLinkApprovals {
       } catch {
         // unreadable: nothing is allowed (fails closed)
       }
+      this.cut = text.length > 0 && !text.endsWith("\n");
       for (const line of text.split("\n")) {
         if (!line.trim()) continue;
         this.journalLines++;
@@ -96,12 +102,13 @@ export class PageLinkApprovals {
     if (!this.file) return;
     mkdirSync(dirname(this.file), { recursive: true });
     const map = this.map();
-    if (this.journalLines + 1 > map.size * 2 + COMPACT_SLACK) {
+    if (this.cut || this.journalLines + 1 > map.size * 2 + COMPACT_SLACK) {
       const temp = `${this.file}.tmp`;
       const lines = [...map.values()].map((row) => JSON.stringify({ op: "allow", ...row }));
       writeFileSync(temp, lines.length ? `${lines.join("\n")}\n` : "", { mode: 0o600 });
       renameSync(temp, this.file);
       this.journalLines = lines.length;
+      this.cut = false;
       return;
     }
     appendFileSync(this.file, `${JSON.stringify(op)}\n`, { mode: 0o600 });

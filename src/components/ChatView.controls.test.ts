@@ -168,12 +168,11 @@ describe("thread control placement", () => {
     expect(legacy).not.toContain("provider did not finish");
     expect(legacy).not.toContain(">Retry<");
   });
-  it("offers Report this problem on a failed turn's card, and only where the caller asks (#2618)", () => {
+  it("a failed turn's card keeps Retry and no Report button: /feedback is the one way in (#3299)", () => {
     const failed = renderToStaticMarkup(createElement(FailedTurnRow, { tool: failedTurnTool("Network timeout"), engine: undefined, onRetry: () => {} }));
-    expect(failed).toContain("data-report-problem");
-    expect(failed).toContain("Report this problem");
+    expect(failed).not.toContain("data-report-problem");
+    expect(failed).not.toContain("Report this problem");
     expect(failed).toContain(" Retry</button>");
-    expect(renderToStaticMarkup(createElement(ErrorRow, { message: "Network timeout", onRetry: () => {} }))).not.toContain("data-report-problem");
   });
   it("draws Retry and the next action on the 28px control step", () => {
     const retry = renderToStaticMarkup(createElement(ErrorRow, { message: "Network timeout", onRetry: () => {} }));

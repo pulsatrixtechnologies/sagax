@@ -1,4 +1,4 @@
-import { AlertTriangle, Info, MessageSquareWarning, RefreshCw } from "lucide-react";
+import { AlertTriangle, Info, RefreshCw } from "lucide-react";
 import { useDesktopCapabilities } from "@/components/DesktopCapabilities";
 import { CHATGPT_USAGE_URL, ManageUsageLink } from "../ChatGptPlanStatus";
 import { CODEX_USAGE_URL, codexUsageLimitReached } from "../../../shared/codex-usage-limit";
@@ -18,7 +18,6 @@ import { viewerCan } from "@/lib/viewer";
 import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import type { InstanceInfo, Message } from "@/state/store";
 import { t } from "@/lib/i18n";
-import { useOpenFeedback } from "@/lib/use-open-feedback";
 import { MessageBoundary, StepBoundary } from "../MessageBoundary";
 
 export function ErrorRow({
@@ -28,7 +27,6 @@ export function ErrorRow({
   action,
   setupInstance,
   claudeUpdateInstance,
-  onReport,
 }: {
   message: string;
   /** A plain sentence to open with instead of `message` (FailedTurnRow's
@@ -43,9 +41,6 @@ export function ErrorRow({
   /** The Claude engine to update when this turn failed because its Claude
    * Code is too old for the model. */
   claudeUpdateInstance?: InstanceInfo;
-  /** "Report this problem" (#2618): opens a report with the Feedback bot,
-   * this card's words attached. Only where the caller passes it. */
-  onReport?: () => void;
 }) {
   "use memo";
   const { capabilities, ready } = useDesktopCapabilities();
@@ -101,16 +96,6 @@ export function ErrorRow({
               <RefreshCw size={12} /> {t("chat.retry")}
             </button>
           )
-        )}
-        {onReport && (
-          <button
-            type="button"
-            data-report-problem=""
-            onClick={onReport}
-            className="ui-button ui-button-md ml-1.5 mt-1.5 rounded-full border-transparent bg-transparent text-ink-secondary hover:bg-danger/10 hover:text-danger"
-          >
-            <MessageSquareWarning size={12} aria-hidden="true" /> {t("feedback.errorCard.report")}
-          </button>
         )}
       </div>
     </div>
@@ -170,7 +155,6 @@ export function FailedTurnRow({ tool, engine, onRetry, botId, threadId }: {
   const config = useStoreSelector((current) => current.config);
   // Hook before any early return (rules of hooks); unused when the limit row is hidden.
   const resume = useLimitResetContinue(botId, threadId, tool.limitResetsAt);
-  const openFeedback = useOpenFeedback();
   // An engine at its limit or out of credit: the composer says so, not the chat.
   if (isEngineLimitFailure(tool)) return null;
   if (tool.place && botId) return <PlaceFailedRow place={tool.place} botId={botId} threadId={threadId} onRetry={onRetry} />;
@@ -210,7 +194,6 @@ export function FailedTurnRow({ tool, engine, onRetry, botId, threadId }: {
       action={resume}
       setupInstance={tool.setup && !pinnedUnavailable ? engine : undefined}
       claudeUpdateInstance={updateTarget}
-      onReport={() => void openFeedback({ source: "error", error: cause })}
     />
   );
 }

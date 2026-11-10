@@ -79,7 +79,6 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"ANY","kind":"exact","route":"/api/events","tier":"write","readOnly":false,"scope":"events:write","defaultEnabled":true},
   {"method":"GET","kind":"exact","route":"/api/events","tier":"read","readOnly":true,"scope":"events:read","defaultEnabled":true},
   {"method":"GET","kind":"exact","route":"/api/feedback","tier":"read","readOnly":true,"scope":"feedback:read","defaultEnabled":true},
-  {"method":"POST","kind":"exact","route":"/api/feedback/start","tier":"write","readOnly":false,"scope":"feedback:write","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/files","tier":"write","readOnly":false,"scope":"files:write","defaultEnabled":true},
   {"method":"ANY","kind":"prefix","route":"/api/groups","tier":"write","readOnly":false,"scope":"groups:write","defaultEnabled":true},
   {"method":"GET","kind":"exact","route":"/api/groups","tier":"read","readOnly":true,"scope":"groups:read","defaultEnabled":true},

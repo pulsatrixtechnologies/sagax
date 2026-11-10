@@ -49,7 +49,7 @@ async function handleBotRespond(deps: BotsMessagesRouteDeps, ctx: RouteContext):
     if (source) {
       return handleThreadRespond(deps, { ...ctx, path: `/api/threads/${source.threadId}/respond`, readBody: async () => ({ ...body, requestId: source.requestId }) });
     }
-    // #2618: the Feedback bot's cards (Send / Cancel, kind, impact) are answered by its own flow
+    // #2618, #3299: the /feedback cards (Send / Cancel) are answered by its own flow
     const feedbackDone = feedbackAnswer(deps, ctx, bot.threadId, body);
     if (feedbackDone) return feedbackDone;
     const behavior = requestBehavior(body.behavior);
@@ -213,7 +213,7 @@ async function handleThreadRespond(deps: BotsMessagesRouteDeps, ctx: RouteContex
     if (source) {
       return handleThreadRespond(deps, { ...ctx, path: `/api/threads/${source.threadId}/respond`, readBody: async () => ({ ...body, requestId: source.requestId }) });
     }
-    // #2618: the Feedback bot's cards (Send / Cancel, kind, impact) are answered by its own flow
+    // #2618, #3299: the /feedback cards (Send / Cancel) are answered by its own flow
     const feedbackDone = feedbackAnswer(deps, ctx, threadId, body);
     if (feedbackDone) return feedbackDone;
     const behavior = requestBehavior(body.behavior);

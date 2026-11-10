@@ -21,8 +21,6 @@ const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
 await loadLocale(params.get("lang") ?? "en");
 const before = params.get("mode") === "before";
-// &report=1: the failed turn's card offers "Report this problem" (#2618)
-const report = params.get("report") === "1";
 
 const reply = `Everyone answered. Five bots synced their rules and their memory index.
 
@@ -60,7 +58,7 @@ function Row({ message }: { message: Message }) {
     );
   }
   const cause = failedTurnCause(message.tool!.name) ?? "";
-  return <ErrorRow message={cause} onRetry={() => {}} {...(report ? { onReport: () => {} } : {})} />;
+  return <ErrorRow message={cause} onRetry={() => {}} />;
 }
 
 function Gallery() {

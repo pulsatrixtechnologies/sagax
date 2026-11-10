@@ -1,30 +1,34 @@
-// The Feedback bot (#2618): one shared system bot every signed-in person can
-// write to. It runs a short conversation in the ordinary chat (never a
-// separate thread), shows what will leave the server, files the report as a
-// GitHub issue with the server's own token, and posts the issue's status
-// back into the same conversation. Without a token, reports wait in a local
-// queue and are retried. The same flow runs inline when someone types
-// /feedback in any chat, and any bot's conversation can get one pre-drafted
-// offer when the person sounds frustrated.
+// In-app feedback (#2618, #3299): `/feedback` typed in any chat is the one
+// way in, and the report stays in that chat. The server reads the chat it is
+// typed in (chat-facts.ts), asks at most one question, shows the exact,
+// anonymized text that will leave, files it as a GitHub issue with the
+// server's own token on Send, and posts the issue's status back into the
+// same conversation. Without a token, reports wait in a local queue and are
+// retried. There is no Feedback bot: a server that still has the one older
+// versions made retires it at startup (retireFeedbackBot). Any bot's
+// conversation can also get one pre-drafted offer when the person sounds
+// frustrated.
 import { textLanguage } from "../../shared/looks-french.ts";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { writeFileAtomic } from "../atomic.ts";
 import {
-  frustrationSignal, isFeedbackCommand, type FeedbackKind, type FeedbackReportView, type FeedbackSource,
-  type FeedbackStartRequest, type FeedbackStartResponse, type FeedbackStatus,
+  FEEDBACK_PLATFORMS, frustrationSignal, isFeedbackCommand, type FeedbackAppContext, type FeedbackKind, type FeedbackReportView,
+  type FeedbackSource, type FeedbackStatus,
 } from "../../shared/feedback.ts";
 import type { AnonymizeNames } from "./anonymize.ts";
-import { anonymize } from "./anonymize.ts";
+import { anonymize, anonymizeWords } from "./anonymize.ts";
+import { chatFacts, type ChatMessageLike } from "./chat-facts.ts";
 import type { FeedbackConfig } from "./config.ts";
 import {
-  feedbackAnswers, feedbackLanguage, isCancelOption, isSendOption, nextFeedbackStep, offerCard, openFeedbackStep, parseKind,
+  feedbackAnswers, feedbackLanguage, isCancelOption, isSendOption, nextFeedbackStep, offerCard, openFeedbackStep,
   SEND_OPTIONS, type FeedbackAnswers, type FeedbackLanguage, type FeedbackMarker, type FlowCard, type FlowMessage,
 } from "./flow.ts";
 import { fileIssue, issueStatus, type GithubFiler } from "./github.ts";
 import { buildReport, stripAttachments, type FiledReport, type ReportContext, type ReportSpan } from "./report.ts";
+import { feedbackText } from "./words.ts";
 
-export interface StoredMessage extends FlowMessage {
+export interface StoredMessage extends FlowMessage, Omit<ChatMessageLike, "feedback" | "role" | "kind" | "text"> {
   id: string;
   at: number;
   sendId?: string;
@@ -35,17 +39,15 @@ interface BotLike {
   id: string;
   name: string;
   threadId: string;
-  systemBot?: "feedback";
-  /** Every thread the bot has (one per person), for the card sweep (#3081). */
-  tasks?: ReadonlyArray<{ threadId: string }>;
 }
 
 /** The slice of the server store the service uses. */
 export interface FeedbackStore {
-  bots: readonly BotLike[];
+  /** Bots as stored: a record from before #3299 may still carry `systemBot`. */
+  bots: readonly (BotLike & { systemBot?: unknown })[];
   bot(id: string): BotLike | undefined;
-  createBot(profile: { name?: string; title?: string; description?: string; color?: string }, options: { seedMessages?: boolean }): BotLike;
-  patchBot(id: string, patch: { systemBot?: "feedback" }): BotLike | null;
+  /** Removes a bot and its threads (retireFeedbackBot). */
+  deleteBot?(id: string): boolean;
   activePath(threadId: string): StoredMessage[];
   appendMessage(threadId: string, message: Omit<StoredMessage, "id" | "at">): StoredMessage;
   /** Marks a card answered (the server store's patchMessage). */
@@ -56,9 +58,9 @@ export interface FeedbackDeps {
   dataDir: string;
   store: FeedbackStore;
   config: () => FeedbackConfig;
-  /** The person's own thread with a bot (routeThreadId on the request). */
-  threadFor: (bot: BotLike) => string;
   names: () => AnonymizeNames;
+  /** The engine (driver kind) and model a bot runs on. */
+  engine?: (botId: string) => { engine?: string; model?: string };
   serverLines: () => string[];
   spans: () => ReportSpan[];
   serverVersion: () => string;
@@ -82,7 +84,8 @@ interface FeedbackRecord {
   createdAt: number;
   updatedAt: number;
   status: RecordStatus;
-  preset: Partial<FeedbackAnswers>;
+  /** The words typed after /feedback, or the message an offer quotes. */
+  said: string;
   context: ReportContext;
   offer?: boolean;
   kind?: FeedbackKind;
@@ -104,6 +107,8 @@ export interface FeedbackMessageInput {
   principalId: string | null;
   sendId?: string;
   sender?: unknown;
+  /** What the app attached to /feedback (version, surface, page, logs). */
+  app?: FeedbackAppContext;
   /** The answer is a click on the flow's own card: it never waits for the
    * card to be the last word, whatever the busy bot said since. */
   viaCard?: boolean;
@@ -113,14 +118,9 @@ const RETRY_MS = 5 * 60_000;
 const POLL_WINDOW_MS = 60 * 24 * 60 * 60_000;
 /** #3018: an unfinished report nobody touched for this long is dropped and its card retired. */
 export const DRAFT_TTL_MS = 7 * 24 * 60 * 60_000;
-const MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024;
 
 const WORDS = {
   fr: {
-    hello: "Je m'occupe de ton signalement. J'ai joint la version, la page et les journaux récents; tout est anonymisé et rien ne part sans ton accord.",
-    previewIntro: "Voici ce qui sera envoyé à l'équipe, une fois anonymisé :",
-    previewTitle: "Envoyer ce signalement?",
-    previewSubtitle: "Écris un détail pour l'ajouter, ou envoie tel quel. La capture d'écran reste sur le serveur.",
     cancelled: "Annulé : rien n'a été envoyé.",
     queuedNoToken: (manual: string) => `En file d'attente : signalement prêt et gardé ici. Ce serveur n'a pas de jeton GitHub pour l'envoyer à l'équipe : un administrateur du serveur doit définir la variable SAGAX_FEEDBACK_GITHUB_TOKEN (ou l'enregistrer par PUT /api/admin/feedback-config). Il part dès que le jeton est défini. En attendant, tu peux ${manual}.`,
     manualLink: (url: string) => `[ouvrir le signalement sur GitHub](${url}) toi-même (il est déjà rempli)`,
@@ -132,10 +132,6 @@ const WORDS = {
     resolved: (link: string) => `Résolu (${link}). Merci pour le signalement!`,
   },
   en: {
-    hello: "I'll take care of your report. I attached the version, the page and recent logs; everything is anonymized and nothing leaves without your OK.",
-    previewIntro: "Here is what will be sent to the team, once anonymized:",
-    previewTitle: "Send this report?",
-    previewSubtitle: "Type a detail to add it, or send it as is. The screenshot stays on the server.",
     cancelled: "Cancelled: nothing was sent.",
     queuedNoToken: (manual: string) => `Queued: report ready and kept here. This server has no GitHub token to send it to the team: a server admin must set the SAGAX_FEEDBACK_GITHUB_TOKEN environment variable (or save it with PUT /api/admin/feedback-config). It goes out as soon as the token is set. Meanwhile you can ${manual}.`,
     manualLink: (url: string) => `[open the report on GitHub](${url}) yourself (it is already filled in)`,
@@ -167,6 +163,16 @@ function oneLine(text: string, max: number): string {
 
 /** French for any fr-* tag, English for any other tag, the guess from the
  * message's words when the person's language is unknown. */
+/** The surface a request came from, when the app attached nothing (a
+ * phone or another client typed /feedback). */
+export function platformFromUserAgent(userAgent: string | undefined): FeedbackAppContext["platform"] | undefined {
+  const agent = userAgent ?? "";
+  if (/iPhone|iPad|CFNetwork|\biOS\b/.test(agent)) return "ios";
+  if (/Electron\//.test(agent)) return "desktop";
+  if (/Mozilla\//.test(agent)) return "web";
+  return undefined;
+}
+
 export function feedbackLanguageFor(appLanguage: string | undefined, text: string): FeedbackLanguage {
   const tag = (appLanguage ?? "").trim().toLowerCase();
   if (tag) return tag.split(/[-_]/)[0] === "fr" ? "fr" : "en";
@@ -205,16 +211,19 @@ export function createFeedbackService(deps: FeedbackDeps) {
     return promise;
   };
 
-  function ensureBot(): BotLike {
-    const found = store.bots.find((bot) => bot.systemBot === "feedback");
-    if (found) return found;
-    const bot = store.createBot({
-      name: "Feedback",
-      title: "Bogues, idées, questions",
-      description: "Signale un bogue, propose une idée ou pose une question à l'équipe Sagax. / Report a bug, suggest an idea or ask the Sagax team a question.",
-      color: "#7c5cff",
-    }, { seedMessages: false });
-    return store.patchBot(bot.id, { systemBot: "feedback" }) ?? bot;
+  /** #3299: older versions made a shared "Feedback" bot (no owner, empty
+   * profile). It is removed with its threads; its unfinished reports are
+   * dropped, its filed ones keep their status but post nowhere. */
+  function retireFeedbackBot(): number {
+    let removed = 0;
+    for (const bot of store.bots.filter((entry) => entry.systemBot === "feedback")) {
+      for (const record of records) {
+        if (record.botId === bot.id && record.status === "draft") record.status = "cancelled";
+      }
+      if (store.deleteBot?.(bot.id)) removed += 1;
+    }
+    if (removed) save();
+    return removed;
   }
 
   function filer(): GithubFiler | null {
@@ -273,7 +282,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
     if (message.card?.answered || message.card?.dismissed) return { ok: false, status: 409, error: "This card was already answered." };
     const record = byId(marker.reportId);
     const bot = record ? store.bot(record.botId) : store.bots.find((entry) => entry.threadId === threadId);
-    if (!bot) return { ok: false, status: 404, error: "The Feedback bot is gone." };
+    if (!bot) return { ok: false, status: 404, error: "The bot of this report is gone." };
     const options = message.card?.options ?? [];
     const picked = options.find((option) => option.toLowerCase() === text.trim().toLowerCase());
     if (!picked && !text.trim()) return { ok: false, status: 400, error: `Pick one of: ${options.join(", ")}.` };
@@ -281,7 +290,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
     return { ok: true, status: 200 };
   }
 
-  function draft(input: { owner: string | null; botId: string; threadId: string; lang: FeedbackLanguage; source: FeedbackSource; preset?: Partial<FeedbackAnswers>; context?: Partial<ReportContext>; offer?: boolean }): FeedbackRecord {
+  function draft(input: { owner: string | null; botId: string; threadId: string; lang: FeedbackLanguage; source: FeedbackSource; said: string; context?: Partial<ReportContext>; offer?: boolean }): FeedbackRecord {
     // a newer report in the same conversation replaces an unfinished one
     for (const record of records) {
       if (record.threadId === input.threadId && record.status === "draft" && !record.offer) record.status = "cancelled";
@@ -296,7 +305,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
       createdAt: now(),
       updatedAt: now(),
       status: "draft",
-      preset: input.preset ?? {},
+      said: input.said,
       context: { source: input.source, ...input.context },
       ...(input.offer ? { offer: true } : {}),
     };
@@ -306,7 +315,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
   }
 
   function answersOf(record: FeedbackRecord): FeedbackAnswers {
-    return feedbackAnswers(store.activePath(record.threadId), record.id, record.preset);
+    return feedbackAnswers(store.activePath(record.threadId), record.id, record.said ?? "");
   }
 
   function reportOf(record: FeedbackRecord): FiledReport {
@@ -322,19 +331,18 @@ export function createFeedbackService(deps: FeedbackDeps) {
   /** The next question, or the preview card. */
   function advance(record: FeedbackRecord): void {
     record.updatedAt = now();
-    const step = nextFeedbackStep(record.lang, answersOf(record), record.id);
+    const step = nextFeedbackStep(record.lang, answersOf(record), record.id, record.context.error || record.context.chat?.error);
     if (step.kind === "ask") {
-      post(record.threadId, step.marker, step.message);
+      post(record.threadId, step.marker, { kind: "text", text: feedbackText(record.lang, "feedback.server.detailQuestion") });
       return;
     }
+    // #3299: the person sees the exact text that leaves, whole
     const report = reportOf(record);
-    const words = WORDS[record.lang];
-    const body = report.body.length > 6000 ? `${report.body.slice(0, 5999)}…` : report.body;
-    post(record.threadId, undefined, { kind: "text", text: `${words.previewIntro}\n\n**${report.title}**\n\n${body}` });
+    post(record.threadId, undefined, { kind: "text", text: `${feedbackText(record.lang, "feedback.server.previewIntro")}\n\n**${report.title}**\n\n${report.body}` });
     // the Feedback product's send preview (a report to a third party, the person's own send); full-access: exempt
     post(record.threadId, { step: "preview", reportId: record.id }, {
       kind: "options",
-      card: { title: words.previewTitle, subtitle: words.previewSubtitle, options: [...SEND_OPTIONS[record.lang]] },
+      card: { title: feedbackText(record.lang, "feedback.server.previewTitle"), subtitle: feedbackText(record.lang, "feedback.server.previewSubtitle"), options: [...SEND_OPTIONS[record.lang]] },
     });
   }
 
@@ -343,6 +351,8 @@ export function createFeedbackService(deps: FeedbackDeps) {
   }
 
   function postStatus(record: FeedbackRecord, line: string): void {
+    // a report of the retired Feedback bot keeps its status, in no chat
+    if (!store.bot(record.botId)) return;
     post(record.threadId, { step: "status", reportId: record.id }, { kind: "text", text: line });
   }
 
@@ -381,9 +391,8 @@ export function createFeedbackService(deps: FeedbackDeps) {
   }
 
   function submit(record: FeedbackRecord): void {
-    const answers = answersOf(record);
-    record.kind = answers.kind ?? "bug";
     record.report = reportOf(record);
+    record.kind = kindOf(record.report);
     record.status = "queued";
     record.updatedAt = now();
     save();
@@ -399,19 +408,42 @@ export function createFeedbackService(deps: FeedbackDeps) {
     post(record.threadId, { step: "status", reportId: record.id }, { kind: "text", text: WORDS[record.lang].cancelled });
   }
 
-  function presetFrom(text: string): Partial<FeedbackAnswers> {
-    if (!text) return {};
-    const kind = parseKind(text);
-    if (!kind) return { describe: text };
-    // a bare kind word ("a bug") answers the kind and nothing more
-    if (text.split(/\s+/).length <= 3) return { kind };
-    return kind === "bug" ? { kind, actual: text } : { kind, describe: text };
+  function kindOf(report: FiledReport): FeedbackKind {
+    return report.labels.includes("enhancement") ? "idea" : report.labels.includes("question") ? "question" : "bug";
   }
 
-  /** The person's message in a feedback conversation, or a /feedback typed
-   * anywhere. Returns the stored message when the flow took it (no turn
-   * runs), null when the message is not the flow's. */
-  function handleMessage(input: FeedbackMessageInput): StoredMessage | null {
+  /** What the app attached, cut to size. */
+  function appContext(app: FeedbackAppContext | undefined, userAgent: string | undefined): Partial<ReportContext> {
+    if (!app) {
+      const platform = platformFromUserAgent(userAgent);
+      return platform ? { platform } : {};
+    }
+    return {
+      ...(FEEDBACK_PLATFORMS.includes(app.platform) ? { platform: app.platform } : {}),
+      ...(app.appVersion ? { appVersion: String(app.appVersion).slice(0, 80) } : {}),
+      ...(app.os ? { os: String(app.os).slice(0, 120) } : {}),
+      ...(app.page ? { page: String(app.page).slice(0, 120) } : {}),
+      ...(Array.isArray(app.clientLogs) ? { clientLogs: app.clientLogs.slice(-60).map((line) => String(line).slice(0, 1000)) } : {}),
+    };
+  }
+
+  function serverFacts(botId: string, messages: readonly StoredMessage[]): Partial<ReportContext> {
+    let engine: { engine?: string; model?: string } = {};
+    try {
+      engine = deps.engine?.(botId) ?? {};
+    } catch { /* the chat's own facts */ }
+    const chat = chatFacts(messages);
+    return {
+      ...(engine.engine ? { engine: engine.engine } : {}),
+      ...(chat.model || engine.model ? { model: chat.model || engine.model } : {}),
+      chat,
+    };
+  }
+
+  /** A /feedback typed in any chat, or the person's answer to the flow's
+   * open question or card. Returns the stored message when the flow took it
+   * (no turn runs), null when the message is not the flow's. */
+  function handleMessage(input: FeedbackMessageInput & { userAgent?: string }): StoredMessage | null {
     const bot = store.bot(input.botId);
     if (!bot) return null;
     const text = input.text.trim();
@@ -442,24 +474,27 @@ export function createFeedbackService(deps: FeedbackDeps) {
       record = marker ? byId(marker.reportId) : undefined;
       if (record && record.status !== "draft") record = undefined;
       if (record && marker?.step === "offer") record = undefined;
-      // in another bot's chat, only while the flow's question is the last word
-      if (record && bot.systemBot !== "feedback" && !input.viaCard) {
+      // only while the flow's question is the last word of the chat
+      if (record && !input.viaCard) {
         const lastBot = [...messages].reverse().find((message) => message.role === "bot");
         if (lastBot?.feedback?.reportId !== record.id) record = undefined;
       }
     }
 
     if (!record) {
-      if (!command && bot.systemBot !== "feedback") return null;
-      const rest = command ? text.replace(/^\/feedback\b/i, "").trim() : text;
+      if (!command) return null;
+      const rest = text.replace(/^\/feedback\b/i, "").trim();
+      // the chat's facts are read before /feedback itself is stored
+      const facts = serverFacts(bot.id, messages);
       const stored = userMessage();
       const fresh = draft({
         owner: input.principalId,
         botId: bot.id,
         threadId: input.threadId,
-        lang: languageFor(input.principalId, rest || text),
-        source: command ? "slash" : "chat",
-        preset: presetFrom(rest),
+        lang: input.app?.locale ?? languageFor(input.principalId, rest || null),
+        source: "slash",
+        said: rest,
+        context: { ...appContext(input.app, input.userAgent), ...facts },
       });
       advance(fresh);
       return stored;
@@ -476,50 +511,11 @@ export function createFeedbackService(deps: FeedbackDeps) {
     return stored;
   }
 
-  function start(owner: string | null, request: FeedbackStartRequest): FeedbackStartResponse {
-    const bot = ensureBot();
-    const threadId = deps.threadFor(bot);
-    const lang: FeedbackLanguage = request.locale ?? languageFor(owner, null);
-    const id = newReportId();
-    let screenshot = false;
-    const match = typeof request.screenshot === "string" ? /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(request.screenshot) : null;
-    if (match) {
-      const bytes = Buffer.from(match[1]!, "base64");
-      if (bytes.length > 0 && bytes.length <= MAX_SCREENSHOT_BYTES) {
-        mkdirSync(join(dir, "shots"), { recursive: true, mode: 0o700 });
-        writeFileSync(join(dir, "shots", `${id}.png`), bytes, { mode: 0o600 });
-        screenshot = true;
-      }
-    }
-    const record = draft({
-      owner,
-      botId: bot.id,
-      threadId,
-      lang,
-      source: request.source,
-      preset: request.source === "error" ? { kind: "bug" } : request.text ? presetFrom(request.text) : {},
-      context: {
-        platform: request.platform,
-        ...(request.appVersion ? { appVersion: String(request.appVersion).slice(0, 80) } : {}),
-        ...(request.os ? { os: String(request.os).slice(0, 120) } : {}),
-        ...(request.page ? { page: String(request.page).slice(0, 120) } : {}),
-        ...(request.error ? { error: String(request.error).slice(0, 4000) } : {}),
-        ...(Array.isArray(request.clientLogs) ? { clientLogs: request.clientLogs.slice(-60).map((line) => String(line).slice(0, 1000)) } : {}),
-        screenshot,
-      },
-    });
-    record.id = id;
-    save();
-    post(threadId, undefined, { kind: "text", text: WORDS[lang].hello });
-    advance(record);
-    return { botId: bot.id, threadId };
-  }
-
   /** After an ordinary message to any bot: one pre-drafted offer per
    * conversation when the person sounds frustrated. */
   function maybeOffer(input: { botId: string; threadId: string; text: string; principalId: string | null }): void {
     const bot = store.bot(input.botId);
-    if (!bot || bot.systemBot === "feedback" || isFeedbackCommand(input.text)) return;
+    if (!bot || isFeedbackCommand(input.text)) return;
     if (records.some((record) => record.threadId === input.threadId && record.offer)) return;
     const earlier = store.activePath(input.threadId)
       .filter((message) => message.role === "user" && message.kind === "text" && message.text && message.text.trim() !== input.text.trim())
@@ -539,32 +535,18 @@ export function createFeedbackService(deps: FeedbackDeps) {
       threadId: input.threadId,
       lang,
       source: "frustration",
-      preset: { kind: "bug", actual: input.text },
-      context: { signal },
+      said: input.text,
+      context: { signal, ...serverFacts(bot.id, store.activePath(input.threadId).filter((message) => message.text?.trim() !== input.text.trim())) },
       offer: true,
     });
-    const summary = oneLine(anonymize(stripAttachments(input.text).text, deps.names()), 200);
+    const summary = oneLine(anonymizeWords(stripAttachments(input.text).text, deps.names()), 200);
     // the Feedback product's offer, never a permission; full-access: exempt
     post(input.threadId, { step: "offer", reportId: record.id }, { kind: "options", card: offerCard(lang, summary) });
   }
 
   /** Retry the queue and read filed issues' status back (every 5 minutes). */
-  /** #3081: every thread of the Feedback bot, not only those that still have
-   * a report record: a card whose report is gone from disk sits in a thread
-   * nothing else would sweep. Runs at startup and on every tick. */
-  function sweepOrphanCards(): void {
-    for (const bot of store.bots) {
-      if (bot.systemBot !== "feedback") continue;
-      const threads = new Set<string>([bot.threadId, ...(bot.tasks ?? []).map((task) => task.threadId)]);
-      for (const threadId of threads) {
-        try { retireStaleCards(threadId); } catch { /* the next sweep */ }
-      }
-    }
-  }
-
   let swept = false;
   async function tick(): Promise<void> {
-    sweepOrphanCards();
     // #3018: drafts left unfinished expire; cards left behind by earlier
     // versions (one per reopened flow) are retired once after a start.
     const stale = new Set<string>();
@@ -623,13 +605,11 @@ export function createFeedbackService(deps: FeedbackDeps) {
   }
 
   return {
-    ensureBot,
-    start,
+    retireFeedbackBot,
     handleMessage,
     answerCard,
     maybeOffer,
     tick,
-    sweepOrphanCards,
     list,
     flush: async () => { await Promise.all(pending); },
   };

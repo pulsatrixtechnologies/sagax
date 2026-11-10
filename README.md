@@ -262,8 +262,8 @@ Follow work, answer approvals, call your bots and manage their routines from
 your phone. Each bot keeps the same single conversation as on the desktop.
 Notifications carry the bot's mascot, on the phone and on the watch, and a
 Live Activity can follow a running task from the lock screen (off by
-default). One tap opens every OS permission still missing, and shaking the
-phone opens a feedback report. ([iOS app](docs/ios-companion.md))
+default). One tap opens every OS permission still missing.
+([iOS app](docs/ios-companion.md))
 
 <table>
 <tr>
@@ -319,9 +319,10 @@ phone opens a feedback report. ([iOS app](docs/ios-companion.md))
   search and backups. ([confidential threads](docs/confidential-threads.md))
 - **Import an agent.** Start a bot from a Grok, Claude Code or Hermes agent
   you already have. ([import](docs/import-agent.md))
-- **Feedback in one click.** A shared Feedback bot takes a problem or an
-  idea, shows the anonymized report, and sends it. From the sidebar footer,
-  the Help menu (Cmd/Ctrl+Shift+F), `/feedback` in any chat or any error card.
+- **Feedback with `/feedback`.** Type it in any chat: the server reads that
+  chat (what you asked, the error, the engine and model, the version), writes
+  a precise GitHub issue with every name, address, ticket, path and secret
+  replaced by a neutral word, shows you the exact text, and sends it.
 - **My devices.** Every Sagax install of yours, with bot access set per
   device. Unattended remote access keeps a computer reachable for its bots.
   ([remote sessions](docs/remote-sessions.md))

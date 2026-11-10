@@ -195,7 +195,6 @@ import { SidebarResizeHandle } from "./Sidebar.tsx-parts/SidebarResizeHandle";
 import { SidebarUnreadPillAbove, SidebarUnreadPillBelow } from "./Sidebar.tsx-parts/SidebarUnreadPills";
 import { hiddenSidebarRows } from "@/lib/sidebar-hidden-entries";
 import { routineRunsWaiting } from "./parallel-approvals";
-import { botTitleText } from "@/lib/system-bot-copy";
 
 export type { MenuState, BotConfirmKind };
 export { parseItemDrag, currentArchivableBot, botConfirmCopy, roomDeleteCopy, sidebarListedBots, TeamMenuItems };
@@ -1895,7 +1894,7 @@ export function BotListItem({
   const visible = useVisibleMessages(bot);
   // The role (Bot settings > Title) is the pill beside the name, as Grok
   // Bot draws it ("Service Desk Ops").
-  const title = botTitleText(bot).trim();
+  const title = (bot.title ?? "").trim();
   const inSidebar = threadsMode === "sidebar" && !iconOnly;
   const [threadsOpen, setThreadsOpen] = useSearchDisclosure(`bot:${bot.id}`, inSidebar ? query : "", searchMatchesThreads(query, bot.tasks, bot.projects), true);
   const threadsListed = inSidebar && threadsOpen;
@@ -2058,7 +2057,7 @@ export function BotListItem({
   };
 
   const row = (
-    <div className="group relative" title={iconOnly ? [bot.name, botTitleText(bot).trim(), share && botShareLabel(share)].filter(Boolean).join("\n") : undefined}>
+    <div className="group relative" title={iconOnly ? [bot.name, (bot.title ?? "").trim(), share && botShareLabel(share)].filter(Boolean).join("\n") : undefined}>
       {/* Keep this wrapper mounted while RenameTitle swaps its label for an
           input. Replacing the wrapper tree remounts RenameTitle, loses its
           editing state, and leaves the row stuck in rename mode. Omitting

@@ -323,8 +323,6 @@ final class Session: ObservableObject {
     }
 
     private var client: CompanionClient?
-    /// A report being started (startFeedback): one shake, one report.
-    private var feedbackStarting = false
     /// `GET /voice/status` per bot, kept a minute (voiceModeStatus).
     private var voiceStatusCache: [String: (status: VoiceModeStatus, at: Date)] = [:]
     /// Why the last voice status could not be read (voiceModeStatus).
@@ -2997,29 +2995,6 @@ final class Session: ObservableObject {
         } catch {
             log.info("reload for an open failed: \(error.localizedDescription, privacy: .public)")
             return false
-        }
-    }
-
-    /// #2618: a shake (FeedbackShake.swift) starts a report with the shared
-    /// Feedback bot. The server asks the questions in that bot's chat; the
-    /// phone sends where it was and opens the conversation.
-    func startFeedback(source: FeedbackStart.Source, locale: Locale) async {
-        guard let client, !feedbackStarting else { return }
-        feedbackStarting = true
-        defer { feedbackStarting = false }
-        let start = FeedbackStart(
-            source: source,
-            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
-            os: "\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)",
-            page: pendingChat == nil ? "home" : "chat",
-            locale: locale.language.languageCode?.identifier == "fr" ? "fr" : "en"
-        )
-        do {
-            let started = try await client.startFeedback(start)
-            _ = await reloadConversations()
-            openChat(threadId: started.threadId)
-        } catch {
-            actionError = error.localizedDescription
         }
     }
 

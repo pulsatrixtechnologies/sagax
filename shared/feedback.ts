@@ -1,8 +1,9 @@
-// In-app feedback (#2618): the shared words of the Feedback bot, the
-// filing labels and the light frustration heuristic every bot uses to offer
-// a ready-made report. The server runs the conversation and files the issue
-// (server/feedback/); the apps only open it (one shared action) and show its
-// cards with the ordinary option card.
+// In-app feedback (#2618, #3299): `/feedback` typed in any chat is the one
+// way in. The server reads the chat it is typed in, builds a precise,
+// anonymized GitHub issue, shows the person the exact text and files it
+// (server/feedback/). No bot of its own, no sidebar button. This file holds
+// the shared words: the filing labels, what the app attaches to the command
+// and the light frustration heuristic every bot uses to offer a report.
 
 export type FeedbackKind = "bug" | "idea" | "question";
 export const FEEDBACK_KINDS: readonly FeedbackKind[] = ["bug", "idea", "question"];
@@ -11,11 +12,13 @@ export const FEEDBACK_KINDS: readonly FeedbackKind[] = ["bug", "idea", "question
  * "queued": not filed yet (no token configured, or the last try failed). */
 export type FeedbackStatus = "queued" | "sent" | "received" | "in_progress" | "resolved";
 
-/** What opened the Feedback conversation. */
-export type FeedbackSource = "sidebar" | "menu" | "shortcut" | "slash" | "shake" | "error" | "frustration" | "chat";
-export const FEEDBACK_SOURCES: readonly FeedbackSource[] = ["sidebar", "menu", "shortcut", "slash", "shake", "error", "frustration", "chat"];
+/** What opened the report: the slash command, or the offer a bot's chat
+ * shows after a frustrated message. */
+export type FeedbackSource = "slash" | "frustration";
 
+/** The surface the person used. */
 export type FeedbackPlatform = "desktop" | "ios" | "web";
+export const FEEDBACK_PLATFORMS: readonly FeedbackPlatform[] = ["desktop", "ios", "web"];
 
 /** Labels every filed report carries, plus the kind's own label. The
  * untriaged flag is what the team filters on before handling them. */
@@ -24,28 +27,18 @@ export const FEEDBACK_UNTRIAGED_LABEL = "feedback:untriaged";
 export const FEEDBACK_IN_PROGRESS_LABEL = "feedback:in-progress";
 export const FEEDBACK_KIND_LABEL: Record<FeedbackKind, string> = { bug: "bug", idea: "enhancement", question: "question" };
 
-/** POST /api/feedback/start: what the app attaches on its own. */
-export interface FeedbackStartRequest {
-  source: FeedbackSource;
+/** What the app attaches on its own when it sends `/feedback` (the
+ * `feedback` field of POST /api/bots/:id/messages). Everything is
+ * anonymized again on the server before it reaches an issue. */
+export interface FeedbackAppContext {
   platform: FeedbackPlatform;
   appVersion?: string;
   os?: string;
   /** The page the person was on (a route name, never a URL with ids). */
   page?: string;
-  /** An error card's own words, when the report starts from one. */
-  error?: string;
-  /** The app's own recent console lines (expurgated again on the server). */
+  /** The app's own recent console lines. */
   clientLogs?: string[];
-  /** A PNG of the Sagax window itself (data URL), captured by the app. */
-  screenshot?: string;
   locale?: "fr" | "en";
-  /** The words typed after /feedback, when the report starts from the slash command. */
-  text?: string;
-}
-
-export interface FeedbackStartResponse {
-  botId: string;
-  threadId: string;
 }
 
 /** One report as its author sees it (GET /api/feedback). */
@@ -59,9 +52,10 @@ export interface FeedbackReportView {
   issueUrl?: string;
 }
 
-/** The marker the server puts on the Feedback bot's own messages, so the
- * next answer knows which question it answers. Server-side only. */
-export type FeedbackStep = "kind" | "steps" | "expected" | "actual" | "describe" | "impact" | "followup" | "preview" | "offer" | "status";
+/** The marker the server puts on its feedback messages, so the next answer
+ * knows what it answers: "detail" is the one question it may ask, "preview"
+ * the Send card, "offer" a frustration offer. Server-side only. */
+export type FeedbackStep = "detail" | "preview" | "offer" | "status";
 
 export function isFeedbackCommand(text: string): boolean {
   return /^\/feedback\b/i.test(text.trim());

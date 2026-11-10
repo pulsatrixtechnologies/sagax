@@ -14,7 +14,6 @@ import {
 } from "@/components/lazy-screens";
 import { ArchivedBotsPanel } from "@/components/Sidebar";
 import { AboutPrompt } from "@/components/AboutDialog";
-import { FeedbackShortcut } from "@/lib/use-open-feedback";
 import { ReleaseNotesPrompt } from "@/components/ReleaseNotesPrompt";
 import { TermsGate } from "@/components/TermsGate";
 import { UpdateBanner } from "@/components/UpdateBanner";
@@ -101,7 +100,6 @@ export function ShellLayout(shell: ShellNavigation) {
       <ReleaseNotesPrompt />
       {/* About: centred modal from Settings > About, the profile menu, the app menu. */}
       <AboutPrompt />
-      <FeedbackShortcut />
       {/* The terms of use, once per account (App Store 1.2). */}
       <TermsGate />
       <UpdateBanner />

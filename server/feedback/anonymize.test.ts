@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anonymize, anonymizeLines } from "./anonymize.ts";
+import { anonymize, anonymizeLines, anonymizeWords, maskUnknownNames } from "./anonymize.ts";
 
 const NAMES = {
   people: ["Alexandra Tremblay", "Jordan"],
@@ -33,10 +33,27 @@ describe("feedback anonymizer", () => {
     expect(out).toBe("thread [id] bot [id] hash [id]");
   });
 
-  it("masks user paths on macOS, Linux and Windows", () => {
-    expect(anonymize("/Users/alex/Library/Logs/x.log", {})).toBe("/Users/[user]/Library/Logs/x.log");
-    expect(anonymize("/home/alex/.sagax/data", {})).toBe("/home/[user]/.sagax/data");
-    expect(anonymize("C:\\Users\\Alex\\AppData\\Roaming", {})).toBe("C:\\Users\\[user]\\AppData\\Roaming");
+  it("masks private paths whole on macOS, Linux, Windows and shares (#3299)", () => {
+    expect(anonymize("/Users/alex/Library/Logs/x.log", {})).toBe("[path]");
+    expect(anonymize("see /home/alex/.sagax/data now", {})).toBe("see [path] now");
+    expect(anonymize("C:\\Users\\Alex\\AppData\\Roaming", {})).toBe("[path]");
+    expect(anonymize("open \\\\FS01\\Clients\\Acme", {})).toBe("open [path]");
+    expect(anonymize("/Volumes/Clients/Acme/q3.xlsx and ~/Documents/acme.pdf", {})).toBe("[path] and [path]");
+    expect(anonymize("GET /api/bots/x/messages failed in server/feedback/report.ts", {})).toBe("GET /api/bots/x/messages failed in server/feedback/report.ts");
+  });
+
+  it("masks ticket numbers and the text quoted after them (#3299)", () => {
+    expect(anonymize('ticket #48213 "Printer down at the north office" is stuck', {})).toBe("[ticket] [ticket text] is stuck");
+    expect(anonymize("billet 297048 et cas INC-00123", {})).toBe("[ticket] et [ticket]");
+    expect(anonymize("see #123456", {})).toBe("see [ticket]");
+    expect(anonymize("HTTP 404 on request 500 times", {})).toBe("HTTP 404 on request 500 times");
+  });
+
+  it("masks computer and server names, known or by their shape (#3299)", () => {
+    expect(anonymize("from Ada's MacBook Pro and adas-imac to SRV-DC01", {})).toBe("from [host] and [host] to [host]");
+    expect(anonymize("UTF-8 and SHA-256 and GPT-5 stay", {})).toBe("UTF-8 and SHA-256 and GPT-5 stay");
+    expect(anonymize("the iPhone app on studio-7", { hosts: ["studio-7"], other: ["adalove"] })).toBe("the iPhone app on [host]");
+    expect(anonymize("login adalove", { other: ["adalove"] })).toBe("login [name]");
   });
 
   it("masks IPv4 and IPv6 addresses", () => {
@@ -60,5 +77,19 @@ describe("feedback anonymizer", () => {
 
   it("keeps ISO timestamps of the log readable", () => {
     expect(anonymize("2026-11-07T23:56:37.075Z warn engine", {})).toContain("2026-11-07T23:56:37.075Z");
+  });
+
+  it("masks people and companies the server does not know, in English and French (#3299)", () => {
+    const known = { people: ["Alice Martin"], orgs: ["Contoso"] };
+    expect(anonymizeWords("Bob Tremblay de Fabrikam m'a demandé", known)).toBe("[name] m'a demandé");
+    expect(anonymizeWords("Can you check the backups for Northwind Traders? Alice Martin asked.", known)).toBe("Can you check the backups for [name]? [person] asked.");
+    expect(anonymizeWords("Peux-tu appeler Jean-Pierre D'Amours chez fabrikam", {})).toBe("Peux-tu appeler [name] chez [name]");
+    expect(anonymizeWords("Send the report to the client wingtip and to ACMEX", {})).toBe("Send the report to the client [name] and to [name]");
+    expect(anonymizeWords("Dominique's report at O'Neil Holdings", {})).toBe("[name] report at [name]");
+  });
+
+  it("keeps ordinary words, products and technical terms in free text (#3299)", () => {
+    const text = "Show the open routines for this week. I expected the Outlook calendar on macOS but the API returns JSON with HTTP 500. Don't retry. C'est l'écran Réglages qui gèle, j'ai essayé deux fois.";
+    expect(maskUnknownNames(text)).toBe(text);
   });
 });

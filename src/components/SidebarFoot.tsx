@@ -9,9 +9,7 @@
 // No hover animation and no stacked state: the name is cut only when the row
 // really has no room left for it.
 import { useEffect, useState } from "react";
-import { MessageSquareWarning } from "lucide-react";
 import { t } from "@/lib/i18n";
-import { useOpenFeedback } from "@/lib/use-open-feedback";
 import { api } from "@/state/store";
 import { useStoreSelector } from "@/state/store-selector";
 import { connectedAppItems, type AccountConnector } from "@/lib/connected-apps";
@@ -97,33 +95,13 @@ export function FootConnectApps({ apps, onOpen }: { apps: readonly PluginItem[];
   );
 }
 
-/** The foot's round Send feedback button (#2618), beside the apps grid: the
- * same quiet circle, it opens a report with the Feedback bot. */
-export function FootFeedback({ onOpen }: { onOpen: () => void }) {
-  const label = t("feedback.sidebar.label");
-  return (
-    <button
-      type="button"
-      data-sidebar-feedback=""
-      onClick={onOpen}
-      aria-label={label}
-      title={label}
-      className="relative flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-card text-sidebar-ink-secondary outline-none transition-colors hover:bg-sidebar-elevated-hover hover:text-sidebar-ink focus-visible:ring-2 focus-visible:ring-focus"
-    >
-      <MessageSquareWarning size={18} strokeWidth={2} aria-hidden="true" />
-    </button>
-  );
-}
-
 export function SidebarFoot({ places, onOpenApps }: { places?: SidebarMenuItem[]; onOpenApps: () => void }) {
   const apps = useConnectedApps();
-  const openFeedback = useOpenFeedback();
   return (
     <div data-sidebar-account-row className="-mx-1.5 flex items-center gap-1.5">
       <SidebarProfileMenu avatarOnly withName places={places} />
       {/* a waiting update: the same kind of round button, beside the grid */}
       <SidebarUpdatePill layout="compact" />
-      <FootFeedback onOpen={() => void openFeedback({ source: "sidebar" })} />
       <FootConnectApps apps={apps} onOpen={onOpenApps} />
       <SidebarRoutinesBadge />
     </div>
@@ -138,13 +116,11 @@ export function SidebarFoot({ places, onOpenApps }: { places?: SidebarMenuItem[]
  * name has no room; it is the avatar's accessible name and tooltip. */
 export function SidebarRailFoot({ places, onOpenApps }: { places?: SidebarMenuItem[]; onOpenApps: () => void }) {
   const apps = useConnectedApps();
-  const openFeedback = useOpenFeedback();
   return (
     <>
       <div data-sidebar-rail-foot="" className="flex flex-col items-center gap-2 pt-1">
         <SidebarUpdatePill layout="compact" />
         <SidebarRoutinesBadge />
-        <FootFeedback onOpen={() => void openFeedback({ source: "sidebar" })} />
         <FootConnectApps apps={apps} onOpen={onOpenApps} />
       </div>
       <div data-sidebar-account-rail="" className="flex h-10 items-center justify-center">

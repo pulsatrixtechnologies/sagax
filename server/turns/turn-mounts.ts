@@ -5,7 +5,7 @@
 // receives, so the list and the turn cannot drift (test "a turn mounts
 // exactly what the list says", server/capabilities/capabilities.test.ts).
 import type { McpServerSpec } from "../contracts.ts";
-import { githubServersAsPerson, withGithubToken } from "../github/github-mcp-token.ts";
+import { githubServersAsPerson, isGithubMcpServer, withGithubToken } from "../github/github-mcp-token.ts";
 import { mcpServerRunsHere } from "../mcp/mcp-platform.ts";
 import { personalAuthHeaders, type GithubConnection, type PersonalMcpServer } from "../people/person-connections.ts";
 import { claudePluginDirs } from "./plugin-turn.ts";
@@ -43,6 +43,18 @@ export function serverMcpAsPerson<T extends Record<string, McpServerSpec>>(serve
   if (!input.organization) return { servers: withGithubToken(servers, input.githubToken), githubWithheld: [] };
   const asPerson = githubServersAsPerson(servers, input.githubToken);
   return { servers: asPerson.servers, githubWithheld: asPerson.withheld };
+}
+
+/** One plugin's URL server as the turn's person (#3385): the same rule as
+ * serverMcpAsPerson, for a server a plugin declares. The GitHub plugin ships
+ * `Authorization: Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}`; mounted as it was
+ * read, the literal placeholder reached the remote server, which refused the
+ * handshake (HTTP 400). Undefined: left out, the person has no GitHub
+ * connection (organization server). Pure. */
+export function pluginMcpAsPerson(name: string, spec: McpServerSpec, input: { organization: boolean; githubToken: () => string | undefined }): McpServerSpec | undefined {
+  if (!isGithubMcpServer(spec)) return spec;
+  const asPerson = serverMcpAsPerson({ [name]: spec }, { organization: input.organization, githubToken: input.githubToken() });
+  return asPerson.githubWithheld.length ? undefined : asPerson.servers[name];
 }
 
 // ── the person's own MCP servers (organization server) ────────────────────

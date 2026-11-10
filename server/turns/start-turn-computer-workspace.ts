@@ -116,10 +116,11 @@ export function createComputerWorkspaceStartTurn(host: StartTurnHost) {
       botId: state.bot.id, threadId: state.threadId, generation: state.dispatchClaimId,
       customMcp: state.instance.adapter.capabilities.customMcp === true, principal: state.turnPlace.principal
     });
-    await mountPluginMcp(state.integrations, {
+    const plugins = await mountPluginMcp(state.integrations, {
       botId: state.bot.id, threadId: state.threadId, generation: state.dispatchClaimId,
       customMcp: state.instance.adapter.capabilities.customMcp === true, principal: state.turnPlace.principal
     });
+    if (plugins?.githubWithheld?.length) state.githubWithheld = [...(state.githubWithheld ?? []), ...plugins.githubWithheld];
     if (IDENTITY.kind === "perspicax" && state.turnPlace.principal) {
       await syncPluginsForTurn(state.turnPlace.principal, state.dispatchClaimId, state.bot.id);
     }

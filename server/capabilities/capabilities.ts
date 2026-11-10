@@ -15,7 +15,7 @@ import { basename } from "node:path";
 import type { McpServerSpec } from "../contracts.ts";
 import type { GithubConnection, PersonalMcpServer } from "../people/person-connections.ts";
 import type { PluginContents } from "../bots/bot-plugins.ts";
-import { engineServerMcp, withoutHostCommands, personalMcpPrecheck, serverMcpAsPerson, turnPluginPromptDirs } from "../turns/turn-mounts.ts";
+import { engineServerMcp, withoutHostCommands, personalMcpPrecheck, pluginMcpAsPerson, serverMcpAsPerson, turnPluginPromptDirs } from "../turns/turn-mounts.ts";
 import { pluginMcpPrecheck, selectPluginScopes } from "./capability-plugin-mounts.ts";
 import {
   engineReceipt,
@@ -561,6 +561,14 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
     const privateAddress = "url" in candidate.spec && inputs.organization && inputs.pluginHostRefused?.(candidate.spec.url);
     if (check || !allowed || privateAddress || !engine.customMcp) {
       if (!row.reason && check !== "invalid" && check !== "reserved") row.reason = check ?? (!allowed ? "policy" : privateAddress ? "private_address" : undefined);
+      continue;
+    }
+    // #3385: a plugin's GitHub server goes as the person (mountPluginMcp);
+    // without their GitHub connection on an organization server it is left out.
+    if (!pluginMcpAsPerson(candidate.name, candidate.spec, { organization: inputs.organization, githubToken: () => inputs.githubToken })) {
+      row.state = "to_connect";
+      row.reason = "needs_github";
+      row.connect = { reason: "github" };
       continue;
     }
     taken.add(candidate.name);

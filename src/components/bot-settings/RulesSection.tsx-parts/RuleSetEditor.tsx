@@ -23,7 +23,7 @@ export function RuleSetEditor({ current, plain, draft, count, conflict, busy, di
 }) {
   return (
     <div className={cn("flex flex-col gap-3", plain && "px-4 pb-3 pt-1")} data-rule-set-editor={current.id}>
-      {!current.enabled && <p className="text-[12.5px] text-ink-secondary">{t("persona.rules.sets.offNote")}</p>}
+      {!current.enabled && <p className="text-[12px] text-ink-secondary">{t("persona.rules.sets.offNote")}</p>}
       <MarkdownEditor
         ariaLabel={t("persona.rules.sets.editorLabel", { name: ruleSetLabel(current), file: current.file })}
         value={draft}
@@ -35,12 +35,12 @@ export function RuleSetEditor({ current, plain, draft, count, conflict, busy, di
         footer={footer}
       />
       {count.over && (
-        <p role="alert" className="text-[12.5px] text-danger">
+        <p role="alert" className="text-[12px] text-danger">
           {t("persona.rules.sets.setOver", { maxLines: count.maxLines, maxBytes: formatMemoryBytes(count.maxBytes) })}
         </p>
       )}
       {conflict && conflict.id === current.id && (
-        <div role="alert" className={plain ? "rounded-lg bg-warning/10 p-3 text-[12.5px] leading-relaxed text-ink" : "rounded-lg border border-warning/25 bg-warning/10 p-3 text-[12.5px] leading-relaxed text-ink"}>
+        <div role="alert" className={plain ? "rounded-lg bg-warning/10 p-3 text-[12px] leading-relaxed text-ink" : "rounded-lg border border-warning/25 bg-warning/10 p-3 text-[12px] leading-relaxed text-ink"}>
           <div className={plain ? undefined : "font-medium"}>{t("persona.rules.conflict")}</div>
           <div className="mt-2 flex gap-2">
             <button type="button" className={buttonCls} disabled={busy} onClick={onReload}>
@@ -65,14 +65,14 @@ export function RuleSetEditor({ current, plain, draft, count, conflict, busy, di
         {dirty && (
           <button
             type="button"
-            className={plain ? buttonCls : "rounded-md px-2 py-1 text-[12.5px] text-ink-secondary hover:bg-control hover:text-ink"}
+            className={plain ? buttonCls : "rounded-md px-2 py-1 text-[12px] text-ink-secondary hover:bg-control hover:text-ink"}
             disabled={busy}
             onClick={onDrop}
           >
             {t("persona.rules.discard")}
           </button>
         )}
-        {saved === current.id && !dirty && <span className="text-[12.5px] text-ink-secondary">{t("persona.rules.saved")}</span>}
+        {saved === current.id && !dirty && <span className="text-[12px] text-ink-secondary">{t("persona.rules.saved")}</span>}
       </div>
     </div>
   );

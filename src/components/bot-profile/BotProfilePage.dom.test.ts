@@ -668,3 +668,90 @@ describe("bot profile page: Analytics tab (#3401)", () => {
     expect(analytics!.compareDocumentPosition(breakdown!) & Node.DOCUMENT_POSITION_FOLLOWING, "the breakdown follows the analytics block").toBeTruthy();
   });
 });
+
+/** The type scale of docs/design/ux-reference-grokbot-cursor.md (11, 12, 13,
+ * 14, 16, 20, 28) and sentence case for every label (#3402): no size off the
+ * scale and no capitals by class, in what any view of the page draws and in
+ * the sources of the page (an error line, a rule set that is off or a new
+ * mascot draws only in some states). */
+const OFF_SCALE = /(?:^|\s)(?:[a-z-]+:)*(?:text-\[(?:9|10|10\.5|11\.5|12\.5|13\.5|15)px\]|uppercase)(?=\s|$)/;
+const PAGE_SOURCES = [
+  "src/components/bot-profile/BotProfilePage.tsx",
+  "src/components/bot-profile/BotProfilePage.tsx-parts/BotProfileHeader.tsx",
+  "src/components/bot-profile/BotProfilePage.tsx-parts/BotProfileTabs.tsx",
+  "src/components/bot-profile/BotProfilePage.tsx-parts/cards.tsx",
+  "src/components/bot-profile/BotProfilePage.tsx-parts/subpages.tsx",
+  "src/components/bot-settings/PaneSection.tsx",
+  "src/components/floating-bots/MascotLookEditor.tsx",
+  "src/components/floating-bots/MascotLookPreview.tsx",
+  "src/components/bot-settings/RulesSection.tsx",
+  "src/components/bot-settings/RulesSection.tsx-parts/SetRowParts.tsx",
+  "src/components/bot-settings/RulesSection.tsx-parts/RuleSetEditor.tsx",
+  "src/components/SuggestionFeedback.tsx",
+  "src/components/bot-settings/HistorySection.tsx",
+  "src/components/bot-settings/WriteCommandCard.tsx",
+  "src/components/bot-settings/OwnerPermissionsCard.tsx",
+  "src/components/bot-settings/CustomRulesCard.tsx",
+];
+
+describe("bot profile page: type scale, marks and words (#3402)", () => {
+  it("no text size off the scale and no capitals in any view, header included", async () => {
+    await mount("en");
+    const hits = new Set<string>();
+    for (const view of VIEWS) {
+      const node = await column(view);
+      for (const el of Array.from(node.querySelectorAll("*"))) {
+        const cls = typeof el.getAttribute("class") === "string" ? el.getAttribute("class")! : "";
+        if (OFF_SCALE.test(cls)) hits.add(`${viewName(view)} / ${describeNode(el)}`);
+      }
+    }
+    expect(Array.from(hits)).toEqual([]);
+  });
+
+  it("no text size off the scale and no capitals in the sources of the page", async () => {
+    const { readFileSync } = await import("node:fs");
+    const hits: string[] = [];
+    for (const file of PAGE_SOURCES) {
+      readFileSync(file, "utf8").split("\n").forEach((line, index) => {
+        for (const literal of line.match(/"[^"]*"/g) ?? []) if (OFF_SCALE.test(literal.slice(1, -1))) hits.push(`${file}:${index + 1}`);
+      });
+    }
+    expect(hits).toEqual([]);
+    // A chosen "Less of this" is text: the accent's text token, held to 4.5 to 1
+    // on a card in every skin by check:contrast (the bare accent is a glyph colour).
+    expect(readFileSync("src/components/SuggestionFeedback.tsx", "utf8")).not.toMatch(/"text-accent"/);
+  });
+
+  it("the audience line: a people mark when the bot is shared, the lock only when it is private", async () => {
+    await mount("en");
+    await home("general");
+    const audience = () => host.querySelector<HTMLElement>("[data-bot-profile-audience]")!;
+    expect(fixture.bot.grants?.length ?? 0).toBeGreaterThan(0);
+    expect(audience().getAttribute("data-bot-profile-audience")).toBe("shared");
+    expect(audience().querySelector(".lucide-users")).not.toBeNull();
+    expect(audience().querySelector(".lucide-lock")).toBeNull();
+    await act(async () => { dispatch({ type: "botPatched", bot: { ...fixture.bot, grants: [], directGrants: [], visibility: undefined } } as never); });
+    await settle();
+    expect(audience().getAttribute("data-bot-profile-audience")).toBe("private");
+    expect(audience().querySelector(".lucide-lock")).not.toBeNull();
+    expect(audience().querySelector(".lucide-users")).toBeNull();
+  });
+
+  it("says conversations, never threads; French says ce bot and Qui utilise quoi; the empty Versions page says what will show", () => {
+    for (const locale of ["en", "fr"] as const) {
+      setLocale(locale);
+      for (const key of ["botProfile.v6.page.model.intro", "botPanel.turnLimits.threadsOpened"] as const) {
+        expect(t(key), `${locale} ${key}`).not.toMatch(/thread|\bfils\b/i);
+      }
+      expect(t("botPanel.history.emptyVersions"), `${locale} versions empty`).toMatch(locale === "en" ? /restore/i : /restaurer/i);
+    }
+    setLocale("fr");
+    expect(t("botProfile.v6.page.model.intro")).toMatch(/conversations/);
+    expect(t("botPanel.turnLimits.threadsOpened")).toMatch(/conversations/i);
+    for (const key of ["access.thisBot", "botPayer.ownerHelp", "botPayer.speakerHelp", "botPayer.privacy", "botPayer.groupHelp", "botPayer.asOnBot"] as const) {
+      expect(t(key, { value: "x" }), `fr ${key}`).not.toMatch(/robot/i);
+    }
+    expect(t("botProfile.usage.intro")).toMatch(/^Qui utilise quoi/);
+    setLocale("en");
+  });
+});

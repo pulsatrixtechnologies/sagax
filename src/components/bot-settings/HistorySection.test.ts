@@ -112,7 +112,7 @@ describe("HistorySection: the bot's versions", () => {
   it("shows Loading… before rows arrive, and one row for the empty state", () => {
     expect(render(null)).toContain("Loading…");
     const empty = render([]);
-    expect(empty).toContain("No changes recorded yet.");
+    expect(empty).toContain("settings will show here, and you can restore it.");
     expect(empty).toContain('data-settings-group="history"');
     expect(empty).toContain(">Changes</h3>");
   });

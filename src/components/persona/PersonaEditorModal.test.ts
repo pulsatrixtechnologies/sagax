@@ -184,7 +184,7 @@ describe("bot profile page shell", () => {
     const label = html.slice(at(html, 'data-bot-profile-label=""'), at(html, 'data-bot-profile-audience'));
     expect(label).toContain(">Research<");
     expect(label).toContain("text-ink-secondary");
-    expect(label).toContain("text-[15px]");
+    expect(label).toContain("text-[14px]");
     // the description, edited in place
     expect(html).toMatch(/<textarea[^>]*data-bot-profile-description=""[^>]*>Finds sources\.<\/textarea>/);
     // each tab is a panel of ONE column (the owner 2026-11-06: no two-column grid)

@@ -326,7 +326,7 @@ export function RulesSection({ bot, active, initial }: { bot: Bot; active: boole
           {totalBlock}
           <div className="flex flex-col" data-rule-sets="">
             {listing !== null && sets.length === 0 && (
-              <div className="px-4 py-2.5 text-[12.5px] text-ink-secondary">{t("persona.rules.sets.empty")}</div>
+              <div className="px-4 py-2.5 text-[12px] text-ink-secondary">{t("persona.rules.sets.empty")}</div>
             )}
             {sets.map((set, index) => {
               const label = ruleSetLabel(set);
@@ -362,7 +362,7 @@ export function RulesSection({ bot, active, initial }: { bot: Bot; active: boole
           </div>
           {adding && addForm}
           {limitNote}
-          {error && <p role="alert" className="px-4 py-2.5 text-[12.5px] text-danger">{error}</p>}
+          {error && <p role="alert" className="px-4 py-2.5 text-[12px] text-danger">{error}</p>}
         </div>
         {confirmDelete}
       </PaneSection>
@@ -380,7 +380,7 @@ export function RulesSection({ bot, active, initial }: { bot: Bot; active: boole
 
       <div className="overflow-clip rounded-xl border-[0.5px] border-border bg-elevated" data-rule-sets="">
         {listing !== null && sets.length === 0 && (
-          <div className="px-3 py-3 text-[12.5px] text-ink-secondary">{t("persona.rules.sets.empty")}</div>
+          <div className="px-3 py-3 text-[12px] text-ink-secondary">{t("persona.rules.sets.empty")}</div>
         )}
         {sets.map((set, index) => {
           const label = ruleSetLabel(set);
@@ -399,7 +399,7 @@ export function RulesSection({ bot, active, initial }: { bot: Bot; active: boole
                     <button type="button" aria-pressed={isSelected} onClick={() => selectSet(set)} className="min-w-0 flex-1 text-left">
                       <span className={cn("truncate text-[13px] font-medium", set.enabled ? "text-ink" : "text-ink-secondary")} data-rule-set-name="">{label}</span>
                       {setBadges(set)}
-                      <span className={cn("block font-mono text-[10.5px] text-ink-secondary", setCount.over && "text-danger")} data-rule-set-counter="">
+                      <span className={cn("block font-mono text-[11px] text-ink-secondary", setCount.over && "text-danger")} data-rule-set-counter="">
                         {set.file} · {counterText}
                       </span>
                     </button>
@@ -420,7 +420,7 @@ export function RulesSection({ bot, active, initial }: { bot: Bot; active: boole
           <button
             type="button"
             data-rules-add=""
-            className="flex items-center gap-1 self-start rounded-lg px-1 py-1 text-[12.5px] font-medium text-accent-text hover:underline disabled:opacity-50"
+            className="flex items-center gap-1 self-start rounded-lg px-1 py-1 text-[12px] font-medium text-accent-text hover:underline disabled:opacity-50"
             disabled={busy || listing === null || atLimit}
             onClick={() => setAdding(true)}
           >
@@ -431,7 +431,7 @@ export function RulesSection({ bot, active, initial }: { bot: Bot; active: boole
       )}
 
       {editor}
-      {error && <p role="alert" className="text-[12.5px] text-danger">{error}</p>}
+      {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
       {confirmDelete}
     </div>
   );

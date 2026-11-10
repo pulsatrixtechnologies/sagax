@@ -117,7 +117,7 @@ function RuleEditor({ rule, botId, onCancel, onSave }: {
           className={plain ? PLAIN_FIELD : "rounded-md bg-raised px-2 py-1.5 text-[13px] text-ink outline-none focus:ring-1 focus:ring-accent"}
         />
       </label>
-      <div className="flex items-center justify-between gap-3 text-[12.5px] text-ink-secondary">
+      <div className="flex items-center justify-between gap-3 text-[12px] text-ink-secondary">
         {t("botPanel.rules.behavior")}
         <PillSelect<RuleBehavior>
           value={behavior}
@@ -126,7 +126,7 @@ function RuleEditor({ rule, botId, onCancel, onSave }: {
           options={(["allow", "ask", "deny"] as const).map((value) => ({ value, label: t(BEHAVIOR_LABEL[value]) }))}
         />
       </div>
-      <div className="flex items-center justify-between gap-3 text-[12.5px] text-ink-secondary">
+      <div className="flex items-center justify-between gap-3 text-[12px] text-ink-secondary">
         {t("botPanel.rules.appliesTo")}
         <PillSelect<"this" | "all">
           value={allBots ? "all" : "this"}
@@ -139,7 +139,7 @@ function RuleEditor({ rule, botId, onCancel, onSave }: {
         />
       </div>
       {scoped && !rule.legacy && (
-        <label className="flex items-center gap-2 text-[12.5px] text-ink-secondary">
+        <label className="flex items-center gap-2 text-[12px] text-ink-secondary">
           <input type="checkbox" checked={anyTarget} onChange={(event) => setAnyTarget(event.target.checked)} />
           {t("botPanel.rules.anyTarget")}
         </label>
@@ -209,7 +209,7 @@ export function OwnerPermissionsCard({ bot, leading }: { bot: Pick<Bot, "id" | "
         accessory={<HelpTip label={t("settings.moreAbout", { title: t("botPanel.rules.title") })}>{t("botPanel.rules.help")}</HelpTip>}>
         <div data-owner-rules={String(rules.length)}>
           {rules.length === 0 ? (
-            <p className={cn(padX, "py-2.5 text-ink-secondary", plain ? "text-[12px] leading-4" : "text-[12.5px] leading-[18px]")}>{t("botPanel.rules.empty")}</p>
+            <p className={cn(padX, "py-2.5 text-ink-secondary", plain ? "text-[12px] leading-4" : "text-[12px] leading-[18px]")}>{t("botPanel.rules.empty")}</p>
           ) : (
             <FoldRow
               cardId="bot.permissions.rules"
@@ -226,14 +226,14 @@ export function OwnerPermissionsCard({ bot, leading }: { bot: Pick<Bot, "id" | "
                       <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-3">
                         <div className="min-w-0">
                           <RuleText text={rule.description} />
-                          <div className={cn("mt-0.5 flex flex-wrap gap-1.5", plain ? "text-[12px] leading-4 text-ink-secondary" : "text-[11.5px] text-ink-tertiary")}>
+                          <div className={cn("mt-0.5 flex flex-wrap gap-1.5", plain ? "text-[12px] leading-4 text-ink-secondary" : "text-[12px] text-ink-tertiary")}>
                             {rule.botId === null && <span>{t("botPanel.rules.allBots")}</span>}
                             {rule.destructive && <span className="text-warning">{t(KIND_LABEL[rule.destructive])}</span>}
                             {rule.legacy && <span>{t("botPanel.rules.migrated")}</span>}
                             {rule.byOther && <span data-rule-saved-by="">{savedByLabel(rule)}</span>}
                           </div>
                         </div>
-                        <span className={cn("whitespace-nowrap text-[12.5px]", rule.behavior === "deny" ? "text-danger" : rule.behavior === "allow" ? "text-success" : "text-ink-secondary")}>
+                        <span className={cn("whitespace-nowrap text-[12px]", rule.behavior === "deny" ? "text-danger" : rule.behavior === "allow" ? "text-success" : "text-ink-secondary")}>
                           {t(BEHAVIOR_LABEL[rule.behavior])}
                         </span>
                         <div className="flex items-center gap-0.5">

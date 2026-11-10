@@ -17,7 +17,7 @@ import type { MascotCharacter, MascotLook } from "../../../shared/mascot-look";
 import type { FxMoveRequest } from "@/components/skin-fx/skin-fx";
 import type { OwlMove } from "./moves";
 
-const sectionHeading = "text-[10.5px] font-medium uppercase tracking-[0.08em] text-ink-secondary";
+const sectionHeading = "text-[11px] font-medium text-ink-secondary";
 const focusRing = "outline-none focus-visible:ring-2 focus-visible:ring-accent";
 /** The mascot's size in the profile page's hero (Grok Bot's avatar size,
  * the owner 2026-11-09: smaller, on the left). */
@@ -166,7 +166,7 @@ function MascotUseAndMoves({ shownName, shownLock, inUse, disabled, moves, onUse
               aria-label={t("mascot.moves.play", { move: item.label })}
               onClick={() => onPlay(item)}
               onMouseEnter={() => onPlay(item)}
-              className={cn("rounded-md bg-control px-2 py-0.5 text-[11.5px] leading-4 text-ink hover:bg-raised-hover", focusRing)}
+              className={cn("rounded-md bg-control px-2 py-0.5 text-[12px] leading-4 text-ink hover:bg-raised-hover", focusRing)}
             >
               {item.label}
             </button>
@@ -184,7 +184,7 @@ export function MascotLookControls({ shownName, shownLock, summary, inUse, disab
   return (
     <div data-mascot-controls="" className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
       <div className="flex min-w-0 flex-col gap-1.5">
-        <div className="max-w-full truncate text-[13.5px] leading-5 text-ink-secondary" data-mascot-summary="">
+        <div className="max-w-full truncate text-[13px] leading-5 text-ink-secondary" data-mascot-summary="">
           {picture ? summary : mascotSummaryLine(shownName, ...summary.split(" · "))}
         </div>
         {!picture && <MascotUseAndMoves shownName={shownName} shownLock={shownLock} inUse={inUse} disabled={disabled} moves={moves} onUse={onUse} onPlay={onPlay} align="start" />}
@@ -256,7 +256,7 @@ export function MascotLookPreview({
 
       <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5 text-center @[34rem]:items-start @[34rem]:text-left">
         <div className="max-w-full truncate text-[24px] font-semibold leading-8 text-ink" data-mascot-name="">{shownName}</div>
-        <div className="max-w-full truncate text-[13.5px] leading-5 text-ink-secondary" data-mascot-summary="">{summary}</div>
+        <div className="max-w-full truncate text-[13px] leading-5 text-ink-secondary" data-mascot-summary="">{summary}</div>
         {!picture && <div className="mt-2.5"><MascotUseAndMoves shownName={shownName} shownLock={shownLock} inUse={inUse} disabled={disabled} moves={moves} onUse={onUse} onPlay={onPlay} align="center" /></div>}
       </div>
 

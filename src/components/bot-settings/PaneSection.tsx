@@ -60,10 +60,10 @@ export function usePaneRows() {
   const plain = useSettingsSurface() === "plain";
   return plain
     ? { plain, bleed: "-mx-4", list: "", row: "px-4", title: "text-[14px] leading-5", note: "text-[12px] leading-4" }
-    : { plain, bleed: "-mx-3.5", list: "divide-y divide-hairline/40", row: "px-3.5", title: "text-[13px]", note: "text-[11.5px]" };
+    : { plain, bleed: "-mx-3.5", list: "divide-y divide-hairline/40", row: "px-3.5", title: "text-[13px]", note: "text-[12px]" };
 }
 
 /** A section's quiet one-line state ("No topic files yet."). */
 export function PaneEmpty({ children }: { children: ReactNode }) {
-  return <p className="text-[12.5px] text-ink-secondary">{children}</p>;
+  return <p className="text-[12px] text-ink-secondary">{children}</p>;
 }

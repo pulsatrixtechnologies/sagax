@@ -190,7 +190,7 @@ export function CustomRuleForm({ botName, initial, risks, saveLabel, onCancel, o
       {!recognized && <p role="note" className="text-[12px] text-ink-secondary" data-custom-rule-unrecognized>{t("customRules.unrecognized")}</p>}
       {shellFamily && <p role="alert" className="text-[12px] text-danger" data-custom-rule-shell-family>{t("customRules.shellFamily")}</p>}
       {exactOutsideCard && <p role="alert" className="text-[12px] text-danger" data-custom-rule-exact-card>{t("customRules.exactFromCard")}</p>}
-      <div className="flex items-center justify-between gap-3 text-[12.5px] text-ink-secondary">
+      <div className="flex items-center justify-between gap-3 text-[12px] text-ink-secondary">
         {t("customRules.form.should")}
         <PillSelect<CustomRuleBehavior>
           value={behavior}
@@ -199,7 +199,7 @@ export function CustomRuleForm({ botName, initial, risks, saveLabel, onCancel, o
           options={(["allow", "ask", "deny"] as const).filter((value) => !allowOff || value !== "allow").map((value) => ({ value, label: t(CUSTOM_BEHAVIOR_LABEL[value]) }))}
         />
       </div>
-      <div className="flex items-center justify-between gap-3 text-[12.5px] text-ink-secondary">
+      <div className="flex items-center justify-between gap-3 text-[12px] text-ink-secondary">
         {t("customRules.form.appliesTo")}
         <PillSelect
           value={choosing ? "some" : allBots ? "all" : "this"}
@@ -215,7 +215,7 @@ export function CustomRuleForm({ botName, initial, risks, saveLabel, onCancel, o
           ]}
         />
       </div>
-      <div className="flex items-center justify-between gap-3 text-[12.5px] text-ink-secondary" data-custom-rule-started-by={startedBy || "any"}>
+      <div className="flex items-center justify-between gap-3 text-[12px] text-ink-secondary" data-custom-rule-started-by={startedBy || "any"}>
         {t("customRules.form.startedBy")}
         <PillSelect<TurnStart | "">
           value={startedBy}
@@ -224,9 +224,9 @@ export function CustomRuleForm({ botName, initial, risks, saveLabel, onCancel, o
           options={[{ value: "", label: t("customRules.form.startedBy.any") }, ...TURN_STARTS.map((value) => ({ value, label: t(START_OPTION[value]) }))]}
         />
       </div>
-      <p className="text-[11.5px] text-ink-tertiary">{t("customRules.form.startedBy.hint")}</p>
+      <p className="text-[12px] text-ink-tertiary">{t("customRules.form.startedBy.hint")}</p>
       {choosing && bots && (
-        <fieldset className="flex flex-col gap-1 text-[12.5px] text-ink-secondary" data-custom-rule-bots>
+        <fieldset className="flex flex-col gap-1 text-[12px] text-ink-secondary" data-custom-rule-bots>
           <legend className="mb-0.5">{t("customRules.form.chooseBots")}</legend>
           <div className="flex flex-wrap gap-x-3 gap-y-1">
             {bots.map((each) => (
@@ -246,7 +246,7 @@ export function CustomRuleForm({ botName, initial, risks, saveLabel, onCancel, o
         </fieldset>
       )}
       {behavior === "allow" && (
-        <fieldset className="flex flex-col gap-1 text-[12.5px] text-ink-secondary" data-custom-rule-risks>
+        <fieldset className="flex flex-col gap-1 text-[12px] text-ink-secondary" data-custom-rule-risks>
           <legend className="mb-0.5">{t("customRules.form.riskTitle")}</legend>
           {shownRisks.map((risk) => (
             <label key={risk} className="flex items-center gap-2" {...(implied.includes(risk) ? { "data-custom-rule-implied": risk } : {})}>
@@ -259,8 +259,8 @@ export function CustomRuleForm({ botName, initial, risks, saveLabel, onCancel, o
             </label>
           ))}
           {missingRisks.length > 0
-            ? <p role="alert" className="text-[11.5px] text-danger" data-custom-rule-risk-missing>{t("customRules.form.riskMissing", { kinds: riskList(missingRisks) })}</p>
-            : <p className="text-[11.5px] text-ink-tertiary">{t("customRules.form.riskHint")}</p>}
+            ? <p role="alert" className="text-[12px] text-danger" data-custom-rule-risk-missing>{t("customRules.form.riskMissing", { kinds: riskList(missingRisks) })}</p>
+            : <p className="text-[12px] text-ink-tertiary">{t("customRules.form.riskHint")}</p>}
         </fieldset>
       )}
       {/* 2026-10-26: replay the rule on the last 7 days before saving it */}
@@ -357,10 +357,10 @@ export function CustomRulesCard({ bot }: { bot: Pick<Bot, "id" | "name"> & Parti
 
   // the bot's profile page (#2313): one card under the grey label, the notes
   // and the rules its rows, Add a pill at the label's right
-  const note = plain ? "px-4 py-2.5 text-[12.5px] leading-[18px] text-ink-secondary" : "mb-2 rounded-lg bg-inset px-3 py-2 text-[12.5px] text-ink-secondary";
+  const note = plain ? "px-4 py-2.5 text-[12px] leading-[18px] text-ink-secondary" : "mb-2 rounded-lg bg-inset px-3 py-2 text-[12px] text-ink-secondary";
   const ruleText = plain ? "break-words text-[14px] leading-5 text-ink" : "break-words text-[13px] text-ink";
-  const ruleMeta = plain ? "mt-0.5 flex flex-wrap gap-1.5 text-[12px] leading-4" : "mt-0.5 flex flex-wrap gap-1.5 text-[11.5px]";
-  const behaviorText = plain ? "whitespace-nowrap text-[13px]" : "whitespace-nowrap text-[12.5px]";
+  const ruleMeta = plain ? "mt-0.5 flex flex-wrap gap-1.5 text-[12px] leading-4" : "mt-0.5 flex flex-wrap gap-1.5 text-[12px]";
+  const behaviorText = plain ? "whitespace-nowrap text-[13px]" : "whitespace-nowrap text-[12px]";
   const iconButton = plain ? "rounded-full p-1.5 text-ink-secondary hover:bg-hover hover:text-ink" : "rounded-md p-1 text-ink-secondary hover:bg-control hover:text-ink";
 
   const notes = (
@@ -422,7 +422,7 @@ export function CustomRulesCard({ bot }: { bot: Pick<Bot, "id" | "name"> & Parti
             {t(CUSTOM_BEHAVIOR_LABEL[rule.behavior])}
           </span>
           <div className="flex items-center gap-0.5">
-            <label className="flex items-center gap-1 px-1 text-[11.5px] text-ink-secondary" title={t("customRules.toggle")}>
+            <label className="flex items-center gap-1 px-1 text-[12px] text-ink-secondary" title={t("customRules.toggle")}>
               <input
                 type="checkbox"
                 aria-label={t("customRules.toggle")}

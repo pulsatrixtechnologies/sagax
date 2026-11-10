@@ -73,7 +73,7 @@ export function WriteCommandCard({ bot, taken, onSaved }: { bot: Bot; taken: rea
   const nameRow = (
     <div className={cn("flex items-center gap-2", plain && "px-4 py-2.5")}>
       <div className="relative w-44 shrink-0">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[15px] text-ink-secondary">/</span>
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[14px] text-ink-secondary">/</span>
         <input
           className={field + " pl-6 font-mono"}
           placeholder={t("skills.write.namePlaceholder")}
@@ -104,7 +104,7 @@ export function WriteCommandCard({ bot, taken, onSaved }: { bot: Bot; taken: rea
   );
   const footer = (
     <div className={cn("flex items-center justify-between gap-3", plain && "px-4 py-2.5")}>
-      <div className={cn("min-w-0 text-ink-secondary", plain ? "text-[12px]" : "text-[11.5px]")}>
+      <div className="min-w-0 text-[12px] text-ink-secondary">
         {touched && problem ? t(PROBLEM_KEY[problem]) : message}
       </div>
       <button

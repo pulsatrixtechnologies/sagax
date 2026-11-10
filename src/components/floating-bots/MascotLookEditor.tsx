@@ -94,7 +94,7 @@ export interface MascotLookEditorProps {
 import { CHARACTER_LABEL, SHAPE_LABEL, SHAPE_SKIN_LABEL, TROMBI_SKIN_LABEL, BUNBU_SKIN_LABEL, SHIBA_SKIN_LABEL, GRUMP_SKIN_LABEL, OGRE_SKIN_LABEL, FROG_SKIN_LABEL, CRAB_SKIN_LABEL, SKIN_TIER_LABEL, OWL_SKIN_LABEL, COLOR_GROUP_LABEL } from "./mascot-look-labels";
 export { CHARACTER_LABEL, SHAPE_LABEL, SHAPE_SKIN_LABEL, TROMBI_SKIN_LABEL, BUNBU_SKIN_LABEL, SHIBA_SKIN_LABEL, GRUMP_SKIN_LABEL, OGRE_SKIN_LABEL, FROG_SKIN_LABEL, CRAB_SKIN_LABEL, SKIN_TIER_LABEL, OWL_SKIN_LABEL, COLOR_GROUP_LABEL } from "./mascot-look-labels";
 
-const heading = "text-[10.5px] font-medium uppercase tracking-[0.08em] text-ink-secondary";
+const heading = "text-[11px] font-medium text-ink-secondary";
 const card = "flex flex-col items-center justify-center gap-0.5 rounded-lg bg-inset p-1 transition-colors hover:bg-control disabled:opacity-50";
 const on = "ring-2 ring-accent-border";
 const focusRing = "outline-none focus-visible:ring-2 focus-visible:ring-accent";
@@ -389,8 +389,8 @@ function MascotTile({ option, look, color, owlSkin, selected, inUse, lock, disab
       <span className={cn("grid size-14 shrink-0 place-items-center overflow-hidden", locked && "opacity-60 grayscale")} aria-hidden="true">
         <option.Thumb color={color} skin={owlSkin} look={{ ...look, character: option.id }} size={52} />
       </span>
-      <span className="w-full truncate text-center text-[12.5px] leading-4 text-ink">{name}</span>
-      <span className={cn("h-3 w-full truncate text-center text-[10.5px] leading-3 text-ink-tertiary", locked && "invisible")}>{option.premium && option.isNew ? option.premium.price : family}</span>
+      <span className="w-full truncate text-center text-[12px] leading-4 text-ink">{name}</span>
+      <span className={cn("h-3 w-full truncate text-center text-[11px] leading-3 text-ink-tertiary", locked && "invisible")}>{option.premium && option.isNew ? option.premium.price : family}</span>
       {inUse && (
         <span className="absolute left-1.5 top-1.5 grid size-4 place-items-center rounded-full bg-accent text-accent-ink" aria-hidden="true">
           <Check size={10} strokeWidth={3} />
@@ -399,9 +399,9 @@ function MascotTile({ option, look, color, owlSkin, selected, inUse, lock, disab
       {locked ? (
         <LockBadge lock={lock} />
       ) : option.isNew ? (
-        <span className="absolute right-1 top-1 rounded-full bg-accent px-1.5 text-[9px] font-semibold uppercase leading-[14px] text-accent-ink" aria-hidden="true">{t("appearance.badge.new")}</span>
+        <span className="absolute right-1 top-1 rounded-full bg-accent px-1.5 text-[11px] font-semibold leading-[14px] text-accent-ink" aria-hidden="true">{t("appearance.badge.new")}</span>
       ) : option.premium ? (
-        <span className="absolute right-1 top-1 rounded-full bg-control px-1.5 text-[9px] font-semibold leading-[14px] text-ink" aria-hidden="true">{option.premium.price}</span>
+        <span className="absolute right-1 top-1 rounded-full bg-control px-1.5 text-[11px] font-semibold leading-[14px] text-ink" aria-hidden="true">{option.premium.price}</span>
       ) : null}
     </button>
   );
@@ -719,8 +719,8 @@ export default function MascotLookEditor({
                   selected ? "text-ink" : "text-ink-secondary hover:text-ink",
                 )}
               >
-                <span className="text-[13.5px] font-medium leading-5">{t(EDITOR_TAB_LABEL[id])}</span>
-                <span className="max-w-[10rem] truncate text-[11.5px] leading-4 text-ink-tertiary" data-appearance-tab-value="">{tabValue[id]}</span>
+                <span className="text-[14px] font-medium leading-5">{t(EDITOR_TAB_LABEL[id])}</span>
+                <span className="max-w-[10rem] truncate text-[12px] leading-4 text-ink-tertiary" data-appearance-tab-value="">{tabValue[id]}</span>
               </button>
             );
           })}
@@ -762,7 +762,7 @@ export default function MascotLookEditor({
                       placeholder={t("appearance.search", { count: listed.length })}
                       aria-label={t("appearance.searchLabel")}
                       data-mascot-search=""
-                      className="w-full min-w-0 bg-transparent text-[12.5px] text-ink placeholder:text-ink-secondary focus:outline-none"
+                      className="w-full min-w-0 bg-transparent text-[12px] text-ink placeholder:text-ink-secondary focus:outline-none"
                     />
                   </label>
                   <div role="group" aria-label={t("appearance.filters")} className="flex flex-wrap gap-1.5" data-mascot-filters="">
@@ -787,7 +787,7 @@ export default function MascotLookEditor({
               <section key={shelf} data-mascot-shelf={shelf} aria-labelledby={`mascot-shelf-${shelf}`}>
                 <div className="mb-1.5 flex items-baseline gap-2">
                   <h3 id={`mascot-shelf-${shelf}`} className={heading}>{t(SHELF_LABEL[shelf])}</h3>
-                  <span className="text-[10.5px] tabular-nums text-ink-tertiary">
+                  <span className="text-[11px] tabular-nums text-ink-tertiary">
                     {shelf === "yours" ? t("appearance.shelf.count", { count: owned, total: listed.length }) : entries.length}
                   </span>
                 </div>

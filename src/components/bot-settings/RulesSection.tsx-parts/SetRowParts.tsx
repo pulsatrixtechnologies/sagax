@@ -12,7 +12,7 @@ export function TotalBlock({ plain, totalLabel, totalOver, lines, bytes, maxLine
     <div data-rules-total="" className={cn("flex flex-col gap-1", plain && "px-4 py-2.5")}>
       <div className={cn("text-[12px] text-ink-secondary", totalOver && "text-danger")}>{totalLabel}</div>
       <Gauge lines={lines} bytes={bytes} maxLines={maxLines} maxBytes={maxBytes} label={totalLabel} />
-      {totalOver && <p role="alert" className="text-[12.5px] text-danger">{t("persona.rules.sets.totalOver")}</p>}
+      {totalOver && <p role="alert" className="text-[12px] text-danger">{t("persona.rules.sets.totalOver")}</p>}
     </div>
   );
 }
@@ -57,10 +57,10 @@ export function SetBadges({ set, dirty }: { set: RuleSetWire; dirty: boolean }) 
   return (
     <>
       {!set.enabled && (
-        <span className="ml-1.5 rounded bg-control px-1 py-px text-[10px] uppercase tracking-wide text-ink-secondary">{t("persona.rules.sets.off")}</span>
+        <span className="ml-1.5 rounded bg-control px-1 py-px text-[11px] text-ink-secondary">{t("persona.rules.sets.off")}</span>
       )}
       {dirty && (
-        <span className="ml-1.5 rounded bg-warning/15 px-1 py-px text-[10px] text-warning">{t("persona.rules.sets.unsaved")}</span>
+        <span className="ml-1.5 rounded bg-warning/15 px-1 py-px text-[11px] text-warning">{t("persona.rules.sets.unsaved")}</span>
       )}
     </>
   );

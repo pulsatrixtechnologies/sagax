@@ -9553,11 +9553,11 @@
       "botPanel.finishUntil.rounds": "9c0f27c23f3e29a34996c582a3f05c22a7c32499fde71acd6c5d6827141ac886",
       "botPanel.finishUntil.roundsHelp": "ef9ea9e44b7fdea5d97c927eb0afcdb9f9e42a022f68767d997e6018f1dcd759",
       "botPanel.finishUntil.error": "374a41323e8d391f1ef436f67615f76c37e656a523e96743c93b189b32ab9941",
-      "botPanel.turnLimits.help": "8b8e5db9ed51f8fdb3040928d25f6f2b37a2209e629253cec33f704096722050",
+      "botPanel.turnLimits.help": "c6352f373d3a6004dbee4ecb235edc169566579a8e411caa8ee5e13eb086ac18",
       "botPanel.turnLimits.roomPosts": "6add9a6441bbbc074cbbee6d98d1b4a236d3070fa94a0bd8eef0cef11d9fb489",
       "botPanel.turnLimits.roomPostsHelp": "98cb55a2f510931495e365e65720f1e98e6eaa6a87c783cc3d45ad0afa06b54b",
-      "botPanel.turnLimits.threadsOpened": "f071e9a1e0a0265f062a4fd73cca64dd86c5e10385288b0b2a89e3c4008b98ea",
-      "botPanel.turnLimits.threadsOpenedHelp": "0a5570a6fe23d535e01e866d224c2f1854c2d7bf1c52be33e1afa5dc4c3a5b5a",
+      "botPanel.turnLimits.threadsOpened": "63239523d15afc2ab788eed7276178edae59a0fec57a8970ef96f25535d54ec1",
+      "botPanel.turnLimits.threadsOpenedHelp": "cead425617bb913800ebf4a8fb7928d861222f011ba2640fd683aae4aab6ce54",
       "botPanel.turnLimits.roomsCreated": "f1336e5b54be5739b64944d3bb171e19ad31f4d3406d39f7fbf2d31223a649a7",
       "botPanel.turnLimits.roomsCreatedHelp": "71c722e5c87cbd920a469b969fae668388f5ce985fa3c7600b726f4098c7a3e7",
       "botPanel.toolAccess.help": "69cbe72f19f00b7367c900589b3d567f1a2e26c1a33c51af72f407f76948ba8c",
@@ -17180,7 +17180,7 @@
       "botProfile.v6.page.personality.intro": "8544dbdba29c89fbf27e252511225a6a4a3733787e844b8b34e5e33321b63da8",
       "botProfile.v6.page.model.title": "5e2c614c23f02239bc03c6c04fcb681950f9e72bf8fdff6be79c79841cbb10c0",
       "botProfile.v6.page.model.desc": "5377c020e371a9bcb1f7ea98f978a28f4c4605a9ac0985bbfcac924d603b6e6e",
-      "botProfile.v6.page.model.intro": "679763d68b406eae3b7f0b772152b7db7c14fbb9d11190b02e9bf92a07ec6600",
+      "botProfile.v6.page.model.intro": "ec4b3e3b2ba12f2d72d8e550a0cf84e53182a0012a82cd9dce4895161a0443a1",
       "botProfile.v6.page.beforeActing.title": "8a3db2ee17dd12777607409783e1f7df09f8061e1fd21c5ba626b954926ba5e6",
       "botProfile.v6.page.beforeActing.desc": "8e00d51b98e2fea872412151003f7b2477a0e926b9b2017f77820dc74edea351",
       "botProfile.v6.page.beforeActing.intro": "c529d4bda5d8f1a90bba200c511b119315fe2678f78397e5a3990acdabd3b76d",
@@ -18472,7 +18472,8 @@
       "watchAlert.stopped.watch": "cb831fc013ecc127a1ff3b5cb728d5c113c5e6caec7a22a1cf74cc6765344669",
       "watchAlert.stopped.watchUnnamed": "34d661f2d60165c5956013518e63c75457a3d4e2287b56273fb7798bdb5efaa1",
       "watchAlert.stopped.domain": "82feedf48c3ee31cc329dc59470fdc5f719c6d16ca0180988f4fca42e52e4598",
-      "watchAlert.stopped.domainUnnamed": "b70adca5db850a287f29a3832d6cd10f680175566dff0506fd579ca177b892a5"
+      "watchAlert.stopped.domainUnnamed": "b70adca5db850a287f29a3832d6cd10f680175566dff0506fd579ca177b892a5",
+      "botPanel.history.emptyVersions": "96a6796e9841c90000d1a713eb087291199d16bf8acf44e06670116bd1c4ac94"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

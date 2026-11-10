@@ -5,7 +5,7 @@
 // all aligned left and tight. The mascot editor
 // itself is the Appearance tab.
 import { lazy, Suspense, useCallback, useState, type ReactNode } from "react";
-import { Lock, Star, Users } from "lucide-react";
+import { Lock, Star, UserRound, Users } from "lucide-react";
 
 import { useStore, type Bot } from "@/state/store";
 import { t } from "@/lib/i18n";
@@ -71,14 +71,14 @@ export function useBotProfileHero({ bot, derived }: {
     </h2>
   );
   const heroLabel = (shown.title || canLabel) ? (
-    <div data-bot-profile-label="" className="-ml-1.5 flex min-w-0 max-w-[calc(100%+0.375rem)] justify-start text-left text-[15px] leading-5 text-ink-secondary">
+    <div data-bot-profile-label="" className="-ml-1.5 flex min-w-0 max-w-[calc(100%+0.375rem)] justify-start text-left text-[14px] leading-5 text-ink-secondary">
       <InlineEditableText
         value={shown.title}
         maxLength={BOT_PROFILE_LIMITS.title}
         placeholder={t("botPanel.label.add")}
         ariaLabel={t("botPanel.label.edit")}
         onSave={canLabel ? (title) => derived.patch(shown.merged ? { title, name: shown.name } : { title }) : undefined}
-        className="min-w-0 justify-start text-left text-[15px] leading-5 text-ink-secondary"
+        className="min-w-0 justify-start text-left text-[14px] leading-5 text-ink-secondary"
       />
     </div>
   ) : undefined;
@@ -165,7 +165,7 @@ export function useBotProfileHero({ bot, derived }: {
           )
         )}
       </div>
-      {heroSources.error && <p role="alert" className="mt-1 text-[11.5px] text-danger">{heroSources.error}</p>}
+      {heroSources.error && <p role="alert" className="mt-1 text-[11px] text-danger">{heroSources.error}</p>}
     </>
   );
 
@@ -196,17 +196,19 @@ export function BotProfileHeader({ bot, derived, hero }: {
   return (
     <header data-bot-profile-header="" data-bot-profile-section="overview" data-persona-section="overview" data-open="" aria-label={sectionLabel("overview")} className="flex min-w-0 flex-col">
       {hero}
-      <div className="mt-2 flex flex-wrap items-center justify-start gap-x-3 gap-y-1 text-[13.5px] leading-5 text-ink-secondary">
-        <span data-bot-profile-audience="" className="inline-flex items-center gap-1.5">
-          <Lock size={13} aria-hidden="true" /> {audience}
+      <div className="mt-2 flex flex-wrap items-center justify-start gap-x-3 gap-y-1 text-[13px] leading-5 text-ink-secondary">
+        {/* The mark says what the words say (#3402): people when someone
+            else sees the bot, the lock only when it is private. */}
+        <span data-bot-profile-audience={notShared ? "private" : "shared"} className="inline-flex items-center gap-1.5">
+          {notShared ? <Lock size={13} aria-hidden="true" /> : <Users size={13} aria-hidden="true" />} {audience}
         </span>
         {owner && (
           <span data-bot-profile-owner="" className="inline-flex items-center gap-1.5">
-            <Users size={13} aria-hidden="true" /> {t("persona.overview.owner")}: {owner}
+            <UserRound size={13} aria-hidden="true" /> {t("persona.overview.owner")}: {owner}
           </span>
         )}
         {isPrimary && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-hover px-2 py-0.5 text-[11.5px]">
+          <span className="inline-flex items-center gap-1 rounded-full bg-hover px-2 py-0.5 text-[11px]">
             <Star size={11} aria-hidden="true" className="text-accent" /> {t("primaryBot.badge")}
           </span>
         )}

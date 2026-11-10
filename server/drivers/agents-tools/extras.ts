@@ -32,7 +32,7 @@ export const DEF_CREATE_OPTIONS_CARD = {
 export const ASK_CHOICE_DEF = {
     name: ASK_CHOICE_TOOL,
     description:
-      "Ask the person to choose, with clickable options, when you need a decision their request did not already cover and your engine has no question tool of its own (or yours is not offered). Put the option you recommend first. The card also has an Other field for a typed answer. A blocking decision MUST use this card or a native question tool, including in routine runs and MCP-started turns; never end with a plain-text confirmation request. Then end your turn. For writes already covered by the person's request or exact quoted GO, call the write tool through its normal approval gate instead of re-asking. Not for may-I permission on in-scope work or teammate contact when Ask before contacting bots is off.",
+      "Ask the person to choose, with clickable options, when you need a decision their request did not cover and your engine has no question tool (or yours is not offered). Put your recommended option first. The card has an Other field for a typed answer. A blocking decision MUST use this card or a native question tool, including in routine runs and MCP-started turns; never end with a plain-text confirmation request. Then end your turn. For writes already covered by the request or an exact quoted GO, call the write tool through its normal approval gate instead of re-asking. Not for may-I permission on in-scope work or teammate contact when Ask before contacting bots is off.",
     inputSchema: {
       type: "object",
       additionalProperties: false,

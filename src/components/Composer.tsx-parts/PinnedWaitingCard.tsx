@@ -9,6 +9,13 @@
 // buttons, same remembered grants. A chevron folds it to one line that still
 // names who waits and for what; it never hides while something is pending.
 // "See in the conversation" scrolls the transcript to the original message.
+//
+// #3414: one compact card, the chat's ask surface (AskCard), with one row on
+// top. An approval's title is that row ("Orla wants to view alerts"), its
+// jump, stepper and fold on the right: no header bar of its own, the bot
+// named once. A question keeps one quiet line naming who waits, since the
+// question card's title is the question itself; so does an approval whose
+// title does not name the bot (a proposal, a room's member bot).
 import { ChevronDown, ChevronUp, CornerLeftUp } from "lucide-react";
 import { useState } from "react";
 
@@ -92,7 +99,7 @@ export function PinnedWaitingCard({
     ? <Stepper index={index} count={items.length} onPrevious={index > 0 ? () => go(index - 1) : undefined} onNext={index < items.length - 1 ? () => go(index + 1) : undefined} />
     : null;
   const mark = (
-    <span aria-hidden="true" className="flex size-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[12px] font-bold leading-none text-accent">?</span>
+    <span aria-hidden="true" className="flex size-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[12px] font-bold leading-none text-accent-text">?</span>
   );
   const foldButton = (
     <button
@@ -106,13 +113,30 @@ export function PinnedWaitingCard({
       {collapsed ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
     </button>
   );
+  const jumpButton = messageId ? (
+    <button
+      type="button"
+      onClick={() => dispatch({ type: "focusMessage", threadId, messageId })}
+      className="flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-1 text-[12px] text-ink-secondary underline-offset-2 hover:text-ink hover:underline"
+      aria-label={t("pinned.seeInConversation")}
+      title={t("pinned.seeInConversation")}
+      data-pinned-jump=""
+    >
+      {/* narrow: the arrow alone, so the title keeps its room */}
+      <CornerLeftUp className="size-4 sm:hidden" aria-hidden="true" />
+      <span className="hidden sm:inline">{t("pinned.seeInConversation")}</span>
+    </button>
+  ) : null;
+  const controls = <>{jumpButton}{stepper}{foldButton}</>;
+  // the chat's ask surface (AskCard): no outline, no shadow at rest
+  const frame = "mb-2 overflow-hidden rounded-3xl bg-composer ring-1 ring-composer-ring";
 
   if (collapsed) {
     return (
       <section
         aria-label={t("pinned.aria", { name })}
         data-pinned-waiting="collapsed"
-        className="mb-2 flex items-center gap-2 overflow-hidden rounded-2xl border border-accent/40 bg-card py-1.5 pe-1.5 ps-3"
+        className={cn(frame, "flex items-center gap-2 py-1.5 pe-1.5 ps-3")}
       >
         {mark}
         <button
@@ -134,30 +158,15 @@ export function PinnedWaitingCard({
     <section
       aria-label={t("pinned.aria", { name })}
       data-pinned-waiting="open"
-      className="mb-2 overflow-hidden rounded-2xl border border-accent/40 bg-card"
+      className={frame}
     >
-      <header className="flex items-center gap-2 border-b border-hairline/50 py-1.5 pe-1.5 ps-3">
-        {mark}
-        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-5 text-ink" data-pinned-title="">{t("pinned.waiting", { name })}</span>
-        {messageId && (
-          <button
-            type="button"
-            onClick={() => dispatch({ type: "focusMessage", threadId, messageId })}
-            className="flex shrink-0 items-center whitespace-nowrap text-[12px] text-ink-secondary underline-offset-2 hover:text-ink hover:underline"
-            aria-label={t("pinned.seeInConversation")}
-            title={t("pinned.seeInConversation")}
-            data-pinned-jump=""
-          >
-            {/* narrow: the arrow alone, so the bot's name keeps its room */}
-            <CornerLeftUp className="size-4 sm:hidden" aria-hidden="true" />
-            <span className="hidden sm:inline">{t("pinned.seeInConversation")}</span>
-          </button>
-        )}
-        {stepper}
-        {foldButton}
-      </header>
       {current.kind === "question" ? (
-        <div className={cn("px-4 pb-3 pt-3")} data-pinned-body="question">
+        <div className="px-4 pb-3 pt-2.5" data-pinned-body="question">
+          <div className="mb-2 flex min-w-0 items-center gap-2">
+            {mark}
+            <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink-secondary" data-pinned-title="">{t("pinned.waiting", { name })}</span>
+            {controls}
+          </div>
           <QuestionCard
             key={current.key}
             threadId={threadId}
@@ -174,8 +183,10 @@ export function PinnedWaitingCard({
             count={1}
             index={0}
             bot={botFor(current.pending)}
+            askerName={name}
             locale={locale}
             allowAllReadOnly={readOnlyAllowAll(items, threadId, dispatch)}
+            controls={controls}
           />
           <PendingApprovalActions
             key={`${current.key}-actions`}

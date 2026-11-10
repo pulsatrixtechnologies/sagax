@@ -304,6 +304,27 @@ export function dispatchSendEffects(action: Action, env: DispatchEnv): void {
             });
           break;
         }
+        case "skipCard": {
+          // #3471: folded at once; the server closes it as skipped and tells
+          // the waiting bot. A card already closed elsewhere (409) keeps
+          // the server's outcome; any other failure opens it again.
+          const requestId = action.requestId;
+          if (requestId) rawDispatch({ type: "cardSettled", threadId: action.threadId, requestId, patch: { answered: "skipped", skipped: true } });
+          const request = action.proposal
+            ? api(`/api/bots/${action.proposal.botId}/proactive/${action.proposal.id}`, { method: "POST", body: JSON.stringify({ skip: true }) })
+            : requestId
+              ? api(`/api/threads/${action.threadId}/respond`, {
+                method: "POST",
+                body: JSON.stringify({ requestId, behavior: action.tool ? "deny" : "answer", skip: true }),
+              })
+              : Promise.resolve();
+          request.catch((error) => {
+            if (teamMemorySettled(error) || (error as { status?: number })?.status === 409) return;
+            if (requestId) rawDispatch({ type: "cardSettled", threadId: action.threadId, requestId, patch: { answered: undefined, skipped: undefined } });
+            showError(error);
+          });
+          break;
+        }
         case "dismissCard": {
           const { host, card, inRoom } = cardTarget(action);
           if (card?.requestId && host) {

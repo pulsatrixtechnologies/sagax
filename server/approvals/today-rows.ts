@@ -129,3 +129,17 @@ export function markAttentionHandled(
   deps.patch(threadId, messageId, { ...message.attention, handledAt: now });
   return true;
 }
+
+/** #3471: the person skipped a question in words (an attention card or an
+ * input request row) in a conversation of theirs: `close` closes it as
+ * skipped and tells the waiting work (waiting-card-skip.ts). */
+export function skipPersonRequestCard(
+  deps: Pick<TodayDeps, "bot" | "messages" | "isViewers"> & { close(threadId: string, message: TodayMessage): boolean },
+  botId: string, threadId: string, messageId: string,
+): boolean {
+  const bot = deps.bot(botId);
+  if (!bot || !deps.isViewers(bot, threadId)) return false;
+  const message = deps.messages(threadId).find((row) => row.id === messageId);
+  if (!message) return false;
+  return deps.close(threadId, message);
+}

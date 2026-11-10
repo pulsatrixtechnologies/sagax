@@ -1503,7 +1503,7 @@ import { createBindTurnComputer } from "./index-leaves/bindTurnComputer.ts";
 import { createStartDuplexCallTurn } from "./index-leaves/startDuplexCallTurn.ts";
 import { createSseFrameFor } from "./index-leaves/sseFrameFor.ts";
 import { createInboxPending, todayDepsFor } from "./index-leaves/inboxPending.ts";
-import { markAttentionHandled } from "./approvals/today-rows.ts";
+import { markAttentionHandled, skipPersonRequestCard } from "./approvals/today-rows.ts";
 import { createProvideSecretFromPhone } from "./index-leaves/provideSecretFromPhone.ts";
 import { createReportIncident } from "./index-leaves/reportIncident.ts";
 import { createRespondToCard } from "./index-leaves/respondToCard.ts";
@@ -1601,6 +1601,7 @@ import { createStopBotForEmergencyApprovalDowngrade } from "./index-leaves/stopB
 import { createSettleTeamMemoryCards } from "./index-leaves/settleTeamMemoryCards.ts";
 import { createPublicGroupState } from "./index-leaves/publicGroupState.ts";
 import { createPendingExpiryDeps } from "./index-leaves/pendingExpiryDeps.ts";
+import { createWaitingCardSkip } from "./index-leaves/waitingCardSkip.ts";
 import { createMountUserSandbox } from "./index-leaves/mountUserSandbox.ts";
 import { createViewerIdentity } from "./index-leaves/viewerIdentity.ts";
 import { createStartMcpSignIn } from "./index-leaves/startMcpSignIn.ts";
@@ -1679,7 +1680,7 @@ import { createAccountConnectorInput } from "./index-leaves/accountConnectorInpu
 import { createAddPersonalMcpServer } from "./index-leaves/addPersonalMcpServer.ts";
 import { createAdminAnswersPendingApproval } from "./index-leaves/adminAnswersPendingApproval.ts";
 import { createAllowCwAction } from "./index-leaves/allowCwAction.ts";
-import { createAnswerProactiveProposal } from "./index-leaves/answerProactiveProposal.ts";
+import { createAnswerProactiveProposal, createSkipProactiveProposal } from "./index-leaves/answerProactiveProposal.ts";
 import { createAnsweringCardAs } from "./index-leaves/answeringCardAs.ts";
 import { createAppendSkillRequestCard } from "./index-leaves/appendSkillRequestCard.ts";
 import { createApplyStricterApprovalLive } from "./index-leaves/applyStricterApprovalLive.ts";
@@ -5791,6 +5792,7 @@ bindLeafHost({
   get spentPlanUntil() { return spentPlanUntil; },
   get planUsedPercent() { return planUsedPercent; },
   get pendingExpiryDeps() { return pendingExpiryDeps; },
+  get waitingCardSkip() { return waitingCardSkip; },
   get openPendingInboxCards() { return openPendingInboxCards; },
   get openApprovalCardMessages() { return openApprovalCardMessages; },
   get appendDecision() { return appendDecision; },
@@ -7765,6 +7767,8 @@ const raiseHarnessQuestion = createRaiseHarnessQuestion(getLeafHost);
 const scheduleApprovalExpiry = createScheduleApprovalExpiry(getLeafHost);
 const pendingExpireDaysForPerson = createPendingExpireDaysForPerson(getLeafHost);
 const pendingExpiryDeps = createPendingExpiryDeps(getLeafHost);
+// #3471: skip any waiting card; the waiting rows' age expiry
+const waitingCardSkip = createWaitingCardSkip(getLeafHost);
 const runPendingApprovalExpirySweep = createRunPendingApprovalExpirySweep(getLeafHost);
 const expireDueApprovalsInThread = createExpireDueApprovalsInThread(getLeafHost);
 const withdrawApprovalNotice = createWithdrawApprovalNotice(getLeafHost);
@@ -7936,6 +7940,7 @@ const offerRoomPostToBots = createOfferRoomPostToBots(getLeafHost);
 const startProactiveWake = createStartProactiveWake(getLeafHost);
 const answerRoleTransition = createAnswerRoleTransition(getLeafHost);
 const answerProactiveProposal = createAnswerProactiveProposal(getLeafHost);
+const skipProactiveProposal = createSkipProactiveProposal(getLeafHost);
 const sendMissingRoleToAdmins = createSendMissingRoleToAdmins(getLeafHost);
 const cloudRoutineReadiness = createCloudRoutineReadiness(getLeafHost);
 const deleteBotWithLifecycle = createDeleteBotWithLifecycle(getLeafHost);
@@ -20216,7 +20221,7 @@ function feedbackOnProposal(botId: string, proposalId: string, choice: BriefFeed
   if (message?.card) store.patchMessage(proposal.threadId, message.id, { card: { ...message.card, feedback: choice } });
   return { status: 200, body: { ok: true, choice } };
 }
-ROUTES.push(createProactiveProposalRoutes({ answer: answerProactiveProposal, feedback: feedbackOnProposal }));
+ROUTES.push(createProactiveProposalRoutes({ answer: answerProactiveProposal, skip: skipProactiveProposal, feedback: feedbackOnProposal }));
 /** #2694: feedback on a whole wake kind (a heartbeat or mail/calendar wake's
  * message, a Today attention card): the next wakes of that kind follow it
  * (votes fade in two weeks, "never" holds until a thumbs-up), one memory
@@ -25416,6 +25421,11 @@ ROUTES.push(createApprovalsInboxRoutes({
   handled: (auth, viewer, item) => markAttentionHandled({
     ...todayDepsFor(getLeafHost(), auth, viewer),
     patch: (threadId, messageId, attention) => { store.patchMessage(threadId, messageId, { attention }); }
+  }, item.botId, item.threadId, item.messageId),
+  // #3471: a question in words skipped, in a conversation of this person's
+  skip: (auth, viewer, item) => skipPersonRequestCard({
+    ...todayDepsFor(getLeafHost(), auth, viewer),
+    close: (threadId, message) => waitingCardSkip.closeRequest(threadId, message as Message, { kind: "skipped" })
   }, item.botId, item.threadId, item.messageId)
 }));
 
@@ -32459,6 +32469,8 @@ setInterval(() => { void feedbackService.tick().catch(() => {}); }, 5 * 60_000).
 ROUTES.push(createFeedbackRoutes({ dataDir: DATA_DIR, service: feedbackService, actorPrincipalId }));
 ROUTES.push(createBotsMessagesRoutes({
   feedback: feedbackService,
+  // #3471: a waiting card skipped (never a deny): closed, the turn told
+  skipWaitingCard: (threadId: string, requestId: string) => waitingCardSkip.skipCard(threadId, requestId),
   // #3431: the first question at the end of a new bot's intro
   proactiveIntroQuestion,
   // #2633: a question declined from an AI client is told to the bot in the

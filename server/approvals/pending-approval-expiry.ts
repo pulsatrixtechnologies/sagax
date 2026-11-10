@@ -57,12 +57,13 @@ export function isPendingApprovalPastExpiry(createdAt: number, days: number, now
   return now >= createdAt + days * DAY_MS;
 }
 
-/** Plain note the waiting bot / requester reads when a card expires by age. */
+/** Plain note the waiting bot / requester reads when a card expires by age
+ * (#3471: every waiting card, not approvals only). */
 export function pendingApprovalExpiryNote(days: number, locale: "en" | "fr" = "en"): string {
   if (locale === "fr") {
-    return `Cette approbation a expiré après ${days} jours sans réponse; redemande-la si elle est encore nécessaire.`;
+    return `Cette demande a expiré après ${days} jours sans réponse : il n'y a pas de réponse et rien n'a été fait. Redemande-la si elle est encore nécessaire.`;
   }
-  return `This approval expired after ${days} days without an answer; ask again if it is still needed.`;
+  return `This request expired after ${days} days without an answer: there is no answer and nothing was run. Ask again if it is still needed.`;
 }
 
 /** Locale keys for the note and the setting label (en source; fr in catalogs). */
@@ -174,4 +175,52 @@ export function visiblePendingExpiresAt(input: {
     return pendingApprovalExpiresAt(input.createdAt, input.days);
   }
   return null;
+}
+
+/** #3471: the kinds that are not option cards with a requestId, under the
+ * same policy: a question in words a bot's work left (an input request row,
+ * an attention card) and a proposal card. A proposal keeps its own shorter
+ * life (`proposalMaxMs`, the proposal is gone after it), so it closes at the
+ * sooner of the two. */
+export interface WaitingRowExpiryDeps {
+  /** Open person requests and open proposal cards, with their thread. */
+  open: () => PendingExpiryRow[];
+  daysFor: (row: PendingExpiryRow) => number;
+  now?: () => number;
+  /** Close a person request as expired with this note (waiting-card-skip.ts). */
+  closeRequest: (row: PendingExpiryRow, note: string) => boolean;
+  /** Fold a proposal card as expired (nothing waits on it). */
+  expireProposal: (row: PendingExpiryRow) => void;
+  proposalMaxMs?: number;
+  localeFor?: (threadId: string) => "en" | "fr";
+}
+
+/** When a waiting row is due, given the policy days (0 = never). */
+export function waitingRowDue(row: PendingExpiryRow, days: number, now: number, proposalMaxMs?: number): boolean {
+  const at = row.message.at;
+  if (!Number.isFinite(at)) return false;
+  if (row.message.card?.proactiveProposal && proposalMaxMs !== undefined && now - at >= proposalMaxMs) return true;
+  return isPendingApprovalPastExpiry(at, days, now);
+}
+
+/** Sweep the waiting rows past their age. Returns how many closed. */
+export function sweepWaitingRowExpiry(deps: WaitingRowExpiryDeps): number {
+  const now = deps.now?.() ?? Date.now();
+  let closed = 0;
+  for (const row of deps.open()) {
+    const days = deps.daysFor(row);
+    if (!waitingRowDue(row, days, now, deps.proposalMaxMs)) continue;
+    try {
+      if (row.message.card?.proactiveProposal) {
+        deps.expireProposal(row);
+        closed += 1;
+        continue;
+      }
+      const note = pendingApprovalExpiryNote(days, deps.localeFor?.(row.threadId) ?? "en");
+      if (deps.closeRequest(row, note)) closed += 1;
+    } catch {
+      // leave the row; the next sweep retries
+    }
+  }
+  return closed;
 }

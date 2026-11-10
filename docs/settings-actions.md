@@ -464,7 +464,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | New conversations confidential | Settings > Organization > Privacy | `sagax_settings` get, set `org.confidentialByDefault` | organisation |
 | Allow vault export | Settings > Organization > Credentials | `sagax_settings` get, set `org.allowVaultExport` | organisation |
 | People from before: days | Settings > Organization > People | `sagax_settings` get, set `org.interimAttachDays` | organisation |
-| Pending approvals expire after (days) | Settings > Organization > Approvals | `sagax_settings` get, set `org.pendingApprovalExpireDays` | organisation |
+| Waiting cards expire after (days) | Settings > Organization > Approvals | `sagax_settings` get, set `org.pendingApprovalExpireDays` | organisation |
 | Plugin marketplaces | Capabilities > Sources > Organization sources and access | `sagax_settings` get, set `org.pluginMarketplaces` | organisation |
 | Public links for published pages | Settings > Pages > Organization pages | `sagax_settings` get, set `org.pagesLinkSharing` | organisation |
 | Reader comments on published pages | Settings > Pages > Organization pages | `sagax_settings` get, set `org.pagesReaderComments` | organisation |

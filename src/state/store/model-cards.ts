@@ -47,6 +47,8 @@ export interface OptionCardData {
   /** Who settled the card; `via: "call"` when it was decided by voice on a Live call. */
   answeredBy?: CardAnswerer;
   dismissed?: boolean;
+  /** #3471: skipped by the person without an answer (`answered` reads "skipped"). */
+  skipped?: boolean;
   /** Present when this card is a live provider ask (approval/question). */
   requestId?: string;
   /** permission asks: the tool being requested (drives the approval box) */

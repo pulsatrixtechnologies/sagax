@@ -26,7 +26,8 @@ import { useStore, type Bot, type Message } from "@/state/store";
 import { approvalCardStaysInChat } from "../ApprovalCard";
 import { PendingApprovalActions, PendingApprovalPanel, readOnlyApprovals, Stepper, type Pending } from "../PendingApproval";
 import { QuestionCard } from "../QuestionCard";
-import { PersonRequestCard } from "../InputRequestCard";
+import { PersonRequestCard, skipPersonRequest, skipPlace } from "../InputRequestCard";
+import { CardCloseButton } from "../AskCard";
 
 /** How much of the question the folded line keeps. */
 const FOLDED_TEXT_MAX = 72;
@@ -37,15 +38,20 @@ export function usePinnedWaiting(approvals: readonly Pending[], questions: reado
   const items = pinnedItems(approvals, questions, requests, topics);
   // the item is remembered by key, not by position: one answered ahead of
   // it must not move the person to another request
-  const [key, setKey] = useState<string | undefined>(undefined);
+  const [place, setPlace] = useState<{ key: string; at: number } | undefined>(undefined);
   const [collapsed, setCollapsed] = useState(false);
-  const found = key ? items.findIndex((item) => item.key === key) : -1;
-  const index = found >= 0 ? found : 0;
+  // #3471: the item the person was on left (answered, skipped, expired):
+  // the one after it moves up into its place, never back to the first
+  const found = place ? items.findIndex((item) => item.key === place.key) : -1;
+  const index = found >= 0 ? found : Math.min(place?.at ?? 0, Math.max(0, items.length - 1));
   return {
     items,
     index,
     current: items[index],
-    go: (to: number) => setKey(items[to]?.key),
+    go: (to: number) => {
+      const target = items[to];
+      setPlace(target ? { key: target.key, at: to } : undefined);
+    },
     collapsed,
     setCollapsed,
   };
@@ -133,7 +139,10 @@ export function PinnedWaitingCard({
       <span className="hidden sm:inline">{t("pinned.seeInConversation")}</span>
     </button>
   ) : null;
-  const controls = <>{jumpButton}{stepper}{foldButton}</>;
+  // #3471: one quiet skip at the end of the top row, for every kind
+  const skip = pinnedItemSkip(current, askedIn, bot?.id, dispatch);
+  const skipButton = skip ? <CardCloseButton label={t("waitingCard.skipAria")} onClick={skip} className="ms-0" /> : null;
+  const controls = <>{jumpButton}{stepper}{foldButton}{skipButton}</>;
   // the chat's ask surface (AskCard): no outline, no shadow at rest
   const frame = "mb-2 overflow-hidden rounded-3xl bg-composer ring-1 ring-composer-ring";
 
@@ -156,6 +165,7 @@ export function PinnedWaitingCard({
         </button>
         {stepper}
         {foldButton}
+        {skipButton}
       </section>
     );
   }
@@ -221,6 +231,22 @@ export function PinnedWaitingCard({
       )}
     </section>
   );
+}
+
+/** How the pinned item is skipped (#3471): an approval or a question by its
+ * request, a question in words by its card. Closed as skipped, never denied. */
+export function pinnedItemSkip(item: PinnedItem, askedIn: string, conversationBotId: string | undefined, dispatch: ReturnType<typeof useStore>["dispatch"]): (() => void) | undefined {
+  if (item.kind === "approval") {
+    const card = item.pending.message.card;
+    const requestId = card?.approvalOrigin?.requestId ?? item.pending.requestId;
+    return () => dispatch({ type: "skipCard", threadId: item.pending.threadId ?? askedIn, requestId, tool: true });
+  }
+  if (item.kind === "question") {
+    const requestId = item.message.card?.requestId;
+    return requestId ? () => dispatch({ type: "skipCard", threadId: askedIn, requestId }) : undefined;
+  }
+  const where = skipPlace(item.card, item.message, askedIn, conversationBotId);
+  return where ? () => { void skipPersonRequest(where, dispatch, item.message).catch(() => undefined); } : undefined;
 }
 
 function questionBot(message: Message, bot: Bot | undefined, name: string): Pick<Bot, "name"> & { id?: string } {

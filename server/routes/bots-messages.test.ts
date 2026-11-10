@@ -192,6 +192,19 @@ describe("createBotsMessagesRoutes", () => {
       expect(again.sent?.status).toBe(409);
     });
 
+    // #3471: a skip is never a deny: the card closes as skipped through its
+    // own path, no rule is saved and the engine is never answered allow
+    it("a skip closes the card as skipped, saves no rule and answers nothing", async () => {
+      const skipWaitingCard = vi.fn(async () => ({ status: 200, body: { ok: true, outcome: "skipped" } }));
+      const deps = approvalDeps({ originApprovals: { sourceFor: () => null }, skipWaitingCard, commandRememberRefusal: () => null });
+      const result = await call(deps, { path: "/api/threads/t1/respond", body: { requestId: "request-1", behavior: "deny", skip: true, rule: "deny" } });
+      expect(result.sent).toEqual({ status: 200, body: { ok: true, outcome: "skipped" } });
+      expect(skipWaitingCard).toHaveBeenCalledOnce();
+      expect(skipWaitingCard).toHaveBeenCalledWith("t1", "request-1");
+      expect(deps.saveOwnerRuleFromCard).not.toHaveBeenCalled();
+      expect(deps.answerRequest).not.toHaveBeenCalled();
+    });
+
     it("a settled or revoked view cannot save a rule or answer again", async () => {
       const deps = approvalDeps({ originApprovals: { sourceFor: () => false } });
       const result = await call(deps, { path: "/api/threads/t1/respond", body: { requestId: "request-1", behavior: "allow", rule: "allow" } });

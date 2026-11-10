@@ -394,6 +394,20 @@ describe("a yes whose wake cannot start (2026-11-01)", () => {
   });
 });
 
+// #3471: a skipped proposal closes once, and is neither a yes nor a no
+describe("a skipped proposal (#3471)", () => {
+  it("closes as skipped once and tells no yes or no", () => {
+    const store = new ProactiveProposals(null, () => 1_000);
+    const told: string[] = [];
+    store.observe((event) => { told.push(event.kind); });
+    const added = store.add({ botId: "nova", threadId: "t1", messageId: "m1", events: [mail("nova")], more: 0, hops: 0, confined: true });
+    told.length = 0;
+    expect(store.answer(added.id, "skipped")?.answered).toBe("skipped");
+    expect(store.answer(added.id, "accepted")).toBeNull();
+    expect(told).toEqual([]);
+  });
+});
+
 describe("teammates' messages (peer inbox, 2026-11-02)", () => {
   const notice = (receiverId: string, n: number, extra: Partial<Parameters<typeof peerNoticeEvent>[0]> = {}) => peerNoticeEvent({
     receiverId, noticeId: `node-${n}`, threadId: `th-${n}`, title: `Northwind write ${n}`, status: "completed",

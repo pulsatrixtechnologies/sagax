@@ -780,7 +780,8 @@ export interface ProactiveProposal {
   confined: boolean;
   createdAt: number;
   /** Set once answered: no second run. */
-  answered?: "accepted" | "declined";
+  /** "skipped" (#3471): closed by the person without a yes or a no. */
+  answered?: "accepted" | "declined" | "skipped";
   /** #3431: a choice card (propose_proactive): its yes writes the person's
    * choice of this watch domain with this bot; it starts no wake. */
   choice?: ProposalChoice;
@@ -897,13 +898,14 @@ export class ProactiveProposals {
    * already answered. `start` (2026-11-01) runs before the answer is kept:
    * when it throws (the wake could not start), the proposal stays open and
    * the person can say yes again, instead of a yes that did nothing. */
-  answer(id: string, verdict: "accepted" | "declined", start?: () => void): ProactiveProposal | null {
+  answer(id: string, verdict: "accepted" | "declined" | "skipped", start?: () => void): ProactiveProposal | null {
     const item = this.get(id);
     if (!item || item.answered) return null;
     start?.();
     item.answered = verdict;
     this.save();
-    this.tell(verdict, item.botId);
+    // #3471: a skip is neither a yes nor a no for the bot's metrics
+    if (verdict !== "skipped") this.tell(verdict, item.botId);
     return item;
   }
 

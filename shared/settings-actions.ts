@@ -1078,7 +1078,7 @@ org("org.memberEnvironmentAutonomy", "memberEnvironmentAutonomy", "any", "Member
 org("org.confidentialByDefault", "confidentialThreadsByDefault", "boolean", "New conversations confidential", "Settings > Organization > Privacy");
 org("org.allowVaultExport", "allowVaultExport", "boolean", "Allow vault export", "Settings > Organization > Credentials");
 org("org.interimAttachDays", "interimAttachDays", "number", "People from before: days", "Settings > Organization > People");
-org("org.pendingApprovalExpireDays", "pendingApprovalExpireDays", "number", "Pending approvals expire after (days)", "Settings > Organization > Approvals");
+org("org.pendingApprovalExpireDays", "pendingApprovalExpireDays", "number", "Waiting cards expire after (days)", "Settings > Organization > Approvals");
 org("org.pluginMarketplaces", "pluginMarketplaces", "any", "Plugin marketplaces", "Capabilities > Sources > Organization sources and access");
 // published pages (lot R8): the admins' switch for public links, a card at every level
 add({

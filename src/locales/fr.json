@@ -13866,9 +13866,9 @@
   "routineReadiness.requiresComputer": "Ordinateur requis",
   "routineReadiness.requiresHelp": "Noms séparés par des virgules, jusqu’à 20 noms de 100 caractères chacun.",
   "routines.failures.grouped": "Exécutions de routine en échec ({count})",
-  "approval.pending.expiredNote": "Cette approbation a expiré après {days} jours sans réponse; redemande-la si elle est encore nécessaire.",
-  "settings.org.pendingApprovalExpireDays": "Les approbations en attente expirent après (jours)",
-  "settings.me.pendingApprovalExpireDays": "Mes approbations en attente expirent après (jours)",
+  "approval.pending.expiredNote": "Cette demande a expiré après {days} jours sans réponse : il n'y a pas de réponse et rien n'a été fait. Redemande-la si elle est encore nécessaire.",
+  "settings.org.pendingApprovalExpireDays": "Les cartes en attente expirent après (jours)",
+  "settings.me.pendingApprovalExpireDays": "Mes cartes en attente expirent après (jours)",
   "limitFailover.exhausted": "Limites atteintes sur {tried} : aucun autre moteur n'a pu répondre. Choisis un autre modèle, ajoute du crédit, ou réessaie à la réinitialisation (vers {time}).",
   "limitFailover.ownerExhausted": "Le propriétaire de ce bot a atteint ses limites sur {tried} : aucun autre moteur n'a pu répondre. Choisis un autre modèle, ajoute du crédit, ou réessaie à la réinitialisation (vers {time}).",
   "limitFailover.exhaustedNoTime": "Limites atteintes sur {tried} : aucun autre moteur n'a pu répondre. Choisis un autre modèle, ajoute du crédit, ou réessaie plus tard.",
@@ -14716,5 +14716,10 @@
   "teamWork.wait.bot": "attend un autre bot",
   "teamWork.wait.computer": "attend l'ordinateur",
   "teamWork.wait.start": "attend de démarrer",
-  "teamWork.work.aria": "{name}, {done} étapes sur {total}"
+  "teamWork.work.aria": "{name}, {done} étapes sur {total}",
+  "waitingCard.skipAria": "Passer sans répondre",
+  "waitingCard.skipped": "Passé, sans réponse",
+  "waitingCard.expired": "Expiré, sans réponse",
+  "approval.pill.skipped": "Passée",
+  "approval.status.skipped": "Passée, rien n'a été fait"
 }

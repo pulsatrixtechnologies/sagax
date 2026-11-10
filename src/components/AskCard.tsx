@@ -87,6 +87,24 @@ export function AskCard({
   );
 }
 
+/** #3471: the one quiet control that skips or closes a waiting card, at the
+ * same place on every kind (the end of the card's top row, in the chat and
+ * on the pinned card over the composer). */
+export function CardCloseButton({ label, onClick, className }: { label: string; onClick: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      data-card-skip=""
+      className={cn("-me-1.5 flex size-7 shrink-0 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/[0.07] hover:text-ink", className)}
+    >
+      <X size={14} aria-hidden="true" />
+    </button>
+  );
+}
+
 /** The answered ask: one quiet line, with room for a trailing action
  * (Details, Try again) and an optional block under it. */
 export function AskSettledLine({

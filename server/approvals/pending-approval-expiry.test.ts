@@ -107,7 +107,8 @@ describe("pendingApprovalExpiresAt / past expiry", () => {
 describe("pendingApprovalExpiryNote", () => {
   it("words the note in English and French", () => {
     expect(pendingApprovalExpiryNote(7, "en")).toBe(
-      "This approval expired after 7 days without an answer; ask again if it is still needed.",
+      // #3471: every waiting card, not approvals only
+      "This request expired after 7 days without an answer: there is no answer and nothing was run. Ask again if it is still needed.",
     );
     expect(pendingApprovalExpiryNote(7, "fr")).toContain("7 jours");
     expect(pendingApprovalExpiryNote(7, "fr")).toContain("expiré");

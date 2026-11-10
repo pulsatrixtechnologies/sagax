@@ -50,3 +50,26 @@ function answerProactiveProposal(botId: string, proposalId: string, accept: bool
 }
   return answerProactiveProposal;
 }
+
+/** #3471: the person skipped a proposal card: closed as skipped, no wake. */
+export function createSkipProactiveProposal(getHost: () => Host): any {
+  return function skipProactiveProposal(botId: string, proposalId: string): { status: number; body: Record<string, unknown> } {
+    const host = getHost();
+    const bot = host.store.bot(botId);
+    const open = bot ? host.proactiveProposals.get(proposalId) : null;
+    if (!bot || !open || open.botId !== bot.id) return { status: 404, body: { error: "no such proposal" } };
+    try {
+      host.routeThreadId(bot, open.threadId);
+    } catch {
+      return { status: 404, body: { error: "no such proposal" } };
+    }
+    const skipped = host.proactiveProposals.answer(proposalId, "skipped");
+    if (!skipped) return { status: 409, body: { error: "this proposal was already answered" } };
+    const card = host.store.messagesFor(skipped.threadId).find((row) => row.id === skipped.messageId)?.card;
+    if (card) {
+      const { answeredText: _text, ...rest } = card;
+      host.store.patchMessage(skipped.threadId, skipped.messageId, { card: { ...rest, answered: "skipped", skipped: true, options: [] } });
+    }
+    return { status: 200, body: { ok: true, outcome: "skipped" } };
+  };
+}

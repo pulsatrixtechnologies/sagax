@@ -12,7 +12,7 @@ import { StepRow } from "../StepRow";
 import { stepLabel } from "@/lib/step-label";
 import { ThreadChip } from "../ThreadChip";
 import { SendReceiptRow } from "../SendReceiptRow";
-import { answerPersonRequest, cardPlace, InputRequestCard } from "../InputRequestCard";
+import { answerPersonRequest, cardPlace, InputRequestCard, skipPersonRequest } from "../InputRequestCard";
 import { RenameTitle } from "../RenameTitle";
 import { delegateModelLabel } from "../DelegationList";
 import { RoutineRunCard } from "../RoutineRunCard";
@@ -125,6 +125,8 @@ export function AttentionRow({ message, threadId, botId }: { message: Message; t
       // #3438: then the card is marked handled, so the pinned card over the
       // composer and this one settle together
       onReply={showThreads ? undefined : (text) => answerPersonRequest(card, text, cardPlace(card, message, threadId, botId))}
+      // #3471: skipped without an answer, the waiting work told so
+      onSkip={showThreads || !threadId ? undefined : () => skipPersonRequest({ botId: botId ?? card.botId, threadId, messageId: message.id }, dispatch, message)}
     />
     {/* #2694: the bot's owner says what to bring less, here as on Today */}
     <div className="flex flex-wrap items-start gap-x-1">

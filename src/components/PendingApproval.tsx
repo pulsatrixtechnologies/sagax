@@ -27,7 +27,7 @@ import { customRuleError } from "./bot-settings/CustomRulesCard";
 import { recipientKeysForSendCard } from "../../shared/send-card-recipients";
 import { parseRecipientEntry } from "../../shared/allowed-recipients";
 import { readableError } from "@/lib/plain-error";
-import { ASK_CHIP, ASK_CHIP_IDLE, ASK_PRIMARY_BUTTON } from "./AskCard";
+import { ASK_CHIP, ASK_CHIP_IDLE, ASK_PRIMARY_BUTTON, CardCloseButton } from "./AskCard";
 
 interface ApprovalLabels {
   [tool: string]: LocaleKey;
@@ -819,6 +819,11 @@ export function PendingApprovalBox({
         onPrevious={index > 0 ? () => go(index - 1) : undefined}
         onNext={index < approvals.length - 1 ? () => go(index + 1) : undefined}
         locale={locale}
+        // #3471: the same quiet skip as the pinned card's, at the row's end
+        controls={<CardCloseButton
+          label={t("waitingCard.skipAria")}
+          onClick={() => dispatch({ type: "skipCard", threadId: pending.threadId ?? threadId, requestId: pending.message.card?.approvalOrigin?.requestId ?? pending.requestId, tool: true })}
+        />}
         allowAllReadOnly={readOnly.length > 1
           ? {
               count: readOnly.length,

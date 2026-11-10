@@ -14,7 +14,7 @@ import type { InternalCapabilityView, InternalRouteContext } from "./internal-ro
 import type { PASS } from "./table.ts";
 
 export const MAX_COMMS_DEPTH = 1;
-export const MAX_CREATED_BOTS_PER_TURN = 4;
+export const MAX_CREATED_BOTS_PER_TURN = 15;
 export const MAX_WORKSPACE_BOTS = 100;
 export const ROOM_POST_MAX_CHARS = 4_000;
 export const BOTS_READ_ONLY = { error: "org_bots_read_only", message: "Your administrator lets you use shared bots only." } as const;

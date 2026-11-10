@@ -38,7 +38,7 @@ export const DEF_START_THREAD = {
 export const DEF_CREATE_BOT = {
     name: "create_bot",
     description:
-      "Create a specialist bot in your section. Primary Bot only. Below Full Access the user approves a card first, except on Approve for me when the user asked for it in their own message. instructions become its soul. Omit modelSelection to use the workspace default, or choose exact IDs from list_team_setup. MCP servers and automatic approvals start disabled. Assign work through delegate_bot. Maximum four new bots per turn.",
+      "Create a specialist bot in your section. Primary Bot only. Below Full Access the user approves a card first, except on Approve for me when the user asked for it in their own message. instructions become its soul. Omit modelSelection to use the workspace default, or choose exact IDs from list_team_setup. MCP servers and automatic approvals start disabled. Assign work through delegate_bot. Maximum fifteen new bots per turn.",
     inputSchema: {
       type: "object",
       properties: {

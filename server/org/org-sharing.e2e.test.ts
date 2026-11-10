@@ -626,11 +626,12 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
       await sleep(300);
       expect(promptsNow()).not.toContain("hop to the writer once private");
     } finally {
+      await api("DELETE", `/api/bots/${writer.id}/direct-grants/${bobId}`, alice);
       await api("PATCH", `/api/bots/${asker.id}`, bob, { approvePeerComms: false });
     }
   }, 60_000);
 
-  it("S3-7: Full access on a member's bot is its owner's choice, confirmed once; Custom never", async () => {
+  it("S3-7:Full access on a member's bot is its owner's choice, confirmed once; Custom never", async () => {
     // off until an admin turns it on (2026-10-11)
     const allowed = await api("PATCH", "/api/org/settings", alice, { allowFullAccess: true });
     expect(allowed.status, allowed.text).toBe(200);

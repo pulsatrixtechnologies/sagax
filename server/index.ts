@@ -20244,7 +20244,7 @@ const routineRequests = new RoutineRequestService({
     const targetBot = store.bot(target.botId);
     if (!targetBot) return `@${target.name} no longer exists, so this routine request cannot be confirmed for it`;
     if (!proposer || (!canReachPeer(proposer, targetBot) && !(proposer.chiefOfStaff && primaryBotSameOwner(proposer, targetBot)))) {
-      return `@${target.name} is no longer in this section, so this routine request cannot be confirmed for it`;
+      return `@${target.name} belongs to another person or is unavailable, so this routine request cannot be confirmed for it`;
     }
     return null;
   },

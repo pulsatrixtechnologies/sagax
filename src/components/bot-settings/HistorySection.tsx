@@ -306,7 +306,7 @@ export function HistorySection({
       <SettingsGroup groupId="history" title={t("botSettings.nav.history")} accessory={note}>
         <div className="flex min-h-[44px] items-center gap-3 px-4 py-2" data-history-empty={rows ? "" : undefined}>
           <History aria-hidden="true" className={ICON} />
-          <span className="text-[14px] leading-5 text-ink-secondary">{rows ? t("botPanel.history.empty") : t("botPanel.loading")}</span>
+          <span className="text-[14px] leading-5 text-ink-secondary">{rows ? t("botPanel.history.emptyVersions") : t("botPanel.loading")}</span>
         </div>
       </SettingsGroup>
     );

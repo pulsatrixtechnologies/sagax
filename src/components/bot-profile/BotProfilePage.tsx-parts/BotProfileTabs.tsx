@@ -197,7 +197,7 @@ export function BotProfileTabBar({ tabs, tab, onTab, search }: {
             />
           </div>
           {q && results.length === 0 && (
-            <div data-persona-no-match="" role="status" className="px-2.5 py-3 text-[12.5px] leading-relaxed text-ink-secondary">
+            <div data-persona-no-match="" role="status" className="px-2.5 py-3 text-[12px] leading-relaxed text-ink-secondary">
               {t("persona.noMatch", { query: query.trim() })}
             </div>
           )}

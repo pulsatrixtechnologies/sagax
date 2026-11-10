@@ -45,16 +45,16 @@ export function SuggestionFeedback({ value, onPick, className, choices = ALL_CHO
   return (
     <div data-suggestion-feedback={choice ?? ""} className={cn("flex flex-col gap-0.5", className)}>
       <div role="group" aria-label={t("suggestionFeedback.label")} className="flex flex-wrap items-center gap-0.5">
-        {choices.includes("up") && <button type="button" aria-label={t("suggestionFeedback.up")} title={t("suggestionFeedback.up")} aria-pressed={choice === "up"} disabled={busy} onClick={() => pick("up")} className={cn(icon, choice === "up" && "text-accent")}>
+        {choices.includes("up") && <button type="button" aria-label={t("suggestionFeedback.up")} title={t("suggestionFeedback.up")} aria-pressed={choice === "up"} disabled={busy} onClick={() => pick("up")} className={cn(icon, choice === "up" && "text-accent-text")}>
           <ThumbsUp size={14} />
         </button>}
-        {choices.includes("down") && <button type="button" aria-label={t("suggestionFeedback.down")} title={t("suggestionFeedback.down")} aria-pressed={choice === "down"} disabled={busy} onClick={() => pick("down")} className={cn(icon, choice === "down" && "text-accent")}>
+        {choices.includes("down") && <button type="button" aria-label={t("suggestionFeedback.down")} title={t("suggestionFeedback.down")} aria-pressed={choice === "down"} disabled={busy} onClick={() => pick("down")} className={cn(icon, choice === "down" && "text-accent-text")}>
           <ThumbsDown size={14} />
         </button>}
-        {choices.includes("less") && <button type="button" aria-pressed={choice === "less"} disabled={busy} onClick={() => pick("less")} className={cn(text, choice === "less" && "text-accent")}>
+        {choices.includes("less") && <button type="button" aria-pressed={choice === "less"} disabled={busy} onClick={() => pick("less")} className={cn(text, choice === "less" && "text-accent-text")}>
           {t("suggestionFeedback.less")}
         </button>}
-        {choices.includes("never") && <button type="button" aria-pressed={choice === "never"} disabled={busy} onClick={() => pick("never")} className={cn(text, choice === "never" && "text-accent")}>
+        {choices.includes("never") && <button type="button" aria-pressed={choice === "never"} disabled={busy} onClick={() => pick("never")} className={cn(text, choice === "never" && "text-accent-text")}>
           {t("suggestionFeedback.never")}
         </button>}
       </div>

@@ -1466,6 +1466,7 @@ import { chatgptAppsProvider } from "./connectors/providers/chatgpt-apps.ts";
 import { createConnectorHub } from "./connectors/hub.ts";
 import { testConnectorHostFromEnv } from "./connectors/hosts/test-host.ts";
 import { createGrokConnectorHost } from "./connectors/hosts/grok-host.ts";
+import { createClaudeConnectorHost } from "./connectors/hosts/claude-host.ts";
 import { installMainRuntimeEventSubscriber } from "./runtime-events/dispatcher.ts";
 import { createApplyConfigHttpPatch } from "./routes/config-http-patch.ts";
 import { createAuthenticate } from "./request-pipeline/authenticate.ts";
@@ -28541,14 +28542,24 @@ const connectorRegistry = new ConnectorRegistry({
   ],
 });
 /** #3348 (L5): the hosts that run call_connector, one per provider. The
- * Grok host (#3350, L7) runs one approved call on the person's own Grok
- * sign-in; the Claude host is L9. */
+ * Grok host (#3350, L7) and the Claude host (#3352, L9) each run one
+ * approved call on the person's own sign-in of that provider. */
 const connectorHub = createConnectorHub([
   ...(testConnectorHost ? [testConnectorHost.host] : []),
   createGrokConnectorHost({
     launch: (principalId, account) => {
       const instanceId = folderInstance("grokAgent", account.instanceId);
       return (instanceId ? engineLogins?.grokConnectorLaunch(principalId, instanceId, account.slot) : null) ?? undefined;
+    },
+  }),
+  createClaudeConnectorHost({
+    // the same sign-in the registry read the person's claude.ai connectors from
+    launch: (principalId, account) => {
+      if (IDENTITY.kind !== "perspicax" && principalId !== localPrincipalId().trim().toLowerCase()) return undefined;
+      const instanceId = IDENTITY.kind === "perspicax" ? folderInstance("claudeAgent", account.instanceId) : account.instanceId;
+      if (!instanceId) return undefined;
+      const signedIn = claudeAccountForPrincipal(principalId, instanceId);
+      return "unavailable" in signedIn ? undefined : { cli: signedIn.cli, env: signedIn.env };
     },
   }),
 ]);

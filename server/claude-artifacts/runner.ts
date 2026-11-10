@@ -14,19 +14,16 @@
 import { copyFileSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import type { ChildProcessByStdio } from "node:child_process";
-import type { Readable, Writable } from "node:stream";
 import { isArtifactConsentRefusal } from "../../shared/claude-chat-blocks.ts";
 import { oneShotIsolationArgs, type ClaudeCliVersion } from "../drivers/claude.ts";
 import { claudeAccountEmail } from "../drivers/claude/helpers.ts";
-import { killCliTree, spawnCli } from "../procs.ts";
+import { readPinnedToolCall, runPinnedClaudeCall, type PinnedClaudeChild, type PinnedClaudeSpawn } from "./pinned-call.ts";
 
 export const CLAUDE_ARTIFACT_TOOLS = ["Artifact", "ArtifactData", "ArtifactComments"] as const;
 export type ClaudeArtifactTool = typeof CLAUDE_ARTIFACT_TOOLS[number];
 
 export const CLAUDE_ARTIFACT_MODEL = "haiku";
 export const CLAUDE_ARTIFACT_TIMEOUT_MS = 90_000;
-const STDOUT_CAP = 4_000_000;
 
 const SYSTEM_PROMPT = "Make exactly the tool calls the user message names, in that order, with exactly the inputs it gives, then stop. Load a deferred tool with ToolSearch first when needed. Reply with nothing else.";
 
@@ -40,8 +37,8 @@ export type ClaudeArtifactRunResult =
   | { ok: false; error: string }
   | { ok: false; blocked: "other_account"; account?: string };
 
-type Child = ChildProcessByStdio<Writable, Readable, Readable>;
-export type ClaudeArtifactSpawn = (cli: string, args: string[], options: { env: NodeJS.ProcessEnv; cwd: string }) => Child;
+type Child = PinnedClaudeChild;
+export type ClaudeArtifactSpawn = PinnedClaudeSpawn;
 
 export interface RunClaudeArtifactOptions {
   account: ClaudeArtifactAccount;
@@ -111,51 +108,20 @@ function isUpdatePublish(tool: ClaudeArtifactTool, input: Record<string, unknown
  * the tool's own ask: an artifact of another claude.ai account. */
 const DONT_ASK_DENIAL = /^Permission to use Artifact(Data|Comments)? has been denied because Claude Code is running in don't ask mode/;
 
-function blockText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .map((part) => part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string" ? (part as { text: string }).text : "")
-    .filter(Boolean)
-    .join("\n");
-}
-
 /** The result of the one `tool` call in a stream-json transcript. */
 export function parseClaudeArtifactStream(stdout: string, tool: ClaudeArtifactTool, accountEmail?: string, action?: string): ClaudeArtifactRunResult {
-  let callId: string | undefined;
-  let finalText = "";
-  let finalError = false;
-  for (const line of stdout.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("{")) continue;
-    let frame: Record<string, unknown>;
-    try {
-      frame = JSON.parse(trimmed) as Record<string, unknown>;
-    } catch {
-      continue;
-    }
-    const message = frame.message as { content?: unknown } | undefined;
-    const content = Array.isArray(message?.content) ? message.content as Array<Record<string, unknown>> : [];
-    if (frame.type === "assistant" && !callId) {
-      const use = content.find((block) => block?.type === "tool_use" && block.name === tool && typeof block.id === "string"
-        && (action === undefined || ((block.input as { action?: unknown } | undefined)?.action ?? "publish") === action));
-      if (use) callId = use.id as string;
-    } else if (frame.type === "user" && callId) {
-      const result = content.find((block) => block?.type === "tool_result" && block.tool_use_id === callId);
-      if (!result) continue;
-      const text = blockText(result.content);
-      if (isArtifactConsentRefusal(text) || DONT_ASK_DENIAL.test(text.trim())) return { ok: false, blocked: "other_account", ...(accountEmail ? { account: accountEmail } : {}) };
-      if (result.is_error === true) return { ok: false, error: text.trim().slice(0, 2_000) || `${tool} failed` };
-      const structured = frame.tool_use_result ?? frame.toolUseResult;
-      return { ok: true, result: structured === undefined ? text : structured, text };
-    } else if (frame.type === "result") {
-      finalText = typeof frame.result === "string" ? frame.result : "";
-      finalError = frame.is_error === true;
-    }
+  const reading = readPinnedToolCall(stdout, (use) => use.name === tool
+    && (action === undefined || ((use.input as { action?: unknown } | undefined)?.action ?? "publish") === action));
+  if (reading.result) {
+    const { text, isError, structured } = reading.result;
+    if (isArtifactConsentRefusal(text) || DONT_ASK_DENIAL.test(text.trim())) return { ok: false, blocked: "other_account", ...(accountEmail ? { account: accountEmail } : {}) };
+    if (isError) return { ok: false, error: text.trim().slice(0, 2_000) || `${tool} failed` };
+    return { ok: true, result: structured === undefined ? text : structured, text };
   }
+  const finalText = reading.finalText;
   if (isArtifactConsentRefusal(finalText)) return { ok: false, blocked: "other_account", ...(accountEmail ? { account: accountEmail } : {}) };
   const reason = finalText.trim().slice(0, 2_000);
-  return { ok: false, error: reason ? (finalError ? reason : `${tool} was not called: ${reason}`) : `${tool} was not called` };
+  return { ok: false, error: reason ? (reading.finalError ? reason : `${tool} was not called: ${reason}`) : `${tool} was not called` };
 }
 
 /** Run one artifact call. Never throws. */
@@ -180,45 +146,16 @@ export async function runClaudeArtifact(options: RunClaudeArtifactOptions): Prom
     const env = claudeArtifactEnv(options.account.env);
     const email = claudeAccountEmail(env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"));
     const args = claudeArtifactArgs(staging, options.version ?? null, options.model);
-    const spawnChild: ClaudeArtifactSpawn = options.spawn
-      ?? ((cli, argv, opts) => spawnCli(cli, argv, { stdio: ["pipe", "pipe", "pipe"], env: opts.env, cwd: opts.cwd }));
-    const kill = options.kill ?? ((child: Child) => killCliTree(child));
-    const stdout = await new Promise<{ out: string; error?: string }>((resolve) => {
-      let child: Child;
-      try {
-        child = spawnChild(options.account.cli, args, { env, cwd: staging });
-      } catch (error) {
-        resolve({ out: "", error: error instanceof Error ? error.message : String(error) });
-        return;
-      }
-      let out = "";
-      let errTail = "";
-      let settled = false;
-      const finish = (error?: string) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolve({ out, ...(error ? { error } : {}) });
-      };
-      const timer = setTimeout(() => {
-        kill(child);
-        finish(`${options.tool} timed out`);
-      }, options.timeoutMs ?? CLAUDE_ARTIFACT_TIMEOUT_MS);
-      timer.unref?.();
-      child.stdout.setEncoding("utf8");
-      child.stderr.setEncoding("utf8");
-      child.stdout.on("data", (chunk: string) => {
-        out += chunk;
-        if (out.length > STDOUT_CAP) {
-          kill(child);
-          finish(`${options.tool} output too large`);
-        }
-      });
-      child.stderr.on("data", (chunk: string) => { errTail = (errTail + chunk).slice(-2_000); });
-      child.on("error", (error) => finish(error.message));
-      child.on("close", (code) => finish(code && !out.trim() ? (errTail.trim() || `claude exited with ${code}`) : undefined));
-      child.stdin.on("error", () => {});
-      child.stdin.end(claudeArtifactPrompt(options.tool, input));
+    const stdout = await runPinnedClaudeCall({
+      cli: options.account.cli,
+      args,
+      env,
+      cwd: staging,
+      prompt: claudeArtifactPrompt(options.tool, input),
+      timeoutMs: options.timeoutMs ?? CLAUDE_ARTIFACT_TIMEOUT_MS,
+      label: options.tool,
+      ...(options.spawn ? { spawn: options.spawn } : {}),
+      ...(options.kill ? { kill: options.kill } : {}),
     });
     const parsed = parseClaudeArtifactStream(stdout.out, options.tool, email, isUpdatePublish(options.tool, input) ? "publish" : undefined);
     if (stdout.error && !parsed.ok && "error" in parsed) return { ok: false, error: stdout.error };

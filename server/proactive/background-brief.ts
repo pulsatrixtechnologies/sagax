@@ -225,20 +225,29 @@ const settingsSchema = z.object({
 });
 
 const botSchema = z.object({
-  // absent: the person never saved a choice, the default applies (on for
-  // a Primary Bot, `defaultEnabled`)
+  // absent: the person never saved a choice, and the brief is off (#3456:
+  // never on because of a default)
   settings: settingsSchema.optional(),
   suggestions: z.array(suggestionSchema).max(80),
   rejected: z.array(z.string().min(1).max(500)).max(200),
-  /** The local day (YYYY-MM-DD in the person's zone) the timer last ran. */
+  /** The local day (YYYY-MM-DD in the person's zone) the minute timer last
+   * ran, before the brief became a routine (#3456). Kept for old files. */
   lastScheduledDay: z.string().regex(DAY).optional(),
   /** When the last pass ran, found something or not. */
   lastPassAt: z.number().optional(),
   /** #2694: the person's feedback per topic (briefTopic). */
   topics: z.record(z.string(), topicSchema).optional(),
+  /** #3456: a main bot that had the brief only by default before it became
+   * a routine: it owes its person one card « Garder le brief du jour ? ». */
+  cardOwed: z.boolean().optional(),
 });
 
-const fileSchema = z.object({ version: z.literal(1), bots: z.record(z.string(), botSchema) });
+const fileSchema = z.object({
+  version: z.literal(1),
+  bots: z.record(z.string(), botSchema),
+  /** #3456: when the brief became a routine of the bot (the upgrade ran). */
+  routinesAt: z.number().optional(),
+});
 type FileShape = z.infer<typeof fileSchema>;
 
 export function briefToolAllowed(tool: string): boolean {
@@ -555,26 +564,23 @@ const emptyBot = (): BotRow => ({
   rejected: [],
 });
 
-export interface BriefStoreOptions {
-  /** Whether the brief is on for a bot whose person never chose: on for a
-   * Primary Bot (2026-10-29). Absent: off. */
-  defaultEnabled?: (botId: string) => boolean;
-}
-
 export class BriefStore {
   private data: FileShape = { version: 1, bots: {} };
   private readonly file: string;
   private readonly now: () => number;
-  private readonly defaultEnabled: (botId: string) => boolean;
+  /** #3456: a file was there when the server started (an install that ran
+   * the brief before it became a routine). */
+  readonly existed: boolean;
 
-  constructor(file: string, now: () => number = Date.now, options: BriefStoreOptions = {}) {
+  constructor(file: string, now: () => number = Date.now) {
     this.file = file;
     this.now = now;
-    this.defaultEnabled = options.defaultEnabled ?? (() => false);
     try {
       this.data = fileSchema.parse(JSON.parse(readFileSync(file, "utf8")));
+      this.existed = true;
     } catch {
       // missing or unreadable: start empty, do not invent suggestions
+      this.existed = false;
       return;
     }
     let migrated = false;
@@ -597,11 +603,45 @@ export class BriefStore {
     return this.data.bots[botId] ?? emptyBot();
   }
 
-  /** The settings in force: the person's own, else the default. */
+  /** The settings in force: the person's own, else off (#3456: nothing is
+   * on because of a default; the brief runs only from its routine). */
   settings(botId: string): BriefSettings {
     const saved = this.bot(botId).settings;
     if (saved) return cleanBriefSettings(saved, { enabled: saved.enabled, everyHours: saved.everyHours, subjects: saved.subjects, at: saved.at ?? BRIEF_DEFAULT_AT, timeZone: saved.timeZone ?? serverTimeZone(), screenContext: saved.screenContext ?? false });
-    return { enabled: this.defaultEnabled(botId), everyHours: 4, subjects: [], at: BRIEF_DEFAULT_AT, timeZone: serverTimeZone(), screenContext: false };
+    return { enabled: false, everyHours: 4, subjects: [], at: BRIEF_DEFAULT_AT, timeZone: serverTimeZone(), screenContext: false };
+  }
+
+  /** Whether the person saved brief settings for this bot (their choice). */
+  saved(botId: string): boolean {
+    return Boolean(this.data.bots[botId]?.settings);
+  }
+
+  /** The bots that have a row (saved settings, suggestions or feedback). */
+  botIds(): string[] {
+    return Object.keys(this.data.bots);
+  }
+
+  /** #3456: the upgrade to routines already ran. */
+  routinesMigrated(): boolean {
+    return this.data.routinesAt !== undefined;
+  }
+
+  markRoutinesMigrated(now = this.now()): void {
+    this.data.routinesAt = now;
+    this.save();
+  }
+
+  /** #3456: the main bots that still owe their person the card. */
+  cardsOwed(): string[] {
+    return Object.entries(this.data.bots).filter(([, row]) => row.cardOwed === true).map(([botId]) => botId);
+  }
+
+  setCardOwed(botId: string, owed: boolean): void {
+    const row = this.bot(botId);
+    if (owed) row.cardOwed = true;
+    else delete row.cardOwed;
+    this.data.bots[botId] = row;
+    this.save();
   }
 
   /** #2699: the bots whose person turned screen context on. */
@@ -632,19 +672,6 @@ export class BriefStore {
     const last = row.lastPassAt ?? row.suggestions.reduce((max, item) => Math.max(max, item.at), 0);
     if (!last) return true;
     return now - last >= settings.everyHours * 3_600_000;
-  }
-
-  /** The timer's question: the person's daily time came and it has not run today. */
-  scheduledDue(botId: string, now = this.now()): boolean {
-    return briefTimeCame(this.settings(botId), this.bot(botId).lastScheduledDay, now);
-  }
-
-  /** The timer took today's run (before it reads, so a slow pass never runs twice). */
-  markScheduled(botId: string, now = this.now()): void {
-    const row = this.bot(botId);
-    row.lastScheduledDay = localDay(now, this.settings(botId).timeZone);
-    this.data.bots[botId] = row;
-    this.save();
   }
 
   /** A pass ran (with or without anything new). */

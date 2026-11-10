@@ -97,8 +97,10 @@ const watchSchema = z.object({
 
 /** 2026-11-05 (#2018): a check Sagax runs as code, by name, before a turn
  * (options.evaluateCode in routines.ts). No LLM call per tick: the turn
- * starts only when the check finds work. */
-export const ROUTINE_CODE_CHECKS = ["claude_artifact_comments"] as const;
+ * starts only when the check finds work. `daily_brief` (#3456) is the
+ * bot's brief: the check reads and delivers it itself and never starts a
+ * turn (server/proactive/brief-routine.ts). */
+export const ROUTINE_CODE_CHECKS = ["claude_artifact_comments", "daily_brief"] as const;
 export const ROUTINE_CODE_CHECK_TIMEOUT_MS = 180_000;
 const codeSchema = z.object({
   kind: z.literal("code"),

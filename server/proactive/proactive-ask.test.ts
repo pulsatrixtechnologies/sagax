@@ -7,9 +7,10 @@ import { availableTools, catalogProfileFromEnv } from "../drivers/agents-catalog
 import { createProactiveAskInternalRoutes } from "../routes/proactive-ask.ts";
 import type { OfferedDomain, OfferedListing } from "./flow-watches.ts";
 import {
-  askTurnRefusal, cadenceWords, choiceCard, firstQuestionText, ProactiveAsk, proposerFor, SECOND_CARD_AFTER_MS,
+  askTurnRefusal, BRIEF_ASK_DOMAIN, cadenceWords, choiceCard, firstQuestionText, ProactiveAsk, proposerFor, SECOND_CARD_AFTER_MS,
   watchReadCovered, type AskBot, type AskTurnFacts, type ChoiceCard,
 } from "./proactive-ask.ts";
+import { briefCard } from "./brief-routine.ts";
 import { ProactiveChoices } from "./proactive-choices.ts";
 import { PROPOSAL_TTL_MS, type ProposalChoice } from "./proactive-wake.ts";
 
@@ -39,6 +40,8 @@ interface Harness {
   posted: Array<{ botId: string; threadId: string; card: ChoiceCard; choice: ProposalChoice; id: string }>;
   clock: { now: number };
   bots: AskBot[];
+  /** #3456: the bots whose brief routine a yes created. */
+  briefYes: string[];
 }
 
 function harness(input: { bots?: AskBot[]; offered?: Record<string, OfferedDomain[]>; aboutMe?: string; since?: number; people?: number } = {}): Harness {
@@ -49,6 +52,7 @@ function harness(input: { bots?: AskBot[]; offered?: Record<string, OfferedDomai
   const bots = input.bots ?? [{ id: "main", title: "Assistant", description: "", main: true, bornAt: START - 30 * DAY }];
   const offered = input.offered ?? { main: [DISPATCH, SECURITY] };
   const posted: Harness["posted"] = [];
+  const briefYes: string[] = [];
   const ask = new ProactiveAsk({
     choices: store,
     bots: () => bots,
@@ -62,9 +66,10 @@ function harness(input: { bots?: AskBot[]; offered?: Record<string, OfferedDomai
       posted.push({ ...row, id });
       return id;
     },
+    briefYes: (_person, botId) => { briefYes.push(botId); },
     now: () => clock.now,
   });
-  return { ask, choices: store, posted, clock, bots };
+  return { ask, choices: store, posted, clock, bots, briefYes };
 }
 
 const propose = (h: Harness, over: Partial<Parameters<ProactiveAsk["propose"]>[0]> = {}) =>
@@ -119,7 +124,7 @@ describe("propose_proactive and its bounds", () => {
     expect(h.posted[0]!.card.options).toEqual(["Oui", "Pas maintenant"]);
     expect(h.posted[0]!.card.subtitle).toContain("toutes les 15 minutes");
     expect(h.posted[0]!.card.subtitle).toContain("Sur Assistant");
-    expect(h.posted[0]!.card.details.watches.map((watch) => [watch.id, watch.on])).toEqual([["dispatch-open", true], ["dispatch-late", false]]);
+    expect(h.posted[0]!.card.details!.watches.map((watch) => [watch.id, watch.on])).toEqual([["dispatch-open", true], ["dispatch-late", false]]);
     expect(h.choices.get(PERSON).asks).toEqual([{ domain: "dispatch", botId: "main", at: START, proposalId: "p1" }]);
   });
 
@@ -411,5 +416,77 @@ describe("a domain nobody follows comes first", () => {
     expect(await h.ask.turnSection(PERSON, "main")).not.toContain("Nobody in the organization");
     await propose(h, { domain: "billing" });
     expect(h.posted[0]!.card.subtitle).not.toContain(NOBODY);
+  });
+});
+
+describe("#3456: the card « Garder le brief du jour ? » goes through the same ledger and bounds", () => {
+  const offer = (h: Harness) => h.ask.offerBrief({ person: PERSON, botId: "main", threadId: "t-main", at: "08:00" });
+
+  it("posted once, with the brief's words and no watch details; no second card", () => {
+    const h = harness();
+    expect(offer(h)).toBe("posted");
+    expect(h.posted).toHaveLength(1);
+    expect(h.posted[0]!.card.title).toBe("Garder le brief du jour ?");
+    // it claims no past sending and no past time: only that the default was on and stopped, and what the yes does
+    expect(h.posted[0]!.card.subtitle).toBe("Le brief du jour était actif par défaut, sans que tu l'aies choisi : je l'ai arrêté. Si tu dis oui, je te l'envoie chaque jour à 8 h 00, comme une de mes routines, que tu peux mettre en pause, modifier ou supprimer.");
+    expect(h.posted[0]!.card.subtitle).not.toMatch(/envoyais/);
+    expect(briefCard("08:00", "en").subtitle).toBe("Today's brief was on by default, without you choosing it: I stopped it. If you say yes, I send it to you every day at 08:00, as one of my routines, which you can pause, edit or delete.");
+    expect(h.posted[0]!.card.options).toEqual(["Oui", "Pas maintenant"]);
+    expect(h.posted[0]!.card.details).toBeUndefined();
+    expect(h.posted[0]!.choice).toEqual({ person: PERSON, domain: BRIEF_ASK_DOMAIN, watches: [], others: [] });
+    expect(h.choices.get(PERSON).asks).toEqual([{ domain: BRIEF_ASK_DOMAIN, botId: "main", at: START, proposalId: "p1" }]);
+    // answered not now, then days later: never a second card
+    h.ask.answer({ id: "p1", botId: "main", choice: h.posted[0]!.choice }, false);
+    h.clock.now = START + 30 * DAY;
+    expect(offer(h)).toBe("closed");
+    expect(h.posted).toHaveLength(1);
+    expect(h.briefYes).toEqual([]);
+  });
+
+  it("a yes creates the brief routine and writes no watch domain", () => {
+    const h = harness();
+    offer(h);
+    h.ask.answer({ id: "p1", botId: "main", choice: h.posted[0]!.choice }, true);
+    expect(h.briefYes).toEqual(["main"]);
+    const choices = h.choices.get(PERSON);
+    expect(choices.domains).toEqual({});
+    expect(choices.asks?.[0]).toMatchObject({ answer: "yes" });
+    expect(h.choices.chosen()).toEqual([]);
+  });
+
+  it("\"never\" is kept in the ledger, no routine, no domain row, no card again", () => {
+    const h = harness();
+    offer(h);
+    h.ask.never({ id: "p1", choice: h.posted[0]!.choice });
+    expect(h.choices.get(PERSON).asks?.[0]).toMatchObject({ answer: "never" });
+    expect(h.choices.get(PERSON).domains).toEqual({});
+    expect(h.briefYes).toEqual([]);
+    h.clock.now = START + 60 * DAY;
+    expect(offer(h)).toBe("closed");
+    expect(h.posted).toHaveLength(1);
+  });
+
+  it("is not the first question: a later-day owner turn on the main bot still writes the upgrade sentence first", async () => {
+    const h = harness();
+    expect(offer(h)).toBe("posted");
+    expect(h.choices.get(PERSON).firstAskedAt).toBeUndefined();
+    h.ask.answer({ id: "p1", botId: "main", choice: h.posted[0]!.choice }, false);
+    h.clock.now = START + DAY;
+    const first = await h.ask.onOwnerTurn(PERSON, "main");
+    expect(first).toEqual({ botId: "main", text: expect.stringMatching(/^Du nouveau : je ne t'envoie plus rien de moi-même tant que tu ne l'as pas choisi\./) });
+  });
+
+  it("counts in the bounds: waits while another card is open or the person was asked today, and then holds them back", async () => {
+    const h = harness();
+    expect((await propose(h)).posted).toBe(true);
+    expect(offer(h)).toBe("later");
+    // the domain card answered, but the person was asked today: still later
+    h.ask.answer({ id: "p1", botId: "main", choice: h.posted[0]!.choice }, false);
+    expect(offer(h)).toBe("later");
+    h.clock.now = START + DAY;
+    expect(offer(h)).toBe("posted");
+    expect(h.posted).toHaveLength(2);
+    // the brief card is open and counts as today's ask: no domain card
+    expect((await propose(h, { domain: "security" })).posted).toBe(false);
   });
 });

@@ -18,6 +18,11 @@
 // - the card's answer: a yes writes the person's choice with the bot that
 //   proposed it; "Ne plus proposer" is kept.
 //
+// - #3456 (lot 5): the card « Garder le brief du jour ? » of a main bot that
+//   had the brief only by default goes through the same ledger and the same
+//   bounds (one open card, one ask a day); it is posted once, ever; a yes
+//   creates the brief routine, "never" is kept.
+//
 // The eligibility listing is the watch loop's (flow-watches.ts `offered`),
 // the store is the person's choices (proactive-choices.ts): nothing here is
 // a second listing or a second store.
@@ -26,6 +31,10 @@ import type { OfferedDomain, OfferedListing, OfferedWatch } from "./flow-watches
 import { parseCadence } from "./flow-watches.ts";
 import type { ProactiveChoices } from "./proactive-choices.ts";
 import { PROPOSAL_TTL_MS, type ProposalChoice } from "./proactive-wake.ts";
+import { briefCard } from "./brief-routine.ts";
+
+/** #3456: the ledger's key of the brief card (never a Flow domain slug). */
+export const BRIEF_ASK_DOMAIN = "sagax.daily-brief";
 
 /** A second card for a domain comes at least this long after "Not now". */
 export const SECOND_CARD_AFTER_MS = 14 * 24 * 60 * 60_000;
@@ -294,7 +303,8 @@ export interface ChoiceCard {
   title: string;
   subtitle: string;
   options: [string, string];
-  details: { domain: string; label: string; botName: string; watches: ChoiceCardWatch[] };
+  /** The folded details of a watch domain; absent on the brief card. */
+  details?: { domain: string; label: string; botName: string; watches: ChoiceCardWatch[] };
 }
 
 /** The choice card: a title, one or two plain lines (what it sends, how
@@ -351,6 +361,8 @@ export interface ProactiveAskDeps {
   /** Post the choice card in the bot's conversation with the person; the
    * proposal's id. No push: the person is in that conversation. */
   postCard(input: { botId: string; threadId: string; card: ChoiceCard; choice: ProposalChoice }): string;
+  /** #3456: the brief card's yes: the bot's brief routine is created. */
+  briefYes?(person: string, botId: string): void;
   now?: () => number;
 }
 
@@ -533,11 +545,32 @@ export class ProactiveAsk {
     return text ? { botId, text } : null;
   }
 
+  /** #3456: the card « Garder le brief du jour ? » of a main bot that had
+   * the brief only by default. Once ever per person; inside the bounds (one
+   * open card, one bot-initiated ask a day): "later" when they hold it
+   * back, "closed" when it was already posted. No push. */
+  offerBrief(input: { person: string; botId: string; threadId: string; at: string }): "posted" | "later" | "closed" {
+    const choices = this.deps.choices.get(input.person);
+    if ((choices.asks ?? []).some((ask) => ask.domain === BRIEF_ASK_DOMAIN)) return "closed";
+    const now = this.now();
+    if (openCard(choices, now) || askedToday(choices, now, this.deps.timeZone(input.person))) return "later";
+    const card = briefCard(input.at, this.deps.language(input.person));
+    const proposalId = this.deps.postCard({ botId: input.botId, threadId: input.threadId, card, choice: { person: input.person, domain: BRIEF_ASK_DOMAIN, watches: [], others: [] } });
+    this.deps.choices.noteAsk(input.person, { domain: BRIEF_ASK_DOMAIN, botId: input.botId, at: now, proposalId }, { firstQuestion: false });
+    return "posted";
+  }
+
   /** The card's answer: a yes writes the choice with the bot that proposed
    * it (the watches the person kept on, off the others); "Not now" is kept
-   * in the ledger. `watchesOn` is the card's switches, when it sent them. */
+   * in the ledger. `watchesOn` is the card's switches, when it sent them.
+   * The brief card's yes creates the brief routine instead (#3456). */
   answer(proposal: { id: string; botId: string; choice: ProposalChoice }, accept: boolean, watchesOn?: readonly string[]): void {
     const { person, domain, watches, others } = proposal.choice;
+    if (domain === BRIEF_ASK_DOMAIN) {
+      if (accept) this.deps.briefYes?.(person, proposal.botId);
+      this.deps.choices.answerAsk(person, proposal.id, accept ? "yes" : "not-now");
+      return;
+    }
     if (accept) {
       const all = [...watches, ...others];
       const on = watchesOn ? all.filter((id) => watchesOn.includes(id)) : watches;
@@ -550,7 +583,8 @@ export class ProactiveAsk {
   /** "Ne plus proposer": final for bots; the person can still turn it on. */
   never(proposal: { id: string; choice: ProposalChoice }): void {
     const { person, domain } = proposal.choice;
-    this.deps.choices.apply(person, { domain, state: "never", via: "card" }, person);
+    // the brief card's "never" lives in the ledger: it is no watch domain
+    if (domain !== BRIEF_ASK_DOMAIN) this.deps.choices.apply(person, { domain, state: "never", via: "card" }, person);
     this.deps.choices.answerAsk(person, proposal.id, "never");
   }
 }

@@ -1,22 +1,19 @@
-// The background brief on its own timer (2026-10-29).
+// The background brief, run by its routine (#3456, lot 5 of #3408).
 //
-// Until now a pass ran only when the person clicked "Read connected apps".
-// Every minute the server now asks each bot whether the person's daily time
-// came (BriefStore.scheduledDue: their time, in their time zone, not yet
-// today). The day is taken BEFORE the reads, so a slow pass or a restart
-// never sends the same brief twice. The pass itself is the click's: reads
+// The brief is a routine of the bot (server/proactive/brief-routine.ts),
+// created only on the person's yes: there is no timer of its own any more,
+// and nothing runs because of a default. At the routine's time its code
+// pre-check (routine-precheck.ts `daily_brief`) runs `runBrief` below: reads
 // only, every number cited with its dated piece, a rejection never proposed
-// again (server/proactive/background-brief.ts).
+// again (server/proactive/background-brief.ts). No model turn starts.
 //
 // What it found is delivered twice, the way the person chose:
 //   - in the bot's conversation with them, as one bot message;
 //   - through "Me joindre" (server/reach-me/service.ts `notice`): a push,
 //     a text, Teams, Telegram or WhatsApp, as set for that bot, within
 //     their hours (held until the next range otherwise).
-// A pass with nothing new sends nothing. The brief is on by default for a
-// Primary Bot; the person turns it off or moves its time on the bot page.
+// A pass with nothing new sends nothing.
 import { readConnectedBrief, suggestionAction, type BriefAppCall, type BriefStore, type BriefSuggestion } from "./background-brief.ts";
-import { reportBackgroundError } from "../background-error.ts";
 
 export interface ScheduledBriefBot {
   id: string;
@@ -32,16 +29,22 @@ export interface BriefDelivery {
   suggestions: BriefSuggestion[];
 }
 
-export interface BriefScheduleDeps {
+export interface BriefRunDeps {
   store: BriefStore;
-  bots(): readonly ScheduledBriefBot[];
   connected(botId: string): readonly string[];
   fastModel(botId: string): string | null;
   reads(botId: string): Promise<BriefAppCall>;
   deliver(input: BriefDelivery): Promise<void> | void;
   now?(): number;
-  log?(line: string): void;
 }
+
+/** What one run of the brief did, in a line for the routine's run log. */
+export type BriefRunOutcome =
+  | { kind: "delivered"; count: number }
+  | { kind: "nothing-new" }
+  | { kind: "no-apps" }
+  | { kind: "no-person" }
+  | { kind: "skipped"; error: string };
 
 /** The bot message of a brief, in the person's language. */
 export function briefMessageText(suggestions: readonly BriefSuggestion[], language: "fr" | "en"): string {
@@ -67,47 +70,41 @@ export function briefNoticeLines(suggestions: readonly BriefSuggestion[], langua
   return { title, lines: suggestions.slice(0, 3).map((item) => suggestionAction(item, language)) };
 }
 
-/** One minute's round. Never throws; returns the bots whose brief was delivered. */
-export async function runScheduledBriefs(deps: BriefScheduleDeps): Promise<string[]> {
+/** One run of the brief for one bot (its routine's time came). Reads
+ * only; no model turn. Throws only when the delivery itself fails. */
+export async function runBrief(bot: ScheduledBriefBot, deps: BriefRunDeps): Promise<BriefRunOutcome> {
   const now = deps.now ?? Date.now;
-  const log = deps.log ?? (() => {});
-  const delivered: string[] = [];
-  for (const bot of deps.bots()) {
-    try {
-      if (!bot.person || !deps.store.scheduledDue(bot.id, now())) continue;
-      // today's run is taken before anything is read
-      deps.store.markScheduled(bot.id, now());
-      if (!deps.connected(bot.id).length) continue;
-      const call = await deps.reads(bot.id);
-      const rejected = deps.store.view(bot.id).suggestions.filter((item) => item.status === "rejected").map((item) => item.identity);
-      const pass = await readConnectedBrief(call, { costUsd: 0, fastModel: deps.fastModel(bot.id) }, rejected);
-      if (!pass.ok) {
-        log(`background brief: ${bot.id} skipped (${pass.error})`);
-        continue;
-      }
-      if (!pass.suggestions.length) {
-        deps.store.markPass(bot.id, now());
-        continue;
-      }
-      const added = deps.store.recordPass(bot.id, pass);
-      if (!added.length) continue;
-      await deps.deliver({ botId: bot.id, botName: bot.name, person: bot.person, suggestions: added });
-      delivered.push(bot.id);
-    } catch (error) {
-      log(`background brief: ${bot.id} failed (${error instanceof Error ? error.message.slice(0, 120) : "error"})`);
-    }
+  if (!bot.person) return { kind: "no-person" };
+  if (!deps.connected(bot.id).length) return { kind: "no-apps" };
+  const call = await deps.reads(bot.id);
+  const rejected = deps.store.view(bot.id).suggestions.filter((item) => item.status === "rejected").map((item) => item.identity);
+  const pass = await readConnectedBrief(call, { costUsd: 0, fastModel: deps.fastModel(bot.id) }, rejected);
+  if (!pass.ok) return { kind: "skipped", error: pass.error };
+  if (!pass.suggestions.length) {
+    deps.store.markPass(bot.id, now());
+    return pass.notice === "no_apps" ? { kind: "no-apps" } : { kind: "nothing-new" };
   }
-  return delivered;
+  const added = deps.store.recordPass(bot.id, pass);
+  if (!added.length) return { kind: "nothing-new" };
+  await deps.deliver({ botId: bot.id, botName: bot.name, person: bot.person, suggestions: added });
+  return { kind: "delivered", count: added.length };
 }
 
-/** Runs `runScheduledBriefs` every minute, one round at a time. */
-export function startBriefTimer(deps: BriefScheduleDeps, everyMs = 60_000): { stop(): void } {
-  let running = false;
-  const timer = setInterval(() => {
-    if (running) return;
-    running = true;
-    void runScheduledBriefs(deps).finally(() => { running = false; }).catch(reportBackgroundError);
-  }, everyMs);
-  timer.unref?.();
-  return { stop: () => clearInterval(timer) };
+/** The run's line in the routine's log, in the person's language. */
+export function briefRunReason(outcome: BriefRunOutcome, language: "fr" | "en"): string {
+  const fr = language === "fr";
+  switch (outcome.kind) {
+    case "delivered":
+      return fr
+        ? `Brief du jour envoyé : ${outcome.count} point${outcome.count > 1 ? "s" : ""}.`
+        : `Today's brief sent: ${outcome.count} point${outcome.count > 1 ? "s" : ""}.`;
+    case "nothing-new":
+      return fr ? "Rien de nouveau aujourd'hui : aucun brief envoyé." : "Nothing new today: no brief sent.";
+    case "no-apps":
+      return fr ? "Aucune app connectée à lire : aucun brief envoyé." : "No connected app to read: no brief sent.";
+    case "no-person":
+      return fr ? "Ce bot n'a personne à qui envoyer le brief." : "This bot has no person to send the brief to.";
+    case "skipped":
+      return fr ? `Brief non lu : ${outcome.error}` : `Brief not read: ${outcome.error}`;
+  }
 }

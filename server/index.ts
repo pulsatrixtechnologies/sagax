@@ -761,7 +761,7 @@ import { correctiveRounds, loopGuardSettings } from "./host/loop-guard.ts";
 import { createDelegatedLevel } from "./host/delegated-level.ts";
 import { createLiveApprovalMode } from "./host/live-approval.ts";
 import { createWaitsBootstrap, cancelWaitFromCard, waitRunChat } from "./waits/wait-host.ts";
-import { HEARTBEAT_PATH, HeartbeatManager } from "./heartbeat/heartbeat.ts";
+import { HEARTBEAT_PATH, HeartbeatManager, heartbeatEmpty, parseHeartbeat } from "./heartbeat/heartbeat.ts";
 import { findWaitPeer, hostWaitRefusal, waitSourceRefusal } from "./routes/waits.ts";
 import { createReadAndDraft } from "./read-and-draft.ts";
 import { createSavedSteps, savedStepsEnabled } from "./saved-steps/saved-steps.ts";
@@ -24508,7 +24508,28 @@ ROUTES.push(createProactiveChoicesRoutes({
   person: (auth) => actorPrincipalId(auth),
   ownBot: (person, botId) => Boolean(watchCarrierOf(person, botId)),
   mainBot: personMainBot,
-  offered: (person, botId) => flowWatchLoop.offered(person, botId)
+  offered: (person, botId) => flowWatchLoop.offered(person, botId),
+  // #3432: the person's bots, main bot first, with the ambient rows each
+  // can draw (screen context on the desktop app only, the checklist only
+  // when HEARTBEAT.md has items)
+  bots: (person) => store.bots
+    .filter((bot) => watchCarrierOf(person, bot.id))
+    .sort((a, b) => Number(b.chiefOfStaff === true) - Number(a.chiefOfStaff === true))
+    .map((bot) => {
+      const settings = backgroundBriefs.view(bot.id).settings;
+      let checklist: boolean | undefined;
+      try {
+        checklist = heartbeatEmpty(parseHeartbeat(readMemoryDoc(bot.id, HEARTBEAT_PATH).text)) ? undefined : !backgroundBriefs.wakeMuted(bot.id, "heartbeat");
+      } catch {
+        checklist = undefined;
+      }
+      return {
+        id: bot.id, brief: settings.enabled === true,
+        ...(SCREEN_CONTEXT_AVAILABLE ? { screen: settings.screenContext === true } : {}),
+        ...(checklist === undefined ? {} : { checklist }),
+      };
+    }),
+  lastAlert: (person, watchId) => flowWatchLoop.lastAlert(person, watchId)
 }));
 /** 2026-11-09, walked from the person's choices since #3423: the Pulsatrix
  * Flow watches of the domains a person turned on

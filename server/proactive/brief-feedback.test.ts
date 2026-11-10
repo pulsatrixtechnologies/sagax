@@ -94,6 +94,42 @@ describe("feedback on brief items and cards (#2694)", () => {
     expect(fr).not.toMatch(/[–—]/);
   });
 
+  it("#3432: the checklist switch sets or clears the heartbeat mute, with no memory line", async () => {
+    const store = storeAt();
+    // muted by thumbs-down votes, not blocked: one "up" would not bring it back
+    for (let vote = 0; vote < 4; vote += 1) store.topicFeedback("bot-1", "heartbeat", "down");
+    expect(store.wakeMuted("bot-1", "heartbeat")).toBe(true);
+    const remembered: string[] = [];
+    const wakes: string[] = [];
+    const routes = createBackgroundBriefRoutes({
+      store, owns: () => true, fastModel: () => "fast", keep: (_bot, line) => { remembered.push(line); }, connected: () => [],
+      reads: async () => { throw new Error("no read"); },
+      remember: (_bot, choice, text) => { remembered.push(`${choice}:${text}`); },
+      wakeFeedback: (_bot, topic, choice) => { wakes.push(`${topic}:${choice}`); return { status: 200, body: {} }; },
+    });
+    const put = async (body: unknown) => {
+      let status = 0;
+      let sent: Record<string, unknown> = {};
+      await routes({
+        req: {} as never, res: { setHeader() {} } as never, path: "/api/bots/bot-1/background-brief", method: "PUT", auth: {} as never,
+        readBody: async () => body, json: (_res: unknown, code: number, payload: Record<string, unknown>) => { status = code; sent = payload; }
+      } as never);
+      return { status, sent };
+    };
+    const before = store.settings("bot-1");
+    expect(await put({ checklist: true })).toMatchObject({ status: 200, sent: { checklist: true } });
+    expect(store.wakeMuted("bot-1", "heartbeat")).toBe(false);
+    expect(await put({ checklist: false })).toMatchObject({ status: 200, sent: { checklist: false } });
+    expect(store.wakeMuted("bot-1", "heartbeat")).toBe(true);
+    expect(await put({ checklist: true })).toMatchObject({ status: 200, sent: { checklist: true } });
+    expect(store.wakeMuted("bot-1", "heartbeat")).toBe(false);
+    expect(store.topics("bot-1")["wake:heartbeat"]).toBeUndefined();
+    expect(remembered).toEqual([]);
+    expect(wakes).toEqual([]);
+    // the brief's own settings are left as they were
+    expect(store.settings("bot-1")).toEqual(before);
+  });
+
   it("routes: brief item feedback remembers, card feedback reaches its handler", async () => {
     const store = storeAt();
     const [added] = store.recordPass("bot-1", pass([piece("Outlook", "Répondre à Carla 2026-11-08")]));

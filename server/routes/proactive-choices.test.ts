@@ -29,7 +29,7 @@ describe("GET and PUT /api/me/proactive (#3423)", () => {
     domain: "security", label: { en: "Security" },
     watches: [{ id: "w-s1", summary: "Threats.", cadence: "1h", products: ["sentinelone"], runs: false, missing: "product" }], eligible: false,
   };
-  const setup = (listing?: (botId: string) => OfferedListing) => {
+  const setup = (listing?: (botId: string) => OfferedListing, extra: Partial<Parameters<typeof createProactiveChoicesRoutes>[0]> = {}) => {
     const store = new ProactiveChoices();
     const asked: string[] = [];
     const route = createProactiveChoicesRoutes({
@@ -41,6 +41,7 @@ describe("GET and PUT /api/me/proactive (#3423)", () => {
         asked.push(botId);
         return listing ? listing(botId) : { ok: true, botId, domains: [security, service] };
       },
+      ...extra,
     });
     return { store, route, asked };
   };
@@ -87,6 +88,45 @@ describe("GET and PUT /api/me/proactive (#3423)", () => {
     expect(await call(route, { method: "PUT", body: { domain: "service", state: "on", botId: "b1" } })).toMatchObject({ status: 409, body: { unavailable: expect.stringContaining("Pulsatrix Flow") } });
     expect(await call(route, { method: "PUT", body: { domain: "service", state: "never" } })).toMatchObject({ status: 200 });
     expect(store.get("person-1").domains.service?.state).toBe("never");
+  });
+
+  it("#3432: ?view=all lists only eligible domains, with the bots that can carry each, its running watches and their last alert", async () => {
+    const backups: OfferedDomain = {
+      domain: "backups", label: { fr: "Sauvegardes", en: "Backups" },
+      watches: [
+        { id: "w-b1", summary: "Failed backups.", cadence: "1h", products: ["axcient"], runs: true },
+        { id: "w-b2", summary: "Old backups.", cadence: "1d", products: ["axcient"], runs: false, missing: "skill" },
+      ], eligible: true,
+    };
+    const { route, asked } = setup(
+      (botId) => botId === "b1" ? { ok: true, botId, domains: [backups, security, service] } : { ok: true, botId, domains: [security, service] },
+      {
+        bots: () => [{ id: "main", brief: true, checklist: false }, { id: "b1", brief: false, screen: true }],
+        lastAlert: (_person, watchId) => (watchId === "w-open" ? 1_700_000_000_000 : undefined),
+      },
+    );
+    const answer = await call(route, { method: "GET", query: "?view=all" }) as { status: number; body: { receive: unknown; available: unknown } };
+    expect(answer.status).toBe(200);
+    expect(answer.body.available).toEqual([security, service]);
+    expect(answer.body.receive).toEqual({
+      bots: [{ id: "main", brief: true, checklist: false }, { id: "b1", brief: false, screen: true }],
+      domains: [
+        { domain: "backups", label: { fr: "Sauvegardes", en: "Backups" }, carriers: ["b1"], watches: [{ id: "w-b1", summary: "Failed backups.", cadence: "1h", runsOn: ["b1"] }] },
+        { domain: "service", label: { fr: "Service", en: "Service" }, carriers: ["main", "b1"], lastAlertAt: 1_700_000_000_000,
+          watches: [{ id: "w-open", summary: "Open tickets.", cadence: "15m", runsOn: ["main", "b1"], lastAlertAt: 1_700_000_000_000 }] },
+      ],
+    });
+    // one listing per bot, one at a time; the main bot's, already read for `available`, is not read again
+    expect(asked).toEqual(["main", "b1"]);
+    // without the view, GET answers as before
+    expect(await call(route, { method: "GET" })).toEqual({ status: 200, body: { domains: {}, available: [security, service], botId: "main" } });
+  });
+
+  it("#3432: ?view=all without a bot that can carry a watch, or when no listing answers, says why", async () => {
+    const none = setup(undefined, { bots: () => [] });
+    expect(await call(none.route, { method: "GET", query: "?view=all" })).toMatchObject({ status: 200, body: { receive: { bots: [], domains: [], unavailable: expect.stringContaining("no bot") } } });
+    const down = setup((botId) => ({ ok: false, botId, cause: "flow-failed" }), { bots: () => [{ id: "main", brief: false }] });
+    expect(await call(down.route, { method: "GET", query: "?view=all" })).toMatchObject({ status: 200, body: { receive: { domains: [], unavailable: expect.stringContaining("does not answer") } } });
   });
 
   it("is the person's own route (client scope), no admin", () => {

@@ -119,11 +119,11 @@ describe("Settings in server mode", () => {
     const html = render();
     expect(html).toContain('data-testid="account-identity"');
     expect(nestedCardBorders(html)).toEqual([]);
-    // About me is the operator's shared profile. This signed-in person is
-    // not the operator, so the row stays hidden instead of offering a save
-    // the server would refuse. It is still a row, not a card, for the operator.
-    expect(html).not.toContain('data-settings-card="general.aboutMe"');
-    expect(html).not.toContain("I run IT at Example.");
+    // #3432: About me is each person's own since #3424 (/api/me/about-me),
+    // so a member of an organization server sees its row with their first
+    // line; it is a row that opens the sub-page, never a card or a field here.
+    expect(html).toContain('data-settings-card="general.aboutMe"');
+    expect(html).toContain("I run IT at Example.");
     expect(html).not.toContain("<textarea");
   });
 

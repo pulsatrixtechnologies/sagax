@@ -34,6 +34,7 @@ import { OsPermissionBanner } from "./settings/OsPermissions";
 import { BlockedPeopleRow, ReportsRow } from "./settings/ModerationSettings";
 import { DisclosurePill } from "./settings/AppearanceSettings";
 import { SignalSettings } from "./settings/SignalSettings";
+import { ProactiveReceiveSettings } from "./settings/ProactiveReceiveSettings";
 
 const SOUND_NONE = "none";
 type SoundSelect = typeof SOUND_NONE | NotificationSound;
@@ -126,6 +127,8 @@ export function NotificationSettings({ privacy = false }: { privacy?: boolean })
         </CompactRow>
       </SettingsGroup>
       <SignalSettings organization={privacy} />
+      {/* #3432: « Ce que je reçois », beside the budget and quiet hours */}
+      <ProactiveReceiveSettings />
       <SettingsGroup title={t("settings.group.alerts")} groupId="alerts">
         <NotificationInvite />
         <NativeNotificationStatusRow />

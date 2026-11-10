@@ -498,6 +498,9 @@ interface WatchState {
   /** #3140: observe at the next tick, whatever the cadence (a pending wake
    * replayed after a restart). */
   due?: true;
+  /** #3432: when the watch last woke the carrying bot for the person (its
+   * last alert, shown in the person's Settings). */
+  alertAt?: number;
 }
 
 /** Per person and watch (#3423: a watch is the person's, not a bot's):
@@ -528,6 +531,7 @@ export class WatchMemory {
               ...(typeof row.fired === "string" ? { fired: row.fired } : {}),
               ...(typeof row.skip === "string" ? { skip: row.skip } : {}),
               ...(row.due === true ? { due: true as const } : {}),
+              ...(typeof row.alertAt === "number" ? { alertAt: row.alertAt } : {}),
             };
           }
           this.items[person] = kept;
@@ -593,6 +597,11 @@ export class WatchMemory {
     if (state.fired === key) return "duplicate";
     this.set(person, watchId, { ...state, fired: key });
     return "fire";
+  }
+
+  /** #3432: the watch woke the carrying bot for the person (an alert). */
+  alerted(person: string, watchId: string, at: number): void {
+    this.set(person, watchId, { ...this.get(person, watchId), alertAt: at });
   }
 
   /** A fired condition that could not start: let it fire again. */
@@ -839,6 +848,11 @@ export class FlowWatchLoop {
     return { ok: true, botId, domains };
   }
 
+  /** #3432: when this watch last alerted the person, if ever. */
+  lastAlert(person: string, watchId: string): number | undefined {
+    return this.deps.memory.get(person.trim().toLowerCase(), watchId).alertAt;
+  }
+
   /** A domain's label from the listings read so far, else its slug. */
   label(domain: string, language: "fr" | "en"): string {
     for (const { value } of this.listings.values()) {
@@ -1002,6 +1016,7 @@ export class FlowWatchLoop {
       this.deps.log(botId, `Pulsatrix watch ${watch.id} did not wake the bot (${offered ?? "error"}).`);
       return "refused";
     }
+    if (offered === "gathered") this.deps.memory.alerted(person, watch.id, this.now());
     return "fired";
   }
 }

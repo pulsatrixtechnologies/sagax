@@ -69,6 +69,11 @@ vi.mock("@/lib/group-owner", () => ({
   viewerIsOrgAdmin: () => fixture.admin,
 }));
 
+// #3432: « Ce que je reçois » has its own test (settings/ProactiveReceiveSettings.dom.test.ts)
+vi.mock("./settings/ProactiveReceiveSettings", () => ({
+  ProactiveReceiveSettings: () => "RECEIVE_SETTINGS_MARKER",
+}));
+
 vi.mock("./NotificationInvite", () => ({
   NotificationInvite: () => null,
 }));
@@ -136,6 +141,8 @@ describe("NotificationSettings (#2080)", () => {
     mount(false);
     expect(host.textContent).toContain("Daily budget");
     expect(host.textContent).toContain("Quiet hours");
+    // #3432: « Ce que je reçois » right after the budget and quiet hours
+    expect(host.textContent).toMatch(/Quiet hours[\s\S]*RECEIVE_SETTINGS_MARKER/);
   });
 
   it("opens blocked people under Manage", () => {

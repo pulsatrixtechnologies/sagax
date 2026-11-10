@@ -420,6 +420,22 @@ describe("the loop", () => {
     expect(h.offered).toHaveLength(2);
   });
 
+  it("#3432: a watch that wakes the carrying bot is the person's last alert, kept on disk; a refused one is not", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "watch-alert-"));
+    const memory = new WatchMemory(join(dir, "memory.json"));
+    const h = harness({ memory });
+    expect(h.loop.lastAlert("person-1", "w-open")).toBeUndefined();
+    expect(h.loop.consider("b1", "person-1", watch({ id: "w-open" }), { items: [1] })).toBe("fired");
+    const first = h.loop.lastAlert("Person-1 ", "w-open");
+    expect(first).toBeGreaterThanOrEqual(0);
+    memory.save();
+    expect(new WatchMemory(join(dir, "memory.json")).get("person-1", "w-open").alertAt).toBe(first);
+    const blocked = harness({ budget: 0 });
+    expect(blocked.loop.consider("b1", "person-1", watch({ id: "w-open" }), { items: [1] })).toBe("budget");
+    expect(blocked.loop.lastAlert("person-1", "w-open")).toBeUndefined();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it("budget: past the hour's limit a watch waits and may fire later", async () => {
     const h = harness({ budget: 1 });
     expect(h.loop.consider("b1", "person-1", watch({ id: "a" }), { items: [1] })).toBe("fired");

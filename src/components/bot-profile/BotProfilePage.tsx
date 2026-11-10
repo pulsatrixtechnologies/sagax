@@ -35,7 +35,7 @@
 // for opens its tab and sub-page and scrolls into view. A section this
 // viewer may not change says why (botSectionLock); nothing is hidden for
 // lack of a permission.
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Bell, Brain, ChevronRight, Repeat, Users } from "lucide-react";
 
 import { useStore, type Bot, type BotSettingsSection } from "@/state/store";
@@ -73,6 +73,7 @@ import { RulesSection } from "../bot-settings/RulesSection";
 import { WorkspaceFilesSection } from "../bot-settings/WorkspaceFilesSection";
 import { PermissionsSection, type PermissionsPart } from "../bot-settings/PermissionsSection";
 import { AccessSection } from "../bot-settings/AccessSection";
+import { teamVaultOffered } from "../bot-settings/TeamBotVaultSection";
 import { DeveloperLink } from "../settings/DeveloperLink";
 import { botSectionLock, useBotSectionAvailability, useBotSectionContent } from "../bot-settings/useBotSectionContent";
 import { AccountsCard, Block, CardRow, ChannelsCard, Note, ProfileCard, sectionLabel, type Channel } from "./BotProfilePage.tsx-parts/cards";
@@ -281,6 +282,8 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     slackUrl,
     channelsElsewhere: true,
     sharingElsewhere: true,
+    // the shared vault is under Bot accounts (owner decision 2026-11-10, #3399)
+    vaultElsewhere: true,
     // #3398: both switches sit in place in General > Settings.
     notifyElsewhere: true,
     routinesSwitchElsewhere: true,
@@ -294,8 +297,9 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     // preview and the recent changes.
     if (id === "summary") return renderSectionBody("overview");
     // Shared with: one summary row whose Manage opens the top bar's Share
-    // popover (the people and groups are edited there, nowhere else), then
-    // the shared vault. Who pays for the replies is on Model (#2625).
+    // popover (the people and groups are edited there, nowhere else). The
+    // shared vault is under Bot accounts (#3399); who pays for the replies
+    // is on Model (#2625).
     if (id === "sharing") {
       return (
         <>
@@ -360,7 +364,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         {lockOf("permissions") ? body("permissions") : <PermissionsSection bot={bot} derived={derived} part={part} />}
       </Block>
     ) : null;
-  const access = (part: "mcp" | "brief" | "advanced") =>
+  const access = (part: "brief" | "advanced") =>
     shown("access") ? (
       <Block key={`access-${part}`} id="access" locked={lockOf("access") !== null}>
         {lockOf("access") ? body("access") : <AccessSection bot={bot} derived={derived} part={part} />}
@@ -445,10 +449,12 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     if (group.card === "channels") return <ChannelsCard key={group.id} bot={bot} slackUrl={slackUrl} open={channel} onOpen={setChannel} />;
     if (group.card === "accounts") {
       return (
-        <Fragment key={group.id}>
-          <AccountsCard bot={bot} onEngine={() => openPage("model")} />
-          {access("mcp")}
-        </Fragment>
+        // #3399: one card, each app, server and vault login once, with its
+        // control in its row (the MCP servers card is gone from this page).
+        <Block key={group.id} id="access" locked={lockOf("access") !== null}>
+          <AccountsCard bot={bot} onEngine={() => openPage("model")} derived={derived} vault={teamVaultOffered(state.config, bot)} />
+          {lockOf("access") ? body("access") : null}
+        </Block>
       );
     }
     const switches = group.id === "settings" ? [collaboratorsSwitch, notifySwitch].filter(Boolean) : [];

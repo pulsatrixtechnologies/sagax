@@ -346,6 +346,8 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
   if (path === "/api/org") return json({ org: { name: "Northwind Studio", identity: { kind: "perspicax", issuer: "https://perspicax.example.test" } }, link: { state: "ok" }, viewerRole: "admin", settings: {} });
   if (path === "/api/org/directory") return json({ people: PEOPLE, teams: [{ id: "tm_studio", name: "Studio team", managers: ["pr_alex"], members: ["pr_alex", "pr_sam", "pr_jordan"] }], viewer: { principalId: "pr_alex" } });
   if (path === "/api/bots") return json({ bots: [bot, ...neighbours], groups: [], sections: [], computerControl: {}, botQueuedMessages: {} });
+  // the bot's shared vault (#3399, under Bot accounts): one login, never its value
+  if (path === `${bots}/credentials/list`) return json({ items: [{ id: "v1", kind: "login", name: "Supplier portal", domains: ["portal.northwind.example"], hasPassword: true, hasTotp: false, hasApiKey: false, hasNotes: false }] });
   if (method !== "GET" && (path === bots || path.startsWith(`${bots}/`) || path.startsWith("/api/"))) {
     if (path.endsWith("/history/restore")) return json({ ok: true, revision: HISTORY.length + 1 });
     if (!/\/(analytics|history)$/.test(path)) return json(body ?? { ok: true });
@@ -375,8 +377,10 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
     entries: [workspaceEntry("MEMORY.md", MEMORY.length), workspaceEntry("RULES.md", RULES.length), workspaceEntry("topics/vendors.md", 1840, { load: "on demand" }), workspaceEntry("topics/market-notes.md", 3120, { load: "on demand" })], truncated: false,
   });
   if (path === `${bots}/capabilities`) return json({ botId: BOT_ID, engine: { kind: "claude", label: "Claude" }, items: [
-    capabilityItem("github", "connector", "GitHub", "Example account"), capabilityItem("calendar", "mcp", "Calendar", "Example account"),
-    capabilityItem("mail", "mcp", "Mail", "Alex Example"), capabilityItem("notes", "mcp", "Notes", "Alex Example", "off"),
+    capabilityItem("connector:account:github", "connector", "GitHub", "Example account"), capabilityItem("mcp:installation:calendar", "mcp", "Calendar", "Example account"),
+    capabilityItem("mcp:installation:mail", "mcp", "Mail", "Alex Example"), capabilityItem("mcp:me:notes", "mcp", "Notes", "Alex Example", "off"),
+    // still to connect: listed in the Plugins window only (#3399)
+    capabilityItem("mcp:installation:github", "mcp", "Github", "Example account", "to_connect"),
   ] });
   if (path === `${bots}/inbound-mail`) return json({ available: true, address: "scout@northwind.example", enabled: true });
   if (path === `${bots}/reach-me`) return json({ saved: true, settings: { channels: ["push", "email"], hours: { always: true } }, channels: { push: { ready: true, devices: 2 }, email: { ready: true } } });

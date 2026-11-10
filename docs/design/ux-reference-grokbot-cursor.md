@@ -249,6 +249,11 @@ avec l'app de référence : #3388 ; ce patron : #3398.
     l'intégration complète suit après le gel (#3411).
   - Comptes du bot : un seul nom pour la carte (jamais « Ce qu'il peut utiliser »), la
     rangée du moteur avec Gérer, les comptes, et Ajouter à droite de l'étiquette.
+    Chaque app, serveur ou connexion du coffre une seule fois, son contrôle dans sa
+    rangée ; une personne que le serveur refuserait voit l'état sans interrupteur.
+    Sans compte, une rangée vide porte Ajouter. Le menu Ajouter : Applications,
+    Serveurs MCP et « Connexion du coffre » (formulaire dans la carte, rangée avec
+    Retirer ; plus dans Partagé avec, décision de JC du 2026-11-10, #3399).
   - Plus : Partagé avec, Règles, Quand il agit seul, Voix, Réglages avancés, Versions.
 - Une rangée n'ouvre une sous-page que pour un réglage trop long pour une carte
   (Personnalité, Modèle, Avant d'agir, Partagé avec, Règles, Quand il agit seul, Voix,

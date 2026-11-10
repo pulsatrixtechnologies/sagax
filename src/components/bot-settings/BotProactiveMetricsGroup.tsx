@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 
 import { activeLocale, t } from "@/lib/i18n";
-import { formatUsd } from "@/lib/usage";
+import { formatMoney } from "@/lib/usage";
 import { api, type Bot } from "@/state/store";
 import type { BotAnalyticsDays } from "../../../shared/bot-analytics";
 import { proactiveModeFor } from "../../../shared/proactive-mode";
@@ -66,7 +66,7 @@ export function BotProactiveMetricsView({ data, proactive }: { data: ProactiveMe
             <span className={FIGURE}>{count(totals.writes)}</span>
           </CompactRow>
           <CompactRow label={t("botProfile.proactive.cost")}>
-            <span className={FIGURE}>{totals.costRuns > 0 ? formatUsd(totals.cost) : "..."}</span>
+            <span className={FIGURE}>{totals.costRuns > 0 ? formatMoney(totals.cost) : "..."}</span>
           </CompactRow>
           <CompactRow label={t("botProfile.proactive.saved")}>
             <span className="flex items-center gap-1.5">

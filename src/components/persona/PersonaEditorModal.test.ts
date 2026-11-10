@@ -156,7 +156,7 @@ describe("bot profile page shell", () => {
     expect(tabsOf(html)).toEqual(TABS_ALL);
     expect(BOT_PROFILE_TABS).toEqual(TABS_ALL);
     expect(html).toContain('role="tablist"');
-    for (const label of [">General<", ">Knowledge<", ">Stats<", ">Appearance"]) expect(html).toContain(label);
+    for (const label of [">General<", ">Knowledge<", ">Analytics<", ">Appearance"]) expect(html).toContain(label);
     // #3398: General is section cards with their controls in place; a row
     // opens a sub-page only for a long setting; no Settings fold, no identity card of facts
     expect(html).not.toContain("data-bot-profile-settings-toggle");
@@ -310,7 +310,7 @@ describe("bot profile page shell", () => {
   it("names the tabs, the header and the channels in French", () => {
     setLocale("fr");
     const html = render("overview");
-    for (const label of [">Général<", ">Connaissances<", ">Statistiques<", ">Apparence", ">Réglages<", ">Canaux<", ">Comptes du bot<", ">Plus<", ">Avant d&#x27;agir<", ">Quand il agit seul<"]) expect(html).toContain(label);
+    for (const label of [">Général<", ">Connaissances<", ">Analytique<", ">Apparence", ">Réglages<", ">Canaux<", ">Comptes du bot<", ">Plus<", ">Avant d&#x27;agir<", ">Quand il agit seul<"]) expect(html).toContain(label);
     // the channels are in place on General (#3398); a sub-page's link back names its tab
     for (const label of [">Courriel<", ">Me joindre<"]) expect(html).toContain(label);
     const rules = render("rules");

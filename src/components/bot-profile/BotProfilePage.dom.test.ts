@@ -642,3 +642,29 @@ describe("bot profile page: Bot accounts card (#3399)", () => {
     expect(panel.querySelector("[data-skills-empty] [data-bot-profile-add]")).not.toBeNull();
   });
 });
+
+// #3401: the tab is named Analytics and opens on the block of the reference
+// app (range, Messages and Hours saved, Top users, then Usage and
+// Proactivity); the cost breakdown comes after it.
+describe("bot profile page: Analytics tab (#3401)", () => {
+  it("names the tab Analytics, Analytique in French", async () => {
+    await mount("en");
+    await home("general");
+    expect(host.querySelector(`[data-bot-profile-tab="stats"]`)?.textContent).toBe("Analytics");
+    act(() => root.unmount());
+    host.remove();
+    await mount("fr");
+    await home("general");
+    expect(host.querySelector(`[data-bot-profile-tab="stats"]`)?.textContent).toBe("Analytique");
+  });
+
+  it("draws the analytics block before the cost breakdown", async () => {
+    await mount("en");
+    const panel = (await home("stats")).querySelector<HTMLElement>('[data-bot-profile-panel="stats"]')!;
+    const analytics = panel.querySelector("[data-bot-analytics]");
+    const breakdown = panel.querySelector("[data-bot-usage-breakdown]");
+    expect(analytics, "the analytics block").not.toBeNull();
+    expect(breakdown, "the cost breakdown").not.toBeNull();
+    expect(analytics!.compareDocumentPosition(breakdown!) & Node.DOCUMENT_POSITION_FOLLOWING, "the breakdown follows the analytics block").toBeTruthy();
+  });
+});

@@ -240,8 +240,8 @@ avec l'app de référence : #3388 ; ce patron : #3398.
   son propriétaire, la description éditée en place. Fermer en haut à gauche, Partager en
   haut à droite (la seule porte du partage des personnes et des groupes) ; la barre
   devient floue avec la petite mascotte et le nom quand le nom passe dessous.
-- Onglets en pilules : Général, Apparence, Connaissances, Statistiques (Simple masque
-  Statistiques). La loupe à droite cherche dans tous les réglages.
+- Onglets en pilules : Général, Apparence, Connaissances, Analytique (Simple masque
+  Analytique). La loupe à droite cherche dans tous les réglages.
 - Général est fait de cartes de section avec leurs contrôles sur place, comme la
   référence : une étiquette grise de 13 px au-dessus d'une carte pleine sans bordure,
   24 px entre les groupes.
@@ -281,6 +281,16 @@ avec l'app de référence : #3388 ; ce patron : #3398.
   - Son travail : Routines et Dossier et mémoire ouvrent leur page. Sur la page
     Routines, l'étiquette grise « Routines » porte ses actions à droite, au-dessus
     d'une seule carte de rangées.
+- Analytique (#3401) : d'abord le bloc de la référence, puis nos groupes.
+  - La plage de dates à gauche et 7, 30 ou 90 jours à droite (7 par défaut) ; ce choix
+    mène tout le bloc et nos groupes. Les cartes Messages et Heures économisées
+    (chiffre à 28 px, « Estimation en cours… » tant que la base manque), puis
+    Principaux utilisateurs avec son tri.
+  - Puis Utilisation (avec Tous les bots) et Proactivité, puis la ventilation des coûts :
+    une étiquette grise « Statistiques d'usage » dont l'intro est une bulle d'aide ;
+    sa période, $ ou jetons et le menu Grouper par sont dans la rangée d'en-tête de sa
+    carte (sa période reste la sienne) ; total à 28 px, les autres chiffres à 20 px.
+  - L'argent suit la langue et la devise (« 9,59 $ » en français).
 - Une rangée n'ouvre une sous-page que pour un réglage trop long pour une carte
   (Personnalité, Modèle, Avant d'agir, Partagé avec, Règles, Quand il agit seul, Voix,
   Réglages avancés, Versions ; dans Connaissances : Routines, Dossier et mémoire). Elle

@@ -1,6 +1,10 @@
 // The V6 "Statistiques d'usage" (#2612): who uses what on this bot, split by
 // account, model, source and person, in $ or in tokens, over 7 days, 30 days
 // or the current month. Each row opens its detail (calls, tokens, tools).
+// On the Analytics tab it comes after the reference block (#3401): a grey
+// group label with its intro behind a help tip, its own period, unit and
+// group-by controls in the header row of the chart card, money written as
+// the reader writes it.
 // Each section is a ranked list with one bar per row in a single hue (the
 // rows are their own legend): the top rows, then the rest and the rows at
 // zero folded into one "Others (N)" row that opens them (#2671).
@@ -11,12 +15,12 @@ import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { engineLabel, personLabel } from "@/lib/human-label";
 import { activeLocale, documentLanguage, t } from "@/lib/i18n";
-import { formatTokens, formatUsd, hasFiniteCost } from "@/lib/usage";
+import { formatMoney, formatMoneyCompact, formatTokens, hasFiniteCost } from "@/lib/usage";
 import type { LocaleKey } from "@/locales";
 import { api, useStore, type Bot } from "@/state/store";
 import { BOT_USAGE_PERIODS, type BotUsagePeriod } from "../../../shared/bot-analytics";
 import type { BotUsageBreakdown, UsageStatsGroup, UsageToolStat } from "../../../shared/telemetry";
-import { PILL, SettingsGroup } from "../SettingsPrimitives";
+import { HelpTip, PILL, SettingsGroup } from "../SettingsPrimitives";
 import { OTHER_COLOR, SERIES_SLOTS, TextToggle, UsageChartCard, UsageChartControls, formatTileShare, seriesColor, type ChartSeries } from "../usage-chart/UsageChartCard";
 
 export type BotUsageUnit = "usd" | "tokens";
@@ -146,9 +150,6 @@ export function foldRows(rows: readonly UsageShare[], top = TOP_ROWS): { shown: 
   return { shown, others };
 }
 
-/** Dollars, one way everywhere: an unpriced figure reads "$0". */
-const usd = (value: number | null) => formatUsd(hasFiniteCost(value) ? value : 0);
-
 const titleCase = (word: string) => word.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 export interface BotUsageBreakdownViewProps {
@@ -186,6 +187,9 @@ export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, ac
   const totals = data?.totals ?? null;
   const tokens = totals ? tokensOf(totals) : 0;
   const perMillion = totals && tokens > 0 && hasFiniteCost(totals.costUsd) ? totals.costUsd / (tokens / 1_000_000) : null;
+  const currency = data?.currency ?? null;
+  /** Money, one way everywhere: an unpriced figure reads "$0" ("0 $"). */
+  const usd = (value: number | null) => formatMoney(hasFiniteCost(value) ? value : 0, currency);
   const periodCaption = period === "month" ? t("botProfile.usage.periodMonth") : t("botProfile.usage.lastDays", { days: String(period) });
 
   const provider = (group: UsageStatsGroup): string | null => {
@@ -229,8 +233,30 @@ export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, ac
   };
   const figure = (value: number, group: UsageStatsGroup) => (unit === "usd" ? usd(group.costUsd) : formatTokens(value));
 
+  const controls = (
+    <UsageChartControls
+      inCard
+      periods={BOT_USAGE_PERIODS.map((option) => ({ id: String(option), label: t(PERIOD_LABEL[String(option)]!) }))}
+      period={String(period)}
+      onPeriod={(id) => onPeriod(id === "month" ? "month" : (Number(id) as BotUsagePeriod))}
+      periodAria={t("botProfile.usage.periodAria")}
+      extra={<TextToggle options={(["usd", "tokens"] as const).map((option) => ({ id: option, label: t(UNIT_LABEL[option]) }))} value={unit} onChange={(id) => onUnit(id as BotUsageUnit)} ariaLabel={t("botProfile.usage.unitAria")} dataKey="data-bot-usage-unit" />}
+      groups={(Object.keys(DIMENSION_LABEL) as Dimension[]).map((id) => ({ id, label: t(DIMENSION_LABEL[id]) }))}
+      group={dimension}
+      onGroup={(id) => setDimension(id as Dimension)}
+      groupAria={t("botProfile.usage.chart.groupAria")}
+    />
+  );
+  const money = (value: number) => (value > 0 && value < 0.01 ? `<${formatMoney(0.01, currency)}` : formatMoney(value, currency));
+  const totalLabel = unit === "usd" ? t("botProfile.usage.chart.totalCost") : t("botProfile.usage.chart.totalTokens");
+  const chartLabel = t("botProfile.usage.chart.aria", { group: t(DIMENSION_LABEL[dimension]) });
+
   const chartCard = () => {
-    if (!data) return null;
+    // Loading or failed: the card keeps its header row, so the controls
+    // stay in place while an answer is on its way.
+    if (!data) {
+      return <UsageChartCard controls={controls} rangeLabel={periodCaption} totalLabel={totalLabel} total={PENDING} days={[]} series={[]} formatValue={money} chartLabel={chartLabel} empty={PENDING} />;
+    }
     const groups = dimension === "account" ? data.byAccount : dimension === "model" ? data.byModel : dimension === "source" ? data.bySource : data.byPerson;
     const firstLines = subLabels(dimension, groups);
     const idOf = (group: UsageStatsGroup) => `${label(dimension, group)}\u0000${firstLines.get(group) ?? ""}`;
@@ -273,20 +299,20 @@ export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, ac
     const rangeLabel = first && last
       ? first === last ? dayText(first, locale, true) : t("botProfile.usage.chart.rangeTo", { from: dayText(first, locale), to: dayText(last, locale, true) })
       : periodCaption;
-    const money = (value: number) => (value > 0 && value < 0.01 ? "<$0.01" : formatUsd(value));
     const formatValue = unit === "usd" ? money : (value: number) => formatTokens(value);
     return (
       <UsageChartCard
+        controls={controls}
         rangeLabel={rangeLabel}
         onPrev={onOffset && offset < MAX_OFFSET ? () => onOffset(offset + 1) : undefined}
         onNext={onOffset && offset > 0 ? () => onOffset(offset - 1) : undefined}
-        totalLabel={unit === "usd" ? t("botProfile.usage.chart.totalCost") : t("botProfile.usage.chart.totalTokens")}
+        totalLabel={totalLabel}
         total={totals ? (unit === "usd" ? usd(totals.turns === 0 ? 0 : totals.costUsd) : formatTokens(tokens)) : PENDING}
         days={days.map((day) => ({ key: day.day, label: dayText(day.day, locale) }))}
         series={series}
         formatValue={formatValue}
-        formatAxis={unit === "usd" ? (value) => `$${new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 2 }).format(value)}` : undefined}
-        chartLabel={t("botProfile.usage.chart.aria", { group: t(DIMENSION_LABEL[dimension]) })}
+        formatAxis={unit === "usd" ? (value) => formatMoneyCompact(value, currency, locale) : undefined}
+        chartLabel={chartLabel}
         empty={t("botProfile.usage.empty")}
       />
     );
@@ -374,7 +400,7 @@ export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, ac
                     <span className="min-w-0 flex-1 truncate text-[14px] leading-5 text-ink-secondary">{t("botProfile.usage.others", { count: String(others.length) })}</span>
                     {bar(othersValue, true)}
                     <span className="flex w-20 shrink-0 flex-col items-end">
-                      <span className="tabular-nums text-[14px] leading-5 text-ink-secondary">{unit === "usd" ? formatUsd(othersValue) : formatTokens(othersValue)}</span>
+                      <span className="tabular-nums text-[14px] leading-5 text-ink-secondary">{unit === "usd" ? formatMoney(othersValue, currency) : formatTokens(othersValue)}</span>
                       <span className="tabular-nums text-[12px] leading-4 text-ink-secondary">{formatShare(othersShare)}</span>
                     </span>
                     <ChevronRight size={16} aria-hidden="true" className={cn("shrink-0 text-ink-tertiary transition-transform motion-reduce:transition-none", othersOpen && "rotate-90")} />
@@ -389,23 +415,15 @@ export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, ac
     );
   };
 
+  const title = t("botProfile.usage.title");
   return (
+    <SettingsGroup
+      title={title}
+      groupId="bot-usage-breakdown"
+      plain
+      accessory={<HelpTip label={t("settings.moreAbout", { title })}>{t("botProfile.usage.intro")}</HelpTip>}
+    >
     <div data-bot-usage-breakdown="" aria-busy={loading || undefined} className="flex min-w-0 flex-col gap-5">
-      <div className="flex min-w-0 flex-col gap-1 px-1">
-        <h2 className="text-[18px] font-semibold leading-6 text-ink">{t("botProfile.usage.title")}</h2>
-        <p className="text-[13px] leading-5 text-ink-secondary">{t("botProfile.usage.intro")}</p>
-      </div>
-      <UsageChartControls
-        periods={BOT_USAGE_PERIODS.map((option) => ({ id: String(option), label: t(PERIOD_LABEL[String(option)]!) }))}
-        period={String(period)}
-        onPeriod={(id) => onPeriod(id === "month" ? "month" : (Number(id) as BotUsagePeriod))}
-        periodAria={t("botProfile.usage.periodAria")}
-        extra={<TextToggle options={(["usd", "tokens"] as const).map((option) => ({ id: option, label: t(UNIT_LABEL[option]) }))} value={unit} onChange={(id) => onUnit(id as BotUsageUnit)} ariaLabel={t("botProfile.usage.unitAria")} dataKey="data-bot-usage-unit" />}
-        groups={(Object.keys(DIMENSION_LABEL) as Dimension[]).map((id) => ({ id, label: t(DIMENSION_LABEL[id]) }))}
-        group={dimension}
-        onGroup={(id) => setDimension(id as Dimension)}
-        groupAria={t("botProfile.usage.chart.groupAria")}
-      />
 
       {error && (
         <div role="note" data-bot-usage-error="" className="flex min-w-0 flex-wrap items-center gap-3 px-1 text-[13px] leading-[18px] text-ink-secondary">
@@ -419,12 +437,12 @@ export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, ac
       <div className="grid gap-3 sm:grid-cols-3">
         <div data-bot-usage-card="cost" className={STAT_CARD}>
           <div className="text-[13px] leading-[18px] text-ink-secondary">{t("botProfile.usage.cost")}</div>
-          <div className="mt-1 tabular-nums text-[26px] leading-8 text-ink">{totals ? usd(totals.turns === 0 ? 0 : totals.costUsd) : PENDING}</div>
+          <div className="mt-1 tabular-nums text-[20px] leading-7 text-ink">{totals ? usd(totals.turns === 0 ? 0 : totals.costUsd) : PENDING}</div>
           <div className="text-[12px] leading-4 text-ink-secondary">{periodCaption}</div>
         </div>
         <div data-bot-usage-card="tokens" className={STAT_CARD}>
           <div className="text-[13px] leading-[18px] text-ink-secondary">{t("botProfile.usage.tokens")}</div>
-          <div className="mt-1 tabular-nums text-[26px] leading-8 text-ink">{totals ? formatTokens(tokens) : PENDING}</div>
+          <div className="mt-1 tabular-nums text-[20px] leading-7 text-ink">{totals ? formatTokens(tokens) : PENDING}</div>
           {totals && (
             <div className="text-[12px] leading-4 text-ink-secondary">
               {t("botProfile.usage.tokensSplit", { input: formatTokens(totals.inputTokens), output: formatTokens(totals.outputTokens), cached: formatTokens(totals.cachedInputTokens) })}
@@ -433,8 +451,8 @@ export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, ac
         </div>
         <div data-bot-usage-card="calls" className={STAT_CARD}>
           <div className="text-[13px] leading-[18px] text-ink-secondary">{t("botProfile.usage.calls")}</div>
-          <div className="mt-1 tabular-nums text-[26px] leading-8 text-ink">{totals ? formatTokens(totals.turns) : PENDING}</div>
-          {perMillion !== null && <div className="text-[12px] leading-4 text-ink-secondary">{t("botProfile.usage.perMillion", { cost: formatUsd(perMillion) })}</div>}
+          <div className="mt-1 tabular-nums text-[20px] leading-7 text-ink">{totals ? formatTokens(totals.turns) : PENDING}</div>
+          {perMillion !== null && <div className="text-[12px] leading-4 text-ink-secondary">{t("botProfile.usage.perMillion", { cost: formatMoney(perMillion, currency) })}</div>}
         </div>
       </div>
 
@@ -456,6 +474,7 @@ export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, ac
         </>
       )}
     </div>
+    </SettingsGroup>
   );
 }
 

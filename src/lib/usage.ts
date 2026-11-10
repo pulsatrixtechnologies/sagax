@@ -1,7 +1,7 @@
 // Turning banked token/cost figures into something a header chip can show.
 // Pure, so the numbers can be tested without the components.
 import type { Bot, TaskUsage } from "@/state/store";
-import { t } from "./i18n";
+import { activeLocale, documentLanguage, t } from "./i18n";
 
 export const EMPTY_USAGE: TaskUsage = { input: 0, output: 0, costUsd: null, turns: 0 };
 type TokenUsage = Pick<TaskUsage, "input" | "output"> & Partial<TaskUsage>;
@@ -60,6 +60,28 @@ export function formatUsd(usd: number): string {
   if (usd === 0) return "$0";
   if (usd < 0.01) return `$${usd.toFixed(3)}`;
   return `$${usd.toFixed(2)}`;
+}
+
+/** Money as the reader writes it, in its currency (USD when the server
+ * names none): "$9.59" in English, "9,59 $" in French (#3401). Same
+ * precision as formatUsd: no decimals at 0, three under a cent, else two. */
+export function formatMoney(amount: number, currency?: string | null, locale = documentLanguage(activeLocale())): string {
+  if (!hasFiniteCost(amount)) return "";
+  const digits = amount === 0 ? 0 : Math.abs(amount) < 0.01 ? 3 : 2;
+  try {
+    return new Intl.NumberFormat(locale, { style: "currency", currency: currency || "USD", currencyDisplay: "narrowSymbol", minimumFractionDigits: digits, maximumFractionDigits: digits }).format(amount);
+  } catch {
+    return formatUsd(amount);
+  }
+}
+
+/** A short money figure for a chart axis ("$1.2K", "1,2 k $"). */
+export function formatMoneyCompact(amount: number, currency?: string | null, locale = documentLanguage(activeLocale())): string {
+  try {
+    return new Intl.NumberFormat(locale, { style: "currency", currency: currency || "USD", currencyDisplay: "narrowSymbol", notation: "compact", maximumFractionDigits: 2 }).format(amount);
+  } catch {
+    return `$${amount}`;
+  }
 }
 
 /** How much of `input` the provider served from its prompt cache. Clamped to

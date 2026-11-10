@@ -76,6 +76,8 @@ export interface UsageChartControlsProps {
   group?: string;
   onGroup?: (id: string) => void;
   groupAria?: string;
+  /** Inside a card's header row (#3401): no side inset of its own. */
+  inCard?: boolean;
 }
 
 /** A plain-text toggle: the active choice in the ink color, the others quiet. */
@@ -98,9 +100,9 @@ export function TextToggle({ options, value, onChange, ariaLabel, dataKey }: { o
   );
 }
 
-export function UsageChartControls({ periods, period, onPeriod, periodAria, extra, groups, group, onGroup, groupAria }: UsageChartControlsProps) {
+export function UsageChartControls({ periods, period, onPeriod, periodAria, extra, groups, group, onGroup, groupAria, inCard = false }: UsageChartControlsProps) {
   return (
-    <div data-usage-chart-controls="" className="flex min-w-0 flex-wrap items-center justify-between gap-x-6 gap-y-2 px-1">
+    <div data-usage-chart-controls="" className={cn("flex min-w-0 flex-wrap items-center justify-between gap-x-6 gap-y-2", !inCard && "px-1")}>
       <div className="flex min-w-0 flex-wrap items-center gap-x-6">
         <TextToggle options={periods} value={period} onChange={onPeriod} ariaLabel={periodAria} dataKey="data-bot-usage-period" />
         {extra}
@@ -141,12 +143,15 @@ export interface UsageChartCardProps {
   /** One color for every bar (a single series, no legend). */
   empty?: ReactNode;
   className?: string;
+  /** The card's header row (#3401): the period, unit and group-by controls,
+   * above the range and its arrows. */
+  controls?: ReactNode;
   children?: ReactNode;
 }
 
 const GRID_LINES = 5;
 
-export function UsageChartCard({ rangeLabel, onPrev, onNext, totalLabel, total, days, series, formatValue, formatAxis, legend = "tiles", chartLabel, empty, className, children }: UsageChartCardProps) {
+export function UsageChartCard({ rangeLabel, onPrev, onNext, totalLabel, total, days, series, formatValue, formatAxis, legend = "tiles", chartLabel, empty, className, controls, children }: UsageChartCardProps) {
   const [hover, setHover] = useState<number | null>(null);
   const totals = days.map((_, index) => series.reduce((sum, one) => sum + (one.values[index] ?? 0), 0));
   const max = niceMax(Math.max(0, ...totals));
@@ -179,6 +184,7 @@ export function UsageChartCard({ rangeLabel, onPrev, onNext, totalLabel, total, 
 
   return (
     <div data-usage-chart-card="" className={cn("usage-chart flex min-w-0 flex-col rounded-2xl bg-card px-4 pb-4 pt-3", className)}>
+      {controls ? <div data-usage-chart-header="" className="mb-2 min-w-0">{controls}</div> : null}
       <div className="flex items-center justify-between gap-3">
         <span data-usage-chart-range="" className="min-w-0 truncate text-[14px] leading-5 text-ink-secondary">{rangeLabel}</span>
         <span className="flex shrink-0 items-center">
@@ -191,7 +197,7 @@ export function UsageChartCard({ rangeLabel, onPrev, onNext, totalLabel, total, 
         </span>
       </div>
       <div className="mt-2 text-[13px] leading-[18px] text-ink-secondary">{totalLabel}</div>
-      <div data-usage-chart-total="" className="tabular-nums text-[30px] font-medium leading-9 text-ink">{total}</div>
+      <div data-usage-chart-total="" className="tabular-nums text-[28px] leading-8 text-ink">{total}</div>
 
       {nothing && empty ? (
         <div data-usage-chart-empty="" className="flex min-h-[120px] items-center text-[13px] leading-[18px] text-ink-secondary">{empty}</div>
@@ -251,7 +257,7 @@ export function UsageChartCard({ rangeLabel, onPrev, onNext, totalLabel, total, 
               <span className="flex min-w-0 flex-col">
                 <span className="truncate text-[13px] leading-[18px] text-ink-secondary">{one.label}</span>
                 {one.sub ? <span className="truncate text-[11px] leading-4 text-ink-tertiary">{one.sub}</span> : null}
-                <span data-usage-chart-share="" className="tabular-nums text-[24px] font-medium leading-8 text-ink">{formatTileShare(one.share)}</span>
+                <span data-usage-chart-share="" className="tabular-nums text-[20px] leading-7 text-ink">{formatTileShare(one.share)}</span>
               </span>
             </div>
           ))}

@@ -177,3 +177,55 @@ describe("bot usage breakdown (#2612)", () => {
     expect(html).not.toContain("data-bot-usage-row");
   });
 });
+
+// #3401: the breakdown under the Analytics tab's reference block: a grey
+// group label with its intro behind a help tip, the period, unit and
+// group-by controls in the header row of the chart card, figures at 28 (the
+// total) and 20 (the others), and money in the reader's language.
+describe("bot usage breakdown in the Analytics tab (#3401)", () => {
+  const spaced = (html: string) => html.replace(/[  ]/g, " ");
+
+  it("writes money in the reader's language and currency", () => {
+    setLocale("fr");
+    const html = spaced(render());
+    expect(html).toContain(">4,00 $<");
+    expect(html).not.toContain("$4.00");
+    setLocale("en");
+    expect(render()).toContain(">$4.00<");
+    expect(spaced(render({ data: { ...data(), currency: "EUR" } }))).toContain(">€4.00<");
+  });
+
+  it("labels the breakdown with the shared grey group label and its intro as a help tip", () => {
+    const html = render({ initialDetails: false });
+    expect(html).not.toMatch(/<h2[^>]*>Usage statistics<\/h2>/);
+    expect(html).not.toContain("text-[18px]");
+    expect(html).toMatch(/data-settings-group="bot-usage-breakdown"[^>]*>.*?<h3[^>]*text-ink-secondary[^>]*>Usage statistics<\/h3>/);
+    expect(html).toMatch(/<summary[^>]*aria-label="More about Usage statistics"/);
+    expect(html).toContain("Open a row for the detail.");
+    expect(html).not.toContain("Tap a row");
+    setLocale("fr");
+    expect(render()).toContain("Ouvre une ligne pour le détail.");
+  });
+
+  it("puts the period, unit and group-by controls in the chart card's header row", () => {
+    const html = render({ initialDetails: false });
+    const card = html.slice(html.indexOf("data-usage-chart-card"));
+    const header = card.slice(0, card.indexOf("data-usage-chart-range"));
+    expect(header).toContain("data-usage-chart-controls");
+    expect(header).toContain('data-bot-usage-period="30"');
+    expect(header).toContain('data-bot-usage-unit="tokens"');
+    expect(header).toContain("data-usage-chart-group");
+    expect(html.indexOf("data-usage-chart-controls")).toBeGreaterThan(html.indexOf("data-usage-chart-card"));
+  });
+
+  it("draws the total at 28 px and every other figure at 20 px", () => {
+    const html = render({ initialDetails: false });
+    expect(html).toMatch(/data-usage-chart-total=""[^>]*text-\[28px\]/);
+    expect(html).toMatch(/data-usage-chart-share=""[^>]*text-\[20px\]/);
+    for (const card of ["cost", "tokens", "calls"]) {
+      const at = html.indexOf(`data-bot-usage-card="${card}"`);
+      expect(html.slice(at, at + 400)).toContain("text-[20px]");
+    }
+    expect(html).not.toMatch(/text-\[(?:24|26|30)px\]/);
+  });
+});

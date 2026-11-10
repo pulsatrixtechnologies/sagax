@@ -26,6 +26,11 @@ export interface RoutineRunCardData {
   autoPausedAfter?: number;
   /** 2026-11-01: completed, but not all of it went right (RoutineRun.problems). */
   problems?: string;
+  /** #3479: the same problem came back in later runs: how many runs in a
+   * row had it (this row's run included), since when, and when last. */
+  repeat?: { firstRunId: string; count: number; since: number; lastAt: number };
+  /** #3479: the first run without problems after `afterRuns` runs with them. */
+  recovered?: { afterRuns: number; since: number };
   /** 2026-11-01: why a queued or waiting run has not gone on yet. */
   attention?: string;
   /** 2026-11-03: the teammates the run handed work to, linked from the card. */

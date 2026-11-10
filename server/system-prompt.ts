@@ -400,6 +400,19 @@ export const ROUTINE_EXECUTION_PROMPT =
   // 2026-10-22: the run is in the background; nothing reaches the person's
   // chat unless it needs them (server/routines/routine-report.ts).
   ROUTINE_REPORT_CONTRACT;
+/** #3479: every routine run follows the same report rule, whatever started
+ * it: a schedule, a person (manual), a trigger (a webhook, an incoming mail
+ * or text) or the server's start. Its final message reaches the person only
+ * when it needs them, and NOTHING_TO_REPORT keeps it quiet. A proactive wake
+ * carries the same contract in its own prompt (server/proactive/proactive-wake.ts),
+ * a legacy one under the webhook source included, so it is not said twice.
+ * A trigger turn gets it only when a routine run is active on its thread
+ * (`run`): a webhook that starts no routine is not a routine run. */
+export function routineExecutionPromptFor(source: string | undefined, run?: { proactive?: unknown } | null): string {
+  if (source === "webhook" || source === "startup") return run && !run.proactive ? ROUTINE_EXECUTION_PROMPT : "";
+  if (source !== "schedule" && source !== "manual") return "";
+  return run?.proactive ? "" : ROUTINE_EXECUTION_PROMPT;
+}
 export const LEARN_PROMPT =
   " If the user sends /learn or asks you to save a reusable procedure from this work, use skills_list and skill_manage. Create new skills; update an existing learned skill only when the user explicitly asks to revise that exact name. Include source provenance." + PROPOSAL_RESULT_PROMPT;
 export const WEBHOOK_PROMPT =

@@ -23,12 +23,15 @@ const PARTIAL = [
   "",
   "Quatre GO attendent la personne : surveiller Sagax 0.8.76, renouveler le jeton GitHub, retirer iMessage et REA, garder Flow 0.22.0.",
 ].join("\n");
+// #3479: the same problem twice in a row is said once; the scheduled run
+// here meets a different one, so it posts its own card.
+const OTHER_PARTIAL = PARTIAL.replace("lecture des droits d'outils refusée (session personne absente)", "lecture des droits d'outils refusée (jeton expiré)");
 
 it("a run completed with problems posts in the bot's chat, Run now and scheduled, without the raw marker or a table", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "sagax-partial-routines-"));
   const fixture = await launchVerificationServer({
     ...process.env,
-    FAKE_CLAUDE_REPLIES: JSON.stringify([PARTIAL, PARTIAL]),
+    FAKE_CLAUDE_REPLIES: JSON.stringify([PARTIAL, OTHER_PARTIAL]),
     FAKE_CLAUDE_REPLY_STATE: join(scratch, "reply-index"),
   });
   const api = async (method: string, path: string, body?: unknown, status = 200) => {

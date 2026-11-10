@@ -3,7 +3,7 @@
 // Never imports server/index.ts.
 import { hideServerPathsInSections } from "../server-path-prompt.ts";
 import { turnTracePayloadHash } from "./turn-trace.ts";
-import { FEEDBACK_PROMPT, IMAGE_PROMPT } from "../system-prompt.ts";
+import { FEEDBACK_PROMPT, IMAGE_PROMPT, routineExecutionPromptFor } from "../system-prompt.ts";
 import { hasPerspicaxConventions } from "../perspicax/perspicax-conventions.ts";
 import { onDemandPromptParts, promptReferencesAvailable } from "../context/prompt-references.ts";
 import { compactBotLast } from "../context/compact-prompt.ts";
@@ -24,7 +24,6 @@ export function createPromptStartTurn(host: StartTurnHost) {
     LOCAL_RECENT_WORK_LINES,
     MEME_PROMPT,
     REACTION_PROMPT,
-    ROUTINE_EXECUTION_PROMPT,
     TEAM_MEMORY_PROMPT,
     WEBHOOK_PROMPT,
     WITHHELD_HOST_TOOLS_PROMPT,
@@ -217,7 +216,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       { id: "feedback", label: "Feedback", text: state.integrations.agents && !state.onCall && !state.opts?.automationSource ? FEEDBACK_PROMPT : "" },
       { id: "recall", label: "Recall", text: state.recallPrompt },
       { id: "routine", label: "Routines", text: state.routinePrompt },
-      { id: "routine-execution", label: "Routine execution", text: state.opts?.automationSource === "schedule" || state.opts?.automationSource === "manual" ? ROUTINE_EXECUTION_PROMPT : "" },
+      { id: "routine-execution", label: "Routine execution", text: routineExecutionPromptFor(state.opts?.automationSource, state.opts?.automationSource === "webhook" || state.opts?.automationSource === "startup" ? host.activeRoutineRunForThread?.(state.threadId) ?? null : null) },
       { id: "profile", label: "Profile changes", text: state.profilePrompt },
       { id: "learn", label: "Skill authoring", text: state.learnPrompt },
       { id: "rich-output", label: "Rich output", text: richOutputPrompt((state.liveBot ?? state.bot).emailDrafts !== false) },

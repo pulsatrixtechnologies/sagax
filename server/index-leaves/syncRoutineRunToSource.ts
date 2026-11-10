@@ -3,7 +3,7 @@
 import { wakeTopicOf } from "../routines/routine-run-card.ts";
 import type { RoutineRun } from "../routines/routines.ts";
 import { textLanguage } from "../../shared/looks-french.ts";
-import { ROUTINE_QUIET_MARKER } from "../routines/routine-report.ts";
+import { ROUTINE_QUIET_MARKER, isSameProblemLine } from "../routines/routine-report.ts";
 import { needsYouNotificationWords } from "../runtime-events/question-notification-words.ts";
 export type Host = Record<string, any>;
 
@@ -25,11 +25,12 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   // #3219: the NOTHING_TO_REPORT marker is a status the parser consumes; the
   // run's own thread never shows it raw.
   if (run.status === "completed" && run.threadId) {
-    const marker = new RegExp(`^[ \\t]*${ROUTINE_QUIET_MARKER}[ \\t]*$`, "gm");
+    // #3479: the same-problem line in every shape routineReportOutcome reads.
+    const isMarker = (line: string) => line.trim() === ROUTINE_QUIET_MARKER || isSameProblemLine(line);
     const last = host.store.messagesFor(run.threadId)?.findLast?.((message) => message.role === "bot" && !message.kind && typeof message.text === "string" && message.text.trim());
-    if (last?.text && marker.test(last.text)) {
-      marker.lastIndex = 0;
-      host.store.patchMessage(run.threadId, last.id, { text: last.text.replace(marker, "").replace(/\n{3,}/g, "\n\n").trim() });
+    const lines = last?.text ? last.text.split(/\r?\n/) : [];
+    if (lines.some(isMarker)) {
+      host.store.patchMessage(run.threadId, last.id, { text: lines.filter((line) => !isMarker(line)).join("\n").replace(/\n{3,}/g, "\n\n").trim() });
     }
   }
   // 2026-11-05: a completed report with items only the person can do
@@ -71,7 +72,9 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
     // in Automations.
     const own = run.threadId ? host.store.taskByThread(run.botId, run.threadId) : null;
     // Thumbs-down or "less" (quiet): it still surfaces, never unread.
-    if (reportable && own?.routineRunId === run.id) {
+    // #3479: a lasting problem was said by its first run already, unless
+    // this run also has new items only the person can do.
+    if (reportable && (!run.problemRepeat || attentionFound) && own?.routineRunId === run.id) {
       host.store.patchTask(run.botId, own.threadId, { routineRunId: undefined, ...(reportableUnread ? { unread: true } : {}) });
     }
     return null;
@@ -83,13 +86,33 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   );
   // Never posted and nothing for the person: the chat is left alone.
   if (!existing && !reportable) return sourceThreadId;
+  // #3479: the fallback text gives times in the person's zone, as the card.
+  const person = run.runAs ?? host.effectiveRunAs?.({ botId: run.botId });
+  const zone = (person && host.isPrincipalId?.(person) ? host.botSettings?.person?.(person)?.timeZone : null) ?? host.routineTimeZone?.();
+  // #3479: the same problem as the previous run is said once. The row of the
+  // first run with it is updated in place (how many runs, since when): no
+  // new row, no unread, no notification. The run stays in the run list.
+  // A repeat run with new items only the person can do posts its card and
+  // rings as any other run: nothing waiting for the person stays hidden.
+  if (!existing && !attentionFound && run.status === "completed" && run.problems && run.problemRepeat) {
+    const firstRunId = run.problemRepeat.firstRunId;
+    const anchor = host.store.messagesFor(sourceThreadId).findLast?.((message) => message.kind === "routine.run"
+      && (message.routineRun?.runId === firstRunId || message.routineRun?.repeat?.firstRunId === firstRunId));
+    if (anchor?.routineRun) {
+      const repeated = { ...anchor.routineRun, repeat: { ...run.problemRepeat, lastAt: run.finishedAt ?? run.problemRepeat.since } };
+      const anchorLanguage = textLanguage(`${anchor.routineRun.summary ?? ""}\n${run.routineName ?? ""}`)
+        ?? (run.runAs ? host.languageOfPerson?.(run.runAs) : undefined);
+      host.store.patchMessage(sourceThreadId, anchor.id, { text: host.routineRunFallbackText(repeated, anchorLanguage, zone), routineRun: repeated });
+      return sourceThreadId;
+    }
+  }
   const fresh = host.routineRunCard(run, sourceThreadId, host.routineFullReport(run));
   // #2694: the person's feedback on a wake stays on its card across updates
   const card = existing?.routineRun?.feedback ? { ...fresh, feedback: existing.routineRun.feedback } : fresh;
   // #3219: the line follows the language the run wrote in, else the person's.
   const language = textLanguage(`${run.output ?? ""}\n${run.routineName ?? ""}`)
     ?? (run.runAs ? host.languageOfPerson?.(run.runAs) : undefined);
-  const text = host.routineRunFallbackText(card, language);
+  const text = host.routineRunFallbackText(card, language, zone);
   const statusChanged = existing?.routineRun?.status !== run.status;
   const runBotRecord = host.store.bot(run.botId);
   const attention = attentionFound && runBotRecord && run.threadId

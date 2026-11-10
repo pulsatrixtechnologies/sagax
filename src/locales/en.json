@@ -12933,6 +12933,8 @@
   "routineRun.hours": "{count} h",
   "routineRun.hoursMinutes": "{hours} h {minutes} min",
   "routineRun.quiet": "Nothing for you this time; nothing was posted.",
+  "routineRun.sameProblem": "Same problem since {since}, {count} runs in a row",
+  "routineRun.worksAgain": "Works again (problems since {since})",
   "routineRun.blockedLine": "Blocked: {reason}",
   "routineRun.blockedNoReason": "Blocked: a step stopped the run. Open the run to see which one.",
   "routineRun.blockedWaitingFor": "Blocked: waiting for {name}",

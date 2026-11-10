@@ -26,6 +26,7 @@ import {
 } from "./model-auto.ts";
 import { unpackCatalog } from "../model-catalog/trim.ts";
 import { STATIC_CODEX_MODELS } from "../drivers/codex-catalog.ts";
+import { STATIC_CLAUDE_MODELS } from "../drivers/claude/config.ts";
 
 // A small fixture catalogue: what models.dev says, by bare id.
 const FACTS: Record<string, CatalogFacts> = {
@@ -351,6 +352,13 @@ describe("with the shipped catalogue and the drivers' own model lists", () => {
     return row ? { name: row.name, reasoning: row.reasoning, vision: row.modalities.input.includes("image"), context: row.limit?.context, costInput: row.cost?.input, costOutput: row.cost?.output, releaseDate: row.release_date } : undefined;
   };
   const claudeReal: AutoEngine = { ...claude, models: { default: "claude-sonnet-5", options: claude.models.options.filter((option) => option.id !== "claude-unlisted-9") } };
+
+  it("picks Claude Fable 5.2, the newest Fable, from the Claude engine's shipped list (#3256)", () => {
+    const shipped: AutoEngine = { ...claude, models: { default: STATIC_CLAUDE_MODELS.default, options: STATIC_CLAUDE_MODELS.options.map(({ id, label }) => ({ id, label })) } };
+    const pick = pickOrchestrationModel({ base: claudeBase, engines: [shipped], catalog: real });
+    expect(pick.selection.model).toBe("claude-fable-5-2");
+    expect(pick.modelLabel).toBe("Claude Fable 5.2");
+  });
 
   it("picks Claude Fable 5.1 to orchestrate a Claude bot, Opus 5.5 when Fable is not listed", () => {
     expect(pickOrchestrationModel({ base: claudeBase, engines: [claudeReal], catalog: real }).modelLabel).toBe("Claude Fable 5.1");

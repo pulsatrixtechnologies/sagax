@@ -3,7 +3,7 @@ import { t } from "@/lib/i18n";
 import { useStore, type Message } from "@/state/store";
 import { effortLabel } from "@/lib/effort-label";
 
-/** The words for what a turn ran on: "Claude Fable 5.1 · effort Medium". The
+/** The words for what a turn ran on: "Claude Fable 5.2 · effort Medium". The
  * model reads as the picker names it; no recorded effort is "Default". */
 export function turnRunText(
   run: NonNullable<Message["turnRun"]>,

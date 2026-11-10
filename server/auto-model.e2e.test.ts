@@ -37,14 +37,14 @@ it("runs an Auto bot's own turn on the orchestration model and says why", () => 
   expect(saved.modelSelection?.auto ?? (await f.bots()).find((b: any) => b.id === f.chief.id).modelSelection.auto).toBe(true);
   const preview = await f.api(`/api/bots/${f.chief.id}/auto-model`, undefined, "GET");
   expect(preview.auto).toBe(true);
-  expect(preview.pick).toMatchObject({ role: "orchestration", model: "claude-fable-5-1", reason: "strongest-own", tier: "top" });
-  expect(preview.explanation).toContain("Auto: Claude Fable 5.1 for this bot, because it is the strongest general model");
+  expect(preview.pick).toMatchObject({ role: "orchestration", model: "claude-fable-5-2", reason: "strongest-own", tier: "top" });
+  expect(preview.explanation).toContain("Auto: Claude Fable 5.2 for this bot, because it is the strongest general model");
 
   await f.cli("send", "--bot", f.chief.id, "--task", f.chief.activeTaskId, "--text", "Please have Engineering refactor the CSV export.");
   expect((await f.cli("wait", "--bot", f.chief.id, "--task", f.chief.activeTaskId, "--timeout", "30")).status).toBe("settled");
   const chief = (await f.bots()).find((b: any) => b.id === f.chief.id);
   const task = chief.tasks.find((t: any) => t.threadId === f.chief.activeTaskId);
-  expect(task.autoModel).toMatchObject({ role: "orchestration", model: "claude-fable-5-1" });
+  expect(task.autoModel).toMatchObject({ role: "orchestration", model: "claude-fable-5-2" });
   // The bot itself keeps Auto and its base model.
   expect(chief.modelSelection).toMatchObject({ ...f.chief.modelSelection, auto: true });
   expect((await f.api(`/api/bots/${f.lead.id}/auto-model`, undefined, "GET")).auto).toBe(false);

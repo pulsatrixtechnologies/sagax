@@ -93,7 +93,7 @@ describe("bundled snapshot", () => {
     const store = new ModelCatalogStore({ dataDir: tempDir(), env: {}, openCodeCachePath: null, log: () => {} });
     const catalog = store.get();
     expect(catalog.origin).toBe("snapshot");
-    expect(catalog.updatedAt).toBe("2026-10-03T12:34:20.000Z");
+    expect(catalog.updatedAt).toBe("2026-11-10T01:02:58.000Z");
     expect(Object.keys(catalog.providers).length).toBeGreaterThan(200);
     expect(catalog.providers.openrouter?.env).toEqual(["OPENROUTER_API_KEY"]);
     expect(catalog.providers.openrouter?.models["anthropic/claude-sonnet-4.5"]).toMatchObject({ id: "anthropic/claude-sonnet-4.5", tool_call: true });

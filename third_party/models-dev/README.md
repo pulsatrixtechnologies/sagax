@@ -6,9 +6,9 @@ models.dev catalog (`https://models.dev/api.json`), MIT License, Copyright (c)
 snapshot itself (`source.licenseText`).
 
 - Source: https://github.com/anomalyco/models.dev at commit
-  `036a4f1d6ee01a0ed3f156077375a15087dd322f` (2026-10-03T12:34:20Z). The
-  `api.json` used was checked to be identical in content to the catalog that
-  commit generates.
+  `1bf866e6a1cbbf923259ad1d76b50e4eac53d111` (2026-11-10T01:02:58Z), the
+  head of the repository when `https://models.dev/api.json` was downloaded
+  for this build (2026-11-10, refresh for Claude Fable 5.2).
 - Built with `node scripts/build-model-catalog.mjs --input api.json --commit
   <sha> --updated-at <commit time>`; `--check` verifies the committed file.
 - Trimmed to the provider index and current, tool-calling, text-input models.

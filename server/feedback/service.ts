@@ -5,27 +5,26 @@
 // server's own token on Send, and posts the issue's status back into the
 // same conversation. Without a token, reports wait in a local queue and are
 // retried. There is no Feedback bot: a server that still has the one older
-// versions made retires it at startup (retireFeedbackBot). Any bot's
-// conversation can also get one pre-drafted offer when the person sounds
-// frustrated.
-import { textLanguage } from "../../shared/looks-french.ts";
+// versions made retires it at startup (retireFeedbackBot). No card offers a
+// report on its own: a bot that hears frustration with Sagax tells the
+// person to type /feedback (server/system-prompt.ts).
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { writeFileAtomic } from "../atomic.ts";
 import {
-  FEEDBACK_PLATFORMS, frustrationSignal, isFeedbackCommand, type FeedbackAppContext, type FeedbackKind, type FeedbackReportView,
+  FEEDBACK_PLATFORMS, isFeedbackCommand, type FeedbackAppContext, type FeedbackKind, type FeedbackReportView,
   type FeedbackSource, type FeedbackStatus,
 } from "../../shared/feedback.ts";
 import type { AnonymizeNames } from "./anonymize.ts";
-import { anonymize, anonymizeWords } from "./anonymize.ts";
+import { anonymize } from "./anonymize.ts";
 import { chatFacts, type ChatMessageLike } from "./chat-facts.ts";
 import type { FeedbackConfig } from "./config.ts";
 import {
-  feedbackAnswers, feedbackLanguage, isCancelOption, isSendOption, nextFeedbackStep, offerCard, openFeedbackStep,
+  feedbackAnswers, feedbackLanguage, isCancelOption, isSendOption, nextFeedbackStep, openFeedbackStep,
   SEND_OPTIONS, type FeedbackAnswers, type FeedbackLanguage, type FeedbackMarker, type FlowCard, type FlowMessage,
 } from "./flow.ts";
 import { fileIssue, issueStatus, type GithubFiler } from "./github.ts";
-import { buildReport, stripAttachments, type FiledReport, type ReportContext, type ReportSpan } from "./report.ts";
+import { buildReport, type FiledReport, type ReportContext, type ReportSpan } from "./report.ts";
 import { feedbackText } from "./words.ts";
 
 export interface StoredMessage extends FlowMessage, Omit<ChatMessageLike, "feedback" | "role" | "kind" | "text"> {
@@ -84,11 +83,15 @@ interface FeedbackRecord {
   createdAt: number;
   updatedAt: number;
   status: RecordStatus;
-  /** The words typed after /feedback, or the message an offer quotes. */
+  /** The words typed after /feedback. */
   said: string;
   context: ReportContext;
+  /** A report older versions offered on their own after a frustrated
+   * message: retired at the first sweep (#3299). */
   offer?: boolean;
   kind?: FeedbackKind;
+  /** The text the person was last shown on the preview: exactly what is
+   * filed on Send (#3299). */
   report?: FiledReport;
   issueNumber?: number;
   issueUrl?: string;
@@ -156,13 +159,6 @@ function newReportId(): string {
   return `fb${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function oneLine(text: string, max: number): string {
-  const line = text.replace(/\s+/g, " ").trim();
-  return line.length > max ? `${line.slice(0, max - 1)}…` : line;
-}
-
-/** French for any fr-* tag, English for any other tag, the guess from the
- * message's words when the person's language is unknown. */
 /** The surface a request came from, when the app attached nothing (a
  * phone or another client typed /feedback). */
 export function platformFromUserAgent(userAgent: string | undefined): FeedbackAppContext["platform"] | undefined {
@@ -173,6 +169,8 @@ export function platformFromUserAgent(userAgent: string | undefined): FeedbackAp
   return undefined;
 }
 
+/** French for any fr-* tag, English for any other tag, the guess from the
+ * message's words when the person's language is unknown. */
 export function feedbackLanguageFor(appLanguage: string | undefined, text: string): FeedbackLanguage {
   const tag = (appLanguage ?? "").trim().toLowerCase();
   if (tag) return tag.split(/[-_]/)[0] === "fr" ? "fr" : "en";
@@ -290,10 +288,10 @@ export function createFeedbackService(deps: FeedbackDeps) {
     return { ok: true, status: 200 };
   }
 
-  function draft(input: { owner: string | null; botId: string; threadId: string; lang: FeedbackLanguage; source: FeedbackSource; said: string; context?: Partial<ReportContext>; offer?: boolean }): FeedbackRecord {
+  function draft(input: { owner: string | null; botId: string; threadId: string; lang: FeedbackLanguage; source: FeedbackSource; said: string; context?: Partial<ReportContext> }): FeedbackRecord {
     // a newer report in the same conversation replaces an unfinished one
     for (const record of records) {
-      if (record.threadId === input.threadId && record.status === "draft" && !record.offer) record.status = "cancelled";
+      if (record.threadId === input.threadId && record.status === "draft") record.status = "cancelled";
     }
     retireStaleCards(input.threadId);
     const record: FeedbackRecord = {
@@ -307,7 +305,6 @@ export function createFeedbackService(deps: FeedbackDeps) {
       status: "draft",
       said: input.said,
       context: { source: input.source, ...input.context },
-      ...(input.offer ? { offer: true } : {}),
     };
     records.push(record);
     save();
@@ -333,11 +330,17 @@ export function createFeedbackService(deps: FeedbackDeps) {
     record.updatedAt = now();
     const step = nextFeedbackStep(record.lang, answersOf(record), record.id, record.context.error || record.context.chat?.error);
     if (step.kind === "ask") {
+      delete record.report;
+      save();
       post(record.threadId, step.marker, { kind: "text", text: feedbackText(record.lang, "feedback.server.detailQuestion") });
       return;
     }
-    // #3299: the person sees the exact text that leaves, whole
+    // #3299: the person sees the exact text that leaves, whole. It is kept
+    // as shown: Send files this text, not one rebuilt from newer logs. A
+    // detail added at the preview builds it again and shows it again.
     const report = reportOf(record);
+    record.report = report;
+    save();
     post(record.threadId, undefined, { kind: "text", text: `${feedbackText(record.lang, "feedback.server.previewIntro")}\n\n**${report.title}**\n\n${report.body}` });
     // the Feedback product's send preview (a report to a third party, the person's own send); full-access: exempt
     post(record.threadId, { step: "preview", reportId: record.id }, {
@@ -391,7 +394,8 @@ export function createFeedbackService(deps: FeedbackDeps) {
   }
 
   function submit(record: FeedbackRecord): void {
-    record.report = reportOf(record);
+    // the text on the preview card, as the person saw it
+    record.report ??= reportOf(record);
     record.kind = kindOf(record.report);
     record.status = "queued";
     record.updatedAt = now();
@@ -452,20 +456,6 @@ export function createFeedbackService(deps: FeedbackDeps) {
       role: "user", kind: "text", text, ...(input.sendId ? { sendId: input.sendId } : {}), ...(input.sender ? { sender: input.sender } : {}),
     }));
 
-    // an offer card answered, even after the bot went on talking
-    if (isSendOption(text) || isCancelOption(text)) {
-      for (let index = messages.length - 1; index >= 0; index -= 1) {
-        const marker = messages[index]!.feedback;
-        if (marker?.step !== "offer") continue;
-        const record = byId(marker.reportId);
-        if (!record || record.status !== "draft") break;
-        const stored = userMessage();
-        if (isSendOption(text)) submit(record);
-        else cancel(record);
-        return stored;
-      }
-    }
-
     const command = isFeedbackCommand(text);
     let record: FeedbackRecord | undefined;
     let marker: FeedbackMarker | null = null;
@@ -473,7 +463,6 @@ export function createFeedbackService(deps: FeedbackDeps) {
       marker = openFeedbackStep(messages);
       record = marker ? byId(marker.reportId) : undefined;
       if (record && record.status !== "draft") record = undefined;
-      if (record && marker?.step === "offer") record = undefined;
       // only while the flow's question is the last word of the chat
       if (record && !input.viaCard) {
         const lastBot = [...messages].reverse().find((message) => message.role === "bot");
@@ -511,39 +500,6 @@ export function createFeedbackService(deps: FeedbackDeps) {
     return stored;
   }
 
-  /** After an ordinary message to any bot: one pre-drafted offer per
-   * conversation when the person sounds frustrated. */
-  function maybeOffer(input: { botId: string; threadId: string; text: string; principalId: string | null }): void {
-    const bot = store.bot(input.botId);
-    if (!bot || isFeedbackCommand(input.text)) return;
-    if (records.some((record) => record.threadId === input.threadId && record.offer)) return;
-    const earlier = store.activePath(input.threadId)
-      .filter((message) => message.role === "user" && message.kind === "text" && message.text && message.text.trim() !== input.text.trim())
-      .map((message) => message.text!);
-    const signal = frustrationSignal(input.text, earlier);
-    // #3218: the same prompt again is not frustration, and no offer when
-    // sending is not set up on this server.
-    if (!signal || signal === "repeat") return;
-    if (!filer()) return;
-    // #3218: the card follows the conversation's language (the words of the
-    // person's messages), before the app setting.
-    const spoken = textLanguage([...earlier.slice(-3), input.text].join("\n"));
-    const lang = spoken ?? languageFor(input.principalId, input.text);
-    const record = draft({
-      owner: input.principalId,
-      botId: bot.id,
-      threadId: input.threadId,
-      lang,
-      source: "frustration",
-      said: input.text,
-      context: { signal, ...serverFacts(bot.id, store.activePath(input.threadId).filter((message) => message.text?.trim() !== input.text.trim())) },
-      offer: true,
-    });
-    const summary = oneLine(anonymizeWords(stripAttachments(input.text).text, deps.names()), 200);
-    // the Feedback product's offer, never a permission; full-access: exempt
-    post(input.threadId, { step: "offer", reportId: record.id }, { kind: "options", card: offerCard(lang, summary) });
-  }
-
   /** Retry the queue and read filed issues' status back (every 5 minutes). */
   let swept = false;
   async function tick(): Promise<void> {
@@ -551,7 +507,9 @@ export function createFeedbackService(deps: FeedbackDeps) {
     // versions (one per reopened flow) are retired once after a start.
     const stale = new Set<string>();
     for (const record of records) {
-      if (record.status === "draft" && now() - (record.updatedAt ?? record.createdAt) > DRAFT_TTL_MS) {
+      // #3299: a card older versions offered on their own files nothing now
+      const retired = record.offer && record.status === "draft";
+      if (retired || record.status === "draft" && now() - (record.updatedAt ?? record.createdAt) > DRAFT_TTL_MS) {
         record.status = "cancelled";
         record.updatedAt = now();
         stale.add(record.threadId);
@@ -608,7 +566,6 @@ export function createFeedbackService(deps: FeedbackDeps) {
     retireFeedbackBot,
     handleMessage,
     answerCard,
-    maybeOffer,
     tick,
     list,
     flush: async () => { await Promise.all(pending); },

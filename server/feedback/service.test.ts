@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -51,9 +51,15 @@ const NAMES = {
   other: ["adalove"],
 };
 
-function setup(options: { token?: string; language?: (person: string | null) => string; now?: () => number } = {}) {
+function setup(options: { token?: string; language?: (person: string | null) => string; now?: () => number; records?: unknown[] } = {}) {
   const dataDir = mkdtempSync(join(tmpdir(), "fb-service-"));
   dirs.push(dataDir);
+  if (options.records) {
+    mkdirSync(join(dataDir, "feedback"), { recursive: true });
+    writeFileSync(join(dataDir, "feedback", "reports.json"), JSON.stringify(options.records));
+  }
+  // the server's recent log: a test can add lines between two steps
+  const logs = ["2026-11-10T14:02:11.000Z warn [engines] Ada Lovelace hit a 502 at 10.0.0.4 on SRV-DC01"];
   const store = fakeStore();
   const calls: Array<{ method: string; url: string; body?: { title?: string; body?: string; labels?: string[] } }> = [];
   const fetch = (async (url: string, init: RequestInit) => {
@@ -70,7 +76,7 @@ function setup(options: { token?: string; language?: (person: string | null) => 
     store,
     config: () => ({ repo: "acme/app", source: options.token ? "file" : null, ...(options.token ? { token: options.token } : {}) }),
     names: () => NAMES,
-    serverLines: () => ["2026-11-10T14:02:11.000Z warn [engines] Ada Lovelace hit a 502 at 10.0.0.4 on SRV-DC01"],
+    serverLines: () => [...logs],
     spans: () => [{ name: "tool.read", ms: 120, ok: false }],
     serverVersion: () => "0.8.80",
     engine: () => ({ engine: "claude", model: "claude-test-model" }),
@@ -78,7 +84,7 @@ function setup(options: { token?: string; language?: (person: string | null) => 
     ...(options.language ? { language: options.language } : {}),
     ...(options.now ? { now: options.now } : {}),
   });
-  return { service, store, calls, dataDir };
+  return { service, store, calls, dataDir, logs };
 }
 
 const say = (service: ReturnType<typeof setup>["service"], text: string, threadId = "t-main", extra: Record<string, unknown> = {}) =>
@@ -127,15 +133,32 @@ describe("/feedback, with no Feedback bot (#3299)", () => {
     expect(service.list("p1")[0]?.status).toBe("in_progress");
   });
 
-  it("shows the person the exact text that is filed", async () => {
-    const { service, store, calls } = setup({ token: "server-token" });
+  it("shows the person the exact text that is filed, even when the server log moves before Send", async () => {
+    const { service, store, calls, logs } = setup({ token: "server-token" });
     failedChat(store);
     say(service, "/feedback nothing loads");
     const preview = thread(store).at(-2)!.text ?? "";
+    // the log changes between the preview and Send: what leaves is still what was shown
+    logs.push("2026-11-10T14:05:00.000Z error [routes] a later line the person never saw");
     say(service, "Send");
     await service.flush();
     const issue = filed(calls)!;
-    expect(preview).toContain(`**${issue.title}**\n\n${issue.body}`);
+    expect(preview.endsWith(`**${issue.title}**\n\n${issue.body}`)).toBe(true);
+    expect(issue.body).not.toContain("a later line the person never saw");
+  });
+
+  it("builds the preview again, with the newer log, when the person adds a detail", async () => {
+    const { service, store, calls, logs } = setup({ token: "server-token" });
+    failedChat(store);
+    say(service, "/feedback nothing loads");
+    logs.push("2026-11-10T14:05:00.000Z error [routes] a later line");
+    say(service, "It started after the last update");
+    const preview = thread(store).at(-2)!.text ?? "";
+    expect(preview).toContain("a later line");
+    say(service, "Send");
+    await service.flush();
+    const issue = filed(calls)!;
+    expect(preview.endsWith(`**${issue.title}**\n\n${issue.body}`)).toBe(true);
   });
 
   it("asks one question only when nothing says what went wrong, then previews", () => {
@@ -242,20 +265,25 @@ describe("anonymization of a /feedback report (#3299)", () => {
     "ghp_abcdefghijklmnopqrstuvwxyz0123456789AB", "sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789", "xoxb-1234567890-abcdefghij",
     "/Users/ada", "Clients/Nimbus", "C:\\Users\\Ada", "\\\\FS01\\Clients", "/Volumes/Shared/Nimbus",
     "514-555-0199", "10.0.0.4", "192.168.1.20", "3f2a9c1e-8b7d-4e6f-9a0b-1c2d3e4f5a6b", "@gracehopper",
+    // names the server does not know, with no quotes around them, in the
+    // error, the server log, the app log and a connector's tool name
+    "Northwind", "Traders", "Bob Tremblay", "Tremblay", "Fabrikam", "Jean Dupont", "Dupont", "Alice Smith", "Smith",
   ];
 
   it("feeds identifying text everywhere a report reads from and none of it reaches the issue", async () => {
-    const { service, store, calls } = setup({ token: "server-token" });
+    const { service, store, calls, logs } = setup({ token: "server-token" });
     store.appendMessage("t-main", { role: "user", kind: "text", text: "Atlas, open ticket #48213 \"Printer down at the north office\" for Nimbus Plumbing and mail ada@nimbus-plumbing.ca" });
     store.appendMessage("t-main", { role: "bot", kind: "text", text: "Done, Ada Lovelace. I wrote to billing@nimbus-plumbing.ca." });
     store.appendMessage("t-main", { role: "user", kind: "text", text: "Now save the report in /Users/ada/Clients/Nimbus/q3.xlsx and on \\\\FS01\\Clients\\Nimbus, call Grace Hopper at 514-555-0199" });
+    store.appendMessage("t-main", { role: "bot", kind: "activity", text: "", tool: { name: "mcp__northwind_crm__get_agreement", ok: false }, turnId: "turn-1" } as never);
     store.appendMessage("t-main", {
       role: "bot", kind: "activity", text: "", turnId: "turn-1",
-      tool: failedTurnTool("Could not reach SRV-DC01 (10.0.0.4) from Ada's MacBook Pro with token ghp_abcdefghijklmnopqrstuvwxyz0123456789AB for portal.nimbus-plumbing.ca; thread 3f2a9c1e-8b7d-4e6f-9a0b-1c2d3e4f5a6b"),
+      tool: failedTurnTool("No agreement found for company Northwind Traders (contact Bob Tremblay)\nCould not reach SRV-DC01 (10.0.0.4) from Ada's MacBook Pro with token ghp_abcdefghijklmnopqrstuvwxyz0123456789AB for portal.nimbus-plumbing.ca; thread 3f2a9c1e-8b7d-4e6f-9a0b-1c2d3e4f5a6b"),
     } as never);
     const words = "/feedback Ada Lovelace here from Nimbus Plumbing: case 48213 failed, I expected the file in C:\\Users\\Ada\\Documents and /Volumes/Shared/Nimbus but ada-iphone and ada-studio show nothing. Key sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789, slack xoxb-1234567890-abcdefghij, ping @gracehopper, my login adalove, ada.lovelace, from 192.168.1.20";
+    logs.push("2026-11-10T14:03:40.000Z warn [connectors] company Fabrikam Inc has no site; user Jean Dupont");
     say(service, words, "t-main", {
-      app: { platform: "desktop", appVersion: "0.8.80", page: "chat", locale: "en", clientLogs: ["fetch failed for ada@nimbus-plumbing.ca at /Users/ada/Library/Logs/sagax.log"] },
+      app: { platform: "desktop", appVersion: "0.8.80", page: "chat", locale: "en", clientLogs: ["fetch failed for ada@nimbus-plumbing.ca at /Users/ada/Library/Logs/sagax.log", "render failed for Alice Smith"] },
     });
     const preview = thread(store).at(-2)!.text ?? "";
     say(service, "Send");
@@ -267,6 +295,11 @@ describe("anonymization of a /feedback report (#3299)", () => {
       expect(preview.toLowerCase(), leak).not.toContain(leak.toLowerCase());
     }
     // the neutral words stand in, so the report still reads
+    // the technical facts stay readable around the masks
+    expect(published).toContain("No agreement found for company [name] (contact [name])");
+    expect(published).toContain("render failed for [name]");
+    expect(published).toContain("[connector]");
+    expect(published).toContain("get_agreement");
     for (const mark of ["[person]", "[org]", "[email]", "[ticket]", "[ticket text]", "[path]", "[host]", "[ip]", "[phone]", "[id]", "[domain]", "[handle]", "[name]"]) {
       expect(published).toContain(mark);
     }
@@ -318,42 +351,7 @@ describe("the Feedback bot of older versions is retired (#3299)", () => {
   });
 });
 
-describe("frustration offer", () => {
-  it("offers a pre-drafted report on frustration once per conversation, sent in one click", async () => {
-    const { service, store, calls } = setup({ token: "server-token" });
-    service.maybeOffer({ botId: "b-main", threadId: "t-main", text: "ça marche toujours pas, tabarnak", principalId: "p1" });
-    const offer = thread(store).at(-1)!;
-    expect(offer.feedback?.step).toBe("offer");
-    expect(offer.card?.options).toEqual(["Envoyer le signalement", "Non merci"]);
-    service.maybeOffer({ botId: "b-main", threadId: "t-main", text: "fuck", principalId: "p1" });
-    expect(thread(store).filter((message) => message.feedback?.step === "offer")).toHaveLength(1);
-    store.appendMessage("t-main", { role: "bot", kind: "text", text: "Désolé, je regarde." });
-    expect(say(service, "Envoyer le signalement")).not.toBeNull();
-    await service.flush();
-    expect(calls.some((call) => call.method === "POST" && call.url.endsWith("/issues"))).toBe(true);
-    service.maybeOffer({ botId: "b-main", threadId: "t-other", text: "Merci, parfait", principalId: "p1" });
-    expect(store.threads.get("t-other")).toBeUndefined();
-  });
-
-  it("never offers the card on a near-duplicate prompt, nor without a token (#3218)", () => {
-    const withToken = setup({ token: "server-token" });
-    withToken.store.appendMessage("t-main", { role: "user", kind: "text", text: "Combien de billets ouverts sur le tableau IT Ops presentement?" });
-    withToken.service.maybeOffer({ botId: "b-main", threadId: "t-main", text: "Combien de billets ouverts sur le tableau IT Ops présentement ?", principalId: "p1" });
-    expect(thread(withToken.store).filter((message) => message.feedback?.step === "offer")).toHaveLength(0);
-    const without = setup();
-    without.service.maybeOffer({ botId: "b-main", threadId: "t-main", text: "ça marche toujours pas, tabarnak", principalId: "p1" });
-    expect(thread(without.store).filter((message) => message.feedback?.step === "offer")).toHaveLength(0);
-  });
-
-  it("words the offer in the conversation's language, then the app's", () => {
-    const english = setup({ token: "t", language: () => "en-US" });
-    english.service.maybeOffer({ botId: "b-main", threadId: "t-main", text: "this is still not working and I am angry, damn", principalId: "p1" });
-    expect(thread(english.store).at(-1)!.card?.title).toBe("Looks like something isn't working.");
-    const mixed = setup({ token: "t", language: () => "en-US" });
-    mixed.service.maybeOffer({ botId: "b-main", threadId: "t-main", text: "ça marche toujours pas, tabarnak", principalId: "p1" });
-    expect(thread(mixed.store).at(-1)!.card?.title).toBe("On dirait que quelque chose ne marche pas.");
-  });
-
+describe("the language of a /feedback report", () => {
   it("guesses from the words only when the person's language is unknown", () => {
     expect(feedbackLanguageFor("", "ça marche pas")).toBe("fr");
     expect(feedbackLanguageFor(undefined, "it broke again")).toBe("en");
@@ -378,6 +376,19 @@ describe("feedback cards never stay pending once their source is dead (#3018)", 
     say(service, "/feedback the routine list never loads at all");
     say(service, "Cancel");
     expect(open(thread(store))).toEqual([]);
+  });
+
+  it("retires a report card older versions offered on their own, and it files nothing (#3299)", async () => {
+    const legacy = { id: "fbold", owner: "p1", botId: "b-main", threadId: "t-main", lang: "fr", createdAt: 1, updatedAt: Date.now(), status: "draft", said: "ça marche pas", context: { source: "offer" }, offer: true };
+    const { service, store, calls } = setup({ token: "server-token", records: [legacy] });
+    store.appendMessage("t-main", { role: "bot", kind: "options", feedback: { step: "offer", reportId: "fbold" }, card: { title: "On dirait que quelque chose ne marche pas.", subtitle: "", options: ["Envoyer le signalement", "Non merci"], requestId: "fb-fbold-offer-1", requestType: "question" } } as Omit<StoredMessage, "id" | "at">);
+    // its old option, typed or clicked, opens nothing and sends nothing
+    expect(say(service, "Envoyer le signalement")).toBeNull();
+    await service.flush();
+    expect(calls.filter((call) => call.method === "POST")).toEqual([]);
+    await service.tick();
+    expect(open(thread(store))).toEqual([]);
+    expect(service.list("p1")).toEqual([]);
   });
 
   it("sweeps cards left behind by older versions and expires untouched drafts", async () => {

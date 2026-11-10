@@ -686,8 +686,6 @@ async function handleBotMessagePost(deps: BotsMessagesRouteDeps, ctx: RouteConte
     }
     // a correction into the running turn (steer, queued into it) counts for Prompter
     recordMastery(masterySendFacts({ threadId, text, steered: busyMode === "steer" && (receipt as { queued?: unknown }).queued === true }, person));
-    // #2618: one ready-made report offered when the person sounds frustrated
-    if (feedback && !guarded && !pressed && !voiceCall) feedback.maybeOffer({ botId: bot.id, threadId, text, principalId: person || null });
     return json(res, 202, receipt);
   }
   return PASS;

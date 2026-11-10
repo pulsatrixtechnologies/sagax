@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anonymize, anonymizeLines, anonymizeWords, maskUnknownNames } from "./anonymize.ts";
+import { anonymize, anonymizeLines, anonymizeTechnical, anonymizeToolName, anonymizeWords, maskUnknownNames } from "./anonymize.ts";
 
 const NAMES = {
   people: ["Alexandra Tremblay", "Jordan"],
@@ -91,5 +91,24 @@ describe("feedback anonymizer", () => {
   it("keeps ordinary words, products and technical terms in free text (#3299)", () => {
     const text = "Show the open routines for this week. I expected the Outlook calendar on macOS but the API returns JSON with HTTP 500. Don't retry. C'est l'écran Réglages qui gèle, j'ai essayé deux fois.";
     expect(maskUnknownNames(text)).toBe(text);
+  });
+
+  it("masks the name after a cue, past its linking words (#3299)", () => {
+    expect(anonymizeWords("mon client s'appelle desjardins", {})).toBe("mon client s'appelle [name]");
+    expect(anonymizeWords("le client qui se nomme fabrikam a appelé", {})).toBe("le client qui se nomme [name] a appelé");
+    expect(anonymizeWords("the client is wingtip", {})).toBe("the client is [name]");
+  });
+
+  it("masks names with no quotes in errors and logs, and keeps the code words (#3299)", () => {
+    expect(anonymizeTechnical("No agreement found for company Northwind Traders (contact Bob Tremblay)", {})).toBe("No agreement found for company [name] (contact [name])");
+    expect(anonymizeLines(["warn [connectors] company Fabrikam Inc has no site; user Jean Dupont"], {}, 5)[0]).not.toMatch(/Fabrikam|Jean|Dupont/);
+    expect(anonymizeLines(["render failed for Alice Smith"], {}, 5)).toEqual(["render failed for [name]"]);
+    expect(anonymizeTechnical("TypeError: cannot read ENOENT from fetch", {})).toBe("TypeError: cannot read ENOENT from fetch");
+  });
+
+  it("masks a connector's name inside an MCP tool name (#3299)", () => {
+    expect(anonymizeToolName("mcp__northwind_crm__get_agreement", {})).toBe("mcp__[connector]__get_agreement");
+    expect(anonymizeToolName("fabrikam.list_sites", {})).toBe("[connector].list_sites");
+    expect(anonymizeToolName("routines_list", {})).toBe("routines_list");
   });
 });

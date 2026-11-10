@@ -8,7 +8,7 @@
 // the anonymizer. Pictures never leave: an image the person attached is only
 // counted, since a picture cannot be anonymized.
 import { FEEDBACK_KIND_LABEL, FEEDBACK_LABEL, FEEDBACK_UNTRIAGED_LABEL, type FeedbackKind, type FeedbackPlatform, type FeedbackSource } from "../../shared/feedback.ts";
-import { anonymize, anonymizeLines, anonymizeWords, maskUnknownNames, type AnonymizeNames } from "./anonymize.ts";
+import { anonymize, anonymizeLines, anonymizeTechnical, anonymizeToolName, anonymizeWords, maskUnknownNames, type AnonymizeNames } from "./anonymize.ts";
 import type { ChatFacts } from "./chat-facts.ts";
 import { parseKind, type FeedbackAnswers } from "./flow.ts";
 
@@ -35,8 +35,6 @@ export interface ReportContext {
   model?: string;
   /** What the chat /feedback was typed in says (chat-facts.ts). */
   chat?: ChatFacts;
-  /** Why a bot offered the report (frustration signal), when it did. */
-  signal?: string;
 }
 
 export interface FiledReport {
@@ -101,12 +99,6 @@ function quote(text: string): string {
 
 function fenced(lines: readonly string[]): string {
   return ["```text", ...lines.map((line) => line.replace(/```/g, "'''")), "```"].join("\n");
-}
-
-const QUOTED = /("[^"\n]*"|'[^'\n]{2,}'|«[^»\n]*»|“[^”\n]*”)/g;
-
-function maskQuoted(line: string): string {
-  return line.replace(QUOTED, (part) => maskUnknownNames(part));
 }
 
 const PLATFORM_WORD: Record<FeedbackPlatform, string> = { desktop: "the desktop app", ios: "the iOS app", web: "the web app" };
@@ -177,9 +169,9 @@ export function buildReport(answers: FeedbackAnswers, context: ReportContext, na
   const chat = context.chat;
   const asks = (chat?.asks ?? []).map(cleanWords).filter(Boolean);
   const error = context.error?.trim() || chat?.error?.trim() || "";
-  // an error quotes the record it failed on ('Company "X" not found'): the
-  // quoted part loses its proper nouns, the error's own words stay
-  const errorLines = error ? anonymizeLines(error.split("\n"), names, 30).map(maskQuoted) : [];
+  // an error names the record it failed on, quoted or not ('No agreement for
+  // company Northwind Traders'): its proper nouns go, its code words stay
+  const errorLines = error ? anonymizeLines(error.split("\n"), names, 30) : [];
   const pageName = context.page && context.page !== "unknown" ? oneLine(clean(context.page)) : "";
   const surface = context.platform ? PLATFORM_WORD[context.platform] : undefined;
   const engine = context.engine ? oneLine(clean(context.engine)) : undefined;
@@ -231,8 +223,8 @@ export function buildReport(answers: FeedbackAnswers, context: ReportContext, na
     `| Model | ${cell(model)} |`,
     ...(turnId ? [`| Turn id | ${turnId} |`] : []),
     ...(requestIds.length ? [`| Request ids | ${requestIds.join(", ")} |`] : []),
-    ...(chat?.failedTools.length ? [`| Failed tool calls | ${cell(chat.failedTools.map((name) => clean(name)).join(", "))} |`] : []),
-    `| Opened from | ${context.source === "slash" ? "/feedback" : context.source}${context.signal ? ` (${context.signal})` : ""} |`,
+    ...(chat?.failedTools.length ? [`| Failed tool calls | ${cell(chat.failedTools.map((name) => anonymizeToolName(name, names)).join(", "))} |`] : []),
+    `| Opened from | ${context.source === "slash" ? "/feedback" : context.source} |`,
   ].join("\n"));
   if (errorLines.length) sections.push(`## Error\n\n${fenced(errorLines)}`);
   if (context.serverLines?.length) sections.push(`## Server log\n\nRecent warnings and errors, anonymized.\n\n${fenced(anonymizeLines(context.serverLines, names, 40))}`);
@@ -243,10 +235,10 @@ export function buildReport(answers: FeedbackAnswers, context: ReportContext, na
       "",
       "| Span | Duration | Status |",
       "|---|---|---|",
-      ...context.spans.slice(-20).map((span) => `| ${cell(clean(span.name))} | ${Math.round(span.ms)} ms | ${span.ok ? "ok" : "error"} |`),
+      ...context.spans.slice(-20).map((span) => `| ${cell(anonymizeTechnical(span.name, names))} | ${Math.round(span.ms)} ms | ${span.ok ? "ok" : "error"} |`),
     ].join("\n"));
   }
-  sections.push("---\n_Filed with /feedback in Sagax. Names of people, organizations, clients, bots and computers (including proper nouns in the person's words and requests), tickets, addresses, ids, paths and secrets are replaced by neutral words on the server before filing._");
+  sections.push("---\n_Filed with /feedback in Sagax. Names of people, organizations, clients, bots, connectors and computers (including proper nouns in the person's words, requests, errors and logs), tickets, addresses, ids, paths and secrets are replaced by neutral words on the server before filing._");
   return {
     title: reportTitle(kind, point, pageName || undefined),
     body: sections.join("\n\n"),

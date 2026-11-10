@@ -112,6 +112,8 @@ monday tuesday wednesday thursday friday saturday sunday january february march 
 ajoute ajouter annule appelle cherche clique corrige crée créer donne écris efface enlève envoie envoyer essaie explique ferme fais faire installe lance lis liste met mets montre ouvre partage peux-tu pouvez-vous redémarre regarde remplace renomme répare réponds résume sauvegarde supprime trouve vérifie
 erreur avertissement problème idée attendu résultat étape étapes contexte page chat réglages paramètres compte équipe groupe fenêtre écran bouton tâche tâches routine outil outils modèle moteur demande billet
 lundi mardi mercredi jeudi vendredi samedi dimanche janvier février mars avril mai juin juillet août septembre octobre novembre décembre
+failed fail fails company companies organization organizations customer customers board boards reach reached failure cannot unable invalid unexpected unknown missing required timeout timed refused denied unauthorized forbidden found retry retrying retried connection connect connected disconnected requests response responses status rate limit limited quota exceeded internal bad gateway service unavailable overloaded provider driver session user users contact agreement site render rendered loading loaded fetch fetched parse parsing syntax type reference range uncaught unhandled promise rejection exception stack trace warn info debug fatal err get post put patch head options true false null undefined nan object array string number function cause caused reading properties property access network offline abort aborted cancelled canceled closed done started starting stopped completed complete success returned return got received sent sending permission permissions scope scopes expired revoked login logout auth authentication authorization signed client socket stream handshake certificate host port proxy redirect empty ignored skipped queued pending running blocked denied duplicate conflict gone payload body header headers value key field method path query invalid timeout
+échec échoué impossible introuvable invalide inconnu inconnue manquant manquante refusé refusée délai expiré expirée
 `.split(/\s+/).filter(Boolean));
 
 /** Products, platforms and technical words a report may name as they are. */
@@ -125,7 +127,7 @@ utf ascii regex cron webhook webhooks token tokens oauth2 ipv4 ipv6 vm vms ec2 s
 `.split(/\s+/).filter(Boolean));
 
 /** Words that announce a client or company named next, in lower case. */
-const NAMES_NEXT = /(?<![\p{L}\p{N}])(client|cliente|clients|customer|customers|company|compagnie|entreprise|organisation|organization|org|chez|firme|employer|employeur|tenant)(\s*:?\s+)(?!\[)([\p{L}][\p{L}\p{N}&'’.-]*)/giu;
+const NAMES_NEXT = /(?<![\p{L}\p{N}])(client|cliente|clients|customer|customers|company|compagnie|entreprise|organisation|organization|org|chez|firme|employer|employeur|tenant|user|utilisateur|utilisatrice|contact|member|membre)(\s*:?\s+(?:(?:qui\s+)?(?:s['’]appelle|se\s+nomme|nommée?|appelée?|named|called|is|est|was|était)\s+)?)(?!\[)([\p{L}][\p{L}\p{N}&'’.-]*)/giu;
 
 /** One capitalized word: an initial capital, then letters, digits, an
  * apostrophe or a hyphen inside (O'Neil, Jean-Pierre, D'Amours). */
@@ -137,8 +139,18 @@ function isKnownWord(word: string): boolean {
   return COMMON_WORDS.has(lower) || TECH_TERMS.has(lower) || TECH_TERMS.has(lower.replace(/s$/, ""));
 }
 
-/** Masks names the server cannot know: proper nouns in free text. */
-export function maskUnknownNames(text: string): string {
+/** A code word of an error or a log line: a class name whose last part is
+ * an ordinary word (TypeError, AbortSignal, NotFound), or an errno (ENOENT).
+ * A name in camel case (McDonald, NorthWind) ends in no known word. */
+function isCodeWord(word: string): boolean {
+  if (/^E[A-Z]{3,}$/.test(word)) return true;
+  const parts = /^\p{Lu}[\p{Ll}\p{N}]+(?:\p{Lu}[\p{Ll}\p{N}]*)+$/u.test(word) ? word.split(/(?=\p{Lu})/u) : null;
+  return Boolean(parts && parts.length >= 2 && isKnownWord(parts.at(-1)!));
+}
+
+/** Masks names the server cannot know: proper nouns in free text. With
+ * `technical` (an error, a log line), code words stay as they are. */
+export function maskUnknownNames(text: string, options: { technical?: boolean } = {}): string {
   if (!text) return "";
   let out = text.replace(CAP_WORD, (word: string) => {
     const elided = ELISION.exec(word);
@@ -148,6 +160,7 @@ export function maskUnknownNames(text: string): string {
     }
     // a word cut by a hyphen (Jean-Pierre, Wi-Fi) is known when the whole is
     if (isKnownWord(word) || word.split(/[-'’]/).every((part) => isKnownWord(part))) return word;
+    if (options.technical && isCodeWord(word)) return word;
     // a single capital letter (a list item, "A") and "I" stay
     if (word.length === 1) return word;
     // a code-like word with digits (H264, P50) stays
@@ -168,10 +181,35 @@ export function anonymizeWords(text: string, names: AnonymizeNames): string {
   return maskUnknownNames(anonymize(text, names));
 }
 
-/** The last `max` lines, each anonymized and cut to 400 characters. */
+/** An error or a log line, safe for a public issue (#3299): every mark of
+ * anonymize(), then the proper nouns the server does not know. An error names
+ * the record it failed on as it is ("No agreement for company Northwind
+ * Traders"), so the names go wherever they stand, not only between quotes;
+ * the code words of the line (TypeError, ENOENT, GET) stay. */
+export function anonymizeTechnical(text: string, names: AnonymizeNames): string {
+  return maskUnknownNames(anonymize(text, names), { technical: true });
+}
+
+/** The last `max` lines, each anonymized (anonymizeTechnical) and cut to 400 characters. */
 export function anonymizeLines(lines: readonly string[], names: AnonymizeNames, max = 40): string[] {
   return lines.slice(-max).map((line) => {
-    const clean = anonymize(String(line), names).replace(/\s+/g, " ").trim();
+    const clean = anonymizeTechnical(String(line), names).replace(/\s+/g, " ").trim();
     return clean.length > 400 ? `${clean.slice(0, 399)}…` : clean;
   });
+}
+
+/** A failed tool's name, safe for a public issue (#3299). A connector's tool
+ * carries the connector's name (mcp__<connector>__<tool>, <connector>.<tool>,
+ * <connector>:<tool>), which may be a client's or a person's: that part
+ * becomes [connector] unless each of its words is a known product or
+ * technical word. The tool's own name stays. */
+export function anonymizeToolName(name: string, names: AnonymizeNames): string {
+  const known = (part: string) => part.split(/[_-]+/).filter(Boolean).every((word) => isKnownWord(word));
+  const mcp = /^(mcp__)(.+?)(__.+)$/i.exec(name);
+  const split = mcp ? [mcp[1]!, mcp[2]!, mcp[3]!] : (() => {
+    const at = /^([^.:]+)([.:].+)$/.exec(name);
+    return at ? ["", at[1]!, at[2]!] : null;
+  })();
+  const masked = split ? `${split[0]}${known(split[1]) ? split[1] : "[connector]"}${split[2]}` : name;
+  return anonymizeTechnical(masked, names);
 }

@@ -35,7 +35,7 @@ export interface FlowMessage {
 }
 
 export interface FeedbackAnswers {
-  /** The words typed after /feedback, or the frustrated message an offer quotes. */
+  /** The words typed after /feedback. */
   said: string;
   /** The answer to the one question, when it was asked. */
   detail?: string;
@@ -53,34 +53,11 @@ export const SEND_OPTIONS: Record<FeedbackLanguage, [string, string]> = {
   fr: ["Envoyer", "Annuler"],
   en: ["Send", "Cancel"],
 };
-export const OFFER_OPTIONS: Record<FeedbackLanguage, [string, string]> = {
-  fr: ["Envoyer le signalement", "Non merci"],
-  en: ["Send the report", "No thanks"],
-};
-
-const OFFER_WORDS: Record<FeedbackLanguage, { title: string; subtitle: (summary: string) => string }> = {
-  fr: {
-    title: "On dirait que quelque chose ne marche pas.",
-    subtitle: (summary) => `Je peux envoyer un signalement à l'équipe avec ce message, la version et les journaux récents, anonymisés :\n\n« ${summary} »`,
-  },
-  en: {
-    title: "Looks like something isn't working.",
-    subtitle: (summary) => `I can send a report to the team with this message, the version and recent logs, anonymized:\n\n"${summary}"`,
-  },
-};
-
-/** The ready-made report offered after a frustrated message, in the
- * person's language (the app gallery shows it too). */
-export function offerCard(lang: FeedbackLanguage, summary: string): FlowCard {
-  const words = OFFER_WORDS[lang];
-  return { title: words.title, subtitle: words.subtitle(summary), options: [...OFFER_OPTIONS[lang]] };
-}
-
 const DETAIL_QUESTION: Record<FeedbackLanguage, string> = {
   fr: "Qu'est-ce qui s'est passé, et qu'est-ce que tu attendais à la place? Une phrase suffit.",
   en: "What happened, and what did you expect instead? One sentence is enough.",
 };
-const ANSWER_STEPS = new Set<FeedbackStep>(["detail", "preview", "offer"]);
+const ANSWER_STEPS = new Set<FeedbackStep>(["detail", "preview"]);
 
 /** The kind the person's words point to: a bug unless they read as an
  * idea or a question. */
@@ -131,7 +108,7 @@ export function feedbackAnswers(messages: readonly FlowMessage[], reportId: stri
     const text = (message.text ?? "").trim();
     if (!marker || !text) continue;
     if (marker.step === "detail") answers.detail = answers.detail ? `${answers.detail}\n${text}` : text;
-    else if (marker.step === "preview" || marker.step === "offer") {
+    else if (marker.step === "preview") {
       if (!isSendOption(text, true) && !isCancelOption(text, true)) answers.extra = [...(answers.extra ?? []), text];
     }
     asked = null;
@@ -159,14 +136,14 @@ const NEGATIONS = new Set(["pas", "ne", "n", "not", "dont", "don", "jamais", "ne
  * only at the preview question) a short free confirmation such as "Oui,
  * envoie-le", "go" or "send it". Anything longer is a detail to add. */
 export function isSendOption(text: string, loose = false): boolean {
-  if ([SEND_OPTIONS.fr[0], SEND_OPTIONS.en[0], OFFER_OPTIONS.fr[0], OFFER_OPTIONS.en[0]].includes(text.trim())) return true;
+  if ([SEND_OPTIONS.fr[0], SEND_OPTIONS.en[0]].includes(text.trim())) return true;
   if (!loose) return false;
   const tokens = words(text);
   return tokens.length > 0 && tokens.length <= 5 && tokens.some((token) => SEND_WORDS.has(token)) && !tokens.some((token) => NEGATIONS.has(token));
 }
 
 export function isCancelOption(text: string, loose = false): boolean {
-  if ([SEND_OPTIONS.fr[1], SEND_OPTIONS.en[1], OFFER_OPTIONS.fr[1], OFFER_OPTIONS.en[1]].includes(text.trim())) return true;
+  if ([SEND_OPTIONS.fr[1], SEND_OPTIONS.en[1]].includes(text.trim())) return true;
   if (!loose) return false;
   const tokens = words(text);
   if (tokens.length === 0 || tokens.length > 5) return false;

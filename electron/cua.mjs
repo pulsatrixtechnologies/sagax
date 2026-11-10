@@ -23,9 +23,11 @@ import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import fs from "node:fs";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import localOriginModule from "./local-origin.cjs";
+import { createHelperRestarts, followLinuxConnection } from "./cua-restart.mjs";
 
 // Local control answers only the local server's UI (electron/local-origin.cjs).
 const { localOnly } = localOriginModule;
@@ -62,6 +64,7 @@ const WIN_INSTALLED_DRIVERS = [
   path.join(app.getPath("home"), "AppData", "Local", "Programs", "CuaDriver", "cua-driver.exe"),
 ];
 let embeddedHost = null; // EmbeddedCuaDriverHost | null
+let embeddedGeneration = null;
 let startupAbort = null;
 let lifecycleGeneration = 0;
 let macRetry = null;
@@ -70,6 +73,24 @@ let linuxBundleStage = null;
 let stateListener = () => {};
 const connectionStore = createCuaConnectionStore({
   getUserData: () => app.getPath("userData"),
+});
+
+/** A start that failed for a reason only the person can fix (a missing helper, a permission to grant): restarting it
+ * again by itself would only repeat the same reason. */
+function needsPerson(reason) {
+  return /binary not found|required; grant access|missing; reinstall/i.test(String(reason ?? ""));
+}
+
+const helperRestarts = createHelperRestarts({
+  restart: async () => {
+    if (process.platform === "linux") return (await ensureLinuxRuntime().retry())?.status === "ready";
+    const connection = await startCua();
+    if (connection?.mode === "embedded" || connection?.mode === "standalone") return true;
+    return needsPerson(connection?.reason) ? "needs-person" : false;
+  },
+  // Linux already published its own unavailable record: a legacy-shaped one would not fit its schema.
+  report: (reason) => { if (process.platform !== "linux") persistAndNotify({ mode: "unavailable", reason }); },
+  log: (line) => console.error(`[cua] ${line}`),
 });
 
 function ensureLinuxRuntime() {
@@ -106,7 +127,10 @@ function ensureLinuxRuntime() {
         getUserData: () => app.getPath("userData"),
         connectionStore,
         bundledDriverPath,
-        onChange: (connection) => stateListener(connection),
+        onChange: (connection) => {
+          stateListener(connection);
+          followLinuxConnection(helperRestarts, connection);
+        },
       });
     } catch (error) {
       console.error("[cua] Bundled Linux driver failed integrity validation:", error);
@@ -235,6 +259,14 @@ async function attachStandalone(signal) {
   };
 }
 
+/** One socket per app run: the SDK's default has the start's random id in it, and a bridge that outlives a restart of
+ * the helper keeps pointing at this one. */
+function embeddedSocketPath() {
+  if (process.platform === "win32") return `\\\\.\\pipe\\cua-sagax-${process.pid}`;
+  const preferred = path.join(os.tmpdir(), `cua-sagax-${process.pid}.sock`);
+  return preferred.length < 100 ? preferred : `/tmp/cua-sagax-${process.pid}.sock`;
+}
+
 async function startEmbedded(binary, signal) {
   // Import from the staged Resources tree in production. The app intentionally
   // excludes general node_modules, so a bare package import only works in dev.
@@ -254,11 +286,23 @@ async function startEmbedded(binary, signal) {
     }
   }
   // The native SDK owns the child lifecycle but exposes no windowsHide option.
-  const host = new sdk.EmbeddedCuaDriverHost(resolveEmbeddedDriverBinary(binary), HOST_BUNDLE_ID);
+  const host = sdk.EmbeddedCuaDriverHost.withOptions({
+    binaryPath: resolveEmbeddedDriverBinary(binary),
+    hostBundleId: HOST_BUNDLE_ID,
+    socketPath: embeddedSocketPath(),
+    approveCapabilityManifest: false,
+    approveSessionPolicy: false,
+    dangerouslyBypassApprovals: false,
+    environment: [],
+    inheritStderr: true,
+    noOverlay: false,
+    captureStderr: false,
+  });
   try {
     const conn = await host.start({ signal });
     signal.throwIfAborted();
     embeddedHost = host;
+    embeddedGeneration = conn.generation;
     return {
       mode: "embedded",
       socketPath: conn.socketPath,
@@ -336,7 +380,27 @@ export async function startCua() {
   }
 
   signal.throwIfAborted();
+  if (nextConnection.mode === "embedded") watchEmbeddedHost(embeddedHost, embeddedGeneration);
+  if (nextConnection.mode === "embedded" || nextConnection.mode === "standalone") helperRestarts.started();
   return persistAndNotify(nextConnection);
+}
+
+/** The helper can die while the app runs (a crash in the driver): it is started again by itself, and readiness says it
+ * is down meanwhile. */
+function watchEmbeddedHost(host, generation) {
+  if (!host || typeof host.waitForExit !== "function") return;
+  const gone = (detail) => {
+    // An exit the app asked for is not a crash: stopCua forgets the host first.
+    if (host !== embeddedHost) return;
+    embeddedHost = null;
+    embeddedGeneration = null;
+    void host.stop().catch(() => {}).finally(() => host.uniffiDestroy?.());
+    helperRestarts.exited(detail);
+  };
+  void host.waitForExit(generation).then(
+    (exit) => gone(`code ${exit?.code ?? "none"}`),
+    (error) => gone(error?.message ?? String(error)),
+  );
 }
 
 export async function cuaPermissionsStatus() {
@@ -357,6 +421,7 @@ export async function cuaPermissionsStatus() {
 }
 
 export async function stopCua() {
+  helperRestarts.reset();
   lifecycleGeneration++;
   startupAbort?.abort();
   startupAbort = null;
@@ -370,6 +435,7 @@ export async function stopCua() {
   }
   const host = embeddedHost;
   embeddedHost = null;
+  embeddedGeneration = null;
   if (host) {
     try {
       await host.stop();
@@ -395,6 +461,7 @@ export function registerCuaIpc() {
     if (process.platform !== "linux") {
       return { enabled: false, status: "unavailable", reasonCode: "unsupported-platform" };
     }
+    helperRestarts.reset();
     try {
       await ensureLinuxRuntime().enable();
     } catch (error) {
@@ -406,6 +473,7 @@ export function registerCuaIpc() {
     if (process.platform !== "linux") {
       return { enabled: false, status: "unavailable", reasonCode: "unsupported-platform" };
     }
+    helperRestarts.reset();
     try {
       await ensureLinuxRuntime().disable();
     } catch (error) {
@@ -447,6 +515,7 @@ export function registerCuaIpc() {
     if (process.platform !== "linux") {
       return { enabled: false, status: "unavailable", reasonCode: "unsupported-platform" };
     }
+    helperRestarts.reset();
     try {
       await ensureLinuxRuntime().retry();
     } catch (error) {

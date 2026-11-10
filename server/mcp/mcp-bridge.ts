@@ -146,6 +146,27 @@ export interface BridgeOptions {
   /** A last look at each whole frame from the child before it reaches the
    * agent (local-computer-guidance.ts). Absent: frames pass as they are. */
   rewriteResponse?: (line: string) => string;
+  /** The child can die and come back behind this bridge (the app restarts the
+   * driver's helper), so the agent's connection stays up: calls that were
+   * waiting are answered with `stopped`, and the next call starts a new child
+   * past the same initialize handshake. Absent: the bridge ends with its child. */
+  respawn?: { stopped: string };
+}
+
+/** How long a call waits, in steps, for a dead child to come back before the
+ * agent is told it stopped. */
+const RESPAWN_WAITS_MS = [0, 500, 1_500, 3_000];
+const RESPAWN_INITIALIZE_MS = 5_000;
+const OWN_ID = "sagax-bridge-";
+
+/** The answer a request gets when the child it was sent to is gone: a tool
+ * call ends as a failed tool result the model can read, anything else as a
+ * JSON-RPC error. A notification gets nothing. */
+export function stoppedAnswer(frame: { id?: unknown; method?: unknown }, text: string): string | null {
+  if (frame.id === undefined || frame.id === null) return null;
+  return JSON.stringify(frame.method === "tools/call"
+    ? { jsonrpc: "2.0", id: frame.id, result: { content: [{ type: "text", text }], isError: true } }
+    : { jsonrpc: "2.0", id: frame.id, error: { code: -32000, message: text } });
 }
 
 /** Collect a byte stream into complete newline-terminated lines. MCP's
@@ -263,22 +284,122 @@ export function createMcpBridgeInterceptor(
 export function runMcpBridge(options: BridgeOptions): void {
   const env = options.env ?? { ...process.env, PATH: augmentedPath() };
   const { command, args } = resolveCliSpawn(options.command, options.args, env);
-  const child = spawn(command, args, {
-    shell: false,
-    env,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-
-  // docker may exit before it drains stdin; pipe() leaves this error unhandled.
-  child.stdin.on("error", () => {});
-  child.stderr.pipe(process.stderr);
+  const respawn = options.respawn;
+  const spawnChild = () => {
+    const proc = spawn(command, args, {
+      shell: false,
+      env,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    // docker may exit before it drains stdin; pipe() leaves this error unhandled.
+    proc.stdin.on("error", () => {});
+    proc.stderr.pipe(process.stderr, { end: false });
+    return proc;
+  };
+  let child = spawnChild();
 
   const client = options.gate
     ? createControlClient({ url: options.gate.url, token: options.gate.token })
     : null;
 
   const answer = (line: string) => process.stdout.write(line + "\n");
-  const forward = (line: string) => child.stdin.write(line + "\n");
+
+  // Respawn bookkeeping: the agent's initialize (replayed to a new child), and
+  // the requests a child has not answered yet (answered for it if it dies).
+  let childGone = false;
+  let stopping = false;
+  let revival: Promise<boolean> | null = null;
+  let initializeParams: unknown;
+  const waitingOnChild = new Map<string, { id: unknown; method: unknown }>();
+  const parseFrame = (line: string): any => {
+    try {
+      return JSON.parse(line);
+    } catch {
+      return null;
+    }
+  };
+  const noteRequest = (frame: any) => {
+    if (frame?.method === "initialize") initializeParams = frame.params;
+    if (frame?.id !== undefined && frame.id !== null && frame.method) {
+      waitingOnChild.set(JSON.stringify(frame.id), { id: frame.id, method: frame.method });
+    }
+  };
+  const noteResponse = (line: string) => {
+    if (waitingOnChild.size === 0) return;
+    const id = parseFrame(line)?.id;
+    if (id !== undefined) waitingOnChild.delete(JSON.stringify(id));
+  };
+  const answerStopped = (frame: { id?: unknown; method?: unknown }) => {
+    const line = stoppedAnswer(frame, respawn!.stopped);
+    if (line) answer(line);
+  };
+
+  /** A new child past its initialize handshake (the driver's proxy refuses
+   * calls before it), or false when it did not come up in time. */
+  const startChild = () => new Promise<boolean>((resolve) => {
+    const proc = spawnChild();
+    const handshake = `${OWN_ID}init-${Date.now()}`;
+    let settled = false;
+    const finish = (up: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (!up) proc.kill("SIGKILL");
+      resolve(up);
+    };
+    const timer = setTimeout(() => finish(false), RESPAWN_INITIALIZE_MS);
+    timer.unref?.();
+    const adopt = () => {
+      child = proc;
+      childGone = false;
+      watchChild(proc);
+      finish(true);
+    };
+    proc.once("error", () => finish(false));
+    proc.once("close", () => finish(false));
+    wireChildOutput(proc, (line) => {
+      if (settled || !line.includes(handshake)) return false;
+      proc.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
+      adopt();
+      return true;
+    });
+    if (initializeParams === undefined) {
+      adopt();
+      return;
+    }
+    proc.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: handshake, method: "initialize", params: initializeParams }) + "\n");
+  });
+  const reviveChild = async () => {
+    for (const wait of RESPAWN_WAITS_MS) {
+      await new Promise((settle) => setTimeout(settle, wait));
+      if (await startChild()) return true;
+    }
+    return false;
+  };
+  /** Waits for a dead child to come back. Frames are sent one at a time, so
+   * at most one revival runs. */
+  const childAlive = () =>
+    childGone ? (revival ??= reviveChild().finally(() => { revival = null; })) : Promise.resolve(true);
+
+  const send = async (line: string) => {
+    const frame = parseFrame(line);
+    if (!(await childAlive())) {
+      if (frame) answerStopped(frame);
+      return;
+    }
+    noteRequest(frame);
+    child.stdin.write(line + "\n");
+  };
+  let sending: Promise<void> = Promise.resolve();
+  const forward = (line: string): void | Promise<void> => {
+    if (!respawn) {
+      child.stdin.write(line + "\n");
+      return;
+    }
+    // In order: a frame waits for the one before it, and for a revival.
+    sending = sending.then(() => send(line)).catch(reportBackgroundError);
+    return sending;
+  };
   const intercept = createMcpBridgeInterceptor({
     answer,
     forward,
@@ -298,16 +419,23 @@ export function runMcpBridge(options: BridgeOptions): void {
     inbound.flush();
     // A final tools/call can still be awaiting the control endpoint. Do not
     // close the far end before the serialized gate has forwarded it.
-    void pendingInput.finally(() => child.stdin.end()).catch(reportBackgroundError);
+    void Promise.all([pendingInput, sending]).finally(() => child.stdin.end()).catch(reportBackgroundError);
   });
 
   // Injected responses and refusals must never land inside one of the
   // child's half-written frames, so the child's stdout is re-emitted at
   // line granularity as well.
   const rewrite = options.rewriteResponse ?? ((line: string) => line);
-  const outbound = createLineSplitter((line) => process.stdout.write(rewrite(toolLists.rewriteResponse(line)) + "\n"));
-  child.stdout.on("data", (chunk) => outbound.push(chunk));
-  child.stdout.on("end", () => outbound.flush());
+  const wireChildOutput = (proc: typeof child, take: (line: string) => boolean) => {
+    const outbound = createLineSplitter((line) => {
+      if (take(line)) return;
+      if (respawn) noteResponse(line);
+      process.stdout.write(rewrite(toolLists.rewriteResponse(line)) + "\n");
+    });
+    proc.stdout.on("data", (chunk) => outbound.push(chunk));
+    proc.stdout.on("end", () => outbound.flush());
+  };
+  wireChildOutput(child, () => false);
 
   const detach = () => {
     process.stdin.off("data", onStdin);
@@ -341,21 +469,46 @@ export function runMcpBridge(options: BridgeOptions): void {
     child.stderr.on("data", touch);
   }
 
-  child.on("error", (error) => {
-    process.stderr.write(`could not connect to ${options.label}: ${error.message}\n`);
-    process.exitCode = 1;
-    watchdog?.stop();
-    detach();
-  });
-  child.on("close", (code, signal) => {
-    if (signal) process.stderr.write(`${options.label} connection ended with ${signal}\n`);
-    // Let stdout and stderr drain before the bridge exits.
-    process.exitCode = process.exitCode ?? code ?? 1;
-    watchdog?.stop();
-    detach();
-  });
+  /** With respawn, a dead child ends no connection: what it still owed the
+   * agent is answered here, and the next frame starts a new one. */
+  const childLost = (proc: typeof child) => {
+    if (proc !== child || childGone) return;
+    childGone = true;
+    for (const waiting of waitingOnChild.values()) answerStopped(waiting);
+    waitingOnChild.clear();
+    process.stderr.write(`${options.label}: its helper stopped; a new one starts on the next call\n`);
+    if (stopping) detach();
+  };
+  function watchChild(proc: typeof child) {
+    proc.on("error", (error) => {
+      process.stderr.write(`could not connect to ${options.label}: ${error.message}\n`);
+      if (respawn) {
+        childLost(proc);
+        return;
+      }
+      process.exitCode = 1;
+      watchdog?.stop();
+      detach();
+    });
+    proc.on("close", (code, signal) => {
+      if (respawn) {
+        childLost(proc);
+        return;
+      }
+      if (signal) process.stderr.write(`${options.label} connection ended with ${signal}\n`);
+      // Let stdout and stderr drain before the bridge exits.
+      process.exitCode = process.exitCode ?? code ?? 1;
+      watchdog?.stop();
+      detach();
+    });
+  }
+  watchChild(child);
 
   for (const signal of ["SIGTERM", "SIGINT"] as const) {
-    process.on(signal, () => child.kill(signal));
+    process.on(signal, () => {
+      stopping = true;
+      if (childGone) process.exit(0);
+      child.kill(signal);
+    });
   }
 }

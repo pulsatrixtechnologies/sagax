@@ -16,6 +16,7 @@
 
 import { botRecipientAllowed } from "../../shared/allowed-recipients.ts";
 import { newId } from "../contracts.ts";
+import { openCardCandidates } from "../messages/message-db.ts";
 import { standingGrantsAllowed } from "../rules/custom-rules-org.ts";
 import { deliverableNotification, type Notification } from "../notify.ts";
 import { peerAllowKey, type PeerAction } from "./peer-approval-key.ts";
@@ -302,20 +303,23 @@ function peerCardThreads(bus: ApprovalBus): Set<string> {
 
 /** Cards left on disk by a previous run can never be answered  -  their
  * in-memory approval died with the process. Settle them at boot so a
- * crashed run doesn't leave a thread with a permanently blocked composer. */
+ * crashed run doesn't leave a thread with a permanently blocked composer.
+ * The open cards come from an index of the rows that hold one, not from
+ * every transcript: reading and decoding each thread held the event loop
+ * for seconds at each boot of a large server (#3473). */
 export function dismissStalePeerCards(bus: ApprovalBus): number {
+  const threads = peerCardThreads(bus);
   let dismissed = 0;
-  for (const threadId of peerCardThreads(bus)) {
-    for (const message of bus.store.messagesFor(threadId)) {
-      const card = message.card;
-      if (!card?.requestId || card.answered || card.dismissed) continue;
-      if (card.tool !== "ask_bot" && card.tool !== "delegate_bot" && card.tool !== "post_to_room") continue;
-      if (pendingComms.has(card.requestId)) continue;
-      const patched = bus.store.patchMessage(threadId, message.id, {
-        card: { ...card, answered: "deny", dismissed: true },
-      });
-      if (patched) dismissed += 1;
-    }
+  for (const { threadId, message } of openCardCandidates()) {
+    if (!threads.has(threadId)) continue;
+    const card = message.card;
+    if (!card?.requestId || card.answered || card.dismissed) continue;
+    if (card.tool !== "ask_bot" && card.tool !== "delegate_bot" && card.tool !== "post_to_room") continue;
+    if (pendingComms.has(card.requestId)) continue;
+    const patched = bus.store.patchMessage(threadId, message.id, {
+      card: { ...card, answered: "deny", dismissed: true },
+    });
+    if (patched) dismissed += 1;
   }
   return dismissed;
 }

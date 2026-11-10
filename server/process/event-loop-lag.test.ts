@@ -14,6 +14,17 @@ function blockFor(ms: number): void {
   }
 }
 
+function firstLongBlock(ms: number): void {
+  blockFor(ms);
+}
+
+function secondLongBlock(ms: number): void {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    /* a second block, inside the stack cooldown of the first */
+  }
+}
+
 describe("event loop lag monitor", () => {
   it("reports a block over the threshold with the stack it was stuck in", async () => {
     const lines: { level: string; message: string }[] = [];
@@ -31,6 +42,28 @@ describe("event loop lag monitor", () => {
       expect(blocked).toBeGreaterThanOrEqual(1_000);
       // The inspector is there under vitest: the line names the blocking function.
       expect(stall!.message).toContain("blockFor");
+    } finally {
+      stop();
+    }
+  }, 15_000);
+
+  it("reads a stack for every long block, even inside the cooldown (#3473)", async () => {
+    const lines: { level: string; message: string }[] = [];
+    const stop = startEventLoopLagMonitor(
+      { info: (message) => lines.push({ level: "info", message }), warn: (message) => lines.push({ level: "warn", message }) },
+      { reportMs: 60_000, stallMs: 300, longStallMs: 700, stackCooldownMs: 60_000 },
+    );
+    try {
+      await wait(500);
+      firstLongBlock(1_200);
+      await wait(1_200);
+      secondLongBlock(1_200);
+      await wait(1_200);
+      const stalls = lines.filter((line) => line.level === "warn" && line.message.startsWith("[loop-lag] event loop blocked"));
+      expect(stalls).toHaveLength(2);
+      expect(stalls[0].message).toContain("firstLongBlock");
+      expect(stalls[1].message, "the second long block had no stack").toContain("secondLongBlock");
+      expect(stalls[1].message).toMatch(/\(rss \d+ MB, heap \d+ MB\)/);
     } finally {
       stop();
     }

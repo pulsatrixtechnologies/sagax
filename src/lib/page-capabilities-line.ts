@@ -1,11 +1,10 @@
 // What a page version declares it uses (shared/page-capabilities.ts), as one
 // short line on the publication card and in the app's open page (#3413 lot
 // 1b): nothing the page may read is invisible, and a version that adds a
-// capability says so before it is published. The declaration is read from
-// the version's own HTML with the same parser the server uses.
+// capability says so before it is published. The declaration is the
+// server's own reading of that version.
 import { t } from "@/lib/i18n";
-import { pageIsHtml, type PageKind } from "../../shared/published-pages";
-import { pageCapabilitiesAny, pageCapabilitiesOf, type PageCapabilities, type PageDataSource } from "../../shared/page-capabilities";
+import { pageCapabilitiesAny, parsePageCapabilities, type PageCapabilities, type PageDataSource } from "../../shared/page-capabilities";
 
 const SOURCE_WORDS: Record<PageDataSource, () => string> = {
   "team-board": () => t("pages.caps.source.team-board"),
@@ -45,17 +44,16 @@ export function capabilityLine(next: PageCapabilities | null | undefined, publis
 
 const declared = new Map<string, Promise<PageCapabilities | null>>();
 
-/** A version's declaration, from its source (the person's own route; a
- * version never changes, so it is asked once). Null when it has none or
- * cannot be read. */
-export function versionCapabilities(pageId: string, version: number, kind: PageKind | undefined, read: (path: string) => Promise<{ content?: unknown }>): Promise<PageCapabilities | null> {
-  // only an HTML page can declare (the server reads it the same way)
-  if (!kind || !pageIsHtml(kind)) return Promise.resolve(null);
+/** A version's declaration, as the server read it from that version
+ * (GET /api/pages/:id/capabilities?version=n, the page's own person); a
+ * version never changes, so it is asked once. Null when it declares nothing
+ * or cannot be read. */
+export function versionCapabilities(pageId: string, version: number, read: (path: string) => Promise<{ capabilities?: unknown }>): Promise<PageCapabilities | null> {
   const key = `${pageId}:${version}`;
   let found = declared.get(key);
   if (!found) {
-    found = read(`/api/pages/${encodeURIComponent(pageId)}/versions/${version}/source`)
-      .then((answer) => (typeof answer.content === "string" ? pageCapabilitiesOf(answer.content) : null))
+    found = read(`/api/pages/${encodeURIComponent(pageId)}/capabilities?version=${version}`)
+      .then((answer) => parsePageCapabilities(answer.capabilities))
       .catch(() => { declared.delete(key); return null; });
     declared.set(key, found);
   }

@@ -424,7 +424,7 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
     }
   };
   // what the page may ask of Sagax (#3413): the same broker as the reading link's
-  const broker = usePageCapabilityBroker({ pageId, drawn: `${version ?? ""}:${reloads}`, frame: innerFrame });
+  const broker = usePageCapabilityBroker({ pageId, drawn: `${version ?? ""}:${reloads}`, ...(version !== null ? { version } : {}), preview: () => frameRef.current, frame: innerFrame });
   const capsShown = useCapabilityStripVisible(broker);
   useEffect(() => {
     const listen = (event: MessageEvent) => {

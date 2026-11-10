@@ -16,15 +16,20 @@ import { pageCapabilitiesAny } from "../../shared/page-capabilities";
 import { createCapabilityBroker, type CapabilityBroker } from "../page-reader/capabilities";
 
 /** The open page's broker: one per drawn version, listening on this window.
- * `frame` is the page's own frame (inside the preview wrapper). */
-export function usePageCapabilityBroker(input: { pageId: string; drawn: string; frame(): Window | null }): CapabilityBroker {
+ * The page's calls reach this window through the preview wrapper's relay
+ * (PREVIEW_CAP_RELAY_SOURCE): `preview` is that wrapper's iframe, `frame` the
+ * page's own frame inside it (the open-link messages come from there). */
+export function usePageCapabilityBroker(input: { pageId: string; drawn: string; version?: number; preview(): HTMLIFrameElement | null; frame(): Window | null }): CapabilityBroker {
   const { state, dispatch } = useStore();
   // the broker lives as long as the drawn version; it reads the app state as it is when asked
   const here = useRef(state);
   here.current = state;
   const broker = useMemo(() => createCapabilityBroker({
-    frame: input.frame,
-    api: <T,>(path: string) => api<T>(path),
+    frame: () => input.preview()?.contentWindow ?? null,
+    frameOrigin: () => { try { return new URL(input.preview()?.src ?? "", location.href).origin; } catch { return ""; } },
+    openFrame: input.frame,
+    ...(input.version !== undefined ? { version: input.version } : {}),
+    api: <T,>(path: string, init?: { method: "POST"; body: unknown }) => api<T>(path, init ? { method: init.method, body: JSON.stringify(init.body) } : undefined),
     pageId: input.pageId,
     signedIn: true,
     lang: typeof document !== "undefined" && document.documentElement.lang.startsWith("en") ? "en" : "fr",
@@ -36,7 +41,6 @@ export function usePageCapabilityBroker(input: { pageId: string; drawn: string; 
       openBot(dispatch, bot, false);
       return true;
     },
-    allowStore: typeof window === "undefined" ? null : window.localStorage,
   }), [input.pageId, input.drawn, dispatch]);
   useEffect(() => {
     void broker.start();

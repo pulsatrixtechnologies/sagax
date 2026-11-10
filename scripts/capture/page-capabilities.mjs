@@ -70,6 +70,7 @@ document.getElementById("open-other").onclick=()=>sagax.open("https://example.or
 </script></body></html>`;
 
 let askFirst = false;
+let approved = false;
 const boot = { v: 1, lang: "en", title: "Team board", kind: "html", version: 1, pageId: PAGE_ID, me: { id: "pr_ada", name: "Ada" }, owner: { name: "Ada" }, can: { share: true, annotate: true }, bot: { name: "Ember", color: "#4c8dff" } };
 const json = (res, status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
 const server = createServer(async (req, res) => {
@@ -80,9 +81,6 @@ const server = createServer(async (req, res) => {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" }); return res.end(html);
   }
   if (url.pathname === `/pages/frame/${TOKEN}`) {
-    // the bar's script is a deferred module: a page that calls at load needs the broker
-    // already listening, so the frame answers after it (see the PR: the frame's first calls race the module)
-    await new Promise((done) => setTimeout(done, 1200));
     res.writeHead(200, { "content-type": "text/html; charset=utf-8", "content-security-policy": shared.pageCsp("html") });
     return res.end(render.pageDocument({ kind: "html", title: "Team board", content: TEST_PAGE }, { reportSize: true, capabilities: CAPS }));
   }
@@ -95,9 +93,10 @@ const server = createServer(async (req, res) => {
   const base = `/api/pages/${PAGE_ID}`;
   if (url.pathname === `${base}/capabilities`) return json(res, 200, { capabilities: CAPS, reads: [{ name: "team-board", label: "The work of your coding teams" }] });
   if (url.pathname === `${base}/data/team-board`) {
-    if (askFirst && url.searchParams.get("approved") !== "1") return json(res, 409, { error: "Your organization asks you first before this page reads your data.", code: "ask_first" });
+    if (askFirst && !approved) return json(res, 409, { error: "Your organization asks you first before this page reads your data.", code: "ask_first", approvalId: "ap_capture", source: "team-board", version: 1 });
     return json(res, 200, { name: "team-board", at: Date.now(), ...BOARD });
   }
+  if (url.pathname === `${base}/data-approvals/ap_capture` && req.method === "POST") { approved = true; return json(res, 200, { ok: true }); }
   if (url.pathname === `${base}/viewer`) return json(res, 200, { name: "Ada", handle: "h_ada", role: "owner", lang: "en" });
   if (url.pathname === `${base}/live`) { res.writeHead(200, { "content-type": "text/event-stream" }); return res.write(`event: presence\ndata: {"people":[]}\n\n`); }
   res.writeHead(404, { "content-type": "application/json" }); res.end("{}");
@@ -148,6 +147,7 @@ try {
 
     // 3. the organization asks first
     askFirst = true;
+    approved = false;
     const ask = await browser.newContext({ viewport: { width: 1100, height: 640 }, deviceScaleFactor: 2, colorScheme: scheme });
     const askPage = await ask.newPage();
     await askPage.goto(`http://127.0.0.1:${readerPort}/pages/view/${TOKEN}`, { waitUntil: "load" });
@@ -159,6 +159,7 @@ try {
     await ask.close();
 
     // 4. a narrow window
+    approved = false;
     const narrow = await browser.newContext({ viewport: { width: 390, height: 760 }, deviceScaleFactor: 2, colorScheme: scheme });
     const narrowPage = await narrow.newPage();
     await narrowPage.goto(`http://127.0.0.1:${readerPort}/pages/view/${TOKEN}`, { waitUntil: "load" });

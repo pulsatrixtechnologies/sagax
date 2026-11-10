@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import { capabilitiesAdded, capabilityLine, capabilityParts, versionCapabilities } from "./page-capabilities-line";
 
-const html = (block: string) => `<!doctype html><title>x</title>${block}<p>hi</p>`;
 const BOARD = { data: ["team-board" as const], viewer: false, open: false };
 
 describe("capabilityLine", () => {
@@ -27,18 +26,16 @@ describe("capabilityLine", () => {
 });
 
 describe("versionCapabilities", () => {
-  it("reads the declaration from the version's own source, once", async () => {
-    const read = vi.fn(async () => ({ content: html('<script type="application/sagax-capabilities+json">{"data":["team-board"],"viewer":true}</script>') }));
-    expect(await versionCapabilities("page_a", 3, "html", read)).toEqual({ data: ["team-board"], viewer: true, open: false });
-    await versionCapabilities("page_a", 3, "html", read);
+  it("asks the server what that version declares, once", async () => {
+    const read = vi.fn(async () => ({ version: 3, capabilities: { data: ["team-board"], viewer: true, open: false } }));
+    expect(await versionCapabilities("page_a", 3, read)).toEqual({ data: ["team-board"], viewer: true, open: false });
+    await versionCapabilities("page_a", 3, read);
     expect(read).toHaveBeenCalledTimes(1);
-    expect(read).toHaveBeenCalledWith("/api/pages/page_a/versions/3/source");
+    expect(read).toHaveBeenCalledWith("/api/pages/page_a/capabilities?version=3");
   });
 
-  it("asks nothing for a page that is not HTML, and has none when the source cannot be read", async () => {
-    const read = vi.fn(async () => ({ content: "# hi" }));
-    expect(await versionCapabilities("page_b", 1, "markdown", read)).toBeNull();
-    expect(read).not.toHaveBeenCalled();
-    expect(await versionCapabilities("page_c", 1, "html", async () => { throw new Error("offline"); })).toBeNull();
+  it("has none when the server says none or cannot be reached", async () => {
+    expect(await versionCapabilities("page_b", 1, async () => ({ capabilities: { data: [], viewer: false, open: false } }))).toEqual({ data: [], viewer: false, open: false });
+    expect(await versionCapabilities("page_c", 1, async () => { throw new Error("offline"); })).toBeNull();
   });
 });

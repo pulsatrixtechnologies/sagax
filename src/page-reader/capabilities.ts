@@ -21,7 +21,8 @@
 //  - the server's declaration decides (a name it did not grant is refused
 //    here without a request, and by the server anyway);
 //  - the organization's Ask first (409 ask_first) shows its card in the
-//    wrapper's bar and retries with approved=1 only after the reader's click;
+//    wrapper's bar; the reader's click is sent to the server, which records it,
+//    and the data is read again (no request flag is ever trusted);
 //  - once the frame received data, a link opens without a question only when
 //    its address appeared as is in a data answer (pageLinkOpensDirectly);
 //    any other shows its destination and waits for a click;
@@ -29,6 +30,8 @@
 //    to focus, make the page read again.
 import {
   CAP_EVENT_MESSAGE,
+  CAP_HELLO_MESSAGE,
+  CAP_READY_MESSAGE,
   CAP_RESULT_MESSAGE,
   pageCapGranted,
   pageLinkOpensDirectly,
@@ -54,8 +57,8 @@ const EVENT_GAP_MS = 1_000;
 
 /** A message counts only when it comes from the page's own frame window and
  * from its opaque origin. Pure. */
-export function fromPageFrame(event: { source: unknown; origin: string }, frame: Window | null | undefined): boolean {
-  return Boolean(frame) && event.source === frame && event.origin === PAGE_FRAME_ORIGIN;
+export function fromPageFrame(event: { source: unknown; origin: string }, frame: Window | null | undefined, origin: string = PAGE_FRAME_ORIGIN): boolean {
+  return Boolean(frame) && event.source === frame && event.origin === origin;
 }
 
 /** A live `data` event's source name, checked, or null. Pure. */
@@ -96,7 +99,18 @@ export interface BrokerDeps {
   /** The page's frame window, when it is there. */
   frame(): Window | null;
   /** The server, with this reader's own session. Throws with `status`/`code`. */
-  api<T>(path: string): Promise<T>;
+  api<T>(path: string, init?: { method: "POST"; body: unknown }): Promise<T>;
+  /** The window the capability messages come from: the page's frame (the
+   * default origin is the sandbox's opaque "null"), or in the app's preview
+   * the preview wrapper that relays them (PREVIEW_CAP_RELAY_SOURCE), whose
+   * origin is then `origin`. */
+  frameOrigin?: string | (() => string);
+  /** The page's own frame, which posts the open-link messages to the app
+   * directly (default: `frame`). */
+  openFrame?(): Window | null;
+  /** The version the app's preview shows (sent as ?version=n); the reading
+   * link serves the published one. */
+  version?: number;
   /** Present only for a signed-in reader who may read the page. */
   pageId?: string;
   signedIn: boolean;
@@ -105,8 +119,6 @@ export interface BrokerDeps {
   openUrl(url: string): void;
   /** Open a bot's chat or one of its conversations; false: not possible here. */
   openRef(ref: { botId: string; threadId?: string }): boolean;
-  /** Where "Always allow" is kept (this browser, this page and source). */
-  allowStore?: Pick<Storage, "getItem" | "setItem"> | null;
   now?(): number;
 }
 
@@ -174,15 +186,16 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
   };
   const answer = (id: number, outcome: { ok: true; value: unknown } | { ok: false; error: PageCapError; message?: string }) => post({ type: CAP_RESULT_MESSAGE, id, ...outcome });
 
-  const allowKey = (name: string) => `sagax-page-allow:${deps.pageId}:${name}`;
-  const allowed = (name: string) => {
-    try { return deps.allowStore?.getItem(allowKey(name)) === "1"; } catch { return false; }
+  // the route's query: the version the preview shows, the reader's language
+  const route = (path: string, extra: Record<string, string> = {}) => {
+    const query = new URLSearchParams({ ...extra, ...(deps.version !== undefined ? { version: String(deps.version) } : {}), lang: deps.lang });
+    return `/api/pages/${encodeURIComponent(deps.pageId!)}/${path}?${query}`;
   };
 
   const load = async () => {
     if (!deps.pageId) return set({ loaded: true });
     try {
-      const body = await deps.api<{ capabilities?: unknown; reads?: unknown }>(`/api/pages/${encodeURIComponent(deps.pageId)}/capabilities`);
+      const body = await deps.api<{ capabilities?: unknown; reads?: unknown }>(route("capabilities"));
       const caps = parsePageCapabilities(body.capabilities);
       const reads = Array.isArray(body.reads)
         ? body.reads.filter((entry): entry is { name: string; label: string } => Boolean(entry) && typeof (entry as { name?: unknown }).name === "string" && typeof (entry as { label?: unknown }).label === "string")
@@ -212,26 +225,25 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
     return pending;
   };
 
-  const readData = async (name: string, fresh: boolean, approved: boolean): Promise<unknown> => {
-    const query = [fresh ? "fresh=1" : "", approved ? "approved=1" : ""].filter(Boolean).join("&");
+  const readData = async (name: string, fresh: boolean, asked = false): Promise<unknown> => {
     try {
-      const body = await deps.api<{ value?: unknown; links?: unknown; refs?: unknown }>(`/api/pages/${encodeURIComponent(deps.pageId!)}/data/${encodeURIComponent(name)}${query ? `?${query}` : ""}`);
+      const body = await deps.api<{ value?: unknown; links?: unknown; refs?: unknown }>(route(`data/${encodeURIComponent(name)}`, fresh ? { fresh: "1" } : {}));
       receivedData = true;
       readNames.add(name);
+      // the exits the source named, as the server sent them: nothing is computed here
       if (Array.isArray(body.links)) boundedAdd(links, body.links as string[]);
       if (Array.isArray(body.refs)) boundedAdd(refs, body.refs as string[]);
       return body.value ?? null;
     } catch (cause) {
       const failure = capFailure(cause);
-      if (failure.error !== "ask_first" || approved) throw cause;
-      // the organization asks first: the card, outside the page; nothing is
-      // sent with approved=1 before the reader's own click
-      if (allowed(name)) return readData(name, fresh, true);
+      const approvalId = (cause as { body?: { approvalId?: unknown } }).body?.approvalId;
+      if (failure.error !== "ask_first" || asked || typeof approvalId !== "string") throw cause;
+      // the organization asks first: the card, outside the page; the reader's
+      // own answer goes to the server, which records it, and only then is the
+      // data read again (no flag in the request is ever trusted)
       const choice = await askFirst(name);
-      if (choice === "decline") throw Object.assign(new Error("You declined this read."), { code: "denied", status: 403 });
-      if (choice === "always") {
-        try { deps.allowStore?.setItem(allowKey(name), "1"); } catch { /* this visit only */ }
-      }
+      await deps.api(`/api/pages/${encodeURIComponent(deps.pageId!)}/data-approvals/${encodeURIComponent(approvalId)}?lang=${deps.lang}`, { method: "POST", body: { answer: choice === "decline" ? "deny" : choice } });
+      if (choice === "decline") throw Object.assign(new Error(deps.lang === "fr" ? "Tu as refusé cette lecture." : "You declined this read."), { code: "denied", status: 403 });
       return readData(name, fresh, true);
     }
   };
@@ -263,11 +275,18 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
 
   return {
     start() {
+      // the frame's calls wait for this: it listens now
+      post({ type: CAP_READY_MESSAGE });
       started ??= load();
       return started;
     },
     async onMessage(event) {
-      if (!fromPageFrame(event, deps.frame())) return false;
+      if (!fromPageFrame(event, deps.frame(), typeof deps.frameOrigin === "function" ? deps.frameOrigin() : deps.frameOrigin)) return false;
+      // the bridge started (or restarted): tell it the broker listens
+      if (event.data && typeof event.data === "object" && (event.data as { type?: unknown; v?: unknown }).type === CAP_HELLO_MESSAGE && (event.data as { v?: unknown }).v === 1) {
+        post({ type: CAP_READY_MESSAGE });
+        return true;
+      }
       const request: PageCapRequest | null = parsePageCapRequest(event.data);
       if (!request) return false;
       const id = request.id;
@@ -293,9 +312,9 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
         if (request.cap === "data.read") {
           const params = request.args?.params;
           const fresh = Boolean(params && typeof params === "object" && (params as { fresh?: unknown }).fresh === true);
-          answer(id, { ok: true, value: await readData(source as string, fresh, false) });
+          answer(id, { ok: true, value: await readData(source as string, fresh) });
         } else if (request.cap === "viewer.get") {
-          answer(id, { ok: true, value: await deps.api<unknown>(`/api/pages/${encodeURIComponent(deps.pageId)}/viewer?lang=${deps.lang}`) });
+          answer(id, { ok: true, value: await deps.api<unknown>(route("viewer")) });
         } else if (!state.caps) {
           answer(id, { ok: false, error: "unavailable", message: "This page's capabilities could not be read." });
         } else {
@@ -308,7 +327,7 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
       return true;
     },
     guardOpen(event) {
-      const frame = deps.frame();
+      const frame = deps.openFrame ? deps.openFrame() : deps.frame();
       if (!frame || event.source !== frame) return false;
       const url = parsePageOpenMessage(event.data);
       if (!url || pageLinkOpensDirectly(url, { receivedData, links })) return false;
@@ -353,7 +372,7 @@ export function watchPageCapabilities(frame: HTMLIFrameElement | null, input: { 
   if (!frame) return null;
   const broker = createCapabilityBroker({
     frame: () => frame.contentWindow,
-    api: <T,>(path: string) => readerApi<T>(path),
+    api: <T,>(path: string, init?: { method: "POST"; body: unknown }) => readerApi<T>(path, init),
     ...(input.pageId ? { pageId: input.pageId } : {}),
     signedIn: input.signedIn,
     lang: input.lang,
@@ -365,7 +384,6 @@ export function watchPageCapabilities(frame: HTMLIFrameElement | null, input: { 
       window.open(`${location.origin}/#thread=${encodeURIComponent(ref.threadId)}&bot=${encodeURIComponent(ref.botId)}`, "_blank", "noopener,noreferrer");
       return true;
     },
-    allowStore: safeLocalStorage(),
   });
   const onMessage = (event: MessageEvent) => { void broker.onMessage(event); };
   const onGuard = (event: MessageEvent) => { if (broker.guardOpen(event)) event.stopImmediatePropagation(); };
@@ -391,12 +409,4 @@ export function watchPageCapabilities(frame: HTMLIFrameElement | null, input: { 
       document.removeEventListener("visibilitychange", onVisible);
     },
   };
-}
-
-function safeLocalStorage(): Storage | null {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
 }

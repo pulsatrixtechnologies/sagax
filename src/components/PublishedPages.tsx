@@ -135,11 +135,10 @@ export function PagePublishCard({ message, threadLatestVersion }: { message: Mes
   useEffect(() => {
     if (!page || !cardKind || !showsCaps) { setDeclared({ next: null, published: undefined }); return; }
     let current = true;
-    const kindOf = (n: number) => page.versions.find((entry) => entry.n === n)?.kind;
     const compare = publishedVersion !== null && publishedVersion !== ref.version;
     void Promise.all([
-      versionCapabilities(ref.pageId, ref.version, cardKind, (path) => api(path)),
-      compare ? versionCapabilities(ref.pageId, publishedVersion, kindOf(publishedVersion), (path) => api(path)) : Promise.resolve(undefined),
+      versionCapabilities(ref.pageId, ref.version, (path) => api(path)),
+      compare ? versionCapabilities(ref.pageId, publishedVersion, (path) => api(path)) : Promise.resolve(undefined),
     ]).then(([next, published]) => { if (current) setDeclared({ next, published }); });
     return () => { current = false; };
   }, [page, cardKind, showsCaps, publishedVersion, ref.pageId, ref.version]);

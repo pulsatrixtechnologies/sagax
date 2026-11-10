@@ -26,7 +26,7 @@ export const PERSONA_SEARCH_WORDS: Record<PersonaCategory, readonly string[]> = 
   access: ["accès", "acces", "access", "mcp", "outils", "tools", "webhooks", "crochets", "autoriser", "toujours permettre", "toujours autoriser", "allow", "exclure", "exclude", "navigateur", "browser", "dossier de travail", "horaire", "planifié", "schedule"],
   slack: ["slack", "messages directs", "direct messages", "mentions", "canal", "channel"],
   permissions: ["permissions", "approbation", "approbations", "approuver", "approval", "approve", "mode auto", "auto mode", "révision", "revision", "review", "pairs", "peers", "contacter", "contact", "coordination", "demander d'abord", "refuser", "ask first", "deny", "horaire", "routines", "schedule"],
-  voice: ["voix", "voice", "parler", "speak", "alertes", "alerts", "notifications", "son", "sound", "horaire", "heures calmes", "ne pas déranger", "quiet hours", "do not disturb", "schedule"],
+  voice: ["voix", "voice", "parler", "speak", "alertes", "alerts", "notifications", "notify me", "m'avertir", "avertis-moi", "son", "sound", "horaire", "heures calmes", "ne pas déranger", "quiet hours", "do not disturb", "schedule"],
   usage: ["utilisation", "usage", "jetons", "tokens", "coût", "cout", "cost", "facturation", "billing"],
   history: ["changements", "changes", "historique", "history", "annuler", "undo", "restaurer", "rollback", "journal", "log"],
 };
@@ -38,6 +38,8 @@ export const PERSONA_PART_SEARCH_WORDS: Partial<Record<PersonaCategory, Partial<
   permissions: {
     actsAlone: ["proactif", "proactive", "de lui-même", "on its own", "agit seul", "acts alone", "cible de publication", "publish target", "destinataires", "recipients", "brouillons", "drafts", "email drafts", "brouillons de courriel", "mèmes", "memes", "meme", "gif"],
     rules: ["règles personnalisées", "regles personnalisees", "custom rules"],
+    // the Routines page is a sub-page of Knowledge (#2624): a search for it opens it (#3398)
+    routines: ["routines", "routine"],
     advanced: ["bot principal", "primary bot", "primary", "coordination", "contacter", "contact", "pairs", "peers", "garde-fou de boucle", "loop guard", "boucle", "loop", "crochets", "hooks", "accès aux outils", "tool access", "parallèle", "parallele", "parallel", "envois en ton nom", "sending on your behalf", "limite quotidienne", "daily limit"],
   },
   access: {
@@ -45,6 +47,70 @@ export const PERSONA_PART_SEARCH_WORDS: Partial<Record<PersonaCategory, Partial<
     advanced: ["ordinateur", "computer", "nuage", "cloud", "navigateur", "browser"],
   },
 };
+
+/** The two switches General > Settings holds in place (#3398): "Notify me"
+ * (it left Voice) and "Collaborators can create routines" (it left
+ * Routines). A search for their words opens General at the Settings card,
+ * not the page they used to be on. A word a page also answers to (such as
+ * "routines", the Routines page) is not here: the switch only takes over a
+ * query that names it, see settingsSwitchForQuery. */
+export type BotProfileSettingsSwitch = "notifyMe" | "collaboratorsCreateRoutines";
+export const SETTINGS_SWITCH_SEARCH_WORDS: Readonly<Record<BotProfileSettingsSwitch, readonly string[]>> = {
+  notifyMe: ["notify me", "m'avertir", "avertis-moi", "me prévenir", "notifications", "alertes", "alerts"],
+  collaboratorsCreateRoutines: ["collaborators can create routines", "les collaborateurs peuvent créer des routines", "collaborators", "collaborateurs"],
+};
+
+/** The page whose search result stands for the two switches: it lives on the
+ * General tab, and openCategory then opens General at the Settings card. */
+const SETTINGS_SWITCH_PAGE: PersonaCategory = "permissions";
+
+/** Shortest query that may take a switch on a partial match. */
+const SWITCH_PARTIAL_MIN = 4;
+
+const switchWords = (text: string): string[] => settingsQuery(text).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
+/** Whether the words of `query` are whole words that follow each other in `phrase`. */
+function wholeWordsIn(phrase: string, query: string): boolean {
+  const have = switchWords(phrase);
+  const want = switchWords(query);
+  if (want.length === 0 || want.length > have.length) return false;
+  for (let start = 0; start + want.length <= have.length; start += 1) {
+    if (want.every((word, index) => have[start + index] === word)) return true;
+  }
+  return false;
+}
+
+/** How a switch word answers `query`: the whole word or phrase itself, or
+ * (at SWITCH_PARTIAL_MIN characters or more) its start or two or more of
+ * its whole words; null when it does not. */
+function switchWordMatches(word: string, query: string): "whole" | "partial" | null {
+  const q = settingsQuery(query);
+  const w = settingsQuery(word);
+  if (q === w) return "whole";
+  if (q.length < SWITCH_PARTIAL_MIN) return null;
+  if (w.startsWith(q)) return "partial";
+  if (switchWords(q).length >= 2 && wholeWordsIn(w, q)) return "partial";
+  return null;
+}
+
+/** The General > Settings switch a search for `query` names, or null. A
+ * switch takes over the search only when the query names it better than a
+ * page does: one of its words or phrases in full, or, from
+ * SWITCH_PARTIAL_MIN characters, the start of one of them or several of
+ * their whole words, and then only if no page label (`pageLabels`) holds
+ * the query. A short or generic query ("a", "me", "rate", "create",
+ * "routines") stays with the pages. */
+export function settingsSwitchForQuery(query: string, pageLabels: readonly string[] = []): BotProfileSettingsSwitch | null {
+  if (!settingsQuery(query)) return null;
+  const labelHit = pageLabels.some((label) => settingsTextMatches(label, query));
+  for (const [id, words] of Object.entries(SETTINGS_SWITCH_SEARCH_WORDS) as Array<[BotProfileSettingsSwitch, readonly string[]]>) {
+    for (const word of words) {
+      const match = switchWordMatches(word, query);
+      if (match === "whole" || (match === "partial" && !labelHit)) return id;
+    }
+  }
+  return null;
+}
 
 /** The sub-page a search for `query` opens for `category`: the one that
  * holds the matched option, else the section's own (null: the header). */
@@ -71,6 +137,9 @@ export function personaPageRank(page: PersonaCategory, label: string, query: str
   if (keywords.some((word) => settingsTextMatches(word, query))) return 1;
   if (PERSONA_SEARCH_WORDS[page].some((word) => settingsTextMatches(word, query))) return 2;
   if (partWords(page).some((word) => settingsTextMatches(word, query))) return 2;
+  // the two switches of General > Settings (#3398) answer only their own
+  // words (settingsSwitchForQuery), never a substring such as "create"
+  if (page === SETTINGS_SWITCH_PAGE && settingsSwitchForQuery(query)) return 2;
   return null;
 }
 

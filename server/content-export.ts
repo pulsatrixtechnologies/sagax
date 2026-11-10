@@ -79,7 +79,7 @@ export function unsealDatabaseCopy(path: string, keys: readonly ExportedContentK
       }
       // the copy keeps no key, binding or keyed token
       for (const trigger of ["messages_sealed_ad", "messages_sealed_au"]) db.exec(`DROP TRIGGER IF EXISTS ${trigger}`);
-      db.exec("DROP TABLE IF EXISTS messages_sealed_fts; DROP TABLE IF EXISTS message_index; DROP TABLE IF EXISTS content_keys; DROP TABLE IF EXISTS thread_keys; DROP TABLE IF EXISTS content_meta;");
+      db.exec("DROP TABLE IF EXISTS messages_sealed_fts; DROP TABLE IF EXISTS message_index; DROP TABLE IF EXISTS content_keys; DROP TABLE IF EXISTS content_keys_retired; DROP TABLE IF EXISTS thread_keys; DROP TABLE IF EXISTS content_meta;");
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");

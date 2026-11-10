@@ -11,7 +11,9 @@ import { readerText, type ReaderBoot } from "../../shared/page-reader";
 import { initialsOf } from "@/lib/page-share-plan";
 import { AnnotatePanel } from "./AnnotatePanel";
 import { othersHere, usePageLive } from "./live";
+import type { CapabilityBroker } from "./capabilities";
 import { downloadPdf } from "./print";
+import { ReaderCapabilities } from "./ReaderCapabilities";
 import { ReaderShare } from "./ReaderShare";
 import { ReaderStateButton } from "./ReaderState";
 
@@ -27,7 +29,7 @@ function useBarHeight(active: boolean) {
   }, [active]);
 }
 
-export function ReaderActions({ boot }: { boot: ReaderBoot }) {
+export function ReaderActions({ boot, broker }: { boot: ReaderBoot; broker?: CapabilityBroker | null }) {
   const [sharing, setSharing] = useState(false);
   const [annotating, setAnnotating] = useState(false);
   const text = (key: Parameters<typeof readerText>[1], values?: Record<string, string>) => readerText(boot.lang, key, values);
@@ -49,6 +51,7 @@ export function ReaderActions({ boot }: { boot: ReaderBoot }) {
           {others.length > 4 && <span className="sr-presence-avatar sr-presence-more" title={others.slice(4).map((person) => person.name).join(", ")}>+{others.length - 4}</span>}
         </div>
       )}
+      {broker && <ReaderCapabilities boot={boot} broker={broker} />}
       <button type="button" className="sr-bar-button" data-reader-pdf aria-label={text("pdf")} title={text("pdfHint")} onClick={downloadPdf}>
         <FileDown size={14} aria-hidden="true" />
         <span className="sr-bar-label">{text("pdf")}</span>

@@ -169,3 +169,16 @@ describe("self-knowledge base", () => {
     ]);
   });
 });
+
+// #3398: Slack as a channel between a team and a bot is removed for now; the
+// model is not told it sits under Edit bot while no surface offers it.
+describe("self-knowledge: team chat channels removed", () => {
+  it("has no Slack bot setting while TEAM_CHAT_CHANNELS_OFFERED is false", async () => {
+    const { TEAM_CHAT_CHANNELS_OFFERED } = await import("../../shared/team-chat-channels.ts");
+    const ids = (base: KnowledgeBase) => base.sections.map((section) => section.id);
+    expect(TEAM_CHAT_CHANNELS_OFFERED).toBe(false);
+    expect(ids(fresh)).not.toContain("bot-setting:slack");
+    expect(ids(committed)).not.toContain("bot-setting:slack");
+    expect(ids(fresh)).toContain("bot-setting:voice");
+  });
+});

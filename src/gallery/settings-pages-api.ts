@@ -2,7 +2,7 @@
  * also rendered by the one-card-level guard (#2175,
  * src/components/SettingsModal.oneCardLevel.dom.test.ts) so a page is checked
  * on the same data it is shot with. Fictional data only, neutral names.
- * `params`: the gallery's query (`providers=1`, `org=1`, `auto=1`). */
+ * `params`: the gallery's query (`providers=1`, `org=1`, `auto=1`, `keys=unreadable`). */
 export function settingsPagesApi(params: URLSearchParams): Record<string, unknown> {
   const DAY = 86_400_000;
   const NOW = Date.UTC(2026, 9, 28, 14);
@@ -122,6 +122,7 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
       ],
       wallets: { shop_pay: { chosen: true, ready: true, missing: "" }, link: { chosen: false, ready: false, missing: "the Link CLI" } },
       onePassword: { available: false, reason: "absent" },
+      ...(params.get("keys") === "unreadable" ? { unavailable: true } : {}),
     },
     // Settings > Developer > Per bot (#2658): the first bot's technical cards
     "/api/webhooks": { webhooks: [], attempts: [] },

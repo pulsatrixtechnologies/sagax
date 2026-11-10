@@ -94,3 +94,26 @@ describe("Vault item rows", () => {
     expect(row.querySelector("[data-credential-reveal]")!.closest("[data-credential-detail]")).toBe(detail);
   });
 });
+
+describe("Vault that could not be opened (#3320)", () => {
+  afterEach(() => { delete (window as unknown as { ogb?: unknown }).ogb; });
+
+  it("explains Reset saved keys when the saved keys could not be read, never 'restart to try again'", async () => {
+    (window as unknown as { ogb: unknown }).ogb = { credentialStore: { unreadable: async () => true, reset: vi.fn() } };
+    fixture.load.mockResolvedValue({ items: [], wallets: {}, onePassword: { available: false, reason: "absent" }, unavailable: true });
+    await render();
+    await act(async () => { await Promise.resolve(); });
+    const text = container.textContent ?? "";
+    expect(text).toContain("Reset saved keys puts the unreadable files aside");
+    expect(text).toContain("Vault items then start empty");
+    expect(text).not.toContain("restart Sagax to try again");
+    expect(container.querySelector("[data-saved-keys-reset] button")?.textContent).toBe("Reset saved keys");
+  });
+
+  it("keeps the restart advice when the saved keys were read", async () => {
+    fixture.load.mockResolvedValue({ items: [], wallets: {}, onePassword: { available: false, reason: "absent" }, unavailable: true });
+    await render();
+    expect(container.textContent).toContain("restart Sagax to try again");
+    expect(container.querySelector("[data-saved-keys-reset]")).toBeNull();
+  });
+});

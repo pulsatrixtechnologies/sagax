@@ -55,6 +55,7 @@ import { SwitchRow } from "./SettingsPrimitives";
 import { useWidgetTheme } from "./WidgetFrame";
 import { encodeSkinTokens } from "@/lib/page-theme";
 import { MenuItem, PopoverMenu } from "./bot-settings/FilesSection";
+import { PageCapabilityStrip, useCapabilityStripVisible, usePageCapabilityBroker } from "./PageCapabilityStrip";
 
 export { needsLinkConfirm, pageErrorText };
 
@@ -422,8 +423,14 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
       return null;
     }
   };
+  // what the page may ask of Sagax (#3413): the same broker as the reading link's
+  const broker = usePageCapabilityBroker({ pageId, drawn: `${version ?? ""}:${reloads}`, ...(version !== null ? { version } : {}), preview: () => frameRef.current, frame: innerFrame });
+  const capsShown = useCapabilityStripVisible(broker);
   useEffect(() => {
     const listen = (event: MessageEvent) => {
+      void broker.onMessage(event);
+      // a frame that read data opens only the links its data named without a question
+      if (broker.guardOpen(event)) return;
       if (acceptPageOpen(event)) return;
       const frame = innerFrame();
       const y = acceptScroll(event, frame);
@@ -432,7 +439,7 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
     };
     window.addEventListener("message", listen);
     return () => window.removeEventListener("message", listen);
-  }, [annotating, pageId]);
+  }, [annotating, pageId, broker]);
 
   const call = async <T,>(path: string, init: RequestInit): Promise<T | null> => {
     setBusy(true);
@@ -583,8 +590,9 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
       </header>
       <div className="flex min-h-0 flex-1">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-          {(annotating || error) && !gone && !(failed && !src) && (
+          {(annotating || error || capsShown) && !gone && !(failed && !src) && (
             <div className="mt-14">
+              <PageCapabilityStrip broker={broker} />
               {annotating && <p role="status" className="border-y border-hairline/30 bg-accent/10 px-3 py-1.5 text-[12px] text-ink">{t("pages.annotate.hint")}</p>}
               {error && <p role="alert" className="px-3 py-1.5 text-[12px] text-danger">{error}</p>}
             </div>

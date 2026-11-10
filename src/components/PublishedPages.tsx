@@ -25,6 +25,8 @@ import { PageSharePopover } from "./PageShare";
 import { useWidgetTheme } from "./WidgetFrame";
 import { encodeSkinTokens } from "@/lib/page-theme";
 import { openPage } from "@/lib/open-page";
+import { capabilityLine, versionCapabilities } from "@/lib/page-capabilities-line";
+import type { PageCapabilities } from "../../shared/page-capabilities";
 import { pageCardOpenVersion, pageCardStatusWithThreadLatest } from "@/lib/page-chat-layout";
 import { readableError } from "@/lib/plain-error";
 
@@ -123,18 +125,35 @@ export function PagePublishCard({ message, threadLatestVersion }: { message: Mes
     return () => { live = false; };
   }, [ref.pageId, ref.version, threadLatestVersion]);
 
+  // what this version declares the page uses (#3413), and what it adds to the
+  // published one: shown before anyone publishes it
+  const [declared, setDeclared] = useState<{ next: PageCapabilities | null; published: PageCapabilities | null | undefined }>({ next: null, published: undefined });
+  const publishedVersion = page?.currentVersion ?? null;
+  const cardKind = (page?.versions.find((entry) => entry.n === ref.version) ?? page?.versions.at(-1))?.kind;
+  const cardStatus = deleted ? "deleted" : pageCardStatusWithThreadLatest(pageCardState(page, ref.version), ref.version, threadLatestVersion);
+  const showsCaps = cardStatus === "proposed" || cardStatus === "published" || cardStatus === "draft";
+  useEffect(() => {
+    if (!page || !cardKind || !showsCaps) { setDeclared({ next: null, published: undefined }); return; }
+    let current = true;
+    const compare = publishedVersion !== null && publishedVersion !== ref.version;
+    void Promise.all([
+      versionCapabilities(ref.pageId, ref.version, (path) => api(path)),
+      compare ? versionCapabilities(ref.pageId, publishedVersion, (path) => api(path)) : Promise.resolve(undefined),
+    ]).then(([next, published]) => { if (current) setDeclared({ next, published }); });
+    return () => { current = false; };
+  }, [page, cardKind, showsCaps, publishedVersion, ref.pageId, ref.version]);
   if (missing) {
     return <div className="chat-text w-fit max-w-[min(80%,560px)] rounded-[18px] bg-card px-3 py-[7px] text-[13px] text-ink">{message.text}</div>;
   }
   const title = page?.title || ref.title;
   // a design reads as one on its card (#2717)
-  const cardKind = (page?.versions.find((entry) => entry.n === ref.version) ?? page?.versions.at(-1))?.kind;
   const loadedStatus = deleted ? "deleted" : pageCardState(page, ref.version);
   const status = pageCardStatusWithThreadLatest(loadedStatus, ref.version, threadLatestVersion);
   // the page's own preview address, and nothing else, is ever framed: any
   // other answer (an older server, a bad path) is "Preview unavailable"
   const src = !deleted && previewPath ? previewSrc(previewPath, { bare: true, theme, skin }) : null;
   const unavailable = deleted || noPreview || (previewPath !== null && src === null);
+  const capsLine = showsCaps ? capabilityLine(declared.next, declared.published) : null;
   // the page names its own bot and conversation; Updated below opens latest
   const open = () => {
     if (!page) return;
@@ -170,6 +189,7 @@ export function PagePublishCard({ message, threadLatestVersion }: { message: Mes
           <span data-page-card-state={status ?? ""} className="block truncate text-[12px] text-ink-secondary">
             {cardKind === "design" ? t("pages.kind.design") : t("pages.label")}{stateLine}
           </span>
+          {capsLine && <span data-page-card-caps title={capsLine} className="line-clamp-2 text-[12px] text-ink-secondary">{capsLine}</span>}
         </span>
       </footer>
       <button type="button" data-page-open aria-label={t("pages.cardOpen", { title })} disabled={!page} onClick={open}

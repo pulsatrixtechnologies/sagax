@@ -54,6 +54,7 @@ import { modelOn } from "../../../shared/offered-models";
 import { ImageGenerationSettings, imageProviderLabel } from "./ImageGenerationSettings";
 import { MemesSettings } from "./MemesSettings";
 import { WebSearchSettings } from "./WebSearchSettings";
+import { SavedKeysResetNotice } from "../SavedKeysReset";
 import { DescribedRow, FoldRow, HelpTip, LinkRow, PILL, PRIMARY_PILL, SettingsFoldSection, SettingsGroup, SettingsIconTile, Switch, requestSettingsCard } from "../SettingsPrimitives";
 import { ExternalLinkPill, SettingsEmpty, StatusText } from "./SettingsPatterns";
 import { LocalModelsSettings } from "./LocalModelsSettings";
@@ -529,6 +530,7 @@ export function ProvidersSettings() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6 pb-2" data-providers-page="">
+      <SavedKeysResetNotice />
       {accounts.unavailable && <p data-needs-server-update="" className="text-[12px] text-ink-secondary">{accounts.unavailable}</p>}
       {accounts.error && <p role="alert" className="text-[12px] text-danger">{accounts.error}</p>}
       <div data-settings-card="providers.list">

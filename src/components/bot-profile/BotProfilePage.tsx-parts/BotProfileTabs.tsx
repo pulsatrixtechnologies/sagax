@@ -15,7 +15,7 @@ import { sectionLabel, TAB_LABEL } from "./cards";
  * tab opens and hides its rows that do not match; the tabs of the others
  * stay plain, the rest dim. Command-F or a slash opens it from anywhere on
  * the page. */
-export function useBotProfileSearch({ rootRef, pages, tabOf, view, onOpenCategory }: {
+export function useBotProfileSearch({ rootRef, pages, tabOf, view, onOpenCategory, rootFor }: {
   rootRef: RefObject<HTMLElement | null>;
   pages: readonly PersonaCategory[];
   tabOf: (id: PersonaCategory) => BotProfileTab;
@@ -24,6 +24,9 @@ export function useBotProfileSearch({ rootRef, pages, tabOf, view, onOpenCategor
   /** Opens the tab and the sub-page that hold a section (V6, #2612); with
    * the query, the sub-page that holds the matched option (#2623). */
   onOpenCategory: (id: PersonaCategory, query?: string) => void;
+  /** Where the hit is when it is not its section's block: a selector for
+   * the query (General's Settings card for a switch held in place, #3398). */
+  rootFor?: (query: string) => string | null;
 }) {
   const searchRef = useRef<HTMLInputElement>(null);
   const [searching, setSearching] = useState(false);
@@ -42,7 +45,8 @@ export function useBotProfileSearch({ rootRef, pages, tabOf, view, onOpenCategor
     onOpenCategory(first, next);
   };
   useLayoutEffect(() => {
-    const root = searchHit ? rootRef.current?.querySelector<HTMLElement>(`[data-bot-profile-section="${searchHit}"]`) : null;
+    const selector = searchHit ? (rootFor?.(q) ?? `[data-bot-profile-section="${searchHit}"]`) : null;
+    const root = selector ? rootRef.current?.querySelector<HTMLElement>(selector) : null;
     if (!root || !q) return;
     let scroll = true;
     const apply = () => {

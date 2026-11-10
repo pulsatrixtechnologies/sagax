@@ -26,7 +26,7 @@ afterEach(async () => {
 });
 
 async function serve(deps: Partial<HostedSlackRouteDeps>): Promise<string> {
-  const routes = [createHostedSlackRoutes({ bot: (id) => BOTS[id], hostedReady: () => true, env: HOSTED, ...deps })];
+  const routes = [createHostedSlackRoutes({ bot: (id) => BOTS[id], hostedReady: () => true, env: HOSTED, teamChatOffered: true, ...deps })];
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const handled = await dispatchRoutes(routes, {
@@ -41,6 +41,16 @@ async function serve(deps: Partial<HostedSlackRouteDeps>): Promise<string> {
 }
 
 describe("GET /api/bots/:id/slack-management through the route table", () => {
+  // #3398 (the owner 2026-11-10): Slack as a channel is removed for now
+  // (shared/team-chat-channels.ts). A fully hosted, entitled workspace gets
+  // no link, so the Channels card, Add to Slack and the bot panel hide it.
+  it("offers no link while team chat channels are removed, even on a hosted workspace", async () => {
+    const base = await serve({ teamChatOffered: undefined });
+    const response = await fetch(`${base}/api/bots/bot_123/slack-management`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ available: false });
+  });
+
   it("answers a hosted workspace with the Admin link for that bot, uncached", async () => {
     const base = await serve({});
     const response = await fetch(`${base}/api/bots/bot_123/slack-management`);

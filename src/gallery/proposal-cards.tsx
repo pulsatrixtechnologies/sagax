@@ -1,6 +1,6 @@
 // Dev gallery for the proposal cards in the chat (learned skill, routine):
 // open and settled, and the composer's box for an open skill. Synthetic data
-// only. Served by Vite in dev at /src/gallery/proposal-cards.html;
+// only (an unreviewed skill shows the disabled Enable). Served by Vite in dev at /src/gallery/proposal-cards.html;
 // not part of the packaged app. ?lang=fr|en&skin=<id>
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -34,7 +34,7 @@ description: Stop a running task cleanly when the person asks to abort it.
 3. Never retry the aborted task on your own.
 `;
 
-function skillCard(id: string, answered?: "allow"): Message {
+function skillCard(id: string, answered?: "allow", unreviewed = false): Message {
   const gist = "Added a task-abort skill so the bot stops a running task cleanly when you ask it to.";
   return {
     id,
@@ -59,8 +59,8 @@ function skillCard(id: string, answered?: "allow"): Message {
         name: "task-abort",
         gist,
         source: "learn:automatic review of this conversation",
-        preview: SKILL_MD,
-        sha256: "6d3bee9d".repeat(8),
+        // an unreviewed request has no preview to read: its Enable stays disabled
+        ...(unreviewed ? {} : { preview: SKILL_MD, sha256: "6d3bee9d".repeat(8) }),
         warnings: [],
         createdAt: 1,
       },
@@ -104,6 +104,7 @@ function routineCard(id: string, answered?: "allow"): Message {
 }
 
 const OPEN = [skillCard("s1"), routineCard("r1")];
+const UNREVIEWED = skillCard("s3", undefined, true);
 const SETTLED = [skillCard("s2", "allow"), routineCard("r2", "allow")];
 
 function Preview() {
@@ -118,6 +119,9 @@ function Preview() {
         </div>
         <div className="mt-4 rounded-2xl border border-hairline/40 bg-card">
           <PendingApprovalBox approvals={pendingApprovals([OPEN[1]!])} threadId="t" botFor={() => BOT} onCancelTurn={() => {}} />
+        </div>
+        <div data-gallery-unreviewed className="mt-4 rounded-2xl border border-hairline/40 bg-card">
+          <PendingApprovalBox approvals={pendingApprovals([UNREVIEWED])} threadId="t" botFor={() => BOT} onCancelTurn={() => {}} />
         </div>
       </div>
     </div>

@@ -668,10 +668,10 @@ export function ApprovalCard({
     <div
       data-tour="approval"
       data-proposal-card={isSkillRequest ? "skill" : isRoutineRequest ? "routine" : isProfileRequest ? "profile" : isRuleRequest ? "rule" : "team"}
-      className="w-full max-w-[840px] rounded-2xl border border-accent/40 bg-card px-4 py-3"
+      // #3414: the compact surface every ask of the chat shares (AskCard)
+      className="w-full max-w-[840px] rounded-3xl bg-composer px-4 py-3 ring-1 ring-composer-ring"
     >
       <ApprovalHeading
-        bot={bot}
         title={card.skillRequest ? (
           <span className="flex flex-col">
             <span className="text-[12px] font-normal text-ink-tertiary">{proposalTitle}</span>

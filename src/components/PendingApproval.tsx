@@ -7,7 +7,7 @@
 // the detail printed raw in a monospace block that is NEVER truncated
 // (it scrolls instead), and the buttons ordered least-destructive-last so
 // the primary action sits under your thumb.
-import { memo, useState } from "react";
+import { memo, useState, type ReactNode } from "react";
 import { Bot as BotIcon, ChevronDown, ChevronLeft, ChevronRight, GitFork } from "lucide-react";
 import { api, useStore, type Bot, type Message } from "@/state/store";
 import { cn } from "@/lib/cn";
@@ -27,6 +27,7 @@ import { customRuleError } from "./bot-settings/CustomRulesCard";
 import { recipientKeysForSendCard } from "../../shared/send-card-recipients";
 import { parseRecipientEntry } from "../../shared/allowed-recipients";
 import { readableError } from "@/lib/plain-error";
+import { ASK_CHIP, ASK_CHIP_IDLE, ASK_PRIMARY_BUTTON } from "./AskCard";
 
 interface ApprovalLabels {
   [tool: string]: LocaleKey;
@@ -225,16 +226,25 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
   onPrevious,
   onNext,
   allowAllReadOnly,
+  controls,
+  askerName,
 }: {
   pending: Pending;
   count: number;
   index: number;
-  /** who asks, for the avatar and the "Name wants to" title */
+  /** who asks, for the "Name wants to" title */
   bot?: Bot;
   onPrevious?: () => void;
   onNext?: () => void;
   /** several read-only requests wait: allow them all at once */
   allowAllReadOnly?: { count: number; onAllow: () => void };
+  /** the host card's own controls on the title row (the pinned card's jump,
+   * stepper and fold), so the card keeps one row on top, never a header bar */
+  controls?: ReactNode;
+  /** who waits, when the host knows it better than `bot` (a room's pinned
+   * card names the member bot that asks); the card says it whenever its
+   * title does not */
+  askerName?: string;
   /** The active locale. Not read here: it is the memo key, the same way the
    * transcript takes one. Every line in this panel comes from the catalog,
    * and nothing else about a pending approval changes with the language. */
@@ -249,8 +259,27 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const proposal = isSkillApproval(pending) || isRoutineApproval(pending) || isProfileApproval(pending) || isRuleApproval(pending) || Boolean(card?.teamSetupRequest);
   const view = !proposal && card ? toolApprovalView(card, bot?.name) : undefined;
+  // #3414: the bot is named once, in the title. A background conversation's
+  // card (another bot, a proactive wake) says who asked only when that is
+  // not the bot the title already names. An empty askedBy (a conversation an
+  // unnamed bot opened) always says so: the approval started without the
+  // person, whichever bot the title names.
+  const askedByLine = pending.askedBy === undefined
+    ? undefined
+    : pending.askedBy
+      ? pending.askedBy.trim() === bot?.name?.trim() ? undefined : t("approval.askedByBot", { name: pending.askedBy })
+      : t("approval.askedByOtherBot");
+  // A proposal's title ("Enable this learned skill") and a tool title built
+  // without a bot name never say who asks: one quiet line does, so a card
+  // over a room's composer still names the bot it waits on.
+  const title = view ? view.title : label(pending);
+  const asker = askerName?.trim() || bot?.name?.trim();
+  const askerLine = !askedByLine && asker && !title.includes(asker) ? t("approval.askedByBot", { name: asker }) : undefined;
+  const whoLine = askedByLine ?? askerLine;
   // never truncated: long commands wrap and scroll
   const visibleText = proposal ? pending.detail : pending.commandAllowlist?.command ?? view?.plain;
+  // the command that runs, on its own line when the summary does not say it
+  const commandLine = !proposal && visibleText && visibleText.trim() !== view?.summary?.trim() ? visibleText : undefined;
   return (
     <div
       role="region"
@@ -267,54 +296,65 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
       }
       className="px-4 pt-3"
     >
-      {pending.askedBy !== undefined && (
-        <div className="mb-1.5 flex items-center gap-1.5 text-[11.5px] text-ink-secondary" data-approval-asked-by={pending.threadId}>
-          <BotIcon size={12} aria-hidden="true" />
-          <span className="truncate">{pending.askedBy ? t("approval.askedByBot", { name: pending.askedBy }) : t("approval.askedByOtherBot")}</span>
-        </div>
-      )}
-      {pending.parallelTitle && (
-        <div className="mb-1.5 flex items-center gap-1.5 text-[11.5px] text-ink-secondary" data-approval-parallel={pending.threadId}>
-          <GitFork size={12} aria-hidden="true" />
-          <span className="truncate">{t("approval.parallelTask", { title: pending.parallelTitle })}</span>
-        </div>
-      )}
       <ApprovalHeading
-        bot={bot}
-        title={<span aria-live="polite">{view ? view.title : label(pending)}</span>}
+        title={<span aria-live="polite">{title}</span>}
         summary={view?.summary}
         risk={view?.risk}
-        aside={count > 1 ? (
-          <div className="flex flex-col items-end gap-0.5">
-            <Stepper index={index} count={count} onPrevious={onPrevious} onNext={onNext} />
-            {allowAllReadOnly && allowAllReadOnly.count > 1 && (
-              <button
-                type="button"
-                onClick={allowAllReadOnly.onAllow}
-                title={t("approval.action.allowAllReadOnlyHint")}
-                className="rounded-md px-1 text-[12px] font-medium text-accent hover:underline"
-              >
-                {t("approval.action.allowAllReadOnly", { count: allowAllReadOnly.count })}
-              </button>
+        context={commandLine || whoLine || pending.parallelTitle ? (
+          <div className="mt-0.5 flex min-w-0 flex-col text-[12px] leading-5 text-ink-tertiary">
+            {/* what runs stays readable on the card (deciding on it never
+                takes a click); the whole of it and the arguments fold below */}
+            {commandLine && (
+              <code className="min-w-0 truncate font-mono text-[12px] text-ink-secondary" title={commandLine} data-approval-command="">{commandLine.replace(/\s+/g, " ")}</code>
+            )}
+            {whoLine && (
+              <span className="flex min-w-0 items-center gap-1.5" data-approval-asked-by={askedByLine ? pending.threadId : undefined} data-approval-asker={askerLine ? "" : undefined}>
+                <BotIcon size={12} aria-hidden="true" className="shrink-0" />
+                <span className="truncate">{whoLine}</span>
+              </span>
+            )}
+            {pending.parallelTitle && (
+              <span className="flex min-w-0 items-center gap-1.5" data-approval-parallel={pending.threadId}>
+                <GitFork size={12} aria-hidden="true" className="shrink-0" />
+                <span className="truncate">{t("approval.parallelTask", { title: pending.parallelTitle })}</span>
+              </span>
             )}
           </div>
         ) : undefined}
+        aside={count > 1 || controls ? (
+          <>
+            {count > 1 && (
+              <div className="flex flex-col items-end gap-0.5">
+                <Stepper index={index} count={count} onPrevious={onPrevious} onNext={onNext} />
+                {allowAllReadOnly && allowAllReadOnly.count > 1 && (
+                  <button
+                    type="button"
+                    onClick={allowAllReadOnly.onAllow}
+                    title={t("approval.action.allowAllReadOnlyHint")}
+                    className="rounded-md px-1 text-[12px] font-medium text-accent hover:underline"
+                  >
+                    {t("approval.action.allowAllReadOnly", { count: allowAllReadOnly.count })}
+                  </button>
+                )}
+              </div>
+            )}
+            {controls}
+          </>
+        ) : undefined}
       />
       {!proposal && (visibleText || view?.args || pending.tool) && (
-        // 2026-10-20 (after the reference design): one short line of what runs, the
-        // rest folded under Details
-        <div className="mt-1.5" data-approval-preview={detailsOpen ? "open" : "closed"}>
+        // #3414: the raw detail (the command, the arguments) stays behind
+        // one quiet, folded "Details", the way the chat's step rows open
+        <div className="ms-[23px] mt-1" data-approval-preview={detailsOpen ? "open" : "closed"}>
           <button
             type="button"
             aria-expanded={detailsOpen}
             aria-label={t("approval.aria.reviewDetails")}
             onClick={() => setDetailsOpen((open) => !open)}
-            className="flex w-full min-w-0 items-center gap-1.5 rounded-lg bg-inset px-2.5 py-1.5 text-left text-[12px] text-ink-secondary hover:text-ink"
+            className="-ms-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-[12px] text-ink-secondary hover:text-ink"
           >
             <ChevronDown size={13} aria-hidden="true" className={cn("shrink-0 transition-transform", detailsOpen ? "rotate-0" : "-rotate-90")} />
-            {visibleText && !detailsOpen
-              ? <code className="min-w-0 flex-1 truncate font-mono text-ink" title={visibleText}>{visibleText.replace(/\s+/g, " ")}</code>
-              : <span className="flex-1">{t("approval.details.more")}</span>}
+            <span>{t("approval.details.more")}</span>
           </button>
           {detailsOpen && (
             <>
@@ -446,8 +486,9 @@ export function PendingApprovalActions({
     });
   };
 
-  const base = "rounded-full px-3.5 py-1.5 text-[13.5px] transition-colors";
-  const secondary = cn(base, "border border-hairline/50 text-ink hover:bg-control");
+  // #3414: the answers are the chat's ask controls (AskCard), the same
+  // height, type and fills as every other card of the chat
+  const secondary = cn(ASK_CHIP, ASK_CHIP_IDLE);
   // "Cancel turn" stops the whole reply: a quiet link, away from the answers
   const quiet = "rounded-md px-1 py-1 text-[12.5px] text-ink-secondary underline-offset-2 hover:text-ink hover:underline";
   // Organization server: a command on the server asked by a member's bot
@@ -615,15 +656,15 @@ export function PendingApprovalActions({
     );
   }
   return (
-    <div className="flex flex-wrap items-center gap-2 px-4 pb-3 pt-2">
+    <div className="flex flex-wrap items-center gap-2 px-4 pb-3 pt-2.5" data-approval-actions="composer">
       {appLine}
       {riskHint}
-      <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+      <div className="ms-auto flex flex-wrap items-center justify-end gap-2">
         <button
           type="button"
           onClick={() => decide("deny")}
           autoFocus={isTeamSetup}
-          className={cn(base, "border border-danger/40 text-danger hover:bg-danger/10")}
+          className={cn(ASK_CHIP, "border-transparent bg-ink/[0.07] text-danger hover:bg-danger/10")}
         >
           {denyLabel}
         </button>
@@ -632,10 +673,7 @@ export function PendingApprovalActions({
           type="button"
           onClick={() => decide("allow")}
           disabled={isSkillRequest && !reviewedSha256}
-          className={cn(
-            base,
-            "bg-accent font-medium text-accent-ink hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40",
-          )}
+          className={ASK_PRIMARY_BUTTON}
         >
           {allowLabel}
         </button>
@@ -768,7 +806,8 @@ export function PendingApprovalBox({
   const readOnly = readOnlyApprovals(approvals);
   const go = (to: number) => setRequestId(approvals[to]?.requestId);
   return (
-    <div className="mb-2 overflow-hidden rounded-2xl border border-accent/40 bg-card">
+    // #3414: the compact surface every ask of the chat shares (AskCard)
+    <div className="mb-2 overflow-hidden rounded-3xl bg-composer ring-1 ring-composer-ring">
       {/* locale: the panel is memoized and its other props do not
           change with the language (see MessagesList in ChatView) */}
       <PendingApprovalPanel

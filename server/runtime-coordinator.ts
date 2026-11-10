@@ -367,9 +367,19 @@ export class RuntimeCoordinator implements Coordinator {
    * room or not: what a routine run or an external runtime is waiting on. */
   outstandingFor(threadId: string): HandoffView[] {
     this.ready();
-    const live = this.live();
-    const mine = new Set(live.filter(a => a.assignee.destination.threadId === threadId).map(a => a.id));
-    return live.filter(a => a.parentId !== undefined && mine.has(a.parentId) && a.reply !== "none").map(a => this.project(a));
+    // This thread's open rows and their children, never every open row.
+    return this.store.all({ nonTerminal: true, assigneeThreadId: threadId })
+      .flatMap(parent => this.store.children(parent.id).filter(a => !isTerminal(a) && a.reply !== "none").map(a => ({ a, parent })))
+      .sort((x, y) => x.a.createdAt - y.a.createdAt)
+      .map(({ a, parent }) => view(a, parent));
+  }
+
+  /** Running assignments whose turn happens in this thread; reads only that
+   * thread's open rows, so it stays cheap to ask often. */
+  runningIn(threadId: string): HandoffView[] {
+    this.ready();
+    // The view's status: a root's own first turn reads as "source", not running.
+    return this.runningRows(threadId).map(a => this.project(a)).filter(n => n.status === "running");
   }
 
   beginTurn(req: BeginTurnRequest): HandoffView {
@@ -757,7 +767,7 @@ export class RuntimeCoordinator implements Coordinator {
 
   progress(threadId: string): void {
     this.ready();
-    for (const n of this.live()) if (n.status === "running" && n.assignee.destination.threadId === threadId) this.runtime.progress(n.id);
+    for (const n of this.runningRows(threadId)) this.runtime.progress(n.id);
   }
 
   /** A typed line answers a coordinated child parked on its NEEDS INPUT
@@ -909,6 +919,11 @@ export class RuntimeCoordinator implements Coordinator {
 
   private live(): Assignment[] {
     return this.store.all({ nonTerminal: true });
+  }
+
+  /** The open rows whose turn happens in this thread, still running. */
+  private runningRows(threadId: string): Assignment[] {
+    return this.store.all({ nonTerminal: true, assigneeThreadId: threadId }).filter(a => a.status === "running");
   }
 
   /** The assignment in this thread that is parked on the person's answer. */

@@ -18241,7 +18241,7 @@ const handoffs = new Handoffs({
 function reportsToRequester(threadId: string): boolean {
   const watched = delegationWatch.get(threadId);
   return Boolean(watched && delegationReportsBack(watched)) || [...awaitedAsks].some(ask => ask.threadId === threadId)
-    || coordinator.active().some(node => node.status === "running" && node.threadId === threadId && node.parentId !== undefined);
+    || coordinator.runningIn(threadId).some(node => node.parentId !== undefined);
 }
 
 /** finalizeDelegationWatch's rule for who hears a delegation's end: an

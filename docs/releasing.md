@@ -120,7 +120,15 @@ sha you pass) is not an ancestor of `origin/main`. Run it after
 4. Gates: `pnpm test:routine-smoke` (production routine paths against a fake
    Perspicax MCP and the real Sagax routine pipeline: readiness, run start,
    approvals, credits failover, error reporting, token usage; see
-   `docs/verification/routine-smoke.md`), `scripts/smoke-browser-bundle.mjs`
+   `docs/verification/routine-smoke.md`), `pnpm test:connector-matrix` (a
+   bot on every engine row calls a connector of every provider, on fakes:
+   list, read with no card, one card per send at Ask, Always allow and Refuse
+   rules across engines, Full access, the turn's own person only, room, peer
+   and restart turns; and the connector hosts' launch contract against the
+   CLI pins of `engines.lock.json`, which turns red at a pin bump until the
+   connector shapes are captured again; see
+   `docs/design/connectors-across-engines.md`, section 6),
+   `scripts/smoke-browser-bundle.mjs`
    (live on the host arch, `--check-only` for the others) and
    `SAGAX_SMOKE_DIST=<resources>/server node scripts/smoke-packaged-server.mjs`
    for every package.

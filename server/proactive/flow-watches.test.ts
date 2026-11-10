@@ -37,6 +37,7 @@ function harness(opts: { choices?: HarnessChoice[]; mode?: unknown; observed?: u
   let access = true;
   let sessions = 0;
   let apiReads = 0;
+  let inventories = 0;
   const offered: ProactiveEvent[] = [];
   const logs: string[] = [];
   const pauses: Array<{ botId: string; domain: string; cause: string }> = [];
@@ -78,7 +79,7 @@ function harness(opts: { choices?: HarnessChoice[]; mode?: unknown; observed?: u
       if (!row) return { ok: false, cause: "bot-gone" };
       return row.owner === person && !row.hidden ? { ok: true } : { ok: false, cause: "bot-not-eligible" };
     },
-    holdsSkill: (_botId, _person, skill) => (opts.skills ?? ["reporting-x"]).includes(skill),
+    skills: () => { inventories += 1; return new Set(opts.skills ?? ["reporting-x"]); },
     owner: (botId) => roster.find((candidate) => candidate.id === botId)?.owner,
     helper: () => helper,
     session: async (_owner, _bot, fn) => {
@@ -108,6 +109,7 @@ function harness(opts: { choices?: HarnessChoice[]; mode?: unknown; observed?: u
     setAccess: (value: boolean) => { access = value; },
     sessions: () => sessions,
     apiReads: () => apiReads,
+    inventories: () => inventories,
   };
 }
 
@@ -581,5 +583,28 @@ describe("the loop", () => {
     h.advance(15 * 60_000);
     await h.loop.tick();
     expect(h.offered).toHaveLength(2);
+  });
+});
+
+describe("#3470: one skill inventory per bot", () => {
+  const BOTS = 20;
+  const WATCHES = 30;
+  const many = () => Array.from({ length: WATCHES }, (_, index) => watch({ id: `w-${index}`, skill: index % 2 ? "reporting-x" : "reporting-y" }));
+  const roster = () => Array.from({ length: BOTS }, (_, index) => ({ id: `b${index + 1}`, owner: "person-1" }));
+
+  it("the listing of every bot of a person builds at most one inventory per bot, whatever the number of watches", async () => {
+    const h = harness({ bots: roster(), watches: many(), choices: [] });
+    for (let index = 1; index <= BOTS; index += 1) {
+      const listing = await h.loop.offered("person-1", `b${index}`);
+      expect(listing.ok).toBe(true);
+      if (listing.ok) expect(listing.domains[0]!.watches.filter((row) => row.missing === "skill")).toHaveLength(WATCHES / 2);
+    }
+    expect(h.inventories()).toBeLessThanOrEqual(BOTS);
+  });
+
+  it("the loop's walk of a chosen domain reads the bot's skills once, not once per watch", async () => {
+    const h = harness({ watches: many() });
+    await h.loop.tick();
+    expect(h.inventories()).toBe(1);
   });
 });

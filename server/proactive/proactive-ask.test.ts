@@ -7,8 +7,8 @@ import { availableTools, catalogProfileFromEnv } from "../drivers/agents-catalog
 import { createProactiveAskInternalRoutes } from "../routes/proactive-ask.ts";
 import type { OfferedDomain, OfferedListing } from "./flow-watches.ts";
 import {
-  askTurnRefusal, BRIEF_ASK_DOMAIN, cadenceWords, choiceCard, firstQuestionText, ProactiveAsk, proposerFor, SECOND_CARD_AFTER_MS,
-  watchReadCovered, type AskBot, type AskTurnFacts, type ChoiceCard,
+  ASK_LISTING_FRESH_MS, askTurnRefusal, BRIEF_ASK_DOMAIN, cadenceWords, choiceCard, firstQuestionText, PROACTIVE_ASK_WAIT_MS, ProactiveAsk, proposerFor, SECOND_CARD_AFTER_MS,
+  watchReadCovered, withinWait, type AskBot, type AskTurnFacts, type ChoiceCard,
 } from "./proactive-ask.ts";
 import { briefCard } from "./brief-routine.ts";
 import { ProactiveChoices } from "./proactive-choices.ts";
@@ -488,5 +488,84 @@ describe("#3456: the card « Garder le brief du jour ? » goes through the same 
     expect(h.posted).toHaveLength(2);
     // the brief card is open and counts as today's ask: no domain card
     expect((await propose(h, { domain: "security" })).posted).toBe(false);
+  });
+});
+
+describe("#3470: an owner turn never freezes the server on its listing", () => {
+  const BOTS = 20;
+  /** A person with many bots; `busyMs`: each bot's listing holds the
+   * event loop that long (a slow skill inventory). */
+  function many(busyMs = 0) {
+    const clock = { now: START - DAY };
+    const choices = new ProactiveChoices(undefined, () => clock.now);
+    clock.now = START;
+    const bots: AskBot[] = Array.from({ length: BOTS }, (_, index) => ({ id: `b${index}`, title: `Bot ${index}`, description: "", main: index === 0, bornAt: START - 30 * DAY }));
+    const reads: string[] = [];
+    const ask = new ProactiveAsk({
+      choices,
+      bots: () => bots,
+      offered: async (_person, botId): Promise<OfferedListing> => {
+        reads.push(botId);
+        const until = Date.now() + busyMs;
+        while (Date.now() < until) { /* a synchronous inventory */ }
+        return { ok: true, botId, domains: botId === "b0" ? [DISPATCH, SECURITY] : [DISPATCH] };
+      },
+      aboutMe: () => "",
+      timeZone: () => "America/Toronto",
+      language: () => "fr",
+      postCard: () => "p1",
+      now: () => clock.now,
+    });
+    return { ask, reads, clock, choices, bots };
+  }
+  /** One owner turn as server/index.ts runs it: the first question, then the section. */
+  const turn = async (ask: ProactiveAsk) => {
+    const asked = await ask.onOwnerTurn(PERSON, "b0");
+    return { asked, section: await ask.turnSection(PERSON, "b0") };
+  };
+
+  it("one listing per owner turn: the first question and the section share it", async () => {
+    const h = many();
+    const { asked, section } = await turn(h.ask);
+    expect(asked?.botId).toBe("b0");
+    expect(section).toContain("dispatch");
+    expect(h.reads).toHaveLength(BOTS);
+  });
+
+  it("a listing just read is not rebuilt at the person's next turn, and is after a change of their choices or bots", async () => {
+    const h = many();
+    await turn(h.ask);
+    h.clock.now += 60_000;
+    await turn(h.ask);
+    expect(h.reads).toHaveLength(BOTS);
+    h.choices.apply(PERSON, { domain: "security", state: "never", via: "card" }, PERSON);
+    await h.ask.turnSection(PERSON, "b0");
+    expect(h.reads).toHaveLength(2 * BOTS);
+    h.bots.pop();
+    await h.ask.turnSection(PERSON, "b0");
+    expect(h.reads).toHaveLength(3 * BOTS - 1);
+    h.clock.now += ASK_LISTING_FRESH_MS;
+    await h.ask.turnSection(PERSON, "b0");
+    expect(h.reads).toHaveLength(4 * BOTS - 2);
+  });
+
+  it("a timer fires between two bots of a listing", async () => {
+    const h = many(5);
+    let firedAfter = -1;
+    setTimeout(() => { firedAfter = h.reads.length; }, 0);
+    await h.ask.listing(PERSON);
+    expect(firedAfter).toBeGreaterThan(0);
+    expect(firedAfter).toBeLessThan(BOTS);
+  });
+
+  it("the turn does not wait past its bound with a slow inventory", async () => {
+    // 20 bots of 30 ms each: a listing of 600 ms against a bound of 100 ms
+    const h = many(30);
+    const started = Date.now();
+    const section = await withinWait(turn(h.ask).then((row) => row.section), 100, "");
+    const waited = Date.now() - started;
+    expect(section).toBe("");
+    expect(waited).toBeLessThan(100 + 3 * 30);
+    expect(PROACTIVE_ASK_WAIT_MS).toBe(2_000);
   });
 });

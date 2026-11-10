@@ -18355,7 +18355,9 @@
       "sendReceipt.state.failed": "5d28a90f4498a81461efbaf6f628a19d9778390bb5c81a393dd936181cc3d826",
       "sendReceipt.state.queued": "d36be6494248ee06ac18f38ea1119dfe4699fdcfcbbcc30a2e4f1ccbce68dfac",
       "sendReceipt.state.read": "3316348dbadfb7b11c7c2ea235949419e23f9fa898ad2c198f999617912a9925",
-      "sendReceipt.state.waiting": "40fd9e27fced4d3fe3774f01d021b80bf2dc5a6e6a36532f47c85215dc0962f6"
+      "sendReceipt.state.waiting": "40fd9e27fced4d3fe3774f01d021b80bf2dc5a6e6a36532f47c85215dc0962f6",
+      "rich.code.lines": "69955e2c682db58538a7f20c69a27d6d9c7711528f21ce6c9978f86030726b43",
+      "rich.code.linesOne": "19dbd91911f5bb5afdbb9e9bd8693a45d659251e9626e2b150ee930693d5dc4f"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

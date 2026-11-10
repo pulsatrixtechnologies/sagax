@@ -10,6 +10,8 @@
 // read as "not now"; a request that cannot be honoured gets a typed refusal.
 import { randomUUID } from "node:crypto";
 
+import { redactSecretsInText } from "../../shared/redact.ts";
+
 import {
   attemptOutcomeFor,
   byOldestFirst,
@@ -875,7 +877,9 @@ result => this.turnEnded(n.id, result, live),
     if (!n || n.status !== "needs_input") return false;
     const now = this.clock.now();
     this.reminded.delete(id);
-    n.answer = clip(text, BRIEF_MAX); delete n.question; n.lastActivityAt = now;
+    // Mask secrets before an over-long answer is clipped, so the cut can
+    // never leave part of one that redaction no longer matches.
+    n.answer = clip(text.length > BRIEF_MAX ? redactSecretsInText(text) : text, BRIEF_MAX); delete n.question; n.lastActivityAt = now;
     // Teammates it waited on settled while it waited on the person: the
     // answer and their results ride one resume, not an answer turn first.
     n.status = this.resultsOwed(n) ? "resume" : "queued";

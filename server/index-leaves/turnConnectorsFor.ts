@@ -1,18 +1,17 @@
 // @ts-nocheck
 /** turnConnectorsFor (#1388). Pure move from server/index.ts. */
 import { basename } from "node:path";
+import type { ConnectorTurnPlan } from "../connectors/turn-plan.ts";
 export type Host = Record<string, any>;
 
 export function createTurnConnectorsFor(getHost: () => Host): any {
-function turnConnectorsFor(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string; driverKind: string }, speaker: TurnSpeaker,   integrations: NonNullable<SendTurnInput["integrations"]>, principal: string | null, customMcp: boolean, threadId?: string) {
+function turnConnectorsFor(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string; driverKind: string }, speaker: TurnSpeaker,   integrations: NonNullable<SendTurnInput["integrations"]>, principal: string | null, customMcp: boolean, threadId?: string, connectorPlan?: ConnectorTurnPlan) {
   const host = getHost();
-  const { claudeAiConnectorsForTurn, scopedPluginFolders } = host;
-  const account = {
-    ...host.accountConnectorInput(bot, instance, speaker),
-    ...(threadId && host.isRelayPart?.(threadId) ? { engineRelay: true } : {}),
-  };
-  const claudeAi = claudeAiConnectorsForTurn(account);
-  const claudeConnectors = claudeAi ? host.claudeAiConnectorRows(account) : undefined;
+  const { scopedPluginFolders } = host;
+  // the turn's connector plan (server/connectors/turn-plan.ts), computed in turn setup
+  const plan = connectorPlan ?? host.connectorPlanForTurn(bot, instance, speaker, threadId);
+  const claudeAi = plan.claudeAi;
+  const claudeConnectors = claudeAi ? host.claudeAiConnectorRows(plan.input) : undefined;
   const remote = host.remoteMcpServers();
   const serverServers = Object.keys(host.engineMcpServers(bot)).map((name) => {
     const spec = remote[name];
@@ -41,7 +40,7 @@ function turnConnectorsFor(bot: BotRecord, instance: Parameters<typeof withholdH
     plugins,
     claudeAi,
     ...(claudeConnectors ? { claudeConnectors } : {}),
-    grokCloud: host.grokCloudOnTurn(account, instance, bot)
+    grokCloud: plan.grokCloudOnTurn
   });
 
 }

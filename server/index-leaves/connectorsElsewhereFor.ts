@@ -10,7 +10,7 @@ export type Host = Record<string, any>;
 export function createConnectorsElsewhereFor(getHost: () => Host): any {
 function connectorsElsewhereFor(bot: BotRecord, instance: { instanceId: string; driverKind: string }, speaker: TurnSpeaker) {
   const host = getHost();
-  const { claudeAiConnectorsForTurn, connectorPrincipalFor, grokCloudConnectorsForTurn, isPrincipalId, secondLoginSupported } = host;
+  const { isPrincipalId, secondLoginSupported } = host;
   const registry = host.connectorRegistry;
 
   if (host.IDENTITY.kind !== "perspicax" || !registry) return [];
@@ -20,9 +20,10 @@ function connectorsElsewhereFor(bot: BotRecord, instance: { instanceId: string; 
     if (!candidate.enabled || candidate.adapter.capabilities.withholdsHostTools !== true) continue;
     if (candidate.driverKind === "claudeAgent") {
       if (candidate.instanceId === instance.instanceId) continue;
-      const input = host.accountConnectorInput(bot, candidate, speaker);
-      if (!claudeAiConnectorsForTurn(input)) continue;
-      const account = registry.account(connectorPrincipalFor(input), { provider: "claude-ai", instanceId: candidate.instanceId, slot: "primary" });
+      // the connector plan of a turn on that engine (server/connectors/turn-plan.ts)
+      const plan = host.connectorPlanForTurn(bot, candidate, speaker);
+      if (!plan.claudeAi) continue;
+      const account = registry.account(plan.principal, { provider: "claude-ai", instanceId: candidate.instanceId, slot: "primary" });
       if (account?.auth !== "subscription") continue;
       out.push({ engine: host.engineDisplayName(candidate), connectors: connectedConnectorNames(account) });
       continue;
@@ -31,11 +32,11 @@ function connectorsElsewhereFor(bot: BotRecord, instance: { instanceId: string; 
     const payer = host.turnPayerPrincipal(bot, candidate, speaker);
     if (!payer || !isPrincipalId(payer)) continue;
     for (const slot of ["primary", "second"] as const) {
-      const input = host.accountConnectorInput(bot, candidate, speaker, undefined, slot);
+      const plan = host.connectorPlanForTurn(bot, candidate, speaker, undefined, undefined, { slot });
       // the turn itself already loads this sign-in's connectors: not elsewhere
-      if (candidate.instanceId === instance.instanceId && slot === currentSlot && grokCloudConnectorsForTurn(input)) continue;
+      if (candidate.instanceId === instance.instanceId && slot === currentSlot && plan.grokCloud) continue;
       // what a run_with_engine part on that sign-in loads (engineRelay)
-      if (!grokCloudConnectorsForTurn({ ...input, engineRelay: true }) || !host.withholdHostToolsFor(candidate) || bot.toolScope !== undefined) continue;
+      if (!plan.relayLoads || !host.withholdHostToolsFor(candidate) || bot.toolScope !== undefined) continue;
       const account = registry.account(payer, { provider: "grok-com", instanceId: candidate.instanceId, slot });
       // not signed in there, or not read yet (the registry reads it in the background)
       if (!account || account.at === 0) continue;

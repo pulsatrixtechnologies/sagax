@@ -6,6 +6,7 @@ import { ATTACHMENTS_DIR } from "../attachments/attachments.ts";
 import { DATA_DIR } from "../config.ts";
 import { claudeUserSkillsDir, claudeUserSkillsEnabled, forgetClaudeUserSkillsDir } from "../turn-settings.ts";
 import { deferConnectorsPatch } from "./defer-connectors-patch.ts";
+import { connectorPlanAt } from "../connectors/turn-plan.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 import { warmCachePrime } from "./warm-cache-prime.ts";
@@ -16,7 +17,6 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     DirectTurnSetupCancelled,
     IDENTITY,
     VOICE_FIRST_SENTENCE_SYSTEM,
-    accountConnectorInput,
     approvalModeForTurn,
     liveApprovalMode,
     auditFullAccessTurn,
@@ -24,7 +24,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     browserIsThePlace,
     callTurnEffort,
     cfg,
-    claudeAiConnectorsFor,
+    connectorPlanForTurn,
     claudeUserMcpEnabled,
     clearCancelledProviderHandshake,
     confinedWhy,
@@ -35,8 +35,6 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     engineStartGate,
     engineTurnLevel,
     fitTurnImagesForModel,
-    grokCloudConnectorsForTurn,
-    isRelayPart,
     guardTurnDispatch,
     handoffs,
     harnessCommandSource,
@@ -218,12 +216,12 @@ export function createDispatchStartTurn(host: StartTurnHost) {
         if (!claudeUserSkillsEnabled(cfg)) forgetClaudeUserSkillsDir(DATA_DIR);
         return userSkillsDir ? { userSkillsDir } : {};
       })(),
-      claudeAiConnectors: claudeAiConnectorsFor(state.bot, state.instance, state.speaker, turnAccess?.via),
-      grokCloudConnectors: grokCloudConnectorsForTurn({
-        ...accountConnectorInput(state.bot, state.instance, state.speaker, turnAccess?.via),
-        // a run_with_engine part loads this person's grok.com connectors
-        ...(isRelayPart(state.threadId) ? { engineRelay: true } : {}),
-      }),
+      // the plan of turn setup, for the access this dispatch materialized
+      // (a run_with_engine part loads this person's grok.com connectors)
+      ...(() => {
+        const plan = connectorPlanAt(state.connectorPlan ?? connectorPlanForTurn(state.bot, state.instance, state.speaker, state.threadId), turnAccess?.via);
+        return { claudeAiConnectors: plan.claudeAi, grokCloudConnectors: plan.grokCloud };
+      })(),
       ...pluginDirsFor(state.bot, state.instance, orgSpeakerPrincipal(state.bot, state.speaker)),
       mcpCallTimeoutMs: mcpCallTimeoutMinutes(cfg) * 60_000,
       ...(() => { const approvalWaitMs = routineApprovalWaitMs?.(state.threadId); return approvalWaitMs ? { approvalWaitMs } : {}; })(),
@@ -246,9 +244,10 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       const integrations = state.integrations;
       const principal = state.turnPlace.principal;
       const customMcp = state.instance.adapter.capabilities.customMcp === true;
+      const connectorPlan = state.connectorPlan;
       deferConnectorsPatch(() => {
         store.patchTask(botId, threadId, {
-          connectors: turnConnectorsFor(connectorsBot, instance, speaker, integrations, principal, customMcp, threadId),
+          connectors: turnConnectorsFor(connectorsBot, instance, speaker, integrations, principal, customMcp, threadId, connectorPlan),
         });
         turnTrace(threadId, "connectors-patched");
       });

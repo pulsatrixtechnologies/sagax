@@ -408,7 +408,7 @@ export interface SendTurnInput {
   claudeAiConnectors?: boolean;
   /** Grok: load the cloud connectors of the xAI account this turn runs on,
    * which is the person's own grok.com sign-in
-   * (harness-connectors.ts grokCloudConnectorsForTurn). Absent or false:
+   * (connectors/turn-plan.ts grokCloudConnectorsForTurn). Absent or false:
    * off, whatever the organization turn (review of #943). */
   grokCloudConnectors?: boolean;
   /** Claude Code plugins installed on the bot (server/bots/bot-plugins.ts): one

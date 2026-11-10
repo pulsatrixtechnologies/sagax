@@ -184,7 +184,7 @@ export function ownerScopedTool(tool: string, ownerScopedMcpServer?: (server: st
 /** 2026-10-16 (hotfix 0.5.10): a claude.ai connector (`claude_ai_<Service>`)
  * acts as the account the turn runs on. On an organization server those
  * connectors are mounted only when the turn runs on the speaker's own Claude
- * subscription (harness-connectors.ts claudeAiConnectorsForTurn), so they are
+ * subscription (connectors/turn-plan.ts claudeAiConnectorsForTurn), so they are
  * that person's own rights, like a personal connection: the owner answers
  * the card, not an admin. On any other access they are nobody's. */
 export function claudeAiOwnerScopedServer(server: string, via: string | undefined): boolean {
@@ -202,7 +202,7 @@ export function perspicaxOwnerScopedServer(server: string): boolean {
  * driver's use_tool target, listed by this session's own catalog on a
  * managed gateway server: session-permission.ts `accountConnector`). The
  * driver loads those connectors only when the turn runs on the speaker's own
- * xAI sign-in (harness-connectors.ts grokCloudConnectorsForTurn), so they are
+ * xAI sign-in (connectors/turn-plan.ts grokCloudConnectorsForTurn), so they are
  * that person's own rights, like a claude.ai connector
  * (claudeAiOwnerScopedServer): the owner answers the card, not an admin. On
  * any other access they are nobody's. */

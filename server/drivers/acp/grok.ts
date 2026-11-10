@@ -186,7 +186,7 @@ export function grokCloudConnectorEnv(toolScope: unknown, ownAccount?: boolean):
   GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED: "true" | "false";
 } {
   // Review of #943 (point 5): only on the person's own xAI sign-in
-  // (harness-connectors.ts grokCloudConnectorsForTurn), never on an account
+  // (connectors/turn-plan.ts grokCloudConnectorsForTurn), never on an account
   // that pays for someone else's turn.
   if (toolScope !== undefined || ownAccount !== true) {
     return { GROK_MANAGED_MCPS_ENABLED: "false", GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED: "false" };

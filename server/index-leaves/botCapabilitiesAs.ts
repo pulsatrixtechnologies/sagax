@@ -5,7 +5,6 @@ import { resolveBotCapabilities } from "../capabilities/capabilities.ts";
 import { builtinRuntimeMissing } from "../capabilities/builtin-plugin-mounts.ts";
 import { BUILTIN_PLUGINS, builtinPluginEnabled } from "../../shared/builtin-plugins.ts";
 import { skillsLibraryEnabled, customMcpServers } from "../config.ts";
-import { claudeAiConnectorsForTurn } from "../harness-connectors.ts";
 import { parseStoredMcpServer, reservedMcpServerName, isRemoteMcpServer } from "../mcp/mcp-registry.ts";
 import { guarded as orgFlowGuarded } from "../org/org-flow-plugins.ts";
 import { skillDiscoveryAvailable } from "../skills/skill-discovery.ts";
@@ -55,8 +54,9 @@ function botCapabilitiesAs(
   const remote = host.remoteMcpServers();
   const declaration = organization ? host.perspicaxDirectory?.flowPlugins() : undefined;
   const sub = principal ? host.perspicaxSubOf(principal) : null;
-  const account = host.accountConnectorInput(bot, instance, speaker);
-  const claudeRides = claudeAiConnectorsForTurn(account);
+  // what a turn of this viewer's on this engine would get (server/connectors/turn-plan.ts)
+  const plan = host.connectorPlanForTurn(bot, instance, speaker);
+  const claudeRides = plan.claudeAi;
   let personal: CapabilityInputs["personal"];
   if (organization && principal) {
     let servers: Record<string, PersonalMcpServer> = {};
@@ -152,10 +152,10 @@ function botCapabilitiesAs(
       held: sub && host.perspicaxDirectory ? host.perspicaxDirectory.profilesOf(sub) : null
     },
     claudeAi: claudeRides ? { rides: true, ...((): { connectors?: Array<{ name: string; status: string }> } => {
-      const connectors = host.claudeAiConnectorRows(account);
+      const connectors = host.claudeAiConnectorRows(plan.input);
       return connectors ? { connectors } : {};
     })() } : { rides: false },
-    grokCloud: host.grokCloudOnTurn(account, instance, bot)
+    grokCloud: plan.grokCloudOnTurn
   };
   return { ok: true, capabilities: resolveBotCapabilities(inputs, { ...(principal ? { principalId: principal } : {}), mayChange, ...(viewer.computedFor ? { computedFor: viewer.computedFor } : {}) }) };
 }

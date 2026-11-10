@@ -6,6 +6,7 @@ import { DATA_DIR } from "../config.ts";
 import { claudeUserSkillsDir, claudeUserSkillsEnabled, forgetClaudeUserSkillsDir } from "../turn-settings.ts";
 import type { GroupMemberTurnCtx } from "./group-member-turn-ctx.ts";
 import { roomSubagentModel } from "./group-member-turn-room-model.ts";
+import { connectorPlanAt } from "../connectors/turn-plan.ts";
 import { soloPiTurnAccess } from "../pi-own-model-servers-access.ts";
 
 export function createGuardRoomMemberDispatch(host: GroupMemberTurnHost) {
@@ -43,14 +44,13 @@ export function createBeginRoomMemberOutcome(host: GroupMemberTurnHost) {
     EngineAccessLost,
     RoomTurnDeadline,
     accessCardFor,
-    accountConnectorInput,
     auditFullAccessTurn,
     autoRecallPrompt,
     bindInternalCapabilityToProviderTurn,
     browserIsThePlace,
     bus,
     cfg,
-    claudeAiConnectorsFor,
+    connectorPlanForTurn,
     claudeUserMcpEnabled,
     clearCancelledProviderHandshake,
     confinedWhy,
@@ -64,7 +64,6 @@ export function createBeginRoomMemberOutcome(host: GroupMemberTurnHost) {
     extractTurnImages,
     failedTurnTool,
     fitTurnImagesForModel,
-    grokCloudConnectorsForTurn,
     groupEngineCommandRoute,
     guardTurnDispatch,
     harnessCommandSource,
@@ -121,6 +120,7 @@ export function createBeginRoomMemberOutcome(host: GroupMemberTurnHost) {
       text, cwd, turnImages, roomPlace, roomPlan, integrations, roomToolScope, roomGuestConfined,
       roomPrincipal, roomSpeakerId, roomTurnSelection, internalGeneration, onProviderHandshakeStarted,
       onProviderHandshakeSettled, onDispatchError, userName, roomCompactPrompt, roomAgentsKnownUse,
+      roomConnectorPlan,
     } = ctx;
   const worksInWorkspace = supportsWorkspaceFiles(instance.driverKind);
   ctx.replyText = "";
@@ -306,8 +306,11 @@ const sendRoomTurn = async (roomTurnAccess: TurnAccess | undefined) => {
           if (!claudeUserSkillsEnabled(cfg)) forgetClaudeUserSkillsDir(DATA_DIR);
           return userSkillsDir ? { userSkillsDir } : {};
         })(),
-        claudeAiConnectors: claudeAiConnectorsFor(readyBot, instance, roomSpeaker, roomTurnAccess?.via),
-        grokCloudConnectors: grokCloudConnectorsForTurn(accountConnectorInput(readyBot, instance, roomSpeaker, roomTurnAccess?.via)),
+        // the plan of the room turn's setup, for the access this dispatch materialized
+        ...(() => {
+          const plan = connectorPlanAt(roomConnectorPlan ?? connectorPlanForTurn(readyBot, instance, roomSpeaker, threadId), roomTurnAccess?.via);
+          return { claudeAiConnectors: plan.claudeAi, grokCloudConnectors: plan.grokCloud };
+        })(),
         ...pluginDirsFor(readyBot, instance, roomPrincipal ?? undefined),
         mcpCallTimeoutMs: mcpCallTimeoutMinutes(cfg) * 60_000,
         ...(instance.instanceId === roomTurnSelection(readyBot).instanceId

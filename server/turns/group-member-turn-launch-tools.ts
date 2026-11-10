@@ -215,6 +215,7 @@ export function createClaimRoomMemberTurn(host: GroupMemberTurnHost) {
     cloudEngine,
     cloudPlaceRefusal,
     computerPlaceRefusal,
+    connectorPlanForTurn,
     computerToolsRefusal,
     dataIntegration,
     groupSpeakers,
@@ -223,6 +224,7 @@ export function createClaimRoomMemberTurn(host: GroupMemberTurnHost) {
     registry,
     remoteComputerForTurn,
     resolveSurface,
+    roomRoutineSpeaker,
     roomStallCompletions,
     roomTurnApprovalMode,
     roomTurnBrief,
@@ -241,7 +243,7 @@ export function createClaimRoomMemberTurn(host: GroupMemberTurnHost) {
       isCancelled, bot, group, instance, threadId, orchestration, preparedApprovalMode, preparedSelection,
       setupRetry, runGroupMemberTurn, groupId, botId, hop, spoken, cardContinuation, onDispatchError,
       onProviderHandshakeStarted, onProviderHandshakeSettled, skillAuthoringClaim, operation,
-      internalGeneration, roomTurnSelection, roomPlace, integrations,
+      internalGeneration, roomTurnSelection, roomPlace, integrations, roomSpeakerId, roomGuestConfined,
     } = ctx;
     let roomSpeaker = ctx.roomSpeaker;
   // Connected-app discovery is intentionally awaited before a provider owns
@@ -436,6 +438,11 @@ export function createClaimRoomMemberTurn(host: GroupMemberTurnHost) {
     if (data) integrations.data = data;
   }
     ctx.readyBot = readyBot;
+    // Lot L2 of the connectors design: this room turn's connectors, and
+    // whose, computed once here and read by the prompt and the dispatch
+    // (server/connectors/turn-plan.ts), for the person the turn answers.
+    const roomConnectorSpeaker = roomSpeakerId ? { origin: "person", principalId: roomSpeakerId, groupId } : roomRoutineSpeaker(threadId) ?? { origin: "operator" };
+    ctx.roomConnectorPlan = connectorPlanForTurn(readyBot, instance, roomConnectorSpeaker, threadId, undefined, { guestConfined: roomGuestConfined === true });
     ctx.readyGroup = readyGroup;
     ctx.roomToolScope = roomToolScope;
     ctx.roomTeamComputer = roomTeamComputer;

@@ -9636,7 +9636,7 @@ Bot (rules in `server/bots/bot-creation.ts`). Keep:
   server-private, never on the wire, never set by PATCH, dropped by a bot
   zip import) never creates another unless the person makes it their
   Primary Bot, `too_deep`; a temporary agent never does, `temporary_agent`;
-  at most `BOT_CREATIONS_PER_HOUR` (6) bots made by bots per person per
+  at most `BOT_CREATIONS_PER_HOUR` (50) bots made by bots per person per
   rolling hour, `rate_limited`, on top of the 4 per turn; no `suggestion`
   (nobody asked), `suggestion_primary_only`; a `cwd` only when the owner
   holds `folders.botWorkingFolder` on an organization server,

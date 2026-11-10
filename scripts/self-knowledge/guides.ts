@@ -121,7 +121,7 @@ export const GUIDES: Guide[] = [
     id: "create-bot",
     title: "Create a new bot",
     keywords: "creer create nouveau new bot bots agent assistant",
-    text: "A Primary Bot has create_bot; another bot gets it when it may create bots for its person (not hidden, not temporary, owner not read-only). Only on the person's own request, at most 6 bots made by bots per person per hour. Below Full access the person approves a card; the new bot starts with connected apps and automatic approvals off. On an organization server a member creates bots for themselves only (permission bots.create, on by default). The person can always create one from the sidebar.",
+    text: "A Primary Bot has create_bot; another bot gets it when it may create bots for its person (not hidden, not temporary, owner not read-only). Only on the person's own request, at most 50 bots made by bots per person per hour. Below Full access the person approves a card; the new bot starts with connected apps and automatic approvals off. On an organization server a member creates bots for themselves only (permission bots.create, on by default). The person can always create one from the sidebar.",
     refs: ["tool:create_bot", "file:server/bots/bot-creation.ts", "file:shared/permissions.ts"],
   },
   {

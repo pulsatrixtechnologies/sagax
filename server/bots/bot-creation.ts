@@ -38,7 +38,7 @@ export interface BotCreatedBy {
 /** A bot made by a bot never makes another (unless it becomes the Primary Bot). */
 export const BOT_CREATION_MAX_DEPTH = 1;
 /** Bots made by bots, per person, in any rolling hour (non-Primary creators). */
-export const BOT_CREATIONS_PER_HOUR = 6;
+export const BOT_CREATIONS_PER_HOUR = 50;
 export const BOT_CREATION_WINDOW_MS = 3_600_000;
 
 const BOT_ID = /^[\w-]{1,128}$/;

@@ -32,7 +32,7 @@ describe("ReaderCapabilities", () => {
   });
 
   it("opens by itself on an Ask first card, which has Allow, Always allow and Decline and shows what is read", () => {
-    const html = render({ caps: CAPS, reads: [{ name: "team-board", label: "The work of your coding teams" }], approvals: [{ id: 1, name: "team-board", label: "The work of your coding teams" }] });
+    const html = render({ caps: CAPS, reads: [{ name: "team-board", label: "The work of your coding teams" }], approvals: [{ id: 1, name: "team-board", label: "The work of your coding teams", at: 0 }] });
     expect(html).toContain("data-page-caps-panel");
     expect(html).toContain("The work of your coding teams");
     expect(html).toContain("data-cap-viewer");
@@ -42,10 +42,21 @@ describe("ReaderCapabilities", () => {
     expect(html).not.toContain(`aria-label="${readerText("en", "close")}"`);
   });
 
-  it("shows the destination of a link and waits for a click, never an id", () => {
-    const html = render({ caps: CAPS, links: [{ id: 2, url: "https://evil.example/?q=1", host: "evil.example" }] });
-    expect(html).toContain("evil.example");
-    expect(html).toContain("data-cap-link-open");
-    expect(html).toContain("data-cap-link-cancel");
+  it("shows the whole address of a link, host first, query and fragment visible, and offers Always allow this site", () => {
+    const url = "https://evil.example/path?d=secret-board#frag";
+    const html = render({ caps: CAPS, links: [{ id: 2, url, host: "evil.example", rest: "/path?d=secret-board#frag", always: true, at: 0 }] });
+    expect(html).toMatch(/<strong[^>]*data-cap-host[^>]*>evil\.example<\/strong>/);
+    expect(html).toContain("/path?d=secret-board#frag");
+    for (const marker of ["data-cap-link-open", "data-cap-link-cancel", "data-cap-link-always"]) expect(html).toContain(marker);
+    expect(html).not.toContain("data-cap-more");
+  });
+
+  it("cuts a long address in the middle with a way to see it all, and shows no Always allow when it is not offered", () => {
+    const url = `https://evil.example/?d=${"x".repeat(400)}END`;
+    const html = render({ caps: CAPS, links: [{ id: 2, url, host: "evil.example", rest: url.slice(19), always: false, at: 0 }] });
+    expect(html).toContain("data-cap-more");
+    expect(html).toContain("…");
+    expect(/<code[^>]*data-cap-rest[^>]*>([^<]*)<\/code>/.exec(html)![1]!.length).toBeLessThan(130);
+    expect(html).not.toContain("data-cap-link-always");
   });
 });

@@ -199,6 +199,9 @@ const STRINGS = {
     capLinkTitle: "This page wants to open",
     capLinkNote: "This address was not in the data the page read.",
     capLinkOpen: "Open",
+    capLinkAlways: "Always allow this site",
+    capLinkMore: "Show the whole address",
+    capLinkLess: "Show less",
   },
   fr: {
     share: "Partager",

@@ -10,7 +10,7 @@ import { Eye, Link2, ShieldQuestion, X } from "lucide-react";
 
 import { pageCapabilitiesAny } from "../../shared/page-capabilities";
 import { readerText, type ReaderBoot, type ReaderStringKey } from "../../shared/page-reader";
-import type { CapabilityBroker } from "./capabilities";
+import { splitAddress, type CapabilityBroker, type PendingLink } from "./capabilities";
 
 export function ReaderCapabilities({ boot, broker }: { boot: ReaderBoot; broker: CapabilityBroker }) {
   const state = useSyncExternalStore(broker.subscribe, broker.getState, broker.getState);
@@ -67,19 +67,33 @@ export function ReaderCapabilities({ boot, broker }: { boot: ReaderBoot; broker:
               </div>
             </div>
           ))}
-          {state.links.map((entry) => (
-            <div key={entry.id} className="sr-confirm sr-cap-card" role="alert" data-cap-link>
-              <span className="sr-cap-card-title"><Link2 size={14} aria-hidden="true" />{text("capLinkTitle")}</span>
-              <code className="sr-cap-url" title={entry.url}>{entry.host}</code>
-              <span>{text("capLinkNote")}</span>
-              <div className="sr-confirm-actions">
-                <button type="button" className="sr-button sr-button-small" data-cap-link-cancel onClick={() => broker.resolveLink(entry.id, false)}>{text("cancel")}</button>
-                <button type="button" className="sr-button sr-button-small sr-button-primary" data-cap-link-open onClick={() => broker.resolveLink(entry.id, true)}>{text("capLinkOpen")}</button>
-              </div>
-            </div>
-          ))}
+          {state.links.map((entry) => <LinkCard key={entry.id} entry={entry} broker={broker} text={text} />)}
         </div>
       )}
+    </div>
+  );
+}
+
+/** The address a page asks to open, in full: the host first, in semibold,
+ * then the path, query and fragment as written under it, cut in the middle
+ * only when long, with a way to see it all. */
+function LinkCard({ entry, broker, text }: { entry: PendingLink; broker: CapabilityBroker; text: (key: ReaderStringKey, values?: Record<string, string>) => string }) {
+  const [all, setAll] = useState(false);
+  const address = splitAddress(entry.url);
+  return (
+    <div className="sr-confirm sr-cap-card" role="alert" data-cap-link>
+      <span className="sr-cap-card-title"><Link2 size={14} aria-hidden="true" />{text("capLinkTitle")}</span>
+      <span className="sr-cap-address" title={entry.url}>
+        <strong className="sr-cap-host" data-cap-host>{address.host}</strong>
+        {address.rest && <code className="sr-cap-url" data-cap-rest>{all ? address.rest : address.short}</code>}
+      </span>
+      {address.cut && <button type="button" className="sr-link sr-cap-more" data-cap-more aria-expanded={all} onClick={() => setAll((value) => !value)}>{text(all ? "capLinkLess" : "capLinkMore")}</button>}
+      <span>{text("capLinkNote")}</span>
+      <div className="sr-confirm-actions">
+        <button type="button" className="sr-button sr-button-small" data-cap-link-cancel onClick={() => broker.resolveLink(entry.id, "cancel")}>{text("cancel")}</button>
+        {entry.always && <button type="button" className="sr-button sr-button-small" data-cap-link-always onClick={() => broker.resolveLink(entry.id, "always")}>{text("capLinkAlways")}</button>}
+        <button type="button" className="sr-button sr-button-small sr-button-primary" data-cap-link-open onClick={() => broker.resolveLink(entry.id, "open")}>{text("capLinkOpen")}</button>
+      </div>
     </div>
   );
 }

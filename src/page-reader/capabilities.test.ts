@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { CAP_EVENT_MESSAGE, CAP_HELLO_MESSAGE, CAP_MESSAGE, CAP_READY_MESSAGE, CAP_RESULT_MESSAGE } from "../../shared/page-capabilities";
 import { PAGE_OPEN_MESSAGE } from "../../shared/published-pages";
-import { capFailure, createCapabilityBroker, fromPageFrame, parseDataEvent, type BrokerDeps } from "./capabilities";
+import { capFailure, CARD_GUARD_MS, createCapabilityBroker, fromPageFrame, parseDataEvent, splitAddress, type BrokerDeps } from "./capabilities";
 
 const CAPS = { capabilities: { data: ["team-board"], viewer: true, open: true }, reads: [{ name: "team-board", label: "The work of your coding teams" }] };
 const BOARD = { name: "team-board", value: { lanes: [] }, at: 1, links: ["https://github.com/o/r/pull/1"], refs: ["thread:bot1:th1"] };
@@ -12,6 +12,7 @@ class Refusal extends Error {
   constructor(message: string, readonly status: number, readonly code?: string, readonly body?: Record<string, unknown>) { super(message); }
 }
 
+const clock = { t: 1_000_000 };
 function setup(over: Partial<BrokerDeps> = {}, routes: Record<string, unknown | (() => unknown)> = {}) {
   const sent: Record<string, unknown>[] = [];
   const frame = { postMessage: vi.fn((message: Record<string, unknown>) => { sent.push(message); }) } as unknown as Window;
@@ -29,7 +30,9 @@ function setup(over: Partial<BrokerDeps> = {}, routes: Record<string, unknown | 
   });
   const openUrl = vi.fn();
   const openRef = vi.fn(() => true);
+  clock.t = 1_000_000;
   const broker = createCapabilityBroker({
+    now: () => clock.t,
     frame: () => frame,
     api: api as unknown as BrokerDeps["api"],
     pageId: "page_12345678",
@@ -159,6 +162,7 @@ describe("Ask first", () => {
     expect(broker.getState().approvals).toHaveLength(1);
     expect(broker.getState().approvals[0]).toMatchObject({ name: "team-board", label: "The work of your coding teams" });
     expect(posts).toEqual([]);
+    clock.t += 700;
     broker.resolveApproval(broker.getState().approvals[0]!.id, "once");
     await pending;
     expect(posts).toEqual([{ path: "/api/pages/page_12345678/data-approvals/ap_1?lang=en", body: { answer: "once" } }]);
@@ -172,6 +176,7 @@ describe("Ask first", () => {
     const { broker, call, posts, result } = setup({}, asking());
     const pending = call("data.read", { name: "team-board" });
     await flush();
+    clock.t += 700;
     broker.resolveApproval(broker.getState().approvals[0]!.id, "always");
     await pending;
     expect(posts[0]!.body).toEqual({ answer: "always" });
@@ -194,6 +199,7 @@ describe("Ask first", () => {
     const second = call("data.read", { name: "team-board" }, 2);
     await flush();
     expect(broker.getState().approvals).toHaveLength(1);
+    clock.t += 700;
     broker.resolveApproval(broker.getState().approvals[0]!.id, "once");
     await Promise.all([first, second]);
   });
@@ -276,7 +282,10 @@ describe("open", () => {
     expect(openUrl).toHaveBeenCalledTimes(1);
     const [pending] = broker.getState().links;
     expect(pending).toMatchObject({ url: "https://evil.example/?q=secret", host: "evil.example" });
-    broker.resolveLink(pending!.id, true);
+    expect(broker.resolveLink(pending!.id, "open")).toBe(false);
+    expect(openUrl).toHaveBeenCalledTimes(1);
+    clock.t += 700;
+    expect(broker.resolveLink(pending!.id, "open")).toBe(true);
     expect(openUrl).toHaveBeenLastCalledWith("https://evil.example/?q=secret");
     expect(broker.getState().links).toEqual([]);
   });
@@ -285,7 +294,7 @@ describe("open", () => {
     const { call, openUrl, broker } = setup({}, ROUTES);
     await call("data.read", { name: "team-board" }, 1);
     await call("open", { ref: "https://evil.example/" }, 2);
-    broker.resolveLink(broker.getState().links[0]!.id, false);
+    broker.resolveLink(broker.getState().links[0]!.id, "cancel");
     expect(openUrl).not.toHaveBeenCalled();
   });
 
@@ -298,6 +307,7 @@ describe("open", () => {
     expect(broker.guardOpen({ source: frame, data: message("https://github.com/o/r/pull/1") })).toBe(false);
     expect(broker.guardOpen({ source: {}, data: message("https://evil.example/") })).toBe(false);
     expect(broker.guardOpen({ source: frame, data: message("https://evil.example/") })).toBe(true);
+    await flush();
     expect(broker.getState().links.map((entry) => entry.url)).toEqual(["https://evil.example/"]);
   });
 
@@ -344,5 +354,113 @@ describe("refresh without polling", () => {
     expect(parseDataEvent({ name: "team-board" })).toBe("team-board");
     expect(parseDataEvent({ name: "../x" })).toBeNull();
     expect(parseDataEvent(null)).toBeNull();
+  });
+});
+
+describe("a card cannot be clicked at once (a page could time a decoy under the cursor)", () => {
+  const asking = () => ({
+    ...ROUTES,
+    "/api/pages/page_12345678/data/team-board": () => new Refusal("Ask.", 409, "ask_first", { approvalId: "ap_1", source: "team-board", version: 1 }),
+  });
+
+  it("Ask first: Allow and Always allow wait, Decline never does", async () => {
+    const { broker, call, posts } = setup({}, asking());
+    void call("data.read", { name: "team-board" });
+    await flush();
+    const id = broker.getState().approvals[0]!.id;
+    clock.t += CARD_GUARD_MS - 1;
+    expect(broker.resolveApproval(id, "once")).toBe(false);
+    expect(broker.resolveApproval(id, "always")).toBe(false);
+    expect(broker.getState().approvals).toHaveLength(1);
+    expect(posts).toEqual([]);
+    clock.t += 1;
+    expect(broker.resolveApproval(id, "decline")).toBe(true);
+  });
+
+  it("Ask first: Decline is answered at once", async () => {
+    const { broker, call } = setup({}, asking());
+    void call("data.read", { name: "team-board" });
+    await flush();
+    expect(broker.resolveApproval(broker.getState().approvals[0]!.id, "decline")).toBe(true);
+  });
+
+  it("a link card: Open and Always allow this site wait, Cancel never does", async () => {
+    const { broker, call, openUrl } = setup({}, ROUTES);
+    await call("data.read", { name: "team-board" }, 1);
+    await call("open", { ref: "https://evil.example/" }, 2);
+    const id = broker.getState().links[0]!.id;
+    clock.t += CARD_GUARD_MS - 1;
+    expect(broker.resolveLink(id, "open")).toBe(false);
+    expect(broker.resolveLink(id, "always")).toBe(false);
+    expect(openUrl).not.toHaveBeenCalled();
+    expect(broker.resolveLink(id, "cancel")).toBe(true);
+    expect(broker.getState().links).toEqual([]);
+  });
+});
+
+describe("Always allow this site (kept on the server, per reader, page and host)", () => {
+  const LINK = "/api/pages/page_12345678/link-approvals";
+  it("an allowed site opens at once, no card", async () => {
+    const { call, openUrl, broker, result, calls } = setup({}, { ...ROUTES, [LINK]: { allowed: true } });
+    await call("data.read", { name: "team-board" }, 1);
+    await call("open", { ref: "https://example.org/a?b=1" }, 2);
+    expect(calls.at(-1)).toBe(`${LINK}?host=example.org`);
+    expect(openUrl).toHaveBeenCalledWith("https://example.org/a?b=1");
+    expect(result(2)).toMatchObject({ ok: true, value: true });
+    expect(broker.getState().links).toEqual([]);
+  });
+
+  it("the card offers it; the click is sent to the server and the link opens", async () => {
+    const { call, openUrl, broker, posts } = setup({}, { ...ROUTES, [LINK]: () => ({ allowed: false, ok: true }) });
+    await call("data.read", { name: "team-board" }, 1);
+    await call("open", { ref: "https://example.org/a?b=1" }, 2);
+    const card = broker.getState().links[0]!;
+    expect(card.always).toBe(true);
+    clock.t += 700;
+    expect(broker.resolveLink(card.id, "always")).toBe(true);
+    expect(posts).toEqual([{ path: LINK, body: { host: "example.org", answer: "always" } }]);
+    expect(openUrl).toHaveBeenCalledWith("https://example.org/a?b=1");
+  });
+
+  it("a server without the route still asks with the card", async () => {
+    const { call, broker } = setup({}, ROUTES);
+    await call("data.read", { name: "team-board" }, 1);
+    await call("open", { ref: "https://example.org/" }, 2);
+    expect(broker.getState().links).toHaveLength(1);
+  });
+
+  it("an e-mail address is never offered Always allow", async () => {
+    const { call, broker } = setup({}, ROUTES);
+    await call("data.read", { name: "team-board" }, 1);
+    await call("open", { ref: "mailto:a@example.org?subject=x" }, 2);
+    expect(broker.getState().links[0]).toMatchObject({ always: false, host: "a@example.org" });
+  });
+});
+
+describe("the reader's name is data too", () => {
+  it("viewer.get marks the frame: a link outside the data waits for a click before any data read", async () => {
+    const { call, broker, openUrl } = setup({}, ROUTES);
+    await call("viewer.get", {}, 1);
+    await call("open", { ref: "https://example.org/?n=Ada" }, 2);
+    expect(openUrl).not.toHaveBeenCalled();
+    expect(broker.getState().links).toHaveLength(1);
+  });
+});
+
+describe("splitAddress", () => {
+  it("puts the host apart and keeps the query and fragment as written", () => {
+    expect(splitAddress("https://example.org/a/b?d=1&e=2#frag")).toMatchObject({ host: "example.org", rest: "/a/b?d=1&e=2#frag", cut: false });
+    expect(splitAddress("https://example.org/").rest).toBe("");
+  });
+
+  it("cuts a long rest in the middle only, the whole is still there", () => {
+    const long = `https://example.org/?d=${"x".repeat(400)}END`;
+    const parts = splitAddress(long);
+    expect(parts.cut).toBe(true);
+    expect(parts.short.length).toBeLessThan(130);
+    expect(parts.short).toContain("…");
+    expect(parts.short.startsWith("/?d=")).toBe(true);
+    expect(parts.short.endsWith("END")).toBe(true);
+    expect(parts.rest).toBe(long.slice("https://example.org".length));
   });
 });

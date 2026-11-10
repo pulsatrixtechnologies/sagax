@@ -5,7 +5,7 @@
 // the organization's Ask first card and the confirmation of a link the page
 // asks to open that no data answer named. The page is outside: the click is
 // here.
-import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link2, ShieldQuestion } from "lucide-react";
 
 import { t } from "@/lib/i18n";
@@ -13,7 +13,7 @@ import { openExternalLink } from "@/lib/app-links";
 import { capabilityLine } from "@/lib/page-capabilities-line";
 import { api, openBot, openThread, useStore } from "@/state/store";
 import { pageCapabilitiesAny } from "../../shared/page-capabilities";
-import { createCapabilityBroker, type CapabilityBroker } from "../page-reader/capabilities";
+import { createCapabilityBroker, splitAddress, type CapabilityBroker, type PendingLink } from "../page-reader/capabilities";
 
 /** The open page's broker: one per drawn version, listening on this window.
  * The page's calls reach this window through the preview wrapper's relay
@@ -79,14 +79,27 @@ export function PageCapabilityStrip({ broker }: { broker: CapabilityBroker }) {
           <button type="button" data-cap-allow className="rounded px-1.5 py-1 text-accent hover:bg-hover" onClick={() => broker.resolveApproval(entry.id, "once")}>{t("pages.caps.allow")}</button>
         </div>
       ))}
-      {state.links.map((entry) => (
-        <div key={entry.id} role="alert" data-cap-link className="flex flex-wrap items-center gap-2 border-b border-hairline/30 bg-accent/10 px-3 py-1.5 text-[12px] text-ink">
-          <Link2 size={14} aria-hidden="true" className="shrink-0" />
-          <span className="min-w-0 flex-1 break-all" title={entry.url}>{t("pages.caps.link", { host: entry.host })}</span>
-          <button type="button" data-cap-link-cancel className="rounded px-1.5 py-1 text-ink-secondary hover:bg-hover" onClick={() => broker.resolveLink(entry.id, false)}>{t("pages.cancel")}</button>
-          <button type="button" data-cap-link-open className="rounded px-1.5 py-1 text-accent hover:bg-hover" onClick={() => broker.resolveLink(entry.id, true)}>{t("pages.caps.linkOpen")}</button>
-        </div>
-      ))}
+      {state.links.map((entry) => <LinkRow key={entry.id} entry={entry} broker={broker} />)}
+    </div>
+  );
+}
+
+/** The address a page asks to open, in full: host first, in medium weight,
+ * then path, query and fragment as written, cut in the middle only when long. */
+function LinkRow({ entry, broker }: { entry: PendingLink; broker: CapabilityBroker }) {
+  const [all, setAll] = useState(false);
+  const address = splitAddress(entry.url);
+  return (
+    <div role="alert" data-cap-link className="flex flex-wrap items-center gap-2 border-b border-hairline/30 bg-accent/10 px-3 py-1.5 text-[12px] text-ink">
+      <Link2 size={14} aria-hidden="true" className="shrink-0" />
+      <span className="min-w-0 flex-1" title={entry.url}>
+        <span className="block">{t("pages.caps.link")} <span data-cap-host className="font-medium">{address.host}</span></span>
+        {address.rest && <code data-cap-rest className="block break-all font-mono text-[11.5px] text-ink-secondary">{all ? address.rest : address.short}</code>}
+        {address.cut && <button type="button" data-cap-more aria-expanded={all} className="text-accent hover:underline" onClick={() => setAll((value) => !value)}>{t(all ? "pages.caps.linkLess" : "pages.caps.linkMore")}</button>}
+      </span>
+      <button type="button" data-cap-link-cancel className="rounded px-1.5 py-1 text-ink-secondary hover:bg-hover" onClick={() => broker.resolveLink(entry.id, "cancel")}>{t("pages.cancel")}</button>
+      {entry.always && <button type="button" data-cap-link-always className="rounded px-1.5 py-1 text-accent hover:bg-hover" onClick={() => broker.resolveLink(entry.id, "always")}>{t("pages.caps.linkAlways")}</button>}
+      <button type="button" data-cap-link-open className="rounded px-1.5 py-1 text-accent hover:bg-hover" onClick={() => broker.resolveLink(entry.id, "open")}>{t("pages.caps.linkOpen")}</button>
     </div>
   );
 }

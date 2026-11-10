@@ -219,7 +219,10 @@ body.sr-panel-open iframe { margin-right: 380px; width: calc(100% - 380px) !impo
 .sr-cap-scope { margin: 0 0 4px; }
 .sr-cap-card { margin-top: 10px; }
 .sr-cap-card-title { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
-.sr-cap-url { font: 12px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.sr-cap-address { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sr-cap-host { font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
+.sr-cap-url { font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; opacity: .85; }
+.sr-cap-more { margin: 0; align-self: flex-start; font-size: 12px; }
 .sr-cap-card .sr-confirm-actions { justify-content: flex-end; flex-wrap: wrap; }
 /* on a phone the first button of the bar is far from the right edge: the popover hangs from the bar itself */
 @media (max-width: 640px) {

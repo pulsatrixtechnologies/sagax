@@ -81,8 +81,42 @@ export function capFailure(cause: unknown): { error: PageCapError; message?: str
   return { error, ...(message ? { message } : {}) };
 }
 
-export interface PendingApproval { id: number; name: string; label: string }
-export interface PendingLink { id: number; url: string; host: string }
+/** A card ignores the clicks that follow its appearance by this long: the
+ * page chooses when a card appears and could put a decoy under the cursor. */
+export const CARD_GUARD_MS = 600;
+/** An address longer than this shows its middle cut, with a way to see it all. */
+export const LINK_SHOWN_CHARS = 120;
+
+export interface PendingApproval { id: number; name: string; label: string; at: number }
+/** A link the page asked to open: `host` apart, `rest` (path, query and
+ * fragment, as is) under it; `always` when "Always allow this site" can be
+ * offered (an http(s) site, not an e-mail address). */
+export interface PendingLink { id: number; url: string; host: string; rest: string; always: boolean; at: number }
+export type LinkChoice = "open" | "always" | "cancel";
+
+/** The address in two parts for the card: the host, then everything after
+ * it, as written (query and fragment included), and that rest cut in the
+ * middle when it is longer than `max`. Pure. */
+export function splitAddress(url: string, max: number = LINK_SHOWN_CHARS): { host: string; rest: string; short: string; cut: boolean } {
+  let host = "";
+  let rest = "";
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "mailto:") {
+      host = parsed.pathname;
+      rest = `${parsed.search}${parsed.hash}`;
+    } else {
+      host = parsed.host;
+      rest = `${parsed.pathname === "/" && !parsed.search && !parsed.hash ? "" : parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+  } catch {
+    host = url.slice(0, 80);
+  }
+  if (rest.length <= max) return { host, rest, short: rest, cut: false };
+  const keep = Math.max(2, max - 1);
+  const head = Math.ceil(keep * 0.6);
+  return { host, rest, short: `${rest.slice(0, head)}…${rest.slice(rest.length - (keep - head))}`, cut: true };
+}
 
 export interface CapabilityState {
   /** The declaration has been asked (an answer or a refusal). */
@@ -135,8 +169,10 @@ export interface CapabilityBroker {
   dataChanged(name: string): void;
   /** The window came back to focus. */
   refocused(): void;
-  resolveApproval(id: number, choice: ApprovalChoice): void;
-  resolveLink(id: number, open: boolean): void;
+  /** Answers a card; Allow and Always allow are ignored for CARD_GUARD_MS after it appeared (returns false). */
+  resolveApproval(id: number, choice: ApprovalChoice): boolean;
+  /** Same for a link card: Open and Always allow this site wait, Cancel never does. */
+  resolveLink(id: number, choice: LinkChoice): boolean;
   getState(): CapabilityState;
   subscribe(listener: () => void): () => void;
 }
@@ -147,15 +183,6 @@ function boundedAdd(set: Set<string>, values: readonly string[]) {
   for (const value of values) {
     if (set.size >= SET_MAX) return;
     if (typeof value === "string") set.add(value);
-  }
-}
-
-function hostOf(url: string): string {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "mailto:" ? parsed.pathname : parsed.host;
-  } catch {
-    return url.slice(0, 80);
   }
 }
 
@@ -221,7 +248,7 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
       });
     });
     asking.set(name, pending);
-    set({ approvals: [...state.approvals, { id, name, label }] });
+    set({ approvals: [...state.approvals, { id, name, label, at: now() }] });
     return pending;
   };
 
@@ -248,7 +275,7 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
     }
   };
 
-  const open = (args: Record<string, unknown> | undefined): { ok: true; value: unknown } | { ok: false; error: PageCapError; message?: string } => {
+  const open = async (args: Record<string, unknown> | undefined): Promise<{ ok: true; value: unknown } | { ok: false; error: PageCapError; message?: string }> => {
     const ref = typeof args?.ref === "string" ? args.ref : "";
     const target = parsePageOpenRef(ref);
     if (target) {
@@ -262,15 +289,30 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
       deps.openUrl(url);
       return { ok: true, value: true };
     }
-    askLink(url);
-    return { ok: true, value: false };
+    return { ok: true, value: await askLink(url) };
   };
 
-  const askLink = (url: string) => {
-    if ([...pendingLinks.values()].includes(url)) return;
+  const linkRoute = (extra = "") => `/api/pages/${encodeURIComponent(deps.pageId!)}/link-approvals${extra}`;
+  /** A link no data answer named: opens at once when the reader allowed
+   * this site for this page (kept on the server, like the data approvals),
+   * else shows its card and waits. True when it opened. */
+  const askLink = async (url: string): Promise<boolean> => {
+    if ([...pendingLinks.values()].includes(url)) return false;
+    const { host, rest } = splitAddress(url);
+    const always = /^https?:/i.test(url) && Boolean(deps.pageId);
+    if (always) {
+      try {
+        const known = await deps.api<{ allowed?: unknown }>(linkRoute(`?${new URLSearchParams({ host })}`));
+        if (known.allowed === true) {
+          deps.openUrl(url);
+          return true;
+        }
+      } catch { /* the route is not there or failed: the card asks */ }
+    }
     const id = ++seq;
     pendingLinks.set(id, url);
-    set({ links: [...state.links, { id, url, host: hostOf(url) }] });
+    set({ links: [...state.links, { id, url, host, rest, always, at: now() }] });
+    return false;
   };
 
   return {
@@ -314,11 +356,14 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
           const fresh = Boolean(params && typeof params === "object" && (params as { fresh?: unknown }).fresh === true);
           answer(id, { ok: true, value: await readData(source as string, fresh) });
         } else if (request.cap === "viewer.get") {
-          answer(id, { ok: true, value: await deps.api<unknown>(route("viewer")) });
+          const info = await deps.api<unknown>(route("viewer"));
+          // the reader's name is personal data too: a link opens only with a question from now on
+          receivedData = true;
+          answer(id, { ok: true, value: info });
         } else if (!state.caps) {
           answer(id, { ok: false, error: "unavailable", message: "This page's capabilities could not be read." });
         } else {
-          answer(id, open(request.args));
+          answer(id, await open(request.args));
         }
       } catch (cause) {
         const failure = capFailure(cause);
@@ -331,7 +376,7 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
       if (!frame || event.source !== frame) return false;
       const url = parsePageOpenMessage(event.data);
       if (!url || pageLinkOpensDirectly(url, { receivedData, links })) return false;
-      askLink(url);
+      void askLink(url);
       return true;
     },
     dataChanged(name) {
@@ -347,13 +392,23 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
       }
     },
     resolveApproval(id, choice) {
+      const entry = state.approvals.find((card) => card.id === id);
+      if (!entry || (choice !== "decline" && now() - entry.at < CARD_GUARD_MS)) return false;
       approvals.get(id)?.(choice);
+      return true;
     },
-    resolveLink(id, openIt) {
-      const url = pendingLinks.get(id);
+    resolveLink(id, choice) {
+      const entry = state.links.find((card) => card.id === id);
+      if (!entry || (choice !== "cancel" && now() - entry.at < CARD_GUARD_MS)) return false;
       pendingLinks.delete(id);
-      set({ links: state.links.filter((entry) => entry.id !== id) });
-      if (url && openIt) deps.openUrl(url);
+      set({ links: state.links.filter((card) => card.id !== id) });
+      if (choice === "cancel") return true;
+      if (choice === "always" && entry.always) {
+        // kept on the server for this reader, page and site; this link opens either way
+        void deps.api(linkRoute(), { method: "POST", body: { host: entry.host, answer: "always" } }).catch(() => undefined);
+      }
+      deps.openUrl(entry.url);
+      return true;
     },
     getState: () => state,
     subscribe(listener) {

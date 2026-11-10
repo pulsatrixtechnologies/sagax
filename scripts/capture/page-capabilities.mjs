@@ -66,7 +66,7 @@ read(false);sagax.data.subscribe("team-board",v=>out("data",v.lanes.map(l=>l.tit
 sagax.viewer.get().then(v=>out("viewer",v.name+" · "+v.role),e=>out("viewer","refused: "+e.code));
 document.getElementById("refresh").onclick=()=>read(true);
 document.getElementById("open-ok").onclick=()=>sagax.open("https://github.com/pulsatrix/sagax/pull/3417");
-document.getElementById("open-other").onclick=()=>sagax.open("https://example.org/somewhere-else");
+document.getElementById("open-other").onclick=()=>sagax.open("https://example.org/somewhere-else?board=To+do+2+In+review+1+Merged+1&owner=ada&token_like=aGVsbG8gd29ybGQgdGhpcyBpcyBkYXRhIHRoYXQgbGVhdmVz&note=the+page+can+put+anything+here#section-3");
 </script></body></html>`;
 
 let askFirst = false;
@@ -167,6 +167,17 @@ try {
     await narrowPage.waitForTimeout(300);
     await shoot(narrowPage, `reader-narrow-ask-first-${scheme}`);
     await narrow.close();
+    // 5. the link card with its whole address, narrow
+    askFirst = false;
+    const narrowLink = await browser.newContext({ viewport: { width: 390, height: 760 }, deviceScaleFactor: 2, colorScheme: scheme });
+    const narrowLinkPage = await narrowLink.newPage();
+    await narrowLinkPage.goto(`http://127.0.0.1:${readerPort}/pages/view/${TOKEN}`, { waitUntil: "load" });
+    await narrowLinkPage.frameLocator("iframe").locator("#data", { hasText: "To do: 2" }).waitFor({ timeout: 15_000 });
+    await narrowLinkPage.frameLocator("iframe").locator("#open-other").click();
+    await narrowLinkPage.waitForSelector("[data-cap-link]");
+    await narrowLinkPage.waitForTimeout(300);
+    await shoot(narrowLinkPage, `reader-narrow-link-confirm-${scheme}`);
+    await narrowLink.close();
     askFirst = false;
   }
 

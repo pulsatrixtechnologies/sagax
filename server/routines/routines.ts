@@ -3043,10 +3043,11 @@ export class RoutineManager {
     this.stop();
   }
 
+  /** #3322: the shutdown pause is final for this manager. A maintenance
+   * resume during the drain never restarts the scheduler; the next process
+   * starts a fresh manager. */
   start() {
-    this.paused = false;
-    this.shuttingDown = false;
-    if (this.timer) return;
+    if (this.shuttingDown || this.timer) return;
     // Repair: a wall-clock routine whose next run was stored in the wrong
     // zone (a default that was the host's UTC) is recomputed once, here.
     try { this.rescheduleWallClock((routine) => { const found = this.routines.find((candidate) => candidate === routine); return found?.schedule.type === "daily"; }); } catch (error) { console.warn("routines: wall-clock repair failed", error); }
@@ -3434,6 +3435,9 @@ export class RoutineManager {
       // another request rolls back a failed routine-definition write.
       let indexed: RoutineRun[] | null = null, byId = new Map<string, RoutineRun>();
       for (const id of this.runs.map((run) => run.id)) {
+        // #3322: a pause that came while this pass awaited a dispatch leaves
+        // the runs still queued untouched, for the next start.
+        if (this.paused) return;
         if (indexed !== this.runs) [indexed, byId] = [this.runs, new Map(this.runs.map((run) => [run.id, run]))];
         const run = byId.get(id);
         if (!run || run.status !== "queued") continue;
@@ -3664,11 +3668,18 @@ export class RoutineManager {
             }
           }
         }
+        // #3322: the pre-check, admission or readiness above may have been
+        // awaited across the shutdown pause: the run stays queued, no task.
+        if (this.paused) return;
         // Every run works in its own task (a webhook's too, since
         // 2026-10-28) and reports into the conversation it belongs to.
         const startedAt = this.now();
         const title = this.runTitle(run.routineName, startedAt, run);
-        const unstarted = this.unstartedTasks.get(run.id);
+        // A room goal the shutdown pause sent back to the queue starts on
+        // the task it already had (requeueAfterPause); a bot's run joins its
+        // thread through joinedEarly above.
+        const unstarted = this.unstartedTasks.get(run.id)
+          ?? (run.target === "room-goal" && run.retryAt !== undefined ? run.threadId : undefined);
         this.unstartedTasks.delete(run.id);
         const joined = joinedEarly || unstarted || null;
         const reservedThread = joined || run.target === "room-goal" ? null : this.takeReserved(run);
@@ -3715,6 +3726,8 @@ export class RoutineManager {
           if (run.target === "bot" && this.options.prepareTurn) {
             await this.options.prepareTurn(cloneRun(run));
             if (run.status !== "running") continue;
+            // #3322: a pause during the preparation starts no turn.
+            if (this.paused) { this.requeueAfterPause(run); continue; }
           }
           const engine = this.options.engineForRun?.(run);
           if (engine) this.readinessEngines.set(run.id, engine);
@@ -3727,6 +3740,8 @@ export class RoutineManager {
           turnTrace(task.threadId, "routine-memory");
           // The run may have been cancelled while the memory answered.
           if (askMemory && run.status !== "running") continue;
+          // #3322: same for a pause while the memory answered.
+          if (this.paused && run.status === "running") { this.requeueAfterPause(run); continue; }
           if (run.target === "room-goal") {
             if (!run.groupId || !this.options.startGoal) {
               this.failThread(task.threadId, "Room goal routines are unavailable");
@@ -5293,6 +5308,25 @@ export class RoutineManager {
 
   private emitRoutine(routine: Routine) {
     this.options.emit?.({ kind: "routine", routine: this.routineWithHealth(routine) });
+  }
+
+  /** #3322: the shutdown pause came after this run got its task but before
+   * its turn started, so the routine's prompt was never posted there. Left
+   * running, the next process would resume it as a cut turn and tell the bot
+   * it had been working. Back to queued on that same task instead, saved now:
+   * the next start posts the routine's own prompt in it, and the run's line
+   * says why it waits. */
+  private requeueAfterPause(run: RoutineRun): void {
+    run.status = "queued";
+    run.startedAt = undefined;
+    run.retryAt = this.now();
+    run.attention = "Starts again after the restart, in this task";
+    try {
+      this.save();
+    } catch (error) {
+      console.warn(`routines: could not save the run sent back to the queue at shutdown: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    this.emitRun(run);
   }
 
   /** A scheduled run whose routine has a pre-check stays out of the

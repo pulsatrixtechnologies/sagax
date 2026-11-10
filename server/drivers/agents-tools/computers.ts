@@ -87,7 +87,7 @@ export const DEF_REMOTE_SESSION_EXEC = {
 
 export const DEF_HOST_COMPUTER = {
     name: "host_computer",
-    description: "Work on the person's enrolled host as your computer: the one picked in the Computer menu or, with no pick, a bot host shared with All bots or with you (several: pass host; a refusal lists names). No Remote session card. Actions: exec runs one command (sh, or PowerShell on Windows); screenshot (not on a shell-only host); ask_mode asks the person: isolated VM or the host as-is (asked itself the first time); set_mode records it; vm_status, vm_provision, vm_delete, vm_rebuild manage the VM. The host's access rule applies: Ask waits for a yes before a change, Never refuses.",
+    description: "Work on the person's enrolled host as your computer: the one picked in the Computer menu or, with no pick, a bot host shared with All bots or with you (several: pass host; a refusal lists names). No Remote session card. Actions: exec runs one command (sh, or PowerShell on Windows); screenshot (not on a shell-only host); ask_mode asks the person: isolated VM or host as-is (asked once; an Always allow host is as-is); set_mode records it; vm_status, vm_provision, vm_delete, vm_rebuild manage the VM. The host's access rule applies: Ask waits for a yes before a change, Never refuses.",
     inputSchema: {
       type: "object",
       additionalProperties: false,

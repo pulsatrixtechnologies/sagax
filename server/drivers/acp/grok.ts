@@ -28,6 +28,7 @@ import { grokCatalogFor, grokCatalogSection, grokMcpAlreadySettled, noteGrokAcco
 import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors.ts";
 import { turnReachFor } from "../../turns/turn-reach.ts";
 import { turnActiveProfileFor } from "../../turns/turn-active-profile.ts";
+import { grokGatewayOnTurn } from "../../connectors/turn-plan.ts";
 import { narrowsNativeTools } from "../../../shared/tool-scope.ts";
 import { grokToolScopeProfile, grokInheritedProfile } from "./grok-tool-scope.ts";
 export { grokToolScopeProfile, grokInheritedProfile, allowsRegisteredTool } from "./grok-tool-scope.ts";
@@ -246,7 +247,11 @@ export function grokTurnCatalogSection(input: {
   const reach = turnReachFor(input.threadId) ?? { lines: [], tools: [] };
   // the xAI cloud connectors an own-account org turn can connect (#966),
   // so a card connector not yet connected on grok.com is actionable
-  const connectable = grokConnectableConnectors(input.accountConnectors === true);
+  // #3351: only when this turn's plan loads the gateway (no tool selection,
+  // an engine that withholds host tools on an organization server), the
+  // same plan the one connector list reads
+  const gateway = input.accountConnectors === true && (input.threadId ? grokGatewayOnTurn(input.threadId) !== false : true);
+  const connectable = grokConnectableConnectors(gateway);
   // routine act-as / profile_use / identity on the live Perspicax connection
   const activeProfile = turnActiveProfileFor(input.threadId, input.botId);
   if (!catalog && !reach.tools.length && !reach.lines.length && !connectable.length) return knownGrokToolsSection(known);

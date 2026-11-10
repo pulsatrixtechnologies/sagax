@@ -4,11 +4,8 @@ import { resolveEngineAccess } from "./engines/engine-credentials.ts";
 
 import {
   ClaudeAiConnectorInventory,
-  claudeAiConnectorsPrompt,
   connectorPrincipalFor,
   createHarnessConnectorRoutes,
-  engineConnectorsPrompt,
-  relayHint,
   accountConnectorsForTurn,
   parseClaudeAuthStatus,
   parseClaudeMcpList,
@@ -62,20 +59,6 @@ describe("claudeAiConnectorsForTurn", () => {
     expect(claudeAiConnectorsForTurn(turn({ via: "subscription", restrictedByPolicy: true }))).toBe(false);
     expect(claudeAiConnectorsForTurn(turn({ via: "subscription", driver: "codex" }))).toBe(false);
   });
-  it("tells the bot whose connectors they are only when they are mounted", () => {
-    expect(claudeAiConnectorsPrompt(false)).toBe("");
-    expect(claudeAiConnectorsPrompt(true)).toContain("mcp__claude_ai_");
-    expect(claudeAiConnectorsPrompt(true)).not.toMatch(/[–—]/);
-  });
-  it("#1943 tells the bot to keep the owner's mail on /me without another userId", () => {
-    const prompt = claudeAiConnectorsPrompt(true);
-    expect(prompt).toContain("omit userId and user_id");
-    expect(prompt).toContain("/me");
-    expect(prompt).toContain("bot inbound address");
-    expect(engineConnectorsPrompt({
-      driver: "grokAgent", claudeAi: false, grokCloud: true,
-    })).toContain("omit userId and user_id");
-  });
 });
 
 describe("whose account connectors a turn reaches (review of #943, point 5)", () => {
@@ -93,7 +76,6 @@ describe("whose account connectors a turn reaches (review of #943, point 5)", ()
     expect(grokCloudConnectorsForTurn({ ...own, driver: "claudeAgent", grokAccountConnectors: true })).toBe(false);
     // nor does the xAI API engine's: it has no use_tool to reach them
     expect(grokCloudConnectorsForTurn({ ...own, driver: "grok", grokAccountConnectors: true })).toBe(false);
-    expect(engineConnectorsPrompt({ driver: "grok", claudeAi: false, grokCloud: true })).not.toContain("use_tool");
   });
   it("someone else's sign-in pays: foreign, nothing offered", () => {
     for (const driver of ["claudeAgent", "grokAgent"]) {
@@ -144,63 +126,6 @@ describe("whose account connectors a turn reaches (review of #943, point 5)", ()
     expect(grokCloudConnectorsForTurn({ ...own, driver: "grok" })).toBe(false);
     expect(grokCloudConnectorsForTurn({ ...own, driver: "claudeAgent" })).toBe(false);
     expect(grokCloudConnectorsForTurn({ ...base, identity: "solo", driver: "grokAgent", speaker: { origin: "operator" }, engineRelay: true })).toBe(true);
-  });
-  it("tells a foreign turn the connectors belong to someone else and offers nothing", () => {
-    const text = engineConnectorsPrompt({ driver: "grokAgent", claudeAi: false, grokCloud: false, foreign: true });
-    expect(text).toContain("belong to someone else");
-    expect(text).not.toContain("use_tool");
-    expect(text).not.toContain("ask_bot");
-  });
-});
-
-describe("what a turn is told about mail, Teams, calendar and SharePoint (parité R9 + R11)", () => {
-  it("a Claude turn with the speaker's connectors: whose they are, and every send or write waits for its card", () => {
-    const text = engineConnectorsPrompt({ driver: "claudeAgent", claudeAi: true, grokCloud: false });
-    expect(text).toContain(claudeAiConnectorsPrompt(true).trim());
-    expect(text).toMatch(/approval card/);
-    expect(text).toMatch(/SharePoint/);
-  });
-  it("a Grok organization turn: the xAI account's cloud connectors through use_tool, managed on grok.com", () => {
-    const text = engineConnectorsPrompt({ driver: "grokAgent", claudeAi: false, grokCloud: true });
-    expect(text).toContain("use_tool");
-    expect(text).toContain("https://grok.com/connectors");
-    expect(text).toContain("Microsoft Teams");
-    expect(text).toMatch(/approval card/);
-  });
-  it("an engine with none: says which engine has them and offers a teammate, never claims a send", () => {
-    for (const input of [
-      { driver: "codex", claudeAi: false, grokCloud: false },
-      { driver: "claudeAgent", claudeAi: false, grokCloud: false },
-      // a solo Grok turn: the cloud connectors stay off (#918)
-      { driver: "grokAgent", claudeAi: false, grokCloud: false },
-    ]) {
-      const text = engineConnectorsPrompt(input);
-      // a person's chat coordinates (no ask_bot there): no tool is named
-      expect(text).toContain("ask a teammate bot on that engine with your teammate tools");
-      expect(text).not.toContain("ask_bot");
-      expect(text).not.toContain("use_tool");
-      expect(text).not.toContain("mcp__claude_ai_");
-    }
-  });
-  it("to connect a connector: open_connector_setup, one call, never a tour of the settings (Owner 2026-10-22)", () => {
-    for (const input of [
-      { driver: "claudeAgent", claudeAi: true, grokCloud: false },
-      { driver: "grokAgent", claudeAi: false, grokCloud: true },
-      { driver: "codex", claudeAi: false, grokCloud: false },
-      { driver: "grokAgent", claudeAi: false, grokCloud: false },
-    ]) {
-      const text = engineConnectorsPrompt(input);
-      expect(text).toContain("open_connector_setup");
-      expect(text).not.toMatch(/tell the person to connect it at/);
-    }
-    // Grok calls it straight away, no search_tool round first
-    expect(engineConnectorsPrompt({ driver: "grokAgent", claudeAi: false, grokCloud: true })).toContain("use_tool with tool_name agents__open_connector_setup");
-    expect(engineConnectorsPrompt({ driver: "grokAgent", claudeAi: false, grokCloud: true, foreign: true })).not.toContain("open_connector_setup");
-  });
-  it("never a dash a person would read as an em dash", () => {
-    for (const grokCloud of [true, false]) {
-      for (const claudeAi of [true, false]) expect(engineConnectorsPrompt({ driver: grokCloud ? "grokAgent" : "claudeAgent", claudeAi, grokCloud })).not.toMatch(/[–—]/);
-    }
   });
 });
 
@@ -419,55 +344,6 @@ describe("a stored claudeAi: false", () => {
   });
 });
 
-describe("2026-10-28: Grok's own connectors in the person's Grok turn", () => {
-  it("tells the Grok turn they are the person's own and how to find Teams or Outlook", () => {
-    const text = engineConnectorsPrompt({ driver: "grokAgent", claudeAi: false, grokCloud: true });
-    expect(text).toContain("person's own xAI account");
-    expect(text).toMatch(/search_tool \(for example "teams" or "outlook"\)/);
-    expect(text).toContain("Microsoft Teams");
-  });
-});
-
-describe("2026-10-28: Full access never asks for a typed GO", () => {
-  it("Full access: a send asks for no card and no typed GO; only Refuse, Ask first and allowed recipients stop it", () => {
-    for (const input of [
-      { driver: "claudeAgent", claudeAi: true, grokCloud: false, full: true },
-      { driver: "grokAgent", claudeAi: false, grokCloud: true, full: true },
-    ]) {
-      const text = engineConnectorsPrompt(input);
-      expect(text).toContain("Full access");
-      expect(text).not.toMatch(/wait for the person's approval card/);
-      expect(text).toMatch(/no confirmation and no typed GO/);
-      expect(text).toMatch(/Ask first/);
-      expect(text).toMatch(/allowed recipients/);
-    }
-    // below Full the card stays, and the bot never asks for a typed word either
-    const ask = engineConnectorsPrompt({ driver: "claudeAgent", claudeAi: true, grokCloud: false });
-    expect(ask).toMatch(/approval card/);
-    expect(ask).toMatch(/never ask for a typed GO/);
-  });
-});
-
-describe("2026-10-29: the relay hint names the person's other engines and sign-ins", () => {
-  it("nothing known elsewhere: the generic hint; known: each engine with its connectors, the personal account first for mail and Teams", () => {
-    expect(relayHint(undefined)).toContain("call run_with_engine with that engine");
-    expect(relayHint([{ engine: "Claude", connectors: [] }])).toContain("call run_with_engine with that engine");
-    const named = relayHint([
-      { engine: "Grok (personal account)", connectors: ["Microsoft Teams", "Outlook (Exchange)"], accountKind: "personal" },
-      { engine: "Claude", connectors: ["Microsoft 365"] },
-    ]);
-    expect(named).toContain("Grok (personal account): Microsoft Teams, Outlook (Exchange); Claude: Microsoft 365");
-    expect(named).toContain("prefer the personal account");
-    expect(named).toContain("Never answer that you cannot switch engines or accounts");
-    // the prompt of a turn with no connector of its own carries it
-    const text = engineConnectorsPrompt({ driver: "codex", claudeAi: false, grokCloud: false, relay: true, elsewhere: [{ engine: "Claude", connectors: ["Microsoft 365"] }] });
-    expect(text).toContain("Claude: Microsoft 365");
-    // and so does a Grok turn on one account about the other
-    const grok = engineConnectorsPrompt({ driver: "grokAgent", claudeAi: false, grokCloud: true, relay: true, elsewhere: [{ engine: "Grok (personal account)", connectors: ["Microsoft Teams"], accountKind: "personal" }] });
-    expect(grok).toContain("Grok (personal account): Microsoft Teams");
-  });
-});
-
 describe("2026-10-28: a part run on another engine (run_with_engine)", () => {
   const base = { identity: "perspicax" as const, restrictedByPolicy: false, ownerPrincipalId: BOB, localPrincipalId: LOCAL };
   // the sub-turn's speaker: the same bot, for the person of the source turn (index.ts peerSpeaker)
@@ -500,18 +376,5 @@ describe("2026-10-28: a part run on another engine (run_with_engine)", () => {
   it("someone else's Grok sign-in never serves the part: foreign, no connectors", () => {
     const input = { ...base, driver: "grokAgent", via: "subscription" as const, payerPrincipalId: ADA, speaker: relaySpeaker };
     expect(grokCloudConnectorsForTurn(input)).toBe(false);
-  });
-
-  it("a turn without the connector is pointed at run_with_engine, never at \"I can't switch engines\"", () => {
-    const text = engineConnectorsPrompt({ driver: "claudeAgent", claudeAi: false, grokCloud: false, relay: true });
-    expect(text).toContain("run_with_engine");
-    expect(text).toContain("Microsoft Teams");
-    expect(text).toContain("open_connector_setup");
-    expect(engineConnectorsPrompt({ driver: "claudeAgent", claudeAi: true, grokCloud: false, relay: true })).toContain("run_with_engine");
-    // a turn one hop away has no run_with_engine: not named
-    expect(engineConnectorsPrompt({ driver: "claudeAgent", claudeAi: false, grokCloud: false })).not.toContain("run_with_engine");
-    for (const full of [true, false]) {
-      expect(engineConnectorsPrompt({ driver: "claudeAgent", claudeAi: false, grokCloud: false, relay: true, full })).not.toMatch(/[–—]/);
-    }
   });
 });

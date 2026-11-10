@@ -214,25 +214,33 @@ export function connectorPlanAt(plan: ConnectorTurnPlan & { at?(via: AccessVia |
 /** #3349 (L6): per thread, whether the turn last dispatched there mounted
  * the speaker's own claude.ai connectors (plan.claudeAi). The bus reads it to
  * give a native `claude_ai_` ask the connector facts a hub call carries.
+ * #3351 (L8): and whether it loaded the Grok gateway (plan.grokCloudOnTurn),
+ * which the Grok catalog section reads, so it says what the one list says.
  * Bounded: the oldest threads are forgotten first. */
-const CLAUDE_AI_OWN_MAX = 5_000;
-const claudeAiOwnByThread = new Map<string, boolean>();
+const DISPATCHED_MAX = 5_000;
+const dispatchedByThread = new Map<string, { claudeAi: boolean; grokCloudOnTurn: boolean }>();
 
 /** The plan a dispatch materialized (connectorPlanAt), remembered for its
  * thread. */
 export function dispatchedConnectorPlan(threadId: string, plan: ConnectorTurnPlan & { at?(via: AccessVia | undefined): ConnectorTurnPlan }, via: AccessVia | undefined): ConnectorTurnPlan {
   const at = connectorPlanAt(plan, via);
-  claudeAiOwnByThread.delete(threadId);
-  claudeAiOwnByThread.set(threadId, at.claudeAi === true);
-  while (claudeAiOwnByThread.size > CLAUDE_AI_OWN_MAX) {
-    const oldest = claudeAiOwnByThread.keys().next().value;
+  dispatchedByThread.delete(threadId);
+  dispatchedByThread.set(threadId, { claudeAi: at.claudeAi === true, grokCloudOnTurn: at.grokCloudOnTurn === true });
+  while (dispatchedByThread.size > DISPATCHED_MAX) {
+    const oldest = dispatchedByThread.keys().next().value;
     if (oldest === undefined) break;
-    claudeAiOwnByThread.delete(oldest);
+    dispatchedByThread.delete(oldest);
   }
   return at;
 }
 
 /** The turn on this thread mounted the speaker's own claude.ai connectors. */
 export function claudeAiConnectorsOwn(threadId: string): boolean {
-  return claudeAiOwnByThread.get(threadId) === true;
+  return dispatchedByThread.get(threadId)?.claudeAi === true;
+}
+
+/** Whether the turn dispatched on this thread loads the Grok gateway;
+ * undefined when no turn was dispatched there by this process. */
+export function grokGatewayOnTurn(threadId: string): boolean | undefined {
+  return dispatchedByThread.get(threadId)?.grokCloudOnTurn;
 }

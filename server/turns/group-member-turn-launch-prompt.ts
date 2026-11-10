@@ -260,7 +260,8 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
     { id: "shell", label: "Long-running commands", text: workspace ? longCommandsPrompt(roomComputerPromptKind) : "" },
     { id: "mcp", label: "MCP servers", text: customMcpPrompt(Object.keys(integrations.custom ?? {}), mcpServersOff(bot)) + githubWithheldPrompt(roomGithubWithheld) },
     { id: "perspicax", label: "Perspicax", text: roomPerspicaxPrompt },
-    { id: "claude-ai", label: "Claude connectors", text: engineConnectorsPromptFor(readyBot, instance, roomSpeakerId ? { origin: "person", principalId: roomSpeakerId, groupId } : roomRoutineSpeaker(threadId) ?? { origin: "operator" }, { level: roomPromptLevel, perspicaxConventions: hasPerspicaxConventions(roomPerspicaxPrompt), ...(ctx.roomConnectorPlan ? { plan: ctx.roomConnectorPlan } : {}) }) },
+    // #3351: the one connector list, the same text as the person's direct turn
+    { id: "claude-ai", label: "Connectors", text: engineConnectorsPromptFor(readyBot, instance, roomSpeakerId ? { origin: "person", principalId: roomSpeakerId, groupId } : roomRoutineSpeaker(threadId) ?? { origin: "operator" }, { level: roomPromptLevel, perspicaxConventions: hasPerspicaxConventions(roomPerspicaxPrompt), agents: Boolean(integrations.agents), toolScope: roomToolScope, ...(ctx.roomConnectorPlan ? { plan: ctx.roomConnectorPlan } : {}) }) },
     { id: "approval-level", label: "Approval level", text: approvalLevelPrompt(roomPromptLevel) },
     // #1819: effective ask-before-contact (Full skips the Sagax peer card)
     { id: "peer-contact", label: "Peer contact", text: peerContactPrompt({

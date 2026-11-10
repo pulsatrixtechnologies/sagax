@@ -10,7 +10,7 @@ import type { ProviderAuthenticationStatus } from "../contracts.ts";
 import { grokAccountReach, type GrokAccountReach } from "../drivers/acp/grok-tool-catalog.ts";
 import { LOGIN_MARKER, PrincipalEngineLogins, secondLoginSupported, type LoginController } from "../engines/principal-engine-logins.ts";
 import { separateAccountInstance } from "../engines/separate-account.ts";
-import { ClaudeAiConnectorInventory, connectorPrincipalFor, engineConnectorsPrompt } from "../harness-connectors.ts";
+import { ClaudeAiConnectorInventory, connectorPrincipalFor } from "../harness-connectors.ts";
 import { createConnectorPlanForTurn, grokCloudConnectorsForTurn, relayAddsAccountConnectors, turnLoadsAccountConnectors } from "./turn-plan.ts";
 import { createConnectorsElsewhereFor } from "../index-leaves/connectorsElsewhereFor.ts";
 import { createConnectorSetupStore } from "../index-leaves/connectorSetupStore.ts";
@@ -247,9 +247,6 @@ describe("connector registry (#3344)", () => {
       { engine: "Grok", connectors: ["Microsoft Teams", "Outlook (Exchange)", "Automations"], accountKind: "team" },
       { engine: "Grok (personal account)", connectors: ["Microsoft Teams", "Outlook (Exchange)", "Automations", "Docs Hub"], accountKind: "personal" },
     ]);
-    const prompt = engineConnectorsPrompt({ driver: "claudeAgent", claudeAi: false, grokCloud: false, relay: true, elsewhere: fromClaude });
-    expect(prompt).toContain("Grok: Microsoft Teams, Outlook (Exchange)");
-    expect(prompt).toContain("Grok (personal account): Microsoft Teams");
 
     // a bot on Grok with default settings does not load its own account's
     // connectors in its turn: it is told that sign-in is reachable too

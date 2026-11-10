@@ -23,7 +23,8 @@ import { availableTools, catalogProfileFromEnv, PERSPICAX_TOOLS } from "./agents
 import { GUEST_CONFINED_CODEX_ARGS } from "./codex.ts";
 import { engineHasNativeWebSearch } from "../web-search/native.ts";
 import { chiefOfStaffSystemPrompt } from "../chief-of-staff.ts";
-import { engineConnectorsPrompt } from "../harness-connectors.ts";
+import { connectorListPrompt } from "../connectors/list-prompt.ts";
+import type { ConnectorAccount } from "../connectors/types.ts";
 import { incidentText } from "../peers/incidents.ts";
 import { peerRosterSystemPrompt } from "../peers/peer-roster.ts";
 import {
@@ -216,6 +217,16 @@ describe("reachability guard: a bot shared with the person speaking (2026-10-28)
   });
 });
 
+const LIST_ACCOUNTS: ConnectorAccount[] = [
+  { provider: "grok-com", driver: "grokAgent", instanceId: "default", slot: "primary", key: "grok-com:default:primary", label: "Grok", auth: "subscription", at: 1, connectors: [
+    { name: "Outlook (Exchange)", state: "connected", tools: [] },
+    { name: "Microsoft Teams", state: "needs-sign-in", tools: [] },
+  ] },
+  { provider: "claude-ai", driver: "claudeAgent", instanceId: "default", slot: "primary", key: "claude-ai:default:primary", label: "Claude", auth: "subscription", at: 1, connectors: [
+    { name: "Example Docs", state: "connected", tools: [] },
+  ] },
+];
+
 describe("reachability guard: what a person's direct chat is told", () => {
   // server/index.ts startTurn: a person's own message, boundedCoordination on
   const team = [{ id: "chief", name: "Atlas" }, { id: "b2", name: "Nova" }];
@@ -223,10 +234,11 @@ describe("reachability guard: what a person's direct chat is told", () => {
     chief: chiefOfStaffSystemPrompt("chief", team, true),
     roster: peerRosterSystemPrompt(team.slice(1), true, false),
     rosterCreator: peerRosterSystemPrompt(team.slice(1), true, true),
-    connectorsNone: engineConnectorsPrompt({ driver: "codex", claudeAi: false, grokCloud: false }),
-    // 2026-10-28: a person's own direct turn is pointed at run_with_engine, in Full or not
-    connectorsRelay: engineConnectorsPrompt({ driver: "codex", claudeAi: false, grokCloud: false, relay: true }),
-    connectorsRelayFull: engineConnectorsPrompt({ driver: "claudeAgent", claudeAi: true, grokCloud: false, relay: true, full: true }),
+    // #3351: the one connector list, whatever engine the bot runs on
+    connectorsNone: connectorListPrompt({ principal: "person-a", accounts: [], callable: () => false, callTool: true }),
+    // 2026-10-28: a person's own direct turn is pointed at run_with_engine for a provider with no host yet, in Full or not
+    connectorsRelay: connectorListPrompt({ principal: "person-a", accounts: LIST_ACCOUNTS, callable: (provider) => provider === "grok-com", callTool: true, relay: true }),
+    connectorsRelayFull: connectorListPrompt({ principal: "person-a", accounts: LIST_ACCOUNTS, callable: (provider) => provider === "grok-com", callTool: true, relay: true, full: true }),
     // the Team incidents report: a turn of the Primary Bot with no automation source
     incident: incidentText({ kind: "failed", bot: { id: "b2", name: "Nova" }, threadId: "t1", detail: "crash" }, { count: 1, mayRetry: true, muted: false }),
     credential: CREDENTIAL_PROMPT,

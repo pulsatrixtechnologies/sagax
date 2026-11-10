@@ -137,6 +137,12 @@ export class ConnectorRegistry {
     this.now = options.now ?? Date.now;
   }
 
+  /** An engine instance's sign-in as this provider names it (#3351: the
+   * prompt's list matches a turn's native mount to its own account). */
+  accountInstanceOf(provider: ConnectorProvider, instanceId: string): string {
+    return this.accountInstance(provider, instanceId);
+  }
+
   /** A filter with its instance named as the providers name it. */
   private normalized<T extends RefFilter>(filter: T): T {
     if (filter.instanceId === undefined) return filter;

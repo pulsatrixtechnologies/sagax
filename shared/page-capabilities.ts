@@ -259,3 +259,38 @@ export function pageGithubExit(url: unknown, repos: ReadonlySet<string>): string
 export function pageLinkOpensDirectly(url: string, input: { receivedData: boolean; links: ReadonlySet<string> }): boolean {
   return !input.receivedData || input.links.has(url);
 }
+
+/** "Always allow this site" on a link card (#3413): the reader's answer,
+ * kept by the server per reader, page and host.
+ *   GET    /api/pages/:id/link-approvals?host=<host>   -> PageLinkApprovalState
+ *   POST   /api/pages/:id/link-approvals  PageLinkApprovalAnswer -> { ok: true }
+ *   DELETE /api/pages/:id/link-approvals?host=<host>   -> { ok: true } (forget)
+ * The host only, as normalizePageLinkHost gives it: never a subdomain or
+ * another host. */
+export interface PageLinkApprovalState {
+  allowed: boolean;
+}
+
+export interface PageLinkApprovalAnswer {
+  host: string;
+  answer: "always";
+}
+
+/** A host as a link approval keeps it: lower case, no port, no
+ * credentials, punycode as is; from a bare host or an http(s) address.
+ * Null for anything else (another scheme, spaces, an empty value). Pure. */
+export function normalizePageLinkHost(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const raw = value.trim();
+  if (!raw || raw.length > 300 || /\s/.test(raw)) return null;
+  let url: URL;
+  try {
+    url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(raw) && !/^[^/:]+:\d+$/.test(raw) ? raw : `https://${raw}`);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  const host = url.hostname.toLowerCase().replace(/\.$/, "");
+  if (!host || !/^[a-z0-9.-]+$|^\[[0-9a-f:.]+\]$/.test(host)) return null;
+  return host;
+}

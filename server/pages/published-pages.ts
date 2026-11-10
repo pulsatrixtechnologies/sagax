@@ -1106,7 +1106,7 @@ export class PublishedPages {
 
   /** Stop serving the page now. The link is gone for good. */
   revoke(id: string, by?: string): PageRecord | PageError {
-    return this.mutate(id, (page, now) => {
+    const result = this.mutate(id, (page, now) => {
       page.status = "revoked";
       delete page.linkId;
       // its shared state goes with the link (#1544)
@@ -1116,6 +1116,16 @@ export class PublishedPages {
       page.history.push({ at: now, action: "revoke", ...(by ? { by } : {}) });
       return page;
     });
+    // what is kept beside the page goes too (#3413: its link approvals)
+    if (!("ok" in result)) for (const listener of this.revokedListeners) listener(id);
+    return result;
+  }
+
+  private readonly revokedListeners: Array<(pageId: string) => void> = [];
+
+  /** Called after a page is revoked, by any path (its person, an admin). */
+  onRevoked(listener: (pageId: string) => void): void {
+    this.revokedListeners.push(listener);
   }
 
   remove(id: string): boolean {

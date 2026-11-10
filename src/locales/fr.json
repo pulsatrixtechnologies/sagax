@@ -12915,6 +12915,8 @@
   "routineRun.hours": "{count} h",
   "routineRun.hoursMinutes": "{hours} h {minutes} min",
   "routineRun.quiet": "Rien pour toi cette fois ; rien n'a été publié.",
+  "routineRun.sameProblem": "Même problème depuis {since}, {count} exécutions de suite",
+  "routineRun.worksAgain": "Fonctionne de nouveau (problèmes depuis {since})",
   "routineRun.blockedLine": "Bloquée : {reason}",
   "routineRun.blockedNoReason": "Bloquée : une étape a arrêté l'exécution. Ouvre l'exécution pour voir laquelle.",
   "routineRun.blockedWaitingFor": "Bloquée : en attente de {name}",

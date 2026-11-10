@@ -79,6 +79,11 @@ export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullRepor
   if (run.readiness) card.readiness = structuredClone(run.readiness);
   if (run.autoPaused) card.autoPausedAfter = run.autoPaused.failures;
   if (run.status === "completed" && run.problems) card.problems = readableRoutineProblems(redactSecretsInText(run.problems)).slice(0, 1_000);
+  // #3479: a lasting problem's count, and the first success after it.
+  if (run.status === "completed" && run.problems && run.problemRepeat) {
+    card.repeat = { ...run.problemRepeat, lastAt: run.finishedAt ?? run.problemRepeat.since };
+  }
+  if (run.status === "completed" && !run.problems && run.recovered) card.recovered = { ...run.recovered };
   if (run.status === "queued" && run.attention) card.attention = redactSecretsInText(run.attention).slice(0, 500);
   if (run.startedAt) card.startedAt = run.startedAt;
   const wakeTopic = wakeTopicOf(run);
@@ -95,11 +100,40 @@ export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullRepor
   return card;
 }
 
+/** A moment in the person's zone, as the card shows it; UTC, said so, when
+ * no valid zone is known. */
+function shortAt(at: number, timeZone?: string): string {
+  if (timeZone) {
+    try {
+      const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+        timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+      }).formatToParts(at).map((part) => [part.type, part.value]));
+      return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+    } catch { /* an unknown zone reads in UTC */ }
+  }
+  return `${new Date(at).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
+
+/** #3479: how long a lasting problem has been there, for the row's text. */
+export function routineRepeatLine(repeat: { count: number; since: number }, language?: string, timeZone?: string): string {
+  return (language ?? "").toLowerCase().startsWith("fr")
+    ? `Même problème depuis ${shortAt(repeat.since, timeZone)}, ${repeat.count} exécutions de suite.`
+    : `Same problem since ${shortAt(repeat.since, timeZone)}, ${repeat.count} runs in a row.`;
+}
+
+/** #3479: the line of the first success after runs with problems. */
+export function routineRecoveredLine(recovered: { afterRuns: number; since: number }, language?: string, timeZone?: string): string {
+  const runs = recovered.afterRuns;
+  return (language ?? "").toLowerCase().startsWith("fr")
+    ? `Fonctionne de nouveau, après ${runs} ${runs === 1 ? "exécution" : "exécutions"} avec des problèmes depuis ${shortAt(recovered.since, timeZone)}.`
+    : `Works again, after ${runs} ${runs === 1 ? "run" : "runs"} with problems since ${shortAt(recovered.since, timeZone)}.`;
+}
+
 /** The text of a run's message: what a client without the card draws, and
  * what the notification, the search and the thread preview read. */
-export function routineRunFallbackText(card: RoutineRunCardData, language?: string): string {
+export function routineRunFallbackText(card: RoutineRunCardData, language?: string, timeZone?: string): string {
   // #3219: a quiet run's line in the language of the conversation.
-  if (card.status === "nothing_to_report" && (language ?? "").toLowerCase().startsWith("fr")) return `Routine « ${card.routineName} » : rien à signaler`;
+  if (card.status === "nothing_to_report" && !card.recovered && (language ?? "").toLowerCase().startsWith("fr")) return `Routine « ${card.routineName} » : rien à signaler`;
   const goalState = card.goalStatus === "needs-input"
     ? "needs your input"
     : card.goalStatus === "blocked"
@@ -136,7 +170,11 @@ export function routineRunFallbackText(card: RoutineRunCardData, language?: stri
   // 2026-11-03 (the maintainer): the problem lines themselves stay in the run detail
   // (View run), never in the conversation, this text included (an older
   // client, the notification, the search and the thread preview read it).
-  const problems = card.status === "completed" && card.problems ? "\n\nCompleted with problems." : "";
+  const problems = card.status === "completed" && card.problems ? `\n\nCompleted with problems.${card.repeat ? ` ${routineRepeatLine(card.repeat, language, timeZone)}` : ""}` : "";
+  // #3479: the first success after runs with problems is said once.
+  const recovered = card.recovered && (card.status === "completed" || card.status === "nothing_to_report") ? routineRecoveredLine(card.recovered, language, timeZone) : "";
+  if (recovered && card.summary && card.status === "completed") return `${card.summary}\n\n${recovered}\n\nRoutine “${card.routineName}”`;
+  if (recovered) return `Routine “${card.routineName}” · ${recovered}`;
   if (card.status === "completed" && (!card.goalStatus || card.goalStatus === "completed") && card.summary) return `${card.summary}${problems}\n\nRoutine “${card.routineName}”`;
   if (problems) return `Routine “${card.routineName}” completed with problems`;
   // 2026-10-26: older clients without the notice still read the pause.

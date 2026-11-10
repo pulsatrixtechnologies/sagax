@@ -337,6 +337,18 @@ export function RoutineRunCard({
             <span key="name" data-routine-run-name className="max-w-[16rem] truncate font-medium text-ink-secondary">{run.routineName.trim()}</span>
           ),
           <time key="at" dateTime={new Date(at).toISOString()} title={triggeredAt ? routineDateTime(triggeredAt) : undefined}>{routineDateTime(at)}</time>,
+          // #3479: a lasting problem is said once; its row counts the runs
+          // since, and the first success after it says it works again.
+          withProblems && run.repeat && run.repeat.count > 1 && (
+            <span key="repeat" data-routine-run-repeat title={routineDateTime(run.repeat.lastAt)}>
+              {t("routineRun.sameProblem", { since: routineDateTime(run.repeat.since), count: run.repeat.count })}
+            </span>
+          ),
+          !withProblems && run.recovered && (
+            <span key="recovered" data-routine-run-recovered>
+              {t("routineRun.worksAgain", { since: routineDateTime(run.recovered.since) })}
+            </span>
+          ),
           elapsed && <span key="elapsed" data-routine-run-elapsed className="tabular-nums">{elapsed}</span>,
           onOpen && (
             <button

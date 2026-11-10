@@ -21,7 +21,7 @@ import type { RuntimeEvent } from "../contracts.ts";
 import { OwnedFile } from "../atomic.ts";
 import { saveSoon } from "../save-batch.ts";
 import { redactSecretsInText } from "../redact.ts";
-import { flowRunBlockedReason, routineReportOutcome, type RoutineReportOutcome } from "./routine-report.ts";
+import { flowRunBlockedReason, routineReportOutcome, routineSameProblemNote, type RoutineReportOutcome } from "./routine-report.ts";
 import { clipReadable, failureDetail } from "../../shared/routine-result.ts";
 import { stopCause } from "../drivers/engine-errors.ts";
 import {
@@ -1179,6 +1179,7 @@ function composeExecutionPrompt(
   retried?: RoutineRetryCause,
   watchNote?: string,
   goal?: string,
+  previousProblems?: string,
 ): string {
   const parts = [prompt, retried ? retryNote(retried) : ""];
   // #2696: the goal and its two closing lines come right after the work.
@@ -1198,6 +1199,8 @@ function composeExecutionPrompt(
       ].join("\n"),
     );
   }
+  // #3479: the previous run's problems, so a lasting one is said once.
+  if (previousProblems) parts.push(previousProblems);
   for (const attachment of attachments ?? []) {
     const tag = attachment.kind === "image" ? "attached-image" : "attached-file";
     parts.push(
@@ -2058,6 +2061,46 @@ export class RoutineManager {
   private outcomesNewestFirst(routineId: string, exceptRunId?: string): RoutineRun[] {
     return this.runs.filter(run => run.routineId === routineId && run.id !== exceptRunId && ((run.status === "failed" && run.error !== ROUTINE_RESTARTED) || run.status === "completed")).reverse()
       .sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt) || b.createdAt - a.createdAt);
+  }
+
+  /** #3479: the routine's previous outcome when it completed with problems,
+   * on the same bot (its problems are never shown to another bot). */
+  private previousProblemRun(run: RoutineRun): (RoutineRun & { problems: string }) | null {
+    const last = this.outcomesNewestFirst(run.routineId, run.id).find((candidate) => candidate.finishedAt !== undefined && candidate.createdAt <= run.createdAt);
+    return last && last.botId === run.botId && last.status === "completed" && last.problems ? last as RoutineRun & { problems: string } : null;
+  }
+
+  private previousProblemsNote(run: RoutineRun): string | undefined {
+    const previous = this.previousProblemRun(run);
+    return previous ? routineSameProblemNote({ problems: redactSecretsInText(previous.problems), finishedAt: previous.finishedAt! }) : undefined;
+  }
+
+  /** #3479: a problem that repeats is said once. "The same problem" is the
+   * bot's own judgment (its SAME_PROBLEM line, after reading the previous
+   * run's problems in its prompt), or the very same recorded problems (the
+   * server's own lines, word for word). The server never compares the
+   * meaning of free text: a reworded or new problem is said. The first run
+   * without problems after some is marked recovered, said once too. */
+  private settleProblemStreak(run: RoutineRun, sameProblem: boolean): void {
+    const previous = this.previousProblemRun(run);
+    delete run.problemRepeat;
+    delete run.recovered;
+    if (!previous) return;
+    const first = previous.problemRepeat ?? { firstRunId: previous.id, since: previous.finishedAt!, count: 1 };
+    // The bot says the problem goes on, though the server recorded none this
+    // time (one failure it lets pass, a dropped RUN_STATUS line): the run
+    // carries the previous problems and the streak goes on. Never "works
+    // again" under a summary that says it does not.
+    if (!run.problems && sameProblem) {
+      run.problems = previous.problems;
+      delete run.quiet;
+    }
+    if (!run.problems) {
+      run.recovered = { afterRuns: first.count, since: first.since };
+      return;
+    }
+    const sameText = previous.problems.trim() === run.problems.trim();
+    if (sameProblem || sameText) run.problemRepeat = { firstRunId: first.firstRunId, since: first.since, count: first.count + 1 };
   }
 
   private failsLikeLastOutcome(run: RoutineRun): boolean {
@@ -3760,7 +3803,7 @@ export class RoutineManager {
             await this.options.startTurn(
               run.botId,
               task.threadId,
-              withMemoryNote(composeExecutionPrompt(prompt, run.attachments, this.continuityCarry(run), run.retried, run.watchNote, this.goalBlockFor(run)), memoryNote),
+              withMemoryNote(composeExecutionPrompt(prompt, run.attachments, this.continuityCarry(run), run.retried, run.watchNote, this.goalBlockFor(run), this.previousProblemsNote(run)), memoryNote),
               run.runOn ?? "maus",
               triggerSource,
               (message) => this.failThread(task.threadId, message),
@@ -4381,6 +4424,7 @@ export class RoutineManager {
       run.problems = clipReadable(readable, 1_000);
       delete run.quiet;
     } else delete run.problems;
+    this.settleProblemStreak(run, outcome.sameProblem === true);
     const engine = this.readinessEngines.get(run.id) ?? this.options.engineForRun?.(run);
     if (engine) clearEngineRefusal(engine.engine, engine.account, this.now());
     // A run that completes ends the owner's open notices for its bot.
@@ -4766,6 +4810,8 @@ export class RoutineManager {
     run.attention = undefined;
     run.error = redactSecretsInText(message).slice(0, 500);
     run.finishedAt = this.now();
+    delete run.problemRepeat;
+    delete run.recovered;
     const paused = this.autoPauseAfterFailure(run);
     this.saveLater();
     this.emitRun(run);
@@ -4793,6 +4839,8 @@ export class RoutineManager {
     run.finishedAt = this.now();
     delete run.problems;
     delete run.quiet;
+    delete run.problemRepeat;
+    delete run.recovered;
     this.saveLater();
     this.emitRun(run);
     if (preflight) {

@@ -164,6 +164,13 @@ export interface RoutineRun {
    * engine error, a teammate whose work failed). The reason, for the person:
    * shown as "Completed with problems", never a plain success. */
   problems?: string;
+  /** #3479: the same problem as the routine's previous run (the bot's
+   * SAME_PROBLEM line, or the same recorded problems): the row of the first
+   * run with it is updated in place, nothing new is posted or rung. `count`
+   * is how many runs in a row had it, this one included, since `since`. */
+  problemRepeat?: { firstRunId: string; since: number; count: number };
+  /** #3479: the first run without problems after `afterRuns` runs with them. */
+  recovered?: { afterRuns: number; since: number };
   /** 2026-11-03: the teammates this run handed work to and their threads. */
   handedTo?: RoutineRunHandoff[];
   /** 2026-11-01: a person started this run (Run now, run_routine from

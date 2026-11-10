@@ -6,6 +6,15 @@ import { isEngineEmptyFailure } from "../peers/incidents.ts";
 import { withBotNotify } from "../../shared/notification.ts";
 import { retireSafetyHolds } from "../safety/safety-review.ts";
 import { firstSignedOut } from "../engines/engine-refusals.ts";
+/** Whether a finished routine run rings "done": a completed result the
+ * routine posts, never a quiet one, never one whose items for the person
+ * rang "needs you" from its card, and (#3479) never the same problem as the
+ * previous run, which its first run said already. */
+export function routineRunRingsDone(routineRun: any, host: any): boolean {
+  return routineRun.status === "completed" && !routineRun.quiet && !routineRun.problemRepeat
+    && host.routineEffectivePostResults(routineRun) && !host.personAttention(routineRun.output);
+}
+
 export function handleTurnCompleted(event: any, ctx: any, host: any): void {
   const { deleteAttachment, endedToolOutput } = host;
   const {
@@ -413,7 +422,8 @@ function settleTurnTask(event: any, ctx: any, host: any, turn: any): void {
     // copied to: one piece of news, one push.
     // A report with items for the person rang "needs you" from its card
     // (syncRoutineRunToSource): one piece of news, one push.
-    if ((!routineRun || (routineRun.status === "completed" && !routineRun.quiet && host.routineEffectivePostResults(routineRun) && !host.personAttention(routineRun.output))) && !internal && !incidentsCopied && !host.computerSelectionTurns.get(event.threadId)?.selected) {
+    // #3479: the same problem as the previous run was said by its first run.
+    if ((!routineRun || routineRunRingsDone(routineRun, host)) && !internal && !incidentsCopied && !host.computerSelectionTurns.get(event.threadId)?.selected) {
       // the frame carries the bot's avatar so every desktop client can
       // show the notification under that bot's own face
       const completionDetail = routineRun

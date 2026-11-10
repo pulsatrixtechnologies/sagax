@@ -10,7 +10,10 @@
  * ?scene=feedback (#2694): a heartbeat and a mail wake rated in place, a
  * "needs you" card and each point of a brief, beside a suggestion card
  * (the compliant neighbour, OptionCard with its feedback row), and a chosen
- * watch's alert with « Stop this watch » and « Stop this domain » (#3457). */
+ * watch's alert with « Stop this watch » and « Stop this domain » (#3457).
+ * ?scene=repeat (#3479): a problem said once, its row counting the runs
+ * since, beside a plain problem row (the compliant neighbour), then the
+ * first success after it, said once. */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -72,6 +75,9 @@ const messages: Message[] = [
   card("failed", { routineName: "Backup check", status: "failed", error: "The storage service did not answer after three tries.", autoPausedAfter: 3 }, NOW - 12 * M),
   card("running", { routineName: "Project health watch", status: "running", startedAt: NOW - 2 * M - 14_000, handedTo: [{ botId: "nova", threadId: "nova-run", name: "Nova", status: "running" }] } as Partial<RoutineRunCardData> & Pick<RoutineRunCardData, "routineName" | "status">, NOW - 3 * M),
 ];
+const repeatedRun = card("repeat", { routineName: "Backup check", status: "completed", summary: "The backup host did not answer.", problems: "The backup host has not answered since Monday.",
+  repeat: { firstRunId: "run-repeat", count: 7, since: NOW - 6 * 60 * M, lastAt: NOW - 8 * M } }, NOW - 6 * 60 * M);
+const recoveredRun = card("recovered", { routineName: "Backup check", status: "nothing_to_report", recovered: { afterRuns: 7, since: NOW - 6 * 60 * M } }, NOW - 2 * M);
 const REPORT = `Here is this evening's dispatch pass.
 
 ## Board state
@@ -277,6 +283,12 @@ function Shell() {
                 <NeighbourBubble text={brief.text ?? ""} />
                 <BriefItemsFeedback message={brief} botId="atlas" threadId="atlas-thread" />
               </div>
+            </>
+          ) : scene === "repeat" ? (
+            <>
+              <RoutineRunRow message={messages[2]!} botId="atlas" />
+              <RoutineRunRow message={repeatedRun} botId="atlas" />
+              <RoutineRunRow message={recoveredRun} botId="atlas" />
             </>
           ) : scene === "unified" ? (
             <>

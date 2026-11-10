@@ -800,8 +800,18 @@ export function openedUnreadDivider(state: AppState, threadId: string, unread: b
 /** The visible conversation: walk parentId links from the active leaf back
  * to the root. Falls back to the flat list for pre-branching payloads. */
 export function visibleMessages(bot: Pick<Bot, "messages" | "activeLeafId">): Message[] {
-  return withoutLeakedTokens(activeBranch(bot));
+  const cached = shownBranches.get(bot.messages);
+  if (cached && cached.leafId === bot.activeLeafId) return cached.shown;
+  const shown = withoutLeakedTokens(activeBranch(bot));
+  shownBranches.set(bot.messages, { leafId: bot.activeLeafId, shown });
+  return shown;
 }
+
+// One shown branch per transcript array and leaf: the sidebar rows, the
+// composer and the chat ask for it on each store change, and an unchanged
+// transcript hands back the same array and messages (so memos keyed on them
+// hold, a cleaned line included).
+const shownBranches = new WeakMap<readonly Message[], { leafId: string | null | undefined; shown: Message[] }>();
 
 function activeBranch(bot: Pick<Bot, "messages" | "activeLeafId">): Message[] {
   const leafId = bot.activeLeafId;

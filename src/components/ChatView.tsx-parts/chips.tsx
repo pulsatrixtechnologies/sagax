@@ -1,5 +1,6 @@
 import { AttentionCard } from "../AttentionCard";
-import { memo } from "react";
+import { memo, useContext } from "react";
+import { LiveToolsContext } from "@/hooks/use-live-tool-ids";
 import { api, openRoutineRun, openThread, type Bot, type Message } from "@/state/store";
 import { useStoreDispatch, useStoreGetter, useStoreSelector, shallowEqual } from "@/state/store-selector";
 import { useAdvancedMode } from "@/lib/interface-mode";
@@ -63,7 +64,7 @@ export function PeerLabel({ peer, autoModel }: { peer: PeerLine; autoModel?: Mes
 /** A tool run as a quiet step row (StepRow), or a receipt that opens a conversation. */
 export const ActivityChip = memo(function ActivityChip({ message, place = "auto" }: { message: Message; place?: EffectivePlace }) {
   "use memo";
-  const { bots, dispatch, botDmIds, liveTools } = useChatRows();
+  const { bots, dispatch, botDmIds } = useChatRows(), liveTools = useContext(LiveToolsContext);
   const tool = message.tool;
   if (!tool) return null;
   if (message.inputRequest) return <InputRequestCard message={message} />;

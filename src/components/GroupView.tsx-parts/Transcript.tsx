@@ -5,7 +5,7 @@ import { openThread, useStore, type Bot, type Group, type Message } from "@/stat
 import { BotAvatar } from "../Avatar";
 import { PersonAvatar } from "../MessageAuthor";
 import { withoutDeadThreadChips } from "@/lib/dead-thread-chips";
-import { liveToolIds } from "@/lib/tool-liveness";
+import { useLiveToolIds } from "@/hooks/use-live-tool-ids";
 import { botNames } from "../ToolActivity";
 import { roomActivityVisible } from "@/lib/room-activity";
 import { viewerActorId } from "@/lib/viewer";
@@ -199,7 +199,7 @@ export const Transcript = memo(function Transcript({
   // the open thread's own turn: another thread working beside it leaves
   // this one free to retry
   const roomBusy = roomThreadWorking(group, group.threadId);
-  const liveTools = useMemo(() => liveToolIds(transcript, { busy: roomBusy, turnStartedAt: group.turnStartedAt }), [transcript, roomBusy, group.turnStartedAt]);
+  const liveTools = useLiveToolIds(transcript, { busy: roomBusy, turnStartedAt: group.turnStartedAt });
   let retryableId: string | undefined;
   let retryableIndex = -1;
   for (let index = transcript.length - 1; index >= 0; index -= 1) {

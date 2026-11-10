@@ -397,7 +397,7 @@ describe("a room turn and the teammates outside the room", () => {
     expect(system).toContain("coordinate_bots");
     expect(system).not.toContain("ask_bot");
     // Do not duplicate the peer catalog in the prompt; other sections stay unseen.
-    expect(system).not.toContain("- Room Inside — General assistant");
+    expect(system).not.toContain("- Room Inside (General assistant)");
     expect(system).not.toContain("Elsewhere Bot");
 
     // the scripted reply mentions the outsider: nobody's turn starts, and the

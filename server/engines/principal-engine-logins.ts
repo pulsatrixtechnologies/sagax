@@ -418,6 +418,14 @@ export class PrincipalEngineLogins {
     void this.accountModels(principalId, instanceId).catch(() => null).finally(() => this.warming.delete(key)).catch(reportBackgroundError);
   }
 
+  /** #3350: the person's own Grok CLI on one sign-in, for one approved
+   * connector call (server/connectors/hosts/grok-host.ts); null when that
+   * sign-in is missing. Never another person's: the folder is the
+   * principal's. */
+  grokConnectorLaunch(principalId: string, instanceId: string, slot: LoginSlot = "primary"): { cli: string; env: Record<string, string | undefined> } | null {
+    return this.accountEnv(principalId, instanceId, slot);
+  }
+
   private accountEnv(principalId: string, instanceId: string, slot: LoginSlot = "primary"): { cli: string; env: Record<string, string | undefined> } | null {
     const facts = this.options.instance(instanceId);
     if (!facts || facts.driver !== "grokAgent" || !facts.cli.trim() || !this.signedIn(principalId, "grokAgent", slot, instanceId)) return null;

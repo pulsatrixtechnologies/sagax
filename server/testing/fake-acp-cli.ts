@@ -135,6 +135,17 @@
 //                   then the prompt stays open until session/cancel, which
 //                   ends it "cancelled" with the measured usage. A refused ask
 //                   ends the prompt with no result frame (not measured).
+//   FAKE_ACP_MODE=pinned with FAKE_ACP_PINNED (#3350, the Grok connector host):
+//                   a pinned prompt ("with tool T and this input JSON") asks
+//                   for one gateway use_tool call, as grok 1.0.77 does, then
+//                   obey: asks for T with that input; alter-input: the same
+//                   tool with a changed input; other-tool: another tool with
+//                   that input; needs-sign-in: authenticate fails as an
+//                   expired sign-in. An allowed ask runs: one JSON line
+//                   {tool, input, pid, grokHome, cwd} in FAKE_ACP_PINNED_CALLS,
+//                   a completed result, then the prompt stays open until
+//                   session/cancel. A refused ask runs nothing and ends the
+//                   prompt.
 //   FAKE_ACP_GROK_LEADER=1  grok's leader: an `agent` run without
 //                   `--no-leader` whose leader socket exists
 //                   ($GROK_LEADER_SOCKET, else $GROK_HOME/leader.sock; the
@@ -522,8 +533,9 @@ const launchTraceFile = process.env.FAKE_ACP_LAUNCH_TRACE_FILE;
 // Side spawns that share the chat CLI must not look like a pooled session
 // relaunch in FAKE_ACP_LAUNCH_COUNT_FILE (#1970): model-list probe, reach
 // probe, memory/review one-shots, and bare --version.
+const connectorCall = process.env.SAGAX_GROK_CONNECTOR_CALL === "1";
 const countLaunch = Boolean(launchCountFile)
-  && !modelProbe && !reachProbe && !backgroundText && !versionOnly;
+  && !modelProbe && !reachProbe && !backgroundText && !versionOnly && !connectorCall;
 if (process.env.FAKE_ACP_DUMP && !modelProbe) {
   writeFileSync(process.env.FAKE_ACP_DUMP, JSON.stringify(dumpState, null, 2));
 }
@@ -546,6 +558,7 @@ if (launchTraceFile) {
       argv,
       modelProbe,
       reachProbe,
+      connectorCall,
       backgroundText,
       versionOnly,
       counted: countLaunch,
@@ -715,6 +728,52 @@ function playConnectorReplay(msg: any): void {
     hangKeepAlive = setInterval(() => {}, 1_000);
   };
   out({ jsonrpc: "2.0", id: pendingPermissionId, method: "session/request_permission", params: frames[ask]!.params });
+}
+
+/** pinned mode (#3350): one gateway use_tool ask for the pinned prompt,
+ * obeyed or not as FAKE_ACP_PINNED says; only an allowed ask runs. */
+function playPinned(msg: any): void {
+  const text = String(msg.params?.prompt?.[0]?.text ?? "");
+  const named = /with tool "([^"]+)" and this input JSON[^\n]*\n([\s\S]+)$/.exec(text);
+  const sessionId = msg.params?.sessionId;
+  if (!named) {
+    result(msg.id, { stopReason: "end_turn", _meta: {} });
+    return;
+  }
+  let input: Record<string, unknown> = {};
+  try { input = JSON.parse(named[2]!.trim()); } catch { /* an empty input */ }
+  const variant = process.env.FAKE_ACP_PINNED ?? "obey";
+  const tool = variant === "other-tool" ? "cursor__user-Other-send_5fmessage___2" : named[1]!;
+  const askedInput = variant === "alter-input" ? { ...input, to: "someone-else@example.com" } : input;
+  const toolCallId = "pinned-call-1";
+  const update = (value: Record<string, unknown>) => out({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: value } });
+  update({ sessionUpdate: "tool_call", toolCallId, title: "use_tool", kind: "other", status: "pending", rawInput: { tool_name: tool, tool_input: askedInput } });
+  pendingPermissionId = 9500;
+  onPermissionAnswered = (allowed) => {
+    if (!allowed) {
+      update({ sessionUpdate: "tool_call_update", toolCallId, status: "failed" });
+      result(msg.id, { stopReason: "end_turn", _meta: {} });
+      return;
+    }
+    if (process.env.FAKE_ACP_PINNED_CALLS) {
+      appendFileSync(process.env.FAKE_ACP_PINNED_CALLS, `${JSON.stringify({ tool, input: askedInput, pid: process.pid, grokHome: process.env.GROK_HOME ?? null, cwd: process.cwd() })}\n`);
+    }
+    update({
+      sessionUpdate: "tool_call_update", toolCallId, status: "completed",
+      rawOutput: { type: "MCP", tool_name: tool, server_name: "managed_gateway:cursor", output: `pinned result of ${tool} for ${JSON.stringify(askedInput)}`, is_error: false },
+    });
+    hangingPromptId = msg.id;
+    hangKeepAlive = setInterval(() => {}, 1_000);
+  };
+  out({ jsonrpc: "2.0", id: pendingPermissionId, method: "session/request_permission", params: {
+    sessionId,
+    toolCall: { toolCallId, title: "use_tool", kind: "other", rawInput: { variant: "UseTool", tool_name: tool, tool_input: askedInput } },
+    options: [
+      { optionId: "always-allow", name: "Always allow", kind: "allow_always" },
+      { optionId: "allow-once", name: "Allow once", kind: "allow_once" },
+      { optionId: "reject-once", name: "Reject", kind: "reject_once" },
+    ],
+  } });
 }
 
 // ask-peer mode: the "agents" MCP server entry from session/new's mcpServers
@@ -1018,6 +1077,10 @@ function handle(msg: any) {
       break;
     }
     case "authenticate":
+      if (mode === "pinned" && process.env.FAKE_ACP_PINNED === "needs-sign-in") {
+        out({ jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: "Authentication required: sign in to Grok again" } });
+        break;
+      }
       if (mode === "authenticate-failed") {
         out({ jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: "Login expired" } });
         break;
@@ -1257,6 +1320,10 @@ function handle(msg: any) {
       if (failRpc(msg)) return;
       if (mode === "connector-replay") {
         playConnectorReplay(msg);
+        return;
+      }
+      if (mode === "pinned") {
+        playPinned(msg);
         return;
       }
       if (mode === "reply-then-exit-0") {

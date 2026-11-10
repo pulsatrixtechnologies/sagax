@@ -149,6 +149,10 @@ export interface CallConnectorRouteDeps extends Omit<ConnectorsRouteDeps, "calla
    * no turn runs there (nothing to hold the request on). `engine` is that
    * turn's driver kind. */
   hold(input: CallConnectorHold): { engine: string; decision: Promise<HeldDecision> } | undefined;
+  /** #3350: post the Connect card of the account in this conversation, for
+   * the calling person, when the host answers that its sign-in is missing
+   * or expired. True when the card was posted. */
+  signInCard?(input: { botId: string; threadId: string; principalId: string; account: ConnectorAccount }): boolean | void;
 }
 
 const callBody = z.object({
@@ -217,6 +221,19 @@ export function createCallConnectorInternalRoute(deps: CallConnectorRouteDeps): 
       return json(res, 200, { ok: false, declined: true, error: decision.message?.trim() || `The call to ${entry.name} (${toolId}) was declined, so it was not run.` });
     }
     const result = await hub.call({ principalId, account, connector: entry, tool: toolId, arguments: args, engine: held.engine });
+    if (result.needsSignIn) {
+      const posted = deps.signInCard ? deps.signInCard({ botId: capability.botId, threadId: capability.threadId, principalId, account }) !== false : false;
+      return json(res, 200, {
+        ok: false,
+        connector: entry.name,
+        account: account.label,
+        tool: toolId,
+        signIn: posted,
+        error: posted
+          ? `${entry.name} (${account.label}) needs a new sign-in, so the call was not run. The Connect card is posted in this conversation: once the person signs in, call it again.`
+          : result.text
+      });
+    }
     return json(res, 200, {
       ok: !result.isError,
       connector: entry.name,

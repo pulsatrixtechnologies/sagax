@@ -27,6 +27,9 @@ export interface ConnectorHostCall {
 export interface ConnectorHostResult {
   text: string;
   isError?: boolean;
+  /** #3350: the person's sign-in of this provider is missing or expired;
+   * the route posts the Connect card for that person (nothing was run). */
+  needsSignIn?: boolean;
 }
 
 /** A connector's tool as a host describes it (L7 and later). */

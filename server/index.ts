@@ -1465,6 +1465,7 @@ import { grokComProvider } from "./connectors/providers/grok-com.ts";
 import { chatgptAppsProvider } from "./connectors/providers/chatgpt-apps.ts";
 import { createConnectorHub } from "./connectors/hub.ts";
 import { testConnectorHostFromEnv } from "./connectors/hosts/test-host.ts";
+import { createGrokConnectorHost } from "./connectors/hosts/grok-host.ts";
 import { installMainRuntimeEventSubscriber } from "./runtime-events/dispatcher.ts";
 import { createApplyConfigHttpPatch } from "./routes/config-http-patch.ts";
 import { createAuthenticate } from "./request-pipeline/authenticate.ts";
@@ -22594,7 +22595,24 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     confined: (threadId) => cloudGuestDriven(threadId) || botmailConfined(threadId),
     accounts: (principalId) => connectorRegistry.accounts(principalId),
     hub: () => connectorHub,
-    hold: holdConnectorCall
+    hold: holdConnectorCall,
+    // #3350: the host found the account's sign-in missing or expired: the
+    // same Connect card as open_connector_setup's, for that person only
+    signInCard: ({ botId, threadId, principalId, account }) => {
+      const owner = connectorThread(botId, threadId);
+      const instanceId = folderInstance(account.driver, account.instanceId);
+      const engine = instanceId ? registry.instances().find((candidate) => candidate.instanceId === instanceId) : undefined;
+      if (!owner || !engine) return false;
+      const name = engineDisplayName(engine);
+      store.appendMessage(threadId, {
+        role: "bot",
+        kind: "access",
+        text: `${owner.bot.name} asks you to sign in to ${name} again to use ${account.label} connectors. Open Settings > Models to sign in.`,
+        ...(owner.group ? { from: { botId: owner.bot.id, name: owner.bot.name, color: owner.bot.color } } : {}),
+        access: { reason: "sign_in", engine: name, instanceId: engine.instanceId, botId: owner.bot.id, botName: owner.bot.name, ownerPrincipalId: principalId, payerPrincipalId: principalId }
+      });
+      return true;
+    }
   }),
   // open_connector_setup (server/routes/connector-setup.ts)
   createConnectorSetupInternalRoutes({
@@ -28521,9 +28539,18 @@ const connectorRegistry = new ConnectorRegistry({
     testConnectorHost?.source ?? chatgptAppsProvider(),
   ],
 });
-/** #3348 (L5): the hosts that run call_connector, one per provider. Only
- * the test host today; the Grok host is L7, the Claude host L9. */
-const connectorHub = createConnectorHub(testConnectorHost ? [testConnectorHost.host] : []);
+/** #3348 (L5): the hosts that run call_connector, one per provider. The
+ * Grok host (#3350, L7) runs one approved call on the person's own Grok
+ * sign-in; the Claude host is L9. */
+const connectorHub = createConnectorHub([
+  ...(testConnectorHost ? [testConnectorHost.host] : []),
+  createGrokConnectorHost({
+    launch: (principalId, account) => {
+      const instanceId = folderInstance("grokAgent", account.instanceId);
+      return (instanceId ? engineLogins?.grokConnectorLaunch(principalId, instanceId, account.slot) : null) ?? undefined;
+    },
+  }),
+]);
 /** The CLI and environment of a person's own Claude account (their
  * claude.ai connectors), or why there is none. */
 

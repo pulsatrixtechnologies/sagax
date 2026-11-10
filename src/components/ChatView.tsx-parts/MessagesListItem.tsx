@@ -314,6 +314,9 @@ export function MessagesListItem({
   }
   const m = item.message;
   const row = (() => {
+    // #3461: the orchestrator reads a team note at its next turn; the person's
+    // chat does not draw it until the work view does (lot 2 of #3451)
+    if (m.teamNote) return null;
     // A client abort is a stop, not a failure. Legacy rows still store
     // the provider's sentence or an error row; both read as this line.
     if (isCancelledTranscriptRow(m)) {

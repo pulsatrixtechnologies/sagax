@@ -324,6 +324,10 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
 export interface BotActivityReader {
   list(bot: ActivityBot, viewerId: string | undefined, limit: number, windowMs?: number): BotActivityItem[];
   failureCause(threadId: string): string | undefined;
+  /** #3461: one conversation's entry, the same as in `list`, archived ones
+   * included (a team bot's step thread the sweep archived). Undefined when
+   * the bot has no such thread or the viewer may not read it. */
+  thread(bot: ActivityBot, threadId: string, viewerId: string | undefined): BotActivityItem | undefined;
 }
 
 export function createBotActivityReader(deps: BotActivityRouteDeps): BotActivityReader {
@@ -333,6 +337,13 @@ export function createBotActivityReader(deps: BotActivityRouteDeps): BotActivity
     list(bot, viewerId, limit, windowMs) {
       state.messagePages.clear();
       return listed.list(bot, viewerId, Math.min(limit, LIST_MAX), windowMs);
+    },
+    thread(bot, threadId, viewerId) {
+      state.messagePages.clear();
+      const task = deps.tasks(bot.id).find((entry) => entry.threadId === threadId);
+      if (!task || !deps.threadReadable(bot.id, threadId, viewerId)) return undefined;
+      const runs = new Map(deps.runs(bot.id).filter((run) => deps.runSeen(run, viewerId)).map((run) => [run.id, run]));
+      return listed.threadItem(bot, task, runs, viewerId);
     },
     failureCause(threadId) {
       const rows = listed.messages(threadId, CURRENT_SCAN).messages;

@@ -4,6 +4,7 @@ import { voiceOpenerFrameAllowed } from "../voice/voice-first-sentence.ts";
 import { phoneToolsFrameAllowed } from "../../shared/phone-tools.ts";
 import { liveFramesNeedChannelFilter, sseFrameProjection } from "../rooms/channel-visibility.ts";
 import { botActFrameAllowed } from "../../shared/bot-act.ts";
+import { teamWorkFrameAllowed } from "../../shared/team-work.ts";
 import { achievementFrameAllowed } from "../achievements/achievements.ts";
 import { encodeSseDataFrame } from "../streams/sse-fanout.ts";
 import { dataFrameAllowed } from "../data/scope.ts";
@@ -62,6 +63,8 @@ function sseFrameFor(   client: SseClient,   seq: number,   payload: Record<stri
   if (payload?.kind === "data" && !dataFrameAllowed(payload, client.viewerId, host.localPrincipalId())) return null;
   // a bot's task list changed: that person's streams only (shared/bot-task-list.ts)
   if (payload && !host.botTasksFrameAllowed(payload, client.viewerId || undefined, host.localPrincipalId())) return null;
+  // an orchestrator's team work changed: that person's streams only (shared/team-work.ts)
+  if (payload && !teamWorkFrameAllowed(payload, client.viewerId || undefined, host.localPrincipalId())) return null;
   if (payload?.kind === "bot-act" && !botActFrameAllowed(typeof payload.audience === "string" ? payload.audience : "", client.viewerId, host.localPrincipalId())) return null;
   if (payload) {
     const scoped = host.scopeChannelApproval(payload, host.approvalViewerOf(client));

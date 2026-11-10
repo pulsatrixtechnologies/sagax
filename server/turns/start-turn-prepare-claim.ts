@@ -2,6 +2,7 @@
 // #1388 wave 4 step 3: startTurn prepare leaf. Never imports server/index.ts.
 import { randomUUID } from "node:crypto";
 import type { StartTurnHost } from "./start-turn-types.ts";
+import { notePersonWrote } from "../team-work/person-note.ts";
 import type { TurnState, PrepareResult } from "./start-turn-state.ts";
 
 export function createPrepareClaimStartTurn(host: StartTurnHost) {
@@ -83,7 +84,11 @@ export function createPrepareClaimStartTurn(host: StartTurnHost) {
       // Where the person is now (server/threads/main-thread.ts). A line relayed
       // from Slack was written there, not in this conversation: the line
       // says so (Message.relayed), also in a turn a computer switch continues.
-      if (!state.userMessage.relayed) store.setTaskAskedAt(state.bot.id, state.threadId, state.userMessage.at);
+      if (!state.userMessage.relayed) {
+        store.setTaskAskedAt(state.bot.id, state.threadId, state.userMessage.at);
+        // #3461: the bot that opened this thread is told what the person wrote
+        notePersonWrote({ botId: state.bot.id, threadId: state.threadId, text: state.userMessage.text ?? "", at: state.userMessage.at });
+      }
       // A background thread the server archived on its own is the person's
       // again once they write in it (server/threads/background-sweep.ts).
       // An AI client's prompt is not their writing: that thread stays put.

@@ -461,3 +461,51 @@ describe("the stall handler", () => {
     expect(context.stoppedTurnText("t1", "turn-1", undefined, "interrupted")).toMatch(/^Turn interrupted — the Company connection changed\. Before it stopped/);
   });
 });
+
+describe("TurnWatchdog peek (#3461: the live state of a team bot)", () => {
+  it("gives the start, the last event, the tool call in flight and the parks, and writes nothing", () => {
+    const { dog, tick, stalls } = rig();
+    expect(dog.peek("t1")).toBeUndefined();
+    tick(1_000);
+    dog.watch("t1", "bot1");
+    expect(dog.peek("t1")).toEqual({ threadId: "t1", botId: "bot1", startedAt: 1_000, lastEventAt: 1_000, waitingOnHuman: false, waitingOnComputer: false });
+    tick(2_000);
+    dog.observe(toolStarted("a"));
+    tick(1_000);
+    dog.observe(toolStarted("b"));
+    expect(dog.peek("t1")).toMatchObject({ lastEventAt: 4_000, toolSince: 3_000 });
+    dog.observe(toolEnded("a"));
+    expect(dog.peek("t1")).toMatchObject({ toolSince: 4_000 });
+    dog.observe(toolEnded("b"));
+    expect(dog.peek("t1")?.toolSince).toBeUndefined();
+    dog.setWaitingOnHuman("t1", true);
+    expect(dog.peek("t1")).toMatchObject({ waitingOnHuman: true });
+    dog.setWaitingOnHuman("t1", false);
+    dog.setWaitingOnComputer("t1", true);
+    expect(dog.peek("t1")).toMatchObject({ waitingOnHuman: false, waitingOnComputer: true });
+    // a copy: changing it changes nothing in the watchdog
+    const seen = dog.peek("t1")!;
+    seen.lastEventAt = 0;
+    expect(dog.peek("t1")!.lastEventAt).toBe(4_000);
+    expect(stalls).toHaveLength(0);
+    dog.settle("t1");
+    expect(dog.peek("t1")).toBeUndefined();
+  });
+
+  it("follows the forgiven sleep", () => {
+    const { dog, tick } = rig();
+    dog.watch("t1", "bot1");
+    tick(5_000);
+    dog.sweep(4_000);
+    expect(dog.peek("t1")!.lastEventAt).toBe(4_000);
+  });
+
+  it("lists the open turns of a bot", () => {
+    const { dog } = rig();
+    dog.watch("t1", "bot1");
+    dog.watch("t2", "bot1");
+    dog.watch("t3", "bot2");
+    expect(dog.openTurns("bot1").map((turn) => turn.threadId).sort()).toEqual(["t1", "t2"]);
+    expect(dog.openTurns("bot3")).toEqual([]);
+  });
+});

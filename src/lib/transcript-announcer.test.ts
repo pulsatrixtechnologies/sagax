@@ -146,6 +146,11 @@ describe("latestReply", () => {
     expect(latestReply(messages, () => "Pepper")?.id).toBe("a");
   });
 
+  it("skips a team note row (#3461), which the chat does not draw", () => {
+    const note = { ...text("b", "bot", "You wrote to Dev: Use main."), teamNote: { botId: "dev", botName: "Dev", threadId: "t", text: "Use main.", at: 1, lastAt: 1, count: 1 } };
+    expect(latestReply([text("a", "bot", "Here is the plan."), note], () => "Pepper")?.id).toBe("a");
+  });
+
   it("skips activity rows and empty text", () => {
     const messages: Message[] = [
       text("a", "bot", "Answer."),

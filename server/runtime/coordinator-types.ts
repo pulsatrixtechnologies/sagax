@@ -10,6 +10,7 @@ import type {
   Owner,
   Reply,
   Requester,
+  Status,
   StatusView,
   TurnEvidence,
 } from "./types.ts";
@@ -79,6 +80,33 @@ export interface HandoffView {
   consult?: boolean;
   /** Admitted ahead of other queued work (send_to_bot priority now). */
   priority?: "now";
+}
+
+/** #3461: one piece of work a bot's turn handed out, as the team work view
+ * reads it (server/team-work/team-work.ts). Plain facts of the runtime row:
+ * the runtime's own status (needs_input kept apart from waiting), its
+ * times and who asked. */
+export interface HandedOver {
+  id: string;
+  /** The team bot that does it, and the thread where its turns run. */
+  botId: string;
+  threadId: string;
+  groupId?: string;
+  requesterBotId?: string;
+  /** The requester's conversation. */
+  requesterThreadId?: string;
+  mode: Mode;
+  reply: Reply;
+  status: Status;
+  brief: string;
+  createdAt: number;
+  startedAt?: number;
+  finishedAt?: number;
+  result: string;
+  outcome?: Outcome;
+  outcomeDetail?: string;
+  /** Who the tree acts for (Assignment.person), never shown. */
+  person?: string;
 }
 
 /** A person's or a routine's own turn, as a root (one per request). */
@@ -208,6 +236,10 @@ export interface CoordinatorHost {
   /** A settled child, to its requester; a root the runtime ended, alone. */
   report(child: HandoffView, parent?: HandoffView): void;
   changed(groupIds: ReadonlySet<string>, directThreadIds: ReadonlySet<string>): void;
+  /** #3461: hand-overs a bot's turn made were created or changed state
+   * (queued, started, parked, settled): the requester bots, with the person
+   * each tree acts for. Never per tool call. Optional. */
+  handedOutChanged?(changes: ReadonlyArray<{ botId: string; person?: string }>): void;
   /** Display names for the envelope of a turn. */
   names(node: HandoffView, parent?: HandoffView): EnvelopeNames;
   /** A teammate ended its turn on a question for the person: show it where
@@ -253,6 +285,10 @@ export interface Coordinator {
    * (no room groupId). Indexed store read for the activity panel; identical
    * membership to scanning all() for those parents. */
   directChildrenOf(botId: string, threadId: string): HandoffView[];
+  /** #3461: the work every turn of this bot handed out (any of its
+   * threads), created since `since` or still live, no room work. Indexed
+   * store read (RuntimeStore.handedOutBy). */
+  handedOutBy(botId: string, since: number): HandedOver[];
   /** Hand work on from a running node: the requester's own root (its turn's
    * generation, begun by beginTurn) or a teammate's node (`parentId`).
    * `joined`: the request joined another tree's identical live request for

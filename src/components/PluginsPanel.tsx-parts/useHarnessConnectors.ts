@@ -1,9 +1,27 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/state/store";
+import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors";
+import type { connectorGroups } from "../plugins/HarnessConnectorGroups";
 import type { HarnessAnswer } from "./types";
 
-/** The connectors of the person's own Claude account
- * (GET /api/me/harness-connectors): Providers lists them by engine, and
+/** What the connector sections are built from (`connectorGroups`), as the
+ * server's registry of the person's connectors answers it (#3358): Claude's
+ * own account, each of the person's Grok sign-ins with the real state of
+ * its connectors, and the ChatGPT apps of their Codex sign-in. A server that
+ * lists no Grok sign-in (older, solo) leaves Grok on the xAI catalog when a
+ * Grok engine is set up. */
+export function harnessGroupsInput(answer: HarnessAnswer | null, loading: boolean, grokConfigured: boolean): Parameters<typeof connectorGroups>[0] {
+  const claude = answer?.claude;
+  return {
+    claude: claude ? { available: claude.available, reason: claude.reason, connectors: claude.connectors ?? [], manageUrl: answer.manageUrl } : null,
+    claudeLoading: loading && !answer,
+    grok: answer?.grok ? { accounts: answer.grok.accounts ?? [] } : grokConfigured ? { connectors: GROK_CLOUD_CONNECTORS } : null,
+    codex: answer?.codex ?? null,
+  };
+}
+
+/** The connectors of the person's own accounts (GET /api/me/harness-connectors,
+ * read from the connector registry): Providers lists them by engine, and
  * "N connected" counts the connected ones. */
 export function useHarnessConnectors() {
   const [answer, setAnswer] = useState<HarnessAnswer | null>(null);

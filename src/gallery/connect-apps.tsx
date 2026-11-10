@@ -5,7 +5,8 @@
  * manage: the real Connect apps panel (PluginsPanel) on a stand-in /api
  * shaped like an organization member's (2026-10-26): GitHub added by hand
  * and again by a marketplace plugin, five plugins, the person's Claude
- * account with Gmail, Google Drive and Google Calendar, a Grok account.
+ * account with Gmail, Google Drive and Google Calendar, two Grok sign-ins
+ * with the real state of their connectors and a ChatGPT sign-in (#3358).
  * Names are neutral. role=admin: the same person as an organization admin
  * (the organization's sources and access). org-settings: Settings >
  * Organization for that person. settings-subpage: a Settings sub-page in
@@ -179,7 +180,17 @@ const MANAGE_API: Record<string, unknown> = {
     { name: "Google Drive", status: "connected" },
     { name: "Google Calendar", status: "connected" },
     { name: "Canva", status: "needs_auth" },
-  ] }, codex: { available: false } },
+  ] }, codex: { available: true, connectors: [{ name: "Notion", status: "connected" }] },
+  // #3358: the person's Grok sign-ins as the connector registry knows them
+  grok: { accounts: [
+    { label: "Grok", slot: "primary", auth: "subscription", at: 1_761_650_000_000, connectors: [
+      { id: "outlook", name: "Outlook (Exchange)", status: "connected" },
+      { id: "microsoft-teams", name: "Microsoft Teams", status: "needs_auth" },
+    ] },
+    { label: "Grok (personal account)", slot: "second", kind: "personal", auth: "subscription", at: 1_761_650_000_000, connectors: [
+      { id: "gmail", name: "Gmail", status: "failed" },
+    ] },
+  ] } },
   "/api/me/org-capabilities": { owner: "perspicax", items: [] },
   "/api/org/capabilities": { owner: "perspicax", capabilities: [], installed: {} },
   "/api/pages": { pages: [

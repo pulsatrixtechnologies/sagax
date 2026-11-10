@@ -19,6 +19,7 @@ import { claudeAiConnectorsForTurn, grokCloudConnectorsForTurn } from "./connect
 import type { RequestAuth } from "./auth/request-auth.ts";
 import { PASS, type RouteContext } from "./routes/table.ts";
 import type { SessionRecord } from "./auth/sessions.ts";
+import type { ConnectorAccount } from "./connectors/types.ts";
 
 const LOCAL = "pr_00000000-0000-4000-8000-000000000001";
 const ADA = "pr_00000000-0000-4000-8000-00000000000a";
@@ -279,12 +280,12 @@ function harness(overrides: Partial<HarnessConnectorRouteDeps> = {}) {
     ...overrides,
   };
   const route = createHarnessConnectorRoutes(deps);
-  const call = async (input: { method: string; path: string; auth: RequestAuth; body?: unknown }) => {
+  const call = async (input: { method: string; path: string; auth: RequestAuth; body?: unknown; query?: string }) => {
     const out: { status?: number; body?: any } = {};
     const ctx = {
       req: { headers: { "content-type": "application/json" } },
       res: { setHeader: () => {}, headersSent: false, writableEnded: false },
-      url: new URL(`http://localhost${input.path}`), path: input.path, method: input.method, auth: input.auth,
+      url: new URL(`http://localhost${input.path}${input.query ?? ""}`), path: input.path, method: input.method, auth: input.auth,
       json: (_res: unknown, status: number, body: unknown) => { out.status = status; out.body = body; },
       readBody: async () => input.body ?? {},
     } as unknown as RouteContext;
@@ -331,6 +332,59 @@ describe("GET /api/me/harness-connectors", () => {
   });
   it("passes other paths", async () => {
     expect((await harness().call({ method: "GET", path: "/api/me/engines", auth: session(ADA, ["client"]) })).passed).toBe(true);
+  });
+});
+
+describe("#3358: the pages read the person's Grok and ChatGPT sign-ins from the registry", () => {
+  const grokAccount = (person: string, slot: "primary" | "second", over: Partial<ConnectorAccount> = {}): ConnectorAccount => ({
+    provider: "grok-com", driver: "grokAgent", instanceId: `grok-${person}-${slot}`, slot, key: `grok-com:grok-${person}-${slot}:${slot}`,
+    label: slot === "second" ? "Grok (personal account)" : "Grok", auth: "subscription", gateway: true,
+    connectors: [{ id: "outlook", name: "Outlook (Exchange)", state: "connected", tools: [{ id: "outlook__send_mail" }] }], at: 5, ...over,
+  });
+  const byPerson: Record<string, ConnectorAccount[]> = {
+    [ADA]: [
+      grokAccount(ADA, "primary", { connectors: [{ id: "microsoft-teams", name: "Microsoft Teams", state: "needs-sign-in", tools: [] }] }),
+      grokAccount(ADA, "second", { kind: "personal" }),
+      { provider: "chatgpt-apps", driver: "codex", instanceId: "codex-ada", slot: "primary", key: "chatgpt-apps:codex-ada:primary", label: "ChatGPT", auth: "subscription", connectors: [{ name: "Notes", state: "connected", tools: [] }], at: 5 },
+    ],
+    [BOB]: [grokAccount(BOB, "primary", { auth: "unknown", connectors: [], at: 0 })],
+  };
+  const refreshed: Array<{ person: string; provider?: string }> = [];
+  const registry = {
+    accountsOf: (person: string, provider: string) => (byPerson[person] ?? []).filter((account) => account.provider === provider),
+    account: () => undefined,
+    refresh: async (person: string, only?: { provider?: string }) => { refreshed.push({ person, provider: only?.provider }); return []; },
+  } as unknown as HarnessConnectorRouteDeps["registry"];
+  const get = (h: ReturnType<typeof harness>, who: string, query = "") =>
+    h.call({ method: "GET", path: "/api/me/harness-connectors", query, auth: session(who, ["client"]) }).then((out) => out.body);
+
+  it("lists each Grok sign-in of the person with its real state, and the ChatGPT apps of their Codex sign-in", async () => {
+    const h = harness({ registry });
+    const ada = await get(h, ADA);
+    expect(ada.grok.accounts).toEqual([
+      { label: "Grok", slot: "primary", auth: "subscription", connectors: [{ id: "microsoft-teams", name: "Microsoft Teams", status: "needs_auth" }], at: 5 },
+      { label: "Grok (personal account)", slot: "second", kind: "personal", auth: "subscription", connectors: [{ id: "outlook", name: "Outlook (Exchange)", status: "connected" }], at: 5 },
+    ]);
+    expect(ada.codex).toEqual({ available: true, connectors: [{ name: "Notes", status: "connected" }] });
+    // never an instance id, a tool id or a key of the sign-in
+    expect(JSON.stringify(ada)).not.toMatch(/grok-pr_|codex-ada|outlook__send_mail|grok-com:/);
+  });
+  it("never another person's: Bob sees his own sign-in only, not read yet", async () => {
+    const bob = await get(harness({ registry }), BOB);
+    expect(bob.grok.accounts).toEqual([{ label: "Grok", slot: "primary", auth: "unknown", connectors: [], at: 0 }]);
+    expect(bob.codex).toEqual({ available: false, reason: "not_supported" });
+  });
+  it("Read again reads the Grok and ChatGPT sign-ins again; a solo server lists no Grok sign-in of a person", async () => {
+    refreshed.length = 0;
+    await get(harness({ registry }), ADA, "?refresh=1");
+    expect(refreshed).toEqual(expect.arrayContaining([{ person: ADA, provider: "grok-com" }, { person: ADA, provider: "chatgpt-apps" }]));
+    const solo = await get(harness({ registry, organization: false, localPrincipalId: () => ADA }), ADA);
+    expect(solo.grok).toBeUndefined();
+  });
+  it("a section the server cannot fill still has its Grok sign-ins (Claude not signed in)", async () => {
+    const bob = await get(harness({ registry }), BOB);
+    expect(bob.claude.reason).toBe("not_signed_in");
+    expect(bob.grok.accounts).toHaveLength(1);
   });
 });
 

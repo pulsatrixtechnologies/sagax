@@ -19,7 +19,9 @@ import { installedEntries, privateSkills } from "@/lib/installed-model";
 import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors";
 import { bringsLabel, InstalledView, type InstalledViewProps } from "./InstalledView";
 import { ConnectAppsView, connectedCounts, normalizeConnectAppsTab, isProvidersLink, CONNECT_APPS_TABS, SCOPELESS_TABS, connectAppsTabLabel } from "./ConnectAppsView";
-import { accountConnectorRows, connectedAccountRows, connectorGroups, noticeAction, type HarnessConnectorGroup } from "./HarnessConnectorGroups";
+import { accountConnectorRows, connectedAccountRows, connectorGroups, noticeAction, type HarnessConnectorGroup, type RegistryGrokAccount } from "./HarnessConnectorGroups";
+import { harnessGroupsInput } from "../PluginsPanel.tsx-parts/useHarnessConnectors";
+import type { HarnessAnswer } from "../PluginsPanel.tsx-parts/types";
 import { DiscoverView } from "./DiscoverView";
 import { AccountsView } from "./AccountsView";
 import { SourcesView } from "./SourcesView";
@@ -394,6 +396,61 @@ describe("The engine accounts' connectors as plugin rows (#2306)", () => {
     const installed = renderToStaticMarkup(createElement(InstalledView, props({ entries: [], accounts: { sections: sections(groups), onSetUp: noop } })));
     expect(installed).toMatch(/<li class="col-span-full"><div[^>]*data-harness-notice="empty"/);
     expect(installed).toContain('data-harness-add="claude"');
+  });
+
+  describe("#3358: the pages read the connector registry", () => {
+    const account = (over: Partial<RegistryGrokAccount> = {}): RegistryGrokAccount => ({ label: "Grok", slot: "primary", auth: "subscription", connectors: [], at: 5, ...over });
+    const fromServer = (answer: HarnessAnswer, grokConfigured = true) => connectorGroups(harnessGroupsInput(answer, false, grokConfigured));
+
+    it("Grok rows carry their real state from the person's own sign-ins, not the xAI catalog", () => {
+      const groups = fromServer({ claude, grok: { accounts: [
+        account({ connectors: [{ id: "outlook", name: "Outlook (Exchange)", status: "connected" }, { id: "microsoft-teams", name: "Microsoft Teams", status: "needs_auth" }] }),
+        account({ label: "Grok (personal account)", slot: "second", kind: "personal", connectors: [{ id: "microsoft-teams", name: "Microsoft Teams", status: "connected" }, { id: "gmail", name: "Gmail", status: "failed" }] }),
+      ] } });
+      const grok = groups.find((group) => group.id === "grok")!;
+      // each connector once, its best state across the two sign-ins; nothing from the catalog
+      expect(grok.connectors).toEqual([
+        { id: "outlook", name: "Outlook (Exchange)", status: "connected" },
+        { id: "microsoft-teams", name: "Microsoft Teams", status: "connected" },
+        { id: "gmail", name: "Gmail", status: "failed" },
+      ]);
+      expect(grok.account).toBe("Grok, Grok (personal account)");
+      const html = discover(groups);
+      expect(html).not.toContain('data-harness-connector="grok:X"');
+      expect(html).not.toContain("Not verifiable");
+      expect(html).toMatch(/data-harness-connector="grok:Outlook \(Exchange\)"[\s\S]*?data-harness-status="connected"[^>]*>connector \(Grok account\)</);
+      expect(html).toMatch(/data-harness-connector="grok:Outlook \(Exchange\)"[\s\S]*?Installed/);
+      expect(html).toMatch(/data-harness-connector="grok:Gmail"[\s\S]*?<button[^>]*data-harness-signin="grok:Gmail"[^>]*data-harness-status="failed"[^>]*>Reconnect</);
+      // the connected Grok rows count in "N connected"
+      expect(connectedAccountRows(groups)).toBe(3 + 2);
+    });
+
+    it("a Grok section with no connector says why: none added, not read yet, a key, signed out, no sign-in", () => {
+      const reason = (accounts: RegistryGrokAccount[]) => {
+        const grok = fromServer({ claude, grok: { accounts } }).find((group) => group.id === "grok")!;
+        return grok.notice?.kind === "unavailable" ? grok.notice.reason : grok.notice?.kind;
+      };
+      expect(reason([account()])).toBe("empty");
+      expect(reason([account({ auth: "unknown", at: 0 })])).toBe("unknown");
+      expect(reason([account({ auth: "key" })])).toBe("key");
+      expect(reason([account({ auth: "none" })])).toBe("not_signed_in");
+      // an organization server that lists no Grok sign-in of the person: none, even with a Grok engine set up
+      expect(reason([])).toBe("no_account");
+    });
+
+    it("a server that lists no Grok sign-in (older, solo) keeps the xAI catalog when Grok is set up", () => {
+      const grok = fromServer({ claude }).find((group) => group.id === "grok")!;
+      expect(grok.connectors.map((connector) => connector.name)).toEqual(GROK_CLOUD_CONNECTORS.map((connector) => connector.name));
+      expect(fromServer({ claude }, false).find((group) => group.id === "grok")!.notice).toEqual({ kind: "no_account" });
+    });
+
+    it("the ChatGPT group shows for a ChatGPT sign-in the registry lists, with its apps or that it has none yet", () => {
+      const listed = fromServer({ claude, codex: { available: true, connectors: [{ name: "Notion", status: "connected" }] } });
+      expect(discover(listed)).toMatch(/data-plugins-section="from-codex"[\s\S]*>From ChatGPT<[\s\S]*data-plugin-row="account:codex:Notion"/);
+      const none = fromServer({ claude, codex: { available: true, connectors: [] } }).find((group) => group.id === "codex");
+      expect(none?.notice).toEqual({ kind: "empty" });
+      expect(fromServer({ claude, codex: { available: false } }).map((group) => group.id)).toEqual(["claude", "grok"]);
+    });
   });
 });
 

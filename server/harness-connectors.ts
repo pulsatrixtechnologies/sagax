@@ -40,7 +40,7 @@ import { resolveCli } from "./procs.ts";
 import type { RequestAuth } from "./auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./routes/table.ts";
 import type { ConnectorRegistry } from "./connectors/registry.ts";
-import type { ConnectorState } from "./connectors/types.ts";
+import type { ConnectorAccount, ConnectorState } from "./connectors/types.ts";
 
 /** How Claude Code names a claude.ai connector's server. */
 export const CLAUDE_AI_SERVER_PREFIX = "claude.ai ";
@@ -347,7 +347,7 @@ export interface HarnessConnectorRouteDeps {
   /** #3344: the person's connector registry (server/connectors/registry.ts).
    * When given, the answer is read from it (the read lands there, so every
    * other reader and the next start know it too). */
-  registry?: Pick<ConnectorRegistry, "refresh" | "account">;
+  registry?: Pick<ConnectorRegistry, "refresh" | "account" | "accountsOf">;
   /** #1533: the person's own Claude sign-in exists, but Claude says it is
    * signed out (its refresh was refused): their engine card says Reconnect. */
   /** #2384: `instanceId` is the account the inventory was read on. */
@@ -371,12 +371,57 @@ async function registryInventory(registry: Pick<ConnectorRegistry, "refresh" | "
   return { auth: known.auth, connectors: known.connectors.map((entry) => ({ name: entry.name, status: REGISTRY_STATUS[entry.state] })), at: known.at };
 }
 
+/** #3358: one of the person's Grok sign-ins on the connector pages, as the
+ * registry knows it. Never its instance id, address or email: its label,
+ * its slot and what it is. */
+export interface HarnessGrokAccount {
+  label: string;
+  slot: "primary" | "second";
+  kind?: "personal" | "team";
+  auth: "subscription" | "key" | "none" | "unknown";
+  connectors: Array<{ id?: string; name: string; status: ClaudeAiConnectorStatus }>;
+  at: number;
+}
+
+/** #3358: what the pages read from the registry beside Claude: the
+ * person's Grok sign-ins (an organization server, where each person has
+ * their own) and the ChatGPT apps of their Codex sign-in. */
+async function registryAccounts(registry: HarnessConnectorRouteDeps["registry"], principalId: string, organization: boolean, refresh: boolean): Promise<{ grok?: { accounts: HarnessGrokAccount[] }; codex: { available: boolean; reason?: "not_supported"; connectors?: ClaudeAiConnector[] } }> {
+  const notSupported = { available: false, reason: "not_supported" as const };
+  if (!registry) return { codex: notSupported };
+  if (refresh) {
+    await Promise.all([
+      organization ? registry.refresh(principalId, { provider: "grok-com" }, true) : Promise.resolve(),
+      registry.refresh(principalId, { provider: "chatgpt-apps" }, true),
+    ]);
+  }
+  const entries = (connectors: ConnectorAccount["connectors"]) => connectors.map((entry) => ({ ...(entry.id ? { id: entry.id } : {}), name: entry.name, status: REGISTRY_STATUS[entry.state] }));
+  const grok = organization
+    ? {
+      accounts: registry.accountsOf(principalId, "grok-com").map((account): HarnessGrokAccount => ({
+        label: account.label,
+        slot: account.slot,
+        ...(account.kind ? { kind: account.kind } : {}),
+        auth: account.auth,
+        connectors: account.auth === "subscription" ? entries(account.connectors) : [],
+        at: account.at,
+      })),
+    }
+    : undefined;
+  const chatgpt = registry.accountsOf(principalId, "chatgpt-apps").filter((account) => account.auth === "subscription");
+  const codex = chatgpt.length
+    ? { available: true, connectors: chatgpt.flatMap((account) => entries(account.connectors).map(({ name, status }) => ({ name, status }))) }
+    : notSupported;
+  return { ...(grok ? { grok } : {}), codex };
+}
+
 function isAdminScope(auth: RequestAuth): boolean {
   if (auth.kind === "loopback" && auth.trust === "service") return false;
   return auth.scopes.includes("admin");
 }
 
-/** GET  /api/me/harness-connectors        the caller's own claude.ai connectors
+/** GET  /api/me/harness-connectors        the caller's own claude.ai connectors,
+ *                                         Grok sign-ins and ChatGPT apps (#3358)
  *  PUT  /api/harness-connectors/settings  retired no-op (always on), kept for older clients
  * Nothing returned names the account (no email, no organization, no URL). */
 export function createHarnessConnectorRoutes(deps: HarnessConnectorRouteDeps): RouteHandler {
@@ -401,15 +446,18 @@ export function createHarnessConnectorRoutes(deps: HarnessConnectorRouteDeps): R
     const principalId = deps.principalFor(auth);
     if (!principalId) return json(res, 403, { error: "sign in as a person first" });
     const base = { manageUrl: CLAUDE_AI_CONNECTORS_URL, canManage: admin, enabled: true };
-    const answer = (claude: { available: boolean; reason?: ClaudeAiUnavailable; connectors: ClaudeAiConnector[] }) =>
-      json(res, 200, { ...base, claude, codex: { available: false, reason: "not_supported" } });
+    const refresh = url.searchParams.get("refresh") === "1";
+    // #3358: the other providers' sign-ins, read beside Claude's
+    const others = registryAccounts(deps.registry, principalId, deps.organization, refresh)
+      .catch(() => ({ codex: { available: false, reason: "not_supported" } }));
+    const answer = async (claude: { available: boolean; reason?: ClaudeAiUnavailable; connectors: ClaudeAiConnector[] }) =>
+      json(res, 200, { ...base, claude, ...(await others) });
     if (deps.restrictedByPolicy()) return answer({ available: false, reason: "managed_policy", connectors: [] });
     if (!deps.organization && principalId !== deps.localPrincipalId().trim().toLowerCase()) {
       return answer({ available: false, reason: "not_operator", connectors: [] });
     }
     const account = deps.claudeAccountFor(principalId);
     if ("unavailable" in account) return answer({ available: false, reason: account.unavailable, connectors: [] });
-    const refresh = url.searchParams.get("refresh") === "1";
     const inventory = deps.registry && account.instanceId
       ? await registryInventory(deps.registry, principalId, account.instanceId, refresh)
       : await deps.inventory.read(account.key, { cli: account.cli, env: account.env }, refresh);

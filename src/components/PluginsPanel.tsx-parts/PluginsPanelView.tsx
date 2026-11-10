@@ -36,7 +36,7 @@ import { MarketplacesSection } from "../plugins/MarketplacesSection";
 import { DataCenterDialog } from "../plugins/DataCenterDialog";
 import { ScopeToggle } from "../plugins/ScopeToggle";
 import { MacAppsInstalledSection } from "../plugins/MacAppsView";
-import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors";
+import { harnessGroupsInput } from "./useHarnessConnectors";
 import { pluginSourceLabel } from "./helpers";
 import { pageLabel, PluginsPanelSubpage } from "./PluginsPanelSubpage";
 import type { PluginsPanelState } from "./usePluginsPanelState";
@@ -124,12 +124,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     />
   );
 
-  const groups = connectorGroups({
-    claude: harness.answer?.claude ? { available: harness.answer.claude.available, reason: harness.answer.claude.reason, connectors: harness.answer.claude.connectors ?? [], manageUrl: harness.answer.manageUrl } : null,
-    claudeLoading: harness.loading && !harness.answer,
-    grok: grokConfigured ? { connectors: GROK_CLOUD_CONNECTORS } : null,
-    codex: harness.answer?.codex ?? null,
-  });
+  const groups = connectorGroups(harnessGroupsInput(harness.answer, harness.loading, grokConfigured));
   // the engine accounts' connectors as rows (#2306): "From <provider>" in
   // Discover, rows of the Installed list in Manage, counted in "N connected"
   const accountSections = groups.map((group) => ({ group, rows: accountConnectorRows(group, items) }));

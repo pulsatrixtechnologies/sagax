@@ -3,16 +3,16 @@
 // a reader not signed in or who may not read the page gets the same refusal
 // as for data; an approval never covers a subdomain or another host; revoke
 // forgets them.
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { RequestAuth } from "../auth/request-auth.ts";
-import { normalizePageLinkHost } from "../../shared/page-capabilities.ts";
+import { normalizePageLinkOrigin } from "../../shared/page-capabilities.ts";
 import { PageDataApprovals } from "../pages/page-data-approvals.ts";
-import { PageLinkApprovals } from "../pages/page-link-approvals.ts";
+import { PAGE_LINK_APPROVALS_PER_READER_PAGE, PageLinkApprovals } from "../pages/page-link-approvals.ts";
 import { PageSources } from "../pages/page-sources.ts";
 import { PublishedPages, type PageRecord } from "../pages/published-pages.ts";
 import { createPageDataRoutes, type PageDataRouteDeps } from "./page-data.ts";
@@ -71,85 +71,149 @@ async function call(routes: ReturnType<typeof createPageDataRoutes>, auth: Reque
 }
 
 const ROUTE = "/api/pages/page-1/link-approvals";
+const q = (origin: string) => `${ROUTE}?${new URLSearchParams({ origin })}`;
 
-describe("link approvals: Always allow this site", () => {
-  it("keeps an approval for the reader, page and host, and lets them forget it", async () => {
+describe("link approvals: Always allow this site, by origin", () => {
+  it("keeps an approval for the reader, page and origin, and lets them forget it", async () => {
     const { routes } = world();
-    expect((await call(routes, as("person-b"), `${ROUTE}?host=docs.example.com`)).body).toEqual({ allowed: false });
-    expect((await call(routes, as("person-b"), ROUTE, "POST", { host: "Docs.Example.com", answer: "always" })).body).toEqual({ ok: true });
-    expect((await call(routes, as("person-b"), `${ROUTE}?host=docs.example.com`)).body).toEqual({ allowed: true });
-    expect((await call(routes, as("person-b"), `${ROUTE}?host=docs.example.com`, "DELETE")).body).toEqual({ ok: true });
-    expect((await call(routes, as("person-b"), `${ROUTE}?host=docs.example.com`)).body).toEqual({ allowed: false });
+    expect((await call(routes, as("person-b"), q("https://docs.example.com"))).body).toEqual({ allowed: false });
+    expect((await call(routes, as("person-b"), ROUTE, "POST", { origin: "https://Docs.Example.com", answer: "always" })).body).toEqual({ ok: true });
+    expect((await call(routes, as("person-b"), q("https://docs.example.com"))).body).toEqual({ allowed: true });
+    expect((await call(routes, as("person-b"), q("https://docs.example.com:443"))).body).toEqual({ allowed: true });
+    expect((await call(routes, as("person-b"), q("https://docs.example.com"), "DELETE")).body).toEqual({ ok: true });
+    expect((await call(routes, as("person-b"), q("https://docs.example.com"))).body).toEqual({ allowed: false });
   });
 
-  it("never covers another person, a subdomain or another host", async () => {
+  it("never opens another scheme, port, host, subdomain or person (second review)", async () => {
     const { routes } = world();
-    await call(routes, as("person-b"), ROUTE, "POST", { host: "example.com", answer: "always" });
-    expect((await call(routes, as("person-c"), `${ROUTE}?host=example.com`)).body).toEqual({ allowed: false });
-    expect((await call(routes, as("person-b"), `${ROUTE}?host=docs.example.com`)).body).toEqual({ allowed: false });
-    expect((await call(routes, as("person-b"), `${ROUTE}?host=example.org`)).body).toEqual({ allowed: false });
-    expect((await call(routes, as("person-b"), `${ROUTE}?host=example.com.evil.net`)).body).toEqual({ allowed: false });
+    await call(routes, as("person-b"), ROUTE, "POST", { origin: "https://example.com", answer: "always" });
+    for (const other of ["http://example.com", "https://example.com:8080", "http://example.com:8080", "https://docs.example.com", "https://example.org", "https://example.com.evil.net"]) {
+      expect((await call(routes, as("person-b"), q(other))).body, other).toEqual({ allowed: false });
+    }
+    expect((await call(routes, as("person-c"), q("https://example.com"))).body).toEqual({ allowed: false });
+  });
+
+  it("answers 400, not allowed false, to the old host parameter, so the old client hides the option", async () => {
+    const { routes } = world();
+    const old = await call(routes, as("person-b"), `${ROUTE}?host=example.com`);
+    expect(old.status).toBe(400);
+    expect(old.body.code).toBe("origin_required");
+    expect((await call(routes, as("person-b"), ROUTE, "POST", { host: "example.com", answer: "always" })).status).toBe(400);
   });
 
   it("refuses a bot's act session, to read, write or forget", async () => {
     const { routes, links } = world();
-    const write = await call(routes, as("person-b", true), ROUTE, "POST", { host: "example.com", answer: "always" });
+    const write = await call(routes, as("person-b", true), ROUTE, "POST", { origin: "https://example.com", answer: "always" });
     expect(write.status).toBe(403);
     expect(write.body.code).toBe("person_only");
-    expect(links.allowed("person-b", "page-1", "example.com")).toBe(false);
-    expect((await call(routes, as("person-b", true), `${ROUTE}?host=example.com`)).status).toBe(403);
-    expect((await call(routes, as("person-b", true), `${ROUTE}?host=example.com`, "DELETE")).status).toBe(403);
+    expect(links.allowed("person-b", "page-1", "https://example.com")).toBe(false);
+    expect((await call(routes, as("person-b", true), q("https://example.com"))).status).toBe(403);
+    expect((await call(routes, as("person-b", true), q("https://example.com"), "DELETE")).status).toBe(403);
   });
 
   it("gives a reader not signed in, or who may not read the page, the same refusal as for data", async () => {
     const { routes } = world({ record: page({ access: "private" }) });
-    const anon = await call(routes, as(null), `${ROUTE}?host=example.com`);
+    const anon = await call(routes, as(null), q("https://example.com"));
     expect(anon.status).toBe(401);
     expect(anon.body.code).toBe("sign_in");
-    const stranger = await call(routes, as("person-b"), ROUTE, "POST", { host: "example.com", answer: "always" });
+    const stranger = await call(routes, as("person-b"), ROUTE, "POST", { origin: "https://example.com", answer: "always" });
     expect(stranger.status).toBe(404);
     expect(stranger.body.code).toBe("not_found");
   });
 
-  it("refuses a host that is not one, and an answer it does not know", async () => {
+  it("refuses a value that is not an http or https origin, and an answer it does not know", async () => {
     const { routes } = world();
-    expect((await call(routes, as("person-b"), ROUTE, "POST", { host: "javascript:alert(1)", answer: "always" })).status).toBe(400);
-    expect((await call(routes, as("person-b"), ROUTE, "POST", { host: "example.com", answer: "once" })).status).toBe(400);
-    expect((await call(routes, as("person-b"), `${ROUTE}?host=`)).status).toBe(400);
+    for (const bad of ["javascript:alert(1)", "example.com", "https://example.com/path", "https://u:p@example.com", "ftp://example.com", ""]) {
+      expect((await call(routes, as("person-b"), ROUTE, "POST", { origin: bad, answer: "always" })).status, bad).toBe(400);
+    }
+    expect((await call(routes, as("person-b"), ROUTE, "POST", { origin: "https://example.com", answer: "once" })).status).toBe(400);
+  });
+});
+
+describe("link approvals: bounds (second review)", () => {
+  it("keeps at most 50 sites per reader and page, dropping only that reader's oldest on that page", () => {
+    const links = new PageLinkApprovals(null, () => NOW);
+    links.allow("person-a", "page-1", "https://a.example");
+    links.allow("person-b", "page-2", "https://b.example");
+    for (let index = 0; index < 1_000; index++) links.allow("person-b", "page-1", `https://site${index}.example`);
+    expect(PAGE_LINK_APPROVALS_PER_READER_PAGE).toBe(50);
+    expect(links.count("person-b", "page-1")).toBe(50);
+    expect(links.allowed("person-b", "page-1", "https://site999.example")).toBe(true);
+    expect(links.allowed("person-b", "page-1", "https://site0.example")).toBe(false);
+    // nobody else lost anything, nor the same reader on another page
+    expect(links.allowed("person-a", "page-1", "https://a.example")).toBe(true);
+    expect(links.allowed("person-b", "page-2", "https://b.example")).toBe(true);
   });
 
-  it("keeps approvals on disk, and forgets a page's approvals when it is revoked", () => {
+  it("appends one line per answer instead of rewriting the file, and reads it back", () => {
     const dir = mkdtempSync(join(tmpdir(), "sagax-link-approvals-"));
     dirs.push(dir);
-    const file = join(dir, "page-link-approvals.json");
-    const first = new PageLinkApprovals(file, () => NOW);
-    first.allow("person-b", "page-1", "example.com");
-    first.allow("person-b", "page-2", "example.com");
+    const file = join(dir, "page-link-approvals.jsonl");
+    const links = new PageLinkApprovals(file, () => NOW);
+    links.allow("person-b", "page-1", "https://a.example");
+    const one = statSync(file).size;
+    links.allow("person-b", "page-1", "https://b.example");
+    const two = statSync(file).size;
+    expect(readFileSync(file, "utf8").split("\n").filter(Boolean)).toHaveLength(2);
+    expect(two - one).toBeLessThan(200);
+    links.forget("person-b", "page-1", "https://a.example");
     const again = new PageLinkApprovals(file, () => NOW);
-    expect(again.allowed("person-b", "page-1", "example.com")).toBe(true);
-    // revoke goes through PublishedPages: its listeners hear it
+    expect(again.allowed("person-b", "page-1", "https://a.example")).toBe(false);
+    expect(again.allowed("person-b", "page-1", "https://b.example")).toBe(true);
+  });
+});
+
+describe("link and data approvals go with the page (second review)", () => {
+  function pagesIn(dir: string) {
     const pages = new PublishedPages(dir, () => NOW);
     const made = pages.propose({ ownerId: "person-a", botId: "lead", threadId: "t", title: "P", kind: "html", content: "<p>x</p>" });
     if (!made.ok) throw new Error(made.error);
     pages.publish(made.page.id, { version: made.version.n, access: "org", expiresAt: null });
-    again.allow("person-b", made.page.id, "example.com");
-    pages.onRevoked((id) => again.forgetPage(id));
-    pages.revoke(made.page.id);
-    expect(again.allowed("person-b", made.page.id, "example.com")).toBe(false);
-    expect(again.allowed("person-b", "page-2", "example.com")).toBe(true);
+    return { pages, id: made.page.id };
+  }
+
+  it("forgets a page's link approvals when it is revoked or deleted, and its data approvals when deleted", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-link-approvals-"));
+    dirs.push(dir);
+    const links = new PageLinkApprovals(join(dir, "links.jsonl"), () => NOW);
+    const data = new PageDataApprovals(join(dir, "data.json"), () => NOW);
+    const revoked = pagesIn(dir);
+    const deleted = pagesIn(dir);
+    revoked.pages.onRevoked((id) => links.forgetPage(id));
+    deleted.pages.onRemoved((id) => { links.forgetPage(id); data.forgetPage(id); });
+    links.allow("person-b", revoked.id, "https://example.com");
+    links.allow("person-b", deleted.id, "https://example.com");
+    links.allow("person-b", "other", "https://example.com");
+    const ask = { person: "person-b", pageId: deleted.id, version: 1, source: "team-board" };
+    data.answer(data.open(ask), "person-b", { allow: true, always: true });
+    expect(data.allowed(ask)).toBe(true);
+    revoked.pages.revoke(revoked.id);
+    expect(links.allowed("person-b", revoked.id, "https://example.com")).toBe(false);
+    expect(deleted.pages.remove(deleted.id)).toBe(true);
+    expect(links.allowed("person-b", deleted.id, "https://example.com")).toBe(false);
+    expect(data.allowed(ask)).toBe(false);
+    expect(new PageDataApprovals(join(dir, "data.json"), () => NOW).allowed(ask)).toBe(false);
+    expect(links.allowed("person-b", "other", "https://example.com")).toBe(true);
+  });
+
+  it("does not fail a revoke when a listener throws", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-link-approvals-"));
+    dirs.push(dir);
+    const { pages, id } = pagesIn(dir);
+    pages.onRevoked(() => { throw new Error("disk full"); });
+    expect("ok" in pages.revoke(id)).toBe(false);
   });
 });
 
-describe("normalizePageLinkHost", () => {
-  it("keeps the host in lower case, without port or credentials, punycode as is, http and https only", () => {
-    expect(normalizePageLinkHost("Docs.Example.COM")).toBe("docs.example.com");
-    expect(normalizePageLinkHost("example.com:8443")).toBe("example.com");
-    expect(normalizePageLinkHost("https://user:pass@Example.com:443/a?b")).toBe("example.com");
-    expect(normalizePageLinkHost("http://xn--bcher-kva.example/")).toBe("xn--bcher-kva.example");
-    expect(normalizePageLinkHost("ftp://example.com/")).toBeNull();
-    expect(normalizePageLinkHost("mailto:a@example.com")).toBeNull();
-    expect(normalizePageLinkHost("")).toBeNull();
-    expect(normalizePageLinkHost("exa mple.com")).toBeNull();
-    expect(normalizePageLinkHost(42)).toBeNull();
+describe("normalizePageLinkOrigin", () => {
+  it("keeps scheme, host and port, default ports folded, lower case, punycode as is; http and https only", () => {
+    expect(normalizePageLinkOrigin("https://Docs.Example.COM")).toBe("https://docs.example.com");
+    expect(normalizePageLinkOrigin("https://example.com:443")).toBe("https://example.com");
+    expect(normalizePageLinkOrigin("http://example.com:80/")).toBe("http://example.com");
+    expect(normalizePageLinkOrigin("https://example.com:8443")).toBe("https://example.com:8443");
+    expect(normalizePageLinkOrigin("https://xn--bcher-kva.example")).toBe("https://xn--bcher-kva.example");
+    for (const bad of ["example.com", "https://example.com/a", "https://example.com/?x", "https://example.com/#x", "https://u:p@example.com", "ftp://example.com", "mailto:a@example.com", "", 42]) {
+      expect(normalizePageLinkOrigin(bad), String(bad)).toBeNull();
+    }
   });
 });

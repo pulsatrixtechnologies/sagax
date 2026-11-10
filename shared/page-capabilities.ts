@@ -261,36 +261,40 @@ export function pageLinkOpensDirectly(url: string, input: { receivedData: boolea
 }
 
 /** "Always allow this site" on a link card (#3413): the reader's answer,
- * kept by the server per reader, page and host.
- *   GET    /api/pages/:id/link-approvals?host=<host>   -> PageLinkApprovalState
+ * kept by the server per reader, page and origin (scheme, host and port:
+ * an approval of https://example.com never opens http://example.com nor
+ * https://example.com:8080, nor a subdomain or another host).
+ *   GET    /api/pages/:id/link-approvals?origin=<origin>  -> PageLinkApprovalState
  *   POST   /api/pages/:id/link-approvals  PageLinkApprovalAnswer -> { ok: true }
- *   DELETE /api/pages/:id/link-approvals?host=<host>   -> { ok: true } (forget)
- * The host only, as normalizePageLinkHost gives it: never a subdomain or
- * another host. */
+ *   DELETE /api/pages/:id/link-approvals?origin=<origin>  -> { ok: true } (forget)
+ * `origin` as normalizePageLinkOrigin gives it, on both sides. A request
+ * with anything else (the former `host`) answers 400 `origin_required`. */
 export interface PageLinkApprovalState {
   allowed: boolean;
 }
 
 export interface PageLinkApprovalAnswer {
-  host: string;
+  origin: string;
   answer: "always";
 }
 
-/** A host as a link approval keeps it: lower case, no port, no
- * credentials, punycode as is; from a bare host or an http(s) address.
- * Null for anything else (another scheme, spaces, an empty value). Pure. */
-export function normalizePageLinkHost(value: unknown): string | null {
+/** An origin as a link approval keeps it: an http or https address with
+ * nothing after its origin (an empty path or "/", no query, no fragment, no
+ * credentials), given back as the browser's own origin: lower case host,
+ * punycode as is, default port folded. Null for anything else. The client
+ * passes a link's own origin (`new URL(link).origin`) through it too. Pure. */
+export function normalizePageLinkOrigin(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const raw = value.trim();
   if (!raw || raw.length > 300 || /\s/.test(raw)) return null;
   let url: URL;
   try {
-    url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(raw) && !/^[^/:]+:\d+$/.test(raw) ? raw : `https://${raw}`);
+    url = new URL(raw);
   } catch {
     return null;
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-  const host = url.hostname.toLowerCase().replace(/\.$/, "");
-  if (!host || !/^[a-z0-9.-]+$|^\[[0-9a-f:.]+\]$/.test(host)) return null;
-  return host;
+  if (!url.hostname || url.username || url.password || url.search || url.hash || (url.pathname !== "/" && url.pathname !== "")) return null;
+  if (/[?#]/.test(raw)) return null;
+  return url.origin;
 }

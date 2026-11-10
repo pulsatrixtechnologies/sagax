@@ -12504,9 +12504,14 @@ const personalHostChecks = new Map<string, { at: number; refused: boolean }>();
 const pageSources = new PageSources();
 // Ask first answers of page data reads: "Always allow" kept on disk per person
 const pageDataApprovals = new PageDataApprovals(join(DATA_DIR, "page-data-approvals.json"));
-// "Always allow this site" answers of a page's link card, per person, page and host; a revoke forgets them
-const pageLinkApprovals = new PageLinkApprovals(join(DATA_DIR, "page-link-approvals.json"));
+// "Always allow this site" answers of a page's link card, per person, page and origin; a revoke forgets them
+const pageLinkApprovals = new PageLinkApprovals(join(DATA_DIR, "page-link-approvals.jsonl"));
 publishedPages.onRevoked((pageId) => pageLinkApprovals.forgetPage(pageId));
+// a deleted page takes its link and data approvals with it
+publishedPages.onRemoved((pageId) => {
+  pageLinkApprovals.forgetPage(pageId);
+  pageDataApprovals.forgetPage(pageId);
+});
 const pageDataWatch = new PageDataWatch(pageLive);
 store.onChange((change) => {
   if (change.type === "bot") pageDataWatch.botChanged(change.botId);

@@ -1117,15 +1117,32 @@ export class PublishedPages {
       return page;
     });
     // what is kept beside the page goes too (#3413: its link approvals)
-    if (!("ok" in result)) for (const listener of this.revokedListeners) listener(id);
+    if (!("ok" in result)) this.tell(this.revokedListeners, id);
     return result;
   }
 
   private readonly revokedListeners: Array<(pageId: string) => void> = [];
+  private readonly removedListeners: Array<(pageId: string) => void> = [];
 
   /** Called after a page is revoked, by any path (its person, an admin). */
   onRevoked(listener: (pageId: string) => void): void {
     this.revokedListeners.push(listener);
+  }
+
+  /** Called after a page is deleted (#3413: its link and data approvals go). */
+  onRemoved(listener: (pageId: string) => void): void {
+    this.removedListeners.push(listener);
+  }
+
+  /** A listener that fails never turns a saved revoke or delete into an error. */
+  private tell(listeners: ReadonlyArray<(pageId: string) => void>, pageId: string): void {
+    for (const listener of listeners) {
+      try {
+        listener(pageId);
+      } catch (error) {
+        console.warn(`[pages] a listener failed for page ${pageId}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
   }
 
   remove(id: string): boolean {
@@ -1134,6 +1151,7 @@ export class PublishedPages {
     if (kept.length === pages.length) return false;
     this.save(kept);
     this.dropContent(id);
+    this.tell(this.removedListeners, id);
     return true;
   }
 

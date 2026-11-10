@@ -6,10 +6,12 @@
 //   GET  /api/pages/:id/data/:source?fresh=1&version=n   PageDataAnswer
 //   GET  /api/pages/:id/viewer?version=n             PageViewerInfo
 //   POST /api/pages/:id/data-approvals/:approvalId   PageDataApprovalAnswer -> { ok, answer }
-//   GET    /api/pages/:id/link-approvals?host=<host>  PageLinkApprovalState
-//   POST   /api/pages/:id/link-approvals               PageLinkApprovalAnswer -> { ok: true }
-//   DELETE /api/pages/:id/link-approvals?host=<host>  -> { ok: true }  forget it
-// Link approvals ("Always allow this site"): per reader, page and exact host,
+//   GET    /api/pages/:id/link-approvals?origin=<origin>  PageLinkApprovalState
+//   POST   /api/pages/:id/link-approvals  { origin, answer: "always" } -> { ok: true }
+//   DELETE /api/pages/:id/link-approvals?origin=<origin>  -> { ok: true }  forget it
+// Link approvals ("Always allow this site"): per reader, page and exact
+// origin (scheme, host, port; normalizePageLinkOrigin); anything else, the
+// former `host` included, answers 400 origin_required;
 // on disk (server/pages/page-link-approvals.ts); the person only, never a
 // bot's act session.
 //
@@ -42,7 +44,7 @@ import {
   type PageDataSource,
   type PageLinkApprovalState,
   type PageViewerInfo,
-  normalizePageLinkHost,
+  normalizePageLinkOrigin,
 } from "../../shared/page-capabilities.ts";
 import type { PagesPolicy } from "../../shared/published-pages.ts";
 import type { PageDataApprovals } from "../pages/page-data-approvals.ts";
@@ -139,20 +141,22 @@ export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
       // the reader's own answer: never a bot's act copy, to read, write or forget
       if (deps.botAct(auth)) return json(res, 403, { error: lang === "fr" ? "Seule la personne répond à cette carte, jamais un bot." : "Only the person answers this card, never a bot.", code: "person_only" });
       const links = deps.links!;
+      const originRequired = () => json(res, 400, { error: lang === "fr" ? "Envoie l'origine du site (https://exemple.com), pas son hôte." : "Send the site's origin (https://example.com), not its host.", code: "origin_required" });
       if (method === "POST") {
         const body = await readBody(req) as Record<string, unknown> | null;
-        const host = normalizePageLinkHost(body?.host);
-        if (!host || body?.answer !== "always") return refuse(400, "bad_request");
-        links.allow(who.by, page.id, host);
+        const origin = normalizePageLinkOrigin(body?.origin);
+        if (!origin) return originRequired();
+        if (body?.answer !== "always") return refuse(400, "bad_request");
+        if (!links.allow(who.by, page.id, origin)) return json(res, 409, { error: lang === "fr" ? "Trop de sites sont déjà permis sur ce serveur." : "Too many sites are already allowed on this server.", code: "too_many" });
         return json(res, 200, { ok: true });
       }
-      const host = normalizePageLinkHost(url.searchParams.get("host"));
-      if (!host) return refuse(400, "bad_request");
+      const origin = normalizePageLinkOrigin(url.searchParams.get("origin"));
+      if (!origin) return originRequired();
       if (method === "DELETE") {
-        links.forget(who.by, page.id, host);
+        links.forget(who.by, page.id, origin);
         return json(res, 200, { ok: true });
       }
-      const state: PageLinkApprovalState = { allowed: links.allowed(who.by, page.id, host) };
+      const state: PageLinkApprovalState = { allowed: links.allowed(who.by, page.id, origin) };
       return json(res, 200, state);
     }
 

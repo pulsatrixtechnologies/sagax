@@ -1,13 +1,14 @@
 // @vitest-environment happy-dom
-// #2620: a sub-page of the bot page stages its changes in a draft; the
-// footer's Save writes them, Cancel drops them, and leaving with unsaved
-// changes asks first (the prototype's sub-pages end with Save and Cancel).
+// #3397: every change on a sub-page of the bot page applies in place, at
+// once, as on the Settings pages (the reference app has no Cancel and no
+// Save on the bot profile). No sub-page ends with a save bar, and leaving a
+// sub-page after a change asks nothing. Versions is the way back.
 import { act, createElement, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { Action } from "@/state/store";
-import { setLocale } from "@/lib/i18n";
+import { setLocale, t } from "@/lib/i18n";
 import { setAdvancedMode } from "@/lib/interface-mode";
 import { editBotFixture } from "@/gallery/edit-bot-api";
 import { BOT_PROFILE_SUBPAGES, botProfileTabOfPage, type BotProfileSubPage } from "@/lib/persona-sections";
@@ -101,51 +102,44 @@ async function openSub(page: BotProfileSubPage): Promise<HTMLElement> {
   return host.querySelector<HTMLElement>(`[data-bot-profile-subpage="${page}"]`)!;
 }
 
-/** Flips the first switch of a sub-page that writes a bot field (others,
- * like a bot account, save on their own) and returns that sub-page. */
-async function flipBotField(): Promise<{ sub: HTMLElement; was: string | null; label: string | null }> {
-  for (const page of BOT_PROFILE_SUBPAGES) {
-    if (page === "routines" || page === "rules" || page === "folder" || page === "skills" || page === "versions" || page === "accounts") continue;
-    const sub = await openSub(page);
-    if (!sub) continue;
-    const toggle = sub.querySelector<HTMLElement>("[role='switch']:not([disabled])");
-    if (!toggle) continue;
-    const was = toggle.getAttribute("aria-checked");
-    const label = toggle.getAttribute("aria-label") ?? toggle.closest("label")?.textContent ?? null;
-    await click(toggle, "switch");
-    if (host.querySelector("[data-bot-profile-unsaved]")) return { sub, was, label };
-    // Not a draft write here: put it back and try the next sub-page.
-    await click(sub.querySelector<HTMLElement>("[role='switch']:not([disabled])"), "switch back");
-  }
-  throw new Error("no sub-page switch staged a draft");
-}
+const notifySwitch = (sub: HTMLElement) =>
+  sub.querySelector<HTMLElement>(`[role='switch'][aria-label="${t("botPanel.voice.notifyHelp")}"]`);
+const notifications = () => (JSON.parse(storeBot() as string) as { notifications?: boolean }).notifications !== false;
 
-describe("bot page sub-pages: Save / Cancel draft (#2620)", () => {
-  it("a change waits for Save; Save writes it", async () => {
+describe("bot page sub-pages apply each change in place (#3397)", () => {
+  it("Voice > Notify me writes the bot at once, with no Save step", async () => {
     await mount("en");
-    const before = storeBot();
-    const { sub, was } = await flipBotField();
-    // The sub-page shows the change, the workspace's bot does not have it yet.
-    expect(sub.querySelector("[role='switch']:not([disabled])")?.getAttribute("aria-checked")).not.toBe(was);
-    expect(storeBot()).toBe(before);
-    await click(host.querySelector<HTMLElement>("[data-bot-profile-save]"), "Save");
-    expect(storeBot()).not.toBe(before);
-    expect(host.querySelector("[data-bot-profile-unsaved]")).toBeNull();
+    const sub = await openSub("voice");
+    const toggle = notifySwitch(sub);
+    expect(toggle, "the Notify me switch").not.toBeNull();
+    const was = notifications();
+    await click(toggle, "Notify me");
+    // The workspace's bot has the change right away: nothing waits.
+    expect(notifications()).toBe(!was);
+    expect(notifySwitch(host.querySelector<HTMLElement>("[data-bot-profile-subpage=\"voice\"]")!)?.getAttribute("aria-checked")).toBe(String(!was));
   });
 
-  it("Cancel drops the draft; Back with a change asks before leaving", async () => {
+  it("no sub-page ends with a Cancel and Save bar", async () => {
+    await mount("fr");
+    for (const page of BOT_PROFILE_SUBPAGES) {
+      const sub = await openSub(page);
+      if (!sub) continue;
+      expect(sub.querySelector("[data-bot-profile-savebar]"), `save bar on ${page}`).toBeNull();
+    }
+  });
+
+  it("Escape after a change returns to the row, with no question", async () => {
     await mount("en");
-    const before = storeBot();
-    const { sub } = await flipBotField();
-    const page = sub.getAttribute("data-bot-profile-subpage");
-    // No confirm provider here: the prompt fails closed, the page stays.
-    await click(host.querySelector<HTMLElement>("[data-bot-profile-back]"), "Back");
-    expect(host.querySelector(`[data-bot-profile-subpage="${page}"]`)).not.toBeNull();
-    await click(host.querySelector<HTMLElement>("[data-bot-profile-cancel]"), "Cancel");
-    expect(storeBot()).toBe(before);
-    expect(host.querySelector("[data-bot-profile-unsaved]")).toBeNull();
-    // A clean sub-page: Save is off.
-    await openSub(page as BotProfileSubPage);
-    expect(host.querySelector<HTMLButtonElement>("[data-bot-profile-save]")?.disabled).toBe(true);
+    const sub = await openSub("voice");
+    await click(notifySwitch(sub), "Notify me");
+    const page = host.querySelector<HTMLElement>("[data-bot-profile-page]")!;
+    // No confirm provider here: a discard question would fail closed and
+    // keep the sub-page open.
+    await act(async () => {
+      page.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    });
+    await settle();
+    expect(host.querySelector("[data-bot-profile-subpage]")).toBeNull();
+    expect(host.querySelector('[data-bot-profile-row="page-voice"]')).not.toBeNull();
   });
 });

@@ -209,10 +209,15 @@ déblocages récents, grille) ; si la personne ne partage rien, une note privée
   de la mascotte en très grand, un champ nom centré, la grille des formes, la rangée
   des couleurs (la choisie entourée d'un anneau), et un seul gros bouton Créer en bas,
   grisé tant que le nom est vide.
-- Chez Sagax, l'assistant de création (six étapes) et l'éditeur de persona gardent leur
+- Chez Sagax, l'assistant de création (six étapes) et la page profil du bot gardent leur
   contenu ; leur forme suit ce patron : identité en haut (avatar à côté du nom), une
-  section par sujet, une seule sauvegarde collée au bas, « Non enregistré » visible dès
-  un changement, confirmation seulement si on quitte avec un changement.
+  section par sujet.
+- Page profil du bot (#3397) : chaque changement s'applique sur place, tout de suite,
+  comme dans les Réglages. Aucune barre Annuler / Enregistrer, aucun brouillon, aucune
+  question quand on quitte une sous-page (Échap revient à sa rangée). Les éditeurs de
+  texte long qui ont leur propre Enregistrer le gardent (un fichier de règles, la
+  condition « Ne pas finir avant »). La sous-page Versions liste chaque changement et le
+  restaure : c'est le chemin du retour après un changement fait par erreur.
 - Nom et étiquette se modifient là où ils s'affichent (édition en place), pas dans un
   formulaire à part.
 

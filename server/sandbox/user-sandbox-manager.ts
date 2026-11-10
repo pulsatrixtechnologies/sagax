@@ -16,6 +16,7 @@ import { SandboxdRequestError, validSandboxdUrl } from "./user-sandbox-client.ts
 import { sandboxKeyForPrincipal } from "./user-sandbox-spec.ts";
 import { UserSandboxUnavailable } from "./user-sandbox-errors.ts";
 import { provisionerNotReached, provisionerUnreachable, SANDBOX_CUT_WHILE_STARTING_MESSAGE, SANDBOX_STARTING_CODE, SANDBOX_STILL_STARTING_MESSAGE, sandboxStarting, SANDBOX_STARTING_RETRY_DELAY_MS, SANDBOX_STARTING_RETRY_MS, sandboxWakeSettingsFromEnv, type SandboxClusterWaker, type SandboxWakeSettings, type WakeMode } from "./sandbox-k8s-wake.ts";
+import type { SandboxWakeWaitingFor } from "../../shared/sandbox-wake.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
 export const DEFAULT_DELETE_GRACE_MS = 72 * 3600_000;
@@ -73,7 +74,14 @@ export interface UserSandboxManagerOptions {
 export interface ClusterWaitEvent {
   principalId: string;
   botId?: string;
-  phase: "waiting" | "timeout";
+  /** #3296: "waiting" is said when the wait starts and again after each
+   * check that found it not ready yet; "ready" and "timeout" end it. */
+  phase: "waiting" | "ready" | "timeout";
+  /** What the call waits for: the cluster of the environments (asleep), or
+   * this person's environment on it (its Pod starting). */
+  waitingFor?: SandboxWakeWaitingFor;
+  /** When that wait started (epoch ms). */
+  since?: number;
 }
 
 export class UserSandboxManager {
@@ -126,8 +134,10 @@ export class UserSandboxManager {
    * starts, and when a call finds it gone, wake it (a call that certainly
    * did not reach it is sent once more). */
   private wakingClient(client: SandboxdClient, waker: SandboxClusterWaker, who: { principalId: string; botId?: string }, mode: WakeMode): SandboxdClient {
-    const notify = (phase: ClusterWaitEvent["phase"]) => {
-      try { this.options.onClusterWait?.({ ...who, phase }); } catch { /* a notice never fails the call */ }
+    const notify = (phase: ClusterWaitEvent["phase"], waitingFor?: SandboxWakeWaitingFor, since?: number) => {
+      try {
+        this.options.onClusterWait?.({ ...who, phase, ...(waitingFor ? { waitingFor } : {}), ...(since !== undefined ? { since } : {}) });
+      } catch { /* a notice never fails the call */ }
     };
     // 2026-10-19 (production): right after a cold start the provisioner answered,
     // then the first exec waited for a pod on a node pool scaling 0 -> 1, was
@@ -144,45 +154,65 @@ export class UserSandboxManager {
       // waited on a wake, or ran inside a wake window, now ends with a
       // plain "still starting" error when the environment did not take it.
       let waited = false;
+      // #3296: a wait is said when it starts, again after each check that
+      // found it not ready yet (what is waited for, since when), and its end
+      // is said too, so the conversation never goes quiet while it waits.
+      let unwatch = () => {};
       const readyNow = async () => {
         try {
-          await waker.ready(mode, () => { waited = true; notify("waiting"); });
-        } catch (error) {
-          if ((error as { code?: unknown }).code === "cluster_start_timeout") notify("timeout");
-          throw error;
+          await waker.ready(mode, () => {
+            waited = true;
+            const since = waker.wakeState()?.since ?? this.now();
+            notify("waiting", "cluster", since);
+            unwatch();
+            unwatch = waker.watch(() => notify("waiting", "cluster", since));
+          });
+        } finally {
+          unwatch();
+          unwatch = () => {};
         }
       };
-      await readyNow();
-      if (mode === "wake") this.noteUse(useKey(who.principalId, who.botId));
-      const startedAt = this.now();
-      let resent = false;
-      for (;;) {
-        try {
-          return await call();
-        } catch (error) {
-          // Bounded twice: the starting window, and the whole call (wake
-          // included) stays under the engine's 10 minute cut of a tool call.
-          if (mode === "wake" && sandboxStarting(error) && this.now() - startedAt < SANDBOX_STARTING_RETRY_MS
-            && this.now() - calledAt < SANDBOX_CALL_BUDGET_MS) {
-            waited = true;
-            notify("waiting");
-            await this.sleep(SANDBOX_STARTING_RETRY_DELAY_MS);
-            continue;
+      const attempt = async (): Promise<T> => {
+        await readyNow();
+        if (mode === "wake") this.noteUse(useKey(who.principalId, who.botId));
+        const startedAt = this.now();
+        let resent = false;
+        for (;;) {
+          try {
+            return await call();
+          } catch (error) {
+            // Bounded twice: the starting window, and the whole call (wake
+            // included) stays under the engine's 10 minute cut of a tool call.
+            if (mode === "wake" && sandboxStarting(error) && this.now() - startedAt < SANDBOX_STARTING_RETRY_MS
+              && this.now() - calledAt < SANDBOX_CALL_BUDGET_MS) {
+              waited = true;
+              notify("waiting", "environment", startedAt);
+              await this.sleep(SANDBOX_STARTING_RETRY_DELAY_MS);
+              continue;
+            }
+            // past its bound: nothing ran, said plainly
+            if (mode === "wake" && sandboxStarting(error)) throw new UserSandboxUnavailable(SANDBOX_STILL_STARTING_MESSAGE, SANDBOX_STARTING_CODE);
+            if (!provisionerUnreachable(error)) throw error;
+            waker.markUnreachable();
+            if (mode === "wake" && !resent && (idempotent || provisionerNotReached(error))) {
+              resent = true;
+              await readyNow();
+              continue;
+            }
+            if (mode === "wake" && (waited || waker.wakeState() !== null)) {
+              throw new UserSandboxUnavailable(idempotent || provisionerNotReached(error) ? SANDBOX_STILL_STARTING_MESSAGE : SANDBOX_CUT_WHILE_STARTING_MESSAGE, "sandbox_starting_cut");
+            }
+            throw error;
           }
-          // past its bound: nothing ran, said plainly
-          if (mode === "wake" && sandboxStarting(error)) throw new UserSandboxUnavailable(SANDBOX_STILL_STARTING_MESSAGE, SANDBOX_STARTING_CODE);
-          if (!provisionerUnreachable(error)) throw error;
-          waker.markUnreachable();
-          if (mode === "wake" && !resent && (idempotent || provisionerNotReached(error))) {
-            resent = true;
-            await readyNow();
-            continue;
-          }
-          if (mode === "wake" && (waited || waker.wakeState() !== null)) {
-            throw new UserSandboxUnavailable(idempotent || provisionerNotReached(error) ? SANDBOX_STILL_STARTING_MESSAGE : SANDBOX_CUT_WHILE_STARTING_MESSAGE, "sandbox_starting_cut");
-          }
-          throw error;
         }
+      };
+      try {
+        const result = await attempt();
+        if (waited) notify("ready");
+        return result;
+      } catch (error) {
+        if (waited) notify(wakeGaveUp(error) ? "timeout" : "ready");
+        throw error;
       }
     };
     return {
@@ -257,6 +287,15 @@ export class UserSandboxManager {
       if (await this.prewake(principalId, botId)) asked += 1;
     }
     return asked;
+  }
+
+  /** #3296: start the cluster of the Kubernetes provisioner at the server
+   * start, when that provisioner and its wake are configured. The turns that
+   * come meanwhile join the same wake (and say they wait). False when there
+   * is nothing to wake or it did not start. */
+  async wakeClusterAtStart(): Promise<boolean> {
+    if (!this.options.kubernetes || !this.options.kubernetesWaker) return false;
+    return this.options.kubernetesWaker.wakeAtStart();
   }
 
   pendingDeletionAt(principalId: string): number | null {
@@ -667,6 +706,10 @@ export class UserSandboxManager {
     this.timer = setInterval(() => { void this.sweepDeletions().catch(reportBackgroundError); }, intervalMs);
     this.timer.unref?.();
     void this.sweepDeletions().catch(reportBackgroundError);
+    // #3296: with a Kubernetes provisioner and its wake, the cluster starts
+    // with the server, whoever used it last: the first turn of the first
+    // person no longer starts it (2 to 8 minutes of silence after a roll).
+    void this.wakeClusterAtStart().catch(reportBackgroundError);
     // QA 0.8.66 F1: warm the environments in use before the first turn needs them
     void this.prewarmRecent().catch(reportBackgroundError);
   }
@@ -684,6 +727,13 @@ export const SANDBOX_CALL_BUDGET_MS = 9 * 60_000 + 30_000;
 export const PREWAKE_RECENT_USE_MS = 7 * 24 * 3600_000;
 /** How often a use is written to the state file for the same person and bot. */
 export const USE_PERSIST_MS = 60 * 60_000;
+
+/** The wait ended because the environment did not start in time (the
+ * cluster's wake timed out, or the Pod was still starting past its bound). */
+function wakeGaveUp(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === "cluster_start_timeout" || code === SANDBOX_STARTING_CODE || code === "sandbox_starting_cut";
+}
 
 function useKey(principalId: string, botId?: string): string {
   return `${principalId}\n${botId ?? ""}`;

@@ -1787,7 +1787,7 @@ import { createReachMeCard } from "./index-leaves/reachMeCard.ts";
 import { createPendingApprovalCards } from "./index-leaves/pendingApprovalCards.ts";
 import { createOrgUsageFacts } from "./index-leaves/orgUsageFacts.ts";
 import { createOfferPeerNotice } from "./index-leaves/offerPeerNotice.ts";
-import { createNoteSandboxClusterWait } from "./index-leaves/noteSandboxClusterWait.ts";
+import { createEndSandboxWakeRows, createEndSandboxWakeRowsLeftOpen, createNoteSandboxClusterWait, type SandboxWakeRow } from "./index-leaves/noteSandboxClusterWait.ts";
 import { createMigrateGithubCredentials } from "./index-leaves/migrateGithubCredentials.ts";
 import { createManagedBoatOwners } from "./index-leaves/managedBoatOwners.ts";
 import { createIncidentRefused } from "./index-leaves/incidentRefused.ts";
@@ -6185,6 +6185,8 @@ bindLeafHost({
   get runLifecycleEvent() { return runLifecycleEvent; },
   get execLifecycleHook() { return execLifecycleHook; },
   get sandboxWakeNoted() { return sandboxWakeNoted; },
+  get sandboxWakeRowsFile() { return sandboxWakeRowsFile; },
+  get endSandboxWakeRows() { return endSandboxWakeRows; },
   get _noteSandboxClusterWaitImpl() { return _noteSandboxClusterWaitImpl; },
   get personConnections() { return personConnections; },
   get personalSkills() { return personalSkills; },
@@ -11727,8 +11729,14 @@ const botTailscaleService = new BotTailscaleService(DATA_DIR, {
 
 /** Plugin hooks for this turn. Refuses the organization server's own host. */
 
-/** Turns that already got a cluster-wake row, by thread: `${generation}:${phase}`. */
-const sandboxWakeNoted = new Map<string, Set<string>>();
+/** #3296: the live cluster-wake row of each thread's current turn
+ * (server/index-leaves/noteSandboxClusterWait.ts). */
+const sandboxWakeNoted = new Map<string, SandboxWakeRow>();
+/** #3296: the open wait rows on disk, ended at the next start after a crash. */
+const sandboxWakeRowsFile = join(DATA_DIR, "sandbox-wake-open.json");
+/** #3296: ends the wait rows of turns that ended, were stopped or were cut. */
+const endSandboxWakeRows = createEndSandboxWakeRows(getLeafHost);
+const endSandboxWakeRowsLeftOpen = createEndSandboxWakeRowsLeftOpen(getLeafHost);
 /** The Kubernetes cluster of the server environments is starting (or did not
  * start in time) for a call of this person: one status row in each of their
  * running turns that works there, this bot's first. The turn itself waits;
@@ -33955,6 +33963,8 @@ const onListening = async () => {
   // runtime's (docs/runtime-contract.md §5): its first tick dispatches them.
   // Cut turns resume before the scheduler's first tick, so a queued run
   // that joins the same conversation waits for the resume, not the reverse.
+  // #3296: a wait row the last process left open (killed mid-wait) ends now
+  try { endSandboxWakeRowsLeftOpen(); } catch (error) { reportBackgroundError(error); }
   resumeTurnsCutByRestart();
   // Tasks reserved for a scheduled run before a restart (pre-warm) that no
   // run took: empty and hidden, removed before schedules fire again.

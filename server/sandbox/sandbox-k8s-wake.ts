@@ -158,6 +158,9 @@ export class SandboxClusterWaker {
   private wakeStartedAt: number | null = null;
   /** Webhook POSTs sent by this process (tests and diagnostics). */
   posts = 0;
+  /** #3296: callers waiting on the wake hear each probe that found the
+   * cluster still down, so their conversation keeps saying it waits. */
+  private readonly watchers = new Set<(state: { since: number; elapsedMs: number }) => void>();
   private readonly options: SandboxClusterWakerOptions;
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
@@ -212,6 +215,26 @@ export class SandboxClusterWaker {
     return this.wake();
   }
 
+  /** Called after each probe of a wake that found the provisioner still
+   * down, until the caller unsubscribes. A watcher that throws is ignored. */
+  watch(listener: (state: { since: number; elapsedMs: number }) => void): () => void {
+    this.watchers.add(listener);
+    return () => { this.watchers.delete(listener); };
+  }
+
+  /** #3296: at the server start (a roll included), when a provisioner and its
+   * wake are configured: start the cluster now, not at the first turn of the
+   * first person. Never throws; true when the provisioner answers. */
+  async wakeAtStart(): Promise<boolean> {
+    try {
+      await this.ready("wake");
+      return true;
+    } catch (error) {
+      this.log(`sandbox wake: the start wake did not finish (${error instanceof Error ? error.message : String(error)})`);
+      return false;
+    }
+  }
+
   /** A call failed for lack of an answer: the next one probes again. */
   markUnreachable(): void {
     this.healthyAt = Number.NEGATIVE_INFINITY;
@@ -237,8 +260,9 @@ export class SandboxClusterWaker {
   }
 
   private async run(): Promise<void> {
-    this.wakeStartedAt = this.now();
-    const deadline = this.wakeStartedAt + this.options.settings.timeoutMs;
+    const since = this.now();
+    this.wakeStartedAt = since;
+    const deadline = since + this.options.settings.timeoutMs;
     this.log("sandbox wake: the Kubernetes provisioner is unreachable; starting its cluster");
     await this.postIfDue();
     let delay = BACKOFF_FIRST_MS;
@@ -248,6 +272,9 @@ export class SandboxClusterWaker {
         return;
       }
       const left = deadline - this.now();
+      for (const watcher of this.watchers) {
+        try { watcher({ since, elapsedMs: Math.max(0, this.now() - since) }); } catch { /* a notice never fails the wake */ }
+      }
       if (left <= 0) break;
       await this.sleep(Math.min(delay, left));
       delay = Math.min(Math.round(delay * 1.5), BACKOFF_MAX_MS);

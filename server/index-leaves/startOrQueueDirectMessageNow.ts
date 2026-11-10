@@ -14,7 +14,9 @@ async function startOrQueueDirectMessageNow(botId: string, threadId: string, tex
     atCapacity: host.botAtThreadCapacity(botId, threadId),
     threadBusy: host.threadBusy(botId, threadId),
     groupTurn: Boolean(host.activeGroupTurnForBot(botId)),
-    parksBehindCoordination: host.parksBehindCoordination(botId, threadId)
+    parksBehindCoordination: host.parksBehindCoordination(botId, threadId),
+    // #3296: a stopping server would cut the turn; it waits for the next start
+    restarting: host.isShuttingDown()
   });
   if (decision.action === "queue") {
     const queued = queueSteeredMessage(botId, threadId, text, {

@@ -8,6 +8,8 @@ function revokeEarlierTurnCapabilities(threadId: string) {
 
   host.computerSelectionTurns.delete(threadId);
   host.turnWorkplaces.delete(threadId);
+  // #3296: a stopped or replaced turn's wait row ends with it
+  host.endSandboxWakeRows?.({ threadId });
   void host.perspicaxMcp?.endThread(threadId);
   const generation = host.activeInternalGenerationByThread.get(threadId);
   if (generation) host.revokeInternalCapabilityGeneration(threadId, generation);

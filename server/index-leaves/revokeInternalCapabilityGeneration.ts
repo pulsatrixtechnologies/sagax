@@ -22,6 +22,8 @@ function revokeInternalCapabilityGeneration(threadId: string, generation: string
     host.activeInternalGenerationByThread.delete(threadId);
   }
   if (host.turnWorkplaces.get(threadId)?.generation === generation) host.turnWorkplaces.delete(threadId);
+  // #3296: the turn is over (done, failed or stopped): so is its wait row
+  host.endSandboxWakeRows?.({ threadId, generation });
   host.internalGenerationByProviderTurn.deleteGeneration(threadId, generation);
   return retired;
 }

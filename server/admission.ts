@@ -25,7 +25,7 @@ export type AdmissionSurface =
 
 /** The 1:1 queue's reason vocabulary, shared by the receipt, the chip, and
  * the position lookup. A reasonless park is a busy-thread correction. */
-export type AdmissionQueueReason = "capacity" | "group-turn";
+export type AdmissionQueueReason = "capacity" | "group-turn" | "restart";
 
 /** Refusal codes that callers surface verbatim. */
 export type AdmissionRefusalCode = "guarded_busy" | "queue-head-only" | "busy" | "missing";
@@ -141,6 +141,10 @@ export interface AdmissionState {
   roomWorking?: boolean;
   /** The room thread itself is mid-turn. */
   threadWorking?: boolean;
+  /** #3296: the server is stopping for a restart (an update, a roll). A
+   * turn started now would be cut by the stop: the words wait in the
+   * durable queue and start as soon as the server is back. */
+  restarting?: boolean;
 }
 
 /** Why a steer the engine could otherwise take was parked instead: the
@@ -177,6 +181,7 @@ export function admit(
       return { action: "steer" };
     }
     case "direct": {
+      if (state.restarting) return { action: "queue", reason: "restart" };
       if (state.atCapacity || state.threadBusy || state.groupTurn || state.parksBehindCoordination) {
         // Capacity outranks a room turn in the receipt because the person
         // can fix it (finish a thread); coordination parking is reasonless.
@@ -231,6 +236,7 @@ export function admit(
       // A self-opened thread is brand new: its own busy flag is impossible,
       // so only a full slot list or a live room turn can park it. Provenance
       // (peerAsk, unattended) survives the wait in the queue payload.
+      if (state.restarting) return { action: "queue", reason: "restart" };
       if (state.atCapacity || state.groupTurn) {
         return { action: "queue", reason: state.atCapacity ? "capacity" : "group-turn" };
       }

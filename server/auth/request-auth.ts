@@ -81,6 +81,7 @@ export const SERVICE_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Re
   { methods: ["GET"], path: /^\/api\/brand$/ },
   { methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], path: /^\/api\/internal\// }, // capability bearer checked in the handler
   { methods: ["POST"], path: /^\/api\/testing\/internal-capability$/ }, // exists only with its private key
+  { methods: ["POST"], path: /^\/api\/testing\/held-request$/ }, // #3346: exists only with the same private key
 ];
 
 /** Routes the hosted worker may use when it presents its relay token.
@@ -642,6 +643,7 @@ function mutatingPublicRoute(method: string, path: string): boolean {
   // public; possession of the one-time code is its authorization.
   return !path.startsWith("/api/internal/") &&
     path !== "/api/testing/internal-capability" &&
+    path !== "/api/testing/held-request" &&
     path !== "/api/auth/pair" &&
     // The same exchange under the shape the companion apps send.
     path !== "/api/pair";

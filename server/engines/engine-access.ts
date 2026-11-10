@@ -206,7 +206,11 @@ export function perspicaxOwnerScopedServer(server: string): boolean {
  * that person's own rights, like a claude.ai connector
  * (claudeAiOwnerScopedServer): the owner answers the card, not an admin. On
  * any other access they are nobody's. */
-export function engineAccountConnectorCall(event: { accountConnector?: boolean; engineConnector?: boolean }, via: string | undefined): boolean {
+export function engineAccountConnectorCall(event: { accountConnector?: boolean; engineConnector?: boolean; connectorHub?: boolean }, via: string | undefined): boolean {
+  // #3346: a request the server holds for a connector it runs with the
+  // turn's own principal (never one named in tool arguments): the speaker's
+  // own, whatever access the engine runs on. Only the server sets the field.
+  if (event.connectorHub === true) return true;
   return via === "subscription" && event.accountConnector === true && event.engineConnector === true;
 }
 

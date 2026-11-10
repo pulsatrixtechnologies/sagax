@@ -1432,6 +1432,34 @@
       }
     },
     {
+      "name": "call_connector",
+      "description": "Run one tool of one of the person's connectors (from connectors), whatever engine this bot runs on, and return the tool's own result. connector: its name; tool: one of its tools; arguments: that tool's input. The person's approval settings decide it as for any connector call: a read runs, a send or a change may show a card first. A connector marked callable false cannot be called this way yet.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "connector",
+          "tool"
+        ],
+        "properties": {
+          "connector": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "A connector name from connectors."
+          },
+          "tool": {
+            "type": "string",
+            "maxLength": 300,
+            "description": "One of that connector's tools, as connectors names it."
+          },
+          "arguments": {
+            "type": "object",
+            "description": "The tool's input."
+          }
+        }
+      }
+    },
+    {
       "name": "send_voice_note",
       "description": "Send the user a voice note: a short spoken message synthesized with your configured voice, stored as audio, and attached to your reply when the turn ends. Write the note as speakable words, exactly as it should be said — no lists, links or markdown meant for screens. The same text becomes the note's visible caption and transcript, so the person can read or listen. Use it for warmth, tone or emphasis a written line cannot carry; use ordinary text otherwise.",
       "inputSchema": {

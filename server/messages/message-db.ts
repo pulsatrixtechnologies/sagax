@@ -143,6 +143,15 @@ function ensureSealedSchema(db: DatabaseSync): void {
         AND json_extract(json, '$.card.answered') IS NULL
         AND COALESCE(json_extract(json, '$.card.dismissed'), 0) = 0
         AND COALESCE(json_extract(json, '$.card.expired'), 0) = 0;
+    -- Cards with a request still open at restart, whatever their kind: the
+    -- boot sweep of peer cards (openCardCandidates) reads only these rows
+    -- instead of every transcript. answered and dismissed match any falsy
+    -- value the full row could hold, so no row the sweep would settle is
+    -- left out.
+    CREATE INDEX IF NOT EXISTS messages_open_request_cards ON messages(thread_id)
+      WHERE json_extract(json, '$.card.requestId') IS NOT NULL
+        AND COALESCE(json_extract(json, '$.card.answered'), 0) IN (0, '')
+        AND COALESCE(json_extract(json, '$.card.dismissed'), 0) IN (0, '');
     CREATE VIRTUAL TABLE IF NOT EXISTS messages_sealed_fts USING fts5(
       words, prefixes, content='', contentless_delete=1, detail=column
     );
@@ -1373,6 +1382,23 @@ export function openApprovalCardMessages(): Array<{ threadId: string; message: M
       "AND json_extract(json, '$.card.answered') IS NULL " +
       "AND COALESCE(json_extract(json, '$.card.dismissed'), 0) = 0 " +
       "AND COALESCE(json_extract(json, '$.card.expired'), 0) = 0",
+    )
+    .all() as unknown as Array<StoredRow & { thread_id: string }>;
+  return decodedWithThread(rows);
+}
+
+/** Every row holding a card with a request id that is neither answered nor
+ * dismissed, through the messages_open_request_cards index: a handful of
+ * rows, where reading each transcript meant decoding every message of every
+ * thread in one synchronous stretch (#3473). The caller still checks the
+ * decoded card, so this is a superset of what it settles. */
+export function openCardCandidates(): Array<{ threadId: string; message: Message }> {
+  const rows = db()
+    .prepare(
+      "SELECT thread_id, id, json, sealed, key_id FROM messages " +
+      "WHERE json_extract(json, '$.card.requestId') IS NOT NULL " +
+      "AND COALESCE(json_extract(json, '$.card.answered'), 0) IN (0, '') " +
+      "AND COALESCE(json_extract(json, '$.card.dismissed'), 0) IN (0, '')",
     )
     .all() as unknown as Array<StoredRow & { thread_id: string }>;
   return decodedWithThread(rows);

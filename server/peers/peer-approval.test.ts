@@ -16,7 +16,7 @@ import {
   resolvePeerComms,
   type ApprovalBus,
 } from "./peer-approval.ts";
-import { closeMessageDb } from "../messages/message-db.ts";
+import { closeMessageDb, insertMessage } from "../messages/message-db.ts";
 import type { Notification } from "../notify.ts";
 import { Store, type BotRecord } from "../store.ts";
 
@@ -346,6 +346,37 @@ describe("peer approval card lifecycle", () => {
     });
 
     expect(dismissStalePeerCards(bus)).toBe(1);
+  });
+
+  it("settles a stale card at boot without reading every transcript (#3473)", () => {
+    // A large server: many threads, long ones, one card left open. The sweep
+    // used to read and decode every thread in one synchronous stretch, which
+    // held the event loop for seconds at each boot.
+    const threads: string[] = [];
+    for (let t = 0; t < 40; t++) threads.push(store.createTask(from.id, `Work ${t}`, false)!.threadId);
+    const filler = "x".repeat(400);
+    for (const threadId of threads) {
+      for (let m = 0; m < 150; m++) insertMessage(threadId, { id: `${threadId}-m${m}`, at: m + 1, role: "bot", kind: "text", text: filler });
+      // an answered card and a dismissed one: never settled again
+      insertMessage(threadId, { id: `${threadId}-done`, at: 200, role: "bot", kind: "options", card: { title: "t", subtitle: "ping", options: ["Allow", "Deny"], requestId: `${threadId}-done`, tool: "ask_bot", answered: "allow" } });
+    }
+    const target = threads[17];
+    insertMessage(target, { id: "stale", at: 300, role: "bot", kind: "options", card: { title: "t", subtitle: "ping", options: ["Allow", "Deny"], requestId: "stale-request", tool: "delegate_bot" } });
+    // another kind of open card is not a peer card
+    insertMessage(threads[3], { id: "question", at: 300, role: "bot", kind: "options", card: { title: "q", subtitle: "pick", options: ["Yes"], requestId: "question-request" } });
+
+    // a fresh process: nothing in the thread cache
+    closeMessageDb();
+    store = new Store(selection);
+    bus = { store, broadcast: () => {} };
+    const reads = vi.spyOn(store, "messagesFor");
+
+    expect(dismissStalePeerCards(bus)).toBe(1);
+    expect(reads, "the boot sweep read whole transcripts").not.toHaveBeenCalled();
+    const settled = store.messagesFor(target).find((message) => message.id === "stale");
+    expect(settled?.card).toMatchObject({ answered: "deny", dismissed: true, tool: "delegate_bot" });
+    expect(store.messagesFor(threads[3]).find((message) => message.id === "question")?.card?.answered).toBeUndefined();
+    expect(dismissStalePeerCards(bus)).toBe(0);
   });
 
   it("leaves a live card alone at boot", async () => {

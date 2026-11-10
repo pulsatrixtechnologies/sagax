@@ -15,6 +15,12 @@
 //   is stuck in. The stack comes with the stall line. A stack is read at most
 //   once per STACK_COOLDOWN_MS, and never when the inspector is missing.
 //
+// #3473: a block that reaches LONG_STALL_MS gets a stack every time, cooldown
+// or not, so each long block names its path. The pause lands on the first
+// JavaScript frame the main thread runs: for a block inside native code (a
+// SQLite read, a process start, a garbage collection) that is the frame that
+// called it. The stall line also gives the process size at that moment.
+//
 // #1750: when Debugger.pause returns nothing (common in containers, and during
 // stall bursts under the 5 min cooldown), the watchdog samples a short CPU
 // profile instead and posts its hottest frames. A failed capture uses a short
@@ -27,6 +33,8 @@ import { Worker } from "node:worker_threads";
 
 export const LAG_REPORT_MS = 60_000;
 export const STALL_MS = 1_000;
+/** A block this long gets a stack whatever the cooldown (#3473). */
+export const LONG_STALL_MS = 2_000;
 export const STACK_COOLDOWN_MS = 5 * 60_000;
 /** After a capture that returned no frames, try again sooner (#1750). */
 export const STACK_RETRY_COOLDOWN_MS = 15_000;
@@ -44,6 +52,8 @@ export interface LoopLagOptions {
   reportMs?: number;
   stallMs?: number;
   stackCooldownMs?: number;
+  /** A block this long reads a stack even inside the cooldown. */
+  longStallMs?: number;
   /** Read the blocked thread's stack through a watchdog worker (default true). */
   stacks?: boolean;
 }
@@ -58,9 +68,11 @@ const WATCHDOG_SOURCE = `
 const { parentPort, workerData } = require("node:worker_threads");
 let inspector = null;
 try { inspector = require("node:inspector"); } catch {}
-const { stallMs, cooldownMs, retryCooldownMs, maxFrames, profileMs } = workerData;
+const { stallMs, longStallMs, cooldownMs, retryCooldownMs, maxFrames, profileMs } = workerData;
 let last = Date.now();
 let lastStackAt = 0;
+// The heartbeat a capture was taken for: one capture per block.
+let capturedFor = -1;
 let lastGotStack = false;
 let busy = false;
 let inspectorMissingLogged = false;
@@ -85,6 +97,7 @@ function topProfileFrames(profile) {
 }
 
 function capture() {
+  capturedFor = last;
   if (!inspector || typeof inspector.Session !== "function") {
     if (!inspectorMissingLogged) {
       inspectorMissingLogged = true;
@@ -149,6 +162,7 @@ const tick = setInterval(() => {
   const now = Date.now();
   const cool = lastGotStack ? cooldownMs : retryCooldownMs;
   if (now - last >= stallMs && now - lastStackAt >= cool) capture();
+  else if (now - last >= longStallMs && capturedFor !== last) capture();
 }, Math.max(50, Math.floor(stallMs / 4)));
 parentPort.on("close", () => clearInterval(tick));
 `;
@@ -158,6 +172,7 @@ export function startEventLoopLagMonitor(log: LoopLagLogger, options: LoopLagOpt
   const reportMs = options.reportMs ?? LAG_REPORT_MS;
   const stallMs = options.stallMs ?? STALL_MS;
   const cooldownMs = options.stackCooldownMs ?? STACK_COOLDOWN_MS;
+  const longStallMs = Math.max(stallMs, options.longStallMs ?? LONG_STALL_MS);
   let histogram: ReturnType<typeof monitorEventLoopDelay> | null = null;
   try {
     histogram = monitorEventLoopDelay({ resolution: 20 });
@@ -207,7 +222,8 @@ export function startEventLoopLagMonitor(log: LoopLagLogger, options: LoopLagOpt
           : reason
             ? ` (no stack; ${reason})`
             : " (no stack)";
-        log.warn(`[loop-lag] event loop blocked ${blocked} ms${detail}`);
+        const { rss, heapUsed } = process.memoryUsage();
+        log.warn(`[loop-lag] event loop blocked ${blocked} ms (rss ${Math.round(rss / 1048576)} MB, heap ${Math.round(heapUsed / 1048576)} MB)${detail}`);
       }, STACK_WAIT_MS);
       write.unref?.();
     }
@@ -221,6 +237,7 @@ export function startEventLoopLagMonitor(log: LoopLagLogger, options: LoopLagOpt
         eval: true,
         workerData: {
           stallMs,
+          longStallMs,
           cooldownMs,
           retryCooldownMs: Math.min(STACK_RETRY_COOLDOWN_MS, cooldownMs),
           maxFrames: MAX_FRAMES,

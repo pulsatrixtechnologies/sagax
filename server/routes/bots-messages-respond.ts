@@ -143,6 +143,7 @@ async function handleBotRespond(deps: BotsMessagesRouteDeps, ctx: RouteContext):
         requestId: String(body.requestId),
         behavior,
         reviewedSha256,
+        ...(body.via === "profile" ? { via: "profile" as const } : {}),
       }))) return;
       // peer-approval intercept: harness-native cards carry a requestId
       // that lives in peer-approval's pending map. Resolve them here so
@@ -266,6 +267,7 @@ async function handleThreadRespond(deps: BotsMessagesRouteDeps, ctx: RouteContex
           requestId,
           behavior,
           reviewedSha256,
+          ...(body.via === "profile" ? { via: "profile" as const } : {}),
         }))) return;
       }
       if (await resolveAndSendMeeting(res, auth, threadId, requestId, behavior)) return;

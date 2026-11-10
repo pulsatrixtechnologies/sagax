@@ -342,7 +342,9 @@ describe("bot profile page shell", () => {
     expect(botProfileSubPageFor("slack")).toBeNull();
     expect(botProfileSubPageFor("access")).toBeNull();
     expect(personaCategoryForSection("routines")).toBeNull();
-    for (const section of ["model", "voice", "soul", "history", "rules", "skills"] as const) {
+    // #3400: the skills are in place on Knowledge, no sub-page
+    expect(botProfileSubPageFor("skills")).toBeNull();
+    for (const section of ["model", "voice", "soul", "history", "rules"] as const) {
       const html = render(section);
       const page = botProfileSubPageFor(section)!;
       expect(subPageOf(html), section).toBe(page);
@@ -366,7 +368,7 @@ describe("bot profile page shell", () => {
     const accounts = render("access");
     expect(selectedTab(accounts)).toBe("general");
     expect(subPageOf(accounts)).toBeUndefined();
-    expect(accounts).toContain("No accounts connected to this bot yet.");
+    expect(accounts).toContain("This bot has no accounts yet");
   });
 
   it("draws the top bar's X from the app's round header control, not a black disc", () => {
@@ -428,7 +430,8 @@ describe("General cards and sub-pages", () => {
     expect(accounts).not.toContain(">Summaries<");
     expect(accounts).toContain("data-bot-profile-add");
     expect(accounts).not.toContain("k1");
-    expect(bodiesOf(accounts)).toContain("access");
+    // #3399: the MCP servers card is gone from General; each server is a row of the card
+    expect(bodiesOf(accounts)).not.toContain("access");
     // Personality: What it does (the server's overview), then the Soul
     const personality = render("summary");
     expect(subPageOf(personality)).toBe("personality");
@@ -460,7 +463,7 @@ describe("General cards and sub-pages", () => {
   it("says when the accounts are loading and when the bot has none", () => {
     expect(render("access")).toContain("Loading accounts");
     fixture.capabilities = { engine: { kind: "claude", label: "Claude Code" }, items: [] };
-    expect(render("access")).toContain("No accounts connected to this bot yet.");
+    expect(render("access")).toContain("This bot has no accounts yet");
   });
 
   it("each row carries its name, description and value; the permissions and access pieces each live in one sub-page", () => {
@@ -480,10 +483,13 @@ describe("General cards and sub-pages", () => {
 });
 
 describe("Knowledge", () => {
-  it("lists Routines, Skills and the Folder; Skills and the Folder open as sub-pages, the folder links the Memory page", () => {
+  it("draws Skills in place (#3400); Routines and the Folder open as sub-pages, the folder links the Memory page", () => {
     const home = render("skills");
     expect(selectedTab(home)).toBe("knowledge");
-    expect(subPageOf(home)).toBe("skills");
+    expect(subPageOf(home)).toBeUndefined();
+    expect(home).toContain('data-bot-profile-row="page-routines"');
+    expect(home).toContain('data-bot-profile-row="page-folder"');
+    expect(home).not.toContain('data-bot-profile-row="page-skills"');
     for (const id of KNOWLEDGE_SECTIONS) {
       const html = render(id);
       expect(sectionHtml(html, id).open).toBe(true);

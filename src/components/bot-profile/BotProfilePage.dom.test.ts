@@ -56,6 +56,8 @@ let grantsAnswer: unknown = null;
 let capabilitiesAnswer: unknown = null;
 let serversAnswer: unknown = null;
 let vaultAnswer: unknown = null;
+/** What the server answers for the bot's skills (null: the fixture's own). */
+let skillsAnswer: unknown = null;
 /** Who the server says the viewer is (null: no viewer, as a solo install). */
 let viewerAnswer: unknown = null;
 
@@ -93,6 +95,7 @@ beforeAll(async () => {
     if (capabilitiesAnswer && url.pathname.endsWith("/capabilities")) return Promise.resolve(json(capabilitiesAnswer));
     if (serversAnswer && url.pathname === "/api/mcp/servers") return Promise.resolve(json(serversAnswer));
     if (vaultAnswer && url.pathname.endsWith("/credentials/list")) return Promise.resolve(json(vaultAnswer));
+    if (skillsAnswer && /\/api\/bots\/[^/]+\/skills$/.test(url.pathname)) return Promise.resolve(json(skillsAnswer));
     return Promise.resolve(fixture.answer(url.pathname) ?? json({ error: "not in this gallery" }, 404));
   });
   if (!("checkVisibility" in Element.prototype)) Object.defineProperty(Element.prototype, "checkVisibility", { configurable: true, value: () => true });
@@ -106,6 +109,7 @@ afterEach(() => {
   capabilitiesAnswer = null;
   serversAnswer = null;
   vaultAnswer = null;
+  skillsAnswer = null;
   viewerAnswer = null;
 });
 
@@ -224,7 +228,7 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
     expect(Array.from((await home("general")).querySelectorAll("[data-bot-profile-subpage-open]")).map((row) => row.getAttribute("data-bot-profile-subpage-open"))).toEqual(
       ["personality", "model", "beforeActing", "sharing", "rules", "actsAlone", "voice", "advanced", "versions"],
     );
-    expect(Array.from((await home("knowledge")).querySelectorAll("[data-bot-profile-subpage-open]")).map((row) => row.getAttribute("data-bot-profile-subpage-open"))).toEqual(["routines", "skills", "folder"]);
+    expect(Array.from((await home("knowledge")).querySelectorAll("[data-bot-profile-subpage-open]")).map((row) => row.getAttribute("data-bot-profile-subpage-open"))).toEqual(["routines", "folder"]);
   });
 
   it("no bordered card, framed field or underlined link inside the column of any view", async () => {
@@ -248,6 +252,8 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
       ...BOT_PROFILE_SUBPAGES.map((page): [View, readonly string[]] => [{ page }, BOT_PROFILE_SUBPAGE_SECTIONS[page]]),
       // the cards in place; Slack is not offered by this stand-in server
       [{ tab: "general" }, BOT_PROFILE_CARD_SECTIONS.accounts],
+      // #3400: To review and Skills in place on Knowledge
+      [{ tab: "knowledge" }, BOT_PROFILE_CARD_SECTIONS.skills],
       [{ tab: "stats" }, ["usage"]],
     ];
     for (const [view, ids] of views) {
@@ -606,5 +612,33 @@ describe("bot profile page: Bot accounts card (#3399)", () => {
     const menu = document.querySelector<HTMLElement>("[role='menu']")!;
     expect(menu.textContent).toContain("Connecte une application au nom de ce bot");
     expect(menu.textContent).toContain("Connexion du coffre");
+  });
+
+  it("#3400: Knowledge shows To review first (one row per proposal, or one row when none waits), the Skills card in place, then Its work", async () => {
+    await mount("en");
+    skillsAnswer = {
+      skills: [{ name: "weekly-report", description: "Writes the weekly status report.", enabled: true, source: "taught", warnings: [] }],
+      staged: [{ id: "st1", name: "pricing-check", gist: "Compares a quote with the last three prices.", action: "create", sha256: "a".repeat(64), card: { threadId: "th1", requestId: "rq1", messageId: "m1" } }],
+      library: [], assignedSkills: [],
+    };
+    let panel = await home("knowledge");
+    const review = panel.querySelector<HTMLElement>('[data-settings-group="bot-profile-review"]')!;
+    expect(review, "To review card").not.toBeNull();
+    const skills = panel.querySelector<HTMLElement>("[data-skills-section]")!;
+    expect(skills, "Skills card in place").not.toBeNull();
+    const work = panel.querySelector<HTMLElement>('[data-settings-group="bot-profile-group-work"]')!;
+    expect(review.compareDocumentPosition(skills) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(skills.compareDocumentPosition(work) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(review.querySelectorAll('[data-bot-profile-row^="review-st"]')).toHaveLength(1);
+    expect(review.textContent).toContain("pricing-check");
+    expect(review.querySelector("[data-bot-profile-review-allow]")).not.toBeNull();
+    expect(review.querySelector("[data-bot-profile-review-deny]")).not.toBeNull();
+    expect(panel.querySelector('[data-bot-profile-subpage-open="skills"]')).toBeNull();
+
+    skillsAnswer = { skills: [], staged: [], library: [], assignedSkills: [] };
+    await home("general");
+    panel = await home("knowledge");
+    expect(panel.querySelector("[data-bot-profile-review-empty]")?.textContent).toContain("You're all caught up");
+    expect(panel.querySelector("[data-skills-empty] [data-bot-profile-add]")).not.toBeNull();
   });
 });

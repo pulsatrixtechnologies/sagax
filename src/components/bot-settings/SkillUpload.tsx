@@ -6,7 +6,7 @@
 // the skills arrive switched off, to be read and switched on in the list.
 import { cn } from "@/lib/cn";
 import { Upload, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef, useState, type MutableRefObject } from "react";
 
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
@@ -135,9 +135,19 @@ export function SkillUploadPreview({ items, onRemove, disabled }: { items: Uploa
   );
 }
 
-export function SkillUpload({ botId, disabled, onAdded }: { botId: string; disabled?: boolean; onAdded: () => void }) {
+export function SkillUpload({ botId, disabled, onAdded, pickRef, hideButton = false, className }: {
+  botId: string;
+  disabled?: boolean;
+  onAdded: () => void;
+  /** #3400: opens the file picker from elsewhere (the Skills card's "+ Add"). */
+  pickRef?: MutableRefObject<(() => void) | null>;
+  /** #3400: no Upload pill and no help line here; only what the upload shows once files are picked. */
+  hideButton?: boolean;
+  className?: string;
+}) {
   const { request: api } = useBotEditor();
   const input = useRef<HTMLInputElement>(null);
+  if (pickRef) pickRef.current = () => input.current?.click();
   const [picked, setPicked] = useState<Picked[]>([]);
   const [items, setItems] = useState<UploadPreviewItem[] | null>(null);
   const [phase, setPhase] = useState<"idle" | "reading" | "adding">("idle");
@@ -216,7 +226,11 @@ export function SkillUpload({ botId, disabled, onAdded }: { botId: string; disab
   const refused = items?.some((item) => item.errors.length > 0) ?? false;
 
   return (
-    <div className="flex flex-col gap-2" data-skill-upload="">
+    <div
+      className={cn("flex flex-col gap-2", className)}
+      data-skill-upload=""
+      hidden={hideButton && !items && !message && !error && phase === "idle"}
+    >
       <div className="flex items-center gap-2">
         <input
           ref={input}
@@ -228,7 +242,7 @@ export function SkillUpload({ botId, disabled, onAdded }: { botId: string; disab
           tabIndex={-1}
           onChange={(event) => void choose(event.target.files)}
         />
-        <button
+        {!hideButton && <button
           type="button"
           data-skill-upload-button=""
           aria-label={t("botPanel.skills.upload.aria")}
@@ -238,8 +252,9 @@ export function SkillUpload({ botId, disabled, onAdded }: { botId: string; disab
         >
           <Upload size={14} aria-hidden="true" />
           {phase === "reading" ? t("botPanel.skills.upload.reading") : t("botPanel.skills.upload.button")}
-        </button>
-        <span className={cn("leading-snug text-ink-secondary", plain ? "text-[12px]" : "text-[11.5px]")}>{t("botPanel.skills.upload.help")}</span>
+        </button>}
+        {!hideButton && <span className={cn("leading-snug text-ink-secondary", plain ? "text-[12px]" : "text-[11.5px]")}>{t("botPanel.skills.upload.help")}</span>}
+        {hideButton && phase === "reading" && <span role="status" className="text-[12px] leading-4 text-ink-secondary">{t("botPanel.skills.upload.reading")}</span>}
       </div>
       {items && (
         <div className="flex flex-col gap-2 rounded-xl bg-inset p-3">

@@ -23,7 +23,7 @@ export function attachClaudeFinish(ctx: ClaudeTurnCtx): void {
     session, threadId, emit, base, settle, settleResult, child,
     retryState, renewedTurns, freshNextTurn, carriedCosts, carriedModels,
     active, sessions, sendTurn, retryScale,
-    markClosed, currentTurnId, sessionId,
+    markClosed, currentTurnId, sessionId, noteAutocompactRefused,
   } = ctx;
 
   let closeFinalized = false;
@@ -131,6 +131,14 @@ const finalizeClose = async (code: number | null) => {
     // A retained process may be running a later user turn. Its close
     // handler must retry that request, not the process's first prompt.
     const { turnId, input: turn, retryAbort } = session.turn;
+    // #3302: a CLI that changed under a running app can list
+    // --autocompact in its --help and still refuse it. Commander prints
+    // this at launch, before init, so nothing ran. Only a launch that
+    // passed the flag counts: the version that refused it keeps it off,
+    // and the relaunch without it can never loop.
+    const refusedAutocompact = session.passedAutocompact === true && !session.sawInit &&
+      /unknown option '--autocompact'/.test(session.stderr);
+    if (refusedAutocompact) noteAutocompactRefused(session.autocompactVersion ?? null);
     const retry = retryState.get(threadId) ?? { attempt: 0, cancelled: false };
     const message = `claude exited ${code} before result${session.stderr ? `: ${session.stderr.trim().slice(-300)}` : ""}`;
     const verdict = classifyError({ exitCode: code, stderr: message });
@@ -140,7 +148,8 @@ const finalizeClose = async (code: number | null) => {
     // resumes the session on a fresh process at once — no retry row,
     // no retry budget spent. (A fresh process is never retained, so
     // this happens at most once per turn.)
-    const endedBeforeTurn = session.turn.awaitingInit === true;
+    const endedBeforeTurn = session.turn.awaitingInit === true ||
+      (refusedAutocompact && !session.turn.sawStreamDelta);
     // A turn that already got an assistant message (a tool call
     // included) is never sent again: that model call is paid for and
     // the CLI retried its own API calls (mayResendTurn).
@@ -202,10 +211,16 @@ const finalizeClose = async (code: number | null) => {
         retryState.set(threadId, retry);
         active.set(threadId, { stop: () => { retry.cancelled = true; retryAbort.abort(); }, turnId });
         try {
-          const cursor = session.sessionId ?? sessionId ?? undefined;
-          // The reset was consumed by the initial launch. Retry the
-          // new session, never the context that launch replaced.
-          await sendTurn({ ...turn, sessionReset: false, resumeCursor: cursor }, turnId);
+          // A refused flag stopped the launch before it read anything:
+          // the same turn goes again on the cursor it was given.
+          if (refusedAutocompact) {
+            await sendTurn(turn, turnId);
+          } else {
+            const cursor = session.sessionId ?? sessionId ?? undefined;
+            // The reset was consumed by the initial launch. Retry the
+            // new session, never the context that launch replaced.
+            await sendTurn({ ...turn, sessionReset: false, resumeCursor: cursor }, turnId);
+          }
         } catch (e) {
           if (active.get(threadId)?.turnId === turnId) active.delete(threadId);
           retryState.delete(threadId);

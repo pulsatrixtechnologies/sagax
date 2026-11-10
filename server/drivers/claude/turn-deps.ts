@@ -45,6 +45,10 @@ export type SendTurnDeps = {
   getCliVersionChecked: () => boolean;
   setCliVersionChecked: (checked: boolean) => void;
   getCliHasAutocompact: () => boolean | null;
+  /** the CLI version whose --help set getCliHasAutocompact */
+  getCliHelpVersion: () => string | null;
+  /** a launch of that CLI version refused --autocompact as an unknown option */
+  noteAutocompactRefused: (version: string | null) => void;
   readCliVersion: (env: NodeJS.ProcessEnv) => Promise<{ version: string } | { reason: string }>;
   sessions: Map<string, ClaudeSession>;
   active: Map<string, ClaudeActiveTurn>;

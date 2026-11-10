@@ -13,6 +13,7 @@ import { resolveClaudeConfigDir } from "./config.ts";
 import { readToolPaths } from "../../own-file-reads.ts";
 import { claudeElicitations } from "./elicitation.ts";
 import type { ClaudeSession } from "./session-types.ts";
+import { CLAUDE_OWN_MEMORY_OFF } from "./claude-own-memory.ts";
 import type { ClaudeTurnCtx, ClaudeTurnEarly } from "./turn-ctx.ts";
 
 export async function spawnClaudeSession(ctx: ClaudeTurnCtx): Promise<ClaudeTurnEarly | null> {
@@ -22,7 +23,7 @@ export async function spawnClaudeSession(ctx: ClaudeTurnCtx): Promise<ClaudeTurn
     sessions, active, emit, base, heldVolatile, warmContracts, sessionConfigDirs,
     support, config, controlsHost, commandCwd, permissionEnv, socketPath,
     mcpServers, settings, authSettingsPath, retryState, switches,
-    relaunch,
+    relaunch, passedAutocompact, autocompactVersion, isolated,
   } = ctx;
   let { broker, mcpConfigPath, systemPromptPath } = ctx;
   const { createPermissionBroker, askQuestions, askSummary, parseChoices, questionChoices,
@@ -168,6 +169,14 @@ if (turn.warmOnly === true && turn.warmSignal?.aborted) {
   return { turnId };
 }
 
+// A bot's memory is Sagax's own: Claude Code's per-folder auto-memory
+// would split notes by thread and add about 4k tokens to every model call
+// (#3302). A compact prompt that adopted that memory as the bot's own
+// folder (#1276) and a bot that inherits this machine's setup keep it.
+// Set before the warm contract below copies env, so a keep-warm replay
+// launches the same way.
+if (isolated && !turn.compactPrompt?.memoryDir) Object.assign(env, CLAUDE_OWN_MEMORY_OFF);
+
 let child: ReturnType<typeof spawnCli>;
 try {
   // Fake CLI only: warmOnly launches announce init without a prompt so
@@ -199,6 +208,8 @@ const session: ClaudeSession = {
   mcpConfigPath,
   systemPromptPath,
   argsKey,
+  passedAutocompact,
+  autocompactVersion,
   switches,
   turnFiles: turnFiles(mcpServers),
   contract,

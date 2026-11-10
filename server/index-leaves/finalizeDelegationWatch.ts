@@ -59,7 +59,7 @@ function finalizeDelegationWatch(
       host.store.appendMessage(threadId, {
         role: "bot",
         kind: "activity",
-        tool: { name: `Send failed — ${failureChip}`, ok: false, ...(watched.taskId ? { handoffId: watched.taskId } : {}) }
+        tool: { name: `Send failed - ${failureChip}`, ok: false, ...(watched.taskId ? { handoffId: watched.taskId } : {}) }
       });
     }
     return true;

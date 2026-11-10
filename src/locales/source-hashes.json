@@ -18362,7 +18362,12 @@
       "chat.messagedOthers.other": "65746a9f503bae33780616112be206b01457d3fdb97bf8a47cbea1cef0af389d",
       "step.messageFrom": "8d95f1beda392bcbc5313526da2811b585963e4390b89e017c8bb63a5f7d009d",
       "step.messaged.done": "a548fc0453e0d4476457b509c9222d7327dca74ef9376187ea20858598751697",
-      "step.messaged.failed": "caff8ffeb499540e5ac2eaf0b84bfb0cbf407f84450ae0843e8e231ecc0d12f8"
+      "step.messaged.failed": "caff8ffeb499540e5ac2eaf0b84bfb0cbf407f84450ae0843e8e231ecc0d12f8",
+      "step.sendFailed": "010e570c9b8885a67df4c677e9164750e935f2217bfa0bbbc53ae15b6917cd06",
+      "step.sendFailed.cause": "0211442b05d6cec8168fe37046bd0a7cba1117e0b0d9986b14ebe2b62d9a44b7",
+      "step.sendTo.deleted": "7d1996b1a09d8a9fd4d0763f8da2c1803dbceaf5009f6cb472804e5e1c564b44",
+      "step.sendTo.deletedEarly": "38139c9e22545e9413178fcb456fa8dcda43a7d4d5be2692a4c3292d049e92c2",
+      "step.fullAccess.undelivered": "11516706b749f9d2c0975d610d2c9585e5703c9f3e4ffc75680ca38229546dd6"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

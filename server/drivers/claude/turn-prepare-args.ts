@@ -1,7 +1,11 @@
 /** Claude turn prepare: validation and CLI args (#1383). */
+import { join } from "node:path";
+
 import { newId } from "../../contracts.ts";
 import { assertToolScopeSupported } from "../../../shared/tool-scope-support.ts";
+import { DATA_DIR } from "../../config.ts";
 import { claudeDisallowedTools, claudeOrgTools } from "../host-tools.ts";
+import { pluginDirsForTurn } from "./plugin-agent-tools.ts";
 import { versionAtLeast } from "../acp/core.ts";
 import { killCliTree } from "../../procs.ts";
 import { CLAUDE_REPLAY_FLOOR, DRIVER_KIND, NO_ANTHROPIC_KEY } from "./config.ts";
@@ -229,8 +233,12 @@ if (isolated) {
 }
 // The bot's plugins (server/bots/bot-plugins.ts): skills, commands and
 // agents only, loaded for this session. A guest's confined turn gets none.
+// #3384: a role that names a built-in this turn does not offer loads from a
+// copy that starts it with the turn's own tools (plugin-agent-tools.ts).
 if (!turn.guestConfined && claudeCliSupports(cliVersion, "--plugin-dir")) {
-  for (const dir of turn.pluginDirs ?? []) args.push("--plugin-dir", dir);
+  const offered = orgTools ?? (config.tools !== undefined ? config.tools.join(",") : null);
+  const builtins = { offered: offered === null ? null : offered.split(",").filter(Boolean), denied: disallowedTools };
+  for (const dir of pluginDirsForTurn(turn.pluginDirs ?? [], builtins, join(DATA_DIR, "engine-policies", "plugin-agents"))) args.push("--plugin-dir", dir);
 }
 const compactWindow = autoCompactWindow(turnEnvironment);
 // Recorded where the flag is added: only a launch that passed it can

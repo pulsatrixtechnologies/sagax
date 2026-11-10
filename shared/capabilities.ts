@@ -89,6 +89,9 @@ export interface CapabilityPromptIndex {
   omitted: number;
   /** Discovery stopped early: more references may exist than were indexed. */
   incomplete?: boolean;
+  /** References past the full-entry budget, listed by name (and path or
+   * route) instead of dropped (#3295). Absent on older servers. */
+  named?: number;
   /** Whole files actually included, by part. Absent on older servers. */
   parts?: { skills: number; commands: number; agents: number };
 }

@@ -574,7 +574,8 @@ physical limits: `docs/plans/grok-convergence-media-evidence.md` (iOS section).
 The turn, preview, Capabilities `promptIndex` and `skills_list` share
 `scopedSkillInventory` and `server/skills/skill-discovery.ts`. The prompt renders
 it per capability (`server/capabilities/capability-prompt.ts`, lot 3: 4,000 bytes and 30
-files each, whole-file omission); native Claude plugins stay native.
+full entries each, whole files only; past that budget every enabled reference
+is still named with its route, never dropped, #3295); native Claude plugins stay native.
 `skills_list` reads independently of skill authoring and pages by stable
 scoped identity. Never restore the plugin scanner's silent 40-file cutoff.
 Keep disabled descriptions and staged gists out of discovery, and derive
@@ -1186,8 +1187,9 @@ sheet). Keep these rules, covered by `server/capabilities/capabilities.test.ts`,
 - `promptIndex` reports the exact prompt bytes, file count and omissions
   per capability (`Capability.promptIndex`) and in aggregate, from
   `capabilityPrompt` fed by `scopedSkillInventory`: 4,000 bytes and 30
-  files per capability, whole instruction files for chat engines, paths
-  for file engines, whole-file omission (never a cut file). Oversized files
+  full entries per capability, whole instruction files for chat engines, paths
+  for file engines, never a cut file; references past the budget are listed
+  by name with their route (`named`), never dropped (#3295). Oversized files
   do not prevent smaller files or another capability from being served.
   Preview and receipts do not touch native links.
 - Linked Flow has one row `flow:organization:pulsatrix-flow`, combining

@@ -26,19 +26,21 @@ describe("the same instructions for every engine, budgeted per capability", () =
       expect(prompt.text.includes("skills_list")).toBe(managedTools);
     }
   });
-  it("keeps files whole and reports count/byte omissions without starving the next capability", () => {
+  it("keeps files whole and names what passes the count/byte budget without starving the next capability", () => {
     const prompt = capabilityPrompt("grok", [
       { key: "many", name: "Many", files: Array.from({ length: 35 }, (_, i) => file(`s${i}`)) },
       { key: "large", name: "Large", files: [file("big", "é".repeat(4_000)), file("small")] },
       { key: "other", name: "Other", files: [file("independent")] },
     ]);
-    expect(prompt.byCapability.many).toMatchObject({ skills: 30, omitted: 5 });
-    expect(prompt.byCapability.large).toMatchObject({ skills: 1, omitted: 1 });
+    expect(prompt.byCapability.many).toMatchObject({ skills: 30, named: 5, omitted: 0 });
+    expect(prompt.byCapability.large).toMatchObject({ skills: 1, named: 1, omitted: 0 });
     expect(prompt.byCapability.other).toMatchObject({ skills: 1, omitted: 0 });
     expect(prompt.text).toContain('skill "small"');
     expect(prompt.text).not.toContain('skill "big"');
+    expect(prompt.text).toContain("skills: big.");
+    expect(prompt.text).toContain("skills: s30, s31, s32, s33, s34.");
     expect(Object.values(prompt.byCapability).every((row) => row.bytes <= CAPABILITY_PROMPT_MAX_BYTES)).toBe(true);
-    expect(prompt.index.omitted).toBe(6);
+    expect(prompt.index).toMatchObject({ omitted: 0, named: 6 });
     expect(prompt.index.bytes).toBe(Buffer.byteLength(prompt.text, "utf8"));
   });
   it("never opens instruction files just to build a file-engine index", () => {
@@ -81,7 +83,29 @@ describe("the same instructions for every engine, budgeted per capability", () =
       file("small"), { ...file("large-agent", "x".repeat(4_000)), kind: "agent" },
       { ...file("run"), kind: "command" },
     ] }]);
-    expect(prompt.byCapability.mixed).toMatchObject({ skills: 2, omitted: 1, parts: { skills: 1, commands: 1, agents: 0 } });
+    expect(prompt.byCapability.mixed).toMatchObject({ skills: 2, named: 1, omitted: 0, parts: { skills: 1, commands: 1, agents: 0 } });
     expect(prompt.index.parts).toEqual({ skills: 1, commands: 1, agents: 0 });
+  });
+  // #3295: a pack larger than the old cap (30 files, 4,000 bytes) keeps every
+  // enabled reference reachable: what does not fit in full is named, with the
+  // route to its instructions, never dropped in silence.
+  it("names every reference of a pack past the full-entry budget, with how to reach it", () => {
+    const pack = Array.from({ length: 80 }, (_, i) => ({ ...file(`pack-skill-${String(i).padStart(2, "0")}`), description: "Handles one packing step. ".repeat(6) }));
+    const names = pack.map((entry) => entry.name);
+    const managed = capabilityPrompt("grok", [{ key: "pack", name: "Pack", files: pack }], { managedTools: true });
+    for (const name of names) expect(managed.text).toMatch(new RegExp(`\\b${name}\\b`));
+    expect(managed.text).toContain("skills_list with the name");
+    expect(managed.byCapability.pack.omitted).toBe(0);
+    expect(managed.byCapability.pack.named).toBe(80 - managed.byCapability.pack.skills);
+    expect(managed.byCapability.pack.bytes).toBeLessThanOrEqual(CAPABILITY_PROMPT_MAX_BYTES);
+    expect(managed.index.bytes).toBe(Buffer.byteLength(managed.text, "utf8"));
+    expect(managed.index.bytes).toBeLessThanOrEqual(managed.index.maxBytes);
+    const files = capabilityPrompt("codex", [{ key: "pack", name: "Pack", files: pack }]);
+    for (const entry of pack) expect(files.text).toContain(entry.path);
+    expect(files.byCapability.pack.omitted).toBe(0);
+    const inline = capabilityPrompt("grok", [{ key: "pack", name: "Pack", files: pack }]);
+    for (const name of names) expect(inline.text).toMatch(new RegExp(`\\b${name}\\b`));
+    expect(inline.text).toContain("not in this prompt");
+    expect(inline.byCapability.pack.omitted).toBe(0);
   });
 });

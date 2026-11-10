@@ -21,7 +21,9 @@ async function startOrQueueOpenedThread(
     // one); the drain's own block check already waits for it, so the words
     // queue here rather than bounce.
     atCapacity: host.botAtThreadCapacity(botId),
-    groupTurn: Boolean(host.activeGroupTurnForBot(botId))
+    groupTurn: Boolean(host.activeGroupTurnForBot(botId)),
+    // #3296: a stopping server would cut the turn; it waits for the next start
+    restarting: host.isShuttingDown()
   });
   if (decision.action === "queue") {
     queueSteeredMessage(botId, threadId, text, {

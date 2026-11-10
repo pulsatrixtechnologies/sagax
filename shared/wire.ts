@@ -15,6 +15,7 @@ import type { OrderTracking } from "./order-tracking.ts";
 import type { SoloGoalLine } from "./solo-goal-line.ts";
 import type { DirectTriggers } from "./direct-triggers.ts";
 import type { FinishUntilLine } from "./finish-until-line.ts";
+import type { SandboxWakeLine } from "./sandbox-wake.ts";
 import type { MeetingRequestCardData } from "./meeting-request.ts";
 import type { PhoneCallConsentCardData } from "./phone-call-consent.ts";
 import type { PhoneCallLiveEvent, PhoneCallLiveLine, PhoneCallPhase } from "./phone-call-live.ts";
@@ -1060,6 +1061,9 @@ export interface WireMessage extends WaitLineField {
      * relaunch x/N, met, blocked, bound reached or stopped; drawn in the
      * reader's language. */
     finishUntil?: FinishUntilLine;
+    /** #3296: the live state of the "server environment is starting" row
+     * (shared/sandbox-wake.ts): what is waited for, since when, and its end. */
+    sandboxWake?: SandboxWakeLine;
   };
   /** A bot line a "post" webhook wrote: whoever called the webhook chose
    * its words. On a Cloud home a conversation holding one is someone else's
@@ -1691,9 +1695,10 @@ export interface RoomHeldMessage {
 // the app consumes, payload typed by the shape that actually goes over the
 // wire. Transport-owned frames (hello, ping) stay in src/lib/live-events.
 
-/** Why a steer-queue entry waits: a shared thread slot, or the bot's room
- * turn (which runs one at a time per bot). */
-export type SteerQueueReason = "capacity" | "group-turn";
+/** Why a steer-queue entry waits: a shared thread slot, the bot's room
+ * turn (which runs one at a time per bot), or a server restart (#3296: the
+ * words start as soon as the server is back). */
+export type SteerQueueReason = "capacity" | "group-turn" | "restart";
 
 /** Pending steer-queue chips, as `queuedSteerSnapshot` emits them and the
  * `bot.queued` frame carries them: threadId → queued items. */

@@ -14597,5 +14597,10 @@
   "sendReceipt.state.read": "lu",
   "sendReceipt.state.waiting": "attend une réponse",
   "systemBot.feedback.title": "Bogues, idées, questions",
-  "systemBot.feedback.description": "Signale un bogue, propose une idée ou pose une question à l'équipe Sagax."
+  "systemBot.feedback.description": "Signale un bogue, propose une idée ou pose une question à l'équipe Sagax.",
+  "chat.sandboxWake.cluster": "En attente du réveil de l'environnement serveur (il était en veille), depuis {since} : {elapsed}.",
+  "chat.sandboxWake.environment": "En attente du démarrage de ton environnement serveur, depuis {since} : {elapsed}.",
+  "chat.sandboxWake.ready": "L'environnement serveur était prêt après {elapsed}.",
+  "chat.sandboxWake.interrupted": "Le tour attendait l'environnement serveur depuis {since} et s'est terminé avant qu'il soit prêt.",
+  "composer.queued.restart": "Sagax redémarre. Ce message part dès qu'il est de retour."
 }

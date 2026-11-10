@@ -10,13 +10,13 @@ async function startAgentPrompt(from: BotRecord, target: BotRecord, threadId: st
   const unattended = host.isUnattended(from.id, sourceThreadId);
   const peerAsk = { botId: from.id, name: from.name, unattended: unattended || undefined };
   const speaker = host.peerSpeaker(from.id, sourceThreadId);
-  const decision = host.admit("opened-thread", {}, { atCapacity: host.botAtThreadCapacity(target.id), groupTurn: Boolean(host.activeGroupTurnForBot(target.id)) });
+  const decision = host.admit("opened-thread", {}, { atCapacity: host.botAtThreadCapacity(target.id), groupTurn: Boolean(host.activeGroupTurnForBot(target.id)), restarting: host.isShuttingDown() });
   // front is set only when the conversation is already busy. priorityNow
   // alone still starts when admit says start; using it as front would queue
   // an idle wake.
   const forceFront = wake?.front === true;
   if (forceFront || decision.action === "queue") {
-    const reason = decision.action === "queue" && (decision.reason === "capacity" || decision.reason === "group-turn")
+    const reason = decision.action === "queue" && (decision.reason === "capacity" || decision.reason === "group-turn" || decision.reason === "restart")
       ? decision.reason
       : "capacity";
     queueSteeredMessage(target.id, threadId, text, {

@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { describeRun, groupActivityRuns, groupTranscript, isHiddenStatusActivity, isRecoveryActivity, isToolStep, roomTurnFolds, statusActivity } from "./activity-runs";
+import { describeRun, groupActivityRuns, groupTranscript, isHiddenStatusActivity, isRecoveryActivity, isToolStep, roomTurnFolds, sandboxWakeElapsed, sandboxWakeLineText, sandboxWakeLiveLine, statusActivity } from "./activity-runs";
 import type { Message } from "@/state/store";
 import { SANDBOX_WAKE_NOTICE, SANDBOX_WAKE_TIMEOUT_NOTICE } from "../../shared/sandbox-wake";
 import { workspaceLineName } from "../../shared/workspace-line";
@@ -429,5 +429,45 @@ describe("a usage-limit switch is transparent (2026-10-29)", () => {
   it("keeps consecutive-limit exhaustion visible in the chat (#1942)", () => {
     expect(isHiddenStatusActivity(limitRow("error: Limits were reached on Claude, Codex: no other engine could answer.",
       { kind: "exhausted", tried: ["Claude", "Codex"], resetsAt: 0 }))).toBe(false);
+  });
+});
+
+describe("#3296 the live environment wait row", () => {
+  const since = new Date(2026, 10, 10, 14, 5, 0).getTime();
+  const row = (sandboxWake: NonNullable<NonNullable<Message["tool"]>["sandboxWake"]>): Message =>
+    ({ id: `w${++seq}`, at: since, role: "bot", kind: "activity", tool: { name: SANDBOX_WAKE_NOTICE, ok: true, sandboxWake } });
+
+  it("says what the turn waits for, since when, and how long, then how it ended", () => {
+    const waiting = sandboxWakeLineText({ waitingFor: "cluster", since }, since + 125_000);
+    expect(waiting).toContain("wake up");
+    expect(waiting).toContain("2m 05s");
+    expect(waiting).toMatch(/since \S*\d\d/);
+    expect(sandboxWakeLineText({ waitingFor: "environment", since }, since + 9_000)).toContain("your server environment to start");
+    expect(sandboxWakeLineText({ waitingFor: "cluster", since, endedAt: since + 61_000, outcome: "ready" }, since + 90_000)).toBe("The server environment was ready after 1m 01s.");
+    expect(sandboxWakeLineText({ waitingFor: "cluster", since, endedAt: since + 61_000, outcome: "timeout" }, since)).toBe("The server environment did not start in time. Send the message again in a few minutes.");
+  });
+
+  it("keeps counting while its turn works, whatever came after it, until the server ends it", () => {
+    const live = row({ waitingFor: "cluster", since });
+    expect(sandboxWakeLiveLine(live, true)).toEqual({ waitingFor: "cluster", since });
+    expect(sandboxWakeLiveLine(live, false)).toBeNull();
+    expect(sandboxWakeLiveLine(row({ waitingFor: "cluster", since, endedAt: since + 1, outcome: "ready" }), true)).toBeNull();
+    // the older counter stays for rows written before the live line
+    expect(sandboxWakeElapsed(live, [live, text("later")], true, since + 5_000)).toBeNull();
+    expect(statusActivity(row({ waitingFor: "environment", since, endedAt: since + 3_000, outcome: "ready" }))).toEqual({ kind: "notice", text: "The server environment was ready after 3s." });
+  });
+
+  it("never says a wait goes on once its turn is over: a row with no end reads in the past tense, and stays still", () => {
+    // the turn was stopped, ended, or the server restarted during the wait
+    const open = row({ waitingFor: "cluster", since });
+    const later = statusActivity(open)!;
+    expect(later.kind).toBe("notice");
+    expect(later.text).not.toMatch(/Waiting/);
+    expect(later.text).toMatch(/^The turn waited for the server environment from \S*\d\d.* and ended before it was ready\.$/);
+    // the text does not grow with the clock
+    const spy = vi.spyOn(Date, "now").mockReturnValue(since + 3 * 3_600_000);
+    try { expect(statusActivity(open)).toEqual(later); } finally { spy.mockRestore(); }
+    // the same words when the server ended it as interrupted
+    expect(statusActivity(row({ waitingFor: "cluster", since, endedAt: since + 40_000, outcome: "interrupted" }))).toEqual(later);
   });
 });

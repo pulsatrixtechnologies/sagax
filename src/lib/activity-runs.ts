@@ -8,13 +8,14 @@
 // words always separate one group from the next.
 import { isBusyElsewhereWait } from "@/lib/turn-tail";
 import type { Message } from "@/state/store";
-import { t } from "@/lib/i18n";
+import { activeLocale, t } from "@/lib/i18n";
 import { autoWorkerLine } from "@/lib/auto-model";
 import { limitFailoverLineText } from "@/lib/limit-failover";
 import { failedTurnCause } from "../../shared/failed-turn";
 import { isStoppedTurnName } from "../../shared/client-cancel";
 import { localDay } from "@/lib/transcript-derivations";
-import { SANDBOX_WAKE_NOTICE, SANDBOX_WAKE_TIMEOUT_NOTICE } from "../../shared/sandbox-wake";
+import { SANDBOX_WAKE_NOTICE, SANDBOX_WAKE_TIMEOUT_NOTICE, type SandboxWakeLine } from "../../shared/sandbox-wake";
+import { formatElapsed } from "@/lib/working-time";
 import { ONE_PASSWORD_WAITING } from "../../shared/credential-vault";
 import { HOST_CONTROL_NOTICE } from "../../shared/host-control";
 import { isQuietWorkspaceLine, parseWorkspaceLine, type WorkspaceLine } from "../../shared/workspace-line";
@@ -59,7 +60,13 @@ export function statusActivity(message: Message): { kind: "recovery" | "notice" 
   if (name?.startsWith("recovery:")) return { kind: "recovery", text: name.slice("recovery:".length).trim() };
   // The Kubernetes cluster of the server environments is starting
   // (server/sandbox/sandbox-k8s-wake.ts): the server's fixed rows, in the person's language.
-  if (name === SANDBOX_WAKE_NOTICE) return { kind: "notice", text: t("chat.sandboxWakingAsleep") };
+  if (name === SANDBOX_WAKE_NOTICE) {
+    const wake = message.kind === "activity" ? message.tool?.sandboxWake : undefined;
+    // Not the live row (StatusActivityRow draws that while its turn works):
+    // a wait with no end is one whose turn is over, said in the past tense.
+    if (!wake) return { kind: "notice", text: t("chat.sandboxWakingAsleep") };
+    return { kind: "notice", text: sandboxWakeLineText(wake.endedAt === undefined ? { ...wake, endedAt: wake.checkedAt ?? wake.since, outcome: "interrupted" } : wake, Date.now()) };
+  }
   if (name === SANDBOX_WAKE_TIMEOUT_NOTICE) return { kind: "notice", text: t("chat.sandboxWakeTimeout") };
   // A fill reads 1Password, which may ask the person first (parité R10).
   if (name === ONE_PASSWORD_WAITING) return { kind: "notice", text: t("vault.onePassword.waiting") };
@@ -77,12 +84,37 @@ export function statusActivity(message: Message): { kind: "recovery" | "notice" 
   return null;
 }
 
+/** #3296: the live "environment is starting" row in the reader's language:
+ * what the turn waits for, since when (the time of day and how long), and
+ * how it ended. */
+export function sandboxWakeLineText(line: SandboxWakeLine, now: number): string {
+  const since = new Date(line.since).toLocaleTimeString(activeLocale(), { hour: "2-digit", minute: "2-digit" });
+  if (line.endedAt !== undefined) {
+    if (line.outcome === "timeout") return t("chat.sandboxWakeTimeout");
+    if (line.outcome === "interrupted") return t("chat.sandboxWake.interrupted", { since });
+    return t("chat.sandboxWake.ready", { elapsed: formatElapsed(line.endedAt - line.since) });
+  }
+  const elapsed = formatElapsed(now - line.since);
+  return line.waitingFor === "environment"
+    ? t("chat.sandboxWake.environment", { since, elapsed })
+    : t("chat.sandboxWake.cluster", { since, elapsed });
+}
+
+/** #3296: the live row of a wait that is not over keeps counting while its
+ * turn works, whatever came after it; the server ends it. */
+export function sandboxWakeLiveLine(message: Message, busy: boolean): SandboxWakeLine | null {
+  if (!busy || message.kind !== "activity" || message.tool?.name !== SANDBOX_WAKE_NOTICE) return null;
+  const line = message.tool.sandboxWake;
+  return line && line.endedAt === undefined ? line : null;
+}
+
 /** QA 0.8.66 F1: the "environment is starting" row of a turn still waiting
  * on it (busy, and nothing came after the row) counts its seconds, so a cold
  * start never reads as a silent chat. Null when the row is not that notice
- * or the wait is over. */
+ * or the wait is over. A live row (#3296) is drawn by sandboxWakeLineText. */
 export function sandboxWakeElapsed(message: Message, transcript: readonly Message[], busy: boolean, now: number): number | null {
   if (!busy || message.kind !== "activity" || message.tool?.name !== SANDBOX_WAKE_NOTICE) return null;
+  if (message.tool.sandboxWake) return null;
   const index = transcript.findIndex((m) => m.id === message.id);
   if (index < 0 || index !== transcript.length - 1) return null;
   if (typeof message.at !== "number" || !Number.isFinite(message.at)) return null;

@@ -8,6 +8,8 @@ function revokeAllInternalCapabilities() {
 
   host.computerSelectionTurns.clear();
   host.turnWorkplaces.clear();
+  // #3296: the shutdown cuts every turn, and every wait row with it
+  host.endSandboxWakeRows?.();
   if (host.perspicaxMcp) host.perspicaxEnding = host.perspicaxMcp.endAll();
   host.internalCapabilities.clear();
   host.sessionCredentials.clear();

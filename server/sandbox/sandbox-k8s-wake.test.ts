@@ -214,7 +214,12 @@ describe("the cluster wake", () => {
     expect(r.posts[0]!.method).toBe("POST");
     expect(r.calls).toEqual(["kubernetes:exec"]);
     expect(clock).toBeGreaterThan(startedAt);
-    expect(r.waits).toEqual([{ principalId: ALICE, botId: "bot1", phase: "waiting" }]);
+    // #3296: said when the wait starts, after each check that found the
+    // cluster still down (what is waited for, since when), then ended
+    expect(r.waits[0]).toEqual({ principalId: ALICE, botId: "bot1", phase: "waiting", waitingFor: "cluster", since: startedAt });
+    expect(r.waits.slice(1, -1).every((event) => event.phase === "waiting" && event.waitingFor === "cluster" && event.since === startedAt)).toBe(true);
+    expect(r.waits.length).toBeGreaterThan(2);
+    expect(r.waits.at(-1)).toEqual({ principalId: ALICE, botId: "bot1", phase: "ready" });
     // Healthy now: the next call goes straight through, no probe, no POST.
     const probes = r.probes();
     await r.manager.exec(ALICE, { argv: ["true"] }, "bot1");
@@ -229,7 +234,9 @@ describe("the cluster wake", () => {
     expect(results.every((result) => result.exitCode === 0)).toBe(true);
     expect(r.posts).toHaveLength(1);
     expect(r.waker.posts).toBe(1);
-    expect(r.waits.filter((event) => event.phase === "waiting")).toHaveLength(12);
+    // every call said it waits, and every call's wait was ended
+    expect(new Set(r.waits.filter((event) => event.phase === "waiting").map((event) => event.botId))).toEqual(new Set(["bot0", "bot1", "bot2"]));
+    expect(r.waits.filter((event) => event.phase === "ready")).toHaveLength(12);
     expect(r.calls.filter((call) => call === "kubernetes:exec")).toHaveLength(12);
   });
 
@@ -241,7 +248,12 @@ describe("the cluster wake", () => {
     expect(error.message).toMatch(/did not start in time/);
     expect(clock - startedAt).toBeGreaterThanOrEqual(5 * 60_000);
     expect(clock - startedAt).toBeLessThan(5 * 60_000 + 30_000);
-    expect(r.waits.map((event) => event.phase)).toEqual(["waiting", "timeout"]);
+    // #3296: the wait is said again while it lasts, then ends as a timeout
+    const phases = r.waits.map((event) => event.phase);
+    expect(phases[0]).toBe("waiting");
+    expect(phases.at(-1)).toBe("timeout");
+    expect(phases.slice(0, -1).every((phase) => phase === "waiting")).toBe(true);
+    expect(phases.filter((phase) => phase === "timeout")).toHaveLength(1);
     // A successful POST is not repeated during the same wake.
     expect(r.posts).toHaveLength(1);
     expect(r.calls).toEqual([]);

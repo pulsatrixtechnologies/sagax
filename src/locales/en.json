@@ -14597,5 +14597,10 @@
   "sendReceipt.state.read": "read",
   "sendReceipt.state.waiting": "waiting on you",
   "systemBot.feedback.title": "Bugs, ideas, questions",
-  "systemBot.feedback.description": "Report a bug, suggest an idea or ask the Sagax team a question."
+  "systemBot.feedback.description": "Report a bug, suggest an idea or ask the Sagax team a question.",
+  "chat.sandboxWake.cluster": "Waiting for the server environment to wake up (it was asleep), since {since}: {elapsed}.",
+  "chat.sandboxWake.environment": "Waiting for your server environment to start, since {since}: {elapsed}.",
+  "chat.sandboxWake.ready": "The server environment was ready after {elapsed}.",
+  "chat.sandboxWake.interrupted": "The turn waited for the server environment from {since} and ended before it was ready.",
+  "composer.queued.restart": "Sagax is restarting. This message starts as soon as it is back."
 }

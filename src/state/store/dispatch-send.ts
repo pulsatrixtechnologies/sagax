@@ -138,7 +138,7 @@ export function dispatchSendEffects(action: Action, env: DispatchEnv): void {
                   threadId: body.threadId,
                   queueId: body.queueId,
                   text: action.text,
-                  reason: body.reason === "capacity" || body.reason === "group-turn" ? body.reason : undefined,
+                  reason: body.reason === "capacity" || body.reason === "group-turn" || body.reason === "restart" ? body.reason : undefined,
                 });
               }
             })

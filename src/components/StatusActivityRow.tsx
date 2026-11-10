@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Info, RefreshCw, X } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { dismissNotice, noticeDismissed } from "@/lib/usage-notices";
-import { isHiddenStatusActivity, sandboxWakeElapsed, statusActivity } from "@/lib/activity-runs";
+import { isHiddenStatusActivity, sandboxWakeElapsed, sandboxWakeLineText, sandboxWakeLiveLine, statusActivity } from "@/lib/activity-runs";
 import type { Message } from "@/state/store";
 import { CancelledTurnRow } from "./CancelledTurnRow";
 
@@ -17,16 +17,20 @@ export function StatusActivityRow({ message, transcript, busy = false }: { messa
   // QA 0.8.66 F1: a cold start counts its seconds while the turn waits on it
   const [now, setNow] = useState(() => Date.now());
   const elapsed = transcript ? sandboxWakeElapsed(message, transcript, busy, now) : null;
-  const ticking = elapsed !== null;
+  // #3296: a live wait row says what it waits for and since when, and counts
+  const live = sandboxWakeLiveLine(message, busy);
+  const ticking = elapsed !== null || live !== null;
   useEffect(() => {
     if (!ticking) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [ticking]);
   if (closed || isHiddenStatusActivity(message)) return null;
-  const status = elapsed !== null
-    ? { kind: "notice" as const, text: t("chat.sandboxWakingElapsed", { seconds: String(elapsed) }) }
-    : statusActivity(message);
+  const status = live
+    ? { kind: "notice" as const, text: sandboxWakeLineText(live, now) }
+    : elapsed !== null
+      ? { kind: "notice" as const, text: t("chat.sandboxWakingElapsed", { seconds: String(elapsed) }) }
+      : statusActivity(message);
   if (!status) return null;
   if (status.kind === "stopped") return <CancelledTurnRow />;
   const Icon = status.kind === "recovery" ? RefreshCw : Info;

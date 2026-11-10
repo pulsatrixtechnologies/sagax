@@ -249,7 +249,7 @@ export function createHostComputerRouter(deps: {
       return { ok: false, hosts: names, error: error ?? (names.length ? `No host named "${wanted}" is a bot computer you may use. Use one of: ${names.join(", ")}.` : "No host is a bot computer for this bot.") };
     }
     deps.store.setBotHost(principalId, botId, host.hostId);
-    const asked = deps.store.mode(principalId, host.hostId, botId) ? false : ask(principalId, botId, host.hostId, host.name).asked;
+    const asked = modeOf(principalId, botId, host.hostId, host.access) ? false : ask(principalId, botId, host.hostId, host.name).asked;
     return { ok: true, host, asked };
   }
 
@@ -305,6 +305,16 @@ export function createHostComputerRouter(deps: {
     return closed;
   }
 
+  /** This bot's answer to "isolated or as-is" on that host. A host on Always
+   * allow already says "work on it": no question, as-is is recorded as if
+   * the person had answered it (an earlier answer is kept). */
+  function modeOf(principalId: string, botId: string, hostId: string, access: BotComputerHostAccess): BotComputerHostMode | null {
+    const known = deps.store.mode(principalId, hostId, botId);
+    if (known || access !== "always") return known;
+    deps.store.setMode(principalId, hostId, botId, "as_is");
+    return "as_is";
+  }
+
   /** Post the isolated / as-is question in the bot's chat (once per host and bot). */
   function ask(principalId: string, botId: string, hostId: string, hostName: string): { asked: boolean; requestId: string | null } {
     const waiting = deps.store.pendingFor(principalId, hostId, botId);
@@ -333,7 +343,7 @@ export function createHostComputerRouter(deps: {
     const host = (await choices(principalId)).find((row) => row.hostId === hostId);
     if (!host) return { ok: false, error: "That computer is not one of your bot computers." };
     deps.store.setBotHost(principalId, botId, hostId);
-    if (deps.store.mode(principalId, hostId, botId)) return { ok: true, asked: false };
+    if (modeOf(principalId, botId, hostId, host.access)) return { ok: true, asked: false };
     return { ok: true, asked: ask(principalId, botId, hostId, host.name).asked };
   }
 
@@ -485,7 +495,8 @@ export function createHostComputerRouter(deps: {
       return { text: vm ? JSON.stringify({ name: vm.name, engine: vm.engine, state: vm.state, step: vm.step ?? null, error: vm.error ?? null }) : "No VM on that host." };
     }
     // exec and screenshot: the answer to "isolated or as-is" comes first
-    if (!deps.store.mode(principalId, hostId, botId)) {
+    // (a host on Always allow answers as-is itself)
+    if (!modeOf(principalId, botId, hostId, view.access)) {
       const asked = ask(principalId, botId, hostId, view.name);
       return { text: asked.requestId ? `I asked the person whether to work in an isolated VM on ${view.name} or on the host as-is. Wait for their answer.` : "Ask the person whether to use an isolated VM or the host as-is (action ask_mode).", isError: !asked.requestId };
     }
@@ -525,7 +536,7 @@ export function createHostComputerRouter(deps: {
     const lines: string[] = [];
     const chosen = hostId ? hosts.find((host) => host.hostId === hostId) : null;
     if (chosen) {
-      const mode = chosen.modes[botId] ?? null;
+      const mode = chosen.modes[botId] ?? (chosen.access === "always" ? "as_is" : null);
       lines.push(`Your computer is the host "${chosen.name}" (${osLabel(chosen.os)}${chosen.online ? "" : ", offline"}). Run shell commands there with host_computer action exec${chosen.shellOnly ? "; it is shell only, no screenshot" : ", and look at it with action screenshot"}. No Remote session card is needed.`);
       if (!mode) lines.push("The person has not said yet whether you work in an isolated VM on it or on the host as-is: call host_computer action ask_mode before anything else.");
       else if (mode === "isolated") lines.push(`You work in an isolated VM on it${chosen.vm ? ` (${chosen.vm.name}, ${chosen.vm.state})` : " that you provision with action vm_provision"}.`);

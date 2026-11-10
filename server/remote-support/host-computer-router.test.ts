@@ -96,8 +96,8 @@ describe("host computer choices", () => {
 });
 
 describe("isolated or as-is question", () => {
-  it("is asked once in the bot's chat when the host is chosen, and remembered", async () => {
-    const { router, store, raiseQuestion } = setup();
+  it("is asked once in the bot's chat when an Ask host is chosen, and remembered", async () => {
+    const { router, store, raiseQuestion } = setup({ access: "ask" });
     store.update(ALICE, FS01, { botComputer: true });
     expect(await router.select(ALICE, "wren", FS01)).toEqual({ ok: true, asked: true });
     expect(raiseQuestion).toHaveBeenCalledTimes(1);
@@ -115,12 +115,61 @@ describe("isolated or as-is question", () => {
     expect(raiseQuestion).toHaveBeenCalledTimes(1);
   });
 
-  it("an exec before the answer asks instead of running", async () => {
-    const { router, store, exec } = setup();
+  it("on an Ask host, an exec before the answer asks instead of running", async () => {
+    const { router, store, exec } = setup({ access: "ask" });
     store.update(ALICE, FS01, { botComputer: true });
     store.setBotHost(ALICE, "wren", FS01);
     const out = await router.call({ principalId: ALICE, botId: "wren", threadId: "t-wren", action: "exec", command: "uname -a" });
     expect(out.text).toMatch(/isolated VM/);
+    expect(exec).not.toHaveBeenCalled();
+  });
+
+  // #3319: Always allow already says "work on it": no card, as-is recorded
+  it("on an Always allow host, an exec runs as-is with no card and records as_is", async () => {
+    const { router, store, exec, raiseQuestion } = setup({ access: "always", rows: [row(FS01, "FS-01")] });
+    store.update(ALICE, FS01, { botComputer: true });
+    const out = await router.call({ principalId: ALICE, botId: "wren", threadId: "t-wren", action: "exec", command: "uname -a" });
+    expect("isError" in out && out.isError).toBeFalsy();
+    expect(JSON.parse(out.text)).toMatchObject({ where: "FS-01", exitCode: 0 });
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(raiseQuestion).not.toHaveBeenCalled();
+    expect(store.mode(ALICE, FS01, "wren")).toBe("as_is");
+    // another bot of the person: no card either
+    await router.call({ principalId: ALICE, botId: "finch", threadId: "t-finch", action: "exec", command: "ls" });
+    expect(raiseQuestion).not.toHaveBeenCalled();
+    expect(store.mode(ALICE, FS01, "finch")).toBe("as_is");
+  });
+
+  it("on an Always allow host, picking it in the menu or by the bot asks nothing", async () => {
+    const { router, store, raiseQuestion } = setup({ access: "always" });
+    store.update(ALICE, FS01, { botComputer: true });
+    expect(await router.select(ALICE, "wren", FS01)).toEqual({ ok: true, asked: false });
+    expect(await router.selectByBot(ALICE, "finch", "FS-01")).toMatchObject({ ok: true, asked: false });
+    expect(raiseQuestion).not.toHaveBeenCalled();
+    expect(store.mode(ALICE, FS01, "wren")).toBe("as_is");
+    expect(store.mode(ALICE, FS01, "finch")).toBe("as_is");
+    await router.views(ALICE);
+    expect(router.turnNote(ALICE, "wren", "hello", false)).not.toMatch(/ask_mode/);
+  });
+
+  it("on an Always allow host, an earlier isolated answer is kept", async () => {
+    const { router, store, exec, raiseQuestion } = setup({ access: "always", rows: [row(FS01, "FS-01")] });
+    store.update(ALICE, FS01, { botComputer: true });
+    store.setMode(ALICE, FS01, "wren", "isolated");
+    const out = await router.call({ principalId: ALICE, botId: "wren", threadId: "t-wren", action: "exec", command: "ls" });
+    expect(out.text).toMatch(/isolated environment/);
+    expect(exec).not.toHaveBeenCalled();
+    expect(raiseQuestion).not.toHaveBeenCalled();
+    expect(store.mode(ALICE, FS01, "wren")).toBe("isolated");
+    expect(await router.select(ALICE, "wren", FS01)).toEqual({ ok: true, asked: false });
+    expect(store.mode(ALICE, FS01, "wren")).toBe("isolated");
+  });
+
+  it("on a Never host, the exec is still refused", async () => {
+    const { router, store, exec } = setup({ access: "never", rows: [row(FS01, "FS-01")] });
+    store.update(ALICE, FS01, { botComputer: true });
+    store.setMode(ALICE, FS01, "wren", "as_is");
+    expect((await router.call({ principalId: ALICE, botId: "wren", threadId: "t-wren", action: "exec", command: "ls" })).text).toMatch(/Never/);
     expect(exec).not.toHaveBeenCalled();
   });
 });
@@ -253,7 +302,7 @@ describe("hosts shared with the bot, no pick", () => {
   });
 
   it("select_computer's list holds the host and the bot switches to it itself", async () => {
-    const { router, store, raiseQuestion } = setup();
+    const { router, store, raiseQuestion } = setup({ access: "ask" });
     store.update(ALICE, FS01, { botComputer: true });
     const { hosts } = await router.botHosts(ALICE, "wren");
     expect(hosts.map((host) => host.name)).toEqual(["FS-01"]);

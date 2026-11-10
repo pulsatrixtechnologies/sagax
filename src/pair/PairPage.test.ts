@@ -6,7 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { parsePairingHash, takePairingFromLocation } from "@/lib/session";
 import { markSignInCredentialSpent } from "@/lib/session";
-import { BrowserSignInWaiting, PairPage, browserSignInErrorText, finishReturnedSignIn, returnedCredentialRefused, signInErrorText } from "./PairPage";
+import { BrowserSignInWaiting, PairPage, browserSignInErrorText, finishReturnedSignIn, pairVersionText, returnedCredentialRefused, signInErrorText } from "./PairPage";
+import type { EnvironmentDescriptor } from "@/lib/session";
 
 const CREDENTIAL = `omb_pair_${"A1b2_C3d4-".repeat(4)}xyz`;
 
@@ -155,5 +156,21 @@ describe("a returned credential the server refused (2026-10-13, older server spe
     setLocale("fr");
     const fr = renderToStaticMarkup(createElement(PairPage, { initialCode: CREDENTIAL, autoSubmit: true }));
     expect(fr).toContain("Cette connexion a déjà servi ou a expiré. Reconnecte-toi avec Sagax Business.");
+  });
+});
+
+describe("the version on the sign-in page (#3260)", () => {
+  const base: EnvironmentDescriptor = { environmentId: "env", label: "Example", platform: "linux", version: "0.1.107", capabilities: { remoteSessions: true, selfUpdate: "operator" } };
+
+  it("shows the Sagax release, not the base version, in English and Quebec French", () => {
+    const environment = { ...base, release: "0.8.81" };
+    expect(pairVersionText(environment)).toBe("Version 0.8.81 on linux.");
+    setLocale("fr");
+    expect(pairVersionText(environment)).toBe("Version 0.8.81 sur linux.");
+  });
+
+  it("falls back on the version of a server that sends no release", () => {
+    expect(pairVersionText(base)).toBe("Version 0.1.107 on linux.");
+    expect(pairVersionText({ ...base, release: "  " })).toBe("Version 0.1.107 on linux.");
   });
 });

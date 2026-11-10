@@ -9,11 +9,23 @@ export interface EnvironmentDescriptor {
   environmentId: string;
   label: string;
   platform: string;
+  /** The base version (package.json `version`), the same on every Sagax
+   * release: kept for the link between the app and the server, never shown. */
   version: string;
+  /** The Sagax release people know (forkVersion). Absent on a server from
+   * before 2026-10-28. */
+  release?: string;
   capabilities: { remoteSessions: true; selfUpdate: "desktop-managed" | "operator"; emailSignIn?: boolean; sharedComputers?: true; cloudHome?: true; signInPreview?: true };
   /** An organization server: people sign in with Pulsatrix Perspicax at
    * `loginPath` (server/auth/oidc-login.ts); email codes and invitations are off. */
   identity?: { kind: "perspicax"; protocol: "oidc"; issuer: string; loginPath: string };
+}
+
+/** The version to show people for this server: its Sagax release, else the
+ * version of an older server that does not send one. */
+export function environmentReleaseVersion(environment: Pick<EnvironmentDescriptor, "version" | "release">): string {
+  const release = typeof environment.release === "string" ? environment.release.trim() : "";
+  return release || environment.version;
 }
 
 /** The same-origin path that starts "Sign in with Pulsatrix", or null when

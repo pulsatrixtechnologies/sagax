@@ -8,17 +8,23 @@
 // "Champ | Valeur" table for three values (a regression of #2949 on another
 // engine, in French) gets the same rewrite, whatever its cells hold.
 
+/** #3293: the one table threshold of the served prompt. Every other prompt
+ * line (work style, ConnectWise records, show_widget forms) defers to it
+ * instead of stating a threshold of its own. */
+export const TABLE_RULE =
+  "a table only for 3+ columns of comparable values (numbers, dates, ids) across 6 or more rows of one kind, or on request";
+
 /** The output-style rule every bot gets. */
 export const OUTPUT_STYLE_RULE =
   " Output style: by default answer in short prose, or a short bulleted list with the label in bold (\"- **Label**: what it is\")."
-  + " Use a table only for real tabular data: at least 3 columns of comparable values (numbers, dates, ids), more than about 6 rows of the same kind, or when the person asks for a table."
+  + ` Use ${TABLE_RULE}.`
   + " Never a two-column label and sentence table, never a table for a status or a summary."
   + " Never a field and value table (\"Field | Value\", \"Champ | Valeur\") for a handful of values: two or three values are one sentence or a short list, in French as in English, whatever the engine."
   + " When a compact Sagax card fits (an ```email draft, an ```artifact link, a ```cw card the person asked for), it wins over a table or a list.";
 
 /** One short rule for the cold (routine, automation) prompt. */
 export const OUTPUT_STYLE_RULE_SHORT =
-  " Default to short prose or a short list with bold labels; a table only for 3+ columns of comparable values, 6+ rows of one kind, or on request; never a label and sentence, field and value (\"Champ | Valeur\") or status table.";
+  ` Default to short prose or a short list with bold labels; ${TABLE_RULE}; never a label and sentence, field and value ("Champ | Valeur") or status table.`;
 
 const SEPARATOR = /^\s*\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?\s*$/;
 /** A table row: a line with at least one unescaped pipe. */

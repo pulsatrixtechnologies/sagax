@@ -336,7 +336,7 @@ describe("shared sentences", () => {
   it("mentionPrompt names every tagged bot with its id, and is empty for none", () => {
     expect(mentionPrompt([])).toBe("");
     expect(mentionPrompt([{ id: "a1", name: "Ana" }, { id: "b2", name: "Bo" }])).toBe(
-      " The user tagged @Ana (bot_id a1) and @Bo (bot_id b2) in their message. If they assigned independent work, use coordinate_bots and finish your turn without waiting; for a question, use coordinate_bots with consult: true — the answer resumes you.",
+      " The user tagged @Ana (bot_id a1) and @Bo (bot_id b2) in their message. If they assigned independent work, use coordinate_bots and finish your turn without waiting; for a question, use coordinate_bots with consult: true; the answer resumes you.",
     );
   });
 
@@ -424,16 +424,17 @@ describe("RICH_OUTPUT_PROMPT", () => {
     expect(RICH_OUTPUT_PROMPT).not.toContain("with a Markdown table for records and comparisons");
     expect(RICH_OUTPUT_PROMPT).not.toContain("ConnectWise records go in a Markdown table by default");
     expect(RICH_OUTPUT_PROMPT).toContain("ConnectWise records go in prose or a short list");
-    // #2641 (2026-11-08): no prompt line sends data to a table by default
-    expect(RICH_OUTPUT_PROMPT).toContain("more than 5 rows and 3 columns");
+    // #2641 (2026-11-08): no prompt line sends data to a table by default;
+    // #3293: the ConnectWise and form lines defer to the one table rule
+    expect(RICH_OUTPUT_PROMPT).toContain("ConnectWise records go in prose or a short list; a Markdown table only under the output style rule.");
     expect(WIDGET_PROMPT).not.toContain("Put data and comparisons in a markdown table");
-    expect(WIDGET_PROMPT).toContain("a markdown table only for real tabular data");
+    expect(WIDGET_PROMPT).toContain("a markdown table only under the output style rule");
   });
 });
 
 describe("short answers (#3224)", () => {
   it("keeps short replies table-free, arithmetic out of the shell, and counts before naming a number", () => {
-    expect(WORK_STYLE_PROMPT).toContain("never a table for a short answer");
+    expect(WORK_STYLE_PROMPT).toContain("prose or a short list by default; tables per the output style rule");
     expect(WORK_STYLE_PROMPT).toContain("never through a shell command");
     expect(WORK_STYLE_PROMPT).toContain("Count the items of a list you produced");
     expect(RICH_OUTPUT_PROMPT).not.toContain("3 or more comparable fields");

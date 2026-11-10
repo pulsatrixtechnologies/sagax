@@ -97,6 +97,15 @@ Perspicax has watches: elsewhere nothing below runs and nothing is shown.
   "who it is for" line and watches, ranked by words shared with About me,
   then with the bot's title. Empty when nothing is eligible, and
   `propose_proactive` is then not listed (`SAGAX_PROACTIVE_ASK`).
+- **Coverage first** (#3458, decision 5: no administrator's page): the server
+  knows, per organization, which eligible domains nobody follows (no person
+  has them on). Among the domains that share words with the person's About
+  me, such a domain comes first in the prompt section, and its choice card
+  adds « Personne ne suit encore ce domaine dans ton organisation. » Only
+  that fact is used: never who follows what, and nothing is shown to an
+  administrator. A domain that does not match the person keeps its place; a
+  server of one person changes nothing. Known limit: a domain every matching
+  person refused stays without a follower, and nobody is told.
 - **`propose_proactive`** (`POST /api/internal/proactive/propose`):
   `about_person` appends what the person said about their work to their
   About me (the learned list, Remove in Settings); `domain` (with `watches`,

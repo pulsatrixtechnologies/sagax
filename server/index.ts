@@ -24636,6 +24636,11 @@ const proactiveAsk = new ProactiveAsk({
     const owner = personAboutMe.ofBot(person);
     return owner ? personAboutMe.read(owner) : "";
   },
+  // #3458: the people of the organization with a bot (one: nobody else follows)
+  people: () => new Set(store.bots.flatMap((bot) => {
+    const owner = bot.hidden || bot.temporary ? "" : (effectiveBotOwner(bot) || "").trim().toLowerCase();
+    return owner ? [owner] : [];
+  })).size,
   timeZone: (person) => (isPrincipalId(person) ? botSettings.person(person).timeZone ?? undefined : undefined) ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
   language: (person) => reachMeLanguage(reachMePerson(person) || null),
   // the choice card: no wake, no push (the person is in that conversation)

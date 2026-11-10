@@ -61,6 +61,7 @@ export function createPrepareValidateStartTurn(
     sharedBotForViewer,
     speakerPayerMode,
     speakerTurnSelection,
+    signedOutTurnSelection,
     store,
     threadPrewarm,
     toolScopeForTurn,
@@ -185,6 +186,19 @@ export function createPrepareValidateStartTurn(
       turnModelSwitches.delete(state.threadId);
       turnModelRequested.delete(state.threadId);
     }
+  }
+  // #3315: the engine is known to be signed out for this turn's payer: a
+  // backup the person chose takes this turn, and only this turn. The thread
+  // keeps the model the person chose, so the turn after a sign-in runs there.
+  if (!state.opts?.warmOnly && !state.opts?.cardContinuation && state.bot.modelSelection.auto !== true) {
+    const carried = signedOutTurnSelection(state.bot, state.threadId, resolveTurnSpeaker({
+      speaker: state.opts?.speaker,
+      sender: state.opts?.sender ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.sender),
+      peerAsk: state.opts?.peerAsk ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.peerAsk),
+      trigger: state.opts?.trigger,
+      automationSource: state.opts?.automationSource
+    }));
+    if (carried) state.bot = { ...state.bot, modelSelection: carried };
   }
   // Auto (docs/plans/2026-10-08-auto-model.md): this turn's model. A
   // person's turn runs on the orchestration model; work a bot handed out

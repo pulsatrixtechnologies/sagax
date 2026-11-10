@@ -6,7 +6,8 @@ export function createLimitFailoverRow(getHost: () => Host): any {
 function limitFailoverRow(threadId: string, line: LimitFailoverLine) {
   const host = getHost();
   const { newId } = host;
-  const quiet = line.kind === "switched" || line.kind === "back";
+  // #3315: a turn that carried on past a signed-out engine is quiet too; the stretch's one notice reads in the chat.
+  const quiet = line.kind === "switched" || line.kind === "back" || line.kind === "signedOut";
   // #1942: consecutive limits with nothing left is a failed turn, not a soft recovery.
   const failed = line.kind === "exhausted";
   const words = line.kind === "switched" && line.to === "Auto" && line.reason !== "model"

@@ -37,7 +37,15 @@ export type LimitFailoverLine =
    * left to try. The turn is failed (not silent done); `tried` names the
    * engines that refused. `resetsAt` is the soonest known reset when one
    * was said. */
-  | { kind: "exhausted"; tried: string[]; resetsAt?: number; owner?: true };
+  | { kind: "exhausted"; tried: string[]; resetsAt?: number; owner?: true }
+  /** #3315: `from` is known to be signed out for this turn's payer, so the
+   * turn runs on `to`, a backup the person chose, for this turn only: the
+   * conversation keeps its own model and is back on `from` once it is signed
+   * in again. Quiet: a hidden row and a line in the Events lens. */
+  | { kind: "signedOut"; from: string; to: string }
+  /** #3315: the one line of a sign-out's stretch in the bot's chat: `from` is
+   * signed out, `to` answers meanwhile, and signing in again ends it. */
+  | { kind: "signedOutNotice"; from: string; to: string };
 
 /** How long after a reset the conversation goes back, so the provider has
  * rolled its window over (upstream AFTER_RESET_MS). */
@@ -116,5 +124,9 @@ export function limitFailoverText(line: LimitFailoverLine, clock: (at: number) =
       if (line.owner) return `This bot's owner hit usage limits on ${tried}: no other engine could answer.${when}`;
       return `Limits were reached on ${tried}: no other engine could answer.${when}`;
     }
+    case "signedOut":
+      return `${line.from} is signed out, so ${line.to} took over this turn.`;
+    case "signedOutNotice":
+      return `${line.from} is signed out, so ${line.to} answers meanwhile. Sign in again in Settings → Model providers and accounts to keep using ${line.from}.`;
   }
 }

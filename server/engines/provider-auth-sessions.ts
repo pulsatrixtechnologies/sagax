@@ -18,6 +18,16 @@ const failure = (message: string, status: number) => Object.assign(new Error(mes
 
 export class ProviderAuthSessions {
   private readonly flows = new Map<string, Flow>();
+  /** A sign-in to this engine finished: whatever waited on it being signed out may use it again (#3315). */
+  private readonly signedIn: (instanceId: string) => void;
+
+  constructor(options: { signedIn?: (instanceId: string) => void } = {}) {
+    this.signedIn = options.signedIn ?? (() => {});
+  }
+
+  private tellSignedIn(instanceId: string): void {
+    try { this.signedIn(instanceId); } catch (error) { reportBackgroundError(error); }
+  }
 
   get active(): boolean {
     return [...this.flows.values()].some((flow) => flow.busy || (!flow.revoked && flow.expiresAt > Date.now()));
@@ -45,7 +55,10 @@ export class ProviderAuthSessions {
       flow.flowId = result.flowId;
       const expiry = Date.parse(result.expiresAt ?? "");
       if (Number.isFinite(expiry)) flow.expiresAt = expiry;
-      if (result.phase === "succeeded") this.flows.delete(instance.instanceId);
+      if (result.phase === "succeeded") {
+        this.flows.delete(instance.instanceId);
+        this.tellSignedIn(instance.instanceId);
+      }
       return result;
     } catch (error) {
       if ((!resuming || flow.revoked) && this.flows.get(instance.instanceId) === flow) this.flows.delete(instance.instanceId);
@@ -73,6 +86,7 @@ export class ProviderAuthSessions {
     // Keep the terminal result available to its owner, but release the slot so
     // another admin need not wait fifteen minutes after success or cancellation.
     if (status.phase !== "waiting") flow.expiresAt = 0;
+    if (status.phase === "succeeded") this.tellSignedIn(instanceId);
     return status;
   }
 
@@ -88,6 +102,7 @@ export class ProviderAuthSessions {
       // failure (the person had to click Connect a second time). The slot
       // is released so anyone may start again at once.
       flow.expiresAt = 0;
+      this.tellSignedIn(instanceId);
     } finally { flow.busy = false; }
   }
 

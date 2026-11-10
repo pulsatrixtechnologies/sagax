@@ -221,7 +221,8 @@ import { withoutWiderAudience } from "./memory/memory-audience.ts";
 import { BriefStore, feedbackMemoryText, localizedGist, suggestionAction, type BriefFeedback, type BriefSuggestion } from "./proactive/background-brief.ts";
 import { listBriefApps, readBriefTool } from "./proactive/background-brief-apps.ts";
 import { createBackgroundBriefRoutes } from "./routes/background-brief.ts";
-import { briefMessageText, briefNoticeLines, startBriefTimer } from "./proactive/background-brief-schedule.ts";
+import { briefMessageText, briefNoticeLines, briefRunReason, runBrief, type BriefDelivery } from "./proactive/background-brief-schedule.ts";
+import { BriefRoutines } from "./proactive/brief-routine.ts";
 import { DAILY_SUGGESTIONS_WINDOW_MS, dailySuggestionCard, dailySuggestionEvent, pickDailySuggestions, suggestionsPostedSince } from "./proactive/daily-suggestions.ts";
 import { createMemoryUpkeep, upkeepEnabled } from "./memory/memory-upkeep.ts";
 import { createSkillReview, looksLikeStop, turnSignal, turnToolSteps } from "./skills/skill-review.ts";
@@ -5570,7 +5571,7 @@ bindLeafHost({
   get stallLimitMs() { return stallLimitMs; },
   get standingGrantsAllowed() { return standingGrantsAllowed; },
   get startAutoVmClaim() { return startAutoVmClaim; },
-  get startBriefTimer() { return startBriefTimer; },
+  get runBrief() { return runBrief; },
   get startContainerRuntime() { return startContainerRuntime; },
   get startEgressProxy() { return startEgressProxy; },
   get startEventLoopLagMonitor() { return startEventLoopLagMonitor; },
@@ -19464,7 +19465,8 @@ routines = new RoutineManager({
   evaluateWatch: (routine, watch) => routineWatchEvaluator(routine, watch),
   forgetWatch: (routineId) => routineWatchStates.forget(routineId),
   // #2018: "Commentaires des artefacts" (server/claude-artifacts/comments-routine.ts)
-  evaluateCode: (routine) => claudeArtifactCommentsCheck(routine),
+  // #3456: the bot's daily brief (server/proactive/brief-routine.ts)
+  evaluateCode: (routine, precheck) => precheck.check === "daily_brief" ? briefRoutineCheck(routine) : claudeArtifactCommentsCheck(routine),
   languageFor: (routine) => {
     const person = IDENTITY.kind === "perspicax" && routine.botId
       ? effectiveRunAs({ botId: routine.botId, ...(routine.runAs ? { runAs: routine.runAs } : {}) })
@@ -24428,9 +24430,26 @@ const typingPrewake = new TypingPrewakeThrottle();
  * bot that runs only in the cloud. UserSandboxManager.prewake does the rest
  * (Kubernetes with the cluster wake only, a bot that used it lately only). */
 // 2026-10-16: a person's custom auto-review rules (server/routes/custom-rules.ts).
-// 2026-10-29: on by default for a Primary Bot; the person turns it off or moves its time.
-const backgroundBriefs = new BriefStore(join(DATA_DIR, "background-brief.json"), Date.now, {
-  defaultEnabled: (botId) => store.bot(botId)?.chiefOfStaff === true
+// #3456: never on by default; the brief is a routine of the bot, created on
+// the person's yes (server/proactive/brief-routine.ts).
+const backgroundBriefs = new BriefStore(join(DATA_DIR, "background-brief.json"), Date.now);
+/** The person a bot's brief is for (its owner; the local person on a desktop). */
+function briefPerson(bot: BotRecord): string {
+  return reachMePerson(effectiveBotOwner(bot) || localPrincipalId());
+}
+const briefRoutines = new BriefRoutines({
+  store: backgroundBriefs,
+  routines: () => routines ? {
+    list: () => routines!.listRoutines(),
+    create: (input, runAs) => routines!.create(input, undefined, runAs ? { runAs } : undefined),
+    update: (id, patch) => routines!.update(id, patch)
+  } : null,
+  language: briefLanguage,
+  runAs: (botId) => {
+    const bot = store.bot(botId);
+    const owner = bot && IDENTITY.kind === "perspicax" ? (effectiveBotOwner(bot) || "").trim().toLowerCase() : "";
+    return owner || undefined;
+  }
 });
 /** The apps a bot reads for its brief: its own connected servers, a GitHub
  * one as the bot's owner. */
@@ -24524,7 +24543,7 @@ ROUTES.push(createProactiveChoicesRoutes({
         checklist = undefined;
       }
       return {
-        id: bot.id, brief: settings.enabled === true,
+        id: bot.id, brief: briefRoutines.on(bot.id),
         ...(SCREEN_CONTEXT_AVAILABLE ? { screen: settings.screenContext === true } : {}),
         ...(checklist === undefined ? {} : { checklist }),
       };
@@ -24647,9 +24666,13 @@ const proactiveAsk = new ProactiveAsk({
   postCard: ({ botId, threadId, card, choice }) => {
     const proposal = proactiveProposals.add({ botId, threadId, messageId: "", events: [], more: 0, hops: 0, confined: true, choice });
     // a choice card, not a permission: its yes is the person's standing choice; full-access: exempt
-    const message = store.appendMessage(threadId, { role: "bot", kind: "options", card: { title: card.title, subtitle: card.subtitle, options: [...card.options], proactiveProposal: { id: proposal.id }, proactiveChoice: card.details } });
+    const message = store.appendMessage(threadId, { role: "bot", kind: "options", card: { title: card.title, subtitle: card.subtitle, options: [...card.options], proactiveProposal: { id: proposal.id }, ...(card.details ? { proactiveChoice: card.details } : {}) } });
     proactiveProposals.setMessage(proposal.id, message.id);
     return proposal.id;
+  },
+  // #3456: « Garder le brief du jour ? »: the yes creates the brief routine
+  briefYes: (person, botId) => {
+    briefRoutines.accept(botId, isPrincipalId(person) ? botSettings.person(person).timeZone ?? undefined : undefined);
   }
 });
 /** The turns whose prompt carries the Proactive alerts section: their
@@ -24713,37 +24736,78 @@ async function proactiveIntroQuestion(botId: string, auth: RequestAuth): Promise
   }).catch(() => "");
   return Promise.race([work, new Promise<string>((resolve) => { setTimeout(() => { late = true; resolve(""); }, PROACTIVE_ASK_WAIT_MS).unref?.(); })]);
 }
-if (!process.env.VITEST) {
-  startBriefTimer({
+/** #3456: the brief, delivered by its routine's code check: in the bot's
+ * conversation with the person, the primary bot's daily suggestions, and
+ * the "Me joindre" notice. */
+function deliverBrief({ botId, botName, person, suggestions }: BriefDelivery): void {
+  const bot = store.bot(botId);
+  if (!bot) return;
+  const language = reachMeLanguage(person);
+  const threadId = backgroundBriefThread(bot, person);
+  if (threadId && !store.isConfidentialThread(threadId)) {
+    // #2695: what waited (daily budget, quiet hours, FYI) arrives in the brief, in its own words
+    const held = heldSignalsSection(signalGate.takeHeld(person), language);
+    // #2694: each point carries its id, so the chat rates it in place
+    const briefItems = suggestions.slice(0, 12).map((item) => ({ id: item.id, text: suggestionAction(item, language) }));
+    store.appendMessage(threadId, { role: "bot", kind: "text", text: held ? `${briefMessageText(suggestions, language)}\n\n${held}` : briefMessageText(suggestions, language), briefItems });
+    // #2693: the primary bot turns up to 3 points a day into one-gesture cards
+    if (bot.chiefOfStaff === true) postDailySuggestions(bot.id, threadId, suggestions, language);
+  }
+  // #2695: the brief's "Me joindre" notice is a card like any other: quiet
+  // hours and the day's budget first (the brief itself is already in the chat)
+  if (!reachMeService || !signalGate.admit(person)) return;
+  const { title, lines } = briefNoticeLines(suggestions, language);
+  reachMeService?.notice({ id: `brief-${botId}-${suggestions[0]!.id}`, person, botId, botName, threadId: threadId ?? "", title, lines });
+}
+/** #3456: the brief routine's code check (routine-precheck.ts `daily_brief`):
+ * reads and delivers the brief, and never starts a turn. */
+async function briefRoutineCheck(routine: { botId: string }): Promise<{ wake: false; reason: string }> {
+  const bot = store.bot(routine.botId);
+  const language = briefLanguage(routine.botId);
+  if (!bot || bot.hidden || bot.temporary) return { wake: false, reason: briefRunReason({ kind: "no-person" }, language) };
+  const outcome = await runBrief({ id: bot.id, name: bot.name, person: briefPerson(bot) || null }, {
     store: backgroundBriefs,
-    bots: () => store.bots
-      .filter((bot) => !bot.hidden && !bot.temporary)
-      .map((bot) => ({ id: bot.id, name: bot.name, person: reachMePerson(effectiveBotOwner(bot) || localPrincipalId()) || null })),
     connected: backgroundBriefConnected,
     fastModel: (botId) => store.bot(botId)?.modelSelection.fast?.model ?? null,
     reads: backgroundBriefReads,
-    deliver: ({ botId, botName, person, suggestions }) => {
-      const bot = store.bot(botId);
-      if (!bot) return;
-      const language = reachMeLanguage(person);
-      const threadId = backgroundBriefThread(bot, person);
-      if (threadId && !store.isConfidentialThread(threadId)) {
-        // #2695: what waited (daily budget, quiet hours, FYI) arrives in the brief, in its own words
-        const held = heldSignalsSection(signalGate.takeHeld(person), language);
-        // #2694: each point carries its id, so the chat rates it in place
-        const briefItems = suggestions.slice(0, 12).map((item) => ({ id: item.id, text: suggestionAction(item, language) }));
-        store.appendMessage(threadId, { role: "bot", kind: "text", text: held ? `${briefMessageText(suggestions, language)}\n\n${held}` : briefMessageText(suggestions, language), briefItems });
-        // #2693: the primary bot turns up to 3 points a day into one-gesture cards
-        if (bot.chiefOfStaff === true) postDailySuggestions(bot.id, threadId, suggestions, language);
-      }
-      // #2695: the brief's "Me joindre" notice is a card like any other: quiet
-      // hours and the day's budget first (the brief itself is already in the chat)
-      if (!reachMeService || !signalGate.admit(person)) return;
-      const { title, lines } = briefNoticeLines(suggestions, language);
-      reachMeService?.notice({ id: `brief-${botId}-${suggestions[0]!.id}`, person, botId, botName, threadId: threadId ?? "", title, lines });
-    },
-    log: (line) => console.log(line)
+    deliver: deliverBrief
   });
+  return { wake: false, reason: briefRunReason(outcome, language) };
+}
+/** #3456: a main bot that had the brief only by default owes its person one
+ * card « Garder le brief du jour ? », inside the ask ledger's bounds; it
+ * waits while another card is open or the person was asked today. */
+function offerOwedBriefCards(): void {
+  for (const botId of backgroundBriefs.cardsOwed()) {
+    const bot = store.bot(botId);
+    // the person decided already, or the bot is no longer their main bot
+    if (!bot || bot.hidden || bot.temporary || bot.chiefOfStaff !== true || briefRoutines.of(botId) || backgroundBriefs.saved(botId)) {
+      backgroundBriefs.setCardOwed(botId, false);
+      continue;
+    }
+    const person = briefPerson(bot);
+    const threadId = person ? backgroundBriefThread(bot, person) : undefined;
+    if (!person || !threadId || store.isConfidentialThread(threadId)) continue;
+    const offered = proactiveAsk.offerBrief({ person, botId, threadId, at: backgroundBriefs.settings(botId).at });
+    if (offered !== "later") backgroundBriefs.setCardOwed(botId, false);
+  }
+}
+if (!process.env.VITEST) {
+  // the upgrade, once: saved settings that were on become the routine
+  const upgraded = briefRoutines.upgrade(store.bots.filter((bot) => !bot.hidden && !bot.temporary).map((bot) => ({ id: bot.id, main: bot.chiefOfStaff === true })));
+  if (upgraded.created.length || upgraded.owed.length) console.log(`background brief: ${upgraded.created.length} routine(s) from saved settings, ${upgraded.owed.length} card(s) owed`);
+  try {
+    offerOwedBriefCards();
+  } catch (error) {
+    reportBackgroundError(error);
+  }
+  setInterval(() => {
+    try {
+      offerOwedBriefCards();
+    } catch (error) {
+      reportBackgroundError(error);
+    }
+  }, 60_000).unref();
 }
 ROUTES.push(createBackgroundBriefRoutes({
   store: backgroundBriefs,
@@ -24773,7 +24837,11 @@ ROUTES.push(createBackgroundBriefRoutes({
   },
   connected: backgroundBriefConnected,
   reads: backgroundBriefReads,
-  screenContextAvailable: () => SCREEN_CONTEXT_AVAILABLE
+  screenContextAvailable: () => SCREEN_CONTEXT_AVAILABLE,
+  routine: {
+    view: (botId) => briefRoutines.view(botId),
+    sync: (botId, patch, settings) => { briefRoutines.sync(botId, patch, settings); }
+  }
 }));
 ROUTES.push(createCustomRuleRoutes({
   store: customRules,

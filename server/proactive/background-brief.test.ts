@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { memoryReadersOf } from "../memory/memory-audience.ts";
 import { memoryMayShow } from "../memory/memory-audience.ts";
 import { BriefStore, briefGist, localizedGist, suggestionAction, suggestionIdentity, toolWords, briefReadTools, briefTimeCame, briefToolAllowed, cleanBriefSettings, datedBriefPiece, keptMemoryLine, localDay, migrateBriefIdentities, readConnectedBrief, runBriefPass } from "./background-brief.ts";
-import { briefMessageText, briefNoticeLines, runScheduledBriefs, type BriefDelivery } from "./background-brief-schedule.ts";
+import { briefMessageText, briefNoticeLines, briefRunReason, runBrief, type BriefDelivery } from "./background-brief-schedule.ts";
 
 const piece = { piece: "Inbox, Monday note", asOf: "2026-10-26", text: "Three invoices arrived, 3 in all." };
 
@@ -137,32 +137,34 @@ describe("background brief", () => {
     expect(localDay(Date.parse("2026-10-27T02:00:00Z"), "America/Toronto")).toBe("2026-10-26");
   });
 
-  it("is on by default for a Primary Bot, and the person's own choice wins", () => {
+  it("#3456: never on by default, a Primary Bot included; the person's own choice wins and is kept", () => {
     const dir = mkdtempSync(join(tmpdir(), "sagax-brief-"));
     dirs.push(dir);
-    const store = new BriefStore(join(dir, "background-brief.json"), () => 1_000, { defaultEnabled: (botId) => botId === "primary" });
-    expect(store.settings("primary").enabled).toBe(true);
-    expect(store.settings("other").enabled).toBe(false);
+    const store = new BriefStore(join(dir, "background-brief.json"), () => 1_000);
+    expect(store.existed).toBe(false);
+    expect(store.settings("primary").enabled).toBe(false);
+    expect(store.saved("primary")).toBe(false);
+    expect(store.saveSettings("primary", { enabled: true, at: "06:45", timeZone: "Europe/Paris" })).toMatchObject({ enabled: true, at: "06:45", timeZone: "Europe/Paris" });
     // a time change alone keeps it on
-    expect(store.saveSettings("primary", { at: "06:45", timeZone: "Europe/Paris" })).toMatchObject({ enabled: true, at: "06:45", timeZone: "Europe/Paris" });
+    expect(store.saveSettings("primary", { at: "07:15" })).toMatchObject({ enabled: true, at: "07:15" });
     store.saveSettings("primary", { enabled: false });
-    expect(store.settings("primary")).toMatchObject({ enabled: false, at: "06:45" });
-    const reopened = new BriefStore(join(dir, "background-brief.json"), () => 1_000, { defaultEnabled: () => true });
+    expect(store.settings("primary")).toMatchObject({ enabled: false, at: "07:15" });
+    const reopened = new BriefStore(join(dir, "background-brief.json"), () => 1_000);
+    expect(reopened.existed).toBe(true);
+    expect(reopened.saved("primary")).toBe(true);
     expect(reopened.settings("primary").enabled).toBe(false);
     expect(cleanBriefSettings({ at: "25:00", timeZone: "Nowhere/City" }, { enabled: true, everyHours: 4, subjects: [], at: "08:00", timeZone: "UTC", screenContext: false })).toMatchObject({ at: "08:00", timeZone: "UTC" });
   });
 
-  it("the timer reads once at the person's time and delivers only what is new", async () => {
+  it("#3456: one run of the brief reads once and delivers only what is new", async () => {
     const dir = mkdtempSync(join(tmpdir(), "sagax-brief-"));
     dirs.push(dir);
-    let now = Date.parse("2026-10-26T12:05:00Z");
-    const store = new BriefStore(join(dir, "background-brief.json"), () => now, { defaultEnabled: (botId) => botId === "primary" });
-    store.saveSettings("primary", { at: "08:00", timeZone: "America/Toronto" });
+    const now = Date.parse("2026-10-26T12:05:00Z");
+    const store = new BriefStore(join(dir, "background-brief.json"), () => now);
     const delivered: BriefDelivery[] = [];
     let reads = 0;
     const deps = {
       store,
-      bots: () => [{ id: "primary", name: "Nimbus", person: "pr_a" }, { id: "other", name: "Other", person: "pr_a" }, { id: "nobody", name: "Nobody", person: null }],
       connected: () => ["Inbox"],
       fastModel: () => "fast-1",
       reads: async () => ({
@@ -172,18 +174,19 @@ describe("background brief", () => {
       deliver: (input: BriefDelivery) => { delivered.push(input); },
       now: () => now,
     };
-    expect(await runScheduledBriefs(deps)).toEqual(["primary"]);
+    expect(await runBrief({ id: "primary", name: "Nimbus", person: "pr_a" }, deps)).toEqual({ kind: "delivered", count: 1 });
     expect(reads).toBe(1);
     expect(delivered[0]).toMatchObject({ botId: "primary", person: "pr_a" });
     expect(delivered[0]!.suggestions[0]!.text).toContain("3 invoices");
-    // the same minute again: today is taken
-    expect(await runScheduledBriefs(deps)).toEqual([]);
-    expect(reads).toBe(1);
-    // next day, same piece: nothing new, nothing sent
-    now = Date.parse("2026-10-27T12:05:00Z");
-    expect(await runScheduledBriefs(deps)).toEqual([]);
+    // the next day, same piece: nothing new, nothing sent
+    expect(await runBrief({ id: "primary", name: "Nimbus", person: "pr_a" }, deps)).toEqual({ kind: "nothing-new" });
     expect(reads).toBe(2);
     expect(delivered).toHaveLength(1);
+    // no person: nothing read
+    expect(await runBrief({ id: "nobody", name: "Nobody", person: null }, deps)).toEqual({ kind: "no-person" });
+    expect(reads).toBe(2);
+    expect(briefRunReason({ kind: "delivered", count: 2 }, "fr")).toBe("Brief du jour envoyé : 2 points.");
+    expect(briefRunReason({ kind: "nothing-new" }, "en")).toBe("Nothing new today: no brief sent.");
     const text = briefMessageText(delivered[0]!.suggestions, "fr");
     expect(text).toContain("Brief du jour");
     // #2845: what the answer counts, as an action, never its raw first line

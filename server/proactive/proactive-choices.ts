@@ -94,13 +94,15 @@ export class ProactiveChoices {
     this.apply(person, { domain, watch: watchId, on: false, via }, person);
   }
 
-  /** One proposal and, later, its answer (the card, #3431). */
-  noteAsk(person: string, entry: AskEntry): void {
+  /** One proposal and, later, its answer (the card, #3431). A card that is
+   * not the first question of the upgrade (the brief card, #3456) passes
+   * firstQuestion false: the main bot still writes its one sentence. */
+  noteAsk(person: string, entry: AskEntry, options: { firstQuestion?: boolean } = {}): void {
     const key = personKey(person);
     if (!key) return;
     const row = this.people[key] ?? emptyChoices();
     row.asks = [...(row.asks ?? []), entry].slice(-ASKS_KEPT);
-    row.firstAskedAt ??= entry.at;
+    if (options.firstQuestion !== false) row.firstAskedAt ??= entry.at;
     this.people[key] = row;
     this.save();
   }

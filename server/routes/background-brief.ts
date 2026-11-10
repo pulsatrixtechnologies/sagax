@@ -5,9 +5,12 @@
 //        `screenContext` (#2699): the bot sees the front app and window
 //        title on this computer. GET says `screenContextAvailable` (the
 //        desktop app on macOS or Windows); elsewhere a PUT of it is ignored.
-//        `at` (HH:MM) in `timeZone` is when the brief runs on its own each
-//        day (server/proactive/background-brief-schedule.ts). On by default for a
-//        Primary Bot; `enabled: false` turns it off. `checklist` (#3432):
+//        `at` (HH:MM) in `timeZone` is when the brief runs each day. #3456:
+//        the brief is a routine of the bot (server/proactive/brief-routine.ts),
+//        never on by default: `enabled: true` is the person's yes and creates
+//        or resumes it, `enabled: false` pauses it, a time or subjects change
+//        moves it. GET reads `enabled` and the time from that routine (the
+//        person may pause or move it in the routines list). `checklist` (#3432):
 //        a plain switch of the checklist wakes (heartbeat): false blocks
 //        them, true clears the block and its votes; no memory line.
 //   POST /api/bots/:id/background-brief/pass { costUsd? }
@@ -60,6 +63,11 @@ export interface BackgroundBriefRouteDeps {
   reads(botId: string): Promise<BriefAppCall>;
   /** #2699: screen context works here (desktop app, macOS or Windows). */
   screenContextAvailable?: () => boolean;
+  /** #3456: the bot's brief routine (server/proactive/brief-routine.ts). */
+  routine?: {
+    view(botId: string): BriefSettings;
+    sync(botId: string, patch: Partial<BriefSettings>, settings: BriefSettings): void;
+  };
 }
 
 export function createBackgroundBriefRoutes(deps: BackgroundBriefRouteDeps): RouteHandler {
@@ -75,7 +83,8 @@ export function createBackgroundBriefRoutes(deps: BackgroundBriefRouteDeps): Rou
     if (!suggestionId && method === "GET") {
       const apps = deps.connected(botId).length;
       const screenContextAvailable = deps.screenContextAvailable?.() === true;
-      return json(res, 200, { ...deps.store.view(botId), apps, screenContextAvailable, ...(apps ? {} : { notice: "no_apps" as const }) });
+      const view = deps.store.view(botId);
+      return json(res, 200, { ...view, ...(deps.routine ? { settings: deps.routine.view(botId) } : {}), apps, screenContextAvailable, ...(apps ? {} : { notice: "no_apps" as const }) });
     }
     if (!suggestionId && method === "PUT") {
       const body = await readBody(req) as Partial<BriefSettings> & { checklist?: unknown };
@@ -91,7 +100,13 @@ export function createBackgroundBriefRoutes(deps: BackgroundBriefRouteDeps): Rou
       // #3432: the checklist switch sets or clears the heartbeat mute, with no vote and no memory line
       const checklist = typeof body.checklist === "boolean" ? !deps.store.setWakeMuted(botId, "heartbeat", !body.checklist) : undefined;
       const settings = checklist !== undefined && !Object.keys(patch).length ? deps.store.settings(botId) : deps.store.saveSettings(botId, patch);
-      return json(res, 200, { settings, ...(checklist !== undefined ? { checklist } : {}) });
+      if (!deps.routine) return json(res, 200, { settings, ...(checklist !== undefined ? { checklist } : {}) });
+      try {
+        deps.routine.sync(botId, patch, settings);
+      } catch (error) {
+        return json(res, 409, { error: `The brief's routine could not be saved: ${error instanceof Error ? error.message : String(error)}`, settings: deps.routine.view(botId) });
+      }
+      return json(res, 200, { settings: deps.routine.view(botId), ...(checklist !== undefined ? { checklist } : {}) });
     }
     if (suggestionId === "pass" && method === "POST") {
       const connected = deps.connected(botId);

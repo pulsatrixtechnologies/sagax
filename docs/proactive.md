@@ -38,7 +38,7 @@ both write `proactive`).
   `unavailable` says why. With `?view=all` (#3432) it adds `receive`, what
   Settings, Notifications, « Ce que je reçois » and each bot's « Ce que ce
   bot suit pour toi » draw: `bots` (the person's own visible bots, main bot
-  first, with `brief`, `screen` only on the desktop app and `checklist` only
+  first, with `brief` (on while the bot's brief routine is on), `screen` only on the desktop app and `checklist` only
   when HEARTBEAT.md has items) and `domains` (only eligible ones, each with
   `carriers`, the bots that can carry it, and its running watches with
   `runsOn` and `lastAlertAt`, the last time the watch woke its bot).
@@ -137,6 +137,49 @@ Perspicax has watches: elsewhere nothing below runs and nothing is shown.
   (`watch-read`), while the domain is on, on that bot, with that watch on.
   The organization's Refuse and Ask first rules and the person's own come
   first; a write keeps the ordinary approval path.
+
+## The daily brief is a routine (`server/proactive/brief-routine.ts`, #3456)
+
+The brief is ambient too: it never runs because of a default or a stored
+mode, a main bot included (owner's decision 2 of #3408: "a routine, on your
+yes").
+
+- **A routine of the bot**, created only on the person's yes: the brief's
+  switch on the bot page (`PUT /api/bots/:id/background-brief`
+  `{enabled: true}`) or the card below. It is listed in
+  the bot's routines, where it is paused, edited or deleted like any routine.
+  Its schedule is a daily cron at the brief's time in the brief's own time
+  zone (a weekday expression picked in the routines list is kept); its
+  instructions name the person's subjects; `postResults` is off (the brief
+  posts itself).
+- **No turn, no model call.** Its pre-check is code (`{kind: "code", check:
+  "daily_brief"}`, `server/routines/routine-precheck.ts`): at the routine's
+  time it reads the connected apps (reads only) and delivers what is new
+  (`background-brief-schedule.ts` `runBrief`): the brief message, the main
+  bot's daily suggestions, the "Me joindre" notice. The run is recorded as
+  nothing to report, with one line ("Brief du jour envoyé : 3 points."). There
+  is no minute timer of the brief any more, so no routine means no brief and
+  no daily suggestions.
+- **The bot page** reads the brief as on only while its routine is on, at the
+  routine's time. Off on the page pauses the routine; on resumes or creates
+  it. Every page sends its time zone with each change, so the schedule moves
+  only when the time is in the change or the zone differs from the routine's
+  (from the routine's own time), and the instructions are rewritten only when
+  the subjects are in the change: an edit made in the routines list is kept.
+- **The upgrade, once** (`BriefRoutines.upgrade`, the file's `routinesAt`):
+  saved brief settings stay (the person chose them); those that were on become
+  the routine, same time and subjects. A main bot that had the brief only by
+  default (an install that ran it, no saved settings) stops and owes its person
+  one card « Garder le brief du jour ? » (`cardOwed`). A fresh install owes
+  nothing.
+- **The card** goes through the ask ledger and its bounds
+  (`ProactiveAsk.offerBrief`, ledger key `sagax.daily-brief`): one open card
+  per person and one bot-initiated ask per person per local day, so it waits
+  while another card is open or the person was asked today (checked each
+  minute, no model); once ever per person; no push. "Oui" creates the routine
+  and saves the brief as the person's choice (in their time zone when they had
+  none); "Pas maintenant" is kept in the ledger; "Ne plus proposer" is kept as
+  `never` in the ledger and writes no watch domain.
 
 ## Pulsatrix watches (`server/proactive/flow-watches.ts`)
 

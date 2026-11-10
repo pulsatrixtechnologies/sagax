@@ -3,23 +3,26 @@
 // never the page owner's. Nothing is stored and nothing runs when no page
 // asks: no timer, no routine, no periodic write.
 //
-// Beside the registry, two small in-memory books the data route keeps:
-// - PageDataTaint: who received personal data from which page, so their
-//   writes to what other readers read (the shared state) are refused on a
-//   page that is not private to its person (the design note's first
-//   isolation rule).
-// - PageDataWatch: which open page reads which bots for whom, so a change of
-//   one of those bots sends a `data` event to that person's open stream only.
-//   An entry whose page is no longer open is dropped on the next change.
+// Beside the registry, PageDataWatch: which open page reads which bots for
+// whom, so a change of one of those bots sends a `data` event to that
+// person's open stream only. An entry whose page is no longer open is dropped
+// on the next change. The rule that a page reading personal data keeps its
+// shared state read only while shared rests on the declaration
+// (PublishedPages.stateReadOnlyForData), never on a memory mark.
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { PageDataSource } from "../../shared/page-capabilities.ts";
-import type { PageRecord } from "./published-pages.ts";
 
 export interface PageSourceRead {
   /** The value the page receives. */
   value: unknown;
   /** The bots this answer was read from (the live `data` event's topics). */
   topics: string[];
+  /** The addresses the source names as exits (fields it chose, never free
+   * text such as a title): the only links the wrapper opens without a
+   * question. */
+  links?: string[];
+  /** The open references it names (sagax.open accepts only those). */
+  refs?: string[];
 }
 
 export interface PageSource {
@@ -60,43 +63,9 @@ export class PageSources {
   }
 }
 
-/** A page private to its person: shared with nobody (no invite, no editor,
- * not in a bot's Library for others). Pure. */
-export function pagePrivateToPerson(page: Pick<PageRecord, "access" | "invites" | "editors" | "botShared">): boolean {
-  if (page.access !== "private" || page.botShared === true) return false;
-  const invited = (page.invites?.people.length ?? 0) + (page.invites?.teams.length ?? 0);
-  return invited === 0 && !(page.editors?.length);
-}
-
-/** How long a reader stays marked after personal data reached them on a page. */
-export const PAGE_DATA_TAINT_MS = 12 * 60 * 60_000;
 const BOOK_MAX = 10_000;
 
 const keyOf = (pageId: string, person: string) => `${pageId}\u0000${person.toLowerCase()}`;
-
-export class PageDataTaint {
-  private readonly marks = new Map<string, number>();
-  private readonly now: () => number;
-  constructor(now: () => number = Date.now) {
-    this.now = now;
-  }
-
-  mark(pageId: string, person: string): void {
-    if (this.marks.size >= BOOK_MAX) this.marks.delete(this.marks.keys().next().value!);
-    this.marks.delete(keyOf(pageId, person));
-    this.marks.set(keyOf(pageId, person), this.now());
-  }
-
-  has(pageId: string, person: string): boolean {
-    const at = this.marks.get(keyOf(pageId, person));
-    if (at === undefined) return false;
-    if (this.now() - at > PAGE_DATA_TAINT_MS) {
-      this.marks.delete(keyOf(pageId, person));
-      return false;
-    }
-    return true;
-  }
-}
 
 interface Watched {
   pageId: string;
@@ -145,11 +114,4 @@ export class PageDataWatch {
       }
     }
   }
-}
-
-/** The first isolation rule: a reader who received personal data from this
- * page may not write what other readers read, unless the page is private to
- * its person. Pure. */
-export function sharedWriteRefused(page: Pick<PageRecord, "id" | "access" | "invites" | "editors" | "botShared">, person: string, taint: Pick<PageDataTaint, "has">): boolean {
-  return taint.has(page.id, person) && !pagePrivateToPerson(page);
 }

@@ -36,7 +36,7 @@ import { sanitizePageLook, type PageLook } from "../../src/lib/page-look.ts";
 import { applyDesignSystem, BUILTIN_DESIGN_SYSTEMS, DEFAULT_DESIGN_SYSTEM, DESIGN_SYSTEM_LIMITS, findDesignSystem, ownDesignSystemId, parseDesignTokens, type DesignSystem } from "../../src/lib/design-systems.ts";
 import { threadOwner } from "../threads/thread-privacy.ts";
 import { pageAudienceOf, samePageAudience, type PageAudience } from "../../shared/page-audience.ts";
-import { pageCapabilitiesOf, type PageCapabilities } from "../../shared/page-capabilities.ts";
+import { pageCapabilitiesOf, pageCapabilitiesPersonal, type PageCapabilities } from "../../shared/page-capabilities.ts";
 import { ANON_STATE_LIMITS, anonymousBy, STATE_LIMITS, stateRulesOf, stateValueJson, type PageStateEntry, type StateRules } from "../../shared/page-state.ts";
 import { THREAD_LIMITS, type PageQuote, type PageSuggestion, type PageThread, type PageThreadReply } from "../../shared/page-threads.ts";
 import {
@@ -473,8 +473,12 @@ export class PublishedPages {
     const page = pages.find((entry) => entry.id === id);
     if (!page) return refuse(404, "not_found", "This page does not exist.");
     const now = this.clock();
+    const sharedBefore = pageSharedWithOthers(page);
     const result = change(page, now);
     if ("ok" in result) return result;
+    // #3413: a page that reads personal data and becomes shared loses the
+    // shared state it kept while private, so nothing it received goes out
+    if (!sharedBefore && pageSharedWithOthers(page) && page.state && this.declaresPersonalData(page)) delete page.state;
     if (touch) page.updatedAt = now;
     this.save(pages);
     return page;
@@ -734,6 +738,22 @@ export class PublishedPages {
     return content === null ? null : pageCapabilitiesOf(content);
   }
 
+  /** Whether any HTML version of the page declares a capability that
+   * hands it the reader's personal data (#3413). */
+  private declaresPersonalData(page: PageRecord): boolean {
+    return page.versions.some((version) => pageIsHtml(version.kind) && pageCapabilitiesPersonal(pageCapabilitiesOf(this.content(page.id, version.n) ?? "")));
+  }
+
+  /** #3413, the first isolation rule, held by the declaration itself: while
+   * the page is shared with anyone but its person and its served version
+   * declares a personal data capability, its shared state is read only for
+   * everyone, its person included. Nothing in memory: it holds across a
+   * restart. */
+  stateReadOnlyForData(id: string): boolean {
+    const page = this.get(id);
+    return Boolean(page && pageSharedWithOthers(page) && pageCapabilitiesPersonal(this.capabilities(id)));
+  }
+
   /** The keys its person made read-only. */
   stateLocks(id: string): string[] {
     return [...(this.get(id)?.stateLocks ?? [])];
@@ -744,6 +764,7 @@ export class PublishedPages {
    * in (`anon`) has tighter limits, and the writes from their network
    * address are counted too. Never moves the page in its person's list. */
   setState(id: string, input: { key: string; value: unknown; by: string; anon?: { source: string } }): { ok: true; state: Record<string, PageStateEntry> } | PageError {
+    if (this.stateReadOnlyForData(id)) return refuse(409, "shared_write_after_data", "This page reads personal data: its shared state is read only while it is shared.");
     const json = stateValueJson(input.value);
     if (json === null) return refuse(400, "bad_value", `value: plain JSON data, at most ${STATE_LIMITS.valueBytes / 1024} KB.`);
     if (input.anon && new TextEncoder().encode(json).length > ANON_STATE_LIMITS.valueBytes) return refuse(400, "bad_value", `value: at most ${ANON_STATE_LIMITS.valueBytes / 1024} KB without signing in.`);
@@ -1128,4 +1149,17 @@ export class PublishedPages {
       ...(path ? { path, url: `${origin.replace(/\/+$/, "")}${path}`, reachable } : {}),
     };
   }
+}
+
+/** A page private to its person: shared with nobody (no invite, no editor,
+ * not in a bot's Library for others). Pure. */
+export function pagePrivateToPerson(page: Pick<PageRecord, "access" | "invites" | "editors" | "botShared">): boolean {
+  if (page.access !== "private" || page.botShared === true) return false;
+  const invited = (page.invites?.people.length ?? 0) + (page.invites?.teams.length ?? 0);
+  return invited === 0 && !(page.editors?.length);
+}
+
+/** Someone other than its person may read the page now. Pure. */
+export function pageSharedWithOthers(page: Pick<PageRecord, "status" | "access" | "invites" | "editors" | "botShared">): boolean {
+  return page.status === "published" && !pagePrivateToPerson(page);
 }

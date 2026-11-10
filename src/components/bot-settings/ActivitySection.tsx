@@ -31,7 +31,14 @@
 // card opens ActivityDetailModal. The
 // list refetches when the bot's threads change (the store's event stream)
 // and polls while work runs.
-import { useCallback, useEffect, useState } from "react";
+//
+// #3462 (lot 2 of #3451): for an orchestrator bot, one whose team holds a
+// step of its code work (GET /api/bots/:id/team-work), the Coding section
+// draws its work first (TeamWorkSection: the team row, one row per piece of
+// work, its steps, "Done today"), then the same agent rows. A bot without a
+// team, a read not back yet and a failed first read keep this section as it
+// was, the same DOM.
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ChevronRight, GitCommitHorizontal, GitMerge, GitPullRequest, GitPullRequestClosed } from "lucide-react";
 
 import { api, openRoutineRun, type Action, type Bot } from "@/state/store";
@@ -67,6 +74,10 @@ import { useBotActivityFeed } from "@/lib/use-bot-activity-feed";
 import { GROUPED_CARD, GROUPED_ROW, PANEL_LABEL } from "@/lib/grouped-card";
 import { deleteJobBranches, loadArchivedBranches, setBranchArchived } from "@/lib/code-branches";
 import { CodeBranchList, type BranchListActions } from "./CodeBranchList";
+import { TeamWorkSection, type TeamOpenStep } from "./TeamWorkSection";
+import { useTeamWork, type TeamWorkLoader } from "@/lib/use-team-work";
+import type { TeamWorkStep } from "@/lib/team-work";
+import type { BotActivityStatus } from "../../../shared/bot-activity-status";
 
 export { ActivityList, type CardActions };
 
@@ -252,7 +263,7 @@ export function SectionHeader({ icon, title, name, onOpenHistory }: { icon?: Rea
  * keeps the history one click away. A first load that failed
  * is one quiet line; a later failed refresh keeps the last list. Split out so
  * it renders without the fetching. */
-export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunched, error = false, advanced = true, archived, branchActions, showAllHistory = true, onIgnore, codeWork = true }: {
+export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunched, error = false, advanced = true, archived, branchActions, showAllHistory = true, onIgnore, codeWork = true, team }: {
   list: BotActivityList | null;
   live?: LiveView;
   actions: CardActions;
@@ -273,10 +284,22 @@ export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunch
   /** #2599: false where the pull requests, branches and commits live in
    * the panel's Coding tab (the bot panel): only the agent rows show here. */
   codeWork?: boolean;
+  /** #3462: an orchestrator's work; it draws the Coding section, with the
+   * agent rows (and the code work) under it. */
+  team?: (rows: ReactNode) => ReactNode;
 }) {
   const sections = panelSections(list, live, advanced, archived, actions.now);
   const { coding, work, launched } = sections;
   const showCoding = codeWork ? sections.showCoding : coding.length > 0 || launched.length > 0;
+  if (team) {
+    const rows = list === null ? null : (
+      <>
+        <AgentRows items={coding} launched={onOpenLaunched ? launched : []} onOpen={actions.onOpen} onOpenLaunched={onOpenLaunched} onStop={actions.onStop} stopping={actions.stopping} onIgnore={onIgnore ? (id) => onIgnore(ignoredJobKey(id)) : undefined} />
+        {codeWork && <CodeWorkList work={work} now={actions.now ?? Date.now()} branchActions={branchActions} />}
+      </>
+    );
+    return <>{team(rows)}</>;
+  }
   if (list === null) {
     return error ? <p role="status" data-activity-error className="px-0.5 text-[12.5px] text-ink-tertiary">{t("botPanel.coding.error")}</p> : null;
   }
@@ -369,9 +392,55 @@ export function ActivitySection({ bot }: { bot: Bot }) {
   return <ActivitySectionBody bot={bot} panel={panel} />;
 }
 
+/** The runtime status of a step, as the coding chat's header reads it. */
+export function stepActivityStatus(status: TeamWorkStep["status"] | undefined): BotActivityStatus {
+  switch (status) {
+    case "queued": return "queued";
+    case "needs_input":
+    case "waiting": return "waiting";
+    case "completed": return "finished";
+    case "failed":
+    case "expired": return "failed";
+    case "cancelled": return "stopped";
+    default: return "running";
+  }
+}
+
+/** A step's (or a team bot's) coding chat: the team bot's thread, opened
+ * where the chat is; the selected bot stays the orchestrator (#3462). */
+export function openTeamStep(dispatch: (action: Action) => void, orchestratorId: string, step: TeamOpenStep, now = Date.now()): void {
+  const itemId = `thread:${step.threadId}`;
+  dispatch({
+    type: "openCodingChat",
+    target: {
+      botId: step.botId,
+      itemId,
+      threadId: step.threadId,
+      seed: { id: itemId, kind: "session", botId: step.botId, title: step.name, status: stepActivityStatus(step.status), startedAt: step.startedAt ?? now, updatedAt: now, threadId: step.threadId, coding: true },
+      step: {
+        orchestratorId,
+        name: step.name,
+        ...(step.work ? { work: step.work } : {}),
+        ...(step.index !== undefined ? { index: step.index } : {}),
+        ...(step.total !== undefined ? { total: step.total } : {}),
+      },
+    },
+  });
+}
+
 /** Activity's Coding section from a shared panel state; `codeWork` false
  * where the Coding tab holds the pull requests and branches (#2599). */
-export function ActivitySectionBody({ bot, panel, codeWork = true }: { bot: Bot; panel: BotCodingPanel; codeWork?: boolean }) {
+export function ActivitySectionBody({ bot, panel, codeWork = true, streaming, openStepThreadId, loadTeamWork }: {
+  bot: Bot;
+  panel: BotCodingPanel;
+  codeWork?: boolean;
+  /** The app's live stream is up (the bot panel passes the store's); unknown: read at render. */
+  streaming?: boolean;
+  /** The step of this bot's work whose coding chat is open. */
+  openStepThreadId?: string;
+  /** The team work read (tests, galleries). */
+  loadTeamWork?: TeamWorkLoader;
+}) {
   const { advanced, feed, archived, ignore, branchActions } = panel;
   const showAllHistory = useShowAllHistory();
   const [open, setOpen] = useState<BotActivityItem | null>(null);
@@ -393,6 +462,26 @@ export function ActivitySectionBody({ bot, panel, codeWork = true }: { bot: Bot;
     else setOpen(item);
   };
   const actions: CardActions = { onOpen: openItem, onStop: stop, stopping: feed.stopping, now: feed.now, fading: feed.live.fading };
+  // #3462: an orchestrator's work, read once and kept current by frames.
+  const teamView = useTeamWork(bot.id, loadTeamWork ? { load: loadTeamWork } : {});
+  const teamWork = teamView.work && teamView.work.team.length > 0 ? teamView.work : null;
+  const team = teamWork ? (rows: ReactNode) => {
+    const state = getState();
+    return (
+      <TeamWorkSection
+        work={teamWork}
+        now={teamView.now}
+        streaming={streaming ?? state.connected !== false}
+        bots={state.bots ?? []}
+        orchestrator={{ name: bot.name, ...(bot.title ? { title: bot.title } : {}) }}
+        openThreadId={openStepThreadId}
+        onOpenStep={(step) => openTeamStep(dispatch, bot.id, step)}
+        onOpenHistory={setAll}
+      >
+        {rows}
+      </TeamWorkSection>
+    );
+  } : undefined;
 
   // The command palette's "<bot> history" opens it with the row hidden.
   useEffect(() => watchBotHistoryRequests(bot.id, () => setAll("coding")), [bot.id]);
@@ -416,7 +505,7 @@ export function ActivitySectionBody({ bot, panel, codeWork = true }: { bot: Bot;
 
   return (
     <>
-      <PanelSections list={list} live={feed.live} actions={actions} onOpenHistory={setAll} onOpenLaunched={openLaunched} error={error} advanced={advanced} archived={archived} branchActions={branchActions} showAllHistory={showAllHistory} onIgnore={ignore} codeWork={codeWork} />
+      <PanelSections list={list} live={feed.live} actions={actions} onOpenHistory={setAll} onOpenLaunched={openLaunched} error={error} advanced={advanced} archived={archived} branchActions={branchActions} showAllHistory={showAllHistory} onIgnore={ignore} codeWork={codeWork} team={team} />
       {all && (
         <ActivityListModal
           botId={bot.id}

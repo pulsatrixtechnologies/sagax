@@ -28,6 +28,14 @@
 //   tasks) live in the bot panel on the right while the window is open, as
 //   sections of it (#2285), never in the plain chat (#2149).
 //
+// A step of an orchestrator bot's work (#3462, target.step) opens here too,
+// with this same look: the chat is the team bot's (its pill, its thread, its
+// composer, which writes to that bot), the selected bot and the panel stay
+// the orchestrator's. One line joins the meta block under the bar ("<piece
+// of work> · step 3 of 5 · last action 20 s ago"), the working line says
+// how long the turn has been quiet, and the session card goes to the
+// orchestrator's Coding tab, offered beside Activity.
+//
 // The activity entry is polled every 3 s while the task runs (and a while
 // after a follow-up, until the new turn shows); a reload keeps what is on
 // screen, so a status change never blanks the sheet.
@@ -64,6 +72,8 @@ import { waitingSources } from "@/lib/activity-waiting-sources";
 import { openExternalLink } from "@/lib/app-links";
 import { useChatColumnClass } from "@/lib/chat-bubble-width";
 import { useCodingPanelHost } from "@/lib/coding-panel-host";
+import { useTeamWorkRead } from "@/lib/use-team-work";
+import { teamQuietSince, teamStepMetaLine, teamStepOf, teamWorkAt } from "@/lib/team-work";
 import { PANEL_CARD, PANEL_LABEL, PANEL_ROW } from "@/lib/grouped-card";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -268,6 +278,15 @@ export interface CodingChatSheetProps {
   /** The dev pods as sections of the bot panel (#2285), put in its Coding
    * tab under the "This session" card; Connectors too (#2599). */
   side?: ReactNode;
+  /** #3462, a step's chat: the line under the bar ("<piece of work> · step 3
+   * of 5 · last action 20 s ago"). */
+  stepLine?: string;
+  /** The step's turn did nothing since then: the working line says how long. */
+  quietSince?: number | null;
+  /** The bot whose panel holds the session card (the orchestrator, for a step). */
+  panelBotId?: string;
+  /** The chat's title instead of the entry's (a step's name). */
+  title?: string;
 }
 
 /** #2285: what the header used to say on its meta line (status, duration,
@@ -301,7 +320,7 @@ function SessionCard({ glyph, lead, live, elapsed, tokens }: { glyph: string; le
 }
 
 /** The sheet, without fetching: tests and galleries draw it with fixed data. */
-export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMore = false, loadingOlder = false, onLoadOlder, onRetry, now, bot, bots, onClose, onStop, stopping = false, onSend, waiting, composer, side }: CodingChatSheetProps) {
+export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMore = false, loadingOlder = false, onLoadOlder, onRetry, now, bot, bots, onClose, onStop, stopping = false, onSend, waiting, composer, side, stepLine, quietSince = null, panelBotId, title: titleAsked }: CodingChatSheetProps) {
   const chat = useChatWindow();
   const chatColumnClassName = useChatColumnClass();
   const column = useExchangePortalHost();
@@ -358,14 +377,14 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
 
   const elapsed = formatActivityDuration((shown.endedAt ?? now) - shown.startedAt);
   const folderText = place.folder ?? place.repo;
-  const title = activityTitle(shown);
+  const title = titleAsked?.trim() || activityTitle(shown);
   const statusGlyph = live ? "○" : "●";
   // Prefer the humanized step from #2099; fall back to the raw step or Working.
   const statusLead = live
     ? (humanStep(shown.currentStep) || shown.currentStep?.trim() || t("codingChat.working"))
     : activityStatusLabel(shown.status);
   const tokensLabel = tokens !== undefined && tokens > 0 ? formatTokens(tokens) : undefined;
-  const panelHost = useCodingPanelHost(shown.botId);
+  const panelHost = useCodingPanelHost(panelBotId ?? shown.botId);
 
   const sheet = (
     <div
@@ -456,6 +475,8 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
       <div data-coding-pane className="relative flex min-h-0 flex-1 flex-col">
       <div ref={scroller} onScroll={onScroll} className={cn("min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-5", CHAT_UNDER_BAR_PAD)} data-testid="coding-chat-scroll">
         <div className={cn(chatColumnClassName, "flex flex-col gap-2 py-6")} role="log" aria-live="off">
+          {/* #3462: a step's place in its piece of work, under the bar. */}
+          {stepLine && <p data-coding-step-meta className="min-w-0 truncate text-center text-[12px] leading-4 text-ink-secondary" title={stepLine}>{stepLine}</p>}
           {/* The task's folder and branch head the transcript, under the bar. */}
           {(folderText || place.branch) && <div data-coding-meta className="flex min-w-0 flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-center text-[12px] leading-4 text-ink-secondary">
             {folderText && <span data-coding-folder className="min-w-0 truncate" title={place.repo ?? place.folder}>{folderText}</span>}
@@ -497,7 +518,7 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
       {live && rows.length > 0 && (
         <div data-turn-presence-slot="" className="shrink-0 bg-app px-5">
           <div className={cn(chatColumnClassName, "pb-1.5")}>
-            <TurnPresence bot={party} visible label={statusLead} seed={`${shown.botId}:${shown.startedAt}`} since={shown.startedAt} />
+            <TurnPresence bot={party} visible label={statusLead} seed={`${shown.botId}:${shown.startedAt}`} since={shown.startedAt} quietSince={quietSince} />
           </div>
         </div>
       )}
@@ -607,6 +628,15 @@ export function CodingChat({ target, onClose }: { target: CodingChatTarget; onCl
     : undefined;
 
   const follow = useCallback(() => setFollowUntil(Date.now() + FOLLOW_MS), []);
+  // #3462: a step of an orchestrator's work reads its place from the
+  // orchestrator's list (the panel's read and the stream's events since).
+  const stepRead = useTeamWorkRead(target.step?.orchestratorId);
+  const stepPlace = useMemo(() => (stepRead ? teamStepOf(teamWorkAt(stepRead.work, stepRead.overlays, now), threadId) : null), [stepRead, now, threadId]);
+  const stepLine = target.step
+    ? stepPlace
+      ? teamStepMetaLine(stepPlace, now)
+      : [target.step.work, target.step.index !== undefined && target.step.total !== undefined && target.step.total > 1 ? t("teamWork.chat.step", { index: target.step.index, total: target.step.total }) : undefined].filter(Boolean).join(" · ") || undefined
+    : undefined;
   const computerStart = state.computerStarts[target.botId];
   const taskBot = bot && threadId ? { ...bot, threadId } : undefined;
   const side = (messages: readonly Message[]) => taskBot
@@ -627,6 +657,7 @@ export function CodingChat({ target, onClose }: { target: CodingChatTarget; onCl
     stopping,
     onSend: send,
     waiting,
+    ...(target.step ? { stepLine, quietSince: teamQuietSince(stepPlace), panelBotId: target.step.orchestratorId, title: target.step.name } : {}),
   };
   if (!threadId) {
     const messages = detail ? stepMessages(detail.steps, item.botId, bot?.name ?? item.botName ?? "") : [];

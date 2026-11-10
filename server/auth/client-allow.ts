@@ -34,6 +34,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["GET", "PUT"], path: /^\/api\/me\/appearance$/ },
   // #2695: the person's own signal budget and quiet hours on a personal computer
   { methods: ["GET", "PUT"], path: /^\/api\/me\/signals$/ },
+  // #3423: the person's own proactive choices (which watch domains, on which
+  // of their bots); the handler answers the session's person only
+  { methods: ["GET", "PUT"], path: /^\/api\/me\/proactive$/ },
   // own photo on an organization server (server/routes/me-avatar.ts): written
   // to Perspicax with the session person's own sign-in token, never anyone else's
   { methods: ["PUT", "DELETE"], path: /^\/api\/me\/avatar$/ },

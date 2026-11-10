@@ -1,4 +1,46 @@
 {
+  "domains": {
+    "backup": {
+      "label": {
+        "fr": "Sauvegardes",
+        "en": "Backups"
+      },
+      "for": {
+        "fr": "Qui suit les sauvegardes des clients",
+        "en": "Who follows the clients' backups"
+      }
+    },
+    "dispatch": {
+      "label": {
+        "fr": "Répartition",
+        "en": "Dispatch"
+      },
+      "for": {
+        "fr": "Qui répartit les billets",
+        "en": "Who dispatches the tickets"
+      }
+    },
+    "documentation": {
+      "label": {
+        "fr": "Documentation",
+        "en": "Documentation"
+      },
+      "for": {
+        "fr": "Qui tient la documentation",
+        "en": "Who keeps the documentation"
+      }
+    },
+    "network": {
+      "label": {
+        "fr": "Réseau",
+        "en": "Network"
+      },
+      "for": {
+        "fr": "Qui suit les réseaux des clients",
+        "en": "Who follows the clients' networks"
+      }
+    }
+  },
   "watches": [
     {
       "skill": "reporting-backup-health",
@@ -22,7 +64,10 @@
         "skill": "reporting-backup-health"
       },
       "kind": "read",
-      "prompt": "Utilise le skill reporting-backup-health pour vérifier les appliances hors ligne, puis les sauvegardes en échec ou périmées et les échecs AutoVerify, par client, et propose les billets à ouvrir."
+      "prompt": "Utilise le skill reporting-backup-health pour vérifier les appliances hors ligne, puis les sauvegardes en échec ou périmées et les échecs AutoVerify, par client, et propose les billets à ouvrir.",
+      "tools": [
+        "axcient_x360recover_query"
+      ]
     },
     {
       "skill": "choosing-dispatch-techs",

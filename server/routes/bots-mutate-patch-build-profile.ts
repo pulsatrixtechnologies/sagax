@@ -236,6 +236,9 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
       return true;
     }
     patch.proactiveMode = env.normalizeProactiveMode(raw);
+    // #3423: the switch records who set it, so a person's act and the
+    // server's default can be told apart (the default is never a choice)
+    patch.proactiveModeSet = { principalId: env.sessionPrincipal(env.auth) || "local", at: Date.now() };
   }
   // #2691: direct triggers per channel with filters; null clears them all.
   if (body.directTriggers !== undefined) {

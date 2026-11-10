@@ -155,6 +155,8 @@ export function createHostComputerRouter(deps: {
   const open = new Map<string, { sessionId: string; lastUsed: number; principalId: string; botId: string }>();
   const opening = new Map<string, Promise<HostSession | { error: string }>>();
   const polling = new Set<string>();
+  /** principal|host: commands running (or queued) on the person's session. */
+  const busy = new Map<string, number>();
   const key = (principalId: string, hostId: string) => `${principalId.trim().toLowerCase()}|${hostId}`;
   const vmKey = (principalId: string, botId: string, hostId: string) => `${principalId.trim().toLowerCase()}|${botId}|${hostId}`;
   /** The session ended at Perspicax (its end time passed): never reused. */
@@ -338,8 +340,19 @@ export function createHostComputerRouter(deps: {
     const run = async (): Promise<{ out: RemoteExecResult | { error: string }; session: HostSession | null }> => {
       const session = await sessionOn(principalId, botId, hostId);
       if ("error" in session) return { out: session, session: null };
-      const out = await deps.sessions.exec({ principalId, botId: session.botId, threadId: "", id: session.sessionId, command, actor: botId, ...(timeoutMs ? { timeoutMs } : {}) });
-      return { out, session };
+      // in flight (or waiting its turn on the tunnel, #3430): the idle sweep
+      // never closes the session under it, and its end counts as a use
+      const k = key(principalId, hostId);
+      busy.set(k, (busy.get(k) ?? 0) + 1);
+      try {
+        const out = await deps.sessions.exec({ principalId, botId: session.botId, threadId: "", id: session.sessionId, command, actor: botId, ...(timeoutMs ? { timeoutMs } : {}) });
+        return { out, session };
+      } finally {
+        const left = (busy.get(k) ?? 1) - 1;
+        if (left > 0) busy.set(k, left); else busy.delete(k);
+        const known = open.get(k);
+        if (known && known.sessionId === session.sessionId) known.lastUsed = now();
+      }
     };
     const first = await run();
     if (!("error" in first.out) || !first.session) return first.out;
@@ -364,7 +377,7 @@ export function createHostComputerRouter(deps: {
     let closed = 0;
     for (const [k, row] of open) {
       const live = deps.sessions.target({ principalId: row.principalId, botId: row.botId, threadId: "", id: row.sessionId });
-      if (live && !expired(live.endAt) && now() - row.lastUsed < HOST_SESSION_IDLE_MS) continue;
+      if (live && !expired(live.endAt) && (busy.has(k) || now() - row.lastUsed < HOST_SESSION_IDLE_MS)) continue;
       open.delete(k);
       await deps.sessions.close(row.principalId, row.botId, row.sessionId).catch(() => null);
       closed += 1;

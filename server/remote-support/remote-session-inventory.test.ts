@@ -277,6 +277,53 @@ describe("commands for the bot", () => {
     expect(execs.map((event) => [event.command, event.botId])).toEqual([["uptime", "bot-ember"], ["whoami", BOT]]);
   });
 
+  it("runs the commands of several bots on one session one after the other, so none resets another's tunnel (#3430)", async () => {
+    // Every tailcat process is its own WireGuard endpoint with the session's
+    // client key. A second one with the same key started while the first
+    // still runs makes the host drop the first one's connection: ssh 255.
+    const live = new Map<string, number>();
+    let most = 0;
+    const { service, commands } = harness(async (command, argv) => {
+      if (command === OS_PROBE_UNIX) return ok("Darwin");
+      if (command === inventoryCommand("macos")) return ok(MAC_INVENTORY);
+      const keyPath = argv[argv.indexOf("--key") + 1] ?? "";
+      const start = (live.get(keyPath) ?? 0) + 1;
+      live.set(keyPath, start);
+      most = Math.max(most, start);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      const reset = (live.get(keyPath) ?? 0) > 1;
+      live.set(keyPath, (live.get(keyPath) ?? 1) - 1);
+      return reset ? { code: 255, stdout: "", stderr: "" } : ok(`${command} done\n`);
+    });
+    await service.publish(open);
+    const bots = ["bot-1", "bot-ember", "bot-server", "bot-core"];
+    const results = await Promise.all(bots.map((actor, index) =>
+      service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: `echo ${index}`, actor })));
+    expect(results.map((result) => ("stdout" in result ? result.stdout : result.error))).toEqual(bots.map((_, index) => `echo ${index} done\n`));
+    expect(most).toBe(1);
+    // each command went out once
+    for (const index of bots.keys()) expect(commands.filter((command) => command === `echo ${index}`)).toHaveLength(1);
+  });
+
+  it("keeps the queue moving after a command that failed or threw (#3430)", async () => {
+    let calls = 0;
+    const { service } = harness(async (command) => {
+      if (command === OS_PROBE_UNIX) return ok("Darwin");
+      if (command === inventoryCommand("macos")) return ok(MAC_INVENTORY);
+      calls += 1;
+      if (command === "boom") throw new Error("spawn failed");
+      return ok("fine\n");
+    });
+    await service.publish(open);
+    const [first, second] = await Promise.allSettled([
+      service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "boom" }),
+      service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "uptime" }),
+    ]);
+    expect(first.status).toBe("rejected");
+    expect(second).toMatchObject({ status: "fulfilled", value: { exitCode: 0, stdout: "fine\n" } });
+    expect(calls).toBe(2);
+  });
+
   it("runs nothing on a computer whose OS is still not known, and says so", async () => {
     const { service, commands } = harness(() => ({ code: 1, stdout: "", stderr: "" }));
     await service.publish(open);

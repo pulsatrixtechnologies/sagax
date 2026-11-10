@@ -248,6 +248,8 @@ type RemoteSessionEnv = {
   hostLabel: (session: StoredSession) => string;
   tailcatBin: () => string;
   ssh: (session: StoredSession, command: string, timeoutMs: number) => Promise<CommandResult | null>;
+  /** One tailcat call on a tunnel, after the ones already running on its key. */
+  tunnelRun: (keyPath: string, argv: string[], timeoutMs: number) => Promise<CommandResult>;
   reading: Map<string, Promise<void>>;
   inspect: (session: StoredSession) => Promise<void>;
   refresh: (session: StoredSession) => void;
@@ -322,10 +324,27 @@ function buildRemoteSessionEnv(deps: RemoteSessionDeps): RemoteSessionEnv {
 
   const tailcatBin = () => resolveTailcatBinary() ?? "tailcat";
 
+  // One tailcat process at a time per tunnel key (#3430). Each `tailcat ssh`
+  // or `tailcat cp` is its own WireGuard endpoint with the session's client
+  // key; a second one started while the first still runs sends the host a
+  // new handshake for the same peer, and the host drops the first one's
+  // connection (ssh 255). A session shared by every bot of the person
+  // (#3393) therefore runs their commands one after the other. The command
+  // timeout starts when its own turn comes.
+  const tunnelQueues = new Map<string, Promise<unknown>>();
+  const tunnelRun = (keyPath: string, argv: string[], timeoutMs: number): Promise<CommandResult> => {
+    const before = tunnelQueues.get(keyPath) ?? Promise.resolve();
+    const mine = before.then(() => run(argv, timeoutMs));
+    const tail = mine.then(() => undefined, () => undefined);
+    tunnelQueues.set(keyPath, tail);
+    void tail.then(() => { if (tunnelQueues.get(keyPath) === tail) tunnelQueues.delete(keyPath); });
+    return mine;
+  };
+
   async function ssh(session: StoredSession, command: string, timeoutMs: number) {
     const tunnel = tunnelOf(session);
     if (!tunnel) return null;
-    return run(tailcatSshArgv(tailcatBin(), tunnel.keyPath, tunnel.address, command), timeoutMs);
+    return tunnelRun(tunnel.keyPath, tailcatSshArgv(tailcatBin(), tunnel.keyPath, tunnel.address, command), timeoutMs);
   }
 
   /** Ask the computer its OS: uname, then PowerShell. Sets osGuessed off only
@@ -467,6 +486,7 @@ function buildRemoteSessionEnv(deps: RemoteSessionDeps): RemoteSessionEnv {
     hostLabel,
     tailcatBin,
     ssh,
+    tunnelRun,
     reading,
     inspect,
     refresh,
@@ -706,7 +726,7 @@ function activeFromEnv(env: RemoteSessionEnv, principalId: string, botId: string
 function createRemoteSessionOps(env: RemoteSessionEnv) {
   const {
     deps, rows, persist, exclusive, owned, tunnelOf, refresh, writeCard, inspect,
-    hostLabel, tailcatBin, ssh, run, now, actionsAudit, systemSsh, home, controls,
+    hostLabel, tailcatBin, ssh, tunnelRun, now, actionsAudit, systemSsh, home, controls,
   } = env;
 
   const ops = {
@@ -813,7 +833,7 @@ function createRemoteSessionOps(env: RemoteSessionEnv) {
       try {
         const tunnel = tunnelOf(session);
         if (!tunnel) return { error: "The tunnel for this remote computer is not on this server yet." };
-        const copied = await run(tailcatCopyArgv(tailcatBin(), tunnel.keyPath, local, `${tunnel.address}:${remotePath}`), 60_000);
+        const copied = await tunnelRun(tunnel.keyPath, tailcatCopyArgv(tailcatBin(), tunnel.keyPath, local, `${tunnel.address}:${remotePath}`), 60_000);
         if (copied.code !== 0) return { error: "The file did not arrive on the remote computer." };
         actionsAudit?.write({ at: now(), sessionId: session.id, principalId: session.principalId, botId: session.botId, kind: "transfer", direction: "upload", file: safeName });
         return { name: safeName };
@@ -832,7 +852,7 @@ function createRemoteSessionOps(env: RemoteSessionEnv) {
       mkdirSync(localDir, { recursive: true, mode: 0o700 });
       const name = safe.split(/[\\/]/).pop() || "download";
       const local = path.join(localDir, `${randomBytes(8).toString("hex")}`);
-      const copied = await run(tailcatCopyArgv(tailcatBin(), tunnel.keyPath, `${tunnel.address}:${safe}`, local), 60_000);
+      const copied = await tunnelRun(tunnel.keyPath, tailcatCopyArgv(tailcatBin(), tunnel.keyPath, `${tunnel.address}:${safe}`, local), 60_000);
       try {
         if (copied.code !== 0) return { error: "That file could not be read on the remote computer." };
         const bytes = readFileSync(local);

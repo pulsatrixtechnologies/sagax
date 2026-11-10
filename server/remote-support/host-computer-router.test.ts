@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createHostComputerRouter, NO_HYPERVISOR } from "./host-computer-router.ts";
+import { createHostComputerRouter, HOST_SESSION_IDLE_MS, NO_HYPERVISOR } from "./host-computer-router.ts";
 import { createHostComputerStore } from "./host-computer-store.ts";
 import type { UnattendedHostRow } from "../../shared/remote-unattended-host.ts";
 
@@ -396,6 +396,7 @@ describe("the person's session on a host (#3393)", () => {
     // session id -> the bot whose row it is, its end time, still connected
     const rows = new Map<string, { botId: string; principalId: string; endAt: string; connected: boolean }>();
     let opened = 0;
+    let clock = NOW;
     const open = vi.fn(async (viewer: { principalId: string }, _hostId: string, options: { seatFor?: { botId: string } }) => {
       opened += 1;
       const session = `s${opened}`;
@@ -432,12 +433,12 @@ describe("the person's session on a host (#3393)", () => {
       access: () => "always",
       consumeApproval: () => false,
       raiseQuestion: () => "req-1",
-      now: () => NOW,
+      now: () => clock,
       sleep: () => Promise.resolve(),
     });
     for (const person of [ALICE, BOB_PERSON]) store.update(person, FS01, { botComputer: true });
     const run = (principalId: string, botId: string) => router.call({ principalId, botId, threadId: `t-${botId}`, action: "exec", command: "whoami", host: "FS-01" });
-    return { router, open, exec, close, rows, run };
+    return { router, open, exec, close, rows, run, tick: (ms: number) => { clock += ms; } };
   }
 
   it("every bot of the same person reaches the host through the one open session", async () => {
@@ -514,6 +515,31 @@ describe("the person's session on a host (#3393)", () => {
     // the session stays the person's: the next call reuses it
     await run(ALICE, "architect");
     expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  // #3430: the session closed at 18.5 minutes, not 30. A command running
+  // (or waiting its turn on the tunnel) is a use: the idle sweep never closes
+  // the session under it, and the idle time counts from its end.
+  it("the idle sweep never closes a session with a command still running, and counts idle time from its end (#3430)", async () => {
+    const { router, exec, close, run, tick } = shared();
+    await run(ALICE, "sagax-test");
+    let finish: () => void = () => undefined;
+    exec.mockImplementationOnce(async (input) => {
+      await new Promise<void>((resolve) => { finish = resolve; });
+      return { host: "FS-01", os: "linux" as const, exitCode: 0, stdout: `${input.botId}\n`, stderr: "", timedOut: false };
+    });
+    const long = run(ALICE, "ember");
+    await vi.waitFor(() => expect(exec).toHaveBeenCalledTimes(2));
+    tick(HOST_SESSION_IDLE_MS + 60_000);
+    expect(await router.sweep()).toBe(0);
+    expect(close).not.toHaveBeenCalled();
+    finish();
+    expect(JSON.parse((await long).text)).toMatchObject({ exitCode: 0 });
+    tick(HOST_SESSION_IDLE_MS - 60_000);
+    expect(await router.sweep()).toBe(0);
+    tick(2 * 60_000);
+    expect(await router.sweep()).toBe(1);
+    expect(close).toHaveBeenCalledWith(ALICE, "sagax-test", "s1");
   });
 
   it("a command that did not run is an error naming the host and the reason", async () => {

@@ -101,6 +101,12 @@ defaultAnswer: z.string().optional(),
   batchKey: z.string().optional(),
   relay: z.boolean().optional(),
   priority: z.literal("now").optional(),
+  // #3463: the requester's name for the work, its step and plan (display only).
+  work: z.object({
+    name: z.string().optional(),
+    step: z.string().optional(),
+    plan: z.array(z.object({ name: z.string(), botId: z.string().optional() })).optional(),
+  }).optional(),
   version: z.literal(1),
 });
 

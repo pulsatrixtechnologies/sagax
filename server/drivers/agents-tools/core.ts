@@ -40,6 +40,31 @@ export const DEF_LIST_ROOM_TARGETS = {
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   };
 
+/** #3463: optional names an orchestrator gives a hand-over, so the person's
+ * panel groups the steps of one piece of work and counts its plan. Display
+ * only; the server cuts each to its size (server/team-work/work-label.ts). */
+const WORK_LABEL_PARAMS = {
+  work: { type: "string", description: "Optional name of the piece of work this is a step of (one line, 80 characters). Give the same name to each of its steps: the person's panel groups them." },
+  step: { type: "string", description: "Optional name of this step (40 characters)." },
+  plan: { type: "array", description: "Optional, with work: all its steps in order (at most 12), each with the teammate that does it when known. The latest plan wins.",
+    items: { type: "object", additionalProperties: false, properties: { step: { type: "string" }, bot: { type: "string" } }, required: ["step"] } },
+} as const;
+
+/** The work label fields of a hand-over call, as given, for the route. */
+function workLabelArgs(args: Json): Json {
+  return {
+    ...(typeof args.work === "string" && args.work.trim() ? { work: args.work } : {}),
+    ...(typeof args.step === "string" && args.step.trim() ? { step: args.step } : {}),
+    ...(Array.isArray(args.plan) && args.plan.length ? { plan: args.plan } : {}),
+  };
+}
+
+/** The open pieces of work a hand-over route answered, for the model. */
+function openWorkLine(r: Json): string {
+  const names = Array.isArray(r.openWork) ? r.openWork.filter((name): name is string => typeof name === "string" && Boolean(name)) : [];
+  return names.length ? ` Open pieces of work: ${names.map((name) => JSON.stringify(name)).join(", ")}; reuse one as work for a further step of it.` : "";
+}
+
 export const DEF_COORDINATE_BOTS = {
     name: "coordinate_bots",
     description: "Ask existing Sagax teammates for advice or assign concrete work. In a room it defaults to this room; use group_id from list_room_targets for a specific room. Outside a room, everything you send a teammate from this conversation goes to one thread with them and runs after anything still running there. Give 1-4 bot_ids: teammate ids as list_bots or your roster prints them; a unique teammate name also resolves: they see only what you send them and use their own model, tools and permissions. They can consult their specialists; all results return here and resume you automatically. Include exact file paths, constraints and what must be verified. After sending all assignments, END your turn; do not poll or wait. On return, resolve tradeoffs, verify the requested outcome and request concrete corrections if necessary before giving one final answer. Do not send acknowledgements as new work. A peer ack alone is not completed: set done_when or rework on failed(incomplete).",
@@ -55,6 +80,7 @@ export const DEF_COORDINATE_BOTS = {
       reply: { type: "string", enum: ["resume", "none"], description: "resume (default): the result resumes you. none: a one-way notice that is never awaited; nothing comes back and nothing resumes you." },
       done_when: { type: "string", minLength: 1, maxLength: 500, description: "Harness-checked criterion: tool:ask_choice and/or first_line:PASS|FAIL (join with \"; \"). Free text is advisory. Unmet or a work-mode ack-only reply ends failed(incomplete)." },
       default_answer: { type: "string", minLength: 1, maxLength: 1000, description: "Optional answer the harness applies if the person never replies to a question this work parks on them (R6). When used, the run resumes with a note that it was the requester's default. Leave out to expire the wait as status expired after the delay (and a mid-delay push reminder)." },
+      ...WORK_LABEL_PARAMS,
     }, required: ["bot_ids", "message"] },
   };
 
@@ -92,6 +118,7 @@ export const DEF_SEND_TO_BOT = {
       priority: { type: "string", enum: ["now", "normal"], description: "now wakes an idle recipient at once or moves this to the front of its queue. It never interrupts a running turn. Default normal. At most 10 now sends per sender per hour; past that it is delivered as normal." },
       notify: { ...BOT_NOTIFY_PARAM, description: "Default true. false: the teammate's reply there is shown and unread, but no desktop notification or phone push." },
       reply: { type: "string", enum: ["none", "resume"], description: "Default none: read it with send_status. resume: wake this conversation with a short summary when the recipient finishes." },
+      ...WORK_LABEL_PARAMS,
     }, required: ["bot_id", "title", "message"] },
   };
 
@@ -526,6 +553,7 @@ export async function callCoreTool(name: string, args: Json, context: ToolCallCo
       ...(canonical.reply === "resume" || canonical.reply === "none" ? { reply: canonical.reply } : {}),
       ...(doneWhen ? { doneWhen } : {}),
       ...(defaultAnswer ? { defaultAnswer } : {}),
+      ...workLabelArgs(canonical),
     }) });
     // V4: "already completed" arrives as 200 with message/receipts, never as
     // a red error. A real refusal still carries error and stays isError.
@@ -566,6 +594,7 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
       title, message, depth: context.depth, oneWay: true, notify: botNotifyArg(args.notify),
       ...(asked === "now" || asked === "normal" ? { priority: asked } : {}),
       ...(resume ? { reply: "resume" } : {}),
+      ...workLabelArgs(args),
     }) });
     if (r.error) return { text: `Couldn't send to that bot: ${String(r.error)}`, isError: true };
     const destination = `@${String(r.botName ?? "that bot")} in "${String(r.title ?? title)}" [thread id: ${String(r.threadId ?? "")}]`;
@@ -583,7 +612,7 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
     const after = resume
       ? " Its result stays in that thread; when the recipient finishes, a short return line resumes you here."
       : " Its result stays in that thread and will not resume you: read it later with send_status.";
-    return { text: `${state}${note}${after}${handle}` };
+    return { text: `${state}${note}${after}${openWorkLine(r)}${handle}` };
   }
   if (name === "list_bots") {
     const r = await api(`/api/internal/agents?self=${encodeURIComponent(BOT_ID)}`);

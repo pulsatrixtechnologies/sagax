@@ -943,3 +943,24 @@ Covered by `shared/bot-task-list.test.ts` and `server/bots/bot-task-list.test.ts
 - Tests: `ActivitySection.team-work.dom.test.ts`, `TeamWorkSection.dom.test.ts`,
   `src/lib/team-work.test.ts`, `CodingChat.step.dom.test.ts`,
   `ChatView.team-note.test.ts`. Captures: `node scripts/capture/team-work.mjs`.
+
+
+## Orchestrator work view: names, steps and plan (2026-11-10, #3463, lot 3 of #3451)
+
+- `coordinate_bots` and `send_to_bot` take three optional fields: `work`
+  (the piece of work this hand-over is a step of), `step` (its own name) and
+  `plan` (the work's steps in order, `{ step, bot? }`). The routes turn them
+  into one `TeamWorkLabel` (`server/team-work/work-label.ts`: one line each,
+  80, 40 and 12, secrets redacted, a plan bot resolved like `bot_ids`, an
+  unknown one left out, nothing refused) stored as `Assignment.work` through
+  the coordinator's `extra`. Display only.
+- `buildTeamWork` (`shared/team-work.ts`): hand-overs with the same name
+  (trim, single spaces, case) are one piece of work; a step shows its `step`
+  name, else its title. With a declared plan (the latest wins) the total is
+  the plan's steps plus each hand-over outside it, a plan step is done when
+  one of its hand-overs completed, and the plan steps not handed out yet are
+  `toCome`; a piece of work is finished when no step is live and nothing is
+  to come. No plan: the total is what was handed out, as before.
+- Each hand-over's answer carries `openWork`, the names of the person's
+  open pieces of work of that bot (none from a confidential conversation),
+  so the next call can reuse a name (`openWorkEcho`).

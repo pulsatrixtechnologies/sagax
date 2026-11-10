@@ -3,7 +3,7 @@ import { fitsOnOneLine } from "../../shared/bot-profile.ts";
 import { signTurnHandle } from "../agent-api.ts";
 import { parseAutoComputerTarget } from "../computer/auto-computer.ts";
 import type { HandoffView } from "../coordinator.ts";
-import { PEER_ACCESS_HELP, canAccessBot, peerAllowed, peerInScope } from "../peers/peer-roster.ts";
+import { PEER_ACCESS_HELP, canAccessBot, peerAllowed, peerInScope, resolveTeammate } from "../peers/peer-roster.ts";
 import { planPriorityWake, parseWakePriority, releasePriorityNow } from "../proactive/priority-wake.ts";
 import type { Message } from "../store.ts";
 import { CONFIDENTIAL_PEER_REFUSED } from "../threads/confidential-threads.ts";
@@ -11,6 +11,8 @@ import { resumeOpening, resumeRefusal, subagentRequest } from "../threads/subage
 import { MAX_COMMS_DEPTH, type InternalRoomsCall } from "./internal-rooms-types.ts";
 import { PASS } from "./table.ts";
 import { sendStateOf } from "../../shared/send-receipt.ts";
+import { openWorkEcho } from "../team-work/team-work.ts";
+import { workLabel } from "../team-work/work-label.ts";
 
 export async function handleInternalThreads(call: InternalRoomsCall): Promise<typeof PASS | void> {
   const {
@@ -282,7 +284,10 @@ export async function handleInternalThreads(call: InternalRoomsCall): Promise<ty
     : {};
   const address = { ...(owner.group ? { groupId: owner.group.id } : {}), threadId: fromThreadId, botId: from.id };
   const destination = { threadId: task.threadId, botId: target.id };
-  const extra = wakePlan.reported === "now" ? { priority: "now" as const } : {};
+  // #3463: the piece of work, the step and the plan the sender named; a
+  // bot named in the plan resolves like coordinate_bots' bot_ids
+  const label = workLabel(body, (raw) => { const found = resolveTeammate(store.bots, from, raw); return "id" in found ? found.id : undefined; });
+  const extra = { ...(wakePlan.reported === "now" ? { priority: "now" as const } : {}), ...(label ? { work: label } : {}) };
   let node: HandoffView;
   try {
     node = pollOnlyCaller(internalCapability)
@@ -360,5 +365,8 @@ export async function handleInternalThreads(call: InternalRoomsCall): Promise<ty
     ...(oneWay ? { handle } : {}),
     ...(resumeSender ? { reply: "resume" } : {}),
     ...priorityFields,
+    // the names of the open pieces of work, so the next send reuses one
+    ...(pollOnlyCaller(internalCapability) ? {} : openWorkEcho(coordinator.handedOutBy?.bind(coordinator), from.id, joinPerson(fromThreadId),
+      (threadId) => store.isConfidentialThread(threadId))),
   });
 }

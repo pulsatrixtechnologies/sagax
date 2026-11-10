@@ -454,7 +454,7 @@ if (!result.ok && !result.needsInput && !result.continue && this.closing) return
       status: "queued", level, levelSource: source, executions: 0, restarts: 0, createdAt: now, lastActivityAt: now, result: "",
       rework: Boolean(req.rework), ...(req.approved !== undefined ? { approved: req.approved } : {}),
       ...(req.batchKey !== undefined ? { batchKey: req.batchKey } : {}), ...(req.relay ? { relay: true } : {}),
-      ...(req.priority ? { priority: req.priority } : {}), version: 1,
+      ...(req.priority ? { priority: req.priority } : {}), ...(req.work ? { work: req.work } : {}), version: 1,
     };
     const person = root ? root.person : req.person;
     if (person) node.person = person;

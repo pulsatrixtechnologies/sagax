@@ -8,6 +8,7 @@ import type { HandoffView } from "../coordinator.ts";
 import type { ApprovalBus } from "../peers/peer-approval.ts";
 import type { RosterMember } from "../peers/peer-roster.ts";
 import type { RoomPostBudget } from "../rooms/room-post-budget.ts";
+import type { HandedOver } from "../runtime/coordinator-types.ts";
 import type { RelayEngine } from "../run-with-engine.ts";
 import type { Message } from "../store.ts";
 import type { InternalCapabilityView, InternalRouteContext } from "./internal-route.ts";
@@ -90,6 +91,8 @@ export interface InternalRoomsCoordinator {
   enqueueExternal(...args: unknown[]): { node: HandoffView };
   tick(): void;
   active(): Array<{ status: string; botId: string; id: string; priority?: string }>;
+  /** #3463: the work this bot's turns handed out (the open names echoed). */
+  handedOutBy?(botId: string, since: number): HandedOver[];
 }
 
 export interface InternalRoomsDeps {

@@ -27,6 +27,9 @@ import {
   type RosterMember,
 } from "../peers/peer-roster.ts";
 import { requiresDecisionCard } from "../runtime/done-when.ts";
+import type { HandedOver } from "../runtime/coordinator-types.ts";
+import { openWorkEcho } from "../team-work/team-work.ts";
+import { workLabel } from "../team-work/work-label.ts";
 import { botTurnLimit, COORDINATE_MESSAGE_MAX_CHARS } from "../../shared/turn-limits.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { queuedThreadPosition } from "../turns/steer-queue.ts";
@@ -93,6 +96,7 @@ export interface InternalBotChatStore {
   activePath(threadId: string): ReadonlyArray<{ turnSucceeded?: boolean; at?: number }>;
   appendMessage(threadId: string, message: Record<string, unknown>): unknown;
   messagesFor(threadId: string): readonly InternalBotChatMessage[];
+  isConfidentialThread?(threadId: string): boolean;
   createTask(...args: unknown[]): { threadId: string; title: string } | null | undefined;
   deleteTask(botId: string, threadId: string): void;
   workThread(botId: string, fromBotId: string, fromThreadId: string): { threadId: string; title?: string } | null | undefined;
@@ -107,6 +111,8 @@ export interface InternalBotChatCoordinator {
   status(id: string): AssignmentStatusView | undefined;
   poll(owner: { botId?: string; threadId?: string; runId?: string }): unknown;
   outstandingFor(threadId: string): Array<{ id: string }>;
+  /** #3463: the work this bot's turns handed out (the open names echoed). */
+  handedOutBy?(botId: string, since: number): HandedOver[];
 }
 
 /** One row of the runtime's status read (runtime/coordinator-types StatusView). */
@@ -693,6 +699,10 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
       // the thread it opens carries the call's title, in the named folder.
       title: z.string().trim().min(1).max(80).optional(),
       projectId: z.string().min(1).max(128).optional(),
+      // #3463: the piece of work, the step and the plan, read by workLabel
+      work: z.unknown().optional(),
+      step: z.unknown().optional(),
+      plan: z.unknown().optional(),
     }).safeParse(await readInternalBody());
     if (!parsed.success) return json(res, 400, { error: `Provide 1-4 distinct botIds and a message of 1-${COORDINATE_MESSAGE_MAX_CHARS} characters.` });
     const oneWay = parsed.data.reply === "none";
@@ -723,6 +733,8 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
       botIds.push(resolved.id);
     }
     if (new Set(botIds).size !== botIds.length) return json(res, 400, { error: "bot_ids name the same teammate twice — send each teammate once" });
+    // A bot named in the plan resolves like bot_ids; one that does not is left out.
+    const label = workLabel(parsed.data, (raw) => { const found = resolveTeammate(store.bots, internalSender, raw); return "id" in found ? found.id : undefined; });
     // Outside a room the work lands in this conversation's work thread
     // with the teammate, opened below when there is none: never the
     // teammate's selected thread, which may be confidential
@@ -848,7 +860,7 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
           parsed.data.doneWhen,
           // The request the root answers: one request, one root (I11).
           coordinationRequestId?.(address.threadId) ?? directRequestOwners.get(address.threadId)?.messageId,
-          parsed.data.defaultAnswer ? { defaultAnswer: parsed.data.defaultAnswer } : {});
+          { ...(parsed.data.defaultAnswer ? { defaultAnswer: parsed.data.defaultAnswer } : {}), ...(label ? { work: label } : {}) });
         // A repeat lands on the request already made, possibly in a
         // thread the person archived meanwhile; a thread opened for it
         // is never used.
@@ -945,6 +957,9 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
           : notSentNotes.join("; ") || "Already completed." }
         : { error: refused.join("; ") }),
       ...(EXTERNAL && sent ? { rootId: generation } : {}),
+      // the names of the open pieces of work, so the next call reuses one
+      ...(EXTERNAL || !sent ? {} : openWorkEcho(coordinator.handedOutBy?.bind(coordinator), internalSender.id, joinPerson(address.threadId),
+        (threadId) => store.isConfidentialThread?.(threadId) === true)),
     });
   }
   return PASS;

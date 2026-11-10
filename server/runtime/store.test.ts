@@ -251,6 +251,21 @@ describe("runtime store", () => {
     expect(store.events("broken")).toEqual([]);
   });
 
+  it("round-trips the name of the work a hand-over is a step of, and a row without it reads as before (#3463)", () => {
+    const store = open();
+    const root = assignment("root", { status: "running" });
+    store.insert(root, { kind: "enqueued" });
+    const named = child("named", root, { work: { name: "Login fix", step: "Write the fix", plan: [{ name: "Write the fix", botId: "builder" }, { name: "Review" }] } });
+    const plain = child("plain", root, { createdAt: 2_000 });
+    store.insert(named, { kind: "enqueued" });
+    store.insert(plain, { kind: "enqueued" });
+    expect(store.get("named")).toEqual(named);
+    expect(store.get("named")?.work).toEqual({ name: "Login fix", step: "Write the fix", plan: [{ name: "Write the fix", botId: "builder" }, { name: "Review" }] });
+    expect(store.get("plain")).toEqual(plain);
+    expect(store.get("plain")).not.toHaveProperty("work");
+    expect(store.handedOutBy("chief", 0).find((row) => row.id === "named")?.work?.name).toBe("Login fix");
+  });
+
   it("refuses a row that no longer matches the record schema", () => {
     const store = open();
     store.insert(assignment("ok"), { kind: "enqueued" });

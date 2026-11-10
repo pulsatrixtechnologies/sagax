@@ -16,8 +16,9 @@
 // TEAM_SILENT_MS old), silent for N min, waiting (to start, on the
 // person's answer, on the computer, on another bot), idle.
 //
-// Every figure comes from a record: steps done over steps handed out, the
-// time the steps ran, the tokens of their settled turns. Ids ride for keys
+// Every figure comes from a record: steps done over steps handed out (or
+// over the plan the orchestrator declared, #3463), the time the steps
+// ran, the tokens of their settled turns. Ids ride for keys
 // and for opening a step's chat, never for the screen.
 
 /** An open turn with no event and no tool call in flight for this long reads silent. */
@@ -30,6 +31,23 @@ export const TEAM_WORK_STEPS_SHOWN = 8;
 export const TEAM_NOTE_CHARS = 280;
 /** Writes to the same step's thread within this long fold into one note. */
 export const TEAM_NOTE_BURST_MS = 2 * 60_000;
+/** The name of a piece of work the orchestrator gives, at most (#3463). */
+export const TEAM_WORK_NAME_CHARS = 80;
+/** The name of a step, at most. */
+export const TEAM_STEP_NAME_CHARS = 40;
+/** The steps of a declared plan, at most. */
+export const TEAM_PLAN_STEPS = 12;
+
+/** What the orchestrator says of a hand-over when it makes it (#3463,
+ * optional fields of coordinate_bots and send_to_bot), stored on the
+ * runtime row for display only: the piece of work it is a step of, the
+ * step, and the plan of that work (its steps in order, with the bot of
+ * each when known). One line each, secrets redacted. */
+export interface TeamWorkLabel {
+  name?: string;
+  step?: string;
+  plan?: TeamWorkPlanned[];
+}
 
 /** The runtime's own status of a hand-over (server/runtime/types.ts Status). */
 export type TeamStepStatus =
@@ -125,6 +143,12 @@ export interface TeamStepFacts {
   title: string;
   /** The name of the piece of work the orchestrator gave, when it gave one. */
   work?: string;
+  /** The step's own name the orchestrator gave (#3463): shown, and matched
+   * against the plan. Else the step is its title. */
+  step?: string;
+  /** The plan of the piece of work declared with this hand-over; the
+   * latest declared wins. */
+  plan?: readonly TeamWorkPlanned[];
   mode: "work" | "consult" | "notify";
   /** Work inside a room. */
   room?: boolean;
@@ -174,7 +198,7 @@ export interface TeamWorkStep {
   done: boolean;
 }
 
-/** A step of a declared plan that was not handed out yet (lot 3). */
+/** A step of a declared plan (#3463); in an item, one not handed out yet. */
 export interface TeamWorkPlanned {
   name: string;
   botId?: string;
@@ -253,7 +277,7 @@ function toStep(facts: TeamStepFacts, now: number): TeamWorkStep {
   const durationMs = facts.startedAt !== undefined ? Math.max(0, end - facts.startedAt) : 0;
   return {
     id: facts.id, botId: facts.botId, ...(facts.threadId ? { threadId: facts.threadId } : {}),
-    name: facts.title, status: facts.status, live: teamLive({ status: facts.status, ...(facts.turn ? { turn: facts.turn } : {}) }, now),
+    name: facts.step?.trim() || facts.title, status: facts.status, live: teamLive({ status: facts.status, ...(facts.turn ? { turn: facts.turn } : {}) }, now),
     createdAt: facts.createdAt,
     ...(facts.startedAt !== undefined ? { startedAt: facts.startedAt } : {}),
     ...(facts.finishedAt !== undefined && ended ? { finishedAt: facts.finishedAt } : {}),
@@ -265,20 +289,45 @@ function toStep(facts: TeamStepFacts, now: number): TeamWorkStep {
   };
 }
 
-function toItem(key: string, name: string, steps: TeamWorkStep[]): TeamWorkItem {
+/** Steps done and the total: a step done again by the same bot counts
+ * once. With a plan, each plan step counts once (done when one of its
+ * hand-overs is), plus each hand-over outside it; the plan steps with no
+ * hand-over yet are to come. */
+function tally(steps: readonly TeamWorkStep[], plan: readonly TeamWorkPlanned[] | undefined): { done: number; total: number; toCome: TeamWorkPlanned[] } {
+  const planned = new Map<string, { entry: TeamWorkPlanned; handed: boolean; done: boolean }>();
+  for (const entry of plan ?? []) {
+    const name = teamWorkName(entry.name);
+    if (name && !planned.has(name)) planned.set(name, { entry, handed: false, done: false });
+  }
+  const outside = steps.filter((step) => {
+    const slot = planned.get(teamWorkName(step.name));
+    if (!slot) return true;
+    slot.handed = true;
+    if (step.done) slot.done = true;
+    return false;
+  });
+  const slots = [...planned.values()];
+  return {
+    done: slots.filter((slot) => slot.done).length + new Set(outside.filter((step) => step.done).map(stepKey)).size,
+    total: slots.length + new Set(outside.map(stepKey)).size,
+    toCome: slots.filter((slot) => !slot.handed).map((slot) => ({ name: slot.entry.name, ...(slot.entry.botId ? { botId: slot.entry.botId } : {}) })),
+  };
+}
+
+function toItem(key: string, name: string, steps: TeamWorkStep[], plan?: readonly TeamWorkPlanned[]): TeamWorkItem {
   steps.sort((a, b) => a.createdAt - b.createdAt);
-  const done = new Set(steps.filter((step) => step.done).map(stepKey)).size;
-  const total = new Set(steps.map(stepKey)).size;
+  const { done, total, toCome } = tally(steps, plan);
   const live = steps.filter((step) => !teamStepEnded(step.status));
   const open = live.filter((step) => step.live.state === "working" || step.live.state === "silent");
   const current = open.sort((a, b) => (b.live.lastActionAt ?? 0) - (a.live.lastActionAt ?? 0))[0]
     ?? live.find((step) => step.status === "queued") ?? live[0];
-  const finished = live.length === 0;
+  // no live step and no plan step left to hand out
+  const finished = live.length === 0 && toCome.length === 0;
   const ends = steps.map((step) => step.finishedAt ?? step.createdAt);
   const endedAt = finished ? Math.max(...ends) : undefined;
   const updatedAt = Math.max(...steps.map((step) => Math.max(step.live.lastActionAt ?? 0, step.finishedAt ?? 0, step.startedAt ?? 0, step.createdAt)));
   return {
-    key, name, steps, toCome: [], done, total,
+    key, name, steps, toCome, done, total,
     durationMs: steps.reduce((sum, step) => sum + step.durationMs, 0),
     tokens: steps.reduce((sum, step) => sum + step.tokens, 0),
     ...(current ? { current: { botId: current.botId, stepId: current.id } } : {}),
@@ -293,7 +342,7 @@ function toItem(key: string, name: string, steps: TeamWorkStep[]): TeamWorkItem 
 /** The read model, from the hand-overs the server gathered. Pure. */
 export function buildTeamWork(input: TeamWorkInput): TeamWork {
   const { orchestratorId, now, since } = input;
-  const groups = new Map<string, { name: string; steps: TeamWorkStep[]; coding: boolean }>();
+  const groups = new Map<string, { name: string; steps: TeamWorkStep[]; coding: boolean; plan?: { at: number; steps: readonly TeamWorkPlanned[] } }>();
   for (const facts of input.steps) {
     if (!isTeamStep(facts, orchestratorId)) continue;
     const named = facts.work ? teamWorkName(facts.work) : "";
@@ -305,13 +354,15 @@ export function buildTeamWork(input: TeamWorkInput): TeamWork {
     }
     group.steps.push(toStep(facts, now));
     if (facts.coding) group.coding = true;
+    // the latest plan declared for a piece of work wins
+    if (named && facts.plan?.length && (!group.plan || facts.createdAt >= group.plan.at)) group.plan = { at: facts.createdAt, steps: facts.plan };
   }
   const live: TeamWorkItem[] = [];
   const doneToday: TeamWorkItem[] = [];
   for (const [key, group] of groups) {
     // only code work is listed; other hand-overs stay in the chat
     if (!group.coding) continue;
-    const item = toItem(key, group.name, group.steps);
+    const item = toItem(key, group.name, group.steps, group.plan?.steps);
     if (!item.finished) live.push(item);
     else if ((item.endedAt ?? 0) >= since) doneToday.push(item);
   }

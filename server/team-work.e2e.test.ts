@@ -98,3 +98,79 @@ it("lists a hand-over as a step with its live state, signals it, and tells the o
     await session.close();
   }
 }, 120_000);
+
+// #3463 (lot 3 of #3451): the orchestrator names the work, the step and the
+// plan when it hands work over. Two hand-overs with one name are one piece
+// of work (1/2, then 2/2); with a plan of three, two steps done read 2/3
+// with one step to come.
+it("groups the hand-overs of one named piece of work and counts its declared plan", async () => {
+  const session = await launchVerificationServer(process.env, undefined, undefined, undefined, undefined, { scripted: true }, []);
+  const cli = (...args: string[]) => runControlOmb(args, { env: { SAGAX_URL: session.info.url } }) as Promise<any>;
+  const api = (path: string, body?: unknown, method = "POST") =>
+    request(path, body === undefined ? {} : { method, body: JSON.stringify(body) }, session.info.url) as Promise<any>;
+  try {
+    const orc = (await cli("new-bot", "--name", "Orca", "--section", "Code")).bot;
+    const dev = (await cli("new-bot", "--name", "Devon", "--section", "Code")).bot;
+    const planPath = join(session.info.dataDir, "room-plan.json");
+    const gate = (name: string) => join(session.info.dataDir, `${name}.gate`);
+    const send = (title: string, message: string, label: Record<string, unknown>) =>
+      [{ tool: "send_to_bot", arguments: { bot_id: dev.id, title, message, ...label } }];
+    const releasePlan = [{ step: "Build", bot: "Devon" }, { step: "Test", bot: "Devon" }, { step: "Ship" }];
+    writeFileSync(planPath, JSON.stringify({
+      [orc.id]: { script: [
+        { key: "write", match: ["Start the login fix"], reply: "Handed out", steps: send("Write the fix", "Write the login fix.", { work: "Login fix" }) },
+        { key: "review", match: ["Now the review"], reply: "Handed out", steps: send("Review the fix", "Review the login fix.", { work: " login  FIX " }) },
+        { key: "build", match: ["Start the release"], reply: "Handed out", steps: send("Build", "Build the release.", { work: "Release", step: "Build", plan: releasePlan }) },
+        { key: "test", match: ["Now the tests"], reply: "Handed out", steps: send("Test", "Test the release.", { work: "Release", step: "Test" }) },
+      ] },
+      [dev.id]: { script: [
+        { key: "write", match: ["Write the login fix"], gateFile: gate("write"), reply: "Wrote the fix." },
+        { key: "review", match: ["Review the login fix"], gateFile: gate("review"), reply: "Reviewed." },
+        { key: "build", match: ["Build the release"], gateFile: gate("build"), reply: "Built." },
+        { key: "test", match: ["Test the release"], gateFile: gate("test"), reply: "Tested." },
+      ] },
+    }));
+    const work = async () => api(`/api/bots/${orc.id}/team-work?since=${Date.now() - 3_600_000}`, undefined, "GET");
+    const item = async (name: string) => {
+      const read = await work();
+      return [...(read.live ?? []), ...(read.doneToday ?? [])].find((candidate: any) => candidate.name === name);
+    };
+    const figures = async (name: string) => {
+      const found = await item(name);
+      return found ? `${found.done}/${found.total}${found.finished ? " finished" : ""}` : "none";
+    };
+    // each step's thread runs in a repository folder on the server: code work
+    const stepTasks = async () => ((await api("/api/bots", undefined, "GET")).bots.find((bot: any) => bot.id === dev.id)?.tasks ?? [])
+      .filter((task: any) => task.openedBy?.botId === orc.id);
+    const handOut = async (text: string, gateName: string, count: number) => {
+      await cli("send", "--bot", orc.id, "--task", orc.activeTaskId, "--text", text);
+      await expect.poll(async () => (await stepTasks()).filter((task: any) => task.cwd).length, { timeout: 30_000 }).toBe(count);
+      for (const task of await stepTasks()) if (task.cwd) mkdirSync(join(task.cwd, ".git"), { recursive: true });
+      return () => writeFileSync(gate(gateName), "go");
+    };
+
+    (await handOut("Start the login fix.", "write", 1))();
+    await expect.poll(() => figures("Login fix"), { timeout: 30_000 }).toBe("1/1 finished");
+    const review = await handOut("Now the review.", "review", 2);
+    // the second hand-over with the same name joins the first: 1/2 while it runs
+    await expect.poll(() => figures("Login fix"), { timeout: 30_000 }).toBe("1/2");
+    expect((await work()).live.filter((candidate: any) => candidate.name === "Login fix")).toHaveLength(1);
+    review();
+    await expect.poll(() => figures("Login fix"), { timeout: 30_000 }).toBe("2/2 finished");
+    expect((await item("Login fix")).steps.map((step: any) => step.name)).toEqual(["Write the fix", "Review the fix"]);
+
+    const build = await handOut("Start the release.", "build", 3);
+    await expect.poll(() => figures("Release"), { timeout: 30_000 }).toBe("0/3");
+    expect((await item("Release")).toCome.map((step: any) => step.name)).toEqual(["Test", "Ship"]);
+    expect((await item("Release")).toCome[0].botId).toBe(dev.id);
+    build();
+    await expect.poll(() => figures("Release"), { timeout: 30_000 }).toBe("1/3");
+    (await handOut("Now the tests.", "test", 4))();
+    await expect.poll(async () => (await item("Release"))?.steps?.every((step: any) => step.done), { timeout: 30_000 }).toBe(true);
+    const release = await item("Release");
+    expect(release).toMatchObject({ done: 2, total: 3, finished: false, toCome: [{ name: "Ship" }] });
+    expect(release.steps.map((step: any) => step.name)).toEqual(["Build", "Test"]);
+  } finally {
+    await session.close();
+  }
+}, 180_000);

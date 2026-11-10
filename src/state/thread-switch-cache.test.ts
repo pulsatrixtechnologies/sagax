@@ -126,4 +126,13 @@ describe("thread switching from the page cache", () => {
     expect(bot().switchPreview).toBeUndefined();
     expect(bot().threadId).toBe("one");
   });
+
+  it("ends a pending switch whose response carries no bot", async () => {
+    await act(async () => dispatch({ type: "switchTask", botId: "B", threadId: "two" }));
+    expect(bot().switchingTo).toBe("two");
+    await answer("/api/bots/B/tasks/two", {});
+    await vi.waitFor(() => expect(bot().switchingTo).toBeUndefined());
+    expect(bot().switchPreview).toBeUndefined();
+    expect(bot().threadId).toBe("one");
+  });
 });

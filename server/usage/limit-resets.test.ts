@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -241,6 +241,40 @@ describe("LimitResetClock", () => {
     const fixture = clock().instance;
     await fixture.refresh(true);
     expect(fixture.limit("claude")).toMatchObject({ usedPercent: 91, resetsAt: NOW + 5 * HOUR });
+  });
+});
+
+describe("LimitResetClock holds across a restart", () => {
+  it("keeps a hold and the time it began after a restart, including a hold saved without its start", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-limit-held-at-"));
+    try {
+      const file = join(dir, "limit-holds.json");
+      let now = NOW;
+      const codexAccounts = () => [{ id: "codex", name: "Codex", driver: "codex" as const, environment: {} }];
+      const boot = () => new LimitResetClock({ accounts: codexAccounts, now: () => now, file });
+      const saved = () => JSON.parse(readFileSync(file, "utf8")) as Record<string, { until: number; heldAt: number }>;
+      boot().noteRefusal("codex", NOW + 23 * HOUR);
+      expect(saved().codex).toEqual({ until: NOW + 23 * HOUR, heldAt: NOW });
+      now = NOW + 5 * 60_000;
+      const restarted = boot();
+      const room = codex([3, NOW + 4 * HOUR], [8, NOW + 5 * 24 * HOUR]);
+      restarted.noteUsage({ fetchedAt: iso(NOW - 30_000), providers: [room] });
+      expect(restarted.blockedUntil("codex"), "a cached read from before the refusal").toBe(NOW + 23 * HOUR);
+      restarted.noteUsage({ fetchedAt: iso(now), providers: [room] });
+      expect(restarted.blockedUntil("codex"), "only a turn that succeeds ends the hold").toBe(NOW + 23 * HOUR);
+      // A file an earlier version wrote names no start: the hold counts from this start.
+      writeFileSync(file, JSON.stringify({ codex: { until: NOW + 23 * HOUR } }));
+      now = NOW + 10 * 60_000;
+      const legacy = boot();
+      expect(legacy.blockedUntil("codex")).toBe(NOW + 23 * HOUR);
+      legacy.noteRefusal("grok", NOW + HOUR);
+      expect(saved().codex).toEqual({ until: NOW + 23 * HOUR, heldAt: now });
+      legacy.noteSuccess("codex");
+      expect(saved().codex, "a hold that ended is not brought back by the next start").toBeUndefined();
+      expect(boot().blockedUntil("codex")).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

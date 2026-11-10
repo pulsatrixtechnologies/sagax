@@ -36,6 +36,8 @@ export function createLimitResetHost(options: LimitClockOptions & {
   scopeAccounts?: (scope: string) => PlanAccount[];
   /** Whose clock a limit_reset routine waits on: the scope that pays its runs on its engine. Absent: the server's. */
   routineScope?: (routine: LimitRoutine, engine: string) => string;
+  /** Where a scope's clock keeps its refusals across a restart. Absent: memory only. */
+  holdsFile?: (scope: string) => string | undefined;
 }) {
   const clocks = new Map<string, LimitResetClock>();
   let started = false;
@@ -52,6 +54,7 @@ export function createLimitResetHost(options: LimitClockOptions & {
       loadUsage: options.loadUsage,
       ...(options.describe ? { describe: options.describe } : {}),
       now: options.now,
+      ...(options.holdsFile?.(key) ? { file: options.holdsFile(key) } : {}),
       waiting: () => options.routines().some((routine) =>
         waitingOn(routine) && routine.schedule.at === null && scopeOf(routine, routine.schedule.engine) === key),
       onChange: () => {

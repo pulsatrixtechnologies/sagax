@@ -6,7 +6,7 @@ import { dispatchRoutinesEffects } from "./dispatch-routines";
 import { startTransition } from "react";
 import type { Action, Bot, OptionCardData, TaskUpdatePatch } from "./model";
 import { openOnboardingCard, sendsToFreshTopic, pinBotThreadAction } from "./model";
-import { MESSAGE_PAGE_SIZE, api, persistTaskApproval } from "./api";
+import { MESSAGE_PAGE_SIZE, api, persistTaskApproval, retryRequest } from "./api";
 import { shouldSuppressDeployOutageError } from "@/lib/deploy-reconnect";
 import { readableError } from "@/lib/plain-error";
 import { approvalModeFor } from "../../../shared/approval-mode";
@@ -103,18 +103,18 @@ export function createStoreDispatch(ctx: StoreDispatchCtx): (action: Action) => 
       }).catch((error) => {
         showError(error);
         // Block sends until authoritative settings have been restored. Do
-        // not clear the failed write if reconciliation also fails or a newer
-        // write supersedes it: those settings are still unconfirmed.
+        // not clear the failed write while reconciliation fails (it is asked
+        // again until the server answers) or a newer write supersedes it:
+        // those settings are still unconfirmed.
         if (taskWrites.get(threadId) === pending) {
           pending.patch = {};
-          void api(`/api/bots?messages=${MESSAGE_PAGE_SIZE}`).then(({ bots }) => {
-            if (taskWrites.get(threadId) !== pending) return;
-            const bot = bots.find((candidate: Bot) => candidate.id === botId);
+          retryRequest(() => taskWrites.get(threadId) === pending, () => api(`/api/bots?messages=${MESSAGE_PAGE_SIZE}`).then(({ bots }) => {
+            const bot = taskWrites.get(threadId) === pending ? bots.find((candidate: Bot) => candidate.id === botId) : undefined;
             if (bot) {
               rawDispatch({ type: "botPatched", bot: withTaskWrites(bot) });
               taskWrites.delete(threadId);
             }
-          }).catch(() => {});
+          }));
         }
       });
       return promise;

@@ -7,7 +7,7 @@ export interface TeamBoardCard {
   repo: string; number: number; title: string; issueUrl: string;
   column: TeamBoardColumn;
   stage?: Exclude<TeamBoardColumn, "merged" | "blocked" | "todo">; // when blocked
-  holder?: { botId: string; name: string; threadId?: string };
+  holder?: { botId: string; name: string; threadId?: string; ref?: string };
   since?: number;
   pull?: { number: number; url: string; draft?: true; review?: "approved" | "changes_requested" | "required"; checks?: "failing" | "pending" | "passing" };
   blocked?: { source: "approval" | "turn" | "review" | "checks" | "conflict"; reason: string };
@@ -23,7 +23,7 @@ export interface TeamBoardCard {
   createdAt: number;
   /** The newest movement: the holder's last turn on it, the last commit, the last review, the pull request's update. */
   movedAt?: number;
-  stale?: { why: "no_movement" | "no_review"; days: number };
+  stale?: { why: "no_movement" | "no_review"; days: number; hours?: number };
 }
 export type TeamBoardStatus = "free" | "taken" | "running" | "waiting_you" | "waiting_review" | "waiting_release" | "released" | "blocked";
 export interface TeamBoardSummary { inProgress: number; waitingYou: number; blocked: number; mergedThisWeek: number; oldestInProgress?: { key: string; days: number } }

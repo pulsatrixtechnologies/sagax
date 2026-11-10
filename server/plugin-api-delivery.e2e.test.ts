@@ -231,7 +231,7 @@ it("delivers plugin skills on an API turn with tools, preserves bytes across swi
     expect(JSON.stringify(deniedReq.tools?.map((tool) => tool.function.name) ?? [])).not.toMatch(/skills_list/);
     expect(delivered(deniedReq).all).toContain("Unique bytes plugin-ship.");
     expect(delivered(deniedReq).all).not.toContain("plugins/packing/skills/plugin-ship/SKILL.md");
-    expect(delivered(deniedReq).all).toMatch(/\d+\/\d+ references; \d+ omitted/);
+    expect(delivered(deniedReq).all).toMatch(/\d+\/\d+ references(?: in full, \d+ by name below)?; \d+ omitted/);
     const deniedReceipt = await api("GET", `/api/bots/${bot.id}/capabilities`);
     expect(deniedReceipt.items.find((item: any) => item.form === "plugin" && /packing/i.test(String(item.name)))?.engine.skills).toBe("prompt");
     expect(Boolean(deniedReceipt.promptIndex)).toBe(true);

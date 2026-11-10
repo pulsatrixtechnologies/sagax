@@ -81,11 +81,14 @@ it("keeps every scope discoverable with authoring off and revokes stale library 
     expect(receipt.promptIndex.bytes).toBeLessThanOrEqual(receipt.promptIndex.maxBytes);
     // Prompt index counts unique delivered skills; the Me alias of the
     // assigned library skill shares the library row's delivery slot.
-    expect(receipt.promptIndex.skills + receipt.promptIndex.omitted).toBe(81);
+    // #3295: past the budget a reference is named, never dropped.
+    expect(receipt.promptIndex.omitted).toBe(0);
+    expect(receipt.promptIndex.skills + (receipt.promptIndex.named ?? 0)).toBe(81);
     expect(prompt.text).toContain("skills_list");
-    const omitted = rows.find((row) => row.enabled && !prompt.text.includes(JSON.stringify(row.path)));
-    expect(omitted).toBeTruthy();
-    expect((await api("GET", `/api/internal/workspace/read?path=${encodeURIComponent(omitted.path)}`, undefined, token)).status).toBe(200);
+    const namedOnly = rows.find((row) => row.enabled && !prompt.text.includes(JSON.stringify(row.path)));
+    expect(namedOnly).toBeTruthy();
+    expect(prompt.text).toContain(namedOnly.name);
+    expect((await api("GET", `/api/internal/workspace/read?path=${encodeURIComponent(namedOnly.path)}`, undefined, token)).status).toBe(200);
     expect((await api("GET", "/api/internal/skills?query=track", undefined, token)).body.skills[0].kind).toBe("command");
     for (const bad of ["-1", "NaN", "Infinity", "1.5"]) expect((await api("GET", `/api/internal/skills?offset=${bad}`, undefined, token)).status).toBe(400);
     expect((await api("POST", "/api/internal/skills/stage", { action: "create", source: "conversation", skill_md: skillText("should-not-write") }, token)).status).toBe(403);

@@ -43,6 +43,27 @@ function indexDescription(description: string): string {
   return chars.slice(0, CAPABILITY_DESCRIPTION_MAX_CHARS - 1).join("").replace(/\s+\S*$/, "") + "…";
 }
 
+/** The references past the full-entry budget, by name, grouped by kind,
+ * with the route to their instructions for this engine (#3295). File engines
+ * without managed reads get each path; a managed engine gets one skills_list
+ * route; an engine that can only read its prompt is told plainly which
+ * instructions it does not have. */
+function namedTail(rest: readonly CapabilityPromptFile[], inline: boolean, managed: boolean): string {
+  if (!rest.length) return "";
+  if (!inline && !managed) {
+    return "Also enabled, read the path with your file tools before matching work:\n"
+      + rest.map((file) => `- ${file.kind} ${file.name} (${JSON.stringify(file.path)})`).join("\n") + "\n";
+  }
+  const byKind = (["skill", "command", "agent"] as const)
+    .map((kind) => [kind, rest.filter((file) => file.kind === kind).map((file) => file.name)] as const)
+    .filter(([, names]) => names.length)
+    .map(([kind, names]) => `${kind}s: ${names.join(", ")}`);
+  const route = managed
+    ? "Also enabled, by name only (same standing as the references above; before matching work, call skills_list with the name, then workspace_read its path)"
+    : "Also enabled, instructions not in this prompt (they did not fit and this engine has no tool to read them; say so if a request needs one)";
+  return `${route}: ${byKind.join("; ")}.\n`;
+}
+
 export function capabilityPrompt(driverKind: string, groups: readonly CapabilityPromptGroup[], options: CapabilityPromptOptions = {}): {
   text: string;
   index: CapabilityPromptIndex;
@@ -53,32 +74,41 @@ export function capabilityPrompt(driverKind: string, groups: readonly Capability
   const inline = !engineWorksInFiles(driverKind) && !managed;
   const byCapability: Record<string, CapabilityPromptIndex> = {};
   const blocks: string[] = [];
+  let tailBytes = 0;
   for (const group of groups) {
     if (!group.files.length) continue;
     const heading = `\n\nCapability ${JSON.stringify(group.name)} (${inline ? "instructions" : "file index"}):\n`;
-    const notice = (shown: number) => `${shown}/${group.files.length} references; ${group.files.length - shown} omitted.\n`;
-    const body = (entries: readonly string[]) => heading + entries.join("\n") + "\n" + notice(entries.length);
+    const notice = (shown: number, named: number, omitted: number) => `${shown}/${group.files.length} references${named ? ` in full, ${named} by name below` : ""}; ${omitted} omitted.\n`;
+    const body = (entries: readonly string[], named = 0, omitted = group.files.length - entries.length) => heading + entries.join("\n") + "\n" + notice(entries.length, named, omitted);
     const entries: string[] = [];
+    const rest: CapabilityPromptFile[] = [];
+    let unreadable = 0;
     const parts = { skills: 0, commands: 0, agents: 0 };
     for (const file of group.files) {
-      if (entries.length >= CAPABILITY_PROMPT_MAX_FILES) break;
+      if (entries.length >= CAPABILITY_PROMPT_MAX_FILES) { rest.push(file); continue; }
       const text = inline ? file.read() : null;
-      if (inline && text === null) continue;
+      if (inline && text === null) { unreadable++; continue; }
       const entry = inline
         ? `${file.kind} ${managed ? file.path : JSON.stringify(file.name)}:\n<capability-file>\n${text}\n</capability-file>`
         : `- ${file.kind} ${file.name}: ${indexDescription(file.description)}${managed ? "" : ` (${JSON.stringify(file.path)})`}`;
       // Keep files whole. A large first file cannot starve smaller files
       // from this capability, nor the independently budgeted next one.
-      if (Buffer.byteLength(body([...entries, entry]), "utf8") > CAPABILITY_PROMPT_MAX_BYTES) continue;
+      if (Buffer.byteLength(body([...entries, entry]), "utf8") > CAPABILITY_PROMPT_MAX_BYTES) { rest.push(file); continue; }
       entries.push(entry);
       parts[`${file.kind}s`]++;
     }
-    const text = body(entries);
-    blocks.push(text);
-    byCapability[group.key] = { bytes: Buffer.byteLength(text, "utf8"), maxBytes: CAPABILITY_PROMPT_MAX_BYTES, skills: entries.length, maxSkills: CAPABILITY_PROMPT_MAX_FILES, omitted: group.files.length - entries.length, parts };
+    // #3295: the budget bounds full entries only. Every reference past it is
+    // still named, with the route to its instructions, so a growing pack never
+    // drops an enabled reference from the bot's view.
+    const budgeted = body(entries, rest.length, unreadable);
+    const tail = namedTail(rest, inline, managed);
+    tailBytes += Buffer.byteLength(tail, "utf8");
+    blocks.push(budgeted + tail);
+    byCapability[group.key] = { bytes: Buffer.byteLength(budgeted, "utf8"), maxBytes: CAPABILITY_PROMPT_MAX_BYTES, skills: entries.length, maxSkills: CAPABILITY_PROMPT_MAX_FILES, omitted: unreadable, ...(rest.length ? { named: rest.length } : {}), parts };
   }
   const rows = Object.values(byCapability);
   const omitted = rows.reduce((sum, row) => sum + row.omitted, 0);
+  const named = rows.reduce((sum, row) => sum + (row.named ?? 0), 0);
   // One heading and one closing note, outside the per-capability budgets:
   // how to read an indexed path, where the omitted references are, and a
   // partial scan.
@@ -97,8 +127,9 @@ export function capabilityPrompt(driverKind: string, groups: readonly Capability
   return {
     text, byCapability,
     index: {
-      bytes: Buffer.byteLength(text, "utf8"), maxBytes: rows.length * CAPABILITY_PROMPT_MAX_BYTES + Buffer.byteLength(header + footer, "utf8"),
+      bytes: Buffer.byteLength(text, "utf8"), maxBytes: rows.length * CAPABILITY_PROMPT_MAX_BYTES + Buffer.byteLength(header + footer, "utf8") + tailBytes,
       skills: rows.reduce((sum, row) => sum + row.skills, 0), maxSkills: rows.length * CAPABILITY_PROMPT_MAX_FILES, omitted,
+      ...(named ? { named } : {}),
       parts: { skills: rows.reduce((sum, row) => sum + (row.parts?.skills ?? 0), 0), commands: rows.reduce((sum, row) => sum + (row.parts?.commands ?? 0), 0), agents: rows.reduce((sum, row) => sum + (row.parts?.agents ?? 0), 0) },
       ...(options.incomplete ? { incomplete: true } : {}),
     },

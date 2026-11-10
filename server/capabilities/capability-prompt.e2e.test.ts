@@ -69,10 +69,12 @@ it("indexes personal and plugin references, then loads exact scoped instructions
     // Bodies, including oversized ones, no longer consume the index budget.
     const packing = receipt.items.find((item: { key: string }) => item.key === "plugin:me:packing@catalog");
     expect(packing).toMatchObject({ state: "on", promptIndex: { maxBytes: 4_000, maxSkills: 30 } });
-    const { skills: shown, omitted } = packing.promptIndex as { skills: number; omitted: number };
+    const { skills: shown, omitted, named = 0 } = packing.promptIndex as { skills: number; omitted: number; named?: number };
     expect(shown).toBeGreaterThan(20);
     expect(shown).toBeLessThanOrEqual(30);
-    expect(shown + omitted).toBe(36);
+    // #3295: past the budget, references are named, never dropped.
+    expect(omitted).toBe(0);
+    expect(shown + named).toBe(36);
     expect(receipt.items.find((item: { key: string }) => item.key === "skill:me:packing-list")).toMatchObject({ state: "on", promptIndex: { skills: 1, omitted: 0 } });
     const preview = JSON.stringify(await api("GET", `/api/bots/${bot.id}/system-prompt`));
     await control(["send", "--bot", bot.id, "--text", "Reply briefly."]);

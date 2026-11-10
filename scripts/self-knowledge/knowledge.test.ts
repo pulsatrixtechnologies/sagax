@@ -14,8 +14,8 @@ import type { KnowledgeBase, KnowledgeSection } from "../../server/self-knowledg
 import { availableTools } from "../../server/drivers/agents-catalog.ts";
 import { MCP_PERMISSIONS } from "../../server/mcp/mcp-permissions.ts";
 
-/** AGENTS.md notes left out of the committed base (see build.ts). */
-const AGENTS_NOTES_LEFT_OUT = new Set(["doc:AGENTS.md#misuse-guardrails-2026-10-12"]);
+/** Developer notes left out of the committed base (see build.ts; moved to docs/code/ by #3292). */
+const AGENTS_NOTES_LEFT_OUT = new Set(["doc:docs/code/security.md#misuse-guardrails-2026-10-12"]);
 
 const root = join(import.meta.dirname, "..", "..");
 const committed = JSON.parse(readFileSync(join(root, KNOWLEDGE_FILE), "utf8")) as KnowledgeBase;

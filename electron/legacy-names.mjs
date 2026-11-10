@@ -1,5 +1,5 @@
 // The names this app used before it was called Sagax, and how they are still
-// honored (AGENTS.md, "Legacy names kept for compatibility", says which stay
+// honored (docs/code/repository.md, "Legacy names kept for compatibility", says which stay
 // on purpose). One module for Electron main, the server and the CLI (the
 // server imports it from here, like data-dir-lease.mjs).
 //
@@ -339,7 +339,7 @@ export function hasTokenPrefix(value, kind) {
 
 // ── health ───────────────────────────────────────────────────────────────
 //
-// /api/health keeps `app: "openmausbot"` on purpose (AGENTS.md, "Legacy
+// /api/health keeps `app: "openmausbot"` on purpose (docs/code/repository.md, "Legacy
 // names kept for compatibility"): deployed health checks grep the body for
 // that word and older clients compare it exactly. `product: "sagax"` is the
 // new name.

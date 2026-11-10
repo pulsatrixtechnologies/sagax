@@ -13,7 +13,7 @@
 //     (a person's server saved before #695 under such a name is no longer
 //     mounted either).
 // A server an older build saved under a reserved name is never mounted and
-// is listed apart with a rename (docs: AGENTS.md "Reserved MCP server names").
+// is listed apart with a rename (docs: docs/code/capabilities.md "Reserved MCP server names").
 
 /** Names Sagax mounts itself or that collide with a built-in tool. */
 export const RESERVED_MCP_NAMES: ReadonlySet<string> = new Set([

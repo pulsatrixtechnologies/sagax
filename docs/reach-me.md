@@ -85,5 +85,5 @@ The reply reaches Sagax through the Perspicax Voice inbound route
 (`POST /api/org/telephony/inbound`), which hands it to `reachMeSmsReply`
 (`server/reach-me/inbound.ts`) before the bot's phone triggers.
 
-Developer notes: `AGENTS.md`, "Reach me: one setting per bot to reach the
+Developer notes: `docs/code/reach.md`, "Reach me: one setting per bot to reach the
 person outside the app".

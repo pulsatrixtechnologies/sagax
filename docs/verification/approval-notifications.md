@@ -5,7 +5,7 @@ tracks physical-device checks that the simulator cannot show: question
 choice buttons on the banner, silent removal once the ask is answered
 elsewhere, and the Watch layout. The contracts themselves landed in
 [#1681](https://github.com/pulsatrixtechnologies/sagax/pull/1681). Product
-rules: AGENTS.md "Approval notifications on the phone and the watch".
+rules: `docs/code/reach.md` "Approval notifications on the phone and the watch".
 
 This recipe automates what a Mac can prove without a phone, then lists the
 owner checklist for a real iPhone and Apple Watch. It does **not** claim

@@ -163,7 +163,7 @@ describe("local thread visibility", () => {
 
 describe("threads in Simple mode", () => {
   // Simple mode never hides threads the person chose; unset is the single
-  // stream in both modes (AGENTS.md, "Single stream is the default").
+  // stream in both modes (docs/code/chat.md, "Single stream is the default").
   it.each([
     [true, true, true],
     [true, false, true],

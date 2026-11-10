@@ -367,7 +367,7 @@ function withEnvironment(state, input, makeId) {
  * another would put one setup's state files under another's management. */
 function withLocalEnvironment(state, input, makeId, defaultDir) {
   // Server mode locks the app to its organization server: no local
-  // environment is registered while it is set (AGENTS.md "Launch flow").
+  // environment is registered while it is set (docs/code/apps.md "Launch flow").
   if (state?.serverModeId) return { ok: false, error: "server_mode" };
   const name = typeof input?.name === "string" ? input.name.trim().replace(/\s+/g, " ") : "";
   if (!name || name.length > MAX_NAME) return { ok: false, error: "name" };

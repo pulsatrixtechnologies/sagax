@@ -1,4 +1,4 @@
-// After `git merge upstream/main` (AGENTS.md, "Upstream sync"): remove every
+// After `git merge upstream/main` (docs/code/repository.md, "Upstream sync"): remove every
 // upstream path Sagax deleted on purpose (scripts/upstream-dropped.txt) that
 // the merge brought back. A path upstream changed since Sagax deleted it comes
 // back as a modify/delete conflict; `git rm` settles it as a delete.

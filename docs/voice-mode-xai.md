@@ -96,7 +96,7 @@ defaults. Server and client changes must both be delivered for identified
 OpenAI transcripts; an older server still uses ordered untagged results.
 
 Since 2026-10-29 OpenAI and ElevenLabs can be the voice too, picked per
-person and per bot, each falling back on the others (AGENTS.md, "Voice
+person and per bot, each falling back on the others (`docs/code/voice.md`, "Voice
 providers"). What follows is xAI's side, unchanged.
 
 Voice mode is the floating voice bar above the composer: the bot's name on

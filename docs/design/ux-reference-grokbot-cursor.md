@@ -13,7 +13,7 @@
 - Sources : captures privées de Grok Bot (macOS 0.78.1 et iOS, octobre 2026), mesures
   déjà faites (`docs/plans/grok-convergence-native-visual-audit.md`,
   `docs/plans/grok-convergence-interface-evidence.md`, audits iOS du 2026-10-17 et du
-  2026-10-26), les sections de design de `AGENTS.md`, et ce qu'on sait publiquement de
+  2026-10-26), les sections de design de l'ancien `AGENTS.md` (la section 8 depuis #3292), et ce qu'on sait publiquement de
   Cursor. Aucune capture, aucun texte ni aucun dessin de ces apps n'est copié ici : on
   décrit les patrons dans nos mots.
 
@@ -64,7 +64,7 @@ admin. On copie une façon de ranger, jamais une fonction en moins.
    flèches dans les listes, lettres pour répondre à une question, raccourcis visibles
    dans les menus et les info-bulles.
 8. **La personne voit seulement ce qui est à elle.** Pas de nom d'autre personne, pas
-   d'identifiant technique (jamais d'UUID, voir `AGENTS.md` « Never a UUID/GUID on
+   d'identifiant technique (jamais d'UUID, voir la section 8.8 « Never a UUID/GUID on
    screen »), pas de jargon d'outil.
 
 ### Panneau, vue ou popover : laquelle choisir
@@ -142,7 +142,7 @@ d'apps, puis une capsule de recherche large. Rien d'autre à l'écran.
 - Question du bot : une carte sous la bulle, même fond, question en gras, une rangée par
   réponse avec une touche lettre (A, B, C) arrondie ; plusieurs questions se suivent avec
   des points de pagination et des boutons pilule Précédent et Suivant. Réponse au clic ou
-  à la lettre. Voir `AGENTS.md` « One look for every interactive question ».
+  à la lettre. Voir la section 8.4 « One look for every interactive question ».
 - Carte épinglée au-dessus du compositeur (#3214, #3438) : tout ce que le bot attend
   de la personne, quel que soit le sujet où il l'a demandé (question à choix, question
   en mots, demande d'un travail confié, approbation), le plus ancien d'abord, « 1 sur N »
@@ -322,7 +322,7 @@ Permissions, Coffre, Utilisation et facturation, Mises à jour. Sagax a plus de 
 - Compte : avatar, nom, courriel avec un petit bouton copier, équipe sur une ligne grise ;
   Ajouter un compte et Se déconnecter en pilules grises à droite.
 - Un réglage trop long pour une carte ouvre une sous-page (retour, fil d'Ariane,
-  Échap revient à la section). Voir `AGENTS.md` « Settings layout ».
+  Échap revient à la section). Voir la section 8.5 « Settings layout ».
 - Recherche des réglages en tête de la colonne (Sagax).
 - Forme de l'écran (décision de JC, 2026-11-01) : comme la référence, les Réglages du
   bureau restent une grande fenêtre centrée sur l'app voilée, avec la colonne de
@@ -382,7 +382,7 @@ dessous (« écran de » suivi du nom du bot).
 - **Réveil** : même carte, même glyphe de robot générique atténué (animation
   discrète monochrome) et « Réveil en cours... ». Aucun bouton pendant ce temps.
   Le démarrage d'un ordinateur nuage dit « démarrage » tant que le pod attend
-  (voir `AGENTS.md` « Cloud computers »).
+  (voir `docs/code/computers.md` « Cloud computers »).
 - **En marche** : l'image vivante de l'écran remplit la carte. Au survol (focus clavier
   aussi), une pilule « Ouvrir » apparaît au centre, sur un léger voile ; un clic ouvre
   l'écran en grand pour regarder ou reprendre la main. Au toucher, un tap ouvre. *À
@@ -424,7 +424,7 @@ dessous (« écran de » suivi du nom du bot).
   pièces jointes), Quand (répétition, heures, jours, fuseau par sa ville, phrase vivante,
   trois prochaines exécutions), Où (bot, au nom de, où ça roule, publier le rapport).
   Puis « Plus d'options » replié et mémorisé. Enregistrer et Annuler collés au bas.
-  Voir `AGENTS.md` « Edit routine, Grok-simple » et « A routine's schedule in words ».
+  Voir `docs/code/routines.md` « Edit routine, Grok-simple » et « A routine's schedule in words ».
 - **Exécution** : un passage s'ouvre comme un échange (même forme qu'une conversation
   personne à bot) dans la colonne du fil, pas dans une fenêtre. En tête : état en une
   phrase (« Terminé · en 12 min »), Arrêter et Ouvrir la conversation à droite ; puis ce
@@ -500,7 +500,7 @@ boutons Réglages système appellent l'API du Mac (les permissions se donnent su
 
 **Pointeurs.** `shared/mac-messages-setup.ts`, `server/routes/messages.ts`,
 `src/components/plugins/MessagesSetupView.tsx`, `MacAppsView.tsx`,
-`ios/.../MacMessagesSetupView.swift`, `AGENTS.md` « Messages and lifecycle hooks ».
+`ios/.../MacMessagesSetupView.swift`, `docs/code/reach.md` « Messages and lifecycle hooks ».
 Galerie `src/gallery/mac-messages.html` (états off / ready / enabled / unavailable).
 
 ### 2.9 Coffre
@@ -578,7 +578,7 @@ cartes d'envoi ordinaires, pas cet onglet.
   2 bots »), la cible nommée (personne, fichier, site), le contenu cité coupé avec
   « Voir tout », puis trois réponses : Permettre une fois, Toujours permettre (avec la
   portée exacte écrite : ce bot, cet outil, cette cible), Refuser. Une approbation réglée
-  quitte le fil (le message reste stocké). Voir `AGENTS.md` « Always allow on every card »
+  quitte le fil (le message reste stocké). Voir `docs/code/approvals.md` « Always allow on every card »
   et « Settled approvals in the chat ».
 - Une approbation née sans la personne (routine, autre bot) le dit sur la carte et expire.
 - **Carte de choix d'un domaine de veilles** (#3457) : la carte compacte de l'approbation
@@ -606,7 +606,7 @@ renommer), Partager en pilule à droite, « … » pour le reste. Le compositeur
 pose sur la page avec le même texte (« Message » et le nom du bot). Contenu par défaut :
 grand titre, un paragraphe d'état daté, onglets texte soulignés avec compte, grille de
 statistiques (grand chiffre, libellé, une ligne de couleur seulement pour un état),
-cartes de graphiques sans ombre. Voir `AGENTS.md` « Page view » et « Bot content has a
+cartes de graphiques sans ombre. Voir `docs/code/pages.md` « Page view » et « Bot content has a
 default theme ».
 
 ### 2.13 Aperçu d'un fichier
@@ -1030,7 +1030,7 @@ quelles dans les habillages Pulsatrix, Studio et Atelier.
   haptique). Focus clavier : anneau de 2 px au jeton `focus`, toujours visible au
   clavier. Choisi : pilule ou carte remplie, jamais seulement une couleur de texte.
 - Désactivé : opacité réduite et une info-bulle qui dit pourquoi.
-- Barres de défilement en superposition, sans gouttière (`AGENTS.md` « Overlay
+- Barres de défilement en superposition, sans gouttière (section 8.7 « Overlay
   scrollbars »).
 
 ### Thème sombre
@@ -1108,9 +1108,927 @@ barre. Un point qui ne s'applique pas se dit, il ne se saute pas.
 ## 7. Comment étendre ce fichier
 
 - Ajouter une surface sous la section 2, au même format : bureau, puis iPhone, puis les
-  pointeurs vers `AGENTS.md` ou le code qui la tiennent.
+  pointeurs vers `docs/code/` ou le code qui la tiennent. Une règle d'apparence va dans la
+  section 8, sous sa surface ; `AGENTS.md` ne garde que les règles courtes.
 - Décrire, ne pas recopier : pas de texte d'interface tiers recopié en bloc, pas de
   capture de ces apps dans le dépôt, pas de chemin vers des captures privées.
 - Une mesure fine (taille en pt ou en px) dit d'où elle vient (audit daté) ; sinon,
   « à vérifier ».
 - Retirer « à vérifier » seulement après une observation directe, datée dans le texte.
+
+## 8. Règles d'apparence par surface
+
+Les règles d'apparence de `AGENTS.md` vivent ici depuis #3292, une section par
+surface. Le texte de chaque surface est la description du code, gardée en
+anglais telle qu'elle était. Une règle de cette section l'emporte sur une
+description de `docs/code/`. Toute PR d'interface lit cette section et passe la
+porte UX (section 6).
+
+### 8.0 Titre du bot
+
+- Partout où le nom d'un bot paraît avec son titre (accueil du chat neuf,
+  pastille d'en-tête, panneau du bot, groupe, Coding, profil, routines, barre
+  latérale, tuiles épinglées, rangées) : le nom, puis le titre dessous, plus
+  petit, en gris secondaire, en texte simple. Jamais « Nom · Titre » sur une
+  ligne, jamais de pastille, d'étiquette ni de contour (décision du
+  propriétaire, 2026-11-06, confirmée le 2026-11-07).
+- Un correctif de cet élément balaye toutes les surfaces qui le dessinent, pas
+  seulement celle de la capture.
+
+### 8.0 bis Pied de la barre latérale
+
+- Le pied est la même rangée que la rangée de profil du haut : avatar rond, nom
+  complet en poids normal, sans pastille de fond ; à droite, un bouton rond
+  séparé avec l'icône grille d'apps, qui ouvre Connect apps ; une mise à jour
+  en attente est un bouton rond du même genre. Pas d'animation au survol, pas
+  de logos qui se chevauchent (décision du propriétaire, 2026-10-27).
+- Le badge des routines actives est au bord droit de la rangée, centré, jamais
+  sous le nom.
+
+### 8.1 Barre latérale
+
+#### Sidebar look (owner's reference window, 2026-10-11 and 2026-10-12)
+
+The owner compared Sagax with an OpenMausBot window side by side and asked
+for the sidebar to look like it, keeping every Sagax feature; a second pass
+measured that window (a 2x capture) and matched it. The plus glyph,
+sentence-case headers and title-free rows are upstream main's own; the
+rest comes from that window (upstream main at 83c10b3 draws pinned bots as
+rows or bare circles and marks its Chief of Staff with a crown). Keep
+these, covered by `Sidebar.header.test.ts`, `Sidebar.head.layout.test.ts`,
+`Sidebar.simple-mode.test.ts`, `SidebarSectionHeader.test.ts`,
+`SidebarBotListItem.test.ts`, `PersonLabel.test.ts`, `PrimaryBot.test.ts`
+and `sidebar-logo-preferences.test.ts`:
+
+- Head: the round search and New (`Plus`) buttons, 36px circles 8px apart.
+  New still opens the compose-to picker (which holds Create new Bot). With a
+  title bar (macOS inset lights, or the browser's stand-in dots) and no
+  logo, they sit in the title bar's own 48px row (`SIDEBAR_TITLE_ROW`,
+  `pr-4`), level with the lights, and the tiles start right under. The logo
+  (Settings > Appearance > Sidebar logo) is off unless turned on (`"1"`);
+  with it on, or without a title bar, the brand row under the inset strip
+  holds them as before (`SIDEBAR_HEAD_ROW`, the chat header's 56px).
+- Pinned tiles (the Primary Bot among them when pinned): 95 x 115, 4px
+  apart and centred as a group, 12px under the head; a 64px mascot, the
+  name 12px in the primary ink, the bot's title as
+  plain secondary-grey text under the name, never a tag, a pill or an outline (the owner's rule of 2026-11-06; see "Titre du bot" in docs/design/ux-reference-grokbot-cursor.md). The
+  selected tile is a 16px card in `--color-sidebar-card` (7% of the rail's
+  ink over the rail: #222222 on Midnight). Sagax's wording stays: Primary
+  Bot, and the bot's own title.
+- The Primary Bot star (`PrimaryBotBadge`): a quarter of the avatar (16 on a
+  tile), tucked into the corner of the avatar's box, ringed in what it sits
+  on (the card colour on a selected tile), orange `#f48a29` in every skin
+  (`--color-primary-badge`, a deeper orange on the light rails, its disc
+  held to 3:1 on the rail in `scripts/check-skin-contrast.mjs`), never the
+  skin accent (#188 had made it grey or navy in some skins).
+- Section headers: the name in sentence case, 12px regular in the secondary
+  ink, 30px tall, a small chevron for fold state (`ChevronRight` folded,
+  `ChevronDown` open, `data-section-chevron`), then the attention marks; a
+  click folds and `aria-expanded` says which way. No item count (the My
+  Team reference keeps the name only; #1664 restored the chevron so a
+  folded section is not mistaken for an empty open one). The small
+  capitals rule (`.sidebar-section-label` uppercase) is gone; the class
+  stays as Hibou 98's hook.
+- Rows (comfortable): a 44px portrait at `pl-1`, 6px before the name, 56px
+  tall; the name 14px medium, the bot's title as
+  plain secondary-grey text under the name, never a tag, a pill or an outline (the owner's rule of 2026-11-06; see "Titre du bot" in docs/design/ux-reference-grokbot-cursor.md),
+  then the last message 13px. Group and people rows
+  share the inset and the 44px box (a room's stacked mascots fit inside
+  it), so every row's avatar and name start at one x in every density;
+  people rows keep their custom label (a Sagax feature upstream does not
+  have). A room is one conversation like a bot: no thread list under its
+  row and no thread picker in its header (unified chat: see "One conversation: THE rule"; the owner's rule of 2026-11-05, #2098). The row actions show on
+  hover or focus only, and on touch screens.
+- Midnight's rail secondary ink is `#fcfcfca1` (#a5a5a5 on the rail, the
+  window's preview and header grey); the default skin stays Pulsatrix.
+- iOS: the iPad desktop shell (`ios/App/Desktop/DesktopSidebar*.swift`,
+  `DesktopTheme.swift`) mirrors the head (no logo), tiles, and rows; its
+  section headers still show the folded item count (web uses the chevron
+  instead, #1664).
+
+#### Sidebar by window width (2026-11-01)
+
+Below 640px (`sm`) the sidebar is a drawer (`AppSidebar.tsx`: menu button,
+scrim; drawer classes are `max-sm:` only). From 640 to 767px it is the icons
+rail automatically; from 768px (`md`) the person's density. The automatic rail
+is drawn by `effectiveSidebarDensity` and never saved: no edge, no "full
+sidebar" toggle, ⌘B inert there; widening restores the saved density. Keep JS
+breakpoints (`SIDEBAR_DRAWER_BELOW`, `SIDEBAR_AUTO_RAIL_BELOW`) equal to the
+Tailwind ones, and room for the drawer button with `sm:` (not `md:`). The rail
+foot (`SidebarRailFoot`) is the wide foot stacked: update, routines, round
+apps grid, avatar. Tests: `src/components/AppSidebar.layout.dom.test.ts`;
+captures `node scripts/capture/sidebar-rail.mjs` (gallery
+`src/gallery/app-shell-sidebar.html`).
+
+#### Sidebar sections are personal
+
+On an organization server a sidebar section is one person's folder and
+shares nothing (2026-10-02). Keep these rules, covered by
+`src/lib/personal-sections.test.ts`, `server/rooms/section-channels.test.ts` and
+`src/components/bot-settings/SharingSection.test.ts`:
+
+- The sections live in the person's preference `sagax.sidebarSections.v1`
+  (`src/lib/personal-sections.ts`, synced per person through
+  `/api/me/preferences`); the sidebar overlays them on `bot.section` and
+  `group.section`, which it never writes in organization mode. A solo
+  server keeps the server's sections (one person).
+- The menu creates, renames, moves, folds and deletes; no members or
+  sharing item. A bot is shared from its own panel; a group has its people.
+- Unassigned (what is in none of my sections: my bots, bots shared with me,
+  groups, conversations with people) is always shown, on top. Deleting a
+  section puts its items back in Unassigned and never deletes anything.
+- When Settings > Appearance > Sidebar "Keep people apart" is on (the
+  default, `sagax.sidebarPeopleApart.v1`), unassigned conversations with
+  people sit in the automatic People section (`builtin:people`), next to
+  Unassigned's bots and groups. Personal sections stay free to mix a bot,
+  a group and a person. Off mixes people back into Unassigned (#1661).
+- Server: bots take no access from a section. At boot each legacy shared
+  section became bot grants once (`sectionShareGrants`, marker
+  `botSharesMigratedAt` in `section-channels.json`); the records stay and
+  rooms keep reading them. `PUT /api/org/sections/:id/members|bots` answers
+  410 `sections_are_personal`.
+
+#### Person panel and hidden sidebar entries
+
+A person of the organization opens in the right panel like a bot
+(`src/components/PersonPanel.tsx`, store `personPanelId`, action
+`openPersonPanel`): from a direct conversation's header or context menu, a
+group's person label, the group's People list and another person's name in
+a bot chat. It shows the directory's fields (name, login, email,
+avatar, role, teams), the groups the viewer shares with them, their bots the
+viewer already sees, Message, Close conversation, and for an admin "Manage in
+Perspicax": `GET /api/org/directory` adds `manageUrl`
+(`<issuer>/console/users/<sub>`) for admins only. The header reads, top to
+bottom: avatar, name, the title and points line (`data-member-line`), the
+label (`InlineEditableText`), then the buttons; the role line shows only for
+an administrator or a disabled account, never for a plain member. An admin also sees
+Connections for a person who is in the directory
+(`PersonConnectionsSection`): each MCP server, the GitHub connection and
+the plugins on that person's bots, with Remove and Remove all behind a
+confirm dialog. A member does not see that section. Nothing from a private
+thread. Hiding is per person and view-only (`src/lib/sidebar-hidden.ts`,
+key `sagax.sidebarHidden.v1`, synced by `/api/me/preferences` on an
+organization server): bots by id, groups by id, people by principal; still
+reached by search, the palette and the To: picker; a "Hidden (N)" row and
+Settings > Appearance show bots and groups back. A conversation with a
+person is not hidden but closed (menu "Close", panel "Close conversation",
+same `person:` entry): it simply leaves the sidebar and is listed nowhere
+(`hiddenSidebarRows` skips it; the "Hidden" category is for bots and
+groups). Selecting it again (person panel Message, To: picker, search, a
+nudge: `closedDmToReopen` in `Sidebar`) or any new unread message from the
+person brings it back, whatever the people setting says. A new unread
+message unhides groups by default, bots only when the person turns it on. Archive stays
+the bot-wide action. Tests: `src/lib/sidebar-hidden*.test.ts`,
+`src/lib/person-panel.test.ts`, `PersonPanel.test.ts`,
+`PersonConnectionsSection.test.ts`,
+`src/state/person-panel.reducer.test.ts`.
+
+#### Compact sidebar (the reference design parity, 2026-10-16)
+
+- No side thread: a thread never opens in a column beside the main chat,
+  and no row menu offers Open beside (unified chat: see "One conversation: THE rule"; the owner's rule of 2026-11-05, #2098).
+- Compact sidebar = icons density, the rail (`sidebar-preferences.ts`). The
+  head keeps no collapse button (2026-10-02); the rail's foot has the
+  pressed toggle back, Enter on the edge toggles, and the arrow keys walk
+  the rail (`src/lib/sidebar-rail.ts`). A working room wears the green dot
+  like a bot. Tests: `Sidebar.compact.test.ts`, `src/lib/sidebar-rail.test.ts`.
+
+### 8.2 Pied de la barre latérale et menu du compte
+
+#### Account menu
+
+Team map and Automations open from the account row at the foot of the
+sidebar (`SidebarProfileMenu`), in that order, with a hairline under the
+pair. Archived bots, when there are any, sit above the pair. Connected
+apps (puzzle) and Browse Bots (2x2 grid) stay rows above that row
+(`SidebarPlaces`) while Settings > Appearance > Sidebar shortcuts is on
+(2026-10-14, `src/lib/sidebar-shortcuts-preferences.ts`, per person in
+localStorage `sagax-sidebar-shortcuts`; Advanced mode only, Browse Bots not on
+a remote client). A person with no stored choice gets the old experimental
+switches' value once (`features.connectedApps` or `features.templates` on),
+written on first load. Each icon animates once on hover or keyboard focus
+(`.sidebar-place-icon` in `styles.css`), never under reduced motion. While the
+rows show, the account row drops the title and points line (`memberLine`);
+they stay on Settings > Achievements and in the person panel. There is no
+"Connect apps" pill (Connect apps is the round apps-grid button at the right
+of the row, "Sidebar foot" in the UX reference) and no Browse Bots experimental switch. Browse Bots opens
+the catalogue on its home view. The old Templates library is gone; New bot's "Browse templates",
+Connect apps' "Browse Bots" row and install links open the catalogue on its
+Templates section through `src/lib/templates-entry.ts`. Browse Bots is not in
+the composer To: menu, the mascot menu or the sidebar section menu. Your phone and Help Center are not in the menu.
+The phone stays in Settings and on the collapsed rail. Docs stay on About.
+The row is the avatar and the full name in normal weight with no background
+pill, the same row as the head's profile row (the owner, 2026-10-27). The
+active routines badge sits at the right edge of the row, centred, never
+under the name (`SidebarRoutinesBadge`): the routines icon (`CalendarClock`,
+as in the bot panel's Routines section) and the count of the viewer's active
+routines (`src/lib/active-routines.ts`: the Active switch on, not suspended,
+a next run still due, on a bot the viewer owns). The count opens Automations
+and follows routine frames live. At zero the badge is gone. A
+failed automation no longer dots the row: it tints the count red and keeps
+its dot on the Automations item in the menu; a place in the menu that asks
+for attention still dots the closed row. The guided tour's
+`tools` anchor sits on the places stack, or on the foot when that stack is
+empty. Tests: `SidebarProfileMenu.test.ts`, `SidebarProfileMenu.footer.test.ts`,
+`src/lib/active-routines.test.ts`, `Sidebar.header.test.ts`.
+
+The guided tour (`GuidedTour.tsx`) never starts by itself: not after the
+welcome flow, not on a new bot, not per version. It runs only when opened on
+purpose (Settings > General > App tour sets `tourOpen`) or when a tour the
+person had already begun is resumed after a reload (`tourInProgress`). The
+first-conversation spotlights (`FirstConversationTour.tsx`) are not mounted
+for the same reason. Tests: `GuidedTour.test.ts`, `guided-tour.test.ts`.
+
+### 8.3 Mascottes, formes et bots flottants
+
+#### Shapes set and eyes (2026-10-28)
+
+Decision (maintainer): the Shapes bodies are the bloub network's tables (MIT, NOTICE
+and `third_party/bloub`) plus our pumpkin, 32 in all (`MASCOT_SHAPES`). The
+first eight keep their stored ids; `LEGACY_SHAPES` maps the older ids. Picking
+the pumpkin sets the bot's color to orange where the skin paints the bot's
+color (`PUMPKIN_COLOR`).
+
+One source, one drawing (the "disassembled shape" fix, 2026-10-28):
+
+- `shared/mascot-geometry.json` is the only place a body (64 radii), its face
+  anchor, a move's body, the stem, the eyes, the sixteen faces and a skin's
+  base finish live. The web reads it (`shape-art.ts`, `shape-engine.ts`,
+  `skin-fx/shape-skins.tsx`); the phone reads `ShapeGeometryData.swift`,
+  generated from it by `ios-mascot-export.test.ts` (`UPDATE_IOS_MASCOT=1`).
+  `shared/mascot-geometry.test.ts` ties it to `MASCOT_SHAPES`, `SHAPE_SKINS`
+  and the faces. Never write a shape, an anchor or a skin finish elsewhere.
+- `shape-volume.ts` `drawShape` is the one drawing of a frame in a pose:
+  the outline bent with the resting turn only (`uprightPose`, always; a sway's
+  lean moves the gaze through `ShapeEngine.lean`, never the outline), the
+  eyes in the face's own group (same matrices as the outline, upright, one
+  level pair of one size, fitted inside the outline in the mood's style), the
+  slices and the face. React (`ShapeFrameSvg`) and the live loop
+  (`writeShape`, which writes every part every time, no memo) draw it alike.
+- A move never takes the body apart: no dot, no bar, eyes always on; what it
+  adds (thought dots, the exclamation mark, specks, rings, ribbons) is drawn
+  beside the body. A morph settles into the shape's own body, never the circle.
+- A near-white or near-black body keeps one hairline on its face and a tinted
+  side (`inkPaint.side`): no hairline on the slices (they drew grey rings).
+- Tests: `src/components/shape-set.regression.test.ts` (every shape, skin,
+  face, blink, gaze and move at five moments, resting and rolled: eyes inside
+  the face, slices touching it, the pair equal and level, back to rest);
+  `scripts/capture/shapes.mjs` (headless gallery of every scene into
+  `docs/screenshots/shapes`, the same checks on the browser's own layout, and
+  a pixel comparison to the references: run it on any PR that touches the
+  mascots, the sidebar or the headers, and `--update` the references when a
+  change is wanted); iOS `ShapeSetRegressionTests`, `ShapeEngineTests`,
+  `ShapeVolumeTests`. Gallery: `src/gallery/shape-set.html`.
+- The shape generator is out of the UX but kept: how to generate and add a shape is in `docs/design/shape-generator.md` (`scripts/generate-shape.mjs`).
+
+#### Floating bots and the desktop mascot
+
+A bot put "on the desktop" stands in its own transparent window
+(`electron/floating-bot-window.mjs`). The main app page stays the brain
+(`src/components/floating-bots/FloatingBots.tsx`, `brain.ts`): it sends each
+window a validated snapshot (pose, balloon, `task`, `mood`, `flyAway`,
+`liveliness`, `context`, `mascot` (the bot's look), `hints`) and receives clicks,
+typed text, `play`, `pet` and `mascot` events. Keep it that way: a floating
+window holds no session and calls no API. Changes under `electron/` need an
+Electron restart (no HMR); launch-test them before committing.
+
+- `clips.ts` holds every animation clip as a pure function of time;
+  `behavior.ts` is the state machine that picks them (scheduler.ts for idle
+  actions, with cooldowns and the activity level) and cross-fades them.
+  Nothing moves faster than about 4 Hz; reactions keep a minimum dwell.
+  Test new behavior there, not in the view.
+- Characters live in the registry `mascots.tsx` (id, family, label,
+  thumbnail, renderer, capabilities, the Appearance gallery's paint and
+  moves; optional `premium: { price }` and `isNew` badge its tile, none is
+  set yet); adding one is adding an entry. The desktop owl is the flat one (`Owl25D.tsx`, owl-art's own SVG
+  parts). A stored look `style` of `3d` still validates and is drawn flat.
+  The modeled 3D owl and three.js are gone (2026-10-11); a skin's material
+  finish (`skinFinish`) lives in `src/lib/owl/owl-skins.ts`.
+  `src/lib/floating-bots.test.ts` guards that nothing brings a 3D renderer
+  back.
+- `fit.ts` sizes the stage for the widest pose; `pilot.ts` moves the window
+  (flights, walks) through `floating-bots:geometry`, `move-to` and
+  `autopilot`; main clamps every move and never saves spots flown to.
+- Position anywhere: main keeps only the character's own box on screen
+  (`clampBodyToDisplays`), never the whole window: the page reports that box
+  (`floating-bots:body`, `bodyRectIn`), main uses `FLOAT_BODY` until it does
+  (kept equal to `homeBody` by the window-frame test), and the window's
+  transparent room may hang off a screen's edge (larger-than-screen windows,
+  put back after creation and show). A drag follows the pointer's own path
+  (`entry.drag`, so it crosses seams in small steps and loses no ground at an
+  edge). Spots are saved per display setup as the character's own corner
+  (`v: 2`; an older save reads as the window's corner); a restart puts it back
+  exactly, a setup that is gone falls back to the default spot. macOS undoes
+  a move that puts more than about a fifth of a window on a neighbouring
+  display: there the room stays within `SEAM_SHARE` (`keepOffNeighbours`),
+  geometry sends the `limits` and the chat's room opens away from the seam
+  (`sideWithin`). Measure with `node scripts/verify/dev/verify-mascot-desktop.mjs`
+  (corners of every display, the seam, a restart, the menu, the bubble,
+  the effects; screenshots next to the report).
+- Placement rules live in `placement.ts` (pure, `placement.test.ts`):
+  `placeChat` picks the chat's side from where the character stands (above
+  and left by default; below near the top, right near the left edge) and its
+  room on that display (60 % of its height at most); `effectSide` and
+  `effectLane` put the effects beside the character, never over it. The
+  window holds the chat's room on that side: `FloatingBotWindow` reads the
+  layout when the mascot comes to rest (a drop, a walk, the chat opening, a
+  display change) and, when the side flips, moves the window to its new
+  corner with `floating-bots:frame` (the page hidden for that frame, the box
+  it drew just before sent along), so the character never jumps.
+- The chat stays put (`window-frame.ts`): while the mascot is home the
+  window already holds the quick chat's room (`chatHomeSize`,
+  `FLOAT_HOME`), anchored on the character's bottom-right corner, so
+  opening and closing the balloon does not resize or move the window. The
+  balloon is drawn in that room, above the character, and scrolls. A grip
+  resize or a drag away grows the window in one step, and closing fits
+  back to that room rather than to the bare character. The away badge
+  still fits the window to itself. Drags move the window once a frame
+  (`setPosition`, one request in flight); main saves a spot once the window
+  stands still and only calls `setIgnoreMouseEvents`, `setFocusable` and
+  `focus` on a change. A focus that moved the window is put back on that
+  same turn. With the balloon open the mascot stays home (no
+  wander, no flight while its bot works), draws at 30 fps at most and the
+  skin's loops rest. Measure with `node scripts/verify/dev/verify-mascot-chat.mjs`
+  (isolated real Electron: open latency, window moves, clipped and dropped
+  frames, mascot jumps, position writes, the balloon's gap to the
+  character and click-through of the transparent parts, theme).
+- The balloon has no shield: dragged by its header it comes right up to
+  the character from any side (over the stage's empty room, touching its
+  box), never over it (`clampBalloon` in `Balloon.tsx`, `FACE_INSET` 0).
+  The quick chat keeps the width its window holds (288 px) unless the person
+  sizes it, grows in height up to the room on its display and then scrolls
+  (`balloonSize`), and slides back onto the display when the stage hangs off
+  the edge (`shift`). It wears the main chat's tokens and type (18 px
+  corners, 13 px on a 20 px line, the user bubble) and the app's composer row
+  at its scale: clip, field, model chip, voice button (Send once typed). The
+  clip and the chip are menu events (`attach`, `model`): main brings the app
+  forward and the brain opens that bot's own composer file picker or model
+  picker (`COMPOSER_ATTACH_EVENT`, `COMPOSER_MODEL_EVENT`). It opens and
+  closes with `useHeldMenuMotion` (the open played backwards). Only the part
+  of its offset away from the mascot grows the window; the part toward it is
+  a `translate` inside the window it has. It sits above the art (z-index 2),
+  under the effects (z-index 3).
+- Voice calls with the mascot reuse the app's call, never a second one: the
+  engine (`LiveCallEngine`) runs once in the app page (`CallEngineHost` in
+  App, for the bot `useOnCall()` names) and publishes the call
+  (`src/lib/voice-mode/live-call-store.ts`); the app's pill (`LiveCall`) and
+  the mascot only show and drive it. The mascot's call button (the balloon
+  composer's voice button, `hints.call`, and the menu's "call") starts that same call for its bot
+  (`mascot-call.ts`, `runMascotCallEvent`): one call at a time across app and
+  mascots (`lib/call.ts`). The brain sends `snapshot.call` (`FloatingCall`)
+  and the levels on their own channel (`floating-bots:level`, 20 Hz, rounded);
+  the window draws `MascotCall.tsx` (the pill under the mascot's feet, inside
+  the stage's room; the card where the balloon goes) and the mascot bounces
+  (`--fb-voice`) and leans in (`data-call`), never under reduced motion. The
+  microphone is the app page's (its permission), never the mascot window's.
+  Main sanitizes `call`, its events and their settings patches. Measured in
+  `verify-mascot-chat.mjs` (call leg); the app's call: `verify-voice-mode.ts`.
+- Mascot mode, slice 2 (ChatGPT Pets style). A plain click on the idle
+  character opens the chat balloon and never starts a call (the hover call
+  button and the hotkey do; `mascotClick` in `hover-controls.ts`: a press
+  that travels `DRAG_SLOP` is a drag, a long press or right click is the
+  menu, a double click opens the app, a click on a call never ends it). Hover controls (quick
+  chat, voice, activity) sit in the effects' lane (`MascotHoverControls`),
+  shown `HOVER_IN_MS` after the pointer arrives and kept `HOVER_OUT_MS`
+  after it leaves (`hoverControlsShown`), without a fade under reduced
+  motion. The bell opens the activity tray where the chat goes
+  (`MascotTray`, events `tray` and `work`): the brain builds it from the bot
+  panel's list (`loadBotActivity`, running only) and the approvals its
+  threads wait on (`tray.ts` `buildTray`); the window only sees opaque ids
+  (`a0`, `r1`, `TRAY_ID`), the brain keeps the thread and request and answers
+  through `decideRequest` or `interrupt`. During a call the status chip and
+  live captions (`captions.ts`: the person's words as heard, the bot's
+  sentence word by word at the voice's pace, three lines at most) stand beside
+  the character on the side the window holds room on (`MascotCaptions`);
+  the switch is `captions` in the call settings (Settings > Appearance). The
+  mascot's pose follows the phase (`callPose`).
+- The call hotkey (`electron/mascot-hotkey.mjs`, Control+Option+Space by
+  default, `HOTKEY_CHOICES`, Settings > Appearance) is registered with
+  `globalShortcut` only while the brain asks (setting on and a mascot shown,
+  `hotkeyConfig`), never twice, and let go when no mascot is shown, when the
+  main page goes and at quit. Main reports `tap`, `hold` and `release`
+  (`floating-bots:hotkey`); holds are read only on the mascot's push-to-talk
+  call, through a short-lived macOS probe of the chord's modifiers
+  (osascript, `NSEvent.modifierFlags`; elsewhere every press is a tap). The
+  brain decides (`hotkeyAction` in `hotkey.ts`): start the call with the
+  mascot's bot, mute or unmute, talk while held. Tests:
+  `electron/mascot-hotkey.node-test.mjs`, `hotkey.test.ts`,
+  `hover-controls.test.ts`, `captions.test.ts`, `tray.test.ts`; real Electron:
+  `node scripts/verify/dev/verify-mascot-desktop.mjs` (hover controls and click-to-call
+  legs, screenshots next to the report).
+- The desktop mascot's menu (right click, long press, the menu key or
+  Shift+F10) is main's native menu, popped exactly at the pointer
+  (`floating-bots:menu`, `menuPopupPoint`: the page's CSS pixels times its
+  zoom, kept inside the work area of the display under it); the drawn
+  `.fb-menu` stays for the in-app overlay and an older preload. Its items
+  come from the brain (`floatingMenu` in `brain.ts`): Talk, Start a voice
+  call, Open in Sagax; Switch bot (`switch:<botId>`) and Moves
+  (`move:<clip>`, the list of `moves.ts`, shared with the Appearance gallery);
+  Hide for 1 hour (`snooze`, `hiddenUntil`, the window reopens by itself) and
+  Put back in the window (`dock`); On the desktop (always on top, fly away, activity) and
+  Settings (Settings > Appearance). Items may be separators, greyed or one
+  level of submenu (`menuTemplate`). A move goes from main straight to that
+  window (`floating-bot:move`), never through the brain. A switch re-keys the
+  window in main (`floating-bots:rekey`): same mascot, same spot.
+- Effects (signs, thought dots, Zzz, hearts, sparkles, confetti, Trombi's
+  sparkle) are drawn in the lane beside the character (`.fb-fx[data-side]`),
+  never over it; add a new one there.
+- The floating cluster (the character and the pill hanging on it: the quick
+  input "Écrire à ...", or the call's pill) never goes under the macOS Dock,
+  the Windows taskbar, a Linux panel Electron reports in `workArea`, or off
+  screen (2026-10-13). The page reports the pill's box with the character's
+  (`setBody(rect, keep)`, `keepRectIn`); main keeps their union inside the
+  display's `workArea`, never `bounds` (`clusterBox`, `clampClusterToDisplays`),
+  on every drag step, at drag end, when the pill opens, on `display-added`,
+  `display-removed`, `display-metrics-changed` (the Dock resized or hidden,
+  scale or resolution changed) and on show. When the union is taller or wider
+  than every work area, the character stays inside and the pill may hang out.
+  Where the Dock is right under its feet the pill goes over its head instead
+  (`pillSide` in `placement.ts`, `layout.pill`), the reply's bubble stacked
+  above it. Linux: the same `workArea` clamp; click-through stays off (a
+  compositor that reports `workArea === bounds` does not hide its panel).
+  Positions stay in `floating-bot-positions.json`: per display setup as before
+  (`{x, y, v: 2}`, 32 keys, the shape older builds `slice(0, 32)`). Per-display
+  spots live in a second file, `floating-bot-display-spots.json`, keyed by
+  `displayIdentity` (`<id>@<origin>`, not size or scale; 64 keys, with `t`).
+  A mixed `display:` key left in the setups file is purged on load. Tests:
+  `electron/floating-bot-cluster.test.mjs`.
+- A sleeping mascot is unmistakable (2026-10-13): the stage carries
+  `data-asleep` when it naps or the brain's pose is `sleep` while it rests
+  (`mascotAsleep` in `sleep.ts`; never while dragged, walking or flying).
+  The shared layer dims the character and floats outlined "z Z" beside the
+  head; reduced motion keeps the glyphs still and the closed eyes. The crab
+  draws a closed-eye `asleep` face. Tests: `floating-bots/sleep.test.ts`.
+- The balloon wears the app's theme: the brain sends `theme` (the skin and
+  the brand accent, `theme.ts`, followed live) and the window stamps it;
+  Trombi keeps its Hibou 98 balloon whatever the theme.
+- Main retries a page that fails to load, reloads a dead or silent one, keeps
+  a state sent before its window exists, and logs the page's errors; the
+  window falls back to the plain owl rather than drawing nothing.
+- The character (owl, Shapes, Trombi, Bunbu, Shiba, Frog) and its look live with the bot
+  (`bot.mascotLook`, `shared/mascot-look.ts`, validated by the server), chosen
+  in the persona editor's Appearance gallery (`MascotLookEditor.tsx`) and
+  drawn by `BotAvatar` for every bot avatar in the app; never draw a bot's
+  mascot outside `BotAvatar`. By default the owl and its Common skins are
+  the bot's to wear. The gallery shows every other character on its To
+  unlock shelf, greyed with its achievement and progress: it can be
+  previewed, not worn. Shapes unlocks with a linked Grok account. Trombi
+  stays out of the gallery until its hidden command earns it (an easter egg
+  behind a secret achievement; do not write the command down). Bunbu and
+  every skin above Common unlock with their achievement. Every skin card
+  shows (2026-10-14): a locked one greyed with the padlock, not
+  selectable (`aria-disabled`, a click does nothing), its tooltip and label
+  naming the achievement that unlocks it. An earned skin unlocks its
+  character (Trombi excepted), worn in that skin. A locked reward stays out
+  of the app icon picker. What a bot already wears stays listed. The phone
+  follows the same rules from the server's reward keys and has no Grok
+  detector of its own.
+- Bunbu is an original character of ours (a collectible-vinyl little monster:
+  long paddle ears, gumdrop body, five small teeth, a tummy heart). It is
+  inspired by the designer-toy genre, never a copy of an existing one: keep
+  its silhouette, name and palette our own (no Labubu or Pop Mart design,
+  name, logo or packaging). Its parts are SVG paths in `bunbu-art.ts`
+  (`BunbuMascot.tsx`), its skins in `skin-fx/bunbu-skins.tsx` (shared
+  finishes from `shape-skins.tsx` plus Plush and Velvet); its signature ear
+  flop is the `ruffle` clip (the registry's `moveLabels`). iOS shows the owl
+  for it until ported (`ios/README.md`).
+- Shiba (direction C, "aplat net", approved by the maintainer on 2026-10-09) is an
+  original drawing: a front-facing cartoon dog in flat tones, no photo or
+  pose traced. Its art is data in `shiba-art.ts` (draw ops with paint roles,
+  sixteen faces with the Shapes ids, sit, stand and lie stances, the bust
+  under 48 px, the coat darkened when light so the cream mask reads); its
+  moves are pure functions of time in `shiba-moves.ts` (the fourteen shared
+  moves ported plus the dog's own, composed by `ShibaRig`, never run under
+  reduced motion). The CSS idle in `shiba-mascot.css` must keep its
+  transform origins scoped to `:not(.shiba-rig)`: an inline origin would
+  shift the rig's transform attributes. Its skins are palettes per role
+  (`skin-fx/shiba-skins.tsx`); strokes take the solid `lid` role, never a
+  gradient. It is a Mastery character: its unlocks are in
+  `shared/mascot-unlocks.ts` only. iOS draws it from the generated
+  `ShibaStillArt.swift` (`ios-mascot-export.test.ts`).
+- Frog (the smug sad frog, direction C, approved with the Shiba) follows the
+  same contract (docs/mascots.md): art as data in `frog-art.ts` (the head's
+  outline carries the eye domes, the lids and the lips carry the sixteen
+  faces, the brow layer stays empty), the skin a 24 % tint of the bot color,
+  moves as keyframe tracks in `frog-moves.ts` laid over the idle life as
+  changes from rest by `FrogRig` (so the breath and the blinks never stop),
+  the legs, the haunches, the arms and the pond redrawn by the loop only when
+  their quantized value changes. Its CSS origins are scoped to
+  `:not(.frog-rig)` like the Shiba's. A Mastery character: its unlocks are in
+  `shared/mascot-unlocks.ts` only. iOS draws it from the generated
+  `FrogStillArt.swift`.
+- Crab (the pixel-rect crab, a free default with the owl) follows the same
+  contract (docs/mascots.md): art as data in `crab-art.ts` (only
+  axis-aligned rectangles, a coral fill and two black square eyes), skins in
+  `skin-fx/crab-skins.tsx` (all common), moves as keyframe tracks in
+  `crab-moves.ts` laid over the idle life by `CrabRig`. Its CSS origins are
+  scoped to `:not(.crab-rig)`. Do not brand it Claude or Clawd. iOS draws it
+  from `CrabArt.swift` (hand-written rects, palettes fixture-checked).
+- Shapes: clean-room, 2026-10-08. The Shapes character matches the look
+  and behaviour the maintainer measured on a public avatar studio, written entirely in
+  our own code: no code, data table, path or asset of that site was copied
+  (it has no licence; do not open or paste from it). Facts matched: one SVG
+  body from 64 radii smoothed into a closed outline, radius unit R; eight
+  shapes (Circle, Heart, Squircle, Capsule, Triangle, Hexagon, Cloud,
+  Teardrop), each derived from our own figure (`shape-art.ts`: superellipse,
+  stadium, grown triangle and hexagon, five-circle union, two-circle hull,
+  parametric heart) and sliding into one another over 0.45 s; the clay finish
+  (the Clay skin, id `plain`: a light upper left to a darker rim in four
+  steps, 62% white, 20% white, the color, 40% near black); eyes as rounded
+  bars cut through the body (fill-rule evenodd, the page shows through),
+  placed on an imaginary head turned 28 and tilted 29 degrees,
+  foreshortened, pushed to the outline, kept inside it by our gaze solver,
+  an eye turning away fades (`shape-engine.ts`); sixteen faces and twelve
+  Clay colors (`shared/mascot-colors.ts` palette `clay`, cobalt #3b93f0)
+  blended over 0.45 s; idle wander on five slow loops, drift and breath on
+  3.4 s, blinks every 1.9 to 4.6 s (0.18 s, sometimes double); the face turns
+  toward the pointer (16 degrees sideways, 13 up or down, easing over
+  0.85 s, touch ignored); fourteen moves (`shape-moves.ts`: Thinking, Wink,
+  Wide eyes, Alert, Notification, Exclamation, Sleep, Egg, Hexagon, Play,
+  Orbit, Swirl, Burst, Comet) with our own 3D ring and ribbon generators.
+  Reduced motion draws the still pose and plays no move; avatars under 44 px
+  draw the still pose. The stored shape ids stay the ones the server and the
+  phone know (`bean` is the heart, `pill` the capsule, `pick` the triangle,
+  `drop` the teardrop); the five retired shapes map to the nearest one
+  (`LEGACY_SHAPES`). The Clay colors are new color names: the server needs
+  this build to save them, and the phone shows them only once ported
+  (`src/lib/mascot.test.ts` exempts them until then). Tests:
+  `src/components/shape-engine.test.ts`.
+- Bot colors live in `shared/mascot-colors.ts` (palettes Vivid, Pastel, Deep,
+  Neon, Neutral; the original fifteen ids keep their values) and every skin,
+  the owl's included (`OWL_SKIN_TIER`, `LEGACY_OWL_SKINS`), has a rarity. The
+  gallery's detail shows one palette and one rarity at a time
+  (`editor-tabs.ts`, covered by `editor-tabs.test.ts`); a renamed skin id
+  goes in the legacy table, never removed.
+- Per device:, the mood (`omb.floatingBots.mood.v1`, never punishing),
+  and the settings "Fly away during tasks" and "Activity level"
+  (`omb.floatingBots.prefs.v1`, Settings > Appearance and the right-click
+  menu). The bar under the mascot is the thread's context, from the chat
+  header's own figures. User docs: `apps/docs/content/docs/features/floating-bots.mdx`.
+
+### 8.4 Cartes et questions dans le chat
+
+#### One look for every interactive question (2026-10-20)
+
+The maintainer's capture: every question a bot asks looks the same. Under the bot's
+bubble, a separate card in the bubble's own fill (`bg-card`), 16px corners
+and padding, the bubble's width; the question in bold; one row per answer:
+a 22px rounded key (A, B, C, a lighter fill and a hairline) then the label
+in plain text. No outline, no filled buttons, no technical header, no Send
+for a one-pick question. A row lights up under the pointer, a click is the
+answer, the letter keys answer once the card has focus. Choose several:
+boxes in place of keys and a quiet send. An answer in words: one plain
+field (the "Other" row opens it). Once answered the card stays, the chosen
+row marked and the others dimmed (never folded into a line).
+
+- Web/desktop: `src/components/QuestionSheet.tsx` (`QuestionSheet`,
+  `SheetChoices`, `SheetKey`, `SheetField`, `picksInAnswer`). Used by
+  `QuestionCard` (AskUserQuestion and the engines' asks, also on the
+  Approvals screen), `OptionCard` (ask_person and flat asks, in a chat, a
+  room or a bot-to-bot thread) and a widget's one choice (`ChoiceRows` in
+  `widget/WidgetBody.tsx` shows the key in place of a radio ring).
+- iOS/iPad: `ios/App/Cards/QuestionSheet.swift`, used by
+  `QuestionCardView` and `FlatQuestionCardView` (a live flat ask; a
+  permission or a proposal keeps `CardView`). `AskQuestionAnswer.byQuestion`
+  and `.picks(in:labels:)` mirror `picksInAnswer`.
+- Gallery: `src/gallery/question-cards.html` (`?lang=fr&skin=midnight`);
+  the phone's `ios/parity/capture.sh cards` shows the same variants.
+- Tests: `QuestionSheet.test.ts`, `QuestionCard*.test.ts`,
+  `OptionCard.test.ts`, `WidgetChoiceList.test.ts`, `AskQuestionTests.swift`.
+
+#### Side cards on the chat's right edge (2026-10-19)
+
+The dev context pods (Environment, Context, Connectors, Changes) and the
+"This run" checklist above the composer are one column: same width, same
+right edge, same card. Both draw with `src/lib/side-card.ts` (`SIDE_CARD`,
+`SIDE_CARD_HEADER`, `SIDE_CARD_ICON_BUTTON`) and take their width from
+`railGeometry` (`src/components/dev-pods/DevPods.tsx`); the run card sits
+in `RailAligned`. No hard-coded width or radius on either side.
+
+### 8.5 Réglages
+
+#### Settings layout: one card level, sub-pages for long settings
+
+Every page uses the shared pieces of `SettingsPrimitives.tsx` (2026-10-18,
+The maintainer): `SettingsIntro` for the page's opening sentence (level with the
+title), `SettingsNotice` for its errors and messages (a one-row card),
+`SettingsGroup` (grey heading, one card of rows), rows with the row insets
+(`DescribedRow`, `CompactRow`, `SettingsTextRow`, `FieldRow`), `FIELD`,
+`PILL` and `PRIMARY_PILL`. No page-made cards, inputs or buttons.
+Settings draws one level of card: what sits inside a card is flat (no
+bordered box in a bordered box; `ManagedProfileIdentity flat` in General).
+A setting too long for a card gets a sub-page instead of a growing card
+(`src/components/SettingsSubPage.tsx`): the section shows a
+`SettingsSubPageRow` (title, one-line summary, Edit) and the page replaces
+the section with a back arrow and the breadcrumb "General > About me".
+Back, the breadcrumb and Escape return to the section (Escape is taken in
+the capture phase, so it never closes Settings from a sub-page). The open
+page is `appSettingsSubPage` in the store (`toggleAppSettings` with
+`subPage`; any other navigation clears it); register a page in `SUB_PAGES`
+in `SettingsModal.tsx`. About me is the first: a full-height editor that
+saves as you type, a character count (24,000 max, `server/config.ts`), a
+short guide with an outline, and the block bots read
+(`userProfileSystemPrompt`). Tests: `src/components/SettingsSubPage.test.ts`,
+`src/components/SettingsModal.serverMode.test.ts`.
+
+#### Settings split: Account, Security, Vault, Models, Voice (2026-10-28)
+
+Account keeps the account (who is signed in, name, photo, About me,
+language, time zone) and what General held (server, default bot, tours,
+Advanced). Security (`security`) holds the security keys, the approvals that
+need a key, the person's approval rules (`MyApprovalRules`, paged with
+`SettingsPager`, the Usage traces' pager) and My tool access. Vault
+(`credentials`, label Vault) holds the vault, the one-time card, purchases and
+1Password. Models (`engines`) keeps engines, every key, web search and
+images; Voice (`voice`) holds the person's voice keys, the microphone, the
+voice engine and Live calls. Nothing was removed and no right changed.
+`CARD_HOME` (`src/lib/settings-sections.ts`) sends an old link's card to its
+new page; the self-knowledge builder reads it too. Tests:
+`src/components/SettingsModal.splitPages.dom.test.ts`. Captures:
+`scripts/capture/settings-pages.mjs`.
+
+### 8.6 Skins, couleurs, bulles et icône
+
+#### Skins and contrast (2026-10-08)
+
+Skins are blocks of tokens in `src/styles.css` (`[data-skin="x"]`), listed
+in `src/lib/skins.ts`: Pulsatrix, Pulsatrix Light, Midnight, Atelier,
+Foundry, Lagoon, Graphite, Linen, Dusk, Daylight, Hibou 98 (`retro98`, plus
+its structural `src/styles/retro98.css`) and Meadow. Each skin is one mode
+(light or dark).
+
+##### Skin families (2026-10-19)
+
+Decision: "chaque skin devrait avoir ses propres variantes au lieu d'avoir des
+skins très proches visuellement". Settings > Appearance > Skin shows
+FAMILIES (`src/lib/skin-families.ts`), then the chosen family's Variant
+(swatches, like Background effects' Colour) and its Mode (Light, Dark,
+Auto: follows the system; a pill like Intensity). A variant in a scheme IS
+one of the skins above, unchanged:
+
+- Pulsatrix: Blue (`pulsatrix-light` / `pulsatrix`).
+- Studio: Neutral (`daylight` / `midnight`), Slate (`linen` / `graphite`),
+  Plum (`dusk`, dark only), Meadow (`meadow`, light only).
+- Atelier: Brass (`atelier` / `foundry`), Lagoon (`lagoon`, light only).
+- Hibou 98: its own family, secret as before, no variant or mode row.
+
+Storage: `omb-skin` still holds the worn skin id (CSS, the Windows caption
+overlay, the phone's "Same as my computer" and older builds read it as
+before), so every saved skin maps to itself with no migration step.
+`omb-skin-mode` = "auto" adds Auto: the first-paint script (`index.html`,
+`src/lib/skin-bootstrap.ts`, kept equal by `skin-families.test.ts`),
+`readSkin()` and `installSkinAutoFollow()` (main.tsx, live on a system
+change) swap a paired skin for the system's scheme; a variant with one
+scheme turns Auto off. `omb-skin-variants` remembers the last variant per
+family. Both travel with the person (`shared/user-preferences.ts`), in
+backups, and `omb-skin-mode` in `/api/me/appearance`.
+
+- One option, one place: General's Theme menu (12 skin names) is gone; the
+  skin, its variant and the mode are chosen only in Appearance > Skin.
+- A new skin goes in a family (a variant's `light` or `dark`); the tests
+  fail if a skin id has no place or two. Each skin block sets
+  `--skin-swatch` (the decorative variant swatch, never text).
+- iOS mirrors the model (`ios/Sources/CompanionCore/SkinFamilies.swift`):
+  families Black (Black, Dim: the phone's own), Pulsatrix, Studio, Atelier;
+  Auto is ThemeMode `.system` with the variant's pair, Light or Dark is
+  `.fixed`; "Same as my computer" stays a source toggle. Meadow is not on
+  the phone yet, and Hibou 98 stays desktop only.
+- Tests: `src/lib/skin-families.test.ts`, `src/components/SkinPicker.dom.test.ts`,
+  `src/lib/skin-bootstrap.test.ts`, `ios/Tests/CompanionCoreTests/SkinFamiliesTests.swift`.
+  Gallery: `src/gallery/skin-families.html` (`?view=board` every family and
+  variant; `?skin=&auto=1&unlocked=1` the picker).
+
+- Never hard-code a colour in a component. Fix a failing pair in the skin
+  block (or in `retro98.css` for Hibou 98), never in the `.tsx`.
+- Every popover, menu, picker, sheet and floating card wears
+  `popover-surface` next to its background class. The class points the
+  generic tokens (`ink`, `ink-secondary`, `ink-tertiary`, `panel`, `inset`,
+  `hairline`, `raised`) back at the `--color-popover-*` set, which each skin
+  resolves once at its root. Without it a popover opened from a band that
+  re-points `ink` (Pulsatrix Light's navy `.content-topbar`, the inverted
+  bubbles of Daylight and Meadow) inherits the band's light ink onto a
+  white card: the thread picker measured 1.11:1 that way.
+- New popover code paints from the popover tokens directly: `bg-popover`,
+  `text-popover-ink`, `text-popover-ink-secondary`,
+  `placeholder:text-popover-placeholder`, `bg-popover-field`,
+  `border-popover-border` (a field outline, 3:1), `border-popover-hairline`,
+  `bg-popover-hover`, `text-popover-accent`. `TaskPicker` is the reference.
+- Targets, measured on the surface the thing is actually drawn on: 4.5:1
+  for text (body and secondary alike, placeholders included), 3:1 for
+  icons, check marks, the focus ring and field borders, a just-perceptible
+  step for decorative hairlines and surface-on-surface fills.
+- `pnpm check:contrast` (`scripts/check-skin-contrast.mjs`) measures every
+  skin at its root and inside every context that re-declares tokens (a
+  `[data-skin="x"] .class { … }` band, `.popover-surface`, the bubble
+  `@scope` blocks), including translucent washes (`hover`, `selected`,
+  status tints like `bg-danger/10`) composited over what they sit on. It
+  runs inside `pnpm test:unit` via `src/lib/popover-contrast.test.ts`. A new
+  band or a new token pair goes in that script, not in a one-off test.
+- Run it after touching any palette value. For the real app, launch the
+  harness
+  (`node --experimental-strip-types scripts/control-omb.ts ui launch`), set
+  the skin with `ui eval --js "localStorage.setItem('omb-skin','<id>');
+  location.reload()"`, open the surface, and screenshot or measure its
+  computed colours with `ui eval`.
+
+#### Bot content has a default theme (2026-10-28)
+
+Pages and widgets bots make draw in the app's look, sober as the reference design.
+Every page the sandboxed frame route serves (`pageDocument`) starts with
+one inline stylesheet (src/lib/page-theme.ts): the skin's tokens (the app
+preview sends `theme=` and the person's skin as `skin=`, base64url JSON of
+known tokens with safe values only, `decodeSkinTokens`; a reading link gets
+light plus dark by the reader's system), Geist as a data: font
+(server/geist-face.ts), the widget kit's components and a centered reading
+column. It sits in `@layer sagax-theme`, so a page's own CSS always wins; a
+Markdown page or a presentation follows it entirely. Widgets keep their kit
+(src/lib/widget-kit.ts), now with plain content and the new components
+(`CONTENT_KIT_CSS`: .stat-card, .stat-delta, .bar-chart, svg.chart, .list,
+.lead). The phone draws the same kit (WidgetKit.generated.swift, from
+`node --experimental-strip-types scripts/gen-ios-widget-kit.ts`) in its
+skin's colors and sends `skin=` with its page previews. The prompt
+(`WIDGET_KIT_PROMPT`), propose_page and show_html tell bots to use the
+classes and variables. Same CSP and sandbox. Tests:
+`src/lib/page-theme.test.ts`, `server/pages/published-pages.test.ts`,
+`ios/Tests/CompanionCoreTests/ContentThemeTests.swift`. Captures:
+`scripts/capture/bot-content-theme.ts`, docs/screenshots/bot-content-theme.
+
+#### 1:1 bubble color (iOS)
+
+Settings > Appearance > "Color 1:1 messages with the bot color"
+(`sagax.botBubble.v1`, off by default, `ios/Sources/CompanionCore/BotBubble.swift`).
+On a 1:1 bot chat the assistant bubble and its question cards use that
+bot's colour, held to contrast. The person's own bubbles stay the skin's.
+A room does not set an open bot colour, so it is unchanged. Notification
+sounds stay the existing choice in `NotificationSounds.swift`.
+
+#### App icon: the Pulsatrix logo (2026-10-14)
+
+The app's default icon is the official Pulsatrix owl mark (white outline,
+blue eyes and heartbeat line) on a night blue tile (2026-10-14). Every
+surface comes from one generator, `pnpm icons:generate`
+(`scripts/generate-app-icon.mjs`, helpers in `scripts/app-icon.mjs`): it
+composes the SVG sources from `public/brand/pulsatrix-owl-mark-color-tight.svg`
+(master `build/icon-pulsatrix.svg`, `build/icon.svg`, `public/app-icon.svg`,
+`ios/AppStore/app-icon-ios.svg`, the Icon Composer layers in
+`build/icon.icon/Assets/`), then rasterises the macOS iconset and `.icns`,
+`electron/resources/app-icon.png`, `build/icon.ico`, the web manifest PNGs,
+`public/apple-touch-icon.png` and the iOS AppIcon (RGB, no alpha channel).
+16 to 64 px use a thickened variant so the pulse line stays visible. Never
+edit an output by hand; change the composition and regenerate.
+`scripts/app-icon.test.mjs` fails when a source drifts from the mark. The
+Sagax owl, the default until then, stays in Settings > Appearance > App icon
+as "Owl" (`public/brand/sagax-owl-app-icon.svg`); the default choice keeps the
+id `sagax` so a saved reset still means "the bundle's icon". The Android
+launcher is a separate artwork.
+
+### 8.7 Fond et barres de défilement
+
+#### Background effects behind the conversation (2026-10-18)
+
+Settings > Appearance > Background effects ("Effets d'arrière-plan"), shown
+as the skins are: a live preview (move the pointer and click in it), a
+gallery of miniatures, the effect's colour (swatches) and the intensity
+(low / medium / high). Per person and computer, nothing goes to the server:
+`sagax-background-effect` (JSON `{effect, palettes, intensity}`,
+`src/lib/background-effect-preferences.ts`), other windows follow through the
+storage event. Default None: no canvas, no listener. Migration: the old
+switch `sagax-glyph-ripple` "1" reads as Glyph ripple, anything else as None;
+the first write removes it. Desktop only (a fine pointer), main conversation
+only; the iOS app (native) has none. Keep these rules, covered by
+`src/lib/background-effects.test.ts`,
+`src/lib/background-effect-preferences.test.ts`,
+`src/lib/background-engine.test.ts` and
+`src/components/settings/BackgroundEffectsPicker.dom.test.ts`:
+
+- Registry `src/lib/background-effects.ts`: id, kind (`none`, `glyphs` = the
+  field below, `shader`), palettes offered (first = default), names and
+  descriptions in i18n (`settings.backgroundEffects.effect.<id>.*`). Palettes
+  `theme` (the skin's `--glyph-ripple-tint`, a hue shift, a hot core) and
+  `mono` (the ink) follow the skin; the others have a light and a dark
+  variant. Effects: glyphs, matrix, starfield, aurora, magnetic, synthwave,
+  ink, bubbles, constellation, sonar, fireflies, crystal.
+- Shader effects: one WebGL2 fragment shader each (`background-shaders.ts`,
+  `vec4 effect(vec2 p)` over a shared prelude and footer), engine
+  `background-engine.ts` (`ShaderField`), mounted through the glyph field's
+  `mountGlyphField` wiring (size, density, skin, visibility, focus loss,
+  reduced motion, click fences). Every effect reacts to the pointer and to
+  clicks. Drawn at CSS resolution at most and under 1.44 Mpx; on battery
+  (Battery Status API) half that and 30 fps; otherwise 60 fps at most. The
+  clock runs only while a click lives or the pointer moved in the last
+  1.4 s, then eases to a stop; the last frame stays, nothing runs at rest.
+  Readability: while it runs, the quiet map of the glyph field dims the
+  effect to 40% under text; alpha capped per scheme (`MAX_ALPHA`).
+- No WebGL2, or a shader that does not compile: a shader effect falls back
+  to the glyph field's 2D ring in the effect's colour, on a NEW canvas (one
+  that holds a WebGL context never gives a 2D one; `data-fallback="2d"`);
+  the picker says so. Unmounting an effect gives its context back
+  (`WEBGL_lose_context`), so switching effects never piles contexts up; the
+  miniatures' shared context starts over if it is lost.
+- Focus loss (`blur`) settles the field, the glyph field included: a wave in
+  flight stops when focus leaves the window (devtools, another app).
+- Shaders: no `pow()` of a possibly negative base (`sq`), no `smoothstep`
+  with reversed edges (`sstep`): both are undefined in GLSL ES and break on
+  ANGLE/D3D.
+- Miniatures (`background-preview.ts`): ONE shared hidden WebGL2 canvas for
+  the whole gallery, copied to each tile's 2D canvas; first frames staggered
+  (one shader compile per idle slot); a still frame, animated at 30 fps only
+  while hovered, never with reduced motion; redrawn on a skin change.
+- A click fence that contains the whole pane (the Settings dialog around the
+  live preview) does not fence it (`startsRipple` with `pane`).
+- Gallery: `src/gallery/background-effects.html`
+  (`?effect=&palette=&intensity=&skin=`, `?view=settings`).
+
+##### Glyph ripple (the `glyphs` effect, 2026-10-16)
+
+- One `<canvas>` (`GlyphRippleLayer.tsx`), first child of the main chat
+  pane, `pointer-events: none`, `aria-hidden`; the transcript scroller is
+  `relative` only while the field is on, so it paints over the canvas. No
+  canvas, listener or class when off. Side chats never show it.
+- At rest: faint monospace letters and digits in islands, drawn ONCE (and
+  again on resize, density or skin change). No React in the loop. A hidden
+  window settles at once.
+- The click effect is the energy weave (`src/lib/glyph-energy.ts`, WebGL2,
+  2026-10-17): per glyph cell, a front torn by angular and spatial fbm,
+  a wake threaded by ridged domain-warped veins flowing outward, a short
+  flash at the click, scramble and flicker at the front, a bloom on hot
+  glyphs, interference (cross terms of a coherent sum) where waves
+  overlap, exponential decay and a per-cell afterglow (ping-pong energy
+  texture). Pass 1 computes the energy on a cols x rows texture; pass 2
+  only reads textures (glyph atlas, rest field, energy, quiet map). At
+  most 6 waves of 1.8 s; requestAnimationFrame stops 650 ms after the last
+  wave or pointer move; the last frame stays on screen. A faint glow
+  follows a mouse or pen over the transcript (`pointermove`, passive).
+- Readability: when a wave starts (and every 300 ms while waves run, in a
+  frame, never in the handler) the text boxes of the message rows on
+  screen (`QUIET_SELECTOR` inside `[data-message-row]`) become a quiet
+  map: lit glyphs under text keep 38% of their brightness and get no
+  bloom. Mark anything else to protect with `[data-glyph-quiet]`.
+- No WebGL2 (or shaders that fail): the 2D ring (`src/lib/glyph-ripple.ts`,
+  1.1 s, only the ring's cells redrawn, at most 3 rings) through the same
+  `mountGlyphField` wiring (`GlyphEngine`).
+- Colours: `--color-ink` and `--glyph-ripple-tint` (the skin's accent, a
+  blue on Midnight whose accent is grey), read as resolved colours from the
+  canvas; opacities per scheme in `LEVELS`.
+- A ring starts on a main-button mouse or pen pointerdown on the transcript
+  scroller (a message or empty space, the dock's empty margins included),
+  never in the composer (outside the scroller), a field, an edited message,
+  a menu, a dialog or `[data-no-glyph-ripple]`. The click is never stopped
+  or delayed (passive listener).
+- Reduced motion (the system setting or the app's `data-reduced-motion`,
+  `prefersReducedMotion()`): the still field stays, no wave and no glow.
+- Colour and intensity: the layer sets the canvas's border colour to the
+  palette's tint and `data-gain` to the intensity (a multiplier of `LEVELS`).
+- Gallery: `src/gallery/glyph-ripple.html` (`?skin=<id>&off=1`).
+
+#### Overlay scrollbars (2026-10-18)
+
+Scrollbars never reserve a gutter: `src/styles.css` sets
+`scrollbar-width: none` on every element (and hides `::-webkit-scrollbar`)
+in every skin but Hibou 98, which keeps its classic bars
+(`src/styles/retro98.css`). `src/lib/overlay-scrollbars.ts`
+(`installOverlayScrollbars`, called from `src/main.tsx` and the verification
+preview) draws one thumb per axis over the edge of the element being
+scrolled. It shows while a wheel, touch, scroll key or drag scrolls that
+element, or while the pointer rests on the 12px strip along its edge, and
+fades after `IDLE_MS` (1 s). The scrolled element wears `is-scrolling` while
+its bar shows. A programmatic scroll (the chat following a stream) shows
+nothing. The thumb reads the scroller's own `--color-ink`, respects
+`--glass-top`/`--glass-bottom`, can be dragged, and is `aria-hidden`.
+
+- Do not add `::-webkit-scrollbar`, `scrollbar-width`, `scrollbar-gutter` or
+  `[scrollbar-width:thin]` styles in a component; there is one rule.
+- An element that must keep a native bar takes `data-native-scrollbar`
+  (the terminal, `.xterm`, is skipped already).
+- Inside an open `<dialog>` the thumb is mounted in the dialog (top layer).
+- Tests: `src/lib/overlay-scrollbars.dom.test.ts`.
+
+### 8.8 Identifiants à l'écran
+
+#### Never a UUID/GUID on screen (2026-10-19)
+
+Decision: "N'affiche JAMAIS des GUID, on ne comprend rien." Jamais d'UUID/GUID
+visible ; libellé humain, identifiant seulement en info-bulle ou action
+Copier. On desktop, web, iOS and Android:
+
+- Show a name: the bot's, the person's, the engine's, the environment or
+  computer ("Cloud computer", "Local VM", the Mac's name), the repository
+  or folder. When the name is gone, show a plain word ("Deleted bot",
+  "Unknown person", "Removed engine", "Account 2"), never the id. Never cut
+  an id short as a label (`id.slice(0, 8)` reads no better).
+- The id may stay in a `title` tooltip or a Copy action for support, never
+  in the text itself.
+- Helpers: `shared/human-id.ts` (`isOpaqueId`, `containsUuid`,
+  `readableOr`, `sagaxFolder`, `quotedIdOr` for server text a person may
+  read), `src/lib/human-label.ts` (`personLabel`, `botLabel`,
+  `engineLabel`), `src/lib/short-path.ts` (`shortPath`/`humanPath`: the
+  folders Sagax names after ids, task-workspaces/<bot>/<thread>,
+  parallel-worktrees/<bot>/<thread> and workspaces/<bot>, read as "This
+  conversation's folder", "Parallel task's folder", "The bot's own
+  folder"). iOS: `HumanID` (`ios/App/HumanID.swift`).
+- Text the server returns to a bot that holds an id it needs (a cloud
+  agent's `cloud_agent_id`, an `env_id`) tells the bot to name the thing
+  to the person, never the id.
+- Guard: `src/lib/no-visible-ids.test.ts` renders key cards and labels
+  with UUID fixtures and fails when a UUID reaches visible text. Add a
+  case there for any new screen that names records.

@@ -254,7 +254,7 @@ working or queued messages; a person who left a moment ago stays where they
 were. The topic is a client draft until its first message
 (`POST .../tasks { stream: true }`, then the send). Notifications, links and
 search hits open their own topic. Section "Fresh topic on return" in
-`AGENTS.md` has the full rules and tests.
+`docs/code/chat.md` has the full rules and tests.
 
 Release note text:
 

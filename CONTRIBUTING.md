@@ -269,8 +269,12 @@ commits and screenshots.
 
 ## Docs to update with a change
 
-- `AGENTS.md`: a rule, invariant or decision that future contributors must keep (it is the
-  engineering memory of the project). Keep entries short and dated.
+- `AGENTS.md`: a standing rule future contributors must keep, in one or two lines with its date
+  and issue, under its domain. Rules only: see "How to add to this file" at its top.
+- `docs/code/<domain>.md`: how the code works (files, routes, tests). A description of code goes
+  there, never in `AGENTS.md`; the PR and the issue keep the history, so no fix log anywhere.
+- `docs/design/ux-reference-grokbot-cursor.md`, section 8: the appearance rules, one section per
+  surface.
 - Release notes: every release needs `docs/releases/X.Y.Z.md`, French first, then a line that is
   exactly `## English`. The app shows these notes before and after an update. See
   [`docs/releasing.md`](docs/releasing.md). Maintainers write them at release time; mention
@@ -283,7 +287,7 @@ Maintainers cut releases (`pulsa-vX.Y.Z` tags on this repository) following
 [`docs/releasing.md`](docs/releasing.md). The tag must land on the squash commit
 on `main` (an ancestor of `main`), never on the release branch tip before that
 squash. Merging upstream OpenMausBot changes into Sagax is a
-maintainer task with its own procedure (the "Upstream sync" section of `AGENTS.md`: fetch-only
+maintainer task with its own procedure (`AGENTS.md`, and "Upstream sync" in `docs/code/repository.md`: fetch-only
 `upstream` remote, a real merge, `scripts/rebrand-upstream.mjs`, nothing ever pushed upstream).
 Contributors do not need to do it.
 
@@ -315,7 +319,7 @@ ran in the PR body. Never put a result in the PR that you did not run.
 - `pnpm lint`
 - `pnpm i18n:check`
 - `pnpm test:unit` (about 2.5 minutes) and, for server or conversation changes, `pnpm test:e2e`
-  (about 11 minutes). `pnpm test:shards` runs both. See `AGENTS.md` for the sharded runner.
+  (about 11 minutes). `pnpm test:shards` runs both. See `docs/code/repository.md` ("Tests") for the sharded runner.
 - `pnpm test:electron` for desktop-shell changes (also `pnpm check:electron`).
 - `pnpm build` for anything that touches the UI or the server bundle.
 

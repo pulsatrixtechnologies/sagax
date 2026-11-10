@@ -70,7 +70,7 @@ function cleanName(raw: string): string {
 /** The connector a person named ("Teams", "Microsoft Teams", "gmail"), or null. */
 export function resolveConnectorSetupTarget(raw: string): ConnectorSetupTarget | null {
   const label = cleanName(raw);
-  // a name on screen, never an id (AGENTS.md "Never a UUID/GUID on screen")
+  // a name on screen, never an id (the UX reference in docs/design, "Never a UUID/GUID on screen")
   if (!label || containsUuid(label) || isOpaqueId(label)) return null;
   const key = label.toLowerCase();
   const id = grokConnectorIdForName(key);

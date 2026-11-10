@@ -1,5 +1,5 @@
 // #2175: Settings keep one card level (docs/design/ux-reference-grokbot-cursor.md
-// 2.5, AGENTS.md "Settings layout: one card level"): a page is grey section
+// 2.5 and "Settings layout: one card level"): a page is grey section
 // headings over flat cards of rows, never a card drawn inside another card.
 // A collapsible section (Advanced) is a heading with a disclosure whose
 // content unfolds as sibling sections, not a card holding cards.
@@ -81,7 +81,7 @@ function insideCard(node: Element, root: Element): boolean {
  * shared row standing outside any card (a fold row left loose on the page,
  * indented under a heading), and a switch that is not in a shared row (a row
  * made by hand). Every row of a settings page is a shared row in a card
- * (docs/design/ux-reference-grokbot-cursor.md 2.5, AGENTS.md "Settings
+ * (docs/design/ux-reference-grokbot-cursor.md 2.5 "Settings
  * layout"). Hidden content is skipped: open the folds first. */
 export function rowsOffReference(root: Element): string[] {
   const out: string[] = [];

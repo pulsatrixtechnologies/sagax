@@ -28,7 +28,7 @@ export function ConnectedWorkspacesSettings() {
   const [envForget, setEnvForget] = useState<string | null>(null);
   const [envPurge, setEnvPurge] = useState(false);
   const [envError, setEnvError] = useState("");
-  // Server mode locks this app to one organization server (AGENTS.md
+  // Server mode locks this app to one organization server (docs/code/apps.md
   // "Launch flow"): no local environment is offered or switched to then.
   const [serverModeActive, setServerModeActive] = useState(false);
   useEffect(() => {

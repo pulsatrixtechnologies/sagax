@@ -1196,7 +1196,6 @@
   "voice.grok.ready": "xAI 密钥已保存。Grok 会根据你的文本判断语音语言。",
   "voice.grok.missingKey": "请在主机的“设置 → API 密钥”中添加 xAI API 密钥，才能使用 Grok 语音。",
   "toolDetail.label": "{name} · {status} · 工具详细信息",
-  "toolDetail.input": "输入",
   "toolDetail.output": "结果",
   "toolDetail.running": "运行中",
   "toolDetail.failed": "失败",

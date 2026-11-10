@@ -1682,7 +1682,6 @@
   "voice.grok.ready": "xAI 金鑰已儲存。Grok 會根據你的文字判斷語音語言。",
   "voice.grok.missingKey": "請在主機的「設定 → API 金鑰」中新增 xAI API 金鑰，才能使用 Grok 語音。",
   "toolDetail.label": "{name} · {status} · 工具詳細資訊",
-  "toolDetail.input": "輸入",
   "toolDetail.output": "結果",
   "toolDetail.running": "執行中",
   "toolDetail.failed": "失敗",

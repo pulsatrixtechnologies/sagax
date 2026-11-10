@@ -25,6 +25,7 @@ import { currentTaskBot, type Bot, type InstanceInfo } from "@/state/store";
 import type { LocaleKey } from "@/locales";
 import { ThinkingSheen } from "./BotActivityIndicator";
 import { DottedSpinner } from "./bot-settings/CodingSessionRow";
+import { listNames, NamesLine, type LineParty } from "./BotNamesLine";
 
 const TeammateExchangeSheet = lazy(() => import("./TeammateExchangeSheet"));
 
@@ -266,5 +267,79 @@ export function DelegationList({ entries, owner, botOf, modelOf, onOpen, inline 
         </div>
       )}
     </section>
+  );
+}
+
+/** #3289: the teammates a turn handed work to, as the quiet centered line
+ * every bot-to-bot trace uses (BotNamesLine), never a "Teammates · Finished"
+ * row over a card: "Asking [face] A, [face] B and [face] C" while any works,
+ * "Asked ..." once all are done, the state the verb of the line. A teammate
+ * waiting on the person, or one that stopped, is said on the same line. A
+ * name opens that teammate's work (its task and its answer) as the
+ * bot-to-bot sheet over this column; with onOpen (threads shown) the click
+ * opens what it always did. The model, the times and the note stay in the
+ * name's tooltip. */
+export function DelegationLine({ entries, owner, botOf, modelOf, onOpen }: {
+  entries: ReadonlyArray<DelegationEntry>;
+  owner?: Pick<Bot, "id" | "name" | "color">;
+  botOf?: (botId: string) => Bot | undefined;
+  modelOf?: (botId: string, threadId: string) => string | undefined;
+  onOpen?: (botId: string, threadId: string) => void;
+}) {
+  const [work, setWork] = useState<string | null>(null);
+  if (entries.length === 0) return null;
+  const rows = entries.map((entry) => {
+    const teammate = botOf?.(entry.botId);
+    const name = entry.name || teammate?.name || t("routineRun.aTeammate");
+    return { entry, name, teammate, state: delegationState(entry, teammate), model: modelOf?.(entry.botId, entry.threadId) };
+  });
+  const cardState = delegationCardState(rows.map((row) => row.state));
+  const asking = cardState === "running" || cardState === "waiting";
+  const bots = rows.map((row) => row.teammate).filter((bot): bot is Bot => Boolean(bot));
+  const parties: LineParty[] = rows.map(({ entry, name, teammate, state, model }) => {
+    const when = entry.finishedAt ?? entry.startedAt;
+    return {
+      key: entry.threadId,
+      botId: entry.botId,
+      name,
+      color: teammate?.color,
+      title: [name, model, entry.task, t(STATE_LINE[state]), when ? routineDateTime(when) : undefined, entry.note].filter(Boolean).join(" · "),
+      onOpen: onOpen ? () => onOpen(entry.botId, entry.threadId) : () => setWork(entry.threadId),
+      label: t("delegation.open", { name, status: t(STATE_LINE[state]) }),
+      data: { "data-run-handoff": entry.botId, "data-delegation-state": state, ...(onOpen ? { "data-run-teammate-thread": entry.threadId } : { "data-delegation-reveal": entry.threadId }) },
+    };
+  });
+  const stopped = rows.filter((row) => row.state === "failed").map((row) => row.name);
+  const waiting = cardState === "waiting";
+  const tail = [
+    waiting ? t("delegation.state.waiting") : "",
+    stopped.length ? t("chat.askLine.stopped", { names: listNames(stopped) }) : "",
+  ].filter(Boolean).join(" · ");
+  const shown = work ? rows.find((row) => row.entry.threadId === work) : undefined;
+  return (
+    <NamesLine
+      testId="delegation-line"
+      verb={t(asking ? "chat.askLine.asking" : "chat.askLine.asked")}
+      parties={parties}
+      bots={bots}
+      tail={tail || undefined}
+      tailTone={stopped.length ? "danger" : waiting ? "accent" : undefined}
+      data={{ "data-delegation-card-state": cardState }}
+      className="mt-1 w-full self-stretch"
+    >
+      {shown && (
+        <Suspense fallback={null}>
+          <TeammateExchangeSheet
+            key={shown.entry.threadId}
+            owner={owner}
+            teammate={{ id: shown.entry.botId, name: shown.name, color: shown.teammate?.color }}
+            threadId={shown.entry.threadId}
+            task={shown.entry.task}
+            bots={[owner && (botOf?.(owner.id) ?? owner), shown.teammate].filter(Boolean) as Bot[]}
+            onClose={() => setWork(null)}
+          />
+        </Suspense>
+      )}
+    </NamesLine>
   );
 }

@@ -86,6 +86,8 @@ export interface RelayAsk {
   text: string;
   /** Who asked: the AI client or the teammate. */
   by?: string;
+  /** #3289: the teammate bot that asked, so the chat draws its face. */
+  botId?: string;
 }
 
 export interface RoleNotice {

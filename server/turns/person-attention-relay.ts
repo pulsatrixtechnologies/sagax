@@ -134,7 +134,7 @@ export function askedWords(text: string): string {
 /** #2915: what was asked of the bot for this turn: the last line written to
  * it before the turn's first answer (an AI client's send_prompt, a
  * teammate's ask), and who asked. */
-export function turnAsk(messages: readonly WireMessage[], turnId: string | undefined, opener?: { name?: string }): WireMessage["relayAsk"] {
+export function turnAsk(messages: readonly WireMessage[], turnId: string | undefined, opener?: { name?: string; botId?: string }): WireMessage["relayAsk"] {
   const first = turnId ? messages.findIndex((message) => message.turnId === turnId) : -1;
   for (let index = (first >= 0 ? first : messages.length) - 1; index >= 0; index -= 1) {
     const message = messages[index];
@@ -144,7 +144,8 @@ export function turnAsk(messages: readonly WireMessage[], turnId: string | undef
     const text = asked && typeof message.text === "string" ? askedWords(message.text).replace(/\s+/g, " ").trim() : "";
     if (!text) continue;
     const by = (message.from?.name || message.sender?.name || opener?.name || "").trim();
-    return { text: text.length > RELAY_ASK_MAX ? `${text.slice(0, RELAY_ASK_MAX - 1).trimEnd()}…` : text, ...(by ? { by } : {}) };
+    const botId = message.from?.botId || (message.from || message.sender ? undefined : opener?.botId);
+    return { text: text.length > RELAY_ASK_MAX ? `${text.slice(0, RELAY_ASK_MAX - 1).trimEnd()}…` : text, ...(by ? { by } : {}), ...(botId ? { botId } : {}) };
   }
   return undefined;
 }
@@ -297,7 +298,11 @@ export function mirrorBackgroundReply<B extends AttentionBot>(
   const recent = deps.recent?.(target, RELAY_RECENT_ROWS) ?? deps.messages(target).slice(-RELAY_RECENT_ROWS);
   if (recent.some((message) => message.relayOf === key || message.relayGroup?.includes(key) || message.attention?.sourceMessageId === key)) return false;
   if (trace) {
-    deps.append(target, { role: "bot", kind: "text", text: RELAY_TRACE_TEXT[trace], relayVia: via, relayOf: key, relayTrace: trace, ...(ask ? { relayAsk: ask } : {}) });
+    // #3289: a teammate's turn that ended before its ask could be read still
+    // names who asked (the thread's opener): its line is never a bare "Teammate"
+    const opener = via === "teammate" ? task.openedBy : undefined;
+    const traced = ask ?? (opener?.name?.trim() ? { text: "", by: opener.name.trim(), botId: opener.botId } : undefined);
+    deps.append(target, { role: "bot", kind: "text", text: RELAY_TRACE_TEXT[trace], relayVia: via, relayOf: key, relayTrace: trace, ...(traced ? { relayAsk: traced } : {}) });
     return true;
   }
   const now = deps.now?.() ?? Date.now();

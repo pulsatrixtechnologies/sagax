@@ -16,6 +16,7 @@ import { BotConversationLine, conversationAnchors, splitLeadingConversations, vi
 import { GotoGroupChip } from "../GotoGroupChip";
 import { collapseGotoLines, gotoGroupFromConversations, gotoTargetOf, silentChatItem, unifiedGotoTargetOf } from "@/lib/goto-lines";
 import { collapseMessagedLines } from "@/lib/messaged-line";
+import { collapseAskLines } from "@/lib/ask-line";
 import { NewMessagesDivider } from "../NewMessagesDivider";
 import { unreadMessageIds } from "@/lib/unread-divider";
 import type { EffectivePlace } from "@/lib/place";
@@ -154,10 +155,16 @@ export const MessagesList = memo(function MessagesList({
     // A run of "Messaged" chips of one turn is one centered line, Tool
     // calls hidden or not (#3270): the only trace of the send.
     const messaged = collapseMessagedLines(listed, botDmIds, (item) => silentChatItem(item, showToolCalls)) as ListedItem[];
+    // The unified chat (threads off): a run of hand-offs to teammates is
+    // one centered "Asking / Asked" line too (#3289), Tool calls hidden or
+    // not, each teammate's answer folded into it.
+    const asked = showThreads ? messaged : collapseAskLines(messaged, {
+      selfBotId: botId, lookup: transcript, bots: storeBots, silent: (item) => silentChatItem(item, showToolCalls),
+    }) as ListedItem[];
     // Two or more "Go to conversation" lines in a row become one chip.
-    return collapseGotoLines(messaged, (item) => silentChatItem(item, showToolCalls),
+    return collapseGotoLines(asked, (item) => silentChatItem(item, showToolCalls),
       showThreads ? gotoTargetOf : unifiedGotoTargetOf) as ListedItem[];
-  }, [messages, transcript, botId, botName, selfColor, locale, owners, showToolCalls, showThreads, botDmIds]);
+  }, [messages, transcript, botId, botName, selfColor, locale, owners, showToolCalls, showThreads, botDmIds, storeBots]);
   const windowIds = useMemo(() => new Set(messages.map((message) => message.id)), [messages]);
   const newestMessageId = messages.at(-1)?.id;
   let newestUserMessageId: string | undefined;

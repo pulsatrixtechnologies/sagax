@@ -46,47 +46,56 @@ function render(message: Message, botId: string): string {
 
 beforeEach(() => { fixture.showThreads = false; });
 
-describe("hand-off row (threads off)", () => {
-  it("the sender's chat shows Asked <teammate> with the brief while the teammate works", () => {
+describe("hand-off line (threads off, #3289)", () => {
+  it("the sender's chat says Asking <teammate> on the quiet centered line while the teammate works", () => {
     fixture.bots = [bot("wren", "Wren", [sent]), bot("olive", "Olive")];
     const markup = render(sent, "wren");
-    expect(markup).toContain('data-testid="handoff-row"');
+    expect(markup).toContain('data-testid="ask-line"');
     expect(markup).toContain('data-handoff-phase="running"');
+    expect(markup).toContain("Asking");
     expect(markup).toContain("Olive");
+    // the brief stays one hover away, the exchange one click away
     expect(markup).toContain("Check the build on staging");
+    expect(markup).not.toContain('data-testid="handoff-row"');
     expect(markup).not.toContain("Open the chat");
   });
 
-  it("the teammate's verdict joins the same row, live, and its result row draws nothing more", () => {
+  it("the answer turns the verb to Asked, and its own result row draws nothing more", () => {
     fixture.bots = [bot("wren", "Wren", [sent, replied()]), bot("olive", "Olive")];
     const markup = render(sent, "wren");
     expect(markup).toContain('data-handoff-phase="done"');
-    expect(markup).toContain('data-verdict="FAIL"');
+    expect(markup).toContain("Asked");
     expect(render(replied(), "wren")).toBe("");
   });
 
-  it("a failure is visible on the row", () => {
+  it("a stopped request and a send that never left stay said on the line", () => {
     fixture.bots = [bot("wren", "Wren", [sent, replied(false)]), bot("olive", "Olive")];
-    expect(render(sent, "wren")).toContain('data-handoff-phase="failed"');
+    const stopped = render(sent, "wren");
+    expect(stopped).toContain('data-handoff-phase="stopped"');
+    expect(stopped).toContain("stopped before an answer: Olive");
+    expect(stopped).toContain("text-danger");
     const refused = { ...sent, tool: { ...sent.tool!, ok: false, output: "message of 1-16000 characters" } };
     fixture.bots = [bot("wren", "Wren", [refused]), bot("olive", "Olive")];
     const markup = render(refused, "wren");
-    expect(markup).toContain('data-handoff-phase="failed"');
-    expect(markup).toContain("text-danger");
+    expect(markup).toContain('data-handoff-phase="couldNotAsk"');
+    expect(markup).toContain("could not ask Olive");
   });
 
-  it("the teammate's chat shows who asked, with their name", () => {
+  it("the teammate's chat shows who asked, with their face, name and first words", () => {
     fixture.bots = [bot("wren", "Wren"), bot("olive", "Olive", [incoming])];
     const markup = render(incoming, "olive");
     expect(markup).toContain('data-handoff-side="incoming"');
-    expect(markup).toContain("Asked by Wren");
+    expect(markup).toContain("Wren");
+    expect(markup).toContain("asked");
     expect(markup).toContain("Check the build on staging");
+    expect(markup).not.toContain("Asked by Wren");
   });
 
-  it("a result whose receipt is not on this page still shows on its own", () => {
+  it("a result whose receipt is not on this page still shows on its own line", () => {
     fixture.bots = [bot("wren", "Wren", [replied()]), bot("olive", "Olive")];
     const markup = render(replied(), "wren");
     expect(markup).toContain('data-handoff-side="result"');
-    expect(markup).toContain("Olive replied");
+    expect(markup).toContain("Olive");
+    expect(markup).toContain("answered");
   });
 });

@@ -34,17 +34,21 @@ let root: Root | null = null;
 let host: HTMLDivElement;
 let snapshot: { current?: ReturnType<typeof usePinnedWaiting> } = {};
 
-function Harness({ approvals, questions }: { approvals: Pending[]; questions: Message[] }) {
+/** a room: the composer passes no conversation bot, each item names its own */
+interface Room { member: Bot }
+
+function Harness({ approvals, questions, room }: { approvals: Pending[]; questions: Message[]; room?: Room }) {
   const pinned = usePinnedWaiting(approvals, questions);
   snapshot.current = pinned;
+  const asker = room?.member ?? bot;
   return createElement(PinnedWaitingCard, {
-    pinned, threadId: "main", bot, botFor: () => bot, nameFor: () => "Orla", onCancelTurn: () => dispatched.push({ type: "cancel" }),
+    pinned, threadId: "main", bot: room ? undefined : bot, botFor: () => asker, nameFor: () => asker.name, onCancelTurn: () => dispatched.push({ type: "cancel" }),
   });
 }
 
-async function render(approvals: Pending[], questions: Message[]) {
-  const value = { state: { ...initialState, bots: [bot], instances: [] }, dispatch: (action: unknown) => dispatched.push(action), flushBotPatches: async () => null, refreshInstances: async () => {}, refreshModels: async () => {} };
-  const tree: ReactNode = createElement(BotEditorStore, { value: value as never, children: createElement(Harness, { approvals, questions }) });
+async function render(approvals: Pending[], questions: Message[], room?: Room) {
+  const value = { state: { ...initialState, bots: room ? [bot, room.member] : [bot], instances: [] }, dispatch: (action: unknown) => dispatched.push(action), flushBotPatches: async () => null, refreshInstances: async () => {}, refreshModels: async () => {} };
+  const tree: ReactNode = createElement(BotEditorStore, { value: value as never, children: createElement(Harness, { approvals, questions, room }) });
   await act(async () => { root!.render(tree); });
   await act(async () => { await new Promise((done) => setTimeout(done, 0)); });
 }
@@ -139,6 +143,72 @@ describe("the pinned waiting card (#3214)", () => {
     expect(host.querySelector('[data-pinned-body="approval"]')).not.toBeNull();
     expect(host.textContent).toMatch(/Allow/);
     expect(host.textContent).toMatch(/Deny/);
+  });
+
+  it("#3414: draws an approval as one compact card, the bot named once and the raw detail folded", async () => {
+    // a background turn's card (proactive wake, bot-to-bot conversation):
+    // it carries who asked, here the same bot the title names
+    const base = approval("a1", 1);
+    const pending: Pending = {
+      ...base,
+      message: { ...base.message, from: { botId: "orla", name: "Orla", color: "violet" }, card: { ...base.message.card!, allowSession: true } } as Message,
+      allowSession: true,
+      threadId: "work",
+      askedBy: "Orla",
+    };
+    await render([pending], []);
+    const shown = card()!;
+    // no header bar of its own: the card's title is the ask
+    expect(host.querySelector("[data-pinned-title]")).toBeNull();
+    expect(shown.textContent?.match(/Orla/g)?.length).toBe(1);
+    expect(shown.textContent).toMatch(/Orla wants to/);
+    // what runs reads on the card; the raw arguments stay behind the folded Details
+    expect(shown.textContent).toContain("ls ~");
+    expect(shown.textContent).not.toContain('"command"');
+    const details = Array.from(shown.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "Details")!;
+    expect(details.getAttribute("aria-expanded")).toBe("false");
+    await act(async () => { details.click(); });
+    expect(shown.textContent).toContain('"command"');
+    // the three answers, Always allow included, on the shared ask controls
+    const answers = Array.from(shown.querySelectorAll("[data-approval-actions] button")).map((button) => button.textContent);
+    expect(answers).toEqual(["Deny", "Always allow", "Allow once"]);
+    // the risk mark is a quiet word, never a filled pill
+    expect(shown.querySelector("[data-risk]")?.className).not.toMatch(/\bborder\b|bg-/);
+  });
+
+  it("#3414: says another bot asked when an unnamed bot opened the conversation, even with the title's bot known", async () => {
+    // parallel-approvals: askedBy "" is a conversation an unnamed bot
+    // opened. The pinned card always knows its bot, and the line still shows.
+    const pending: Pending = { ...approval("a2", 1), threadId: "work", askedBy: "" };
+    await render([pending], []);
+    expect(card()?.textContent).toContain("Asked by another bot");
+  });
+
+  it("#3414: names the member bot over a room's composer when a proposal's title does not", async () => {
+    // a skill proposal's title ("Enable this learned skill") never names
+    // the bot; in a room the composer has no bot of its own, so the card
+    // must still say which member asks
+    const quasar = { ...bot, id: "quasar", name: "Quasar" } as Bot;
+    const message = {
+      id: "s1", role: "bot", kind: "options", at: 1, text: "", from: { botId: "quasar", name: "Quasar", color: "teal" },
+      card: {
+        title: 'Enable skill "task-abort"?', subtitle: "Stop a task cleanly.", options: ["Enable", "Deny"], requestId: "skill-s1", tool: "stage_skill",
+        ownerRule: { tool: "sagax:skill", scope: { action: "create", source: "review" }, description: "Keep the skills this bot learns from its conversations" },
+        skillRequest: { version: 1, requestId: "skill-s1", botId: "quasar", threadId: "main", stagedId: "staged-s1", action: "create", name: "task-abort", gist: "Stop a task cleanly.", source: "learn:review", warnings: [], createdAt: 1 },
+      },
+    } as unknown as Message;
+    const pending: Pending = { message, requestId: "skill-s1", tool: "stage_skill", detail: "Stop a task cleanly." };
+    await render([pending], [], { member: quasar });
+    const shown = card()!;
+    expect(shown.querySelector('[data-pinned-body="approval"]')).not.toBeNull();
+    expect(shown.textContent).toContain("Enable this learned skill");
+    expect(shown.querySelector("[data-approval-asker]")?.textContent).toBe("Asked by Quasar");
+    // the answers, Always allow included, are still all there
+    expect(shown.querySelector("[data-always-allow]")).not.toBeNull();
+    // a tool approval whose title already names the bot adds no second line
+    await render([approval("a3", 2)], [], { member: quasar });
+    expect(card()?.textContent).toMatch(/Quasar wants to/);
+    expect(card()?.querySelector("[data-approval-asker]")).toBeNull();
   });
 
   it("folds to one line that still names who waits and for what, and never hides", async () => {

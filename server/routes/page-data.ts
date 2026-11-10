@@ -89,7 +89,7 @@ const TEXTS: Record<PageCapError, Record<Lang, string>> = {
   sign_in: { en: "Sign in to use this page's data.", fr: "Connecte-toi pour utiliser les données de cette page." },
   not_declared: { en: "This page does not declare this capability.", fr: "Cette page ne déclare pas cette capacité." },
   denied: { en: "Your organization refuses this read.", fr: "Ton organisation refuse cette lecture." },
-  ask_first: { en: "Your organization asks you first before this page reads your data.", fr: "Ton organisation te demande d'abord avant que cette page lise tes données." },
+  ask_first: { en: "Your organization asks you first before this page reads your data.", fr: "Ton organisation te demande d'abord ta permission avant que cette page lise tes données." },
   rate_limited: { en: "This page reads too often. Try again in a minute.", fr: "Cette page lit trop souvent. Réessaie dans une minute." },
   too_large: { en: "This data is too large for a page.", fr: "Ces données sont trop grandes pour une page." },
   unavailable: { en: "This data could not be read now.", fr: "Ces données n'ont pas pu être lues pour l'instant." },

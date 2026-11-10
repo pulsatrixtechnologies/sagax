@@ -1,6 +1,6 @@
 /** Isolated gallery for headless screenshots of the card pinned over the
  * composer with what the bot waits on (#3214). Not shipped in the app.
- * ?lang=<code>&skin=<id>&case=question|two|collapsed|approval&width=1440|390
+ * ?lang=<code>&skin=<id>&case=question|two|collapsed|approval|read|write|room-skill&width=1440|390
  * A short transcript above (a bubble, the original question card), then the
  * pinned card and a composer-like box, the way the chat stacks them.
  * Every answer is recorded in window.__decisions. */
@@ -69,11 +69,40 @@ const approvalMessage = {
 } as unknown as Message;
 const approval: Pending = { message: approvalMessage, requestId: "req-ap1", tool: "mcp__sagax-environment__run_command", detail: COMMAND, threadId: "thread-main" };
 
-const cases: Record<string, { approvals: Pending[]; questions: Message[]; collapsed?: boolean }> = {
+// #3414: a background turn's read and write (a proactive wake, its card
+// asked from the bot's own background conversation)
+function toolAsk(id: string, tool: string, input: Record<string, unknown>): Pending {
+  const message = {
+    id, role: "bot", kind: "options", at: 4, text: "", from: { botId: bot.id, name: bot.name, color: "violet" },
+    card: { requestId: `req-${id}`, tool, mcpTool: tool, title: "", subtitle: JSON.stringify(input), toolInput: JSON.stringify(input), options: ["Allow", "Deny"], allowSession: true, approvalOrigin: { threadId: "thread-wake", messageId: id, requestId: `req-${id}` } },
+  } as unknown as Message;
+  return { message, requestId: `req-${id}`, tool, detail: JSON.stringify(input), allowSession: true, threadId: "thread-wake", askedBy: bot.name };
+}
+const readAsk = toolAsk("rd1", "mcp__claude_ai_Acme_Desk__acme_desk__query", { resource: "service/tickets", conditions: "closedFlag=false", pageSize: 25 });
+const writeAsk = toolAsk("wr1", "mcp__perspicax_example_flow__acme_desk_write", { resource: "service/tickets", action: "update", id: 4821, set: { status: { id: 12 } } });
+
+// #3414: a room (group chat): the composer has no bot of its own, and a
+// member bot's skill proposal, whose title never names the bot, waits
+const quasar = { id: "bot-quasar", name: "Quasar", color: "teal", threadId: "thread-main", messages: [], tasks: [] } as unknown as Bot;
+const skillGist = fr ? "Arrêter proprement une tâche quand on me le demande." : "Stop a task cleanly when asked to.";
+const skillMessage = {
+  id: "sk1", role: "bot", kind: "options", at: 6, text: "", from: { botId: quasar.id, name: quasar.name, color: "teal" },
+  card: {
+    title: 'Enable skill "task-abort"?', subtitle: skillGist, options: ["Enable", "Deny"], requestId: "skill-sk1", tool: "stage_skill",
+    ownerRule: { tool: "sagax:skill", scope: { action: "create", source: "review" }, description: fr ? "Garder les compétences que ce bot apprend de ses conversations" : "Keep the skills this bot learns from its conversations" },
+    skillRequest: { version: 1, requestId: "skill-sk1", botId: quasar.id, threadId: "thread-main", stagedId: "staged-sk1", action: "create", name: "task-abort", gist: skillGist, source: "learn:automatic review of this conversation", preview: `---\nname: task-abort\n---\n${skillGist}\n`, sha256: "6d3bee9d".repeat(8), warnings: [], createdAt: 1 },
+  },
+} as unknown as Message;
+const roomSkill: Pending = { message: skillMessage, requestId: "skill-sk1", tool: "stage_skill", detail: skillGist };
+
+const cases: Record<string, { approvals: Pending[]; questions: Message[]; collapsed?: boolean; room?: boolean }> = {
   question: { approvals: [], questions: [q1] },
   two: { approvals: [], questions: [q1, q2] },
   collapsed: { approvals: [], questions: [q1], collapsed: true },
   approval: { approvals: [approval], questions: [q1] },
+  read: { approvals: [readAsk], questions: [] },
+  write: { approvals: [writeAsk], questions: [] },
+  "room-skill": { approvals: [roomSkill], questions: [], room: true },
 };
 const chosen = cases[which] ?? cases.question!;
 
@@ -95,7 +124,7 @@ function Gallery() {
         <div className="h-16" />
       </div>
       <div data-composer-dock className={`mx-auto w-full ${narrow ? "px-3 pb-3" : "max-w-[760px] px-6 pb-6"}`}>
-        <ComposerPendingStrip bot={bot} pinned={pinned} threadId="thread-main" storeBots={[bot]} approvalBotFor={() => bot} onCancelTurn={() => window.__decisions.push({ type: "cancelTurn" })} />
+        <ComposerPendingStrip bot={chosen.room ? undefined : bot} pinned={pinned} threadId="thread-main" storeBots={chosen.room ? [bot, quasar] : [bot]} approvalBotFor={() => (chosen.room ? quasar : bot)} onCancelTurn={() => window.__decisions.push({ type: "cancelTurn" })} />
         <div className="rounded-2xl border border-hairline bg-card px-4 py-3 text-[14px] text-ink-secondary">
           {pinned.current?.kind === "question" ? t("composer.placeholder.question") : t("composer.placeholder.approval")}
         </div>

@@ -1,20 +1,20 @@
 // Pieces shared by the in-chat approval card and the composer's pending
-// approval panel, so both read the same way: avatar, a human title, a risk
-// chip, and the raw tool id + JSON only behind "See technical details".
+// approval panel, so both read the same way: an icon, a human title, the
+// read or write mark, and the raw tool id + JSON only behind "Details".
 import { copyText } from "@/lib/copy-text";
 import { useEffect, useState, type ReactNode } from "react";
-import { Check, ChevronDown, Copy, Eye, PencilLine, Play, Trash2 } from "lucide-react";
-import type { Bot } from "@/state/store";
-import { BotAvatar } from "@/components/Avatar";
+import { Check, ChevronDown, Copy, Eye, PencilLine, Play, ShieldCheck, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { RISK_LABEL, type ApprovalRisk } from "@/lib/approval-describe";
 
+// #3414: the read or write mark is a quiet word with its icon, in the
+// risk's ink, never a filled pill (the reference: color only for a real state)
 const RISK_STYLE: Record<ApprovalRisk, string> = {
-  read: "border-success/35 bg-success/10 text-success",
-  write: "border-warning/35 bg-warning/10 text-warning",
-  execute: "border-warning/35 bg-warning/10 text-warning",
-  destructive: "border-danger/40 bg-danger/10 text-danger",
+  read: "text-success",
+  write: "text-warning",
+  execute: "text-warning",
+  destructive: "text-danger",
 };
 
 const RISK_ICON = { read: Eye, write: PencilLine, execute: Play, destructive: Trash2 } as const;
@@ -24,42 +24,51 @@ export function RiskChip({ risk }: { risk: ApprovalRisk }) {
   return (
     <span
       data-risk={risk}
-      className={cn("inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium", RISK_STYLE[risk])}
+      className={cn("inline-flex shrink-0 items-center gap-1 text-[12px] font-medium", RISK_STYLE[risk])}
     >
-      <Icon size={11} aria-hidden="true" />
+      <Icon size={12} aria-hidden="true" />
       {t(RISK_LABEL[risk])}
     </span>
   );
 }
 
-/** Avatar, title and chips on one row; the summary under the title. */
+/** The compact card's head (#3414), the shape of every ask of the chat
+ * (AskCard): an icon, the ask in one line, then one line under it with the
+ * read or write mark and what it does. The bot is named in the title only,
+ * never again by an avatar. */
 export function ApprovalHeading({
-  bot,
   title,
   summary,
   risk,
+  context,
   aside,
 }: {
-  /** A whole bot shows its avatar; a name alone (a 1:1 chat's row, which
-   * re-renders only with its own message) shows none. */
-  bot?: Bot | Pick<Bot, "name">;
   title: ReactNode;
   summary?: string;
   risk?: ApprovalRisk;
-  /** right side of the title row (the stepper) */
+  /** a quiet line on where it comes from (another bot, a parallel task) */
+  context?: ReactNode;
+  /** right side of the title row (the stepper, the pinned card's controls) */
   aside?: ReactNode;
 }) {
+  const line = summary?.trim();
   return (
-    <div className="flex items-start gap-3">
-      {bot && "color" in bot && bot.color && <BotAvatar bot={bot} size={30} animated={false} />}
+    <div className="flex min-w-0 items-start gap-2">
+      <span aria-hidden="true" className="flex h-5 shrink-0 items-center text-accent-text">
+        <ShieldCheck size={15} />
+      </span>
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-[15px] font-semibold leading-snug text-ink">{title}</span>
-          {risk && <RiskChip risk={risk} />}
-        </div>
-        {summary && <div className="mt-0.5 text-[13px] leading-snug text-ink-secondary">{summary}</div>}
+        <span dir="auto" className="block break-words text-[14px] font-semibold leading-5 text-ink" data-approval-title="">{title}</span>
+        {(risk || line) && (
+          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-[13px] leading-5 text-ink-secondary" data-approval-summary="">
+            {risk && <RiskChip risk={risk} />}
+            {risk && line && <span aria-hidden="true">·</span>}
+            {line && <span className="min-w-0">{line}</span>}
+          </div>
+        )}
+        {context}
       </div>
-      {aside && <div className="shrink-0">{aside}</div>}
+      {aside && <div className="-my-0.5 flex shrink-0 items-center gap-0.5">{aside}</div>}
     </div>
   );
 }

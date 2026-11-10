@@ -468,7 +468,7 @@ export async function handleInternalRequestsEarly(deps: InternalRequestsDeps, ct
         }
         // 2026-10-20: a Primary Bot reaches every bot of its person
         if (!deps.canReachPeer(from, target) && !(from.chiefOfStaff && deps.primaryBotSameOwner(from, target))) {
-          return json(res, 403, { error: `that bot belongs to a different section or is unavailable. ${deps.peerAccessHelp}` });
+          return json(res, 403, { error: `that bot belongs to another person or is unavailable. ${deps.peerAccessHelp}` });
         }
         forBot = { botId: target.id, name: target.name };
       }

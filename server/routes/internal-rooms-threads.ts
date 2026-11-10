@@ -237,7 +237,7 @@ export async function handleInternalThreads(call: InternalRoomsCall): Promise<ty
     return json(res, 200, { error: "thread chains are limited to one hop — open the thread on yourself, or do this one here" });
   }
   if (!canAccessBot(from, target) || target.hidden || !peerInScope(from, target)) {
-    return json(res, 403, { error: `that bot belongs to a different section or is unavailable. ${PEER_ACCESS_HELP}` });
+    return json(res, 403, { error: `that bot belongs to another person or is unavailable. ${PEER_ACCESS_HELP}` });
   }
   if (!peerAllowed(from, target)) {
     return json(res, 403, { error: `that bot is not on this bot's allowed peers. ${PEER_ACCESS_HELP}` });

@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { peerDeliveryReceipt, receiptName, renderPeerDeliveryReceipts, type PeerDeliveryReceipt } from "./peer-delivery.ts";
-import { setPeerScope, type RosterMember } from "./peer-roster.ts";
+import { setPeerScope, setSameOwner, type RosterMember } from "./peer-roster.ts";
 
 describe("receiptName", () => {
-  afterEach(() => setPeerScope(null));
+  afterEach(() => { setPeerScope(null); setSameOwner(null); });
   const sender: RosterMember = { id: "bot-sender", name: "Sender", section: "Ops" };
   const teammate = (patch: Partial<RosterMember> = {}): RosterMember => ({ id: "bot-mate", name: "Teammate name", section: "Ops", ...patch });
 
@@ -15,7 +15,9 @@ describe("receiptName", () => {
 
   it("names nothing once the teammate is another person's private bot (isolation between people)", () => {
     expect(receiptName(sender, teammate({ hidden: true, name: "Private codename" }))).toBeUndefined();
-    expect(receiptName(sender, teammate({ section: "Elsewhere" }))).toBeUndefined();
+    // 2026-11-09: another section of the same person is still a teammate;
+    // another person's bot is not, whatever its section
+    expect(receiptName(sender, teammate({ section: "Elsewhere" }))).toBe("Teammate name");
     expect(receiptName({ ...sender, peers: [] }, teammate())).toBeUndefined();
     expect(receiptName(sender, teammate({ visibility: { people: ["someone@example.test"] } }))).toBeUndefined();
     expect(receiptName(sender, teammate({ temporary: { archived: true } }))).toBeUndefined();
@@ -24,6 +26,9 @@ describe("receiptName", () => {
     setPeerScope((_from, to) => to.id !== "bot-mate" || shared);
     expect(receiptName(sender, teammate())).toBe("Teammate name");
     shared = false;
+    expect(receiptName(sender, teammate({ name: "Private codename" }))).toBeUndefined();
+    setPeerScope(null);
+    setSameOwner((a, b) => a.id === b.id);
     expect(receiptName(sender, teammate({ name: "Private codename" }))).toBeUndefined();
   });
 

@@ -10,6 +10,7 @@ import { createBuildRoomMemberPrompt } from "./group-member-turn-launch-prompt.t
 import { createGuardRoomMemberDispatch, createBeginRoomMemberOutcome } from "./group-member-turn-launch-dispatch.ts";
 import { createSettleRoomMemberTurn } from "./group-member-turn-launch-after.ts";
 import { finishedWithoutSummaryLine, ROOM_SUMMARY_REASK, roomTurnReply } from "../room-reply.ts";
+import { chainedMentionResponders } from "./room-mention-chain.ts";
 
 export { roomSubagentModel } from "./group-member-turn-room-model.ts";
 
@@ -273,7 +274,8 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
         }
       });
     }
-    for (const next of roomResponders(replyText, members, { kind: "mentions" })) {
+    // A bot's mention never starts a turn of another person's bot (#3263).
+    for (const next of chainedMentionResponders(replyText, members, bot, roomResponders)) {
       if (isCancelled?.()) return false;
       if (spoken.has(next.id)) continue;
       if (operation) {

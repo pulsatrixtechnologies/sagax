@@ -156,7 +156,7 @@ export const DEF_CREATE_ROOM = {
 export const DEF_MANAGE_ROOM = {
     name: "manage_room",
     description:
-      "Manage a room from list_rooms: rename it, change its bulletin, or add/remove/set members. Primary Bots only, within your own section and allowed peers; keep yourself as a member. Busy rooms, pending approvals and team-goal leads are protected. You cannot move rooms or bots between sections. Follow the tool result under the effective access level; if the change is refused, report the blocker and ask the user to make the change instead, without trying another route.",
+      "Manage a room from list_rooms: rename it, change its bulletin, or add/remove/set members. Primary Bots only, for a room in your own section; members are your own person's bots from list_bots, whatever their team; keep yourself as a member. Busy rooms, pending approvals and team-goal leads are protected. You cannot move rooms or bots between sections. Follow the tool result under the effective access level; if the change is refused, report the blocker and ask the user to make the change instead, without trying another route.",
     inputSchema: {
       type: "object",
       additionalProperties: false,

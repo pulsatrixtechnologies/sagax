@@ -583,8 +583,10 @@ describe("coordinate_bots on a teammate", () => {
       expect(handoffs().find(node => node.threadId === job)).toMatchObject({ botId: near.id, mode: "work", reply: "resume", text: "go" });
       const send = (botIds: string[]) => api("POST", "/api/internal/coordinate-bots", { botIds, message: "Check it." }, token);
       const outside = await send([other.id]);
+      // 2026-11-09: a bot of the same person in another section is a
+      // teammate; only the sender's explicit peer list keeps it out.
       expect(outside.status).toBe(403);
-      expect(outside.body.error).toContain("section boundary");
+      expect(outside.body.error).toContain("allowed peer");
       const unlisted = await send([far.id]);
       expect(unlisted.status).toBe(403);
       expect(unlisted.body.error).toContain("allowed peer");

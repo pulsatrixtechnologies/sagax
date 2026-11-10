@@ -28,7 +28,7 @@ function roomHandoffProblem(node: Pick<HandoffView, "groupId" | "threadId" | "bo
     const member = host.store.bot(id);
     return member && !canAccessBot(speaker, member) && !coordinatorSupervises(member, speaker, host.resolveManagedNameFor(member));
   });
-  if (group && outsideSection(group, bot)) return "Destination room includes a member outside the agent's section";
+  if (group && outsideSection(group, bot)) return "Destination room includes another person's bot";
   if (parent) {
     const from = host.store.bot(parent.botId);
     const source = parent.groupId ? host.store.group(parent.groupId) : undefined;
@@ -39,7 +39,7 @@ function roomHandoffProblem(node: Pick<HandoffView, "groupId" | "threadId" | "bo
     // Room work between two bots of one person, in rooms that hold only
     // that person's bots, crosses no section boundary (#1098).
     const ownRooms = Boolean(source || group) && sameOwnerBots(from, bot) && (!source || host.oneOwnerRoom(source, from)) && (!group || host.oneOwnerRoom(group, bot));
-    if ((!canAccessBot(from, bot) && !sharedSupervisor && !ownRooms) || (source && outsideSection(source, from))) return "Room work cannot cross the sender's section boundary";
+    if ((!canAccessBot(from, bot) && !sharedSupervisor && !ownRooms) || (source && outsideSection(source, from))) return "Room work cannot reach another person's bot";
     if (source && group && source.id === group.id && parent.threadId !== node.threadId) return "Same-room work must stay in the originating conversation";
     if (!peerAllowed(from, bot)) return "The recipient is not an allowed peer of the sender";
     // A room the sender sits in keeps its own rule: people chose its

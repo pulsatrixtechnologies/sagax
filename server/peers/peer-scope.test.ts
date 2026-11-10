@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { orgPeerInScope } from "./peer-scope.ts";
-import { canReachPeer, reachablePeers, resolveTeammate, setPeerScope, type RosterMember } from "./peer-roster.ts";
+import { canReachPeer, reachablePeers, resolveTeammate, setPeerScope, setSameOwner, type RosterMember } from "./peer-roster.ts";
 
 type Bot = RosterMember & { ownerUserId: string };
 
@@ -51,19 +51,26 @@ describe("orgPeerInScope", () => {
 });
 
 describe("reachablePeers with the organization scope", () => {
-  afterEach(() => setPeerScope(null));
+  afterEach(() => { setPeerScope(null); setSameOwner(null); });
 
   const byId = new Map(fleet.map((bot) => [bot.id, bot]));
-  const install = () => setPeerScope((from, target) => orgPeerInScope(byId.get(from.id)!, byId.get(target.id)!, deps));
+  // index.ts installs both on an organization server.
+  const install = () => {
+    setPeerScope((from, target) => orgPeerInScope(byId.get(from.id)!, byId.get(target.id)!, deps));
+    setSameOwner((a, b) => byId.get(a.id)!.ownerUserId === byId.get(b.id)!.ownerUserId);
+  };
 
   it("without a scope (solo server), every bot of the section is a teammate", () => {
     expect(reachablePeers(fleet, ada).map((bot) => bot.id)).toEqual(["ari", "bee", "quasar"]);
   });
 
-  it("names only the owner's bots and the ones shared with them", () => {
+  it("names only the owner's own bots: a share never lets another person's bot reach them (2026-11-09)", () => {
     install();
     expect(reachablePeers(fleet, ada).map((bot) => bot.id)).toEqual(["ari"]);
-    expect(reachablePeers(fleet, bee).map((bot) => bot.id)).toEqual(["ari"]);
+    // Ari is shared with Bob, yet Bob's Bee does not reach it, nor Ari Bee.
+    expect(reachablePeers(fleet, bee)).toEqual([]);
+    expect(canReachPeer(bee, ari)).toBe(false);
+    expect(canReachPeer(ari, bee)).toBe(false);
     expect(reachablePeers(fleet, quasar).map((bot) => bot.id)).toEqual([]);
     expect(canReachPeer(ada, quasar)).toBe(false);
   });

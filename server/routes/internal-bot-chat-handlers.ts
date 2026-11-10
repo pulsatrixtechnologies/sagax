@@ -320,7 +320,7 @@ export async function handleAskBot(opened: OpenedBotChat): Promise<typeof PASS |
   // hard refusal — every peer turn has an accountable sender.
   const from = internalSender;
   if (!canAccessBot(from, target) || target.hidden || !peerInScope(from, target)) {
-    return json(res, 403, { error: `that bot belongs to a different section or is unavailable. ${PEER_ACCESS_HELP}` });
+    return json(res, 403, { error: `that bot belongs to another person or is unavailable. ${PEER_ACCESS_HELP}` });
   }
   // The sender's allow-list, when it has one. Checked here rather than
   // trusted from the roster: the tool call carries a bot id, and an id
@@ -609,7 +609,7 @@ export async function handleDelegateBot(opened: OpenedBotChat): Promise<typeof P
   const target = store.bot(toBotId);
   if (!target) return json(res, 404, { error: "no such bot" });
   if (!canAccessBot(from, target) || target.hidden || !peerInScope(from, target)) {
-    return json(res, 403, { error: `that bot belongs to a different section or is unavailable. ${PEER_ACCESS_HELP}` });
+    return json(res, 403, { error: `that bot belongs to another person or is unavailable. ${PEER_ACCESS_HELP}` });
   }
   if (!peerAllowed(from, target)) {
     return json(res, 403, { error: `that bot is not on this bot's allowed peers. ${PEER_ACCESS_HELP}` });

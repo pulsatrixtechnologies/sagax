@@ -408,7 +408,7 @@ describe("thread control placement", () => {
       expect(markup).toContain('data-mid="notice"');
       expect(markup).toContain("1Password");
       expect(markup).toContain("boom");
-      expect(markup).toContain("Messaged @Ada");
+      expect(markup).toContain("Messaged Ada");
       expect(markup).toContain("Allow once");
       expect(markup).toContain("run a command");
       expect(markup).toContain("a.json");

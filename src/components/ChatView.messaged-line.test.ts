@@ -119,4 +119,14 @@ describe("Messaged line (#3270)", () => {
     expect(count(markup, 'data-testid="messaged-line-recipient"')).toBe(1);
     expect(count(markup, 'data-testid="bot-comm-chip"')).toBe(1);
   });
+
+  // #3275: the failed chip's words come from the catalog, not the server's tool name
+  it("says a failed send in the chat's language", () => {
+    setLocale("fr");
+    const markup = render(2, { failLast: true });
+    expect(plain(markup)).toContain("N'a pas pu écrire à test");
+    expect(plain(markup)).not.toContain("Messaged @test");
+    setLocale("en");
+    expect(plain(render(2, { failLast: true }))).toContain("Could not message test");
+  });
 });

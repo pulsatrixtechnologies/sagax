@@ -393,7 +393,19 @@ export type StepReading = {
  * language, for any surface that shows a stored tool name or failure cause
  * as text (task timeline, screen reader). Other words stay as they are. */
 export function localizedServerLine(name: string): string {
-  return localizedEngineCause(name) ?? serverSentence(name) ?? name;
+  return localizedEngineCause(name) ?? commSentence(name, "done") ?? serverSentence(name) ?? name;
+}
+
+/** A bot-to-bot receipt the server names in English (server/comms-visibility.ts
+ * "Messaged @X", "Message from @X"; a person's "Messaged X"), said again from
+ * the catalog in the tense of its state, so a failed send in a French chat
+ * reads French (#3275). */
+function commSentence(name: string, phase: StepPhase): string | undefined {
+  let match = /^Message from @(.+)$/.exec(name);
+  if (match) return t("step.messageFrom", { name: match[1]! });
+  match = /^Messaged @?(.+)$/.exec(name);
+  if (match) return t(labelTense(phase) === "failed" ? "step.messaged.failed" : "step.messaged.done", { name: match[1]! });
+  return undefined;
 }
 
 /** Server rows written in English as a sentence (server/index.ts), read
@@ -477,6 +489,8 @@ export function readStep(tool: StepTool, nameOf?: StepNameOf, live?: boolean): S
   if (meta) return meta;
   const stuck = stuckNotice(name);
   if (stuck) return stuck;
+  const comm = commSentence(name, phase);
+  if (comm) return { label: comm };
   const sentence = serverSentence(name);
   if (sentence) return { label: sentence };
   if (isSentence(name)) return { label: name };

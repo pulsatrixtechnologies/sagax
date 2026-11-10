@@ -3,9 +3,10 @@
  * Headless screenshots of a turn that messages several bots, through the
  * real ChatView (gallery messaged-line, Playwright, no window): English and
  * French, 2, 6 and 17 recipients, Tool calls off and on, plus the full list
- * opened and a failed send.
- * Usage: node scripts/capture/messaged-line.mjs [--out DIR] [--port N] [--mode before|after]
- * Files: <mode>-<lang>-<n>-tools-<off|on>.png
+ * opened, then folded back, and a failed send. --skin picks the theme
+ * (pulsatrix-light for the light one).
+ * Usage: node scripts/capture/messaged-line.mjs [--out DIR] [--port N] [--mode before|after] [--skin ID]
+ * Files: <mode>[-<skin>]-<lang>-<n>-tools-<off|on>.png
  */
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
@@ -19,7 +20,8 @@ const arg = (name, fallback) => {
 };
 const outDir = resolve(arg("--out", join(root, "docs", "screenshots", "messaged-line")));
 const port = Number(arg("--port", "5331"));
-const mode = arg("--mode", "after");
+const skin = arg("--skin", "pulsatrix");
+const mode = skin === "pulsatrix" ? arg("--mode", "after") : `${arg("--mode", "after")}-${skin}`;
 
 async function waitForServer(url, ms = 120_000) {
   const start = Date.now();
@@ -54,15 +56,18 @@ try {
       for (const tools of [false, true]) shots.push({ lang, n, tools, name: `${mode}-${lang}-${n}-tools-${tools ? "on" : "off"}` });
     }
     shots.push({ lang, n: 17, tools: false, open: true, name: `${mode}-${lang}-17-open` });
+    shots.push({ lang, n: 17, tools: false, open: true, fold: true, name: `${mode}-${lang}-17-folded` });
     shots.push({ lang, n: 2, tools: false, fail: true, name: `${mode}-${lang}-2-failed` });
     shots.push({ lang, n: 2, tools: false, sheet: true, name: `${mode}-${lang}-2-sheet` });
   }
   for (const shot of shots) {
-    await page.goto(`${base}?skin=pulsatrix&lang=${shot.lang}&n=${shot.n}${shot.tools ? "&tools=1" : ""}${shot.fail ? "&fail=1" : ""}`, { waitUntil: "networkidle" });
+    await page.goto(`${base}?skin=${skin}&lang=${shot.lang}&n=${shot.n}${shot.tools ? "&tools=1" : ""}${shot.fail ? "&fail=1" : ""}`, { waitUntil: "networkidle" });
     await page.waitForTimeout(400);
     if (shot.open) {
       const more = page.locator("[data-testid=messaged-line-more]");
       if (await more.count()) await more.first().click();
+      await page.waitForTimeout(200);
+      if (shot.fold && await more.count()) await more.first().click();
       await page.waitForTimeout(200);
     }
     if (shot.sheet) {

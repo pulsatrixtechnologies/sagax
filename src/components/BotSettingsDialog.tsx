@@ -65,7 +65,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
 }) {
   const advanced = useAdvancedMode();
   const dispatch = useStoreDispatch();
-  const state = useStoreSelector((current) => ({ botSettingsSection: current.botSettingsSection, botSettingsExpandAccordion: current.botSettingsExpandAccordion, computerOpen: current.computerOpen, config: current.config, botPanelTab: current.botPanelTab, botPanelRestored: current.botPanelRestored, codingChat: current.codingChat }), shallowEqual);
+  const state = useStoreSelector((current) => ({ botSettingsSection: current.botSettingsSection, botSettingsExpandAccordion: current.botSettingsExpandAccordion, computerOpen: current.computerOpen, config: current.config, botPanelTab: current.botPanelTab, botPanelRestored: current.botPanelRestored, codingChat: current.codingChat, connected: current.connected }), shallowEqual);
   const runs = useStoreSelector((current) => botRoutineRuns(current, bot.id), shallowEqual);
   const { padClass, dragProps } = useCaptionChrome();
   const { macInset, browser } = useMacInsetChrome();
@@ -96,9 +96,12 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   // branches or commits to show, which live there (#2599, JC 2026-11-07);
   // without either, a Coding pick falls back to Activity.
   const codingChatKey = state.codingChat?.botId === bot.id ? state.codingChat.itemId : null;
+  // #3462: a step of this bot's work open in the chat column: the Coding tab
+  // is offered beside Activity with that session's card, never switched to.
+  const stepThreadId = state.codingChat?.step?.orchestratorId === bot.id ? state.codingChat.threadId : undefined;
   // One activity fetch for both tabs: Activity's agent rows, Coding's code work.
   const codingPanel = useBotCodingPanel(bot);
-  const panelTabs = visiblePanelTabs({ advanced, computerOff, coding: codingChatKey !== null || codingPanel.hasCodeWork });
+  const panelTabs = visiblePanelTabs({ advanced, computerOff, coding: codingChatKey !== null || stepThreadId !== undefined || codingPanel.hasCodeWork });
   const tab: PanelTab = panelTabs.includes(pickedTab) ? pickedTab : "activity";
   // Opening a coding chat brings its tab forward, where its session is.
   useEffect(() => {
@@ -375,7 +378,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                   <BotTaskSection botId={bot.id} />
                   {/* #2599: the agent rows only; the pull requests and
                       branches are in the Coding tab. */}
-                  <ActivitySectionBody bot={bot} panel={codingPanel} codeWork={false} />
+                  <ActivitySectionBody bot={bot} panel={codingPanel} codeWork={false} streaming={state.connected} openStepThreadId={stepThreadId} />
                   {/* Temporary attended remote sessions: only while active.
                       Unattended hosts live in the Computer place picker. */}
                   <RemoteSessionsSection bot={bot} />

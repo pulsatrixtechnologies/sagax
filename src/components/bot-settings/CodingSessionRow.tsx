@@ -36,16 +36,22 @@ export function DottedSpinner({ size = 16 }: { size?: number }) {
 const ICON_SIZE = 20;
 const PR_ICON = { size: ICON_SIZE, strokeWidth: 1.9, "aria-hidden": true as const };
 
+/** The green check of a finished session (merged here; a finished step of
+ * an orchestrator's work on its bot's face, #3462). */
+export function DoneMark({ small = false, data = { "data-coding-icon": "merged" }, className }: { small?: boolean; data?: Record<`data-${string}`, string>; className?: string }) {
+  return (
+    <span {...data} className={cn("flex", small ? "size-3" : "size-5", "shrink-0 items-center justify-center rounded-full bg-success", className)}>
+      <Check size={small ? 8 : 13} strokeWidth={3} aria-hidden="true" />
+    </span>
+  );
+}
+
 function StateMark({ kind }: { kind: CodingRowKind }) {
   switch (kind) {
     case "running":
       return <DottedSpinner size={ICON_SIZE} />;
     case "merged":
-      return (
-        <span data-coding-icon="merged" className="flex size-5 shrink-0 items-center justify-center rounded-full bg-success">
-          <Check size={13} strokeWidth={3} aria-hidden="true" />
-        </span>
-      );
+      return <DoneMark />;
     case "ready":
       return <GitPullRequest {...PR_ICON} data-coding-icon="ready" className="shrink-0 text-[var(--color-switch-on)]" />;
     case "draft":

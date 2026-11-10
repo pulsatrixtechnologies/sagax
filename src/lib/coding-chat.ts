@@ -33,6 +33,22 @@ export interface CodingChatTarget {
   threadId?: string;
   /** The row that was clicked: the header draws at once from it. */
   seed?: BotActivityItem;
+  /** A step of an orchestrator bot's work (#3462): the chat is the team
+   * bot's, the panel stays the orchestrator's. */
+  step?: CodingChatStep;
+}
+
+/** Where a step's coding chat comes from: the orchestrator that runs the
+ * work, and the words to draw before its list is read. */
+export interface CodingChatStep {
+  orchestratorId: string;
+  /** The step's name: the chat's title. */
+  name: string;
+  /** The piece of work it belongs to. */
+  work?: string;
+  /** Its place in the piece of work, 1-based, and the total. */
+  index?: number;
+  total?: number;
 }
 
 export interface TestSummary {

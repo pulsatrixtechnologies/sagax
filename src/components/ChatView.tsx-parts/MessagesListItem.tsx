@@ -13,6 +13,8 @@ import { BotExchangeChip, TranscriptDate } from "../BotExchangeChip";
 import { GotoGroupChip } from "../GotoGroupChip";
 import { MessagedLine } from "../MessagedLine";
 import { AskLine } from "../AskLine";
+import { TeamNoteLine } from "../TeamNoteLine";
+import { teamNoteCount, teamNoteFolded } from "@/lib/team-work";
 import { askAlreadyLined } from "@/lib/ask-line";
 import type { GotoTarget } from "@/lib/goto-lines";
 import { StatusActivityRow } from "@/components/StatusActivityRow";
@@ -314,9 +316,6 @@ export function MessagesListItem({
   }
   const m = item.message;
   const row = (() => {
-    // #3461: the orchestrator reads a team note at its next turn; the person's
-    // chat does not draw it until the work view does (lot 2 of #3451)
-    if (m.teamNote) return null;
     // A client abort is a stop, not a failure. Legacy rows still store
     // the provider's sentence or an error row; both read as this line.
     if (isCancelledTranscriptRow(m)) {
@@ -340,6 +339,19 @@ export function MessagesListItem({
     // #2109: connect_github's sign-in card (code, Copy code, Open link)
     if (m.githubConnect && m.role === "bot" && m.kind === "text") {
       return <MessageBoundary fallbackText={m.text ?? ""}><GithubConnectCard card={m.githubConnect} /></MessageBoundary>;
+    }
+    // #3462: the person wrote to a team bot in a step's chat: one quiet line,
+    // a burst that still meets the next row folds into it
+    if (m.teamNote) {
+      const after = items[index + 1];
+      const next = after?.kind === "message" ? after.message.teamNote : undefined;
+      if (teamNoteFolded(m.teamNote, next)) return null;
+      const before: NonNullable<Message["teamNote"]>[] = [];
+      for (const row of rowsAbove()) {
+        if (!row.teamNote) break;
+        before.unshift(row.teamNote);
+      }
+      return <TeamNoteLine note={m.teamNote} count={teamNoteCount(m.teamNote, before)} orchestratorId={botId} bots={bots} mid={m.id} />;
     }
     // 2026-11-05: what a bot's turn elsewhere left for the person (src/components/AttentionCard.tsx)
     if (m.attention && m.role === "bot" && m.kind === "text") {

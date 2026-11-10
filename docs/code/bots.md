@@ -919,8 +919,27 @@ Covered by `shared/bot-task-list.test.ts` and `server/bots/bot-task-list.test.ts
   bot (`server/team-work/person-note.ts`; a burst folds into one row only
   while that bot's session has not been handed it, else the words are a new
   row); its next turn reads it once as a note from the app; no turn is
-  started for it. The chat does not draw the row (until the work view does).
+  started for it. The chat draws the row as one quiet line (lot 2 below).
   The team bot's answers stay in that thread.
 - No setting, permission, confirmation, limit or admin gate. The Team board
   files are not part of it.
 
+## Orchestrator work view: the panel (2026-11-10, #3462, lot 2 of #3451)
+
+- Only the Coding section of an orchestrator bot's panel changes
+  (`TeamWorkSection.tsx`, words in `src/lib/team-work.ts`, data in
+  `src/lib/use-team-work.ts`); a bot without a team, a read not back yet and a
+  failed first read keep today's section, the same DOM.
+- The team row shows each team bot's mascot with its name, the title under it
+  (as the chat header pill does), so a tile matches the rows that name it.
+- Live marks follow the shared rule (`shared/team-work.ts` `teamLive`), never a
+  plan; no live mark while the live stream is down. No polling: one read, the
+  `team.work` frame (debounced 1 s), runtime events of step threads in a ref,
+  a safety read each 60 s while a step is open.
+- A step opens today's coding chat on the team bot (`CodingChatTarget.step`);
+  the orchestrator stays selected, its panel holds the session card (Coding
+  tab offered, never switched to). A `teamNote` row is one `NamesLine`
+  (`TeamNoteLine.tsx`).
+- Tests: `ActivitySection.team-work.dom.test.ts`, `TeamWorkSection.dom.test.ts`,
+  `src/lib/team-work.test.ts`, `CodingChat.step.dom.test.ts`,
+  `ChatView.team-note.test.ts`. Captures: `node scripts/capture/team-work.mjs`.

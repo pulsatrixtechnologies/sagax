@@ -18405,7 +18405,9 @@
       "savedKeys.reset": "764411710357197d3d55fbf646d0ea6249c4236cbc635e0b4212b8d92cf5dea6",
       "savedKeys.unreadable": "bc5d879863bbf469cf9eb3649a942c922fce1569af6ba8a7c5accf911506701a",
       "savedKeys.resetFailed": "36cbb4b025b8d444bedcdeb27a14ff70011c469e8e75f5634de3942dd6bb7cb6",
-      "botProfile.v6.backTo": "6a44ec550bd8c6c58691c79c5ab6975834d84bb801953b6e1089a3fd7ee145b3"
+      "botProfile.v6.backTo": "6a44ec550bd8c6c58691c79c5ab6975834d84bb801953b6e1089a3fd7ee145b3",
+      "limitFailover.signedOut": "85480b5aa526778a378b1bd9dcf5d370ff94ee9b3ad4b848f9306f27c5dcdcde",
+      "limitFailover.signedOutNotice": "3da0804ffd12b3bf8028ea590164e6a7cc0b7e5f7b9ce830f4044883092c9c0d"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

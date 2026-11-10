@@ -110,6 +110,7 @@ export class ProviderRegistry {
   /** Engines the start-up read has not probed yet; null outside that read. */
   private unread: Set<InstanceId> | null = null;
   private snapshotGeneration = 0;
+  private readonly signedInListeners = new Set<(instanceId: InstanceId) => void>();
   private driversByKind: Map<string, AnyProviderDriver>;
   /** Where Settings-driven npm installs go; the data directory by default. */
   private readonly enginesBaseDir: string | undefined;
@@ -401,11 +402,26 @@ export class ProviderRegistry {
     }
     // Only while this is still the live instance: a reload may have replaced it during the read.
     if (this.byId.get(instance.instanceId)?.live === instance) {
+      const before = this.lastSnapshots.get(instance.instanceId) ?? this.seeds.get(instance.instanceId);
       this.lastSnapshots.set(instance.instanceId, snapshot);
       this.unread?.delete(instance.instanceId);
       this.saveStatus();
+      if (before?.authenticated === false && snapshot.state === "available" && snapshot.authenticated === true) this.signedIn(instance.instanceId);
     }
     return snapshot;
+  }
+
+  /** `listener` hears of each engine whose status read turns from signed out
+   * to signed in, however the sign-in happened: in the app, in the engine's
+   * own browser callback, or in a terminal (#3315). */
+  onSignedIn(listener: (instanceId: InstanceId) => void): void {
+    this.signedInListeners.add(listener);
+  }
+
+  private signedIn(instanceId: InstanceId): void {
+    for (const listener of this.signedInListeners) {
+      try { listener(instanceId); } catch (error) { console.warn(`[registry] signed-in listener: ${error instanceof Error ? error.message : String(error)}`); }
+    }
   }
 
   private saveStatus(): void {

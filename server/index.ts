@@ -7,7 +7,7 @@ import { browserProfilePartitionTarget } from "./config.ts";
 import { masteryDelegationFacts } from "./achievements/achievements-mastery.ts";
 import { checkRoutineReadiness, routineEngineRefusal, routineFlowSkills, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer, type ReadinessEngine } from "./routines/routine-readiness.ts";
 import { routineFlowInput } from "./routines/routine-flow-input.ts";
-import { noteEngineRefusal, clearEngineRefusal, activeEngineRefusal } from "./engines/engine-refusals.ts";
+import { noteEngineRefusal, clearEngineRefusal, activeEngineRefusal, clearSignedOut, persistSignedOutHolds } from "./engines/engine-refusals.ts";
 import { PreSendRefusals } from "./engines/presend-refusals.ts";
 import { PerspicaxReachability, gatewayProbe, observedFetch } from "./perspicax/perspicax-reachability.ts";
 import { createConnectorStatusRoutes } from "./routes/connector-status.ts";
@@ -1537,6 +1537,7 @@ import { createAskBotAndWait } from "./index-leaves/askBotAndWait.ts";
 import { createWaitForChatRoomMember } from "./index-leaves/waitForChatRoomMember.ts";
 import { createStopCompanyInstances } from "./index-leaves/stopCompanyInstances.ts";
 import { createSpeakerTurnSelection } from "./index-leaves/speakerTurnSelection.ts";
+import { createNoteSignedOutTurn, createSignedOutTurnSelection } from "./index-leaves/signedOutTurnSelection.ts";
 import { createConfidentialPerspicaxRefusal } from "./index-leaves/confidentialPerspicaxRefusal.ts";
 import { createCloudRoutineReadiness } from "./index-leaves/cloudRoutineReadiness.ts";
 import { createBrowserIntegration } from "./index-leaves/browserIntegration.ts";
@@ -6919,6 +6920,9 @@ bindLeafHost({
   get sendStateLimit() { return sendStateLimit; },
   get warmPayerAccountModels() { return warmPayerAccountModels; },
   get speakerTurnSelection() { return speakerTurnSelection; },
+  get signedOutTurnSelection() { return signedOutTurnSelection; },
+  get noteSignedOutTurn() { return noteSignedOutTurn; },
+  get engineSignedIn() { return engineSignedIn; },
   get serverEnginesUnknownLogged() { return serverEnginesUnknownLogged; },
   get serverEngineAllowedFor() { return serverEngineAllowedFor; },
   get autoModelCatalog() { return autoModelCatalog; },
@@ -7996,6 +8000,8 @@ const sendStateFor = createSendStateFor(getLeafHost);
 const sendStateLimit = createSendStateLimit(getLeafHost);
 const warmPayerAccountModels = createWarmPayerAccountModels(getLeafHost);
 const speakerTurnSelection = createSpeakerTurnSelection(getLeafHost);
+const signedOutTurnSelection = createSignedOutTurnSelection(getLeafHost);
+const noteSignedOutTurn = createNoteSignedOutTurn(getLeafHost);
 const serverEngineAllowedFor = createServerEngineAllowedFor(getLeafHost);
 const autoCatalogLookup = createAutoCatalogLookup(getLeafHost);
 const announcePlanThresholds = createAnnouncePlanThresholds(getLeafHost);
@@ -9111,6 +9117,19 @@ if (IDENTITY.kind !== "perspicax") {
   });
 }
 const registry = new ProviderRegistry(BUILT_IN_DRIVERS, { statusFile: join(DATA_DIR, "providers", "engine-status.json") });
+// #3315: a sign-out a turn met outlives a restart, and a sign-in ends it.
+persistSignedOutHolds(join(DATA_DIR, "signed-out-holds.json"));
+/** The server's own sign-in to this engine is back (a sign-in finished in the
+ * app, or a status read turned from signed out to signed in): its sign-out
+ * ends for every conversation that ran on it. On an organization server a
+ * person's own sign-in is theirs: only the server's own accounts end here. */
+function engineSignedIn(instanceId: string): void {
+  const ended = clearSignedOut(instanceId, (account) => IDENTITY.kind !== "perspicax" || !account || (() => {
+    try { return JSON.parse(account)[1] === "organization"; } catch { return false; }
+  })());
+  if (ended) console.info(`[signed-out] ${instanceId}: signed in again, its sign-out ended`);
+}
+registry.onSignedIn((instanceId) => engineSignedIn(instanceId));
 const firstEngineRead = holdUntilFirstEngineRead();
 // The approval gates below hand this their model selection — or a driver
 // view they already hold — and let the registry resolve the driver, instead
@@ -9741,7 +9760,7 @@ function queuedTurnTrigger(item: { trigger?: UsageTrigger; sender?: ResolvedSend
   if (item.peerAsk) return undefined;
   return item.sender ? { kind: "user", label: item.sender.name } : { kind: "owner" };
 }
-const providerAuthSessions = new ProviderAuthSessions();
+const providerAuthSessions = new ProviderAuthSessions({ signedIn: (instanceId) => engineSignedIn(instanceId) });
 // OpenCode reads provider keys (ANTHROPIC_API_KEY, OPENAI_API_KEY, …) from
 // its environment, as it does in a terminal, but only where that environment
 // is the person's own shell (openCodeProviderKeysAllowed). Wired before the
@@ -33958,6 +33977,8 @@ const startTurnRunner = createStartTurn({
   soloGoals,
   speakerPayerMode,
   speakerTurnSelection,
+  signedOutTurnSelection,
+  noteSignedOutTurn,
   spokenLineFields,
   startScreenPoller,
   stopScreenPoller,

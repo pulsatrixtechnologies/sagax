@@ -102,4 +102,18 @@ describe("startTurn leaf modules (#1388 w4 step 3)", () => {
     expect(index).toMatch(/const startTurnRunner = createStartTurn\(/);
     expect(index).toMatch(/async function startTurn\(/);
   });
+
+  it("hands startTurnRunner every host dep the start-turn leaves call (#3315)", () => {
+    const index = readFileSync(join(here, "../index.ts"), "utf8");
+    const start = index.indexOf("const startTurnRunner = createStartTurn({");
+    expect(start).toBeGreaterThan(-1);
+    const block = index.slice(start, index.indexOf("\n});", start));
+    for (const dep of ["signedOutTurnSelection", "noteSignedOutTurn"]) {
+      expect(block).toMatch(new RegExp(`^\\s+${dep},$`, "m"));
+    }
+    const validate = readFileSync(join(here, "start-turn-prepare-validate.ts"), "utf8");
+    expect(validate).toMatch(/signedOutTurnSelection\(/);
+    const finish = readFileSync(join(here, "start-turn-finish.ts"), "utf8");
+    expect(finish).toMatch(/host\.noteSignedOutTurn\?\.\(/);
+  });
 });

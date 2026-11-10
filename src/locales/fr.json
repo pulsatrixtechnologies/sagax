@@ -13829,6 +13829,8 @@
   "limitFailover.exhausted": "Limites atteintes sur {tried} : aucun autre moteur n'a pu répondre. Choisis un autre modèle, ajoute du crédit, ou réessaie à la réinitialisation (vers {time}).",
   "limitFailover.ownerExhausted": "Le propriétaire de ce bot a atteint ses limites sur {tried} : aucun autre moteur n'a pu répondre. Choisis un autre modèle, ajoute du crédit, ou réessaie à la réinitialisation (vers {time}).",
   "limitFailover.exhaustedNoTime": "Limites atteintes sur {tried} : aucun autre moteur n'a pu répondre. Choisis un autre modèle, ajoute du crédit, ou réessaie plus tard.",
+  "limitFailover.signedOut": "{from} est déconnecté, alors {to} a pris le relais pour ce tour.",
+  "limitFailover.signedOutNotice": "{from} est déconnecté, alors {to} répond en attendant. Reconnecte-toi dans Réglages → Fournisseurs de modèles et comptes pour continuer avec {from}.",
   "limitFailover.ownerExhaustedNoTime": "Le propriétaire de ce bot a atteint ses limites sur {tried} : aucun autre moteur n'a pu répondre. Choisis un autre modèle, ajoute du crédit, ou réessaie plus tard.",
   "routineReadiness.flow_plan": "La vérification Flow en shadow a échoué à {step} : {error}",
   "routineReadiness.ready.flow": "Le plan Flow en shadow n’a aucun blocage connu. Lance la routine quand tu es prêt.",

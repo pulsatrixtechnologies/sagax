@@ -86,6 +86,8 @@ let e: any = cause;
         directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId);
       if (e instanceof TurnNotStartedError) {
         retireProviderTurn(e.turnId);
+        // #3315: the engine refused a sign-in: new turns skip it for this payer.
+        if (e instanceof TurnAuthenticationRefusedError) host.noteSignedOutTurn?.(state.bot, state.speaker ?? state.opts?.speaker ?? { origin: "person" }, state.instanceId);
         if (!mayRecover) e = new DirectTurnSetupCancelled("turn stopped during provider setup");
       }
       // #2632: a mint refused because this turn's generation was revoked

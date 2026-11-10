@@ -1,5 +1,5 @@
 import type { RoutineRequirements, RoutineReadinessCheck, RoutineReadinessKind, RoutineReadinessResult } from "../../shared/routine-readiness.ts";
-import { activeEngineRefusal, clearEngineRefusal, type EngineRefusal } from "../engines/engine-refusals.ts";
+import { activeEngineRefusal, clearEngineRefusal, SIGNED_OUT_RECHECK_MS, type EngineRefusal } from "../engines/engine-refusals.ts";
 import { redactSecretsInText } from "../redact.ts";
 import type { FlowPluginsDeclaration } from "../perspicax/perspicax-link.ts";
 import type { OrgFlowPluginsStatus } from "../org/org-flow-plugins.ts";
@@ -20,7 +20,12 @@ export interface ReadinessEngine { engine: string; name: string; account?: strin
 /** Refusal facts stay live even when the sign-in probe is cached. */
 export function routineEngineRefusal(engine: ReadinessEngine, now: number): EngineRefusal | undefined {
   const recorded = activeEngineRefusal(engine.engine, engine.account, now);
-  if (engine.signedIn === true && (engine.signedInAt === undefined || engine.signedInAt > (recorded?.at ?? -Infinity))) clearEngineRefusal(engine.engine, engine.account, now, true);
+  // #3315: an engine's own status can read signed in while its turns are
+  // refused for a sign-in (a stale token): a later status read ends such a
+  // sign-out only once SIGNED_OUT_RECHECK_MS has passed since its refusal. A
+  // verified sign-in (no read time: the person's own login) ends it at once.
+  const stale = engine.signedInAt === undefined || recorded?.cause !== "signed_out" || now - recorded.at >= SIGNED_OUT_RECHECK_MS;
+  if (engine.signedIn === true && stale && (engine.signedInAt === undefined || engine.signedInAt > (recorded?.at ?? -Infinity))) clearEngineRefusal(engine.engine, engine.account, now, true);
   return engine.signedIn === false ? { engine: engine.engine, account: engine.account, cause: "signed_out", at: now }
     : activeEngineRefusal(engine.engine, engine.account, now);
 }

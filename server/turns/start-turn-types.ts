@@ -407,6 +407,8 @@ export type StartTurnHost = {
   soloGoals: any,
   speakerPayerMode: any,
   speakerTurnSelection: any,
+  signedOutTurnSelection: any,
+  noteSignedOutTurn: any,
   spokenLineFields: any,
   startScreenPoller: any,
   stopScreenPoller: any,

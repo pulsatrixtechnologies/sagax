@@ -5,6 +5,7 @@ import { isShuttingDown } from "../process/http-shutdown.ts";
 import { isEngineEmptyFailure } from "../peers/incidents.ts";
 import { withBotNotify } from "../../shared/notification.ts";
 import { retireSafetyHolds } from "../safety/safety-review.ts";
+import { firstSignedOut } from "../engines/engine-refusals.ts";
 export function handleTurnCompleted(event: any, ctx: any, host: any): void {
   const { deleteAttachment, endedToolOutput } = host;
   const {
@@ -174,7 +175,21 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
       }
       // #2057: a sign-in refusal held for its renew reports when it settles.
       const signInHeld = host.signInRefusalHeld.delete(event.threadId);
-      if (!event.ok && !stopped && !limitTaken && !emptyRetried && !signInHeld && !lazyClaimAlreadyReported && !computerParked && !host.routines?.runForThread(event.threadId)) {
+      // #3315: a turn its engine refused for a sign-in holds that engine for
+      // this payer (new turns and conversations start on a chosen backup),
+      // and its stretch files one incident per bot, not one per refused turn.
+      let signedOutAgain = false;
+      if (!event.ok && !stopped && bot) {
+        const verdict = host.readinessFailureClass(failureCause ?? "", { stopReason: event.stopReason });
+        const instance = host.registry.get(event.providerInstanceId ?? bot.modelSelection.instanceId);
+        if (instance && verdict.kind === "owner" && verdict.cause === "signed_out") {
+          const access = host.turnAccessByThread.get(event.threadId);
+          const account = host.refusalAccount(access?.via ?? "server", access?.payerPrincipalId, host.turnSlotFor(bot, instance));
+          host.noteEngineRefusal({ engine: instance.instanceId, account, cause: "signed_out", at: Date.now() });
+          signedOutAgain = !firstSignedOut(instance.instanceId, account, `incident:${bot.id}`);
+        }
+      }
+      if (!event.ok && !stopped && !limitTaken && !emptyRetried && !signInHeld && !signedOutAgain && !lazyClaimAlreadyReported && !computerParked && !host.routines?.runForThread(event.threadId)) {
         const broken = bot ?? (speaker ? host.store.bot(speaker.botId) : undefined);
         if (broken) host.reportIncident({ kind: "failed", bot: broken, threadId: event.threadId, detail: failureCause ?? "the run ended without a result" });
       }

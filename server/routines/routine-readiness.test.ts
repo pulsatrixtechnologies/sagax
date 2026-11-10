@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { checkRoutineReadiness, routineFlowSkills, ROUTINE_READINESS_PROBE_TIMEOUT_MS, loadRoutineReadiness, routineNeededSkills, type RoutineReadinessDeps } from "./routine-readiness.ts";
 import type { FlowPluginsDeclaration } from "../perspicax/perspicax-link.ts";
-import { clearEngineRefusal, noteEngineRefusal } from "../engines/engine-refusals.ts";
+import { clearEngineRefusal, noteEngineRefusal, SIGNED_OUT_RECHECK_MS } from "../engines/engine-refusals.ts";
 
 const routine = { botId: "osprey", prompt: "Check the inbox." };
 const run = { botId: routine.botId };
@@ -167,7 +167,9 @@ describe("routine readiness", () => {
     const engine = "cached-sign-in";
     noteEngineRefusal({ engine, cause: "signed_out", at: 200 });
     expect((await checkRoutineReadiness(routine, run, deps({ now: () => 300, engine: () => ({ engine, name: "Grok", signedIn: true, signedInAt: 100 }) }))).ok).toBe(false);
-    expect((await checkRoutineReadiness(routine, run, deps({ now: () => 400, engine: () => ({ engine, name: "Grok", signedIn: true, signedInAt: 301 }) }))).ok).toBe(true);
+    // #3315: a newer status read that says signed in is believed once the re-check interval has passed.
+    expect((await checkRoutineReadiness(routine, run, deps({ now: () => 400, engine: () => ({ engine, name: "Grok", signedIn: true, signedInAt: 301 }) }))).ok).toBe(false);
+    expect((await checkRoutineReadiness(routine, run, deps({ now: () => 200 + SIGNED_OUT_RECHECK_MS, engine: () => ({ engine, name: "Grok", signedIn: true, signedInAt: 301 }) }))).ok).toBe(true);
   });
   it("does not call an engine whose sign-ins are still loading signed out, and never caches that probe (#3125)", async () => {
     const engine = vi.fn(() => ({ engine: "starting-engine", name: "Claude", signedIn: false, starting: true }));

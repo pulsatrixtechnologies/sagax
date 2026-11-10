@@ -18,6 +18,23 @@ function fixture() {
 }
 
 describe("provider login ownership", () => {
+  it("says when a sign-in finished, whichever way it finished, and not while it waits (#3315)", async () => {
+    const heard: string[] = [];
+    const { instance, auth } = fixture();
+    const sessions = new ProviderAuthSessions({ signedIn: (instanceId) => heard.push(instanceId) });
+    await sessions.start(instance, "owner");
+    await sessions.status("codex", "owner", "random-flow");
+    expect(heard, "still waiting").toEqual([]);
+    instance.getAuthentication.mockResolvedValueOnce({ ...auth, phase: "succeeded" });
+    await sessions.status("codex", "owner", "random-flow");
+    expect(heard).toEqual(["codex"]);
+    await sessions.start(instance, "owner");
+    await sessions.complete("codex", "owner", "random-flow", "https://localhost/callback?code=1");
+    expect(heard).toEqual(["codex", "codex"]);
+    instance.startAuthentication.mockResolvedValueOnce({ ...auth, phase: "succeeded" });
+    await sessions.start(instance, "owner");
+    expect(heard).toEqual(["codex", "codex", "codex"]);
+  });
   it("forgets only the replaced provider's login reservation", async () => {
     const { sessions, instance } = fixture();
     const sibling = { ...instance, instanceId: "other" };

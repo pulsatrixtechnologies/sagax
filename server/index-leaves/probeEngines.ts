@@ -33,6 +33,10 @@ function probeEngines() {
       const ready = snapshot.state === "available" && snapshot.authenticated !== false;
       next.set(live.instanceId, { instanceId: live.instanceId, driver: live.driverKind, installed, ready, ...(snapshot.version ? { version: snapshot.version } : {}), at });
     }));
+    // #3315: an engine a probe read signed out reads signed in now: its sign-out ends.
+    for (const [instanceId, probe] of next) {
+      if (probe.ready === true && host.engineProbes.get(instanceId)?.ready === false) host.engineSignedIn?.(instanceId);
+    }
     host.engineProbes = next;
   })().finally(() => { host.engineProbeFlight = null; });
   return host.engineProbeFlight;

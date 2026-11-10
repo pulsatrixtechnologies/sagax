@@ -60,5 +60,9 @@ export function limitFailoverLineText(line: LimitFailoverLine, now = Date.now())
       }
       return t(line.owner ? "limitFailover.ownerExhaustedNoTime" : "limitFailover.exhaustedNoTime", { tried });
     }
+    case "signedOut":
+      return t("limitFailover.signedOut", { from: line.from, to: line.to });
+    case "signedOutNotice":
+      return t("limitFailover.signedOutNotice", { from: line.from, to: line.to });
   }
 }

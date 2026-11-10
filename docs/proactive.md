@@ -23,7 +23,10 @@ Every minute, for each bot whose mode is not off:
 
 1. **Products**: the APIs the owner's Pulsatrix connection serves
    (`api_list`) are matched to the Flow products (hourly).
-2. **Watches** of those products (`--product`), cached one hour.
+2. **Watches** of those products (`--product`), cached one hour. A watch
+   is the organization's, not a bot's: one bot per person watches it
+   (#3394), the Primary Bot when it watches, else the person's first bot
+   (store order) that does. One event wakes one bot, once.
 3. **Cadence**: `15m`, `1h`, `daily@HH:MM`, `weekly:sun..sat@HH:MM`, in the
    tenant's local time (the person's time zone, else the server's). A
    calendar cadence never catches up on the first sight or after a restart.

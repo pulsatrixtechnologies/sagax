@@ -27,6 +27,9 @@
 //      (the card in that same conversation). The proactive layer never runs
 //      a write on its own.
 //
+// One bot per person (#3394): a watch is the organization's, so only one
+// bot of a person watches it (the Primary Bot first); see tick().
+//
 // Dedup: a condition that stays true with the same key never wakes again;
 // it can fire again once it turned false, or when its key changes.
 import { createHash } from "node:crypto";
@@ -544,8 +547,9 @@ export function resolveWatch(watch: FlowWatch, ctx: WatchTokenContext): { watch:
 }
 
 export interface FlowWatchLoopDeps {
-  /** The bots to watch for (not hidden, not temporary), with their owner. */
-  bots(): Array<{ id: string; owner: string }>;
+  /** The bots to watch for (not hidden, not temporary), with their owner
+   * and whether the bot is its person's Primary Bot. */
+  bots(): Array<{ id: string; owner: string; primary?: boolean }>;
   /** The stored bot (its proactiveMode), undefined if gone. */
   bot(botId: string): { proactiveMode?: unknown } | undefined;
   /** The organization's Flow plugin of this bot's owner, or null. */
@@ -618,14 +622,25 @@ export class FlowWatchLoop {
     return value;
   }
 
-  /** One pass over every bot. Never throws; never two at once. */
+  /** One pass over every bot. Never throws; never two at once.
+   *
+   * #3394: a watch belongs to the organization's Flow plugin, not to a bot,
+   * so it is watched once per person: by the Primary Bot when it watches,
+   * else by the person's first bot (store order) that watches it. Every
+   * other bot of the same person leaves that watch alone, so one event
+   * wakes one bot, once. Another person's bots keep their own watch. */
   async tick(): Promise<void> {
     if (this.running) return;
     this.running = true;
     try {
-      for (const { id, owner } of this.deps.bots()) {
+      const bots = this.deps.bots();
+      const ordered = [...bots.filter((bot) => bot.primary), ...bots.filter((bot) => !bot.primary)];
+      const claimed = new Map<string, Set<string>>();
+      for (const { id, owner } of ordered) {
+        let taken = claimed.get(owner);
+        if (!taken) claimed.set(owner, (taken = new Set()));
         try {
-          await this.tickBot(id, owner);
+          await this.tickBot(id, owner, taken);
         } catch (error) {
           this.deps.log(id, `Pulsatrix watches failed: ${error instanceof Error ? error.message.slice(0, 160) : "error"}`);
         }
@@ -636,7 +651,9 @@ export class FlowWatchLoop {
     }
   }
 
-  async tickBot(botId: string, owner: string): Promise<void> {
+  /** `taken`: the watches another bot of the same person already watches
+   * in this pass; this bot skips them and adds the ones it watches. */
+  async tickBot(botId: string, owner: string, taken: Set<string> = new Set()): Promise<void> {
     const bot = this.deps.bot(botId);
     if (!bot || !proactiveMayObserve(proactiveModeFor(bot))) return;
     const helper = this.deps.helper(botId, owner);
@@ -657,7 +674,9 @@ export class FlowWatchLoop {
     const zone = listing.timeZone ?? this.deps.timeZone(owner) ?? this.deps.hostTimeZone?.() ?? "UTC";
     const now = this.now();
     const due: FlowWatch[] = [];
-    for (const watch of watchesForProducts(listing.watches, products)) {
+    const mine = watchesForProducts(listing.watches, products).filter((watch) => !taken.has(watch.id));
+    for (const watch of mine) taken.add(watch.id);
+    for (const watch of mine) {
       const cadence = parseCadence(watch.cadence)!;
       const { last, due: replayed } = this.deps.memory.get(botId, watch.id);
       if (replayed || cadenceDue(cadence, last, now, zone)) due.push(watch);

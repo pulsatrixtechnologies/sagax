@@ -1303,6 +1303,9 @@ resolved (unset fact = skipped), observe as a read with the owner's routine
 credentials (`PerspicaxMcp.withRoutineSession`), JMESPath `when`, dedup per
 watch + result key, `ProactiveEngine.consider`, then a wake with source
 `watch` in the bot's one conversation. Writes go through ordinary approval.
+A watch is the organization's, so one bot per person watches it (#3394): the
+Primary Bot when it watches, else the person's first bot that does; one
+event wakes one bot, once.
 
 ## A reply shows as it is written (2026-10-29)
 

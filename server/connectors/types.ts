@@ -42,6 +42,10 @@ export type ConnectorState = "connected" | "needs-sign-in" | "failed" | "unknown
 export interface ConnectorTool {
   /** the provider's own tool id (Grok: the full gateway name use_tool takes) */
   id: string;
+  /** #3353: what the provider says the tool does, when it lists it (ChatGPT apps) */
+  description?: string;
+  /** #3353: the tool's input schema, when the provider lists it (ChatGPT apps) */
+  inputSchema?: Record<string, unknown>;
 }
 
 export interface ConnectorEntry {

@@ -33,6 +33,7 @@ import {
   type ConnectorProvider,
   type ConnectorProviderSource,
   type ConnectorState,
+  type ConnectorTool,
 } from "./types.ts";
 
 export const CONNECTORS_DIR = "connectors";
@@ -45,12 +46,23 @@ const AUTHS: readonly ConnectorAccountAuth[] = ["subscription", "key", "none", "
 const STATES: readonly ConnectorState[] = ["connected", "needs-sign-in", "failed", "unknown"];
 const MAX_CONNECTORS = 256;
 const MAX_TOOLS = 1024;
+const TOOL_DESCRIPTION_MAX = 1_000;
+const TOOL_SCHEMA_MAX = 8_000;
 
 /** The file of a person: their id when it is a plain one, else a hash, so
  * a path never comes from free text. */
 export function connectorsFileName(principalId: string): string {
   const id = principalId.trim().toLowerCase();
   return /^[a-z0-9][a-z0-9_.-]{0,127}$/.test(id) ? `${id}.json` : `h-${createHash("sha256").update(id).digest("hex").slice(0, 40)}.json`;
+}
+
+/** #3353: a tool's description and input schema, when its provider lists
+ * them (ChatGPT apps), bounded so one tool never weighs on the file. */
+function cleanTool(id: string, raw: Record<string, unknown>): ConnectorTool {
+  const description = typeof raw.description === "string" ? raw.description.replace(/\p{Cc}+/gu, " ").trim().slice(0, TOOL_DESCRIPTION_MAX) : "";
+  const schema = raw.inputSchema && typeof raw.inputSchema === "object" && !Array.isArray(raw.inputSchema) ? raw.inputSchema as Record<string, unknown> : undefined;
+  const schemaFits = schema !== undefined && JSON.stringify(schema).length <= TOOL_SCHEMA_MAX;
+  return { id, ...(description ? { description } : {}), ...(schemaFits ? { inputSchema: schema } : {}) };
 }
 
 function cleanEntry(raw: unknown): ConnectorEntry | null {
@@ -62,7 +74,7 @@ function cleanEntry(raw: unknown): ConnectorEntry | null {
   const tools = Array.isArray(value.tools)
     ? value.tools.flatMap((tool) => {
       const id = tool && typeof tool === "object" && typeof (tool as { id?: unknown }).id === "string" ? (tool as { id: string }).id : "";
-      return TOOL.test(id) ? [{ id }] : [];
+      return TOOL.test(id) ? [cleanTool(id, tool as Record<string, unknown>)] : [];
     }).slice(0, MAX_TOOLS)
     : [];
   const id = typeof value.id === "string" && ID.test(value.id) ? value.id : undefined;

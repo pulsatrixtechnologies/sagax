@@ -127,8 +127,6 @@ export type StartTurnHost = {
   computerToolsRefusal: any,
   confidentialThreadOwner: any,
   confinedWhy: any,
-  connectorSwitchForTurn: any,
-  connectorSwitchText: any,
   containerComputerFrame: any,
   containerComputerMcp: any,
   containerComputerStatus: any,

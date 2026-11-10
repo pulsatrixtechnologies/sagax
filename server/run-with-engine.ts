@@ -1,7 +1,8 @@
 // run_with_engine (2026-10-28): a bot runs one part of its work on another
 // engine or model it may use, then carries on with the result. Example: a
-// Claude bot reads the person's Microsoft Teams through their own Grok
-// account's connectors, then answers in Claude.
+// Claude bot hands a long review to a faster model, then answers in Claude.
+// A connector of the person needs no other engine: every bot calls it from
+// its own turn through the connector hub (call_connector, #3356).
 //
 // The sub-turn is the same bot, in a fresh thread of its own, for the same
 // person: the turn's speaker (peerSpeaker of the source thread) keeps that
@@ -76,13 +77,10 @@ export function chooseRelayEngine(input: {
   engine: string;
   model?: string;
   engines: readonly RelayEngine[];
-  /** The engine the calling turn runs on: running the same engine and model
-   * again is no relay, unless a part there loads account connectors the
-   * calling turn does not (relayAddsAccountConnectors true: a bot on Grok
-   * without the opt-in, connectors/turn-plan.ts relayAddsAccountConnectors).
-   * That part loads them (engineRelay), so it is a real relay (#3344: the bot
-   * is told of its own Grok sign-in's connectors). */
-  current?: { instanceId: string; model: string; account?: "second"; relayAddsAccountConnectors?: boolean };
+  /** The engine the calling turn runs on: running the same engine, model
+   * and sign-in again is no relay (#3356: a part there loads nothing more,
+   * since the exception of #3174 is retired). */
+  current?: { instanceId: string; model: string; account?: "second" };
 }): RelayChoice {
   const asked = norm(input.engine);
   if (!asked) return { ok: false, error: `Name the engine. Engines you may use here: ${relayEngineList(input.engines)}.` };
@@ -119,7 +117,7 @@ export function chooseRelayEngine(input: {
   if (wanted && chosen.model !== wanted && engine.models.options.length > 0) {
     return { ok: false, error: `${engine.displayName} does not offer the model "${wanted.slice(0, 80)}". Its models: ${engine.models.options.map((option) => option.id).join(", ")}.` };
   }
-  if (input.current && input.current.relayAddsAccountConnectors !== true && input.current.instanceId === chosen.instanceId && input.current.model === chosen.model && (input.current.account ?? null) === (engine.account ?? null)) {
+  if (input.current && input.current.instanceId === chosen.instanceId && input.current.model === chosen.model && (input.current.account ?? null) === (engine.account ?? null)) {
     return { ok: false, error: `You already run on ${engine.displayName} with ${chosen.model}: do this part yourself in this turn.` };
   }
   return { ok: true, instanceId: chosen.instanceId, model: chosen.model, engineLabel: engine.displayName, driverKind: engine.driverKind, ...(engine.account ? { account: engine.account } : {}) };

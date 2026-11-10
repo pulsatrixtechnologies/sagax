@@ -1149,6 +1149,8 @@ final class Session: ObservableObject {
         stopActiveRuntime()
         let language = DemoLaunch.language
         let server = DemoServer(now: DemoLaunch.clock ?? Date(), language: language)
+        // #3465: the choice card, for its screenshot
+        if ProcessInfo.processInfo.arguments.contains("-demo-proactive-card") { server.addProactiveChoiceCard() }
         server.onFrame = { [weak self] frame in
             // One serial queue keeps the server's order.
             DispatchQueue.main.async {
@@ -2449,23 +2451,43 @@ final class Session: ObservableObject {
         try? FileManager.default.removeItem(at: root)
     }
 
-    func answer(chat: Chat, card: OptionCard, choice: String, rememberingPermission: Bool = true) async {
+    /// #3465: « Ne plus proposer » on a choice card, its third answer:
+    /// final for bots; the person can still turn the domain on in Settings.
+    /// True once the server kept it.
+    @discardableResult
+    func answerProactiveNever(chat: Chat, card: OptionCard) async -> Bool {
+        guard let proposal = card.proactiveProposal, case let .bot(bot) = chat, let client else { return false }
+        do {
+            try await client.proactiveProposalFeedback(botId: bot.id, proposalId: proposal.id, choice: "never")
+            return true
+        } catch let error as APIError where error.isUnauthorized {
+            handleUnauthorized()
+            return false
+        } catch {
+            return false
+        }
+    }
+
+    /// #3465: false when a proactive proposal's answer did not reach the
+    /// server, so the card can come back for another try.
+    @discardableResult
+    func answer(chat: Chat, card: OptionCard, choice: String, rememberingPermission: Bool = true, watchSwitches: [String: Bool] = [:]) async -> Bool {
         // 2026-10-30: a proactive proposal answers on its own route
         if let proposal = card.proactiveProposal {
-            guard case let .bot(bot) = chat else { return }
+            guard case let .bot(bot) = chat else { return false }
             let accept = ProactiveProposalRules.accepts(card, answer: choice)
-            await perform { try await $0.answerProactiveProposal(botId: bot.id, proposalId: proposal.id, accept: accept) }
-            return
+            // #3465: a choice card's yes keeps the watches its switches show
+            let watches = accept ? ProactiveProposalRules.watchesOn(card, switches: watchSwitches) : nil
+            return await perform { try await $0.answerProactiveProposal(botId: bot.id, proposalId: proposal.id, accept: accept, watches: watches) }
         }
-        guard let requestId = card.requestId else { return }
+        guard let requestId = card.requestId else { return false }
         // Phone-call consent: fixed Accept/Decline labels map to allow/deny
         // (shared/phone-call-consent.ts), never the generic option-card path.
         if card.phoneCallConsent != nil {
             let behavior = PhoneCallConsentRules.behavior(for: choice)
-            await perform {
+            return await perform {
                 try await $0.respond(threadId: chat.threadId, decision: ApprovalDecision(requestId: requestId, behavior: behavior))
             }
-            return
         }
         if rememberingPermission, card.shouldRememberPermission(for: choice), case let .bot(bot) = chat {
             await alwaysAllow(bot: bot, card: card)
@@ -2477,6 +2499,7 @@ final class Session: ObservableObject {
             isPermission: card.isPermission,
             reviewedSha256: card.skillRequest?.reviewedSha256
         )
+        return true
     }
 
     /// Synchronously seal a credential before the caller starts an async
@@ -4324,15 +4347,19 @@ final class Session: ObservableObject {
         }
     }
 
-    func perform(quietly: Bool = false, _ body: (CompanionClient) async throws -> Void) async {
-        guard let client else { return }
+    /// True once the request went through; a failure shows in actionError.
+    @discardableResult
+    func perform(quietly: Bool = false, _ body: (CompanionClient) async throws -> Void) async -> Bool {
+        guard let client else { return false }
         do {
             try await body(client)
+            return true
         } catch let error as APIError where error.isUnauthorized {
             handleUnauthorized()
         } catch {
             if !quietly { actionError = error.localizedDescription }
         }
+        return false
     }
 }
 

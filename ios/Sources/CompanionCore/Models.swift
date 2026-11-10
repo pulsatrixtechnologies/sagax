@@ -176,6 +176,12 @@ public struct OptionCard: Codable, Hashable, Sendable {
     /// 2026-10-30: a proactive proposal (`ProactiveProposalRules`): answered
     /// on its own route, never as a typed message. Nil on every other card.
     public var proactiveProposal: ProactiveProposalRef? = nil
+    /// #3431: a choice card (propose_proactive): the watch domain its yes
+    /// turns on and each watch, for its switches. Nil on every other card.
+    public var proactiveChoice: ProactiveChoiceCardData? = nil
+    /// #2694: the person's feedback on a proactive card ("never" is the
+    /// choice card's « Ne plus proposer »).
+    public var feedback: String? = nil
     public var answered: String?
     public var dismissed: Bool?
     /// Present when this card is a live provider ask — the thing that makes

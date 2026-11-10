@@ -63,6 +63,8 @@ public final class DemoServer: @unchecked Sendable {
     var listener: Int32?
     var listenerURL: URL?
     var listenerQueue: DispatchQueue?
+    /// #3465: the person's proactive choices in the demo (DemoProactive.swift).
+    var proactiveDemoChoices: [String: [String: Any]] = [:]
 
     public init(now: Date = Date(), language: DemoLanguage = .english, chunkDelay: TimeInterval = 0.06, calendar: Calendar = .current) {
         self.now = now
@@ -166,6 +168,12 @@ public final class DemoServer: @unchecked Sendable {
             return blocks(method: method, id: parts.count == 4 ? parts[3] : nil, json: json)
         case (_, ["api", "me"]) where parts.count == 3 && parts[2] == "terms":
             return terms(method: method)
+        case (_, ["api", "me"]) where parts.count == 3 && parts[2] == "proactive":
+            return proactiveChoicesResponse(method: method, json: json)
+        case ("POST", ["api", "bots"]) where parts.count >= 5 && parts[3] == "proactive":
+            return proactiveAnswerResponse(parts: parts, json: json)
+        case ("PUT", ["api", "bots"]) where parts.count == 4 && parts[3] == "background-brief":
+            return .init(status: 200, body: Data(#"{"settings":{"enabled":true}}"#.utf8))
         case ("DELETE", ["api", "me"]) where parts.count == 2:
             return deleteAccount(json)
         case ("GET", ["api", "auth"]) where parts.count == 3 && parts[2] == "session":

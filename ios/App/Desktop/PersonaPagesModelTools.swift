@@ -217,6 +217,8 @@ enum BotPermissionsPart: String, Hashable, Sendable {
 struct PersonaPermissionsPage: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
+    /// #3465: « Ce que ce bot suit pour toi »
+    @StateObject private var follows = ProactiveReceiveModel()
     @ObservedObject private var mode = DesktopInterfaceMode.shared
     let bot: Bot
     let slackURL: URL?
@@ -354,7 +356,10 @@ struct PersonaPermissionsPage: View {
                     Task { _ = await sendPanelPatch(BotPanelPatch(proactiveMode: (on ? ProactiveMode.proactive : .off).rawValue), bot: bot, session: session) }
                 }
                 .accessibilityIdentifier("persona-permissions.proactive")
+                .task(id: bot.id) { await follows.load(session) }
             }
+            // #3465: « Ce que ce bot suit pour toi », beside Proactive
+            PersonaFollowsRows(bot: bot, tint: tint, model: follows)
             // #2048: remembered publish target (page / artifact surface).
             if edits("pageTargetDefault") {
                 DesktopDescribedRow(

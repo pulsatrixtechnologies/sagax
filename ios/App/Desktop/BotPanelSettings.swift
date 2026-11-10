@@ -196,6 +196,8 @@ struct BotPanelPermissions: View {
     @State private var confirmingFull = false
     @State private var allowlist = false
     @State private var grants = false
+    /// #3465: « Ce que ce bot suit pour toi »
+    @StateObject private var follows = ProactiveReceiveModel()
 
     /// An admin session, or the bot's owner on an organization server
     /// (2026-10-26); each switch asks for its own field.
@@ -323,11 +325,14 @@ struct BotPanelPermissions: View {
                 .padding(.top, 12)
                 .accessibilityLabel(Text("Proactive"))
                 .accessibilityIdentifier("desktop-panel-proactive")
+                .task(id: bot.id) { await follows.load(session) }
                 Text(proactive.hint)
                     .panelText(13, 19.5)
                     .foregroundStyle(theme.inkSecondary)
                     .padding(.top, 6)
             }
+            // #3465: « Ce que ce bot suit pour toi », beside Proactive
+            BotFollowsPanelCard(bot: bot, model: follows)
             // #2048: remembered publish target (page / artifact surface).
             if edits("pageTargetDefault") {
                 PanelCard {

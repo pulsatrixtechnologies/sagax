@@ -289,6 +289,11 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "DELETE", path: /^\/api\/bots\/[\w-]+\/command-allowlist\/[\w-]+$/ },
   { method: "GET", path: /^\/api\/me\/preferences$/ },
   { method: "PUT", path: /^\/api\/me\/preferences$/ },
+  // #3465: the person's proactive choices (Settings, « Ce que je reçois », and
+  // a bot's « Ce que ce bot suit pour toi ») and a bot's ambient rows there
+  { method: "GET", path: /^\/api\/me\/proactive$/ },
+  { method: "PUT", path: /^\/api\/me\/proactive$/ },
+  { method: "PUT", path: /^\/api\/bots\/[\w-]+\/background-brief$/ },
   // a personal computer's look (skin, font), for Settings > Appearance > Same as my computer
   { method: "GET", path: /^\/api\/me\/appearance$/ },
   { method: "PUT", path: /^\/api\/me\/appearance$/ },

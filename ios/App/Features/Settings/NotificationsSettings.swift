@@ -264,6 +264,8 @@ struct NotificationsSettingsView: View {
                     identifier: "settings-connection-notices"
                 )
             }
+            // #3465: « Ce que je reçois », the person's proactive choices
+            ProactiveReceiveSection()
             // Presence and read receipts moved to Privacy and security (2026-10-26).
         }
     }

@@ -80,6 +80,9 @@ export type ClaudeSession = {
   systemPromptPath: string | null;
   /** the spawn contract — a different one means a fresh process */
   argsKey: string;
+  /** the launch passed --autocompact, chosen by this CLI version's --help (#3302) */
+  passedAutocompact?: boolean;
+  autocompactVersion?: string | null;
   /** the same contract as an object, to name what changed on a relaunch */
   contract?: unknown;
   /** the turn files its agents server reads (removed with the process) */

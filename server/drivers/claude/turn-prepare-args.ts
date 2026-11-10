@@ -13,7 +13,7 @@ export async function prepareClaudeTurnArgs(ctx: ClaudeTurnCtx): Promise<ClaudeT
   const logicalTurnId = ctx.logicalTurnId;
   const {
     config, input, environment, getStartupModelRefresh, getCliVersion, setCliVersion,
-    getCliVersionChecked, setCliVersionChecked, getCliHasAutocompact, readCliVersion,
+    getCliVersionChecked, setCliVersionChecked, getCliHasAutocompact, getCliHelpVersion, readCliVersion,
     liveApprovalModes, active, sessions, freshNextTurn, refreshSubscriptionHome, retryState,
     support,
   } = ctx;
@@ -21,6 +21,8 @@ export async function prepareClaudeTurnArgs(ctx: ClaudeTurnCtx): Promise<ClaudeT
   let cliVersion = getCliVersion();
   let cliVersionChecked = getCliVersionChecked();
   const cliHasAutocompact = getCliHasAutocompact();
+  // The CLI version whose --help chose --autocompact: a refusal is scoped to it (#3302).
+  const autocompactVersion = getCliHelpVersion();
   const {
     inheritsUserConfig, claudeCliSupports, parseClaudeCliVersion, resolveClaudeTurnModel,
     applyClaudeInject, autoCompactWindow, GUEST_CLAUDE_TOOLS, withWhy,
@@ -231,7 +233,10 @@ if (!turn.guestConfined && claudeCliSupports(cliVersion, "--plugin-dir")) {
   for (const dir of turn.pluginDirs ?? []) args.push("--plugin-dir", dir);
 }
 const compactWindow = autoCompactWindow(turnEnvironment);
-if (compactWindow && cliHasAutocompact === true) {
+// Recorded where the flag is added: only a launch that passed it can
+// count as its refusal, so the relaunch without it never loops (#3302).
+const passedAutocompact = Boolean(compactWindow) && cliHasAutocompact === true;
+if (compactWindow && passedAutocompact) {
   args.push("--autocompact", compactWindow);
 }
 // A resumed conversation can still carry an earlier assignment, place
@@ -259,7 +264,7 @@ if (turn.effort) args.push("--effort", turn.effort);
     renewedFromChat, promptMsg, sessionId, newSessionId, requestedMode, autoAllowlist,
     fullAllowlist, permissionMode, controlsHost, args, replaysUserMessages, isolated, turnModel,
     injected, turnEnvironment, keepsClaudeAiConnectors, mcpFromUserConfig, orgTools,
-    disallowedTools, compactWindow,
+    disallowedTools, compactWindow, passedAutocompact, autocompactVersion,
   });
   setCliVersion(cliVersion);
   setCliVersionChecked(cliVersionChecked);

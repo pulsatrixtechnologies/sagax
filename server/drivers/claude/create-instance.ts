@@ -134,9 +134,16 @@ export async function createClaudeInstance(
   // Whether `claude --help` lists --autocompact, read once per CLI version
   // by snapshot(). The flag is not in every build above its version floor
   // (2.1.129 rejects it), so the listing wins over the floor; null until
-  // probed, or when the probe fails.
+  // probed, or when the probe fails. A CLI version whose launch refused
+  // the flag as an unknown option keeps it off, even after another
+  // version and a rollback to it (#3302).
   let cliHasAutocompact: boolean | null = null;
   let cliHelpVersion: string | null = null;
+  const autocompactRefusedBy = new Set<string>();
+  const noteAutocompactRefused = (version: string | null) => {
+    if (version !== null) autocompactRefusedBy.add(version);
+    if (version === cliHelpVersion) cliHasAutocompact = false;
+  };
   const versionOf = cliVersionReader(config.cli);
   const readCliVersion = (env: NodeJS.ProcessEnv) => new Promise<ReturnType<typeof versionOf>>((resolve) => {
     execCli(config.cli, ["--version"], { timeout: 8000, env }, (err, stdout) => resolve(versionOf(err, stdout)));
@@ -151,7 +158,7 @@ export async function createClaudeInstance(
       done: new Promise<string | null>((resolve) => {
         execCli(config.cli, ["--help"], { timeout: 8000, env }, (err, stdout) => resolve(err ? null : stdout));
       }).then((help) => {
-        cliHasAutocompact = help === null ? null : /^\s*--autocompact\b/m.test(help);
+        cliHasAutocompact = help === null ? null : !autocompactRefusedBy.has(version) && /^\s*--autocompact\b/m.test(help);
         cliHelpVersion = version;
         if (helpRead === read) helpRead = null;
       }),
@@ -322,6 +329,8 @@ export async function createClaudeInstance(
     getCliVersionChecked: () => cliVersionChecked,
     setCliVersionChecked: (v) => { cliVersionChecked = v; },
     getCliHasAutocompact: () => cliHasAutocompact,
+    getCliHelpVersion: () => cliHelpVersion,
+    noteAutocompactRefused,
     readCliVersion,
     sessions,
     active,

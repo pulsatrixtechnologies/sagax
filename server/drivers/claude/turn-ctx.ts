@@ -54,6 +54,9 @@ export type ClaudeTurnCtx = SendTurnDeps & {
   turnModel: string | null | undefined;
   replaysUserMessages: boolean;
   isolated: boolean;
+  /** this launch passes --autocompact, chosen by the --help of autocompactVersion */
+  passedAutocompact: boolean;
+  autocompactVersion: string | null;
   switches: Record<string, boolean>;
   session: ClaudeSession;
   child: ClaudeSession["child"];

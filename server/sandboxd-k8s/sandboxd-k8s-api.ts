@@ -5,6 +5,7 @@ import type { Duplex } from "node:stream";
 
 import { reportBackgroundError } from "../background-error.ts";
 import type { SandboxAudit } from "../sandbox/sandbox-audit.ts";
+import { EXEC_FAILED_CODE, EXEC_NOT_RUN_MESSAGE, SandboxError } from "../sandbox/sandboxd-core.ts";
 import type { K8sClient } from "./sandboxd-k8s-client.ts";
 import {
   PAUSED_ANNOTATION,
@@ -93,6 +94,12 @@ export function assembleKubeDockerApi(parts: KubeDockerApiParts): DockerApi {
     metaOf,
     withExecEnv,
   } = parts;
+  /** One audit line for an exec the cluster did not complete by itself. */
+  const execAudit = (name: string, request: ExecRequest, outcome: "denied", reason: string) => {
+    let key = "";
+    try { key = sandboxKeyFromContainerName(name); } catch { /* name already checked by the caller */ }
+    audit.record({ action: "sandbox.exec", outcome, ...(key ? { key } : {}), detail: { argv0: request.Cmd[0] ?? "", reason: "not_run", why: reason.slice(0, 300) } });
+  };
   const api: DockerApi = {
     async ping() {
       const response = await client.request("GET", `/api/v1/namespaces/${ns}`);
@@ -277,9 +284,17 @@ export function assembleKubeDockerApi(parts: KubeDockerApiParts): DockerApi {
           audit.record({ action: "sandbox.exec", outcome: "denied", ...(key ? { key } : {}), detail: { argv0: request.Cmd[0] ?? "", reason: "stopped" } });
           return { exitCode: 137, stdout: Buffer.alloc(0), stderr: Buffer.from("sagax: the sandbox job was stopped\n"), truncated: false };
         }
-        throw error;
+        // #3440: the cluster's reason reaches the caller (the bot's tool
+        // result, the plugin copy's log), never a bare "the provisioner failed"
+        const why = error instanceof Error ? error.message : String(error);
+        execAudit(name, request, "denied", why);
+        throw new SandboxError(502, EXEC_FAILED_CODE, `${EXEC_NOT_RUN_MESSAGE}: ${why}`);
       }
       releaseExec(name, controller);
+      if (result.failure) {
+        execAudit(name, request, "denied", result.failure);
+        throw new SandboxError(502, EXEC_FAILED_CODE, `${EXEC_NOT_RUN_MESSAGE}: ${result.failure}`);
+      }
       let stdout = result.stdout;
       let stderr = result.stderr;
       let truncated = false;

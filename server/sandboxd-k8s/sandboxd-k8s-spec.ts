@@ -750,6 +750,23 @@ export function parseExecStatus(text: string): number | null {
   return null;
 }
 
+/** #3440: why the cluster did not run a command, from its exec status (the
+ * v4 channel 3 frame), or null when the command itself answered (success or
+ * its own exit code). A failure with no exit code is the cluster's own (the
+ * node could not start the command, or its stream broke): parseExecStatus
+ * reads it as exit 1, and its message was dropped, so every command of a
+ * saturated environment answered "exit 1" with no output and no reason. */
+export function execStatusFailure(text: string): string | null {
+  let body: { status?: string; message?: string; reason?: string; details?: { causes?: { reason?: string; message?: string }[] } };
+  try { body = JSON.parse(text) as typeof body; } catch { return "the environment sent an unreadable exec status"; }
+  if (body.status === "Success") return null;
+  if (body.details?.causes?.some((cause) => cause.reason === "ExitCode")) return null;
+  if (body.status !== "Failure") return null;
+  const message = typeof body.message === "string" ? body.message.trim().slice(0, 500) : "";
+  const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 80) : "";
+  return message || reason || "the cluster refused the command without a reason";
+}
+
 export function sandboxKeyFromContainerName(name: string): string {
   const key = name.startsWith("sagax-user-") ? name.slice("sagax-user-".length) : "";
   if (!SANDBOX_KEY_RE.test(key)) throw new Error("invalid sandbox pod name");

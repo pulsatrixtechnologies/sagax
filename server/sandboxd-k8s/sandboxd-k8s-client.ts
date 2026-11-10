@@ -10,7 +10,7 @@ import { Duplex } from "node:stream";
 import WebSocket from "ws";
 import { parse as parseYaml } from "yaml";
 
-import { parseCpuQuantity, parseExecStatus, parseMemoryQuantity } from "./sandboxd-k8s-spec.ts";
+import { execStatusFailure, parseCpuQuantity, parseExecStatus, parseMemoryQuantity } from "./sandboxd-k8s-spec.ts";
 
 export interface K8sResponse {
   status: number;
@@ -21,6 +21,10 @@ export interface K8sExecResult {
   stdout: Buffer;
   stderr: Buffer;
   exitCode: number | null;
+  /** #3440: set when the command did not answer by itself: the cluster
+   * reported a failure with no exit code, or the stream closed before any
+   * exit status. Says why, in the cluster's own words when it gave some. */
+  failure?: string;
 }
 
 export interface K8sClient {
@@ -184,7 +188,26 @@ export function kubernetesClient(auth: K8sAuth): K8sClient {
       handshakeTimeout: 15_000,
     });
     const fail = (error: Error) => { socket.terminate(); reject(error); };
-    socket.on("unexpected-response", (_request, response) => fail(new Error(`exec refused (${response.statusCode ?? 0})`)));
+    // #3440: the cluster's answer says why (a 429 of the API server's
+    // fairness limits, a node that could not be dialled): it is kept.
+    socket.on("unexpected-response", (_request, response) => {
+      const chunks: Buffer[] = [];
+      let size = 0;
+      let done = false;
+      const end = () => {
+        if (done) return;
+        done = true;
+        let why = "";
+        const text = Buffer.concat(chunks).toString("utf8");
+        try { why = String((JSON.parse(text) as { message?: unknown }).message ?? ""); } catch { why = text; }
+        why = why.replace(/\s+/g, " ").trim().slice(0, 300);
+        fail(new Error(`exec refused (${response.statusCode ?? 0})${why ? `: ${why}` : ""}`));
+      };
+      response.on("data", (chunk: Buffer) => { if (size < 4096) { chunks.push(chunk); size += chunk.length; } });
+      response.on("end", end);
+      response.on("error", end);
+      response.on("close", end);
+    });
     socket.once("error", fail);
     socket.once("open", () => {
       socket.off("error", fail);
@@ -213,6 +236,8 @@ export function kubernetesClient(auth: K8sAuth): K8sClient {
       const stdout: Buffer[] = [];
       const stderr: Buffer[] = [];
       let exitCode: number | null = null;
+      let statusSeen = false;
+      let failure: string | undefined;
       const exitCodeDone = await new Promise<number | null>((resolve, reject) => {
         let settled = false;
         let cancelled = false;
@@ -238,14 +263,23 @@ export function kubernetesClient(auth: K8sAuth): K8sClient {
           const payload = frame.subarray(1);
           if (frame[0] === 1) stdout.push(Buffer.from(payload));
           else if (frame[0] === 2) stderr.push(Buffer.from(payload));
-          else if (frame[0] === 3) exitCode = parseExecStatus(payload.toString("utf8"));
+          else if (frame[0] === 3) {
+            statusSeen = true;
+            const status = payload.toString("utf8");
+            exitCode = parseExecStatus(status);
+            failure = execStatusFailure(status) ?? undefined;
+          }
         });
         socket.on("error", (error) => {
           if (cancelled) return;
           finish(error);
         });
-        socket.on("close", () => {
+        socket.on("close", (code, reason) => {
           if (cancelled) return;
+          if (!statusSeen) {
+            const why = reason.toString("utf8").trim().slice(0, 200);
+            failure = `the connection to the environment closed before the command answered (close ${code}${why ? `: ${why}` : ""}); it may have run in part`;
+          }
           finish(exitCode);
         });
         // The v4 protocol cannot close stdin: the reader takes exactly the
@@ -254,7 +288,7 @@ export function kubernetesClient(auth: K8sAuth): K8sClient {
         // exit status still answers, so a failed send is not an error here.
         if (stdin !== undefined) sendStdin(socket, stdin).catch(() => undefined);
       });
-      return { stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr), exitCode: exitCodeDone };
+      return { stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr), exitCode: exitCodeDone, ...(failure ? { failure } : {}) };
     },
     async execStream(namespace, pod, command, prelude) {
       const socket = await openExec(namespace, pod, command, true);

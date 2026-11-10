@@ -73,6 +73,11 @@ export interface SandboxStats {
   image: string;
 }
 
+/** #3440: the code of an exec the environment's transport did not complete
+ * (the cluster refused it, or its stream broke): the message says why. */
+export const EXEC_FAILED_CODE = "exec_failed";
+export const EXEC_NOT_RUN_MESSAGE = "the server environment did not run the command";
+
 export class SandboxError extends Error {
   readonly status: number;
   readonly code: string;
@@ -112,7 +117,7 @@ export const DEFAULT_EXEC_TIMEOUT_SEC = 120;
 export const MAX_EXEC_OUTPUT_BYTES = 1024 * 1024;
 const MAX_EXEC_ENV_BYTES = 1_500_000;
 const BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
-const MAX_CONCURRENT_EXECS = 4;
+export const MAX_CONCURRENT_EXECS = 4;
 const USAGE_TTL_MS = 60_000;
 const CAPACITY_IDLE_GRACE_MS = 60_000;
 /** Live views of one person's desktop open at once (windows, reconnects). */

@@ -119,6 +119,11 @@ export interface PageRecord {
   /** The person allows the bot (and their own later edit) to replace the
    * published version. Never set by the bot. Off unless they turn it on. */
   keepUpdated?: boolean;
+  /** #3413: a version that declares a personal data capability was current
+   * at some point. Kept until the page is revoked (versions are trimmed, so
+   * their contents cannot tell it later): while it is set and the page is
+   * shared with anyone but its person, its shared state is read only. */
+  personalData?: true;
   /** #3128: the person shares this page in the bot's Library. Everyone who
    * may use the bot reads it and asks the bot to refresh it. Absent means
    * personal, the default. */
@@ -474,11 +479,13 @@ export class PublishedPages {
     if (!page) return refuse(404, "not_found", "This page does not exist.");
     const now = this.clock();
     const sharedBefore = pageSharedWithOthers(page);
+    const currentBefore = page.currentVersion;
     const result = change(page, now);
     if ("ok" in result) return result;
+    if (page.currentVersion !== currentBefore) this.notePersonalData(page);
     // #3413: a page that reads personal data and becomes shared loses the
     // shared state it kept while private, so nothing it received goes out
-    if (!sharedBefore && pageSharedWithOthers(page) && page.state && this.declaresPersonalData(page)) delete page.state;
+    if (!sharedBefore && pageSharedWithOthers(page) && page.state && (page.personalData === true || this.declaresPersonalData(page))) delete page.state;
     if (touch) page.updatedAt = now;
     this.save(pages);
     return page;
@@ -577,6 +584,7 @@ export class PublishedPages {
       version.state = "published";
       page.currentVersion = version.n;
       page.history.push({ at: now, action: "keep", version: n });
+      this.notePersonalData(page);
     }
     page.updatedAt = now;
     this.save(pages);
@@ -746,12 +754,22 @@ export class PublishedPages {
 
   /** #3413, the first isolation rule, held by the declaration itself: while
    * the page is shared with anyone but its person and its served version
-   * declares a personal data capability, its shared state is read only for
+   * declares a personal data capability, or one ever did (`personalData`,
+   * kept on the page until revoke), its shared state is read only for
    * everyone, its person included. Nothing in memory: it holds across a
-   * restart. */
+   * restart and across a change of version. */
   stateReadOnlyForData(id: string): boolean {
     const page = this.get(id);
-    return Boolean(page && pageSharedWithOthers(page) && pageCapabilitiesPersonal(this.capabilities(id)));
+    return Boolean(page && pageSharedWithOthers(page) && (page.personalData === true || pageCapabilitiesPersonal(this.capabilities(id))));
+  }
+
+  /** The current version declares a personal data capability: mark the
+   * page for good (until revoke). Called whenever the current version
+   * changes (publish, a kept-updated proposal). */
+  private notePersonalData(page: PageRecord): void {
+    if (page.personalData === true || page.currentVersion === null) return;
+    const version = page.versions.find((entry) => entry.n === page.currentVersion);
+    if (version && pageIsHtml(version.kind) && pageCapabilitiesPersonal(pageCapabilitiesOf(this.content(page.id, version.n) ?? ""))) page.personalData = true;
   }
 
   /** The keys its person made read-only. */
@@ -1080,6 +1098,8 @@ export class PublishedPages {
     return this.mutate(id, (page, now) => {
       page.status = "revoked";
       delete page.linkId;
+      // the only way the personal data mark goes (#3413)
+      delete page.personalData;
       // its shared state goes with the link (#1544)
       delete page.state;
       page.currentVersion = null;

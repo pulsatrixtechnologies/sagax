@@ -73,4 +73,45 @@ describe("shared state of a page that reads personal data", () => {
     priv.pages.update(priv.id, { access: "org" });
     expect(Object.keys(priv.pages.state(priv.id))).toEqual(["k"]);
   });
+
+  it("stays read only when a version without the block becomes current by publish (second review)", () => {
+    const { pages, id } = made(DATA_PAGE, "org");
+    const v2 = pages.propose({ pageId: id, ownerId: "person-a", botId: "lead", threadId: "t1", title: "Board", kind: "html", content: PLAIN_PAGE });
+    if (!v2.ok) throw new Error(v2.error);
+    pages.publish(id, { version: v2.version.n, access: "org", expiresAt: null });
+    expect(pages.get(id)?.currentVersion).toBe(v2.version.n);
+    expect(pages.setState(id, { key: "k", value: "board of person-b", by: "person-b" })).toMatchObject({ ok: false, code: "shared_write_after_data" });
+  });
+
+  it("stays read only when the bot replaces the version itself on a page kept updated", () => {
+    const { pages, id } = made(DATA_PAGE, "org");
+    pages.setKeepUpdated(id, true);
+    const v2 = pages.propose({ pageId: id, ownerId: "person-a", botId: "lead", threadId: "t1", title: "Board", kind: "html", content: PLAIN_PAGE });
+    if (!v2.ok) throw new Error(v2.error);
+    expect(pages.get(id)?.currentVersion).toBe(v2.version.n);
+    expect(pages.setState(id, { key: "k", value: "board of person-b", by: "person-b" })).toMatchObject({ ok: false, code: "shared_write_after_data" });
+  });
+
+  it("keeps the mark after the data version is trimmed away, and only revoke clears it", () => {
+    const { pages, dir, id } = made(DATA_PAGE, "org");
+    pages.setKeepUpdated(id, true);
+    for (let index = 0; index < 25; index++) pages.propose({ pageId: id, ownerId: "person-a", botId: "lead", threadId: "t1", title: "Board", kind: "html", content: PLAIN_PAGE });
+    expect(pages.setState(id, { key: "k", value: 1, by: "person-b" })).toMatchObject({ ok: false, code: "shared_write_after_data" });
+    // the mark is on the page itself: a restart keeps it
+    expect(new PublishedPages(dir, () => NOW).setState(id, { key: "k", value: 1, by: "person-b" })).toMatchObject({ ok: false, code: "shared_write_after_data" });
+    pages.revoke(id);
+    const plain = pages.get(id)!.versions.at(-1)!.n;
+    pages.publish(id, { version: plain, access: "org", expiresAt: null });
+    expect(pages.setState(id, { key: "k", value: 1, by: "person-b" })).toMatchObject({ ok: true });
+  });
+
+  it("clears the state of a private page when it becomes shared, even when the data version is no longer current", () => {
+    const { pages, id } = made(DATA_PAGE, "private");
+    const v2 = pages.propose({ pageId: id, ownerId: "person-a", botId: "lead", threadId: "t1", title: "Board", kind: "html", content: PLAIN_PAGE });
+    if (!v2.ok) throw new Error(v2.error);
+    pages.publish(id, { version: v2.version.n, access: "private", expiresAt: null });
+    pages.setState(id, { key: "k", value: "my board", by: "person-a" });
+    pages.update(id, { access: "org" });
+    expect(pages.state(id)).toEqual({});
+  });
 });

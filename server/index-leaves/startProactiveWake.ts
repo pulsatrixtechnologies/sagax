@@ -20,7 +20,9 @@ function startProactiveWake(batch: ProactiveWakeBatch, accepted = false, runAs?:
   const peerDigest = peerWakeDigest(batch.events, batch.more);
   const alwaysReport = wakeAlwaysReports(batch.events);
   // #3423: the chosen watches it reports, so the row's "never" stops them
-  const watches = batch.events.flatMap((event) => event.source === "watch" && event.watch?.domain ? [{ id: event.watch.id, domain: event.watch.domain }] : []);
+  // #3431: with the reads the yes covers in this wake (decision 3)
+  const watches = batch.events.flatMap((event) => event.source === "watch" && event.watch?.domain
+    ? [{ id: event.watch.id, domain: event.watch.domain, ...(event.watch.reads?.length ? { reads: [...event.watch.reads] } : {}) }] : []);
   host.routines.enqueueProactive({
     botId: batch.botId,
     name: `Proactive: ${sources.map((source) => host.PROACTIVE_RUN_NAMES[source]).join(", ")}`,

@@ -198,6 +198,9 @@ export function createPromptStartTurn(host: StartTurnHost) {
       }) },
       // 2026-10-30: the bot knows it is proactive, and how (server/proactive/proactive-wake.ts)
       { id: "proactive", label: "Proactive", text: proactivePrompt(proactiveModeFor(state.liveBot ?? state.bot)) },
+      // #3431: the owner's one-to-one turn only, when this bot has a watch
+      // domain to offer them (server/proactive/proactive-ask.ts); else empty
+      { id: "proactive-ask", label: "Proactive alerts", text: state.integrations.agents && !state.onCall ? state.proactiveAskPrompt ?? "" : "" },
       // what this turn reaches, in one line: "what connectors do you have" needs no tool call (server/turns/turn-reach.ts)
       { id: "reach", label: "Reach", text: turnReachPrompt(state.liveBot ?? state.bot, state.instance, state.speaker, state.threadId, state.integrations, Boolean(state.mountedComputer), state.connectorPlan) },
       { id: "browser", label: "Browser", text: state.integrations.browser ? BUILT_IN_BROWSER_SYSTEM_PROMPT + myChromePromptFor(state.bot, state.threadId) : "" },

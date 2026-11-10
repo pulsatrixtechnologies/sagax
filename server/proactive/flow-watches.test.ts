@@ -354,7 +354,8 @@ describe("the loop", () => {
     if (!listing.ok) throw new Error("not listed");
     expect(listing.domains.map((row) => [row.domain, row.eligible])).toEqual([["dispatch", false], ["security", false], ["service", true]]);
     expect(listing.domains.find((row) => row.domain === "service")?.watches).toEqual([
-      { id: "w-open", summary: "Open tickets.", cadence: "15m", products: ["connectwise"], runs: true },
+      // #3431: the tools it reads with (here its observe tool), for the card's details
+      { id: "w-open", summary: "Open tickets.", cadence: "15m", products: ["connectwise"], runs: true, tools: ["cw_psa_service_query"] },
     ]);
     expect(listing.domains.find((row) => row.domain === "security")?.watches[0]).toMatchObject({ runs: false, missing: "product" });
     expect(listing.domains.find((row) => row.domain === "dispatch")?.watches[0]).toMatchObject({ runs: false, missing: "skill" });

@@ -126,6 +126,9 @@ function agentsIntegration(
       // route_message: a person's turn in a 1:1 conversation whose busy sends
       // the bot may route (server/busy-routing.ts). The route re-checks.
       SAGAX_ROUTE_MESSAGES: depth === 0 && host.autoRoutableThread(botId, threadId) ? "1" : "0",
+      // #3431: propose_proactive, in the owner's one-to-one turn whose prompt
+      // carries the Proactive alerts section (proactive-ask.ts). The route re-checks.
+      SAGAX_PROACTIVE_ASK: depth === 0 && host.proactiveAskTurns?.has(threadId) ? "1" : "0",
       // And for a role: team setup, bot creation and deletion, rooms and
       // retries are shown only to a Chief of Staff, whom their routes require.
       SAGAX_CHIEF_OF_STAFF: host.store.bot(botId)?.chiefOfStaff === true ? "1" : "0",

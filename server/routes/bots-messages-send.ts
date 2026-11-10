@@ -576,7 +576,11 @@ async function handleBotMessagePost(deps: BotsMessagesRouteDeps, ctx: RouteConte
       const message = store.appendMessage(threadId, { role: "user", kind: "text", text: typed, ...(sendId ? { sendId } : {}) });
       // an onboarding card, no permission; full-access: exempt
       if (intro.kind === "card") store.appendMessage(threadId, { role: "bot", kind: "options", card: intro.card });
-      else store.appendMessage(threadId, { role: "bot", kind: "text", text: intro.text });
+      else {
+        // #3431: a new bot adds its first question to its closing line
+        const question = typeof deps.proactiveIntroQuestion === "function" ? await deps.proactiveIntroQuestion(bot.id, auth) : "";
+        store.appendMessage(threadId, { role: "bot", kind: "text", text: question ? `${intro.text} ${question}` : intro.text });
+      }
       return json(res, 202, { ok: true, threadId, message });
     }
     const text = press ? press.text : postedText;

@@ -11,6 +11,7 @@ import {
   autoVerdict,
 } from "../approvals/auto-approve.ts";
 import { memberAutoApprovalAllowed } from "../approvals/member-auto-approval.ts";
+import { watchReadCovered } from "../proactive/proactive-ask.ts";
 import {
   ownerModeForTurn,
   perspicaxSelfAnswer,
@@ -484,6 +485,16 @@ function decideRequestOpened(event: any, ctx: any, host: any, s: any): void {
         ? autoVerdict(strictCard || foreignDestination ? "ask" : effectiveApprovalMode, event.tool, {
           recipientsAllowed: recipientsListed,
           connectorRead,
+          // #3431 (decision 3): a read the person's yes to this watch's domain covers
+          watchRead: Boolean(!strictCard && !guestDriven && !foreignDestination && event.outbound !== true && (() => {
+            const run = host.activeRoutineRunForThread?.(event.threadId);
+            return watchReadCovered({
+              tool: event.mcpTool ?? event.tool,
+              botId: asker.id,
+              watches: run?.proactive?.watches,
+              choices: run?.runAs && host.proactiveChoices ? host.proactiveChoices.get(run.runAs) : null,
+            });
+          })()),
           reachMeSelf: Boolean(host.reachMeTeams?.answersConnectorCall(event.threadId, event.mcpTool ?? event.tool, event.input)),
           ...(event.outbound === true ? { outbound: true } : {}),
           requiresExplicitApproval: event.requiresExplicitApproval,

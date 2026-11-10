@@ -133,6 +133,8 @@ import { ProactiveMetricsLedger } from "./proactive/proactive-metrics.ts";
 import { ProactiveBudget, ProactiveEngine, proactiveDryRunSummary } from "./proactive/proactive.ts";
 import { domainLabel, FlowWatchLoop, WATCH_TICK_MS, WatchMemory } from "./proactive/flow-watches.ts";
 import { ProactiveChoices, watchMovedLine, watchPauseLine } from "./proactive/proactive-choices.ts";
+import { askTurnRefusal, ProactiveAsk, type AskBot, type AskTurnFacts } from "./proactive/proactive-ask.ts";
+import { createProactiveAskInternalRoutes } from "./routes/proactive-ask.ts";
 import { createProactiveChoicesRoutes } from "./routes/proactive-choices.ts";
 import { flowHelperIn } from "./proactive/flow-watch-helper.ts";
 import { apiNamesOf } from "./perspicax/perspicax-mcp-helpers.ts";
@@ -6767,6 +6769,9 @@ bindLeafHost({
   get routineWatchDeps() { return routineWatchDeps; },
   get routineWatchEvaluator() { return routineWatchEvaluator; },
   get proactiveProposals() { return proactiveProposals; },
+  get proactiveChoices() { return proactiveChoices; },
+  get proactiveAsk() { return proactiveAsk; },
+  get proactiveAskTurns() { return proactiveAskTurns; },
   get proactiveMetrics() { return proactiveMetrics; },
   get proactiveEngine() { return proactiveEngine; },
   get proactivePending() { return proactivePending; },
@@ -17586,6 +17591,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get USAGE_LIMIT() { return USAGE_LIMIT; },
   get activeGroupSpeaker() { return activeGroupSpeaker; },
   get activeRoutineRunForThread() { return activeRoutineRunForThread; },
+  get proactiveChoices() { return proactiveChoices; },
   get agentCardGuard() { return agentCardGuard; },
   get ambientRefusalFor() { return ambientRefusalFor; },
   get appPiecesByThread() { return appPiecesByThread; },
@@ -20177,6 +20183,22 @@ function feedbackOnProposal(botId: string, proposalId: string, choice: BriefFeed
   } catch {
     return { status: 404, body: { error: "no such proposal" } };
   }
+  // #3431: a choice card's "Ne plus proposer" is final for bots (the person
+  // can still turn the domain on); its other feedback stays on the card
+  if (proposal.choice) {
+    const message = store.messagesFor(proposal.threadId).find((row) => row.id === proposal.messageId);
+    let card = message?.card ? { ...message.card, feedback: choice } : undefined;
+    if (choice === "never" && proposal.answered !== "accepted") {
+      if (!proposal.answered) proactiveProposals.answer(proposal.id, "declined");
+      proactiveAsk.never({ id: proposal.id, choice: proposal.choice });
+      if (card && !card.answered) {
+        const words = briefLanguage(bot.id) === "fr" ? "Ne plus proposer" : "Don't suggest again";
+        card = { ...card, answered: words, answeredText: words };
+      }
+    }
+    if (message && card) store.patchMessage(proposal.threadId, message.id, { card });
+    return { status: 200, body: { ok: true, choice } };
+  }
   const briefId = proposal.events.map((event) => /^suggestion:(.+)$/.exec(event.key)?.[1]).find(Boolean);
   const done = briefId ? backgroundBriefs.feedback(bot.id, briefId, choice) : null;
   const event = proposal.events[0];
@@ -22752,6 +22774,27 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
     speaker: (threadId) => safetyPrincipal(threadId).principalId
   }),
+  // propose_proactive (server/routes/proactive-ask.ts, #3431)
+  createProactiveAskInternalRoutes({
+    turn: (capability) => {
+      const bot = store.bot(capability.botId);
+      if (!bot) return { refused: "Unknown bot: no card." };
+      const refused = askTurnRefusal(proactiveAskTurnFacts(bot, capability.threadId, capability.depth ?? 0));
+      if (refused) return { refused };
+      // the owner's own message of this turn (never a tool result's words)
+      const gate = primaryTurnGate(bot.id, capability.threadId, capability.generation, "cards");
+      if ("status" in gate) return { refused: `${gate.error} No card.` };
+      const person = (effectiveBotOwner(bot) || "").trim().toLowerCase();
+      if (!person || !watchCarrierOf(person, bot.id)) return { refused: "This bot cannot carry a watch for its person (not theirs, hidden or temporary): no card." };
+      return { person, message: gate.message.text };
+    },
+    ask: () => proactiveAsk,
+    learn: (person, botId, facts) => {
+      const bot = store.bot(botId);
+      const owner = personAboutMe.ofBot(person);
+      return bot && owner ? personAboutMe.learn(owner, { botId: bot.id, botName: bot.name }, facts, memoryDate()) : 0;
+    }
+  }),
   // phone_tool (server/routes/phone-tools.ts)
   createPhoneToolInternalRoutes({
     broker: () => phoneTools,
@@ -24549,6 +24592,99 @@ const flowWatchLoop = new FlowWatchLoop({
 });
 if (!process.env.VITEST && IDENTITY.kind === "perspicax") {
   setInterval(() => void flowWatchLoop.tick(), WATCH_TICK_MS).unref();
+}
+/** #3431 (lot 4 of #3408): the bot asks its person what they would like to
+ * receive and proposes one watch domain with a choice card
+ * (server/proactive/proactive-ask.ts). The watch loop's listing and the
+ * person's choices are its only sources. */
+/** How long a turn waits on the first listing of the day. */
+const PROACTIVE_ASK_WAIT_MS = 2_000;
+function proactiveAskBots(person: string): AskBot[] {
+  return store.bots.flatMap((bot) => {
+    if (!watchCarrierOf(person, bot.id)) return [];
+    const born = (bot.tasks ?? []).reduce((oldest, task) => Math.min(oldest, typeof task.createdAt === "number" ? task.createdAt : oldest), Number.POSITIVE_INFINITY);
+    return [{ id: bot.id, title: bot.name, description: bot.description ?? "", main: bot.chiefOfStaff === true, ...(Number.isFinite(born) ? { bornAt: born } : {}) }];
+  });
+}
+const proactiveAsk = new ProactiveAsk({
+  choices: proactiveChoices,
+  bots: proactiveAskBots,
+  offered: (person, botId) => flowWatchLoop.offered(person, botId),
+  aboutMe: (person) => {
+    const owner = personAboutMe.ofBot(person);
+    return owner ? personAboutMe.read(owner) : "";
+  },
+  timeZone: (person) => (isPrincipalId(person) ? botSettings.person(person).timeZone ?? undefined : undefined) ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+  language: (person) => reachMeLanguage(reachMePerson(person) || null),
+  // the choice card: no wake, no push (the person is in that conversation)
+  postCard: ({ botId, threadId, card, choice }) => {
+    const proposal = proactiveProposals.add({ botId, threadId, messageId: "", events: [], more: 0, hops: 0, confined: true, choice });
+    // a choice card, not a permission: its yes is the person's standing choice; full-access: exempt
+    const message = store.appendMessage(threadId, { role: "bot", kind: "options", card: { title: card.title, subtitle: card.subtitle, options: [...card.options], proactiveProposal: { id: proposal.id }, proactiveChoice: card.details } });
+    proactiveProposals.setMessage(proposal.id, message.id);
+    return proposal.id;
+  }
+});
+/** The turns whose prompt carries the Proactive alerts section: their
+ * agents server lists propose_proactive (agentsIntegration). */
+const proactiveAskTurns = new Map<string, string>();
+/** What the server knows of a turn for propose_proactive (askTurnRefusal). */
+function proactiveAskTurnFacts(bot: BotRecord, threadId: string, depth: number): AskTurnFacts {
+  const speaker = turnSpeakers.get(threadId);
+  const owner = (effectiveBotOwner(bot) || "").trim().toLowerCase();
+  const principal = (turnSpeakerPrincipals.get(threadId) ?? (speaker?.origin === "operator" ? localPrincipalId() : "")).trim().toLowerCase();
+  return {
+    ownsThread: Boolean(connectorThread(bot.id, threadId)) && Boolean(store.taskByThread(bot.id, threadId)),
+    inRoom: Boolean(store.groupByThread(threadId)),
+    depth,
+    ownerOwnWords: (speaker?.origin === "person" || speaker?.origin === "operator") && Boolean(owner) && principal === owner && speakerOwnWordsTurn(bot, threadId),
+    onCall: voiceCalls.active(threadId),
+    tainted: phoneToolTaintedThreads.has(threadId)
+  };
+}
+/** The first question, in the asking bot's own chat: no model, no card, no sound. */
+function proactiveQuestionLine(botId: string, text: string): void {
+  const bot = store.bot(botId);
+  const threadId = bot ? botMainThread(bot.id) ?? bot.threadId : undefined;
+  if (bot && threadId) store.appendMessage(threadId, { role: "bot", kind: "text", text });
+}
+/** #3431: at an owner's one-to-one turn, the first question when one is
+ * due, then the turn's Proactive alerts section ("" when nothing is
+ * eligible: no section, no tool). Only an organization server linked to
+ * Perspicax has watches: elsewhere this returns at once. */
+async function proactiveAskForTurn(bot: BotRecord, threadId: string, depth: number, opts: { warm?: boolean } = {}): Promise<string> {
+  proactiveAskTurns.delete(threadId);
+  if (IDENTITY.kind !== "perspicax" || !perspicaxMcp) return "";
+  if (askTurnRefusal(proactiveAskTurnFacts(bot, threadId, depth))) return "";
+  const person = (effectiveBotOwner(bot) || "").trim().toLowerCase();
+  if (!person || !watchCarrierOf(person, bot.id)) return "";
+  const work = (async () => {
+    if (!opts.warm) {
+      const asked = await proactiveAsk.onOwnerTurn(person, bot.id);
+      if (asked) proactiveQuestionLine(asked.botId, asked.text);
+    }
+    return proactiveAsk.turnSection(person, bot.id);
+  })().catch(() => "");
+  // the first listing of the day reads the person's products: a turn never
+  // waits on it long; the next turn finds it read
+  const section = await Promise.race([work, new Promise<string>((resolve) => { setTimeout(() => resolve(""), PROACTIVE_ASK_WAIT_MS).unref?.(); })]);
+  if (section) proactiveAskTurns.set(threadId, section);
+  return section;
+}
+/** #3431: a new bot's intro adds the first question to its closing line. */
+async function proactiveIntroQuestion(botId: string, auth: RequestAuth): Promise<string> {
+  if (IDENTITY.kind !== "perspicax" || !perspicaxMcp) return "";
+  const bot = store.bot(botId);
+  const person = bot ? (effectiveBotOwner(bot) || "").trim().toLowerCase() : "";
+  // the bot's own person, picking on its intro: never someone else's question
+  if (!bot || !person || actorPrincipalId(auth).trim().toLowerCase() !== person || !watchCarrierOf(person, bot.id)) return "";
+  let late = false;
+  const work = proactiveAsk.question(person, bot.id, false).then((text) => {
+    // asked after the closing line went out: its own line, once
+    if (late && text) proactiveQuestionLine(bot.id, text);
+    return text ?? "";
+  }).catch(() => "");
+  return Promise.race([work, new Promise<string>((resolve) => { setTimeout(() => { late = true; resolve(""); }, PROACTIVE_ASK_WAIT_MS).unref?.(); })]);
 }
 if (!process.env.VITEST) {
   startBriefTimer({
@@ -32158,6 +32294,8 @@ setInterval(() => { void feedbackService.tick().catch(() => {}); }, 5 * 60_000).
 ROUTES.push(createFeedbackRoutes({ dataDir: DATA_DIR, service: feedbackService, actorPrincipalId }));
 ROUTES.push(createBotsMessagesRoutes({
   feedback: feedbackService,
+  // #3431: the first question at the end of a new bot's intro
+  proactiveIntroQuestion,
   // #2633: a question declined from an AI client is told to the bot in the
   // language of the person who declined it.
   questionDeclinedText: (auth: RequestAuth) => serverApprovalWords(languageOfRequest(auth)).t("question.card.declinedByClient"),
@@ -33632,6 +33770,7 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
 
 const startTurnRunner = createStartTurn({
   AUTO_COMPUTER_RULES,
+  proactiveAskForTurn,
   handoffOpener,
   personForJoin,
   BOTMAIL_ENGINE_REFUSAL,

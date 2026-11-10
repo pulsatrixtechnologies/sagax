@@ -1285,6 +1285,16 @@ export interface OptionCardData extends WaitCardField {
    * POST /api/bots/:id/proactive/:id (options[0] accepts, options[1]
    * declines), never as a typed message. */
   proactiveProposal?: { id: string };
+  /** #3431: a choice card (propose_proactive): the watch domain it turns on
+   * with its yes, and each watch for the folded details (its label,
+   * cadence in words, whether the yes turns it on, the tools it reads
+   * with). Labels on screen; ids answer the route. */
+  proactiveChoice?: {
+    domain: string;
+    label: string;
+    botName: string;
+    watches: Array<{ id: string; label: string; cadence: string; on: boolean; tools: string[] }>;
+  };
   /** #2694: the person's feedback on this proactive card. */
   feedback?: "up" | "down" | "less" | "never";
   title: string;

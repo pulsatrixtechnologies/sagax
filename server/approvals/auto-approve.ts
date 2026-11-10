@@ -214,6 +214,9 @@ export type AutoVerdictSource =
   /** 2026-10-30: a read of the person's own engine account connector (their
    * grok.com Outlook, Teams, calendar...), at any level. */
   | "connector-read"
+  /** #3431 (decision 3): inside a watch wake, a read-only tool of the watch
+   * whose domain the person said yes to. */
+  | "watch-read"
   | "no-grant";
 
 export interface AutoVerdict {
@@ -329,6 +332,12 @@ export function autoVerdict(
      * Answered at any level after the safety hold and the person's own deny
      * and ask rules, never a widening or a call a security key protects. */
     connectorRead?: boolean;
+    /** #3431 (decision 3, 2026-11-10): inside the wake of a watch whose
+     * domain the person turned on, one of the read-only tools that watch
+     * declares (proactive-ask.ts watchReadCovered). Answered after the
+     * safety hold and the organization's and the person's Refuse and Ask
+     * rules; never a send, a widening or a call a security key protects. */
+    watchRead?: boolean;
     /** The call is one of Sagax's own tools that must never answer itself:
      * a rule change (rules_update and the like, "rule-change" class). */
     ruleChange?: boolean;
@@ -390,6 +399,9 @@ export function autoVerdict(
   if (context?.safetyAllow && !outward) return { approve: `approved ${tool} (read-only)`, source: "safety-read" };
   if (context?.connectorRead && !outward && !context.requiresExplicitApproval && !(context.stepUpRequired?.length)) {
     return { approve: `approved ${tool} (read of your own connector)`, source: "connector-read" };
+  }
+  if (context?.watchRead && !outward && !context.requiresExplicitApproval && !(context.stepUpRequired?.length)) {
+    return { approve: `approved ${tool} (a read your yes to this alert covers)`, source: "watch-read" };
   }
   if (context?.widgetApproved) return { approve: `approved ${tool} (approved in the ConnectWise widget)`, source: "widget-approval" };
   // An allow rule never answers a sandbox widening (only Full may), and its

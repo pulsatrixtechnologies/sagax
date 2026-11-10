@@ -261,6 +261,9 @@ export function createComputerMountStartTurn(host: StartTurnHost) {
         ? store.activePath(state.threadId).findLast((message: any) => message.role === "user" && message.kind === "text")
         : state.userMessage;
       const ownThreadCreation = state.boundedCoordination && !state.coordinated && Boolean(state.origin && !state.origin.peerAsk);
+      // #3431: the Proactive alerts section and propose_proactive, read
+      // before the tools are listed (an owner's one-to-one turn only)
+      state.proactiveAskPrompt = await host.proactiveAskForTurn(state.bot, state.threadId, state.commsDepth, { warm: Boolean(state.warmOnly) });
       state.integrations.agents = agentsIntegration(state.bot.id, state.threadId, state.commsDepth, state.skillAuthoring, state.dispatchClaimId, state.opts?.coordination?.id, state.boundedCoordination, ownThreadCreation, state.worksInWorkspace, !engineHasNativeWebSearch(state.instance.driverKind, withholdHostToolsFor(state.instance), state.model));
     }
     if (state.instance.adapter.capabilities.hooks === true && hooksEnabled()) {

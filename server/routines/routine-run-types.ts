@@ -210,7 +210,7 @@ export interface RoutineRunProactive {
    * DM: server/proactive/proactive-wake.ts wakeAlwaysReports). */
   alwaysReport?: true;
   /** #3423: the Pulsatrix watches this wake reports, with their domain. */
-  watches?: Array<{ id: string; domain: string }>;
+  watches?: Array<{ id: string; domain: string; reads?: string[] }>;
 }
 
 /** Similar work the organization memory knew of before a run (organization

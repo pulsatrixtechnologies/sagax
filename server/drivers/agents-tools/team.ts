@@ -302,6 +302,25 @@ export const DEF_PROPOSE_RULE = {
     },
   };
 
+/** #3431: shown only in the owner's one-to-one turns of a bot with an
+ * eligible watch domain not yet decided (SAGAX_PROACTIVE_ASK); the route
+ * re-checks the turn and every bound. */
+export const DEF_PROPOSE_PROACTIVE = {
+    name: "propose_proactive",
+    description:
+      "Your person's own turn only. about_person: save what they told you about their work, their responsibilities or their team (one fact per item, in plain words) into their About me, shared with all their bots. domain: propose one watch domain listed under Proactive alerts, once, when their work, your purpose or the present subject matches it; the server posts one Yes / Not now card and decides every bound. A refusal is one line for you: say nothing about it. Nothing is sent before they say yes.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        about_person: { type: "array", maxItems: 5, items: { type: "string", minLength: 3, maxLength: 300 }, description: "Facts about the person's work, responsibilities or team, from their own words." },
+        domain: { type: "string", minLength: 1, maxLength: 120, description: "The domain id, as listed under Proactive alerts." },
+        watches: { type: "array", maxItems: 40, items: { type: "string", minLength: 1, maxLength: 120 }, description: "The watch ids of that domain the person wants; omit for all of them." },
+        quote: { type: "string", maxLength: 600, description: "A domain proposed before: the person's own words of this turn about it." },
+      },
+    },
+  };
+
 export const DEF_PROPOSE_TEAM_MEMORY = {
     name: "propose_team_memory",
     description:
@@ -333,13 +352,24 @@ export const DEF_NUDGE_PERSON = {
     },
   };
 
-export const TEAM_TOOL_NAMES: ReadonlySet<string> = new Set(['start_thread', 'create_bot', 'list_team_setup', 'propose_team_setup', 'propose_bot_deletion', 'import_plugin_team', 'archive_bot', 'create_room', 'manage_room', 'retry_thread', 'propose_profile', 'propose_model', 'propose_rule', 'propose_team_memory', 'nudge_person'] as const);
+export const TEAM_TOOL_NAMES: ReadonlySet<string> = new Set(['start_thread', 'create_bot', 'list_team_setup', 'propose_team_setup', 'propose_bot_deletion', 'import_plugin_team', 'archive_bot', 'create_room', 'manage_room', 'retry_thread', 'propose_profile', 'propose_model', 'propose_rule', 'propose_team_memory', 'nudge_person', 'propose_proactive'] as const);
 
 /** Handle a tool of this family, or return null when the name is not ours. */
 export async function callTeamTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
   const { botId: BOT_ID, threadId: THREAD_ID, depth: DEPTH, externalRuntime: EXTERNAL_RUNTIME, coordinating: COORDINATING } = context;
   const { api, apiResponse } = context.client;
   if (!TEAM_TOOL_NAMES.has(name)) return null;
+  if (name === "propose_proactive") {
+    const body: Record<string, unknown> = {};
+    const facts = Array.isArray(args.about_person) ? args.about_person.filter((fact): fact is string => typeof fact === "string" && fact.trim().length >= 3) : [];
+    if (facts.length) body.about_person = facts.slice(0, 5).map((fact) => fact.trim().slice(0, 300));
+    if (typeof args.domain === "string" && args.domain.trim()) body.domain = args.domain.trim();
+    if (Array.isArray(args.watches)) body.watches = args.watches.filter((id): id is string => typeof id === "string" && id.trim().length > 0).map((id) => id.trim());
+    if (typeof args.quote === "string" && args.quote.trim()) body.quote = args.quote.trim();
+    if (!body.about_person && !body.domain) return { text: "propose_proactive needs about_person (what the person said about their work) or a domain.", isError: true };
+    const r = await api("/api/internal/proactive/propose", { method: "POST", body: JSON.stringify(body) });
+    return { text: String(r.text ?? r.error ?? "Done.") };
+  }
   if (name === "start_thread") {
     const title = String(args.title ?? "").trim();
     const message = String(args.message ?? "").trim();

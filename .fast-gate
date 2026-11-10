@@ -6,3 +6,12 @@
 # agents-*-tools.ts files, the reviewed read list), so a lot that adds or
 # rewords a tool there runs this file too.
 agents-proxy: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/(drivers/(agents-catalog[^/]*|agents-[^/]*-tools|agents-tools/[^/]*|agents-call[^/]*|agents-merged)|tools/agent-tool-policy)\.ts$'; then ./node_modules/.bin/vitest run --reporter=dot server/drivers/agents-proxy.test.ts; fi
+
+# index-reach (#3477): the reach rule lives in server/peers/ and is enforced by
+# the routine, room and bot-chat routes, but its end-to-end cases sit in
+# server/index.test.ts, which the stem rule runs only when server/index.ts
+# itself is touched. A lot that changes the rule runs that part of the file
+# (the cases about teammates, sections, peers and Primary Bots, about 20 s),
+# not the whole file; when server/index.ts or its test is touched the tests
+# check already runs all of it.
+index-reach: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/index(\.test)?\.ts$'; then :; elif printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/(peers/[^/]*|routines/routine-requests[^/]*|routes/internal-(requests|rooms|bot-chat)[^/]*|index-leaves/[^/]*)\.ts$'; then ./node_modules/.bin/vitest run --reporter=dot server/index.test.ts -t 'teammate|targeted|section|peer|another person|Chief|Primary Bot|reach'; fi

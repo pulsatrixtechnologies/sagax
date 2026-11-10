@@ -87,14 +87,10 @@ export function GroupDetailsTab({ group, members, ownBots, leadBotId, canEdit, c
         else onOpenTab(item.action);
       },
     })),
-    // As on a bot: Add to Slack (the lead's Slack: the Admin link when the
-    // server has one, else its Slack settings) and Add to meeting (a new
-    // routine in this panel's Upcoming card).
-    ...(ownLead
-      ? [slackUrl
-        ? { id: "slack", title: t("botPanel.suggestions.slack.title"), icon: SlackLogo, href: slackUrl }
-        : { id: "slack", title: t("botPanel.suggestions.slack.title"), icon: SlackLogo, onRun: () => dispatch({ type: "openPersonaEditor", botId: ownLead.id, section: "slack" }) }]
-      : []),
+    // As on a bot: Add to Slack (the lead's Admin link, only where the
+    // server offers one, #3398) and Add to meeting (a new routine in this
+    // panel's Upcoming card).
+    ...(ownLead && slackUrl ? [{ id: "slack", title: t("botPanel.suggestions.slack.title"), icon: SlackLogo, href: slackUrl }] : []),
     ...(canAddRoutine ? [{ id: "meeting", title: t("botPanel.suggestions.meeting.title"), icon: CalendarPlus, onRun: () => setNewRoutine((count) => count + 1) }] : []),
   ];
 

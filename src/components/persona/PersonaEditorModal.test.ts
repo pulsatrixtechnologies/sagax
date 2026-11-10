@@ -66,7 +66,7 @@ vi.mock("../bot-settings/AccessSection", () => ({ AccessSection: marker("access"
 vi.mock("../computer/WorksOnSetting", () => ({ WorksOnSetting: marker("worksOn") }));
 vi.mock("../bot-settings/ModelSection", () => ({ ModelSection: marker("model") }));
 vi.mock("../bot-settings/PermissionsSection", () => ({ PermissionsSection: marker("permissions") }));
-vi.mock("../bot-settings/VoiceSection", () => ({ VoiceSection: marker("voice") }));
+vi.mock("../bot-settings/VoiceSection", () => ({ VoiceSection: marker("voice"), NotifyMeRow: marker("notifyMe") }));
 vi.mock("../bot-settings/SharingSection", () => ({ SharingSection: marker("sharing") }));
 vi.mock("../bot-settings/VisibilitySection", () => ({ VisibilitySection: marker("visibility") }));
 vi.mock("../bot-settings/HistorySection", () => ({ HistorySection: marker("history") }));
@@ -95,12 +95,14 @@ const bot = {
 const other = { ...bot, id: "other", name: "Other" } as Bot;
 
 function render(section: BotSettingsSection, state: Partial<AppState> = {}) {
-  fixture.state = { bots: [bot, other], personaEditor: { botId: bot.id, section }, ...state };
+  // a server with spoken replies: the Voice sub-page has its voice rows
+  fixture.state = { config: { tts: { configured: false } } as AppState["config"], bots: [bot, other], personaEditor: { botId: bot.id, section }, ...state };
   return renderToStaticMarkup(createElement(PersonaEditorModal));
 }
 
 const memberConfig = {
   viewer: { role: "member", principalId: "pr_me", operator: false },
+  tts: { configured: false },
 } as unknown as AppState["config"];
 
 beforeEach(() => {
@@ -144,7 +146,8 @@ describe("bot profile page shell", () => {
     expect(html).toContain('data-bot-profile-placement="main"');
     expect(html).not.toContain("data-detail-panel");
     expect(html).not.toContain("data-bot-profile-visibility");
-    expect(render("slack")).toContain("data-slack-logo");
+    // #3398: no Slack row where the server offers no link (Slack is removed for now)
+    expect(render("slack")).not.toContain("data-slack-logo");
     expect(html).toContain("data-bot-profile-page");
     expect(html).not.toContain('aria-modal="true"');
     expect(html).toContain('data-bot-profile-banner=""');
@@ -154,9 +157,10 @@ describe("bot profile page shell", () => {
     expect(BOT_PROFILE_TABS).toEqual(TABS_ALL);
     expect(html).toContain('role="tablist"');
     for (const label of [">General<", ">Knowledge<", ">Stats<", ">Appearance"]) expect(html).toContain(label);
-    // V6: General is rows under grey labels, each opening its sub-page; no Settings fold, no identity card of facts
+    // #3398: General is section cards with their controls in place; a row
+    // opens a sub-page only for a long setting; no Settings fold, no identity card of facts
     expect(html).not.toContain("data-bot-profile-settings-toggle");
-    expect(rowsOf(html)).toEqual(["personality", "model", "beforeActing", "channels", "sharing", "accounts", "rules", "actsAlone", "voice", "advanced", "versions"]);
+    expect(rowsOf(html)).toEqual(["personality", "model", "beforeActing", "sharing", "rules", "actsAlone", "voice", "advanced", "versions"]);
     for (const label of [">Settings<", ">Channels<", ">Bot accounts<", ">More<"]) expect(html).toContain(label);
     expect(html).not.toContain(">Identity<");
     expect(selectedTab(html)).toBe("general");
@@ -307,8 +311,11 @@ describe("bot profile page shell", () => {
     setLocale("fr");
     const html = render("overview");
     for (const label of [">Général<", ">Connaissances<", ">Statistiques<", ">Apparence", ">Réglages<", ">Canaux<", ">Comptes du bot<", ">Plus<", ">Avant d&#x27;agir<", ">Quand il agit seul<"]) expect(html).toContain(label);
-    const channels = render("slack");
-    for (const label of [">Canaux<", ">Courriel<", ">Me joindre<", ">Retour<"]) expect(channels).toContain(label);
+    // the channels are in place on General (#3398); a sub-page's link back names its tab
+    for (const label of [">Courriel<", ">Me joindre<"]) expect(html).toContain(label);
+    const rules = render("rules");
+    expect(rules).toContain('aria-label="Retour à Général"');
+    expect(rules).toMatch(/data-bot-profile-back=""[^>]*>[\s\S]*?Général<\/button>/);
   });
 
   it("renders nothing when closed or when the bot is gone", () => {
@@ -331,16 +338,20 @@ describe("bot profile page shell", () => {
     expect(botProfileSubPageFor("soul")).toBe("personality");
     expect(botProfileSubPageFor("memory")).toBe("folder");
     expect(botProfileSubPageFor("routines")).toBe("routines");
+    // #3398: the channels and the accounts are cards in place on General
+    expect(botProfileSubPageFor("slack")).toBeNull();
+    expect(botProfileSubPageFor("access")).toBeNull();
     expect(personaCategoryForSection("routines")).toBeNull();
-    for (const section of ["model", "voice", "access", "soul", "history", "rules", "skills"] as const) {
+    for (const section of ["model", "voice", "soul", "history", "rules", "skills"] as const) {
       const html = render(section);
       const page = botProfileSubPageFor(section)!;
       expect(subPageOf(html), section).toBe(page);
       expect(html).toContain(`data-bot-profile-subpage="${page}"`);
-      // a sub-page is Back, a title and one line of intro, no tab row
+      // a sub-page is Back, a title (the Settings page title style, 20 px) and one line of intro, no tab row
       expect(html).toContain("data-bot-profile-back");
+      expect(html).toMatch(/data-bot-profile-subpage-title=""[^>]*text-\[20px\]/);
       expect(html).not.toContain('role="tablist"');
-      expect(sectionHtml(html, section === "access" ? "access" : section).open).toBe(true);
+      expect(sectionHtml(html, section).open).toBe(true);
       for (const id of BOT_PROFILE_SUBPAGE_SECTIONS[page]) if (id !== "visibility") expect(sectionsOf(html)).toContain(id);
     }
     // Stats is a tab of its own, its usage block on the tab
@@ -350,9 +361,12 @@ describe("bot profile page shell", () => {
     expect(bodiesOf(sectionHtml(stats, "usage").html)).toEqual(["usage"]);
     // the memory is managed in the Bot folder
     expect(sectionHtml(render("memory"), "files").open).toBe(true);
-    // the Accounts sub-page says when the bot has none
+    // a link to the accounts opens the General tab, no sub-page, the card says when the bot has none
     fixture.capabilities = { engine: { kind: "claude", label: "Claude Code" }, items: [] };
-    expect(render("access")).toContain("No accounts connected to this bot yet.");
+    const accounts = render("access");
+    expect(selectedTab(accounts)).toBe("general");
+    expect(subPageOf(accounts)).toBeUndefined();
+    expect(accounts).toContain("No accounts connected to this bot yet.");
   });
 
   it("draws the top bar's X from the app's round header control, not a black disc", () => {
@@ -377,8 +391,8 @@ describe("bot profile page shell", () => {
   });
 });
 
-describe("General sub-pages", () => {
-  it("Channels lists the channels with their state; What it can use the engine and accounts; Shared with its summary row", () => {
+describe("General cards and sub-pages", () => {
+  it("the General tab holds the channel rows, the accounts with their Add button and the two switches in place (#3398); Shared with its summary row", () => {
     fixture.mail = { available: true, address: "pepper@bots.example", enabled: true };
     fixture.reach = { settings: { channels: ["sms"] }, channels: {} };
     fixture.capabilities = {
@@ -388,15 +402,26 @@ describe("General sub-pages", () => {
         { key: "k2", form: "skill", name: "Summaries", state: "ready", enabled: true, canToggle: true },
       ],
     };
-    const channels = render("slack");
-    expect([...channels.matchAll(/data-bot-profile-row="([\w-]+)"/g)].map((match) => match[1])).toEqual(["slack", "email", "reachMe", "messages"]);
+    const general = render("overview");
+    expect(selectedTab(general)).toBe("general");
+    expect(subPageOf(general)).toBeUndefined();
+    // Settings: the two switches first, then the rows that open a page
+    const settings = general.slice(at(general, 'data-settings-group="bot-profile-group-settings"'), at(general, 'data-settings-group="bot-profile-channels"'));
+    expect(settings).toContain('data-settings-row="botCollaboratorsCreateRoutines"');
+    expect(settings).toContain('data-section-body="notifyMe"');
+    expect(at(settings, 'data-settings-row="botCollaboratorsCreateRoutines"')).toBeLessThan(at(settings, 'data-bot-profile-subpage-open="personality"'));
+    // Channels in place: no team chat row where the server offers no link (Slack is removed for now)
+    const channels = general.slice(at(general, 'data-settings-group="bot-profile-channels"'), at(general, 'data-settings-group="bot-profile-accounts"'));
+    expect([...channels.matchAll(/data-bot-profile-row="([\w-]+)"/g)].map((match) => match[1])).toEqual(["email", "reachMe", "messages"]);
+    expect(general).not.toContain('data-bot-profile-row="slack"');
+    expect(general).not.toContain("Not offered here");
     expect(channels).toContain("pepper@bots.example");
-    expect(channels).toContain(">Not offered here<");
     expect(channels).toContain('data-bot-profile-action="email"');
     expect(channels).toContain('data-bot-profile-action="reachMe"');
-    const accounts = render("access");
-    expect(subPageOf(accounts)).toBe("accounts");
-    expect([...accounts.matchAll(/data-bot-profile-row="([\w-]+)"/g)].map((match) => match[1])).toEqual(["engine", "account-0"]);
+    // Bot accounts in place, one name, its Add button
+    const accounts = general.slice(at(general, 'data-settings-group="bot-profile-accounts"'));
+    expect(general).not.toContain("What it can use");
+    expect([...accounts.matchAll(/data-bot-profile-row="([\w-]+)"/g)].map((match) => match[1]).slice(0, 2)).toEqual(["engine", "account-0"]);
     expect(accounts).toContain(">Claude Code<");
     expect(accounts).toContain(">Outlook<");
     // skills are Knowledge's, not an account
@@ -422,13 +447,13 @@ describe("General sub-pages", () => {
     expect(html.match(/data-bot-profile-share=""/g)).toHaveLength(1);
   });
 
-  it("shows Slack as managed in Admin where the server offers it, and a Slack link opens it", () => {
+  it("keeps the Slack row for a server that offers its link, and a Slack link opens it on General", () => {
     fixture.slackUrl = "https://admin.example/slack";
-    expect(render("slack")).toContain(">Managed in Admin<");
+    expect(render("overview")).toContain(">Managed in Admin<");
     expect(render("overview")).not.toContain('data-section-body="slack"');
     const html = render("slack");
     expect(selectedTab(html)).toBe("general");
-    expect(subPageOf(html)).toBe("channels");
+    expect(subPageOf(html)).toBeUndefined();
     expect(html).toContain('data-section-body="slack"');
   });
 

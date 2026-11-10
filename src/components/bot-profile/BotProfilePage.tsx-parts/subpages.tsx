@@ -1,6 +1,7 @@
 // The V6 bot page's rows and sub-pages (#2612, the "Épuré Grok Bot"
-// canvas): a tab is a list of rows under grey labels, each row opens its own
-// sub-page (Back, a title, one line of intro, then the section bodies).
+// canvas): a row under a grey label opens its own sub-page (Back to the tab,
+// a title, one line of intro, then the section bodies), for a setting too
+// long for a card (#3398: the channels and the accounts are cards in place).
 import type { ReactNode } from "react";
 import {
   AudioLines,
@@ -9,8 +10,6 @@ import {
   Cpu,
   FolderOpen,
   History,
-  MessageCircle,
-  Plug,
   Puzzle,
   Repeat,
   ScrollText,
@@ -23,7 +22,8 @@ import {
 
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
-import type { BotProfileSubPage } from "@/lib/persona-sections";
+import type { BotProfileSubPage, BotProfileTab } from "@/lib/persona-sections";
+import { TAB_LABEL } from "./cards";
 
 type Meta = { icon: ReactNode; title: LocaleKey; desc: LocaleKey; intro: LocaleKey };
 
@@ -35,9 +35,7 @@ export const SUBPAGE_META: Record<BotProfileSubPage, Meta> = {
   personality: meta(<UserRound />, "botProfile.v6.page.personality.title", "botProfile.v6.page.personality.desc", "botProfile.v6.page.personality.intro"),
   model: meta(<Cpu />, "botProfile.v6.page.model.title", "botProfile.v6.page.model.desc", "botProfile.v6.page.model.intro"),
   beforeActing: meta(<ShieldCheck />, "botProfile.v6.page.beforeActing.title", "botProfile.v6.page.beforeActing.desc", "botProfile.v6.page.beforeActing.intro"),
-  channels: meta(<MessageCircle />, "botProfile.v6.page.channels.title", "botProfile.v6.page.channels.desc", "botProfile.v6.page.channels.intro"),
   sharing: meta(<Users />, "botProfile.v6.page.sharing.title", "botProfile.v6.page.sharing.desc", "botProfile.v6.page.sharing.intro"),
-  accounts: meta(<Plug />, "botProfile.v6.page.accounts.title", "botProfile.v6.page.accounts.desc", "botProfile.v6.page.accounts.intro"),
   rules: meta(<ScrollText />, "botProfile.v6.page.rules.title", "botProfile.v6.page.rules.desc", "botProfile.v6.page.rules.intro"),
   actsAlone: meta(<Zap />, "botProfile.v6.page.actsAlone.title", "botProfile.v6.page.actsAlone.desc", "botProfile.v6.page.actsAlone.intro"),
   voice: meta(<AudioLines />, "botProfile.v6.page.voice.title", "botProfile.v6.page.voice.desc", "botProfile.v6.page.voice.intro"),
@@ -48,11 +46,10 @@ export const SUBPAGE_META: Record<BotProfileSubPage, Meta> = {
   folder: meta(<FolderOpen />, "botProfile.v6.page.folder.title", "botProfile.v6.page.folder.desc", "botProfile.v6.page.folder.intro"),
 };
 
-/** The grey label over each group of rows. */
+/** The grey label over each group of rows (the channels and accounts
+ * cards carry their own). */
 export const GROUP_LABEL: Record<string, LocaleKey> = {
   settings: "botProfile.v6.group.settings",
-  channels: "botProfile.v6.group.channels",
-  accounts: "botProfile.v6.group.accounts",
   more: "botProfile.v6.group.more",
   work: "botProfile.v6.group.work",
 };
@@ -80,21 +77,25 @@ export function SubPageRow({ page, value, onOpen }: { page: BotProfileSubPage; v
   );
 }
 
-/** A sub-page: Back, its title, one line of intro, then its cards. */
-export function SubPage({ page, onBack, children }: { page: BotProfileSubPage; onBack: () => void; children: ReactNode }) {
+/** A sub-page: the link back named after the tab it returns to (focused
+ * when the page opens, #3398), its title in the Settings page title style,
+ * one line of intro, then its cards. */
+export function SubPage({ page, tab, onBack, children }: { page: BotProfileSubPage; tab: BotProfileTab; onBack: () => void; children: ReactNode }) {
   const entry = SUBPAGE_META[page];
+  const tabName = t(TAB_LABEL[tab]);
   return (
     <div data-bot-profile-subpage={page} className="mt-4 flex min-w-0 flex-col">
       <button
         type="button"
         data-bot-profile-back=""
+        aria-label={t("botProfile.v6.backTo", { tab: tabName })}
         onClick={onBack}
-        className="-ml-1 flex min-h-[32px] w-fit items-center gap-1 rounded-lg px-1 text-[13px] leading-5 text-ink-secondary transition-colors hover:text-ink"
+        className="-ml-1 flex min-h-[32px] w-fit items-center gap-1 rounded-lg px-1 text-[13px] leading-5 text-ink-secondary transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
       >
         <ChevronLeft size={16} aria-hidden="true" />
-        {t("botProfile.v6.back")}
+        {tabName}
       </button>
-      <h2 data-bot-profile-subpage-title="" className="mt-2 text-[18px] font-semibold leading-6 text-ink">{t(entry.title)}</h2>
+      <h2 data-bot-profile-subpage-title="" className="mt-2 text-[20px] font-semibold leading-7 tracking-[-0.012em] text-ink">{t(entry.title)}</h2>
       <p className="mt-1 text-[13px] leading-5 text-ink-secondary">{t(entry.intro)}</p>
       <div className="mt-5 flex min-w-0 flex-col gap-6">{children}</div>
     </div>

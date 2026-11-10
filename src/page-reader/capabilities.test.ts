@@ -426,7 +426,23 @@ describe("Always allow this site (kept on the server, per reader, page and host)
     const { call, broker } = setup({}, ROUTES);
     await call("data.read", { name: "team-board" }, 1);
     await call("open", { ref: "https://example.org/" }, 2);
+    // the option would do nothing: it is not offered
     expect(broker.getState().links).toHaveLength(1);
+    expect(broker.getState().links[0]!.always).toBe(false);
+  });
+
+  it("a failing route (a 500, a network error) offers no button either", async () => {
+    const { call, broker } = setup({}, { ...ROUTES, [LINK]: () => new Refusal("down", 500) });
+    await call("data.read", { name: "team-board" }, 1);
+    await call("open", { ref: "https://example.org/" }, 2);
+    expect(broker.getState().links[0]!.always).toBe(false);
+  });
+
+  it("an answer that is not `allowed: false` offers no button", async () => {
+    const { call, broker } = setup({}, { ...ROUTES, [LINK]: { ok: true } });
+    await call("data.read", { name: "team-board" }, 1);
+    await call("open", { ref: "https://example.org/" }, 2);
+    expect(broker.getState().links[0]!.always).toBe(false);
   });
 
   it("an e-mail address is never offered Always allow", async () => {

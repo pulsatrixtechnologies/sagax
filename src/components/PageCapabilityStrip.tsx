@@ -95,10 +95,11 @@ function LinkRow({ entry, broker }: { entry: PendingLink; broker: CapabilityBrok
       <span className="min-w-0 flex-1" title={entry.url}>
         <span className="block">{t("pages.caps.link")} <span data-cap-host className="font-medium">{address.host}</span></span>
         {address.rest && <code data-cap-rest className="block break-all font-mono text-[11.5px] text-ink-secondary">{all ? address.rest : address.short}</code>}
+        <span data-cap-note className="block text-ink-secondary">{t("pages.caps.linkNote")}</span>
         {address.cut && <button type="button" data-cap-more aria-expanded={all} className="text-accent hover:underline" onClick={() => setAll((value) => !value)}>{t(all ? "pages.caps.linkLess" : "pages.caps.linkMore")}</button>}
       </span>
       <button type="button" data-cap-link-cancel className="rounded px-1.5 py-1 text-ink-secondary hover:bg-hover" onClick={() => broker.resolveLink(entry.id, "cancel")}>{t("pages.cancel")}</button>
-      {entry.always && <button type="button" data-cap-link-always className="rounded px-1.5 py-1 text-accent hover:bg-hover" onClick={() => broker.resolveLink(entry.id, "always")}>{t("pages.caps.linkAlways")}</button>}
+      {entry.always && <button type="button" data-cap-link-always title={t("pages.caps.linkAlwaysHint")} className="rounded px-1.5 py-1 text-accent hover:bg-hover" onClick={() => broker.resolveLink(entry.id, "always")}>{t("pages.caps.linkAlways")}</button>}
       <button type="button" data-cap-link-open className="rounded px-1.5 py-1 text-accent hover:bg-hover" onClick={() => broker.resolveLink(entry.id, "open")}>{t("pages.caps.linkOpen")}</button>
     </div>
   );

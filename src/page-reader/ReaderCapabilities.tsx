@@ -91,7 +91,7 @@ function LinkCard({ entry, broker, text }: { entry: PendingLink; broker: Capabil
       <span>{text("capLinkNote")}</span>
       <div className="sr-confirm-actions">
         <button type="button" className="sr-button sr-button-small" data-cap-link-cancel onClick={() => broker.resolveLink(entry.id, "cancel")}>{text("cancel")}</button>
-        {entry.always && <button type="button" className="sr-button sr-button-small" data-cap-link-always onClick={() => broker.resolveLink(entry.id, "always")}>{text("capLinkAlways")}</button>}
+        {entry.always && <button type="button" className="sr-button sr-button-small" data-cap-link-always title={text("capLinkAlwaysHint")} onClick={() => broker.resolveLink(entry.id, "always")}>{text("capLinkAlways")}</button>}
         <button type="button" className="sr-button sr-button-small sr-button-primary" data-cap-link-open onClick={() => broker.resolveLink(entry.id, "open")}>{text("capLinkOpen")}</button>
       </div>
     </div>

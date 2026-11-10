@@ -56,7 +56,7 @@ describe("the bar's words", () => {
   it("every key has French and English, with the same placeholders", () => {
     // #3413 lot 1b: English first, the Quebec French is lot 1c (readerText falls
     // back to English meanwhile); empty this list when 1c lands
-    const FRENCH_PENDING = new Set(["capReads", "capReadsHint", "capTitle", "capScope", "capViewer", "capOpen", "capAsk", "capAskWhat", "capAllow", "capAlways", "capLinkTitle", "capLinkNote", "capLinkOpen", "capLinkAlways", "capLinkMore", "capLinkLess"]);
+    const FRENCH_PENDING = new Set(["capReads", "capReadsHint", "capTitle", "capScope", "capViewer", "capOpen", "capAsk", "capAskWhat", "capAllow", "capAlways", "capLinkTitle", "capLinkNote", "capLinkOpen", "capLinkAlways", "capLinkAlwaysHint", "capLinkMore", "capLinkLess"]);
     expect([...READER_STRINGS_FR_KEYS].sort()).toEqual(READER_STRING_KEYS.filter((key) => !FRENCH_PENDING.has(key)).sort());
     for (const key of READER_STRING_KEYS.filter((entry) => !FRENCH_PENDING.has(entry))) {
       const names = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();

@@ -299,15 +299,19 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
   const askLink = async (url: string): Promise<boolean> => {
     if ([...pendingLinks.values()].includes(url)) return false;
     const { host, rest } = splitAddress(url);
-    const always = /^https?:/i.test(url) && Boolean(deps.pageId);
-    if (always) {
+    // "Always allow this site" is offered only when the server answered the
+    // question (`allowed: false`): where the route is missing or fails the
+    // option would do nothing, so it is not shown
+    let always = false;
+    if (/^https?:/i.test(url) && deps.pageId) {
       try {
         const known = await deps.api<{ allowed?: unknown }>(linkRoute(`?${new URLSearchParams({ host })}`));
         if (known.allowed === true) {
           deps.openUrl(url);
           return true;
         }
-      } catch { /* the route is not there or failed: the card asks */ }
+        always = known.allowed === false;
+      } catch { /* the route is not there or failed: the card asks, without that option */ }
     }
     const id = ++seq;
     pendingLinks.set(id, url);

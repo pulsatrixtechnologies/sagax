@@ -12710,6 +12710,8 @@
   "pages.caps.always": "Always allow",
   "pages.caps.link": "This page wants to open:",
   "pages.caps.linkAlways": "Always allow this site",
+  "pages.caps.linkAlwaysHint": "Afterwards, this page may open any address of this site without asking.",
+  "pages.caps.linkNote": "That address was not in the data it read.",
   "pages.caps.linkMore": "Show the whole address",
   "pages.caps.linkLess": "Show less",
   "pages.caps.linkOpen": "Open",

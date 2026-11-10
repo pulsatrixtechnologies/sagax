@@ -48,6 +48,7 @@ describe("ReaderCapabilities", () => {
     expect(html).toMatch(/<strong[^>]*data-cap-host[^>]*>evil\.example<\/strong>/);
     expect(html).toContain("/path?d=secret-board#frag");
     for (const marker of ["data-cap-link-open", "data-cap-link-cancel", "data-cap-link-always"]) expect(html).toContain(marker);
+    expect(html).toContain("any address of this site");
     expect(html).not.toContain("data-cap-more");
   });
 

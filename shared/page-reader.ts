@@ -200,6 +200,7 @@ const STRINGS = {
     capLinkNote: "This address was not in the data the page read.",
     capLinkOpen: "Open",
     capLinkAlways: "Always allow this site",
+    capLinkAlwaysHint: "Afterwards, this page may open any address of this site without asking.",
     capLinkMore: "Show the whole address",
     capLinkLess: "Show less",
   },

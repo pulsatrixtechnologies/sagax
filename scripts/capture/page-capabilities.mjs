@@ -97,6 +97,9 @@ const server = createServer(async (req, res) => {
     return json(res, 200, { name: "team-board", at: Date.now(), ...BOARD });
   }
   if (url.pathname === `${base}/data-approvals/ap_capture` && req.method === "POST") { approved = true; return json(res, 200, { ok: true }); }
+  // what lot 1a's server will answer for "Always allow this site"
+  if (url.pathname === `${base}/link-approvals` && req.method === "GET") return json(res, 200, { allowed: false });
+  if (url.pathname === `${base}/link-approvals` && req.method === "POST") return json(res, 200, { ok: true });
   if (url.pathname === `${base}/viewer`) return json(res, 200, { name: "Ada", handle: "h_ada", role: "owner", lang: "en" });
   if (url.pathname === `${base}/live`) { res.writeHead(200, { "content-type": "text/event-stream" }); return res.write(`event: presence\ndata: {"people":[]}\n\n`); }
   res.writeHead(404, { "content-type": "application/json" }); res.end("{}");

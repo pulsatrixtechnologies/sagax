@@ -99,7 +99,9 @@
 //                     session/new's mcpServers, as the agent's own MCP client
 //                     would with no permission check of its own (Grok's
 //                     default mode), and reply one line per call:
-//                     "server:tool -> <first text block>" or "-> error <why>")
+//                     "server:tool -> <first text block>" or "-> error <why>";
+//                     FAKE_ACP_MCP_CALL_ARGS='{"server:tool":{...}}' gives a
+//                     call its arguments, default {"note":"fake"})
 //                   | lend-question (call list_shared_computers through the
 //                     injected agents MCP, ask a question card, call it again
 //                     once the card is answered, and reply
@@ -1656,6 +1658,10 @@ function handle(msg: any) {
       }
       if (mode === "mcp-call") {
         const calls = (process.env.FAKE_ACP_MCP_CALLS ?? "").split(",").map((entry) => entry.trim()).filter(Boolean);
+        // FAKE_ACP_MCP_CALL_ARGS: {"server:tool": {...}}, the arguments of a call
+        // (default {"note":"fake"})
+        let mcpCallArgs: Record<string, Record<string, unknown>> = {};
+        try { mcpCallArgs = JSON.parse(process.env.FAKE_ACP_MCP_CALL_ARGS ?? "{}") as Record<string, Record<string, unknown>>; } catch { /* no arguments given */ }
         void (async () => {
           const results: string[] = [];
           for (const call of calls) {
@@ -1680,7 +1686,7 @@ function handle(msg: any) {
               if (!allowed) { results.push(`${call} -> refused at the agent's prompt`); continue; }
             }
             try {
-              results.push(`${call} -> ${await driveMcp({ command: entry.command, args: entry.args, env: entry.env }, [{ name: tool, args: () => ({ note: "fake" }) }])}`);
+              results.push(`${call} -> ${await driveMcp({ command: entry.command, args: entry.args, env: entry.env }, [{ name: tool, args: () => mcpCallArgs[call] ?? { note: "fake" } }])}`);
             } catch (error) {
               results.push(`${call} -> error ${(error as Error).message}`);
             }

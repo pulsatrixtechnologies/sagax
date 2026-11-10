@@ -61,6 +61,9 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("connectors:setup", "read", "open_connector_setup"),
   // the speaker's own connectors and their tools (server/routes/internal-connectors.ts)
   p("connectors:list", "read", "connectors"),
+  // one call of the speaker's own connector, decided by their approval
+  // settings on the calling turn (server/routes/internal-connectors.ts)
+  p("connectors:call", "own", "call_connector"),
   p("delegation:check", "read", "check_delegation"),
   p("delegation:wait", "read", "wait_delegation"),
   // the runtime's read of a hand-off (docs/runtime-contract.md §9)

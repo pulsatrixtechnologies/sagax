@@ -1,7 +1,10 @@
 import type { ServerResponse } from "node:http";
 import { describe, expect, it } from "vitest";
 import type { ConnectorAccount } from "../connectors/types.ts";
-import { createConnectorsInternalRoutes, CONNECTORS_INTERNAL_PATH } from "./internal-connectors.ts";
+import { createConnectorHub } from "../connectors/hub.ts";
+import type { ConnectorHost, ConnectorHostCall } from "../connectors/hosts/types.ts";
+import type { HeldDecision } from "../harness/held-requests.ts";
+import { CALL_CONNECTOR_INTERNAL_PATH, createCallConnectorInternalRoute, createConnectorsInternalRoutes, CONNECTORS_INTERNAL_PATH, type CallConnectorHold } from "./internal-connectors.ts";
 import { PASS } from "./table.ts";
 
 function account(principal: string, connectors: ConnectorAccount["connectors"]): ConnectorAccount {
@@ -126,5 +129,75 @@ describe("POST /api/internal/connectors", () => {
     const { call } = route();
     expect((await call({ path: "/api/internal/other" })).result).toBe(PASS);
     expect((await call({ method: "GET" })).status).toBe(405);
+  });
+});
+
+describe("POST /api/internal/call-connector (#3348 review)", () => {
+  const ROSTER: ConnectorAccount[] = [account("ana@example.com", [
+    { id: "mail", name: "Mail", state: "connected", tools: [{ id: "send_message" }] },
+    { id: "files", name: "Files", state: "unknown", tools: [{ id: "write_file" }] },
+    { id: "tasks", name: "Tasks", state: "failed", tools: [{ id: "list_tasks" }] },
+    { id: "drive", name: "Drive", state: "needs-sign-in", tools: [] }
+  ])];
+
+  function callRoute() {
+    const held: CallConnectorHold[] = [];
+    const ran: ConnectorHostCall[] = [];
+    const host: ConnectorHost = {
+      provider: "claude-ai",
+      async call(input) {
+        ran.push(input);
+        return input.connector.state === "connected" ? { text: "done" } : { text: `provider says: ${input.connector.name} answered 502`, isError: true };
+      }
+    };
+    const hub = createConnectorHub([host]);
+    const handler = createCallConnectorInternalRoute({
+      ownsThread: () => true,
+      principal: () => "ana@example.com",
+      confined: () => false,
+      accounts: () => ROSTER,
+      hub: () => hub,
+      hold: (input) => { held.push(input); return { engine: "claudeAgent", decision: Promise.resolve({ behavior: "allow" } as HeldDecision) }; }
+    });
+    async function call(body: unknown) {
+      let payload: Record<string, unknown> = {};
+      await handler({
+        res: {} as ServerResponse,
+        path: CALL_CONNECTOR_INTERNAL_PATH,
+        method: "POST",
+        json: ((_res: ServerResponse, _code: number, out: Record<string, unknown>) => { payload = out; }) as never,
+        capability: { botId: "b1", threadId: "t1", generation: "g" },
+        readBody: async () => body as Record<string, unknown>
+      });
+      return payload;
+    }
+    return { call, held, ran };
+  }
+
+  it("sends arguments larger than 64 KiB to the held request and the host whole", async () => {
+    const { call, held, ran } = callRoute();
+    const body = "x".repeat(200 * 1024);
+    const payload = await call({ connector: "Mail", tool: "send_message", arguments: { body } });
+    expect(payload).toMatchObject({ ok: true, result: "done" });
+    expect(held).toHaveLength(1);
+    expect(ran[0]!.arguments).toEqual({ body });
+  });
+
+  it.each(["Files", "Tasks"])("lets a %s connector in an unknown or failed state reach the host, so the provider's own error comes back", async (name) => {
+    const { call, held, ran } = callRoute();
+    const tool = name === "Files" ? "write_file" : "list_tasks";
+    const payload = await call({ connector: name, tool, arguments: {} });
+    expect(held).toHaveLength(1);
+    expect(ran).toHaveLength(1);
+    expect(payload).toMatchObject({ ok: false, connector: name, error: `provider says: ${name} answered 502` });
+  });
+
+  it("answers a connector waiting for a sign-in with open_connector_setup, before any hold", async () => {
+    const { call, held, ran } = callRoute();
+    const payload = await call({ connector: "Drive", tool: "list_files" });
+    expect(payload.ok).toBe(false);
+    expect(String(payload.error)).toContain("open_connector_setup");
+    expect(held).toHaveLength(0);
+    expect(ran).toHaveLength(0);
   });
 });

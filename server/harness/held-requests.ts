@@ -131,6 +131,16 @@ export class HeldRequests {
     }
   }
 
+  /** Nobody answered one request in time (call_connector waits nine
+   * minutes, like a safety hold): it is declined and its card reads Expired.
+   * False when it was already settled. */
+  expire(requestId: string, message: string): boolean {
+    const held = this.pending.get(requestId);
+    if (!held) return false;
+    this.settle(requestId, held, { behavior: "deny", message }, "timeout");
+    return true;
+  }
+
   /** Requests still open on a thread (for tests and diagnostics). */
   openCount(threadId?: string): number {
     if (!threadId) return this.pending.size;

@@ -49,7 +49,7 @@ import * as extrasTools from "./agents-tools/extras.ts";
 import * as phoneFamilyTools from "./agents-tools/phone.ts";
 import * as roomsTools from "./agents-tools/rooms.ts";
 import * as routinesTools from "./agents-tools/routines.ts";
-import { DEF_CONNECTORS } from "./agents-tools/connectors.ts";
+import { DEF_CALL_CONNECTOR, DEF_CONNECTORS } from "./agents-tools/connectors.ts";
 import * as settingsFamilyTools from "./agents-tools/settings.ts";
 import * as teamTools from "./agents-tools/team.ts";
 import * as transcriptsTools from "./agents-tools/transcripts.ts";
@@ -235,6 +235,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   settingsFamilyTools.DEF_REQUEST_SIGN_IN,
   settingsFamilyTools.DEF_OPEN_CONNECTOR_SETUP,
   DEF_CONNECTORS,
+  DEF_CALL_CONNECTOR,
   extrasTools.DEF_SEND_VOICE_NOTE,
   phoneFamilyTools.DEF_END_CALL,
   settingsFamilyTools.DEF_LIST_TERMINAL_RESOURCES,
@@ -401,6 +402,8 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "make_video", "show_html", "update_html", "wait_until", "list_waits", "cancel_wait", "open_connector_setup",
   // #3347: the person's connectors and their tools, next to open_connector_setup
   "connectors",
+  // #3348: one call of one of those connectors, through the hub
+  "call_connector",
 ]);
 
 /** #1276: the tools at the heart of a chat turn, listed whole in a compact

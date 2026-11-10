@@ -119,6 +119,9 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   open_connector_setup: "conversation",
   // #3347: the speaker's own connectors (the turn's connector principal), a read
   connectors: "conversation",
+  // #3348: one call of the speaker's own connector; its held request is
+  // decided by the speaker's own settings, so the wrapper never asks
+  call_connector: "conversation",
   // claims (perspicax-claims.ts): a lease in Perspicax held by this bot for
   // its person, through the turn's own Perspicax token; claim_list is a read
   claim: "conversation",

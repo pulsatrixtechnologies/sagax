@@ -915,7 +915,7 @@ import { grokAccountReach, grokReachConnectorNames } from "./drivers/acp/grok-to
 import { GROK_CLOUD_CONNECTORS } from "../shared/grok-cloud-connectors.ts";
 import { probeFullDiskAccess } from "./imessage/imessage-permissions.ts";
 import { connectorSetupOwner, createConnectorSetupInternalRoutes, createConnectorSetupProofs, createConnectorSetupRoutes } from "./routes/connector-setup.ts";
-import { createConnectorsInternalRoutes } from "./routes/internal-connectors.ts";
+import { createCallConnectorInternalRoute, createConnectorsInternalRoutes } from "./routes/internal-connectors.ts";
 import { connectorReauthFailure, connectorReauthText, type ConnectorSetupView } from "../shared/connector-setup.ts";
 import { streamTerminalAttachment } from "./terminal-resources/adapters/personal.ts";
 import { parseTerminalDestinationPick } from "../shared/terminal-request.ts";
@@ -1463,6 +1463,8 @@ import { ConnectorRegistry } from "./connectors/registry.ts";
 import { claudeAiProvider } from "./connectors/providers/claude-ai.ts";
 import { grokComProvider } from "./connectors/providers/grok-com.ts";
 import { chatgptAppsProvider } from "./connectors/providers/chatgpt-apps.ts";
+import { createConnectorHub } from "./connectors/hub.ts";
+import { testConnectorHostFromEnv } from "./connectors/hosts/test-host.ts";
 import { installMainRuntimeEventSubscriber } from "./runtime-events/dispatcher.ts";
 import { createApplyConfigHttpPatch } from "./routes/config-http-patch.ts";
 import { createAuthenticate } from "./request-pipeline/authenticate.ts";
@@ -22580,7 +22582,18 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
     principal: connectorsTurnPrincipal,
     confined: (threadId) => cloudGuestDriven(threadId) || botmailConfined(threadId),
-    accounts: (principalId) => connectorRegistry.accounts(principalId)
+    accounts: (principalId) => connectorRegistry.accounts(principalId),
+    callable: (provider) => connectorHub.callable(provider)
+  }),
+  // call_connector (#3348): a held request on the calling turn, then the
+  // provider's host; the same person as connectors
+  createCallConnectorInternalRoute({
+    ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
+    principal: connectorsTurnPrincipal,
+    confined: (threadId) => cloudGuestDriven(threadId) || botmailConfined(threadId),
+    accounts: (principalId) => connectorRegistry.accounts(principalId),
+    hub: () => connectorHub,
+    hold: holdConnectorCall
   }),
   // open_connector_setup (server/routes/connector-setup.ts)
   createConnectorSetupInternalRoutes({
@@ -28471,6 +28484,7 @@ function folderInstance(driver: string, accountId: string): string | undefined {
 function signedInFolders(principalId: string, driver: LoginDriver, slot: LoginSlot): string[] {
   return (engineLogins?.signedInAccounts(principalId, driver, slot) ?? []).map((id) => id ?? DEFAULT_ACCOUNT);
 }
+const testConnectorHost = testConnectorHostFromEnv();
 const connectorRegistry = new ConnectorRegistry({
   dataDir: DATA_DIR,
   accountInstance: (_provider, instanceId) => (IDENTITY.kind !== "perspicax" || separateAccountInstance(instanceId) ? instanceId : DEFAULT_ACCOUNT),
@@ -28502,9 +28516,13 @@ const connectorRegistry = new ConnectorRegistry({
         if (instanceId) await engineLogins?.readReach(principalId, instanceId, slot, force);
       },
     }),
-    chatgptAppsProvider(),
+    // #3348: the test connector host stands for this provider in tests only
+    testConnectorHost?.source ?? chatgptAppsProvider(),
   ],
 });
+/** #3348 (L5): the hosts that run call_connector, one per provider. Only
+ * the test host today; the Grok host is L7, the Claude host L9. */
+const connectorHub = createConnectorHub(testConnectorHost ? [testConnectorHost.host] : []);
 /** The CLI and environment of a person's own Claude account (their
  * claude.ai connectors), or why there is none. */
 
@@ -28636,6 +28654,33 @@ function noteConnectorReauth(threadId: string, toolName: string, output: string 
   };
   const language = languageOfPerson(principalId).toLowerCase().startsWith("fr") ? "fr" : "en";
   store.appendMessage(threadId, { role: "bot", kind: "text", text: connectorReauthText(failure, language), from: { botId: bot.id, name: bot.name, color: bot.color }, connectorSetup: view });
+}
+
+/** #3348: a call_connector waits for the person at most this long, like a
+ * safety hold; then it is declined and its card reads Expired. */
+const CONNECTOR_CALL_WAIT_MS = 9 * 60_000;
+const CONNECTOR_CALL_EXPIRED = "Nobody answered this connector call within nine minutes, so it was declined.";
+
+/** #3348: the held request of one call_connector, on the turn running the
+ * thread (a direct turn or a room turn), decided by the same pipeline as an
+ * engine's own ask. Undefined when no turn runs there. */
+function holdConnectorCall(input: { threadId: string; mcpTool: string; summary: string; input: string; outbound: boolean }) {
+  const engine = runningTurnEngines.get(input.threadId);
+  if (!engine) return undefined;
+  const turnId = liveTurnByThread.get(input.threadId);
+  const { requestId, decision } = heldRequests.open({
+    threadId: input.threadId,
+    ...(turnId ? { turnId } : {}),
+    providerInstanceId: engine.instanceId,
+    provider: engine.driverKind,
+    mcpTool: input.mcpTool,
+    summary: input.summary,
+    input: input.input,
+    outbound: input.outbound,
+  });
+  const timer = setTimeout(() => heldRequests.expire(requestId, CONNECTOR_CALL_EXPIRED), CONNECTOR_CALL_WAIT_MS);
+  timer.unref?.();
+  return { engine: engine.driverKind, decision: decision.finally(() => clearTimeout(timer)) };
 }
 
 /** The turn's connector principal for the connectors tool (#3347): the

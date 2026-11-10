@@ -256,6 +256,19 @@ describe("personal and complete plugin capabilities", () => {
     expect(byKey(noEnvironment, "plugin:bot:alpha@market")?.mounts).toBeUndefined();
   });
 
+  it("lists a plugin's GitHub server to connect when the person has no GitHub connection, on once they have one (#3385)", () => {
+    const input = inputs(ENGINES[2]!);
+    input.pluginEnvironment = true;
+    input.githubToken = undefined;
+    input.pluginMcp = [{ scope: "bot", key: "alpha@market", name: "gh-plugin", spec: { type: "http", url: "https://api.githubcopilot.com/mcp/", headers: { Authorization: "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}" } } }];
+    const missing = resolveBotCapabilities(input, { principalId: "p1", mayChange: true });
+    expect(byKey(missing, "plugin:bot:alpha@market")).toMatchObject({ state: "to_connect", reason: "needs_github", connect: { reason: "github" } });
+    expect(listedMounts(missing)).not.toContain("gh-plugin");
+    input.githubToken = "gho_resolvertoken";
+    const connected = resolveBotCapabilities(input, { principalId: "p1", mayChange: true });
+    expect(byKey(connected, "plugin:bot:alpha@market")).toMatchObject({ state: "on", mounts: ["gh-plugin"] });
+  });
+
   it("hides a macOS-only command server in the Linux server environment: no row, not brought, never mounted (#3181)", () => {
     const input = inputs(ENGINES[2]!);
     input.pluginEnvironment = true;

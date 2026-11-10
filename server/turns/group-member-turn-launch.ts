@@ -80,10 +80,11 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
         botId: ctx.readyBot.id, threadId: ctx.threadId, generation: ctx.internalGeneration,
         customMcp: ctx.instance.adapter.capabilities.customMcp === true, principal: ctx.roomPlace.principal,
       });
-      await host.mountPluginMcp(ctx.integrations, {
+      const plugins = await host.mountPluginMcp(ctx.integrations, {
         botId: ctx.readyBot.id, threadId: ctx.threadId, generation: ctx.internalGeneration,
         customMcp: ctx.instance.adapter.capabilities.customMcp === true, principal: ctx.roomPlace.principal,
       });
+      if (plugins?.githubWithheld?.length) ctx.roomGithubWithheld = [...(ctx.roomGithubWithheld ?? []), ...plugins.githubWithheld];
       const pluginGate = mount.afterPlugins(ctx);
       if (pluginGate !== undefined) return pluginGate;
       mount.defineScreens(ctx);

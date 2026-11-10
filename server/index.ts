@@ -1170,7 +1170,8 @@ import { updateDoc, updateRules } from "./workspace/workspace-tools.ts";
 import { markWorkspaceUse, promptSectionPaths } from "./workspace/workspace-usage.ts";
 import { createBotActivityReader, createBotActivityRoutes, type BotActivityRouteDeps } from "./routes/bot-activity.ts";
 import { createPageDataRoutes } from "./routes/page-data.ts";
-import { PageDataTaint, PageDataWatch, PageSources, sharedWriteRefused } from "./pages/page-sources.ts";
+import { PageDataWatch, PageSources } from "./pages/page-sources.ts";
+import { PageDataApprovals } from "./pages/page-data-approvals.ts";
 import { createTeamBoardSource } from "./pages/sources/team-board.ts";
 import { TEAM_BOARD_ENTRIES_PER_BOT, TEAM_BOARD_WORK_WINDOW_MS } from "./team-board/board.ts";
 import { createGithubBoardReader, ghGraphqlVia } from "./team-board/github-board.ts";
@@ -12482,7 +12483,8 @@ const personalHostChecks = new Map<string, { at: number; refused: boolean }>();
 // the pages routes so a reader who is not signed in reads `sign_in`. The
 // sources are registered where their own wiring lives (team-board below).
 const pageSources = new PageSources();
-const pageDataTaint = new PageDataTaint();
+// Ask first answers of page data reads: "Always allow" kept on disk per person
+const pageDataApprovals = new PageDataApprovals(join(DATA_DIR, "page-data-approvals.json"));
 const pageDataWatch = new PageDataWatch(pageLive);
 store.onChange((change) => {
   if (change.type === "bot") pageDataWatch.botChanged(change.botId);
@@ -12490,6 +12492,7 @@ store.onChange((change) => {
 ROUTES.push(createPageDataRoutes({
   pages: publishedPages,
   reader: (auth) => pageReaderFor(auth),
+  botAct: (auth) => auth.kind === "session" && isBotActSession(auth.session),
   teamsOf: (principalId) => IDENTITY.kind === "perspicax" ? (principals.byId(principalId)?.teams ?? []).map((team) => team.id) : [],
   ownerActive: (page) => {
     if (IDENTITY.kind !== "perspicax" || !page.ownerId) return true;
@@ -12498,19 +12501,20 @@ ROUTES.push(createPageDataRoutes({
   },
   names: (ids) => Object.fromEntries(ids.map((id) => [id, pageThreadName(id)])),
   sources: pageSources,
-  // the organization's Deny and Ask first, as for the reader's own bot doing this read
-  orgRule: ({ page, source }) => {
+  // the organization's Deny and Ask first for the action page_data, in the
+  // reader's context: no bot of the page's owner is named (an organization
+  // rule applies to every bot and person)
+  orgRule: ({ source }) => {
     const rules = customRules.orgRules().filter((rule) => rule.enabled);
     if (!rules.length) return "none";
-    const { decision } = reviewCustomRules(rules, { tool: "page_data", mcpTool: `page_data_${source.replace(/-/g, "_")}`, summary: `A page reads ${source} for the person reading it`, input: JSON.stringify({ source }), hints: { readOnly: true } }, page.botId);
+    const { decision } = reviewCustomRules(rules, { tool: "page_data", mcpTool: `page_data_${source.replace(/-/g, "_")}`, summary: `A page reads ${source} for the person reading it`, input: JSON.stringify({ source }), hints: { readOnly: true } }, "");
     return decision.kind === "deny" ? "deny" : decision.kind === "ask" ? "ask" : "none";
   },
-  taint: pageDataTaint,
+  approvals: pageDataApprovals,
   watch: pageDataWatch
 }));
 ROUTES.push(createPublishedPageRoutes({
   pages: publishedPages,
-  sharedWriteRefused: (page, by) => sharedWriteRefused(page, by, pageDataTaint),
   owner: (auth) => IDENTITY.kind === "perspicax" && auth.kind === "session" ? auth.session.principalId?.trim() || undefined : undefined,
   isPerson: (auth) => IDENTITY.kind === "perspicax"
     ? auth.kind === "session" && Boolean(auth.session.principalId?.trim())

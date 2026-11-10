@@ -416,6 +416,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // declares, the reader's own data from a declared source, and who reads.
   // The handler answers for the session's person only.
   { methods: ["GET"], path: /^\/api\/pages\/[\w-]+\/(?:capabilities|viewer|data\/[\w-]+)$/ },
+  // the reader's own answer to an Ask first card of a data read (never a
+  // bot's act copy: the handler refuses it)
+  { methods: ["POST"], path: /^\/api\/pages\/[\w-]+\/data-approvals\/[\w-]+$/ },
   { methods: ["PATCH"], path: /^\/api\/bots\/[\w-]+\/cards\/[\w-]+$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/secret-cards\/[\w-]+\/(?:resume|dismiss)$/ },
   // A sign-in card's Done or Cancel. The bot's browser itself stays admin

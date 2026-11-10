@@ -99,6 +99,7 @@ import type { PageError, PageRecord, PageVersionRecord, PublishedPages } from ".
 import { commentAnswerDocument, escapeHtml, pageDocument, parseReaderAssets, splitSlides, wrapperDocument, type ReaderAssets } from "../pages/published-pages-render.ts";
 import type { ReaderBoot } from "../../shared/page-reader.ts";
 import type { PageLive } from "../pages/page-live.ts";
+import { pageCapabilitiesAny } from "../../shared/page-capabilities.ts";
 import { anonymousBy, anonymousName, READER_ID, READER_ID_HEADER, STATE_LIMITS, STATE_PREFIX, stateLevelFor, stateMayWrite, stateRoleFor, validStateKey, type PageStateEntry, type PageStateView, type StateAccess, type StateRole } from "../../shared/page-state.ts";
 import { applySuggestion, parsePageQuote, parseSuggestion, parseThreadText, suggestable, type PageThread, type PageThreadsAnswer } from "../../shared/page-threads.ts";
 import { geistFace } from "../geist-face.ts";
@@ -408,6 +409,8 @@ function sendWrapper(options: PublicPageOptions, req: IncomingMessage, res: Serv
     lang,
     openNonce,
     preview: input.preview,
+    // #3413: the preview of a version that declares capabilities relays them to the app's broker
+    ...(input.preview && pageCapabilitiesAny(options.pages?.capabilities(input.page.id, input.version.n)) ? { capsRelay: true } : {}),
     ...(!input.preview && input.version.kind === "presentation" ? { slides: splitSlides(options.pages?.content(input.page.id, input.version.n) ?? "").length } : {}),
     ...(input.preview ? {} : { reader: { boot: readerBoot({ page: input.page, version: input.version, viewer, lang, personName: names.personName, ...(meName ? { meName } : {}),
       ...(drawn?.bot ? { bot: drawn.bot } : {}),
@@ -874,9 +877,6 @@ export interface PublishedPageRouteDeps {
   /** Someone other than the page's person commented or replied: tell its
    * person (a notification). */
   onComment?(input: { page: PageRecord; by: string; text: string; reply: boolean }): void;
-  /** #3413: this reader received personal data from this page, which is not
-   * private to its person: their writes to its shared state are refused. */
-  sharedWriteRefused?(page: PageRecord, by: string): boolean;
 }
 
 const LINK_SHARING_OFF = { error: "Your organization turned off public links for pages. Choose My organization instead.", code: "link_sharing_off" };
@@ -1341,9 +1341,6 @@ async function pageThreads(deps: PublishedPageRouteDeps, ctx: ExtrasContext, thr
       return json(res, 403, locked
         ? { error: lang === "fr" ? "Cette valeur est en lecture seule." : "This value is read-only.", code: "locked" }
         : { error: lang === "fr" ? "Seule la personne de la page modifie cette valeur." : "Only the page's person changes this value.", code: "not_allowed" });
-    }
-    if (deps.sharedWriteRefused?.(page, who.by)) {
-      return json(res, 403, { error: lang === "fr" ? "Cette page a lu tes données : elle ne peut plus écrire ce que d'autres lisent." : "This page read your data: it can no longer write what others read.", code: "shared_write_after_data" });
     }
     const result = deps.pages.setState(page.id, { key: body.key, value: body.value, by: who.by });
     if (!result.ok) return json(res, result.status, { error: result.error, code: result.code });

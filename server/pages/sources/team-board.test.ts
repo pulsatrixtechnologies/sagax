@@ -8,7 +8,7 @@ import type { BotActivityItem } from "../../../shared/bot-activity.ts";
 import type { TeamBoard } from "../../../shared/team-board.ts";
 import { createGithubBoardReader, TEAM_BOARD_GITHUB_TTL_MS } from "../../team-board/github-board.ts";
 import type { BoardBot, BoardEntry, BoardTeam } from "../../team-board/board.ts";
-import { createTeamBoardSource, type TeamBoardSourceDeps } from "./team-board.ts";
+import { createTeamBoardSource, teamBoardExits, type TeamBoardSourceDeps } from "./team-board.ts";
 
 const NOW = 1_800_000_000_000;
 const TOKEN_A = "ghp_tokenOfPersonA_xxxxxxxxxxxxxxxxxxxx";
@@ -177,5 +177,45 @@ describe("team-board source", () => {
     const reader = createGithubBoardReader({ token: () => undefined, fetch: fetch as unknown as typeof globalThis.fetch });
     expect(await reader.read("person-a", ["acme/shared"])).toEqual({ snapshots: new Map(), state: "not_connected", fix: "connect_or_token" });
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("team-board exits (#3413 review)", () => {
+  it("names only the issue and pull request addresses of the board's repositories, never a title", () => {
+    const card = (over: Record<string, unknown>) => ({ key: "k", repo: "acme/shared", number: 1, title: "https://x.example/a", issueUrl: "https://github.com/acme/shared/issues/1", column: "code", sectionId: "s", status: "taken", createdAt: NOW, ...over });
+    const board = {
+      lanes: [{ sectionId: "s", name: "T", repos: ["acme/shared"], cards: [
+        card({ pull: { number: 2, url: "https://github.com/acme/shared/pull/2" }, holder: { botId: "b", name: "B", ref: "thread:b:t" }, blocked: { source: "turn", reason: "https://x.example/b" } }),
+        card({ number: 3, issueUrl: "https://github.com/other/repo/issues/3" }),
+        card({ number: 4, issueUrl: "https://x.example/c" }),
+      ] }],
+      at: NOW, github: { state: "ok" }, summary: { inProgress: 0, waitingYou: 0, blocked: 0, mergedThisWeek: 0 }, todoTotal: {},
+    } as unknown as TeamBoard;
+    expect(teamBoardExits(board)).toEqual({
+      links: ["https://github.com/acme/shared/issues/1", "https://github.com/acme/shared/pull/2"],
+      refs: ["thread:b:t"],
+    });
+  });
+
+  it("gives the true count of open issues per repository", async () => {
+    const { routes } = world();
+    const board = (await call(routes, session("person-a"))).sent[0]!.body as TeamBoard;
+    expect(board.todoTotal["acme/shared"]).toBe(2);
+  });
+});
+
+describe("open issues read (#3413 review)", () => {
+  it("reads at most 300, in pages of 100, and keeps GitHub's true count", async () => {
+    let page = 0;
+    const fetch = vi.fn(async () => {
+      page += 1;
+      const nodes = Array.from({ length: 100 }, (_, index) => ({ number: page * 1000 + index, title: "t", url: `https://github.com/acme/big/issues/${page * 1000 + index}` }));
+      return new Response(JSON.stringify({ data: { repository: { issues: { totalCount: 450, pageInfo: { hasNextPage: true, endCursor: `c${page}` }, nodes }, pullRequests: { nodes: [] } } } }), { status: 200 });
+    });
+    const reader = createGithubBoardReader({ token: () => TOKEN_A, fetch: fetch as unknown as typeof globalThis.fetch, now: () => NOW });
+    const read = await reader.read("person-a", ["acme/big"]);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(read.snapshots.get("acme/big")?.issues).toHaveLength(300);
+    expect(read.snapshots.get("acme/big")?.openIssues).toBe(450);
   });
 });

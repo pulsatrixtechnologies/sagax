@@ -17,9 +17,10 @@ import { githubAccessFailure, type GithubAccessFix } from "../github/github-acce
 
 /** A repository's read is reused this long (design note: 60 seconds). */
 export const TEAM_BOARD_GITHUB_TTL_MS = 60_000;
-/** To do holds every open issue of the team's repositories (decided 2026-11-10):
- * all pages are read. A number here bounds it instead. */
-export const TEAM_BOARD_OPEN_ISSUES: number = Number.POSITIVE_INFINITY;
+/** To do reads the open issues of a repository newest first, in pages of
+ * 100, up to this many (#3413 review); the true number of open issues
+ * comes with them (RepoSnapshot.openIssues), so the page says how many more. */
+export const TEAM_BOARD_OPEN_ISSUES = 300;
 /** Pull requests read per repository, newest by update (open or merged). */
 export const TEAM_BOARD_PULLS = 50;
 const ISSUE_PAGE = 100;
@@ -60,6 +61,8 @@ export interface BoardPull {
 export interface RepoSnapshot {
   issues: BoardIssue[];
   pulls: BoardPull[];
+  /** GitHub's count of open issues (beyond the ones read). */
+  openIssues: number;
 }
 
 export type GithubBoardState = "ok" | "stale" | "unavailable" | "not_connected";
@@ -106,6 +109,7 @@ const PULL_FIELDS = `number url title state isDraft mergedAt createdAt updatedAt
 export const BOARD_QUERY = `query($owner: String!, $name: String!, $after: String, $pulls: Int!, $withPulls: Boolean!) {
   repository(owner: $owner, name: $name) {
     issues(states: OPEN, first: ${ISSUE_PAGE}, after: $after, orderBy: { field: UPDATED_AT, direction: DESC }) {
+      totalCount
       pageInfo { hasNextPage endCursor }
       nodes { number title url createdAt }
     }
@@ -242,6 +246,7 @@ export function createGithubBoardReader(deps: GithubBoardDeps): GithubBoardReade
     const issues: BoardIssue[] = [];
     let pulls: BoardPull[] = [];
     let after: string | undefined;
+    let openIssues = 0;
     for (let page = 0; ; page++) {
       const answer = await graphql(token, { owner, name, after: after ?? null, pulls: TEAM_BOARD_PULLS, withPulls: page === 0 });
       if (!answer.ok) {
@@ -251,6 +256,7 @@ export function createGithubBoardReader(deps: GithubBoardDeps): GithubBoardReade
       const repository = obj(obj(answer.data).repository);
       if (page === 0) pulls = list(repository.pullRequests).flatMap((node) => boardPull(node, repo) ?? []);
       const block = obj(repository.issues);
+      if (typeof block.totalCount === "number") openIssues = block.totalCount;
       for (const node of list(block)) {
         const number = Number(node.number);
         const url = str(node.url);
@@ -261,7 +267,7 @@ export function createGithubBoardReader(deps: GithubBoardDeps): GithubBoardReade
       after = str(info.endCursor);
       if (info.hasNextPage !== true || !after || issues.length >= TEAM_BOARD_OPEN_ISSUES) break;
     }
-    return { ok: true, snapshot: { issues, pulls } };
+    return { ok: true, snapshot: { issues, pulls, openIssues: Math.max(openIssues, issues.length) } };
   }
 
   function readOnce(person: string, token: string | undefined, repo: string): Promise<RepoRead> {

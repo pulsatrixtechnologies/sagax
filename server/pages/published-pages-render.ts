@@ -17,7 +17,7 @@ import type { WidgetThemeTokens } from "../../src/lib/widget-kit.ts";
 import { READER_ACTIONS_ID, READER_BOOT_ID, READER_MASCOT_ID, readerByline, type ReaderBoot } from "../../shared/page-reader.ts";
 import { readerBarThemeCss, type PageLook } from "../../src/lib/page-look.ts";
 import { STATE_ASK_MESSAGE, STATE_MESSAGE, STATE_RESULT_MESSAGE, STATE_SET_MESSAGE } from "../../shared/page-state.ts";
-import { CAP_EVENT_MESSAGE, CAP_MESSAGE, CAP_RESULT_MESSAGE, pageCapabilitiesAny, type PageCapabilities } from "../../shared/page-capabilities.ts";
+import { CAP_EVENT_MESSAGE, CAP_HELLO_MESSAGE, CAP_MESSAGE, CAP_READY_MESSAGE, CAP_READY_TIMEOUT_MS, CAP_RESULT_MESSAGE, pageCapabilitiesAny, type PageCapabilities } from "../../shared/page-capabilities.ts";
 import { ANNOTATE_FOCUS_MESSAGE, ANNOTATE_FOUND_MESSAGE, ANNOTATE_MARKS_MESSAGE, ANNOTATE_MODE_MESSAGE, ANNOTATE_SELECT_MESSAGE, THREAD_LIMITS } from "../../shared/page-threads.ts";
 import { PAGE_ANNOTATION_MESSAGE, PAGE_BANNER_NAME_MAX, PAGE_HEIGHT_MAX, PAGE_LIMITS, PAGE_OPEN_MESSAGE, PAGE_SCROLL_MAX, PAGE_SCROLL_MESSAGE, PAGE_SIZE_ASK, PAGE_SIZE_MESSAGE, pageCsp, pageFrameSandbox, pageIsHtml, type PageKind, type PageTheme, type ReaderComment } from "../../shared/published-pages.ts";
 
@@ -255,17 +255,37 @@ try{P.postMessage({type:"${STATE_ASK_MESSAGE}",v:1},"*")}catch(x){}
  * again. No network. Defines `caps` for the code that follows. Pure. */
 function capabilityParts(caps: PageCapabilities): string {
   const granted = JSON.stringify({ data: caps.data, viewer: caps.viewer, open: caps.open }).replace(/</g, "\\u003c");
-  return String.raw`var C=${granted},cpend={},cseq=0,dsubs={},CP=window.parent;
-function capCall(c,a){return new Promise(function(ok,no){var id=++cseq;cpend[id]={ok:ok,no:no};try{CP.postMessage({type:"${CAP_MESSAGE}",v:1,id:id,cap:c,args:a||{}},"*")}catch(x){delete cpend[id];no(x)}})}
+  // Handshake (#3413 lot 1b): the frame says hello once; the wrapper's broker
+  // answers ready (and says ready once when it starts). Calls made before
+  // that wait in a queue, each with its own bounded wait, then fail with
+  // code "unavailable". No periodic timer.
+  return String.raw`var C=${granted},cpend={},cseq=0,dsubs={},CP=window.parent,cready=false,cqueue=[];
+function capPost(m){try{CP.postMessage(m,"*")}catch(x){var p=cpend[m.id];if(p){delete cpend[m.id];clearTimeout(p.t);p.no(x)}}}
+function capCall(c,a){return new Promise(function(ok,no){var id=++cseq,m={type:"${CAP_MESSAGE}",v:1,id:id,cap:c,args:a||{}};cpend[id]={ok:ok,no:no,t:0};
+if(cready){capPost(m);return}cqueue.push(m);cpend[id].t=setTimeout(function(){if(!cpend[id])return;delete cpend[id];cqueue=cqueue.filter(function(q){return q.id!==id});var er=new Error("The page's wrapper did not answer.");er.code="unavailable";no(er)},${CAP_READY_TIMEOUT_MS})})}
 window.addEventListener("message",function(e){if(e.source!==CP||!e.data||e.data.v!==1)return;var d=e.data;
-if(d.type==="${CAP_RESULT_MESSAGE}"&&typeof d.id==="number"&&cpend[d.id]){var p=cpend[d.id];delete cpend[d.id];if(d.ok===true)p.ok(d.value);else{var er=new Error(String(d.message||d.error||"refused"));er.code=String(d.error||"");p.no(er)}}
+if(d.type==="${CAP_READY_MESSAGE}"){if(cready)return;cready=true;var q=cqueue;cqueue=[];q.forEach(function(m){var p=cpend[m.id];if(p){clearTimeout(p.t);capPost(m)}})}
+else if(d.type==="${CAP_RESULT_MESSAGE}"&&typeof d.id==="number"&&cpend[d.id]){var p=cpend[d.id];delete cpend[d.id];clearTimeout(p.t);if(d.ok===true)p.ok(d.value);else{var er=new Error(String(d.message||d.error||"refused"));er.code=String(d.error||"");p.no(er)}}
 else if(d.type==="${CAP_EVENT_MESSAGE}"&&d.cap==="data"&&typeof d.name==="string"&&dsubs[d.name]){var n=d.name;capCall("data.read",{name:n}).then(function(v){(dsubs[n]||[]).slice().forEach(function(f){try{f(v)}catch(x){}})},function(){})}});
+try{CP.postMessage({type:"${CAP_HELLO_MESSAGE}",v:1},"*")}catch(x){}
 var caps={capabilities:Object.freeze({data:Object.freeze(C.data.slice()),viewer:C.viewer,open:C.open}),
 data:Object.freeze({read:function(n,q){return capCall("data.read",{name:String(n),params:q&&typeof q==="object"?q:{}})},
 subscribe:function(n,f){n=String(n);if(typeof f!=="function")return function(){};(dsubs[n]=dsubs[n]||[]).push(f);return function(){dsubs[n]=(dsubs[n]||[]).filter(function(g){return g!==f})}}}),
 viewer:Object.freeze({get:function(){return capCall("viewer.get",{})}}),
 open:function(r){return capCall("open",{ref:String(r)})}};`;
 }
+
+/** The app's preview wrapper (a server document between the app and the
+ * frame): it relays the capability messages between its own frame and its
+ * parent, the app, where the broker runs, and nothing else. Calls and
+ * hello go up only from its frame's window; results, events and ready go
+ * down only from its parent. The frame keeps listening to its parent only. */
+export const PREVIEW_CAP_RELAY_SOURCE = String.raw`(function(){"use strict";
+var UP={"${CAP_MESSAGE}":1,"${CAP_HELLO_MESSAGE}":1},DOWN={"${CAP_RESULT_MESSAGE}":1,"${CAP_EVENT_MESSAGE}":1,"${CAP_READY_MESSAGE}":1};
+addEventListener("message",function(e){var f=document.querySelector("iframe");if(!f||!e.data||e.data.v!==1||typeof e.data.type!=="string")return;var d=e.data;
+if(e.source===f.contentWindow&&UP[d.type]===1){if(parent!==window)try{parent.postMessage(d,"*")}catch(x){}return}
+if(e.source===parent&&parent!==window&&DOWN[d.type]===1){try{f.contentWindow.postMessage(d,"*")}catch(x){}}});
+})();`;
 
 const STATE_BRIDGE_DEFINE = `try{Object.defineProperty(W,"sagax",{value:Object.freeze({page:Object.freeze(page)}),writable:false,configurable:false,enumerable:false})}catch(x){}`;
 
@@ -541,6 +561,9 @@ export interface WrapperInput {
   slides?: number;
   /** Nonce for the wrapper's open-link listener (#1799). */
   openNonce?: string;
+  /** #3413: the app's preview of a version that declares capabilities
+   * relays them between its frame and the app (PREVIEW_CAP_RELAY_SOURCE). */
+  capsRelay?: boolean;
 }
 
 /** The built tags of the reader's bar (dist/page-reader.html): paths under
@@ -664,6 +687,9 @@ export function wrapperDocument(input: WrapperInput): string {
     + (input.openNonce
       ? `<script nonce="${escapeHtml(input.openNonce)}">${WRAPPER_OPEN_SOURCE}</script>`
       : `<script>${WRAPPER_OPEN_SOURCE}</script>`)
+    + (input.capsRelay && input.preview
+      ? (input.openNonce ? `<script nonce="${escapeHtml(input.openNonce)}">${PREVIEW_CAP_RELAY_SOURCE}</script>` : `<script>${PREVIEW_CAP_RELAY_SOURCE}</script>`)
+      : "")
     + "</head><body>"
     + (reader ? readerBar({ ...input, botHex: reader.botHex ?? null }) : bare ? "" : `<div class="sagax-banner" role="note">${escapeHtml(wrapperBanner(input))}</div>`)
     + `<iframe src="${escapeHtml(input.frameUrl)}" sandbox="${sandbox}" referrerpolicy="no-referrer" allow="" title="${escapeHtml(input.title)}"></iframe>`

@@ -12,6 +12,7 @@ import type { RequestAuth } from "../../auth/request-auth.ts";
 import { boardSummary, type TeamBoard } from "../../../shared/team-board.ts";
 import { buildTeamBoard, type BoardBot, type BoardEntry, type BoardTeam } from "../../team-board/board.ts";
 import type { GithubBoardReader } from "../../team-board/github-board.ts";
+import { pageGithubExit, parsePageOpenRef } from "../../../shared/page-capabilities.ts";
 import { PageSourceError, type PageSource } from "../page-sources.ts";
 
 export interface TeamBoardSourceDeps {
@@ -61,8 +62,27 @@ export async function readTeamBoard(deps: TeamBoardSourceDeps, auth: RequestAuth
       ...("fix" in github && github.fix ? { fix: github.fix } : {}),
     },
     summary: boardSummary(lanes.flatMap((lane) => lane.cards), at),
+    todoTotal: Object.fromEntries([...github.snapshots].map(([repo, snapshot]) => [repo, snapshot.openIssues])),
   };
   return { board, topics: [...new Set([...members.keys(), ...bots.map((bot) => bot.id)])] };
+}
+
+/** The exits a board names (#3413 review): each card's issue and pull
+ * request address, on https://github.com/, of a repository the board shows;
+ * and each holder's open reference. Never a title, a reason or any other
+ * free text. Pure. */
+export function teamBoardExits(board: TeamBoard): { links: string[]; refs: string[] } {
+  const repos = new Set(board.lanes.flatMap((lane) => lane.repos));
+  const links = new Set<string>();
+  const refs = new Set<string>();
+  for (const card of board.lanes.flatMap((lane) => lane.cards)) {
+    for (const url of [card.issueUrl, card.pull?.url]) {
+      const exit = pageGithubExit(url, repos);
+      if (exit) links.add(exit);
+    }
+    if (card.holder?.ref && parsePageOpenRef(card.holder.ref)) refs.add(card.holder.ref);
+  }
+  return { links: [...links], refs: [...refs] };
 }
 
 export function createTeamBoardSource(deps: TeamBoardSourceDeps): PageSource {
@@ -71,7 +91,7 @@ export function createTeamBoardSource(deps: TeamBoardSourceDeps): PageSource {
     label: TEAM_BOARD_SOURCE_LABEL,
     async read(auth, { fresh }) {
       const { board, topics } = await readTeamBoard(deps, auth, fresh);
-      return { value: board, topics };
+      return { value: board, topics, ...teamBoardExits(board) };
     },
   };
 }

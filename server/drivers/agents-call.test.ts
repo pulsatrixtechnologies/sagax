@@ -156,6 +156,23 @@ describe("add_mcp_server", () => {
     }]);
   });
 
+  it("action restart sends only the name and returns what the route says, keys untouched", async () => {
+    const calls: Array<{ path: string; body: unknown }> = [];
+    const said = "Restarted MCP server notes. Its saved keys stay. Test: it started, but it has no tools. This turn keeps talking to the old process; your next turn starts the new code.";
+    const result = await callTool("add_mcp_server", { action: "restart", name: "notes", env: { NOTES_TOKEN: "ignored" } }, context({
+      client: {
+        api: async (path, init) => {
+          calls.push({ path, body: JSON.parse(String(init?.body)) });
+          return { name: "notes", restarted: true, text: said };
+        },
+        apiResponse: async () => ({ ok: true, status: 200, body: {} }),
+      },
+    }));
+    expect(result.isError).toBeFalsy();
+    expect(result.text).toBe(said);
+    expect(calls).toEqual([{ path: "/api/internal/mcp-servers", body: { action: "restart", name: "notes" } }]);
+  });
+
   it("tells the model a server saved on Full access is switched on (2026-10-26)", async () => {
     const result = await callTool("add_mcp_server", { name: "docs", url: "https://docs.example/mcp" }, context({
       client: {

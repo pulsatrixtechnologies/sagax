@@ -8,8 +8,8 @@ import { customMcpServers } from "../config.ts";
 import type { McpServerSpec, StdioMcpSpec } from "../contracts.ts";
 import { addBotMcpServer, claimBotMcpServers, withoutBotMcpServers, type BotMcpServerAdd } from "../mcp/mcp-bot-servers.ts";
 import { createMcpHealth, nameList, toolLabel, type McpHealthDeps } from "../mcp/mcp-health.ts";
-import { probeMcpServer } from "../mcp/mcp-probe.ts";
-import { isRemoteMcpServer, parseStoredMcpServer } from "../mcp/mcp-registry.ts";
+import { probeMcpServer, type McpProbeResult } from "../mcp/mcp-probe.ts";
+import { isRemoteMcpServer, MCP_RESTART_ENV, parseStoredMcpServer } from "../mcp/mcp-registry.ts";
 import { canUseMcpServer } from "../../shared/tool-scope.ts";
 
 type Bot = { id: string; name: string; mcpServers?: string[]; toolScope?: unknown };
@@ -28,6 +28,8 @@ export interface McpServersHostDeps {
   /** Whether bots' turns run boxed here, each seeing only its own folders. */
   boxed(): boolean;
   start?: McpHealthDeps["start"];
+  /** How a restart tests a command server as one bot's turns start it (tests swap it). */
+  probe?(server: StdioMcpSpec, asBot: { id: string; cwd: string }): Promise<McpProbeResult>;
 }
 
 const CLAIMED_FILE = (dataDir: string) => join(dataDir, "mcp-bot-servers.json");
@@ -52,33 +54,70 @@ export function enabledCommandServers(cfg: AppConfig): Record<string, StdioMcpSp
   return out;
 }
 
+export { MCP_RESTART_ENV };
+
+/** An engine keeps a command server's process across turns and starts a new one only when its spec changes (Claude Code,
+ * for its warm session), so a restart has to show in the spec. Counted since this server started: its processes go with it. */
+export function withRestarts<T extends McpServerSpec>(servers: Record<string, T>, restarts: ReadonlyMap<string, number>): Record<string, T> {
+  if (!restarts.size) return servers;
+  return Object.fromEntries(Object.entries(servers).map(([name, server]) => {
+    const count = restarts.get(name);
+    return [name, count && "command" in server ? { ...server, env: { ...server.env, [MCP_RESTART_ENV]: String(count) } } : server];
+  }));
+}
+
 export function createMcpServersHost(deps: McpServersHostDeps) {
   const configured = (bot: Bot): Record<string, McpServerSpec> => deps.policy(customMcpServers(deps.cfg(), bot.mcpServers, bot.id));
   /** None on an AI that starts no servers, and only those its tool selection reaches. */
   const started = (bot: Bot): string[] => (deps.startsServers(bot.id) ? Object.keys(configured(bot)).filter((name) => canUseMcpServer(bot.toolScope, name)) : []);
-  const start: McpHealthDeps["start"] = deps.start ?? (async (_name, server, botId) => {
+  /** Sagax has no bot-box wrap yet: a bot's command servers start from its own folder when it exists. */
+  const asBot = (botId: string) => {
     const own = join(deps.dataDir, "workspaces", botId);
-    // Sagax has no bot-box wrap yet: start from the bot's own folder when it exists.
-    const result = await probeMcpServer(
-      { ...server, enabled: true },
-      undefined,
-      undefined,
-      undefined,
-      { asBot: { id: botId, cwd: existsSync(own) ? own : deps.dataDir } },
-    );
+    return { id: botId, cwd: existsSync(own) ? own : deps.dataDir };
+  };
+  const probe = deps.probe ?? ((server: StdioMcpSpec, bot: { id: string; cwd: string }) =>
+    probeMcpServer({ ...server, enabled: true }, undefined, undefined, undefined, { asBot: bot }));
+  const start: McpHealthDeps["start"] = deps.start ?? (async (_name, server, botId) => {
+    const result = await probe(server, asBot(botId));
     return result.ok ? { ok: true } : { ok: false, error: result.error };
   });
-  const health = createMcpHealth({
+  const checks = createMcpHealth({
     file: join(deps.dataDir, "mcp-health.json"),
     servers: () => enabledCommandServers(deps.cfg()),
     users: (name) => deps.bots().filter((bot) => started(bot).includes(name)),
     start,
     tell: deps.tell,
   });
+  // Any change the checks hear about (a restart, an edit, turning it off or on) counts as a restart, so the next turn of
+  // an engine that kept the old process starts a new one, off and on in one turn included.
+  const restarts = new Map<string, number>();
+  const health = {
+    ...checks,
+    changed(name: string): void {
+      restarts.set(name, (restarts.get(name) ?? 0) + 1);
+      checks.changed(name);
+    },
+    usable<T extends McpServerSpec>(botId: string, mounted: Record<string, T>): Record<string, T> {
+      return withRestarts(checks.usable(botId, mounted), restarts);
+    },
+  };
 
   return {
     health,
     mounted: (bot: Bot): Record<string, McpServerSpec> => health.usable(bot.id, configured(bot)),
+    /** Reloads an enabled command server: the next turn of every bot that uses it starts a new process with what is saved
+     * today (keys, sign-in and all), and it is tested now as `botId`'s turns start it. Null when no such server runs here. */
+    async restart(name: string, botId: string): Promise<McpProbeResult | null> {
+      const server = enabledCommandServers(deps.cfg())[name];
+      if (!server) return null;
+      health.changed(name);
+      const { bot: _bot, ...spec } = server;
+      try {
+        return await probe(spec, asBot(botId));
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
     prepare: (bot: Bot): Promise<void> => health.prepare(bot.id, started(bot)),
     off: (bot: Bot) => health.off(bot.id, started(bot)),
     listing: <T extends { name: string }>(server: T): T & { offFor?: string[] } => {

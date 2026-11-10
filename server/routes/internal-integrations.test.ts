@@ -387,3 +387,88 @@ describe("createInternalIntegrationsRoutes", () => {
     expect(JSON.parse(ended[0]!.body)).toEqual({ jsonrpc: "2.0", id: 7, result: { ok: true } });
   });
 });
+
+describe("POST /mcp-servers action restart", () => {
+  const mail = { command: "mail-mcp", args: [] as string[], env: { MAIL_KEY: "saved-key" }, enabled: true };
+
+  it("reloads an enabled command server at any level, keeping its saved keys, spending no secretRef and saying what the test showed", async () => {
+    for (const level of ["full", "auto", "ask"]) {
+      const restartMcpServer = vi.fn(async () => ({ ok: true as const, tools: [{ name: "read_mail" }] }));
+      const redeemMcpBody = vi.fn();
+      const persistMcpServers = vi.fn();
+      const appendMessage = vi.fn(() => ({ id: "card" }));
+      const tryBeginMcpConfigUpdate = vi.fn(() => true);
+      const route = createInternalIntegrationsRoutes(deps({
+        mcpServers: () => ({ mail }), restartMcpServer, redeemMcpBody, persistMcpServers, appendMessage, tryBeginMcpConfigUpdate,
+        sourceApprovalMode: () => level,
+      }));
+      const { sent, run } = call(route, { path: "/api/internal/mcp-servers", body: { action: "restart", name: "mail" } });
+      await run();
+      expect(sent).toEqual([{ status: 200, body: {
+        name: "mail",
+        restarted: true,
+        text: "Restarted MCP server mail. Its saved keys stay. Test: it started and listed its tools: read_mail. That does not show what they return: call one to check. This turn keeps talking to the old process; your next turn starts the new code.",
+      } }]);
+      expect(restartMcpServer).toHaveBeenCalledWith("mail", bot.id);
+      expect(redeemMcpBody, "no secretRef is spent").not.toHaveBeenCalled();
+      expect(persistMcpServers, "nothing saved changes").not.toHaveBeenCalled();
+      expect(appendMessage, "no card: it runs what is already on").not.toHaveBeenCalled();
+      expect(tryBeginMcpConfigUpdate, "a restart writes no config, so it never waits on the config lock").not.toHaveBeenCalled();
+    }
+  });
+
+  it("says plainly that a test only proves the server started", async () => {
+    const answer = async (result: Awaited<ReturnType<NonNullable<InternalIntegrationsDeps["restartMcpServer"]>>>) => {
+      const route = createInternalIntegrationsRoutes(deps({ mcpServers: () => ({ mail }), restartMcpServer: async () => result }));
+      const { sent, run } = call(route, { path: "/api/internal/mcp-servers", body: { action: "restart", name: "mail" } });
+      await run();
+      return sent[0];
+    };
+    expect((await answer({ ok: true, tools: [] }))?.body).toMatchObject({ text: expect.stringContaining("Test: it started, but it has no tools.") });
+    expect((await answer({ ok: false, error: "spawn mail-mcp ENOENT" }))?.body).toMatchObject({ text: expect.stringContaining("Test: it did not start: spawn mail-mcp ENOENT") });
+  });
+
+  it("answers what has no process to restart here", async () => {
+    const route = createInternalIntegrationsRoutes(deps({
+      mcpServers: () => ({ linear: { type: "http", url: "https://mcp.example.com/mcp", headers: {}, enabled: true }, notes: { ...mail, enabled: false } }),
+      restartMcpServer: async () => null,
+    }));
+    const post = async (body: Record<string, unknown>) => {
+      const { sent, run } = call(route, { path: "/api/internal/mcp-servers", body });
+      await run();
+      return sent[0];
+    };
+    expect(await post({ action: "restart", name: "linear" })).toMatchObject({ status: 400, body: { error: expect.stringContaining("has no process to restart") } });
+    expect(await post({ action: "restart", name: "notes" })).toMatchObject({ status: 403, body: { error: "notes is off. The person turns it on in MCP server settings." } });
+    expect(await post({ action: "restart", name: "missing" })).toMatchObject({ status: 404 });
+    expect(await post({ action: "rename", name: "notes" })).toMatchObject({ status: 400, body: { error: "Unknown action: send add (the default) or restart." } });
+  });
+
+  it("an add with action add saves as before, the action left out of what is saved", async () => {
+    const addDisabledMcpServer = vi.fn(deps().addDisabledMcpServer);
+    const route = createInternalIntegrationsRoutes(deps({ addDisabledMcpServer }));
+    const { sent, run } = call(route, { path: "/api/internal/mcp-servers", body: { action: "add", name: "tools", command: "npx" } });
+    await run();
+    expect(sent[0]?.status).toBe(201);
+    expect(addDisabledMcpServer.mock.calls[0]?.[1]).toEqual({ name: "tools", command: "npx" });
+  });
+
+  it("on an organization server reloads the person's own command server through their relay", async () => {
+    const closePersonalStdio = vi.fn();
+    const addPersonalMcpServer = vi.fn(async () => undefined);
+    const route = createInternalIntegrationsRoutes(deps({
+      isPerspicax: () => true, closePersonalStdio, addPersonalMcpServer,
+      personalMcpServer: (_person, name) => (name === "mail" ? mail : name === "web" ? { url: "https://mcp.example.com/mcp", enabled: true } : undefined),
+    }));
+    const post = async (body: Record<string, unknown>) => {
+      const { sent, run } = call(route, { path: "/api/internal/mcp-servers", body });
+      await run();
+      return sent[0];
+    };
+    expect(await post({ action: "restart", name: "mail" })).toMatchObject({ status: 200, body: { restarted: true, personal: true, text: expect.stringContaining("Its saved keys stay.") } });
+    expect(closePersonalStdio).toHaveBeenCalledWith("person-1", "mail");
+    expect(addPersonalMcpServer).not.toHaveBeenCalled();
+    expect(await post({ action: "restart", name: "web" })).toMatchObject({ status: 400 });
+    expect(await post({ action: "restart", name: "missing" })).toMatchObject({ status: 404 });
+  });
+});

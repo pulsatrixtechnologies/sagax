@@ -108,3 +108,58 @@ it("never makes a server the own of a deleted bot whose folder was left behind",
 it("says it in one plain line per bot", () => {
   expect(claimedNotice("Iris", ["blender"])).toBe("The Blender tool only works for Iris, so it's off for your other bots.");
 });
+
+it("a restart, or turning a server off and on, shows in what the next turn starts, so an engine that kept the old process replaces it", async () => {
+  const { cfg, host } = setup({ boxed: false, bots: [PAUL] });
+  host.boot();
+  await host.health.settled();
+  const fresh = JSON.stringify(host.mounted(PAUL).notes);
+  expect((host.mounted(PAUL).notes as { env: Record<string, string> }).env.SAGAX_MCP_RESTART).toBeUndefined();
+
+  host.health.changed("notes");
+  await host.health.settled();
+  const restarted = JSON.stringify(host.mounted(PAUL).notes);
+  expect(restarted).not.toBe(fresh);
+
+  const entry = cfg.mcpServers!.notes as { enabled: boolean };
+  entry.enabled = false;
+  host.health.changed("notes");
+  entry.enabled = true;
+  host.health.changed("notes");
+  await host.health.settled();
+  expect(JSON.stringify(host.mounted(PAUL).notes), "off and on in one turn leaves the config the same").not.toBe(restarted);
+  expect(cfg.mcpServers!.notes, "nothing saved changes").toEqual({ command: "npx", args: ["-y", "@x/notes-mcp"], enabled: true });
+});
+
+it("restart reloads an enabled command server, keeps what is saved, and tests it as the asking bot", async () => {
+  const probed: Array<{ command: string; bot: string }> = [];
+  const data = mkdtempSync(join(tmpdir(), "sagax-mcp-host-"));
+  dirs.push(data);
+  const cfg = {
+    mcpServers: {
+      mail: { command: "mail-mcp", args: [], env: { MAIL_KEY: "kept" }, enabled: true },
+      off: { command: "mail-mcp", args: [], enabled: false },
+      linear: { type: "http", url: "https://mcp.example.com/mcp", headers: {}, enabled: true },
+    },
+  } as unknown as AppConfig;
+  const host = createMcpServersHost({
+    dataDir: data, cfg: () => cfg, persist: (next) => { cfg.mcpServers = next; }, bots: () => [PAUL], startsServers: () => true,
+    boxed: () => false, policy: (servers) => servers, tell: () => undefined, start: async () => ({ ok: true }),
+    probe: async (server, asBot) => { probed.push({ command: server.command, bot: asBot.id }); return { ok: true, tools: [{ name: "read_mail" }] }; },
+  });
+  const before = structuredClone(cfg.mcpServers);
+  expect(await host.restart("mail", PAUL.id)).toEqual({ ok: true, tools: [{ name: "read_mail" }] });
+  expect(probed).toEqual([{ command: "mail-mcp", bot: PAUL.id }]);
+  expect(cfg.mcpServers).toEqual(before);
+  expect((host.mounted(PAUL).mail as { env: Record<string, string> }).env).toEqual({ MAIL_KEY: "kept", SAGAX_MCP_RESTART: "1" });
+  expect(await host.restart("off", PAUL.id), "an off server has no process").toBeNull();
+  expect(await host.restart("linear", PAUL.id), "nor one reached by its address").toBeNull();
+  expect(await host.restart("missing", PAUL.id)).toBeNull();
+});
+
+it("leaves servers reached by URL alone", async () => {
+  const { cfg, host } = setup({ boxed: false, bots: [PAUL] });
+  cfg.mcpServers!.linear = { type: "http", url: "https://mcp.example.com/mcp", headers: {}, enabled: true };
+  host.health.changed("linear");
+  expect(host.mounted(PAUL).linear).toEqual({ type: "http", url: "https://mcp.example.com/mcp", headers: {} });
+});

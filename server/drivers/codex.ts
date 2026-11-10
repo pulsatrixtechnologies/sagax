@@ -18,7 +18,7 @@ import { laterStartup, openStartupModelCatalog, writeStartupModelCache } from ".
 import { hostedWorkspaceConfigured } from "../enterprise.ts";
 import { ChatGptPlanAuthController } from "./chatgpt-plan-auth.ts";
 import { codexLaunchesStarting, codexLaunchSlot } from "./codex-process.ts";
-import { isReservedMcpEnvEntry } from "../mcp/mcp-registry.ts";
+import { isReservedMcpEnvEntry, MCP_RESTART_ENV } from "../mcp/mcp-registry.ts";
 
 import type {
   DriverCreateInput,
@@ -281,7 +281,9 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
       const approvalMode: ApprovalMode = turn.approvalMode ?? (config.fullAuto ? "full" : "ask");
       for (const [name, server] of Object.entries(turn.integrations?.custom ?? {})) {
         if ("url" in server || isSagaxWorkplaceProxy(name, server) || isSagaxPerspicaxBridge(server)) continue;
-        const reserved = Object.entries(server.env).find(([key, value]) => isReservedMcpEnvEntry(key, value))?.[0];
+        // The restart counter is added by Sagax itself (mcp-servers-host), never typed by a person.
+        const reserved = Object.entries(server.env)
+          .find(([key, value]) => key !== MCP_RESTART_ENV && isReservedMcpEnvEntry(key, value))?.[0];
         if (reserved) {
           throw new Error(`Custom MCP server “${name}” cannot set reserved environment variable “${reserved}”`);
         }

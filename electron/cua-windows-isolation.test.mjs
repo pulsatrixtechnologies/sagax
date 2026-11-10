@@ -10,7 +10,9 @@ vi.mock("electron", () => ({
 }));
 vi.mock("@trycua/cua-driver/embedded", () => ({
   EmbeddedCuaDriverHost: class {
-    constructor(binary, bundleId) { this.binary = binary; this.bundleId = bundleId; fixture.hosts.push(this); }
+    constructor(options) { this.binary = options.binaryPath; this.bundleId = options.hostBundleId; this.options = options; fixture.hosts.push(this); }
+    static withOptions(options) { return new this(options); }
+    waitForExit() { return new Promise(() => {}); }
     start(options) { return fixture.start(options); }
     stop = vi.fn(async () => {});
     uniffiDestroy = vi.fn();
@@ -53,6 +55,8 @@ describe("Windows owned CUA host", () => {
     });
     expect(fixture.start.mock.calls[0][0].signal).toBeInstanceOf(AbortSignal);
     expect(fixture.hosts[0].binary).toBe(process.env.CUA_DRIVER_PATH);
+    // A fixed pipe per app run: a bridge that outlives a restart of the helper still points at it.
+    expect(fixture.hosts[0].options.socketPath).toBe(`\\\\.\\pipe\\cua-sagax-${process.pid}`);
     await cua.stopCua();
     expect(fixture.hosts[0].stop).toHaveBeenCalledOnce();
     expect(fixture.hosts[0].uniffiDestroy).toHaveBeenCalledOnce();

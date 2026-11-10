@@ -70,5 +70,7 @@ export async function resolveStep(step: RecipeStep, caller: ComputerCaller, sign
     if (held === undefined) return fail(`could not read what ${target} holds`);
     if (held !== "" && held !== step.args.value) return fail(`${target} already holds other text`);
   }
-  return { ok: true, args: token === undefined ? { ...args, element_index: index } : { ...args, element_token: token } };
+  // cua-driver 0.41 and later act on an element only through its element_token; an index is no longer an address it accepts.
+  if (token === undefined) return fail(`${target} has no element token to act on`);
+  return { ok: true, args: { ...args, element_token: token } };
 }

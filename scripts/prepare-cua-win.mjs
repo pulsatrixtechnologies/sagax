@@ -33,15 +33,15 @@ const expectedVersion = String(sdkPackage.version);
 
 const RELEASES = {
   x64: {
-    version: "0.33.0",
-    file: "cua-driver-rs-0.33.0-windows-x86_64-binary.zip",
-    sha256: "b7c4a2c18a30ccba7cc96e2cf864e2d3e1d00703f0de0e3b7c6feaa5564f9eee",
+    version: "0.45.4",
+    file: "cua-driver-rs-0.45.4-windows-x86_64-binary.zip",
+    sha256: "949927b4cb0519c6fb1377878d67d79a8d6fae7bc56cbed17c7aa26448d82cb5",
     machine: 0x8664,
   },
   arm64: {
-    version: "0.33.0",
-    file: "cua-driver-rs-0.33.0-windows-arm64-binary.zip",
-    sha256: "9feef1cfe0cfdaf5471d46743d33b978431f7706f8d32627733e0dec29dd29b5",
+    version: "0.45.4",
+    file: "cua-driver-rs-0.45.4-windows-arm64-binary.zip",
+    sha256: "8bdd935ef6cf9679eb4d10f713b35e03f368ea60acb8b2c4d24ca867be182485",
     machine: 0xaa64,
   },
 };

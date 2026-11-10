@@ -1,5 +1,5 @@
 // What a lent screen accepts, argument by argument. Derived from the local
-// computer-control driver's own input schemas (cua-driver 0.12.6 `describe`),
+// computer-control driver's own input schemas (cua-driver 0.45.4 `describe`),
 // keeping only arguments that observe or operate what is on screen. Anything
 // that names a local path, a command line, a port or a system prompt is not
 // lent: `screenshot_out_file` and `debug_image_out` write a file anywhere
@@ -28,7 +28,9 @@ const PAGE_URL = { type: "url", schemes: ["http:", "https:", "about:"] };
 
 const at = { x: NUMBER, y: NUMBER };
 const target = { pid: INTEGER, window_id: INTEGER, session: ID };
-const element = { element_index: INTEGER, element_token: ID };
+// Since 0.41 the driver addresses an element by element_token only, keys its
+// agent cursor by session, and has no set_agent_cursor_style.
+const element = { element_token: ID };
 const tab = { target_id: ID, tab_id: ID, session: ID };
 
 export const LENT_SCREEN_ARGUMENTS = Object.freeze({
@@ -56,14 +58,12 @@ export const LENT_SCREEN_ARGUMENTS = Object.freeze({
   end_session: { session: ID },
   get_session_state: { session: ID },
   escalate_session: { session: ID, reason: oneOf("ax_tree_pixel_mismatch", "background_delivery_failed", "foreground_ineffective", "no_window_target", "other"), detail: LABEL },
-  get_agent_cursor_state: { cursor_id: ID },
-  set_agent_cursor_enabled: { cursor_id: ID, enabled: BOOLEAN },
+  get_agent_cursor_state: { session: ID },
+  set_agent_cursor_enabled: { session: ID, enabled: BOOLEAN },
   set_agent_cursor_motion: {
-    cursor_id: ID, cursor_color: ID, cursor_label: ID, cursor_icon: oneOf("arrow", "teardrop", ""),
-    arc_flow: NUMBER, arc_size: NUMBER, cursor_opacity: NUMBER, cursor_size: NUMBER, dwell_after_click_ms: NUMBER, end_handle: NUMBER,
+    session: ID, arc_flow: NUMBER, arc_size: NUMBER, dwell_after_click_ms: NUMBER, end_handle: NUMBER,
     glide_duration_ms: NUMBER, idle_hide_ms: NUMBER, spring: NUMBER, start_handle: NUMBER, turn_radius: NUMBER,
   },
-  set_agent_cursor_style: { cursor_id: ID, bloom_color: ID, gradient_colors: KEYS },
   browser_click: { ...tab, ...at, input_route: INPUT_ROUTE, ref: ID },
   browser_type: { ...tab, mode: oneOf("insert_text", "keystrokes"), ref: ID, text: TEXT },
   browser_navigate: { ...tab, url: PAGE_URL },

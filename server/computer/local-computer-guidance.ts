@@ -5,6 +5,12 @@
 // act on either. This adds, to that one refusal, what the bot can do instead.
 type JsonObject = Record<string, unknown>;
 
+/** What a bot is told when the computer-control helper dies under one of its
+ * calls: the app restarts the helper by itself, and the bridge keeps the bot's
+ * tools, so the next call reaches the new one. */
+export const COMPUTER_HELPER_STOPPED =
+  "Computer control on this computer stopped because its helper crashed and Sagax is restarting it by itself, so try the same action once more in a few seconds, and if it fails the same way, tell the person computer control is not working and to quit and reopen Sagax.";
+
 export const OWN_PROFILE_UNAVAILABLE =
   "Computer control on this computer cannot attach to the person's own signed-in browser profile, and Sagax has no setting that lets them allow it, so do not retry strategy existing_profile or ask them to grant it. To work in a site they are signed in to, use the screen: launch_app with urls opens the page in their own browser, signed in as they are; read it with get_window_state and act with click, type_text and press_key. Or use your own browser tools if you have them, and ask the person to sign in there when the site needs their login.";
 

@@ -19,7 +19,9 @@ Every product skill of Pulsatrix Flow declares what to watch
 helper, `px_flow.py proactive [--product p ...]`, which prints
 `{"watches":[{id, skill, products, domain, summary, observe, when, cadence, propose, kind, prompt}]}`.
 
-Every minute, for each bot whose mode is not off:
+Every minute, for each bot whose stored mode is exactly `proactive` (an
+explicit choice; a bot with no stored mode, an old value or `off` gets no
+Pulsatrix watch, until the per-domain choice of #3408):
 
 1. **Products**: the APIs the owner's Pulsatrix connection serves
    (`api_list`) are matched to the Flow products (hourly).

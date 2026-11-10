@@ -638,7 +638,8 @@ export class FlowWatchLoop {
 
   async tickBot(botId: string, owner: string): Promise<void> {
     const bot = this.deps.bot(botId);
-    if (!bot || !proactiveMayObserve(proactiveModeFor(bot))) return;
+    // Hotfix: watches only for an explicitly stored "proactive" (no default, no old value) until the per-domain choice of #3408.
+    if (!bot || bot.proactiveMode !== "proactive" || !proactiveMayObserve(proactiveModeFor(bot))) return;
     const helper = this.deps.helper(botId, owner);
     if (!helper) return;
     // the products of the profiles the bot holds (needs a connection, hourly)

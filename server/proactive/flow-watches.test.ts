@@ -179,8 +179,18 @@ describe("observe is a read", () => {
 });
 
 describe("the loop", () => {
-  it("a profile bot with no stored mode is proactive and fires a watch into its conversation", async () => {
-    const h = harness({ stored: false });
+  it("a bot with no stored mode or an old value gets no watch: nothing observed, nothing offered", async () => {
+    for (const opts of [{ stored: false }, { mode: "propose" }, { mode: "follow-rules" }]) {
+      const h = harness(opts);
+      await h.loop.tick();
+      expect(h.calls).toEqual([]);
+      expect(h.helperCalls).toEqual([]);
+      expect(h.offered).toEqual([]);
+    }
+  });
+
+  it("a profile bot with a stored proactive mode fires a watch into its conversation", async () => {
+    const h = harness({ mode: "proactive" });
     await h.loop.tick();
     expect(h.helperCalls).toContainEqual(["connectwise"]);
     expect(h.calls.map((call) => call.name)).toEqual(["cw_psa_service_query"]);

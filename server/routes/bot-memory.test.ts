@@ -129,7 +129,7 @@ describe("the bot-memory module through the route table", () => {
     commitLearned(facts);
     let aboutMe = `Handwritten note\n${facts[0]!.line}`;
     const saved: string[] = [];
-    const base = await serve({ aboutMe: () => aboutMe, saveAboutMe: (text) => { aboutMe = text; saved.push(text); } });
+    const base = await serve({ aboutMe: () => aboutMe, saveAboutMe: (_owner, text) => { aboutMe = text; saved.push(text); } });
     expect(await (await fetch(`${base}/api/profile/learned`)).json()).toEqual({ learned: facts });
     const remove = () => fetch(`${base}/api/profile/learned/${facts[0]!.id}/remove`, { method: "POST" });
     const removed = await remove();
@@ -148,7 +148,7 @@ describe("the bot-memory module through the route table", () => {
     let failSave = true;
     const base = await serve({
       aboutMe: () => aboutMe,
-      saveAboutMe: (text) => {
+      saveAboutMe: (_owner, text) => {
         if (failSave) throw new Error("synthetic profile write failure");
         aboutMe = text;
       },
@@ -165,6 +165,31 @@ describe("the bot-memory module through the route table", () => {
     expect(await retried.json()).toEqual({ ok: true, aboutMe: "Handwritten note", learned: [] });
     expect(planLearned(from, [facts[0]!.text], aboutMe, "2026-09-28")).toEqual([]);
     expect((await remove()).status).toBe(404);
+  });
+
+  it("#3424: a member reads, writes and trims their own About me and learned list, never the operator's", async () => {
+    const operatorFacts = planLearned({ botId: "bot-123", botName: "Memo" }, ["Operator drinks coffee"], "", "2026-11-10");
+    commitLearned(operatorFacts);
+    const texts: Record<string, string> = { operator: `Operator note\n${operatorFacts[0]!.line}`, "member-a": "" };
+    const key = (owner: { person: string | null }) => owner.person ?? "operator";
+    const base = await serve({
+      aboutMeOwner: () => ({ person: "member-a" }),
+      aboutMe: (owner) => texts[key(owner)] ?? "",
+      saveAboutMe: (owner, text) => { texts[key(owner)] = text; },
+    });
+    expect(await (await fetch(`${base}/api/profile/learned`)).json()).toEqual({ learned: [] });
+    expect((await fetch(`${base}/api/profile/learned/${operatorFacts[0]!.id}/remove`, { method: "POST" })).status).toBe(404);
+    expect(texts.operator).toContain("Operator drinks coffee");
+    expect(await (await fetch(`${base}/api/me/about-me`)).json()).toEqual({ aboutMe: "" });
+    const put = await fetch(`${base}/api/me/about-me`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ aboutMe: "Member note" }) });
+    expect(await put.json()).toEqual({ ok: true, aboutMe: "Member note" });
+    expect(texts).toMatchObject({ "member-a": "Member note", operator: `Operator note\n${operatorFacts[0]!.line}` });
+    expect((await fetch(`${base}/api/me/about-me`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ aboutMe: 3 }) })).status).toBe(400);
+    // a session with no person behind it has no About me to read or write
+    const nobody = await serve({ aboutMeOwner: () => null, aboutMe: () => { throw new Error("unexpected read"); } });
+    expect((await fetch(`${nobody}/api/profile/learned`)).status).toBe(403);
+    expect((await fetch(`${nobody}/api/me/about-me`)).status).toBe(403);
+    expect((await fetch(`${nobody}/api/me/about-me`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ aboutMe: "x" }) })).status).toBe(403);
   });
 
   it("passes wrong methods and near-miss paths to the next handler", async () => {
@@ -210,13 +235,16 @@ describe("the bot-memory module through the route table", () => {
       ["POST", "/api/bots/b1/memory/journal/e1/revert"],
       ["GET", "/api/bots/b1/memory/upkeep"],
       ["POST", "/api/bots/b1/memory/tidy"],
+      // #3424: the person's own About me and learned facts, theirs on an organization server
+      ["GET", "/api/profile/learned"],
+      ["POST", "/api/profile/learned/e1/remove"],
+      ["GET", "/api/me/about-me"],
+      ["PUT", "/api/me/about-me"],
     ] as const) {
       expect(requiredScope(method, path), `${method} ${path}`).toBe("client");
     }
-    // the person's About me facts and opening the folder on this machine stay admin
+    // opening the folder on this machine stays admin
     for (const [method, path] of [
-      ["GET", "/api/profile/learned"],
-      ["POST", "/api/profile/learned/e1/remove"],
       ["POST", "/api/bots/b1/memory/open"],
     ] as const) {
       expect(requiredScope(method, path), `${method} ${path}`).toBe("admin");

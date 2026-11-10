@@ -33,6 +33,8 @@ import {
 } from "../memory/memory-journal.ts";
 import { upkeepEnabled, type MemoryUpkeep } from "../memory/memory-upkeep.ts";
 import { listLearnedFacts, removeLearned } from "../profiles/profile-learned.ts";
+import type { AboutMeOwner } from "../profiles/person-about-me.ts";
+import { ABOUT_ME_MAX } from "../people/person-settings.ts";
 import { secretValue } from "../backup/workspace-backup-policy.ts";
 import { MEMORY_FILE_MAX_BYTES } from "../workspace/workspace.ts";
 import { writeWorkspaceBytes } from "../workspace/workspace-manage.ts";
@@ -50,8 +52,13 @@ export interface BotMemoryRouteDeps {
   /** Recall by meaning for this bot (server/recall/semantic-index.ts): the
    * encoder and how many passages are indexed. Absent: not offered. */
   semantic?(botId: string): unknown;
-  aboutMe(): string;
-  saveAboutMe(text: string): void;
+  /** #3424: whose About me a request reads and writes. `{ person: null }` is
+   * the server's profile (the operator's), `{ person: id }` a signed-in
+   * person's own on an organization server, null a session with no person
+   * behind it. Absent: always the server's profile (a personal server). */
+  aboutMeOwner?(auth: RequestAuth): AboutMeOwner | null;
+  aboutMe(owner: AboutMeOwner): string;
+  saveAboutMe(owner: AboutMeOwner, text: string): void;
   /** On an OMB Cloud home (server/lending-memory.ts), absent elsewhere:
    * - `needed`: when this bot's memory was changed where the owner did not
    *   write, which files changed and a token for exactly what is there now;
@@ -287,15 +294,24 @@ export function createBotMemoryRoutes(deps: BotMemoryRouteDeps): RouteHandler {
       if (!result.ok) return json(res, result.status, { error: result.error });
       return json(res, 200, { ok: true, ...result.doc, entry: result.entry ? journalEntryForClient(m[1], result.entry) : null, overview: memoryOverview(m[1]) });
     }
-    // What upkeep learned about the person is shared through About me.
-    if (method === "GET" && path === "/api/profile/learned") {
-      return json(res, 200, { learned: listLearnedFacts() });
-    }
+    // What upkeep learned about the person is shared through About me: the
+    // caller's own (#3424), never another person's.
+    const learnedRoute = path === "/api/profile/learned" || path === "/api/me/about-me" ? path : null;
     m = path.match(/^\/api\/profile\/learned\/([\w-]+)\/remove$/);
-    if (m && method === "POST") {
-      const removed = removeLearned(m[1], deps.aboutMe(), deps.saveAboutMe);
+    if ((learnedRoute && (method === "GET" || (method === "PUT" && learnedRoute === "/api/me/about-me"))) || (m && method === "POST")) {
+      const owner = deps.aboutMeOwner ? deps.aboutMeOwner(auth) : { person: null };
+      if (!owner) return json(res, 403, { error: "About me belongs to a signed-in person." });
+      if (learnedRoute === "/api/profile/learned") return json(res, 200, { learned: listLearnedFacts(owner.person) });
+      if (learnedRoute === "/api/me/about-me" && method === "GET") return json(res, 200, { aboutMe: deps.aboutMe(owner) });
+      if (learnedRoute === "/api/me/about-me") {
+        const parsed = z.object({ aboutMe: z.string().max(ABOUT_ME_MAX) }).safeParse(await readBody(req));
+        if (!parsed.success) return json(res, 400, { error: `aboutMe is text of at most ${ABOUT_ME_MAX} characters.` });
+        deps.saveAboutMe(owner, parsed.data.aboutMe);
+        return json(res, 200, { ok: true, aboutMe: deps.aboutMe(owner) });
+      }
+      const removed = removeLearned(m![1]!, deps.aboutMe(owner), (text) => deps.saveAboutMe(owner, text), owner.person);
       if (!removed) return json(res, 404, { error: "That fact was already removed." });
-      return json(res, 200, { ok: true, aboutMe: deps.aboutMe(), learned: listLearnedFacts() });
+      return json(res, 200, { ok: true, aboutMe: deps.aboutMe(owner), learned: listLearnedFacts(owner.person) });
     }
     m = path.match(/^\/api\/bots\/([\w-]+)\/memory\/upkeep$/);
     if (m && method === "GET") {

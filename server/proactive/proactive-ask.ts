@@ -8,7 +8,8 @@
 //   the first time the person writes to it);
 // - the prompt section of the owner's one-to-one turns (at most three
 //   eligible domains not yet decided, ranked by words shared with About me,
-//   then with the bot's title);
+//   then with the bot's title; #3458: a domain nobody in the organization
+//   follows comes first among those that match About me);
 // - `propose_proactive` and its bounds: one proposer per person and domain,
 //   one open card per person, one bot-initiated ask per person per local
 //   day, two cards per domain at most (the second after "Not now", 14 days
@@ -298,7 +299,12 @@ export interface ChoiceCard {
 
 /** The choice card: a title, one or two plain lines (what it sends, how
  * often, on which bot), Yes and Not now, and the folded details. */
-export function choiceCard(input: { domain: OfferedDomain; chosen: readonly string[]; botName: string; language: AskLanguage }): ChoiceCard {
+/** #3458: the card's line for a domain nobody in the organization follows. */
+export function unfollowedLine(language: AskLanguage): string {
+  return language === "fr" ? "Personne ne suit encore ce domaine dans ton organisation." : "Nobody in your organization follows this domain yet.";
+}
+
+export function choiceCard(input: { domain: OfferedDomain; chosen: readonly string[]; botName: string; language: AskLanguage; unfollowed?: boolean }): ChoiceCard {
   const { domain, language } = input;
   const label = domainLabelIn(domain, language);
   const runnable = domain.watches.filter((watch) => watch.runs);
@@ -310,9 +316,10 @@ export function choiceCard(input: { domain: OfferedDomain; chosen: readonly stri
   const title = language === "fr"
     ? `Recevoir les alertes ${/^[aeiouyhàâéèêëîïôûù]/i.test(lower) ? "d'" : "de "}${lower} ?`
     : `Receive ${label} alerts?`;
-  const subtitle = language === "fr"
+  const base = language === "fr"
     ? `${what} Sur ${input.botName}, seulement si tu dis oui.`
     : `${what} On ${input.botName}, only if you say yes.`;
+  const subtitle = input.unfollowed ? `${base} ${unfollowedLine(language)}` : base;
   return {
     title,
     subtitle,
@@ -329,13 +336,16 @@ export function choiceCard(input: { domain: OfferedDomain; chosen: readonly stri
 // ── the service ──────────────────────────────────────────────────────────
 
 export interface ProactiveAskDeps {
-  choices: Pick<ProactiveChoices, "get" | "apply" | "noteAsk" | "answerAsk" | "noteQuestion" | "since">;
+  choices: Pick<ProactiveChoices, "get" | "apply" | "noteAsk" | "answerAsk" | "noteQuestion" | "since" | "chosen">;
   /** The person's bots that can carry a watch: their own, visible, not
    * temporary. */
   bots(person: string): AskBot[];
   /** The watch loop's listing for one bot (flow-watches.ts offered). */
   offered(person: string, botId: string): Promise<OfferedListing>;
   aboutMe(person: string): string;
+  /** #3458: how many people of the organization have a bot (one on a
+   * personal server). With one, nobody else could follow a domain. */
+  people?(): number;
   timeZone(person: string): string;
   language(person: string): AskLanguage;
   /** Post the choice card in the bot's conversation with the person; the
@@ -391,23 +401,47 @@ export class ProactiveAsk {
     return { byBot, proposer };
   }
 
+  /** #3458: the organization's domains somebody follows (a person has it
+   * on), or null on a server of one person. Only this fact leaves the
+   * store: never who follows it. */
+  private followed(): Set<string> | null {
+    if ((this.deps.people?.() ?? 1) < 2) return null;
+    return new Set(this.deps.choices.chosen().flatMap((row) => row.domains.map((choice) => choice.domain)));
+  }
+
+  /** #3458: nobody in the organization follows this domain (never on a
+   * server of one person). */
+  unfollowed(domain: string): boolean {
+    const followed = this.followed();
+    return followed !== null && !followed.has(domain);
+  }
+
   /** The domains this bot may still propose to its person, ranked by words
-   * shared with About me, then with the bot's title; at most three. */
-  async candidates(person: string, botId: string, listing?: AskListing): Promise<Array<{ domain: OfferedDomain; returning: boolean }>> {
+   * shared with About me, then with the bot's title; at most three. #3458:
+   * a domain nobody in the organization follows comes first among those
+   * that share words with About me (what the bot learned of the person's
+   * work, responsibilities and team); one that does not match keeps its
+   * place. `unfollowed` marks those. */
+  async candidates(person: string, botId: string, listing?: AskListing): Promise<Array<{ domain: OfferedDomain; returning: boolean; unfollowed: boolean }>> {
     const read = listing ?? await this.listing(person);
     const choices = this.deps.choices.get(person);
     const now = this.now();
     const about = this.deps.aboutMe(person);
     const bot = this.deps.bots(person).find((row) => row.id === botId);
     const title = bot ? `${bot.title} ${bot.description}` : "";
+    const followed = this.followed();
     return (read.byBot.get(botId) ?? [])
       .filter((domain) => read.proposer.get(domain.domain) === botId)
       .map((domain) => ({ domain, state: domainAskState(choices, domain.domain, now) }))
       .filter((row) => row.state.kind !== "closed")
-      .map((row) => ({ domain: row.domain, returning: row.state.kind === "returning", about: sharedWords(about, domainText(row.domain)), titled: sharedWords(title, domainText(row.domain)) }))
-      .sort((a, b) => b.about - a.about || b.titled - a.titled || a.domain.domain.localeCompare(b.domain.domain))
+      .map((row) => {
+        const shared = sharedWords(about, domainText(row.domain));
+        const unfollowed = followed !== null && !followed.has(row.domain.domain) && shared > 0;
+        return { domain: row.domain, returning: row.state.kind === "returning", unfollowed, about: shared, titled: sharedWords(title, domainText(row.domain)) };
+      })
+      .sort((a, b) => Number(b.unfollowed) - Number(a.unfollowed) || b.about - a.about || b.titled - a.titled || a.domain.domain.localeCompare(b.domain.domain))
       .slice(0, ASK_CANDIDATES)
-      .map(({ domain, returning }) => ({ domain, returning }));
+      .map(({ domain, returning, unfollowed }) => ({ domain, returning, unfollowed }));
   }
 
   /** The prompt section of an owner's one-to-one turn, or "" (and the
@@ -418,10 +452,10 @@ export class ProactiveAsk {
     const choices = this.deps.choices.get(person);
     const now = this.now();
     const blocked = openCard(choices, now) || askedToday(choices, now, this.deps.timeZone(person));
-    const lines = found.map(({ domain, returning }) => {
+    const lines = found.map(({ domain, returning, unfollowed }) => {
       const audience = audienceIn(domain, "en") ?? audienceIn(domain, "fr");
       const watches = domain.watches.filter((watch) => watch.runs).map((watch) => `${watch.id}: ${watch.summary} (${cadenceWords(watch.cadence, "en")})`).join("; ");
-      return `- ${domainLabelIn(domain, "en")} (domain "${domain.domain}")${audience ? `, for: ${audience}` : ""}. Watches: ${watches}.${returning ? " Proposed before and answered not now: propose it again only if the person's own message of this turn is about it, with their words as quote." : ""}`;
+      return `- ${domainLabelIn(domain, "en")} (domain "${domain.domain}")${audience ? `, for: ${audience}` : ""}. Watches: ${watches}.${unfollowed ? " Nobody in the organization follows it yet: offer it first when it matches their work." : ""}${returning ? " Proposed before and answered not now: propose it again only if the person's own message of this turn is about it, with their words as quote." : ""}`;
     });
     return [
       "",
@@ -459,7 +493,7 @@ export class ProactiveAsk {
     const chosen = asked.length ? asked : runnable;
     const others = runnable.filter((id) => !chosen.includes(id));
     const bot = this.deps.bots(input.person).find((row) => row.id === input.botId);
-    const card = choiceCard({ domain, chosen, botName: bot?.title ?? "", language: this.deps.language(input.person) });
+    const card = choiceCard({ domain, chosen, botName: bot?.title ?? "", language: this.deps.language(input.person), unfollowed: this.unfollowed(domain.domain) });
     const proposalId = this.deps.postCard({ botId: input.botId, threadId: input.threadId, card, choice: { person: input.person, domain: domain.domain, watches: chosen, others } });
     this.deps.choices.noteAsk(input.person, { domain: domain.domain, botId: input.botId, at: now, proposalId });
     return { posted: true, proposalId, text: "The card is posted in this conversation. End your turn without repeating it: the person answers on the card." };

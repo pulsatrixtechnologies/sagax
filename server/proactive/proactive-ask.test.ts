@@ -41,7 +41,7 @@ interface Harness {
   bots: AskBot[];
 }
 
-function harness(input: { bots?: AskBot[]; offered?: Record<string, OfferedDomain[]>; aboutMe?: string; since?: number } = {}): Harness {
+function harness(input: { bots?: AskBot[]; offered?: Record<string, OfferedDomain[]>; aboutMe?: string; since?: number; people?: number } = {}): Harness {
   // the store's `since` (the upgrade) is the clock when it is made
   const clock = { now: input.since ?? START - DAY };
   const store = new ProactiveChoices(undefined, () => clock.now);
@@ -54,6 +54,7 @@ function harness(input: { bots?: AskBot[]; offered?: Record<string, OfferedDomai
     bots: () => bots,
     offered: async (_person, botId): Promise<OfferedListing> => ({ ok: true, botId, domains: offered[botId] ?? [] }),
     aboutMe: () => input.aboutMe ?? "",
+    people: () => input.people ?? 1,
     timeZone: () => "America/Toronto",
     language: () => "fr",
     postCard: (row) => {
@@ -357,5 +358,58 @@ describe("reads covered by the yes (decision 3)", () => {
     off.stopWatch(PERSON, "dispatch", "dispatch-open");
     expect(watchReadCovered({ tool: "dispatch_query", botId: "main", watches, choices: off.get(PERSON) })).toBe(false);
     expect(watchReadCovered({ tool: "dispatch_query", botId: "main", watches, choices: null })).toBe(false);
+  });
+});
+
+// #3458 (lot 9 of #3408): a domain nobody in the organization follows comes
+// first among those that match the person, and its card says so.
+describe("a domain nobody follows comes first", () => {
+  const BILLING = domain("billing", "people who bill service tickets", "Billing", { label: "Facturation", audience: "ceux qui facturent les billets des techniciens" });
+  const ABOUT = "Je fais la répartition des billets aux techniciens.";
+  const NOBODY = "Personne ne suit encore ce domaine dans ton organisation.";
+  const followedBy = (h: Harness, other: string, slug: string) => h.choices.apply(other, { domain: slug, state: "on", botId: `${other}-bot`, via: "settings" }, other);
+
+  it("two domains match the person, one is followed in the organization: the other is offered first and its card says so", async () => {
+    const h = harness({ offered: { main: [DISPATCH, BILLING] }, aboutMe: ABOUT, people: 3 });
+    followedBy(h, "person-2", "dispatch");
+    const found = await h.ask.candidates(PERSON, "main");
+    expect(found.map((row) => row.domain.domain)).toEqual(["billing", "dispatch"]);
+    expect(found.map((row) => row.unfollowed)).toEqual([true, false]);
+    const section = await h.ask.turnSection(PERSON, "main");
+    expect(section.indexOf("domain \"billing\"")).toBeLessThan(section.indexOf("domain \"dispatch\""));
+    expect(section).toMatch(/domain "billing".*Nobody in the organization follows it yet/);
+    expect(section).not.toMatch(/domain "dispatch".*Nobody in the organization/);
+    await propose(h, { domain: "billing" });
+    expect(h.posted[0]!.card.subtitle).toContain(NOBODY);
+    // a followed domain's card has no such line, and no one else's choice shows
+    const other = harness({ offered: { main: [DISPATCH, BILLING] }, aboutMe: ABOUT, people: 3 });
+    followedBy(other, "person-2", "dispatch");
+    await propose(other, { domain: "dispatch" });
+    expect(other.posted[0]!.card.subtitle).not.toContain(NOBODY);
+    expect(JSON.stringify(other.posted[0]!.card)).not.toContain("person-2");
+  });
+
+  it("a domain nobody follows that does not match the person is not offered", async () => {
+    const TIME = domain("time", "technicians who enter time on service tickets", "Time", { label: "Temps", audience: "les techniciens qui saisissent le temps des billets" });
+    const h = harness({ offered: { main: [DISPATCH, BILLING, TIME, SECURITY] }, aboutMe: ABOUT, people: 3 });
+    for (const slug of ["dispatch", "billing", "time"]) followedBy(h, "person-2", slug);
+    const found = await h.ask.candidates(PERSON, "main");
+    expect(found.map((row) => row.domain.domain)).not.toContain("security");
+    expect(await h.ask.turnSection(PERSON, "main")).not.toContain("Nobody in the organization");
+    // with room left, it still does not jump ahead of a matching one
+    const two = harness({ offered: { main: [DISPATCH, SECURITY] }, aboutMe: ABOUT, people: 3 });
+    followedBy(two, "person-2", "dispatch");
+    expect((await two.ask.candidates(PERSON, "main")).map((row) => row.domain.domain)).toEqual(["dispatch", "security"]);
+    expect(await two.ask.turnSection(PERSON, "main")).not.toMatch(/Nobody in the organization follows it yet: offer it first/);
+  });
+
+  it("a personal server (one person): no line, nothing changes", async () => {
+    const h = harness({ offered: { main: [DISPATCH, BILLING] }, aboutMe: ABOUT, people: 1 });
+    const found = await h.ask.candidates(PERSON, "main");
+    expect(found.map((row) => row.domain.domain)).toEqual(["dispatch", "billing"]);
+    expect(found.every((row) => !row.unfollowed)).toBe(true);
+    expect(await h.ask.turnSection(PERSON, "main")).not.toContain("Nobody in the organization");
+    await propose(h, { domain: "billing" });
+    expect(h.posted[0]!.card.subtitle).not.toContain(NOBODY);
   });
 });

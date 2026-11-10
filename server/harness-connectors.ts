@@ -26,8 +26,11 @@ import type { AccessVia } from "./engines/engine-credentials.ts";
 // Codex: the ChatGPT apps (connectors) of `codex login` need Codex backend
 // auth ("ChatGPT connectors require Codex backend auth" in codex-cli
 // 0.153.0). Sagax's ChatGPT plan mode passes a token to a custom provider
-// with an ephemeral credential store, and an API key has none, so Codex
-// turns get no ChatGPT connectors; nothing here mounts them.
+// with an ephemeral credential store, and an API key has none, so those
+// bring no ChatGPT apps; nothing here mounts them. #3353 (L10): the person's
+// own Codex sign-in on ChatGPT brings them through the connector registry
+// (server/connectors/providers/chatgpt-apps.ts), listed and called by the
+// Codex host with no model, so `codex` answers them from the registry below.
 import { execFile } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

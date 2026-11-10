@@ -70,6 +70,7 @@ import type { TerminalRequestCardData } from "./terminal-request.ts";
 import type { WireVideoWidget } from "./video-widget.ts";
 import type { ArtifactsFrame } from "./artifacts.ts";
 import type { BotTasksFrame } from "./bot-task-list.ts";
+import type { TeamNote, TeamWorkFrame } from "./team-work.ts";
 import type { WaitCardField, WaitLineField } from "./wait-request.ts";
 import { EFFORT_LEVELS, isEffortLevel, type EffortLevel, type ModelSelection } from "./model-selection.ts";
 
@@ -964,6 +965,11 @@ export interface WireMessage extends WaitLineField {
    * into their own conversation with that bot (shared/person-attention.ts).
    * On a routine.run row it rides beside the report. `text` is the fallback. */
   attention?: PersonAttentionCard;
+  /** #3461: what the person wrote to a team bot in a thread this bot opened
+   * (shared/team-work.ts), one quiet row in their conversation with this
+   * bot; the bot reads it at its next turn. On a text row; `text` is the
+   * fallback. */
+  teamNote?: TeamNote;
   /** #2109 (2026-11-05): GitHub sign-in by link and pairing code, posted by
    * connect_github in the bot's chat and patched to connected in place
    * (shared/github-connect-card.ts). On a text row; `text` is the fallback. */
@@ -1789,6 +1795,8 @@ export type ServerFrame =
   | ArtifactsFrame
   /** A bot's task list changed (server/bots/bot-task-list.ts): ids only, fetch again. */
   | BotTasksFrame
+  /** #3461: an orchestrator's hand-overs changed state (shared/team-work.ts): ids only, fetch again. */
+  | TeamWorkFrame
   | { kind: "webhook"; webhook: WebhookTrigger }
   | { kind: "webhook.attempt"; attempt: WebhookAttempt }
   | { kind: "webhook.deleted"; webhookId: string }

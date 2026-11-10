@@ -3,6 +3,7 @@
  * Never imports server/index.ts.
  */
 import { randomUUID } from "node:crypto";
+import { notePersonWrote } from "../team-work/person-note.ts";
 
 import type { SteerOutcome } from "../contracts.ts";
 import {
@@ -145,7 +146,11 @@ async function handleQueueSteer(deps: BotsMessagesRouteDeps, ctx: RouteContext):
       // Words a person queued are written here once steered in, as once a
       // drained turn starts with them (startTurn); a bot's own never are.
       const asked = messages.filter((_, index) => !held.items[index]?.unattended && !held.items[index]?.peerAsk).at(-1);
-      if (asked) store.setTaskAskedAt(bot.id, bot.threadId, asked.at);
+      if (asked) {
+        store.setTaskAskedAt(bot.id, bot.threadId, asked.at);
+        // #3461: the bot that opened this thread is told what the person wrote
+        notePersonWrote({ botId: bot.id, threadId: bot.threadId, text: asked.text ?? "", at: asked.at });
+      }
       // Offered to the next turn again unless the person stops this one.
       // one steer carried them all: the engine taking it in takes them all
       for (const message of messages) {

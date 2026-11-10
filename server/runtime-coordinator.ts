@@ -11,7 +11,7 @@
 // as "not now" by the Runtime, so nothing here wraps it again.
 import { join } from "node:path";
 
-import type { BeginTurnRequest, Coordinator, CoordinatorHost, CoordinatorOptions, HandedOutOutcome, HandoffView, HostTurnResult, LiveHandoffEdge, RoomAddress } from "./runtime/coordinator-types.ts";
+import type { BeginTurnRequest, Coordinator, CoordinatorHost, CoordinatorOptions, HandedOutOutcome, HandedOver, HandoffView, HostTurnResult, LiveHandoffEdge, RoomAddress } from "./runtime/coordinator-types.ts";
 import type { WorkOrigin } from "./peers/peer-provenance.ts";
 import { composeEnvelope, composeQuestion, composeReport, composeResume, composeRootTurn, continuationLine, envelopeNote } from "./runtime/envelope.ts";
 import { Runtime } from "./runtime/runtime.ts";
@@ -138,6 +138,37 @@ export function view(a: Assignment, parent?: Assignment): HandoffView {
   if (a.mode === "consult") node.consult = true;
   if (a.priority) node.priority = a.priority;
   return node;
+}
+
+/** #3461: a hand-over's plain facts for the team work view. Pure. */
+export function handedOver(a: Assignment): HandedOver {
+  const { groupId, threadId } = a.assignee.destination;
+  return {
+    id: a.id, botId: a.assignee.botId, threadId, mode: a.mode, reply: a.reply, status: a.status, brief: a.brief,
+    createdAt: a.createdAt, result: a.result,
+    ...(groupId !== undefined ? { groupId } : {}),
+    ...(a.requester.botId !== undefined ? { requesterBotId: a.requester.botId } : {}),
+    ...(a.requester.threadId !== undefined ? { requesterThreadId: a.requester.threadId } : {}),
+    ...(a.startedAt !== undefined ? { startedAt: a.startedAt } : {}),
+    ...(a.finishedAt !== undefined ? { finishedAt: a.finishedAt } : {}),
+    ...(a.outcome !== undefined ? { outcome: a.outcome } : {}),
+    ...(a.outcomeDetail !== undefined ? { outcomeDetail: a.outcomeDetail } : {}),
+    ...(a.person !== undefined ? { person: a.person } : {}),
+  };
+}
+
+/** #3461: the requester bots whose hand-overs are among these changed rows
+ * (a bot's turn handed them out, in a direct thread), with the person each
+ * tree acts for, once each. */
+export function handedOutChanges(rows: Iterable<Assignment>): Array<{ botId: string; person?: string }> {
+  const seen = new Map<string, { botId: string; person?: string }>();
+  for (const row of rows) {
+    if (!row.parentId || row.requester.kind !== "bot_turn" || !row.requester.botId) continue;
+    if (row.assignee.destination.groupId !== undefined || row.assignee.botId === row.requester.botId) continue;
+    const key = `${row.requester.botId}\n${row.person ?? ""}`;
+    if (!seen.has(key)) seen.set(key, { botId: row.requester.botId, ...(row.person ? { person: row.person } : {}) });
+  }
+  return [...seen.values()];
 }
 
 export class RuntimeCoordinator implements Coordinator {
@@ -268,6 +299,11 @@ export class RuntimeCoordinator implements Coordinator {
     this.ready();
     return this.store.childrenOfAssignee(botId, threadId).map(child =>
       view(child, child.parentId ? this.store.get(child.parentId) : undefined));
+  }
+
+  handedOutBy(botId: string, since: number): HandedOver[] {
+    this.ready();
+    return this.store.handedOutBy(botId, since).map(handedOver);
   }
 
   // ── enqueue ──────────────────────────────────────────────────────────
@@ -848,6 +884,10 @@ export class RuntimeCoordinator implements Coordinator {
           if (groupId) groups.add(groupId); else threads.add(row.assignee.destination.threadId);
         }
         host.changed(groups, threads);
+        if (host.handedOutChanged) {
+          const changes = handedOutChanges(rows);
+          if (changes.length) host.handedOutChanged(changes);
+        }
       },
       names: (a, parent) => host.names(view(a, parent), parent && this.project(parent)),
       // A host without the port knows nothing of what a cut turn did: the

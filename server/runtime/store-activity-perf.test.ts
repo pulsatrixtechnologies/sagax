@@ -113,4 +113,57 @@ describe("runtime store activity children perf", () => {
       store.close();
     }
   });
+  it("handedOutBy (#3461): the hand-overs of every turn of a bot since a date, plus the live ones, under the same bound", () => {
+    const store = openRuntimeStore(":memory:");
+    try {
+      const SINCE = 5_000;
+      const expected: string[] = [];
+      // two conversations of the orchestrator, each its own root
+      const rootA = assignment("orc-a", { status: "running", startedAt: 1_000 });
+      const rootB = assignment("orc-b", { status: "completed", outcome: "done", finishedAt: 9_000, createdAt: 4_000,
+        assignee: { botId: "chief", destination: { kind: "standing_thread", threadId: "chief-chat-2" } },
+        requester: { kind: "person", threadId: "chief-chat-2" } });
+      store.insert(rootA, { kind: "enqueued", at: 1_000 });
+      store.insert(rootB, { kind: "enqueued", at: 4_000 });
+      // before the date and ended: left out
+      store.insert(childOf("old-done", rootA, { createdAt: 2_000, status: "completed", outcome: "done", finishedAt: 3_000 }), { kind: "enqueued", at: 2_000 });
+      // before the date and still live: listed
+      store.insert(childOf("old-live", rootA, { createdAt: 2_500, status: "running" }), { kind: "enqueued", at: 2_500 });
+      expected.push("old-live");
+      for (let i = 0; i < 4; i += 1) {
+        const id = `new-${i}`;
+        store.insert(childOf(id, i % 2 ? rootB : rootA, { createdAt: SINCE + i, status: i % 2 ? "completed" : "queued",
+          ...(i % 2 ? { outcome: "done" as const, finishedAt: SINCE + 100 + i } : {}) }), { kind: "enqueued", at: SINCE + i });
+        expected.push(id);
+      }
+      // room work: left out
+      store.insert(childOf("room", rootA, { createdAt: SINCE + 50,
+        assignee: { botId: "builder", destination: { kind: "room_thread", threadId: "room", groupId: "g" } } }), { kind: "enqueued", at: SINCE + 50 });
+      // noise: other bots' trees
+      for (let r = 0; r < 400; r += 1) {
+        const root = assignment(`noise-root-${r}`, { createdAt: 10_000 + r, status: "completed", outcome: "done", finishedAt: 20_000 + r,
+          assignee: { botId: `bot-${r % 40}`, destination: { kind: "standing_thread", threadId: `chat-${r}` } },
+          requester: { kind: "person", threadId: `chat-${r}` } });
+        store.insert(root, { kind: "enqueued", at: 10_000 + r });
+        for (let c = 0; c < 8; c += 1) {
+          store.insert(childOf(`noise-${r}-${c}`, root, { createdAt: 30_000 + r * 8 + c, status: "completed", outcome: "done", finishedAt: 40_000 + r * 8 + c }),
+            { kind: "enqueued", at: 30_000 + r * 8 + c });
+        }
+      }
+      expect(store.all().length).toBeGreaterThan(3_000);
+      expect(store.handedOutBy("chief", SINCE).map(row => row.id)).toEqual(expected);
+      expect(store.handedOutBy("nobody", 0)).toEqual([]);
+      const samples: number[] = [];
+      for (let i = 0; i < 25; i += 1) {
+        const started = performance.now();
+        store.handedOutBy("chief", SINCE);
+        samples.push(performance.now() - started);
+      }
+      samples.sort((a, b) => a - b);
+      expect(samples[Math.floor(samples.length / 2)]!).toBeLessThan(5);
+      expect(samples[Math.floor(samples.length * 0.95)]!).toBeLessThan(20);
+    } finally {
+      store.close();
+    }
+  });
 });

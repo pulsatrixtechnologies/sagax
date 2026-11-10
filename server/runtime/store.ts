@@ -113,6 +113,11 @@ export interface RuntimeStore {
    * room work (a child with a groupId). Indexed join on the parent's assignee
    * columns: the activity panel's per-thread read, never a full-table scan. */
   childrenOfAssignee(botId: string, threadId: string): Assignment[];
+  /** #3461: the work every turn of this bot handed out (children of every
+   * assignment whose assignee is this bot, any thread), created since
+   * `since` or not ended yet, excluding room work; createdAt order. The same
+   * indexed join as childrenOfAssignee: the team work view's read. */
+  handedOutBy(botId: string, since: number): Assignment[];
   /** The root of this id's tree. */
   root(id: string): Assignment | undefined;
   /** `assigneeThreadId`: only rows whose turn happens in that thread (any bot). */
@@ -342,6 +347,10 @@ export function openRuntimeStore(path: string): RuntimeStore {
       INNER JOIN assignments p ON c.parent_id = p.id
       WHERE p.assignee_bot_id = ? AND p.assignee_thread_id = ?
       ORDER BY c.created_at, c.rowid`),
+    handedOutBy: db.prepare(`SELECT c.id, c.json FROM assignments c
+      INNER JOIN assignments p ON c.parent_id = p.id
+      WHERE p.assignee_bot_id = ? AND (c.created_at >= ? OR c.${LIVE})
+      ORDER BY c.created_at, c.rowid`),
     insert: db.prepare(`INSERT INTO assignments (id, root_id, parent_id, status, requester_thread_id, requester_run_id,
       assignee_bot_id, assignee_thread_id, created_at, finished_at, json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
     update: db.prepare(`UPDATE assignments SET root_id = ?, parent_id = ?, status = ?, requester_thread_id = ?,
@@ -419,6 +428,15 @@ export function openRuntimeStore(path: string): RuntimeStore {
         const child = readAssignment(row);
         // Room handoffs carry a groupId; the activity panel's direct-thread
         // children list skips them (same filter as activityChildren).
+        if (child.assignee.destination.groupId !== undefined) continue;
+        out.push(child);
+      }
+      return out;
+    },
+    handedOutBy(botId, since) {
+      const out: Assignment[] = [];
+      for (const row of statements.handedOutBy.all(botId, since) as Row[]) {
+        const child = readAssignment(row);
         if (child.assignee.destination.groupId !== undefined) continue;
         out.push(child);
       }

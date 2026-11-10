@@ -81,7 +81,7 @@ export function latestReply(
 ): TranscriptSnapshot["reply"] {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]!;
-    if (message.role === "bot" && message.kind === "text" && message.text?.trim() && !isCancelledTranscriptRow(message)) {
+    if (message.role === "bot" && message.kind === "text" && message.text?.trim() && !isCancelledTranscriptRow(message) && !message.teamNote) {
       return { id: message.id, name: nameOf(message), text: message.text };
     }
   }

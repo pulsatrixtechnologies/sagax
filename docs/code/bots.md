@@ -893,3 +893,34 @@ person reopens a done task (`POST /api/bots/:id/task-list/:tid/reopen`).
 Not an organization setting: another person's list is 404, and there is no
 admin route. The panel section is `BotTaskSection`, above the code journal.
 Covered by `shared/bot-task-list.test.ts` and `server/bots/bot-task-list.test.ts`.
+
+## Orchestrator work view: the read model (2026-11-10, #3461, lot 1 of #3451)
+
+- A step is one hand-over (a runtime row) a turn of the orchestrator made to
+  another of the person's bots, in a direct thread, mode work or notify.
+  Nothing new is stored for it. A consultation, room work and a hand-over a
+  team bot makes further down are not steps. One rule and its cases:
+  `shared/team-work.ts`, `shared/team-work.vectors.json` (server, desktop,
+  phone).
+- Live state comes from the open turn's last event (`TurnWatchdog.peek`),
+  never from a plan: working (a tool call in flight, or an action under
+  `TEAM_SILENT_MS`, 3 minutes), silent, waiting (to start, on the person, on
+  the computer, on another bot), idle.
+- `GET /api/bots/:id/team-work?since=<reader's midnight>`
+  (`server/routes/bot-team-work.ts`, built by `server/team-work/team-work.ts`)
+  lists a step only when the reader may read its thread and the conversation
+  it was handed out from; a confidential thread yields nothing; a team bot is
+  named only while the orchestrator can reach it. Only code work is listed.
+- The `team.work` frame (ids only, `server/team-work/frames.ts`) goes out
+  once per orchestrator and person within a second when a hand-over is
+  created, starts, parks or settles; never per tool call.
+- What the person writes to a team bot in a thread another of their bots
+  opened leaves one quiet `teamNote` row in their conversation with that
+  bot (`server/team-work/person-note.ts`; a burst folds into one row only
+  while that bot's session has not been handed it, else the words are a new
+  row); its next turn reads it once as a note from the app; no turn is
+  started for it. The chat does not draw the row (until the work view does).
+  The team bot's answers stay in that thread.
+- No setting, permission, confirmation, limit or admin gate. The Team board
+  files are not part of it.
+

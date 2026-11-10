@@ -35,6 +35,34 @@ export interface WatchedTurn {
   waitingOnComputer: boolean;
   /** Tool items this turn started and has not reported ended. */
   runningTools: Set<string>;
+  /** When each of runningTools started (#3461: "Running tests · 6 min"). */
+  toolStartedAt: Map<string, number>;
+}
+
+/** What a reader may know of an open turn (TurnWatchdog.peek): a copy, so
+ * reading it never changes the watchdog. */
+export interface TurnPeek {
+  threadId: string;
+  botId: string;
+  startedAt: number;
+  lastEventAt: number;
+  waitingOnHuman: boolean;
+  waitingOnComputer: boolean;
+  /** The oldest tool call still running started then. */
+  toolSince?: number;
+}
+
+function peekOf(turn: WatchedTurn): TurnPeek {
+  let toolSince: number | undefined;
+  for (const id of turn.runningTools) {
+    const at = turn.toolStartedAt.get(id) ?? turn.lastEventAt;
+    if (toolSince === undefined || at < toolSince) toolSince = at;
+  }
+  return {
+    threadId: turn.threadId, botId: turn.botId, startedAt: turn.startedAt, lastEventAt: turn.lastEventAt,
+    waitingOnHuman: turn.waitingOnHuman, waitingOnComputer: turn.waitingOnComputer,
+    ...(toolSince !== undefined ? { toolSince } : {}),
+  };
 }
 
 /** A silence limit from the environment, in whole milliseconds. Number() also
@@ -125,7 +153,7 @@ export class TurnWatchdog {
   watch(threadId: string, botId: string): void {
     const at = this.now();
     this.turns.set(threadId, { threadId, botId, startedAt: at, lastEventAt: at, waitingOnHuman: false, waitingOnComputer: false,
-      runningTools: new Set() });
+      runningTools: new Set(), toolStartedAt: new Map() });
   }
 
   /** Any provider event for the thread proves the turn is alive; a tool item's
@@ -135,8 +163,13 @@ export class TurnWatchdog {
     if (!turn) return;
     turn.lastEventAt = this.now();
     if ((event.type !== "item.started" && event.type !== "item.completed") || event.itemType !== "tool" || !event.itemId) return;
-    if (event.type === "item.completed") turn.runningTools.delete(event.itemId);
-    else turn.runningTools.add(event.itemId);
+    if (event.type === "item.completed") {
+      turn.runningTools.delete(event.itemId);
+      turn.toolStartedAt.delete(event.itemId);
+    } else if (!turn.runningTools.has(event.itemId)) {
+      turn.runningTools.add(event.itemId);
+      turn.toolStartedAt.set(event.itemId, turn.lastEventAt);
+    }
   }
 
   /** request.opened → true (a human is deciding; not a stall however long
@@ -171,6 +204,19 @@ export class TurnWatchdog {
 
   watching(threadId: string): boolean {
     return this.turns.has(threadId);
+  }
+
+  /** The open turn of this thread, as a reader may know it; writes nothing. */
+  peek(threadId: string): TurnPeek | undefined {
+    const turn = this.turns.get(threadId);
+    return turn ? peekOf(turn) : undefined;
+  }
+
+  /** The open turns of a bot, in every thread. */
+  openTurns(botId: string): TurnPeek[] {
+    const out: TurnPeek[] = [];
+    for (const turn of this.turns.values()) if (turn.botId === botId) out.push(peekOf(turn));
+    return out;
   }
 
   /** Visible for tests; the interval calls this.

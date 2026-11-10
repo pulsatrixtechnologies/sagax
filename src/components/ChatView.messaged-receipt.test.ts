@@ -93,3 +93,19 @@ describe.each([false, true])("Messaged receipt, threads off, tool calls %s", (to
     expect(markup).toContain("Fix the sidebar");
   });
 });
+
+// #3461: the quiet note the orchestrator reads at its next turn is not drawn
+// in the person's chat (the work view of lot 2 of #3451 will show it).
+describe("team note row", () => {
+  it("draws nothing, neither a bubble nor its fallback text", () => {
+    const markup = render([
+      { id: "u", role: "user", kind: "text", text: "fix the login", at } as Message,
+      { id: "n", role: "bot", kind: "text", at, text: "You wrote to Devon (Fix the login): Use the main branch.",
+        teamNote: { botId: "dev", botName: "Devon", threadId: "code-2", title: "Fix the login", text: "Use the main branch.", at, lastAt: at, count: 1 } } as Message,
+      { id: "b", role: "bot", kind: "text", text: "Sent it to the coding session.", at } as Message,
+    ]);
+    expect(markup).toContain("Sent it to the coding session.");
+    expect(markup).not.toContain("Use the main branch.");
+    expect(markup).not.toContain("data-mid=\"n\"");
+  });
+});

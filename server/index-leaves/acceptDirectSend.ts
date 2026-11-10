@@ -1,6 +1,7 @@
 // @ts-nocheck
 /** acceptDirectSend (#1388). Pure move from server/index.ts. */
 import { queuedSteeredMessage } from "../turns/steer-queue.ts";
+import { notePersonWrote } from "../team-work/person-note.ts";
 export type Host = Record<string, any>;
 
 export function createAcceptDirectSend(getHost: () => Host): any {
@@ -167,6 +168,8 @@ async function acceptDirectSend(
           });
           // Written here, as the words that start a turn are (startTurn).
           host.store.setTaskAskedAt(botId, threadId, message.at);
+          // #3461: the bot that opened this thread is told what the person wrote
+          notePersonWrote({ botId, threadId, text, at: message.at });
           if (host.store.taskByThread(botId, threadId)?.openedBy?.kind !== "agent") host.store.restoreAutoArchived(botId, threadId);
           // Durable while the engine process holds them: a crash or stop can
           // resume them once (held-steers.ts).

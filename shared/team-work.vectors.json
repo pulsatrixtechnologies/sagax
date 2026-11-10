@@ -1,0 +1,87 @@
+{
+  "about": "The team work rule (shared/team-work.ts), the same cases on the server, the desktop and the phone. live: teamLive(input, now). build: buildTeamWork(input) for the orchestrator 'orc', read at now with since the reader's midnight; expect lists only the fields each case checks.",
+  "live": [
+    { "name": "working: an action 40 s ago", "input": { "status": "running", "turn": { "startedAt": 0, "lastActionAt": 960000 } }, "now": 1000000, "expect": { "state": "working", "lastActionAt": 960000 } },
+    { "name": "working: a tool call in flight, however long quiet", "input": { "status": "running", "turn": { "startedAt": 0, "lastActionAt": 100000, "toolSince": 100000 } }, "now": 1000000, "expect": { "state": "working", "lastActionAt": 100000, "toolSince": 100000 } },
+    { "name": "working: just under 3 minutes", "input": { "status": "running", "turn": { "startedAt": 0, "lastActionAt": 820001 } }, "now": 1000000, "expect": { "state": "working", "lastActionAt": 820001 } },
+    { "name": "silent at exactly 3 minutes", "input": { "status": "running", "turn": { "startedAt": 0, "lastActionAt": 820000 } }, "now": 1000000, "expect": { "state": "silent", "lastActionAt": 820000, "silentMs": 180000 } },
+    { "name": "silent for 6 minutes", "input": { "status": "running", "turn": { "startedAt": 0, "lastActionAt": 640000 } }, "now": 1000000, "expect": { "state": "silent", "lastActionAt": 640000, "silentMs": 360000 } },
+    { "name": "waiting to start: queued", "input": { "status": "queued" }, "now": 1000000, "expect": { "state": "waiting", "wait": "start" } },
+    { "name": "waiting on the person: the row needs input", "input": { "status": "needs_input" }, "now": 1000000, "expect": { "state": "waiting", "wait": "answer" } },
+    { "name": "waiting on the person: the turn is parked on a card", "input": { "status": "running", "turn": { "startedAt": 0, "lastActionAt": 100000, "waitingOnHuman": true } }, "now": 1000000, "expect": { "state": "waiting", "wait": "answer" } },
+    { "name": "waiting on the computer", "input": { "status": "running", "turn": { "startedAt": 0, "lastActionAt": 100000, "waitingOnComputer": true } }, "now": 1000000, "expect": { "state": "waiting", "wait": "computer" } },
+    { "name": "waiting on another bot: it handed work out", "input": { "status": "waiting" }, "now": 1000000, "expect": { "state": "waiting", "wait": "bot" } },
+    { "name": "idle: ended, no open turn", "input": { "status": "completed" }, "now": 1000000, "expect": { "state": "idle" } },
+    { "name": "idle: nothing at all", "input": {}, "now": 1000000, "expect": { "state": "idle" } },
+    { "name": "an open turn that is no hand-over", "input": { "turn": { "startedAt": 0, "lastActionAt": 990000 } }, "now": 1000000, "expect": { "state": "working", "lastActionAt": 990000 } }
+  ],
+  "build": [
+    {
+      "name": "no name: each hand-over is a piece of work of one step",
+      "input": { "orchestratorId": "orc", "now": 1000000, "since": 0, "steps": [
+        { "id": "h1", "botId": "dev", "requesterBotId": "orc", "threadId": "t1", "title": "Fix the login", "mode": "work", "status": "running", "createdAt": 100000, "startedAt": 100000, "turn": { "startedAt": 100000, "lastActionAt": 990000 }, "coding": true },
+        { "id": "h2", "botId": "rev", "requesterBotId": "orc", "threadId": "t2", "title": "Review the login fix", "mode": "notify", "status": "queued", "createdAt": 200000, "coding": true }
+      ] },
+      "expect": { "live": [ { "key": "step:h1", "name": "Fix the login", "done": 0, "total": 1 }, { "key": "step:h2", "name": "Review the login fix", "done": 0, "total": 1 } ], "doneToday": [], "team": ["dev", "rev"] }
+    },
+    {
+      "name": "one name is one piece of work, matched after trim, spaces and case",
+      "input": { "orchestratorId": "orc", "now": 1000000, "since": 0, "steps": [
+        { "id": "h1", "botId": "dev", "requesterBotId": "orc", "title": "Write the fix", "work": "Login  fix", "mode": "work", "status": "completed", "createdAt": 100000, "startedAt": 100000, "finishedAt": 400000, "tokens": 1000, "coding": true },
+        { "id": "h2", "botId": "rev", "requesterBotId": "orc", "title": "Review it", "work": " login fix ", "mode": "work", "status": "running", "createdAt": 500000, "startedAt": 600000, "turn": { "startedAt": 600000, "lastActionAt": 980000 }, "tokens": 500 }
+      ] },
+      "expect": { "live": [ { "key": "work:login fix", "name": "Login fix", "done": 1, "total": 2, "durationMs": 700000, "tokens": 1500, "current": { "botId": "rev", "stepId": "h2" }, "finished": false } ], "doneToday": [] }
+    },
+    {
+      "name": "a step done again by the same bot counts once",
+      "input": { "orchestratorId": "orc", "now": 1000000, "since": 0, "steps": [
+        { "id": "h1", "botId": "dev", "requesterBotId": "orc", "title": "Write the fix", "work": "Login fix", "mode": "work", "status": "completed", "createdAt": 100000, "startedAt": 100000, "finishedAt": 200000, "coding": true },
+        { "id": "h2", "botId": "dev", "requesterBotId": "orc", "title": "write the fix", "work": "Login fix", "mode": "work", "status": "completed", "createdAt": 300000, "startedAt": 300000, "finishedAt": 400000 }
+      ] },
+      "expect": { "live": [], "doneToday": [ { "key": "work:login fix", "done": 1, "total": 1, "durationMs": 200000, "finished": true, "endedAt": 400000 } ] }
+    },
+    {
+      "name": "a consultation, room work and a deeper hand-over are not steps",
+      "input": { "orchestratorId": "orc", "now": 1000000, "since": 0, "steps": [
+        { "id": "c1", "botId": "dev", "requesterBotId": "orc", "title": "Which branch?", "mode": "consult", "status": "completed", "createdAt": 100000, "finishedAt": 110000, "coding": true },
+        { "id": "r1", "botId": "dev", "requesterBotId": "orc", "title": "Room work", "mode": "work", "room": true, "status": "running", "createdAt": 100000, "coding": true },
+        { "id": "d1", "botId": "qa", "requesterBotId": "dev", "title": "Run the tests", "mode": "work", "status": "running", "createdAt": 100000, "coding": true },
+        { "id": "s1", "botId": "orc", "requesterBotId": "orc", "title": "Its own thread", "mode": "work", "status": "running", "createdAt": 100000, "coding": true }
+      ] },
+      "expect": { "live": [], "doneToday": [], "team": [] }
+    },
+    {
+      "name": "sums of time and tokens: a running step counts to now, tokens of settled turns only",
+      "input": { "orchestratorId": "orc", "now": 1000000, "since": 0, "steps": [
+        { "id": "h1", "botId": "dev", "requesterBotId": "orc", "title": "Build", "work": "Release", "mode": "work", "status": "completed", "createdAt": 0, "startedAt": 0, "finishedAt": 300000, "tokens": 12000, "coding": true },
+        { "id": "h2", "botId": "qa", "requesterBotId": "orc", "title": "Test", "work": "Release", "mode": "work", "status": "running", "createdAt": 300000, "startedAt": 400000, "turn": { "startedAt": 400000, "lastActionAt": 900000, "toolSince": 900000 }, "tokens": 0 },
+        { "id": "h3", "botId": "rev", "requesterBotId": "orc", "title": "Review", "work": "Release", "mode": "work", "status": "queued", "createdAt": 500000 }
+      ] },
+      "expect": { "live": [ { "key": "work:release", "done": 1, "total": 3, "durationMs": 900000, "tokens": 12000, "current": { "botId": "qa", "stepId": "h2" }, "live": { "state": "working", "lastActionAt": 900000, "toolSince": 900000 } } ] }
+    },
+    {
+      "name": "the finished rule: a step still live keeps the piece of work in progress",
+      "input": { "orchestratorId": "orc", "now": 1000000, "since": 0, "steps": [
+        { "id": "h1", "botId": "dev", "requesterBotId": "orc", "title": "Build", "work": "Release", "mode": "work", "status": "completed", "createdAt": 0, "startedAt": 0, "finishedAt": 300000, "coding": true },
+        { "id": "h2", "botId": "qa", "requesterBotId": "orc", "title": "Test", "work": "Release", "mode": "work", "status": "needs_input", "createdAt": 300000, "startedAt": 300000 }
+      ] },
+      "expect": { "live": [ { "key": "work:release", "finished": false, "current": { "botId": "qa", "stepId": "h2" }, "live": { "state": "waiting", "wait": "answer" } } ], "doneToday": [] }
+    },
+    {
+      "name": "done today counts from the reader's midnight; earlier finished work is not listed",
+      "input": { "orchestratorId": "orc", "now": 1000000, "since": 500000, "steps": [
+        { "id": "h1", "botId": "dev", "requesterBotId": "orc", "title": "Yesterday", "mode": "work", "status": "completed", "createdAt": 0, "startedAt": 0, "finishedAt": 499999, "coding": true },
+        { "id": "h2", "botId": "dev", "requesterBotId": "orc", "title": "Today", "mode": "work", "status": "completed", "createdAt": 400000, "startedAt": 400000, "finishedAt": 500000, "merged": true, "did": "Merged the fix.", "coding": true },
+        { "id": "h3", "botId": "qa", "requesterBotId": "orc", "title": "Failed today", "mode": "work", "status": "failed", "createdAt": 600000, "startedAt": 600000, "finishedAt": 700000, "failure": "The tests failed.", "coding": true }
+      ] },
+      "expect": { "live": [], "doneToday": [ { "key": "step:h3", "merged": false, "endedAt": 700000 }, { "key": "step:h2", "merged": true, "endedAt": 500000 } ], "team": ["qa", "dev"] }
+    },
+    {
+      "name": "only code work is listed",
+      "input": { "orchestratorId": "orc", "now": 1000000, "since": 0, "steps": [
+        { "id": "h1", "botId": "dev", "requesterBotId": "orc", "title": "Summarize the news", "mode": "work", "status": "running", "createdAt": 0, "startedAt": 0 }
+      ] },
+      "expect": { "live": [], "doneToday": [], "team": [] }
+    }
+  ]
+}

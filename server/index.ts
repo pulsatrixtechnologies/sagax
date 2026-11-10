@@ -1173,6 +1173,10 @@ import { docsIndexPrompt, readWorkspaceText, rulesSystemPrompt } from "./workspa
 import { updateDoc, updateRules } from "./workspace/workspace-tools.ts";
 import { markWorkspaceUse, promptSectionPaths } from "./workspace/workspace-usage.ts";
 import { createBotActivityReader, createBotActivityRoutes, type BotActivityRouteDeps } from "./routes/bot-activity.ts";
+import { createBotTeamWorkRoutes } from "./routes/bot-team-work.ts";
+import { createTeamWorkReader } from "./team-work/team-work.ts";
+import { createPersonNote, setPersonNoteSink } from "./team-work/person-note.ts";
+import { queueTeamWorkFrames } from "./team-work/frames.ts";
 import { createPageDataRoutes } from "./routes/page-data.ts";
 import { PageDataWatch, PageSources } from "./pages/page-sources.ts";
 import { PageDataApprovals } from "./pages/page-data-approvals.ts";
@@ -13863,6 +13867,8 @@ const coordinator: Coordinator = createCoordinator({
     },
     // DEL-08: capacity with one reserved person slot (see canStart).
     slotUse: coordinatorSlotUse,
+    // #3461: the orchestrator's panel reads its team work again
+    handedOutChanged: (changes) => queueTeamWorkFrames(changes, (frame) => broadcast({ ...frame }), IDENTITY.kind === "perspicax"),
     changed: (groupIds, directThreadIds) => {
       for (const id of groupIds) {
         const group = store.group(id);
@@ -25539,6 +25545,67 @@ pageSources.register(createTeamBoardSource({
   },
   queued: () => coordinator.liveEdges().filter((edge) => edge.state === "queued").map((edge) => edge.threadId),
   github: teamBoardGithub
+}));
+// The work an orchestrator bot runs through its team (#3461, lot 1 of
+// #3451): GET /api/bots/:id/team-work for the Coding section of its panel,
+// the ids-only `team.work` frame when one of its hand-overs changes state,
+// and the quiet note that tells it what the person wrote to a team bot.
+const teamWorkActivity = createBotActivityReader(botActivityDeps);
+const teamWorkReader = createTeamWorkReader({
+  handedOutBy: (botId, since) => coordinator.handedOutBy(botId, since),
+  thread: (botId, threadId) => store.taskByThread(botId, threadId) ?? undefined,
+  threadReadable: (botId, threadId, viewerId) => {
+    const bot = store.bot(botId);
+    return Boolean(bot) && botThreadReadable(bot!, threadId, viewerId, "thread.read");
+  },
+  messages: (threadId, limit) => store.messagesTail(threadId, limit).messages,
+  activity: (botId, threadId, viewerId) => {
+    const bot = store.bot(botId);
+    return bot ? teamWorkActivity.thread(bot, threadId, viewerId) : undefined;
+  },
+  failureCause: (threadId) => teamWorkActivity.failureCause(threadId),
+  inRepository: (cwd) => inGitRepository(cwd),
+  peek: (threadId) => watchdog.peek(threadId),
+  openTurns: (botId) => watchdog.openTurns(botId),
+  name: (orchestratorId, botId) => {
+    const from = store.bot(orchestratorId);
+    const target = store.bot(botId);
+    if (!from || !target || !canReachPeer(from, target)) return undefined;
+    return { name: target.name, ...(target.title?.trim() ? { title: target.title.trim() } : {}) };
+  },
+});
+ROUTES.push(createBotTeamWorkRoutes({
+  bot: (id, auth) => {
+    const bot = store.bot(id);
+    return bot && !bot.hidden && visibleTo(viewerFor(auth)).bot(bot.id) ? bot : null;
+  },
+  viewerId: (auth) => channelFilterViewerId(auth),
+  read: (botId, viewerId, since) => teamWorkReader.read(botId, viewerId, since),
+}));
+setPersonNoteSink(createPersonNote({
+  thread: (botId, threadId) => store.taskByThread(botId, threadId) ?? undefined,
+  bot: (botId) => store.bot(botId) ?? undefined,
+  samePerson: (botId, otherBotId) => {
+    const a = store.bot(botId);
+    const b = store.bot(otherBotId);
+    return Boolean(a && b && sameOwnerBots(a, b));
+  },
+  conversation: (botId, person) => {
+    const bot = store.bot(botId);
+    return bot ? conversationThreadFor(bot, person) : undefined;
+  },
+  messages: (threadId) => store.messagesTail(threadId, 40).messages,
+  append: (threadId, row) => { store.appendMessage(threadId, row); },
+  patch: (threadId, messageId, patch) => { store.patchMessage(threadId, messageId, patch); },
+  redact: (text) => redactSecretsInText(text),
+  // a running turn may hold it already; a record names what a session got
+  handed: (botId, threadId, messageId) => handoffs.current(threadId) !== undefined ||
+    Object.values(store.taskByThread(botId, threadId)?.handedMessages ?? {})
+      .some((state) => state.ids.includes(messageId) || state.through === messageId || state.omitted === messageId),
+  externallyUpdated: (botId, threadId) => {
+    const bot = store.bot(botId);
+    if (bot) markTaskContextExternallyUpdated(bot, threadId, false);
+  },
 }));
 // The bot panel's Coding branches, acted on by the person
 // (server/routes/bot-code-branches.ts): commit, push, pull request, diff,

@@ -3,6 +3,7 @@
  * Never imports server/index.ts.
  */
 import { randomUUID } from "node:crypto";
+import { notePersonWrote } from "../team-work/person-note.ts";
 
 import type { BusySendRequest } from "../../shared/parallel-tasks.ts";
 import type { ResolvedSender } from "../../shared/wire.ts";
@@ -347,6 +348,8 @@ async function runSequencedBotSend(input: {
       });
       // Written here, as the words that start a turn are (startTurn).
       store.setTaskAskedAt(bot.id, threadId, message.at);
+      // #3461: the bot that opened this thread is told what the person wrote
+      notePersonWrote({ botId: bot.id, threadId, text, at: message.at });
       // background-sweep.ts: what the server archived is theirs again
       if (store.taskByThread(bot.id, threadId)?.openedBy?.kind !== "agent") store.restoreAutoArchived(bot.id, threadId);
       // Durable while the engine process holds them: a crash or stop can

@@ -3,6 +3,7 @@
 // logic, contacts nobody, and the link carries identifiers, never a credential.
 // Client-scoped in server/auth/request-auth.ts, so a member reading Bot Settings
 // gets the same link; Admin authorizes whoever opens it.
+import { TEAM_CHAT_CHANNELS_OFFERED } from "../../shared/team-chat-channels.ts";
 import { hostedSlackManagement } from "../hosted-slack.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
@@ -14,6 +15,10 @@ export interface HostedSlackRouteDeps {
   hostedReady(): boolean;
   /** Defaults to the process environment; tests pass their own. */
   env?: NodeJS.ProcessEnv;
+  /** Whether Slack is offered as a channel at all (#3398): defaults to
+   * shared/team-chat-channels.ts, false for now, so no link is offered
+   * and no surface shows Slack. Tests of the link pass true. */
+  teamChatOffered?: boolean;
 }
 
 export function createHostedSlackRoutes(deps: HostedSlackRouteDeps): RouteHandler {
@@ -24,6 +29,7 @@ export function createHostedSlackRoutes(deps: HostedSlackRouteDeps): RouteHandle
     if (!bot || bot.hidden) return json(res, 404, { error: "no such bot" });
     res.setHeader("cache-control", "no-store");
     // The id in the link is the stored bot's, not the text from the request.
-    return json(res, 200, hostedSlackManagement(bot.id, deps.hostedReady(), deps.env));
+    const offered = deps.teamChatOffered ?? TEAM_CHAT_CHANNELS_OFFERED;
+    return json(res, 200, hostedSlackManagement(bot.id, offered && deps.hostedReady(), deps.env));
   };
 }

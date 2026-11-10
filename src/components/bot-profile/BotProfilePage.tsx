@@ -8,32 +8,35 @@
 // top bar floats over the banner and, once the name scrolls under it, turns
 // into a blurred bar with the small mascot and the name. Then pill tabs:
 //
-// - General: rows under grey labels. Settings (Personality, Model, Before
-//   it acts), Channels (Channels, Shared with), Bot accounts (What it can
-//   use), More (Rules, When it acts alone, Voice, Advanced settings,
-//   Versions).
+// - General: section cards with their controls in place (#3398). Settings
+//   (the switches "Collaborators can create routines" and "Notify me", then
+//   the rows Personality, Model, Before it acts), the Channels card, the Bot
+//   accounts card, More (Shared with, Rules, When it acts alone, Voice,
+//   Advanced settings, Versions).
 // - Appearance: the whole mascot editor (character, shape, colour, style,
 //   moves, Play a move, Randomize); the character picked previews in the
 //   hero.
 // - Knowledge: Its work (Routines, Skills, Folder and memory).
 // - Stats: the bot's usage over 7, 30 or 90 days.
 //
-// Each row opens its own sub-page in the same column: Back, the title, one
-// line of intro, then the cards. Each change applies in place, at once, as
+// A row opens its own sub-page in the same column, only for a setting too
+// long for a card: a link back named after the tab (focused when the page
+// opens), the title, one line of intro, then the cards. Each change applies in place, at once, as
 // on the Settings pages (#3397): no Cancel and no Save bar, no question on
 // leaving; Versions restores a change. Nothing of the editor is gone: each
 // sub-page shows the same section bodies (useBotSectionContent, and the
 // Permissions and Access sections split in parts) that save through the
 // same paths; each option is in exactly one sub-page. The magnifier beside
-// the tabs searches every setting and opens the sub-page of the first hit.
+// the tabs searches every setting and opens the sub-page of the first hit
+// (or the General tab at its card).
 //
 // Opened by the store action openPersonaEditor ("..." > Edit bot, a click on
 // the mascot, the bot panel's gear, a deep link to a section). A section asked
 // for opens its tab and sub-page and scrolls into view. A section this
 // viewer may not change says why (botSectionLock); nothing is hidden for
 // lack of a permission.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Brain, ChevronRight, Users } from "lucide-react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Bell, Brain, ChevronRight, Repeat, Users } from "lucide-react";
 
 import { useStore, type Bot, type BotSettingsSection } from "@/state/store";
 import { t } from "@/lib/i18n";
@@ -43,6 +46,7 @@ import { useAdvancedMode } from "@/lib/interface-mode";
 import { simpleHidesBotSection } from "@/lib/interface-visibility";
 import { canEditBotField } from "@/lib/bot-capabilities";
 import {
+  BOT_PROFILE_CARD_GROUP,
   BOT_PROFILE_SUBPAGE_SECTIONS,
   BOT_PROFILE_TAB_GROUPS,
   BOT_PROFILE_TABS,
@@ -50,6 +54,7 @@ import {
   type BotProfileSubPage,
   type BotProfileTab,
   type PersonaCategory,
+  botProfileCardOf,
   botProfileSubPageFor,
   botProfileSubPageOf,
   botProfileTabFor,
@@ -61,7 +66,8 @@ import {
 import { personaSharingSummary } from "@/lib/bot-sharing";
 import { MAUS_COLORS } from "@/lib/mascot";
 import { mascotColorGroup } from "../../../shared/mascot-colors";
-import { PILL, SettingsSurfaceProvider } from "../SettingsPrimitives";
+import { DescribedRow, PILL, SettingsSurfaceProvider, Switch } from "../SettingsPrimitives";
+import { NotifyMeRow } from "../bot-settings/VoiceSection";
 import { MascotHeroSlotContext } from "../floating-bots/mascot-hero-slot";
 import { RulesSection } from "../bot-settings/RulesSection";
 import { WorkspaceFilesSection } from "../bot-settings/WorkspaceFilesSection";
@@ -75,10 +81,20 @@ import { BotProfileTabBar, useBotProfileSearch } from "./BotProfilePage.tsx-part
 import { BotProfileInsetStrip, BotProfileTopBar } from "./BotProfilePage.tsx-parts/BotProfileTopBar";
 import { GROUP_LABEL, SUBPAGE_META, SubPage, SubPageRow } from "./BotProfilePage.tsx-parts/subpages";
 import { useBotRowValues } from "./BotProfilePage.tsx-parts/rowValues";
-import { personaSubPageForQuery } from "@/lib/persona-search";
+import { SETTINGS_SWITCH_SEARCH_WORDS, personaSubPageForQuery, settingsSwitchForQuery, type BotProfileSettingsSwitch } from "@/lib/persona-search";
 import { BotUsageBreakdownSection } from "../bot-settings/BotUsageBreakdown";
 
+/** General's Settings card (its two switches lead it, #3398). */
+const SETTINGS_CARD_SELECTOR = '[data-settings-group="bot-profile-group-settings"]';
+
 type BotProfilePageProps = { bot: Bot; section: BotSettingsSection; onClose: () => void };
+
+/** True while a popover anchored in the page is open: its trigger says so
+ * with aria-haspopup and aria-expanded (Share, Add, a pill list). A row that
+ * only unfolds in place has no aria-haspopup and does not count. */
+export function pagePopoverOpen(root: ParentNode | null): boolean {
+  return !!root?.querySelector('[aria-haspopup]:not([aria-haspopup="false"])[aria-expanded="true"]');
+}
 
 /** The bot page. Every control writes the bot at once (#3397). */
 export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePageProps) {
@@ -104,12 +120,16 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         : id === "sharing" && shown("visibility") ? "visibility"
           : id;
 
-  // A sub-page with nothing to show this viewer is not listed. The
-  // channels, the bot's accounts, When it acts alone, Rules and Routines
-  // always have something; Advanced settings is for Advanced mode.
+  // A sub-page with nothing to show this viewer is not listed. When it
+  // acts alone, Rules and Routines always have something; Advanced
+  // settings is for Advanced mode.
   const subPageShown = (id: BotProfileSubPage): boolean => {
     if (id === "advanced") return advanced;
-    if (id === "channels" || id === "accounts" || id === "actsAlone" || id === "rules" || id === "routines") return true;
+    // Voice holds the voice rows (a server with spoken replies) or, for a
+    // viewer who may not change the bot's voice, their own provider; "Notify
+    // me" is in place in General > Settings (#3398).
+    if (id === "voice") return shown("voice") && (Boolean(state.config?.tts) || !canEditBotField(state.config, bot, "voice"));
+    if (id === "actsAlone" || id === "rules" || id === "routines") return true;
     return BOT_PROFILE_SUBPAGE_SECTIONS[id].some(shown);
   };
   const resolvePage = (id: BotProfileSubPage | null): BotProfileSubPage | null => (id && subPageShown(id) ? id : null);
@@ -149,22 +169,40 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     setPage(null);
   };
 
+  // The card of the General tab that holds a section in place (the
+  // channels, the bot's accounts), as a selector to scroll to.
+  const cardSelector = (id: PersonaCategory): string | null => {
+    const card = botProfileCardOf(id);
+    return card ? `[data-settings-group="${BOT_PROFILE_CARD_GROUP[card]}"]` : null;
+  };
+
   // Where a section lives: the header (identity), the Appearance tab, a
-  // channel row, or a block on its sub-page.
+  // card of the General tab, or a block on its sub-page.
   const placeOf = (target: BotSettingsSection): { category: PersonaCategory | null; selector: string | null } => {
     const category = personaCategoryForSection(target);
     if (!category) return { category, selector: null };
     if (category === "overview") return { category, selector: "[data-bot-profile-title]" };
     const id = resolve(category);
-    return { category: id, selector: id === "slack" ? '[data-bot-profile-row="slack"]' : `[data-bot-profile-section="${id}"]` };
+    return { category: id, selector: cardSelector(id) ?? `[data-bot-profile-section="${id}"]` };
   };
 
   // Opens a section where it lives: its tab and sub-page, scrolled into view.
   const openCategory = (category: PersonaCategory, query?: string) => {
+    // A search for one of the two switches in place (#3398) opens General
+    // at the Settings card, where the switch is now.
+    if (query && settingsSwitchSelector(query)) {
+      setTab("general");
+      setPage(null);
+      scrollTo.current = settingsSwitchSelector(query);
+      return;
+    }
     // A search opens the sub-page that holds the matched option (#2623).
     const hit = query ? resolvePage(personaSubPageForQuery(resolve(category), query)) : null;
+    const next = hit ?? pageOf(category);
     setTab(hit ? botProfileTabOfPage(hit) : tabOf(category));
-    setPage(hit ?? pageOf(category));
+    setPage(next);
+    // A section held by a card in place opens the General tab at its card.
+    if (!next) scrollTo.current = cardSelector(resolve(category)) ?? scrollTo.current;
     if (category === "slack") setChannel("slack");
   };
   const reveal = (target: BotSettingsSection) => {
@@ -196,6 +234,9 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     const node = rootRef.current?.querySelector<HTMLElement>(selector);
     node?.scrollIntoView?.({ block: "start", inline: "nearest" });
     if (node?.matches("[data-bot-profile-row]")) node.focus({ preventScroll: true });
+    // A sub-page just opened: the focus goes to its link back (#3398), so
+    // the next Tab is the page's first control, not the top bar's Close.
+    if (node?.matches("[data-bot-profile-subpage]")) node.querySelector<HTMLElement>("[data-bot-profile-back]")?.focus({ preventScroll: true });
   });
 
   const goTo = (id: BotSettingsSection) => {
@@ -217,7 +258,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
       : page === "routines" ? "routines"
         : page === "skills" ? "skills"
           : page === "folder" ? "skills"
-            : page === "personality" || page === "channels" || page === "sharing" ? "overview"
+            : page === "personality" || page === "sharing" ? "overview"
               : "model"
     : tab === "stats" ? "usage" : tab === "knowledge" ? "skills" : "overview";
   const { renderSectionBody, dialogs, derived } = useBotSectionContent(bot, {
@@ -240,6 +281,9 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     slackUrl,
     channelsElsewhere: true,
     sharingElsewhere: true,
+    // #3398: both switches sit in place in General > Settings.
+    notifyElsewhere: true,
+    routinesSwitchElsewhere: true,
   });
 
   const lockOf = (id: BotSettingsSection): LocaleKey | null => botSectionLock(state.config, bot, id);
@@ -332,12 +376,8 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         return <>{block("model")}{block("worksOn")}</>;
       case "beforeActing":
         return permissions("beforeActing");
-      case "channels":
-        return <ChannelsCard bot={bot} slackUrl={slackUrl} open={channel} onOpen={setChannel} />;
       case "sharing":
         return <>{block("sharing")}{block("visibility")}</>;
-      case "accounts":
-        return <><AccountsCard bot={bot} onEngine={() => openPage("model")} />{access("mcp")}</>;
       case "rules":
         return <>{block("rules")}{permissions("rules")}</>;
       case "actsAlone":
@@ -376,7 +416,59 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   };
 
   // The short value every row shows on its right (the canvas, #2621).
-  const rowValue = useBotRowValues(bot, { tab, listing: page === null, slackUrl });
+  const rowValue = useBotRowValues(bot, { tab, listing: page === null });
+
+  // General > Settings starts with its two switches in place (#3398): who
+  // may create routines on the bot (#2622, for whoever may change it) and
+  // this person's own "Notify me" (with its per-person override).
+  const collaboratorsSwitch = canEditBotField(state.config, bot, "collaboratorsCreateRoutines") ? (
+    <DescribedRow
+      key="collaboratorsCreateRoutines"
+      rowId="botCollaboratorsCreateRoutines"
+      icon={<Repeat strokeWidth={1.5} />}
+      keywords={SETTINGS_SWITCH_SEARCH_WORDS.collaboratorsCreateRoutines.join(" · ")}
+      label={t("botPanel.routines.collaboratorsCreate")}
+      description={t("botPanel.routines.collaboratorsCreateHint")}
+    >
+      <Switch
+        checked={bot.collaboratorsCreateRoutines !== false}
+        aria-label={t("botPanel.routines.collaboratorsCreate")}
+        onClick={() => derived.patch({ collaboratorsCreateRoutines: bot.collaboratorsCreateRoutines === false })}
+      />
+    </DescribedRow>
+  ) : null;
+  const notifySwitch = shown("voice") && lockOf("voice") === null ? <NotifyMeRow key="notifyMe" bot={bot} derived={derived} icon={<Bell strokeWidth={1.5} />} keywords={SETTINGS_SWITCH_SEARCH_WORDS.notifyMe.join(" · ")} /> : null;
+
+  // One group of the General or Knowledge tab: a card in place, or rows
+  // that each open their sub-page (a group with nothing left is not drawn).
+  const tabGroup = (group: (typeof BOT_PROFILE_TAB_GROUPS)[BotProfileTab][number]): ReactNode => {
+    if (group.card === "channels") return <ChannelsCard key={group.id} bot={bot} slackUrl={slackUrl} open={channel} onOpen={setChannel} />;
+    if (group.card === "accounts") {
+      return (
+        <Fragment key={group.id}>
+          <AccountsCard bot={bot} onEngine={() => openPage("model")} />
+          {access("mcp")}
+        </Fragment>
+      );
+    }
+    const switches = group.id === "settings" ? [collaboratorsSwitch, notifySwitch].filter(Boolean) : [];
+    const rows = group.pages.filter(subPageShown);
+    if (switches.length === 0 && rows.length === 0) return null;
+    return (
+      <ProfileCard key={group.id} title={t(GROUP_LABEL[group.id]!)} groupId={`bot-profile-group-${group.id}`}>
+        {switches}
+        {rows.map((id) => <SubPageRow key={id} page={id} value={rowValue(id)} onOpen={() => openPage(id)} />)}
+      </ProfileCard>
+    );
+  };
+
+  // The Settings card when a search names one of its switches and this
+  // viewer has it, as a selector (the search marks the row inside it).
+  const switchShown: Record<BotProfileSettingsSwitch, boolean> = { notifyMe: notifySwitch !== null, collaboratorsCreateRoutines: collaboratorsSwitch !== null };
+  function settingsSwitchSelector(query: string): string | null {
+    const id = settingsSwitchForQuery(query, pages.map(sectionLabel));
+    return id && switchShown[id] ? SETTINGS_CARD_SELECTOR : null;
+  }
 
   const pages = useMemo(
     () => PERSONA_CATEGORIES.filter((id) => id !== "overview" && shown(id)),
@@ -389,6 +481,8 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     tabOf,
     view: `${tab}/${page ?? ""}`,
     onOpenCategory: openCategory,
+    // the search filters the General tab (it holds the card) and marks the switch
+    rootFor: (query) => (settingsSwitchSelector(query) ? '[data-bot-profile-panel="general"]' : null),
   });
 
   const tabs: readonly BotProfileTab[] = BOT_PROFILE_TABS.filter(tabShown);
@@ -459,6 +553,10 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
       data-bot-profile-subpage-current={page ?? undefined}
       onKeyDown={(event) => {
         if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing) return;
+        // A popover of the page is open (Share, Add, a pill list): this
+        // Escape is its own, so it closes that popover only (its dismiss
+        // hook on the window) and the page stays (#3398).
+        if (pagePopoverOpen(rootRef.current)) return;
         event.preventDefault();
         event.stopPropagation();
         if (page) back();
@@ -494,7 +592,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
           {(!page || search.searching) && <BotProfileTabBar tabs={tabs} tab={tab} onTab={openTab} search={search} />}
 
           {page ? (
-            <SubPage key={page} page={page} onBack={back}>
+            <SubPage key={page} page={page} tab={tab} onBack={back}>
               {subPageBody(page)}
             </SubPage>
           ) : (
@@ -515,15 +613,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
                   )
                 : tab === "appearance"
                   ? block("appearance")
-                  : BOT_PROFILE_TAB_GROUPS[tab].map((group) => {
-                    const rows = group.pages.filter(subPageShown);
-                    if (rows.length === 0) return null;
-                    return (
-                      <ProfileCard key={group.id} title={t(GROUP_LABEL[group.id]!)} groupId={`bot-profile-group-${group.id}`}>
-                        {rows.map((id) => <SubPageRow key={id} page={id} value={rowValue(id)} onOpen={() => openPage(id)} />)}
-                      </ProfileCard>
-                    );
-                  })}
+                  : BOT_PROFILE_TAB_GROUPS[tab].map(tabGroup)}
             </div>
           )}
         </div>

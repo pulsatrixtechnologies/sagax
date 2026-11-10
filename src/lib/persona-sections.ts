@@ -79,13 +79,15 @@ export function personaGroupSections(group: PersonaGroup): readonly PersonaCateg
 
 /** The bot's profile page, V6 (#2612, the "Épuré Grok Bot" canvas): the
  * hero (banner, mascot, name with its title under it, description), then
- * three tabs. General and Knowledge are lists of rows; each row opens its
- * own sub-page (Back, a title, one line of intro, then the same section
- * bodies as before). Stats shows the usage in place.
+ * the tabs. General is section cards with their controls in place (#3398);
+ * a row opens its own sub-page (Back, a title, one line of intro, then the
+ * same section bodies as before) only for a setting too long for a card.
+ * Stats shows the usage in place.
  *
- * - General: Personality, Model, Before it acts (Settings); Channels,
- *   Shared with (Channels); What it can use (the bot's accounts); Rules,
- *   When it acts alone, Voice, Advanced settings, Versions (More).
+ * - General: Settings (two switches in place, then Personality, Model,
+ *   Before it acts), the Channels card and the Bot accounts card in place,
+ *   More (Shared with, Rules, When it acts alone, Voice, Advanced settings,
+ *   Versions).
  * - Appearance: the whole mascot editor in place (character, shape, colour,
  *   style, moves), its own tab like Grok Bot's (JC 2026-11-08: no dropdown
  *   under the header any more).
@@ -99,9 +101,7 @@ export const BOT_PROFILE_SUBPAGES = [
   "personality",
   "model",
   "beforeActing",
-  "channels",
   "sharing",
-  "accounts",
   "rules",
   "actsAlone",
   "voice",
@@ -119,9 +119,7 @@ export const BOT_PROFILE_SUBPAGE_SECTIONS: Readonly<Record<BotProfileSubPage, re
   personality: ["summary", "soul"],
   model: ["model", "worksOn"],
   beforeActing: ["permissions"],
-  channels: ["slack"],
   sharing: ["sharing", "visibility"],
-  accounts: ["access"],
   rules: ["rules"],
   actsAlone: [],
   voice: ["voice"],
@@ -132,13 +130,34 @@ export const BOT_PROFILE_SUBPAGE_SECTIONS: Readonly<Record<BotProfileSubPage, re
   folder: ["files"],
 };
 
-/** The rows of each tab, grouped under a grey label, in the page's order. */
-export const BOT_PROFILE_TAB_GROUPS: Readonly<Record<BotProfileTab, ReadonlyArray<{ id: string; pages: readonly BotProfileSubPage[] }>>> = {
+/** The cards a tab draws in place, controls and all (#3398): the
+ * channels and the bot's accounts. Not sub-pages any more. */
+export const BOT_PROFILE_CARDS = ["channels", "accounts"] as const;
+export type BotProfileCard = (typeof BOT_PROFILE_CARDS)[number];
+
+/** The persona sections each in-place card holds (a deep link to one opens
+ * the General tab at its card). */
+export const BOT_PROFILE_CARD_SECTIONS: Readonly<Record<BotProfileCard, readonly PersonaCategory[]>> = {
+  channels: ["slack"],
+  accounts: ["access"],
+};
+
+/** The card's grey group on the page, for a deep link to scroll to. */
+export const BOT_PROFILE_CARD_GROUP: Readonly<Record<BotProfileCard, string>> = {
+  channels: "bot-profile-channels",
+  accounts: "bot-profile-accounts",
+};
+
+/** The groups of each tab in the page's order: a card drawn in place, or
+ * rows under a grey label that each open a sub-page. Shared with is under
+ * More: the Channels card holds channels only (sharing's other door is the
+ * Share button of the top bar). */
+export const BOT_PROFILE_TAB_GROUPS: Readonly<Record<BotProfileTab, ReadonlyArray<{ id: string; pages: readonly BotProfileSubPage[]; card?: BotProfileCard }>>> = {
   general: [
     { id: "settings", pages: ["personality", "model", "beforeActing"] },
-    { id: "channels", pages: ["channels", "sharing"] },
-    { id: "accounts", pages: ["accounts"] },
-    { id: "more", pages: ["rules", "actsAlone", "voice", "advanced", "versions"] },
+    { id: "channels", pages: [], card: "channels" },
+    { id: "accounts", pages: [], card: "accounts" },
+    { id: "more", pages: ["sharing", "rules", "actsAlone", "voice", "advanced", "versions"] },
   ],
   appearance: [],
   knowledge: [{ id: "work", pages: ["routines", "skills", "folder"] }],
@@ -154,10 +173,18 @@ export function botProfileTabPages(tab: BotProfileTab): readonly BotProfileSubPa
   return BOT_PROFILE_TAB_GROUPS[tab].flatMap((group) => group.pages);
 }
 
-/** Each tab's sections, through its sub-pages (Appearance and Stats hold
- * their section themselves). */
+/** Each tab's in-place cards, in order. */
+export function botProfileTabCards(tab: BotProfileTab): readonly BotProfileCard[] {
+  return BOT_PROFILE_TAB_GROUPS[tab].flatMap((group) => (group.card ? [group.card] : []));
+}
+
+/** Each tab's sections, through its sub-pages and its cards (Appearance
+ * and Stats hold their section themselves). */
 export const BOT_PROFILE_TAB_SECTIONS: Readonly<Record<BotProfileTab, readonly PersonaCategory[]>> = {
-  general: botProfileTabPages("general").flatMap((page) => BOT_PROFILE_SUBPAGE_SECTIONS[page]),
+  general: [
+    ...botProfileTabPages("general").flatMap((page) => BOT_PROFILE_SUBPAGE_SECTIONS[page]),
+    ...botProfileTabCards("general").flatMap((card) => BOT_PROFILE_CARD_SECTIONS[card]),
+  ],
   appearance: ["appearance"],
   knowledge: botProfileTabPages("knowledge").flatMap((page) => BOT_PROFILE_SUBPAGE_SECTIONS[page]),
   stats: ["usage"],
@@ -175,6 +202,11 @@ export function botProfileSubPageOf(category: PersonaCategory): BotProfileSubPag
   return BOT_PROFILE_SUBPAGES.find((page) => BOT_PROFILE_SUBPAGE_SECTIONS[page].includes(category)) ?? null;
 }
 
+/** The in-place card that holds `category`, or null. */
+export function botProfileCardOf(category: PersonaCategory): BotProfileCard | null {
+  return BOT_PROFILE_CARDS.find((card) => BOT_PROFILE_CARD_SECTIONS[card].includes(category)) ?? null;
+}
+
 /** The tab of a sub-page. */
 export function botProfileTabOfPage(page: BotProfileSubPage): BotProfileTab {
   return BOT_PROFILE_TABS.find((tab) => botProfileTabPages(tab).includes(page)) ?? "general";
@@ -186,7 +218,9 @@ export function botProfileTabOf(category: PersonaCategory): BotProfileTab | null
   if (category === "usage") return "stats";
   if (category === "appearance") return "appearance";
   const page = botProfileSubPageOf(category);
-  return page ? botProfileTabOfPage(page) : "general";
+  if (page) return botProfileTabOfPage(page);
+  const card = botProfileCardOf(category);
+  return BOT_PROFILE_TABS.find((tab) => card !== null && botProfileTabCards(tab).includes(card)) ?? "general";
 }
 
 /** The tab a link to `section` opens: the header's sections and the bot

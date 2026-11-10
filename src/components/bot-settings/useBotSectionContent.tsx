@@ -99,6 +99,8 @@ export function useBotSectionContent(bot: Bot, {
   slackUrl,
   channelsElsewhere = false,
   sharingElsewhere = false,
+  notifyElsewhere = false,
+  routinesSwitchElsewhere = false,
 }: {
   /** The section on screen: the overview and history load when it is theirs. */
   section: BotSettingsSection;
@@ -115,6 +117,12 @@ export function useBotSectionContent(bot: Bot, {
    * page's Share popover, JC 2026-11-06: one option in one place): the
    * Sharing section keeps only who pays and the shared vault. */
   sharingElsewhere?: boolean;
+  /** "Notify me" is drawn elsewhere (the profile page's Settings card,
+   * #3398): Voice leaves it out. */
+  notifyElsewhere?: boolean;
+  /** "Collaborators can create routines" is drawn elsewhere (the profile
+   * page's Settings card, #3398): Routines leaves it out. */
+  routinesSwitchElsewhere?: boolean;
 }): { renderSectionBody: (id: BotSettingsSection) => ReactNode; dialogs: ReactNode; derived: ReturnType<typeof useBotSettingsDerived> } {
   const dispatch = useStoreDispatch();
   const { flushBotPatches } = useStoreCommands();
@@ -313,7 +321,7 @@ export function useBotSectionContent(bot: Bot, {
         // with may create routines on it (absent = they may).
         return (
           <>
-            {canEditBotField(config, bot, "collaboratorsCreateRoutines") && (
+            {!routinesSwitchElsewhere && canEditBotField(config, bot, "collaboratorsCreateRoutines") && (
               <PaneSection>
                 <SwitchRow
                   label={t("botPanel.routines.collaboratorsCreate")}
@@ -342,7 +350,7 @@ export function useBotSectionContent(bot: Bot, {
       case "permissions":
         return <PermissionsSection bot={bot} derived={derived} />;
       case "voice":
-        return <VoiceSection bot={bot} derived={derived} />;
+        return <VoiceSection bot={bot} derived={derived} notifyElsewhere={notifyElsewhere} />;
       case "visibility":
         return <VisibilitySection bot={bot} />;
       case "sharing":

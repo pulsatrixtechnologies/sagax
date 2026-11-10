@@ -46,6 +46,8 @@ function Shell() {
   const { bot, neighbours, routines } = fixture;
   useEffect(() => {
     dispatch({ type: "hydrate", bots: [bot, ...neighbours], groups: [], sections: [], computerControl: {} } as never);
+    // a server with spoken replies: the Voice sub-page has its voice rows (#3398: "Notify me" moved to General)
+    dispatch({ type: "configStatus", config: { tts: { configured: false } } } as never);
     dispatch({ type: "routinesHydrated", routines, runs: [] } as never);
     dispatch({ type: "instances", instances: [{ instanceId: "claude", driverKind: "grokAgent", displayName: "Grok", snapshot: { status: "ready" }, capabilities: { browserMcp: true, computerMcp: true }, models: { default: "sonnet", options: [{ id: "sonnet", label: "Sonnet" }] } }] } as never);
     dispatch({ type: "select", id: bot.id } as never);
@@ -102,21 +104,23 @@ async function openSub(page: BotProfileSubPage): Promise<HTMLElement> {
   return host.querySelector<HTMLElement>(`[data-bot-profile-subpage="${page}"]`)!;
 }
 
-const notifySwitch = (sub: HTMLElement) =>
-  sub.querySelector<HTMLElement>(`[role='switch'][aria-label="${t("botPanel.voice.notifyHelp")}"]`);
-const notifications = () => (JSON.parse(storeBot() as string) as { notifications?: boolean }).notifications !== false;
+// "Voice notes" stays on the Voice sub-page ("Notify me" moved in place to
+// General > Settings, #3398).
+const notesSwitch = (sub: HTMLElement) =>
+  sub.querySelector<HTMLElement>(`[role='switch'][aria-label="${t("botPanel.voice.notesAria")}"]`);
+const voiceNotes = () => (JSON.parse(storeBot() as string) as { voiceNotes?: boolean }).voiceNotes !== false;
 
 describe("bot page sub-pages apply each change in place (#3397)", () => {
-  it("Voice > Notify me writes the bot at once, with no Save step", async () => {
+  it("Voice > Voice notes writes the bot at once, with no Save step", async () => {
     await mount("en");
     const sub = await openSub("voice");
-    const toggle = notifySwitch(sub);
-    expect(toggle, "the Notify me switch").not.toBeNull();
-    const was = notifications();
-    await click(toggle, "Notify me");
+    const toggle = notesSwitch(sub);
+    expect(toggle, "the Voice notes switch").not.toBeNull();
+    const was = voiceNotes();
+    await click(toggle, "Voice notes");
     // The workspace's bot has the change right away: nothing waits.
-    expect(notifications()).toBe(!was);
-    expect(notifySwitch(host.querySelector<HTMLElement>("[data-bot-profile-subpage=\"voice\"]")!)?.getAttribute("aria-checked")).toBe(String(!was));
+    expect(voiceNotes()).toBe(!was);
+    expect(notesSwitch(host.querySelector<HTMLElement>("[data-bot-profile-subpage=\"voice\"]")!)?.getAttribute("aria-checked")).toBe(String(!was));
   });
 
   it("no sub-page ends with a Cancel and Save bar", async () => {
@@ -131,7 +135,7 @@ describe("bot page sub-pages apply each change in place (#3397)", () => {
   it("Escape after a change returns to the row, with no question", async () => {
     await mount("en");
     const sub = await openSub("voice");
-    await click(notifySwitch(sub), "Notify me");
+    await click(notesSwitch(sub), "Voice notes");
     const page = host.querySelector<HTMLElement>("[data-bot-profile-page]")!;
     // No confirm provider here: a discard question would fail closed and
     // keep the sub-page open.

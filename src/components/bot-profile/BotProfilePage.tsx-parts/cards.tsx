@@ -138,7 +138,11 @@ function SlackLogo() {
   );
 }
 
-/** General > Channels: where the bot can be reached, each with its state. */
+/** General > Channels, in place on the tab (#3398): where the bot can be
+ * reached, each with its state and its Connect or Manage. A channel this
+ * server does not offer is not drawn (Slack without its Admin link: Slack
+ * as a channel is removed for now, shared/team-chat-channels.ts), and a
+ * card with no channel left is not drawn. */
 export function ChannelsCard({ bot, slackUrl, open, onOpen }: {
   bot: Bot;
   slackUrl: string | null | undefined;
@@ -170,44 +174,56 @@ export function ChannelsCard({ bot, slackUrl, open, onOpen }: {
   const reachOn = (reach?.settings.channels ?? []).map((id) => (REACH_LABEL[id] ? t(REACH_LABEL[id]!) : null)).filter((label): label is string => label !== null);
   const messagesHere = messages ? messages.available && messages.onThisMac : false;
 
-  return (
-    <ProfileCard title={t("botProfile.channels")} groupId="bot-profile-channels">
+  // An option the context makes impossible is not rendered (hiddenWhenUnavailable).
+  const rows: ReactNode[] = [];
+  if (slackUrl) {
+    rows.push(
       <CardRow
+        key="slack"
         rowId="slack"
         icon={<SlackLogo />}
         label={t("botProfile.channel.slack")}
-        state={slackUrl ? t("botProfile.state.managedInAdmin") : t("botProfile.state.notOffered")}
-        action={slackUrl ? pill("slack", true) : undefined}
+        state={t("botProfile.state.managedInAdmin")}
+        action={pill("slack", true)}
       >
-        {slackUrl && open === "slack" ? <SlackSection managementUrl={slackUrl} /> : null}
-      </CardRow>
-      {(mail === null || mail.available) && (
-        <CardRow
-          rowId="email"
-          icon={<Mail />}
-          label={t("botProfile.channel.email")}
-          state={mail === null ? null : !mail.available ? t("botProfile.state.notOffered") : mail.address ?? t("botProfile.state.noAddress")}
-          action={mail?.available && mail.address ? pill("email", true) : undefined}
-        >
-          {open === "email" && mail?.address ? <BotEmailAddress botId={bot.id} /> : null}
-        </CardRow>
-      )}
+        {open === "slack" ? <SlackSection managementUrl={slackUrl} /> : null}
+      </CardRow>,
+    );
+  }
+  if (mail === null || mail.available) {
+    rows.push(
       <CardRow
-        rowId="reachMe"
-        icon={<BellRing />}
-        label={t("botPanel.reachMe.label")}
-        state={reach === null ? null : reachOn.length > 0 ? reachOn.join(", ") : t("botProfile.state.notConnected")}
-        action={reach === null ? undefined : pill("reachMe", reachOn.length > 0)}
+        key="email"
+        rowId="email"
+        icon={<Mail />}
+        label={t("botProfile.channel.email")}
+        state={mail === null ? null : mail.address ?? t("botProfile.state.noAddress")}
+        action={mail?.address ? pill("email", true) : undefined}
       >
-        {open === "reachMe" ? <BotReachMe botId={bot.id} /> : null}
-      </CardRow>
-      {/* an option the context makes impossible is not rendered (hiddenWhenUnavailable) */}
-      {(messages === undefined || messagesHere) && (
+        {open === "email" && mail?.address ? <BotEmailAddress botId={bot.id} /> : null}
+      </CardRow>,
+    );
+  }
+  rows.push(
+    <CardRow
+      key="reachMe"
+      rowId="reachMe"
+      icon={<BellRing />}
+      label={t("botPanel.reachMe.label")}
+      state={reach === null ? null : reachOn.length > 0 ? reachOn.join(", ") : t("botProfile.state.notConnected")}
+      action={reach === null ? undefined : pill("reachMe", reachOn.length > 0)}
+    >
+      {open === "reachMe" ? <BotReachMe botId={bot.id} /> : null}
+    </CardRow>,
+  );
+  if (messages === undefined || messagesHere) {
+    rows.push(
         <CardRow
+          key="messages"
           rowId="messages"
           icon={<MessageCircle />}
           label={t("botProfile.channel.messages")}
-          state={messages === undefined ? null : !messagesHere ? t("botProfile.state.unavailable") : messages!.useMessages ? t("botProfile.state.on") : t("botProfile.state.notConnected")}
+          state={messages === undefined ? null : messages!.useMessages ? t("botProfile.state.on") : t("botProfile.state.notConnected")}
           action={messagesHere ? (
             <button
               type="button"
@@ -221,8 +237,14 @@ export function ChannelsCard({ bot, slackUrl, open, onOpen }: {
               {messages!.useMessages ? t("botProfile.manage") : t("botProfile.connect")}
             </button>
           ) : undefined}
-        />
-      )}
+        />,
+    );
+  }
+  if (rows.length === 0) return null;
+
+  return (
+    <ProfileCard title={t("botProfile.channels")} groupId="bot-profile-channels">
+      {rows}
     </ProfileCard>
   );
 }

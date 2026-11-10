@@ -59,7 +59,11 @@ vi.mock("../bot-settings/AccessSection", () => ({ AccessSection: page("access", 
 vi.mock("../computer/WorksOnSetting", () => ({ WorksOnSetting: page("worksOn", "Where it works", "Browser") }));
 vi.mock("../bot-settings/ModelSection", () => ({ ModelSection: page("model", "Effort", "Provider") }));
 vi.mock("../bot-settings/PermissionsSection", () => ({ PermissionsSection: page("permissions", "Auto approve", "Peers") }));
-vi.mock("../bot-settings/VoiceSection", () => ({ VoiceSection: page("voice", "Speak replies", "Alerts") }));
+// "Notify me" is General's switch (#3398): the page draws it from VoiceSection's NotifyMeRow.
+vi.mock("../bot-settings/VoiceSection", () => ({
+  VoiceSection: page("voice", "Speak replies", "Alerts"),
+  NotifyMeRow: () => createElement("div", { "data-settings-row": "notify-me" }, "Notify me"),
+}));
 vi.mock("../bot-settings/SharingSection", () => ({ SharingSection: page("sharing", "Teams", "Level") }));
 vi.mock("../bot-settings/VisibilitySection", () => ({ VisibilitySection: page("visibility", "Admins only", "People") }));
 vi.mock("../bot-settings/HistorySection", () => ({ HistorySection: page("history", "Undo", "Log") }));
@@ -145,9 +149,9 @@ afterEach(() => {
 
 describe("bot profile settings search", () => {
   it("opens from the magnifier beside the tabs, under them, and dims no tab while empty", () => {
-    // a link to Appearance lands on General with the header's fold open (#2271)
-    expect(selectedTab()).toBe("general");
-    expect(shownTab()).toBe("general");
+    // a link to Appearance lands on its own tab (#2969: General | Appearance | Knowledge | Stats)
+    expect(selectedTab()).toBe("appearance");
+    expect(shownTab()).toBe("appearance");
     expect(opened()).toContain("appearance");
     expect(host.querySelector("[data-persona-search]")).toBeNull();
     expect(toggle().getAttribute("aria-expanded")).toBe("false");
@@ -163,9 +167,9 @@ describe("bot profile settings search", () => {
   it("shows the tab that holds a word, in English and in French, and marks the tabs that do", () => {
     act(() => toggle().click());
     type("mascot");
-    // the appearance is the header's: its fold opens, no tab is the match
-    expect(selectedTab()).toBe("general");
-    expect(matching()).toEqual([]);
+    // the mascot is on the Appearance tab (#2969): that tab is the match, General dims
+    expect(selectedTab()).toBe("appearance");
+    expect(matching()).toEqual(["appearance"]);
     expect(opened()).toContain("appearance");
     expect(host.querySelector('[data-bot-profile-tab="general"]')!.classList.contains("opacity-40")).toBe(true);
     type("effort");
@@ -194,7 +198,7 @@ describe("bot profile settings search", () => {
     act(() => toggle().click());
     type("zzzxq");
     expect(matching()).toEqual([]);
-    expect(selectedTab()).toBe("general");
+    expect(selectedTab()).toBe("appearance");
     expect(host.querySelector("[data-persona-no-match]")!.textContent).toBe("Nothing matches “zzzxq”");
   });
   it("opens the field with a slash or Command-F from any tab, but not while typing", async () => {

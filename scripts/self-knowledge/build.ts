@@ -22,6 +22,7 @@ import { TOOL_POLICY_ROWS } from "../../server/tool-policy.generated.ts";
 import type { KnowledgeBase, KnowledgeSection, PerspicaxSnapshot } from "../../server/self-knowledge/self-knowledge-types.ts";
 import { clip, CUSTOMER_TAG_LEFT, docSections, plainText, scrub, slug } from "./markdown.ts";
 import { CARD_HOME } from "../../src/lib/settings-sections.ts";
+import { TEAM_CHAT_CHANNELS_OFFERED } from "../../shared/team-chat-channels.ts";
 import { GUIDES, SETTING_NOTES } from "./guides.ts";
 
 export const KNOWLEDGE_FILE = join("server", "self-knowledge", "knowledge.generated.json");
@@ -269,6 +270,9 @@ function botEditorSections(root: string): KnowledgeSection[] {
   const out: KnowledgeSection[] = [];
   for (const match of read(root, "src/components/bot-settings/sections.ts").matchAll(/\{ id: "(\w+)", label: "([^"]+)",(?: labelKey: "([\w.]+)",)?[^\n]*?keywords: \[([^\]]*)\]/g)) {
     const [, id, fallback, labelKey, words] = match;
+    // Slack as a channel between a team and a bot is removed for now
+    // (#3398): no surface offers it, so the model is not told it is there.
+    if (id === "slack" && !TEAM_CHAT_CHANNELS_OFFERED) continue;
     const name = labelKey ? label(labelKey, en, fr) : { english: fallback, french: "" };
     const group = groupOf.get(id) ?? (id === "memory" ? groupOf.get("files") : undefined);
     const groupName = group ? label(`persona.group.${group}`, en, fr) : null;

@@ -48,11 +48,10 @@ export function SuggestionsSection({ bot, routineCount, slackUrl = null, onAddTo
     [setup, bot.tasks, bot.waitingApprovals],
   );
   const extra: SuggestionRow[] = [
-    // Add to Slack is always there: the Admin link when the server has one,
-    // else the bot's Slack settings.
-    slackUrl
-      ? { id: "slack", title: t("botPanel.suggestions.slack.title"), icon: SlackLogo, href: slackUrl }
-      : { id: "slack", title: t("botPanel.suggestions.slack.title"), icon: SlackLogo, onRun: () => dispatch({ type: "openPersonaEditor", botId: bot.id, section: "slack" }) },
+    // Add to Slack only where the server offers the Admin link (#3398: an
+    // option that cannot work is hidden; Slack as a channel is removed for
+    // now, shared/team-chat-channels.ts).
+    ...(slackUrl ? [{ id: "slack", title: t("botPanel.suggestions.slack.title"), icon: SlackLogo, href: slackUrl }] : []),
     ...(onAddToMeeting ? [{ id: "meeting", title: t("botPanel.suggestions.meeting.title"), icon: CalendarPlus, onRun: onAddToMeeting }] : []),
   ];
   if (!shown || (!items.length && !extra.length)) return null;

@@ -385,7 +385,9 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
   if (path === `${bots}/tool-grants`) return json({ grants: [] });
   if (path === `${bots}/lifecycle-hooks`) return json({ enabled: true, events: ["turn.start", "turn.end"] });
   if (path === `${bots}/roles/rules`) return json({ rules: [{ id: "rr1", from: { slug: "finance", name: "Finance" }, to: { slug: "", name: "Me" }, path: "/finance/invoices", ownerId: "pr_alex", createdAt: NOW - 4 * DAY }] });
-  if (path === `${bots}/slack-management`) return json({ available: true, managementUrl: "https://northwind.example/slack-app" });
+  // As the server answers while Slack as a channel is removed (#3398,
+  // shared/team-chat-channels.ts).
+  if (path === `${bots}/slack-management`) return json({ available: false });
   if (path === `${bots}/outbound`) return json({ calls: [] });
   if (path === `${bots}/activity`) return json({ items: [], subagents: [], launchedAgents: [] });
   if (path === `${bots}/task-list`) return json({ tasks: [] });

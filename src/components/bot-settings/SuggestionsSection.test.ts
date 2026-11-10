@@ -20,12 +20,23 @@ const bot = { id: "b1", name: "Pepper", tasks: [{ threadId: "t1", title: "Deploy
 describe("SuggestionsSection", () => {
   it("draws the card while the global preference is on", () => {
     fixture.shown = true;
-    const html = renderToStaticMarkup(createElement(SuggestionsSection, { bot, routineCount: 0 }));
-    // the bot panel's card has Hide and always offers Add to Slack
+    const html = renderToStaticMarkup(createElement(SuggestionsSection, { bot, routineCount: 0, slackUrl: "https://admin.example.test/slack?bot=b1" }));
+    // the bot panel's card has Hide, and Add to Slack where the server offers its link
     expect(html).toContain("data-suggestions-hide");
     expect(html).toContain('data-suggestion="approval:t1"');
     expect(html).toContain('data-suggestion="slack"');
     expect(html).toContain("data-slack-logo");
+  });
+
+  // #3398: Slack as a channel is removed for now; without the server's link
+  // Add to Slack cannot work, so it is not drawn (it used to open a Slack
+  // page that has nothing to offer).
+  it("draws no Add to Slack when the server offers no Slack link", () => {
+    fixture.shown = true;
+    const html = renderToStaticMarkup(createElement(SuggestionsSection, { bot, routineCount: 0, slackUrl: null }));
+    expect(html).toContain('data-suggestion="approval:t1"');
+    expect(html).not.toContain('data-suggestion="slack"');
+    expect(html).not.toContain("data-slack-logo");
   });
 
   it("draws nothing for any bot once the preference is off", () => {

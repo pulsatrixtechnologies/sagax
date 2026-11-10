@@ -221,6 +221,50 @@ déblocages récents, grille) ; si la personne ne partage rien, une note privée
 - Nom et étiquette se modifient là où ils s'affichent (édition en place), pas dans un
   formulaire à part.
 
+### 2.4 bis Page de profil du bot
+
+Code : `src/components/bot-profile/` (bureau et web, une seule page). Audit côte à côte
+avec l'app de référence : #3388 ; ce patron : #3398.
+
+- La page remplit le panneau principal à la place du chat, à côté de la barre latérale
+  inchangée. Une colonne centrée de 760 px, gouttières de 24 px (16 px sur un téléphone).
+- En-tête : une bannière basse dans la couleur de la mascotte, la mascotte petite à
+  gauche sur son bord bas, le nom à 28 px avec le titre du bot dessous, qui le voit et
+  son propriétaire, la description éditée en place. Fermer en haut à gauche, Partager en
+  haut à droite (la seule porte du partage des personnes et des groupes) ; la barre
+  devient floue avec la petite mascotte et le nom quand le nom passe dessous.
+- Onglets en pilules : Général, Apparence, Connaissances, Statistiques (Simple masque
+  Statistiques). La loupe à droite cherche dans tous les réglages.
+- Général est fait de cartes de section avec leurs contrôles sur place, comme la
+  référence : une étiquette grise de 13 px au-dessus d'une carte pleine sans bordure,
+  24 px entre les groupes.
+  - Réglages : d'abord les interrupteurs, sur place (« Les collaborateurs peuvent créer
+    des routines », « M'avertir quand ce bot termine ou a besoin de moi ») ; puis les
+    rangées Personnalité, Modèle, Avant d'agir.
+  - Canaux : une rangée par canal (logo ou icône, nom, une ligne grise d'état, Connecter
+    ou Gérer à droite) ; un canal déplie ses réglages sous sa rangée. Un canal que le
+    serveur n'offre pas n'est pas dessiné, et une carte sans canal n'est pas dessinée.
+    Slack et Microsoft Teams comme canal entre une équipe et le bot sont retirés pour
+    le moment (décision de JC du 2026-11-10, `shared/team-chat-channels.ts`) ;
+    l'intégration complète suit après le gel (#3411).
+  - Comptes du bot : un seul nom pour la carte (jamais « Ce qu'il peut utiliser »), la
+    rangée du moteur avec Gérer, les comptes, et Ajouter à droite de l'étiquette.
+  - Plus : Partagé avec, Règles, Quand il agit seul, Voix, Réglages avancés, Versions.
+- Une rangée n'ouvre une sous-page que pour un réglage trop long pour une carte
+  (Personnalité, Modèle, Avant d'agir, Partagé avec, Règles, Quand il agit seul, Voix,
+  Réglages avancés, Versions ; dans Connaissances : Routines, Compétences, Dossier et
+  mémoire). Elle garde à droite sa valeur courte et un chevron.
+- Une sous-page : le lien de retour nommé d'après l'onglet où il revient (« ‹ Général »),
+  qui reçoit le focus à l'ouverture ; le titre dans le style des titres de page des
+  Réglages (20 px, semi-gras) ; une ligne d'intro ; puis ses cartes. Échap revient à la
+  rangée qui l'a ouverte.
+- Chaque changement s'applique sur place (voir 2.4) ; Versions restaure.
+- Menus Ajouter : chaque élément porte un titre et une ligne grise qui dit ce qu'il
+  fera. Échap avec un menu ou une fenêtre ouverte ferme ce menu seulement (il prend la
+  touche en premier) ; Échap sans rien d'ouvert quitte la sous-page, puis la page.
+- Un lien ou une recherche vers un canal ou un compte ouvre Général et défile jusqu'à
+  sa carte.
+
 ### 2.5 Réglages
 
 **Bureau.** Une colonne de sections à gauche (icône monochrome et libellé, la choisie en

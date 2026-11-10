@@ -68,6 +68,17 @@
 //     loads no claude.ai connector, init lists none and the connector call is replaced by the real CLI's "No such tool" text
 //   FAKE_CLAUDE_MCP_SERVE_REPLAY  a fixture (fixtures/connectors/claude-mcp-serve.json): `claude mcp serve` answers
 //     initialize and tools/list with what 2.1.322 served (its own tools only, never a configured server's)
+//   FAKE_CLAUDE_CONNECTOR_MODE  the Claude connector host's pinned call (#3352, L9): a `-p` launch reads the
+//     prompt "Call the tool <id> exactly once with this input JSON, then stop:" from stdin and plays it as M1 and M2
+//     measured: init (the connector as `claude.ai <Name>`), ToolSearch, then the tool, asked through the
+//     --permission-prompt-tool of the --mcp-config unless pre-allowed. obey | alter-input (the model adds a field) |
+//     other-tool (the model calls another tool of the server) | needs-sign-in (init lists the connector as needs-auth,
+//     no such tool). A launch with --strict-mcp-config, --setting-sources or ENABLE_CLAUDEAI_MCP_SERVERS=false loads
+//     no claude.ai connector (M8).
+//   FAKE_CLAUDE_CONNECTOR_CALLS  JSON-lines file: each connector tool that RAN appends {tool, input, pid, configDir, cwd}
+//   FAKE_CLAUDE_CONNECTOR_TRACE  JSON-lines file: each connector launch appends {pid, cwd, configDir}
+//   FAKE_CLAUDE_USER_ALLOW  comma list of tool ids the account's own settings allow (they run unasked, unless the
+//     launch's --settings file lists them under permissions.ask)
 //   FAKE_CLAUDE_DUMP   path to write {argv, env, cwd, prompt, systemPrompt,
 //                      mcpConfig} as JSON at each turn this process is given
 //                      (the latest turn wins), so the test can assert on argv
@@ -479,6 +490,78 @@ if (argv[0] === "mcp" && argv[1] === "serve" && process.env.FAKE_CLAUDE_MCP_SERV
     }
   });
   process.stdin.on("end", () => process.exit(0));
+  await new Promise(() => {});
+}
+// The Claude connector host's pinned call (#3352): see FAKE_CLAUDE_CONNECTOR_MODE above.
+if (argv.includes("-p") && process.env.FAKE_CLAUDE_CONNECTOR_MODE) {
+  const mode = process.env.FAKE_CLAUDE_CONNECTOR_MODE;
+  const prompt = await new Promise<string>((resolve) => {
+    let data = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => { data += chunk; });
+    process.stdin.on("end", () => resolve(data));
+  });
+  const configDir = process.env.CLAUDE_CONFIG_DIR ?? null;
+  if (process.env.FAKE_CLAUDE_CONNECTOR_TRACE) appendFileSync(process.env.FAKE_CLAUDE_CONNECTOR_TRACE, `${JSON.stringify({ pid: process.pid, cwd: process.cwd(), configDir })}\n`);
+  const pinned = /^Call the tool (\S+) exactly once with this input JSON, then stop:\n([\s\S]*)$/.exec(prompt.trim());
+  const toolId = pinned?.[1] ?? "";
+  const input = (() => { try { return JSON.parse(pinned?.[2] ?? "{}") as Record<string, unknown>; } catch { return {}; } })();
+  const server = toolId.replace(/^mcp__/, "").split("__")[0] ?? "";
+  const display = `claude.ai ${server.replace(/^claude_ai_/, "").replace(/_/g, " ")}`;
+  const loads = !argv.includes("--strict-mcp-config") && !argv.includes("--setting-sources") && process.env.ENABLE_CLAUDEAI_MCP_SERVERS !== "false";
+  const session = "fake-connector-session";
+  const frames: unknown[] = [];
+  const emit = (frame: unknown) => frames.push(frame);
+  const result = (text: string, denials: unknown[] = []) => emit({ type: "result", subtype: "success", is_error: false, num_turns: 3, result: text, session_id: session, permission_denials: denials });
+  emit({ type: "system", subtype: "init", session_id: session, permissionMode: argAfter("--permission-mode"), tools: ["ToolSearch"], mcp_servers: loads ? [{ name: display, status: mode === "needs-sign-in" ? "needs-auth" : "connected", source: "claudeai" }] : [] });
+  if (!loads || mode === "needs-sign-in" || !toolId) {
+    emit({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: `No such tool available: ${toolId}` }] }, session_id: session });
+    result(`No such tool available: ${toolId}`);
+  } else {
+    emit({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "toolu_fake_search", name: "ToolSearch", input: { query: `select:${toolId}`, max_results: 1 } }] }, session_id: session });
+    emit({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_fake_search", content: [{ type: "tool_reference", tool_name: toolId }] }] }, session_id: session });
+    const called = mode === "other-tool" ? `mcp__${server}__other_tool` : toolId;
+    const calledInput = mode === "alter-input" ? { ...input, bcc: "someone@example.com" } : input;
+    emit({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "toolu_fake_call", name: called, input: calledInput }] }, session_id: session });
+    const allowedTools = (argAfter("--allowedTools") ?? "").split(",").map((name) => name.trim()).filter(Boolean);
+    const userAllow = (process.env.FAKE_CLAUDE_USER_ALLOW ?? "").split(",").map((name) => name.trim()).filter(Boolean);
+    const askRules = (() => {
+      const file = argAfter("--settings");
+      if (!file) return [] as string[];
+      try { return ((JSON.parse(readFileSync(file, "utf8")) as { permissions?: { ask?: string[] } }).permissions?.ask ?? []); } catch { return [] as string[]; }
+    })();
+    let verdict: { behavior?: string; message?: string } = { behavior: "deny", message: `Permission to use ${called} has been denied.` };
+    if ((allowedTools.includes(called) || userAllow.includes(called)) && !askRules.includes(called)) {
+      verdict = { behavior: "allow" };
+    } else {
+      const promptTool = argAfter("--permission-prompt-tool");
+      const configPath = argAfter("--mcp-config");
+      const [, promptServer = "", promptName = ""] = /^mcp__([^_]+(?:_[^_]+)*)__(.+)$/.exec(promptTool ?? "") ?? [];
+      const config = configPath ? JSON.parse(readFileSync(configPath, "utf8")) as { mcpServers?: Record<string, { command: string; args?: string[]; env?: Record<string, string> }> } : {};
+      const mounted = config.mcpServers?.[promptServer];
+      if (mounted && promptName) {
+        const mcp = fakeMcpSession(mounted);
+        await mcp.request("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "fake-claude", version: "1" } });
+        mcp.notify("notifications/initialized");
+        const answer = await mcp.request("tools/call", { name: promptName, arguments: { tool_name: called, input: calledInput, tool_use_id: "toolu_fake_call" } });
+        mcp.close();
+        const text = ((answer.result as { content?: Array<{ text?: string }> } | undefined)?.content?.[0]?.text) ?? "";
+        try { verdict = JSON.parse(text) as typeof verdict; } catch { verdict = { behavior: "deny", message: text || "no answer" }; }
+      }
+    }
+    if (verdict.behavior === "allow") {
+      if (process.env.FAKE_CLAUDE_CONNECTOR_CALLS) appendFileSync(process.env.FAKE_CLAUDE_CONNECTOR_CALLS, `${JSON.stringify({ tool: called, input: calledInput, pid: process.pid, configDir, cwd: process.cwd() })}\n`);
+      const text = `pinned result of ${called} ${JSON.stringify(calledInput)}`;
+      emit({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_fake_call", content: [{ type: "text", text }] }] }, session_id: session, tool_use_result: [{ type: "text", text }] });
+      emit({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "Done." }] }, session_id: session });
+      result("Done.");
+    } else {
+      emit({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_fake_call", is_error: true, content: verdict.message ?? "denied" }] }, session_id: session });
+      emit({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "The call was denied." }] }, session_id: session });
+      result("The call was denied.", [{ tool_name: called, tool_use_id: "toolu_fake_call", tool_input: calledInput }]);
+    }
+  }
+  process.stdout.write(frames.map((frame) => JSON.stringify(frame)).join("\n") + "\n", () => process.exit(0));
   await new Promise(() => {});
 }
 if (argv.includes("-p") && process.env.FAKE_CLAUDE_CONNECTOR_REPLAY) {

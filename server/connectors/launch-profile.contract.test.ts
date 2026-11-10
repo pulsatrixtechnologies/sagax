@@ -246,12 +246,13 @@ posixOnly("Codex host methods (#3354)", () => {
   it("sends only the methods of the contract, each known for the pin, and never turn/start", async () => {
     chmodSync(FAKE_CODEX, 0o755);
     const root = realpathSync(mkdtempSync(join(tmpdir(), "sagax-codex-contract-")));
+    let host: ReturnType<typeof createCodexConnectorHost> | undefined;
     try {
       const home = join(root, "codex");
       mkdirSync(home, { recursive: true });
       const log = join(root, "methods.jsonl");
       const launch = { cli: FAKE_CODEX, env: { ...process.env, CODEX_HOME: home, FAKE_CODEX_CONNECTOR_REPLAY: FIXTURES, FAKE_CODEX_METHOD_LOG: log } };
-      const host = createCodexConnectorHost({ launch: () => launch, gate: (_label, run) => run(), timeoutMs: 15_000, listTimeoutMs: 15_000 });
+      host = createCodexConnectorHost({ launch: () => launch, gate: (_label, run) => run(), timeoutMs: 15_000, listTimeoutMs: 15_000 });
       const listing = await host.listApps(launch);
       expect(listing?.auth).toBe("subscription");
       const ref = { provider: "chatgpt-apps" as const, driver: "codex" as const, instanceId: "default", slot: "primary" as const };
@@ -267,6 +268,8 @@ posixOnly("Codex host methods (#3354)", () => {
         expect(atLeast(parse(pin), parse(methods[method]!.since)), method).toBe(true);
       }
     } finally {
+      // #3357: the warm app-server ends with the host
+      await host?.close?.();
       rmSync(root, { recursive: true, force: true });
     }
   }, 60_000);

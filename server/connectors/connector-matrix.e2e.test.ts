@@ -624,7 +624,8 @@ posixOnly("connector matrix, provider columns on the real hosts (#3354)", () => 
         last: (person) => {
           if (!existsSync(codexDump(person))) return undefined;
           const dump = JSON.parse(readFileSync(codexDump(person), "utf8")) as { env: Record<string, string | undefined>; calls: Array<{ method: string; params: { arguments?: Record<string, unknown> } }> };
-          const call = dump.calls.find((entry) => entry.method === "mcpServer/tool/call");
+          // #3357: a warm app-server serves several calls; the last one is this call
+          const call = dump.calls.filter((entry) => entry.method === "mcpServer/tool/call").at(-1);
           return call && underPerson(person, dump.env.CODEX_HOME) ? { input: call.params.arguments ?? {}, folder: dump.env.CODEX_HOME! } : undefined;
         },
       },
@@ -725,7 +726,10 @@ posixOnly("connector matrix, provider columns on the real hosts (#3354)", () => 
     }
   }, 120_000);
 
-  it("leaves no host process running", async () => {
+  it("leaves no host process running once the hub is closed", async () => {
+    // #3357: hosts keep a warm process per person and account until idle,
+    // sign-out or shutdown; the server's shutdown closes the hub
+    await hub.close();
     await new Promise((r) => setTimeout(r, 300));
     const pids = [
       ...lines<{ pid: number }>(grokCalls()).map((c) => c.pid),

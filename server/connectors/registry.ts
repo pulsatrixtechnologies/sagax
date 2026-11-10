@@ -332,6 +332,17 @@ export class ConnectorRegistry {
     return this.refresh(principalId, ref, provider === "claude-ai").then(() => undefined);
   }
 
+  /** #3357: the connector accounts a sign-in change touches, as the hosts
+   * key them (`<provider>:<instanceId>:<slot>`); null when the change is a
+   * reset of every sign-in of the person. */
+  accountsOfSignIn(change: ConnectorAccountChange): Array<{ provider: ConnectorProvider; accountKey: string }> | null {
+    if ("cleared" in change) return null;
+    return CONNECTOR_PROVIDERS.filter((provider) => PROVIDER_DRIVER[provider] === change.driver).map((provider) => ({
+      provider,
+      accountKey: connectorAccountKey({ provider, instanceId: this.accountInstance(provider, change.instanceId), slot: change.slot }),
+    }));
+  }
+
   /** Read one sign-in in the background: once per process, or once per
    * `maxAgeMs` for a provider that ages. */
   private warm(principalId: string, ref: ConnectorAccountRef, maxAgeMs?: number): void {

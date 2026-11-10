@@ -8,9 +8,13 @@
 // `mcpServer/tool/call` on the `codex_apps` server with the approved tool
 // and arguments. No model runs: no `turn/start` is ever sent, so nothing but
 // the approved call can run. The same app-server reads the person's apps for
-// the registry (`mcpServerStatus/list`). The process is ended before the
-// call returns. No token is read or kept: Codex uses the sign-in it already
-// has.
+// the registry (`mcpServerStatus/list`). No token is read or kept: Codex
+// uses the sign-in it already has.
+//
+// #3357 (L14): the app-server of a call stays warm for the next call of the
+// same person on the same sign-in (server/connectors/host-pool.ts); each
+// call reads the sign-in again and starts its own thread. The registry's
+// list still runs on a short app-server of its own.
 //
 // M6: Codex asks the client nothing for such a call, so the held request of
 // the calling turn (the person's own approval settings, P5) is the only
@@ -25,6 +29,7 @@ import { codexHome } from "../../drivers/codex-identity.ts";
 import { mcpAppApprovalForm } from "../../drivers/codex/approvals.ts";
 import { engineStartGate } from "../../engines/engine-start-gate.ts";
 import { killCliTree, spawnCli } from "../../procs.ts";
+import { createConnectorHostPool, type ConnectorHostPoolOptions, type PoolWork, type WarmProcess } from "../host-pool.ts";
 import { CODEX_APPS_SERVER, chatgptAppsDescribe, chatgptAppsResult, chatgptAppsRuleTool, chatgptAppsToolId, codexAccountAuth, type CodexAppsListing } from "../providers/chatgpt-apps.ts";
 import type { ConnectorAccount } from "../types.ts";
 import type { ConnectorHost, ConnectorHostCall, ConnectorHostResult } from "./types.ts";
@@ -48,6 +53,9 @@ export interface CodexConnectorHostDeps {
   /** Default 30 s: a cold app-server and the list (under 100 ms measured). */
   listTimeoutMs?: number;
   now?: () => number;
+  /** #3357: the warm pool (idle limit, memory guard). The start limit is
+   * `gate`. */
+  pool?: Omit<ConnectorHostPoolOptions, "gate">;
 }
 
 export interface CodexConnectorHost extends ConnectorHost {
@@ -85,9 +93,10 @@ type RpcMessage = { id?: unknown; method?: unknown; params?: unknown; result?: u
 
 class RpcError extends Error {}
 
-/** One short app-server on one sign-in: requests, the answers Codex's own
- * requests get, and an end that waits for the process to be gone. */
-interface AppServer {
+/** One app-server on one sign-in: requests, the answers Codex's own
+ * requests get, and an end that waits for the process to be gone. #3357:
+ * kept warm for the next call of the same person and sign-in. */
+interface AppServer extends WarmProcess {
   request(method: string, params: unknown): Promise<unknown>;
   notify(method: string, params: unknown): void;
   cwd: string;
@@ -113,81 +122,98 @@ export function createCodexConnectorHost(deps: CodexConnectorHostDeps): CodexCon
   const listTimeoutMs = deps.listTimeoutMs ?? LIST_TIMEOUT_MS;
   const now = deps.now ?? Date.now;
   const running = new Set<ReturnType<typeof spawnCli>>();
+  const pool = createConnectorHostPool<AppServer>({ ...deps.pool, gate });
 
-  /** Run `work` on a fresh app-server of this sign-in; the process is gone
-   * before the answer returns. Rejects on a timeout or an early exit. */
-  function withAppServer<T>(launch: CodexConnectorLaunch, limitMs: number, work: (server: AppServer) => Promise<T>): Promise<T> {
+  /** Start an app-server on this sign-in. Its requests reject once it is
+   * gone; `stop` waits for the process to be gone. */
+  function startAppServer(launch: CodexConnectorLaunch): AppServer {
     const env = codexConnectorHostEnv(launch.env);
     const home = codexHome(env);
     const cwd = home && isAbsolute(home) ? home : env.HOME && isAbsolute(env.HOME) ? env.HOME : homedir();
-    return new Promise<T>((resolve, reject) => {
-      let child: ReturnType<typeof spawnCli>;
-      try {
-        child = spawnCli(launch.cli, codexConnectorHostArgs(), { cwd, env: env as NodeJS.ProcessEnv, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
-      } catch (error) {
-        reject(error instanceof Error ? error : new Error(String(error)));
+    const child = spawnCli(launch.cli, codexConnectorHostArgs(), { cwd, env: env as NodeJS.ProcessEnv, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    running.add(child);
+    let exited = false;
+    let stopping: Promise<void> | undefined;
+    let nextId = 0;
+    const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
+    const gone = (error: Error) => {
+      if (exited) return;
+      exited = true;
+      running.delete(child);
+      for (const entry of pending.values()) entry.reject(error);
+      pending.clear();
+    };
+    const write = (message: unknown) => {
+      try { child.stdin.write(`${JSON.stringify(message)}\n`); } catch { /* the exit handler ends it */ }
+    };
+    child.stdin.on("error", () => { /* the exit handler ends it */ });
+    // never kept nor logged: raw CLI errors may name the account
+    child.stderr.resume();
+    child.on("error", (error) => gone(error));
+    child.on("close", () => gone(new Error("the app-server stopped")));
+    let buffer = "";
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      buffer += chunk;
+      if (buffer.length > MESSAGE_MAX) {
+        for (const entry of pending.values()) entry.reject(new Error("answer too large"));
+        pending.clear();
+        buffer = "";
+        void server.stop();
         return;
       }
-      running.add(child);
-      let settled = false;
-      let nextId = 0;
-      const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
-      const end = (outcome: { value: T } | { error: Error }) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        for (const entry of pending.values()) entry.reject(new Error("the app-server stopped"));
-        pending.clear();
-        void killCliTree(child, 1_000).then((stopped) => {
-          if (!stopped) { try { child.kill("SIGKILL"); } catch { /* already gone */ } }
-        }).catch(() => undefined).finally(() => {
-          running.delete(child);
-          if ("value" in outcome) resolve(outcome.value);
-          else reject(outcome.error);
-        });
-      };
-      const timer = setTimeout(() => end({ error: new Error("timeout") }), limitMs);
-      const write = (message: unknown) => {
-        try { child.stdin.write(`${JSON.stringify(message)}\n`); } catch { /* the exit handler ends it */ }
-      };
-      child.stdin.on("error", () => { /* the exit handler ends it */ });
-      // never kept nor logged: raw CLI errors may name the account
-      child.stderr.resume();
-      child.on("error", (error) => end({ error }));
-      child.on("close", () => end({ error: new Error("the app-server stopped") }));
-      let buffer = "";
-      child.stdout.setEncoding("utf8");
-      child.stdout.on("data", (chunk: string) => {
-        buffer += chunk;
-        if (buffer.length > MESSAGE_MAX) { end({ error: new Error("answer too large") }); return; }
-        let newline: number;
-        while ((newline = buffer.indexOf("\n")) >= 0) {
-          const line = buffer.slice(0, newline);
-          buffer = buffer.slice(newline + 1);
-          if (!line.trim()) continue;
-          let message: RpcMessage;
-          try { message = JSON.parse(line) as RpcMessage; } catch { continue; }
-          if (typeof message.method === "string" && message.id !== undefined) {
-            write({ jsonrpc: "2.0", id: message.id, ...answerServerRequest(message.method, message.params) });
-          } else if (message.method === undefined && typeof message.id === "number" && pending.has(message.id)) {
-            const entry = pending.get(message.id)!;
-            pending.delete(message.id);
-            if (message.error) entry.reject(new RpcError(String(message.error.message ?? "error")));
-            else entry.resolve(message.result);
-          }
+      let newline: number;
+      while ((newline = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, newline);
+        buffer = buffer.slice(newline + 1);
+        if (!line.trim()) continue;
+        let message: RpcMessage;
+        try { message = JSON.parse(line) as RpcMessage; } catch { continue; }
+        if (typeof message.method === "string" && message.id !== undefined) {
+          write({ jsonrpc: "2.0", id: message.id, ...answerServerRequest(message.method, message.params) });
+        } else if (message.method === undefined && typeof message.id === "number" && pending.has(message.id)) {
+          const entry = pending.get(message.id)!;
+          pending.delete(message.id);
+          if (message.error) entry.reject(new RpcError(String(message.error.message ?? "error")));
+          else entry.resolve(message.result);
         }
-      });
-      const server: AppServer = {
-        cwd,
-        request: (method, params) => new Promise((resolveRequest, rejectRequest) => {
-          const id = ++nextId;
-          pending.set(id, { resolve: resolveRequest, reject: rejectRequest });
-          write({ jsonrpc: "2.0", id, method, params });
-        }),
-        notify: (method, params) => write({ jsonrpc: "2.0", method, params }),
-      };
-      work(server).then((value) => end({ value }), (error: unknown) => end({ error: error instanceof Error ? error : new Error(String(error)) }));
+      }
     });
+    const server: AppServer = {
+      cwd,
+      alive: () => !exited && child.exitCode === null && child.signalCode === null,
+      request: (method, params) => new Promise((resolveRequest, rejectRequest) => {
+        if (exited) { rejectRequest(new Error("the app-server stopped")); return; }
+        const id = ++nextId;
+        pending.set(id, { resolve: resolveRequest, reject: rejectRequest });
+        write({ jsonrpc: "2.0", id, method, params });
+      }),
+      notify: (method, params) => write({ jsonrpc: "2.0", method, params }),
+      stop: () => stopping ??= killCliTree(child, 1_000).then((stopped) => {
+        if (!stopped) { try { child.kill("SIGKILL"); } catch { /* already gone */ } }
+      }).catch(() => undefined).finally(() => { gone(new Error("the app-server stopped")); }),
+    };
+    return server;
+  }
+
+  /** `work` on `server`, bounded by `limitMs`: a timeout rejects with
+   * "timeout" and ends the server (its state is unknown). */
+  function bounded<T>(server: AppServer, limitMs: number, work: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => { void server.stop(); reject(new Error("timeout")); }, limitMs);
+      work().then((value) => { clearTimeout(timer); resolve(value); }, (error: unknown) => { clearTimeout(timer); reject(error instanceof Error ? error : new Error(String(error))); });
+    });
+  }
+
+  /** Run `work` on a fresh app-server of this sign-in; the process is gone
+   * before the answer returns (the registry's list). */
+  async function withAppServer<T>(launch: CodexConnectorLaunch, limitMs: number, work: (server: AppServer) => Promise<T>): Promise<T> {
+    const server = startAppServer(launch);
+    try {
+      return await bounded(server, limitMs, () => work(server));
+    } finally {
+      await server.stop();
+    }
   }
 
   /** initialize, then what the sign-in is (account/read). */
@@ -232,26 +258,59 @@ export function createCodexConnectorHost(deps: CodexConnectorHostDeps): CodexCon
     needsSignIn: true,
   });
 
+  /** A warm app-server, opened (initialize) once at its start. */
+  async function openServer(launch: CodexConnectorLaunch): Promise<AppServer> {
+    const server = startAppServer(launch);
+    try {
+      await bounded(server, timeoutMs, async () => {
+        await server.request("initialize", { clientInfo: { name: "sagax", title: "Sagax", version: "1" }, capabilities: { experimentalApi: true } });
+        server.notify("initialized", {});
+      });
+      return server;
+    } catch (error) {
+      await server.stop();
+      throw error;
+    }
+  }
+
   async function call(request: ConnectorHostCall): Promise<ConnectorHostResult> {
     const name = request.connector.name;
     const launch = deps.launch(request.principalId, request.account);
     if (!launch) return signIn(name);
     const tool = chatgptAppsToolId(request.connector, request.tool) ?? request.tool;
+    // one time limit for the start and the call together, not one each
+    let deadline: number | undefined;
     try {
-      return await gate(`${launch.cli} app-server (connector call)`, () => withAppServer(launch, timeoutMs, async (server): Promise<ConnectorHostResult> => {
-        const auth = await open(server);
-        if (auth === "none") return signIn(name);
-        if (auth === "key") return signIn(name, "this Codex sign-in is an API key, which carries no ChatGPT apps");
-        const threadId = await startThread(server);
-        try {
-          const result = await server.request("mcpServer/tool/call", { server: CODEX_APPS_SERVER, threadId, tool, arguments: request.arguments });
-          return chatgptAppsResult(result);
-        } catch (error) {
-          const why = error instanceof Error ? error.message : String(error);
-          if (error instanceof RpcError && SIGN_IN_ERROR.test(why)) return signIn(name);
-          throw error;
-        }
-      }));
+      return await pool.use(
+        { principalId: request.principalId, accountKey: request.account.key },
+        `${launch.cli} app-server (connector call)`,
+        () => {
+          deadline = Date.now() + timeoutMs;
+          return openServer(launch);
+        },
+        async (server, warm): Promise<PoolWork<ConnectorHostResult>> => {
+          const mark = (result: ConnectorHostResult): ConnectorHostResult => (warm ? { ...result, warm: true } : result);
+          return bounded(server, deadline === undefined ? timeoutMs : Math.max(1, deadline - Date.now()), async () => {
+            // the sign-in is read on every call: a warm server never answers for a sign-in that changed
+            const read = await server.request("account/read", { refreshToken: false }) as { account?: unknown } | undefined;
+            const auth = codexAccountAuth(read?.account === undefined ? undefined : read.account);
+            if (auth === "none") return { value: mark(signIn(name)), keep: false };
+            if (auth === "key") return { value: mark(signIn(name, "this Codex sign-in is an API key, which carries no ChatGPT apps")), keep: false };
+            const threadId = await startThread(server);
+            try {
+              const result = await server.request("mcpServer/tool/call", { server: CODEX_APPS_SERVER, threadId, tool, arguments: request.arguments });
+              return { value: mark(chatgptAppsResult(result)), keep: true };
+            } catch (error) {
+              const why = error instanceof Error ? error.message : String(error);
+              if (error instanceof RpcError && SIGN_IN_ERROR.test(why)) return { value: mark(signIn(name)), keep: false };
+              if (error instanceof RpcError) return { value: mark({ text: `Codex did not run ${tool} of ${name}: ${why}`, isError: true }), keep: true };
+              // the call was sent: a server gone before it answered may have run it
+              if (why !== "timeout") return { value: mark({ text: `Codex stopped before ${name} answered, so its result is unknown.`, isError: true }), keep: false };
+              throw error;
+            }
+          });
+        },
+      );
     } catch (error) {
       const why = error instanceof Error ? error.message : String(error);
       if (why === "timeout") return { text: `${name} did not answer in time, so its result is unknown.`, isError: true };
@@ -271,7 +330,10 @@ export function createCodexConnectorHost(deps: CodexConnectorHostDeps): CodexCon
       return chatgptAppsDescribe(connector, tool);
     },
     listApps,
-    close() {
+    stopPrincipal: (principalId, accountKey) => pool.stopPrincipal(principalId, accountKey),
+    poolStats: () => pool.stats(),
+    async close() {
+      await pool.close();
       for (const child of running) {
         try { child.kill(); } catch { /* already gone */ }
       }

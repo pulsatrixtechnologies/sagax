@@ -6,6 +6,7 @@ import { ATTACHMENTS_DIR } from "../attachments/attachments.ts";
 import { DATA_DIR } from "../config.ts";
 import { claudeUserSkillsDir, claudeUserSkillsEnabled, forgetClaudeUserSkillsDir } from "../turn-settings.ts";
 import { deferConnectorsPatch } from "./defer-connectors-patch.ts";
+import { keepHubRows } from "./turn-connectors.ts";
 import { dispatchedConnectorPlan } from "../connectors/turn-plan.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
@@ -246,7 +247,8 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       const connectorPlan = state.connectorPlan;
       deferConnectorsPatch(() => {
         store.patchTask(botId, threadId, {
-          connectors: turnConnectorsFor(connectorsBot, instance, speaker, integrations, principal, customMcp, threadId, connectorPlan),
+          // #3357: the conversation's call_connector counters carry over
+          connectors: keepHubRows(store.taskByThread(botId, threadId)?.connectors, turnConnectorsFor(connectorsBot, instance, speaker, integrations, principal, customMcp, threadId, connectorPlan)),
         });
         turnTrace(threadId, "connectors-patched");
       });

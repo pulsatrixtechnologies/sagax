@@ -918,7 +918,7 @@ import { grokAccountReach, grokReachConnectorNames } from "./drivers/acp/grok-to
 import { GROK_CLOUD_CONNECTORS } from "../shared/grok-cloud-connectors.ts";
 import { probeFullDiskAccess } from "./imessage/imessage-permissions.ts";
 import { connectorSetupOwner, createConnectorSetupInternalRoutes, createConnectorSetupProofs, createConnectorSetupRoutes } from "./routes/connector-setup.ts";
-import { createCallConnectorInternalRoute, createConnectorsInternalRoutes } from "./routes/internal-connectors.ts";
+import { createCallConnectorInternalRoute, createConnectorsInternalRoutes, type CallConnectorRan } from "./routes/internal-connectors.ts";
 import { connectorReauthFailure, connectorReauthText, type ConnectorSetupView } from "../shared/connector-setup.ts";
 import { streamTerminalAttachment } from "./terminal-resources/adapters/personal.ts";
 import { parseTerminalDestinationPick } from "../shared/terminal-request.ts";
@@ -955,7 +955,7 @@ import { claudeAiConnectorsOwn, createConnectorPlanForTurn } from "./connectors/
 import { forgetTurnReach,
   registerReachProvider } from "./turns/turn-reach.ts";
 import { setTurnActiveProfileResolver } from "./turns/turn-active-profile.ts";
-import { turnConnectorsRecord } from "./turns/turn-connectors.ts";
+import { turnConnectorsRecord, withHubCall } from "./turns/turn-connectors.ts";
 import { remoteSessionReach } from "./remote-support/remote-session-reach.ts";
 import { createHarnessCommandRoutes, HarnessCommandCatalog, typedCommandForTurn, unavailableCommandError } from "./harness-commands.ts";
 import { ProviderAuthSessions } from "./engines/provider-auth-sessions.ts";
@@ -1471,7 +1471,7 @@ import { ConnectorRegistry } from "./connectors/registry.ts";
 import { claudeAiProvider } from "./connectors/providers/claude-ai.ts";
 import { grokComProvider } from "./connectors/providers/grok-com.ts";
 import { chatgptAppsProvider } from "./connectors/providers/chatgpt-apps.ts";
-import { createConnectorHub } from "./connectors/hub.ts";
+import { createConnectorHub, retireConnectorHosts } from "./connectors/hub.ts";
 import { testConnectorHostFromEnv } from "./connectors/hosts/test-host.ts";
 import { createGrokConnectorHost } from "./connectors/hosts/grok-host.ts";
 import { createClaudeConnectorHost } from "./connectors/hosts/claude-host.ts";
@@ -13080,7 +13080,15 @@ const engineLogins = IDENTITY.kind === "perspicax"
       resumeEngineReconnectForPerson(person, engineName);
     },
     // #3344: the person's connector registry follows their sign-ins
-    onConnectorAccountChanged: (person, change) => { void connectorRegistry.followSignIn(person, change).catch(reportBackgroundError); }
+    onConnectorAccountChanged: (person, change) => {
+      void connectorRegistry.followSignIn(person, change).catch(reportBackgroundError);
+    },
+    // #3357: a warm connector host never outlives the sign-in it started on.
+    // Only that account's, and only on a real change (never a reach probe);
+    // a call still running finishes with its real result.
+    onSignInChanged: (person, change) => {
+      void retireConnectorHosts(connectorHub, connectorRegistry, person, change).catch(reportBackgroundError);
+    }
   })
   : null;
 /** Slice 4: shared sidebar sections (section-channels.ts), organization mode. */
@@ -22691,7 +22699,9 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
         access: { reason: "sign_in", engine: name, instanceId: engine.instanceId, botId: owner.bot.id, botName: owner.bot.name, ownerPrincipalId: principalId, payerPrincipalId: principalId }
       });
       return true;
-    }
+    },
+    // #3357: the host's model round, on the calling thread
+    ran: connectorCallRan
   }),
   // open_connector_setup (server/routes/connector-setup.ts)
   createConnectorSetupInternalRoutes({
@@ -28712,10 +28722,59 @@ function codexConnectorLaunch(principalId: string, accountId: string): CodexConn
   delete env.OPENAI_API_KEY;
   return { cli: typeof config.cli === "string" && config.cli.trim() ? config.cli : "codex", env };
 }
+/** #3357 (L14): the memory guard of the warm connector hosts: while memory
+ * reads high, a host's process ends with its call instead of idling. */
+function connectorHostMemoryOk(): boolean {
+  const level = memoryWatch.current();
+  return level !== "high" && level !== "critical";
+}
+/** #3357 (L14): a call_connector call reached its host. The provider's
+ * small model round is booked as usage on the calling thread, on the
+ * person's own sign-in of that provider, and the conversation's Connectors
+ * record counts the call (the dev panel). */
+function connectorCallRan(call: CallConnectorRan): void {
+  const { botId, threadId, principalId, account, connector, result } = call;
+  const usage = result.usage;
+  if (usage) {
+    const bot = store.bot(botId);
+    const run = activeRoutineRunForThread(threadId);
+    const org = IDENTITY.kind === "perspicax";
+    bookTurnUsage({
+      botId,
+      botName: bot?.name ?? botId,
+      threadId,
+      instanceId: folderInstance(account.driver, account.instanceId) ?? account.instanceId,
+      driverKind: account.driver,
+      model: usage.model,
+      input: usage.input,
+      output: usage.output,
+      ...(usage.cachedInput ? { cachedInput: usage.cachedInput } : {}),
+      costUsd: usage.costUsd,
+      trigger: run
+        ? { kind: "routine", routineId: run.routineId, ...(org ? { runAsPrincipalId: principalId } : {}) }
+        : org ? { kind: "user", principalId } : { kind: "owner" },
+      ...(org ? { access: "subscription" as const, payerPrincipalId: principalId } : {})
+    });
+  }
+  const task = store.taskByThread(botId, threadId);
+  if (task) {
+    store.patchTask(botId, threadId, {
+      connectors: withHubCall(task.connectors, {
+        provider: account.provider,
+        name: connector.name,
+        isError: result.isError === true,
+        warm: result.warm === true,
+        ...(usage ? { input: usage.input, output: usage.output } : {}),
+        at: Date.now()
+      })
+    });
+  }
+}
 /** #3353 (L10): the ChatGPT apps of a person's own Codex sign-in, read and
  * called through a short app-server on that sign-in, with no model. */
 const codexConnectorHost = createCodexConnectorHost({
   launch: (principalId, account) => codexConnectorLaunch(principalId, account.instanceId),
+  pool: { memoryOk: connectorHostMemoryOk },
 });
 const connectorRegistry = new ConnectorRegistry({
   dataDir: DATA_DIR,
@@ -28769,6 +28828,7 @@ const connectorHub = createConnectorHub([
       const instanceId = folderInstance("grokAgent", account.instanceId);
       return (instanceId ? engineLogins?.grokConnectorLaunch(principalId, instanceId, account.slot) : null) ?? undefined;
     },
+    pool: { memoryOk: connectorHostMemoryOk },
   }),
   createClaudeConnectorHost({
     // the same sign-in the registry read the person's claude.ai connectors from
@@ -34497,6 +34557,8 @@ const gracefulShutdown = createGracefulShutdown({
       tunnelListener?.close();
     },
     async () => { await videoGenerations.close(); await managedDesktop.close(); await registry.disposeAll(); },
+    // #3357: the warm connector hosts end with the server
+    async () => { await connectorHub.close(); },
     // Every open DuckDB database flushes and closes; the next start reopens them.
     async () => { await dataEngine.closeAll().catch((error) => console.warn("data: close failed", error)); },
     async () => {

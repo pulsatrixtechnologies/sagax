@@ -883,7 +883,10 @@ function createRemoteSessionOps(env: RemoteSessionEnv) {
     },
     /** The technician says which OS it is (the computer could not tell, or it
      * told wrong): the card is read again with that OS's commands. */
-    async exec(input: { principalId: string; botId: string; threadId: string; id?: string; command: string; timeoutMs?: number }): Promise<RemoteExecResult | { error: string }> {
+    /** `actor`: the bot that asked for the command when it is not the
+     * session's own (a bot computer's session serves every bot of the
+     * person, #3393); the audit names it. */
+    async exec(input: { principalId: string; botId: string; threadId: string; id?: string; command: string; timeoutMs?: number; actor?: string }): Promise<RemoteExecResult | { error: string }> {
       const session = ops.target(input);
       if (!session) return { error: "No remote session is connected in this conversation." };
       if (!tunnelOf(session)) return { error: "This server does not have the tunnel of that session (it was opened outside Sagax). Open it with remote_support_open." };
@@ -900,7 +903,7 @@ function createRemoteSessionOps(env: RemoteSessionEnv) {
       // Audit what ran (never the output): a read-only command needs no card;
       // a write that reached here was approved (the route gates it first).
       const readOnly = remoteCommandReadOnly(command, { os: session.os, known: !session.osGuessed });
-      actionsAudit?.write({ at: now(), sessionId: session.id, principalId: session.principalId, botId: session.botId, kind: "exec", command, readOnly, approved: !readOnly, exitCode: result.code });
+      actionsAudit?.write({ at: now(), sessionId: session.id, principalId: session.principalId, botId: input.actor?.trim() || session.botId, kind: "exec", command, readOnly, approved: !readOnly, exitCode: result.code });
       return {
         host: hostLabel(session),
         os: session.os,

@@ -382,3 +382,147 @@ describe("hosts shared with the bot, no pick", () => {
     expect(exec).not.toHaveBeenCalled();
   });
 });
+
+// #3393: one unattended session per person and host, shared by every bot of
+// that person; an ended session is replaced; a command that did not run is
+// an error with its reason.
+describe("the person's session on a host (#3393)", () => {
+  const BOB_PERSON = "bob@example.test";
+
+  function shared(opts: { endAt?: string; failReused?: "ended" | "expired" | "live" | "no-tunnel" } = {}) {
+    const dir = mkdtempSync(path.join(tmpdir(), "host-computer-"));
+    dirs.push(dir);
+    const store = createHostComputerStore({ dataDir: dir, now: () => NOW });
+    // session id -> the bot whose row it is, its end time, still connected
+    const rows = new Map<string, { botId: string; principalId: string; endAt: string; connected: boolean }>();
+    let opened = 0;
+    const open = vi.fn(async (viewer: { principalId: string }, _hostId: string, options: { seatFor?: { botId: string } }) => {
+      opened += 1;
+      const session = `s${opened}`;
+      rows.set(session, { botId: options.seatFor?.botId ?? "primary", principalId: viewer.principalId, endAt: opts.endAt ?? new Date(NOW + 30 * 60_000).toISOString(), connected: true });
+      return { ok: true as const, code: `K7QMN${opened}`, botId: options.seatFor?.botId ?? "primary", threadId: "t", session };
+    });
+    const target = ({ principalId, botId, id }: { principalId: string; botId: string; id?: string }) => {
+      const found = id ? rows.get(id) : undefined;
+      return found && found.connected && found.botId === botId && found.principalId === principalId ? { id: id!, os: "linux", endAt: found.endAt } : null;
+    };
+    const exec = vi.fn(async (input: { principalId: string; botId: string; id?: string; command: string; actor?: string }) => {
+      if (!target({ principalId: input.principalId, botId: input.botId, id: input.id })) return { error: "No remote session is connected in this conversation." };
+      if (opts.failReused && input.id === "s1" && exec.mock.calls.length > 1) {
+        if (opts.failReused === "no-tunnel") return { error: "This server does not have the tunnel of that session." };
+        // ssh exit 255 with no output: the session ended at the server, or
+        // the command itself (or a dropped tunnel mid-run) gave 255
+        if (opts.failReused === "ended") rows.get("s1")!.connected = false;
+        if (opts.failReused === "expired") rows.get("s1")!.endAt = new Date(NOW - 1_000).toISOString();
+        return { error: "The remote computer did not answer (the tunnel is down or the session ended)." };
+      }
+      return { host: "FS-01", os: "linux" as const, exitCode: 0, stdout: `${input.botId}\n`, stderr: "", timedOut: false };
+    });
+    const close = vi.fn(async (_principalId: string, _botId: string, id: string) => { const found = rows.get(id); if (found) found.connected = false; });
+    const router = createHostComputerRouter({
+      store,
+      hosts: {
+        list: async () => ({ available: true as const, hosts: [row(FS01, "FS-01")] }),
+        open,
+        installCode: async () => ({ ok: false as const, error: "unavailable" as const, message: "no" }),
+      },
+      sessions: { target, exec, screen: async () => null, close, markQuiet: vi.fn() },
+      botThread: (botId) => `t-${botId}`,
+      botName: () => "Bot",
+      access: () => "always",
+      consumeApproval: () => false,
+      raiseQuestion: () => "req-1",
+      now: () => NOW,
+      sleep: () => Promise.resolve(),
+    });
+    for (const person of [ALICE, BOB_PERSON]) store.update(person, FS01, { botComputer: true });
+    const run = (principalId: string, botId: string) => router.call({ principalId, botId, threadId: `t-${botId}`, action: "exec", command: "whoami", host: "FS-01" });
+    return { router, open, exec, close, rows, run };
+  }
+
+  it("every bot of the same person reaches the host through the one open session", async () => {
+    const { open, exec, run } = shared();
+    for (const bot of ["sagax-test", "ember", "architect"]) {
+      const out = await run(ALICE, bot);
+      expect(out).not.toHaveProperty("isError");
+      expect(JSON.parse(out.text)).toMatchObject({ where: "FS-01", exitCode: 0 });
+    }
+    expect(open).toHaveBeenCalledTimes(1);
+    // the session row is the opener's: every exec goes through it
+    expect(exec.mock.calls.map(([input]) => [input.id, input.botId])).toEqual([["s1", "sagax-test"], ["s1", "sagax-test"], ["s1", "sagax-test"]]);
+    // the audit names the bot that asked for each command, not the opener
+    expect(exec.mock.calls.map(([input]) => input.actor)).toEqual(["sagax-test", "ember", "architect"]);
+  });
+
+  it("never shares a session with another person", async () => {
+    const { open, exec, run } = shared();
+    await run(ALICE, "sagax-test");
+    await run(BOB_PERSON, "ember");
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(exec.mock.calls.map(([input]) => [input.principalId, input.id])).toEqual([[ALICE, "s1"], [BOB_PERSON, "s2"]]);
+  });
+
+  it("a session past its end time is closed and the next exec opens a new one", async () => {
+    const { open, exec, close, run } = shared({ endAt: new Date(NOW - 1_000).toISOString() });
+    await run(ALICE, "sagax-test");
+    const out = await run(ALICE, "perspicax-core");
+    expect(JSON.parse(out.text)).toMatchObject({ exitCode: 0 });
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(close).toHaveBeenCalledWith(ALICE, "sagax-test", "s1");
+    expect(exec.mock.calls.at(-1)![0]).toMatchObject({ id: "s2", botId: "perspicax-core" });
+  });
+
+  // The session was live when the command was sent: dead after a 255 means
+  // it died during the command, which may have run. Never run it again; close
+  // the dead session so the next call opens a new one.
+  for (const variant of ["ended", "expired"] as const) {
+    it(`a 255 on a session that ${variant === "ended" ? "closed" : "passed its end time"} during the command runs it once in all, closes the session, and the next call opens a new one`, async () => {
+      const { open, exec, close, run } = shared({ failReused: variant });
+      await run(ALICE, "sagax-test");
+      const out = await run(ALICE, "ember");
+      expect(out).toMatchObject({ isError: true });
+      expect(out.text).toMatch(/^The connection to FS-01 dropped during the command, so it may have run: /);
+      expect(exec.mock.calls.map(([input]) => [input.id, input.command, input.actor])).toEqual([["s1", "whoami", "sagax-test"], ["s1", "whoami", "ember"]]);
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(close).toHaveBeenCalledWith(ALICE, "sagax-test", "s1");
+      const next = await run(ALICE, "architect");
+      expect(JSON.parse(next.text)).toMatchObject({ exitCode: 0 });
+      expect(open).toHaveBeenCalledTimes(2);
+      expect(exec.mock.calls.at(-1)![0]).toMatchObject({ id: "s2", actor: "architect" });
+    });
+  }
+
+  it("a reused session with no tunnel here is replaced: the command was never sent", async () => {
+    const { open, exec, close, run } = shared({ failReused: "no-tunnel" });
+    await run(ALICE, "sagax-test");
+    const out = await run(ALICE, "ember");
+    expect(JSON.parse(out.text)).toMatchObject({ exitCode: 0 });
+    expect(close).toHaveBeenCalledWith(ALICE, "sagax-test", "s1");
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(exec.mock.calls.map(([input]) => input.id)).toEqual(["s1", "s1", "s2"]);
+  });
+
+  it("a 255 on a session that is still live is neither run again nor a reason to close it", async () => {
+    const { open, exec, close, run } = shared({ failReused: "live" });
+    await run(ALICE, "sagax-test");
+    const out = await run(ALICE, "ember");
+    expect(out).toMatchObject({ isError: true });
+    expect(out.text).toMatch(/^The connection to FS-01 dropped during the command, so it may have run: The remote computer did not answer/);
+    expect(exec.mock.calls.map(([input]) => input.id)).toEqual(["s1", "s1"]);
+    expect(close).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledTimes(1);
+    // the session stays the person's: the next call reuses it
+    await run(ALICE, "architect");
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it("a command that did not run is an error naming the host and the reason", async () => {
+    const { exec, run } = shared();
+    await run(ALICE, "sagax-test");
+    exec.mockImplementation(async () => ({ error: "This server does not have the tunnel of that session." }));
+    const out = await run(ALICE, "ember");
+    expect(out).toMatchObject({ isError: true });
+    expect(out.text).toMatch(/^The command did not run on FS-01: This server does not have the tunnel/);
+    expect(out.text).not.toMatch(/exit code/);
+  });
+});

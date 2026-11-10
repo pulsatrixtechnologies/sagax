@@ -9,6 +9,7 @@ import { transcriptLookups } from "@/lib/transcript-derivations";
 import type { EffectivePlace } from "@/lib/place";
 import { t } from "@/lib/i18n";
 import { ChatRowsContext, type ChatRows } from "./types";
+import { ChatBusyContext } from "../MessageActions";
 import { MessagesList } from "./MessagesList";
 import { noop } from "./sideChat";
 import { useStreamAnchor } from "./useStreamAnchor";
@@ -87,7 +88,7 @@ export function StreamSegment({ task, first, rows, place, engine, aroundId, onQu
   const focus = focusAll?.threadId === task.threadId ? focusAll : null;
   const ids = useMemo(() => new Set(messages.map((message) => message.id)), [messages]);
   const segmentRows = useMemo<ChatRows>(() => ({
-    ...rows, threadId: task.threadId, busy: true, hasMore: transcript.hasMore, focus, onBranch: (messageId: string) => ids.has(messageId),
+    ...rows, threadId: task.threadId, hasMore: transcript.hasMore, focus, onBranch: (messageId: string) => ids.has(messageId),
   }), [rows, task.threadId, transcript.hasMore, focus, ids]);
   const reply = useCallback((message: Message) => onQuote(message, task.threadId), [onQuote, task.threadId]);
   useFocusMessage(task.threadId, transcript.reached);
@@ -103,7 +104,7 @@ export function StreamSegment({ task, first, rows, place, engine, aroundId, onQu
         </div>
       )}
       {transcript.failed && <p className="text-center text-[12px] text-ink-tertiary">{t("stream.topicFailed")}</p>}
-      <ChatRowsContext.Provider value={segmentRows}>
+      <ChatRowsContext.Provider value={segmentRows}><ChatBusyContext value={true}>
         <MessagesList
           messages={messages}
           transcript={messages}
@@ -122,7 +123,7 @@ export function StreamSegment({ task, first, rows, place, engine, aroundId, onQu
           onReply={reply}
           seen={null}
         />
-      </ChatRowsContext.Provider>
+      </ChatBusyContext></ChatRowsContext.Provider>
     </section>
   );
 }

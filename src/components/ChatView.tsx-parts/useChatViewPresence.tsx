@@ -146,11 +146,16 @@ export function useChatViewPresence({
 
   // regenerate = fork the last user message with the same text — reuses the
   // existing branch machinery, so the old answer stays reachable via ‹ ›
+  // The turn is read when chosen, not a dependency: a turn starting or
+  // ending keeps this callback, so the last answer it is handed to does not
+  // render again (#3323); the menu entry itself waits for the turn (IdleOnly).
+  const busyNow = useRef(bot.busy);
+  useLayoutEffect(() => { busyNow.current = bot.busy; }, [bot.busy]);
   const regenerate = useCallback(() => {
-    if (lastUserMessage?.text && !bot.busy && !lastUserMessage.id.startsWith("optimistic-")) {
+    if (lastUserMessage?.text && !busyNow.current && !lastUserMessage.id.startsWith("optimistic-")) {
       dispatch({ type: "editMessage", botId: bot.id, threadId: bot.threadId, messageId: lastUserMessage.id, text: lastUserMessage.text });
     }
-  }, [lastUserMessage, bot.busy, bot.id, bot.threadId, dispatch]);
+  }, [lastUserMessage, bot.id, bot.threadId, dispatch]);
 
   const currentLink = profile.tasks?.find((task) => task.threadId === bot.threadId)?.link;
   const threadLink = useMemo(() => canWrite !== false

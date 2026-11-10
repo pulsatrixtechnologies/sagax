@@ -1,4 +1,4 @@
-import { liveToolIds } from "@/lib/tool-liveness";
+import { useLiveToolIds } from "@/hooks/use-live-tool-ids";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type Dispatch } from "react";
 import {
   visibleMessages,
@@ -96,7 +96,7 @@ export function useChatViewTranscript({
   // flag, an engine with the agents tools, and a bot that can take a message
   // now — plus a run with something to keep. Incomplete tools only count as
   // running while they belong to the live turn.
-  const liveTools = useMemo(() => liveToolIds(messages, bot), [messages, bot.busy, bot.turnStartedAt]);
+  const liveTools = useLiveToolIds(messages, bot);
   const recordedRun = useMemo(() => runSteps(messages, liveTools), [messages, liveTools]);
   const recordedRunCounts = runSummary(recordedRun);
   const engineSupportsAgents = Boolean(
@@ -177,8 +177,8 @@ export function useChatViewTranscript({
   const dmIds = useStoreSelector((current) => current.groups.filter((group) => group.dm && !group.peopleDm).map((group) => group.id), shallowEqual);
   const botDmIds = useMemo(() => new Set(dmIds), [dmIds]);
   const rows = useMemo<ChatRows>(
-    () => ({ botId: bot.id, threadId: bot.threadId, botName: bot.name, viewerName, voiceId: bot.voice, tts, localVoice, busy, liveTools, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds, bubbleStyle: coloredUserBubble }),
-    [bot.id, bot.threadId, bot.name, viewerName, bot.voice, tts, localVoice, busy, liveTools, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds, coloredUserBubble],
+    () => ({ botId: bot.id, threadId: bot.threadId, botName: bot.name, viewerName, voiceId: bot.voice, tts, localVoice, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds, bubbleStyle: coloredUserBubble }),
+    [bot.id, bot.threadId, bot.name, viewerName, bot.voice, tts, localVoice, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds, coloredUserBubble],
   );
   // Where this conversation works, for the place icon on screen and page tools.
   const place = effectivePlace(bot, bot.tasks?.find((task) => task.threadId === bot.threadId));

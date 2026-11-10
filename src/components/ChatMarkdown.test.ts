@@ -541,6 +541,19 @@ describe("#Title thread links in markdown", () => {
     expect(markup).toMatch(/role="heading" aria-level="1">QA PR 245<a /);
   });
 
+  // #3323: a heading's "## " cannot hold a thread link, so that bubble does
+  // not follow the thread list (opening or renaming a thread elsewhere).
+  it("reads the thread list only for a text that can hold a thread link", () => {
+    let reads = 0;
+    const value = { currentBotId: "scout", get threads() { reads++; return threads; } };
+    const draw = (text: string) => renderToStaticMarkup(createElement(StoreProvider, null,
+      createElement(ThreadRefsContext.Provider, { value }, createElement(ChatMarkdown, { text }))));
+    draw("## A heading\n\nStill # no thread link, and C# stays plain.");
+    expect(reads).toBe(0);
+    draw("Tracked in #QA PR 245.");
+    expect(reads).toBe(1);
+  });
+
   it("does nothing without any visible threads", () => {
     const markup = renderToStaticMarkup(createElement(StoreProvider, null, createElement(ChatMarkdown, { text: "#QA PR 245" })));
     expect(markup).not.toContain("data-thread-link");

@@ -34,10 +34,10 @@ export interface ChatRows {
   /** A paired Mac reads aloud with its own voices. That choice lives on the
    * device, not in the store, so it is read here once per store event. */
   localVoice: boolean;
-  /** Tool activity ids that belong to the live turn (not historical receipts). */
-  liveTools: ReadonlySet<string>;
-  /** Editing, regenerating and switching versions wait for the turn. */
-  busy: boolean;
+  // Whether the turn runs and which tool calls are live are not here: the
+  // few rows that show them read ChatBusyContext (MessageActions) and
+  // LiveToolsContext (use-live-tool-ids), so a turn starting, ending or
+  // running a new tool re-renders those rows and not every message.
   /** Older messages remain on the server, beyond the page the thread holds. */
   hasMore: boolean;
   /** Every bot, for who wrote a relayed line or sits across a bot⇄bot chip. */

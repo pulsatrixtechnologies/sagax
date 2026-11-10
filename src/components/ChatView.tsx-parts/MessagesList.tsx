@@ -83,7 +83,7 @@ export const MessagesList = memo(function MessagesList({
   const config = useStoreSelector((current) => current.config);
   // read when a chip is clicked, so a store event does not render the list
   const getState = useStoreGetter();
-  const { botId, threadId, botName, busy, hasMore, bots, focus, showToolCalls, locale, dispatch, botDmIds } = useChatRows();
+  const { botId, threadId, botName, hasMore, bots, focus, showToolCalls, locale, dispatch, botDmIds } = useChatRows();
   const showThreads = useShowThreads();
   const appleMobileWeb = isAppleMobileWebClient();
   const selfColor = bots.find((candidate) => candidate.id === botId)?.color;
@@ -256,7 +256,6 @@ export const MessagesList = memo(function MessagesList({
           botId={botId}
           threadId={threadId}
           botName={botName}
-          busy={busy}
           hasMore={hasMore}
           engine={engine}
           lookups={lookups}

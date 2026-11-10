@@ -1,5 +1,6 @@
 import { StepBoundary, stepFallbackText } from "../MessageBoundary";
-import type { ReactNode } from "react";
+import { use, type ReactNode } from "react";
+import { ChatBusyContext } from "@/components/MessageActions";
 import { openBot, openThread, type Action, type Bot, type ConfigStatus, type Group, type InstanceInfo, type Message } from "@/state/store";
 import { isCancelledTranscriptRow } from "../../../shared/client-cancel";
 import { isPureLeakedSystemHarnessMessage } from "../../../shared/system-message-guard.ts";
@@ -82,7 +83,6 @@ export function MessagesListItem({
   botId,
   threadId,
   botName,
-  busy,
   hasMore,
   engine,
   lookups,
@@ -124,7 +124,6 @@ export function MessagesListItem({
   botId: string;
   threadId: string;
   botName: string;
-  busy: boolean;
   hasMore: boolean;
   engine: InstanceInfo | undefined;
   lookups: TranscriptLookups;
@@ -390,11 +389,11 @@ export function MessagesListItem({
         return <ConversationRoutineToggle message={m} />;
       case "call":
         // a finished Live call's record; its spoken lines stay inline
-        return m.call ? <CallRecordRow message={m} transcript={transcript} botName={botName} busy={busy} hasMore={hasMore} /> : null;
+        return m.call ? <BusyCallRecordRow message={m} transcript={transcript} botName={botName} hasMore={hasMore} /> : null;
       case "activity": {
         // a Data receipt first: its title is a person's words, never a status or error marker
         if (m.dataResult) return <DataResultChip message={m} />;
-        if (isStatusActivity(m)) return <StatusActivityRow message={m} transcript={transcript} busy={busy} />;
+        if (isStatusActivity(m)) return <BusyStatusActivityRow message={m} transcript={transcript} />;
         // a failed turn is an error, not a tool run — render it as one.
         // bot⇄bot comm chips and opened-thread chips stay because they
         // link to another conversation.
@@ -501,4 +500,14 @@ export function MessagesListItem({
       </div>
     </VirtualRow>
   );
+}
+
+// A call record and a status line follow the turn (a live call, a step still
+// running): they read it themselves, so the other rows do not.
+function BusyCallRecordRow(props: Omit<Parameters<typeof CallRecordRow>[0], "busy">) {
+  return <CallRecordRow {...props} busy={use(ChatBusyContext)} />;
+}
+
+function BusyStatusActivityRow(props: Omit<Parameters<typeof StatusActivityRow>[0], "busy">) {
+  return <StatusActivityRow {...props} busy={use(ChatBusyContext)} />;
 }

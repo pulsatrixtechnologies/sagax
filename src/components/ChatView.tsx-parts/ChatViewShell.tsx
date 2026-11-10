@@ -26,6 +26,8 @@ import { ExchangeColumnProvider } from "../BotExchangeChip";
 import { TranscriptAnnouncer } from "../TranscriptAnnouncer";
 import { ThreadLinkContext } from "@/components/ThreadLinkMenu";
 import { ChatRowsContext } from "./types";
+import { ChatBusyContext } from "../MessageActions";
+import { LiveToolsContext } from "@/hooks/use-live-tool-ids";
 import { MessagesList } from "./MessagesList";
 import { EmptyChat } from "./chips";
 import { FreshTopicDivider, PreviousTopicsLine, StreamEarlierTopics, TopicDivider } from "./stream";
@@ -51,7 +53,7 @@ export function ChatViewShell(m: Record<string, any>) {
     scrollRef, transcriptRef, topSentinelRef, transcriptKey, following, followRef,
     windowedMessages, hiddenCount, laterCount, olderPending, showLater, jumpToLatest, scrollHandlers,
     runOverlayRef, runCardOpen, lastBotTextId, unreadDivider,
-    mentionPeers, showToolCalls, rows, place,
+    mentionPeers, showToolCalls, rows, place, liveTools, busy,
     currentTask, streamOn, streamHasEarlier, askedFresh, resumeTopic, newTopicBack, backFromNewTopic, streamReach, clearStreamReach,
     quoteEarlier, streamEngine, streamDrawn, earlierConversations, conversationsOpen, toggleConversations,
     editingId, setEditingId, startEdit, cancelEdit, submitEdit,
@@ -183,7 +185,7 @@ export function ChatViewShell(m: Record<string, any>) {
             <div ref={topSentinelRef} className="h-2 w-full pointer-events-none" aria-hidden="true" />
           ) : null}
           {windowedMessages.length === 0 && !bot.busy && (!streamHasEarlier || !streamDrawn) && <EmptyChat bot={bot} />}
-          <ChatRowsContext.Provider value={rows}>
+          <ChatRowsContext.Provider value={rows}><LiveToolsContext value={liveTools}><ChatBusyContext value={busy}>
             <ConversationGalleryProvider>
             <MessagesList
               confidential={confidential}
@@ -207,7 +209,7 @@ export function ChatViewShell(m: Record<string, any>) {
               seen={seenRow}
             />
             </ConversationGalleryProvider>
-          </ChatRowsContext.Provider>
+          </ChatBusyContext></LiveToolsContext></ChatRowsContext.Provider>
           {laterCount > 0 && (
             <div className="flex justify-center">
               <button

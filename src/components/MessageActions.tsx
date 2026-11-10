@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, use, useEffect, useRef, useState, type ReactNode } from "react";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { cn } from "@/lib/cn";
 import { HOVER_ACTION_BUTTON, HOVER_ICON, MessageHoverActions, MessageMenuItem as MenuEntry, type HoverReactions } from "./MessageHoverActions";
@@ -22,6 +22,17 @@ export type MessageMenuItem = {
    * listed in the menu's last section. */
   section?: "view";
 };
+
+/** Whether the chat's turn is running, apart from the row values every
+ * message reads: a turn starting or ending re-renders only the few controls
+ * that wait for it (Edit, Regenerate, the version arrows), not every row. */
+export const ChatBusyContext = createContext(false);
+
+/** What only works between turns: left out while the chat's turn runs. It
+ * reads the turn itself, so the row around it does not. */
+export function IdleOnly({ children }: { children: ReactNode }) {
+  return use(ChatBusyContext) ? null : children;
+}
 
 /** Where a message row starts: the element that hovering, focusing or
  * tapping reveals the actions for. */

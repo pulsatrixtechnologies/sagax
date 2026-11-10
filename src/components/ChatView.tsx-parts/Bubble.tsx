@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, use, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -14,6 +14,7 @@ import {
 import { cancelLocalSend } from "@/lib/send-cancel";
 import { restoreComposerDraft } from "@/lib/drafts";
 import { MessageBar, MessageMenuItem } from "../MessageBar";
+import { ChatBusyContext, IdleOnly } from "../MessageActions";
 import { HOVER_ICON } from "../MessageHoverActions";
 import { useHoverDwell } from "@/hooks/use-hover-dwell";
 import { useSpeech } from "@/lib/tts/useSpeech";
@@ -148,7 +149,7 @@ export const Bubble = memo(function Bubble({
 }) {
   "use memo";
   const bubbleWidths = useChatBubbleWidthClasses();
-  const { botId, threadId, botName, viewerName, voiceId, tts, localVoice, busy, bots, mentionPeers, focus, dispatch, onBranch, reactionSelf, bubbleStyle } = useChatRows();
+  const { botId, threadId, botName, viewerName, voiceId, tts, localVoice, bots, mentionPeers, focus, dispatch, onBranch, reactionSelf, bubbleStyle } = useChatRows();
   // Emoji reactions (src/components/Reactions.tsx): the smiley of the hover
   // row and the head of its "…" menu, the chips under the bubble.
   const toggleReactionOn = useToggleReaction(threadId, dispatch);
@@ -228,7 +229,8 @@ export const Bubble = memo(function Bubble({
   const versionIndex = forks.findIndex((v) => v.id === message.id);
   const switchTo = (v: Message | undefined) => {
     // an edit still waiting for its server fork has no branch to switch to yet
-    if (v && !busy && !v.id.startsWith("optimistic-")) dispatch({ type: "switchBranch", botId, threadId, messageId: v.id });
+    // (VersionArrows leaves them disabled while the turn runs)
+    if (v && !v.id.startsWith("optimistic-")) dispatch({ type: "switchBranch", botId, threadId, messageId: v.id });
   };
   const userGallery = (className: string) => attachments && (
     <AttachmentGallery beneath align="end" images={attachments.images} files={attachments.files} message={{ threadId, messageId: message.id }} eager={eagerAttachments} className={className} />
@@ -263,8 +265,10 @@ export const Bubble = memo(function Bubble({
           >
             {/* editing rewinds the thread, so it waits for the turn to end —
                 same rule as the version switcher below */}
-            {message.kind === "text" && !webhookView && !hasAttachments && !busy && !message.id.startsWith("optimistic-") && (
-              <MessageMenuItem label={t("chat.editMessage")} icon={<Pencil {...HOVER_ICON} />} onSelect={() => onStartEdit(message.id)} />
+            {message.kind === "text" && !webhookView && !hasAttachments && !message.id.startsWith("optimistic-") && (
+              <IdleOnly>
+                <MessageMenuItem label={t("chat.editMessage")} icon={<Pencil {...HOVER_ICON} />} onSelect={() => onStartEdit(message.id)} />
+              </IdleOnly>
             )}
             {message.sendId && message.id.startsWith("optimistic-") && (
               <MessageMenuItem
@@ -447,8 +451,10 @@ export const Bubble = memo(function Bubble({
               )}
             </>}
           >
-            {!busy && onRegenerate && (
-              <MessageMenuItem label={t("chat.regenerate")} icon={<RefreshCw {...HOVER_ICON} />} onSelect={onRegenerate} />
+            {onRegenerate && (
+              <IdleOnly>
+                <MessageMenuItem label={t("chat.regenerate")} icon={<RefreshCw {...HOVER_ICON} />} onSelect={onRegenerate} />
+              </IdleOnly>
             )}
             <MessageMenuItem
               label={pinned ? t("chat.unpinMessage") : t("chat.pinMessage")}
@@ -462,32 +468,41 @@ export const Bubble = memo(function Bubble({
       <ReactionChips reactions={message.reactions} selfIds={reactionSelf} bots={bots} end={user} onToggle={(emoji) => toggleReactionOn(message.id, emoji)} />
       {/* always laid out, only faded in: the answer above never moves (2026-10-15) */}
       {!user && !peer && message.turnRun && <TurnRunLine run={message.turnRun} visible={dwell.shown} />}
-      {forks.length > 1 && (
-        <div className="mt-1 flex items-center gap-0.5 pr-1 text-[12px] text-ink-secondary">
-          <button
-            onClick={() => switchTo(forks[versionIndex - 1])}
-            disabled={versionIndex <= 0 || busy}
-            className="rounded p-0.5 hover:bg-raised hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
-            title={t("chat.previousVersion")}
-          >
-            <ChevronLeft size={14} />
-          </button>
-          <span className="tabular-nums">
-            {versionIndex + 1}/{forks.length}
-          </span>
-          <button
-            onClick={() => switchTo(forks[versionIndex + 1])}
-            disabled={versionIndex >= forks.length - 1 || busy}
-            className="rounded p-0.5 hover:bg-raised hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
-            title={t("chat.nextVersion")}
-          >
-            <ChevronRight size={14} />
-          </button>
-        </div>
-      )}
+      {forks.length > 1 && <VersionArrows index={versionIndex} count={forks.length} onPick={(step) => switchTo(forks[versionIndex + step])} />}
     </div>
   );
 });
+
+/** "‹ 2/3 ›" under an edited message. Switching versions rewinds the
+ * thread, so it waits for the turn; the arrows read the turn themselves and
+ * the bubble above them does not render when it starts or ends. */
+function VersionArrows({ index, count, onPick }: { index: number; count: number; onPick: (step: -1 | 1) => void }) {
+  const busy = use(ChatBusyContext);
+  const pick = (step: -1 | 1) => { if (!busy) onPick(step); };
+  return (
+    <div className="mt-1 flex items-center gap-0.5 pr-1 text-[12px] text-ink-secondary">
+      <button
+        onClick={() => pick(-1)}
+        disabled={index <= 0 || busy}
+        className="rounded p-0.5 hover:bg-raised hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
+        title={t("chat.previousVersion")}
+      >
+        <ChevronLeft size={14} />
+      </button>
+      <span className="tabular-nums">
+        {index + 1}/{count}
+      </span>
+      <button
+        onClick={() => pick(1)}
+        disabled={index >= count - 1 || busy}
+        className="rounded p-0.5 hover:bg-raised hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
+        title={t("chat.nextVersion")}
+      >
+        <ChevronRight size={14} />
+      </button>
+    </div>
+  );
+}
 
 /** Who wrote a relayed line and how it arrived, above the bubble — the
  * same shape as a room's cluster label. Looked up by id, then by name for

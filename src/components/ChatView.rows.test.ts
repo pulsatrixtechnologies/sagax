@@ -198,6 +198,28 @@ describe("chat transcript rows", () => {
     expect(document.body.textContent).toContain("Read file 2, page 2");
   });
 
+  // #3323: whether the turn runs and which tool calls are live are read by
+  // the few rows that show them (the tool chips, Edit, Regenerate, the
+  // version arrows), not by every message row.
+  it("renders no message row when a turn starts, runs a new tool and ends", async () => {
+    const turn = (busy: boolean, transcript: Message[] = messages) => (current: AppState) => {
+      const pepper = current.bots.find((bot) => bot.id === "pepper")!;
+      const tasks = pepper.tasks?.map((task) => ({ ...task, busy, activity: busy ? "working" as const : "idle" as const }));
+      return { ...current, bots: current.bots.map((bot) => bot.id === "pepper"
+        ? { ...pepper, busy, turnStartedAt: running.at, tasks, messages: transcript, activeLeafId: transcript.at(-1)!.id }
+        : bot) };
+    };
+    const started = await rowRendersAfter(turn(true));
+    expect(started).toMatchObject({ botText: 0, userText: 0, speak: 0 });
+    // the running step turns live: its chip, and no other row
+    expect(started.toolChip).toBe(1);
+    const next = message("m8", running.id, { kind: "activity", tool: { name: "Read file 3" } });
+    const grown = await rowRendersAfter(turn(true, [...messages, next]));
+    expect(grown).toMatchObject({ botText: 0, userText: 0, speak: 0 });
+    expect(document.body.textContent).toContain("Read file 3");
+    expect(await rowRendersAfter(turn(false))).toMatchObject({ botText: 0, userText: 0, speak: 0 });
+  });
+
   // The separator used to follow every store event; now it follows the date.
   it("moves Today on to Yesterday after midnight, at the next store event", async () => {
     vi.setSystemTime(new Date(2026, 9, 4, 0, 30));

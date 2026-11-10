@@ -23,6 +23,7 @@ import { isTechnicalNoticeName } from "../../shared/chat-notices";
 import type { SelectedComputer } from "../../shared/execution-target";
 import type { LocaleKey } from "@/locales";
 import type { SoloGoalLine, SoloGoalLineStatus } from "../../shared/solo-goal-line";
+import type { LearnedSkillLine } from "../../shared/learned-skill-line";
 import type { FinishUntilLine, FinishUntilLineStatus } from "../../shared/finish-until-line";
 
 export type ActivityTranscriptItem =
@@ -51,6 +52,10 @@ export function statusActivity(message: Message): { kind: "recovery" | "notice" 
   // reader's language. The switch is retired (#3356); stored lines still render.
   const switched = message.kind === "activity" ? message.tool?.connectorSwitch : undefined;
   if (switched) return { kind: "notice", text: t("chat.connectorSwitch", { engine: switched.engine, connector: switched.connector }) };
+  // #3400: a learning decided in the Knowledge tab, or the daily reminder
+  // of the learnings that wait (shared/learned-skill-line.ts).
+  const learned = message.kind === "activity" ? message.tool?.learnedSkill : undefined;
+  if (learned) return { kind: "notice", text: learnedSkillLineLocalized(learned) };
   // #1372: a 1:1 goal's status (server/solo-goal.ts), in the reader's language.
   const goal = message.kind === "activity" ? message.tool?.soloGoal : undefined;
   if (goal) return { kind: "notice", text: soloGoalLineLocalized(goal) };
@@ -82,6 +87,15 @@ export function statusActivity(message: Message): { kind: "recovery" | "notice" 
   }
   if (name && isStoppedTurnName(name)) return { kind: "stopped", text: name.slice("stopped:".length).trim() };
   return null;
+}
+
+/** #3400: a learned-skill line in the reader's language. */
+export function learnedSkillLineLocalized(line: LearnedSkillLine): string {
+  if (line.event === "waiting") {
+    return line.count === 1 ? t("chat.learnedSkill.waitingOne") : t("chat.learnedSkill.waitingMany", { count: String(line.count) });
+  }
+  if (line.outcome === "declined") return t("chat.learnedSkill.declined", { name: line.name });
+  return t(line.action === "update" ? "chat.learnedSkill.updated" : "chat.learnedSkill.enabled", { name: line.name });
 }
 
 /** #3296: the live "environment is starting" row in the reader's language:

@@ -11,6 +11,7 @@ import { RoutineEditor } from "../RoutinesPage";
 import { canManageRoutineFolders, RoutineFolderList, type RoutineFolderControl } from "../routines/RoutineFolders";
 import { RoutinePanelPage } from "./RoutinePanelPage";
 import { PanelPageHeader as RoutineDetailHeader, PanelPageLayer } from "./PanelPage";
+import { useSettingsSurface } from "../SettingsPrimitives";
 
 export { RoutineDetailHeader };
 
@@ -27,6 +28,9 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
   followFocus?: boolean;
 }) {
   const { state, dispatch } = useStore();
+  // The bot's profile page (#3400): the shared group, a grey label with its
+  // actions at the right and one card of rows, as every card of the page.
+  const plain = useSettingsSurface() === "plain";
   const [editing, setEditing] = useState<Routine | "new" | { copyOf: Routine } | null>(null);
   // A new or copied routine, once created, opens its own page.
   const opened = (routine: Routine) => { setEditing(null); setNewFolder(undefined); setDetailId(routine.id); };
@@ -84,7 +88,15 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
 
   // No routine and nothing pending: no section, one quiet line. Asking the bot
   // in chat is the way in (plain text, no underline, no "New routine").
-  if (routines.length === 0 && state.routinesLoadState === "ready" && !editing) {
+  const editorLayer = (editing === "new" || (editing && "copyOf" in editing)) && (
+    <PanelPageLayer><div className="absolute inset-0 z-30 min-h-[24rem]">
+      {editing === "new"
+        ? <RoutineEditor key={`${bot.id}-new-${newFolder ?? ""}`} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} folder={newFolder} presentation="panel" onClose={() => { setEditing(null); setNewFolder(undefined); }} onDismiss={() => { setNewFolder(undefined); closePanel(); }} page={{ onCreated: opened }} />
+        : <RoutineEditor key={`${"copyOf" in editing ? editing.copyOf.id : ""}-copy`} copyOf={"copyOf" in editing ? editing.copyOf : undefined} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} presentation="panel" onClose={() => setEditing(null)} onDismiss={closePanel} page={{ onCreated: opened }} />}
+    </div></PanelPageLayer>
+  );
+  const empty = routines.length === 0 && state.routinesLoadState === "ready" && !editing;
+  if (empty && !plain) {
     const [before, after] = t("botPanel.routines.hint", { ask: "\u0000" }).split("\u0000");
     return <div data-routines-hint className="px-2 text-center text-[12px] leading-[17px] text-ink-tertiary">
       <p>
@@ -93,6 +105,37 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
         {after}
       </p>
     </div>;
+  }
+
+  const createButton = <button type="button" onClick={() => { setNewFolder(undefined); setEditing("new"); }} aria-label={t("computer.routines.create")} title={t("computer.routines.create")} className="ui-icon-button"><Plus size={15} /></button>;
+  if (plain && !upcoming) {
+    const [before, after] = t("botPanel.routines.hint", { ask: "\u0000" }).split("\u0000");
+    return <section data-routines-group="" aria-label={t("computer.tab.routines")} className="relative flex min-w-0 flex-col gap-2">
+      {/* no routine: no label and no + (the owner, 2026-10-27), the quiet line as the card's row */}
+      {!empty && <div className="flex min-h-6 items-center gap-1.5 px-1">
+        <h3 className="min-w-0 flex-1 text-[13px] font-normal leading-[18px] text-ink-secondary">{t("computer.tab.routines")}</h3>
+        {canManageRoutineFolders(routines, foldersServed) && <button type="button" data-routines-section-more="" aria-haspopup="menu" aria-label={sectionMenuLabel} title={sectionMenuLabel}
+          onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); folderControl.current?.openSectionMenu({ x: rect.left, y: rect.bottom + 4 }, event.currentTarget); }}
+          className="ui-icon-button"><MoreHorizontal size={15} /></button>}
+        {createButton}
+      </div>}
+      <div data-routines-card="" className="flex flex-col rounded-2xl bg-card px-1 py-1">
+        {empty ? (
+          <p data-routines-hint className="flex min-h-[44px] items-center px-3 py-2 text-[12px] leading-4 text-ink-secondary">
+            <span>
+              {before}
+              <button type="button" data-routines-ask onClick={() => { dispatch({ type: "toggleSettings", open: false }); dispatch({ type: "toggleComputer", open: false }); }} className="rounded hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">{t("botPanel.routines.hintAsk")}</button>
+              {after}
+            </span>
+          </p>
+        ) : (
+          <RoutineFolderList controlRef={folderControl} bot={bot} routines={routines} viewerPrincipalId={state.config?.viewer?.principalId ?? null} runs={runs} loading={state.routinesLoadState === "loading" && routines.length === 0} error={state.routinesLoadState === "error"} onOpen={(routine) => setDetailId(routine.id)} grouped={grouped}
+            onCreateIn={(folder) => { setNewFolder(folder); setEditing("new"); }}
+            onDuplicate={(routine) => setEditing({ copyOf: routine })} />
+        )}
+      </div>
+      {editorLayer}
+    </section>;
   }
 
   return <div className={upcoming ? "relative flex flex-col gap-2" : "relative flex flex-col gap-3"}>
@@ -105,19 +148,13 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
         className="ui-icon-button"><MoreHorizontal size={15} /></button>}
       {/* Upcoming has no +, as the reference design: Suggested > Add to meeting
           and asking the bot create one there (#2125) */}
-      {!upcoming && <button type="button" onClick={() => { setNewFolder(undefined); setEditing("new"); }} aria-label={t("computer.routines.create")} title={t("computer.routines.create")} className="ui-icon-button"><Plus size={15} /></button>}
+      {!upcoming && createButton}
     </div>
     <RoutineFolderList controlRef={folderControl} bot={bot} routines={routines} viewerPrincipalId={state.config?.viewer?.principalId ?? null} runs={runs} loading={state.routinesLoadState === "loading" && routines.length === 0} error={state.routinesLoadState === "error"} onOpen={(routine) => setDetailId(routine.id)} grouped={grouped}
       collapseAfter={upcoming ? 5 : undefined} leadingClock={upcoming}
       onCreateIn={(folder) => { setNewFolder(folder); setEditing("new"); }}
       onDuplicate={(routine) => setEditing({ copyOf: routine })} />
-    {(editing === "new" || (editing && "copyOf" in editing)) && (
-      <PanelPageLayer><div className="absolute inset-0 z-30 min-h-[24rem]">
-        {editing === "new"
-          ? <RoutineEditor key={`${bot.id}-new-${newFolder ?? ""}`} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} folder={newFolder} presentation="panel" onClose={() => { setEditing(null); setNewFolder(undefined); }} onDismiss={() => { setNewFolder(undefined); closePanel(); }} page={{ onCreated: opened }} />
-          : <RoutineEditor key={`${"copyOf" in editing ? editing.copyOf.id : ""}-copy`} copyOf={"copyOf" in editing ? editing.copyOf : undefined} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} presentation="panel" onClose={() => setEditing(null)} onDismiss={closePanel} page={{ onCreated: opened }} />}
-      </div></PanelPageLayer>
-    )}
+    {editorLayer}
   </div>;
 }
 

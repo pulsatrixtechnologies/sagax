@@ -255,10 +255,29 @@ avec l'app de référence : #3388 ; ce patron : #3398.
     Serveurs MCP et « Connexion du coffre » (formulaire dans la carte, rangée avec
     Retirer ; plus dans Partagé avec, décision de JC du 2026-11-10, #3399).
   - Plus : Partagé avec, Règles, Quand il agit seul, Voix, Réglages avancés, Versions.
+- Connaissances (#3400) : deux cartes sur place, puis Son travail.
+  - À réviser : une rangée par apprentissage qui attend (son nom, une ligne grise de ce
+    qu'il change), Activer (ou Mettre à jour) et Refuser à droite, et l'icône Ouvrir
+    dans le chat. La décision se prend ici ou sur la carte du chat : c'est la même
+    carte, répondre à un endroit règle l'autre, et une décision prise ici laisse une
+    ligne discrète dans le chat (rien d'invisible). Le chat rappelle de lui-même ce qui
+    attend : une ligne discrète pour tout, au plus une fois par jour (décision de JC du
+    2026-11-10). Rien n'attend : une rangée « Tu es à jour » et une ligne grise.
+  - Compétences : un seul « + Ajouter » à droite de l'étiquette, son menu décrit
+    (Depuis la bibliothèque, Téléverser un fichier, Écrire une commande, Importer
+    depuis un lien quand la bibliothèque est éteinte) ; « Apprendre à l'usage » une
+    rangée à interrupteur de la carte ; chaque compétence une rangée avec son
+    interrupteur et son menu. Sans compétence, une rangée vide porte « + Ajouter ».
+    « Déjà assignées » seulement quand la bibliothèque a des compétences et que toutes
+    le sont. Les compétences de l'organisation et Écrire une commande suivent, chacune
+    sous son étiquette grise. Plus de sous-page Compétences.
+  - Son travail : Routines et Dossier et mémoire ouvrent leur page. Sur la page
+    Routines, l'étiquette grise « Routines » porte ses actions à droite, au-dessus
+    d'une seule carte de rangées.
 - Une rangée n'ouvre une sous-page que pour un réglage trop long pour une carte
   (Personnalité, Modèle, Avant d'agir, Partagé avec, Règles, Quand il agit seul, Voix,
-  Réglages avancés, Versions ; dans Connaissances : Routines, Compétences, Dossier et
-  mémoire). Elle garde à droite sa valeur courte et un chevron.
+  Réglages avancés, Versions ; dans Connaissances : Routines, Dossier et mémoire). Elle
+  garde à droite sa valeur courte et un chevron.
 - Une sous-page : le lien de retour nommé d'après l'onglet où il revient (« ‹ Général »),
   qui reçoit le focus à l'ouverture ; le titre dans le style des titres de page des
   Réglages (20 px, semi-gras) ; une ligne d'intro ; puis ses cartes. Échap revient à la

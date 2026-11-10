@@ -57,6 +57,16 @@ describe("V6 bot page map", () => {
     }
   });
 
+  // #3400: Knowledge is To review and Skills in place, then Its work
+  // (Routines, Folder and memory); the Skills sub-page is gone.
+  it("draws To review and Skills in place on Knowledge, then Routines and the folder", () => {
+    expect(BOT_PROFILE_SUBPAGES).not.toContain("skills");
+    expect(BOT_PROFILE_TAB_GROUPS.knowledge.map((group) => group.card ?? group.id)).toEqual(["skills", "work"]);
+    expect(BOT_PROFILE_TAB_GROUPS.knowledge.find((group) => group.id === "work")!.pages).toEqual(["routines", "folder"]);
+    expect(botProfileSubPageOf("skills")).toBeNull();
+    expect(botProfileTabOf("skills")).toBe("knowledge");
+  });
+
   // 0.8.66 put the approval card in "Before acting" too: 16 pieces, none twice
   it("splits the 16 permissions pieces across its sub-pages once each", () => {
     const pieces = [...PERMISSIONS_PARTS.beforeActing, ...PERMISSIONS_PARTS.actsAlone, ...PERMISSIONS_PARTS.rules, ...PERMISSIONS_PARTS.advanced];

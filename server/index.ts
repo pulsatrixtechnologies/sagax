@@ -1458,6 +1458,7 @@ import { createBotsCoreRoutes } from "./routes/bots-core.ts";
 import { createLocalComputerRoutes } from "./routes/local-computer.ts";
 import { createComputersRoutes } from "./routes/computers.ts";
 import { createBotsContentRoutes } from "./routes/bots-content.ts";
+import { openSkillCards, remindWaitingLearnedSkills } from "./skills/learned-skill-reminder.ts";
 import { createBrowserEngineRoutes } from "./routes/browser-engine.ts";
 import { createPlanUsageRoutes } from "./routes/plan-usage.ts";
 import { createPlanHistoryStore } from "./usage/plan-history.ts";
@@ -32965,6 +32966,7 @@ ROUTES.push(createBotsContentRoutes({
   listNativeBotSkills,
   listStagedSkillWrites,
   stagedSkillListing,
+  stagedSkillCard: (botId, stagedId) => openSkillCards(store, botId).get(stagedId) ?? null,
   githubCredentialsFor,
   computerOwner,
   callerCan,
@@ -34366,6 +34368,12 @@ const pruneDecisionLog = () => {
 };
 pruneDecisionLog();
 setInterval(pruneDecisionLog, 6 * 60 * 60_000).unref();
+// #3400: the chat reminds the person, on its own, of the learnings that
+// wait for a decision (one quiet line, at most once a day per bot).
+const remindLearnedSkills = () => {
+  try { remindWaitingLearnedSkills(store, (botId) => listStagedSkillWrites(botId).map((staged) => staged.id)); } catch (error) { reportBackgroundError(error); }
+};
+setInterval(remindLearnedSkills, 30 * 60_000).unref();
 workspaceAccess = createWorkspaceAccess({ sessions, cookieName: SESSION_COOKIE, closeSessionStreams });
 // Ten-second cadence plus the bridge's five-second backchannel deadline bounds
 // stale portal access on quiet event/browser streams to fifteen seconds.

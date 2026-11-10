@@ -2,6 +2,7 @@
 /** resolveSkillRequest (#1388). Pure move from server/index.ts. */
 import { applyStagedSkillWrite, getStagedSkillWrite } from "../skills/skills.ts";
 import { createHash } from "node:crypto";
+import { noteLearnedSkillDecision } from "../skills/learned-skill-reminder.ts";
 export type Host = Record<string, any>;
 
 export function createResolveSkillRequest(getHost: () => Host): any {
@@ -12,6 +13,9 @@ function resolveSkillRequest(args: {
   requestId: string;
   behavior: "allow" | "deny" | "answer";
   reviewedSha256?: string;
+  /** #3400: answered from the Knowledge tab of the bot's profile, which
+   * leaves one quiet line in the chat (nothing invisible). */
+  via?: "profile";
 }):
   | { claimed: false }
   | { claimed: true; status: number; error: string }
@@ -168,5 +172,24 @@ function resolveSkillRequest(args: {
   return { claimed: true, outcome: "allowed-once" };
 
 }
-  return resolveSkillRequest;
+  /** #3400: the same card answers both places; a fresh decision taken in
+   * the Knowledge tab says so in the chat, on the card's thread. */
+  function resolveSkillRequestNoted(args: Parameters<typeof resolveSkillRequest>[0]): ReturnType<typeof resolveSkillRequest> {
+    const host = getHost();
+    const request = args.via === "profile"
+      ? host.store.messagesFor(args.threadId).find((candidate) => candidate.card?.requestId === args.requestId && candidate.card.skillRequest)?.card?.skillRequest
+      : undefined;
+    const result = resolveSkillRequest(args);
+    if (request && result.claimed && "outcome" in result && !result.alreadySettled) {
+      noteLearnedSkillDecision(host.store, {
+        botId: args.botId,
+        threadId: args.threadId,
+        name: request.name,
+        action: request.action === "update" ? "update" : "create",
+        outcome: result.outcome === "allowed-once" ? "enabled" : "declined",
+      });
+    }
+    return result;
+  }
+  return resolveSkillRequestNoted;
 }

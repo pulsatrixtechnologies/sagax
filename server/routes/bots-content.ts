@@ -89,6 +89,9 @@ export interface BotsContentRouteDeps {
   threadFolder?: (bot: BotRecord, threadId: string) => string | null;
   listStagedSkillWrites: (botId: string) => readonly StagedSkillWrite[];
   stagedSkillListing: (staged: StagedSkillWrite) => Record<string, unknown>;
+  /** #3400: where a staged learning's open card sits in the chat (the
+   * Knowledge tab answers that card, or opens the chat at it). */
+  stagedSkillCard?: (botId: string, stagedId: string) => { threadId: string; requestId: string; messageId: string } | null;
   githubCredentialsFor: (actor: string | null | undefined) => readonly GithubCredential[];
   computerOwner: (auth: RequestAuth) => boolean;
   callerCan: (auth: RequestAuth, key: PermissionKey) => boolean;
@@ -115,12 +118,20 @@ export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandle
       listBotSkills,
       listNativeBotSkills,
       listStagedSkillWrites: listStaged,
-      stagedSkillListing,
+      stagedSkillListing: listingOfStaged,
+      stagedSkillCard,
       githubCredentialsFor,
       computerOwner,
       callerCan,
       pluginSkillSource,
     } = deps;
+
+    // #3400: each staged learning with the card the person answers.
+    const stagedSkillListing = (staged: StagedSkillWrite): Record<string, unknown> => {
+      const listing = listingOfStaged(staged);
+      const card = stagedSkillCard?.(botSkillGate?.[1] ?? "", staged.id);
+      return card ? { ...listing, card: { threadId: card.threadId, requestId: card.requestId, messageId: card.messageId } } : listing;
+    };
 
     // A per-bot skill the library sweep moved (a restored workspace, a skill
     // added while the app was closed) stays this bot's by assignment: its

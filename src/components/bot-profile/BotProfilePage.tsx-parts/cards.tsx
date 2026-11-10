@@ -1,8 +1,8 @@
 // The page's cards and rows (#2271, split from BotProfilePage for #1383):
 // the grey-label card, its rows, a locked section's note, a tab's block,
 // and the General tab's Channels and Bot accounts cards.
-import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { BellRing, Cpu, KeyRound, Lock, Mail, MessageCircle, Plug, Plus, ServerCog, Trash2 } from "lucide-react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { BellRing, Cpu, KeyRound, Lock, Mail, MessageCircle, Plug, ServerCog, Trash2 } from "lucide-react";
 
 import { useStore, type Bot, type BotSettingsSection } from "@/state/store";
 import { t } from "@/lib/i18n";
@@ -19,10 +19,8 @@ import { canEditBotField } from "@/lib/bot-capabilities";
 import { readableError } from "@/lib/plain-error";
 import { readableOr } from "../../../../shared/human-id";
 import { readableName } from "../../../../shared/readable-name";
-import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import type { BotProfileTab, PersonaCategory } from "@/lib/persona-sections";
 import type { MessagesSetupStatus } from "../../../../shared/mac-messages-setup";
-import { AnchoredPopover, useAnchoredDismissRoot } from "../../AnchoredPopover";
 import { HelpTip, PILL, PillSelect, Switch } from "../../SettingsPrimitives";
 import { PluginIcon } from "../../plugins/PluginParts";
 import { ProposalStatus } from "../../bot-settings/ProposalStatus";
@@ -31,6 +29,7 @@ import { BOT_SECTIONS } from "../../bot-settings/sections";
 import { SlackSection } from "../../bot-settings/SlackSection";
 import { BotEmailAddress } from "../../bot-settings/BotEmailAddress";
 import { BotReachMe } from "../../bot-settings/BotReachMe";
+import { AddMenu } from "./AddMenu";
 
 const ENTRY = new Map(BOT_SECTIONS.map((entry) => [entry.id, entry]));
 
@@ -277,26 +276,6 @@ function AccountLogo({ name, form }: { name: string; form: "app" | "mcp" }) {
   return <PluginIcon item={{ kind: form, name, logo: mark.logo ?? undefined, domain: mark.site ?? undefined }} className="size-5 rounded-md text-[11px]" />;
 }
 
-/** One item of the Add menu: a title and a grey line that says what it does. */
-function AddItem({ icon, title, description, onChoose, id }: { icon: ReactNode; title: string; description: string; onChoose: () => void; id: string }) {
-  return (
-    <button
-      type="button"
-      role="menuitem"
-      tabIndex={-1}
-      data-bot-profile-add-item={id}
-      onClick={onChoose}
-      className="flex w-full items-start gap-3 rounded-lg px-2.5 py-2 text-left outline-none hover:bg-hover focus-visible:bg-hover"
-    >
-      <span aria-hidden="true" className="mt-px flex size-4 shrink-0 items-center justify-center text-ink-secondary [&>svg]:size-4">{icon}</span>
-      <span className="flex min-w-0 flex-col">
-        <span className="text-[13px] leading-[18px] text-ink">{title}</span>
-        <span data-bot-profile-add-description="" className="text-[12px] leading-4 text-ink-secondary">{description}</span>
-      </span>
-    </button>
-  );
-}
-
 /** General > Bot accounts (#3399): what this bot has, one row each (its
  * engine, then each app or server that is on, off, set by the organization
  * or in need of attention, then the shared vault's logins), each with its
@@ -314,65 +293,13 @@ export function AccountsCard({ bot, onEngine, derived, vault }: {
   const { data, error, loading, reload } = useBotCapabilities(bot.id);
   const { servers, error: serversError, refresh } = useMcpServers();
   const logins = useTeamBotVault(bot.id, vault);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const anchorRef = useRef<HTMLButtonElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
-  const focusOnOpen = useRef<"first" | "last">("first");
-  const dismissRoot = useAnchoredDismissRoot(anchorRef, popoverRef);
-  usePopoverDismiss(menuOpen, dismissRoot, () => setMenuOpen(false));
-
-  const menuItems = () => Array.from(popoverRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
-  // the menu takes the focus when it opens (its first item, or the last on Up)
-  useEffect(() => {
-    if (!menuOpen) return;
-    const list = menuItems();
-    (focusOnOpen.current === "last" ? list[list.length - 1] : list[0])?.focus();
-    focusOnOpen.current = "first";
-  }, [menuOpen]);
   useEffect(() => { if (adding) firstFieldRef.current?.focus(); }, [adding]);
 
-  const closeMenu = (refocus: boolean) => {
-    setMenuOpen(false);
-    if (refocus) anchorRef.current?.focus();
-  };
   const connect = (surface: "apps" | "mcp") => {
-    closeMenu(false);
     dispatch({ type: "togglePlugins", open: true, surface, botId: bot.id });
-  };
-  const onMenuKey = (event: ReactKeyboardEvent) => {
-    if (!menuOpen) {
-      if ((event.key === "ArrowDown" || event.key === "ArrowUp") && event.target === anchorRef.current) {
-        event.preventDefault();
-        focusOnOpen.current = event.key === "ArrowUp" ? "last" : "first";
-        setMenuOpen(true);
-      }
-      return;
-    }
-    if (event.key === "Escape") {
-      // the menu only: the page and the profile stay open
-      event.preventDefault();
-      event.stopPropagation();
-      closeMenu(true);
-      return;
-    }
-    if (event.key === "Tab") {
-      setMenuOpen(false);
-      return;
-    }
-    const list = menuItems();
-    if (list.length === 0) return;
-    const at = list.indexOf(document.activeElement as HTMLElement);
-    const next = event.key === "ArrowDown" ? (at + 1) % list.length
-      : event.key === "ArrowUp" ? (at <= 0 ? list.length - 1 : at - 1)
-        : event.key === "Home" ? 0
-          : event.key === "End" ? list.length - 1
-            : null;
-    if (next === null) return;
-    event.preventDefault();
-    list[next]!.focus();
   };
 
   // The bot's own list of servers is the switch of a server (Plugins keeps
@@ -492,35 +419,14 @@ export function AccountsCard({ bot, onEngine, derived, vault }: {
   const empty = Boolean(data) && rows.length === 0 && !adding;
 
   const add = (
-    <div className={empty ? "shrink-0" : "ml-auto"} onKeyDown={onMenuKey}>
-      <button
-        ref={anchorRef}
-        type="button"
-        data-bot-profile-add=""
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        onClick={() => setMenuOpen((value) => !value)}
-        className={cn(PILL, "inline-flex shrink-0 items-center gap-1")}
-      >
-        <Plus size={13} aria-hidden="true" /> {t("botProfile.add")}
-      </button>
-      {menuOpen && (
-        <AnchoredPopover
-          anchorRef={anchorRef}
-          popoverRef={popoverRef}
-          align="end"
-          role="menu"
-          aria-label={t("botProfile.add")}
-          className="w-[280px] rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1 text-ink shadow-xl"
-        >
-          <AddItem id="apps" icon={<Plug />} title={t("botProfile.add.apps")} description={t("botProfile.add.appsDescription")} onChoose={() => connect("apps")} />
-          <AddItem id="mcp" icon={<ServerCog />} title={t("botProfile.add.mcp")} description={t("botProfile.add.mcpDescription")} onChoose={() => connect("mcp")} />
-          {vault && (
-            <AddItem id="vault" icon={<KeyRound />} title={t("botProfile.add.vault")} description={t("botProfile.add.vaultDescription")} onChoose={() => { closeMenu(false); setAdding(true); }} />
-          )}
-        </AnchoredPopover>
-      )}
-    </div>
+    <AddMenu
+      className={empty ? "shrink-0" : "ml-auto"}
+      items={[
+        { id: "apps", icon: <Plug />, title: t("botProfile.add.apps"), description: t("botProfile.add.appsDescription"), onChoose: () => connect("apps") },
+        { id: "mcp", icon: <ServerCog />, title: t("botProfile.add.mcp"), description: t("botProfile.add.mcpDescription"), onChoose: () => connect("mcp") },
+        ...(vault ? [{ id: "vault", icon: <KeyRound />, title: t("botProfile.add.vault"), description: t("botProfile.add.vaultDescription"), onChoose: () => setAdding(true) }] : []),
+      ]}
+    />
   );
 
   const title = t("botProfile.accounts");

@@ -24,6 +24,7 @@ vi.mock("@/state/store", () => ({
 }));
 
 const { RoutinesSection, RoutineDetailHeader } = await import("./RoutinesSection");
+const { SettingsSurfaceProvider } = await import("../SettingsPrimitives");
 
 const bot: Bot = {
   id: "bot-1",
@@ -87,6 +88,38 @@ function render(routines: Routine[], runs: RoutineRun[]) {
     createElement(RoutinesSection, { bot, routines, runs }),
   );
 }
+
+describe("RoutinesSection on the bot's profile (plain surface, #3400)", () => {
+  const plainRender = (routines: Routine[]) => renderToStaticMarkup(createElement(SettingsSurfaceProvider, {
+    surface: "plain",
+    children: createElement(RoutinesSection, { bot, routines, runs: [] }),
+  }));
+
+  it("draws the shared group: a grey label with its actions at the right, the rows inside one card", () => {
+    const markup = plainRender([activeRoutine, pausedRoutine]);
+    expect(markup).toContain("data-routines-group");
+    // the grey label, then its actions on the same row, then one filled card
+    const label = markup.indexOf('text-ink-secondary">Routines</h3>');
+    const create = markup.indexOf('aria-label="Create schedule"');
+    const card = markup.indexOf("data-routines-card");
+    expect(label).toBeGreaterThan(-1);
+    expect(create).toBeGreaterThan(label);
+    expect(card).toBeGreaterThan(create);
+    expect(markup).not.toContain("<h2");
+    expect(markup.slice(card)).toMatch(/^data-routines-card=""[^>]*bg-card/);
+    // every row is inside the card
+    expect(markup.slice(card)).toContain("Morning brief");
+    expect(markup.slice(card)).toContain("Weekly digest");
+    expect(markup.slice(0, card)).not.toContain("Morning brief");
+  });
+
+  it("with no routine: the quiet line is the card's row", () => {
+    const markup = plainRender([]);
+    const card = markup.indexOf("data-routines-card");
+    expect(card).toBeGreaterThan(-1);
+    expect(markup.slice(card)).toContain("data-routines-hint");
+  });
+});
 
 describe("RoutinesSection", () => {
   // Owner, 2026-10-27: a bot without routines shows no section (no title, no +,

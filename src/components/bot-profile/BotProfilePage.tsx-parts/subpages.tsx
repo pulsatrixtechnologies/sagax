@@ -10,7 +10,6 @@ import {
   Cpu,
   FolderOpen,
   History,
-  Puzzle,
   Repeat,
   ScrollText,
   ShieldCheck,
@@ -42,7 +41,6 @@ export const SUBPAGE_META: Record<BotProfileSubPage, Meta> = {
   advanced: meta(<SlidersHorizontal />, "botProfile.v6.page.advanced.title", "botProfile.v6.page.advanced.desc", "botProfile.v6.page.advanced.intro"),
   versions: meta(<History />, "botProfile.v6.page.versions.title", "botProfile.v6.page.versions.desc", "botProfile.v6.page.versions.intro"),
   routines: meta(<Repeat />, "botProfile.v6.page.routines.title", "botProfile.v6.page.routines.desc", "botProfile.v6.page.routines.intro"),
-  skills: meta(<Puzzle />, "botProfile.v6.page.skills.title", "botProfile.v6.page.skills.desc", "botProfile.v6.page.skills.intro"),
   folder: meta(<FolderOpen />, "botProfile.v6.page.folder.title", "botProfile.v6.page.folder.desc", "botProfile.v6.page.folder.intro"),
 };
 

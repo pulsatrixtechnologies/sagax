@@ -13,6 +13,7 @@ import type { GithubConnectCard } from "./github-connect-card.ts";
 import type { LimitFailoverLine } from "./limit-failover.ts";
 import type { OrderTracking } from "./order-tracking.ts";
 import type { SoloGoalLine } from "./solo-goal-line.ts";
+import type { LearnedSkillLine } from "./learned-skill-line.ts";
 import type { DirectTriggers } from "./direct-triggers.ts";
 import type { FinishUntilLine } from "./finish-until-line.ts";
 import type { SandboxWakeLine } from "./sandbox-wake.ts";
@@ -1058,6 +1059,10 @@ export interface WireMessage extends WaitLineField {
     /** #1372: a 1:1 goal's status (server/solo-goal.ts); drawn in the
      * reader's language. */
     soloGoal?: SoloGoalLine;
+    /** #3400: a learning decided in the bot's Knowledge tab, or the daily
+     * reminder of the learnings that wait (shared/learned-skill-line.ts);
+     * drawn in the reader's language. */
+    learnedSkill?: LearnedSkillLine;
     /** #1329: a "do not finish until" check (server/finish-until.ts):
      * relaunch x/N, met, blocked, bound reached or stopped; drawn in the
      * reader's language. */

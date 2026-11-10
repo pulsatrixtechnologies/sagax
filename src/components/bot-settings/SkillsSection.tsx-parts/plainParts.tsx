@@ -1,9 +1,9 @@
 import { BookOpen, ChevronDown, Eye } from "lucide-react";
-import { useId, useState, type ReactNode } from "react";
+import { useId, useState } from "react";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { skillSourceLabel } from "@/lib/skills-ui";
-import { PILL, PillSelect, Switch } from "../../SettingsPrimitives";
+import { PILL, Switch } from "../../SettingsPrimitives";
 import { changedAfterReview, originLabel } from "./helpers";
 import { renderRowMenu } from "./rowMenu";
 import type { ManagedSkill, SkillRowActions } from "./types";
@@ -30,43 +30,6 @@ function PlainSourceFold({ label, source }: { label: string; source: string }) {
       </div>
     </div>
   );
-}
-
-export interface PlainAddActionProps {
-  skillWrites: boolean;
-  libraryOn: boolean;
-  libraryPool: Array<{ name: string }>;
-  addFromLibrary: string;
-  setAddFromLibrary: (name: string) => void;
-  working: string;
-  addToBot: () => unknown;
-}
-
-export function renderPlainAddAction(p: PlainAddActionProps): ReactNode {
-  const { skillWrites, libraryOn, libraryPool, addFromLibrary, setAddFromLibrary, working, addToBot } = p;
-  return skillWrites && libraryOn && libraryPool.length > 0 ? (
-    <div className="flex min-w-0 items-center gap-2">
-      <PillSelect
-        ariaLabel={t("botPanel.skills.addAria")}
-        value={addFromLibrary}
-        disabled={Boolean(working)}
-        onChange={setAddFromLibrary}
-        options={[
-          { value: "", label: t("botPanel.skills.addPlaceholder") },
-          ...libraryPool.map((skill) => ({ value: skill.name, label: skill.name })),
-        ]}
-      />
-      <button
-        type="button"
-        data-skills-add=""
-        disabled={!addFromLibrary || Boolean(working)}
-        onClick={() => void addToBot()}
-        className={cn(PILL, "shrink-0")}
-      >
-        {t("common.add")}
-      </button>
-    </div>
-  ) : undefined;
 }
 
 const iconButton = "flex size-8 shrink-0 items-center justify-center rounded-full text-ink-secondary hover:bg-hover hover:text-ink disabled:opacity-40";

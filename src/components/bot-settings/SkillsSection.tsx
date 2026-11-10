@@ -10,6 +10,7 @@ import { t } from "@/lib/i18n";
 import { skillImportLines } from "@/lib/skill-import";
 import type { SkillImportSummary } from "../../../shared/skill-import";
 import { useEffect, useRef, useState } from "react";
+import { BookOpen, Library, Link, SquareSlash, Upload } from "lucide-react";
 
 import { useStore, type Bot } from "@/state/store";
 import { useBotEditor } from "./BotEditorContext";
@@ -24,7 +25,9 @@ import { WriteCommandCard } from "./WriteCommandCard";
 import { PanelPage } from "./PanelPage";
 import type { ManagedSkill, SkillRowActions } from "./SkillsSection.tsx-parts/types";
 import { removeSkill } from "./SkillsSection.tsx-parts/removeSkill";
-import { renderPlainAddAction, renderPlainSkillRow } from "./SkillsSection.tsx-parts/plainParts";
+import { renderPlainSkillRow } from "./SkillsSection.tsx-parts/plainParts";
+import { AddMenu, type AddMenuItem } from "../bot-profile/BotProfilePage.tsx-parts/AddMenu";
+import { ReviewCard, type ReviewEntry } from "../bot-profile/BotProfilePage.tsx-parts/ReviewCard";
 import { renderClassicSkillRow, renderClassicTop } from "./SkillsSection.tsx-parts/classicParts";
 import { SkillEditorPage, type SkillEditorTarget } from "./SkillEditorPage";
 
@@ -39,6 +42,10 @@ interface StagedSkillSummary {
   id: string;
   name: string;
   gist: string;
+  action?: "create" | "update";
+  sha256?: string;
+  /** #3400: the open card in the chat this learning is decided on */
+  card?: { threadId: string; requestId: string; messageId: string };
 }
 
 /** The bot's installed skills and the on/off switch the Skills section and
@@ -103,8 +110,8 @@ export function useManagedSkills(bot: Bot) {
     await refresh();
   };
 
-  const addToBot = async () => {
-    const name = addFromLibrary.trim();
+  const addToBot = async (pick?: string) => {
+    const name = (pick ?? addFromLibrary).trim();
     if (!name || assignmentBusy.current) return;
     assignmentBusy.current = true;
     setWorking(name);
@@ -222,9 +229,37 @@ export function useManagedSkills(bot: Bot) {
     }
   };
 
+  // #3400: a learning decided in the Knowledge tab answers its card in the
+  // chat (the same card, so the chat shows it settled), and the server
+  // leaves one quiet line there.
+  const [deciding, setDeciding] = useState("");
+  const [decideError, setDecideError] = useState("");
+  const decideStaged = async (entry: StagedSkillSummary, behavior: "allow" | "deny") => {
+    if (!entry.card || deciding) return;
+    setDeciding(entry.id);
+    setDecideError("");
+    try {
+      await api(`/api/threads/${encodeURIComponent(entry.card.threadId)}/respond`, {
+        method: "POST",
+        body: JSON.stringify({
+          requestId: entry.card.requestId,
+          behavior,
+          ...(behavior === "allow" && entry.sha256 ? { reviewedSha256: entry.sha256 } : {}),
+          via: "profile",
+        }),
+      });
+      await refresh();
+    } catch (cause) {
+      setDecideError(cause instanceof Error ? cause.message : t("botProfile.review.error"));
+      await refresh();
+    } finally {
+      setDeciding("");
+    }
+  };
+
   return {
     skills, staged, loading, working, setWorking, error, setError, reviewing, setReviewing, refresh, toggle, enableReviewed,
-    share, unshare,
+    share, unshare, deciding, decideError, decideStaged, assignedSkills,
     // the shared skills library (features.skillsLibrary): what this bot can still add, and assignment changes
     libraryPool, addFromLibrary, setAddFromLibrary, assignmentBusy, putAssignments, addToBot,
   };
@@ -288,7 +323,12 @@ export function SkillReviewDialog({
   );
 }
 
-export function SkillsSection({ bot }: { bot: Bot }) {
+export function SkillsSection({ bot, review }: {
+  bot: Bot;
+  /** #3400: the bot's profile draws the "To review" card above the Skills
+   * card (the Knowledge tab); "Open in chat" shows the card in the chat. */
+  review?: { onOpenChat: (entry: ReviewEntry) => void };
+}) {
   const confirm = useConfirm();
   const { request: api } = useBotEditor();
   const { state, dispatch } = useStore();
@@ -300,9 +340,13 @@ export function SkillsSection({ bot }: { bot: Bot }) {
   const skillWrites = !viewerBotsReadOnly(state.config);
   const {
     skills, staged, loading, working, setWorking, error, setError, reviewing, setReviewing, refresh, toggle, enableReviewed,
-    share, unshare,
+    share, unshare, deciding, decideError, decideStaged, assignedSkills,
     libraryPool, addFromLibrary, setAddFromLibrary, assignmentBusy, putAssignments, addToBot,
   } = useManagedSkills(bot);
+  const pickFiles = useRef<(() => void) | null>(null);
+  const tailRef = useRef<HTMLDivElement>(null);
+  // "+ Add" > From the library or Import from a link unfolds its rows in the card
+  const [adding, setAdding] = useState<"library" | "import" | null>(null);
   const [editing, setEditing] = useState<SkillEditorTarget | null>(null);
   const [source, setSource] = useState("");
   const [importing, setImporting] = useState(false);
@@ -394,22 +438,85 @@ export function SkillsSection({ bot }: { bot: Bot }) {
     </>
   );
 
-  // The bot's profile page (plain surface, #2313): one card labelled Skills,
-  // the library's pick and Add a pill at the label's right; each skill a row
-  // (the book icon, the name in 14px, where it comes from and what it does
-  // grey under it, its switch and menu at the right). The library itself is
-  // managed from Access (Manage in Plugins), not from this card.
+  // The bot's profile page (plain surface, #2313; in place on the Knowledge
+  // tab, #3400): "To review" first, then one card labelled Skills with one
+  // "+ Add" at the label's right whose menu says what each choice does (from
+  // the library, upload a file, write a command, import from a link); "Learn
+  // from use" a switch row of the card; each skill a row (the book icon, the
+  // name in 14px, where it comes from and what it does grey under it, its
+  // switch and menu at the right). No skill: one row with "+ Add". The
+  // organization's skills and the command writer follow, each under its
+  // grey label.
   if (plain) {
-    const addAction = renderPlainAddAction({ skillWrites, libraryOn, libraryPool, addFromLibrary, setAddFromLibrary, working, addToBot });
+    const addItems: AddMenuItem[] = skillWrites ? [
+      ...(libraryOn && libraryPool.length > 0 ? [{
+        id: "library", icon: <Library />, title: t("botProfile.skills.addLibrary"), description: t("botProfile.skills.addLibraryDescription"),
+        onChoose: () => setAdding("library"),
+      }] : []),
+      {
+        id: "upload", icon: <Upload />, title: t("botProfile.skills.addUpload"), description: t("botProfile.skills.addUploadDescription"),
+        onChoose: () => pickFiles.current?.(),
+      },
+      {
+        id: "command", icon: <SquareSlash />, title: t("botProfile.skills.addCommand"), description: t("botProfile.skills.addCommandDescription"),
+        onChoose: () => {
+          const field = tailRef.current?.querySelector<HTMLElement>("[data-write-command] input");
+          field?.scrollIntoView?.({ block: "center" });
+          field?.focus({ preventScroll: true });
+        },
+      },
+      ...(!libraryOn ? [{
+        id: "import", icon: <Link />, title: t("botProfile.skills.addImport"), description: t("botProfile.skills.addImportDescription"),
+        onChoose: () => setAdding("import"),
+      }] : []),
+    ] : [];
+    const empty = !loading && skills.length === 0;
+    const add = (className: string) => <AddMenu className={className} items={addItems} disabled={Boolean(working)} />;
+    const allAssigned = skillWrites && libraryOn && libraryPool.length === 0 && assignedSkills.length > 0;
     return (
       <>
-        <PaneSection title={t("botSettings.nav.skills")} help={help} action={addAction} plain data-skills-section="">
+        {review && (
+          <ReviewCard
+            staged={staged}
+            loading={loading}
+            canDecide={skillWrites}
+            working={deciding}
+            error={decideError}
+            onDecide={(entry, behavior) => void decideStaged(entry, behavior)}
+            onOpenChat={review.onOpenChat}
+          />
+        )}
+        <PaneSection title={t("botSettings.nav.skills")} help={help} action={empty ? undefined : add("")} plain data-skills-section="">
           <div className={PLAIN_CARD} data-settings-surface="">
             {learning && <div className="px-4 py-2.5" data-skill-learning="">{learning}</div>}
-            {skillWrites && libraryOn && libraryPool.length === 0 && (
-              <p className="px-4 py-2.5 text-[12.5px] text-ink-secondary">{t("botPanel.skills.allAssigned")}</p>
+            {adding === "library" && skillWrites && libraryPool.length > 0 && (
+              <div data-skills-library="" className="flex flex-col">
+                <div className="flex items-center gap-3 px-4 pb-1 pt-2.5">
+                  <span className="min-w-0 flex-1 text-[12px] leading-4 text-ink-secondary">{t("botProfile.skills.addLibrary")}</span>
+                  <button type="button" onClick={() => setAdding(null)} className={cn(PILL, "shrink-0")}>{t("common.cancel")}</button>
+                </div>
+                {libraryPool.map((entry) => (
+                  <div key={entry.name} className="flex min-h-[56px] items-center gap-3 px-4 py-2.5" data-skills-library-item={entry.name}>
+                    <BookOpen aria-hidden="true" className="size-5 shrink-0 text-ink-secondary" />
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-[14px] leading-5 text-ink">{entry.name}</span>
+                      {entry.description && <span className="line-clamp-2 text-[12px] leading-4 text-ink-secondary">{entry.description}</span>}
+                    </span>
+                    <button
+                      type="button"
+                      data-skills-add={entry.name}
+                      disabled={Boolean(working)}
+                      onClick={() => void addToBot(entry.name).then(() => setAdding(null))}
+                      aria-label={`${t("common.add")} ${entry.name}`}
+                      className={cn(PILL, "shrink-0")}
+                    >
+                      {t("common.add")}
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
-            {skillWrites && !libraryOn && (
+            {adding === "import" && skillWrites && !libraryOn && (
               <div className="flex flex-col gap-1 px-4 py-2.5" data-skills-import="">
                 <form
                   className="flex items-center gap-2"
@@ -420,6 +527,7 @@ export function SkillsSection({ bot }: { bot: Bot }) {
                 >
                   <input
                     className={PLAIN_FIELD}
+                    autoFocus
                     placeholder={t("botPanel.skills.importPlaceholder")}
                     aria-label={t("botPanel.skills.importAria")}
                     value={source}
@@ -428,31 +536,35 @@ export function SkillsSection({ bot }: { bot: Bot }) {
                   <button type="submit" disabled={importing || !source.trim()} className={cn(PILL, "shrink-0")}>
                     {importing ? t("botPanel.skills.importing") : t("botPanel.skills.import")}
                   </button>
+                  <button type="button" onClick={() => setAdding(null)} className={cn(PILL, "shrink-0")}>{t("common.cancel")}</button>
                 </form>
                 {importMessage && <div className="text-[12px] text-ink-secondary">{importMessage}</div>}
               </div>
             )}
             {skillWrites && (
-              <div className="px-4 py-2.5">
-                <SkillUpload botId={bot.id} disabled={Boolean(working)} onAdded={() => void refresh()} />
-              </div>
+              <SkillUpload botId={bot.id} disabled={Boolean(working)} onAdded={() => void refresh()} pickRef={pickFiles} hideButton className="px-4 py-2.5" />
             )}
             {loading ? (
-              <p className="px-4 py-2.5 text-[12.5px] text-ink-secondary">{t("botPanel.loading")}</p>
+              <p className="px-4 py-2.5 text-[12px] leading-4 text-ink-secondary">{t("botPanel.loading")}</p>
             ) : skills.length === 0 ? (
-              <p className="px-4 py-2.5 text-[12.5px] text-ink-secondary">{t("botPanel.skills.empty")}</p>
+              <div data-skills-empty="" className="flex min-h-[56px] items-center gap-3 px-4 py-2.5">
+                <BookOpen aria-hidden="true" className="size-5 shrink-0 text-ink-secondary" />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-[14px] leading-5 text-ink">{t("botProfile.skills.emptyTitle")}</span>
+                  <span className="text-[12px] leading-4 text-ink-secondary">{t("botProfile.skills.emptyLine")}</span>
+                </span>
+                {add("shrink-0")}
+              </div>
             ) : (
               skills.map((skill) => renderPlainSkillRow(rowActions, skill))
             )}
-            {staged.length > 0 && (
-              <p className="px-4 py-2.5 text-[12px] text-warning">
-                {t(staged.length === 1 ? "botPanel.skills.proposalOne" : "botPanel.skills.proposalMany", { count: String(staged.length) })}
-              </p>
+            {allAssigned && (
+              <p className="px-4 py-2.5 text-[12px] leading-4 text-ink-secondary">{t("botPanel.skills.allAssigned")}</p>
             )}
             {error && <p role="alert" className="px-4 py-2.5 text-[12px] text-danger">{error}</p>}
           </div>
         </PaneSection>
-        {tail}
+        <div ref={tailRef} className="contents">{tail}</div>
       </>
     );
   }

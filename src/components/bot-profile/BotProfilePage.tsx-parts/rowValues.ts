@@ -2,7 +2,8 @@
 // canvas: "grok-4.7", "3 active", "Mail, Calendar, GitHub", "7"). Every row
 // shows one, read from the state the sub-page already shows: the store for
 // what it holds (model, approval, sharing, routines, memory, voice), the
-// same endpoints the sub-pages read for the rest (rules, skills, versions).
+// same endpoints the sub-pages read for the rest (rules, versions). The
+// skills are a card in place on Knowledge (#3400): no row, no value.
 // The channels and the accounts are cards in place (#3398): no row, no value. Those load only while their tab's list is on
 // screen; a value not loaded yet is simply absent.
 import { useEffect, useState } from "react";
@@ -49,14 +50,11 @@ function useLoaded<T>(key: string | null, load: () => Promise<T>): T | null {
 export function useBotRowValues(bot: Bot, { tab, listing }: { tab: BotProfileTab; listing: boolean }): (id: BotProfileSubPage) => string | null {
   const { state } = useStore();
   const general = listing && tab === "general";
-  const knowledge = listing && tab === "knowledge";
   const historyAllowed = canEditBotField(state.config, bot, "soul");
 
   const rules = useLoaded(general ? `rules:${bot.id}` : null, () => fetchRules(bot.id));
   const lastVersion = useLoaded(general && historyAllowed ? `history:${bot.id}` : null, () =>
     api(`/api/bots/${bot.id}/history?limit=1`).then((data: { rows?: Array<{ at: number }> }) => data.rows?.[0]?.at ?? null));
-  const skills = useLoaded(knowledge ? `skills:${bot.id}` : null, () =>
-    api(`/api/bots/${bot.id}/skills`).then((data: { skills?: unknown[] }) => (data.skills ?? []).length));
   const routines = state.routines.filter((routine) => routine.botId === bot.id);
 
   return (id) => {
@@ -85,8 +83,6 @@ export function useBotRowValues(bot: Bot, { tab, listing }: { tab: BotProfileTab
         return typeof lastVersion === "number" ? relativeTime(lastVersion) : null;
       case "routines":
         return counted(routines.filter((routine) => routine.enabled !== false).length, "botProfile.v6.value.routines.one", "botProfile.v6.value.routines.other");
-      case "skills":
-        return skills === null ? null : counted(skills, "botProfile.v6.value.skills.one", "botProfile.v6.value.skills.other");
       case "folder":
         return t(bot.memoryEnabled === false ? "botProfile.v6.value.memoryOff" : "botProfile.v6.value.memoryOn");
     }

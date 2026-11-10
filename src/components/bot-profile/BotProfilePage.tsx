@@ -16,7 +16,9 @@
 // - Appearance: the whole mascot editor (character, shape, colour, style,
 //   moves, Play a move, Randomize); the character picked previews in the
 //   hero.
-// - Knowledge: Its work (Routines, Skills, Folder and memory).
+// - Knowledge (#3400): To review (the learnings that wait, approved or
+//   declined in place) and Skills in place, then Its work (Routines, Folder
+//   and memory).
 // - Stats: the bot's usage over 7, 30 or 90 days.
 //
 // A row opens its own sub-page in the same column, only for a setting too
@@ -38,7 +40,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Bell, Brain, ChevronRight, Repeat, Users } from "lucide-react";
 
-import { useStore, type Bot, type BotSettingsSection } from "@/state/store";
+import { openNotificationTarget, useStore, type Bot, type BotSettingsSection } from "@/state/store";
+import { useShowThreads } from "@/lib/thread-preferences";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { cn } from "@/lib/cn";
@@ -71,6 +74,8 @@ import { NotifyMeRow } from "../bot-settings/VoiceSection";
 import { MascotHeroSlotContext } from "../floating-bots/mascot-hero-slot";
 import { RulesSection } from "../bot-settings/RulesSection";
 import { WorkspaceFilesSection } from "../bot-settings/WorkspaceFilesSection";
+import { SkillsSection } from "../bot-settings/SkillsSection";
+import type { ReviewEntry } from "./BotProfilePage.tsx-parts/ReviewCard";
 import { PermissionsSection, type PermissionsPart } from "../bot-settings/PermissionsSection";
 import { AccessSection } from "../bot-settings/AccessSection";
 import { teamVaultOffered } from "../bot-settings/TeamBotVaultSection";
@@ -257,8 +262,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   const hookSection: BotSettingsSection = page
     ? page === "versions" ? "history"
       : page === "routines" ? "routines"
-        : page === "skills" ? "skills"
-          : page === "folder" ? "skills"
+        : page === "folder" ? "skills"
             : page === "personality" || page === "sharing" ? "overview"
               : "model"
     : tab === "stats" ? "usage" : tab === "knowledge" ? "skills" : "overview";
@@ -290,6 +294,12 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   });
 
   const lockOf = (id: BotSettingsSection): LocaleKey | null => botSectionLock(state.config, bot, id);
+  const showThreads = useShowThreads();
+  const openLearningInChat = (entry: ReviewEntry) => {
+    if (!entry.card) return;
+    onClose();
+    openNotificationTarget(dispatch, { botId: bot.id, threadId: entry.card.threadId, requestId: entry.card.requestId, cardId: entry.card.messageId }, state, showThreads);
+  };
   const memoryAllowed = canEditBotField(state.config, bot, "memoryEnabled");
 
   const body = (id: PersonaCategory): ReactNode => {
@@ -337,6 +347,9 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
       );
     }
     if (id === "rules") return <RulesSection bot={bot} active={page === "rules"} />;
+    // Knowledge (#3400): To review heads the Skills card; "Open in chat"
+    // closes the profile and shows the bot's chat at the learning's card.
+    if (id === "skills") return <SkillsSection bot={bot} review={{ onOpenChat: openLearningInChat }} />;
     if (id === "files") {
       // The Bot folder is also where the memory is managed: "Use memory"
       // heads it for a viewer who may change it.
@@ -395,8 +408,6 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         return block("history");
       case "routines":
         return <div data-bot-profile-section="routines" aria-label={t(SUBPAGE_META.routines.title)} className="flex min-w-0 flex-col gap-6">{renderSectionBody("routines")}</div>;
-      case "skills":
-        return block("skills");
       case "folder":
         return (
           <>
@@ -446,6 +457,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   // One group of the General or Knowledge tab: a card in place, or rows
   // that each open their sub-page (a group with nothing left is not drawn).
   const tabGroup = (group: (typeof BOT_PROFILE_TAB_GROUPS)[BotProfileTab][number]): ReactNode => {
+    if (group.card === "skills") return block("skills");
     if (group.card === "channels") return <ChannelsCard key={group.id} bot={bot} slackUrl={slackUrl} open={channel} onOpen={setChannel} />;
     if (group.card === "accounts") {
       return (

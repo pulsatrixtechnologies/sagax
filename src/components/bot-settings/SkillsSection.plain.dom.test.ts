@@ -26,7 +26,10 @@ const { BotEditorContext } = await import("./BotEditorContext");
 
 const bot = { id: "pepper", name: "Pepper", description: "" } as unknown as Bot;
 
-const request = vi.fn(async (path: string) => {
+type SkillsAnswer = { skills: unknown[]; staged: unknown[]; library: unknown[]; assignedSkills: string[] };
+let skillsAnswer: SkillsAnswer | null = null;
+const request = vi.fn(async (path: string, _init?: RequestInit) => {
+  if (path === `/api/bots/${bot.id}/skills` && skillsAnswer) return skillsAnswer;
   if (path === `/api/bots/${bot.id}/skills`) {
     return {
       skills: [
@@ -69,6 +72,7 @@ describe("Skills on the profile page (plain)", () => {
   beforeEach(() => {
     setLocale("en");
     request.mockClear();
+    skillsAnswer = null;
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -78,16 +82,16 @@ describe("Skills on the profile page (plain)", () => {
     container.remove();
   });
 
-  const render = async () => {
+  const render = async (props: Record<string, unknown> = {}) => {
     act(() => root.render(plainSurface(createElement(BotEditorContext.Provider, {
       value: { request: request as never },
-      children: createElement(SkillsSection, { bot }),
+      children: createElement(SkillsSection, { bot, ...props }),
     }))));
     await flush();
     await flush();
   };
 
-  it("is one card labelled Skills, a skill a row, Add a pill at the label, no Manage in Plugins link", async () => {
+  it("is one card labelled Skills, a skill a row, one + Add a pill at the label, no Manage in Plugins link", async () => {
     await render();
     const section = container.querySelector("[data-skills-section]")!;
     expect(section.querySelector("h3")?.textContent).toBe("Skills");
@@ -96,9 +100,14 @@ describe("Skills on the profile page (plain)", () => {
     const card = cards[0]!;
     expect(card.className).toContain("bg-card");
 
-    const add = section.querySelector<HTMLElement>("[data-skills-add]")!;
-    expect(add.className).toContain("ui-button");
-    expect(card.contains(add)).toBe(false);
+    // #3400: one "+ Add" at the label, no library select, no separate Add, no Upload pill with its help
+    const adds = section.querySelectorAll<HTMLElement>("[data-bot-profile-add]");
+    expect(adds).toHaveLength(1);
+    expect(adds[0]!.className).toContain("ui-button");
+    expect(card.contains(adds[0]!)).toBe(false);
+    expect(section.querySelector("[data-pill-select], select")).toBeNull();
+    expect(card.querySelector("[data-skill-upload-button]")).toBeNull();
+    expect(card.textContent).not.toContain("Upload a SKILL.md file");
 
     const rows = card.querySelectorAll("[data-skill-row]");
     expect(rows).toHaveLength(3);
@@ -113,9 +122,6 @@ describe("Skills on the profile page (plain)", () => {
     // a skill changed after its review: Review changes a pill
     const review = card.querySelector("[data-skill-warning] button");
     expect(review?.className).toContain("ui-button");
-    // the upload sits in the card, its button a pill
-    expect(card.querySelector<HTMLElement>("[data-skill-upload-button]")!.className).toContain("ui-button");
-
     expect(container.querySelector("[data-manage-in-connect-apps]")).toBeNull();
     expectPlain(container.innerHTML);
   });
@@ -160,5 +166,71 @@ describe("Skills on the profile page (plain)", () => {
     expect(tile.textContent).toContain("triage");
     expect(html).toContain("text-[14px]");
     expectPlain(html);
+  });
+
+  it("#3400: + Add opens described items (library, upload, command) that work with the arrows", async () => {
+    await render();
+    const section = container.querySelector("[data-skills-section]")!;
+    const add = section.querySelector<HTMLButtonElement>("[data-bot-profile-add]")!;
+    await act(async () => { add.focus(); add.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
+    await flush();
+    const items = [...document.querySelectorAll<HTMLElement>("[data-bot-profile-add-item]")];
+    expect(items.map((item) => item.getAttribute("data-bot-profile-add-item"))).toEqual(["library", "upload", "command"]);
+    for (const item of items) expect(item.querySelector("[data-bot-profile-add-description]")?.textContent?.trim()).toBeTruthy();
+    expect(document.activeElement).toBe(items[0]);
+    await act(async () => { items[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
+    expect(document.activeElement).toBe(items[1]);
+    // From the library lists what the library still offers, each with its Add
+    await act(async () => { items[0]!.click(); });
+    await flush();
+    const offered = container.querySelector('[data-skills-library-item="invoice-check"]');
+    expect(offered?.querySelector("[data-skills-add]")).not.toBeNull();
+  });
+
+  it("#3400: no skill is one row with a title, a grey line and + Add; 'already assigned' only when the library has skills", async () => {
+    skillsAnswer = { skills: [], staged: [], library: [], assignedSkills: [] };
+    await render();
+    const card = container.querySelector("[data-skills-section] [data-settings-surface]")!;
+    const empty = card.querySelector<HTMLElement>("[data-skills-empty]")!;
+    expect(empty.textContent).toContain("No skills yet");
+    expect(empty.querySelector("[data-bot-profile-add]")).not.toBeNull();
+    expect(container.querySelectorAll("[data-bot-profile-add]")).toHaveLength(1);
+    expect(card.textContent).not.toContain("No installed skills yet.");
+    expect(card.textContent).not.toContain("already assigned");
+
+    act(() => root.unmount());
+    root = createRoot(container);
+    skillsAnswer = { skills: [{ name: "invoice-check", description: "Checks an invoice.", enabled: true, source: "", warnings: [], origin: "library" }], staged: [], library: [], assignedSkills: ["invoice-check"] };
+    await render();
+    expect(container.querySelector("[data-skills-section] [data-settings-surface]")!.textContent).toContain("already assigned");
+  });
+
+  it("#3400: To review lists each proposal, decided in place on the chat's card, or one row when none waits", async () => {
+    const opened: unknown[] = [];
+    skillsAnswer = {
+      skills: [], library: [], assignedSkills: [],
+      staged: [{ id: "st1", name: "pricing-check", gist: "Compares a quote with the last three prices.", action: "create", sha256: "a".repeat(64), card: { threadId: "th1", requestId: "rq1", messageId: "m1" } }],
+    };
+    await render({ review: { onOpenChat: (entry: unknown) => opened.push(entry) } });
+    const reviewCard = container.querySelector<HTMLElement>('[data-settings-group="bot-profile-review"]')!;
+    expect(reviewCard).not.toBeNull();
+    // the To review card comes before the Skills card
+    expect(reviewCard.compareDocumentPosition(container.querySelector("[data-skills-section]")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const row = reviewCard.querySelector<HTMLElement>('[data-bot-profile-row="review-st1"]')!;
+    expect(row.textContent).toContain("pricing-check");
+    expect(row.textContent).toContain("Compares a quote");
+    // the orange line about proposals is gone
+    expect(container.textContent).not.toContain("waiting for a decision in chat");
+    await act(async () => { row.querySelector<HTMLElement>("[data-bot-profile-review-open]")!.click(); });
+    expect(opened).toHaveLength(1);
+    skillsAnswer = { skills: [], library: [], assignedSkills: [], staged: [] };
+    await act(async () => { row.querySelector<HTMLElement>("[data-bot-profile-review-allow]")!.click(); });
+    await flush();
+    const answer = request.mock.calls.find(([path]) => path === "/api/threads/th1/respond");
+    expect(answer).toBeDefined();
+    expect(JSON.parse(String((answer![1] as RequestInit).body))).toEqual({ requestId: "rq1", behavior: "allow", reviewedSha256: "a".repeat(64), via: "profile" });
+    // once decided, nothing waits: the empty row
+    const emptyRow = container.querySelector<HTMLElement>("[data-bot-profile-review-empty]");
+    expect(emptyRow?.textContent).toContain("You're all caught up");
   });
 });

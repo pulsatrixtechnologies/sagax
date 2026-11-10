@@ -91,7 +91,9 @@ export function personaGroupSections(group: PersonaGroup): readonly PersonaCateg
  * - Appearance: the whole mascot editor in place (character, shape, colour,
  *   style, moves), its own tab like Grok Bot's (JC 2026-11-08: no dropdown
  *   under the header any more).
- * - Knowledge: Routines, Skills, Folder and memory (Its work).
+ * - Knowledge (#3400): To review and Skills in place (the learnings that
+ *   wait, decided in place; the skills with their "+ Add"), then Its work
+ *   (Routines, Folder and memory).
  * - Stats: the usage over 7, 30 or 90 days. */
 export type BotProfileTab = "general" | "appearance" | "knowledge" | "stats";
 export const BOT_PROFILE_TABS = ["general", "appearance", "knowledge", "stats"] as const satisfies readonly BotProfileTab[];
@@ -108,7 +110,6 @@ export const BOT_PROFILE_SUBPAGES = [
   "advanced",
   "versions",
   "routines",
-  "skills",
   "folder",
 ] as const;
 export type BotProfileSubPage = (typeof BOT_PROFILE_SUBPAGES)[number];
@@ -126,13 +127,13 @@ export const BOT_PROFILE_SUBPAGE_SECTIONS: Readonly<Record<BotProfileSubPage, re
   advanced: [],
   versions: ["history"],
   routines: [],
-  skills: ["skills"],
   folder: ["files"],
 };
 
 /** The cards a tab draws in place, controls and all (#3398): the
- * channels and the bot's accounts. Not sub-pages any more. */
-export const BOT_PROFILE_CARDS = ["channels", "accounts"] as const;
+ * channels and the bot's accounts; Knowledge's To review and Skills
+ * (#3400). Not sub-pages any more. */
+export const BOT_PROFILE_CARDS = ["channels", "accounts", "skills"] as const;
 export type BotProfileCard = (typeof BOT_PROFILE_CARDS)[number];
 
 /** The persona sections each in-place card holds (a deep link to one opens
@@ -140,12 +141,15 @@ export type BotProfileCard = (typeof BOT_PROFILE_CARDS)[number];
 export const BOT_PROFILE_CARD_SECTIONS: Readonly<Record<BotProfileCard, readonly PersonaCategory[]>> = {
   channels: ["slack"],
   accounts: ["access"],
+  skills: ["skills"],
 };
 
 /** The card's grey group on the page, for a deep link to scroll to. */
 export const BOT_PROFILE_CARD_GROUP: Readonly<Record<BotProfileCard, string>> = {
   channels: "bot-profile-channels",
   accounts: "bot-profile-accounts",
+  // a link to the skills lands on To review, the top of the two cards
+  skills: "bot-profile-review",
 };
 
 /** The groups of each tab in the page's order: a card drawn in place, or
@@ -160,7 +164,10 @@ export const BOT_PROFILE_TAB_GROUPS: Readonly<Record<BotProfileTab, ReadonlyArra
     { id: "more", pages: ["sharing", "rules", "actsAlone", "voice", "advanced", "versions"] },
   ],
   appearance: [],
-  knowledge: [{ id: "work", pages: ["routines", "skills", "folder"] }],
+  knowledge: [
+    { id: "skills", pages: [], card: "skills" },
+    { id: "work", pages: ["routines", "folder"] },
+  ],
   stats: [],
 };
 
@@ -186,7 +193,10 @@ export const BOT_PROFILE_TAB_SECTIONS: Readonly<Record<BotProfileTab, readonly P
     ...botProfileTabCards("general").flatMap((card) => BOT_PROFILE_CARD_SECTIONS[card]),
   ],
   appearance: ["appearance"],
-  knowledge: botProfileTabPages("knowledge").flatMap((page) => BOT_PROFILE_SUBPAGE_SECTIONS[page]),
+  knowledge: [
+    ...botProfileTabCards("knowledge").flatMap((card) => BOT_PROFILE_CARD_SECTIONS[card]),
+    ...botProfileTabPages("knowledge").flatMap((page) => BOT_PROFILE_SUBPAGE_SECTIONS[page]),
+  ],
   stats: ["usage"],
 };
 

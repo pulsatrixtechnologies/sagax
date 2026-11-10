@@ -948,7 +948,7 @@ import { createFishVoice } from "./tts/fish-voice.ts";
 import { createInstalledVoices } from "./tts/installed-voice.ts";
 import { systemVoicesAvailable } from "./tts/system-voices.ts";
 import { ClaudeAiConnectorInventory, connectorPrincipalFor, createHarnessConnectorRoutes, runClaudeCli, type ClaudeAiTurnInput } from "./harness-connectors.ts";
-import { createConnectorPlanForTurn } from "./connectors/turn-plan.ts";
+import { claudeAiConnectorsOwn, createConnectorPlanForTurn } from "./connectors/turn-plan.ts";
 import { connectorSwitchText } from "./connector-switch.ts";
 import { connectorNeed } from "../shared/engine-connectors.ts";
 import { forgetTurnReach,
@@ -9894,6 +9894,7 @@ const bus = new EventBus();
 // Published through bus.publish read at call time (the saved-steps override).
 const heldRequests = new HeldRequests((event) => bus.publish(event));
 bus.setHeldRequests(heldRequests);
+bus.setConnectorPlanLookup(claudeAiConnectorsOwn);
 bus.subscribe((event) => {
   if (event.type === "turn.completed" || event.type === "session.exited") heldRequests.retireTurn(event.threadId, event.turnId);
 });

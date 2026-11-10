@@ -6,7 +6,7 @@ import { DATA_DIR } from "../config.ts";
 import { claudeUserSkillsDir, claudeUserSkillsEnabled, forgetClaudeUserSkillsDir } from "../turn-settings.ts";
 import type { GroupMemberTurnCtx } from "./group-member-turn-ctx.ts";
 import { roomSubagentModel } from "./group-member-turn-room-model.ts";
-import { connectorPlanAt } from "../connectors/turn-plan.ts";
+import { dispatchedConnectorPlan } from "../connectors/turn-plan.ts";
 import { soloPiTurnAccess } from "../pi-own-model-servers-access.ts";
 
 export function createGuardRoomMemberDispatch(host: GroupMemberTurnHost) {
@@ -308,7 +308,7 @@ const sendRoomTurn = async (roomTurnAccess: TurnAccess | undefined) => {
         })(),
         // the plan of the room turn's setup, for the access this dispatch materialized
         ...(() => {
-          const plan = connectorPlanAt(roomConnectorPlan ?? connectorPlanForTurn(readyBot, instance, roomSpeaker, threadId), roomTurnAccess?.via);
+          const plan = dispatchedConnectorPlan(threadId, roomConnectorPlan ?? connectorPlanForTurn(readyBot, instance, roomSpeaker, threadId), roomTurnAccess?.via);
           return { claudeAiConnectors: plan.claudeAi, grokCloudConnectors: plan.grokCloud };
         })(),
         ...pluginDirsFor(readyBot, instance, roomPrincipal ?? undefined),

@@ -2161,6 +2161,8 @@
   "step.computer.done": "Used the computer",
   "step.computer.failed": "Could not use the computer",
   "step.computer.running": "Using the computer",
+  "step.connectorCall.account": "Account: {account}",
+  "step.connectorCall.summaryAccount": "{summary} · Account: {account}",
   "step.coordinate.bare.done": "Coordinated teammates",
   "step.coordinate.bare.failed": "Could not coordinate teammates",
   "step.coordinate.bare.running": "Coordinating teammates",

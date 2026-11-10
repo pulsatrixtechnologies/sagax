@@ -7,7 +7,7 @@
 // opened the held request on the calling turn, and the person's approval
 // settings decided it, before the hub asks the host. A provider with no
 // host is not callable, and the connectors list says so.
-import { connectorCallReads, connectorWriteKind } from "../../shared/engine-connectors.ts";
+import { connectorCallActs, connectorCallId } from "../../shared/connector-call.ts";
 import type { ConnectorEntry, ConnectorProvider } from "./types.ts";
 import type { ConnectorHost, ConnectorHostCall, ConnectorHostResult } from "./hosts/types.ts";
 
@@ -25,22 +25,17 @@ export interface ConnectorHubStat {
 
 export const CONNECTOR_HUB_ERROR_MAX = 300;
 
-function slug(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "connector";
-}
-
-/** The rule name of a call when its host names none: a tool id that already
- * names its server keeps it, else the connector's slug and the tool. */
-export function defaultConnectorRuleTool(connector: Pick<ConnectorEntry, "id" | "name">, tool: string): string {
-  const id = tool.trim();
-  if (id.includes("__")) return id;
-  return `${slug(connector.id ?? connector.name)}__${id}`;
+/** The rule name of a call when its host names none: the provider's own
+ * id of the call (shared/connector-call.ts connectorCallId), the same key a
+ * native call of that provider gets. */
+export function defaultConnectorRuleTool(connector: Pick<ConnectorEntry, "id" | "name">, tool: string, provider: ConnectorProvider = "chatgpt-apps"): string {
+  return connectorCallId(provider, connector, tool);
 }
 
 /** A call that reaches outside (a send, a write, anything not plainly a
  * read): the same reading as a native connector call's. */
 export function connectorCallOutbound(ruleTool: string): boolean {
-  return connectorWriteKind(ruleTool) !== null || !connectorCallReads(ruleTool);
+  return connectorCallActs(ruleTool);
 }
 
 export interface ConnectorHub {
@@ -78,7 +73,7 @@ export function createConnectorHub(hosts: readonly ConnectorHost[], now: () => n
     callable: (provider) => byProvider.has(provider),
     ruleTool(provider, connector, tool) {
       const named = byProvider.get(provider)?.ruleTool?.(connector, tool);
-      return named && named.trim() ? named.trim() : defaultConnectorRuleTool(connector, tool);
+      return named && named.trim() ? named.trim() : defaultConnectorRuleTool(connector, tool, provider);
     },
     outbound: connectorCallOutbound,
     async call(call) {

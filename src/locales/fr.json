@@ -1631,6 +1631,8 @@
   "step.computer.done": "A utilisé l'ordinateur",
   "step.computer.failed": "N'a pas pu utiliser l'ordinateur",
   "step.computer.running": "Utilise l'ordinateur",
+  "step.connectorCall.account": "Compte : {account}",
+  "step.connectorCall.summaryAccount": "{summary} · Compte : {account}",
   "step.coordinate.bare.done": "A coordonné des coéquipiers",
   "step.coordinate.bare.failed": "N'a pas pu coordonner les coéquipiers",
   "step.coordinate.bare.running": "Coordonne des coéquipiers",

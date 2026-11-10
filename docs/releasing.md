@@ -136,6 +136,16 @@ sha you pass) is not an ancestor of `origin/main`. Run it after
    `pnpm smoke:launch --app release/mac-arm64/Sagax.app`, and again with
    `--user-data-copy` pointing at an existing userData folder (it is copied,
    never modified). Both must load the main window within 60 s.
+   Then the live connector check, on the release candidate signed in as the
+   QA person (about five minutes, reads only; the one send per provider is
+   denied at its card):
+   `SAGAX_LIVE_TOKEN=... node scripts/verify/release/connectors-live.mjs --plan <qa plan> --server <origin> --doc --notes docs/releases/X.Y.Z.md --issue-repo <owner>/<repo>`.
+   It writes the grid, engine by provider, to
+   `docs/verification/connectors-live.md` and to the release notes before
+   they are checked and published. A red cell (exit 1) opens an issue and
+   stops the release announcement until it is fixed. The plan, the QA
+   accounts and the `--fake` proof (run in `pnpm test:connector-matrix`) are
+   in `docs/verification/connectors-live.md`.
 5. Dispatch CI on the release candidate SHA (Actions → CI → Run workflow) and
    wait until the Windows and macOS vitest jobs on that SHA have succeeded. A
    green push only ran Ubuntu. Squash-merge the release PR into `main`, then

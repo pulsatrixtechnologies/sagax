@@ -104,7 +104,11 @@
 //                     call its arguments, default {"note":"fake"};
 //                     FAKE_ACP_MCP_ROWS=1 also streams each call as a
 //                     tool_call then its tool_call_update, as an ACP agent
-//                     reports an MCP call, so the chat holds one tool row)
+//                     reports an MCP call, so the chat holds one tool row;
+//                     FAKE_ACP_MCP_CALLS_WHEN='{"<marker>":{"calls":"server:tool,...","args":{...}}}'
+//                     picks the calls and their arguments by the first
+//                     marker the prompt holds, as a model reads its ask,
+//                     and makes no call when none is there)
 //                   | lend-question (call list_shared_computers through the
 //                     injected agents MCP, ask a question card, call it again
 //                     once the card is answered, and reply
@@ -1739,11 +1743,20 @@ function handle(msg: any) {
         return;
       }
       if (mode === "mcp-call") {
-        const calls = (process.env.FAKE_ACP_MCP_CALLS ?? "").split(",").map((entry) => entry.trim()).filter(Boolean);
+        // FAKE_ACP_MCP_CALLS_WHEN: the calls of the first marker the prompt holds
+        let byPrompt: { calls?: string; args?: Record<string, Record<string, unknown>> } | undefined;
+        if (process.env.FAKE_ACP_MCP_CALLS_WHEN) {
+          try {
+            const table = JSON.parse(process.env.FAKE_ACP_MCP_CALLS_WHEN) as Record<string, { calls?: string; args?: Record<string, Record<string, unknown>> }>;
+            byPrompt = Object.entries(table).find(([marker]) => promptText.includes(marker))?.[1] ?? { calls: "" };
+          } catch { byPrompt = { calls: "" }; }
+        }
+        const calls = (byPrompt ? byPrompt.calls ?? "" : process.env.FAKE_ACP_MCP_CALLS ?? "").split(",").map((entry) => entry.trim()).filter(Boolean);
         // FAKE_ACP_MCP_CALL_ARGS: {"server:tool": {...}}, the arguments of a call
         // (default {"note":"fake"})
         let mcpCallArgs: Record<string, Record<string, unknown>> = {};
         try { mcpCallArgs = JSON.parse(process.env.FAKE_ACP_MCP_CALL_ARGS ?? "{}") as Record<string, Record<string, unknown>>; } catch { /* no arguments given */ }
+        if (byPrompt?.args) mcpCallArgs = { ...mcpCallArgs, ...byPrompt.args };
         void (async () => {
           const results: string[] = [];
           for (const call of calls) {

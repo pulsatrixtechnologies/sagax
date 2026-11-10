@@ -28,7 +28,10 @@ export interface TeamBoardCard {
 export type TeamBoardStatus = "free" | "taken" | "running" | "waiting_you" | "waiting_review" | "waiting_release" | "released" | "blocked";
 export interface TeamBoardSummary { inProgress: number; waitingYou: number; blocked: number; mergedThisWeek: number; oldestInProgress?: { key: string; days: number } }
 export interface TeamBoardLane { sectionId: string; name: string; lead?: { botId: string; name: string }; repos: string[]; cards: TeamBoardCard[] }
-export interface TeamBoard { lanes: TeamBoardLane[]; at: number; github: { state: "ok" | "stale" | "unavailable" | "not_connected"; at?: number; fix?: string }; summary: TeamBoardSummary }
+export interface TeamBoard { lanes: TeamBoardLane[]; at: number; github: { state: "ok" | "stale" | "unavailable" | "not_connected"; at?: number; fix?: string }; summary: TeamBoardSummary;
+  /** Per repository (owner/name), the true count of open issues: To do
+   * holds at most the 300 newest of them (#3413 review). */
+  todoTotal: Record<string, number> }
 
 /** Merged cards stay on the board this long after the merge (decided 2026-11-10). */
 export const TEAM_BOARD_MERGED_DAYS = 7;

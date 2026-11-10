@@ -19,6 +19,21 @@
 //   wrapper -> frame  { type: "sagax-cap-result", v: 1, id, ok: true, value }
 //                     { type: "sagax-cap-result", v: 1, id, ok: false, error, message? }
 //   wrapper -> frame  { type: "sagax-cap-event", v: 1, cap: "data", name }
+//   frame -> wrapper  { type: "sagax-cap-hello", v: 1 }   once, when its bridge starts
+//   wrapper -> frame  { type: "sagax-cap-ready", v: 1 }   when the broker listens (on start,
+//                                                        and in answer to each hello)
+// The frame queues its calls until ready; each waits CAP_READY_TIMEOUT_MS at
+// most, then fails with code "unavailable". In the app's preview, the
+// server's preview wrapper relays these messages between its frame and the
+// app (PREVIEW_CAP_RELAY_SOURCE); the frame still talks to its parent only.
+//
+// What the page receives (#3413 lot 1b, decided): `data.read(name)` resolves
+// with the source's value alone (PageDataAnswer.value: for `team-board` a
+// TeamBoard, shared/team-board.ts); the answer's `links` and `refs` stay in
+// the wrapper. `viewer.get()` resolves with PageViewerInfo; `open(ref)` with
+// `true`. A refusal rejects with an Error whose `code` is a stable
+// PageCapError and whose `message` is in the reader's language when the
+// server wrote one (the page may show it, or translate the code).
 //
 // In the page (window.sagax, beside `page`): `capabilities` (what this
 // version was granted), `data.read(name, params?)`, `data.subscribe(name,
@@ -32,6 +47,12 @@ export const CAP_MESSAGE = "sagax-cap";
 export const CAP_RESULT_MESSAGE = "sagax-cap-result";
 /** wrapper -> frame: something it reads changed (a `data` source). */
 export const CAP_EVENT_MESSAGE = "sagax-cap-event";
+/** frame -> wrapper: the bridge started (once). */
+export const CAP_HELLO_MESSAGE = "sagax-cap-hello";
+/** wrapper -> frame: the broker listens; queued calls go now. */
+export const CAP_READY_MESSAGE = "sagax-cap-ready";
+/** How long a call waits for ready before it fails ("unavailable"). */
+export const CAP_READY_TIMEOUT_MS = 10_000;
 
 /** The calls lot 1 knows. */
 export const PAGE_CAP_CALLS = ["data.read", "viewer.get", "open"] as const;
@@ -101,14 +122,35 @@ export interface PageCapEvent {
 }
 
 /** GET /api/pages/:id/data/<source>: the source's value for the reader, the
- * addresses it holds (a link to one of them opens without a question) and
- * the opaque app references it holds (`sagax.open` accepts only those). */
+ * addresses the source names as exits (a link to one of them opens without a
+ * question: only fields the source chose, for `team-board` the issue and
+ * pull request addresses of its own repositories on https://github.com/,
+ * never free text such as a title) and the opaque app references it holds
+ * (`sagax.open` accepts only those). The page gets `value` only. */
 export interface PageDataAnswer {
   name: PageDataSource;
   value: unknown;
   at: number;
   links: string[];
   refs: string[];
+}
+
+/** 409 ask_first of a data read: the card the wrapper shows. The reader's
+ * answer goes to POST /api/pages/:id/data-approvals/:approvalId with
+ * PageDataApprovalAnswer; then the wrapper reads again. */
+export interface PageDataAskFirst {
+  error: string;
+  code: "ask_first";
+  approvalId: string;
+  source: PageDataSource;
+  version: number;
+}
+
+/** The reader's answer to an Ask first card: allow this once (this page,
+ * version and source, for a while), always allow (this page and source,
+ * kept by the server), or refuse. */
+export interface PageDataApprovalAnswer {
+  answer: "once" | "always" | "deny";
 }
 
 /** viewer.get: who reads, never an id or an email. `handle` is this page's
@@ -164,6 +206,13 @@ export function pageCapabilitiesAny(caps: PageCapabilities | null | undefined): 
   return Boolean(caps && (caps.data.length || caps.viewer || caps.open));
 }
 
+/** Whether a declaration hands the page the reader's personal data (`data`
+ * today; later any capability that returns the reader's data). A page that
+ * does, while shared, keeps its shared state read only. Pure. */
+export function pageCapabilitiesPersonal(caps: PageCapabilities | null | undefined): boolean {
+  return Boolean(caps && caps.data.length > 0);
+}
+
 /** A call the frame posted, checked, or null. Pure: the wrapper trusts no
  * other shape. */
 export function parsePageCapRequest(data: unknown): PageCapRequest | null {
@@ -186,26 +235,22 @@ export function pageCapGranted(caps: PageCapabilities | null | undefined, cap: P
   return caps.open;
 }
 
-const LINK_KEYS_MAX = 2_000;
-
-/** The http(s) addresses and open references a data answer holds, each as
- * is: the wrapper opens a link without a question only when it is one of
- * these. Pure. */
-export function pageAnswerExits(value: unknown): { links: string[]; refs: string[] } {
-  const links = new Set<string>();
-  const refs = new Set<string>();
-  const walk = (node: unknown, depth: number) => {
-    if (links.size + refs.size >= LINK_KEYS_MAX || depth > 12) return;
-    if (typeof node === "string") {
-      if (/^https?:\/\/[^\s]+$/i.test(node)) links.add(node);
-      else if (parsePageOpenRef(node)) refs.add(node);
-      return;
-    }
-    if (Array.isArray(node)) for (const item of node) walk(item, depth + 1);
-    else if (node && typeof node === "object") for (const item of Object.values(node)) walk(item, depth + 1);
-  };
-  walk(value, 0);
-  return { links: [...links], refs: [...refs] };
+/** An exit a source names, kept only when it is an https://github.com/
+ * address of one of `repos` (owner/name): the issue or pull request of a
+ * card. Pure. */
+export function pageGithubExit(url: unknown, repos: ReadonlySet<string>): string | null {
+  if (typeof url !== "string") return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:" || parsed.hostname !== "github.com" || parsed.username || parsed.password || parsed.port) return null;
+  const match = /^\/([\w.-]+\/[\w.-]+)\/(?:issues|pull)\/\d+$/.exec(parsed.pathname);
+  if (!match || parsed.search || parsed.hash) return null;
+  const repo = match[1]!.toLowerCase();
+  return [...repos].some((name) => name.toLowerCase() === repo) ? parsed.href : null;
 }
 
 /** Whether the wrapper may open an address without asking the reader: in a

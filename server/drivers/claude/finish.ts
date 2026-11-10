@@ -11,7 +11,7 @@ import {
   renewalPrompt,
 } from "../../context/context-renewal.ts";
 import { killCliTree } from "../../procs.ts";
-import { classifyError, computeBackoff, interruptibleDelay, RETRY_MAX_ATTEMPTS } from "../retry.ts";
+import { classifyError, computeBackoff, interruptibleDelay, mayResendTurn } from "../retry.ts";
 import { turnCostFromRunningTotal } from "./cost.ts";
 import { sumTurnModels } from "./session-types.ts";
 import { removePrivateTempDir } from "./helpers.ts";
@@ -141,15 +141,11 @@ const finalizeClose = async (code: number | null) => {
     // no retry budget spent. (A fresh process is never retained, so
     // this happens at most once per turn.)
     const endedBeforeTurn = session.turn.awaitingInit === true;
-    if (
-      !retry.cancelled &&
-      (endedBeforeTurn || (
-        code !== 0 &&
-        verdict.transient &&
-        !session.turn.sawStreamDelta &&
-        retry.attempt < RETRY_MAX_ATTEMPTS - 1
-      ))
-    ) {
+    // A turn that already got an assistant message (a tool call
+    // included) is never sent again: that model call is paid for and
+    // the CLI retried its own API calls (mayResendTurn).
+    if (!retry.cancelled && mayResendTurn({ endedBeforeTurn, exitCode: code, transient: verdict.transient,
+      streamed: session.turn.sawStreamDelta, answered: session.turn.answered === true, attempt: retry.attempt })) {
       // the CLI is gone but the TURN continues: keep the thread busy,
       // emit no terminal event, and relaunch after the backoff. The
       // `active` entry STAYS — it is what makes an interrupt during

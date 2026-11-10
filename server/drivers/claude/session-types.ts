@@ -146,6 +146,9 @@ export type ClaudeSession = {
     retryAbort: AbortController;
     settled: boolean;
     sawStreamDelta: boolean;
+    /** set once any model call of this turn returned an assistant message
+     * (a tool call counts): such a turn is never sent again (mayResendTurn) */
+    answered?: boolean;
     /** written to a process kept warm from an earlier turn, which has
      * not announced this turn with its `init` yet. A process that ends
      * before that never took the prompt (see the close handler). */

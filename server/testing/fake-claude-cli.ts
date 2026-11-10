@@ -881,6 +881,8 @@ const playTurn = (prompt: JsonValue, late = false) => {
   // FAKE_CLAUDE_STATE is unset) the turn completes normally.
   // FAKE_CLAUDE_PARTIAL_FAILS makes the FIRST launch emit a text delta
   // before failing — the partial-output guard must forbid retrying it.
+  // FAKE_CLAUDE_ANSWERED_FAILS makes it finish one model call (a tool use)
+  // before failing: a turn already answered must never be sent again.
   if (process.env.FAKE_CLAUDE_TRANSIENTS && process.env.FAKE_CLAUDE_STATE) {
     let launched = 0;
     try {
@@ -892,6 +894,9 @@ const playTurn = (prompt: JsonValue, late = false) => {
     if (launched < quota) {
       if (process.env.FAKE_CLAUDE_PARTIAL_FAILS) {
         out({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "half an answer" } } });
+      }
+      if (process.env.FAKE_CLAUDE_ANSWERED_FAILS) {
+        out({ type: "assistant", session_id: sessionId, message: { content: [{ type: "tool_use", id: "toolu_spent", name: "Read", input: { file_path: "notes.md" } }] } });
       }
       // an MCP server's question still open when the launch fails
       if (process.env.FAKE_CLAUDE_ELICIT) out({ type: "control_request", request_id: "elicit-1", request: { subtype: "elicitation", ...JSON.parse(process.env.FAKE_CLAUDE_ELICIT) } });

@@ -142,6 +142,15 @@ export function classifyError(err: FailureInput): ErrorClassification {
   return { transient: false, reason: "unknown" };
 }
 
+/** Whether a turn whose CLI exited before its result may be sent again. Only work the provider never did is resent:
+ * a launch that ended before taking the prompt, or a transient failure before any model call answered or any text
+ * streamed. Once a call answered, the subscription has paid for it and the CLI already retried its own API calls. */
+export function mayResendTurn(turn: { endedBeforeTurn: boolean; exitCode: number | null; transient: boolean; streamed: boolean;
+  answered: boolean; attempt: number }): boolean {
+  if (turn.endedBeforeTurn) return true;
+  return turn.exitCode !== 0 && turn.transient && !turn.streamed && !turn.answered && turn.attempt < RETRY_MAX_ATTEMPTS - 1;
+}
+
 /** Capped exponential delay with jitter, in milliseconds. Attempt 0 (the
  * first retry) waits ~1s, then ~3s, then ~8s; beyond that the cap holds.
  * Jitter stays within ±25% so tests can bound it and a thundering herd of

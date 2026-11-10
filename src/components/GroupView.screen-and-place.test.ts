@@ -119,7 +119,7 @@ describe("GroupView: computer/browser session visibility", () => {
       expect(markup).not.toContain('data-mid="bad"');
       expect(markup).toContain("1Password");
       expect(markup).toContain("boom");
-      expect(markup).toContain("Messaged @Ada");
+      expect(markup).toContain("Messaged Ada");
       expect(markup).toContain("hello there");
     } finally {
       vi.stubGlobal("navigator", previous ?? { userAgent: "", maxTouchPoints: 0 });

@@ -17,18 +17,23 @@ export const QUIET_LINE_ROW = "flex justify-center py-1";
 /** The line itself: small, muted, no bubble. */
 export const QUIET_LINE = "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] text-ink-secondary";
 
-/** A bot on a quiet line: its face, then its name in its ink. */
-export function QuietLineParty({ bot, agentId, name, color, nameClassName }: {
+/** A bot on a quiet line: its face, then its name in its ink. `tone="neutral"`
+ * draws the name in the app's ink, one step brighter than the line, so only
+ * the face carries color (the Messaged line, #3275). */
+export function QuietLineParty({ bot, agentId, name, color, nameClassName, tone = "bot" }: {
   bot: { name: string; color: MausColor } & Partial<Bot>;
   agentId?: string;
   name: string;
   color: MausColor;
   nameClassName?: string;
+  tone?: "bot" | "neutral";
 }) {
+  const neutral = tone === "neutral";
+  const className = ["font-medium", neutral ? "text-ink" : "", nameClassName ?? ""].filter(Boolean).join(" ");
   return (
     <>
       <PartyAvatar id={agentId} bot={bot} size={16} />
-      <span className={nameClassName ? `font-medium ${nameClassName}` : "font-medium"} style={{ color: mausInk(color) }}>{name}</span>
+      <span className={className} style={neutral ? undefined : { color: mausInk(color) }}>{name}</span>
     </>
   );
 }

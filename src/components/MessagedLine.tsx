@@ -2,17 +2,21 @@
 // "Messaged [face] Osprey and [face] test". The same row, faces and names
 // as the collapsed bot exchange's line (ConversationLink), with no bubble,
 // no chevron and no "@". More than three recipients: the first three, then
-// "and N others", which shows the whole list. A name opens the exchange in
-// a sheet over this column, never another conversation (unified chat).
+// "and N others", which shows the whole list and then folds it back. The
+// line is neutral: names in the app's ink, only the faces carry color
+// (#3275). A name opens the exchange in a sheet over this column, never
+// another conversation (unified chat).
 import { lazy, memo, Suspense, useState } from "react";
 import type { Bot, Group } from "@/state/store";
 import { activeLocale, t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { mausInk, type MausColor } from "@/lib/mascot";
-import { conjunctionParts, messagedLineNames, type MessagedLineItem, type MessagedRecipient } from "@/lib/messaged-line";
+import { conjunctionParts, MESSAGED_LINE_SHOWN, messagedLineNames, type MessagedLineItem, type MessagedRecipient } from "@/lib/messaged-line";
 import { QUIET_LINE, QUIET_LINE_ROW, QuietLineParty } from "./ConversationLink";
 
 const TeammateExchangeSheet = lazy(() => import("./TeammateExchangeSheet"));
+
+const MORE_BUTTON = "-mx-1 shrink-0 rounded-full px-1 font-medium text-ink hover:bg-raised";
 
 function inkColor(color: string | undefined): MausColor {
   return color && mausInk(color) ? (color as MausColor) : "blue";
@@ -36,6 +40,8 @@ export const MessagedLine = memo(function MessagedLine({ line, self, bots, group
   const { shown, others } = messagedLineNames(line.recipients, expanded);
   const othersLabel = others > 0 ? t(others === 1 ? "chat.messagedOthers.one" : "chat.messagedOthers.other", { count: others }) : null;
   const parts = conjunctionParts(shown.length + (othersLabel ? 1 : 0), activeLocale());
+  // opened: the whole list, then the control that folds it back
+  const foldable = expanded && line.recipients.length > MESSAGED_LINE_SHOWN;
   const open = openKey ? line.recipients.find((recipient) => recipient.key === openKey) : undefined;
   const openThread = open ? exchangeThread(open, groups) : undefined;
   const openBot = open ? bots.find((bot) => bot.id === open.comm.withBotId) : undefined;
@@ -44,7 +50,7 @@ export const MessagedLine = memo(function MessagedLine({ line, self, bots, group
     const color = inkColor(bot?.color ?? recipient.comm.withColor);
     const face = bot ?? { name: recipient.comm.withName, color };
     const party = (
-      <QuietLineParty bot={face} agentId={recipient.comm.withBotId} name={recipient.comm.withName} color={color} nameClassName="min-w-0 max-w-[16rem] truncate" />
+      <QuietLineParty bot={face} agentId={recipient.comm.withBotId} name={recipient.comm.withName} color={color} tone="neutral" nameClassName="min-w-0 max-w-[16rem] truncate" />
     );
     const thread = exchangeThread(recipient, groups);
     // No thread to read: the name is still said, it opens nothing.
@@ -89,12 +95,23 @@ export const MessagedLine = memo(function MessagedLine({ line, self, bots, group
               aria-expanded={false}
               title={line.recipients.slice(shown.length).map((entry) => entry.comm.withName).join(", ")}
               onClick={() => setExpanded(true)}
-              className="-mx-1 shrink-0 rounded-full px-1 font-medium text-ink hover:bg-raised"
+              className={MORE_BUTTON}
             >
               {othersLabel}
             </button>
           );
         })}
+        {foldable && (
+          <button
+            type="button"
+            data-testid="messaged-line-more"
+            aria-expanded={true}
+            onClick={() => setExpanded(false)}
+            className={MORE_BUTTON}
+          >
+            {t("chat.showLess")}
+          </button>
+        )}
       </div>
       {open && openThread && (
         <Suspense fallback={null}>

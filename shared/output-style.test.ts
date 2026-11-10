@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findKeySentenceTables, isFieldValueHeader, isSentenceCell, OUTPUT_STYLE_RULE, OUTPUT_STYLE_RULE_SHORT, rewriteKeySentenceTables } from "./output-style.ts";
+import { findKeySentenceTables, isFieldValueHeader, isSentenceCell, OUTPUT_STYLE_RULE, OUTPUT_STYLE_RULE_SHORT, rewriteKeySentenceTables, TABLE_RULE } from "./output-style.ts";
 
 // #2949: the reply flagged (2026-11-08), a "Piece | State" table of sentences.
 const FLAGGED = [
@@ -18,9 +18,12 @@ const FLAGGED = [
 describe("output style rule", () => {
   it("defaults to prose or short lists and keeps tables for real tabular data", () => {
     expect(OUTPUT_STYLE_RULE).toContain("short prose, or a short bulleted list with the label in bold");
-    expect(OUTPUT_STYLE_RULE).toContain("at least 3 columns of comparable values");
-    expect(OUTPUT_STYLE_RULE).toContain("more than about 6 rows");
-    expect(OUTPUT_STYLE_RULE).toContain("when the person asks for a table");
+    expect(OUTPUT_STYLE_RULE).toContain("3+ columns of comparable values");
+    expect(OUTPUT_STYLE_RULE).toContain("across 6 or more rows of one kind");
+    // #3293: the full and the short rule state the same threshold
+    expect(OUTPUT_STYLE_RULE).toContain(TABLE_RULE);
+    expect(OUTPUT_STYLE_RULE_SHORT).toContain(TABLE_RULE);
+    expect(OUTPUT_STYLE_RULE).toContain("or on request");
     expect(OUTPUT_STYLE_RULE).toContain("Never a two-column label and sentence table, never a table for a status or a summary");
     expect(OUTPUT_STYLE_RULE).toContain("compact Sagax card fits");
     expect(OUTPUT_STYLE_RULE).toContain("Never a field and value table (\"Field | Value\", \"Champ | Valeur\")");

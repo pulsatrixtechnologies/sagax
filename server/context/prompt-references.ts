@@ -43,7 +43,7 @@ function references(): Array<{ id: string; full: string; brief: string }> {
     { id: "memes", full: MEME_PROMPT,
       brief: " Memes: send_meme { query, caption? } for a fitting reaction GIF or still meme when the person's style invites it. Sparingly; never in serious or work contexts; never instead of a needed written answer." + read("memes") },
     { id: "threads", full: THREADS_PROMPT,
-      brief: " Threads: apply corrections and answer status/follow-ups here. For independent work use start_thread or route_message parallel; dependent or overlapping work goes after. Never let tasks write the same resource concurrently. Work over about two minutes or requested in background: start_thread on yourself with report_back true, tell the person briefly and end this turn. Use list_threads for progress; link as #Title." + read("threads") },
+      brief: " Threads: apply corrections and answer status/follow-ups here. For independent work use start_thread or route_message parallel; dependent or overlapping work goes after. Never let tasks write the same resource concurrently. Work over about two minutes or requested in background: start_thread on yourself with report_back true, tell the person briefly and end this turn. Use list_threads for progress; one chat, so name work by subject, never a thread." + read("threads") },
     { id: "routines", full: ROUTINE_PROMPT,
       brief: " When explicitly asked to list/review, schedule, run or change routines, use list_routines and propose_routine/propose_routine_action. Calendar rules need exact cron and IANA timezone; intervals are elapsed time, never daily AI date checks." + read("routines") },
     { id: "profile", full: PROFILE_PROMPT,

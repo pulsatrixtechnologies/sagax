@@ -10503,7 +10503,8 @@ the person asked for are not views.
   `CwWidgets.isViewTool`). Perspicax serves those tools only when the
   profile's "Vues interactives" is on (Perspicax #386). Every other read or
   write (`cw_psa_query`, `find_*`, `*_write`) is an ordinary row and the bot
-  answers with a Markdown table. Rows stored earlier keep a `widget` field
+  answers in prose or a short list; a table only under the one table rule
+  (`TABLE_RULE`, `shared/output-style.ts`, #3293). Rows stored earlier keep a `widget` field
   and still draw as rows.
 - The bot writes a ```cw fence only when the person explicitly asks for an
   interactive view (`CW_FENCE_PROMPT`, `server/system-prompt.ts`).

@@ -22,10 +22,13 @@ const { ApiError } = vi.hoisted(() => ({
 const openPage = vi.fn();
 let summaryVersions = [{ n: 1, kind: "html", title: "Demo", createdAt: 1, state: "proposed", bytes: 10, botId: "b1" }];
 let summaryFetches = 0;
+let sourceHtml = "<p>Demo</p>";
 
 vi.mock("@/state/store", () => ({
   api: vi.fn(async (path: string) => {
     if (path === "/api/pages/policy") return { linkSharing: true, readerComments: true };
+    // the version's own source, for the capabilities line (#3413): a page that declares nothing
+    if (/\/versions\/\d+\/source$/.test(path)) return { version: { n: 1 }, content: sourceHtml };
     const version = /\/versions\/(\d+)$/.exec(path);
     if (version) {
       return {
@@ -67,6 +70,7 @@ vi.mock("@/state/store", () => ({
 vi.mock("./WidgetFrame", () => ({ useWidgetTheme: () => ({ scheme: "light", css: "", tokens: {} }) }));
 vi.mock("@/lib/open-page", () => ({ openPage: (...args: unknown[]) => openPage(...args) }));
 
+import { forgetVersionCapabilities } from "@/lib/page-capabilities-line";
 import { PagePublishCard } from "./PublishedPages";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -77,6 +81,8 @@ let host: HTMLElement;
 beforeEach(() => {
   summaryVersions = [{ n: 1, kind: "html", title: "Demo", createdAt: 1, state: "proposed", bytes: 10, botId: "b1" }];
   summaryFetches = 0;
+  sourceHtml = "<p>Demo</p>";
+  forgetVersionCapabilities();
   openPage.mockReset();
   host = document.createElement("div");
   document.body.append(host);
@@ -141,5 +147,19 @@ describe("PagePublishCard version refresh while mounted", () => {
     act(() => (host.querySelector("[data-page-open]") as HTMLButtonElement).click());
     const arg = openPage.mock.calls[0]![0] as { version?: number };
     expect(arg.version).toBe(2);
+  });
+
+  it("says what the page reads on its card, and nothing for a page with no declaration (#3413)", async () => {
+    sourceHtml = '<script type="application/sagax-capabilities+json">{"data":["team-board"],"viewer":true}</script><p>Board</p>';
+    act(() => root!.render(createElement(PagePublishCard, { message: v1Message as never })));
+    await flush();
+    expect(host.querySelector("[data-page-card-caps]")?.textContent).toBe("Reads: the work of your coding teams, your name and role");
+    act(() => root!.unmount());
+    forgetVersionCapabilities();
+    sourceHtml = "<p>Plain</p>";
+    root = createRoot(host);
+    act(() => root!.render(createElement(PagePublishCard, { message: { ...v1Message, pagePublish: { ...v1Message.pagePublish, version: 1 } } as never })));
+    await flush();
+    expect(host.querySelector("[data-page-card-caps]")).toBeNull();
   });
 });

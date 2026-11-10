@@ -1,0 +1,402 @@
+// The wrapper's broker for a page's capabilities (#3413, lot 1b,
+// shared/page-capabilities.ts). The page's script (a sandboxed frame: no
+// network, no cookie, opaque origin) posts `sagax-cap` messages to its
+// wrapper; this answers them with `sagax-cap-result`, calling the server's
+// own routes with the READER's session (GET /api/pages/:id/capabilities,
+// /data/:source, /viewer, server/routes/page-data.ts). The page never gets a
+// session, a token or an address: only the answers, as messages.
+//
+// The same broker runs in both wrappers: the reading link's bar (main.tsx)
+// and the app's open page (src/components/PageViewer.tsx), each with its own
+// `api` (the reader's cookie, the app's session) and its own way to open a
+// chat; the rules below are the same in both.
+//
+// Rules, each pinned by capabilities.test.ts:
+//  - a message counts only when it comes from that very frame window AND
+//    its origin is the sandbox's opaque one ("null"); anything else is
+//    ignored, not even answered;
+//  - no pageId (a reader not signed in, or with no right on the page): no
+//    personal capability, every call is answered `sign_in` (or `not_found`
+//    when signed in) with no request at all;
+//  - the server's declaration decides (a name it did not grant is refused
+//    here without a request, and by the server anyway);
+//  - the organization's Ask first (409 ask_first) shows its card in the
+//    wrapper's bar and retries with approved=1 only after the reader's click;
+//  - once the frame received data, a link opens without a question only when
+//    its address appeared as is in a data answer (pageLinkOpensDirectly);
+//    any other shows its destination and waits for a click;
+//  - no timer: a `data` event of the live stream, and the window coming back
+//    to focus, make the page read again.
+import {
+  CAP_EVENT_MESSAGE,
+  CAP_RESULT_MESSAGE,
+  pageCapGranted,
+  pageLinkOpensDirectly,
+  parsePageCapabilities,
+  parsePageCapRequest,
+  parsePageOpenRef,
+  type PageCapabilities,
+  type PageCapError,
+  type PageCapRequest,
+} from "../../shared/page-capabilities";
+import { parsePageOpenMessage, parsePageOpenUrl } from "../../shared/published-pages";
+import { readerApi } from "./api";
+
+/** The origin a sandboxed frame without allow-same-origin has. */
+export const PAGE_FRAME_ORIGIN = "null";
+/** Window event the live stream raises for a `data` event (live.ts). */
+export const DATA_LIVE_EVENT = "sagax-live-data";
+
+const KNOWN_ERRORS: readonly PageCapError[] = ["sign_in", "not_declared", "denied", "ask_first", "rate_limited", "too_large", "unavailable", "not_found", "bad_request", "shared_write_after_data"];
+const SOURCE_NAME = /^[\w-]{1,80}$/;
+const SET_MAX = 2_000;
+const EVENT_GAP_MS = 1_000;
+
+/** A message counts only when it comes from the page's own frame window and
+ * from its opaque origin. Pure. */
+export function fromPageFrame(event: { source: unknown; origin: string }, frame: Window | null | undefined): boolean {
+  return Boolean(frame) && event.source === frame && event.origin === PAGE_FRAME_ORIGIN;
+}
+
+/** A live `data` event's source name, checked, or null. Pure. */
+export function parseDataEvent(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const name = (data as { name?: unknown }).name;
+  return typeof name === "string" && SOURCE_NAME.test(name) ? name : null;
+}
+
+/** What a failed call tells the page: the server's own code when it is one
+ * the contract knows, else the one its status means. Pure. */
+export function capFailure(cause: unknown): { error: PageCapError; message?: string } {
+  const record = cause && typeof cause === "object" ? cause as { status?: unknown; code?: unknown; body?: { code?: unknown }; message?: unknown } : {};
+  const code = typeof record.code === "string" ? record.code : typeof record.body?.code === "string" ? record.body.code : "";
+  const status = typeof record.status === "number" ? record.status : 0;
+  const error: PageCapError = (KNOWN_ERRORS as readonly string[]).includes(code) ? code as PageCapError
+    : status === 401 ? "sign_in" : status === 403 ? "not_declared" : status === 404 ? "not_found" : status === 409 ? "ask_first"
+      : status === 413 ? "too_large" : status === 429 ? "rate_limited" : status === 400 ? "bad_request" : "unavailable";
+  const message = status > 0 && typeof record.message === "string" && record.message ? record.message.slice(0, 200) : undefined;
+  return { error, ...(message ? { message } : {}) };
+}
+
+export interface PendingApproval { id: number; name: string; label: string }
+export interface PendingLink { id: number; url: string; host: string }
+
+export interface CapabilityState {
+  /** The declaration has been asked (an answer or a refusal). */
+  loaded: boolean;
+  /** What the server says this version was granted. */
+  caps: PageCapabilities | null;
+  /** The data the page may read, with their human labels. */
+  reads: { name: string; label: string }[];
+  approvals: PendingApproval[];
+  links: PendingLink[];
+}
+
+export interface BrokerDeps {
+  /** The page's frame window, when it is there. */
+  frame(): Window | null;
+  /** The server, with this reader's own session. Throws with `status`/`code`. */
+  api<T>(path: string): Promise<T>;
+  /** Present only for a signed-in reader who may read the page. */
+  pageId?: string;
+  signedIn: boolean;
+  lang: "fr" | "en";
+  /** Open an http(s) or mailto address in the system browser. */
+  openUrl(url: string): void;
+  /** Open a bot's chat or one of its conversations; false: not possible here. */
+  openRef(ref: { botId: string; threadId?: string }): boolean;
+  /** Where "Always allow" is kept (this browser, this page and source). */
+  allowStore?: Pick<Storage, "getItem" | "setItem"> | null;
+  now?(): number;
+}
+
+export type ApprovalChoice = "once" | "always" | "decline";
+
+export interface CapabilityBroker {
+  start(): Promise<void>;
+  /** A message from any window: answers it when it is the page's call. */
+  onMessage(event: { source: unknown; origin: string; data: unknown }): Promise<boolean>;
+  /** A link the page asked to open through the wrapper's own bridge: true
+   * when this took it (the reader is asked first), so the caller stops it. */
+  guardOpen(event: { source: unknown; data: unknown }): boolean;
+  /** The live stream says a data source changed. */
+  dataChanged(name: string): void;
+  /** The window came back to focus. */
+  refocused(): void;
+  resolveApproval(id: number, choice: ApprovalChoice): void;
+  resolveLink(id: number, open: boolean): void;
+  getState(): CapabilityState;
+  subscribe(listener: () => void): () => void;
+}
+
+const EMPTY: CapabilityState = { loaded: false, caps: null, reads: [], approvals: [], links: [] };
+
+function boundedAdd(set: Set<string>, values: readonly string[]) {
+  for (const value of values) {
+    if (set.size >= SET_MAX) return;
+    if (typeof value === "string") set.add(value);
+  }
+}
+
+function hostOf(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "mailto:" ? parsed.pathname : parsed.host;
+  } catch {
+    return url.slice(0, 80);
+  }
+}
+
+export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
+  const now = () => deps.now?.() ?? Date.now();
+  let state: CapabilityState = EMPTY;
+  const listeners = new Set<() => void>();
+  const set = (next: Partial<CapabilityState>) => {
+    state = { ...state, ...next };
+    for (const listener of listeners) listener();
+  };
+
+  // what the frame received: the mark that closes the open-link exit
+  let receivedData = false;
+  const links = new Set<string>();
+  const refs = new Set<string>();
+  const readNames = new Set<string>();
+  const lastEvent = new Map<string, number>();
+  let started: Promise<void> | null = null;
+  let seq = 0;
+  const approvals = new Map<number, (choice: ApprovalChoice) => void>();
+  const asking = new Map<string, Promise<ApprovalChoice>>();
+  const pendingLinks = new Map<number, string>();
+
+  const post = (message: Record<string, unknown>) => {
+    // an opaque origin cannot be named: the target is that one window
+    deps.frame()?.postMessage({ v: 1, ...message }, "*");
+  };
+  const answer = (id: number, outcome: { ok: true; value: unknown } | { ok: false; error: PageCapError; message?: string }) => post({ type: CAP_RESULT_MESSAGE, id, ...outcome });
+
+  const allowKey = (name: string) => `sagax-page-allow:${deps.pageId}:${name}`;
+  const allowed = (name: string) => {
+    try { return deps.allowStore?.getItem(allowKey(name)) === "1"; } catch { return false; }
+  };
+
+  const load = async () => {
+    if (!deps.pageId) return set({ loaded: true });
+    try {
+      const body = await deps.api<{ capabilities?: unknown; reads?: unknown }>(`/api/pages/${encodeURIComponent(deps.pageId)}/capabilities`);
+      const caps = parsePageCapabilities(body.capabilities);
+      const reads = Array.isArray(body.reads)
+        ? body.reads.filter((entry): entry is { name: string; label: string } => Boolean(entry) && typeof (entry as { name?: unknown }).name === "string" && typeof (entry as { label?: unknown }).label === "string")
+          .slice(0, 20).map((entry) => ({ name: entry.name, label: entry.label.slice(0, 120) }))
+        : [];
+      set({ loaded: true, caps, reads });
+    } catch {
+      set({ loaded: true, caps: null, reads: [] });
+    }
+  };
+
+  const askFirst = (name: string): Promise<ApprovalChoice> => {
+    const open = asking.get(name);
+    if (open) return open;
+    const id = ++seq;
+    const label = state.reads.find((entry) => entry.name === name)?.label ?? name;
+    const pending = new Promise<ApprovalChoice>((resolve) => {
+      approvals.set(id, (choice) => {
+        approvals.delete(id);
+        asking.delete(name);
+        set({ approvals: state.approvals.filter((entry) => entry.id !== id) });
+        resolve(choice);
+      });
+    });
+    asking.set(name, pending);
+    set({ approvals: [...state.approvals, { id, name, label }] });
+    return pending;
+  };
+
+  const readData = async (name: string, fresh: boolean, approved: boolean): Promise<unknown> => {
+    const query = [fresh ? "fresh=1" : "", approved ? "approved=1" : ""].filter(Boolean).join("&");
+    try {
+      const body = await deps.api<{ value?: unknown; links?: unknown; refs?: unknown }>(`/api/pages/${encodeURIComponent(deps.pageId!)}/data/${encodeURIComponent(name)}${query ? `?${query}` : ""}`);
+      receivedData = true;
+      readNames.add(name);
+      if (Array.isArray(body.links)) boundedAdd(links, body.links as string[]);
+      if (Array.isArray(body.refs)) boundedAdd(refs, body.refs as string[]);
+      return body.value ?? null;
+    } catch (cause) {
+      const failure = capFailure(cause);
+      if (failure.error !== "ask_first" || approved) throw cause;
+      // the organization asks first: the card, outside the page; nothing is
+      // sent with approved=1 before the reader's own click
+      if (allowed(name)) return readData(name, fresh, true);
+      const choice = await askFirst(name);
+      if (choice === "decline") throw Object.assign(new Error("You declined this read."), { code: "denied", status: 403 });
+      if (choice === "always") {
+        try { deps.allowStore?.setItem(allowKey(name), "1"); } catch { /* this visit only */ }
+      }
+      return readData(name, fresh, true);
+    }
+  };
+
+  const open = (args: Record<string, unknown> | undefined): { ok: true; value: unknown } | { ok: false; error: PageCapError; message?: string } => {
+    const ref = typeof args?.ref === "string" ? args.ref : "";
+    const target = parsePageOpenRef(ref);
+    if (target) {
+      // only a reference a data answer held, never one the page made up
+      if (!refs.has(ref)) return { ok: false, error: "not_found", message: "Unknown reference." };
+      return deps.openRef(target) ? { ok: true, value: true } : { ok: false, error: "unavailable", message: "This cannot be opened here." };
+    }
+    const url = parsePageOpenUrl(ref);
+    if (!url) return { ok: false, error: "bad_request", message: "Not an address this page may open." };
+    if (pageLinkOpensDirectly(url, { receivedData, links })) {
+      deps.openUrl(url);
+      return { ok: true, value: true };
+    }
+    askLink(url);
+    return { ok: true, value: false };
+  };
+
+  const askLink = (url: string) => {
+    if ([...pendingLinks.values()].includes(url)) return;
+    const id = ++seq;
+    pendingLinks.set(id, url);
+    set({ links: [...state.links, { id, url, host: hostOf(url) }] });
+  };
+
+  return {
+    start() {
+      started ??= load();
+      return started;
+    },
+    async onMessage(event) {
+      if (!fromPageFrame(event, deps.frame())) return false;
+      const request: PageCapRequest | null = parsePageCapRequest(event.data);
+      if (!request) return false;
+      const id = request.id;
+      // no pageId: not signed in (or no right): no personal capability, and
+      // no request leaves for the server
+      if (!deps.pageId) {
+        answer(id, { ok: false, error: deps.signedIn ? "not_found" : "sign_in", message: deps.signedIn ? "This page is not available." : "Sign in to use this page's data." });
+        return true;
+      }
+      await (started ??= load());
+      const source = request.cap === "data.read" ? request.args?.name : undefined;
+      if (request.cap === "data.read" && (typeof source !== "string" || !SOURCE_NAME.test(source))) {
+        answer(id, { ok: false, error: "bad_request", message: "A data source name is needed." });
+        return true;
+      }
+      // the server's declaration decides; a name it did not grant is
+      // refused without a request (the server refuses it again anyway)
+      if (state.caps && !pageCapGranted(state.caps, request.cap, typeof source === "string" ? source : undefined)) {
+        answer(id, { ok: false, error: "not_declared", message: `This page does not declare ${request.cap === "data.read" ? `the data source ${String(source)}` : request.cap}.` });
+        return true;
+      }
+      try {
+        if (request.cap === "data.read") {
+          const params = request.args?.params;
+          const fresh = Boolean(params && typeof params === "object" && (params as { fresh?: unknown }).fresh === true);
+          answer(id, { ok: true, value: await readData(source as string, fresh, false) });
+        } else if (request.cap === "viewer.get") {
+          answer(id, { ok: true, value: await deps.api<unknown>(`/api/pages/${encodeURIComponent(deps.pageId)}/viewer?lang=${deps.lang}`) });
+        } else if (!state.caps) {
+          answer(id, { ok: false, error: "unavailable", message: "This page's capabilities could not be read." });
+        } else {
+          answer(id, open(request.args));
+        }
+      } catch (cause) {
+        const failure = capFailure(cause);
+        answer(id, { ok: false, ...failure });
+      }
+      return true;
+    },
+    guardOpen(event) {
+      const frame = deps.frame();
+      if (!frame || event.source !== frame) return false;
+      const url = parsePageOpenMessage(event.data);
+      if (!url || pageLinkOpensDirectly(url, { receivedData, links })) return false;
+      askLink(url);
+      return true;
+    },
+    dataChanged(name) {
+      if (!state.caps || !pageCapGranted(state.caps, "data.read", name)) return;
+      post({ type: CAP_EVENT_MESSAGE, cap: "data", name });
+    },
+    refocused() {
+      const at = now();
+      for (const name of readNames) {
+        if (at - (lastEvent.get(name) ?? 0) < EVENT_GAP_MS) continue;
+        lastEvent.set(name, at);
+        post({ type: CAP_EVENT_MESSAGE, cap: "data", name });
+      }
+    },
+    resolveApproval(id, choice) {
+      approvals.get(id)?.(choice);
+    },
+    resolveLink(id, openIt) {
+      const url = pendingLinks.get(id);
+      pendingLinks.delete(id);
+      set({ links: state.links.filter((entry) => entry.id !== id) });
+      if (url && openIt) deps.openUrl(url);
+    },
+    getState: () => state,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
+  };
+}
+
+/** The reading link's wiring: the broker listens on the wrapper's window,
+ * takes over the wrapper's own open-link bridge for a frame that received
+ * data (capture phase, before the inline handler), turns the live stream's
+ * `data` event and the window's focus into one read again each, and starts
+ * by asking the server what this version declares. No timer. */
+export function watchPageCapabilities(frame: HTMLIFrameElement | null, input: { pageId?: string; signedIn: boolean; lang: "fr" | "en" }): { broker: CapabilityBroker; stop(): void } | null {
+  if (!frame) return null;
+  const broker = createCapabilityBroker({
+    frame: () => frame.contentWindow,
+    api: <T,>(path: string) => readerApi<T>(path),
+    ...(input.pageId ? { pageId: input.pageId } : {}),
+    signedIn: input.signedIn,
+    lang: input.lang,
+    openUrl: (url) => { window.open(url, "_blank", "noopener,noreferrer"); },
+    openRef: (ref) => {
+      // the reading link is a browser tab: a conversation opens in the app's
+      // own address; a bot alone has no address of its own here
+      if (!ref.threadId) return false;
+      window.open(`${location.origin}/#thread=${encodeURIComponent(ref.threadId)}&bot=${encodeURIComponent(ref.botId)}`, "_blank", "noopener,noreferrer");
+      return true;
+    },
+    allowStore: safeLocalStorage(),
+  });
+  const onMessage = (event: MessageEvent) => { void broker.onMessage(event); };
+  const onGuard = (event: MessageEvent) => { if (broker.guardOpen(event)) event.stopImmediatePropagation(); };
+  const onData = (event: Event) => {
+    const name = parseDataEvent((event as CustomEvent).detail);
+    if (name) broker.dataChanged(name);
+  };
+  const onFocus = () => broker.refocused();
+  const onVisible = () => { if (document.visibilityState === "visible") broker.refocused(); };
+  window.addEventListener("message", onMessage);
+  window.addEventListener("message", onGuard, true);
+  window.addEventListener(DATA_LIVE_EVENT, onData);
+  window.addEventListener("focus", onFocus);
+  document.addEventListener("visibilitychange", onVisible);
+  void broker.start();
+  return {
+    broker,
+    stop() {
+      window.removeEventListener("message", onMessage);
+      window.removeEventListener("message", onGuard, true);
+      window.removeEventListener(DATA_LIVE_EVENT, onData);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    },
+  };
+}
+
+function safeLocalStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}

@@ -5,6 +5,7 @@
  * deleted: every /api/pages/<id> call answers the server's 404)
  * &window=1 draws the page as an own desktop window (follow + mock
  * artifactWindowSelf) so Always on top (#2046) shows in « ⋯ »
+ * &caps=1 the page declares what it reads (#3413: the card's line, the strip)
  * &menu=1 opens the more menu; &ontop=1 starts Always on top checked
  * The page id must be one a pages server behind /pages/ knows (the capture
  * script runs one); without it the frame shows that server's 404. Every
@@ -30,6 +31,7 @@ const kind = (params.get("kind") ?? "html") as PageKind;
 const published = params.get("status") !== "draft";
 const linkSharing = params.get("policy") !== "off";
 const deleted = params.get("deleted") === "1";
+const declares = params.get("caps") === "1";
 const ownWindow = params.get("window") === "1";
 const openMenu = params.get("menu") === "1";
 let onTop = params.get("ontop") === "1";
@@ -103,7 +105,7 @@ window.fetch = async (input, init) => {
   if (source) {
     const content = kind === "presentation"
       ? "# Bilan du trimestre\n\nOctobre 2026\n\n---\n\n## Ventes\n\n- Septembre : en hausse\n- Octobre : stable\n\n---\n\n## Prochaines étapes\n\n1. Relancer les clients\n2. Préparer le budget"
-      : "<!doctype html><html><body><h1>Rapport mensuel</h1><h2>Ventes</h2><p>Les ventes de septembre sont en hausse.</p></body></html>";
+      : `<!doctype html><html><body>${declares ? '<script type="application/sagax-capabilities+json">{"data":["team-board"],"viewer":true,"open":true}</script>' : ""}<h1>Rapport mensuel</h1><h2>Ventes</h2><p>Les ventes de septembre sont en hausse.</p></body></html>`;
     return reply({ version: { n: Number(source[1]), kind, title: page.title }, content });
   }
   const version = /^\/versions\/(\d+)$/.exec(rest);
@@ -113,6 +115,9 @@ window.fetch = async (input, init) => {
     page = { ...page, versions: [...page.versions, { n, kind, title: page.title, createdAt: Date.now(), state: "proposed", bytes: 10, botId: page.botId, author: "person" }] };
     return reply({ page, version: n }, 201);
   }
+  if (rest === "/capabilities") return reply(declares
+    ? { capabilities: { data: ["team-board"], viewer: true, open: true }, reads: [{ name: "team-board", label: "The work of your coding teams" }] }
+    : { capabilities: { data: [], viewer: false, open: false }, reads: [] });
   if (rest === "/reader-comments") return reply({ enabled: true, allowed: true, comments: [
     { id: "r1", at: now - 600_000, name: "Marie", text: "Très clair, merci!", status: "pending" },
     { id: "r2", at: now - 7_200_000, name: "Luc", text: "Les chiffres d'août manquent.", status: "approved" },

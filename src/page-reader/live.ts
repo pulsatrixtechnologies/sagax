@@ -4,6 +4,8 @@
 // to anyone else); the browser reconnects a dropped stream by itself.
 import { useEffect, useState } from "react";
 
+import { DATA_LIVE_EVENT, parseDataEvent } from "./capabilities";
+
 export interface LivePerson {
   id: string;
   name: string;
@@ -39,6 +41,13 @@ export function usePageLive(pageId: string | undefined): { people: LivePerson[];
     source.addEventListener("threads", () => setChanges((n) => n + 1));
     // the page's shared state changed (#1544): src/page-reader/state.ts reads it again
     source.addEventListener("state", () => window.dispatchEvent(new Event("sagax-live-state")));
+    // a data source the page reads changed (#3413): the wrapper's broker tells the page
+    source.addEventListener("data", (event) => {
+      try {
+        const name = parseDataEvent(JSON.parse((event as MessageEvent<string>).data));
+        if (name) window.dispatchEvent(new CustomEvent(DATA_LIVE_EVENT, { detail: { name } }));
+      } catch { /* a bad frame changes nothing */ }
+    });
     return () => source.close();
   }, [pageId]);
   return { people, changes };

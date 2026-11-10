@@ -134,6 +134,10 @@ export interface InternalRoomsDeps {
   noteRelayParent(threadId: string, parentThreadId: string): void;
   /** The thread is a part run_with_engine opened (noteRelayParent). */
   isRelayPart(threadId: string): boolean;
+  /** #3344: whether a run_with_engine part of this bot on that selection (its
+   * own sign-in) loads account connectors its turn does not (the Grok gateway
+   * without the bot's opt-in; harness-connectors.ts relayAddsAccountConnectors). */
+  relayAddsAccountConnectors?(bot: InternalRoomsBot, speaker: unknown, selection: { instanceId: string; account?: "second" }): boolean;
   askBotAndWait(
     targetBotId: string,
     message: string,
@@ -248,6 +252,7 @@ export interface InternalRoomsCall {
   openerFrom: InternalRoomsDeps["openerFrom"];
   noteRelayParent: InternalRoomsDeps["noteRelayParent"];
   isRelayPart: InternalRoomsDeps["isRelayPart"];
+  relayAddsAccountConnectors?: InternalRoomsDeps["relayAddsAccountConnectors"];
   askBotAndWait: InternalRoomsDeps["askBotAndWait"];
   externalCompletion: InternalRoomsDeps["externalCompletion"];
   activeRoutineRunForThread: InternalRoomsDeps["activeRoutineRunForThread"];

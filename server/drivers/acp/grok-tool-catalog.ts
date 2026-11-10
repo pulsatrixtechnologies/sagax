@@ -292,8 +292,9 @@ export interface GrokAccountReach {
   /** GROK_CLOUD_CONNECTORS ids the gateway carries */
   connectors: string[];
   /** every connector the gateway carries, known or not, with its tool
-   * count: what Providers shows under each account (2026-10-29) */
-  groups: Array<{ id?: string; label: string; tools: number }>;
+   * count: what Providers shows under each account (2026-10-29), and
+   * its tool names as use_tool takes them (the connector registry, #3344) */
+  groups: Array<{ id?: string; label: string; tools: number; names: string[] }>;
   at: number;
 }
 const REACH_MAX = 512;
@@ -304,7 +305,7 @@ export function noteGrokAccountReach(home: string | undefined, result: unknown, 
   if (!home || !catalog) return;
   const gatewayGroups = grokGatewayConnectors(catalog);
   const connectors = gatewayGroups.flatMap((group) => (group.id ? [group.id] : []));
-  const groups = gatewayGroups.map((group) => ({ ...(group.id ? { id: group.id } : {}), label: group.label, tools: group.tools.length }));
+  const groups = gatewayGroups.map((group) => ({ ...(group.id ? { id: group.id } : {}), label: group.label, tools: group.tools.length, names: [...group.tools] }));
   reachByHome.delete(home);
   reachByHome.set(home, { gateway: catalog.some((server) => server.gateway), connectors, groups, at });
   while (reachByHome.size > REACH_MAX) reachByHome.delete(reachByHome.keys().next().value!);
@@ -320,6 +321,11 @@ export function grokReachConnectorNames(reach: Pick<GrokAccountReach, "groups"> 
 
 export function grokAccountReach(home: string | undefined): GrokAccountReach | undefined {
   return home ? reachByHome.get(home) : undefined;
+}
+
+/** A sign-in left: what its folder carried is no longer that person's. */
+export function forgetGrokAccountReach(home: string | undefined): void {
+  if (home) reachByHome.delete(home);
 }
 
 /** The section naming the catalog (and the bot's known and pinned tools),

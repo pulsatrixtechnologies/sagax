@@ -39,6 +39,8 @@ import type { TurnSpeaker } from "./engines/engine-access.ts";
 import { resolveCli } from "./procs.ts";
 import type { RequestAuth } from "./auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./routes/table.ts";
+import type { ConnectorRegistry } from "./connectors/registry.ts";
+import type { ConnectorState } from "./connectors/types.ts";
 
 /** How Claude Code names a claude.ai connector's server. */
 export const CLAUDE_AI_SERVER_PREFIX = "claude.ai ";
@@ -142,6 +144,23 @@ export function grokCloudConnectorsForTurn(input: ClaudeAiTurnInput): boolean {
   // drivers/grok.ts chat-completions) has no use_tool and no grok.com MCP.
   const load = input.grokAccountConnectors === true || input.engineRelay === true;
   return load && input.driver === GROK_CLI_DRIVER && accountConnectorsForTurn(input) === "own";
+}
+
+/** #3344: whether a turn loads the account connectors of the sign-in it runs
+ * on (claude.ai, or the Grok gateway). A turn that does not may hand a part to
+ * that same sign-in with run_with_engine: the part loads them (engineRelay). */
+export function turnLoadsAccountConnectors(input: ClaudeAiTurnInput): boolean {
+  return claudeAiConnectorsForTurn(input) || grokCloudConnectorsForTurn(input);
+}
+
+/** #3344: whether a run_with_engine part on the turn's own sign-in (same
+ * engine, model and account) would load account connectors the turn itself
+ * does not. Only a Grok CLI turn without the bot opt-in, on the person's own
+ * sign-in: its part loads the gateway (engineRelay). Every other turn (Codex,
+ * pi, Gemini, a chat engine, the xAI API, Claude on a key or on someone
+ * else's sign-in) loads nothing more there, so that part is no relay. */
+export function relayAddsAccountConnectors(input: ClaudeAiTurnInput): boolean {
+  return !turnLoadsAccountConnectors(input) && grokCloudConnectorsForTurn({ ...input, engineRelay: true });
 }
 
 /** The system note for a turn that keeps them: what they are and whose. */
@@ -365,10 +384,31 @@ export interface HarnessConnectorRouteDeps {
    * reason it has none. */
   claudeAccountFor(principalId: string): { cli: string; env: NodeJS.ProcessEnv; key: string; instanceId?: string } | { unavailable: "no_engine" | "not_signed_in" | "key" };
   inventory: Pick<ClaudeAiConnectorInventory, "read">;
+  /** #3344: the person's connector registry (server/connectors/registry.ts).
+   * When given, the answer is read from it (the read lands there, so every
+   * other reader and the next start know it too). */
+  registry?: Pick<ConnectorRegistry, "refresh" | "account">;
   /** #1533: the person's own Claude sign-in exists, but Claude says it is
    * signed out (its refresh was refused): their engine card says Reconnect. */
   /** #2384: `instanceId` is the account the inventory was read on. */
   onSignedOut?(principalId: string, instanceId?: string): void;
+}
+
+const REGISTRY_STATUS: Readonly<Record<ConnectorState, ClaudeAiConnectorStatus>> = {
+  connected: "connected",
+  "needs-sign-in": "needs_auth",
+  failed: "failed",
+  unknown: "unknown",
+};
+
+/** The person's Claude sign-in as the registry knows it once read again
+ * (#3344), in the shape this route has always answered. */
+async function registryInventory(registry: Pick<ConnectorRegistry, "refresh" | "account">, principalId: string, instanceId: string, force: boolean): Promise<ClaudeAiInventory> {
+  const ref = { provider: "claude-ai" as const, instanceId, slot: "primary" as const };
+  await registry.refresh(principalId, ref, force);
+  const known = registry.account(principalId, ref);
+  if (!known || known.at === 0) return { auth: "unknown", connectors: [], at: 0 };
+  return { auth: known.auth, connectors: known.connectors.map((entry) => ({ name: entry.name, status: REGISTRY_STATUS[entry.state] })), at: known.at };
 }
 
 function isAdminScope(auth: RequestAuth): boolean {
@@ -409,7 +449,10 @@ export function createHarnessConnectorRoutes(deps: HarnessConnectorRouteDeps): R
     }
     const account = deps.claudeAccountFor(principalId);
     if ("unavailable" in account) return answer({ available: false, reason: account.unavailable, connectors: [] });
-    const inventory = await deps.inventory.read(account.key, { cli: account.cli, env: account.env }, url.searchParams.get("refresh") === "1");
+    const refresh = url.searchParams.get("refresh") === "1";
+    const inventory = deps.registry && account.instanceId
+      ? await registryInventory(deps.registry, principalId, account.instanceId, refresh)
+      : await deps.inventory.read(account.key, { cli: account.cli, env: account.env }, refresh);
     if (inventory.auth === "none") {
       if (deps.organization) deps.onSignedOut?.(principalId, account.instanceId);
       return answer({ available: false, reason: "not_signed_in", connectors: [] });

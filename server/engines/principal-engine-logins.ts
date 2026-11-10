@@ -22,12 +22,12 @@ import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } f
 import { join } from "node:path";
 
 import { writeFileAtomic } from "../atomic.ts";
-import { noteGrokAccountReach } from "../drivers/acp/grok-tool-catalog.ts";
+import { forgetGrokAccountReach, noteGrokAccountReach } from "../drivers/acp/grok-tool-catalog.ts";
 import type { ProviderAuthenticationStart, ProviderAuthenticationStatus } from "../contracts.ts";
 import { ClaudeLoginController } from "../drivers/claude-login-auth.ts";
 import { CodexDeviceAuthController } from "../drivers/codex-device-auth.ts";
 import { DeviceLoginController } from "../drivers/device-login.ts";
-import { probeGrokModels, readGrokModelsCache } from "../drivers/acp/grok.ts";
+import { probeGrokModels, probeGrokReach, readGrokModelsCache } from "../drivers/acp/grok.ts";
 import { ProviderAuthSessions } from "./provider-auth-sessions.ts";
 import { separateAccountInstance } from "./separate-account.ts";
 import { isPrincipalId } from "../auth/principals.ts";
@@ -151,7 +151,16 @@ export interface PrincipalEngineLoginsOptions {
    * `_x.ai/mcp/list` answer), read by a standalone probe of the person's own
    * CLI (server/drivers/acp/grok.ts probeGrokReach). Tests pass a fake. */
   probeReach?: (cli: string, env: Record<string, string | undefined>) => Promise<unknown>;
+  /** #3344: one of the person's sign-ins came or went (or all of them, the
+   * console's Reset access), so the connector registry reads it again or
+   * forgets it (server/connectors/registry.ts). A Grok sign-in is said
+   * once its reach was probed. */
+  onConnectorAccountChanged?: (principalId: string, change: ConnectorAccountChange) => void;
 }
+
+export type ConnectorAccountChange =
+  | { driver: LoginDriver; slot: LoginSlot; instanceId: string; signedIn: boolean }
+  | { cleared: true };
 
 const failure = (message: string, status: number) => Object.assign(new Error(message), { status });
 
@@ -320,8 +329,10 @@ export class PrincipalEngineLogins {
         this.markSignedIn(principalId, driver, slot, instanceId);
         if (driver === "claudeAgent") this.options.onClaudeLinked?.(principalId);
         try { this.options.onEngineSignedIn?.(principalId, driver); } catch { /* best effort */ }
-        // what this Grok sign-in brings through grok.com, known before its first turn
+        // what this Grok sign-in brings through grok.com, known before its
+        // first turn; the registry hears of it once the probe answered
         if (driver === "grokAgent") this.warmReach(principalId, instanceId, slot, true);
+        else this.connectorAccountChanged(principalId, { driver, slot, instanceId, signedIn: true });
       };
       controller = this.options.controller
         ? this.options.controller({ driver, cli: facts.cli, home: dir, environment, onAuthenticated })
@@ -344,6 +355,8 @@ export class PrincipalEngineLogins {
           if (status.phase === "succeeded" && (!this.signedIn(principalId, driver, slot, instanceId) || this.expired(principalId, driver, slot, instanceId))) {
             this.markSignedIn(principalId, driver, slot, instanceId);
             try { this.options.onEngineSignedIn?.(principalId, driver); } catch { /* best effort */ }
+            if (driver === "grokAgent") this.warmReach(principalId, instanceId, slot, true);
+            else this.connectorAccountChanged(principalId, { driver, slot, instanceId, signedIn: true });
           }
           return status;
         },
@@ -356,9 +369,13 @@ export class PrincipalEngineLogins {
             /* the directory goes below either way */
           }
           // #2373: this account's folder only, never another account's
-          rmSync(this.loginDir(principalId, driver, slot, instanceId), { recursive: true, force: true });
+          const home = this.loginDir(principalId, driver, slot, instanceId);
+          rmSync(home, { recursive: true, force: true });
           this.knownModels.delete(key);
           this.reachRead.delete(key);
+          // #3344: that sign-in's connectors are no longer this person's
+          if (driver === "grokAgent") forgetGrokAccountReach(home);
+          this.connectorAccountChanged(principalId, { driver, slot, instanceId, signedIn: false });
         },
       },
     };
@@ -417,14 +434,29 @@ export class PrincipalEngineLogins {
    * noteGrokAccountReach), the same key a turn on it writes. Once per
    * sign-in per process unless `force`; never awaited by a turn. */
   warmReach(principalId: string, instanceId: string, slot: LoginSlot = "primary", force = false): void {
-    const probe = this.options.probeReach;
-    const env = probe ? this.accountEnv(principalId, instanceId, slot) : null;
-    if (!probe || !env) return;
+    void this.readReach(principalId, instanceId, slot, force).catch(reportBackgroundError);
+  }
+
+  /** warmReach, awaited (the connector registry's read, #3344). The probe
+   * defaults to the person's own Grok CLI (#3344: it was never wired, so a
+   * sign-in's reach stayed unknown until a turn on it loaded the gateway,
+   * which a bot with default settings never does). */
+  async readReach(principalId: string, instanceId: string, slot: LoginSlot = "primary", force = false): Promise<void> {
+    const probe = this.options.probeReach ?? probeGrokReach;
+    const env = this.accountEnv(principalId, instanceId, slot);
+    if (!env) return;
     const key = this.flowKey(principalId, instanceId, slot);
     if (!force && this.reachRead.has(key)) return;
     this.reachRead.add(key);
     const home = this.loginDir(principalId, "grokAgent", slot, instanceId);
-    void probe(env.cli, env.env).then((result) => { if (result) noteGrokAccountReach(home, result, this.now()); }).catch(reportBackgroundError);
+    const result = await probe(env.cli, env.env);
+    if (!result) return;
+    noteGrokAccountReach(home, result, this.now());
+    this.connectorAccountChanged(principalId, { driver: "grokAgent", slot, instanceId, signedIn: true });
+  }
+
+  private connectorAccountChanged(principalId: string, change: ConnectorAccountChange): void {
+    try { this.options.onConnectorAccountChanged?.(principalId, change); } catch (error) { reportBackgroundError(error); }
   }
 
   async start(principalId: string, instanceId: string, sessionId: string, slot: LoginSlot = "primary"): Promise<ProviderAuthenticationStart> {
@@ -462,6 +494,7 @@ export class PrincipalEngineLogins {
         if (!existsSync(dir)) continue;
         if (existsSync(join(dir, LOGIN_MARKER))) cleared += 1;
         rmSync(dir, { recursive: true, force: true });
+        if (driver === "grokAgent") forgetGrokAccountReach(dir);
       }
     }
     // #2373: the added accounts' sign-ins go with them
@@ -474,6 +507,8 @@ export class PrincipalEngineLogins {
     }
     for (const key of this.controllers.keys()) if (key.startsWith(`${principalId}/`)) this.controllers.delete(key);
     for (const key of this.knownModels.keys()) if (key.startsWith(`${principalId}/`)) this.knownModels.delete(key);
+    for (const key of this.reachRead) if (key.startsWith(`${principalId}/`)) this.reachRead.delete(key);
+    this.connectorAccountChanged(principalId, { cleared: true });
     return cleared;
   }
 

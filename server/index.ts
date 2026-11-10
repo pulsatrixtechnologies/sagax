@@ -945,7 +945,7 @@ import { createElevenLabsVoice } from "./tts/elevenlabs-voice.ts";
 import { createFishVoice } from "./tts/fish-voice.ts";
 import { createInstalledVoices } from "./tts/installed-voice.ts";
 import { systemVoicesAvailable } from "./tts/system-voices.ts";
-import { ClaudeAiConnectorInventory, claudeAiConnectorsForTurn, connectorPrincipalFor, createHarnessConnectorRoutes, grokCloudConnectorsForTurn, runClaudeCli, type ClaudeAiTurnInput } from "./harness-connectors.ts";
+import { ClaudeAiConnectorInventory, claudeAiConnectorsForTurn, connectorPrincipalFor, createHarnessConnectorRoutes, grokCloudConnectorsForTurn, relayAddsAccountConnectors, runClaudeCli, type ClaudeAiTurnInput } from "./harness-connectors.ts";
 import { connectorSwitchText } from "./connector-switch.ts";
 import { connectorNeed } from "../shared/engine-connectors.ts";
 import { forgetTurnReach,
@@ -1456,6 +1456,10 @@ import { createCliTestRoutes } from "./routes/cli-test.ts";
 import { createMcpServersHttpRoutes } from "./routes/mcp-servers-http.ts";
 import { createConfigHttpRoutes } from "./routes/config-http.ts";
 import { reportBackgroundError } from "./background-error.ts";
+import { ConnectorRegistry } from "./connectors/registry.ts";
+import { claudeAiProvider } from "./connectors/providers/claude-ai.ts";
+import { grokComProvider } from "./connectors/providers/grok-com.ts";
+import { chatgptAppsProvider } from "./connectors/providers/chatgpt-apps.ts";
 import { installMainRuntimeEventSubscriber } from "./runtime-events/dispatcher.ts";
 import { createApplyConfigHttpPatch } from "./routes/config-http-patch.ts";
 import { createAuthenticate } from "./request-pipeline/authenticate.ts";
@@ -7208,6 +7212,7 @@ bindLeafHost({
   get voiceProviderKeys() { return voiceProviderKeys; },
   get voiceModeDeps() { return voiceModeDeps; },
   get claudeAiInventory() { return claudeAiInventory; },
+  get connectorRegistry() { return connectorRegistry; },
   get claudeAccountForPrincipal() { return claudeAccountForPrincipal; },
   get personClaudeArtifactCall() { return personClaudeArtifactCall; },
   get claudeArtifactSummaries() { return claudeArtifactSummaries; },
@@ -12962,7 +12967,9 @@ const engineLogins = IDENTITY.kind === "perspicax"
     onEngineSignedIn: (person, driver) => {
       const engineName = LOGIN_ENGINE_LABEL[driver as LoginDriver] ?? driver;
       resumeEngineReconnectForPerson(person, engineName);
-    }
+    },
+    // #3344: the person's connector registry follows their sign-ins
+    onConnectorAccountChanged: (person, change) => { void connectorRegistry.followSignIn(person, change).catch(reportBackgroundError); }
   })
   : null;
 /** Slice 4: shared sidebar sections (section-channels.ts), organization mode. */
@@ -23156,6 +23163,12 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     openerFrom,
     noteRelayParent,
     isRelayPart,
+    relayAddsAccountConnectors: (bot, speaker, selection) => {
+      const instance = registry.instances().find((candidate) => candidate.instanceId === selection.instanceId);
+      if (!instance) return false;
+      const input = accountConnectorInput(bot as unknown as BotRecord, instance, speaker as TurnSpeaker, undefined, selection.account === "second" ? "second" : "primary");
+      return relayAddsAccountConnectors(input);
+    },
     askBotAndWait: (targetBotId, message, depth, fromBotId, fromThreadId, targetThreadId, opts) =>
       askBotAndWait(targetBotId, message, depth, fromBotId, fromThreadId, targetThreadId, opts) as Promise<{ status: string; text?: string }>,
     mcpCallTimeoutMinutes: () => mcpCallTimeoutMinutes(cfg),
@@ -28427,6 +28440,57 @@ ROUTES.push(createVoiceModeRoutes(voiceModeDeps));
 // The caller's own claude.ai connectors, read through their own Claude
 // account (server/harness-connectors.ts); always on, no server switch.
 const claudeAiInventory = new ClaudeAiConnectorInventory({ run: runClaudeCli });
+
+// #3344: one registry of each person's connectors over all of their own
+// sign-ins (server/connectors/registry.ts), kept on disk by name and state.
+// On an organization server a person's sign-ins are their own folders: the
+// provider's own one ("default", shared by that engine's instances) and each
+// added account (#2384). On a solo server the machine's Claude login is the
+// operator's.
+const DEFAULT_ACCOUNT = "default";
+/** The instance id a person's own folder runs on for a driver: the first
+ * configured instance of it that is not an added account. */
+function folderInstance(driver: string, accountId: string): string | undefined {
+  if (accountId !== DEFAULT_ACCOUNT) return accountId;
+  return Object.entries(instanceConfigs(cfg)).find(([id, entry]) => entry.driver === driver && !separateAccountInstance(id))?.[0];
+}
+function signedInFolders(principalId: string, driver: LoginDriver, slot: LoginSlot): string[] {
+  return (engineLogins?.signedInAccounts(principalId, driver, slot) ?? []).map((id) => id ?? DEFAULT_ACCOUNT);
+}
+const connectorRegistry = new ConnectorRegistry({
+  dataDir: DATA_DIR,
+  accountInstance: (_provider, instanceId) => (IDENTITY.kind !== "perspicax" || separateAccountInstance(instanceId) ? instanceId : DEFAULT_ACCOUNT),
+  providers: [
+    claudeAiProvider({
+      instances: (principalId) => {
+        if (IDENTITY.kind === "perspicax") return signedInFolders(principalId, "claudeAgent", "primary");
+        if (principalId !== localPrincipalId().trim().toLowerCase()) return [];
+        const account = claudeAccountForPrincipal(principalId);
+        return "unavailable" in account || !account.instanceId ? [] : [account.instanceId];
+      },
+      account: (principalId, accountId) => {
+        const instanceId = IDENTITY.kind === "perspicax" ? folderInstance("claudeAgent", accountId) : accountId;
+        return instanceId ? claudeAccountForPrincipal(principalId, instanceId) : { unavailable: "no_engine" };
+      },
+      inventory: claudeAiInventory,
+      label: () => driverDisplayName("claudeAgent"),
+    }),
+    grokComProvider({
+      // Grok sign-ins of a person exist on an organization server only
+      signIns: (principalId) => IDENTITY.kind !== "perspicax" || !isPrincipalId(principalId)
+        ? []
+        : (["primary", "second"] as const).flatMap((slot) => signedInFolders(principalId, "grokAgent", slot).map((instanceId) => ({ instanceId, slot }))),
+      home: (principalId, accountId, slot) => principalLoginDir(principalId, "grokAgent", slot, accountId === DEFAULT_ACCOUNT ? undefined : accountId),
+      kind: (principalId, accountId, slot) => grokAccountKindFor(principalId, slot, accountId === DEFAULT_ACCOUNT ? undefined : accountId),
+      label: (_accountId, slot, kind) => (slot === "second" ? relayAccountLabel(driverDisplayName("grokAgent"), kind) : driverDisplayName("grokAgent")),
+      probe: async (principalId, accountId, slot, force) => {
+        const instanceId = folderInstance("grokAgent", accountId);
+        if (instanceId) await engineLogins?.readReach(principalId, instanceId, slot, force);
+      },
+    }),
+    chatgptAppsProvider(),
+  ],
+});
 /** The CLI and environment of a person's own Claude account (their
  * claude.ai connectors), or why there is none. */
 
@@ -28580,6 +28644,7 @@ ROUTES.push(createHarnessConnectorRoutes({
   isAdmin: (auth) => (IDENTITY.kind === "perspicax" ? orgAdminCaller(auth) : true),
   claudeAccountFor: claudeAccountForPrincipal,
   inventory: claudeAiInventory,
+  registry: connectorRegistry,
   onSignedOut: (principalId, instanceId) => { void signInRecheck?.refused(principalId, "claudeAgent", "primary", instanceId); }
 }));
 

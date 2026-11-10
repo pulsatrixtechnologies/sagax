@@ -213,6 +213,42 @@ export function routineLimitCreditsText(limit: Pick<RoutineUsageLimit, "from" | 
     : `The ${limit.from} account is out of credit. Add credit with the provider, or choose another engine for this bot.`;
 }
 
+/** Why a run's one automatic second start comes (a usage limit passes its own line). */
+export type RoutineRetryWhy = "stalled" | "restarted" | "rate_limited" | "provider" | "empty_response";
+
+const RETRY_WHY: Record<RoutineRetryWhy, { en: string; fr: string }> = {
+  stalled: { en: "the engine stalled", fr: "le blocage du moteur" },
+  restarted: { en: "Sagax restarted while it ran", fr: "le redémarrage de Sagax pendant l'exécution" },
+  rate_limited: { en: "a rate limit", fr: "une limite de débit" },
+  provider: { en: "a temporary error", fr: "une erreur temporaire" },
+  empty_response: { en: "an empty model response", fr: "une réponse vide du modèle" },
+};
+
+/** The queued note of a run's one automatic second start, in the person's language; the failure keeps its own words. */
+export function routineRetryText(cause: RoutineRetryWhy, failure: string, options: RoutineLimitWordsOptions = {}): string {
+  const fr = isFrench(options.language);
+  const why = RETRY_WHY[cause][fr ? "fr" : "en"];
+  const tail = cause === "restarted" ? "" : `${fr ? " :" : ":"} ${failure}`;
+  return fr ? `Nouveau départ sous peu après ${why}${tail}` : `Starting again shortly after ${why}${tail}`;
+}
+
+/** A run that failed again after its one automatic second start. */
+export function routineRetryFailedText(failure: string, options: RoutineLimitWordsOptions = {}): string {
+  return isFrench(options.language) ? `Échec après une nouvelle tentative automatique : ${failure}` : `Failed after one automatic retry: ${failure}`;
+}
+
+/** A run whose bot or thread is busy for now: it waits to start. */
+export function routineBusyWaitingText(failure: string, options: RoutineLimitWordsOptions = {}): string {
+  return isFrench(options.language) ? `En attente de démarrage : ${failure}` : `Waiting to start: ${failure}`;
+}
+
+/** A run still blocked by a busy bot or thread after the whole wait. */
+export function routineBusyStoppedText(minutes: number, failure: string, options: RoutineLimitWordsOptions = {}): string {
+  return isFrench(options.language)
+    ? `Pas démarrée : toujours occupé après ${minutes} minutes (${failure})`
+    : `Did not start: still busy after ${minutes} minutes (${failure})`;
+}
+
 /** A usage limit read from the run's words alone, with no engine known
  * (its turn was never dispatched): it names no engine it cannot know. */
 export function routineLimitUnknownEngineText(options: RoutineLimitWordsOptions = {}, startsAt?: number): string {

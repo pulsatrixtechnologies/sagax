@@ -632,3 +632,35 @@ describe("weekRuns", () => {
     expect(JSON.parse(readFileSync(h.options.file!, "utf8")).routines[0]).not.toHaveProperty("weekRuns");
   });
 });
+
+// #3287: the retry and busy lines of a run are in the language of the person it is for, like its limit lines.
+describe("a run's retry and busy lines for a French-speaking person", () => {
+  const WORDS = { language: "fr-CA", timeZone: "America/Toronto" };
+  const STALLED_FR = "Aucune activité depuis 20 minutes";
+  const BUSY_FR = "occupé";
+  const fresh = () => ({ id: "run-1", routineId: "routine-1", routineName: "Inbox sweep", botId: "bot-1", target: "bot", status: "running", createdAt: START } as RoutineRun);
+
+  it("says the stall retry and its failure in French", () => {
+    const run = fresh();
+    expect(recoverRun(run, STALLED_FR, { stalled: true }, START, [], WORDS)).toEqual({ queued: true });
+    expect(run.attention).toBe(`Nouveau départ sous peu après le blocage du moteur : ${STALLED_FR}`);
+    run.status = "running";
+    expect(recoverRun(run, STALLED_FR, { stalled: true }, START + MINUTE, [], WORDS))
+      .toEqual({ queued: false, error: `Échec après une nouvelle tentative automatique : ${STALLED_FR}` });
+  });
+
+  it("says the busy wait and its end in French", () => {
+    const run = fresh();
+    expect(recoverRun(run, BUSY_FR, { cause: "busy" }, START, [], WORDS)).toEqual({ queued: true });
+    expect(run.attention).toBe(`En attente de démarrage : ${BUSY_FR}`);
+    run.status = "running";
+    expect(recoverRun(run, BUSY_FR, { cause: "busy" }, START + ROUTINE_BUSY_WAIT_MS, [], WORDS))
+      .toEqual({ queued: false, error: `Pas démarrée : toujours occupé après 60 minutes (${BUSY_FR})` });
+  });
+
+  it("keeps English for a person without French", () => {
+    const run = fresh();
+    recoverRun(run, STALL, { stalled: true }, START, [], { language: "en-CA" });
+    expect(run.attention).toBe(`Starting again shortly after the engine stalled: ${STALL}`);
+  });
+});

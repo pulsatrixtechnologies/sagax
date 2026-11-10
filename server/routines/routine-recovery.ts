@@ -15,7 +15,8 @@ import { classifyError, USAGE_LIMIT } from "../drivers/retry.ts";
 import { limitResetFromText } from "../usage/limit-reset-time.ts";
 import { isEngineEmptyFailure } from "../peers/incidents.ts";
 import {
-  routineLimitCreditsText, routineLimitStoppedText, routineLimitSwitchedText, routineLimitUnknownEngineText, routineLimitWaitingText,
+  routineBusyStoppedText, routineBusyWaitingText, routineLimitCreditsText, routineLimitStoppedText, routineLimitSwitchedText,
+  routineLimitUnknownEngineText, routineLimitWaitingText, routineRetryFailedText, routineRetryText,
   type RoutineLimitWordsOptions, type RoutineUsageLimit,
 } from "./routine-limit-words.ts";
 import type { RoutineRun } from "./routine-run-types.ts";
@@ -87,10 +88,6 @@ const OWNER_ACTION: Record<Exclude<RoutineOwnerCause, "setup" | "usage_limit">, 
   credits: "This bot's engine account is out of credit. Add credit with the provider, or choose another engine for this bot.",
 };
 
-const RETRY_WHY: Record<Exclude<RoutineRetryCause, "usage_limit">, string> = {
-  stalled: "the engine stalled", restarted: "Sagax restarted while it ran", rate_limited: "a rate limit", provider: "a temporary error",
-  empty_response: "an empty model response",
-};
 const FIRST_START: Record<RoutineRetryCause, string> = {
   stalled: "stopped when its engine stalled", restarted: "was cut off when Sagax restarted", rate_limited: "was stopped by a rate limit",
   provider: "failed on a temporary engine error", usage_limit: "was refused by the engine's usage limit",
@@ -145,17 +142,17 @@ export function usedRetry(run: Pick<RoutineRun, "retried" | "takeoverRetried">):
 }
 
 /** Queues the run's one second start; false when it already had it or is not a bot's run. A usage limit's wait
- * passes its own line (which engine, and when the run starts again). */
+ * passes its own line (which engine, and when the run starts again). `words`: the person's language and zone. */
 export function requeueOnce(run: RoutineRun, cause: RoutineRetryCause, failure: string, now: number,
-  at = now + (cause === "rate_limited" ? RATE_LIMIT_RETRY_MS : RETRY_MS), attention?: string): boolean {
+  at = now + (cause === "rate_limited" ? RATE_LIMIT_RETRY_MS : RETRY_MS), attention?: string, words: RoutineLimitWordsOptions = {}): boolean {
   if (run.target !== "bot" || usedRetry(run)) return false;
   run.status = "queued";
   run.retried = cause;
   delete run.takeoverRetried;
   run.retryAt = at;
   run.attention = (attention ?? (cause === "usage_limit"
-    ? routineLimitUnknownEngineText({ timeZone: hostTimeZone() }, at)
-    : `Starting again shortly after ${RETRY_WHY[cause]}${cause === "restarted" ? "" : `: ${failure}`}`)).slice(0, 500);
+    ? routineLimitUnknownEngineText({ ...words, timeZone: words.timeZone ?? hostTimeZone() }, at)
+    : routineRetryText(cause, failure, words))).slice(0, 500);
   delete run.error;
   return true;
 }
@@ -233,17 +230,19 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
   let verdict: RoutineFailureClass = run.target === "bot" ? classifyRoutineFailure(failure, facts) : { kind: "final" };
   // A spent quota the host read from the engine (its words, its stop, its reset) is one, whatever the words say.
   if (limit?.kind === "quota" && verdict.kind !== "owner") verdict = { kind: "owner", cause: "usage_limit" };
-  const again = usedRetry(run) ? `Failed after one automatic retry: ${failure}` : failure;
+  const again = usedRetry(run) ? routineRetryFailedText(failure, said) : failure;
   if (verdict.kind === "busy") {
     run.deferredAt ??= now;
-    if (now - run.deferredAt >= ROUTINE_BUSY_WAIT_MS) return { queued: false, error: `Did not start: still busy after ${ROUTINE_BUSY_WAIT_MS / 60_000} minutes (${failure})` };
+    if (now - run.deferredAt >= ROUTINE_BUSY_WAIT_MS) return { queued: false, error: routineBusyStoppedText(ROUTINE_BUSY_WAIT_MS / 60_000, failure, said) };
     run.status = "queued";
     run.retryAt = now + ROUTINE_BUSY_RECHECK_MS;
-    run.attention = `Waiting to start: ${failure}`.slice(0, 500);
+    run.attention = routineBusyWaitingText(failure, said).slice(0, 500);
     delete run.error;
     return { queued: true };
   }
-  if (verdict.kind === "retry") return requeueOnce(run, verdict.cause, failure, now) ? { queued: true } : { queued: false, error: again };
+  if (verdict.kind === "retry") {
+    return requeueOnce(run, verdict.cause, failure, now, undefined, undefined, said) ? { queued: true } : { queued: false, error: again };
+  }
   if (verdict.kind === "final") return { queued: false, error: again };
   const first = firstOwnerNotice(notices, run.botId, verdict.cause, now);
   if (verdict.cause === "usage_limit") {

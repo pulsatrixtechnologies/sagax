@@ -18,6 +18,7 @@ import { callVideoTool, VIDEO_TOOL_NAME } from "./agents-video.ts";
 import { callImageTool, IMAGE_TOOL_NAME } from "./agents-image.ts";
 import { callVaultHttpTool, VAULT_HTTP_TOOL_NAME } from "./agents-vault-http-tools.ts";
 import { callConnectorSetupTool, CONNECTOR_SETUP_TOOL_NAME } from "./agents-connector-setup.ts";
+import { callConnectorsTool, CONNECTORS_TOOL_NAME } from "./agents-call-connectors.ts";
 import { ARTIFACT_TOOL_NAMES, callArtifactTool } from "./agents-call-artifacts.ts";
 import { callTaskListTool, TASK_LIST_TOOL_NAMES } from "./agents-call-tasks.ts";
 import { HELP_TOOL_NAMES } from "./agents-help-tools.ts";
@@ -91,6 +92,7 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
   if (name === VIDEO_TOOL_NAME) return callVideoTool(args, context.client);
   if (name === VAULT_HTTP_TOOL_NAME) return callVaultHttpTool(args, context);
   if (name === CONNECTOR_SETUP_TOOL_NAME) return callConnectorSetupTool(args, context);
+  if (name === CONNECTORS_TOOL_NAME) return callConnectorsTool(args, context);
   if (ARTIFACT_TOOL_NAMES.has(name)) return callArtifactTool(name, args, context);
   if (TASK_LIST_TOOL_NAMES.has(name)) return callTaskListTool(name, args, context);
   if (HELP_TOOL_NAMES.has(name)) {

@@ -144,7 +144,7 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
     title: "Settings, help, skills and connectors",
     tools: [
       "manage_settings", "sagax_settings", "manage_pairing", "sagax_approvals", "sagax_help",
-      "open_connector_setup", "add_mcp_server", "skill_manage", "skills_list",
+      "open_connector_setup", "connectors", "add_mcp_server", "skill_manage", "skills_list",
       "rules_update", "docs_update", "resource_usage", "offer_shell_terminal",
       "list_terminal_resources", "request_login", "request_sign_in",
     ],

@@ -915,6 +915,7 @@ import { grokAccountReach, grokReachConnectorNames } from "./drivers/acp/grok-to
 import { GROK_CLOUD_CONNECTORS } from "../shared/grok-cloud-connectors.ts";
 import { probeFullDiskAccess } from "./imessage/imessage-permissions.ts";
 import { connectorSetupOwner, createConnectorSetupInternalRoutes, createConnectorSetupProofs, createConnectorSetupRoutes } from "./routes/connector-setup.ts";
+import { createConnectorsInternalRoutes } from "./routes/internal-connectors.ts";
 import { connectorReauthFailure, connectorReauthText, type ConnectorSetupView } from "../shared/connector-setup.ts";
 import { streamTerminalAttachment } from "./terminal-resources/adapters/personal.ts";
 import { parseTerminalDestinationPick } from "../shared/terminal-request.ts";
@@ -22573,6 +22574,14 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
   }),
   // resource_usage (server/routes/resource-usage.ts)
   resourceUsage.internalRoute,
+  // connectors (server/routes/internal-connectors.ts, #3347): the turn's
+  // connector principal from the capability, never the arguments
+  createConnectorsInternalRoutes({
+    ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
+    principal: connectorsTurnPrincipal,
+    confined: (threadId) => cloudGuestDriven(threadId) || botmailConfined(threadId),
+    accounts: (principalId) => connectorRegistry.accounts(principalId)
+  }),
   // open_connector_setup (server/routes/connector-setup.ts)
   createConnectorSetupInternalRoutes({
     ...connectorSetupStore(),
@@ -28627,6 +28636,16 @@ function noteConnectorReauth(threadId: string, toolName: string, output: string 
   };
   const language = languageOfPerson(principalId).toLowerCase().startsWith("fr") ? "fr" : "en";
   store.appendMessage(threadId, { role: "bot", kind: "text", text: connectorReauthText(failure, language), from: { botId: bot.id, name: bot.name, color: bot.color }, connectorSetup: view });
+}
+
+/** The turn's connector principal for the connectors tool (#3347): the
+ * speaker recorded for this thread (a person, the operator, a routine of the
+ * owner, a peer hop carrying its person), through connectorPrincipalFor. */
+function connectorsTurnPrincipal(botId: string, threadId: string): string {
+  const speaker = turnSpeakers.get(threadId);
+  const owner = connectorThread(botId, threadId);
+  if (!speaker || !owner) return "";
+  return connectorPrincipalFor({ identity: IDENTITY.kind, speaker, ownerPrincipalId: effectiveBotOwner(owner.bot), localPrincipalId: localPrincipalId() });
 }
 
 function connectorSetupSpeaker(threadId: string): string | undefined {

@@ -124,7 +124,6 @@ export function CredentialsSettings() {
           onExport={() => { setImported(null); setTransfer("export"); }}
         />
       </div>
-      {data.exportBlocked && <SettingsTextRow><span data-credentials-export-blocked="">{t("vault.transfer.exportBlocked")}</span></SettingsTextRow>}
       {transfer === "import" && (
         <ImportPanel
           existing={data.items}
@@ -167,6 +166,14 @@ export function CredentialsSettings() {
   );
 }
 
+/** The vault's ... menu. #3294: an action that cannot apply here (the vault
+ * unreachable, nothing to export, export turned off by the organization) is
+ * left out, never shown greyed; with none left the menu itself is hidden. */
+export function vaultMenuActions(input: { unavailable: boolean; exportBlocked: boolean; empty: boolean }): Array<"import" | "export"> {
+  if (input.unavailable) return [];
+  return input.empty || input.exportBlocked ? ["import"] : ["import", "export"];
+}
+
 function VaultMenu({ unavailable, exportBlocked, empty, onImport, onExport }: {
   unavailable: boolean;
   exportBlocked: boolean;
@@ -177,6 +184,8 @@ function VaultMenu({ unavailable, exportBlocked, empty, onImport, onExport }: {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   usePopoverDismiss(open, rootRef, () => setOpen(false));
+  const actions = vaultMenuActions({ unavailable, exportBlocked, empty });
+  if (actions.length === 0) return null;
   const choose = (action: () => void) => {
     setOpen(false);
     action();
@@ -196,16 +205,10 @@ function VaultMenu({ unavailable, exportBlocked, empty, onImport, onExport }: {
       </button>
       {open && (
         <div role="menu" className="absolute end-0 z-20 mt-1 flex min-w-40 flex-col rounded-lg border border-border bg-elevated py-1">
-          <button type="button" role="menuitem" className="px-3 py-2 text-left text-[13px] text-ink hover:bg-hover disabled:opacity-50" disabled={unavailable} data-credentials-import="" onClick={() => choose(onImport)}>{t("vault.menu.import")}</button>
-          <button
-            type="button"
-            role="menuitem"
-            className="px-3 py-2 text-left text-[13px] text-ink hover:bg-hover disabled:opacity-50"
-            disabled={unavailable || empty || exportBlocked}
-            title={exportBlocked ? t("vault.transfer.exportBlocked") : undefined}
-            data-credentials-export=""
-            onClick={() => choose(onExport)}
-          >{t("vault.menu.export")}</button>
+          <button type="button" role="menuitem" className="px-3 py-2 text-left text-[13px] text-ink hover:bg-hover" data-credentials-import="" onClick={() => choose(onImport)}>{t("vault.menu.import")}</button>
+          {actions.includes("export") && (
+            <button type="button" role="menuitem" className="px-3 py-2 text-left text-[13px] text-ink hover:bg-hover" data-credentials-export="" onClick={() => choose(onExport)}>{t("vault.menu.export")}</button>
+          )}
         </div>
       )}
     </div>

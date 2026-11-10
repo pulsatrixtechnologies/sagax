@@ -325,9 +325,9 @@ export function createCredentialVaultRoutes(deps: CredentialVaultRouteDeps): Rou
           }
         }
         if (!item.domains.length) return json(res, 400, { error: "This item has no site it may be filled on. Add one first.", code: "invalid_domains" });
-        // a 1Password item is allowed once only, for one sign-in (review of #954)
-        if (item.source === "1password" && mode !== "once") return json(res, 400, { error: "A 1Password item is allowed for this request only.", code: "onepassword_once_only" });
-        const granted = deps.vault.grant(principalId, item.id, { botId: botId!, mode, threadId, ...(item.source === "1password" ? { singleUse: true } : {}) });
+        // #3294: a 1Password item is allowed once (one sign-in) or always,
+        // like any other login; the value is still read at fill time only
+        const granted = deps.vault.grant(principalId, item.id, { botId: botId!, mode, threadId, ...(item.source === "1password" && mode === "once" ? { singleUse: true } : {}) });
         // A login chosen after "I'll sign in myself": that sign-in ends.
         await deps.browser?.endForPerson(botId!, threadId);
         deps.audit?.("credentials.grant", auth, { id: item.id, botId, mode, via: "card", ...(addedSite ? { addedSite: true } : {}) });
@@ -478,7 +478,6 @@ export function createCredentialVaultRoutes(deps: CredentialVaultRouteDeps): Rou
           const input = await body();
           if (typeof input.botId !== "string" || !deps.botExists(input.botId)) return json(res, 404, { error: "no such bot" });
           if (input.mode !== "always") return json(res, 400, { error: "From Settings a bot is allowed always; a one-time grant comes from a request card." });
-          if (deps.vault.item(principalId, id!)?.source === "1password") return json(res, 400, { error: "A 1Password item is allowed for one request at a time, from its card.", code: "onepassword_once_only" });
           const item = deps.vault.grant(principalId, id!, { botId: input.botId, mode: "always" });
           deps.audit?.("credentials.grant", auth, { id, botId: input.botId, mode: "always" });
           return json(res, 200, { item });

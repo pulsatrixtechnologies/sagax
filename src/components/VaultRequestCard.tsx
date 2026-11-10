@@ -286,12 +286,10 @@ export function VaultRequestCard({ botId, threadId, message }: { botId: string; 
                 {t("vault.card.turnOnly")}
               </button>
             )}
-            {/* a 1Password item: this request only (review of #954) */}
-            {!onePasswordChosen && chosen?.source !== "1password" && (
-              <button type="button" disabled={busy || !choice} onClick={() => void grant("always")} className={cn(ASK_CHIP, ASK_CHIP_IDLE)} data-vault-always>
-                {t("vault.card.allowAlways", { bot: botName })}
-              </button>
-            )}
+            {/* #3294: every card offers Always allow, a 1Password item too */}
+            <button type="button" disabled={busy || !choice} onClick={() => void grant("always")} className={cn(ASK_CHIP, ASK_CHIP_IDLE)} data-vault-always>
+              {t("vault.card.allowAlways", { bot: botName })}
+            </button>
           </div>
           <span className="flex items-center gap-1 text-[11.5px] text-ink-tertiary">
             <LockKeyhole size={11} /> {t(onePasswordChosen || chosen?.source === "1password" ? "vault.card.onePasswordPrivacy" : "vault.card.privacy")}

@@ -65,15 +65,10 @@ describe("Full access in the approval menu", () => {
     expect(select).toHaveBeenCalledExactlyOnceWith("full");
   });
 
-  it("greys Full out with a note when the organization turned it off", () => {
-    const select = vi.fn();
-    const open = openMenu(select, "disabled");
-    expect(open.html).toContain("data-full-access-org-off");
-    expect(open.html).toContain("Turned off by your organization.");
-    const item = open.nodes.find((node) => node.props["data-approval-mode"] === "full")!;
-    expect(item.props.disabled).toBe(true);
-    item.props.onClick!();
-    expect(select).not.toHaveBeenCalled();
+  it("never greys Full out for the bot's owner (#3294: no organization switch)", () => {
+    const open = openMenu(vi.fn(), "allowed");
+    expect(open.html).not.toContain("data-full-access-org-off");
+    expect(open.html).not.toContain("Turned off by your organization.");
   });
 
   it("hides Full from someone who does not own the bot", () => {

@@ -1766,7 +1766,6 @@
   "routines.runAsField.pending": "Será executada assim que {name} entrar",
   "routines.runAsField.search": "Buscar pessoas",
   "routines.runNow": "Executar agora",
-  "routines.runNow.inFlight": "Uma execução desta rotina já está em andamento",
   "routines.runNow.starting": "Iniciando…",
   "routines.scope.all": "Todos",
   "routines.scope.allOwners": "Todos os responsáveis",

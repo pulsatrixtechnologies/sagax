@@ -94,13 +94,9 @@ only, never Full or Custom, one admin activity row per bot. A bot's
 conversations that saved their own level keep it unless the admin also
 moves the conversations on Ask (`threads: true`).
 
-**Full access** on an organization server is off until an admin turns it on
-(Settings > Organization > Allow full access, or `allowFullAccess` in the
-admin API's `POST settings`). A saved choice, on or off, is kept. An
-organization that never saved it and whose bots already ran on Full keeps
-Full allowed: the first start of this version writes `allowFullAccess:
-true` once (an `org.settings` row in the admin activity log), so no bot
-changes level.
+**Full access** on an organization server has no organization switch
+(2026-10-26): it is the bot owner's own choice for their own bot, a saved
+`allowFullAccess` is ignored, and the menu never shows Full greyed (#3294).
 
 The approval level belongs to the bot (#1169/#1170, 2026-10-26: "that
 setting is the bot's, every thread always inherits"). Every thread, hidden or
@@ -393,9 +389,11 @@ For a read-shaped tool from a configured custom MCP server, the card also
 offers **Always allow**. This is an explicit standing grant for that exact bot,
 provider instance, MCP server, tool name, and current server configuration. A
 different tool still asks; editing the server command, URL, headers, or
-credentials invalidates the grant. It is not offered for create/update/delete
-tools, computer control, a sandbox change, an unconfigured server, or a guest's
-turn. A custom MCP server controls its own tool names, so only remember tools
+credentials invalidates the grant. This provider grant covers read tools;
+a create/update/delete tool or computer control gets the card's own
+**Always allow** rule instead (this bot and this tool, the same button
+every card offers, #3294); a guest's turn offers that rule too, answering
+only cards from such a turn. A custom MCP server controls its own tool names, so only remember tools
 from a server you trust. The grant applies to the bot's current and future
 conversations, including newly delegated work. Saved entries are visible and
 revocable in the bot's Access settings.

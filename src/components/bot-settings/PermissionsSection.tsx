@@ -15,7 +15,6 @@
 // (omb #2701 / PRO-RÈGLE).
 import { RoleRulesCard } from "./RoleRulesCard";
 import { useEffect, useState } from "react";
-import { Lock } from "lucide-react";
 
 import { canEditBotField, canStepPrimary, viewerOwnsBot } from "@/lib/bot-capabilities";
 import { useAdvancedMode } from "@/lib/interface-mode";
@@ -132,7 +131,7 @@ export function PermissionsSection({
     // #1674: Edit N bots keeps Full as each bot's own level change (never the
     // organization grant of the draft). The org grant path is single-bot only.
     if (orgFullAccess !== undefined && !bulk) {
-      if (orgFullAccess !== "allowed") return;
+      if (orgFullAccess === "hidden") return;
       dispatch({
         type: "updateBot",
         botId: target,
@@ -245,13 +244,6 @@ export function PermissionsSection({
           // Simple draws its two choices under the label.
           below={!advanced && <div className="mt-2">{approvalSelector}</div>}
         >
-          {/* 2026-10-26: a lock on the level only while an
-              organization rule really limits it (Full turned off by the
-              organization); a member otherwise sets their own bot's
-              level freely, so no lock. */}
-          {orgFullAccess === "disabled" && <span role="img" data-level-org-lock="" aria-label={t("approvalMode.full.orgDisabled")} title={t("approvalMode.full.orgDisabled")} className="mr-1.5 inline-flex text-ink-tertiary">
-            <Lock size={11} aria-hidden="true" />
-          </span>}
           {advanced && approvalSelector}
         </DescribedRow>
       )}

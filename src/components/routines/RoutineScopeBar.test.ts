@@ -1,6 +1,6 @@
 // The Automations page scope (2026-10-09): the scope control renders Mine,
-// My teams and Everyone, disables what the profile lacks with a tooltip
-// naming the key, shows Team/Status in advanced mode, Owner under Mine in
+// My teams and Everyone, leaves out what the profile lacks (#3294: hidden,
+// never greyed), shows Team/Status in advanced mode, Owner under Mine in
 // every mode (#1676), and the choice is remembered per person.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -41,7 +41,7 @@ afterAll(() => vi.unstubAllGlobals());
 
 describe("the scope control", () => {
   it("renders the three scopes, Mine checked", () => {
-    const markup = render();
+    const markup = render({ allowed: { mine: true, team: true, all: true } });
     expect(markup).toContain('role="radiogroup"');
     expect(markup).toContain(">Mine</button>");
     expect(markup).toContain(">My teams</button>");
@@ -49,12 +49,16 @@ describe("the scope control", () => {
     expect(button(markup, "mine")).toContain('aria-checked="true"');
   });
 
-  it("disables a scope the profile lacks, with a tooltip naming the permission", () => {
+  it("leaves out a scope the profile lacks, never greyed; Mine alone hides the control (#3294)", () => {
     const markup = render();
-    expect(button(markup, "team")).toContain('disabled=""');
-    expect(button(markup, "team")).toContain("See their teams&#x27; routines");
-    expect(button(markup, "all")).toContain("See every routine of the organization");
-    expect(button(markup, "mine")).not.toContain('disabled=""');
+    expect(markup).not.toContain('role="radiogroup"');
+    expect(markup).not.toContain('disabled=""');
+    expect(markup).not.toContain("See their teams&#x27; routines");
+    const team = render({ allowed: { mine: true, team: true, all: false } });
+    expect(button(team, "mine")).not.toBe("");
+    expect(button(team, "team")).not.toBe("");
+    expect(button(team, "all")).toBe("");
+    expect(team).not.toContain('disabled=""');
   });
 
   it("enables what is allowed; a saved scope the person lost falls back to Mine", () => {

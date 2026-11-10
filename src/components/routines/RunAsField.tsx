@@ -35,10 +35,13 @@ export interface RunAsOptions {
 export const RUN_AS_SEARCH_AFTER = 8;
 
 /** The dropdown's rows: the people matching `query`, the selected one always
- * kept (first, when the server did not list it). */
+ * kept (first, when the server did not list it). #3294: someone who cannot
+ * run the bot's routines is left out, never listed greyed, unless already
+ * chosen (that row keeps its reason). */
 export function runAsRows(options: RunAsOptions, selected: string | undefined, query: string): RunAsOption[] {
   const needle = query.trim().toLocaleLowerCase();
-  const rows = options.people.filter((person) => !needle || person.principalId === selected || person.name.toLocaleLowerCase().includes(needle));
+  const rows = options.people.filter((person) => (person.selectable || person.principalId === selected)
+    && (!needle || person.principalId === selected || person.name.toLocaleLowerCase().includes(needle)));
   const listed = options.people.some((person) => person.principalId === selected);
   if (!listed && selected && options.current?.principalId === selected) {
     return [{ principalId: selected, name: options.current.name || selected, selectable: true, ...(options.current.pending ? { pending: true as const } : {}) }, ...rows];

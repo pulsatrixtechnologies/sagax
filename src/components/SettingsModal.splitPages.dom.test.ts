@@ -201,7 +201,9 @@ describe("Settings split: every moved setting at its new place", () => {
     expect(pane().querySelector("[data-credentials-add]")).not.toBeNull();
     expect(pane().querySelector("[data-credentials-import]")).toBeNull();
     await act(async () => { pane().querySelector<HTMLButtonElement>("[data-vault-menu]")!.click(); });
-    for (const action of ["data-credentials-import", "data-credentials-export"]) expect(pane().querySelector(`[${action}]`), action).not.toBeNull();
+    expect(pane().querySelector("[data-credentials-import]")).not.toBeNull();
+    // #3294: an empty vault has nothing to export: Export is left out, never greyed
+    expect(pane().querySelector("[data-credentials-export]")).toBeNull();
     expect(group("credentials.wallets")).toBeNull();
     expect(card("credentials.wallets")).not.toBeNull();
     expect(pane().textContent).toContain("One-time card");

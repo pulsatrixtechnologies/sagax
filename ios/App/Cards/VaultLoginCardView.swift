@@ -162,13 +162,11 @@ struct VaultLoginCardView: View {
             Button("Deny") { act { client, bot in try await client.dismissVaultCard(botId: bot, messageId: message.id, threadId: chat.threadId) } }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("vault-refuse-\(message.id)")
-            // a 1Password item: this request only (review of #954)
-            if !choiceIsOnePassword {
-                Button("Always allow") { grant(always: true) }
-                    .buttonStyle(.bordered)
-                    .disabled(choice == nil)
-                    .accessibilityIdentifier("vault-always-\(message.id)")
-            }
+            // #3294: every card offers Always allow, a 1Password item too
+            Button("Always allow") { grant(always: true) }
+                .buttonStyle(.bordered)
+                .disabled(choice == nil)
+                .accessibilityIdentifier("vault-always-\(message.id)")
             Button("Allow once") { grant(always: false) }
                 .buttonStyle(.borderedProminent)
                 .tint(tint)
@@ -208,11 +206,6 @@ struct VaultLoginCardView: View {
         }
         .font(.system(size: 14))
         .textFieldStyle(.roundedBorder)
-    }
-
-    private var choiceIsOnePassword: Bool {
-        guard let choice else { return false }
-        return choice.hasPrefix("op:") || (saved ?? []).first(where: { $0.id == choice })?.source == "1password"
     }
 
     private func grant(always: Bool) {

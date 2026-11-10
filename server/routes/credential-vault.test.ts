@@ -595,17 +595,26 @@ describe("1Password per request on the card (parité R10, ligne 82)", () => {
     expect((await off.call("POST", "/api/bots/bot-a/vault-cards/m1/grant", { threadId: "t1", mode: "once", onePassword: { vaultId: "vlt1", itemId: "aaaa1111" } })).status).toBe(409);
   });
 
-  it("allows a 1Password item once only, from the card or Settings (review of #954)", async () => {
+  it("allows a 1Password item once or always, from the card or Settings (#3294)", async () => {
     const { call, cards, vault } = await serve({ onePassword: fakeOp([]) });
     cards.set("t1:m1", vaultRequestCard({ principalId: LOCAL_VAULT_PRINCIPAL, botName: "Ada", domain: "example.test" }));
-    const always = await call("POST", "/api/bots/bot-a/vault-cards/m1/grant", { threadId: "t1", mode: "always", onePassword: { vaultId: "vlt1", itemId: "aaaa1111" } });
-    expect(always.body).toMatchObject({ code: "onepassword_once_only" });
+    // a one-time pick stays one sign-in
     const once = await call("POST", "/api/bots/bot-a/vault-cards/m1/grant", { threadId: "t1", mode: "once", onePassword: { vaultId: "vlt1", itemId: "aaaa1111" } });
+    expect(once.status).toBe(200);
     const id = once.body.item.id as string;
+    expect(vault.list(LOCAL_VAULT_PRINCIPAL)[0]!.grants).toEqual([expect.objectContaining({ mode: "once", singleUse: true })]);
+    // Settings saves an Always for that bot
+    const fromSettings = await call("POST", `/api/me/credentials/${id}/grants`, { botId: "bot-a", mode: "always" });
+    expect(fromSettings.status).toBe(200);
+    expect(vault.list(LOCAL_VAULT_PRINCIPAL)[0]!.grants).toEqual([expect.objectContaining({ botId: "bot-a", mode: "always" })]);
+    // and the card's Always allow, on a saved 1Password item
     cards.set("t1:m2", vaultRequestCard({ principalId: LOCAL_VAULT_PRINCIPAL, botName: "Ada", domain: "example.test" }));
-    expect((await call("POST", "/api/bots/bot-a/vault-cards/m2/grant", { threadId: "t1", mode: "always", itemId: id })).body).toMatchObject({ code: "onepassword_once_only" });
-    expect((await call("POST", `/api/me/credentials/${id}/grants`, { botId: "bot-a", mode: "always" })).body).toMatchObject({ code: "onepassword_once_only" });
-    expect(vault.list(LOCAL_VAULT_PRINCIPAL)[0]!.grants).toEqual([expect.objectContaining({ mode: "once" })]);
+    const always = await call("POST", "/api/bots/bot-a/vault-cards/m2/grant", { threadId: "t1", mode: "always", itemId: id });
+    expect(always.status).toBe(200);
+    expect(always.body).not.toMatchObject({ code: "onepassword_once_only" });
+    const grants = vault.list(LOCAL_VAULT_PRINCIPAL)[0]!.grants;
+    expect(grants).toEqual([expect.objectContaining({ botId: "bot-a", mode: "always" })]);
+    expect(grants[0]).not.toHaveProperty("singleUse");
   });
 
   it("a 1Password grant is one sign-in: it ends a minute after its first fill (review of #954)", async () => {
@@ -624,23 +633,18 @@ describe("1Password per request on the card (parité R10, ligne 82)", () => {
     expect(await fill("password")).toMatchObject({ ok: false, code: "not_granted" });
   });
 
-  it("ignores an Always saved on a 1Password item before, and never names the item to the bot (re-review of #954)", async () => {
+  it("honors an Always saved on a 1Password item (#3294), and never names the item to the bot (re-review of #954)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "sagax-vault-legacy-"));
     cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
     const now = 2_000_000;
     const vault = new CredentialVault(dir, () => ({ kind: "key", key: Buffer.alloc(32, 5) }), () => now);
     const item = vault.create(LOCAL_VAULT_PRINCIPAL, { kind: "login", name: "Secret Payroll Portal", domains: ["example.test"] }, { source: "1password", onePassword: { via: "cli", vaultId: "vlt1", itemId: "aaaa1111" } });
-    // an Always written by an earlier version, straight into the store
-    (vault as unknown as { mutate(p: string, f: (items: Record<string, { grants: unknown[] }>) => void): void }).mutate(LOCAL_VAULT_PRINCIPAL, (items) => {
-      items[item.id]!.grants.push({ botId: "bot-a", mode: "always", grantedAt: now });
-    });
     expect(vault.granted(LOCAL_VAULT_PRINCIPAL, item.id, "bot-a", "t1")).toBe(false);
+    vault.grant(LOCAL_VAULT_PRINCIPAL, item.id, { botId: "bot-a", mode: "always" });
+    expect(vault.granted(LOCAL_VAULT_PRINCIPAL, item.id, "bot-a", "t1")).toBe(true);
+    expect(vault.granted(LOCAL_VAULT_PRINCIPAL, item.id, "bot-a", "another-thread")).toBe(true);
     const read = async () => null;
     const fill = (pageUrl: string) => vault.resolveForFill(LOCAL_VAULT_PRINCIPAL, { handle: vaultHandle(item.id), field: "password", botId: "bot-a", threadId: "t1", pageUrl }, read);
-    const refused = await fill("https://example.test/login");
-    expect(refused).toMatchObject({ ok: false, code: "not_granted" });
-    expect(JSON.stringify(refused)).not.toContain("Payroll");
-    vault.grant(LOCAL_VAULT_PRINCIPAL, item.id, { botId: "bot-a", mode: "once", threadId: "t1", singleUse: true });
     for (const [url, code] of [["https://other.test/", "wrong_origin"], ["https://example.test/login", "no_value"]] as const) {
       const answer = await fill(url);
       expect(answer).toMatchObject({ ok: false, code });

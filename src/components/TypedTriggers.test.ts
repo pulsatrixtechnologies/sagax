@@ -237,7 +237,9 @@ describe("Bot email trigger (B21, 2026-10-21)", () => {
     const none = renderToStaticMarkup(createElement(BotMailAddressLine, { mail: { available: false, address: null, enabled: false } }));
     expect(none).toContain("This bot has no email address yet.");
     const off = renderToStaticMarkup(createElement(BotMailAddressLine, { mail: { available: true, address: "e@bots.example.org", enabled: false } }));
-    expect(off).toContain("Waiting for the administrator to turn it on");
+    // #3294: an address not turned on yet is not shown greyed: it reads as no address
+    expect(off).toContain("This bot has no email address yet.");
+    expect(off).not.toContain("e@bots.example.org");
     expect(renderToStaticMarkup(createElement(BotMailAddressLine, { mail: null }))).toBe("");
   });
 });

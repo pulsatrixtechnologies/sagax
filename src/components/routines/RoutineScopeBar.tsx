@@ -1,16 +1,14 @@
 // The Automations page's scope control and filters (2026-10-09): Mine,
 // My teams and Everyone, then Team, Owner and Status. My teams needs
 // routines.viewTeam and Everyone routines.viewAll (an admin holds both);
-// without the key the choice stays visible, disabled, and its tooltip names
-// the missing permission. Simple mode keeps the scope control, and under
+// #3294: without the key the choice is left out (never shown greyed), and
+// with Mine alone the control itself is hidden. Simple mode keeps the scope control, and under
 // Mine the Owner filter too (#1676: Me vs shared bots). The server decides
 // what each scope answers (server/routines/routine-scope.ts).
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { personLabel } from "@/lib/human-label";
-import { permissionMissingText } from "@/lib/permissions";
 import {
-  ROUTINE_SCOPE_PERMISSION,
   ROUTINE_SCOPE_STATUSES,
   ROUTINE_SCOPES,
   type RoutineScope,
@@ -58,33 +56,28 @@ export function RoutineScopeBar({ prefs, allowed, teams, owners, advanced, hideS
     ? Boolean(meId || owners.length > 0)
     : advanced && owners.length > 0;
   const filtered = Boolean(prefs.teamId || prefs.ownerId || (advanced && !hideStatus && prefs.status));
+  const scopes = ROUTINE_SCOPES.filter((value) => value === "mine" || allowed[value]);
   return (
     <div data-routine-scope-bar className={cn("flex gap-2", stacked ? "flex-col items-stretch" : "flex-wrap items-center")}>
-      <div role="radiogroup" aria-label={t("routines.scope.label")} className={cn("flex items-center rounded-lg border border-hairline/50 bg-panel p-0.5", stacked && "w-full")}>
-        {ROUTINE_SCOPES.map((value) => {
-          const permitted = allowed[value];
-          const missing = value === "mine" || permitted ? undefined : permissionMissingText(ROUTINE_SCOPE_PERMISSION[value]);
-          return (
-            <button
-              key={value}
-              type="button"
-              role="radio"
-              aria-checked={scope === value}
-              data-routine-scope={value}
-              disabled={!permitted}
-              title={missing}
-              onClick={() => permitted && onChange({ ...prefs, scope: value, ...(value === "mine" ? { teamId: undefined } : {}) })}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-[12px] disabled:cursor-not-allowed disabled:opacity-45",
-                stacked && "flex-1 whitespace-nowrap px-2",
-                scope === value ? "bg-raised text-ink" : "text-ink-secondary hover:text-ink",
-              )}
-            >
-              {t(SCOPE_LABEL[value])}
-            </button>
-          );
-        })}
-      </div>
+      {scopes.length > 1 && <div role="radiogroup" aria-label={t("routines.scope.label")} className={cn("flex items-center rounded-lg border border-hairline/50 bg-panel p-0.5", stacked && "w-full")}>
+        {scopes.map((value) => (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={scope === value}
+            data-routine-scope={value}
+            onClick={() => onChange({ ...prefs, scope: value, ...(value === "mine" ? { teamId: undefined } : {}) })}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-[12px]",
+              stacked && "flex-1 whitespace-nowrap px-2",
+              scope === value ? "bg-raised text-ink" : "text-ink-secondary hover:text-ink",
+            )}
+          >
+            {t(SCOPE_LABEL[value])}
+          </button>
+        ))}
+      </div>}
       {showOwner && (
         <select aria-label={t("routines.scope.ownerFilter")} data-routine-filter="owner" value={prefs.ownerId ?? ""} onChange={(event) => onChange({ ...prefs, ownerId: event.target.value || undefined })} className={cn(SELECT, stacked && "w-full max-w-none")}>
           <option value="">{t("routines.scope.allOwners")}</option>

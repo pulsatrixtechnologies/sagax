@@ -13,3 +13,11 @@ export function proactiveProposalAccepts(card: ProactiveProposalCardLike, answer
   const yes = card.options[0]?.trim();
   return Boolean(yes) && answer.trim() === yes;
 }
+
+/** The body of the card's answer route: a choice card's yes carries its
+ * switches (#3457, the watches kept on), so a watch the person turned off
+ * in the details is not turned on by the yes. */
+export function proactiveProposalBody(card: ProactiveProposalCardLike, answer: string, watchesOn?: readonly string[]): { accept: boolean; watches?: string[] } {
+  const accept = proactiveProposalAccepts(card, answer);
+  return accept && watchesOn ? { accept, watches: [...watchesOn] } : { accept };
+}

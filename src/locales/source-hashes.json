@@ -18463,7 +18463,16 @@
       "settings.receive.addressed.switch": "7ca5b93ad394768807f6e94e434cead9c5715ff13f0f77da0391f5cc1eb71d51",
       "botPanel.permissions.follows": "280c305e5965b2e1b1ef25398f012dea1930c53511bba13e651e52621a1866f7",
       "settings.receive.paused": "62321372b40d74e95e4b12e0fa0bb464662e044a30eab36d7169d83c6827761e",
-      "settings.receive.pausedNoBot": "43fefe6cf73923f5c5cd31a5384d4b6a2095ce1fdba35847982619531f44ef25"
+      "settings.receive.pausedNoBot": "43fefe6cf73923f5c5cd31a5384d4b6a2095ce1fdba35847982619531f44ef25",
+      "proactiveChoice.details.show": "7709aae5191068598505cf23f687f642f18a853417aedf191ae669eeb5b9f05b",
+      "proactiveChoice.details.hide": "9151428bef408c6163e8d7960eeda10a1202c00bced06c8a4567c4b3ede43c76",
+      "watchAlert.label": "df6bb7dd2a4425ab1b5994735fb511520b43220d7f3656f68274a8aaf45dcd54",
+      "watchAlert.stopWatch": "02b64b3cc189d7b4b0807db70971f3e0a3188e74cc77dd8e8e0fc732bfa91469",
+      "watchAlert.stopDomain": "f5c2692bc2b8de0a49421974f557127bee2a5bd86d458020210b5699b800ffae",
+      "watchAlert.stopped.watch": "cb831fc013ecc127a1ff3b5cb728d5c113c5e6caec7a22a1cf74cc6765344669",
+      "watchAlert.stopped.watchUnnamed": "34d661f2d60165c5956013518e63c75457a3d4e2287b56273fb7798bdb5efaa1",
+      "watchAlert.stopped.domain": "82feedf48c3ee31cc329dc59470fdc5f719c6d16ca0180988f4fca42e52e4598",
+      "watchAlert.stopped.domainUnnamed": "b70adca5db850a287f29a3832d6cd10f680175566dff0506fd579ca177b892a5"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

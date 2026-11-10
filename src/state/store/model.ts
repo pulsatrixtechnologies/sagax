@@ -1690,7 +1690,9 @@ export type Action =
   // to the room's thread
   | { type: "answerCard"; botId: string; messageId: string; answer: string; threadId?: string; groupId?: string;
       /** A terminal card: the destination the person picked (absent: the bot's). */
-      terminalDestination?: import("../../../shared/terminal-request").TerminalDestinationPick }
+      terminalDestination?: import("../../../shared/terminal-request").TerminalDestinationPick;
+      /** #3457: a choice card's switches, the watches kept on with its yes. */
+      proactiveWatches?: string[] }
   | { type: "dismissCard"; botId: string; messageId: string; threadId?: string; groupId?: string }
   // permission cards answer by THREAD, so a request raised inside a room
   // can be answered the same way as one in a 1:1 chat

@@ -42,6 +42,7 @@ export function ApprovalHeading({
   risk,
   context,
   aside,
+  icon,
 }: {
   title: ReactNode;
   summary?: string;
@@ -50,12 +51,14 @@ export function ApprovalHeading({
   context?: ReactNode;
   /** right side of the title row (the stepper, the pinned card's controls) */
   aside?: ReactNode;
+  /** #3457: the leading mark (a choice card's bell); the shield by default */
+  icon?: ReactNode;
 }) {
   const line = summary?.trim();
   return (
     <div className="flex min-w-0 items-start gap-2">
       <span aria-hidden="true" className="flex h-5 shrink-0 items-center text-accent-text">
-        <ShieldCheck size={15} />
+        {icon ?? <ShieldCheck size={15} />}
       </span>
       <div className="min-w-0 flex-1">
         <span dir="auto" className="block break-words text-[14px] font-semibold leading-5 text-ink" data-approval-title="">{title}</span>

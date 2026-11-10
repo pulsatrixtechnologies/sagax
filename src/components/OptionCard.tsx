@@ -8,6 +8,7 @@ import { otherChoiceIndex } from "../../shared/other-choice";
 import { returnFocusToComposer } from "./AskCard";
 import { ExpandableText } from "./ExpandableText";
 import { SuggestionFeedback } from "./SuggestionFeedback";
+import { ProactiveChoiceCard } from "./ProactiveChoiceCard";
 import { viewerOwnsBot } from "@/lib/bot-capabilities";
 import { picksInAnswer, QuestionSheet, SheetChoices, SheetField, SheetNote, sheetKeyHandler, type SheetChoice } from "./QuestionSheet";
 import { TerminalDestinationPicker, terminalAnswerPick, terminalDestinationKey, terminalDestinationLabel } from "./terminal/TerminalDestinationPicker";
@@ -63,6 +64,25 @@ export function OptionCard({
   if (!card || shouldHideOnboardingCard(message, transcript) || (card.requestId && card.dismissed && card.answered)) return null;
   // 2026-11-05 (JC): no "Agit comme" card in the chat (rows saved before stay hidden)
   if (card.roleTransition) return null;
+  // #3457: a choice card (propose_proactive) is the compact card with its
+  // folded watch switches; the switches go with its yes
+  if (card.proactiveProposal && card.proactiveChoice) {
+    return (
+      <ProactiveChoiceCard
+        card={card}
+        showNever={!groupId || Boolean(bot && viewerOwnsBot(state.config, bot))}
+        onAnswer={(accept, watches) => {
+          const answer = (accept ? card.options[0] : card.options[1]) ?? "";
+          if (!answer.trim()) return;
+          dispatch({ type: "answerCard", botId, threadId, messageId: message.id, answer: answer.trim(), groupId, proactiveWatches: watches });
+          returnFocusToComposer();
+        }}
+        onNever={async () => {
+          await api(`/api/bots/${botId}/proactive/${card.proactiveProposal!.id}/feedback`, { method: "POST", body: JSON.stringify({ choice: "never" }) });
+        }}
+      />
+    );
+  }
 
   const terminalPicked = card.terminalRequest && !card.answered
     ? (card.terminalRequest.destinations ?? []).find((choice) => terminalDestinationKey(choice) === (terminalPick || terminalDestinationKey(card.terminalRequest!)))

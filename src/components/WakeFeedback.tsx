@@ -17,7 +17,9 @@ export function useOwnsBot(botId: string | undefined): boolean {
 }
 
 /** Thumbs and "Moins de ça" on one wake kind (heartbeat, mail, calendar, attention). */
-export function WakeFeedback({ botId, topic, value, threadId, messageId, className }: {
+export function WakeFeedback({ botId, topic, value, threadId, messageId, className, choices }: {
+  /** the answers offered (SuggestionFeedback); all of them by default */
+  choices?: readonly SuggestionFeedbackChoice[];
   botId: string;
   topic: string;
   value?: SuggestionFeedbackChoice;
@@ -30,6 +32,7 @@ export function WakeFeedback({ botId, topic, value, threadId, messageId, classNa
   return (
     <SuggestionFeedback
       className={className}
+      choices={choices}
       value={value}
       onPick={async (choice) => {
         await api(`/api/bots/${botId}/background-brief/wake/feedback`, {

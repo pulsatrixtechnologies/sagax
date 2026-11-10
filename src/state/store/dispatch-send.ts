@@ -11,7 +11,7 @@ import { t } from "@/lib/i18n";
 import { voiceCallId } from "@/lib/call";
 import { devPodsTurnField } from "@/components/dev-pods/prefs";
 import { teamMemorySettled } from "@/lib/team-memory-settled";
-import { proactiveProposalAccepts } from "../../../shared/proactive-proposal";
+import { proactiveProposalBody } from "../../../shared/proactive-proposal";
 import { reviewedSkillSha256, skillRequestBehavior } from "../../../shared/skill-request";
 import { terminalRequestBehavior } from "../../../shared/terminal-request";
 import { meetingRequestBehavior } from "../../../shared/meeting-request";
@@ -248,7 +248,9 @@ export function dispatchSendEffects(action: Action, env: DispatchEnv): void {
           if (card?.proactiveProposal && !inRoom) {
             api(`/api/bots/${action.botId}/proactive/${card.proactiveProposal.id}`, {
               method: "POST",
-              body: JSON.stringify({ accept: proactiveProposalAccepts(card, action.answer) }),
+              // #3457: a choice card's yes carries its switches, so a watch
+              // turned off in the details stays off
+              body: JSON.stringify(proactiveProposalBody(card, action.answer, action.proactiveWatches)),
             }).catch(showError);
             break;
           }

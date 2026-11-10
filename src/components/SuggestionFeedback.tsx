@@ -15,10 +15,15 @@ export function suggestionFeedbackNote(choice: SuggestionFeedbackChoice | undefi
   return t(`suggestionFeedback.noted.${choice}`);
 }
 
-export function SuggestionFeedback({ value, onPick, className }: {
+const ALL_CHOICES: readonly SuggestionFeedbackChoice[] = ["up", "down", "less", "never"];
+
+export function SuggestionFeedback({ value, onPick, className, choices = ALL_CHOICES }: {
   value?: SuggestionFeedbackChoice;
   onPick: (choice: SuggestionFeedbackChoice) => Promise<void>;
   className?: string;
+  /** #3457: the answers this row offers. A choice card keeps only
+   * « Ne plus proposer »; a watch alert drops it for its own two exits. */
+  choices?: readonly SuggestionFeedbackChoice[];
 }) {
   const [local, setLocal] = useState<SuggestionFeedbackChoice | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -40,18 +45,18 @@ export function SuggestionFeedback({ value, onPick, className }: {
   return (
     <div data-suggestion-feedback={choice ?? ""} className={cn("flex flex-col gap-0.5", className)}>
       <div role="group" aria-label={t("suggestionFeedback.label")} className="flex flex-wrap items-center gap-0.5">
-        <button type="button" aria-label={t("suggestionFeedback.up")} title={t("suggestionFeedback.up")} aria-pressed={choice === "up"} disabled={busy} onClick={() => pick("up")} className={cn(icon, choice === "up" && "text-accent")}>
+        {choices.includes("up") && <button type="button" aria-label={t("suggestionFeedback.up")} title={t("suggestionFeedback.up")} aria-pressed={choice === "up"} disabled={busy} onClick={() => pick("up")} className={cn(icon, choice === "up" && "text-accent")}>
           <ThumbsUp size={14} />
-        </button>
-        <button type="button" aria-label={t("suggestionFeedback.down")} title={t("suggestionFeedback.down")} aria-pressed={choice === "down"} disabled={busy} onClick={() => pick("down")} className={cn(icon, choice === "down" && "text-accent")}>
+        </button>}
+        {choices.includes("down") && <button type="button" aria-label={t("suggestionFeedback.down")} title={t("suggestionFeedback.down")} aria-pressed={choice === "down"} disabled={busy} onClick={() => pick("down")} className={cn(icon, choice === "down" && "text-accent")}>
           <ThumbsDown size={14} />
-        </button>
-        <button type="button" aria-pressed={choice === "less"} disabled={busy} onClick={() => pick("less")} className={cn(text, choice === "less" && "text-accent")}>
+        </button>}
+        {choices.includes("less") && <button type="button" aria-pressed={choice === "less"} disabled={busy} onClick={() => pick("less")} className={cn(text, choice === "less" && "text-accent")}>
           {t("suggestionFeedback.less")}
-        </button>
-        <button type="button" aria-pressed={choice === "never"} disabled={busy} onClick={() => pick("never")} className={cn(text, choice === "never" && "text-accent")}>
+        </button>}
+        {choices.includes("never") && <button type="button" aria-pressed={choice === "never"} disabled={busy} onClick={() => pick("never")} className={cn(text, choice === "never" && "text-accent")}>
           {t("suggestionFeedback.never")}
-        </button>
+        </button>}
       </div>
       {note && !failed && <p role="status" className="px-1 text-[12px] leading-4 text-ink-tertiary">{note}</p>}
       {failed && <p role="alert" className="px-1 text-[12px] leading-4 text-danger">{t("suggestionFeedback.failed")}</p>}

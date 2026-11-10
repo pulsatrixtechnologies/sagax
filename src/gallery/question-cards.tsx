@@ -6,6 +6,8 @@ import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { DesktopCapabilitiesProvider } from "@/components/DesktopCapabilities";
 import { OptionCard } from "@/components/OptionCard";
+import { ApprovalCard } from "@/components/ApprovalCard";
+import { ProactiveChoiceCard } from "@/components/ProactiveChoiceCard";
 import { ChatStaleBanner } from "@/components/ChatErrorBanner";
 import { QuestionCard } from "@/components/QuestionCard";
 import { WidgetMessage } from "@/components/widget/WidgetMessage";
@@ -20,6 +22,7 @@ import type { AskQuestion } from "../../shared/ask-question";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
+const LANG = params.get("lang") === "en" ? "en" : "fr";
 await loadLocale(params.get("lang") ?? "fr");
 applySkin((params.get("skin") ?? "midnight") as SkinId);
 
@@ -50,6 +53,60 @@ function settledElsewhere(id: string, outcome: string): Message {
 }
 
 const widget = parseWidgetInput(WIDGET_SAMPLES.dinnerChoice);
+
+// #3457: the choice card of propose_proactive (server/proactive/proactive-ask.ts
+// choiceCard), in the server's own words for each language, beside the
+// compact approval card of #3414 (a rule proposal, open).
+const FR = LANG === "fr";
+const CHOICE: NonNullable<Message["card"]> = {
+  title: FR ? "Recevoir les alertes de répartition ?" : "Receive Dispatch alerts?",
+  subtitle: FR
+    ? "Billets sans technicien assigné (toutes les heures); Rendez-vous passés sans suivi (chaque jour à 8 h 00). Sur Atlas, seulement si tu dis oui."
+    : "Tickets with no technician assigned (every hour); Past appointments with no follow-up (every day at 8:00 AM). On Atlas, only if you say yes.",
+  options: FR ? ["Oui", "Pas maintenant"] : ["Yes", "Not now"],
+  proactiveProposal: { id: "pp-choice" },
+  proactiveChoice: {
+    domain: "dispatch",
+    label: FR ? "Répartition" : "Dispatch",
+    botName: "Atlas",
+    watches: [
+      { id: "unassigned-tickets", label: FR ? "Billets sans technicien assigné" : "Tickets with no technician assigned", cadence: FR ? "toutes les heures" : "every hour", on: true, tools: ["cw_psa_find_tickets"] },
+      { id: "past-appointments", label: FR ? "Rendez-vous passés sans suivi" : "Past appointments with no follow-up", cadence: FR ? "chaque jour à 8 h 00" : "every day at 8:00 AM", on: true, tools: ["cw_psa_find_schedule_entries", "cw_psa_find_tickets"] },
+      { id: "quiet-boards", label: FR ? "Tableaux sans mouvement depuis une semaine" : "Boards with no movement for a week", cadence: FR ? "chaque lundi à 9 h 00" : "every Monday at 9:00 AM", on: false, tools: ["cw_psa_query"] },
+    ],
+  },
+};
+const ROUTINE_NEIGHBOUR = {
+  id: "routine-neighbour", role: "bot", kind: "options", at: 1,
+  card: {
+    title: "Schedule routine",
+    subtitle: FR
+      ? "Chaque jour de semaine à 9 h, revoir les billets ouverts et publier un court résumé.\n\nS'exécute sur : cet ordinateur · 30 min max"
+      : "Every weekday at 9:00, review the open tickets and post a short summary.\n\nRuns on: this computer · 30 min max",
+    options: FR ? ["Planifier", "Annuler"] : ["Schedule", "Cancel"],
+    requestId: "routine-neighbour",
+    tool: "schedule_routine",
+    routineRequest: {
+      version: 1, requestId: "routine-neighbour", botId: "preview-bot", threadId: "t", createdAt: 1,
+      operation: { action: "create", routine: { name: FR ? "Revue des billets" : "Ticket review", instructions: "Review the open tickets.", schedule: { type: "daily", time: "09:00", weekdays: [1, 2, 3, 4, 5] }, runOn: "maus", durationMinutes: 30 } },
+    },
+  },
+} as unknown as Message;
+
+function ChoiceRow({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+  return (
+    <section data-variant={id} className="flex flex-col items-start gap-2 p-4">
+      <div className="text-[11px] uppercase tracking-wide text-ink-tertiary">{label}</div>
+      <Bubble>
+        <p>{FR ? "C'est fait : les trois billets sans technicien sont maintenant assignés." : "Done: the three tickets with no technician are assigned now."}</p>
+      </Bubble>
+      {children}
+    </section>
+  );
+}
+
+const noAnswer = () => {};
+const noNever = async () => {};
 
 function Bubble({ children }: { children: ReactNode }) {
   return <div className={`rounded-[18px] bg-card px-3 py-[7px] text-[13px] leading-5 text-ink ${CHAT_BUBBLE_WIDTH_CLASS.fit}`}>{children}</div>;
@@ -134,6 +191,21 @@ function Preview() {
         <Row id="suggestion-card-less" label="Suggestion du jour, répondue avec « Moins de ça »">
           <OptionCard botId="preview-bot" threadId="t" message={{ id: "s2", role: "bot", kind: "options", at: 1, card: { title: "Relancer Paul pour la facture", subtitle: "Suggestion du jour, gratuite. Je m'en occupe ?", options: ["Fais-le", "Pas maintenant"], proactiveProposal: { id: "pp-s2" }, answered: "Pas maintenant", answeredText: "Pas maintenant", feedback: "less" } } as Message} />
         </Row>
+        <ChoiceRow id="choice-neighbour" label="Carte d'approbation compacte (#3414), la voisine conforme">
+          <ApprovalCard bot={{ name: "Atlas" }} message={ROUTINE_NEIGHBOUR} />
+        </ChoiceRow>
+        <ChoiceRow id="choice-card" label="Carte de choix (#3457), repliée">
+          <ProactiveChoiceCard card={CHOICE} onAnswer={noAnswer} onNever={noNever} />
+        </ChoiceRow>
+        <ChoiceRow id="choice-card-details" label="Carte de choix, détails ouverts (une veille éteinte)">
+          <ProactiveChoiceCard card={CHOICE} onAnswer={noAnswer} onNever={noNever} defaultOpen />
+        </ChoiceRow>
+        <ChoiceRow id="choice-card-answered" label="Carte de choix, répondue">
+          <ProactiveChoiceCard card={{ ...CHOICE, answered: CHOICE.options[0], answeredText: CHOICE.options[0] }} onAnswer={noAnswer} onNever={noNever} />
+        </ChoiceRow>
+        <ChoiceRow id="choice-card-not-now" label="Carte de choix, pas maintenant">
+          <ProactiveChoiceCard card={{ ...CHOICE, answered: CHOICE.options[1], answeredText: CHOICE.options[1] }} onAnswer={noAnswer} onNever={noNever} />
+        </ChoiceRow>
         {widget.ok && (
           <Row id="widget-choice" label="Widget à choix">
             <WidgetMessage botId="preview-bot" threadId="t" message={{ id: "w", role: "bot", kind: "widget", at: 1, text: "", widget: { v: 1, root: widget.value } } as Message} />

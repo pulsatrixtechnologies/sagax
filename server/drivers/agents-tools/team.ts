@@ -17,7 +17,7 @@ import {
 export const DEF_START_THREAD = {
     name: "start_thread",
     description:
-      "Open a new thread: one conversation with its own history and its own run, shown to the person as a row under the bot it belongs to. Leave bot_id out to open it on yourself, for a separate job that should run on its own (\"review each pull request\" — one thread per pull request) instead of inside this conversation. Give bot_id (from list_bots) to open it on a teammate: that is a handoff into a fresh thread, which starts after your current turn ends and whose result is delivered here, like delegate_bot. The title is the row's name: short and specific; write it as #Title when you mention it. Not for a question you need answered now (ask_bot), a task for the teammate's usual conversation (delegate_bot), or a note nobody acts on. If refused, do not retry: say what you still wanted opened.",
+      "Open a new thread: one conversation with its own history and run, shown as a row under its bot. Leave bot_id out to open it on yourself, for a separate job that should run on its own (one thread per pull request to review) instead of inside this conversation. Give bot_id (from list_bots) to open it on a teammate: that is a handoff into a fresh thread, which starts after your current turn ends and whose result is delivered here, like delegate_bot. The title is the row's name: short and specific; write it as #Title when you mention it. Not for a question you need answered now (ask_bot), a task for the teammate's usual conversation (delegate_bot), or a note nobody acts on. If refused, do not retry: say what you wanted opened.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -68,7 +68,7 @@ export const DEF_LIST_TEAM_SETUP = {
 
 export const DEF_PROPOSE_TEAM_SETUP = {
     name: "propose_team_setup",
-    description: "Primary Bot only: submit all requested specialist creation, profile/model configuration, and authorized team moves in ONE combined plan. Use catalog engine/model IDs from list_team_setup. Combine all fields per bot. New teams must be named in newTeams and have a specialist in this plan; access is granted only to those teams. Models change bot defaults: threads following the bot move at their next turn. If review is pending, the decision resumes you once; do not ask again, poll, or repeat the proposal." + PROPOSAL_OUTCOME,
+    description: "Primary Bot only: submit all requested specialist creation, profile/model configuration, and authorized team moves in ONE combined plan. Use catalog engine/model IDs from list_team_setup. Combine all fields per bot. New teams must be named in newTeams and have a specialist in this plan; access is granted only to those teams. Models change bot defaults: threads following the bot move at their next turn. If review is pending, the decision resumes you once: do not ask again, poll, or repeat." + PROPOSAL_OUTCOME,
     inputSchema: {
       type: "object", additionalProperties: false,
       properties: {
@@ -113,7 +113,7 @@ export const DEF_IMPORT_PLUGIN_TEAM = {
 
 export const DEF_PROPOSE_BOT_DELETION = {
     name: "propose_bot_deletion",
-    description: "Primary Bot only: when the user explicitly asks to delete a named teammate, submit a separate deletion request for that exact bot. Deletion removes its conversations, memory, instructions, skills, and any computer owned only by it; generated project files and shared team computers remain. Running work or an unavailable computer provider can block deletion safely. Never delete yourself, substitute an archive, or put deletion into a setup batch. If review is pending, the decision and result resume you once." + PROPOSAL_OUTCOME,
+    description: "Primary Bot only: when the user explicitly asks to delete a named teammate, submit a separate deletion request for that exact bot. Deletion removes its conversations, memory, instructions, skills, and any computer owned only by it; generated project files and shared team computers remain. Running work or an unavailable computer provider can block it. Never delete yourself, substitute an archive, or put deletion into a setup batch. If review is pending, the decision and result resume you once." + PROPOSAL_OUTCOME,
     inputSchema: { type: "object", additionalProperties: false, properties: {
       bot_id: { type: "string", minLength: 1 }, reason: { type: "string", minLength: 1, maxLength: 500 }, quote: PERSON_QUOTE,
     }, required: ["bot_id", "reason"] },
@@ -182,7 +182,7 @@ export const DEF_MANAGE_ROOM = {
 export const DEF_RETRY_THREAD = {
     name: "retry_thread",
     description:
-      "Primary Bot only. Resume a teammate's thread whose last run failed, stalled or could not start — the one an incident report named — exactly where it stopped, keeping its conversation and files. The teammate gets a line saying you asked for the retry and why. Use it when the cause looks transient (a crash, a timeout, a busy service). Use delegate_bot with a corrected brief instead when the request itself needs to change, and tell the person instead when only they can fix the cause (a sign-in, a missing credential, an unanswered question). Never retry the same thread more than twice.",
+      "Primary Bot only. Resume a teammate's thread whose last run failed, stalled or could not start — the one an incident report named — exactly where it stopped, keeping its conversation and files. The teammate gets a line saying you asked and why. Use it when the cause looks transient (a crash, a timeout, a busy service). Use delegate_bot with a corrected brief when the request itself needs to change, and tell the person when only they can fix the cause (a sign-in, a missing credential, an unanswered question). Never retry the same thread more than twice.",
     inputSchema: {
       type: "object",
       additionalProperties: false,

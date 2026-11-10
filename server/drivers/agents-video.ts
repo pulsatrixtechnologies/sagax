@@ -11,8 +11,8 @@ export function videoToolDefinition() {
     description: [
       "Generate a video using the person's xAI API key, or the organization's granted xAI images and videos account. This may incur API charges.",
       "Native image_to_video and reference_to_video remain available when the engine offers them.",
-      "generate starts an async job and returns job_id; status reads progress, list finds this conversation's jobs, cancel stops local polling/download, retry resumes the SAME upstream request without another paid generation.",
-      "The completed MP4 is saved and attached in this chat. Never claim completion from pending status or show a temporary provider URL.",
+      "generate starts an async job and returns job_id; status reads progress, list finds this conversation's jobs, cancel stops local polling/download, retry resumes the SAME upstream request without a new paid generation.",
+      "The finished MP4 is attached in this chat. Never claim completion from pending status or show a temporary provider URL.",
       "Use a stable request_key for safe retries across turns. A new generate request_key starts a separately billable job.",
     ].join(" "),
     inputSchema: {

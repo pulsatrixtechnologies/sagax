@@ -14,7 +14,7 @@ export const DEF_LIST_SHARED_COMPUTERS = {
 
 export const DEF_SHARED_COMPUTER = {
     name: "shared_computer",
-    description: "Use a desktop explicitly shared by the user. Discover computer_id and folder_id with list_shared_computers. list_files/read_file/write_file are confined to chosen folders; paths are relative. read_file returns sha256; overwriting requires expected_sha256. Binary files support base64 encoding. run_command requires a SEPARATE unrestricted terminal grant. computer_tools lists the native computer-control tools; computer_call invokes one with arguments and needs a SEPARATE computer-control grant. Never use the server's filesystem when this desktop is offline. read_copy reads the person's own stored copy of a lent folder or their Chrome reading list (kept while the computer sleeps), never another member's screen. Actions are not retried.",
+    description: "Use a desktop explicitly shared by the user. Discover computer_id and folder_id with list_shared_computers. list_files/read_file/write_file are confined to chosen folders; paths are relative. read_file returns sha256; overwriting requires expected_sha256. Binary files: base64. run_command requires a SEPARATE unrestricted terminal grant. computer_tools lists the native computer-control tools; computer_call invokes one with arguments and needs a SEPARATE computer-control grant. Never use the server's filesystem when this desktop is offline. read_copy reads the person's own stored copy of a lent folder or their Chrome reading list (kept while the computer sleeps), never another member's screen. No retries.",
     inputSchema: { type: "object", additionalProperties: false, properties: {
       computer_id: { type: "string" }, action: { type: "string", enum: ["list_files", "read_file", "write_file", "run_command", "computer_tools", "computer_call", "read_copy"] },
       folder_id: { type: "string" }, path: { type: "string" }, content: { type: "string" }, encoding: { type: "string", enum: ["utf8", "base64"] }, expected_sha256: { type: "string" },
@@ -87,7 +87,7 @@ export const DEF_REMOTE_SESSION_EXEC = {
 
 export const DEF_HOST_COMPUTER = {
     name: "host_computer",
-    description: "Work on the person's enrolled host as your computer: the one picked in the Computer menu or, with no pick, a bot computer host shared with All bots or with you (several: pass host; a refusal lists names). No Remote session card. Actions: exec runs one command (sh, or PowerShell on Windows); screenshot (not on a shell-only host); ask_mode asks the person here: isolated VM on the host or the host as-is (asked by itself the first time); set_mode records it; vm_status, vm_provision, vm_delete, vm_rebuild manage the VM. The host's access rule applies: Ask waits for the person's yes before a change, Never refuses.",
+    description: "Work on the person's enrolled host as your computer: the one picked in the Computer menu or, with no pick, a bot host shared with All bots or with you (several: pass host; a refusal lists names). No Remote session card. Actions: exec runs one command (sh, or PowerShell on Windows); screenshot (not on a shell-only host); ask_mode asks the person: isolated VM or the host as-is (asked itself the first time); set_mode records it; vm_status, vm_provision, vm_delete, vm_rebuild manage the VM. The host's access rule applies: Ask waits for a yes before a change, Never refuses.",
     inputSchema: {
       type: "object",
       additionalProperties: false,

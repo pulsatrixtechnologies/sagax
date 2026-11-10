@@ -27,7 +27,7 @@ export const DEF_GET_CLOUD_AGENT = {
 export const DEF_LAUNCH_CLOUD_AGENT = {
     name: "launch_cloud_agent",
     description:
-      "Launch a cloud coding agent. On an organization server prefer provider perspicax: the run gets its own Pod in Perspicax, pushes a px/... branch, opens a draft pull request, and the person follows it in Sagax's Code section and in a card under your message; it uses the person's sign-in, no key. The environment is found by repo_url; when several match, ask the person which, then launch again with env_id. Other providers (cursor, claude, codex) need the person's own API key in Sagax settings. Pass a complete task prompt. Writes need the person's approval unless their allowlist permits it.",
+      "Launch a cloud coding agent. On an organization server prefer provider perspicax: the run gets its own Pod in Perspicax, pushes a px/... branch, opens a draft pull request, and the person follows it in Sagax's Code section and in a card under your message; it uses their sign-in, no key. The environment is found by repo_url; when several match, ask the person which, then launch again with env_id. Other providers (cursor, claude, codex) need the person's own API key in Sagax settings. Pass a complete task prompt. Writes need the person's approval unless their allowlist permits it.",
     inputSchema: {
       type: "object",
       additionalProperties: false,

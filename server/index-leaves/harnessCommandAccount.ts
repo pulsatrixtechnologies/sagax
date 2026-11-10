@@ -22,7 +22,7 @@ function harnessCommandAccount(   bot: BotRecord,   instance: { instanceId: stri
       }
     }
   }
-  const connectors = host.claudeAiConnectorsFor(bot, instance, speaker, via);
+  const connectors = host.connectorPlanForTurn(bot, instance, speaker, undefined, via).claudeAi;
   return { ...(listing ? { access: listing } : {}), ...(connectors ? { claudeAiConnectors: true } : {}) };
 
 }

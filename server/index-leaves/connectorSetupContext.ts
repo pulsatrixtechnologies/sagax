@@ -1,6 +1,5 @@
 // @ts-nocheck
 /** connectorSetupContext (#1388). Pure move from server/index.ts. */
-import { accountConnectorsForTurn } from "../harness-connectors.ts";
 export type Host = Record<string, any>;
 
 export function createConnectorSetupContext(getHost: () => Host): any {
@@ -18,10 +17,11 @@ function connectorSetupContext(botId: string, threadId: string) {
   // engine can't attach connectors to your own account".
   const ownOn = (drivers: readonly string[]) => host.registry.instances().some((candidate) =>
     candidate.enabled && drivers.includes(candidate.driverKind)
-    && accountConnectorsForTurn(host.accountConnectorInput(bot, candidate, speaker)) === "own");
+    && host.connectorPlanForTurn(bot, candidate, speaker).account === "own");
   return {
     engine: driver === "claudeAgent" ? "claude" : driver === "grokAgent" || driver === "grok" ? "grok" : "other",
-    account: accountConnectorsForTurn(host.accountConnectorInput(bot, instance, speaker, host.turnAccessByThread.get(threadId)?.via)),
+    // the plan of this conversation's turn (server/connectors/turn-plan.ts)
+    account: host.connectorPlanForTurn(bot, instance, speaker, threadId, host.turnAccessByThread.get(threadId)?.via).account,
     ownAccounts: { grok: ownOn(["grokAgent", "grok"]), claude: ownOn(["claudeAgent"]) }
   };
 

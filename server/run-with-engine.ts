@@ -79,7 +79,7 @@ export function chooseRelayEngine(input: {
   /** The engine the calling turn runs on: running the same engine and model
    * again is no relay, unless a part there loads account connectors the
    * calling turn does not (relayAddsAccountConnectors true: a bot on Grok
-   * without the opt-in, harness-connectors.ts relayAddsAccountConnectors).
+   * without the opt-in, connectors/turn-plan.ts relayAddsAccountConnectors).
    * That part loads them (engineRelay), so it is a real relay (#3344: the bot
    * is told of its own Grok sign-in's connectors). */
   current?: { instanceId: string; model: string; account?: "second"; relayAddsAccountConnectors?: boolean };

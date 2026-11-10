@@ -136,7 +136,7 @@ export interface InternalRoomsDeps {
   isRelayPart(threadId: string): boolean;
   /** #3344: whether a run_with_engine part of this bot on that selection (its
    * own sign-in) loads account connectors its turn does not (the Grok gateway
-   * without the bot's opt-in; harness-connectors.ts relayAddsAccountConnectors). */
+   * without the bot's opt-in; connectors/turn-plan.ts relayAddsAccountConnectors). */
   relayAddsAccountConnectors?(bot: InternalRoomsBot, speaker: unknown, selection: { instanceId: string; account?: "second" }): boolean;
   askBotAndWait(
     targetBotId: string,

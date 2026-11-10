@@ -118,50 +118,10 @@ export function accountConnectorsForTurn(input: ClaudeAiTurnInput): "own" | "for
   return principal && principal === input.localPrincipalId.trim().toLowerCase() ? "own" : "foreign";
 }
 
-/** Whether a Claude turn keeps the claude.ai connectors of the account it
- * runs on: only when that account is the speaker's own. */
-export function claudeAiConnectorsForTurn(input: ClaudeAiTurnInput): boolean {
-  return input.driver === "claudeAgent" && accountConnectorsForTurn(input) === "own";
-}
-
-/** Whether a Grok turn may load the cloud connectors of the xAI account it
- * runs on: the person's own grok.com sign-in only, on an organization turn
- * and, since 2026-10-30, on a solo server (the operator's own sign-in). The
- * driver adds no tool selection (grokCloudConnectorEnv) and keeps a card on
- * every write (grok.ts spawnArgs: never Grok's own auto or bypass mode). */
-export function grokCloudConnectorsForTurn(input: ClaudeAiTurnInput): boolean {
-  // #2747 (QA of #2816): xAI's managed gateway serves every connector of the
-  // grok.com account, the account's own third-party MCP connectors included
-  // (`managed_gateway:cursor` carried the operator's "Pulsatrix Sagax"
-  // connector, remote_support_host_code and the rest, into a bot's turn). A
-  // bot sees only the tools Sagax mounts for it, so no bot turn loads the
-  // account's managed MCP unless the bot opted in (grokAccountConnectors,
-  // a bot setting off by default), and then only on the person's own sign-in.
-  // A run_with_engine part is the exception (2026-11-09): that part exists
-  // to reach this person's Outlook, Teams and SharePoint, so it loads the
-  // gateway without the opt-in. Someone else's sign-in still never does.
-  // Only the Grok CLI (grokAgent) loads them: the xAI API engine ("grok",
-  // drivers/grok.ts chat-completions) has no use_tool and no grok.com MCP.
-  const load = input.grokAccountConnectors === true || input.engineRelay === true;
-  return load && input.driver === GROK_CLI_DRIVER && accountConnectorsForTurn(input) === "own";
-}
-
-/** #3344: whether a turn loads the account connectors of the sign-in it runs
- * on (claude.ai, or the Grok gateway). A turn that does not may hand a part to
- * that same sign-in with run_with_engine: the part loads them (engineRelay). */
-export function turnLoadsAccountConnectors(input: ClaudeAiTurnInput): boolean {
-  return claudeAiConnectorsForTurn(input) || grokCloudConnectorsForTurn(input);
-}
-
-/** #3344: whether a run_with_engine part on the turn's own sign-in (same
- * engine, model and account) would load account connectors the turn itself
- * does not. Only a Grok CLI turn without the bot opt-in, on the person's own
- * sign-in: its part loads the gateway (engineRelay). Every other turn (Codex,
- * pi, Gemini, a chat engine, the xAI API, Claude on a key or on someone
- * else's sign-in) loads nothing more there, so that part is no relay. */
-export function relayAddsAccountConnectors(input: ClaudeAiTurnInput): boolean {
-  return !turnLoadsAccountConnectors(input) && grokCloudConnectorsForTurn({ ...input, engineRelay: true });
-}
+// Which of these a turn loads (claude.ai on Claude, the Grok gateway on the
+// Grok CLI) and whether a run_with_engine part adds them is read once per
+// turn by server/connectors/turn-plan.ts, the only file that names those
+// rules (server/connectors/one-source.guard.test.ts).
 
 /** The system note for a turn that keeps them: what they are and whose. */
 export function claudeAiConnectorsPrompt(enabled: boolean): string {

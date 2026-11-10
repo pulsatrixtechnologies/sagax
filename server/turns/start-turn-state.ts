@@ -88,6 +88,8 @@ export type TurnState = {
 
   activeMessages: any;
   liveBot: any;
+  /** The turn's connector plan (server/connectors/turn-plan.ts), set in setup. */
+  connectorPlan: any;
   prompt: any;
   tagged: any;
   voiceBriefed: any;
@@ -255,6 +257,7 @@ export function createTurnState(init: {
 
     activeMessages: undefined,
     liveBot: undefined,
+    connectorPlan: undefined,
     prompt: undefined,
     tagged: undefined,
     voiceBriefed: undefined,

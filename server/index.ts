@@ -945,7 +945,8 @@ import { createElevenLabsVoice } from "./tts/elevenlabs-voice.ts";
 import { createFishVoice } from "./tts/fish-voice.ts";
 import { createInstalledVoices } from "./tts/installed-voice.ts";
 import { systemVoicesAvailable } from "./tts/system-voices.ts";
-import { ClaudeAiConnectorInventory, claudeAiConnectorsForTurn, connectorPrincipalFor, createHarnessConnectorRoutes, grokCloudConnectorsForTurn, relayAddsAccountConnectors, runClaudeCli, type ClaudeAiTurnInput } from "./harness-connectors.ts";
+import { ClaudeAiConnectorInventory, connectorPrincipalFor, createHarnessConnectorRoutes, runClaudeCli, type ClaudeAiTurnInput } from "./harness-connectors.ts";
+import { createConnectorPlanForTurn } from "./connectors/turn-plan.ts";
 import { connectorSwitchText } from "./connector-switch.ts";
 import { connectorNeed } from "../shared/engine-connectors.ts";
 import { forgetTurnReach,
@@ -2711,9 +2712,8 @@ bindLeafHost({
   get principalLoginDir() { return principalLoginDir; },
   get piModelServersForViewer() { return piModelServersForViewer; },
   get claudeAiConnectorRows() { return claudeAiConnectorRows; },
-  get grokCloudOnTurn() { return grokCloudOnTurn; },
   get isRelayPart() { return isRelayPart; },
-  get claudeAiConnectorsFor() { return claudeAiConnectorsFor; },
+  get connectorPlanForTurn() { return connectorPlanForTurn; },
   get catalogPrice() { return catalogPrice; },
   get perspicaxKeysUrl() { return perspicaxKeysUrl; },
   get refusalPayerOf() { return refusalPayerOf; },
@@ -3442,7 +3442,6 @@ bindLeafHost({
   get claudeAccountInfo() { return claudeAccountInfo; },
   get claudeAccountLinked() { return claudeAccountLinked; },
   get claudeActivityEvents() { return claudeActivityEvents; },
-  get claudeAiConnectorsForTurn() { return claudeAiConnectorsForTurn; },
   get claudeAiOwnerScopedServer() { return claudeAiOwnerScopedServer; },
   get claudeArtifactCommentsNote() { return claudeArtifactCommentsNote; },
   get claudeSignedIn() { return claudeSignedIn; },
@@ -4806,7 +4805,6 @@ bindLeafHost({
   get graphConnectorOptions() { return graphConnectorOptions; },
   get greetingLanguage() { return greetingLanguage; },
   get grokAccountReach() { return grokAccountReach; },
-  get grokCloudConnectorsForTurn() { return grokCloudConnectorsForTurn; },
   get grokReachConnectorNames() { return grokReachConnectorNames; },
   get grokVoice() { return grokVoice; },
   get groupLeftFrameAllowed() { return groupLeftFrameAllowed; },
@@ -8008,6 +8006,14 @@ const piLocalTurnAccess = createPiLocalTurnAccess(getLeafHost);
 const turnReachPrompt = createTurnReachPrompt(getLeafHost);
 const turnConnectorsFor = createTurnConnectorsFor(getLeafHost);
 const accountConnectorInput = createAccountConnectorInput(getLeafHost);
+/** Lot L2 of the connectors design: one connector plan per turn, read by
+ * every reader (server/connectors/turn-plan.ts). */
+const connectorPlanForTurn = createConnectorPlanForTurn<BotRecord, any>({
+  accountConnectorInput: (bot, instance, speaker, via, slot) => accountConnectorInput(bot, instance, speaker, via, slot),
+  isRelayPart: (threadId) => isRelayPart(threadId),
+  withholdHostToolsFor: (instance) => withholdHostToolsFor(instance),
+  accounts: (principal) => connectorRegistry.accounts(principal),
+});
 const engineReachFor = createEngineReachFor(getLeafHost);
 const connectorSwitchForTurn = createConnectorSwitchForTurn(getLeafHost);
 const engineConnectorsPromptFor = createEngineConnectorsPromptFor(getLeafHost);
@@ -21846,16 +21852,6 @@ function claudeAiConnectorRows(account: ClaudeAiTurnInput): Array<{ name: string
   const inventory = "unavailable" in owner ? undefined : claudeAiInventory.peek(owner.key, { cli: owner.cli, env: owner.env });
   return inventory && inventory.auth === "subscription" ? inventory.connectors : undefined;
 }
-/** Whether a turn loads the grok.com connectors of its own xAI account
- * (harness-connectors.ts grokCloudConnectorsForTurn, no tool selection): on
- * an organization server where the engine withholds host tools, and on a
- * solo server (2026-10-30), where each write still waits for its card. */
-function grokCloudOnTurn(input: ClaudeAiTurnInput, instance: Parameters<typeof withholdHostToolsFor>[0], bot: BotRecord): boolean {
-  return grokCloudConnectorsForTurn(input) && bot.toolScope === undefined && (IDENTITY.kind !== "perspicax" || withholdHostToolsFor(instance));
-}
-function claudeAiConnectorsFor(bot: BotRecord, instance: { instanceId: string; driverKind: string }, speaker: TurnSpeaker, via?: TurnAccess["via"]): boolean {
-  return claudeAiConnectorsForTurn(accountConnectorInput(bot, instance, speaker, via));
-}
 /** The turn's account and whose it is (review of #943, point 5): engine
  * connectors only on the sign-in of the person the turn is for. */
 /** The connectors an engine reaches for the person a turn is for: their
@@ -23166,8 +23162,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     relayAddsAccountConnectors: (bot, speaker, selection) => {
       const instance = registry.instances().find((candidate) => candidate.instanceId === selection.instanceId);
       if (!instance) return false;
-      const input = accountConnectorInput(bot as unknown as BotRecord, instance, speaker as TurnSpeaker, undefined, selection.account === "second" ? "second" : "primary");
-      return relayAddsAccountConnectors(input);
+      return connectorPlanForTurn(bot as unknown as BotRecord, instance, speaker as TurnSpeaker, undefined, undefined, { slot: selection.account === "second" ? "second" : "primary" }).relayAdds;
     },
     askBotAndWait: (targetBotId, message, depth, fromBotId, fromThreadId, targetThreadId, opts) =>
       askBotAndWait(targetBotId, message, depth, fromBotId, fromThreadId, targetThreadId, opts) as Promise<{ status: string; text?: string }>,
@@ -33005,7 +33000,7 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   canWorkOnCloud,
   cfg,
   checkSoulDrift,
-  claudeAiConnectorsFor,
+  connectorPlanForTurn,
   claudeUserMcpEnabled,
   clearCancelledProviderHandshake,
   cloudEngine,
@@ -33054,7 +33049,6 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   finishUntilPrompt,
   fitTurnImagesForModel,
   githubWithheldPrompt,
-  grokCloudConnectorsForTurn,
   groupEngineCommandRoute,
   groupMemoryWritable,
   groupSpeakers,
@@ -33328,7 +33322,7 @@ const startTurnRunner = createStartTurn({
   checkpoints,
   chiefOfStaffSystemPrompt,
   claimTurnResource,
-  claudeAiConnectorsFor,
+  connectorPlanForTurn,
   claudeUserMcpEnabled,
   clearCancelledProviderHandshake,
   clearDirectTurnDispatch,
@@ -33419,7 +33413,6 @@ const startTurnRunner = createStartTurn({
   gatedLocalComputer,
   generateThreadTitle,
   githubWithheldPrompt,
-  grokCloudConnectorsForTurn,
   isRelayPart,
   guardTurnDispatch,
   guestDrivenTurns,

@@ -18,6 +18,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     callLinesBlock,
     callLinesSince,
     cfg,
+    connectorPlanForTurn,
     checkSoulDrift,
     clearDirectTurnDispatch,
     cloudRoutineReadiness,
@@ -91,6 +92,10 @@ export function createSetupStartTurn(host: StartTurnHost) {
       state.instance.adapter.releaseWarmSession?.(state.threadId);
       return { kind: "return" };
     }
+    // Lot L2 of the connectors design: this turn's connectors, and whose,
+    // computed once here and read by the prompt, the reach line, the
+    // Connectors record and the dispatch (server/connectors/turn-plan.ts).
+    state.connectorPlan = connectorPlanForTurn(state.bot, state.instance, state.speaker, state.threadId, undefined, { guestConfined: state.guestConfined === true });
     const ownEngineRead = typeof engineRead === "function" ? engineRead(state.instance.instanceId) : (state.enginesRead ? state.enginesRead : null);
     if (ownEngineRead) {
       await ownEngineRead;

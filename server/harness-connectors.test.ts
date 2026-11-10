@@ -4,19 +4,18 @@ import { resolveEngineAccess } from "./engines/engine-credentials.ts";
 
 import {
   ClaudeAiConnectorInventory,
-  claudeAiConnectorsForTurn,
   claudeAiConnectorsPrompt,
   connectorPrincipalFor,
   createHarnessConnectorRoutes,
   engineConnectorsPrompt,
   relayHint,
   accountConnectorsForTurn,
-  grokCloudConnectorsForTurn,
   parseClaudeAuthStatus,
   parseClaudeMcpList,
   type ClaudeAiTurnInput,
   type HarnessConnectorRouteDeps,
 } from "./harness-connectors.ts";
+import { claudeAiConnectorsForTurn, grokCloudConnectorsForTurn } from "./connectors/turn-plan.ts";
 import type { RequestAuth } from "./auth/request-auth.ts";
 import { PASS, type RouteContext } from "./routes/table.ts";
 import type { SessionRecord } from "./auth/sessions.ts";

@@ -1,18 +1,14 @@
 // @ts-nocheck
 /** turnReachPrompt (#1388). Pure move from server/index.ts. */
 import { noteTurnReach, reachContributions, reachSummaryPrompt } from "../turns/turn-reach.ts";
+import type { ConnectorTurnPlan } from "../connectors/turn-plan.ts";
 export type Host = Record<string, any>;
 
 export function createTurnReachPrompt(getHost: () => Host): any {
-function turnReachPrompt(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string }, speaker: TurnSpeaker, threadId: string,   integrations: NonNullable<SendTurnInput["integrations"]>, computer: boolean) {
+function turnReachPrompt(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string }, speaker: TurnSpeaker, threadId: string,   integrations: NonNullable<SendTurnInput["integrations"]>, computer: boolean, connectorPlan?: ConnectorTurnPlan) {
   const host = getHost();
-  const { claudeAiConnectorsForTurn } = host;
-
-  // the same payer-is-speaker rule as the connectors section (engineConnectorsPromptFor)
-  const account = {
-    ...host.accountConnectorInput(bot, instance, speaker),
-    ...(host.isRelayPart?.(threadId) ? { engineRelay: true } : {}),
-  };
+  // the turn's connector plan, the one the connectors section reads (server/connectors/turn-plan.ts)
+  const plan = connectorPlan ?? host.connectorPlanForTurn(bot, instance, speaker, threadId);
   const builtins = [
     ...(integrations.browser ? ["the built-in browser"] : []),
     ...(computer ? ["a computer"] : []),
@@ -41,8 +37,8 @@ function turnReachPrompt(bot: BotRecord, instance: Parameters<typeof withholdHos
   return reachSummaryPrompt({
     servers: Object.keys(integrations.custom ?? {}),
     builtins,
-    claudeAi: claudeAiConnectorsForTurn(account),
-    grokCloud: host.grokCloudOnTurn(account, instance, bot),
+    claudeAi: plan.claudeAi,
+    grokCloud: plan.grokCloudOnTurn,
     lines: reach.lines
   });
 

@@ -10,7 +10,8 @@ import type { ProviderAuthenticationStatus } from "../contracts.ts";
 import { grokAccountReach, type GrokAccountReach } from "../drivers/acp/grok-tool-catalog.ts";
 import { LOGIN_MARKER, PrincipalEngineLogins, secondLoginSupported, type LoginController } from "../engines/principal-engine-logins.ts";
 import { separateAccountInstance } from "../engines/separate-account.ts";
-import { ClaudeAiConnectorInventory, claudeAiConnectorsForTurn, connectorPrincipalFor, engineConnectorsPrompt, grokCloudConnectorsForTurn, relayAddsAccountConnectors, turnLoadsAccountConnectors } from "../harness-connectors.ts";
+import { ClaudeAiConnectorInventory, connectorPrincipalFor, engineConnectorsPrompt } from "../harness-connectors.ts";
+import { createConnectorPlanForTurn, grokCloudConnectorsForTurn, relayAddsAccountConnectors, turnLoadsAccountConnectors } from "./turn-plan.ts";
 import { createConnectorsElsewhereFor } from "../index-leaves/connectorsElsewhereFor.ts";
 import { createConnectorSetupStore } from "../index-leaves/connectorSetupStore.ts";
 import { createEngineReachFor } from "../index-leaves/engineReachFor.ts";
@@ -213,9 +214,7 @@ describe("connector registry (#3344)", () => {
       connectorRegistry: registry,
       registry: { instances: () => instances },
       turnSlotFor: () => "primary",
-      claudeAiConnectorsForTurn,
       connectorPrincipalFor,
-      grokCloudConnectorsForTurn,
       isPrincipalId,
       secondLoginSupported,
       relayAccountLabel,
@@ -230,6 +229,14 @@ describe("connector registry (#3344)", () => {
       engineDisplayName: (instance: { driverKind: string }) => (instance.driverKind === "claudeAgent" ? "Claude" : "Grok"),
       claudeAccountForPrincipal: () => ({ unavailable: "not_signed_in" }),
     };
+    // the one connector plan per turn (lot L2), read by every reader
+    const planned = (h: Record<string, unknown>) => Object.assign(h, {
+      connectorPlanForTurn: createConnectorPlanForTurn({
+        accountConnectorInput: (...args: unknown[]) => (h.accountConnectorInput as (...a: unknown[]) => Parameters<typeof turnLoadsAccountConnectors>[0])(...args),
+        withholdHostToolsFor: () => true,
+      }),
+    });
+    planned(host);
     const elsewhere = createConnectorsElsewhereFor(() => host);
     const bot = { modelSelection: { instanceId: "claude" } };
     const speaker = { origin: "person", principalId: A };
@@ -268,7 +275,7 @@ describe("connector registry (#3344)", () => {
     // the part's turn (engineRelay) loads that sign-in's connectors
     expect(grokCloudConnectorsForTurn({ ...ownTurn, engineRelay: true })).toBe(true);
     // an opted-in bot's turn already has them: only the other sign-in
-    const optedIn = { ...host, accountConnectorInput: (...args: unknown[]) => ({ ...(host.accountConnectorInput as (...a: unknown[]) => object)(...args), grokAccountConnectors: true }) };
+    const optedIn = planned({ ...host, accountConnectorInput: (...args: unknown[]) => ({ ...(host.accountConnectorInput as (...a: unknown[]) => object)(...args), grokAccountConnectors: true }) });
     expect(createConnectorsElsewhereFor(() => optedIn)(onGrok, instances[1], speaker).map((entry: { engine: string }) => entry.engine)).toEqual(["Grok (personal account)"]);
     // its own sign-in, not listed, is still "do it yourself" for the relay
     const optedInTurn = (optedIn.accountConnectorInput as (...a: unknown[]) => Parameters<typeof turnLoadsAccountConnectors>[0])(onGrok, instances[1], speaker);

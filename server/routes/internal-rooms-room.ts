@@ -61,7 +61,7 @@ export async function handleCreateOrManageRoom(call: InternalRoomsCall): Promise
     if (!parsed.success) return json(res, 400, { error: "provide a room name, memberIds, and optional bulletin (at most 12000 characters)" });
     const memberIds = [...new Set([chief.id, ...parsed.data.memberIds])];
     if (!allowedRoster(memberIds)) {
-      return json(res, 403, { error: "include yourself and only active, allowed peers from your section" });
+      return json(res, 403, { error: "include yourself and only active, allowed peers from list_bots" });
     }
     // Organization server: a room is read through humanIds (channel.read),
     // so the person whose Primary Bot opens it must be listed or the room
@@ -89,7 +89,7 @@ export async function handleCreateOrManageRoom(call: InternalRoomsCall): Promise
   if (!parsed.success) return json(res, 400, { error: "provide roomId and a supported room action; section moves are user-only" });
   const room = store.group(parsed.data.roomId);
   if (!room || room.dm || sectionKey(room.section) !== sectionKey(chief.section) || !allowedRoster(room.memberIds)) {
-    return json(res, 403, { error: "you can only manage rooms you belong to with allowed peers in your own section" });
+    return json(res, 403, { error: "you can only manage rooms in your own section you belong to with allowed peers from list_bots" });
   }
   const { action, memberIds, name, bulletin } = parsed.data;
   const patch: Record<string, unknown> = {};
@@ -101,7 +101,7 @@ export async function handleCreateOrManageRoom(call: InternalRoomsCall): Promise
     patch.bulletin = redactSecretsInText(bulletin);
   } else {
     if (!memberIds || memberIds.some((id) => !allowedIds.has(id))) {
-      return json(res, 403, { error: "memberIds must name only yourself or active, allowed peers in your section" });
+      return json(res, 403, { error: "memberIds must name only yourself or active, allowed peers from list_bots" });
     }
     const next = action === "add_members" ? [...new Set([...room.memberIds, ...memberIds])]
       : action === "remove_members" ? room.memberIds.filter((id) => !memberIds.includes(id)) : memberIds;

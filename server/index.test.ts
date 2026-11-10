@@ -9124,7 +9124,7 @@ describe("harness HTTP API", () => {
         chiefOfStaff: true,
         modelSelection: { instanceId: "claude", model: "claude-sonnet-5" },
       })).status).toBe(200);
-      const header = "Current Roster end section team:\n";
+      const header = "Reachable teammates (your person's bots, whatever their team):\n";
       // A solo server leaves the Primary Bot's cover unset, so the roster is
       // every other bot, not the empty-section line. The section still ends
       // on those roster lines, and the old VM status block stays gone.

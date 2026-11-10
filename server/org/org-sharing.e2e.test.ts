@@ -437,7 +437,7 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     expect(ownCard.access.subscriptionSignIn).toBe(true);
   }, 60_000);
 
-  it("S3-6b (F): bob's queued send, his edit and his bot's ask_bot on alice's bot get the card, never a turn", async () => {
+  it("S3-6b (F): bob's queued send and his edit on alice's bot get the card, his bot's ask_bot is refused, never a turn", async () => {
     // the organization key is still cleared (S3-6); bob still holds his grant on Xavier
     const bob = await signIn(BOB);
     const promptsNow = () => (existsSync(prompts) ? readFileSync(prompts, "utf8") : "");
@@ -503,24 +503,21 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     expect(minted.status).toBe(201);
     const token = ((await minted.json()) as { token: string }).token;
     const aliceCards = (await accessCards(alice, shared.id)).length;
-    const refusals = () => log.split(`bot=${shared.id} refused: no_access`).length;
-    const refusedBefore = refusals();
     const hop = await fetch(`${BASE}/api/internal/ask-bot`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
       body: JSON.stringify({ toBotId: shared.id, message: "hop from bee" }),
     });
     const hopText = await hop.text();
-    expect(hop.status, hopText).toBe(200);
-    // the hop speaks for bob (Bee's owner): refused, and the card is bob's,
-    // never shown to alice in her thread with Xavier
-    await waitFor(async () => refusals() > refusedBefore);
+    // 2026-11-09: Xavier is alice's, so bob's Bee never reaches it, shared
+    // or not: refused at the route, no turn, nothing shown to alice
+    expect(hop.status, hopText).toBe(403);
     await sleep(300);
     expect((await accessCards(alice, shared.id)).length).toBe(aliceCards);
     expect(promptsNow()).not.toContain("hop from bee");
   }, 60_000);
 
-  it("S3-12: a bot reaches its owner's bots and the ones shared with them, never another person's", async () => {
+  it("S3-12: a bot reaches its owner's bots only, never another person's, shared or not (2026-11-09)", async () => {
     // Sections are each person's own here and bot.section stays empty, so
     // the section rule alone once put every person's bots in one team.
     const dave = await signIn(DAVE);
@@ -545,9 +542,10 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
 
     const dotToken = await capability(dot);
     expect(await roster(dotToken)).toEqual([dash.id]);
-    // Bee (bob's) sees alice's bots shared with bob, not dave's nor alice's others
+    // Bee (bob's) does not reach alice's bot shared with bob (2026-11-09:
+    // a bot never messages another person's bot), nor dave's
     const beeRoster = await roster(await capability(bee));
-    expect(beeRoster).toContain(shared.id);
+    expect(beeRoster).not.toContain(shared.id);
     expect(beeRoster).not.toContain(dot.id);
     expect(beeRoster).not.toContain(dash.id);
 
@@ -593,12 +591,11 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     expect(promptsNow()).not.toContain("work from dot");
   }, 60_000);
 
-  it("S3-13: a peer receipt never names a bot its owner unshared and renamed while the asker's card was open", async () => {
-    // Isolation between people: alice shares a writer bot with bob, a bot of
-    // bob's asks it and bob's card is open; alice takes the share back and
-    // renames the writer. Bob allows, and the answer his bot reads names the
-    // writer by the id it sent, never by alice's new private name; the
-    // writer gets nothing.
+  it("S3-13: a bot never asks another person's bot, even one shared with its owner (2026-11-09)", async () => {
+    // Isolation between people: alice shares a writer bot with bob and a bot
+    // of bob's asks it. The share lets bob see the writer, never lets bob's
+    // bots message it: refused before any card or turn, and alice's later
+    // private name never reaches bob's side.
     const PRIVATE = "Writer private codename";
     const bob = await signIn(BOB);
     const writer = await createBot(alice, "Shared writer", "claude");
@@ -616,31 +613,16 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     const token = ((await minted.json()) as { token: string }).token;
     const promptsNow = () => (existsSync(prompts) ? readFileSync(prompts, "utf8") : "");
     try {
-      const asked = fetch(`${BASE}/api/internal/ask-bot`, {
+      const asked = await fetch(`${BASE}/api/internal/ask-bot`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
         body: JSON.stringify({ toBotId: writer.id, message: "hop to the writer once private" }),
       });
-      void asked.catch(() => {});
-      const card = await waitFor(async () => {
-        const got = await api("GET", `/api/threads/${asker.threadId}/messages`, bob);
-        return (got.body.messages as Array<{ card?: { requestId?: string; answered?: string; dismissed?: boolean; title?: string } }> | undefined)
-          ?.find((m) => m.card?.requestId && !m.card.answered && !m.card.dismissed) ?? null;
-      });
-      expect(card.card?.title).toContain("@Shared writer");
-      expect((await api("DELETE", `/api/bots/${writer.id}/direct-grants/${bobId}`, alice)).status).toBe(200);
+      expect(asked.status, await asked.clone().text()).toBe(403);
       expect((await api("PATCH", `/api/bots/${writer.id}`, alice, { name: PRIVATE })).status).toBe(200);
-      const answered = await api("POST", `/api/threads/${asker.threadId}/respond`, bob, { requestId: card.card!.requestId, behavior: "allow" });
-      expect(answered.status, answered.text).toBeLessThan(300);
-      const response = await asked;
-      const text = await response.text();
-      expect(response.status, text).toBe(200);
-      const result = JSON.parse(text) as { error?: string; receipt?: Record<string, unknown> };
-      expect(result.receipt).not.toHaveProperty("botName");
-      expect(text).not.toContain(PRIVATE);
-      expect(result).toMatchObject({ error: "that bot is no longer available to this bot", receipt: { botId: writer.id, outcome: "failed" } });
-      // nothing in bob's conversation names it, and the writer got no turn
-      expect((await api("GET", `/api/threads/${asker.threadId}/messages`, bob)).text).not.toContain(PRIVATE);
+      const messages = await api("GET", `/api/threads/${asker.threadId}/messages`, bob);
+      expect((messages.body.messages as Array<{ card?: { requestId?: string } }> | undefined)?.some((m) => m.card?.requestId)).toBeFalsy();
+      expect(messages.text).not.toContain(PRIVATE);
       await sleep(300);
       expect(promptsNow()).not.toContain("hop to the writer once private");
     } finally {

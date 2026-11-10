@@ -36,7 +36,7 @@ export const DEF_TOOL_RESULT_READ = {
 
 export const DEF_LIST_ROOM_TARGETS = {
     name: "list_room_targets",
-    description: "Discover actual Sagax teammates and rooms in your allowed teams. Works in a normal bot conversation too; no room is required. Returns bot and room IDs, roles and working folders, never other conversations' history. Use these bots, not native coding helpers with similar names, when the user asks their team to work together.",
+    description: "Discover actual Sagax teammates (every visible bot of your own person, whatever its team, never another person's) and rooms. Works in a normal bot conversation too; no room is required. Returns bot and room IDs, roles and working folders, never other conversations' history. Use these bots, not native coding helpers with similar names, when the user asks their team to work together.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   };
 
@@ -117,7 +117,7 @@ export const DEF_SET_REPLY_NOTIFY = {
 export const DEF_LIST_BOTS = {
     name: "list_bots",
     description:
-      "List the other bots (agents) you may contact in your own team and any additional teams the owner has explicitly allowed you to coordinate, with their team, model and current status. Call this to discover exact teammate IDs before assigning work or requesting advice through your available coordination tools.",
+      "List the other bots (agents) you may contact: every visible bot of your own person, whatever its team, narrowed by your allowed peers when set; never another person's bot. With their team, model and current status. Call this to discover exact teammate IDs before assigning work or requesting advice through your available coordination tools.",
     inputSchema: { type: "object", properties: {} },
   };
 

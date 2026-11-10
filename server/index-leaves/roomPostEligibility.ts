@@ -30,7 +30,7 @@ function roomPostEligibility(
     return {
       ok: false,
       status: 403,
-      error: `that room includes @${outsider.name}, who is outside your section — tell the user what you wanted to post there instead`
+      error: `that room includes @${outsider.name}, who belongs to another person; tell the user what you wanted to post there instead`
     };
   }
   return { ok: true };

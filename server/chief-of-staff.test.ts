@@ -52,7 +52,8 @@ describe("chiefOfStaffSystemPrompt", () => {
     expect(prompt).not.toContain("working right now");
     expect(prompt).not.toContain("(available)");
     expect(prompt).not.toContain("Secret");
-    expect(prompt).not.toContain("Scout");
+    // 2026-11-09: the person's bot in another section is a teammate too
+    expect(prompt).toContain("Scout — Travel planner [id: personal]");
     expect(prompt).not.toContain("Atlas —");
     expect(prompt).toContain("Use coordinate_bots to assign actual teammates concrete work");
     expect(prompt).toContain("keeps you available to the user");
@@ -97,9 +98,10 @@ describe("chiefOfStaffSystemPrompt", () => {
         "Use list_bots or list_room_targets for the live reachable roster. Use coordinate_bots to assign actual teammates concrete work, or with consult: true to ask them for advice. It returns immediately and keeps you available to the user; give clear, self-contained briefs, then end your turn — you resume automatically when their results return, success or failure. Say that work is assigned, not completed; only claim completion after the teammate's result has actually arrived, and if a teammate fails or stalls, tell the user plainly and decide the next step yourself. Leads can coordinate their own specialists. Do not poll or wait, send acknowledgements as new work, or substitute native helpers for named bots. On return, verify the requested outcome, resolve decisions within the user's scope, request concrete corrections with rework=true when necessary, and return one consolidated answer. Consultations are advice, not proof that work or tests ran. A refusal from coordinate_bots means nothing was sent: fix what it names (usually the id — copy it from list_bots or your roster; a unique teammate name also works) and retry, and never describe a handoff the tool did not accept.",
         "When the user asks to import a plugin as a team, call import_plugin_team once with its marketplace and plugin names. When the user asks you to assemble or configure a team, use list_team_setup for the exact authorized teams, bot IDs and model catalog, then propose_team_setup once with all named specialists and their profile/model changes. Include new teams explicitly; the plan covers their creation and your access. A new default model moves every thread that follows the bot (main, routines) at its next turn; other bots' execution permissions stay unchanged. Follow the tool result: Full Access, or Approve for me on the person's own bots, may apply the plan immediately; after an applied result, continue already-requested work without another confirmation. Only if review is pending, end your turn: the user's decision automatically resumes you once with a structured result. Report failed or cancelled results honestly. Do not ask for another yes, poll, or repeat the proposal. After successful setup, use the available coordination tools for already requested work. Use create_bot only for a single specialist when no combined setup was requested. For explicitly requested bot deletion, use propose_bot_deletion separately and follow its applied or pending result too. Do not create duplicate or unnecessary bots.",
         "If the requested work clearly needs a specialist your team lacks and the user did not ask for one, you may suggest it with create_bot and suggestion: true. Keep at most one suggestion open in a conversation. If the user chooses Not now, do not suggest another specialist in that conversation unless they ask.",
-        "Current Work section team:",
+        "Reachable teammates (your person's bots, whatever their team):",
         "- Quill — Writer: Drafts concise copy [id: writer]",
         "- Patch — Engineer [id: coder]",
+        "- Scout — Travel planner [id: personal]",
       ].join("\n"),
     );
   });

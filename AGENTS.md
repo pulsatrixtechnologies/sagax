@@ -3514,12 +3514,12 @@ routines at once, no card, several bots in one order (one call per bot):
   `archive_bot` go through `sagax_settings` (`bot.delete`, `bot.hidden`).
 - A Primary Bot targets every bot of its person (`chiefPeerTargetRule`,
   routine `for_bot_id`): managed teams no longer refuse.
-- Scope (2026-10-20, 0.6.4): a Primary Bot SEES and reaches
-  every bot its person owns (on an organization server also the ones the
-  person may manage), whatever the team: `canAccessBot` / `primaryCovers`
-  (`server/peers/peer-roster.ts`, cover set by index.ts `setPrimaryCover`) feed
-  `canReachPeer` (list_bots, roster), `list_team_setup`, team setup
-  (`covers`), delegations and every "different section" refusal.
+- Scope (2026-10-20, 0.6.4): a Primary Bot SEES every bot its person owns
+  (on an organization server also the ones the person may manage), whatever
+  the team: `primaryCovers` (`server/peers/peer-roster.ts`, cover set by
+  index.ts `setPrimaryCover`) feeds `list_team_setup` and team setup
+  (`covers`). Messaging follows the person rule below (2026-11-09):
+  a managed bot of another person is set up, never messaged.
   `managedSections` only widens coordination of other teams now. An
   archived temporary agent (`archivedAgent`) is in no list.
 - Archive is idempotent (`temporaryAgentSetting`, index.ts, before
@@ -9074,7 +9074,41 @@ shares nothing (2026-10-02). Keep these rules, covered by
   rooms keep reading them. `PUT /api/org/sections/:id/members|bots` answers
   410 `sections_are_personal`.
 
+## Which bots a bot reaches: one person's, whatever the section (2026-11-09)
+
+Owner decision: every bot reaches every visible bot of the same person,
+whatever the sidebar section, and never a bot of another person. One
+function decides, `canAccessBot` in `server/peers/peer-roster.ts`
+(`sameOwnerBots`, the effective owners index.ts installs through
+`setSameOwner`), read through `canReachPeer` by `list_bots`,
+`list_room_targets`, the roster, @mention and name resolution and every
+send route (`coordinate_bots`, threads, delegation dispatch, room handoffs
+and room posts).
+
+- Unset `peers`: every visible bot of the person, all sections. An
+  explicit `peers` list still narrows it (an empty list reaches nobody but
+  the person's Primary Bot, #1098); it never widens past the person.
+- Nothing widens it to another person: not `SAGAX_OPEN_TEAMS=1` (now only
+  team setup and incident routing, `canAccessTeam`), not
+  `managed_sections` (`coordinatorSupervises` also needs the same person),
+  not a `peers` entry, not a share or a manage level (`primaryCovers` stays
+  a setup rule). Before this, a bot shared with a person was reachable by
+  that person's bots, and a Primary Bot reached another person's bot it may
+  manage; both are gone. A room holding bots of two people no longer
+  carries work or posts between them.
+- A bot with no recorded owner (a server bot) is the local operator's
+  (`effectiveBotOwner`): it reaches and is reached by the operator's bots
+  only. A solo server installs no owner check: every bot is the one
+  person's, so every visible bot is reachable whatever its section.
+- Tests: `server/peers/peer-roster.test.ts` (2026-11-09 block),
+  `server/peers/peer-scope.test.ts`.
+
 ## Which bots a bot reaches (organization server, 2026-10-06)
+
+Superseded for messaging by the person rule above: a share no longer lets
+another person's bot message a bot, and a room of two people's bots no
+longer carries work between them. `orgPeerInScope` still says which bots
+the owner sees.
 
 Owner report: a member's bots kept naming a bot ("Nova") the member
 could not see. Why: once sections became personal, `bot.section` stayed

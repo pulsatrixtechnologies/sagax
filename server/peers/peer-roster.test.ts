@@ -38,6 +38,9 @@ const fleet: RosterMember[] = [
 
 const self = fleet[0]!;
 
+// Makes `id` another person's bot; every other bot stays one person's.
+const otherPerson = (id: string) => setSameOwner((a, b) => (a.id === id) === (b.id === id));
+
 // A persona written to break out of its roster line: \u2028 is a line break
 // to plenty of renderers, and \u0007 is the kind of control byte that
 // survives a copy-paste into a bot's settings.
@@ -109,14 +112,15 @@ describe("owner-granted cross-team coordination", () => {
     expect(peerRosterSystemPrompt([{ ...reachable, chiefOfStaff: false }])).not.toContain("[Primary Bot]");
   });
   const chief = { ...self, chiefOfStaff: true, managedSections: ["Personal"] };
-  it("lets Clive reach selected teams without elevating their specialists", () => {
-    expect(reachablePeers(fleet, chief).map(bot => bot.id)).toEqual(["writer", "coder", "elsewhere"]);
+  it("never lets a managed team reach another person's bots (2026-11-09), and keeps it a setup grant", () => {
+    expect(reachablePeers(fleet, chief)).toEqual([]);
+    expect(canAccessTeam(chief, "Personal")).toBe(true);
     expect(canReachPeer(fleet[4]!, chief)).toBe(false);
     expect(canAccessTeam(chief, "Finance")).toBe(false);
     expect(canAccessTeam({ ...chief, chiefOfStaff: false }, "Personal")).toBe(false);
   });
-  it("keeps explicit peer lists and hidden bots as additional restrictions", () => {
-    expect(reachablePeers(fleet, { ...chief, peers: ["elsewhere", "hidden"] }).map(bot => bot.id)).toEqual(["elsewhere"]);
+  it("keeps a peer list from widening past the person", () => {
+    expect(reachablePeers(fleet, { ...chief, peers: ["elsewhere", "hidden"] })).toEqual([]);
     expect(reachablePeers(fleet, { ...chief, peers: [] })).toEqual([]);
     expect(canReachPeer(chief, chief)).toBe(false);
   });
@@ -138,8 +142,8 @@ describe("one person's own Primary Bot (#1098)", () => {
     expect(canReachPeer({ ...self, peers: ["writer"] }, primary)).toBe(true);
     expect(canReachPeer({ ...primary, peers: [] }, self)).toBe(true);
     expect(reachablePeers([...fleet, primary], { ...self, peers: [] }).map(bot => bot.id)).toEqual(["primary"]);
-    // the link is to the Primary Bot only: another team's bot stays out
-    expect(canReachPeer(self, fleet[4]!)).toBe(false);
+    // 2026-11-09: another team's bot of the same person is a teammate too
+    expect(canReachPeer(self, fleet[4]!)).toBe(true);
     // hidden and audience still apply
     expect(canReachPeer(self, { ...primary, hidden: true })).toBe(false);
     expect(canReachPeer(self, { ...primary, visibility: "admins" })).toBe(false);
@@ -148,18 +152,72 @@ describe("one person's own Primary Bot (#1098)", () => {
   it("is not reached by another person's bot", () => {
     setSameOwner((a, b) => a.id === b.id);
     expect(canReachPeer(self, primary)).toBe(false);
-    expect(canReachPeer({ ...primary, managedSections: ["Work"] }, self)).toBe(true);
+    // 2026-11-09: a managed team no longer reaches another person's bot
+    expect(canReachPeer({ ...primary, managedSections: ["Work"] }, self)).toBe(false);
+  });
+});
+
+describe("every visible bot of the same person, never another person's (2026-11-09)", () => {
+  // Two people. The lead sits in one section, its own teammates in three
+  // others; the other person's bots share the lead's section.
+  const owners: Record<string, string> = {
+    lead: "owner-a", alpha: "owner-a", beta: "owner-a", gamma: "owner-a", tucked: "owner-a",
+    neighbor: "owner-b", neighborPrimary: "owner-b",
+  };
+  const people: RosterMember[] = [
+    { id: "lead", name: "Lead", section: "Main Team" },
+    { id: "alpha", name: "Alpha", section: "App Dev" },
+    { id: "beta", name: "Beta", section: "Console Dev" },
+    { id: "gamma", name: "Gamma", section: "Flow Dev" },
+    { id: "tucked", name: "Tucked", section: "Flow Dev", hidden: true },
+    { id: "neighbor", name: "Neighbor", section: "Main Team" },
+    { id: "neighborPrimary", name: "Neighbor Primary", section: "Main Team", chiefOfStaff: true },
+  ];
+  const lead = people[0]!;
+  const neighbor = people[5]!;
+  beforeEach(() => { setSameOwner((a, b) => Boolean(owners[a.id]) && owners[a.id] === owners[b.id]); });
+  afterEach(() => { setSameOwner(null); vi.unstubAllEnvs(); });
+
+  it("reaches every visible bot of its own person across sections when peers is unset", () => {
+    expect(reachablePeers(people, lead).map(bot => bot.id)).toEqual(["alpha", "beta", "gamma"]);
+    expect(canReachPeer(lead, people[3]!)).toBe(true);
+    expect(canReachPeer(people[3]!, lead)).toBe(true);
+    expect(resolveTeammate(people, lead, "Gamma")).toEqual({ id: "gamma", byName: true });
+  });
+
+  it("still narrows to an explicit peers list", () => {
+    expect(reachablePeers(people, { ...lead, peers: ["beta"] }).map(bot => bot.id)).toEqual(["beta"]);
+    expect(reachablePeers(people, { ...lead, peers: [] })).toEqual([]);
+  });
+
+  it("never reaches another person's bot, same section, open teams, managed sections or peers entry included", () => {
+    expect(canReachPeer(lead, neighbor)).toBe(false);
+    expect(canReachPeer(neighbor, lead)).toBe(false);
+    expect(canReachPeer({ ...lead, peers: ["neighbor"] }, neighbor)).toBe(false);
+    expect(canReachPeer({ ...lead, chiefOfStaff: true, managedSections: ["Main Team"] }, neighbor)).toBe(false);
+    expect(canReachPeer(lead, people[6]!)).toBe(false);
+    expect(canReachPeer(people[6]!, lead)).toBe(false);
+    vi.stubEnv("SAGAX_OPEN_TEAMS", "1");
+    expect(canReachPeer(lead, neighbor)).toBe(false);
+    expect(reachablePeers(people, neighbor).map(bot => bot.id)).toEqual(["neighborPrimary"]);
+    expect(resolveTeammate(people, lead, "Neighbor")).toHaveProperty("error");
+  });
+
+  it("keeps a managed section from supervising another person's bot", () => {
+    const coordinator = { ...lead, chiefOfStaff: true, managedSections: ["Main Team"] };
+    expect(coordinatorSupervises(coordinator, neighbor)).toBe(false);
+    expect(coordinatorSupervises(coordinator, { ...people[1]!, section: "Main Team" })).toBe(true);
   });
 });
 
 describe("open teams (SAGAX_OPEN_TEAMS=1)", () => {
   afterEach(() => { vi.unstubAllEnvs(); });
 
-  it("keeps the team boundary unless the flag is exactly 1", () => {
+  it("keeps the team setup boundary unless the flag is exactly 1, and never changes one person's reach", () => {
     for (const value of [undefined, "", "0", "true"]) {
       vi.stubEnv("SAGAX_OPEN_TEAMS", value);
       expect(canAccessTeam(self, "Personal")).toBe(false);
-      expect(reachablePeers(fleet, self).map(bot => bot.id)).toEqual(["writer", "coder"]);
+      expect(reachablePeers(fleet, self).map(bot => bot.id)).toEqual(["writer", "coder", "elsewhere"]);
     }
   });
 
@@ -236,13 +294,17 @@ describe("room recruitment and the peer list (#1366)", () => {
 });
 
 describe("reachablePeers", () => {
-  it("lists every visible same-section bot when no allow-list is set", () => {
-    expect(reachablePeers(fleet, self).map((bot) => bot.id)).toEqual(["writer", "coder"]);
+  afterEach(() => { setSameOwner(null); });
+
+  it("lists every visible bot of the person, whatever its section, when no allow-list is set", () => {
+    expect(reachablePeers(fleet, self).map((bot) => bot.id)).toEqual(["writer", "coder", "elsewhere"]);
   });
 
-  it("narrows to the allow-list without widening past the section", () => {
+  it("narrows to the allow-list without widening past the person", () => {
     expect(reachablePeers(fleet, { ...self, peers: ["coder"] }).map((bot) => bot.id)).toEqual(["coder"]);
-    // an id from another section is still unreachable, allow-listed or not
+    expect(reachablePeers(fleet, { ...self, peers: ["elsewhere"] }).map((bot) => bot.id)).toEqual(["elsewhere"]);
+    // another person's bot stays unreachable, allow-listed or not
+    otherPerson("elsewhere");
     expect(reachablePeers(fleet, { ...self, peers: ["elsewhere"] })).toEqual([]);
     expect(reachablePeers(fleet, { ...self, peers: [] })).toEqual([]);
   });
@@ -255,6 +317,8 @@ describe("reachablePeers", () => {
 });
 
 describe("resolveTeammate", () => {
+  afterEach(() => { setSameOwner(null); });
+
   it("takes an id as an id, even one the caller cannot reach", () => {
     expect(resolveTeammate(fleet, self, "writer")).toEqual({ id: "writer", byName: false });
     // hidden and other-section ids pass through: the route says what is wrong
@@ -269,7 +333,8 @@ describe("resolveTeammate", () => {
   });
 
   it("never resolves a name to a bot the id could not reach", () => {
-    // hidden, another section, the caller itself, and a name nobody has
+    // hidden, another person's, the caller itself, and a name nobody has
+    otherPerson("elsewhere");
     for (const raw of ["Secret", "Scout", "Ada", "Nobody"]) {
       expect(resolveTeammate(fleet, self, raw)).toEqual({
         error: `No bot with id or name "${raw}" — call list_bots and copy the exact id from the result. ${PEER_ACCESS_HELP}`,
@@ -297,7 +362,9 @@ describe("resolveTeammate", () => {
 
 describe("peerRosterSystemPrompt", () => {
   it("names the teammates and how to reach them, granting no new authority", () => {
+    otherPerson("elsewhere");
     const prompt = peerRosterSystemPrompt(reachablePeers(fleet, self));
+    setSameOwner(null);
 
     expect(prompt).toContain("- Quill — Writer [id: writer]");
     expect(prompt).toContain("- Patch — Engineer [id: coder]");
@@ -516,7 +583,7 @@ describe("bot visibility between teammates", () => {
     expect(canReachPeer(hr, self)).toBe(false);
     expect(canReachPeer(hr, admins)).toBe(false);
     expect(canReachPeer(hr, hr2)).toBe(true);
-    expect(reachablePeers([...fleet, hr, hr2, admins], self).map((bot) => bot.id)).toEqual(["writer", "coder"]);
+    expect(reachablePeers([...fleet, hr, hr2, admins], self).map((bot) => bot.id)).toEqual(["writer", "coder", "elsewhere"]);
     expect(reachablePeers([...fleet, hr, hr2, admins], hr).map((bot) => bot.id)).toEqual(["hr2"]);
     // a name never resolves to a teammate the audience rule hides
     expect(resolveTeammate([...fleet, hr], self, "Payroll")).toMatchObject({ error: expect.stringContaining("No bot with id or name") });

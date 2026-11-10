@@ -1368,7 +1368,10 @@ alone.
   recorded in the admin activity log.
 - **Teams.** A team (sidebar section) is listed to a user only when it
   holds a bot or room they can see.
-- **Bots working together.** A bot reaches a teammate (`coordinate_bots`,
+- **Bots working together.** A bot reaches every visible bot of the same
+  person, whatever the sidebar section, and never a bot of another person
+  (no setting, share or `SAGAX_OPEN_TEAMS` changes that); its own allowed
+  peers list can narrow it. A bot reaches a teammate (`coordinate_bots`,
   its roster and `list_bots`, @mentions, a Chief's team) only when exactly
   the same people can see both: otherwise one bot's thread could carry the
   other's answers to people who cannot see it. Bots nobody restricted all

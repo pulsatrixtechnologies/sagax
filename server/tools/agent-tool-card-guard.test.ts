@@ -45,20 +45,32 @@ describe("agent tool guard before the card (B2.1)", () => {
 
   it("shadow records a would-be refusal but still shows the card", () => {
     const { guard, rows } = setup("shadow");
-    expect(guard.opened({ requestId: "c", mcpTool: "agents__create_agent", bot })).toMatchObject({ deny: false, decision: { allow: false, reason: "not_granted" } });
+    expect(guard.opened({ requestId: "c", mcpTool: "agents__delete_agent", bot, input: { agent_id: "a-other" } })).toMatchObject({ deny: false, decision: { allow: false, reason: "not_granted" } });
     expect(rows[0]).toMatchObject({ outcome: "card", detail: { guardAllow: false, guard: "not_granted" } });
   });
 
   it("enforce: grant check, then speaker check, before any card", () => {
     const { guard, rows, grants } = setup("enforce");
-    expect(guard.opened({ requestId: "d", mcpTool: "agents__create_agent", bot, speakerPrincipalId: "pr_owner" })).toMatchObject({ deny: true, decision: { reason: "not_granted" } });
+    expect(guard.opened({ requestId: "d", mcpTool: "agents__delete_agent", bot, speakerPrincipalId: "pr_owner", input: { agent_id: "a-other" } })).toMatchObject({ deny: true, decision: { reason: "not_granted" } });
     grants.grant({ kind: "bot", id: "bot-1" }, "agents:admin", "test");
-    expect(guard.opened({ requestId: "e", mcpTool: "agents__create_agent", bot, speakerPrincipalId: "pr_owner" })).toMatchObject({ deny: true, decision: { reason: "speaker_not_granted" } });
+    expect(guard.opened({ requestId: "e", mcpTool: "agents__delete_agent", bot, speakerPrincipalId: "pr_owner", input: { agent_id: "a-other" } })).toMatchObject({ deny: true, decision: { reason: "speaker_not_granted" } });
     grants.grant({ kind: "user", id: "pr_owner" }, "agents:admin", "test");
-    expect(guard.opened({ requestId: "f", mcpTool: "agents__create_agent", bot, speakerPrincipalId: "pr_owner" })).toMatchObject({ deny: false, decision: { reason: "grant" } });
+    expect(guard.opened({ requestId: "f", mcpTool: "agents__delete_agent", bot, speakerPrincipalId: "pr_owner", input: { agent_id: "a-other" } })).toMatchObject({ deny: false, decision: { reason: "grant" } });
     expect(rows.map((r) => r.outcome)).toEqual(["refused", "refused", "card"]);
     guard.resolved("d", "deny");
     expect(rows).toHaveLength(3);
+  });
+
+  // #3283: a bot of the person's own is their own space, no grant needed;
+  // archiving someone else's agent still needs one (isolation between people)
+  it("enforce: create_agent is the person's own, archiving another person's agent still needs a grant", () => {
+    const grants = new ToolGrantStore(null);
+    const rows: CardGuardRow[] = [];
+    const guard = createAgentCardGuard({ grants, mode: () => "enforce", audit: (row) => rows.push(row), agentOwner: (id) => (id === "a-mine" ? "pr_owner" : "pr_other") });
+    expect(guard.opened({ requestId: "o1", mcpTool: "agents__create_agent", bot, speakerPrincipalId: "pr_owner" })).toMatchObject({ deny: false, decision: { allow: true, reason: "default" } });
+    expect(guard.opened({ requestId: "o2", mcpTool: "agents__delete_agent", bot, speakerPrincipalId: "pr_owner", input: { agent_id: "a-mine" } })).toMatchObject({ deny: false, decision: { allow: true, reason: "owner" } });
+    expect(guard.opened({ requestId: "o3", mcpTool: "agents__delete_agent", bot, speakerPrincipalId: "pr_owner", input: { agent_id: "a-theirs" } })).toMatchObject({ deny: true, decision: { reason: "not_granted" } });
+    expect(rows.map((r) => r.outcome)).toEqual(["card", "card", "refused"]);
   });
 
   it("off: nothing", () => {

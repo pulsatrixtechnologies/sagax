@@ -1438,7 +1438,7 @@ describe("securable tool layer (B2)", () => {
 
   it("shadow records the decision and changes nothing", async () => {
     const { w, api } = withGuard("shadow");
-    expect((await api.call(bot("bot-x"), "create_agent", { name: "Shadowed" })).status).toBe(200);
+    expect((await api.call(bot("bot-x"), "delete_agent", { agent_id: "nope" })).status).toBe(404);
     expect(w.audits.at(-1)!.entry.detail).toMatchObject({ access: "admin", scope: "agents:admin", guard: "not_granted", guardAllow: false, guardMode: "shadow" });
     await api.call(bot("bot-x"), "list_agents", {});
     expect(w.audits.at(-1)!.entry.detail).toMatchObject({ readOnly: true, scope: "agents:read", guard: "default", guardAllow: true });
@@ -1447,13 +1447,22 @@ describe("securable tool layer (B2)", () => {
   it("enforce refuses admin without grants, for the bot and its speaker", async () => {
     const { w, api, grants } = withGuard("enforce");
     const caller = { ...bot("bot-x"), speakerPrincipalId: "pr_owner" };
-    expect((await api.call(caller, "create_agent", { name: "No" })).body).toMatchObject({ code: "not_granted" });
+    expect((await api.call(caller, "delete_agent", { agent_id: "nope" })).body).toMatchObject({ code: "not_granted" });
     expect(w.audits.at(-1)!.entry).toMatchObject({ outcome: "refused", code: "not_granted" });
     grants.grant({ kind: "bot", id: "bot-x" }, "agents:admin", "pr_owner");
-    expect((await api.call(caller, "create_agent", { name: "No" })).body.message).toContain("person this turn speaks for");
+    expect((await api.call(caller, "delete_agent", { agent_id: "nope" })).body.message).toContain("person this turn speaks for");
     grants.grant({ kind: "user", id: "pr_owner" }, "agents:admin", "pr_owner");
-    expect((await api.call(caller, "create_agent", { name: "Yes" })).status).toBe(200);
+    expect((await api.call(caller, "delete_agent", { agent_id: "nope" })).body.code).toBe("unknown_agent");
     expect((await api.call(caller, "list_agents", {})).status).toBe(200);
+  });
+
+  // #3283: a new bot of one's own is own space: no grant, enforce or not
+  it("enforce lets a member create their own agent without any grant", async () => {
+    const { w, api } = withGuard("enforce");
+    const caller = { ...bot("bot-x"), speakerPrincipalId: "pr_owner" };
+    expect((await api.call(caller, "create_agent", { name: "Mine" })).status).toBe(200);
+    expect(w.audits.at(-1)!.entry.detail).toMatchObject({ scope: "agents:write", guard: "default", guardAllow: true, guardMode: "enforce" });
+    expect((await api.call(person("pr_1"), "create_agent", { name: "Mine too" })).status).toBe(200);
   });
 
   it("without a guard dependency the audit carries no guard fields", async () => {

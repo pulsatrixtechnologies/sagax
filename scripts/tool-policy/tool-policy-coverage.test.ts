@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { routeInventory } from "./route-inventory.ts";
-import { classifyRoute, personalProviderRoute, policyFor, policyKey, toolPolicyRows, UNKNOWN_ROUTE_POLICY } from "../../server/tools/tool-policy.ts";
+import { classifyRoute, personalRoute, policyFor, policyKey, toolPolicyRows, UNKNOWN_ROUTE_POLICY } from "../../server/tools/tool-policy.ts";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const inventory = routeInventory(root);
@@ -37,7 +37,7 @@ describe("tool policy coverage", () => {
   it("declares a tier, readOnly and a scope on every row; admin is never on by default", () => {
     const bad = rows.filter((r) => !["read", "write", "admin"].includes(r.tier) || typeof r.readOnly !== "boolean"
       || !/^[a-z0-9-]+:(read|write|admin)$/.test(r.scope) || (r.tier === "admin" && r.defaultEnabled)
-      || ((r.destructive || r.billing) && r.tier !== "admin" && !personalProviderRoute(r.route)) || (r.readOnly && r.method !== "GET"));
+      || ((r.destructive || r.billing) && r.tier !== "admin" && !personalRoute(r.route)) || (r.readOnly && r.method !== "GET"));
     expect(bad.map(policyKey)).toEqual([]);
   });
 
@@ -58,18 +58,31 @@ describe("tool policy coverage", () => {
       ["DELETE", "^\\/api\\/bots\\/([\\w-]+)\\/queue\\/([\\w-]+)$"],
       ["DELETE", "^\\/api\\/webhooks\\/([\\w-]+)(\\/rotate)?$"],
       ["DELETE", "/api/routine-runs"],
+      // #3283: the rest of what a member owns
+      ["DELETE", "^\\/api\\/bots\\/([\\w-]+)\\/direct-grants\\/([^/]+)$"],
+      ["DELETE", "^\\/api\\/bots\\/([\\w-]+)\\/command-allowlist(?:\\/([\\w-]+))?$"],
+      ["DELETE", "^\\/api\\/bots\\/([\\w-]+)\\/workspace\\/entry$"],
+      ["DELETE", "^\\/api\\/bots\\/([\\w-]+)\\/tasks\\/([\\w-]+)$"],
+      ["DELETE", "^\\/api\\/bots\\/([\\w-]+)\\/task-list\\/(task_[A-Za-z0-9_-]+)$"],
+      ["DELETE", "^\\/api\\/bots\\/[\\w-]+\\/rules\\/sets\\/([a-z0-9-]+)$"],
+      ["DELETE", "^\\/api\\/groups\\/([\\w-]+)$"],
+      ["DELETE", "^\\/api\\/groups\\/([\\w-]+)\\/queue\\/([\\w-]+)$"],
+      ["DELETE", "^\\/api\\/groups\\/([\\w-]+)\\/tasks\\/([\\w-]+)$"],
+      ["DELETE", "^\\/api\\/groups\\/[\\w-]+\\/projects\\/[\\w-]+$"],
+      ["DELETE", "^\\/api\\/groups\\/[\\w-]+\\/tasks\\/[\\w-]+$"],
     ] as const) {
       expect(classifyRoute(method, route), route).toMatchObject({ tier: "admin", defaultEnabled: false, ownerScoped: true });
     }
     for (const [method, route] of [
-      ["DELETE", "^\\/api\\/bots\\/([\\w-]+)\\/direct-grants\\/([^/]+)$"],
-      ["DELETE", "^\\/api\\/bots\\/([\\w-]+)\\/command-allowlist(?:\\/([\\w-]+))?$"],
       ["ANY", "^\\/api\\/bots\\/([\\w-]+)\\/tool-grants\\/(tg_[\\w-]+)\\/revoke$"],
+      ["ANY", "^\\/api\\/me\\/tool-grants\\/(tg_[\\w-]+)\\/revoke$"],
+      ["DELETE", "^\\/api\\/team-memory\\/([\\w-]+)$"],
+      ["DELETE", "^\\/api\\/auth\\/sessions\\/([\\w-]+)$"],
+      ["POST", "^\\/api\\/computers\\/vps\\/([\\w-]+)\\/remove$"],
       ["ANY", "^\\/api\\/org\\/invites\\/([^/]+)\\/revoke$"],
       ["GET", "/api/org/members"],
       ["POST", "^\\/api\\/billing\\/checkout$"],
       ["DELETE", "/api/keys/1"],
-      ["DELETE", "^\\/api\\/groups\\/([\\w-]+)$"],
     ] as const) {
       expect(classifyRoute(method, route).ownerScoped, route).toBeUndefined();
     }
@@ -77,7 +90,11 @@ describe("tool policy coverage", () => {
     expect(policyFor("DELETE", "/api/bots/bot-1")).toMatchObject({ tier: "admin", ownerScoped: true, matched: true });
     expect(policyFor("DELETE", "/api/bots/bot-1/workspace/file")).toMatchObject({ tier: "admin", ownerScoped: true });
     expect(policyFor("DELETE", "/api/webhooks/wh-1")).toMatchObject({ ownerScoped: true });
-    expect(policyFor("DELETE", "/api/bots/bot-1/direct-grants/pr_bob").ownerScoped).toBeUndefined();
+    expect(policyFor("DELETE", "/api/bots/bot-1/direct-grants/pr_bob")).toMatchObject({ tier: "admin", ownerScoped: true });
+    expect(policyFor("DELETE", "/api/groups/room-1")).toMatchObject({ tier: "admin", ownerScoped: true });
+    expect(policyFor("DELETE", "/api/groups/room-1/tasks/t-1")).toMatchObject({ tier: "admin", ownerScoped: true });
+    expect(policyFor("POST", "/api/bots/bot-1/tool-grants/tg_1/revoke").ownerScoped).toBeUndefined();
+    expect(policyFor("DELETE", "/api/team-memory/m-1").ownerScoped).toBeUndefined();
   });
 
   it("treats an unknown route as a write, off by default", () => {

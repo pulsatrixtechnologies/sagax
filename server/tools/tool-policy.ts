@@ -5,12 +5,19 @@
 // writes new rows and keeps reviewed ones); the coverage test fails when a
 // route has no row. B1 only declares: nothing enforces the table yet.
 //
-// A deletion is admin by default, with one exception the guard reads at
-// call time: a route that removes something a person owns (their bot, its
-// workspace files, projects and queue, their webhooks, their routine runs)
-// is `ownerScoped`, and the guard lets the owner (or a bot speaking for
-// them) through without a grant. Organization, admin, billing, keys and
-// rights routes are never owner-scoped.
+// #3283 (owner rule of 2026-10-26): a member manages what is theirs without
+// an admin; admin is only what reaches past the person's own space (other
+// people, the whole organization, the shared server, its billing). So a
+// deletion is admin by default with two exceptions:
+//   - a personal route, whose handler binds every operation to the
+//     signed-in person (their provider keys, approval rules, custom review
+//     rules, sidebar teams), is a plain write, on by default;
+//   - a route that removes something one person owns (their bot and what
+//     is in it, their group and what is in it, their webhooks, their
+//     routine runs) is `ownerScoped`: the guard lets the owner (or a bot
+//     speaking for them) through without a grant, and keeps it admin for
+//     anyone else, so isolation between people holds.
+// Organization, admin, billing, keys and rights routes are never either.
 import { TOOL_POLICY_ROWS } from "../tool-policy.generated.ts";
 import type { PolicyMethod, ToolPolicy, ToolTier } from "./tool-policy-types.ts";
 
@@ -25,19 +32,25 @@ const DESTRUCTIVE = /\/(delete|remove|wipe|purge|reset|revoke|archive)(\b|\/|\$|
 const BILLING = /\/(billing|usage|spend-cap|invoices?|subscription|payments?|checkout|credits)(\b|\/|\$|\)|$)/;
 
 // What a person owns, as the plain route text reads after `/api/`
-// (`([w-]+)` is the id). Matched without the `/api/` prefix so the route
-// inventory (scripts/tool-policy/route-inventory.ts) does not read these
-// as routes.
+// (`([w-]+)` or `[w-]+` is the id). Matched without the `/api/` prefix so
+// the route inventory (scripts/tool-policy/route-inventory.ts) does not read
+// these as routes.
+const ID = String.raw`(?:\([^)]*\)|\[[^\]]*\]\+)`;
 const OWNER_SCOPED: readonly RegExp[] = [
-  /^bots\/\([^)]*\)$/,
-  /^bots\/\([^)]*\)\/(workspace\/file|projects|queue)(\b|\/|\(|$)/,
+  // their bot, and what is in it: files, projects, queue, tasks, task list,
+  // its rule sets, the people it is shared with, its saved command rules
+  new RegExp(`^bots\\/${ID}$`),
+  new RegExp(`^bots\\/${ID}\\/(workspace\\/(file|entry)|projects|queue|tasks|task-list|rules\\/sets|direct-grants|command-allowlist)(\\b|\\/|\\(|$)`),
+  // their group, and its projects, queue and tasks
+  new RegExp(`^groups\\/${ID}$`),
+  new RegExp(`^groups\\/${ID}\\/(projects|queue|tasks)(\\b|\\/|\\(|$)`),
   /^webhooks\/\([^)]*\)/,
   /^routine-runs$/,
 ];
 
-/** A deletion of something one person owns (their bot, its workspace
- * files, projects and queue, their webhooks, their routine runs). Never an
- * organization, admin, billing, keys or rights route. */
+/** A deletion of something one person owns (their bot and what is in it,
+ * their group and what is in it, their webhooks, their routine runs). Never
+ * an organization, admin, billing, keys or rights route. */
 export function ownerScopedRoute(route: string): boolean {
   const text = plain(route);
   const bare = text.replace(/^\^/, "").replace(/\$$/, "");
@@ -46,23 +59,38 @@ export function ownerScopedRoute(route: string): boolean {
   return OWNER_SCOPED.some((pattern) => pattern.test(rest));
 }
 
-/** These handlers derive the account owner from the authenticated person,
- * never a caller-provided person id. Their own keys/endpoints need no admin. */
-export function personalProviderRoute(route: string): boolean {
-  return /^\^?\/api\/me\/(?:providers|voice-keys|pi-model-servers)(?:\/|\(|\$|$)/.test(plain(route));
+// Routes whose handler binds every operation to the signed-in person and
+// never takes another person's id (server/auth/client-allow.ts lets a member
+// reach them): their provider keys and model servers, their approval rules,
+// their custom review rules, their sidebar teams.
+const PERSONAL: readonly RegExp[] = [
+  /^me\/(?:providers|voice-keys|pi-model-servers)(?:\/|\(|$)/,
+  new RegExp(`^approval-rules\\/${ID}$`),
+  new RegExp(`^custom-rules(?:\\/${ID})?$`),
+  /^sidebar-sections$/,
+];
+
+/** A route of the person's own space only: its handler derives the person
+ * from authentication, so its reads and writes, a deletion included, need
+ * no admin. */
+export function personalRoute(route: string): boolean {
+  const bare = plain(route).replace(/^\^/, "").replace(/\$$/, "");
+  if (!bare.startsWith("/api/")) return false;
+  const rest = bare.slice("/api/".length);
+  return PERSONAL.some((pattern) => pattern.test(rest));
 }
 
 /** The default classification of a route (generate.ts): GET reads; a DELETE,
  * a deletion verb, org/admin/billing/credentials are admin; everything else,
  * an unguarded method included, writes. A deletion of something one person
  * owns stays admin for everyone else and is `ownerScoped` for its owner.
- * Personal provider handlers bind every operation to the signed-in person,
+ * Personal route handlers bind every operation to the signed-in person,
  * so those reads/writes, including DELETE, need no administrator. */
 export function classifyRoute(method: PolicyMethod, route: string): Omit<ToolPolicy, "method" | "kind" | "route"> {
   const text = plain(route);
   const destructive = method === "DELETE" || DESTRUCTIVE.test(text);
   const billing = BILLING.test(text);
-  const admin = !personalProviderRoute(route) && (destructive || billing || ADMIN_AREA.test(text) || ADMIN_PART.test(text));
+  const admin = !personalRoute(route) &&(destructive || billing || ADMIN_AREA.test(text) || ADMIN_PART.test(text));
   const tier: ToolTier = admin ? "admin" : method === "GET" ? "read" : "write";
   const area = (/^\^?\/api\/(?:\(\?:)?([a-z][a-z0-9-]*)/.exec(text)?.[1] ?? "other");
   const ownerScoped = tier === "admin" && destructive && ownerScopedRoute(route);

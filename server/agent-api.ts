@@ -96,6 +96,9 @@ export function agentToolGuardPolicy(policy: AgentToolPolicy, tool?: AgentToolNa
   // 2026-10-26: archiving one's own agent is theirs, no grant needed
   // (tool-guard.ts ownerScoped); anyone else's stays admin
   const ownerScoped = tool === "delete_agent" && policy.access === "admin";
+  // #3283: create_agent makes a bot of the caller's own (clients.agentsCreate,
+  // held by every member): own space, a write on by default, no grant
+  if (tool === "create_agent") return { tier: "write", scope: "agents:write", readOnly: policy.readOnly, defaultEnabled: true };
   return { tier: policy.access, scope: `agents:${policy.access}`, readOnly: policy.readOnly, defaultEnabled: policy.access !== "admin", ...(ownerScoped ? { ownerScoped: true } : {}) };
 }
 

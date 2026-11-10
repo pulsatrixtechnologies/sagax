@@ -9,18 +9,34 @@ Every HTTP route the server answers has one row in `server/tool-policy.generated
 | `readOnly` | `true` only for a GET that deletes nothing. |
 | `scope` | `<area>:<tier>`, the grant a caller needs. |
 | `defaultEnabled` | Whether agent tools may use the route without a grant that names it. It is never `true` for admin. |
-| `destructive`, `billing` | Billing stays admin. Destructive rows are admin except the personal provider routes below. |
+| `destructive`, `billing` | Billing stays admin. Destructive rows are admin except the personal routes below; a deletion of something one person owns is `ownerScoped`. |
 
 Default classification (`classifyRoute`):
 - **read:** GET.
 - **admin:** DELETE, a deletion verb (`delete`, `remove`, `wipe`, `purge`, `reset`, `revoke`, `archive`), org, admin, billing, usage, fleet, engines, keys, credentials, roles, members, import and export.
 - **write:** everything else, including a route with no method guard.
 
-The personal provider routes (`/api/me/providers` and the older
-`/api/me/voice-keys` alias) are the person's own environment. Their handlers
-derive the owner from authentication and never accept another person's id.
-Their reads and writes, including removing their key or endpoint, are enabled
-without an admin grant. The normal approval rules still apply to bot writes.
+Own space (#3283, owner rule of 2026-10-26): a member manages their own bots,
+groups, setups and settings without an admin. Admin is only what reaches past
+the person's own space: other people, the whole organization, the shared
+server, its billing.
+
+- Personal routes (`personalRoute`): the handler derives the person from
+  authentication and never accepts another person's id. Their provider keys
+  and model servers (`/api/me/providers`, `/api/me/voice-keys`,
+  `/api/me/pi-model-servers`), their approval rules, their custom review rules
+  and their sidebar teams. Reads and writes, a deletion included, are plain
+  writes on by default.
+- Owner-scoped deletions (`ownerScopedRoute`): their bot and what is in it
+  (workspace files and entries, projects, queue, tasks, task list, rule sets,
+  the people it is shared with, its saved command rules), their group and its
+  projects, queue and tasks, their webhooks, their routine runs. The row stays
+  admin; the guard lets the owner, or a bot speaking for them, through without
+  a grant, and anyone else still needs one (isolation between people).
+- Never either: organization, admin, billing, keys, credentials and grants
+  routes, the team memory, sessions and pairing codes, the server's computers.
+
+The normal approval rules still apply to bot writes.
 
 A request that matches no row is treated as **write**, off by default (`UNKNOWN_ROUTE_POLICY`).
 
@@ -52,7 +68,7 @@ Writes still raise the approval card. The decision is recorded on every agent-ap
 - `enforce`: refuses with `not_granted`.
 - `off`: skips the guard.
 
-In shadow mode the audit shows what enforcing would refuse. Today that is `create_agent`, which is admin tier and has no grants yet.
+In shadow mode the audit shows what enforcing would refuse. `create_agent` makes a bot of the caller's own, so the guard reads it as a write on by default (#3283); `delete_agent` is owner-scoped: the agent's owner passes, anyone else needs an `agents:admin` grant.
 
 ## Grants routes (B3a)
 Admin scope only (gate + handler). Policy rows are `tool-grants:admin`, never default-enabled, so no agent tool can grant itself anything.

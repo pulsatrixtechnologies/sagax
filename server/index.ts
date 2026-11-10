@@ -24406,7 +24406,10 @@ const flowWatchLoop = new FlowWatchLoop({
   log: (botId, line) => proactiveEventsLine(botId, line),
   memory: new WatchMemory(join(DATA_DIR, "proactive-watches.json"))
 });
-if (!process.env.VITEST && IDENTITY.kind === "perspicax") {
+// Pulsatrix watches are off for every bot: createBot stores the default mode, so the
+// stored mode is not a choice. The per-person choice of #3408 turns them back on.
+const PULSATRIX_WATCHES_ENABLED = false;
+if (PULSATRIX_WATCHES_ENABLED && !process.env.VITEST && IDENTITY.kind === "perspicax") {
   setInterval(() => void flowWatchLoop.tick(), WATCH_TICK_MS).unref();
 }
 if (!process.env.VITEST) {

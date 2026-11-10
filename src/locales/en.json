@@ -3770,7 +3770,7 @@
   "groupPanel.routines.hint": "No routine for this group yet. Team goals and routines that post here show up in this list.",
   "groupPanel.computer.of": "Computer of",
   "harnessConnectors.body": "The connectors of your own claude.ai account reach your Claude bots when they run on your Claude subscription. They act as you, with your access.",
-  "harnessConnectors.codex": "Codex: ChatGPT connectors do not reach bots in Sagax.",
+  "harnessConnectors.codex": "ChatGPT apps reach your bots once you sign in to Codex with your ChatGPT account.",
   "harnessConnectors.empty": "No connector on your claude.ai account yet.",
   "harnessConnectors.loading": "Checking your Claude account...",
   "harnessConnectors.manage": "Manage on claude.ai",

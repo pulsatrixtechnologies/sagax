@@ -426,6 +426,19 @@ export class PrincipalEngineLogins {
     return this.accountEnv(principalId, instanceId, slot);
   }
 
+  /** #3353: the person's own Codex CLI on their own sign-in (CODEX_HOME in
+   * their folder), for the ChatGPT apps of the connector registry and one
+   * approved call (server/connectors/hosts/codex-host.ts); null when that
+   * sign-in is missing. Never another person's: the folder is the
+   * principal's. */
+  codexConnectorLaunch(principalId: string, instanceId: string): { cli: string; env: Record<string, string | undefined> } | null {
+    const facts = this.options.instance(instanceId);
+    if (!facts || facts.driver !== "codex" || !facts.cli.trim() || !this.signedIn(principalId, "codex", "primary", instanceId)) return null;
+    const env: Record<string, string | undefined> = { ...process.env, ...facts.environment, CODEX_HOME: this.loginDir(principalId, "codex", "primary", instanceId) };
+    delete env.OPENAI_API_KEY;
+    return { cli: facts.cli, env };
+  }
+
   private accountEnv(principalId: string, instanceId: string, slot: LoginSlot = "primary"): { cli: string; env: Record<string, string | undefined> } | null {
     const facts = this.options.instance(instanceId);
     if (!facts || facts.driver !== "grokAgent" || !facts.cli.trim() || !this.signedIn(principalId, "grokAgent", slot, instanceId)) return null;

@@ -2983,7 +2983,7 @@
   "groupPanel.routines.hint": "Aucune routine pour ce groupe. Les objectifs d'équipe et les routines qui publient ici s'affichent dans cette liste.",
   "groupPanel.computer.of": "Ordinateur de",
   "harnessConnectors.body": "Les connecteurs de ton propre compte claude.ai servent tes bots Claude quand ils roulent sur ton abonnement Claude. Ils agissent en ton nom, avec tes accès.",
-  "harnessConnectors.codex": "Codex : les connecteurs ChatGPT ne servent pas les bots dans Sagax.",
+  "harnessConnectors.codex": "Les apps ChatGPT servent tes bots dès que tu te connectes à Codex avec ton compte ChatGPT.",
   "harnessConnectors.empty": "Aucun connecteur sur ton compte claude.ai.",
   "harnessConnectors.loading": "Vérification de ton compte Claude...",
   "harnessConnectors.manage": "Gérer sur claude.ai",

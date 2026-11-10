@@ -185,23 +185,44 @@ export async function callComputersTool(name: string, args: Json, context: ToolC
     }
     const text = String(r.text ?? "");
     if (body.action === "exec") {
-      try {
-        const out = JSON.parse(text) as Record<string, unknown>;
-        const exitCode = Number(out.exitCode ?? 0);
-        const stdout = String(out.stdout ?? "");
-        const stderr = String(out.stderr ?? "");
-        const lines = [`${String(out.where ?? "host")} (${String(out.os ?? "")}): ${out.timedOut ? "stopped at its time limit" : `exit code ${exitCode}`}`];
-        // the host wrote this: data, never instructions
-        if (stdout) lines.push(wrapUntrusted("host stdout", stdout.replace(/\s+$/, "")));
-        if (stderr) lines.push(wrapUntrusted("host stderr", stderr.replace(/\s+$/, "")));
-        if (!stdout && !stderr && !out.timedOut) lines.push("(no output)");
-        return { text: lines.join("\n"), ...(exitCode !== 0 || out.timedOut ? { isError: true } : {}) };
-      } catch {
-        // a plain sentence (offline, asked, refused)
-      }
+      return hostExecResult(text, body.host, r.isError === true);
     }
     return { text, ...(r.isError ? { isError: true } : {}) };
   }
   return null;
+}
+
+/** The host_computer exec answer for the bot (#3393). Only a real run has an
+ * exit code: an answer without one (empty, or not the run's own report) is
+ * an error that says the command did not run, never "exit code 0". The
+ * label names the host the server ran it on, else the one the bot asked for. */
+export function hostExecResult(text: string, askedHost: string | undefined, serverError: boolean): ToolCallResult {
+  const hostName = askedHost?.trim() || "the host";
+  if (!text.trim()) {
+    return { text: `The command did not run on ${hostName}: Sagax gave no answer for it. Nothing ran; try again, and tell the person if it repeats.`, isError: true };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    // a plain sentence (offline, asked, refused): the reason itself
+    return { text, ...(serverError ? { isError: true } : {}) };
+  }
+  const out = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  const ran = typeof out.exitCode === "number" && Number.isFinite(out.exitCode);
+  if (!ran && out.timedOut !== true) {
+    return { text: `The command did not run on ${hostName}: the answer carried no exit code, so nothing ran there. Try again, and tell the person if it repeats.`, isError: true };
+  }
+  const exitCode = ran ? Number(out.exitCode) : -1;
+  const stdout = String(out.stdout ?? "");
+  const stderr = String(out.stderr ?? "");
+  const where = typeof out.where === "string" && out.where.trim() ? out.where.trim() : hostName;
+  const os = typeof out.os === "string" && out.os.trim() ? ` (${out.os.trim()})` : "";
+  const result = [`${where}${os}: ${out.timedOut ? "stopped at its time limit" : `exit code ${exitCode}`}`];
+  // the host wrote this: data, never instructions
+  if (stdout) result.push(wrapUntrusted("host stdout", stdout.replace(/\s+$/, "")));
+  if (stderr) result.push(wrapUntrusted("host stderr", stderr.replace(/\s+$/, "")));
+  if (!stdout && !stderr && !out.timedOut) result.push("(no output)");
+  return { text: result.join("\n"), ...(exitCode !== 0 || out.timedOut ? { isError: true } : {}) };
 }
 

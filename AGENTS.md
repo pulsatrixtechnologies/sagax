@@ -1303,6 +1303,9 @@ resolved (unset fact = skipped), observe as a read with the owner's routine
 credentials (`PerspicaxMcp.withRoutineSession`), JMESPath `when`, dedup per
 watch + result key, `ProactiveEngine.consider`, then a wake with source
 `watch` in the bot's one conversation. Writes go through ordinary approval.
+A watch is the organization's, so one bot per person watches it (#3394): the
+Primary Bot when it watches, else the person's first bot that does; one
+event wakes one bot, once.
 
 ## A reply shows as it is written (2026-10-29)
 
@@ -8044,8 +8047,11 @@ these rules, each covered by `server/harness-connectors.test.ts` or
   false is ignored, `PUT /api/harness-connectors/settings` is a no-op kept for
   older clients). `SAGAX_CLAUDE_ALLOW` is a separate thing (standing tool allow
   rules, see docs/self-hosting.md) and stays.
-- Codex: ChatGPT connectors need Codex's own ChatGPT login, which Sagax's
-  ChatGPT plan mode and API keys do not have, so Codex turns get none.
+- Codex: ChatGPT apps need Codex's own ChatGPT login (the Codex sign-in in
+  Sagax), which Sagax's ChatGPT plan mode and API keys do not have. On that
+  login the connector registry lists them and the Codex host calls one
+  through `call_connector`, from a bot on any engine, with no model turn
+  (server/connectors/hosts/codex-host.ts, #3353).
 - Grok: only an organization turn (host tools withheld) loads the xAI
   account's cloud connectors (`grokCloudConnectorEnv` in
   `server/drivers/acp/grok.ts`). Grok reaches them through `use_tool`, and a

@@ -44,7 +44,8 @@ const body = z.object({
   query: z.string().trim().max(200).optional()
 }).strict();
 
-/** A provider may describe a tool (L10 and later); the registry keeps ids today. */
+/** A tool as the registry keeps it: its id, and its description and input
+ * schema when the provider lists them (ChatGPT apps, #3353). */
 interface DescribedTool { id: string; description?: unknown; inputSchema?: unknown }
 
 function norm(text: string): string {

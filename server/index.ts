@@ -1472,6 +1472,7 @@ import { createConnectorHub } from "./connectors/hub.ts";
 import { testConnectorHostFromEnv } from "./connectors/hosts/test-host.ts";
 import { createGrokConnectorHost } from "./connectors/hosts/grok-host.ts";
 import { createClaudeConnectorHost } from "./connectors/hosts/claude-host.ts";
+import { createCodexConnectorHost, type CodexConnectorLaunch } from "./connectors/hosts/codex-host.ts";
 import { installMainRuntimeEventSubscriber } from "./runtime-events/dispatcher.ts";
 import { createApplyConfigHttpPatch } from "./routes/config-http-patch.ts";
 import { createAuthenticate } from "./request-pipeline/authenticate.ts";
@@ -24398,7 +24399,7 @@ if (screenContext && !process.env.VITEST) screenContext.start();
 const flowWatchLoop = new FlowWatchLoop({
   bots: () => store.bots
     .filter((bot) => !bot.hidden && !bot.temporary)
-    .map((bot) => ({ id: bot.id, owner: effectiveBotOwner(bot) || "" })),
+    .map((bot) => ({ id: bot.id, owner: effectiveBotOwner(bot) || "", primary: bot.chiefOfStaff === true })),
   bot: (botId) => store.bot(botId) ?? undefined,
   // the organization's Flow plugin only: no person's or bot's plugin code
   // runs on the shared server (a local server runs its own)
@@ -28587,6 +28588,38 @@ function signedInFolders(principalId: string, driver: LoginDriver, slot: LoginSl
   return (engineLogins?.signedInAccounts(principalId, driver, slot) ?? []).map((id) => id ?? DEFAULT_ACCOUNT);
 }
 const testConnectorHost = testConnectorHostFromEnv();
+/** #3353: the Codex instances whose own sign-in a person keeps. An
+ * organization server: the person's own signed-in folders. A solo server:
+ * the operator's own Codex (an instance on its own login, never a key, the
+ * ChatGPT plan mode or Company routing). */
+function codexConnectorSignIns(principalId: string): string[] {
+  if (IDENTITY.kind === "perspicax") return isPrincipalId(principalId) ? signedInFolders(principalId, "codex", "primary") : [];
+  if (principalId !== localPrincipalId().trim().toLowerCase()) return [];
+  return Object.entries(instanceConfigs(cfg)).filter(([, entry]) => {
+    if (entry.driver !== "codex" || entry.environment?.OPENAI_API_KEY) return false;
+    const config = (entry.config ?? {}) as { authMode?: unknown; managed?: unknown };
+    return config.authMode === undefined && config.managed === undefined;
+  }).map(([id]) => id);
+}
+/** The person's own Codex CLI on one of those sign-ins, or undefined. */
+function codexConnectorLaunch(principalId: string, accountId: string): CodexConnectorLaunch | undefined {
+  if (IDENTITY.kind === "perspicax") {
+    const instanceId = folderInstance("codex", accountId);
+    return (instanceId ? engineLogins?.codexConnectorLaunch(principalId, instanceId) : null) ?? undefined;
+  }
+  if (!codexConnectorSignIns(principalId).includes(accountId)) return undefined;
+  const entry = instanceConfigs(cfg)[accountId];
+  if (!entry) return undefined;
+  const config = (entry.config ?? {}) as { cli?: unknown };
+  const env: Record<string, string | undefined> = { ...process.env, ...entry.environment };
+  delete env.OPENAI_API_KEY;
+  return { cli: typeof config.cli === "string" && config.cli.trim() ? config.cli : "codex", env };
+}
+/** #3353 (L10): the ChatGPT apps of a person's own Codex sign-in, read and
+ * called through a short app-server on that sign-in, with no model. */
+const codexConnectorHost = createCodexConnectorHost({
+  launch: (principalId, account) => codexConnectorLaunch(principalId, account.instanceId),
+});
 const connectorRegistry = new ConnectorRegistry({
   dataDir: DATA_DIR,
   accountInstance: (_provider, instanceId) => (IDENTITY.kind !== "perspicax" || separateAccountInstance(instanceId) ? instanceId : DEFAULT_ACCOUNT),
@@ -28619,12 +28652,19 @@ const connectorRegistry = new ConnectorRegistry({
       },
     }),
     // #3348: the test connector host stands for this provider in tests only
-    testConnectorHost?.source ?? chatgptAppsProvider(),
+    testConnectorHost?.source ?? chatgptAppsProvider({
+      signIns: codexConnectorSignIns,
+      list: async (principalId, accountId) => {
+        const launch = codexConnectorLaunch(principalId, accountId);
+        return launch ? codexConnectorHost.listApps(launch) : undefined;
+      },
+    }),
   ],
 });
 /** #3348 (L5): the hosts that run call_connector, one per provider. The
- * Grok host (#3350, L7) and the Claude host (#3352, L9) each run one
- * approved call on the person's own sign-in of that provider. */
+ * Grok host (#3350, L7), the Claude host (#3352, L9) and the Codex host
+ * (#3353, L10) each run one approved call on the person's own sign-in of
+ * that provider. */
 const connectorHub = createConnectorHub([
   ...(testConnectorHost ? [testConnectorHost.host] : []),
   createGrokConnectorHost({
@@ -28643,6 +28683,7 @@ const connectorHub = createConnectorHub([
       return "unavailable" in signedIn ? undefined : { cli: signedIn.cli, env: signedIn.env };
     },
   }),
+  codexConnectorHost,
 ]);
 /** The CLI and environment of a person's own Claude account (their
  * claude.ai connectors), or why there is none. */

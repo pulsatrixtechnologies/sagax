@@ -21,6 +21,10 @@
 //                              as one server, codex_apps); mcpServer/tool/call answers the captured result for
 //                              the captured call, a marker result for any other listed tool, and an error result
 //                              for a tool the server does not list. Neither starts a turn or asks the client.
+//   FAKE_CODEX_METHOD_LOG      append {pid, method} for every method the client sends (the Codex connector host
+//                              test counts turn/start: zero, issue #3353)
+//   FAKE_CODEX_CONNECTOR_ASK   "1": before it answers mcpServer/tool/call, ask the client the MCP tool approval
+//                              of that call (an mcpServer/elicitation/request) and record the answer in the dump
 //   FAKE_CODEX_MISSING_BEARER  the first N launches fail their turn as codex-cli 0.160.1 holding no login does
 //                              (count in FAKE_CODEX_STATE)
 //   FAKE_CODEX_LAUNCH_CRASHES  die at turn/start (before ack) with transient stderr,
@@ -208,6 +212,8 @@ if (process.argv[2] === "exec") {
   process.exit(0);
 }
 const calls: Array<{ method: string; params: unknown }> = [];
+/** FAKE_CODEX_CONNECTOR_ASK: runs once the client answered the call's ask. */
+let connectorAsked: (() => void) | undefined;
 // Opt-in config resolution for scope tests; mirror the native -c precedence.
 const mcpOverrides: Record<string, Record<string, unknown>> = {};
 for (let index = 0; process.env.FAKE_CODEX_MCP_OVERRIDES === "1" && index < process.argv.length; index++) {
@@ -540,6 +546,16 @@ process.stdin.on("data", (chunk) => {
     }
 
     if (msg.method) calls.push({ method: msg.method, params: msg.params ?? null });
+    if (msg.method && process.env.FAKE_CODEX_METHOD_LOG) appendFileSync(process.env.FAKE_CODEX_METHOD_LOG, `${JSON.stringify({ pid: process.pid, method: msg.method })}\n`);
+    // the client's answer to the connector call's own ask
+    if (msg.id === 103 && msg.method === undefined && connectorAsked) {
+      decision = msg.result ?? { error: msg.error };
+      const answer = connectorAsked;
+      connectorAsked = undefined;
+      dump();
+      answer();
+      continue;
+    }
 
     switch (msg.method) {
       case "initialize": {
@@ -1234,14 +1250,30 @@ process.stdin.on("data", (chunk) => {
         const captured = JSON.parse(readFileSync(join(folder, "codex-tool-call.json"), "utf8")) as { request: { server: string; tool: string; arguments: unknown }; result: unknown };
         const server = status.result.data.find((entry) => entry.name === msg.params?.server);
         const tool = String(msg.params?.tool ?? "");
-        if (!server) {
-          out({ jsonrpc: "2.0", id: msg.id, error: { code: -32602, message: `unknown MCP server: ${msg.params?.server}` } });
-        } else if (!(tool in server.tools)) {
-          out({ jsonrpc: "2.0", id: msg.id, result: { content: [{ type: "text", text: `unknown tool: ${tool}` }], isError: true } });
-        } else if (tool === captured.request.tool && JSON.stringify(msg.params?.arguments ?? {}) === JSON.stringify(captured.request.arguments)) {
-          out({ jsonrpc: "2.0", id: msg.id, result: captured.result });
+        const answerCall = () => {
+          if (!server) {
+            out({ jsonrpc: "2.0", id: msg.id, error: { code: -32602, message: `unknown MCP server: ${msg.params?.server}` } });
+          } else if (!(tool in server.tools)) {
+            out({ jsonrpc: "2.0", id: msg.id, result: { content: [{ type: "text", text: `unknown tool: ${tool}` }], isError: true } });
+          } else if (tool === captured.request.tool && JSON.stringify(msg.params?.arguments ?? {}) === JSON.stringify(captured.request.arguments)) {
+            out({ jsonrpc: "2.0", id: msg.id, result: captured.result });
+          } else {
+            out({ jsonrpc: "2.0", id: msg.id, result: { content: [{ type: "text", text: `FAKE_CODEX_APP ${tool} ${JSON.stringify(msg.params?.arguments ?? {})}` }], isError: false } });
+          }
+        };
+        if (process.env.FAKE_CODEX_CONNECTOR_ASK === "1" && server && tool in server.tools) {
+          connectorAsked = () => {
+            const accepted = (decision as { action?: unknown } | undefined)?.action === "accept";
+            if (accepted) answerCall();
+            else out({ jsonrpc: "2.0", id: msg.id, result: { content: [{ type: "text", text: "user rejected MCP tool call" }], isError: true } });
+          };
+          out({ jsonrpc: "2.0", id: 103, method: "mcpServer/elicitation/request", params: {
+            threadId: msg.params?.threadId, serverName: msg.params?.server, mode: "form",
+            message: `Allow the ${msg.params?.server} MCP server to run tool "${tool}"?`,
+            _meta: { codex_approval_kind: "mcp_tool_call" }, requestedSchema: { type: "object", properties: {} },
+          } });
         } else {
-          out({ jsonrpc: "2.0", id: msg.id, result: { content: [{ type: "text", text: `FAKE_CODEX_APP ${tool} ${JSON.stringify(msg.params?.arguments ?? {})}` }], isError: false } });
+          answerCall();
         }
         break;
       }

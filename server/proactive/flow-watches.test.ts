@@ -27,7 +27,9 @@ function watch(overrides: Partial<FlowWatch> = {}): FlowWatch {
   };
 }
 
-function harness(opts: { mode?: unknown; stored?: boolean; observed?: unknown; readOnly?: string[]; watches?: unknown[]; budget?: number; now?: () => number; facts?: string; memory?: WatchMemory } = {}) {
+type HarnessBot = { id: string; owner: string; primary?: boolean; mode?: unknown };
+
+function harness(opts: { mode?: unknown; stored?: boolean; observed?: unknown; readOnly?: string[]; watches?: unknown[]; budget?: number; now?: () => number; facts?: string; memory?: WatchMemory; bots?: HarnessBot[] } = {}) {
   let access = true;
   let sessions = 0;
   const offered: ProactiveEvent[] = [];
@@ -44,6 +46,12 @@ function harness(opts: { mode?: unknown; stored?: boolean; observed?: unknown; r
     reference: async () => JSON.stringify({ topic: "team", body: opts.facts ?? "" }),
   };
   const bot = opts.stored === false ? {} : { proactiveMode: opts.mode ?? "proactive" };
+  const roster: HarnessBot[] = opts.bots ?? [{ id: "b1", owner: "person-1" }];
+  const record = (id: string) => {
+    const row = roster.find((candidate) => candidate.id === id);
+    if (!row) return undefined;
+    return row.mode === undefined ? bot : { proactiveMode: row.mode };
+  };
   const session: ObserveSession & { apis(): Promise<Array<{ id: string; name: string }>>; holdsProfile(): Promise<boolean> } = {
     tools: new Set(["api_list", "cw_psa_service_query", "cw_psa_service_write", "flow_run", "flow_action"]),
     readOnly: new Set(opts.readOnly ?? ["cw_psa_service_query", "api_list"]),
@@ -55,8 +63,8 @@ function harness(opts: { mode?: unknown; stored?: boolean; observed?: unknown; r
     holdsProfile: async () => true,
   };
   const deps: FlowWatchLoopDeps = {
-    bots: () => [{ id: "b1", owner: "person-1" }],
-    bot: (id) => (id === "b1" ? bot : undefined),
+    bots: () => roster.map(({ id, owner, primary }) => ({ id, owner, ...(primary ? { primary } : {}) })),
+    bot: (id) => record(id),
     helper: () => helper,
     session: async (_owner, _bot, fn) => {
       sessions += 1;
@@ -64,7 +72,7 @@ function harness(opts: { mode?: unknown; stored?: boolean; observed?: unknown; r
     },
     timeZone: () => ZONE,
     engine: new ProactiveEngine({
-      bot: (id) => (id === "b1" ? bot : undefined),
+      bot: (id) => record(id),
       coveredByRules: () => false,
       budget: new ProactiveBudget({ minIntervalMs: 0, maxPerWindow: opts.budget ?? 12, windowMs: 3_600_000, now: () => clock }),
     }),
@@ -190,6 +198,40 @@ describe("the loop", () => {
     expect(event.runAs).toBe("person-1");
     expect(event.label).toBe("Pulsatrix watch: Open tickets.");
     expect(event.watch?.disposition).toBe("auto");
+  });
+
+  it("#3394: one watch event wakes one bot of the person (the Primary Bot), once", async () => {
+    const h = harness({
+      bots: [
+        { id: "coder-1", owner: "person-1" },
+        { id: "coder-2", owner: "person-1" },
+        { id: "primary", owner: "person-1", primary: true },
+        { id: "coder-3", owner: "person-1" },
+        { id: "other", owner: "person-2" },
+      ],
+    });
+    await h.loop.tick();
+    const woken = (owner: string) => h.offered.filter((event) => event.runAs === owner).map((event) => event.botId);
+    expect(woken("person-1")).toEqual(["primary"]);
+    // another person's bot keeps its own watch (person isolation)
+    expect(woken("person-2")).toEqual(["other"]);
+    // the next cadence: still the same bot, still once
+    h.advance(15 * 60_000);
+    await h.loop.tick();
+    expect(woken("person-1")).toEqual(["primary"]);
+    expect(h.calls.filter((call) => call.name === "cw_psa_service_query")).toHaveLength(4);
+  });
+
+  it("#3394: without a watching Primary Bot, the person's first watching bot takes the watch, alone", async () => {
+    const h = harness({
+      bots: [
+        { id: "primary", owner: "person-1", primary: true, mode: "off" },
+        { id: "coder-1", owner: "person-1" },
+        { id: "coder-2", owner: "person-1" },
+      ],
+    });
+    await h.loop.tick();
+    expect(h.offered.map((event) => event.botId)).toEqual(["coder-1"]);
   });
 
   it("a chosen off is respected: nothing observed, nothing offered", async () => {

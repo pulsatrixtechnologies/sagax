@@ -26,7 +26,7 @@ the one bot of the person that carries it; the watches switched off inside
 it; `coversReads` (the yes covers the domain's read-only tools inside its
 alerts, decision 3); when, how (`card`, `settings`, `words`, `alert`) and by
 whom it was set. Also the ask ledger and when the first question was asked
-(used by the card, a later lot). Absent is off: nothing in it is ever filled
+(used by the card, below; also when each bot asked its first question). Absent is off: nothing in it is ever filled
 from a default or from a stored `proactiveMode` (`createBot` and the startup
 both write `proactive`).
 
@@ -54,6 +54,53 @@ both write `proactive`).
 - The "never" of a watch alert's row stops those watches for good, in the
   person's choices, so the reads stop too. It no longer mutes every watch of
   the bot.
+
+## The bot asks, and proposes one domain (`server/proactive/proactive-ask.ts`)
+
+Decided by the server, no model. Only an organization server linked to
+Perspicax has watches: elsewhere nothing below runs and nothing is shown.
+
+- **One proposer per person and domain.** Among the person's bots that can
+  carry a domain (the watch loop's listing, `offered`), the one whose title
+  and description share the most words with the domain's "who it is for"
+  line; on a tie or with no match, the person's main bot. The other bots stay
+  silent on that domain. The person can still turn it on for any eligible bot
+  in Settings or by asking in words.
+- **The first question**, one sentence in the bot's own chat that names up to
+  three domains it proposes and asks what the person does, their
+  responsibilities and their team's, and what they would like to receive. A
+  new bot adds it to the closing line of its intro. After the upgrade (the
+  store's `since`), the person's main bot writes it once, first saying that
+  nothing is sent on its own any more; every other bot asks the first time the
+  person writes to it. A bot with nothing to offer asks nothing.
+- **The prompt section** (`proactive-ask`, volatile), in the owner's
+  one-to-one turns only: at most three domains not yet decided, each with its
+  "who it is for" line and watches, ranked by words shared with About me,
+  then with the bot's title. Empty when nothing is eligible, and
+  `propose_proactive` is then not listed (`SAGAX_PROACTIVE_ASK`).
+- **`propose_proactive`** (`POST /api/internal/proactive/propose`):
+  `about_person` appends what the person said about their work to their
+  About me (the learned list, Remove in Settings); `domain` (with `watches`,
+  and `quote` for a second card) posts one choice card on the proposal
+  plumbing (`proactiveProposal` plus `proactiveChoice`, the folded details).
+  A refusal is one line for the bot (200, `applied: false`), nothing shown.
+- **Bounds**: the owner's own one-to-one turn only (never a wake, a routine,
+  a room, a call or another person's turn); one open card per person; one
+  bot-initiated ask per person per local day (a card or a first question);
+  two cards per domain at most, the second after "Not now", 14 days later,
+  when the quote is in the person's own message of that turn and is about the
+  domain; "Ne plus proposer" final for bots; an unanswered card ends after
+  three days and counts as "Not now"; no push.
+- **The answer** (`POST /api/bots/:id/proactive/:proposalId`, `{accept,
+  watches?}`): a yes writes the person's choice with the proposing bot, the
+  watches it named on and the domain's others off (`watches` is the card's
+  switches when sent); "Pas maintenant" is kept in the ledger; "Ne plus
+  proposer" (`/feedback` `never`) stores `never`.
+- **Reads covered by the yes** (decision 3): inside a watch wake, a tool the
+  watch declares and the connection marks read-only runs without a card
+  (`watch-read`), while the domain is on, on that bot, with that watch on.
+  The organization's Refuse and Ask first rules and the person's own come
+  first; a write keeps the ordinary approval path.
 
 ## Pulsatrix watches (`server/proactive/flow-watches.ts`)
 

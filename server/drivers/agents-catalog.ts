@@ -96,6 +96,10 @@ export interface CatalogProfile {
   /** A person's turn on a server with a GitHub client id for the device flow
    * (built in since 2026-11-08, so every server): connect_github is offered. Absent is off, so the wire goldens stay. */
   githubConnect?: boolean;
+  /** #3431: the bot's owner speaks one to one and the bot has a watch
+   * domain of the organization to offer them (server/proactive/proactive-ask.ts):
+   * propose_proactive is offered. Absent is off, so the wire goldens stay. */
+  proactiveAsk?: boolean;
   /** The server is a Cloud home (server/cloud-home.ts): no "this computer"
    * of the person's and no Local VM to offer. */
   cloudHome: boolean;
@@ -160,6 +164,7 @@ export function catalogProfileFromEnv(env: NodeJS.ProcessEnv): CatalogProfile {
     routeMessages: !externalRuntime && env.SAGAX_ROUTE_MESSAGES === "1",
     voiceCall: !externalRuntime && env.SAGAX_VOICE_CALL === "1",
     githubConnect: !externalRuntime && env.SAGAX_GITHUB_CONNECT === "1",
+    ...(!externalRuntime && env.SAGAX_PROACTIVE_ASK === "1" ? { proactiveAsk: true } : {}),
     // Sagax is never an OMB Cloud home, so the env switch is ignored.
     cloudHome: false,
     memoryEnabled: env.SAGAX_MEMORY_ENABLED !== "0",
@@ -279,6 +284,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   teamTools.DEF_PROPOSE_TEAM_MEMORY,
   coreTools.DEF_ANSWER_APPROVAL,
   teamTools.DEF_NUDGE_PERSON,
+  teamTools.DEF_PROPOSE_PROACTIVE,
   settingsFamilyTools.DEF_MANAGE_PAIRING,
   settingsFamilyTools.DEF_MANAGE_SETTINGS,
   coreTools.DEF_ACT,
@@ -312,6 +318,9 @@ const STREAM_TOOL_NAMES = new Set(["recall_topic"]);
 // otherwise.
 const ROUTE_TOOL_NAMES = new Set(["route_message"]);
 const GITHUB_CONNECT_TOOL_NAMES = new Set(["connect_github"]);
+// #3431: propose_proactive, only in a turn whose prompt carries the
+// Proactive alerts section (SAGAX_PROACTIVE_ASK); its route refuses otherwise.
+const PROACTIVE_ASK_TOOL_NAMES = new Set(["propose_proactive"]);
 // And for a role: every route behind these refuses a bot that is not its
 // section's Primary Bot, as it does a for_bot_id naming another bot on
 // propose_profile or propose_model. (A routine's for_bot_id is open to any
@@ -606,7 +615,7 @@ export function knownAgentToolName(name: string): boolean {
   if (!everyAgentTool) {
     const widest: Omit<CatalogProfile, "coordinating" | "voiceCall"> = {
       externalRuntime: false, ownThreadCreation: true, skillAuthoring: true, sharedComputers: true,
-      voiceNotes: true, memeReplies: true, meetings: true, singleStream: true, routeMessages: true, githubConnect: true, cloudHome: false,
+      voiceNotes: true, memeReplies: true, meetings: true, singleStream: true, routeMessages: true, githubConnect: true, proactiveAsk: true, cloudHome: false,
       memoryEnabled: true, groupMemory: true, chief: true, createBots: true, botId: WATCHER_OPTIONS_CARD_BOT_ID,
       agentApi: true, perspicax: true, claims: true, grokBridge: true, phoneTools: [...PHONE_TOOLS], webSearch: true, vaultHttp: true,
     };
@@ -644,6 +653,7 @@ function coreCatalogTools(profile: CatalogProfile) {
     .filter((tool) => profile.singleStream === true || !STREAM_TOOL_NAMES.has(tool.name))
     .filter((tool) => profile.routeMessages === true || !ROUTE_TOOL_NAMES.has(tool.name))
     .filter((tool) => profile.githubConnect === true || !GITHUB_CONNECT_TOOL_NAMES.has(tool.name))
+    .filter((tool) => profile.proactiveAsk === true || !PROACTIVE_ASK_TOOL_NAMES.has(tool.name))
     // Tailcat remote sessions need Perspicax: nothing of them on a solo server.
     .filter((tool) => profile.perspicax === true || !REMOTE_SESSION_TOOL_NAMES.has(tool.name));
   const ROLE_TOOLS = profile.chief

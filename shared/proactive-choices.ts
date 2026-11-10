@@ -43,11 +43,14 @@ export interface DomainChoice {
   by: string;
 }
 
-/** What a bot proposed, and the answer (the card is lot 4). */
+/** What a bot proposed, and the answer (#3431, lot 4: the card). An
+ * entry without an answer older than three days counts as "not-now". */
 export interface AskEntry {
   domain: string;
   botId: string;
   at: number;
+  /** The card's proposal (server/proactive/proactive-wake.ts). */
+  proposalId?: string;
   answer?: "yes" | "not-now" | "never";
   answeredAt?: number;
 }
@@ -57,6 +60,8 @@ export interface PersonChoices {
   asks?: AskEntry[];
   /** When the first question was asked of this person (lot 4). */
   firstAskedAt?: number;
+  /** #3431: when each bot of the person asked its first question. */
+  asked?: Record<string, number>;
 }
 
 /** The longest ask ledger kept per person. */
@@ -110,11 +115,20 @@ export function parsePersonChoices(value: unknown): PersonChoices {
     const asks = value.asks.flatMap((row): AskEntry[] => {
       if (!isObject(row) || !validChoiceId(row.domain) || !validChoiceId(row.botId) || typeof row.at !== "number") return [];
       const answer = row.answer === "yes" || row.answer === "not-now" || row.answer === "never" ? row.answer : undefined;
-      return [{ domain: row.domain, botId: row.botId, at: row.at, ...(answer ? { answer } : {}), ...(typeof row.answeredAt === "number" ? { answeredAt: row.answeredAt } : {}) }];
+      return [{
+        domain: row.domain, botId: row.botId, at: row.at,
+        ...(validChoiceId(row.proposalId) ? { proposalId: row.proposalId } : {}),
+        ...(answer ? { answer } : {}), ...(typeof row.answeredAt === "number" ? { answeredAt: row.answeredAt } : {}),
+      }];
     });
     if (asks.length) out.asks = asks.slice(-ASKS_KEPT);
   }
   if (typeof value.firstAskedAt === "number") out.firstAskedAt = value.firstAskedAt;
+  if (isObject(value.asked)) {
+    const asked: Record<string, number> = {};
+    for (const [botId, at] of Object.entries(value.asked)) if (validChoiceId(botId) && typeof at === "number") asked[botId] = at;
+    if (Object.keys(asked).length) out.asked = asked;
+  }
   return out;
 }
 

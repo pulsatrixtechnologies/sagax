@@ -77,6 +77,8 @@ export type TurnState = {
   voiceCallTurn: any;
   voiceTurnPick: any;
   warmOnly: any;
+  /** #3431: the Proactive alerts section of an owner's one-to-one turn. */
+  proactiveAskPrompt: any;
   autoContinuing: boolean;
   /** The model a routine run, webhook run or proactive wake a usage limit refused goes on with
    * (RoutineRun.limitTakeover, server/routines/routine-recovery.ts); its wake skips the fast pick. */
@@ -248,6 +250,7 @@ export function createTurnState(init: {
     voiceCallTurn: undefined,
     voiceTurnPick: undefined,
     warmOnly: undefined,
+    proactiveAskPrompt: undefined,
     autoContinuing: false,
     limitTakeover: undefined,
     fastDetour: false,

@@ -3,7 +3,7 @@
 export type Host = Record<string, any>;
 
 export function createAnswerProactiveProposal(getHost: () => Host): any {
-function answerProactiveProposal(botId: string, proposalId: string, accept: boolean): { status: number; body: Record<string, unknown> } {
+function answerProactiveProposal(botId: string, proposalId: string, accept: boolean, watchesOn?: readonly string[]): { status: number; body: Record<string, unknown> } {
   const host = getHost();
 
   const bot = host.store.bot(botId);
@@ -14,6 +14,19 @@ function answerProactiveProposal(botId: string, proposalId: string, accept: bool
     host.routeThreadId(bot, open.threadId);
   } catch {
     return { status: 404, body: { error: "no such proposal" } };
+  }
+  // #3431: a choice card starts no wake: its yes writes the person's choice
+  // of that domain with this bot; "Pas maintenant" is kept in the ledger
+  if (open.choice) {
+    const answered = host.proactiveProposals.answer(proposalId, accept ? "accepted" : "declined");
+    if (!answered) return { status: 409, body: { error: "this proposal was already answered" } };
+    host.proactiveAsk.answer({ id: answered.id, botId: bot.id, choice: answered.choice }, accept, watchesOn);
+    const card = host.store.messagesFor(answered.threadId).find((row) => row.id === answered.messageId)?.card;
+    if (card) {
+      const picked = (accept ? card.options[0] : card.options[1]) ?? (accept ? "accept" : "decline");
+      host.store.patchMessage(answered.threadId, answered.messageId, { card: { ...card, answered: picked, answeredText: picked } });
+    }
+    return { status: 200, body: { ok: true, accepted: accept } };
   }
   // 2026-11-01: the wake starts before the yes is kept; a wake that cannot
   // start leaves the proposal open (it used to be answered and do nothing).

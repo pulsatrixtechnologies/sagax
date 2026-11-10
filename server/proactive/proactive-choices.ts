@@ -20,12 +20,18 @@ export class ProactiveChoices {
 
   private readonly now: () => number;
 
+  /** #3431: when this store first ran (the upgrade): a bot older than it
+   * existed before the choice, so the main bot says nothing is sent on its
+   * own any more. Kept in the file, set once. */
+  readonly since: number;
+
   constructor(file?: string, now: () => number = () => Date.now()) {
     this.file = file;
     this.now = now;
-    if (!file) return;
+    let since: number | undefined;
     try {
-      const parsed = JSON.parse(readFileSync(file, "utf8")) as { people?: unknown };
+      const parsed = file ? JSON.parse(readFileSync(file, "utf8")) as { people?: unknown; since?: unknown } : null;
+      if (parsed && typeof parsed.since === "number") since = parsed.since;
       if (parsed && typeof parsed.people === "object" && parsed.people !== null) {
         for (const [person, row] of Object.entries(parsed.people as Record<string, unknown>)) {
           const key = personKey(person);
@@ -35,6 +41,8 @@ export class ProactiveChoices {
     } catch {
       // no choice yet
     }
+    this.since = since ?? now();
+    if (file && since === undefined) this.save();
   }
 
   /** A person's choices (a copy); absent reads as nothing chosen. */
@@ -86,13 +94,36 @@ export class ProactiveChoices {
     this.apply(person, { domain, watch: watchId, on: false, via }, person);
   }
 
-  /** One proposal and, later, its answer (the card is lot 4). */
+  /** One proposal and, later, its answer (the card, #3431). */
   noteAsk(person: string, entry: AskEntry): void {
     const key = personKey(person);
     if (!key) return;
     const row = this.people[key] ?? emptyChoices();
     row.asks = [...(row.asks ?? []), entry].slice(-ASKS_KEPT);
     row.firstAskedAt ??= entry.at;
+    this.people[key] = row;
+    this.save();
+  }
+
+  /** The answer of a card, once: false when no open entry has this id. */
+  answerAsk(person: string, proposalId: string, answer: NonNullable<AskEntry["answer"]>): boolean {
+    const row = this.people[personKey(person)];
+    const entry = row?.asks?.find((ask) => ask.proposalId === proposalId);
+    if (!entry || (entry.answer && !(answer === "never" && entry.answer !== "never"))) return false;
+    entry.answer = answer;
+    entry.answeredAt = this.now();
+    this.save();
+    return true;
+  }
+
+  /** #3431: a bot asked its first question of this person. */
+  noteQuestion(person: string, botId: string): void {
+    const key = personKey(person);
+    if (!key) return;
+    const row = this.people[key] ?? emptyChoices();
+    const at = this.now();
+    row.asked = { ...row.asked, [botId]: at };
+    row.firstAskedAt ??= at;
     this.people[key] = row;
     this.save();
   }
@@ -120,7 +151,7 @@ export class ProactiveChoices {
     if (!this.file) return;
     try {
       mkdirSync(dirname(this.file), { recursive: true, mode: 0o700 });
-      writeFileAtomic(this.file, JSON.stringify({ version: 1, people: this.people }), { mode: 0o600 });
+      writeFileAtomic(this.file, JSON.stringify({ version: 1, since: this.since, people: this.people }), { mode: 0o600 });
     } catch {
       // kept in memory
     }

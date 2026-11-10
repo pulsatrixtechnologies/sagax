@@ -147,6 +147,8 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   // Personal review rules only; the route keeps person and org Ask/Deny
   // checks (4ec8a5749, MCP own scope registered in b17ff95a5).
   propose_rule: "own-setup",
+  // #3431: the member's own choice card and About me (owner's own turn only)
+  propose_proactive: "own-setup",
   propose_team_memory: "own-setup",
   propose_team_setup: "own-setup",
   propose_bot_deletion: "own-setup",

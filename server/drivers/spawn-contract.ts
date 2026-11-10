@@ -42,7 +42,7 @@ export const TURN_TOKEN_ENV = ["SAGAX_COMMS_TOKEN", "SAGAX_TURN_DEPTH"] as const
  * runs in the process the person's turn launched; the server refuses what
  * this turn may not do whatever the tool list shows. A turn that needs a
  * switch the live process lacks still gets a fresh one. */
-export const TURN_SWITCH_ENV = ["SAGAX_ROUTE_MESSAGES", "SAGAX_OWN_THREAD_CREATION", "SAGAX_SINGLE_STREAM"] as const;
+export const TURN_SWITCH_ENV = ["SAGAX_ROUTE_MESSAGES", "SAGAX_OWN_THREAD_CREATION", "SAGAX_SINGLE_STREAM", "SAGAX_PROACTIVE_ASK"] as const;
 
 /** A switch the agents server turns OFF for a teammate's turn one hop away
  * (SAGAX_PEER_HOP=1, #1443): the peer tools are left out of its list. A

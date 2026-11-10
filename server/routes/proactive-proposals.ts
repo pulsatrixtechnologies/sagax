@@ -1,7 +1,9 @@
 // The person's answer to a proactive proposal card (2026-10-30,
 // server/proactive/proactive-wake.ts).
 //
-//   POST /api/bots/:id/proactive/:proposalId   { accept: boolean }
+//   POST /api/bots/:id/proactive/:proposalId   { accept: boolean, watches?: string[] }
+//        #3431: on a choice card, `watches` is the card's switches (the
+//        watches kept on with the yes).
 //   POST /api/bots/:id/proactive/:proposalId/feedback   { choice }
 //        #2694: up, down, less or never on the card, answered or not.
 //
@@ -15,7 +17,7 @@ import { PASS, type RouteHandler } from "./table.ts";
 
 export interface ProactiveProposalRouteDeps {
   /** Answer one proposal of this bot; the status and body to send. */
-  answer(botId: string, proposalId: string, accept: boolean): { status: number; body: Record<string, unknown> };
+  answer(botId: string, proposalId: string, accept: boolean, watchesOn?: readonly string[]): { status: number; body: Record<string, unknown> };
   /** #2694: the person's feedback on the card. */
   feedback?(botId: string, proposalId: string, choice: "up" | "down" | "less" | "never"): { status: number; body: Record<string, unknown> };
 }
@@ -35,11 +37,14 @@ export function createProactiveProposalRoutes(deps: ProactiveProposalRouteDeps):
       const done = deps.feedback(match[1]!, match[2]!, choice as "up" | "down" | "less" | "never");
       return json(res, done.status, done.body);
     }
-    const body = await readBody(req) as { accept?: unknown } | null;
+    const body = await readBody(req) as { accept?: unknown; watches?: unknown } | null;
     if (!body || typeof body !== "object" || typeof body.accept !== "boolean") {
       return json(res, 400, { error: "accept must be true or false" });
     }
-    const answer = deps.answer(match[1]!, match[2]!, body.accept);
+    if (body.watches !== undefined && !(Array.isArray(body.watches) && body.watches.length <= 40 && body.watches.every((id) => typeof id === "string" && /^[\w.:-]{1,120}$/.test(id)))) {
+      return json(res, 400, { error: "watches must be a list of watch ids" });
+    }
+    const answer = deps.answer(match[1]!, match[2]!, body.accept, body.watches as string[] | undefined);
     return json(res, answer.status, answer.body);
   };
 }

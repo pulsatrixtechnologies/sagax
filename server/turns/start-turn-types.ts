@@ -2,6 +2,7 @@
 // Injected from index.ts. Loose field types keep the phase split mechanical.
 export type StartTurnHost = {
   AUTO_COMPUTER_RULES: any,
+  proactiveAskForTurn: any,
   BOTMAIL_ENGINE_REFUSAL: any,
   BUILT_IN_BROWSER_SYSTEM_PROMPT: any,
   BUILT_IN_DATA_SYSTEM_PROMPT: any,

@@ -45,7 +45,8 @@ export function userProfileSystemPrompt(profile?: { aboutMe?: string }): string 
 // opened for the conversation: volatile, so neither relaunches.
 // "goal" (server/solo-goal.ts) comes and goes with a 1:1 /goal: volatile,
 // so starting or finishing a goal never relaunches the engine.
-const VOLATILE_SECTIONS = new Set(["memory", "docs", "mentions", "outstanding", "recent", "voice-call", "availability", "model", "stream", "workplace", "reach", "goal", "plan", "routine-execution", "skill-instructions", "playbooks", "files-cwd", "group-memory"]);
+// "proactive-ask" (#3431) comes and goes with what the person decided.
+const VOLATILE_SECTIONS = new Set(["memory", "docs", "mentions", "outstanding", "recent", "voice-call", "availability", "model", "stream", "workplace", "reach", "goal", "plan", "routine-execution", "skill-instructions", "playbooks", "files-cwd", "group-memory", "proactive-ask"]);
 /** These per-turn sections are volatile on every engine (#1997), including
  * selected skill bodies, routine execution, task folders and group memory.
  * Keep the exported set for older host callers that pass it explicitly.

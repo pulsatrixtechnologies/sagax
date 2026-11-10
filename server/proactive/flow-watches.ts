@@ -101,6 +101,9 @@ export interface OfferedWatch {
   /** It would run for this person on this bot; else what is missing. */
   runs: boolean;
   missing?: "product" | "skill";
+  /** #3431: the tools it declares (else its observe tool), for the card's
+   * details; only those the connection marks read-only pass without a card. */
+  tools?: string[];
 }
 
 /** One domain of the organization's Flow, as the person may choose it. */
@@ -219,10 +222,14 @@ export function domainLabel(listing: Pick<FlowWatchListing, "domains"> | undefin
 export function watchReadTools(watches: readonly FlowWatch[], readOnly: ReadonlySet<string>): string[] {
   const out = new Set<string>();
   for (const watch of watches) {
-    const declared = watch.tools.length ? watch.tools : "tool" in watch.observe ? [watch.observe.tool] : [];
-    for (const tool of declared) if (readOnly.has(tool)) out.add(tool);
+    for (const tool of declaredTools(watch)) if (readOnly.has(tool)) out.add(tool);
   }
   return [...out].sort();
+}
+
+/** The tools a watch declares; without Flow's list, its observe tool. */
+export function declaredTools(watch: Pick<FlowWatch, "tools" | "observe">): string[] {
+  return watch.tools.length ? [...watch.tools] : "tool" in watch.observe ? [watch.observe.tool] : [];
 }
 
 /** The helper's stdout, read whole. Bad JSON is no watch at all. */
@@ -447,7 +454,7 @@ export function proposeLabel(propose: WatchPropose): string {
 const DETAIL_MAX = 3_500;
 
 /** The proactive event of a watch that fired. */
-export function watchEvent(input: { botId: string; runAs?: string; watch: FlowWatch; key: string; observed: unknown; disposition: "auto" | "defer" }): ProactiveEvent {
+export function watchEvent(input: { botId: string; runAs?: string; watch: FlowWatch; key: string; observed: unknown; disposition: "auto" | "defer"; reads?: readonly string[] }): ProactiveEvent {
   const { watch } = input;
   let observed = JSON.stringify(input.observed ?? null) ?? "null";
   if (observed.length > DETAIL_MAX) observed = `${observed.slice(0, DETAIL_MAX)} [cut]`;
@@ -472,6 +479,8 @@ export function watchEvent(input: { botId: string; runAs?: string; watch: FlowWa
       domain: watch.domain,
       // #3423: only a domain the person turned on fires: it passes the switch
       chosen: true,
+      // #3431 (decision 3): the read-only tools the yes covers in this wake
+      ...(input.reads?.length ? { reads: [...input.reads] } : {}),
     },
   };
 }
@@ -814,7 +823,7 @@ export class FlowWatchLoop {
     for (const watch of universe.watches) {
       const missing = !watch.products.every((product) => held.has(product)) ? "product" as const
         : watch.skill && !this.deps.holdsSkill(botId, person, watch.skill) ? "skill" as const : undefined;
-      const row: OfferedWatch = { id: watch.id, summary: watch.summary, cadence: watch.cadence, products: watch.products, runs: !missing, ...(missing ? { missing } : {}) };
+      const row: OfferedWatch = { id: watch.id, summary: watch.summary, cadence: watch.cadence, products: watch.products, runs: !missing, ...(missing ? { missing } : {}), tools: declaredTools(watch) };
       byDomain.set(watch.domain, [...(byDomain.get(watch.domain) ?? []), row]);
     }
     const domains = [...byDomain].sort(([a], [b]) => a.localeCompare(b)).map(([domain, watches]): OfferedDomain => {
@@ -931,7 +940,7 @@ export class FlowWatchLoop {
           continue;
         }
         this.deps.memory.observed(person, watch.id);
-        this.consider(botId, person, watch, answer.value);
+        this.consider(botId, person, watch, answer.value, session.readOnly);
       }
       return true;
     }).catch((error: unknown) => {
@@ -971,7 +980,7 @@ export class FlowWatchLoop {
 
   /** A watch observed: its condition, then the budget, then the wake of the
    * carrying bot. The person's choice passes the bot's switch. */
-  consider(botId: string, person: string, watch: FlowWatch, observed: unknown): "fired" | "false" | "duplicate" | "off" | "budget" | "refused" {
+  consider(botId: string, person: string, watch: FlowWatch, observed: unknown, readOnly?: ReadonlySet<string>): "fired" | "false" | "duplicate" | "off" | "budget" | "refused" {
     const { holds, key } = evaluateWhen(watch.when, observed);
     const verdict = this.deps.memory.settle(person, watch.id, holds, key);
     if (verdict === "clear") return "false";
@@ -986,7 +995,8 @@ export class FlowWatchLoop {
       return "off";
     }
     const disposition = considered.decision.disposition;
-    const offered = this.deps.offer(watchEvent({ botId, runAs: person || undefined, watch, key, observed, disposition }));
+    const reads = readOnly ? watchReadTools([watch], readOnly) : [];
+    const offered = this.deps.offer(watchEvent({ botId, runAs: person || undefined, watch, key, observed, disposition, reads }));
     if (offered !== "gathered" && offered !== "duplicate") {
       this.deps.memory.unfire(person, watch.id);
       this.deps.log(botId, `Pulsatrix watch ${watch.id} did not wake the bot (${offered ?? "error"}).`);

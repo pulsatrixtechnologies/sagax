@@ -160,6 +160,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("rules:update", "own", "rules_update"),
   // a Confirm card to add, change or remove one of the speaker's own review rules (server/rules/rule-requests.ts)
   p("rules:propose", "own", "propose_rule"),
+  // #3431: one choice card of a watch domain, in the owner's own turn (server/proactive/proactive-ask.ts)
+  p("proactive:propose", "own", "propose_proactive"),
   p("docs:update", "own", "docs_update"),
   p("credentials:login", "own", "request_login"),
   // an API call with a vault key Sagax adds itself (server/vault/credential-http.ts)

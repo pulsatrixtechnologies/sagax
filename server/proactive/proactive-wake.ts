@@ -75,6 +75,10 @@ export interface WatchWakeFacts {
   disposition: "auto" | "defer";
   /** #3423: the watch's domain, the one the person turned on. */
   domain?: string;
+  /** #3431 (decision 3): the read-only tools of the watch the person's yes
+   * covers inside this wake (declared by the watch, marked read-only by the
+   * connection). */
+  reads?: string[];
   /** #3423: the person chose this watch's domain for this bot: like a
    * direct trigger, it passes the bot's proactive switch. */
   chosen?: true;
@@ -777,11 +781,33 @@ export interface ProactiveProposal {
   createdAt: number;
   /** Set once answered: no second run. */
   answered?: "accepted" | "declined";
+  /** #3431: a choice card (propose_proactive): its yes writes the person's
+   * choice of this watch domain with this bot; it starts no wake. */
+  choice?: ProposalChoice;
+}
+
+/** What a choice card proposes: one watch domain of the organization's
+ * Flow, for this person, carried by the proposing bot. */
+export interface ProposalChoice {
+  person: string;
+  domain: string;
+  /** The watches the bot understood the person wants (on with the yes). */
+  watches: string[];
+  /** The domain's other runnable watches, off with the yes. */
+  others: string[];
 }
 
 export interface ProactiveProposalEvent {
   kind: "proposed" | "accepted" | "declined" | "expired";
   botId: string;
+}
+
+function validProposalChoice(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const row = value as Partial<ProposalChoice>;
+  return typeof row.person === "string" && typeof row.domain === "string"
+    && Array.isArray(row.watches) && row.watches.every((id) => typeof id === "string")
+    && Array.isArray(row.others) && row.others.every((id) => typeof id === "string");
 }
 
 /** A proposal waits at most this long; an older one answers "expired". */
@@ -806,7 +832,8 @@ export class ProactiveProposals {
         if (Array.isArray(parsed.proposals)) {
           this.items = parsed.proposals.filter((item): item is ProactiveProposal =>
             Boolean(item) && typeof (item as ProactiveProposal).id === "string" && typeof (item as ProactiveProposal).botId === "string"
-            && typeof (item as ProactiveProposal).threadId === "string" && Array.isArray((item as ProactiveProposal).events));
+            && typeof (item as ProactiveProposal).threadId === "string" && Array.isArray((item as ProactiveProposal).events)
+            && ((item as ProactiveProposal).choice === undefined || validProposalChoice((item as ProactiveProposal).choice)));
         }
       } catch {
         this.items = [];

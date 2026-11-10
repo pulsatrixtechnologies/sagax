@@ -1624,6 +1624,35 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(seen.argv[seen.argv.indexOf("--tools") + 1]).toBe(CLAUDE_ORG_TOOLS.join(","));
   });
 
+  it("starts a plugin's role naming Read, Glob, Grep and Bash on an organization turn (#3384)", async () => {
+    await create();
+    const plugin = join(scratch, "plugins", "pulsatrix-dev");
+    mkdirSync(join(plugin, "agents"), { recursive: true });
+    mkdirSync(join(plugin, ".claude-plugin"), { recursive: true });
+    writeFileSync(join(plugin, ".claude-plugin", "plugin.json"), JSON.stringify({ name: "pulsatrix-dev" }));
+    const role = "---\nname: px-triage\ndescription: Classifies work.\ntools: Read, Glob, Grep, Bash\n---\nYou are px-triage.\n";
+    writeFileSync(join(plugin, "agents", "px-triage.md"), role);
+    const dump = join(scratch, "org-plugin-role.json");
+    process.env.FAKE_CLAUDE_DUMP = dump;
+    const org = await instance.adapter.sendTurn({ threadId: "t-org-plugin-role", text: "hello", withholdHostTools: true, pluginDirs: [plugin] });
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === org.turnId);
+    let seen = JSON.parse(readFileSync(dump, "utf8"));
+    const loaded = String(seen.argv[seen.argv.indexOf("--plugin-dir") + 1]);
+    const offered = String(seen.argv[seen.argv.indexOf("--tools") + 1]).split(",");
+    const text = readFileSync(join(loaded, "agents", "px-triage.md"), "utf8");
+    const tools = /^tools:\s*(.*)$/m.exec(text.split("\n---")[0]!)?.[1];
+    // every tool the role names is one the turn offers, or it names none
+    // and starts with the turn's own tools
+    if (tools !== undefined) for (const tool of tools.split(",").map((name) => name.trim())) expect(offered).toContain(tool);
+    expect(text).toContain("You are px-triage.");
+    expect(readFileSync(join(plugin, "agents", "px-triage.md"), "utf8")).toBe(role);
+    // a solo turn keeping every built-in loads the installed folder
+    const solo = await instance.adapter.sendTurn({ threadId: "t-solo-plugin-role", text: "hello", pluginDirs: [plugin] });
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === solo.turnId);
+    seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.argv[seen.argv.indexOf("--plugin-dir") + 1]).toBe(plugin);
+  });
+
   it("keeps only the allowlisted built-ins of an owner's selection on an organization server, and the selection as is on a solo one", async () => {
     await create(undefined, {}, { tools: ["Bash", "WebSearch", "Agent", "SomeFutureTool"] });
     const dump = join(scratch, "org-selected.json");

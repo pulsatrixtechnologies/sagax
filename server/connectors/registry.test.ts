@@ -11,10 +11,8 @@ import { grokAccountReach, type GrokAccountReach } from "../drivers/acp/grok-too
 import { LOGIN_MARKER, PrincipalEngineLogins, secondLoginSupported, type LoginController } from "../engines/principal-engine-logins.ts";
 import { separateAccountInstance } from "../engines/separate-account.ts";
 import { ClaudeAiConnectorInventory, connectorPrincipalFor } from "../harness-connectors.ts";
-import { createConnectorPlanForTurn, grokCloudConnectorsForTurn, relayAddsAccountConnectors, turnLoadsAccountConnectors } from "./turn-plan.ts";
-import { createConnectorsElsewhereFor } from "../index-leaves/connectorsElsewhereFor.ts";
+import { createConnectorPlanForTurn, grokCloudConnectorsForTurn } from "./turn-plan.ts";
 import { createConnectorSetupStore } from "../index-leaves/connectorSetupStore.ts";
-import { createEngineReachFor } from "../index-leaves/engineReachFor.ts";
 import { chooseRelayEngine, relayAccountLabel, type RelayEngine } from "../run-with-engine.ts";
 import personalGateway from "../testing/grok-gateway-mcp-list.json" with { type: "json" };
 import teamGateway from "../testing/grok-gateway-team-mcp-list.json" with { type: "json" };
@@ -22,7 +20,7 @@ import { chatgptAppsProvider } from "./providers/chatgpt-apps.ts";
 import { claudeAiProvider } from "./providers/claude-ai.ts";
 import { grokComProvider } from "./providers/grok-com.ts";
 import { ConnectorRegistry, CONNECTORS_DIR } from "./registry.ts";
-import type { ConnectorAccountSlot } from "./types.ts";
+import type { ConnectorAccount, ConnectorAccountSlot } from "./types.ts";
 
 const A = "pr_00000000-0000-4000-8000-00000000000a";
 const B = "pr_00000000-0000-4000-8000-00000000000b";
@@ -200,7 +198,7 @@ describe("connector registry (#3344)", () => {
     expect(after.claudeCalls).toEqual([]);
   });
 
-  it("tells a bot with default settings of the person's Grok sign-ins", async () => {
+  it("lists the person's Grok sign-ins to a bot with default settings, with no relay to reach them", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "connectors-"));
     const { registry, signIn } = server(dataDir, {
       grok: { [home(dataDir, A, "grok")]: teamGateway, [home(dataDir, A, "grok-2")]: personalGateway },
@@ -230,65 +228,53 @@ describe("connector registry (#3344)", () => {
       claudeAccountForPrincipal: () => ({ unavailable: "not_signed_in" }),
     };
     // the one connector plan per turn (lot L2), read by every reader
+    type TurnInput = Parameters<typeof grokCloudConnectorsForTurn>[0];
+    const input = (h: Record<string, unknown>) => (...args: unknown[]) => (h.accountConnectorInput as (...a: unknown[]) => TurnInput)(...args);
     const planned = (h: Record<string, unknown>) => Object.assign(h, {
       connectorPlanForTurn: createConnectorPlanForTurn({
-        accountConnectorInput: (...args: unknown[]) => (h.accountConnectorInput as (...a: unknown[]) => Parameters<typeof turnLoadsAccountConnectors>[0])(...args),
+        accountConnectorInput: input(h),
         withholdHostToolsFor: () => true,
+        accounts: (principal) => registry.accounts(principal),
       }),
     });
     planned(host);
-    const elsewhere = createConnectorsElsewhereFor(() => host);
-    const bot = { modelSelection: { instanceId: "claude" } };
     const speaker = { origin: "person", principalId: A };
-
-    // a Claude bot is told of both Grok sign-ins and what they bring
-    const fromClaude = elsewhere(bot, instances[0], speaker);
-    expect(fromClaude).toEqual([
-      { engine: "Grok", connectors: ["Microsoft Teams", "Outlook (Exchange)", "Automations"], accountKind: "team" },
-      { engine: "Grok (personal account)", connectors: ["Microsoft Teams", "Outlook (Exchange)", "Automations", "Docs Hub"], accountKind: "personal" },
-    ]);
-
-    // a bot on Grok with default settings does not load its own account's
-    // connectors in its turn: it is told that sign-in is reachable too
     const onGrok = { modelSelection: { instanceId: "grok" } };
-    const fromGrok = elsewhere(onGrok, instances[1], speaker);
-    expect(fromGrok.map((entry: { engine: string }) => entry.engine)).toEqual(["Grok", "Grok (personal account)"]);
-    // and the relay really runs there: from the list to run_with_engine, each
-    // engine named is accepted, its own sign-in included (the part loads the
-    // connectors the turn does not, engineRelay)
+    const listed = (plan: { accounts(): readonly ConnectorAccount[] }) =>
+      plan.accounts().filter((account) => account.provider === "grok-com").map((account) => [account.label, account.connectors.map((entry) => entry.name)]);
+    const both = [
+      ["Grok", ["Automations", "Microsoft Teams", "Outlook (Exchange)"]],
+      ["Grok (personal account)", ["Automations", "Docs Hub", "Microsoft Teams", "Outlook (Exchange)"]],
+    ];
+    const sortedNames = (rows: ReturnType<typeof listed>) => rows.map(([label, names]) => [label, [...(names as string[])].sort()]);
+
+    // a Claude bot and a bot on Grok with default settings both get the person's
+    // two Grok sign-ins with what they bring, from the registry (the list of
+    // the prompt and the connectors tool read it; call_connector reaches them)
+    const plan = host.connectorPlanForTurn as ReturnType<typeof createConnectorPlanForTurn<{ modelSelection: { instanceId: string }; toolScope?: unknown }, (typeof instances)[number]>>;
+    expect(sortedNames(listed(plan({ modelSelection: { instanceId: "claude" } }, instances[0], speaker as never)))).toEqual(both);
+    const grokPlan = plan(onGrok, instances[1], speaker as never);
+    expect(sortedNames(listed(grokPlan))).toEqual(both);
+    // that bot's own Grok turn does not load the gateway (the hub serves it)
+    expect(grokPlan.grokCloud).toBe(false);
+
+    // #3356: run_with_engine is no road to a connector any more. The same
+    // engine, model and sign-in is "do it yourself", for a bot on Grok with
+    // default settings too; the person's other sign-in is still a relay
     const relayEngines: RelayEngine[] = [
       { instanceId: "grok", driverKind: "grokAgent", displayName: "Grok", models: { default: "grok-4", options: [{ id: "grok-4" }] } },
       { instanceId: "grok", driverKind: "grokAgent", displayName: "Grok (personal account)", models: { default: "grok-4", options: [{ id: "grok-4" }] }, account: "second", accountKind: "personal" },
     ];
-    const ownTurn = (host.accountConnectorInput as (...a: unknown[]) => Parameters<typeof turnLoadsAccountConnectors>[0])(onGrok, instances[1], speaker);
-    expect(turnLoadsAccountConnectors(ownTurn)).toBe(false);
-    const current = { instanceId: "grok", model: "grok-4", relayAddsAccountConnectors: relayAddsAccountConnectors(ownTurn) };
-    expect(current.relayAddsAccountConnectors).toBe(true);
-    for (const listed of fromGrok) {
-      expect(chooseRelayEngine({ engine: listed.engine, engines: relayEngines, current }), listed.engine).toMatchObject({ ok: true, instanceId: "grok", model: "grok-4" });
-    }
-    const part = chooseRelayEngine({ engine: "Grok", engines: relayEngines, current });
-    expect(part.ok && part.account).toBeUndefined();
-    // the part's turn (engineRelay) loads that sign-in's connectors
-    expect(grokCloudConnectorsForTurn({ ...ownTurn, engineRelay: true })).toBe(true);
-    // an opted-in bot's turn already has them: only the other sign-in
+    const current = { instanceId: "grok", model: "grok-4" };
+    expect(chooseRelayEngine({ engine: "Grok", engines: relayEngines, current })).toMatchObject({ ok: false });
+    expect(chooseRelayEngine({ engine: "Grok (personal account)", engines: relayEngines, current })).toMatchObject({ ok: true, instanceId: "grok", account: "second" });
+    // the old relay flag, passed as before, adds nothing to the turn
+    expect(grokCloudConnectorsForTurn({ ...input(host)(onGrok, instances[1], speaker), engineRelay: true } as TurnInput)).toBe(false);
+    // an opted-in bot loads its own sign-in's gateway natively, as before
     const optedIn = planned({ ...host, accountConnectorInput: (...args: unknown[]) => ({ ...(host.accountConnectorInput as (...a: unknown[]) => object)(...args), grokAccountConnectors: true }) });
-    expect(createConnectorsElsewhereFor(() => optedIn)(onGrok, instances[1], speaker).map((entry: { engine: string }) => entry.engine)).toEqual(["Grok (personal account)"]);
-    // its own sign-in, not listed, is still "do it yourself" for the relay
-    const optedInTurn = (optedIn.accountConnectorInput as (...a: unknown[]) => Parameters<typeof turnLoadsAccountConnectors>[0])(onGrok, instances[1], speaker);
-    expect(chooseRelayEngine({ engine: "Grok", engines: relayEngines, current: { instanceId: "grok", model: "grok-4", relayAddsAccountConnectors: relayAddsAccountConnectors(optedInTurn) } })).toMatchObject({ ok: false });
-    // any other engine loads nothing more in a part on its own engine and
-    // model: a bot on Codex, a Claude bot on a key, still do it themselves
-    const codexEngines: RelayEngine[] = [{ instanceId: "codex", driverKind: "codex", displayName: "Codex", models: { default: "gpt-5", options: [{ id: "gpt-5" }] } }];
-    const codexTurn = { ...ownTurn, driver: "codex", instanceId: "codex" };
-    expect(chooseRelayEngine({ engine: "Codex", engines: codexEngines, current: { instanceId: "codex", model: "gpt-5", relayAddsAccountConnectors: relayAddsAccountConnectors(codexTurn) } })).toMatchObject({ ok: false });
-    const claudeEngines: RelayEngine[] = [{ instanceId: "claude", driverKind: "claudeAgent", displayName: "Claude", models: { default: "opus", options: [{ id: "opus" }] } }];
-    const claudeKeyTurn = { ...ownTurn, driver: "claudeAgent", instanceId: "claude", via: "owner-key" as const };
-    expect(chooseRelayEngine({ engine: "Claude", engines: claudeEngines, current: { instanceId: "claude", model: "opus", relayAddsAccountConnectors: relayAddsAccountConnectors(claudeKeyTurn) } })).toMatchObject({ ok: false });
+    expect((optedIn.connectorPlanForTurn as typeof plan)(onGrok, instances[1], speaker as never).grokCloud).toBe(true);
 
-    // the connector switch and the setup card read the same registry
-    expect(createEngineReachFor(() => optedIn)(onGrok, instances[1], speaker, "subscription", "second")).toEqual(
-      ["Microsoft Teams", "Outlook (Exchange)", "Automations", "Docs Hub"].map((connector) => ({ connector })));
+    // the setup card reads the same registry
     const setup = createConnectorSetupStore(() => ({
       ...host,
       engineLogins: { preferredAccount: () => undefined },

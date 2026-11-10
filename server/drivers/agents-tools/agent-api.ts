@@ -185,7 +185,7 @@ export const AGENT_API_TOOL_NAMES: ReadonlySet<string> = new Set(AGENT_API_TOOLS
 export const DEF_RUN_WITH_ENGINE = {
     name: "run_with_engine",
     description:
-      "Run one part of your work on another engine or model you may use, and get its result in this turn. It runs as you, for the same person, on their own sign-in there (for example their Grok account's Outlook or Teams), at your approval level and rules. Never say you cannot switch engines. A refusal lists the engines you may use.",
+      "Run one part of your work on another engine or model you may use, and get its result in this turn. It runs as you, for the same person, on their own sign-in there, at your approval level and rules. Not for connectors: use call_connector. Never say you cannot switch engines. A refusal lists the engines you may use.",
     inputSchema: {
       type: "object",
       additionalProperties: false,

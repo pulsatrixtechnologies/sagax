@@ -4,7 +4,7 @@
 // (src/components/SettingsSubPage.tsx): a full-height field that saves as you
 // type, a character count, a short guide, and the block bots receive.
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { api, useStore, type ConfigStatus } from "@/state/store";
+import { api, useStore } from "@/state/store";
 import { activeLocale, t } from "@/lib/i18n";
 import { createAboutMeDraft } from "./about-me-draft";
 import { MarkdownEditor } from "./markdown/MarkdownEditor";
@@ -20,10 +20,11 @@ function useAboutMeDraft() {
   let controller = drafts.get(dispatch);
   if (!controller) {
     controller = createAboutMeDraft(confirmed, async (sent) => {
-      const config = await api<ConfigStatus>("/api/config", {
-        method: "PUT", body: JSON.stringify({ profile: { aboutMe: sent } }), timeoutMs: 10_000,
+      // #3424: the person's own About me (the operator's is the server's profile)
+      const saved = await api<{ aboutMe?: string }>("/api/me/about-me", {
+        method: "PUT", body: JSON.stringify({ aboutMe: sent }), timeoutMs: 10_000,
       });
-      dispatch({ type: "profileSaved", profile: { aboutMe: config.profile?.aboutMe ?? sent } });
+      dispatch({ type: "profileSaved", profile: { aboutMe: saved.aboutMe ?? sent } });
     });
     drafts.set(dispatch, controller);
   }

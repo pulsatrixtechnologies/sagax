@@ -35,7 +35,6 @@ export type TurnState = {
   instance: any;
   instanceId: any;
   levels: any;
-  line: any;
   maySelectComputer: any;
   model: any;
   /** 2026-11-04: the routine's model this turn runs on (shared/routine-model.ts), else undefined. */
@@ -166,7 +165,6 @@ export type TurnState = {
   wants: any;
   placeSource: any;
   localVmTarget: any;
-  connectorSwitch: any;
   runtime: any;
   enginesRead: any;
   plannedConfig: any;
@@ -210,7 +208,6 @@ export function createTurnState(init: {
     instance: undefined,
     instanceId: undefined,
     levels: undefined,
-    line: undefined,
     maySelectComputer: undefined,
     model: undefined,
     routineModel: undefined,
@@ -332,7 +329,6 @@ export function createTurnState(init: {
     wants: undefined,
     placeSource: undefined,
     localVmTarget: undefined,
-    connectorSwitch: undefined,
     runtime: undefined,
     enginesRead: undefined,
     plannedConfig: undefined,

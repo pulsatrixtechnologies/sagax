@@ -73,6 +73,16 @@ export interface WatchWakeFacts {
   /** The server's gate: "auto" runs a read now; "defer" is a write, planned
    * as a dry run and then sent through the ordinary approval path. */
   disposition: "auto" | "defer";
+  /** #3423: the watch's domain, the one the person turned on. */
+  domain?: string;
+  /** #3423: the person chose this watch's domain for this bot: like a
+   * direct trigger, it passes the bot's proactive switch. */
+  chosen?: true;
+}
+
+/** #3423: a watch the person chose for this bot (it passes the switch). */
+export function chosenWatchEvent(event: Pick<ProactiveEvent, "source" | "watch">): boolean {
+  return event.source === "watch" && event.watch?.chosen === true;
 }
 
 export interface ProactiveEvent {
@@ -409,8 +419,9 @@ export class ProactiveWaker {
     if (!bot) return "gone";
     // 2026-11-08 (#2691): a direct channel (mail, calendar, text) follows its
     // own trigger first, with its filters; the others follow the switch.
+    // #3423: a watch the person chose passes the switch, as a direct trigger
     const switchOn = proactiveModeFor(bot) !== "off";
-    const verdict = directWakeVerdict(bot, switchOn, event.source, { from: event.from, text: `${event.label}\n${event.summary ?? ""}\n${event.detail}` });
+    const verdict = chosenWatchEvent(event) ? "wake" : directWakeVerdict(bot, switchOn, event.source, { from: event.from, text: `${event.label}\n${event.summary ?? ""}\n${event.detail}` });
     if (verdict !== "wake") return verdict;
     if (!switchOn) event.direct = true;
     // no loop: never on its own proactive work, never past the hop limit
@@ -515,7 +526,7 @@ export class ProactiveWaker {
     // is still shown to the person, deps.dropped). A direct trigger turned
     // on for its channel (#2691) still wakes for its own events.
     if (switchMode === "off") {
-      const kept = pending.events.filter((event) => event.direct === true && directWakeVerdict(bot, false, event.source, { from: event.from, text: `${event.label}\n${event.summary ?? ""}\n${event.detail}` }) === "wake");
+      const kept = pending.events.filter((event) => event.direct === true && (chosenWatchEvent(event) || directWakeVerdict(bot, false, event.source, { from: event.from, text: `${event.label}\n${event.summary ?? ""}\n${event.detail}` }) === "wake"));
       if (!kept.length) {
         this.drop(botId, pending.events);
         return null;
@@ -710,7 +721,7 @@ export function proactivePrompt(mode: ProactiveMode): string {
     case "off":
       return "";
     case "proactive":
-      return "\nProactive mode: on. Emails, calendar entries, failed runs, bots' posts, teammates' messages, webhooks and the Pulsatrix Flow watches of the profiles you hold wake you in the background. You act at your usual approval level and rules, as for any request. Before a write from a wake, plan it (a dry run is recorded on the wake); then the ordinary approval path runs it. A wake reports in this conversation only when it has something for the person.";
+      return "\nProactive mode: on. Emails, calendar entries, failed runs, bots' posts, teammates' messages and webhooks addressed to you wake you in the background. You act at your usual approval level and rules, as for any request. Before a write from a wake, plan it (a dry run is recorded on the wake); then the ordinary approval path runs it. A wake reports in this conversation only when it has something for the person.";
   }
 }
 

@@ -42,8 +42,8 @@ export const LOGIN_EXPIRED_MARKER = ".pulsabot-login-expired.json";
 export type LoginDriver = "claudeAgent" | "codex" | "grokAgent" | "kimiAgent";
 /** 2026-10-29: a person may keep two sign-ins on Grok (a personal grok.com
  * account and a team one), each with its own grok.com connectors. The first
- * one pays their turns; the second is reached through run_with_engine and
- * the connector switch (index.ts relayEnginesFor). */
+ * one pays their turns; the second is reached through run_with_engine
+ * (index.ts relayEnginesFor) and its connectors through the connector hub. */
 export type LoginSlot = "primary" | "second";
 export function loginSlotOf(value: unknown): LoginSlot {
   return value === "second" ? "second" : "primary";

@@ -93,8 +93,9 @@ describe("one source for a turn's connectors (lot L2)", () => {
     expect(roomSetup).toMatch(/ctx\.roomConnectorPlan = connectorPlanForTurn\(/);
     const directDispatch = read("server/turns/start-turn-dispatch.ts");
     const roomDispatch = read("server/turns/group-member-turn-launch-dispatch.ts");
-    expect(directDispatch).toMatch(/connectorPlanAt\(state\.connectorPlan/);
-    expect(roomDispatch).toMatch(/connectorPlanAt\(roomConnectorPlan/);
+    // dispatchedConnectorPlan (L6) is connectorPlanAt, remembered for the thread
+    expect(directDispatch).toMatch(/(?:connectorPlanAt|dispatchedConnectorPlan)\((?:state\.threadId, )?state\.connectorPlan/);
+    expect(roomDispatch).toMatch(/(?:connectorPlanAt|dispatchedConnectorPlan)\((?:threadId, )?roomConnectorPlan/);
     for (const [path, source] of [["start-turn-dispatch", directDispatch], ["group-member-turn-launch-dispatch", roomDispatch]] as const) {
       expect(source, path).not.toMatch(/accountConnectorInput\(/);
     }
@@ -103,7 +104,7 @@ describe("one source for a turn's connectors (lot L2)", () => {
   });
 
   it("the readers outside a turn read the plan, never the account facts alone", () => {
-    for (const leaf of ["engineConnectorsPromptFor", "turnReachPrompt", "turnConnectorsFor", "botCapabilitiesAs", "connectorSetupContext", "harnessCommandAccount", "engineReachFor", "connectorsElsewhereFor"]) {
+    for (const leaf of ["engineConnectorsPromptFor", "turnReachPrompt", "turnConnectorsFor", "botCapabilitiesAs", "connectorSetupContext", "harnessCommandAccount"]) {
       const source = readFileSync(join(ROOT, `server/index-leaves/${leaf}.ts`), "utf8");
       expect(source, leaf).toMatch(/connectorPlanForTurn\(/);
       expect(code(source), leaf).not.toMatch(/accountConnectorInput\(|accountConnectorsForTurn\(/);

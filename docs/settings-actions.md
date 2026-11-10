@@ -306,7 +306,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 |---|---|---|---|
 | How people see your name | Settings > Account | `sagax_settings` get, set `account.label` | simple |
 | Your photo (a data URL, null removes) | Settings > Account | `sagax_settings` set `account.avatar` | simple |
-| About me | Settings > Account > About me | `sagax_settings` get, set `account.aboutMe` | simple; organisation : organisation |
+| About me | Settings > Account > About me | `sagax_settings` get, set `account.aboutMe` | simple |
 | Your own model and notifications for a shared bot | Shared bot > Model / Notifications | `sagax_settings` get, set `account.botOverride` | simple |
 | Your time zone (an IANA zone such as America/Toronto; turns automatic detection off) | Settings > Account > Time zone | `sagax_settings` get, set `account.timeZone` | simple |
 | Detect your time zone automatically (the app then follows this computer's zone) | Settings > Account > Time zone | `sagax_settings` get, set `account.timeZoneAuto` | simple |
@@ -373,6 +373,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Show when online | Settings > Notifications > Privacy | `sagax_settings` get, set `notifications.presence` | simple |
 | Analytics opt-out | Settings > Privacy | `sagax_settings` get, set `notifications.analyticsOptOut` | simple |
 | People you blocked ({block: {id, name}} or {unblock: id}; get lists them) | Settings > Notifications > Privacy > Blocked people | `sagax_settings` get, set `notifications.blocks` | simple |
+| What the server watches for you, by domain ({domain, state, botId?} with state on, off or never turns a domain on for one of your bots, off, or never; {domain, watch, on} switches one watch; get lists your choices (domains) and the domains you can choose (available: domain slug, label, eligible, each watch with its summary and cadence); use a slug from available; absent = off) | No screen yet: ask any of your bots | `sagax_settings` get, set `notifications.proactiveChoices` | simple |
 
 ### Modèles et voix
 

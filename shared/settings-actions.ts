@@ -762,10 +762,10 @@ add({
 });
 add({
   key: "account.aboutMe", family: "account", target: "none", value: "text", label: "About me", where: "Settings > Account > About me",
-  // the server's profile: on an organization server it is the operator's
-  classes: serverWide,
-  read: () => ({ path: "/api/config", field: "profile.aboutMe" }),
-  write: (_ids, v) => ({ method: "PUT", path: "/api/config", body: { profile: { aboutMe: v } } }),
+  // #3424: the person's own on an organization server (the operator's is the
+  // server's profile), read by their own bots only
+  read: () => ({ path: "/api/me/about-me", field: "aboutMe" }),
+  write: (_ids, v) => ({ method: "PUT", path: "/api/me/about-me", body: { aboutMe: v } }),
 });
 add({
   key: "account.botOverride", family: "account", target: "bot", value: "object", label: "Your own model and notifications for a shared bot", where: "Shared bot > Model / Notifications",
@@ -1402,6 +1402,20 @@ add({
     if (typeof r.unblock === "string" && r.unblock) return { method: "DELETE", path: `/api/me/blocks/${enc(r.unblock)}` };
     if (r.block && typeof r.block.id === "string") return { method: "POST", path: "/api/me/blocks", body: { id: r.block.id, ...(typeof r.block.name === "string" ? { name: r.block.name } : {}) } };
     return "value is {block: {id, name}} or {unblock: id}.";
+  },
+});
+// #3423: the person's proactive choices (shared/proactive-choices.ts): which
+// watch domains of the organization they receive, and on which one of their
+// bots. A person chooses by asking any of their bots in words.
+add({
+  key: "notifications.proactiveChoices", family: "notifications", target: "none", value: "object",
+  label: "What the server watches for you, by domain ({domain, state, botId?} with state on, off or never turns a domain on for one of your bots, off, or never; {domain, watch, on} switches one watch; get lists your choices (domains) and the domains you can choose (available: domain slug, label, eligible, each watch with its summary and cadence); use a slug from available; absent = off)",
+  where: "No screen yet: ask any of your bots",
+  read: () => ({ path: "/api/me/proactive" }),
+  write: (_ids, v) => {
+    const r = (v ?? {}) as Record<string, unknown>;
+    if (typeof r.domain !== "string" || !r.domain) return "value is {domain, state (on, off or never), botId?} or {domain, watch, on}.";
+    return { method: "PUT", path: "/api/me/proactive", body: { ...r, via: "words" } };
   },
 });
 // experimental: an organization member's own switches

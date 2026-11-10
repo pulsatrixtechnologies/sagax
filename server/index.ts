@@ -131,7 +131,9 @@ import { createBotEventSubscriptionRoutes } from "./routes/bot-event-subscriptio
 import { BotEventSubscriptions } from "./bot-events/bot-event-subscriptions.ts";
 import { ProactiveMetricsLedger } from "./proactive/proactive-metrics.ts";
 import { ProactiveBudget, ProactiveEngine, proactiveDryRunSummary } from "./proactive/proactive.ts";
-import { FlowWatchLoop, WATCH_TICK_MS, WatchMemory } from "./proactive/flow-watches.ts";
+import { domainLabel, FlowWatchLoop, WATCH_TICK_MS, WatchMemory } from "./proactive/flow-watches.ts";
+import { ProactiveChoices, watchMovedLine, watchPauseLine } from "./proactive/proactive-choices.ts";
+import { createProactiveChoicesRoutes } from "./routes/proactive-choices.ts";
 import { flowHelperIn } from "./proactive/flow-watch-helper.ts";
 import { apiNamesOf } from "./perspicax/perspicax-mcp-helpers.ts";
 import { frontMomentSampler, ScreenContextWatcher, screenContextAvailable, screenMomentKey } from "./proactive/screen-context.ts";
@@ -227,6 +229,7 @@ import { CompanyMemoryCache, companyTextForBots } from "./memory/memory-company.
 import { COMPANY_TOPIC } from "./memory/memory-dream.ts";
 import { procedureSignal, recordProcedure } from "./memory/memory-procedures.ts";
 import { appendAboutMe, commitLearned, planLearned } from "./profiles/profile-learned.ts";
+import { createPersonAboutMe, type AboutMeOwner } from "./profiles/person-about-me.ts";
 import { archivedAgent, canAccessBot, canAccessTeam, primaryCovers, canReachPeer, peerAllowed, peerName, peerRosterSystemPrompt, peerInScope, reachablePeers, sameOwnerBots, setPeerScope, setPrimaryCover, setSameOwner, roomPeerRosterSystemPrompt, roomRosterLine, uniquePeerName, PEER_ACCESS_HELP } from "./peers/peer-roster.ts";
 import { orgPeerInScope } from "./peers/peer-scope.ts";
 import {
@@ -949,8 +952,6 @@ import { createInstalledVoices } from "./tts/installed-voice.ts";
 import { systemVoicesAvailable } from "./tts/system-voices.ts";
 import { ClaudeAiConnectorInventory, connectorPrincipalFor, createHarnessConnectorRoutes, runClaudeCli, type ClaudeAiTurnInput } from "./harness-connectors.ts";
 import { claudeAiConnectorsOwn, createConnectorPlanForTurn } from "./connectors/turn-plan.ts";
-import { connectorSwitchText } from "./connector-switch.ts";
-import { connectorNeed } from "../shared/engine-connectors.ts";
 import { forgetTurnReach,
   registerReachProvider } from "./turns/turn-reach.ts";
 import { setTurnActiveProfileResolver } from "./turns/turn-active-profile.ts";
@@ -1535,7 +1536,6 @@ import { createAskBotAndWait } from "./index-leaves/askBotAndWait.ts";
 import { createWaitForChatRoomMember } from "./index-leaves/waitForChatRoomMember.ts";
 import { createStopCompanyInstances } from "./index-leaves/stopCompanyInstances.ts";
 import { createSpeakerTurnSelection } from "./index-leaves/speakerTurnSelection.ts";
-import { createConnectorSwitchForTurn } from "./index-leaves/connectorSwitchForTurn.ts";
 import { createConfidentialPerspicaxRefusal } from "./index-leaves/confidentialPerspicaxRefusal.ts";
 import { createCloudRoutineReadiness } from "./index-leaves/cloudRoutineReadiness.ts";
 import { createBrowserIntegration } from "./index-leaves/browserIntegration.ts";
@@ -1581,7 +1581,6 @@ import { createWipeConfidentialThread } from "./index-leaves/wipeConfidentialThr
 import { createScheduleFinishUntilRound } from "./index-leaves/scheduleFinishUntilRound.ts";
 import { createOpenMeetingBrowser } from "./index-leaves/openMeetingBrowser.ts";
 import { createGroupGoalCoordinatorTurnForEvent } from "./index-leaves/groupGoalCoordinatorTurnForEvent.ts";
-import { createConnectorsElsewhereFor } from "./index-leaves/connectorsElsewhereFor.ts";
 import { createAddMarketplaceServers } from "./index-leaves/addMarketplaceServers.ts";
 import { createCodeBranchCredentials } from "./index-leaves/codeBranchCredentials.ts";
 import { createBotReaction } from "./index-leaves/botReaction.ts";
@@ -1657,7 +1656,6 @@ import { createPrewarmNamedTeammates } from "./index-leaves/prewarmNamedTeammate
 import { createImportPackageFor } from "./index-leaves/importPackageFor.ts";
 import { createFailQueuedMessage } from "./index-leaves/failQueuedMessage.ts";
 import { createEnsureClaudeArtifactCommentsRoutine } from "./index-leaves/ensureClaudeArtifactCommentsRoutine.ts";
-import { createEngineReachFor } from "./index-leaves/engineReachFor.ts";
 import { createDiskSaverTarget } from "./index-leaves/diskSaverTarget.ts";
 import { createSurfacePeerNotice } from "./index-leaves/surfacePeerNotice.ts";
 import { createSingleBotPackage } from "./index-leaves/singleBotPackage.ts";
@@ -2727,7 +2725,6 @@ bindLeafHost({
   get claudeAiConnectorRows() { return claudeAiConnectorRows; },
   get isRelayPart() { return isRelayPart; },
   get connectorPlanForTurn() { return connectorPlanForTurn; },
-  get catalogPrice() { return catalogPrice; },
   get perspicaxKeysUrl() { return perspicaxKeysUrl; },
   get refusalPayerOf() { return refusalPayerOf; },
   get refusedModelsFor() { return refusedModelsFor; },
@@ -3508,11 +3505,10 @@ bindLeafHost({
   get computersRoutes() { return computersRoutes; },
   get confidentialBrowserSession() { return confidentialBrowserSession; },
   get configForViewer() { return configForViewer; },
+  get personAboutMe() { return personAboutMe; },
   get configureContentEncryption() { return configureContentEncryption; },
   get configuredKeyterms() { return configuredKeyterms; },
-  get connectorNeed() { return connectorNeed; },
   get connectorPrincipalFor() { return connectorPrincipalFor; },
-  get connectorSwitchText() { return connectorSwitchText; },
   get containerComputerAction() { return containerComputerAction; },
   get containerComputerExists() { return containerComputerExists; },
   get containerComputerFrame() { return containerComputerFrame; },
@@ -3761,9 +3757,7 @@ bindLeafHost({
   get createConnectorSetupRoutes() { return createConnectorSetupRoutes; },
   get createConnectorSetupStore() { return createConnectorSetupStore; },
   get createConnectorStatusRoutes() { return createConnectorStatusRoutes; },
-  get createConnectorSwitchForTurn() { return createConnectorSwitchForTurn; },
   get createConnectorThread() { return createConnectorThread; },
-  get createConnectorsElsewhereFor() { return createConnectorsElsewhereFor; },
   get createConsoleBotCapabilities() { return createConsoleBotCapabilities; },
   get createContinueComputerSelection() { return createContinueComputerSelection; },
   get createControlIntegration() { return createControlIntegration; },
@@ -3848,7 +3842,6 @@ bindLeafHost({
   get createEngineHomes() { return createEngineHomes; },
   get createEngineInstalled() { return createEngineInstalled; },
   get createEngineMcpServers() { return createEngineMcpServers; },
-  get createEngineReachFor() { return createEngineReachFor; },
   get createEnsureCalendarCallRoom() { return createEnsureCalendarCallRoom; },
   get createEnsureClaudeArtifactCommentsRoutine() { return createEnsureClaudeArtifactCommentsRoutine; },
   get createEnsureViewerThread() { return createEnsureViewerThread; },
@@ -6948,10 +6941,7 @@ bindLeafHost({
   get turnReachPrompt() { return turnReachPrompt; },
   get turnConnectorsFor() { return turnConnectorsFor; },
   get accountConnectorInput() { return accountConnectorInput; },
-  get engineReachFor() { return engineReachFor; },
-  get connectorSwitchForTurn() { return connectorSwitchForTurn; },
   get engineConnectorsPromptFor() { return engineConnectorsPromptFor; },
-  get connectorsElsewhereFor() { return connectorsElsewhereFor; },
   get subscriptionExpiredCard() { return subscriptionExpiredCard; },
   get signInRefusalHeld() { return signInRefusalHeld; },
   get signInRefusalResent() { return signInRefusalResent; },
@@ -8025,14 +8015,10 @@ const accountConnectorInput = createAccountConnectorInput(getLeafHost);
  * every reader (server/connectors/turn-plan.ts). */
 const connectorPlanForTurn = createConnectorPlanForTurn<BotRecord, any>({
   accountConnectorInput: (bot, instance, speaker, via, slot) => accountConnectorInput(bot, instance, speaker, via, slot),
-  isRelayPart: (threadId) => isRelayPart(threadId),
   withholdHostToolsFor: (instance) => withholdHostToolsFor(instance),
   accounts: (principal) => connectorRegistry.accounts(principal),
 });
-const engineReachFor = createEngineReachFor(getLeafHost);
-const connectorSwitchForTurn = createConnectorSwitchForTurn(getLeafHost);
 const engineConnectorsPromptFor = createEngineConnectorsPromptFor(getLeafHost);
-const connectorsElsewhereFor = createConnectorsElsewhereFor(getLeafHost);
 const subscriptionExpiredCard = createSubscriptionExpiredCard(getLeafHost);
 const holdSignInRefusal = createHoldSignInRefusal(getLeafHost);
 const accessCardFor = createAccessCardFor(getLeafHost);
@@ -12001,6 +11987,38 @@ const personSettings = new PersonSettingsStore(DATA_DIR);
 function personSettingsOwner(principalId: string | null | undefined): string | null {
   return IDENTITY.kind === "perspicax" ? personSettingsPrincipal(principalId) : null;
 }
+// #3424: About me per person (server/profiles/person-about-me.ts). The
+// operator's is the server's profile; on an organization server anyone else
+// has their own, read by their own bots and written by them and by what
+// their bots learn.
+const personAboutMe = createPersonAboutMe({
+  organization: () => IDENTITY.kind === "perspicax",
+  localPrincipalId: () => localPrincipalId(),
+  operator: {
+    read: () => cfg.profile?.aboutMe ?? "",
+    save: (aboutMe) => {
+      saveConfig({ profile: { ...cfg.profile, aboutMe } });
+      Object.assign(cfg, loadConfig());
+      broadcast({ kind: "config", ...configStatus() });
+    },
+  },
+  people: {
+    read: (principalId) => personSettings.get(principalId).aboutMe ?? "",
+    save: (principalId, aboutMe) => {
+      personSettings.setAboutMe(principalId, aboutMe);
+      // each stream gets its own person's About me (configForPerson), so an
+      // open Settings sees what the person's bot just learned
+      broadcast({ kind: "config", ...configStatus() });
+    },
+  },
+});
+/** Whose About me a request reads and writes in Settings: the operator's
+ * with the right to change the installation (as PUT /api/config asked), a
+ * signed-in person's own, or none. */
+function aboutMeOwnerOf(auth: RequestAuth): AboutMeOwner | null {
+  if (viewerIsOperator(auth)) return auth.scopes.includes("admin") ? { person: null } : null;
+  return personAboutMe.ofViewer({ operator: false, principalId: sessionPrincipal(auth) });
+}
 /** A personal Experimental switch for this person: their own value, else the installation's. */
 function personalFeatureOn(feature: PersonalFeature, installation: boolean, principalId: string | null | undefined): boolean {
   const owner = personSettingsOwner(principalId);
@@ -14494,8 +14512,18 @@ store.onChange((change) => {
       catch { console.error("[memory-upkeep] Could not forget deleted bot's upkeep state."); }
       try { cacheKeepWarm.cancelBot(change.botId); }
       catch { console.error("[cache-keepwarm] Could not cancel deleted bot's keep-warm windows."); }
-      try { commandAllowlist.clear(change.botId); mcpServersHost.botDeleted(change.botId); flowWatchLoop.forget(change.botId); }
+      try { commandAllowlist.clear(change.botId); mcpServersHost.botDeleted(change.botId); }
       catch { console.error("[command-allowlist] Could not remove deleted bot's saved rules."); }
+      // #3423: a watch domain it carried moves to the person's main bot, said in one line
+      try {
+        for (const moved of proactiveChoices.botGone(change.botId, personMainBot)) {
+          const language = briefLanguage(moved.botId);
+          // the loop may not exist yet during startup: the slug then
+          const label = (domain: string) => { try { return flowWatchLoop.label(domain, language); } catch { return domain; } };
+          watchChatLine(moved.botId, watchMovedLine(moved.domains.map(label), language));
+        }
+      }
+      catch { console.error("[proactive-choices] Could not move a deleted bot's watch domains."); }
       // Its plugins and the tokens saved for its marketplaces go with it.
       try { botPlugins.forgetBot(change.botId); }
       catch { console.error("[bot-plugins] Could not remove deleted bot's plugins."); }
@@ -16574,17 +16602,12 @@ const memoryUpkeep = createMemoryUpkeep({
   bot: (id) => store.bot(id) ?? undefined,
   engine: (botId) => sideJobs.text("memory", botId),
   busy: (botId) => botHasActiveTurn(botId),
+  // #3424: what a bot learns lands in its own person's About me, never the
+  // operator's for a member's bot
   addToAboutMe: (from, texts) => {
-    const current = cfg.profile?.aboutMe ?? "";
-    const facts = planLearned(from, texts, current, memoryDate());
-    const next = appendAboutMe(current, facts.map((fact) => fact.line));
-    // a full About me takes nothing more; the person trims it first
-    if (!facts.length || next === null) return 0;
-    saveConfig({ profile: { ...cfg.profile, aboutMe: next } });
-    Object.assign(cfg, loadConfig());
-    commitLearned(facts);
-    broadcast({ kind: "config", ...configStatus() });
-    return facts.length;
+    const bot = store.bot(from.botId);
+    const owner = bot ? personAboutMe.ofBot(effectiveBotOwner(bot)) : null;
+    return owner ? personAboutMe.learn(owner, from, texts, memoryDate()) : 0;
   },
   sourceLabel: (botId, threadId) => memorySourceLabel({ room: store.groupByThread(threadId), task: store.taskByThread(botId, threadId), threadId }),
   // A confidential thread is never captured, even a turn queued before it became one.
@@ -20145,7 +20168,13 @@ function feedbackOnWake(botId: string, topic: string, choice: BriefFeedback, whe
   }
   // the row itself names its wake kind when it has one (a Today card sends "attention")
   const kind = message?.routineRun?.wakeTopic ?? topic;
-  backgroundBriefs.topicFeedback(bot.id, kind, choice);
+  // #3423: the "never" of a watch alert stops those watches for good, in the
+  // person's choices (so the reads stop too), never a mute of every watch
+  const watches = kind === "watch" ? message?.routineRun?.watches ?? [] : [];
+  const person = (effectiveBotOwner(bot) || "").trim().toLowerCase();
+  if (choice === "never" && watches.length && person) {
+    for (const row of watches) proactiveChoices.stopWatch(person, row.domain, row.id, "alert");
+  } else backgroundBriefs.topicFeedback(bot.id, kind, choice);
   const said = message?.routineRun?.summary ?? message?.attention?.items[0]?.text ?? message?.text ?? "";
   rememberBriefFeedback(bot.id, choice, said || kind, kind);
   if (message && where.threadId) {
@@ -21912,28 +21941,6 @@ function claudeAiConnectorRows(account: ClaudeAiTurnInput): Array<{ name: string
 }
 /** The turn's account and whose it is (review of #943, point 5): engine
  * connectors only on the sign-in of the person the turn is for. */
-/** The connectors an engine reaches for the person a turn is for: their
- * own sign-in only (accountConnectorsForTurn). Claude's from the cached
- * claude.ai inventory (connected ones; read again in the background, never
- * waited on), Grok's from the xAI catalog on an organization turn. */
-/** A model's catalogue price (input + output), when known. */
-function catalogPrice(driverKind: string, model: string): number | undefined {
-  const facts = autoCatalogLookup(driverKind, model);
-  return facts?.costInput === undefined && facts?.costOutput === undefined ? undefined : (facts?.costInput ?? 0) + (facts?.costOutput ?? 0);
-}
-/** 2026-10-21 (review of #943): a request that needs a connector the
- * bot's engine lacks runs on another engine this person may use that has
- * it (server/connector-switch.ts), or null. `personText` is only what the
- * person typed (never the prompt composed around it: page, mail or data
- * context, a quoted reply). SAGAX_CONNECTOR_SWITCH=0 turns it off. */
-/** What a turn is told about mail, calendar, Teams and SharePoint
- * (server/connectors/list-prompt.ts connectorListPrompt, #3351). */
-/** 2026-10-29: the person's other engines and sign-ins a turn may hand a
- * part to (run_with_engine), with the connectors known to be there: the
- * cached claude.ai inventory of their own Claude sign-in, the reach of each
- * of their Grok sign-ins (their catalog or the reach probe). Only their own
- * accounts (accountConnectorsForTurn "own"), never someone else's; a reach
- * not known yet is left out rather than guessed. */
 /** Where a person sets their model keys (Perspicax console, slice 4). */
 function perspicaxKeysUrl(): string | undefined {
   // #1137: the console's own address for a person's model keys (anthropic,
@@ -23253,11 +23260,6 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     openerFrom,
     noteRelayParent,
     isRelayPart,
-    relayAddsAccountConnectors: (bot, speaker, selection) => {
-      const instance = registry.instances().find((candidate) => candidate.instanceId === selection.instanceId);
-      if (!instance) return false;
-      return connectorPlanForTurn(bot as unknown as BotRecord, instance, speaker as TurnSpeaker, undefined, undefined, { slot: selection.account === "second" ? "second" : "primary" }).relayAdds;
-    },
     askBotAndWait: (targetBotId, message, depth, fromBotId, fromThreadId, targetThreadId, opts) =>
       askBotAndWait(targetBotId, message, depth, fromBotId, fromThreadId, targetThreadId, opts) as Promise<{ status: string; text?: string }>,
     mcpCallTimeoutMinutes: () => mcpCallTimeoutMinutes(cfg),
@@ -23891,12 +23893,9 @@ ROUTES.push(createBotMemoryRoutes({
     const bot = store.bot(botId);
     return semanticIndex.status(botId, bot ? [bot.threadId, ...(bot.tasks ?? []).map((task) => task.threadId)] : []);
   },
-  aboutMe: () => cfg.profile?.aboutMe ?? "",
-  saveAboutMe: (aboutMe) => {
-    saveConfig({ profile: { ...cfg.profile, aboutMe } });
-    Object.assign(cfg, loadConfig());
-    broadcast({ kind: "config", ...configStatus() });
-  }
+  aboutMeOwner: aboutMeOwnerOf,
+  aboutMe: (owner) => personAboutMe.read(owner),
+  saveAboutMe: (owner, aboutMe) => personAboutMe.save(owner, aboutMe)
 }));
 // The persona editor's Files category: the workspace tree, downloads, and
 // document renames, RULES.md and docs/ saves (server/routes/bot-workspace.ts).
@@ -24396,15 +24395,66 @@ const screenContext: ScreenContextWatcher | null = screenSampler ? new ScreenCon
   }
 }) : null;
 if (screenContext && !process.env.VITEST) screenContext.start();
-/** 2026-11-09: the Pulsatrix Flow watches of the profiles a bot holds
- * (server/proactive/flow-watches.ts). Observe as a read with the owner's
- * routine credentials, `when` true and new: one proactive wake in the bot's
- * conversation; a write goes through the ordinary approval path. */
+/** #3423 (lot 2 of #3408): the person's proactive choices: which watch
+ * domains of the organization's Pulsatrix Flow they turned on, and on which
+ * one of their bots (server/proactive/proactive-choices.ts). Absent is off;
+ * a bot's stored proactiveMode is never read as that yes. */
+const proactiveChoices = new ProactiveChoices(join(DATA_DIR, "proactive-choices.json"));
+/** The bots of a person that can carry a watch domain: their own, visible
+ * and not temporary. */
+function watchCarrierOf(person: string, botId: string): BotRecord | null {
+  const bot = store.bot(botId);
+  if (!bot || bot.hidden || bot.temporary) return null;
+  return (effectiveBotOwner(bot) || "").trim().toLowerCase() === person.trim().toLowerCase() ? bot : null;
+}
+/** The default carrier of the person's watch domains: their main bot, else
+ * another bot of theirs (so a moved domain and its lines reach a live chat). */
+function personMainBot(person: string): string | undefined {
+  return store.bots.find((bot) => bot.chiefOfStaff === true && watchCarrierOf(person, bot.id))?.id
+    ?? store.bots.find((bot) => watchCarrierOf(person, bot.id))?.id;
+}
+/** One line in a bot's own chat (never only the Events lens). */
+function watchChatLine(botId: string, line: string): void {
+  const bot = store.bot(botId);
+  const threadId = bot ? botMainThread(bot.id) ?? bot.threadId : undefined;
+  if (!bot || !threadId) return;
+  store.appendMessage(threadId, { role: "bot", kind: "activity", from: { botId: bot.id, name: bot.name, color: bot.color }, tool: { name: line, ok: false } });
+}
+ROUTES.push(createProactiveChoicesRoutes({
+  store: proactiveChoices,
+  person: (auth) => actorPrincipalId(auth),
+  ownBot: (person, botId) => Boolean(watchCarrierOf(person, botId)),
+  mainBot: personMainBot,
+  offered: (person, botId) => flowWatchLoop.offered(person, botId)
+}));
+/** 2026-11-09, walked from the person's choices since #3423: the Pulsatrix
+ * Flow watches of the domains a person turned on
+ * (server/proactive/flow-watches.ts). Observe as a read with the person's
+ * routine credentials, `when` true and new: one proactive wake in the
+ * carrying bot's conversation; a write goes through the ordinary approval
+ * path. No choice: no session, no helper call, no read. */
 const flowWatchLoop = new FlowWatchLoop({
-  bots: () => store.bots
-    .filter((bot) => !bot.hidden && !bot.temporary)
-    .map((bot) => ({ id: bot.id, owner: effectiveBotOwner(bot) || "", primary: bot.chiefOfStaff === true })),
-  bot: (botId) => store.bot(botId) ?? undefined,
+  choices: () => proactiveChoices.chosen(),
+  carrier: (botId, person) => {
+    if (!store.bot(botId)) return { ok: false, cause: "bot-gone" };
+    // the bot's turns mount the person's account connection (organization server)
+    return watchCarrierOf(person, botId) && IDENTITY.kind === "perspicax" && perspicaxMcp ? { ok: true } : { ok: false, cause: "bot-not-eligible" };
+  },
+  // the same resolution as the Skills index of a turn
+  holdsSkill: (botId, person, skill) => {
+    const bot = store.bot(botId);
+    if (!bot) return false;
+    const instance = bot.modelSelection ? registry.get(bot.modelSelection.instanceId) : null;
+    try {
+      return scopedSkillInventory(bot, instance, person).rows.some((row) => row.kind === "skill" && row.enabled && row.name === skill);
+    } catch {
+      return false;
+    }
+  },
+  owner: (botId) => {
+    const bot = store.bot(botId);
+    return bot ? (effectiveBotOwner(bot) || "").trim().toLowerCase() || undefined : undefined;
+  },
   // the organization's Flow plugin only: no person's or bot's plugin code
   // runs on the shared server (a local server runs its own)
   helper: (botId, owner) => {
@@ -24434,7 +24484,11 @@ const flowWatchLoop = new FlowWatchLoop({
   hostTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
   // its own budget: a watch is a scheduled read, not a wake loop (12 an hour)
   engine: new ProactiveEngine({
-    bot: (botId) => store.bot(botId) ?? undefined,
+    // #3423: the person's choice passes the bot's switch, as a direct trigger
+    bot: (botId) => {
+      const bot = store.bot(botId);
+      return bot ? { ...bot, proactiveMode: "proactive" as const } : undefined;
+    },
     coveredByRules: () => false,
     approvalLevel: (botId) => {
       const bot = store.bot(botId);
@@ -24444,7 +24498,15 @@ const flowWatchLoop = new FlowWatchLoop({
   }),
   offer: (event) => offerProactive(event),
   log: (botId, line) => proactiveEventsLine(botId, line),
-  memory: new WatchMemory(join(DATA_DIR, "proactive-watches.json"))
+  pause: (botId, person, domain, cause, listing) => {
+    // a gone carrier has no chat: the line goes to the person's main bot
+    const target = store.bot(botId) ? botId : personMainBot(person);
+    if (!target) return;
+    const language = briefLanguage(target);
+    watchChatLine(target, watchPauseLine(domainLabel(listing, domain, language), cause, language));
+  },
+  // per person; the per-bot file of before (proactive-watches.json) is not read
+  memory: new WatchMemory(join(DATA_DIR, "proactive-watch-memory.json"))
 });
 if (!process.env.VITEST && IDENTITY.kind === "perspicax") {
   setInterval(() => void flowWatchLoop.tick(), WATCH_TICK_MS).unref();
@@ -26825,11 +26887,13 @@ function computerOwnerFields(): { name: string; computerName: string } {
 function profileManagedFor(auth: RequestAuth): boolean {
   return PROFILE_MANAGEMENT !== null && auth.kind === "session";
 }
-/** The profile a bot's turns speak to: the operator's for the operator's
- * bots, as before. A bot someone else owns never carries the operator's
- * about-me, and calls its person by their own name. */
+/** The profile a bot's turns speak to: its own person's About me (#3424),
+ * the operator's for the operator's bots as before. A bot someone else owns
+ * never carries the operator's about-me, and calls its person by their own
+ * name. */
 function botUserProfile(bot: { ownerUserId?: unknown }): { aboutMe?: string } {
-  return effectiveBotOwner(bot) === localPrincipalId() ? cfg.profile ?? {} : {};
+  const owner = personAboutMe.ofBot(effectiveBotOwner(bot));
+  return owner ? { aboutMe: personAboutMe.read(owner) } : {};
 }
 function botUserName(bot: { ownerUserId?: unknown }): string {
   const owner = effectiveBotOwner(bot);
@@ -33604,8 +33668,6 @@ const startTurnRunner = createStartTurn({
   computerToolsRefusal,
   confidentialThreadOwner,
   confinedWhy,
-  connectorSwitchForTurn,
-  connectorSwitchText,
   containerComputerFrame,
   containerComputerMcp,
   containerComputerStatus,

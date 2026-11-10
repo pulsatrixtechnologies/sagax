@@ -235,7 +235,11 @@ off. It keeps the notes in shape without the bot having to decide to:
   dated line `- 2026-09-25 · learned by Scout · …`. **Added by your bots**
   under About me lists each one with **Remove**; a removed fact is never
   added again. On a shared installation, another person's messages never add
-  to the owner's About me.
+  to the owner's About me. On an organization server About me is each
+  person's own: a member's bots read the member's About me (never the
+  operator's), what they learn lands in the member's About me and list
+  (`principals/<id>/person-settings.json` and `profile-learned.json`), and
+  the member writes it in Settings without an administrator.
 - **Nightly tidy-up.** Once a day after 3 am (`memory.tidyHour`), or at the
   next check if the computer was asleep, never while the bot is working, and
   on **Tidy up now**: expired entries move to `memory/archive.md` (from
@@ -416,8 +420,10 @@ free form, or one you rewrite by hand, works the same.
 | `POST` | `/api/bots/:id/memory/tidy` | Runs the tidy-up now (`409` when upkeep is switched off) and returns its report. |
 | `GET` | `/api/profile/learned` | Facts bots added to About me on their own, newest first. |
 | `POST` | `/api/profile/learned/:id/remove` | Takes that line out of About me; the fact is never added again. |
+| `GET`, `PUT` | `/api/me/about-me` | The caller's own About me, `{ aboutMe }`: the server's profile for the operator, the person's own on an organization server. |
 
-All of them need the owner (admin) session, like the other bot-settings routes.
+The bot routes need the owner session, like the other bot-settings routes. The
+About me routes answer for the caller's own About me and learned list only.
 
 Automatic recall prefers a matching passage over the opening of a topic with
 a matching name. Current topic search excludes superseded entries; their text

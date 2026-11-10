@@ -119,6 +119,12 @@ export interface PageRecord {
   /** The person allows the bot (and their own later edit) to replace the
    * published version. Never set by the bot. Off unless they turn it on. */
   keepUpdated?: boolean;
+  /** #3413: a version that declares a personal data capability was current
+   * at some point. Never removed, revoke included (versions are trimmed, so
+   * their contents cannot tell it later, and a reader's frame may outlive a
+   * revoke): while it is set and the page is shared with anyone but its
+   * person, its shared state is read only. */
+  personalData?: true;
   /** #3128: the person shares this page in the bot's Library. Everyone who
    * may use the bot reads it and asks the bot to refresh it. Absent means
    * personal, the default. */
@@ -474,11 +480,15 @@ export class PublishedPages {
     if (!page) return refuse(404, "not_found", "This page does not exist.");
     const now = this.clock();
     const sharedBefore = pageSharedWithOthers(page);
+    const currentBefore = page.currentVersion;
     const result = change(page, now);
     if ("ok" in result) return result;
+    // the version that stops being current counts too: a page stored before
+    // the mark existed gets it as its data version goes
+    if (page.currentVersion !== currentBefore) this.notePersonalData(page, [currentBefore, page.currentVersion]);
     // #3413: a page that reads personal data and becomes shared loses the
     // shared state it kept while private, so nothing it received goes out
-    if (!sharedBefore && pageSharedWithOthers(page) && page.state && this.declaresPersonalData(page)) delete page.state;
+    if (!sharedBefore && pageSharedWithOthers(page) && page.state && (page.personalData === true || this.declaresPersonalData(page))) delete page.state;
     if (touch) page.updatedAt = now;
     this.save(pages);
     return page;
@@ -575,8 +585,10 @@ export class PublishedPages {
     if (page.keepUpdated === true && page.status === "published" && page.currentVersion !== null) {
       for (const entry of page.versions) if (entry.state === "published" && entry.n !== version.n) entry.state = "proposed";
       version.state = "published";
+      const outgoing = page.currentVersion;
       page.currentVersion = version.n;
       page.history.push({ at: now, action: "keep", version: n });
+      this.notePersonalData(page, [outgoing, version.n]);
     }
     page.updatedAt = now;
     this.save(pages);
@@ -746,12 +758,29 @@ export class PublishedPages {
 
   /** #3413, the first isolation rule, held by the declaration itself: while
    * the page is shared with anyone but its person and its served version
-   * declares a personal data capability, its shared state is read only for
+   * declares a personal data capability, or one ever did (`personalData`,
+   * kept on the page for good), its shared state is read only for
    * everyone, its person included. Nothing in memory: it holds across a
-   * restart. */
+   * restart and across a change of version. */
   stateReadOnlyForData(id: string): boolean {
     const page = this.get(id);
-    return Boolean(page && pageSharedWithOthers(page) && pageCapabilitiesPersonal(this.capabilities(id)));
+    return Boolean(page && pageSharedWithOthers(page) && (page.personalData === true || pageCapabilitiesPersonal(this.capabilities(id))));
+  }
+
+  /** The version that becomes current, or the one that stops being current,
+   * declares a personal data capability: mark the page for good, revoke
+   * included (a reader's frame may still be open on it). Called whenever the
+   * current version changes (publish, a kept-updated proposal, revoke). */
+  private notePersonalData(page: PageRecord, numbers: ReadonlyArray<number | null>): void {
+    if (page.personalData === true) return;
+    for (const n of numbers) {
+      if (n === null) continue;
+      const version = page.versions.find((entry) => entry.n === n);
+      if (version && pageIsHtml(version.kind) && pageCapabilitiesPersonal(pageCapabilitiesOf(this.content(page.id, version.n) ?? ""))) {
+        page.personalData = true;
+        return;
+      }
+    }
   }
 
   /** The keys its person made read-only. */

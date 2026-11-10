@@ -293,6 +293,8 @@ describe("what the bot reads", () => {
     expect(proactivePrompt("off")).toBe("");
     expect(proactivePrompt("proactive")).toContain("Proactive mode: on");
     expect(proactivePrompt("proactive")).toContain("dry run");
+    // #3423: the watches are the person's choice, not a property of the mode
+    expect(proactivePrompt("proactive")).not.toMatch(/watch/i);
   });
 
   it("the Events line counts and names, nothing more", () => {
@@ -546,6 +548,15 @@ describe("a dropped watch event can be offered again (#3140)", () => {
     const h = harness({ wren: "proactive" });
     h.waker.offer(event("wren"));
     expect(h.changes.at(-1)).toEqual({ botId: "wren", keys: ["watch:w-open:k1"] });
+  });
+  it("#3423: a watch the person chose passes the bot's switch, as a direct trigger, and keeps it through the flush", () => {
+    const h = harness({ wren: "off" });
+    const chosen: ProactiveEvent = { ...event("wren"), watch: { ...event("wren").watch!, domain: "service", chosen: true } };
+    expect(h.waker.offer(event("wren"))).toBe("off");
+    expect(h.waker.offer(chosen)).toBe("gathered");
+    h.advance(60_000);
+    expect(h.woken).toHaveLength(1);
+    expect(h.woken[0]!.events.map((row) => row.key)).toEqual(["watch:w-open:k1"]);
   });
 });
 

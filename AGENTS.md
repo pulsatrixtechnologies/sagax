@@ -1292,20 +1292,29 @@ iOS sets the mode in Permissions (`ProactiveMode`: `off` | `proactive`).
 Tests: `server/proactive/proactive-wake.test.ts`, `server/proactive/proactive-wake.e2e.test.ts`,
 `shared/proactive-mode.test.ts`, `ProactiveModeTests.swift`.
 
-## Pulsatrix watches (2026-11-09, #3135)
+## Pulsatrix watches (2026-11-09, #3135; the person's choice since #3423)
 
-A bot holding a Pulsatrix profile is proactive by default and watches the
-Flow `px-proactive` watches of its products (`server/proactive/flow-watches.ts`,
-`server/proactive/watch-tokens.ts`, `docs/proactive.md`). Loop every minute
-on Perspicax servers: products from `api_list`, watches from the org Flow
-plugin (`px_flow.py proactive --product`), cadence in local time, tokens
-resolved (unset fact = skipped), observe as a read with the owner's routine
-credentials (`PerspicaxMcp.withRoutineSession`), JMESPath `when`, dedup per
-watch + result key, `ProactiveEngine.consider`, then a wake with source
-`watch` in the bot's one conversation. Writes go through ordinary approval.
-A watch is the organization's, so one bot per person watches it (#3394): the
-Primary Bot when it watches, else the person's first bot that does; one
-event wakes one bot, once.
+A watch is ambient (the server goes looking on the person's behalf): it never
+runs until the person turned its domain on for one of their bots. The choice
+store is `server/proactive/proactive-choices.ts` (`DATA_DIR/proactive-choices.json`,
+0600, one row per person; shape in `shared/proactive-choices.ts`), read and
+changed with `GET`/`PUT /api/me/proactive` (client scope, the person only)
+and `sagax_settings` `notifications.proactiveChoices`. `GET` also lists the
+domains the person can choose (`available`, from `FlowWatchLoop.offered`);
+`PUT` answers an unknown domain (404) or one that cannot run on the bot (409)
+instead of storing it, and a chosen domain Flow does not have pauses with a
+line (`unknown-domain`). No screen yet: the person asks a bot. Absent is off; a stored
+`proactiveMode` is never read as consent (`createBot` and the startup both
+write `proactive`); the switch now records who set it (`proactiveModeSet`).
+The loop (`server/proactive/flow-watches.ts`, `docs/proactive.md`) walks the
+choices, not the bots: no choice, no session, no helper call, no read.
+Eligibility: the carrying bot is the person's own, visible, not temporary,
+on a Perspicax server; the connection serves every product a watch names;
+the bot holds its skill. Products are read once a day per person; watch
+memory is per person (`DATA_DIR/proactive-watch-memory.json`). A chosen watch
+passes the bot's switch, as a direct trigger. A paused domain says so once
+in the carrying bot's chat. A watch alert's "never" stops those watches in
+the person's choices. One domain, one bot, by construction (#3394).
 
 ## A reply shows as it is written (2026-10-29)
 
@@ -2261,9 +2270,12 @@ A bot may run one part of its work on another engine or model and get the
 result back in the same turn (`run_with_engine`, server/run-with-engine.ts,
 route `POST /api/internal/run-with-engine`). The part is the same bot, in a
 fresh thread, for the same person: its speaker is the source turn's
-(`peerSpeaker`), so the person's own sign-ins, keys, routine lineage and
-connectors apply, and the thread keeps the bot's approval level and rules
-(a Custom grant becomes Ask on another engine). The engines offered are the
+(`peerSpeaker`), so the person's own sign-ins, keys and routine lineage
+apply, and the thread keeps the bot's approval level and rules (a Custom
+grant becomes Ask on another engine). It is not a road to a connector: a
+bot reaches every connector of the person from its own turn
+(`call_connector`, see "Connectors" below), and the same engine, model and
+sign-in is never a relay (#3356). The engines offered are the
 ones the payer may run here (`relayEnginesFor`): the organization's engine
 list and the person's own credentials are the only limit. Not in a room, not
 one hop away (`PEER_HOP_ABSENT_TOOLS`). A part still running after
@@ -2460,8 +2472,8 @@ reached through the relay.
   on sign-in and when a turn or Providers finds the reach unknown; the
   result is kept by folder (`noteGrokAccountReach`, now with `groups` and
   tool counts), the same key a turn on that sign-in writes. So Providers
-  shows what each account brings, and `engineReachFor` knows a Grok sign-in's
-  reach (it was "never known" before).
+  shows what each account brings, and the connector registry lists both
+  sign-ins (see "Connectors").
 - Which sign-in a turn runs on: `ModelSelection.account` ("second"), set only
   by the server: `turnSlotFor(bot, instance)` feeds `orgEngineInput`
   (`subscriptionSignedIn` on that slot), `orgTurnAccess` (`loginDir` on that
@@ -2472,23 +2484,8 @@ reached through the relay.
   label, "grok personal", "personal grok account" or the id; the family
   alone ("grok") stays the first sign-in. The part's thread carries
   `account`, so it runs on that folder with that account's gateway.
-- Connector switch (connector-switch.ts): candidates include the other
-  sign-in of the same engine (`account`, `accountKind`); for a personal
-  connector (Outlook, Teams, Gmail, calendar) the personal account wins,
-  even over the team account the turn is on when both have it; a connector
-  that is not personal stays put. The switched turn's selection carries
-  `account`.
-- Prompt: `engineConnectorsPrompt` `elsewhere` (harness-connectors.ts
-  `relayHint`, built by index.ts `connectorsElsewhereFor`): the person's
-  other engines and sign-ins with the connectors known to be there (the
-  cached claude.ai inventory, each Grok sign-in's reach), named as
-  run_with_engine takes them, with "prefer the personal account" when one
-  exists. A reach not known yet is left out, never guessed. So a Claude bot
-  hands a Teams request to the person's Grok, a Grok bot hands a Microsoft
-  365 request to the person's Claude, and a team-account turn hands Outlook
-  to the personal account, with nothing technical for the person.
-- open_connector_setup: a connector on the other Grok account answers "call
-  run_with_engine with engine ..." (no card); with no account of the
+- open_connector_setup: a connector on either Grok account answers
+  "already connected, call it with call_connector" (no card); with no account of the
   person's own at all and a Claude engine that takes a sign-in, the route
   posts the "Connect Claude" card (the #1545 sign_in access card) and tells
   the bot to say so in one sentence, instead of refusing in words.
@@ -2497,7 +2494,7 @@ reached through the relay.
   Connected or Connect a second Grok account, "Through grok.com: Microsoft
   Teams (36), Outlook (Exchange) (29)", Disconnect per row. MyEngineAccess
   takes `account`.
-- Tests: principal-engine-logins, run-with-engine, connector-switch,
+- Tests: principal-engine-logins, run-with-engine,
   harness-connectors, grok-tool-catalog, routes/connector-setup,
   EngineConnect. Verified on the real grok 1.0.70 with a copy of a personal
   sign-in: 488 gateway tools, Teams 36, Outlook 29, `principal_type` User.
@@ -8022,89 +8019,80 @@ list says, and is never switched on again under that name. It is not silent:
   `src/components/McpServersPanel.reserved.test.ts`,
   `server/mcp-reserved-rename.e2e.test.ts`.
 
-## Connectors from the person's own Claude account
+## Connectors
 
-Sagax builds no GitHub, Outlook or Calendar integration of its own: a Claude
-turn keeps the claude.ai connectors (Microsoft 365, GitHub, Gmail, ...) of
-the account it runs on when that account is the speaker's own
-(`server/harness-connectors.ts`, rules in `claudeAiConnectorsForTurn`). Keep
-these rules, each covered by `server/harness-connectors.test.ts` or
-`server/drivers/claude.test.ts`:
+Any bot, on any engine, calls any connector of the person it serves
+(#3286, design `docs/design/connectors-across-engines.md`). Sagax builds no
+GitHub, Outlook, Teams, calendar or SharePoint integration of its own (no
+Graph client, no Teams bot registration, no mailbox), and stores no
+provider token: each provider's CLI keeps its own sign-in.
 
-- Organization server: only an access `via: "subscription"` (The owner
-  speaking, from their own login directory). Owner key, org key and server
-  turns get none. Solo server: the operator and the operator's routines only.
-- The Claude driver drops `--strict-mcp-config` for such a turn (it also
-  drops claude.ai connectors, measured on CLI 2.1.287) and keeps
-  `--setting-sources project`; every other isolated turn sets
-  `ENABLE_CLAUDEAI_MCP_SERVERS=false`.
-- Connector tools (`mcp__claude_ai_*`) are never pre-allowed: they ride the
-  approval flow. An engine tool denial blocks host built-ins, never them.
-- Connected apps (or Model providers while Connected apps is off) shows them read-only (`GET /api/me/harness-connectors`, the
-  caller's own account only, no email or URL) with a link to
-  claude.ai/customize/connectors. Always on: there is no server switch (the
-  admin checkbox and `config.harnessConnectors.claudeAi` are retired, a stored
-  false is ignored, `PUT /api/harness-connectors/settings` is a no-op kept for
-  older clients). `SAGAX_CLAUDE_ALLOW` is a separate thing (standing tool allow
-  rules, see docs/self-hosting.md) and stays.
-- Codex: ChatGPT apps need Codex's own ChatGPT login (the Codex sign-in in
-  Sagax), which Sagax's ChatGPT plan mode and API keys do not have. On that
-  login the connector registry lists them and the Codex host calls one
-  through `call_connector`, from a bot on any engine, with no model turn
-  (server/connectors/hosts/codex-host.ts, #3353).
-- Grok: only an organization turn (host tools withheld) loads the xAI
-  account's cloud connectors (`grokCloudConnectorEnv` in
-  `server/drivers/acp/grok.ts`). Grok reaches them through `use_tool`, and a
-  server Sagax did not mount keeps its card. A solo turn forces
-  `GROK_MANAGED_MCPS_ENABLED=false`: in `--permission-mode default` Grok can
-  call those servers with no prompt. Gateway tools stay off. A tool
-  selection turns the connectors off too. A run_with_engine part on the
-  person's own Grok CLI loads them even when grokAccountConnectors is off
-  (2026-11-09). Any other bot turn still needs that opt-in. Someone else's
-  sign-in never loads them.
-
-## Mail, Teams, calendar and SharePoint through the engines' connectors (parité R9 + R11, 2026-10-21)
-
-Decision: prioritize the connectors the engines already bring (claude.ai
-connectors, the xAI account's cloud connectors on grok.com) over any
-Microsoft 365 enterprise app or Entra app registration of our own. Sagax
-builds no Graph client, no Teams bot registration and no mailbox for this.
-
-- What each engine brings is one pure table, `shared/engine-connectors.ts`:
-  capabilities `mail`, `calendar`, `teams`, `sharepoint` (and `files`), by
-  claude.ai connector name (Microsoft 365, Gmail, Google Calendar, ...) and
-  by Grok cloud connector id (`shared/grok-cloud-connectors.ts`). Codex and
-  Gemini bring none. Connect apps > Providers and the engine cards
-  (Settings > Engines) show it; the names stay read-only ("Manage on ...").
-- A turn is told what its own engine reaches (`engineConnectorsPrompt` in
-  `server/harness-connectors.ts`, the "claude-ai" prompt section).
-- Whose connectors (review of #943): only the sign-in of the person the
-  turn is for (`accountConnectorsForTurn`: the speaker, a routine's owner).
-  When the account is someone else's (another person's subscription pays,
-  the machine's login in solo for anyone but the operator) the turn is
-  told they belong to someone else and nothing is offered; Grok's cloud
-  connectors stay off (`grokCloudConnectors` on the turn,
-  `grokCloudConnectorEnv(..., ownAccount)`).
-- Automatic engine switch (2026-10-21, `server/connector-switch.ts`): a
-  person's request that needs mail, calendar, Teams or SharePoint
-  (`connectorNeed` on the person's raw message only, never the prompt
-  composed around it: page, mail or data context, a quoted reply, a
-  drained queue's prompt) and whose bot's engine lacks it runs, for that
-  request only, on another engine of that person that has it. Candidates:
-  `autoEnginesFor` (allowed engines and models, approval level); never a
-  model whose catalogue price is above the bot's own (unknown prices on
-  one side only: no switch); the bot's effort kept when accepted. Reach:
-  their own sign-in only and only when known (Claude from the cached
-  claude.ai inventory, never waited on, a cold cache is unknown; Grok's
-  connected connectors are never known, so Grok is neither a target nor a
-  reason). Unknown on the bot's engine: no switch. One line "Passé à
-  Claude pour Gmail" (`tool.connectorSwitch`) after admission. Card
-  continuations, compactions, computer choices, Auto, warm-ups, routines
-  and handed-out work stay on the bot's engine. Covered by
-  `server/connector-switch.e2e.test.ts`. `SAGAX_CONNECTOR_SWITCH=0` turns
-  it off.
-- Grok rules of #918 are unchanged otherwise: organization turn (host
-  tools withheld), no tool selection.
+- Whose: only the turn's connector principal (`connectorPrincipalFor` in
+  `server/harness-connectors.ts`: the speaker, a routine's owner, the same
+  person at a peer hop, nobody for an unknown person, the operator only on a
+  solo server). Never read from tool arguments, never another person's. A
+  turn paid by someone else's sign-in is told that account's own connectors
+  are not this person's. A guest's confined turn and a managed policy that
+  restricts MCP get none.
+- Registry (`server/connectors/registry.ts`): the person's connectors over
+  all of their own sign-ins (Claude, both Grok accounts, added accounts,
+  Codex's ChatGPT apps), by name and state only, kept on disk per person so
+  it is known right after a restart. Providers in
+  `server/connectors/providers/`.
+- One plan per turn (`server/connectors/turn-plan.ts`), computed once in
+  turn setup for a direct and a room turn; every reader reads it.
+  `server/connectors/one-source.guard.test.ts` fails when another file
+  names the predicates or the provider switches.
+- One list in the prompt (`server/connectors/list-prompt.ts`, the
+  "claude-ai" section): the same text for the same person on every engine
+  and turn kind, one line per connector with its account, its state and how
+  to reach it from this turn; `open_connector_setup` when it needs a sign-in.
+- The hub: `connectors` (list, find tools) and `call_connector` (one exact
+  call) in the `agents` server, offered in every catalog profile, rooms and
+  peer hops included (`server/drivers/agents-tools/connectors.ts`, route
+  `server/routes/internal-connectors.ts`, `server/connectors/hub.ts`). One
+  host per provider (`server/connectors/hosts/`: Grok, Claude, Codex) runs
+  exactly the approved call on the person's own sign-in; a call whose tool
+  or input differs is never run.
+- Approvals: a hub call is a server-held request on the calling turn
+  (`server/harness/held-requests.ts`), decided by `request.opened` exactly
+  as a native call: organization Refuse and Ask first rules, the person's
+  rules and Always allow, Full access, and "a read of your own connector"
+  with no card. The same act gets the same verdict and rule key on every
+  engine (`shared/connector-call.ts`, `server/connectors/approval-parity.test.ts`).
+  A member's bot gets the member's card, never an admin's. Nothing is
+  invisible: the call, its card and its error are in the bot's own chat.
+- Native shortcuts, under the same rules:
+  - Claude keeps the claude.ai connectors (`mcp__claude_ai_*`) of the account
+    it runs on when that account is the speaker's own (organization server:
+    `via: "subscription"` only; solo: the operator and the operator's
+    routines). The driver then drops `--strict-mcp-config` (it also drops
+    claude.ai connectors, measured on CLI 2.1.287) and keeps
+    `--setting-sources project`; every other isolated turn sets
+    `ENABLE_CLAUDEAI_MCP_SERVERS=false`. Their tools are never pre-allowed;
+    an engine tool denial blocks host built-ins, never them.
+  - Grok CLI loads its account's grok.com gateway only when the bot opted in
+    (`grokAccountConnectors`, off by default, #2747) on the person's own
+    sign-in, with no tool selection, and on an organization server an
+    engine that withholds host tools (`grokCloudConnectorEnv` in
+    `server/drivers/acp/grok.ts`). Grok reaches them through `use_tool`, and a
+    server Sagax did not mount keeps its card. Any other bot on Grok reaches
+    them through the hub, its tool list still holding `agents` only.
+  - Codex: ChatGPT apps need Codex's own ChatGPT login (the Codex sign-in in
+    Sagax), which Sagax's ChatGPT plan mode and API keys do not have. On that
+    login the Codex host calls one with no model turn
+    (`server/connectors/hosts/codex-host.ts`, #3353).
+- Connected apps (or Model providers while Connected apps is off) shows them
+  read-only (`GET /api/me/harness-connectors`, the caller's own account only,
+  no email or URL) with a link to claude.ai/customize/connectors.
+  Always on: there is no server switch (the admin checkbox and
+  `config.harnessConnectors.claudeAi` are retired, a stored false is ignored,
+  `PUT /api/harness-connectors/settings` is a no-op kept for older clients).
+  `SAGAX_CLAUDE_ALLOW` is a separate thing (standing tool allow rules, see
+  docs/self-hosting.md) and stays.
+- What each engine's connectors reach is one pure table,
+  `shared/engine-connectors.ts` (capabilities by claude.ai connector name and
+  Grok cloud connector id); it also reads which calls act outside the app.
 - Every outward call through a connector waits for the approval card
   (`isOutboundTool` via `connectorWriteKind`, same reading for an MCP tool):
   sends, automatic replies (out of office, mailbox
@@ -8134,6 +8122,18 @@ builds no Graph client, no Teams bot registration and no mailbox for this.
 - The card shows every recipient's address (`Name <address>`; a name that
   looks like another address or a domain is dropped): a display name is
   the sender's to choose.
+- Retired (#3356, lot L13): the keyword switch of 2026-10-21 (a mail,
+  calendar, Teams or SharePoint word moved the request to another engine:
+  `server/connector-switch.ts`, `connectorNeed`, `SAGAX_CONNECTOR_SWITCH`),
+  the relay hint and its list (`connectorsElsewhereFor`, `engineReachFor`),
+  the exception of #3174 (a run_with_engine part loaded the Grok gateway
+  without the opt-in, `engineRelay`), and every sentence that sent a bot to
+  `run_with_engine` or to `use_tool` for a connector. A request with a mail
+  word runs on the bot's own engine and model
+  (`server/connectors/no-connector-switch.e2e.test.ts`). Lines "Passé à ...
+  pour ..." already stored still render (`tool.connectorSwitch`).
+- Gates: `pnpm test:connector-matrix` (engine of the bot by provider of the
+  connector, on fakes) and the launch contract of each host.
 - Needs its own infrastructure, so not built here (flagged for later): a
   dedicated inbound address per bot (B21, iOS CO5), a Teams app per bot
   (B20, needs a Bot Framework registration), a free message in a Meet or

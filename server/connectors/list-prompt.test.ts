@@ -56,7 +56,7 @@ function leaf(registry: Record<string, ConnectorAccount[]> = REGISTRY) {
     claudeAiConnectorRows: () => [],
   };
   const promptFor = createEngineConnectorsPromptFor(() => host);
-  return (driver: string, speaker: TurnSpeaker, turn: { relay?: boolean; level?: string; toolScope?: unknown; agents?: boolean; more?: Partial<ClaudeAiTurnInput>; toolSelection?: boolean; guestConfined?: boolean } = {}): string => {
+  return (driver: string, speaker: TurnSpeaker, turn: { level?: string; toolScope?: unknown; agents?: boolean; more?: Partial<ClaudeAiTurnInput>; toolSelection?: boolean; guestConfined?: boolean } = {}): string => {
     const plan = connectorPlanFrom(input(driver, speaker, turn.more), {
       withholdsHostTools: true,
       toolSelection: turn.toolSelection ?? turn.toolScope !== undefined,
@@ -65,7 +65,6 @@ function leaf(registry: Record<string, ConnectorAccount[]> = REGISTRY) {
     });
     return promptFor({ id: "bot-1" }, { instanceId: driver, driverKind: driver }, speaker, {
       plan,
-      ...(turn.relay ? { relay: true } : {}),
       ...(turn.level ? { level: turn.level } : {}),
       ...(turn.toolScope !== undefined ? { toolScope: turn.toolScope } : {}),
       ...(turn.agents !== undefined ? { agents: turn.agents } : {}),
@@ -113,9 +112,11 @@ describe("the one connector list (#3351)", () => {
     expect(text).toContain("- Microsoft Teams (Grok): needs a new sign-in. Call open_connector_setup (agents__open_connector_setup) for it.");
   });
 
-  it("a provider with no host yet is not offered as callable; a direct turn with run_with_engine is pointed at its account", () => {
+  it("a provider with no host yet is not offered as callable, and no turn is sent to run_with_engine for it (#3356)", () => {
     expect(leaf()("codex", room)).toContain("- Example Docs (Claude): connected. Not callable from this turn yet.");
-    expect(leaf()("codex", direct, { relay: true })).toContain("- Example Docs (Claude): connected. Not callable from this turn yet: call run_with_engine with engine \"Claude\" and the complete request.");
+    const text = leaf()("codex", direct);
+    expect(text).toContain("- Example Docs (Claude): connected. Not callable from this turn yet.");
+    expect(text).not.toContain("run_with_engine");
   });
 
   it("keeps the outward rule and the /me rule, at Ask and at Full", () => {
@@ -173,9 +174,9 @@ describe("the one connector list (#3351)", () => {
     const onGrok = connectorListPrompt({ principal: A, accounts: [grok], native: [{ provider: "grok-com", instanceId: DEFAULT_ACCOUNT }], callable: (provider) => CALLABLE.has(provider), callTool: true });
     expect(onGrok).not.toContain("no connector on any account");
     expect(onGrok).toContain("- Grok: connectors not read yet. Use its direct tools through use_tool (search_tool finds them), or call_connector with a connector name the connectors tool lists for it.");
-    // not mounted, no host: pointed at its account
-    expect(connectorListPrompt({ principal: A, accounts: [claude], callable: () => false, callTool: true, relay: true }))
-      .toContain("- Claude: connectors not read yet. Not callable from this turn yet: call run_with_engine with engine \"Claude\" and the complete request.");
+    // not mounted, no host: said so, never sent to another engine (#3356)
+    expect(connectorListPrompt({ principal: A, accounts: [claude], callable: () => false, callTool: true }))
+      .toContain("- Claude: connectors not read yet. Not callable from this turn yet.");
     // a native mount the registry has no account for yet
     expect(connectorListPrompt({ principal: A, accounts: [], native, callable: () => false, callTool: true }))
       .toContain("- Claude: connectors not read yet. Use its direct tools mcp__claude_ai_*.");
@@ -191,9 +192,9 @@ describe("the one connector list (#3351)", () => {
     const promptFor = leaf();
     for (const driver of ENGINES) {
       for (const level of ["full", "ask"]) {
-        const text = promptFor(driver, direct, { level, relay: true });
+        const text = promptFor(driver, direct, { level });
         expect(text).not.toMatch(/[–—]/);
-        expect(promptFor(driver, direct, { level, relay: true })).toBe(text);
+        expect(promptFor(driver, direct, { level })).toBe(text);
       }
     }
     // the order of the registry does not change the text

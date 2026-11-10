@@ -6,7 +6,9 @@ export type Host = Record<string, any>;
 export function createConfigForPerson(getHost: () => Host): any {
 function configForPerson<T extends Parameters<typeof configForViewer>[0]>(status: T, viewer: ViewerIdentity | null): T & { viewer?: ViewerIdentity } {
   const host = getHost();
-  let shown = host.configForViewer(status, viewer);
+  // #3424: a person who is not the operator sees their own About me
+  const aboutMeOwner = viewer && !viewer.operator ? host.personAboutMe.ofViewer({ operator: false, principalId: viewer.principalId }) : null;
+  let shown = host.configForViewer(status, viewer, aboutMeOwner ? host.personAboutMe.read(aboutMeOwner) : "");
   // #2054: a member only sees their own named OpenAI-compatible servers
   // plus org-wide ones; another person's stay out of Settings.
   if (host.IDENTITY.kind === "perspicax" && shown && typeof shown === "object" && "openaiCompatServers" in shown) {

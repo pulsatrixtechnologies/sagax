@@ -75,7 +75,7 @@ export interface GrokReachFact {
   connectors: readonly string[];
   at: number;
   /** 2026-10-29: the person's other Grok sign-in that carries connectors,
-   * named as run_with_engine takes it ("Grok (personal account)"). */
+   * named as the connector list names that account ("Grok (personal account)"). */
   elsewhere?: { engine: string; connectors: readonly string[] };
   /** 2026-10-30: what that sign-in is (grok's `principal_type`), so a card
    * says which account the connector goes on. */
@@ -166,17 +166,17 @@ export function createConnectorSetupInternalRoutes(deps: Shared & {
       }
       return json(res, 409, { error: REFUSALS[route.refusal] });
     }
-    // Already there: the person's Grok catalog carries it (grok's gateway).
-    // No card; the bot calls it.
+    // Already there: one of the person's Grok sign-ins carries it (grok's
+    // gateway). No card; the bot calls it from its own engine through the
+    // connector hub (call_connector), whatever engine it runs on (#3356).
     const reach = deps.grokReach?.(principalId);
-    if (route.route === "grok" && target.grok && reach?.connectors.includes(target.grok)) {
+    const connectedOn = route.route === "grok" && target.grok
+      ? reach?.connectors.includes(target.grok) ? "this person's Grok account"
+        : reach?.elsewhere?.connectors.includes(target.grok) ? `this person's other Grok account, "${reach.elsewhere.engine}"` : undefined
+      : undefined;
+    if (connectedOn) {
       return json(res, 200, { ok: true, route: route.route, label: target.label, status: "connected", card: "none",
-        note: `${target.label} is already connected on this person's Grok account. No card was posted. Find its tools with search_tool ("${target.label}") and call them with use_tool by their full name.` });
-    }
-    // 2026-10-29: on their other Grok account: no card, the bot hands that part there
-    if (route.route === "grok" && target.grok && reach?.elsewhere?.connectors.includes(target.grok)) {
-      return json(res, 200, { ok: true, route: route.route, label: target.label, status: "connected", card: "none",
-        note: `${target.label} is already connected on this person's other Grok account, "${reach.elsewhere.engine}". No card was posted. Call run_with_engine with engine "${reach.elsewhere.engine}" and the complete request: it runs that part on that account and gives you the result.` });
+        note: `${target.label} is already connected on ${connectedOn}. No card was posted. Call it from this turn with call_connector, under the name your connector list gives it (the connectors tool lists its tools and their input).` });
     }
     if (!isConnectorSetupUrl(route.url)) return json(res, 500, { error: "no setup page for that connector" });
     const owner = connectorSetupOwner(principalId);

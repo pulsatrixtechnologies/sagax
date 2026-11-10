@@ -75,6 +75,8 @@
 //   FAKE_CODEX_ROOM_PLAN  plan path: each turn runs the scripted room agent
 //                         (room-handoff-agent.ts) against the mounted agents
 //                         MCP server and replies with its text
+//   FAKE_CODEX_MCP_ROWS  "1", with FAKE_CODEX_ROOM_PLAN: stream each scripted
+//                         agents call as an mcpToolCall item (started, completed)
 //   FAKE_CODEX_COMPLETE_BEFORE_ACK  with FAKE_CODEX_ROOM_PLAN: stream the whole
 //                         turn, completion included, before acknowledging turn/start
 //   FAKE_CODEX_TEXT_*  `codex exec` (the background one-shot, server/drivers/codex-background-text.ts):
@@ -503,7 +505,14 @@ const playRoomPlanTurn = (msg: any, planPath: string) => {
   if (!early) ack();
   // Loaded only in this mode: other tests run a copy of this file on its own.
   void import("./room-handoff-agent.ts").then(({ runRoomHandoffAgent }) => runRoomHandoffAgent(process.argv.slice(2), planPath, { message: { content: text } },
-    { integration, system: developerInstructions, evidence: { resumedThread } }))
+    { integration, system: developerInstructions, evidence: { resumedThread } }, undefined, process.env.FAKE_CODEX_MCP_ROWS === "1" ? {
+      started: (id, step) => notify("item/started", { item: { id, type: "mcpToolCall", server: "agents", tool: step.tool ?? "coordinate_bots", arguments: step.arguments, status: "inProgress" } }),
+      completed: (id, step, response) => {
+        const failed = Boolean(response.error || response.result?.isError);
+        notify("item/completed", { item: { id, type: "mcpToolCall", server: "agents", tool: step.tool ?? "coordinate_bots", arguments: step.arguments,
+          status: failed ? "failed" : "completed", ...(failed ? { error: { message: JSON.stringify(response.error ?? response.result) } } : { result: response.result }) } });
+      },
+    } : undefined))
     .then((reply) => {
       notify("item/completed", { item: { id: "m1", type: "agentMessage", text: reply } });
       notify("turn/completed", { turn: { status: "completed" } });

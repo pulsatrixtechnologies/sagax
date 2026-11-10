@@ -36,6 +36,9 @@ export interface RoutineRunCardData {
   /** #2694: a proactive wake's kind ("heartbeat", "mail", "calendar", ...),
    * so the person can say less of it, or never, from the chat. */
   wakeTopic?: string;
+  /** #3423: the Pulsatrix watches a watch wake reported, with their domain:
+   * the row's "never" stops these watches for good (the person's choice). */
+  watches?: Array<{ id: string; domain: string }>;
   /** #2694: the person's feedback on that wake, kept across card updates. */
   feedback?: "up" | "down" | "less" | "never";
 }

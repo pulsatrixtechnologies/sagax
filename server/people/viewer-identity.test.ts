@@ -28,6 +28,9 @@ describe("viewer identity", () => {
     const status = { profile: { name: "Owner", email: "owner@example.com", aboutMe: "private", avatarUrl: "/api/profile/avatar.png" }, other: 1 };
     const member: ViewerIdentity = { operator: false, principalId: ZARA, email: "zara@example.test", name: "zara", role: "member", canCreateBots: true, operatorName: "Owner" };
     expect(configForViewer(status, member)).toEqual({ ...status, profile: { name: "zara", email: "zara@example.test", aboutMe: "", avatarUrl: "" }, viewer: member });
+    // #3424: the member's own About me, never the operator's
+    expect(configForViewer(status, member, "Zara's own").profile.aboutMe).toBe("Zara's own");
+    expect(configForViewer(status, { ...member, operator: true }, "Zara's own").profile.aboutMe).toBe("private");
     const operator: ViewerIdentity = { operator: true, principalId: LOCAL, email: "owner@example.com", name: "Owner", role: "owner", canCreateBots: true };
     expect(configForViewer(status, operator)).toEqual({ ...status, viewer: operator });
     expect(configForViewer(status, null)).toBe(status);

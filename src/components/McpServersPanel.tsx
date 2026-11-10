@@ -5,7 +5,11 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { McpResultBudgetField } from "./McpResultBudgetField";
 import {
+  isRemoteMcpListing,
+  probeFailureLabel,
+  refusedKeys,
   type ClientDraft,
+  type McpServerListing,
   type RemoteMcpListing,
   type ReservedMcpListing,
 } from "./mcpServersModel";
@@ -18,7 +22,9 @@ export {
   parseMcpArguments,
   parseMcpEnvironment,
   parseMcpHeaders,
+  probeFailureLabel,
   probeToolsLabel,
+  refusedKeys,
   signedInToolsCheck,
   type McpAccountListing,
   type McpAuthState,
@@ -137,7 +143,8 @@ export function McpImportForm({ mcp }: { mcp: McpServers }) {
 /** The add / edit form of one server: a command or an address, with its
  * environment or headers. Values saved before are never shown again. */
 export function McpServerEditor({ mcp }: { mcp: McpServers }) {
-  const { editing, draft, setDraft, busy, closeEditor, save } = mcp;
+  const { editing, draft, setDraft, busy, closeEditor, save, fixingKeys } = mcp;
+  if (editing && editing !== "new" && fixingKeys) return <McpFixKeysEditor mcp={mcp} />;
   return (
     <>
         {editing && (
@@ -314,6 +321,78 @@ function McpReservedRow({ server, disabled, renaming, onRename, onRemove }: {
           {t("mcp.reserved.remove")}
         </button>
       </form>
+    </div>
+  );
+}
+
+/** Fix the keys: only the values of the headers the server refused, typed
+ * again like passwords and never shown back. A server sent no header gets
+ * the header lines, to add the key it asks for. Save tests again. */
+function McpFixKeysEditor({ mcp }: { mcp: McpServers }) {
+  const { editing, draft, setDraft, busy, closeEditor, save, servers, keyValues, setKeyValues } = mcp;
+  const server = servers?.find((entry) => entry.name === editing);
+  const names = server && isRemoteMcpListing(server) ? server.headerKeys : [];
+  return (
+    <div data-mcp-editor="fix-keys" className="mt-4 rounded-2xl border border-hairline/60 bg-card p-4 sm:p-5">
+      <div className="text-[14px] font-medium text-ink">{t("mcp.fixKeys.title", { name: editing ?? "" })}</div>
+      <p className="mt-1.5 text-[12px] leading-relaxed text-ink-secondary">{t("mcp.fixKeys.hint")}</p>
+      <div className="mt-4 space-y-3">
+        {names.length ? names.map((name) => (
+          <label key={name} className="block">
+            <span className="block font-mono text-[12px] font-medium text-ink-secondary">{name}</span>
+            <input
+              type="password"
+              aria-label={name}
+              autoComplete="new-password"
+              spellCheck={false}
+              autoFocus={name === names[0]}
+              value={keyValues[name] ?? ""}
+              placeholder={t("mcp.fixKeys.placeholder")}
+              onChange={(event) => setKeyValues((current) => ({ ...current, [name]: event.target.value }))}
+              className="mt-1.5 w-full rounded-lg border border-hairline/60 bg-raised px-3 py-2.5 font-mono text-[12px] text-ink outline-none focus:border-accent"
+            />
+          </label>
+        )) : (
+          <label className="block">
+            <span className="text-[12px] font-medium text-ink-secondary">{t("mcp.field.headers")}</span>
+            <textarea
+              autoFocus
+              value={draft.headers}
+              onChange={(event) => setDraft((current) => ({ ...current, headers: event.target.value }))}
+              placeholder="Authorization: Bearer …"
+              rows={3}
+              className="mt-1.5 w-full resize-y rounded-lg border border-hairline/60 bg-raised px-3 py-2.5 font-mono text-[12px] text-ink outline-none focus:border-accent"
+            />
+            <span className="mt-1.5 block text-[11px] text-ink-secondary">{t("mcp.headersHint")}</span>
+          </label>
+        )}
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <button type="button" onClick={closeEditor} className="rounded-lg px-3 py-2 text-[12.5px] text-ink-secondary hover:bg-raised" data-mcp-editor-cancel>{t("mcp.cancel")}</button>
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={() => void save()}
+          className="flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-[12.5px] font-medium text-accent-ink disabled:opacity-50"
+        >
+          {busy === "save" && <Loader2 size={13} className="animate-spin" />} {t("mcp.save")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Under a server whose test refused the keys: what to check, by header name
+ * only, and Fix the keys. */
+export function McpKeysRefused({ mcp, server }: { mcp: McpServers; server: McpServerListing }) {
+  const result = mcp.probe[server.name];
+  if (!result || !refusedKeys(server, result) || mcp.editing === server.name) return null;
+  return (
+    <div role="alert" data-mcp-keys-refused className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger">
+      <span className="min-w-0 flex-1">{probeFailureLabel(server, result)}</span>
+      <button type="button" disabled={mcp.busy !== null} onClick={() => mcp.startFixKeys(server)} className="ui-button shrink-0 text-[12px] disabled:opacity-40">
+        {t("mcp.check.fixKeys")}
+      </button>
     </div>
   );
 }

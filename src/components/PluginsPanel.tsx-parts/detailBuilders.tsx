@@ -11,8 +11,10 @@ import {
   isRemoteMcpListing,
   McpAuthLine,
   McpClientForm,
+  McpKeysRefused,
   McpMessages,
   McpServerEditor,
+  refusedKeys,
 } from "../McpServersPanel";
 import { AddAccountButton, SignInButton, type DetailAccount, type DetailTool } from "../plugins/PluginDetailView";
 import { grokConnectorDetail } from "./GrokConnectors";
@@ -153,6 +155,7 @@ export function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccoun
           </form>
         )}
         {remote && server.auth && server.auth !== "none" && server.auth !== "connected" && <McpAuthLine server={server} />}
+        <McpKeysRefused mcp={mcp} server={server} />
         {mcp.waiting[name] && (
           <div role="status" className="mt-2 flex items-center gap-2 rounded-lg bg-raised/60 px-3 py-2 text-[12px] text-ink-secondary">
             <Loader2 size={13} className="shrink-0 animate-spin" /> {t("mcp.oauth.waiting")}
@@ -178,7 +181,8 @@ export function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccoun
     tools: {
       list: toolList,
       loading: mcp.busy === `test:${name}`,
-      error: probe && !probe.ok ? probe.error : undefined,
+      // A refused key is said once, with Fix the keys, in the line above.
+      error: probe && !probe.ok && !refusedKeys(server, probe) ? probe.error : undefined,
       note: t("connectApps.detail.toolsNote"),
       onToggle: (tool, enabled) => {
         const next = new Set(disabled);

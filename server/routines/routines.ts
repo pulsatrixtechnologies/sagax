@@ -1132,6 +1132,7 @@ function cloneRun(run: RoutineRun): RoutineRun {
         ...run.proactive,
         sources: [...run.proactive.sources],
         ...(run.proactive.dryRuns ? { dryRuns: run.proactive.dryRuns.map((entry) => ({ ...entry })) } : {}),
+        ...(run.proactive.watches ? { watches: run.proactive.watches.map((entry) => ({ ...entry })) } : {}),
       },
     } : {}),
   };
@@ -2861,6 +2862,7 @@ export class RoutineManager {
         ...input.proactive,
         sources: [...input.proactive.sources],
         ...(input.proactive.dryRuns ? { dryRuns: input.proactive.dryRuns.map((entry) => ({ ...entry })) } : {}),
+        ...(input.proactive.watches ? { watches: input.proactive.watches.map((entry) => ({ ...entry })) } : {}),
       },
       ...(input.runAs ? { runAs: input.runAs } : {}),
       createdAt: now,

@@ -71,7 +71,7 @@ export function hostComputerHostName(input: string | undefined): string | undefi
 const NOT_SENT = /No remote session is connected|does not have the tunnel/;
 /** ssh exit 255 with no output. The session may have ended, but the command
  * itself may also have exited 255, or the tunnel dropped while it ran: it
- * may have run, so it is never run again unless the session is really gone. */
+ * may have run, so it is never run again. */
 const TRANSPORT_FAILED = /did not answer \(the tunnel is down or the session ended\)/;
 
 /** Idle sessions close after this long without a call. */
@@ -329,12 +329,11 @@ export function createHostComputerRouter(deps: {
   }
 
   /** Run one command on the person's session there, for the bot `botId`.
-   * A reused session that is gone is closed and the command goes once
-   * through a new session, only when it surely did not run: refused before
-   * it was sent, or a transport failure on a session `target` no longer
-   * holds as live. A transport failure on a live session is answered as is:
-   * the command may have run, and the session (maybe running another bot's
-   * command) stays open. */
+   * A reused session that refused the command before sending it (no live
+   * row, no tunnel here) is closed and the command goes once through a new
+   * session. A transport failure (ssh 255) is never run again: the command
+   * may have run. The session is closed then only if `target` sees it dead
+   * or ended; a live one (maybe running another bot's command) stays open. */
   const execOn = async (principalId: string, botId: string, hostId: string, command: string, timeoutMs?: number): Promise<RemoteExecResult | HostExecError> => {
     const run = async (): Promise<{ out: RemoteExecResult | { error: string }; session: HostSession | null }> => {
       const session = await sessionOn(principalId, botId, hostId);
@@ -346,12 +345,15 @@ export function createHostComputerRouter(deps: {
     if (!("error" in first.out) || !first.session) return first.out;
     const session = first.session;
     if (TRANSPORT_FAILED.test(first.out.error)) {
+      // The session was live when the command was sent: dead now means it
+      // died during the command, which may have run. Never run it again; a
+      // dead or ended session is closed so the next call opens a new one.
       const live = deps.sessions.target({ principalId, botId: session.botId, threadId: "", id: session.sessionId });
-      if (live && !expired(live.endAt)) return { error: first.out.error, mayHaveRun: true };
-    } else if (!NOT_SENT.test(first.out.error)) {
-      return first.out;
+      if (!live || expired(live.endAt)) await drop(principalId, hostId, session.sessionId);
+      return { error: first.out.error, mayHaveRun: true };
     }
-    // the session is gone: the command never reached the host
+    if (!NOT_SENT.test(first.out.error)) return first.out;
+    // refused before it was sent: the command never reached the host
     await drop(principalId, hostId, session.sessionId);
     if (!session.reused) return first.out;
     return (await run()).out;

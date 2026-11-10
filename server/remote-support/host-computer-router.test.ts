@@ -389,7 +389,7 @@ describe("hosts shared with the bot, no pick", () => {
 describe("the person's session on a host (#3393)", () => {
   const BOB_PERSON = "bob@example.test";
 
-  function shared(opts: { endAt?: string; failReused?: "ended" | "live" | "no-tunnel" } = {}) {
+  function shared(opts: { endAt?: string; failReused?: "ended" | "expired" | "live" | "no-tunnel" } = {}) {
     const dir = mkdtempSync(path.join(tmpdir(), "host-computer-"));
     dirs.push(dir);
     const store = createHostComputerStore({ dataDir: dir, now: () => NOW });
@@ -413,6 +413,7 @@ describe("the person's session on a host (#3393)", () => {
         // ssh exit 255 with no output: the session ended at the server, or
         // the command itself (or a dropped tunnel mid-run) gave 255
         if (opts.failReused === "ended") rows.get("s1")!.connected = false;
+        if (opts.failReused === "expired") rows.get("s1")!.endAt = new Date(NOW - 1_000).toISOString();
         return { error: "The remote computer did not answer (the tunnel is down or the session ended)." };
       }
       return { host: "FS-01", os: "linux" as const, exitCode: 0, stdout: `${input.botId}\n`, stderr: "", timedOut: false };
@@ -471,16 +472,25 @@ describe("the person's session on a host (#3393)", () => {
     expect(exec.mock.calls.at(-1)![0]).toMatchObject({ id: "s2", botId: "perspicax-core" });
   });
 
-  it("a reused session that ended at the server is replaced and the command runs once there", async () => {
-    const { open, exec, close, run } = shared({ failReused: "ended" });
-    await run(ALICE, "sagax-test");
-    const out = await run(ALICE, "sagax-test");
-    expect(out).not.toHaveProperty("isError");
-    expect(JSON.parse(out.text)).toMatchObject({ where: "FS-01", exitCode: 0 });
-    expect(open).toHaveBeenCalledTimes(2);
-    expect(close).toHaveBeenCalledWith(ALICE, "sagax-test", "s1");
-    expect(exec.mock.calls.map(([input]) => input.id)).toEqual(["s1", "s1", "s2"]);
-  });
+  // The session was live when the command was sent: dead after a 255 means
+  // it died during the command, which may have run. Never run it again; close
+  // the dead session so the next call opens a new one.
+  for (const variant of ["ended", "expired"] as const) {
+    it(`a 255 on a session that ${variant === "ended" ? "closed" : "passed its end time"} during the command runs it once in all, closes the session, and the next call opens a new one`, async () => {
+      const { open, exec, close, run } = shared({ failReused: variant });
+      await run(ALICE, "sagax-test");
+      const out = await run(ALICE, "ember");
+      expect(out).toMatchObject({ isError: true });
+      expect(out.text).toMatch(/^The connection to FS-01 dropped during the command, so it may have run: /);
+      expect(exec.mock.calls.map(([input]) => [input.id, input.command, input.actor])).toEqual([["s1", "whoami", "sagax-test"], ["s1", "whoami", "ember"]]);
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(close).toHaveBeenCalledWith(ALICE, "sagax-test", "s1");
+      const next = await run(ALICE, "architect");
+      expect(JSON.parse(next.text)).toMatchObject({ exitCode: 0 });
+      expect(open).toHaveBeenCalledTimes(2);
+      expect(exec.mock.calls.at(-1)![0]).toMatchObject({ id: "s2", actor: "architect" });
+    });
+  }
 
   it("a reused session with no tunnel here is replaced: the command was never sent", async () => {
     const { open, exec, close, run } = shared({ failReused: "no-tunnel" });

@@ -416,7 +416,7 @@ async function handleBotMessagePost(deps: BotsMessagesRouteDeps, ctx: RouteConte
     recordAchievements, recordMastery, refreshUnsetModelSelections, registry, requirePinnedClientThread,
     resolveReplyTarget, routeThreadId, routableSteers, routines, runningRequestText, runningTurnInstance,
     sendSequencer, soloGoalReceipts, soloGoals, startDuplexCallTurn, startOrQueueDirectMessage, startParallelTask,
-    startTurn, stoppingThreads, stopDirectThreadByPerson, store, threadBusy, usageTriggerFor, voiceCalls,
+    idleThreads, startTurn, stoppingThreads, stopDirectThreadByPerson, store, threadBusy, usageTriggerFor, voiceCalls,
     voiceLatency, widgetPressesInFlight, feedback,
   } = deps;
   let m: RegExpMatchArray | null = null;
@@ -635,8 +635,12 @@ async function handleBotMessagePost(deps: BotsMessagesRouteDeps, ctx: RouteConte
       const stoppedTurnId = liveTurnByThread.get(threadId);
       const message = store.appendMessage(threadId, { role: "user", kind: "text", text, ...(sendKey ? { sendId: sendKey } : {}), sender: messageSender(auth) });
       const run = routines!.activeBotRunForBot(bot.id);
-      if (run?.threadId === threadId) await routines!.cancelRun(run.id);
-      else await stopDirectThreadByPerson(bot.id, threadId);
+      if (run?.threadId === threadId) {
+        // #3300: frees the conversation when the run's setup never returns
+        const free = idleThreads.stopping(bot.id, threadId);
+        await routines!.cancelRun(run.id);
+        free();
+      } else await stopDirectThreadByPerson(bot.id, threadId);
       closeCutToolRows(threadId);
       confirmStop(threadId, stoppedTurnId);
       return json(res, 200, { ok: true, threadId, stopped: true, message });

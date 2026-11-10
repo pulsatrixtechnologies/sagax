@@ -285,6 +285,7 @@ export function buildClaudeInstanceApi(bag: Record<string, any>): ProviderInstan
         return behavior === "allow" ? "allowed-once" : behavior === "answer" ? "answered" : "rejected";
       },
       hasSession: (threadId) => active.has(threadId),
+      enginePid: (threadId) => (active.has(threadId) ? sessions.get(threadId)?.child.pid : undefined),
       releaseWarmSession: (threadId) => {
         const live = sessions.get(threadId);
         // A running turn owns the process. Hangup closes only an idle one,

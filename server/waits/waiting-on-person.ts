@@ -29,6 +29,14 @@ export function settledWaitingChip(name: string, kind: string, behavior: Resolve
     : { name: question ? `${who}'s question was answered` : `${who}'s request was approved`, ok: true };
 }
 
+/** A running turn waited on the person; once they answer it works again. A
+ * conversation resting on a card (busy false: its turn ended, the card stays
+ * open) runs no turn and keeps waiting: flipping it to working would show it
+ * busy with nothing to ever end it. Every waiting-on-you to working flip
+ * goes through this. */
+export const turnWaitedOnPerson = <T extends { activity?: string; busy?: boolean }>(waiting: T | null | undefined): waiting is T =>
+  waiting?.activity === "waiting-on-you" && waiting.busy === true;
+
 /** Why handed-out work has not started: its teammate's free slots are held,
  * and one of them by a card waiting on the person in `title`. Written once
  * and never patched, so it stays true after the card is answered. */

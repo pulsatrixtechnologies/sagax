@@ -2,6 +2,7 @@
 /** handleRequestResolved (#1388). Pure move from server/index.ts bus.subscribe. */
 import { appendDecision } from "../decision-log.ts";
 import { safetySettleRequest, takeSafetyNote } from "../safety/safety-review.ts";
+import { turnWaitedOnPerson } from "../waits/waiting-on-person.ts";
 export function handleRequestResolved(event: any, ctx: any, host: any): void {
   const {
     bot, speaker,
@@ -26,9 +27,9 @@ export function handleRequestResolved(event: any, ctx: any, host: any): void {
       const stillOpen = Boolean(host.agentPendingApproval?.(botId, event.threadId, { except: event.requestId, rootOnly: true })?.open?.length);
       if (stillOpen) {
         // nothing: the remaining card keeps the thread waiting
-      } else if (bot && host.store.taskByThread(bot.id, event.threadId)?.activity === "waiting-on-you") {
+      } else if (bot && turnWaitedOnPerson(host.store.taskByThread(bot.id, event.threadId))) {
         host.store.setTaskActivity(bot.id, event.threadId, "working");
-      } else if (!bot && waiting?.activity === "waiting-on-you") host.store.setActivity(waiting.id, "working");
+      } else if (!bot && turnWaitedOnPerson(waiting)) host.store.setActivity(waiting.id, "working");
       const messageId = event.requestId ? host.askMessageByRequest.get(`${event.threadId}:${event.requestId}`) : null;
       if (messageId) {
         const existing = host.store.messagesFor(event.threadId).find((m) => m.id === messageId);

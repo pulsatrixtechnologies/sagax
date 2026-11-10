@@ -24,6 +24,7 @@ import {
   type CommandResult,
   type RunCommand,
 } from "./remote-session-probe.ts";
+import type { RemoteSessionActionEvent } from "./remote-session-actions-audit.ts";
 
 const ADDRESS = "tcABCDEFGHJKMNPQRSTUVWXYZ234567890abcd";
 const ID = "8f2a0c1d2e3f";
@@ -52,7 +53,7 @@ afterEach(() => {
 
 const ok = (stdout: string): CommandResult => ({ code: 0, stdout, stderr: "" });
 
-function harness(answer: (command: string, argv: string[]) => CommandResult | Promise<CommandResult>, options: { tunnel?: boolean; ssh?: boolean } = {}) {
+function harness(answer: (command: string, argv: string[]) => CommandResult | Promise<CommandResult>, options: { tunnel?: boolean; ssh?: boolean; audit?: RemoteSessionActionEvent[] } = {}) {
   const dataDir = mkdtempSync(path.join(tmpdir(), "sagax-inv-"));
   const home = mkdtempSync(path.join(tmpdir(), "sagax-inv-flow-"));
   roots.push(dataDir, home);
@@ -95,6 +96,7 @@ function harness(answer: (command: string, argv: string[]) => CommandResult | Pr
     home: () => home,
     now: () => clock,
     systemSsh: () => (options.ssh === false ? null : "/usr/bin/ssh"),
+    ...(options.audit ? { actionsAudit: { write: (event: RemoteSessionActionEvent) => { options.audit!.push(event); } } as never } : {}),
   });
   return { service, commands, messages, placeTunnel, tick: (ms: number) => { clock += ms; } };
 }
@@ -259,6 +261,20 @@ describe("commands for the bot", () => {
     expect(await service.exec({ principalId: PERSON, botId: BOT, threadId: "other", id: "8F2-NZU", command: "uptime" })).toMatchObject({ exitCode: 0 });
     expect(await service.exec({ principalId: "person-2", botId: BOT, threadId: THREAD, command: "uptime" })).toEqual({ error: expect.any(String) });
     expect(commands.filter((command) => command === "uptime")).toHaveLength(2);
+  });
+
+  it("audits a command under the bot that asked for it, beside the session's own bot (#3393)", async () => {
+    const audit: RemoteSessionActionEvent[] = [];
+    const { service } = harness((command) => {
+      if (command === OS_PROBE_UNIX) return ok("Darwin");
+      if (command === inventoryCommand("macos")) return ok(MAC_INVENTORY);
+      return ok("done\n");
+    }, { audit });
+    await service.publish(open);
+    await service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "uptime", actor: "bot-ember" });
+    await service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "whoami" });
+    const execs = audit.filter((event) => event.kind === "exec");
+    expect(execs.map((event) => [event.command, event.botId])).toEqual([["uptime", "bot-ember"], ["whoami", BOT]]);
   });
 
   it("runs nothing on a computer whose OS is still not known, and says so", async () => {

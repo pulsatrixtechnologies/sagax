@@ -65,10 +65,14 @@ export function hostComputerHostName(input: string | undefined): string | undefi
   }
 }
 
-/** The answers of server/remote-support/remote-sessions.ts exec when the
- * session itself is gone (ended at the server, tunnel down, row closed):
- * nothing ran, and a new session is the cure. */
-const SESSION_GONE = /No remote session is connected|does not have the tunnel|did not answer \(the tunnel is down or the session ended\)/;
+/** The answers of server/remote-support/remote-sessions.ts exec given
+ * before the command is sent (no live row, no tunnel here): nothing ran, and
+ * a new session is the cure. */
+const NOT_SENT = /No remote session is connected|does not have the tunnel/;
+/** ssh exit 255 with no output. The session may have ended, but the command
+ * itself may also have exited 255, or the tunnel dropped while it ran: it
+ * may have run, so it is never run again unless the session is really gone. */
+const TRANSPORT_FAILED = /did not answer \(the tunnel is down or the session ended\)/;
 
 /** Idle sessions close after this long without a call. */
 export const HOST_SESSION_IDLE_MS = 10 * 60_000;
@@ -95,6 +99,8 @@ export interface HostComputerCallInput {
 /** The person's session on a host: `botId` is the bot that opened it (its
  * row), `reused` when an earlier call opened it. */
 interface HostSession { sessionId: string; botId: string; reused: boolean }
+/** A command that failed; `mayHaveRun` when it may have reached the host. */
+interface HostExecError { error: string; mayHaveRun?: boolean }
 
 export type HostComputerCallResult =
   | { text: string; isError?: boolean }
@@ -102,7 +108,9 @@ export type HostComputerCallResult =
 
 interface SessionDeps {
   target(input: { principalId: string; botId: string; threadId: string; id?: string }): { id: string; os: string; osGuessed?: boolean; headless?: boolean; endAt?: string } | null;
-  exec(input: { principalId: string; botId: string; threadId: string; id?: string; command: string; timeoutMs?: number }): Promise<RemoteExecResult | { error: string }>;
+  /** `botId` owns the session row; `actor` is the bot that asked for the
+   * command (the audit names it). */
+  exec(input: { principalId: string; botId: string; threadId: string; id?: string; command: string; timeoutMs?: number; actor?: string }): Promise<RemoteExecResult | { error: string }>;
   screen(principalId: string, botId: string, id: string): Promise<Buffer | null>;
   close(principalId: string, botId: string, id: string): Promise<unknown>;
   markQuiet(id: string): void;
@@ -320,21 +328,32 @@ export function createHostComputerRouter(deps: {
     return run;
   }
 
-  /** Run one command on the person's session there. A reused session whose
-   * tunnel no longer answers (it ended at the server) is closed and the
-   * command goes once through a new session. */
-  const execOn = async (principalId: string, botId: string, hostId: string, command: string, timeoutMs?: number): Promise<RemoteExecResult | { error: string }> => {
+  /** Run one command on the person's session there, for the bot `botId`.
+   * A reused session that is gone is closed and the command goes once
+   * through a new session, only when it surely did not run: refused before
+   * it was sent, or a transport failure on a session `target` no longer
+   * holds as live. A transport failure on a live session is answered as is:
+   * the command may have run, and the session (maybe running another bot's
+   * command) stays open. */
+  const execOn = async (principalId: string, botId: string, hostId: string, command: string, timeoutMs?: number): Promise<RemoteExecResult | HostExecError> => {
     const run = async (): Promise<{ out: RemoteExecResult | { error: string }; session: HostSession | null }> => {
       const session = await sessionOn(principalId, botId, hostId);
       if ("error" in session) return { out: session, session: null };
-      const out = await deps.sessions.exec({ principalId, botId: session.botId, threadId: "", id: session.sessionId, command, ...(timeoutMs ? { timeoutMs } : {}) });
+      const out = await deps.sessions.exec({ principalId, botId: session.botId, threadId: "", id: session.sessionId, command, actor: botId, ...(timeoutMs ? { timeoutMs } : {}) });
       return { out, session };
     };
     const first = await run();
-    if (!("error" in first.out) || !first.session || !SESSION_GONE.test(first.out.error)) return first.out;
-    // the command did not run: this session is no longer usable
-    await drop(principalId, hostId, first.session.sessionId);
-    if (!first.session.reused) return first.out;
+    if (!("error" in first.out) || !first.session) return first.out;
+    const session = first.session;
+    if (TRANSPORT_FAILED.test(first.out.error)) {
+      const live = deps.sessions.target({ principalId, botId: session.botId, threadId: "", id: session.sessionId });
+      if (live && !expired(live.endAt)) return { error: first.out.error, mayHaveRun: true };
+    } else if (!NOT_SENT.test(first.out.error)) {
+      return first.out;
+    }
+    // the session is gone: the command never reached the host
+    await drop(principalId, hostId, session.sessionId);
+    if (!session.reused) return first.out;
     return (await run()).out;
   };
 
@@ -567,7 +586,12 @@ export function createHostComputerRouter(deps: {
       return { text: `${view.name} asks before any change and the person has not allowed this command. Call host_computer again so Sagax asks them; never work around the card.`, isError: true };
     }
     const out = await execOn(principalId, botId, route.hostId, command, input.timeoutMs);
-    if ("error" in out) return { text: `The command did not run on ${view.name}: ${out.error}`, isError: true };
+    if ("error" in out) {
+      const lead = "mayHaveRun" in out && out.mayHaveRun
+        ? `The connection to ${view.name} dropped during the command, so it may have run: ${out.error} Check its effect before running it again.`
+        : `The command did not run on ${view.name}: ${out.error}`;
+      return { text: lead, isError: true };
+    }
     if (!view.os && route.hostId === hostId) {
       const learned = parseHostOs(out.os);
       if (learned) deps.store.update(principalId, hostId, { os: learned });

@@ -16,6 +16,11 @@
 //                     already carries Sagax's fresh-session note answers normally unless
 //                     FAKE_CODEX_CONTEXT_FULL_AGAIN=1)
 //   A turn/start whose text carries [fake:context-full] behaves like context-full mode.
+//   FAKE_CODEX_CONNECTOR_REPLAY  the folder of the 0.166.0 captures (fixtures/connectors/, issue #3343):
+//                              mcpServerStatus/list answers codex-mcp-server-status.json (the ChatGPT apps
+//                              as one server, codex_apps); mcpServer/tool/call answers the captured result for
+//                              the captured call, a marker result for any other listed tool, and an error result
+//                              for a tool the server does not list. Neither starts a turn or asks the client.
 //   FAKE_CODEX_MISSING_BEARER  the first N launches fail their turn as codex-cli 0.160.1 holding no login does
 //                              (count in FAKE_CODEX_STATE)
 //   FAKE_CODEX_LAUNCH_CRASHES  die at turn/start (before ack) with transient stderr,
@@ -92,6 +97,7 @@
 // Keep this file dependency-free — it runs as a bare `node` subprocess.
 import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 
 const mode = process.env.FAKE_CODEX_MODE ?? "happy";
@@ -1209,6 +1215,33 @@ process.stdin.on("data", (chunk) => {
             const event = JSON.parse(process.env.FAKE_CODEX_REVIEW_AFTER_COMPLETION);
             out({ jsonrpc: "2.0", method: event.method, params: event.params });
           }
+        }
+        break;
+      }
+      case "mcpServerStatus/list":
+      case "mcpServer/tool/call": {
+        dump();
+        const folder = process.env.FAKE_CODEX_CONNECTOR_REPLAY;
+        if (!folder) {
+          out({ jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: `method not found: ${msg.method}` } });
+          break;
+        }
+        const status = JSON.parse(readFileSync(join(folder, "codex-mcp-server-status.json"), "utf8")) as { result: { data: Array<{ name: string; tools: Record<string, unknown> }> } };
+        if (msg.method === "mcpServerStatus/list") {
+          out({ jsonrpc: "2.0", id: msg.id, result: status.result });
+          break;
+        }
+        const captured = JSON.parse(readFileSync(join(folder, "codex-tool-call.json"), "utf8")) as { request: { server: string; tool: string; arguments: unknown }; result: unknown };
+        const server = status.result.data.find((entry) => entry.name === msg.params?.server);
+        const tool = String(msg.params?.tool ?? "");
+        if (!server) {
+          out({ jsonrpc: "2.0", id: msg.id, error: { code: -32602, message: `unknown MCP server: ${msg.params?.server}` } });
+        } else if (!(tool in server.tools)) {
+          out({ jsonrpc: "2.0", id: msg.id, result: { content: [{ type: "text", text: `unknown tool: ${tool}` }], isError: true } });
+        } else if (tool === captured.request.tool && JSON.stringify(msg.params?.arguments ?? {}) === JSON.stringify(captured.request.arguments)) {
+          out({ jsonrpc: "2.0", id: msg.id, result: captured.result });
+        } else {
+          out({ jsonrpc: "2.0", id: msg.id, result: { content: [{ type: "text", text: `FAKE_CODEX_APP ${tool} ${JSON.stringify(msg.params?.arguments ?? {})}` }], isError: false } });
         }
         break;
       }

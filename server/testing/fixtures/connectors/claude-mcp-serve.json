@@ -1,0 +1,46 @@
+{
+  "configured": [
+    "probe"
+  ],
+  "configuredTools": [
+    "echo_read",
+    "permission_check"
+  ],
+  "initialize": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {
+      "tools": {
+        "listChanged": true
+      }
+    },
+    "serverInfo": {
+      "name": "claude/tengu",
+      "version": "2.1.322"
+    }
+  },
+  "toolNames": [
+    "Agent",
+    "Bash",
+    "Read",
+    "Edit",
+    "Write",
+    "NotebookEdit",
+    "WebFetch",
+    "ReportFindings",
+    "WebSearch",
+    "TaskStop",
+    "Skill",
+    "DesignSync",
+    "EnterWorktree",
+    "ExitWorktree",
+    "SendMessage",
+    "ListAgents",
+    "Workflow",
+    "CronCreate",
+    "CronDelete",
+    "CronList",
+    "ScheduleWakeup",
+    "Monitor",
+    "ToolSearch"
+  ]
+}

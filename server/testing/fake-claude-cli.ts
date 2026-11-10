@@ -61,6 +61,13 @@
 //     there as a JSON line and exits 1 with "error: unknown option '--autocompact'" (a CLI that changed under a running app)
 //   FAKE_CLAUDE_REJECT_STDERR  replaces that refusal's message (another unknown option, say)
 //   FAKE_CLAUDE_REJECT_GATE  path: that refusal first writes `<path>.waiting`, then waits until <path> exists
+//   FAKE_CLAUDE_CONNECTOR_REPLAY  a JSONL fixture of a real one-shot call (fixtures/connectors/claude-*.jsonl):
+//     a `-p` launch (prompt on argv or stdin) prints its frames as they are and exits 0
+//   FAKE_CLAUDE_CONNECTOR_REACH  with the replay, the measured reach table (fixtures/connectors/claude-connector-reach.json):
+//     the launch's --setting-sources, --strict-mcp-config and ENABLE_CLAUDEAI_MCP_SERVERS pick the measured case; when it
+//     loads no claude.ai connector, init lists none and the connector call is replaced by the real CLI's "No such tool" text
+//   FAKE_CLAUDE_MCP_SERVE_REPLAY  a fixture (fixtures/connectors/claude-mcp-serve.json): `claude mcp serve` answers
+//     initialize and tools/list with what 2.1.322 served (its own tools only, never a configured server's)
 //   FAKE_CLAUDE_DUMP   path to write {argv, env, cwd, prompt, systemPrompt,
 //                      mcpConfig} as JSON at each turn this process is given
 //                      (the latest turn wins), so the test can assert on argv
@@ -449,6 +456,60 @@ if (process.env.FAKE_CLAUDE_REJECT_AUTOCOMPACT && argv.includes("--autocompact")
 // e.g. "claude.ai Gmail: https://example.invalid/mcp - ✓ Connected".
 if (argv[0] === "mcp" && argv[1] === "list") {
   process.stdout.write(process.env.FAKE_CLAUDE_MCP_LIST ?? "No MCP servers configured.\n", () => process.exit(0));
+  await new Promise(() => {});
+}
+
+// Replays of real captures (issue #3343, docs/verification/connectors-hub-measures.md).
+if (argv[0] === "mcp" && argv[1] === "serve" && process.env.FAKE_CLAUDE_MCP_SERVE_REPLAY) {
+  const served = JSON.parse(readFileSync(process.env.FAKE_CLAUDE_MCP_SERVE_REPLAY, "utf8")) as { initialize: unknown; toolNames: string[] };
+  let pending = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (chunk) => {
+    pending += chunk;
+    let newline: number;
+    while ((newline = pending.indexOf("\n")) >= 0) {
+      const line = pending.slice(0, newline);
+      pending = pending.slice(newline + 1);
+      let message: { id?: unknown; method?: unknown };
+      try { message = JSON.parse(line); } catch { continue; }
+      if (message.id === undefined) continue;
+      if (message.method === "initialize") out({ jsonrpc: "2.0", id: message.id, result: served.initialize });
+      else if (message.method === "tools/list") out({ jsonrpc: "2.0", id: message.id, result: { tools: served.toolNames.map((name) => ({ name, inputSchema: { type: "object" } })) } });
+      else out({ jsonrpc: "2.0", id: message.id, error: { code: -32601, message: "Method not found" } });
+    }
+  });
+  process.stdin.on("end", () => process.exit(0));
+  await new Promise(() => {});
+}
+if (argv.includes("-p") && process.env.FAKE_CLAUDE_CONNECTOR_REPLAY) {
+  const frames = readFileSync(process.env.FAKE_CLAUDE_CONNECTOR_REPLAY, "utf8").split("\n").filter((line) => line.trim())
+    .map((line) => JSON.parse(line) as Record<string, any>);
+  const reachFile = process.env.FAKE_CLAUDE_CONNECTOR_REACH;
+  const loadsClaudeAi = (() => {
+    if (!reachFile) return true;
+    const table = JSON.parse(readFileSync(reachFile, "utf8")) as { cases: Array<{ settingSources: string | null; strictMcpConfig: boolean; claudeAiEnvFalse: boolean; claudeAi: string }> };
+    const sources = argv.includes("--setting-sources") ? argAfter("--setting-sources") ?? "" : null;
+    const strict = argv.includes("--strict-mcp-config");
+    const envFalse = process.env.ENABLE_CLAUDEAI_MCP_SERVERS === "false";
+    const hit = table.cases.find((entry) => entry.settingSources === sources && entry.strictMcpConfig === strict && entry.claudeAiEnvFalse === envFalse)
+      ?? (strict || envFalse ? { claudeAi: "absent" } : null);
+    if (!hit) throw new Error(`no measured case for --setting-sources ${sources} strict ${strict} env ${envFalse}`);
+    return hit.claudeAi === "connected";
+  })();
+  const isConnector = (name: unknown) => typeof name === "string" && name.startsWith("mcp__claude_ai_");
+  const missing = frames.flatMap((frame) => frame.type === "assistant" ? frame.message.content : [])
+    .find((block: Record<string, unknown>) => block.type === "tool_use" && isConnector(block.name))?.name as string | undefined;
+  const lines: unknown[] = [];
+  for (const frame of frames) {
+    if (loadsClaudeAi || !missing) { lines.push(frame); continue; }
+    if (frame.type === "system" && frame.subtype === "init") {
+      lines.push({ ...frame, mcp_servers: (frame.mcp_servers as Array<{ name: string }>).filter((server) => !server.name.startsWith("claude.ai ")) });
+    } else if (frame.type === "result") {
+      lines.push({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: `No such tool available: ${missing}` }] }, parent_tool_use_id: null, session_id: frame.session_id });
+      lines.push({ ...frame, result: `No such tool available: ${missing}`, num_turns: 1, permission_denials: [] });
+    }
+  }
+  process.stdout.write(lines.map((line) => JSON.stringify(line)).join("\n") + "\n", () => process.exit(0));
   await new Promise(() => {});
 }
 

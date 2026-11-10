@@ -1,0 +1,22 @@
+{
+  "note": "thread/start {cwd, ephemeral: true} on the default CODEX_HOME of a ChatGPT sign-in (M6, M7): the thread is ready for mcpServerStatus/list and mcpServer/tool/call with no turn.",
+  "result": {
+    "thread": {
+      "id": "fixture-thread"
+    },
+    "model": "fixture-model",
+    "modelProvider": "openai",
+    "approvalPolicy": "on-request",
+    "approvalsReviewer": "user",
+    "sandbox": {
+      "type": "readOnly",
+      "networkAccess": false
+    },
+    "disabledPluginIds": []
+  },
+  "appList": {
+    "accessible": 8,
+    "listed": 5021,
+    "note": "app/list answered in about 30 s; mcpServerStatus/list in under 100 ms"
+  }
+}

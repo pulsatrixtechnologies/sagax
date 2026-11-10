@@ -1,0 +1,173 @@
+{
+  "cli": "0.166.0",
+  "note": "mcpServerStatus/list {detail: toolsAndAuthOnly} on a thread of a ChatGPT sign-in, no turn (M6). The apps are one server, codex_apps; tools is a map keyed by the tool name, each a full MCP tool with inputSchema, annotations and the connector in _meta. The real server listed 286 tools of 11 connectors.",
+  "result": {
+    "data": [
+      {
+        "name": "codex_apps",
+        "authStatus": "bearerToken",
+        "httpOrigin": "https://example.com",
+        "pluginId": null,
+        "runtimeStatus": null,
+        "serverInfo": {
+          "name": "plugin-runtime",
+          "version": "0.1.0"
+        },
+        "serverCapabilities": null,
+        "resources": [],
+        "resourceTemplates": [],
+        "toolsError": null,
+        "toolListMeta": {
+          "openai/apps": [
+            {
+              "connectorId": "connector_fixture_mail",
+              "serverCapabilities": {}
+            },
+            {
+              "connectorId": "connector_fixture_chat",
+              "serverCapabilities": {}
+            }
+          ]
+        },
+        "tools": {
+          "example_mail.list_categories": {
+            "name": "example_mail.list_categories",
+            "title": "list_categories",
+            "description": "List mailbox categories available for tagging messages.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "title": "list_categories_input"
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false,
+              "openWorldHint": false
+            },
+            "_meta": {
+              "_codex_apps": {
+                "resource_uri": "/connector_fixture_mail/link_fixture/list_categories",
+                "contains_mcp_source": false
+              },
+              "connector_id": "connector_fixture_mail",
+              "connector_name": "Example Mail",
+              "connector_description": "Read and send mail items.",
+              "link_id": "link_fixture"
+            }
+          },
+          "example_mail.list_messages": {
+            "name": "example_mail.list_messages",
+            "title": "list_messages",
+            "description": "Retrieve emails from a folder.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "folder": {
+                  "type": "string",
+                  "title": "Folder"
+                },
+                "top": {
+                  "type": "integer",
+                  "default": 25,
+                  "minimum": 1,
+                  "maximum": 100,
+                  "title": "Top"
+                }
+              },
+              "title": "list_messages_input"
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false,
+              "openWorldHint": false
+            },
+            "_meta": {
+              "_codex_apps": {
+                "resource_uri": "/connector_fixture_mail/link_fixture/list_messages",
+                "contains_mcp_source": false
+              },
+              "connector_id": "connector_fixture_mail",
+              "connector_name": "Example Mail",
+              "connector_description": "Read and send mail items.",
+              "link_id": "link_fixture"
+            }
+          },
+          "example_mail.send_email": {
+            "name": "example_mail.send_email",
+            "title": "send_email",
+            "description": "Send an email as the signed-in user.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "to": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "subject": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "to",
+                "subject",
+                "body"
+              ],
+              "title": "send_email_input"
+            },
+            "annotations": {
+              "readOnlyHint": false,
+              "destructiveHint": false,
+              "openWorldHint": true
+            },
+            "_meta": {
+              "_codex_apps": {
+                "resource_uri": "/connector_fixture_mail/link_fixture/send_email",
+                "contains_mcp_source": false
+              },
+              "connector_id": "connector_fixture_mail",
+              "connector_name": "Example Mail",
+              "connector_description": "Read and send mail items.",
+              "link_id": "link_fixture"
+            }
+          },
+          "example_chat.list_chats": {
+            "name": "example_chat.list_chats",
+            "title": "list_chats",
+            "description": "List chats available to the signed-in user.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "type": "integer",
+                  "default": 25
+                }
+              },
+              "title": "list_chats_input"
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false,
+              "openWorldHint": false
+            },
+            "_meta": {
+              "_codex_apps": {
+                "resource_uri": "/connector_fixture_chat/link_fixture/list_chats",
+                "contains_mcp_source": false
+              },
+              "connector_id": "connector_fixture_chat",
+              "connector_name": "Example Chat",
+              "connector_description": "Read and send chat items.",
+              "link_id": "link_fixture"
+            }
+          }
+        }
+      }
+    ],
+    "nextCursor": null
+  }
+}

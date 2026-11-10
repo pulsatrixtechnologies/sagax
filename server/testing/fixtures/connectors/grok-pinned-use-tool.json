@@ -1,0 +1,242 @@
+{
+  "cli": "1.0.77",
+  "argv": [
+    "--permission-mode",
+    "default",
+    "agent",
+    "--no-leader",
+    "-m",
+    "grok-4.7-build-fast",
+    "stdio"
+  ],
+  "env": {
+    "GROK_MANAGED_MCPS_ENABLED": "true",
+    "GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED": "true"
+  },
+  "tool": "cursor__user-Example-docs-lookup_5fentry___13",
+  "input": {
+    "name": "example"
+  },
+  "prompt": "Call the tool use_tool exactly once with tool \"cursor__user-Example-docs-lookup_5fentry___13\" and this input JSON, then stop:\n{\"name\":\"example\"}",
+  "frames": [
+    {
+      "atMs": 0,
+      "method": "session/update",
+      "params": {
+        "sessionId": "fixture-session",
+        "update": {
+          "sessionUpdate": "tool_call",
+          "toolCallId": "call-fixture-0",
+          "title": "use_tool",
+          "rawInput": {
+            "tool_name": "cursor__user-Example-docs-lookup_5fentry___13",
+            "tool_input": {
+              "name": "example"
+            }
+          },
+          "_meta": {
+            "x.ai/tool": {
+              "version": 1,
+              "name": "use_tool",
+              "kind": "use_tool",
+              "namespace": "grok_build",
+              "label": "Use Tool",
+              "read_only": false
+            }
+          }
+        },
+        "_meta": {
+          "totalTokens": 30331,
+          "requestTrimmedTokens": 0,
+          "eventId": "fixture-event-20",
+          "agentTimestampMs": 0,
+          "promptId": "fixture-prompt",
+          "streamStartMs": 0,
+          "turnStartMs": 0,
+          "updateType": "ToolCall",
+          "updateParams": {
+            "toolCallId": "call-fixture-0",
+            "title": "use_tool",
+            "kind": "Other",
+            "status": "Pending"
+          }
+        }
+      }
+    },
+    {
+      "atMs": 166,
+      "method": "_x.ai/session_notification",
+      "params": {
+        "sessionId": "fixture-session",
+        "update": {
+          "sessionUpdate": "pending_interaction",
+          "tool_call_id": "call-fixture-0",
+          "kind": "permission"
+        }
+      }
+    },
+    {
+      "atMs": 167,
+      "method": "session/update",
+      "params": {
+        "sessionId": "fixture-session",
+        "update": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "call-fixture-0",
+          "kind": "other",
+          "title": "cursor__user-Example-docs-lookup_5fentry___13",
+          "locations": [],
+          "rawInput": {
+            "variant": "UseTool",
+            "tool_name": "cursor__user-Example-docs-lookup_5fentry___13",
+            "tool_input": {
+              "name": "example"
+            }
+          },
+          "_meta": {
+            "x.ai/tool": {
+              "version": 1,
+              "name": "use_tool",
+              "kind": "use_tool",
+              "namespace": "grok_build",
+              "label": "Use Tool",
+              "read_only": false
+            }
+          }
+        },
+        "_meta": {
+          "totalTokens": 30331,
+          "requestTrimmedTokens": 0,
+          "eventId": "fixture-event-22",
+          "agentTimestampMs": 0,
+          "promptId": "fixture-prompt",
+          "streamStartMs": 0,
+          "turnStartMs": 0,
+          "updateType": "ToolCallUpdate",
+          "updateParams": {
+            "toolCallId": "call-fixture-0",
+            "status": null
+          }
+        }
+      }
+    },
+    {
+      "atMs": 167,
+      "method": "session/request_permission",
+      "params": {
+        "sessionId": "fixture-session",
+        "toolCall": {
+          "toolCallId": "call-fixture-0",
+          "kind": "other",
+          "title": "cursor__user-Example-docs-lookup_5fentry___13",
+          "rawInput": {
+            "variant": "UseTool",
+            "tool_name": "cursor__user-Example-docs-lookup_5fentry___13",
+            "tool_input": {
+              "name": "example"
+            }
+          },
+          "_meta": {
+            "x.ai/tool": {
+              "version": 1,
+              "name": "use_tool",
+              "kind": "use_tool",
+              "namespace": "grok_build",
+              "label": "Use Tool",
+              "read_only": false
+            },
+            "x.ai/requestingSessionId": "fixture-session"
+          }
+        },
+        "options": [
+          {
+            "optionId": "always-allow",
+            "name": "always allow",
+            "kind": "allow_always"
+          },
+          {
+            "optionId": "allow-once",
+            "name": "allow once",
+            "kind": "allow_once"
+          },
+          {
+            "optionId": "reject-once",
+            "name": "reject once",
+            "kind": "reject_once"
+          }
+        ]
+      },
+      "answer": {
+        "outcome": {
+          "outcome": "selected",
+          "optionId": "allow-once"
+        }
+      }
+    },
+    {
+      "atMs": 168,
+      "method": "_x.ai/session_notification",
+      "params": {
+        "sessionId": "fixture-session",
+        "update": {
+          "sessionUpdate": "interaction_resolved",
+          "tool_call_id": "call-fixture-0"
+        }
+      }
+    },
+    {
+      "atMs": 2489,
+      "method": "session/update",
+      "params": {
+        "sessionId": "fixture-session",
+        "update": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "call-fixture-0",
+          "status": "failed",
+          "rawOutput": {
+            "type": "MCP",
+            "tool_name": "cursor__user-Example-docs-lookup_5fentry___13",
+            "server_name": "Cursor (user-Example-docs)",
+            "output": {
+              "Error": "Input validation error: Invalid arguments for tool lookup_entry: query: Invalid input: expected string, received undefined"
+            },
+            "is_error": true
+          }
+        },
+        "_meta": {
+          "totalTokens": 30331,
+          "requestTrimmedTokens": 0,
+          "eventId": "fixture-event-23",
+          "agentTimestampMs": 0,
+          "promptId": "fixture-prompt",
+          "streamStartMs": 0,
+          "turnStartMs": 0,
+          "updateType": "ToolCallUpdate",
+          "updateParams": {
+            "toolCallId": "call-fixture-0",
+            "status": "Failed"
+          }
+        }
+      }
+    }
+  ],
+  "cancelAfterResultMs": 0,
+  "promptResult": {
+    "stopReason": "cancelled",
+    "_meta": {
+      "modelId": "grok-4.7-build-fast",
+      "totalTokens": 30331,
+      "inputTokens": 30137,
+      "outputTokens": 187,
+      "cancellationCategory": "MidTurnAbort",
+      "usage": {
+        "modelCalls": 1,
+        "apiDurationMs": 2911
+      }
+    }
+  },
+  "timing": {
+    "promptToResultMs": 5677,
+    "processStartToListSettledMs": null
+  }
+}

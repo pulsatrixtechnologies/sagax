@@ -1,0 +1,131 @@
+{
+  "note": "Shape of _x.ai/mcp/list on grok 1.0.77 with both GROK_MANAGED_* variables true (M4). Tool objects carry name, displayName, description and enabled only: no input schema. The real gateway listed 561 tools on one server.",
+  "sessionMcpResolved": true,
+  "servers": [
+    {
+      "name": "managed_gateway:cursor",
+      "displayName": "Cursor (user-example)",
+      "type": "managedGateway",
+      "source": "managed",
+      "session": {
+        "enabled": true,
+        "status": "ready",
+        "tools": [
+          {
+            "name": "cursor__user-Example-docs-lookup_5fentry___13",
+            "displayName": "Lookup Entry",
+            "description": "Find an entry in a public documentation index by name.",
+            "enabled": true
+          },
+          {
+            "name": "cursor__user-Example-mail-list_5fmessages___21",
+            "displayName": "List Messages",
+            "description": "List the signed-in user's recent messages.",
+            "enabled": true
+          },
+          {
+            "name": "cursor__user-Example-mail-get_5fme___21",
+            "displayName": "Get Me",
+            "description": "Get the signed-in user's profile.",
+            "enabled": true
+          },
+          {
+            "name": "cursor__user-Example-mail-send_5fmessage___21",
+            "displayName": "Send Message",
+            "description": "Send a message as the signed-in user.",
+            "enabled": true
+          },
+          {
+            "name": "cursor__user-Example-calendar-list_5fevents___22",
+            "displayName": "List Events",
+            "description": "List the signed-in user's calendar events.",
+            "enabled": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "managed_gateway:tasks",
+      "displayName": "Automations",
+      "type": "managedGateway",
+      "source": "managed",
+      "session": {
+        "enabled": true,
+        "status": "ready",
+        "tools": [
+          {
+            "name": "tasks__create",
+            "displayName": "Create",
+            "description": "Create an automation.",
+            "enabled": true
+          },
+          {
+            "name": "tasks__update",
+            "displayName": "Update",
+            "description": "Update an automation.",
+            "enabled": true
+          },
+          {
+            "name": "tasks__validate",
+            "displayName": "Validate",
+            "description": "Validate an automation.",
+            "enabled": true
+          },
+          {
+            "name": "tasks__list_trigger_catalog",
+            "displayName": "List Trigger Catalog",
+            "description": "List Trigger Catalog an automation.",
+            "enabled": true
+          },
+          {
+            "name": "tasks__list_trigger_resources",
+            "displayName": "List Trigger Resources",
+            "description": "List Trigger Resources an automation.",
+            "enabled": true
+          },
+          {
+            "name": "tasks__list",
+            "displayName": "List",
+            "description": "List an automation.",
+            "enabled": true
+          },
+          {
+            "name": "tasks__delete",
+            "displayName": "Delete",
+            "description": "Delete an automation.",
+            "enabled": true
+          },
+          {
+            "name": "tasks__pause",
+            "displayName": "Pause",
+            "description": "Pause an automation.",
+            "enabled": true
+          },
+          {
+            "name": "tasks__run_now",
+            "displayName": "Run Now",
+            "description": "Run Now an automation.",
+            "enabled": true
+          },
+          {
+            "name": "tasks__get_results",
+            "displayName": "Get Results",
+            "description": "Get Results an automation.",
+            "enabled": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "example-remote",
+      "type": "http",
+      "source": "user",
+      "url": "https://example.com/mcp",
+      "session": {
+        "enabled": true,
+        "status": "unavailable",
+        "authRequired": true
+      }
+    }
+  ]
+}

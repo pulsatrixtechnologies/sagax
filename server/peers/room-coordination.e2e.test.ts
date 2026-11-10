@@ -544,7 +544,7 @@ it.each([
     .evidence.find((entry: any) => entry.step).response.result.content[0].text;
   expect(refused).toBe(hidden
     ? `The bot with id "${botId}" is no longer available — call list_bots for the ones you can reach`
-    : `No bot with id or name "${botId}" — call list_bots and copy the exact id from the result. ${PEER_ACCESS_HELP}`);
+    : `No bot with id or name "${botId}": call list_bots and copy the exact id from the result. ${PEER_ACCESS_HELP}`);
 }), 45_000);
 
 // The Chief's roster names teammates, so a Chief reaches for the name it can
@@ -566,7 +566,7 @@ it("resolves a unique teammate name in a bot_ids slot, and refuses an ambiguous 
   expect((await f.wait()).status).toBe("settled");
   const refused = f.provider().filter((turn: any) => turn.botId === f.sender.id).at(-1)
     .evidence.find((entry: any) => entry.step).response.result.content[0].text;
-  expect(refused).toBe(`2 reachable teammates are named "${f.target.name}" — call list_bots and use the id of the one you mean`);
+  expect(refused).toBe(`2 reachable teammates are named "${f.target.name}": call list_bots and use the id of the one you mean`);
 }), 60_000);
 
 

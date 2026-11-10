@@ -28,7 +28,7 @@ describe("chiefOfStaffSystemPrompt roster caps", () => {
     const team = Array.from({ length: 60 }, (_, i) => ({ id: `bot${i}`, name: `Bot ${i}` }));
     const prompt = chiefOfStaffSystemPrompt("chief", [{ id: "chief", name: "Atlas" }, ...team], true);
     expect(prompt).toContain("Bot 39");
-    expect(prompt).not.toContain("Bot 40 —");
+    expect(prompt).not.toContain("Bot 40 (");
     expect(prompt).toContain("…and 20 more");
   });
 });
@@ -46,15 +46,15 @@ describe("chiefOfStaffSystemPrompt", () => {
     const prompt = chiefOfStaffSystemPrompt("chief", bots, true);
 
     expect(prompt).toContain("Your home team is the Work section");
-    expect(prompt).toContain("Quill — Writer: Drafts concise copy [id: writer]");
-    expect(prompt).toContain("Patch — Engineer [id: coder]");
+    expect(prompt).toContain("Quill (Writer): Drafts concise copy [id: writer]");
+    expect(prompt).toContain("Patch (Engineer) [id: coder]");
     // availability changes turn to turn; it rides the volatile half instead
     expect(prompt).not.toContain("working right now");
     expect(prompt).not.toContain("(available)");
     expect(prompt).not.toContain("Secret");
     // 2026-11-09: the person's bot in another section is a teammate too
-    expect(prompt).toContain("Scout — Travel planner [id: personal]");
-    expect(prompt).not.toContain("Atlas —");
+    expect(prompt).toContain("Scout (Travel planner) [id: personal]");
+    expect(prompt).not.toContain("Atlas (");
     expect(prompt).toContain("Use coordinate_bots to assign actual teammates concrete work");
     expect(prompt).toContain("keeps you available to the user");
     expect(prompt).toContain("you resume automatically when their results return, success or failure");
@@ -99,9 +99,9 @@ describe("chiefOfStaffSystemPrompt", () => {
         "When the user asks to import a plugin as a team, call import_plugin_team once with its marketplace and plugin names. When the user asks you to assemble or configure a team, use list_team_setup for the exact authorized teams, bot IDs and model catalog, then propose_team_setup once with all named specialists and their profile/model changes. Include new teams explicitly; the plan covers their creation and your access. A new default model moves every thread that follows the bot (main, routines) at its next turn; other bots' execution permissions stay unchanged. Follow the tool result: Full Access, or Approve for me on the person's own bots, may apply the plan immediately; after an applied result, continue already-requested work without another confirmation. Only if review is pending, end your turn: the user's decision automatically resumes you once with a structured result. Report failed or cancelled results honestly. Do not ask for another yes, poll, or repeat the proposal. After successful setup, use the available coordination tools for already requested work. Use create_bot only for a single specialist when no combined setup was requested. For explicitly requested bot deletion, use propose_bot_deletion separately and follow its applied or pending result too. Do not create duplicate or unnecessary bots.",
         "If the requested work clearly needs a specialist your team lacks and the user did not ask for one, you may suggest it with create_bot and suggestion: true. Keep at most one suggestion open in a conversation. If the user chooses Not now, do not suggest another specialist in that conversation unless they ask.",
         "Reachable teammates (your person's bots, whatever their team):",
-        "- Quill — Writer: Drafts concise copy [id: writer]",
-        "- Patch — Engineer [id: coder]",
-        "- Scout — Travel planner [id: personal]",
+        "- Quill (Writer): Drafts concise copy [id: writer]",
+        "- Patch (Engineer) [id: coder]",
+        "- Scout (Travel planner) [id: personal]",
       ].join("\n"),
     );
   });
@@ -115,7 +115,7 @@ describe("chiefOfStaffSystemPrompt", () => {
       true,
     );
 
-    expect(prompt).toContain("Patch — Engineer [id: coder]");
+    expect(prompt).toContain("Patch (Engineer) [id: coder]");
     expect(prompt).not.toContain("Quill");
   });
 });

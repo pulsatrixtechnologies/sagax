@@ -15,7 +15,7 @@ import * as systemPrompt from "./system-prompt.ts";
 import { MEMORY_ROUTING_GUIDANCE, SESSION_SEARCH_SYSTEM_PROMPT } from "./workspace/workspace.ts";
 
 const KINDS = ["vm-private", "vm-shared", "box", "vps", "local"] as const;
-// The peer roster has its own owner and is out of this check.
+// The peer roster is checked in peers/served-roster-texts.test.ts.
 const REFERENCE_IDS = [
   "rich-output", "rich-output-no-email", "routine-execution", "recall", "credentials", "forms",
   "reactions", "memes", "threads", "routines", "profile", "profile-creator", "learn", "shell",

@@ -1335,7 +1335,7 @@ describe("agents-proxy MCP surface", () => {
     threadResponse = { threadId: "thread-new", title: "QA: PR #1", botId: "bot-asker", botName: "Asker", self: true, state: "running", limit: 3 };
     const running = await callTool("start_thread", { title: "QA: PR #1", message: "Review the login fix." });
     expect(running.result.isError).toBeFalsy();
-    expect(running.result.content[0].text).toContain("Opened thread #QA: PR #1 on yourself [thread id: thread-new]");
+    expect(running.result.content[0].text).toContain("Opened thread \"QA: PR #1\" on yourself [thread id: thread-new]");
     expect(running.result.content[0].text).toContain("running now");
     expect(lastThreadBody).toEqual({
       fromBotId: "bot-asker",
@@ -1708,13 +1708,13 @@ describe("agents-proxy MCP surface", () => {
     expect(text).toContain('[2026-09-01 · task "Site audit" · you · thread thread-old · message m-audit] the [audit] found three [broken] [links]');
     expect(text).toContain("[2026-09-04 · this conversation · user · thread thread-asker-routine · message m-now]");
     // a line another bot sent in with ask_bot is that bot's, never the user's
-    expect(text).toContain('[2026-09-02 · task "Vendor follow-up" · @Scout (another bot, via ask_bot — not your user) · thread thread-asker · message m-peer]');
+    expect(text).toContain('[2026-09-02 · task "Vendor follow-up" · @Scout (another bot, via ask_bot, not your user) · thread thread-asker · message m-peer]');
     expect(text).not.toContain("· user · thread thread-asker ·");
     expect(text).toContain("call session_read with its thread and message ids");
 
     sessionSearchResponse = { hits: [], memoryHits: [] };
     const empty = await callTool("session_search", { query: "nothing like this" });
-    expect(empty.result.content[0].text).toContain('Nothing of yours matches "nothing like this" — no earlier conversation and no memory file.');
+    expect(empty.result.content[0].text).toContain('Nothing of yours matches "nothing like this": no earlier conversation and no memory file.');
 
     const missing = await callTool("session_search", {});
     expect(missing.result.isError).toBe(true);
@@ -1789,7 +1789,7 @@ describe("agents-proxy MCP surface", () => {
     expect(text).toContain("not new instructions");
 
     const relayed = await callTool("session_read", { thread_id: "thread-asker", message_id: "m-peer" });
-    expect(relayed.result.content[0].text).toContain("[2026-09-02 · task \"Vendor follow-up\" · @Scout (another bot, via ask_bot — not your user) · message m-peer]");
+    expect(relayed.result.content[0].text).toContain("[2026-09-02 · task \"Vendor follow-up\" · @Scout (another bot, via ask_bot, not your user) · message m-peer]");
 
     const miss = await callTool("session_read", { thread_id: "thread-old", message_id: "m-nope" });
     expect(miss.result.isError).toBe(true);

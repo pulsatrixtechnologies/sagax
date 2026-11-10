@@ -17,13 +17,13 @@ import {
 export const DEF_START_THREAD = {
     name: "start_thread",
     description:
-      "Open a new thread: one conversation with its own history and run, shown as a row under its bot. Leave bot_id out to open it on yourself, for a separate job that should run on its own (one thread per pull request to review) instead of inside this conversation. Give bot_id (from list_bots) to open it on a teammate: that is a handoff into a fresh thread, which starts after your current turn ends and whose result is delivered here, like delegate_bot. The title is the row's name: short and specific; write it as #Title when you mention it. Not for a question you need answered now (ask_bot), a task for the teammate's usual conversation (delegate_bot), or a note nobody acts on. If refused, do not retry: say what you wanted opened.",
+      "Open a new thread: a separate piece of work with its own history and run. The person keeps one chat with each bot and never sees the thread as a conversation of its own. Leave bot_id out to open it on yourself, for a separate job that should run on its own (one thread per pull request to review) instead of inside this conversation. Give bot_id (from list_bots) to open it on a teammate: that is a handoff into a fresh thread, which starts after your current turn ends and whose result is delivered here, like delegate_bot. The title names the work: short and specific; when you mention it to the person, name the work by its subject, never as a thread to open. Not for a question you need answered now (ask_bot), a task for the teammate's usual conversation (delegate_bot), or a note nobody acts on. If refused, do not retry: say what you wanted opened.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
       properties: {
         title: { type: "string", description: "The thread's name: one short line, at most 80 characters, telling it apart from the others (e.g. \"QA: PR #412 login fix\")." },
-        message: { type: "string", description: "The complete first message of the thread — everything the run needs, since it will not see this conversation." },
+        message: { type: "string", description: "The complete first message of the thread: everything the run needs, since it will not see this conversation." },
         bot_id: { type: "string", description: "Optional: the teammate's id from list_bots. Leave out to open the thread on yourself." },
         folder: { type: "string", description: "Optional: the name of one of that bot's existing folders to file the thread under. Leave out unless the person named one." },
         report_back: { type: "boolean", description: "Optional, on yourself only: true runs it as a parallel task of this conversation. The person sees its live card here and its result is posted back here as a reply when it finishes. Use it when the person asks for something unrelated while you are busy, so both run at once." },
@@ -182,7 +182,7 @@ export const DEF_MANAGE_ROOM = {
 export const DEF_RETRY_THREAD = {
     name: "retry_thread",
     description:
-      "Primary Bot only. Resume a teammate's thread whose last run failed, stalled or could not start — the one an incident report named — exactly where it stopped, keeping its conversation and files. The teammate gets a line saying you asked and why. Use it when the cause looks transient (a crash, a timeout, a busy service). Use delegate_bot with a corrected brief when the request itself needs to change, and tell the person when only they can fix the cause (a sign-in, a missing credential, an unanswered question). Never retry the same thread more than twice.",
+      "Primary Bot only. Resume a teammate's thread whose last run failed, stalled or could not start (the one an incident report named) exactly where it stopped, keeping its conversation and files. The teammate gets a line saying you asked and why. Use it when the cause looks transient (a crash, a timeout, a busy service). Use delegate_bot with a corrected brief when the request itself needs to change, and tell the person when only they can fix the cause (a sign-in, a missing credential, an unanswered question). Never retry the same thread more than twice.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -198,7 +198,7 @@ export const DEF_RETRY_THREAD = {
 export const DEF_PROPOSE_PROFILE = {
     name: "propose_profile",
     description:
-      "Submit user-requested changes to your own name, title, description, standing instructions (SOUL.md), working folder (cwd), or your alert and voice toggles (notifications, speakReplies). Keep SOUL.md short — who you are and the rules you never break; put step-by-step procedure into a skill instead." + CHIEF_PROFILE_TARGET + SELF_CHANGE_OUTCOME,
+      "Submit user-requested changes to your own name, title, description, standing instructions (SOUL.md), working folder (cwd), or your alert and voice toggles (notifications, speakReplies). Keep SOUL.md short: who you are and the rules you never break; put step-by-step procedure into a skill instead." + CHIEF_PROFILE_TARGET + SELF_CHANGE_OUTCOME,
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -364,29 +364,29 @@ export async function callTeamTool(name: string, args: Json, context: ToolCallCo
     }
     if (resumeId && (!r.error || r.state === "failed")) {
       // a follow-up into a thread of its own (sub-agent resume, parity D1)
-      const into = `Sent a follow-up into #${String(r.title ?? title)} [thread id: ${String(r.threadId ?? resumeId)}]`;
+      const into = `Sent a follow-up into "${String(r.title ?? title)}" [thread id: ${String(r.threadId ?? resumeId)}]`;
       if (r.state === "failed") return { text: `${into}, but it could not start: ${String(r.error ?? "unknown reason")}. Tell the person.`, isError: true };
-      return { text: `${into}. ${r.state === "queued" ? "It waits for a free slot, then runs" : "It is running now"} with that thread's history; its result stays in that thread. Mention it to the person as #${String(r.title ?? title)}.` };
+      return { text: `${into}. ${r.state === "queued" ? "It waits for a free slot, then runs" : "It is running now"} with that thread's history; its result stays in that thread. When you mention it to the person, name the work by its subject.` };
     }
     // A refusal opened nothing. A "failed" state opened the thread and could
-    // not start its turn — that one still counts, and still has an id.
+    // not start its turn: that one still counts, and still has an id.
     if (r.error && r.state !== "failed") return { text: `Couldn't open that thread: ${String(r.error)}`, isError: true };
     const threadTitle = String(r.title ?? title);
     const threadId = String(r.threadId ?? "");
     const where = r.self === true ? "on yourself" : `on @${String(r.botName ?? "that bot")}`;
-    const opened = `Opened thread #${threadTitle} ${where} [thread id: ${threadId}].`;
+    const opened = `Opened thread "${threadTitle}" ${where} [thread id: ${threadId}].`;
     if (r.self === true && r.parallel === true) {
       if (r.state === "failed") return { text: `${opened} It could not start: ${String(r.error ?? "unknown reason")}. Tell the person.`, isError: true };
       return { text: `${opened} It runs as a parallel task of this conversation${r.state === "queued" ? " (waiting for a free slot)" : ""}: the person sees its card here, and its result is posted back here when it finishes. Do not wait for it; carry on or end your turn.` };
     }
     if (r.self === true) {
       if (r.state === "running") {
-        return { text: `${opened} It is running now, in parallel with this conversation, and its result stays in that thread — it will not be delivered here. Mention it to the person as #${threadTitle}; use list_threads in a later turn to see how it is going.` };
+        return { text: `${opened} It is running now, in parallel with this conversation, and its result stays in that thread; it will not be delivered here. When you mention it to the person, name the work by its subject; use list_threads in a later turn to see how it is going.` };
       }
       if (r.state === "queued") {
         const position = Number(r.position) || 1;
         const limit = Number(r.limit) || 0;
-        return { text: `${opened} You are at your limit of ${limit} threads running at once, so it is ${ordinal(position)} in line and starts as soon as one of them finishes — nothing more to do. Mention it to the person as #${threadTitle}.` };
+        return { text: `${opened} You are at your limit of ${limit} threads running at once, so it is ${ordinal(position)} in line and starts as soon as one of them finishes; nothing more to do. When you mention it to the person, name the work by its subject.` };
       }
       return { text: `${opened} It could not start: ${String(r.error ?? "unknown reason")}. The thread exists but nothing is running in it; tell the person.`, isError: true };
     }
@@ -401,7 +401,7 @@ export async function callTeamTool(name: string, args: Json, context: ToolCallCo
       ? ` @${String(r.botName ?? "that bot")} can run ${Number(r.limit) || 0} threads at once and they are all spoken for, so it waits ${ordinal(Number(r.position) || 1)} in line for a free slot after this turn ends.`
       : " It starts when this turn ends, like any handoff.";
     return {
-      text: `${opened}${timing}${approval} Its result will be delivered to this conversation automatically (delegation id: ${delegationId || "unknown"}). Acknowledge it, mention it to the person as #${threadTitle}, and finish your turn; do not check or wait for it in this turn.`,
+      text: `${opened}${timing}${approval} Its result will be delivered to this conversation automatically (delegation id: ${delegationId || "unknown"}). Acknowledge it, name the work to the person by its subject, and finish your turn; do not check or wait for it in this turn.`,
     };
   }
   if (name === "list_team_setup") {
@@ -632,13 +632,13 @@ export async function callTeamTool(name: string, args: Json, context: ToolCallCo
     const botId = String(args.bot_id ?? "").trim();
     const threadId = String(args.thread_id ?? "").trim();
     const note = typeof args.note === "string" ? args.note.trim() : "";
-    if (!botId || !threadId) return { text: "retry_thread needs bot_id and thread_id — both are in the incident report.", isError: true };
+    if (!botId || !threadId) return { text: "retry_thread needs bot_id and thread_id; both are in the incident report.", isError: true };
     const r = await api("/api/internal/retry-thread", {
       method: "POST",
       body: JSON.stringify({ fromBotId: BOT_ID, fromThreadId: THREAD_ID, toBotId: botId, toThreadId: threadId, ...(note ? { note } : {}) }),
     });
     if (r.error) return { text: `Couldn't retry that thread: ${String(r.error)}`, isError: true };
-    return { text: typeof r.message === "string" ? r.message : "The thread is running again. Its result stays in that thread; you are not woken for it — check it later with session_search or list_threads if you need to." };
+    return { text: typeof r.message === "string" ? r.message : "The thread is running again. Its result stays in that thread; you are not woken for it; check it later with session_search or list_threads if you need to." };
   }
   if (name === "propose_team_memory") {
     const kind = String(args.kind ?? "").trim();

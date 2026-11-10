@@ -192,6 +192,7 @@ case "assistant": {
     if (!session.turn?.stopRequested) emit({ ...base(threadId, currentTurnId()), type: "runtime.error", message: claudeApiErrorMessage(o, text) });
     break;
   }
+  if (session.turn) session.turn.answered = true;
   if (text.trim()) {
     if (session.turn && !o.parent_tool_use_id) session.turn.lastText = text.slice(-2_000);
     // fallback delta for CLIs/paths that never streamed the block

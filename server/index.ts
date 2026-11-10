@@ -7217,6 +7217,7 @@ bindLeafHost({
   get voiceModeDeps() { return voiceModeDeps; },
   get claudeAiInventory() { return claudeAiInventory; },
   get connectorRegistry() { return connectorRegistry; },
+  get connectorHub() { return connectorHub; },
   get claudeAccountForPrincipal() { return claudeAccountForPrincipal; },
   get personClaudeArtifactCall() { return personClaudeArtifactCall; },
   get claudeArtifactSummaries() { return claudeArtifactSummaries; },
@@ -21884,7 +21885,7 @@ function catalogPrice(driverKind: string, model: string): number | undefined {
  * person typed (never the prompt composed around it: page, mail or data
  * context, a quoted reply). SAGAX_CONNECTOR_SWITCH=0 turns it off. */
 /** What a turn is told about mail, calendar, Teams and SharePoint
- * (harness-connectors.ts engineConnectorsPrompt). */
+ * (server/connectors/list-prompt.ts connectorListPrompt, #3351). */
 /** 2026-10-29: the person's other engines and sign-ins a turn may hand a
  * part to (run_with_engine), with the connectors known to be there: the
  * cached claude.ai inventory of their own Claude sign-in, the reach of each

@@ -40,7 +40,7 @@ function claudeAccountForPrincipal(principalId: string, wanted?: string): { cli:
       return { unavailable: "no_engine" as const };
     }
   }
-  return { cli, env, key: `instance:${instanceId}` };
+  return { cli, env, key: `instance:${instanceId}`, instanceId };
 
 }
   return claudeAccountForPrincipal;

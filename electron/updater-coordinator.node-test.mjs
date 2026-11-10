@@ -1179,3 +1179,44 @@ test("feed notes already listing a skipped version keep theirs; a failed read of
   assert.equal(failed.getState().status, "downloading");
   assert.equal(failed.getState().notes, "only the newest");
 });
+
+test("a check that emits an error and rejects with a different one is routed once", async () => {
+  // Quiet: the hourly check lands on idle once, never on an error.
+  const quiet = harness();
+  quiet.updater.checkForUpdates = () => {
+    quiet.updater.emit("error", new Error("offline"));
+    return Promise.reject(new Error("offline"));
+  };
+  await quiet.coordinator.check();
+  assert.deepEqual(quiet.states.map((entry) => entry.status), ["idle"]);
+
+  // The person's own check shows its failure once, not twice.
+  const manual = harness();
+  manual.updater.checkForUpdates = () => {
+    manual.updater.emit("error", new Error("offline"));
+    return Promise.reject("offline");
+  };
+  await manual.coordinator.check(true);
+  assert.equal(errorStates(manual.states).length, 1);
+});
+
+test("a failure only the person can fix stays up when the check then rejects with a different, quiet error", async () => {
+  const h = harness();
+  let checks = 0;
+  h.updater.checkForUpdates = () => {
+    checks += 1;
+    h.updater.emit("error", Object.assign(new Error("operation not permitted, rename"), { code: "EPERM" }));
+    return Promise.reject(new Error("Command failed"));
+  };
+
+  await h.coordinator.check();
+  assert.equal(h.getState().status, "error");
+  assert.match(h.getState().message, /permissions/);
+
+  // The notice keeps the state: the next hourly check neither runs nor hides it.
+  const before = h.states.length;
+  await h.coordinator.check();
+  assert.equal(checks, 1);
+  assert.equal(h.states.length, before);
+  assert.equal(h.getState().status, "error");
+});

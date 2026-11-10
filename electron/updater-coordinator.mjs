@@ -403,18 +403,20 @@ export function createUpdaterCoordinator(
     }
 
     if (manual) actionOwnsState = false;
+    // routeError marks the operation failed when its error event is routed; its
+    // own rejection, whatever value it carries, is then the same failure.
     const operation = { manual, supersededByDownload: Boolean(downloadOperation), failed: false, promise: null };
     checkOperation = operation;
     try {
       operation.promise = Promise.resolve(updater.checkForUpdates())
         .catch((error) => {
-          if (!operation.supersededByDownload) handleRejectedOperation(operation.manual, error);
+          if (!operation.failed && !operation.supersededByDownload) handleRejectedOperation(operation.manual, error);
         })
         .finally(() => {
           if (checkOperation === operation) checkOperation = null;
         });
     } catch (error) {
-      if (!operation.supersededByDownload) handleRejectedOperation(operation.manual, error);
+      if (!operation.failed && !operation.supersededByDownload) handleRejectedOperation(operation.manual, error);
       checkOperation = null;
       operation.promise = Promise.resolve();
     }

@@ -122,6 +122,9 @@ export interface ToolExec {
    * (server/sandbox/sandbox-server-path.ts). Checked before the misuse guard, so the
    * bot reads where its folder is, never the policy refusal. */
   serverPathAnswer?(value: string, kind: "path" | "command"): string | null;
+  /** #3440: a line added to a shell command that failed (a plugin folder
+   * it names whose copy failed, and why), or null. */
+  commandNote?(command: string): string | null;
   /** #2775: a file tool's path with tmp/ in the conversation's own folder
    * (server/sandbox/sandbox-bot-folder.ts conversationTmpPath). */
   conversationPath?(path: string): string;
@@ -564,7 +567,9 @@ export async function callUserSandboxTool(name: string, args: Record<string, unk
       if (refused) return text(refused, true);
       const asked = typeof args.timeout_seconds === "number" ? args.timeout_seconds : 120;
       const timeout = Math.min(MISUSE_MAX_COMMAND_SECONDS, Math.max(1, Number.isFinite(asked) ? asked : 120));
-      return commandOutput(await exec.exec({ argv: ["bash", "-lc", command], timeoutSec: timeout }));
+      const output = commandOutput(await exec.exec({ argv: ["bash", "-lc", command], timeoutSec: timeout }));
+      const note = output.isError ? exec.commandNote?.(command) : null;
+      return note ? { ...output, content: [...output.content, { type: "text", text: note }] } : output;
     }
     if (name === "read_file") {
       const path = validPath(args.path);

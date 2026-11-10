@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** syncPluginFoldersForTurn (#1388). Pure move from server/index.ts. */
+import { pluginCopyFailures, SANDBOX_CAPABILITY_SKILLS_DIR } from "../sandbox/sandbox-plugins.ts";
+
 export type Host = Record<string, any>;
 
 export function createSyncPluginFoldersForTurn(getHost: () => Host): any {
@@ -14,11 +16,17 @@ async function syncPluginFoldersForTurn(principalId: string, botId: string, limi
   const plugins = host.scopedPluginFolders(bot, principalId).filter((plugin) => plugin.scope !== "bot" || host.samePerson(host.effectiveBotOwner(bot), principalId));
   const skills = skillsLibraryEnabled(host.cfg) && host.personalSkills.enabled(principalId).length ? [{ name: "me", dir: host.personalSkills.root(principalId) }] : [];
   if (!plugins.length && !skills.length) return;
+  // #3440: the copy's commands wait in the person's line like the bots' own
+  // (sandbox-exec-queue.ts): the bot's turn waits for this copy, so it must
+  // not wait behind the other bots; `limit` keeps it to two places at once
   const target = { exec: (input) => limit(() => host.userSandbox!.exec(principalId, input, botId)) };
-  try {
-    if (skills.length) await host.syncPluginsToSandbox(skills, target, "/workspace/sagax-capability-skills");
-    const result = await host.syncPluginsToSandbox(plugins, target);
+  const options = { failures: pluginCopyFailures, scope: principalId };
+  const report = (result) => {
     if (result.skipped.length) console.warn(`[plugins] not copied to the server environment: ${result.skipped.map((row) => `${row.name} (${row.reason})`).join(", ")}`);
+  };
+  try {
+    if (skills.length) report(await host.syncPluginsToSandbox(skills, target, SANDBOX_CAPABILITY_SKILLS_DIR, options));
+    report(await host.syncPluginsToSandbox(plugins, target, undefined, options));
   } catch (error) {
     console.warn(`[plugins] server environment not updated: ${error instanceof Error ? error.message : String(error)}`);
   }

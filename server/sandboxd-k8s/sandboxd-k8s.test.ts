@@ -15,7 +15,7 @@ import { createSandboxdHandler } from "../sandboxd.ts";
 import { SandboxdVerifier } from "../sandbox/sandboxd-auth.ts";
 import { kubeconfigFileFromEnv, kubernetesClient, type K8sClient, type K8sResponse } from "./sandboxd-k8s-client.ts";
 import { kubernetesApi, withExecEnv } from "./sandboxd-k8s.ts";
-import { PAUSED_ANNOTATION, kubernetesSandboxConfigFromEnv, sandboxEgress } from "./sandboxd-k8s-spec.ts";
+import { PAUSED_ANNOTATION, execStatusFailure, kubernetesSandboxConfigFromEnv, sandboxEgress } from "./sandboxd-k8s-spec.ts";
 import { FakeDocker } from "../testing/fake-docker.ts";
 import { sandboxdClient } from "../sandbox/user-sandbox-client.ts";
 import { SANDBOX_INSTANCE_LABEL, SANDBOX_LABEL, SANDBOX_USER_LABEL, sandboxContainerSpec, sandboxKeyForPrincipal, sandboxNames, sandboxdConfigFromEnv } from "../sandbox/user-sandbox-spec.ts";
@@ -663,5 +663,96 @@ describe("the cluster API is denied to every sandbox", () => {
     const defaultDeny = objects.get("/apis/networking.k8s.io/v1/namespaces/sandboxes/networkpolicies/sagax-default-deny");
     expect((defaultDeny!.spec as Obj).egress).toBeUndefined();
     expect(sandboxEgress([])).toEqual([{ to: [{ ipBlock: { cidr: "0.0.0.0/0" } }] }]);
+  });
+});
+
+// #3440: under many bots of one person at once, commands into the person's
+// environment answered "exit 1" with no output, or "the provisioner failed":
+// the cluster's own reason (a failure status with no exit code, a stream
+// closed before any status, a refused exec) was dropped on the way.
+describe("an exec the cluster did not complete says why (#3440)", () => {
+  async function wsServer(onConnection: (socket: import("ws").WebSocket) => void): Promise<{ client: K8sClient; close: () => Promise<void> }> {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-k8s-ws-"));
+    const tls = selfSignedCert(dir);
+    const server = createServer(tls);
+    const wss = new WebSocketServer({ server });
+    wss.on("connection", onConnection);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as AddressInfo).port;
+    return {
+      client: kubernetesClient({ server: `https://127.0.0.1:${port}`, ca: tls.cert }),
+      close: async () => { wss.close(); await new Promise<void>((resolve) => server.close(() => resolve())); },
+    };
+  }
+
+  it("reads a failure status with no exit code as the cluster's reason", () => {
+    expect(execStatusFailure('{"status":"Success"}')).toBeNull();
+    expect(execStatusFailure('{"status":"Failure","reason":"NonZeroExitCode","details":{"causes":[{"reason":"ExitCode","message":"2"}]}}')).toBeNull();
+    expect(execStatusFailure('{"status":"Failure","message":"error dialing backend: dial tcp 10.0.0.4:10250: i/o timeout","reason":"InternalError"}')).toBe("error dialing backend: dial tcp 10.0.0.4:10250: i/o timeout");
+    expect(execStatusFailure('{"status":"Failure"}')).toBe("the cluster refused the command without a reason");
+  });
+
+  it("keeps the message of a failure status, and of a stream closed before any status", async () => {
+    const failed = await wsServer((socket) => {
+      socket.send(Buffer.concat([Buffer.from([3]), Buffer.from(JSON.stringify({ status: "Failure", message: "error dialing backend: i/o timeout", reason: "InternalError" }))]));
+      socket.close();
+    });
+    try {
+      const result = await failed.client.exec("sandboxes", "sagax-user-x", ["echo", "ok"]);
+      expect(result.failure).toBe("error dialing backend: i/o timeout");
+    } finally { await failed.close(); }
+
+    const dropped = await wsServer((socket) => { socket.close(1011, "stream reset"); });
+    try {
+      const result = await dropped.client.exec("sandboxes", "sagax-user-x", ["echo", "ok"]);
+      expect(result.exitCode).toBeNull();
+      expect(result.failure).toContain("closed before the command answered (close 1011: stream reset)");
+    } finally { await dropped.close(); }
+
+    const answered = await wsServer((socket) => {
+      socket.send(Buffer.concat([Buffer.from([1]), Buffer.from("ok\n")]));
+      socket.send(Buffer.concat([Buffer.from([3]), Buffer.from(JSON.stringify({ status: "Success" }))]));
+      socket.close();
+    });
+    try {
+      const result = await answered.client.exec("sandboxes", "sagax-user-x", ["echo", "ok"]);
+      expect(result).toMatchObject({ exitCode: 0 });
+      expect(result.failure).toBeUndefined();
+    } finally { await answered.close(); }
+  });
+
+  it("keeps the reason of an exec the API server refused", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-k8s-ws-"));
+    const tls = selfSignedCert(dir);
+    const server = createServer(tls);
+    server.on("upgrade", (_request, socket) => {
+      const body = JSON.stringify({ kind: "Status", status: "Failure", message: "Too many requests, please try again later.", reason: "TooManyRequests", code: 429 });
+      socket.end(`HTTP/1.1 429 Too Many Requests\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const port = (server.address() as AddressInfo).port;
+      const client = kubernetesClient({ server: `https://127.0.0.1:${port}`, ca: tls.cert });
+      await expect(client.exec("sandboxes", "sagax-user-x", ["echo", "ok"])).rejects.toThrow("exec refused (429): Too many requests, please try again later.");
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("the provisioner answers the bot with that reason instead of exit 1 or 'the provisioner failed'", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-k8s-why-"));
+    let answer: () => Promise<Awaited<ReturnType<K8sClient["exec"]>>> = async () => ({ stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), exitCode: 1, failure: "error dialing backend: i/o timeout" });
+    const { service, auditFile } = harness(dir, () => answer());
+    await service.installEgressPolicy();
+    await service.ensure(person);
+    const exec: ToolExec = { exec: (input) => service.exec(person, input), overQuota: async () => false };
+    const first = await callUserSandboxTool("run_command", { command: "echo ok" }, exec);
+    expect(first.isError).toBe(true);
+    expect(JSON.stringify(first.content)).toContain("the server environment did not run the command: error dialing backend: i/o timeout");
+    answer = async () => { throw new Error("exec refused (429): Too many requests"); };
+    const second = await callUserSandboxTool("run_command", { command: "echo ok" }, exec);
+    expect(JSON.stringify(second.content)).toContain("the server environment did not run the command: exec refused (429): Too many requests");
+    await expect(service.exec(person, { argv: ["true"] })).rejects.toMatchObject({ status: 502, code: "exec_failed" });
+    expect(readFileSync(auditFile, "utf8")).toContain("\"reason\":\"not_run\"");
   });
 });

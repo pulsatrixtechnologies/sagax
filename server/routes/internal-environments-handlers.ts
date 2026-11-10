@@ -34,6 +34,7 @@ import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tools
 import { USER_SANDBOX_MCP_NAME } from "../sandbox/user-sandbox-routing.ts";
 import { UserSandboxUnavailable } from "../sandbox/user-sandbox-manager.ts";
 import { handleUserSandboxMcp } from "../sandbox/user-sandbox-tools.ts";
+import { pluginCopyFailures } from "../sandbox/sandbox-plugins.ts";
 import { conversationTmpPath, inBotFolder } from "../sandbox/sandbox-bot-folder.ts";
 import type { SandboxExecInput } from "../sandbox/sandboxd-core.ts";
 import type { InternalCapabilityView, InternalRouteContext } from "./internal-route.ts";
@@ -572,6 +573,8 @@ async function handleSandboxMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
       overQuota: async () => await deps.userSandboxOverQuota(ownerId, capability.botId),
       // #2775: tmp/ of a file tool is this conversation's own folder.
       conversationPath: (value) => conversationTmpPath(value, folder, capability.threadId),
+      // #3440: a failed command into a plugin whose copy failed says why
+      commandNote: (command) => pluginCopyFailures.noteForCommand(ownerId, command),
       commandRefusal: (command) => deps.enginePluginCommandRefusal(command)
         ?? enginePluginCommandRefusal(command)
         ?? deps.misuseTextRefusal(command, ownerId, "shell", { botId: capability.botId, threadId: capability.threadId, tool: "run_command" }),

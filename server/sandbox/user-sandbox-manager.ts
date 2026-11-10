@@ -15,6 +15,7 @@ import type { SandboxdClient, SandboxdInfo } from "./user-sandbox-client.ts";
 import { SandboxdRequestError, validSandboxdUrl } from "./user-sandbox-client.ts";
 import { sandboxKeyForPrincipal } from "./user-sandbox-spec.ts";
 import { UserSandboxUnavailable } from "./user-sandbox-errors.ts";
+import { SandboxExecQueue } from "./sandbox-exec-queue.ts";
 import { provisionerNotReached, provisionerUnreachable, SANDBOX_CUT_WHILE_STARTING_MESSAGE, SANDBOX_STARTING_CODE, SANDBOX_STILL_STARTING_MESSAGE, sandboxStarting, SANDBOX_STARTING_RETRY_DELAY_MS, SANDBOX_STARTING_RETRY_MS, sandboxWakeSettingsFromEnv, type SandboxClusterWaker, type SandboxWakeSettings, type WakeMode } from "./sandbox-k8s-wake.ts";
 import type { SandboxWakeWaitingFor } from "../../shared/sandbox-wake.ts";
 import { reportBackgroundError } from "../background-error.ts";
@@ -95,6 +96,7 @@ export class UserSandboxManager {
    * still open: a second view must not change them under the first. */
   private readonly desktopOpens = new Map<string, Promise<unknown>>();
   private readonly desktopViews = new Map<string, { passwords: { full: string; view: string }; open: number; openedAt: number }>();
+  private readonly execQueue: SandboxExecQueue;
   private info: SandboxdInfo | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   readonly graceMs: number;
@@ -108,6 +110,7 @@ export class UserSandboxManager {
     this.graceMs = options.graceMs ?? DEFAULT_DELETE_GRACE_MS;
     this.now = options.now ?? Date.now;
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => { setTimeout(resolve, ms).unref?.(); }));
+    this.execQueue = new SandboxExecQueue();
     this.load();
   }
 
@@ -452,12 +455,32 @@ export class UserSandboxManager {
     }
   }
 
+  /** #3440: one person's commands wait in line for the environment's
+   * places (sandbox-exec-queue.ts), in the order they came, instead of being
+   * refused past them. */
   async exec(principalId: string, input: SandboxExecInput, botId?: string): Promise<SandboxExecOutput> {
     this.refuseIfOut(principalId);
-    try {
-      return await this.clientFor(principalId, botId, "wake").exec(this.keyFor(principalId), input);
-    } catch (error) {
-      throw asUnavailable(error);
+    const key = this.keyFor(principalId);
+    const timeoutMs = Math.max(1, Math.floor(input.timeoutSec ?? DEFAULT_COMMAND_SECONDS)) * 1000;
+    // the wait and the command together stay within one tool call
+    const deadline = this.now() + Math.max(EXEC_MIN_WAIT_MS, SANDBOX_CALL_BUDGET_MS - timeoutMs);
+    const startedAt = this.now();
+    const busy = (load: { active: number; waiting: number }) => new UserSandboxUnavailable(
+      `The server environment was busy with ${load.active} other commands of this person's bots (${load.waiting} more waiting) for ${Math.round((this.now() - startedAt) / 1000)} s, so this command did not run. Call it again.`,
+      "busy",
+    );
+    for (;;) {
+      const release = await this.execQueue.acquire(key, Math.max(0, deadline - this.now()), busy);
+      try {
+        return await this.clientFor(principalId, botId, "wake").exec(key, input);
+      } catch (error) {
+        // The environment refused it before it ran (its own count of
+        // commands, or another server's): nothing ran, it waits again.
+        if (!refusedBusy(error) || this.now() >= deadline) throw asUnavailable(refusedBusy(error) ? busy(this.execQueue.load(key)) : error);
+      } finally {
+        release();
+      }
+      await this.sleep(EXEC_BUSY_RETRY_MS);
     }
   }
 
@@ -723,6 +746,18 @@ export class UserSandboxManager {
 /** A whole call that waits for the cluster and then for its pod stays under
  * the 10 minute cut an engine puts on one tool call. */
 export const SANDBOX_CALL_BUDGET_MS = 9 * 60_000 + 30_000;
+/** The provisioner's default command time (sandboxd-core DEFAULT_EXEC_TIMEOUT_SEC). */
+const DEFAULT_COMMAND_SECONDS = 120;
+/** A command waits at least this long for a place, however long it runs. */
+const EXEC_MIN_WAIT_MS = 60_000;
+/** After the environment refused a command for being busy, it is sent again this soon. */
+const EXEC_BUSY_RETRY_MS = 250;
+
+/** The provisioner refused a command because its places were taken: nothing ran. */
+function refusedBusy(error: unknown): boolean {
+  return error instanceof SandboxdRequestError && error.status === 429 && error.code === "busy";
+}
+
 /** prewake only for a bot that used the environment this recently. */
 export const PREWAKE_RECENT_USE_MS = 7 * 24 * 3600_000;
 /** How often a use is written to the state file for the same person and bot. */

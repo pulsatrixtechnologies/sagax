@@ -150,6 +150,32 @@ describe("fast-gate.sh", () => {
     expect(out).toMatch(/ok\s+extra-guard/);
   });
 
+  // #3406: adding connectors and call_connector to the catalog left the
+  // pinned tool lists of agents-proxy.test.ts red, as no lot touched it.
+  it("runs agents-proxy.test.ts when a tool of the agents server changes", () => {
+    write(".fast-gate", readFileSync(resolve(__dirname, "..", ".fast-gate"), "utf8"));
+    const touches = (path: string) => {
+      git("checkout", "-q", "--", ".");
+      git("clean", "-qfd", "--", "server", "src");
+      write(path, "export {};\n");
+      rmSync(join(fakeBin, "calls"), { force: true });
+      const { code, out } = gate("--base", "main", "--only", "extra-agents-proxy");
+      expect(code, out).toBe(0);
+      let calls = "";
+      try { calls = readFileSync(join(fakeBin, "calls"), "utf8"); } catch { /* no call */ }
+      return calls.includes("vitest run --reporter=dot server/drivers/agents-proxy.test.ts");
+    };
+    for (const path of [
+      "server/drivers/agents-catalog.ts",
+      "server/drivers/agents-tools/connectors.ts",
+      "server/drivers/agents-call-connectors.ts",
+      "server/drivers/agents-settings-tools.ts",
+      "server/tools/agent-tool-policy.ts",
+    ]) expect(touches(path), path).toBe(true);
+    expect(touches("src/b.ts")).toBe(false);
+    expect(touches("server/drivers/agents-catalog-goldens/x.json")).toBe(false);
+  });
+
   it("has nothing to check on a clean branch", () => {
     const { code, out } = gate("--base", "main");
     expect(code).toBe(0);

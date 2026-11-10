@@ -67,9 +67,19 @@ export function editBotFixture(org: boolean, color?: string | null) {
     if (/\/api\/bots\/[^/]+\/overview/.test(path)) return json(overview);
     // The profile page's General tab (#2126): accounts, email, reach me, Messages.
     if (/\/api\/bots\/[^/]+\/capabilities/.test(path)) {
-      const item = (key: string, form: string, name: string, label: string) => ({ key, form, name, source: { kind: "account", label }, scope: "bot", state: "on", enabled: true, canToggle: true, engine: { mcp: "mounted", nothing: false } });
-      return json({ botId: bot.id, engine: { kind: "claude", label: "Claude" }, items: [item("github", "connector", "GitHub", "Example account"), item("calendar", "mcp", "Calendar", "Example account")] });
+      // #3399: an engine account's connector, this computer's servers (one
+      // still to connect, listed in the Plugins window only), a skill
+      const item = (key: string, form: string, name: string, scope: string, state = "on", extra: Record<string, unknown> = {}) => ({ key, form, name, source: { kind: scope === "account" ? "account" : "installation", label: "Example account" }, scope, state, enabled: state === "on", canToggle: scope === "installation", engine: { mcp: "mounted", nothing: false }, ...extra });
+      return json({ botId: bot.id, engine: { kind: "claude", label: "Claude" }, items: [
+        item("connector:account:github", "connector", "GitHub", "account"),
+        item("mcp:installation:calendar", "mcp", "Calendar", "installation"),
+        item("mcp:installation:mail", "mcp", "Mail", "installation"),
+        item("mcp:installation:github", "mcp", "Github", "installation", "to_connect", { reason: "needs_github", connect: { reason: "github" } }),
+        item("skill:bot:notes", "skill", "Notes", "bot"),
+      ] });
     }
+    // the bot's shared vault (managers only): one login, never its value
+    if (/\/api\/bots\/[^/]+\/credentials\/list$/.test(path)) return json({ items: org ? [{ id: "v1", kind: "login", name: "Supplier portal", domains: ["portal.example.com"], hasPassword: true }] : [] });
     if (/\/api\/bots\/[^/]+\/inbound-mail/.test(path)) return json({ available: true, address: "pepper@example.com", enabled: true });
     if (/\/api\/bots\/[^/]+\/reach-me/.test(path)) return json({ saved: true, settings: { channels: ["push"], hours: { always: true } }, channels: { push: { ready: true, devices: 1 } } });
     // Knowledge tab: a couple of fictional skills so the list is not empty.

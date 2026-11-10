@@ -52,6 +52,12 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 let slackAnswer: unknown = null;
 /** What the server answers for the bot's grants (null: the fixture's own). */
 let grantsAnswer: unknown = null;
+/** What the server answers for the bot's capabilities, servers and vault (null: the fixture's own). */
+let capabilitiesAnswer: unknown = null;
+let serversAnswer: unknown = null;
+let vaultAnswer: unknown = null;
+/** Who the server says the viewer is (null: no viewer, as a solo install). */
+let viewerAnswer: unknown = null;
 
 const { StoreProvider, useStore } = await import("@/state/store");
 const { PersonaEditorModal } = await import("../persona/PersonaEditorModal");
@@ -64,7 +70,7 @@ function Shell() {
   useEffect(() => {
     dispatch({ type: "hydrate", bots: [bot, ...neighbours], groups: [], sections: [], computerControl: {} } as never);
     // a server with spoken replies: the Voice sub-page has its voice rows (#3398: "Notify me" moved to General)
-    dispatch({ type: "configStatus", config: { tts: { configured: false } } } as never);
+    dispatch({ type: "configStatus", config: { tts: { configured: false }, ...(viewerAnswer ? { viewer: viewerAnswer } : {}) } } as never);
     dispatch({ type: "routinesHydrated", routines, runs: [] } as never);
     dispatch({ type: "instances", instances: [{ instanceId: "claude", driverKind: "grokAgent", displayName: "Grok", snapshot: { status: "ready" }, capabilities: { browserMcp: true, computerMcp: true }, models: { default: "sonnet", options: [{ id: "sonnet", label: "Sonnet" }] } }] } as never);
     dispatch({ type: "select", id: bot.id } as never);
@@ -84,6 +90,9 @@ beforeAll(async () => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, "http://localhost/");
     if (slackAnswer && url.pathname.endsWith("/slack-management")) return Promise.resolve(json(slackAnswer));
     if (grantsAnswer && url.pathname.endsWith("/grants")) return Promise.resolve(json(grantsAnswer));
+    if (capabilitiesAnswer && url.pathname.endsWith("/capabilities")) return Promise.resolve(json(capabilitiesAnswer));
+    if (serversAnswer && url.pathname === "/api/mcp/servers") return Promise.resolve(json(serversAnswer));
+    if (vaultAnswer && url.pathname.endsWith("/credentials/list")) return Promise.resolve(json(vaultAnswer));
     return Promise.resolve(fixture.answer(url.pathname) ?? json({ error: "not in this gallery" }, 404));
   });
   if (!("checkVisibility" in Element.prototype)) Object.defineProperty(Element.prototype, "checkVisibility", { configurable: true, value: () => true });
@@ -94,6 +103,10 @@ afterEach(() => {
   host.remove();
   slackAnswer = null;
   grantsAnswer = null;
+  capabilitiesAnswer = null;
+  serversAnswer = null;
+  vaultAnswer = null;
+  viewerAnswer = null;
 });
 
 async function mount(locale: "en" | "fr") {
@@ -463,5 +476,135 @@ describe("bot profile page: General cards in place (#3398)", () => {
     expect(page.getAttribute("data-bot-profile-tab-current")).toBe("general");
     expect(page.getAttribute("data-bot-profile-subpage-current")).toBeNull();
     expect(page.querySelector('[data-settings-group="bot-profile-accounts"]')).not.toBeNull();
+  });
+});
+
+// #3399: the Bot accounts card holds what this bot has, one row each with its
+// control (no second MCP servers card), an empty row with "+ Add" when it has
+// nothing, an Add menu whose items say what they do and that the keyboard
+// walks, and the bot's vault logins (moved from Shared with, owner decision 2026-11-10).
+describe("bot profile page: Bot accounts card (#3399)", () => {
+  const accounts = async () => (await home("general")).querySelector<HTMLElement>('[data-settings-group="bot-profile-accounts"]')!;
+  const rowLabels = (card: HTMLElement) => Array.from(card.querySelectorAll("[data-bot-profile-row] span.truncate.text-ink")).map((node) => node.textContent);
+  const key = async (node: Element, which: string) => {
+    await act(async () => { node.dispatchEvent(new KeyboardEvent("keydown", { key: which, bubbles: true, cancelable: true })); });
+    await settle();
+  };
+
+  it("lists only what the bot has: an app or server still to connect stays in the Plugins window", async () => {
+    await mount("en");
+    const card = await accounts();
+    const labels = rowLabels(card);
+    expect(labels).toContain("Calendar");
+    expect(labels).toContain("Mail");
+    expect(labels, "the server still to connect").not.toContain("Github");
+    expect(card.textContent).not.toContain(t("capabilities.state.toConnect"));
+    expect(labels, "a skill is not an account").not.toContain("Notes");
+  });
+
+  it("one row per server with its switch in the row, and no second card or Manage in Plugins pill", async () => {
+    await mount("en");
+    const panel = (await home("general")).querySelector<HTMLElement>('[data-bot-profile-panel="general"]')!;
+    const card = await accounts();
+    expect(card.querySelector(`[role='switch'][aria-label="${t("botAccess.mcpAllow", { name: "Calendar" })}"]`), "the Calendar switch in its row").not.toBeNull();
+    expect(panel.querySelectorAll(`[role='switch'][aria-label="${t("botAccess.mcpAllow", { name: "Calendar" })}"]`).length, "the server once on the tab").toBe(1);
+    expect(panel.querySelector("[data-manage-in-connect-apps]")).toBeNull();
+    expect(panel.textContent).not.toContain(t("connectors.tab.mcp") + t("botAccess.mcpDescription"));
+    // every two-line row is the same height
+    for (const row of Array.from(card.querySelectorAll<HTMLElement>("[data-bot-profile-row] > div:first-child"))) expect(row.className, row.textContent ?? "").toContain("min-h-[56px]");
+  });
+
+  it("with nothing, one empty row carries the Add pill", async () => {
+    capabilitiesAnswer = { botId: "b1", engine: { kind: "claude", label: "Claude" }, items: [] };
+    serversAnswer = { servers: [] };
+    vaultAnswer = { items: [] };
+    await mount("en");
+    const card = await accounts();
+    const empty = card.querySelector<HTMLElement>("[data-bot-profile-accounts-empty]");
+    expect(empty, "the empty row").not.toBeNull();
+    expect(empty!.textContent).toContain(t("botProfile.accounts.emptyTitle"));
+    expect(empty!.textContent).toContain(t("botProfile.accounts.emptyLine"));
+    expect(empty!.querySelector("[data-bot-profile-add]"), "Add in the row").not.toBeNull();
+    expect(card.querySelectorAll("[data-bot-profile-add]").length, "one Add").toBe(1);
+    expect(card.querySelector('[data-bot-profile-row="engine"]'), "the engine row stays").not.toBeNull();
+  });
+
+  it("the Add menu: a plus, described items, focus on the first, arrows move, Escape closes the menu only", async () => {
+    await mount("en");
+    const add = (await accounts()).querySelector<HTMLElement>("[data-bot-profile-add]")!;
+    expect(add.querySelector("svg.lucide-plus"), "a plus before the word").not.toBeNull();
+    expect(add.querySelector("svg.lucide-chevron-down"), "no chevron").toBeNull();
+    await click(add, "Add");
+    const menu = document.querySelector<HTMLElement>("[role='menu']")!;
+    const items = Array.from(menu.querySelectorAll<HTMLElement>("[role='menuitem']"));
+    expect(items.map((item) => item.getAttribute("data-bot-profile-add-item"))).toEqual(["apps", "mcp", "vault"]);
+    for (const item of items) expect(item.querySelector("[data-bot-profile-add-description]")?.textContent?.trim(), item.textContent ?? "").toBeTruthy();
+    expect(menu.textContent).toContain(t("botProfile.add.appsDescription"));
+    expect(menu.textContent).toContain(t("botProfile.add.mcpDescription"));
+    expect(document.activeElement, "focus on the first item").toBe(items[0]);
+    await key(items[0]!, "ArrowDown");
+    expect(document.activeElement).toBe(items[1]);
+    await key(items[1]!, "End");
+    expect(document.activeElement).toBe(items[2]);
+    await key(items[2]!, "ArrowDown");
+    expect(document.activeElement, "wraps to the first").toBe(items[0]);
+    await key(items[0]!, "ArrowUp");
+    expect(document.activeElement, "wraps to the last").toBe(items[2]);
+    await key(items[2]!, "Home");
+    expect(document.activeElement).toBe(items[0]);
+    await key(items[0]!, "Escape");
+    expect(document.querySelector("[role='menu']"), "the menu closed").toBeNull();
+    expect(host.querySelector("[data-bot-profile-page]"), "the profile stays open").not.toBeNull();
+    expect(document.activeElement, "focus back on Add").toBe(add);
+    // ArrowDown on the pill opens the menu at its first item
+    await key(add, "ArrowDown");
+    expect(document.activeElement?.getAttribute("data-bot-profile-add-item")).toBe("apps");
+  });
+
+  it("the vault logins sit under Bot accounts, added from the Add menu, and leave Shared with", async () => {
+    await mount("en");
+    const card = await accounts();
+    expect(rowLabels(card)).toContain("Supplier portal");
+    expect(card.querySelector("[data-bot-profile-vault-remove]"), "Remove in its row").not.toBeNull();
+    await click(card.querySelector<HTMLElement>("[data-bot-profile-add]"), "Add");
+    await click(document.querySelector<HTMLElement>('[data-bot-profile-add-item="vault"]'), "Vault login");
+    const form = card.querySelector<HTMLElement>('[data-bot-profile-row="vault-new"] [data-team-vault-form]');
+    expect(form, "the login form opens in the card").not.toBeNull();
+    expect(card.textContent).toContain(t("botPanel.teamVault.help", { bot: fixture.bot.name }));
+    expect(document.activeElement?.getAttribute("aria-label")).toBe(t("botPanel.teamVault.name"));
+    const sharing = await column({ page: "sharing" });
+    expect(sharing.querySelector('[data-settings-card="bot.teamVault"]'), "no vault on Shared with").toBeNull();
+  });
+
+  it("a viewer the server would refuse sees each row's status with no switch, account choice or Use all", async () => {
+    // an organization member without the tools permission (mcpServers and
+    // mcpAccounts need bots.tools in shared/permissions.ts)
+    viewerAnswer = { operator: false, principalId: "pr_alex", name: "Alex Example", role: "member", permissions: [] };
+    // a server with two accounts would offer the account choice to a viewer who may set it
+    serversAnswer = { servers: [
+      { name: "mail", enabled: true, auth: "connected" },
+      { name: "calendar", enabled: true, auth: "connected", accounts: [{ id: "default", auth: "connected" }, { id: "work", label: "Work", auth: "connected" }] },
+    ] };
+    await mount("en");
+    const card = await accounts();
+    const labels = rowLabels(card);
+    expect(labels, "the rows stay").toContain("Calendar");
+    expect(card.textContent, "each row says its state").toContain(t("capabilities.state.on"));
+    expect(card.querySelector(`[role='switch'][aria-label="${t("botAccess.mcpAllow", { name: "Calendar" })}"]`), "no server switch").toBeNull();
+    expect(card.querySelector("[data-mcp-account]"), "no account choice").toBeNull();
+    expect(card.textContent, "no Use all").not.toContain(t("botAccess.mcpUseAll"));
+  });
+
+  it("French: the menu items and the empty row say what they do", async () => {
+    capabilitiesAnswer = { botId: "b1", engine: { kind: "claude", label: "Claude" }, items: [] };
+    serversAnswer = { servers: [] };
+    vaultAnswer = { items: [] };
+    await mount("fr");
+    const card = await accounts();
+    expect(card.textContent).toContain("Ce bot n'a aucun compte pour l'instant");
+    await click(card.querySelector<HTMLElement>("[data-bot-profile-add]"), "Ajouter");
+    const menu = document.querySelector<HTMLElement>("[role='menu']")!;
+    expect(menu.textContent).toContain("Connecte une application au nom de ce bot");
+    expect(menu.textContent).toContain("Connexion du coffre");
   });
 });

@@ -11,7 +11,7 @@ import { api, type Bot, type BotSettingsSection, type ConfigStatus } from "@/sta
 import type { BotOverview } from "@/lib/bot-overview-types";
 import type { LocaleKey } from "@/locales";
 import { t } from "@/lib/i18n";
-import { canEditBotField, canSetBotHost, canStepPrimary, showBotVisibility, viewerOwnsBot } from "@/lib/bot-capabilities";
+import { canEditBotField, canStepPrimary, showBotVisibility } from "@/lib/bot-capabilities";
 import { viewerBotsReadOnly } from "@/lib/viewer";
 import { servedPage } from "@/lib/desktop";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
@@ -41,7 +41,7 @@ import { SharingSection } from "./SharingSection";
 import { BotPayerCard } from "./BotPayerSettings";
 import { PaneSection } from "./PaneSection";
 import { SwitchRow } from "../SettingsPrimitives";
-import { TeamBotVaultSection } from "./TeamBotVaultSection";
+import { TeamBotVaultSection, teamVaultOffered } from "./TeamBotVaultSection";
 import { AppearancePane } from "../appearance/AppearancePane";
 import type { PromptPreviewData } from "./PromptPreview";
 
@@ -99,6 +99,7 @@ export function useBotSectionContent(bot: Bot, {
   slackUrl,
   channelsElsewhere = false,
   sharingElsewhere = false,
+  vaultElsewhere = false,
   notifyElsewhere = false,
   routinesSwitchElsewhere = false,
 }: {
@@ -117,6 +118,9 @@ export function useBotSectionContent(bot: Bot, {
    * page's Share popover, JC 2026-11-06: one option in one place): the
    * Sharing section keeps only who pays and the shared vault. */
   sharingElsewhere?: boolean;
+  /** The bot's shared vault is drawn elsewhere (the profile page's Bot
+   * accounts card, owner decision 2026-11-10, #3399): Sharing leaves it out. */
+  vaultElsewhere?: boolean;
   /** "Notify me" is drawn elsewhere (the profile page's Settings card,
    * #3398): Voice leaves it out. */
   notifyElsewhere?: boolean;
@@ -354,14 +358,12 @@ export function useBotSectionContent(bot: Bot, {
       case "visibility":
         return <VisibilitySection bot={bot} />;
       case "sharing":
-        // The shared vault of a team bot sits with its sharing, in Edit bot,
-        // not in the bot's side panel (JC 2026-11-03).
+        // The shared vault of a team bot sits with its sharing in Edit bot;
+        // on the profile page it is under Bot accounts (owner decision 2026-11-10, #3399).
         return (
           <>
             {!sharingElsewhere && <SharingSection bot={bot} />}
-            {Boolean(bot.grants?.length || bot.directGrants?.length) && (viewerOwnsBot(config, bot) || canSetBotHost(config, bot)) && (
-              <TeamBotVaultSection botId={bot.id} botName={bot.name} />
-            )}
+            {!vaultElsewhere && teamVaultOffered(config, bot) && <TeamBotVaultSection botId={bot.id} botName={bot.name} />}
           </>
         );
       case "history":

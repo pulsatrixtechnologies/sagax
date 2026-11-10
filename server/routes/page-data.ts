@@ -3,7 +3,12 @@
 // own session; the page itself never reaches them (no network in its frame).
 //
 //   GET  /api/pages/:id/capabilities?version=n      { version, capabilities, reads: [{ name, label }] }
-//   GET  /api/pages/:id/data/:source?fresh=1&version=n   PageDataAnswer
+//   GET  /api/pages/:id/data/:source?fresh=1&version=n&<params>   PageDataAnswer
+//        <params>: what the page passed to data.read (pageDataParams: string
+//        values, shape checked here, meaning checked by the source; 400
+//        bad_request otherwise, before anything is read). An organization's
+//        Deny answers 403 `denied` with `reason: "org_rule"`; the reader's own
+//        refusal on the Ask first card is told by the wrapper (`declined`).
 //   GET  /api/pages/:id/viewer?version=n             PageViewerInfo
 //   POST /api/pages/:id/data-approvals/:approvalId   PageDataApprovalAnswer -> { ok, answer }
 //   GET    /api/pages/:id/link-approvals?origin=<origin>  PageLinkApprovalState
@@ -37,6 +42,7 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import {
   PAGE_CAP_LIMITS,
   pageCapGranted,
+  pageDataParams,
   type PageCapabilities,
   type PageCapError,
   type PageDataAnswer,
@@ -203,7 +209,9 @@ export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
     const source = deps.sources.get(name);
     if (!pageCapGranted(caps, "data.read", name) || !source || version === undefined) return refuse(403, "not_declared");
     const rule = deps.orgRule?.({ source: name, auth }) ?? "none";
-    if (rule === "deny") return refuse(403, "denied");
+    if (rule === "deny") return refuse(403, "denied", { reason: "org_rule" });
+    const params = pageDataParams([...url.searchParams.entries()]);
+    if (!params) return refuse(400, "bad_request");
     const ask = { person: who.by, pageId: page.id, version, source: name };
     if (rule === "ask" && !deps.approvals.allowed(ask)) {
       const body: PageDataAskFirst = { error: TEXTS.ask_first[lang], code: "ask_first", approvalId: deps.approvals.open(ask), source: name as PageDataSource, version };
@@ -212,7 +220,7 @@ export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
     if (!allowRead(`${page.id}\u0000${who.by.toLowerCase()}`)) return refuse(429, "rate_limited");
     let read: Awaited<ReturnType<typeof source.read>>;
     try {
-      read = await source.read(auth, { params: {}, fresh: url.searchParams.get("fresh") === "1" });
+      read = await source.read(auth, { params, fresh: url.searchParams.get("fresh") === "1", lang });
     } catch (error) {
       if (error instanceof PageSourceError) return refuse(error.status, error.code);
       return refuse(503, "unavailable");

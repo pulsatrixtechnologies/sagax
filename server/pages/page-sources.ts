@@ -29,8 +29,11 @@ export interface PageSource {
   name: PageDataSource;
   /** What the reader's bar says the page reads. */
   label: string;
-  /** Throws PageSourceError for a refusal the reader can act on. */
-  read(auth: RequestAuth, input: { params: Record<string, unknown>; fresh: boolean }): Promise<PageSourceRead>;
+  /** Throws PageSourceError for a refusal the reader can act on. `params`:
+   * what the page passed (string values, shape checked by the route; the
+   * source checks their meaning); `lang`: the reader's language, for the
+   * few labels a source writes. */
+  read(auth: RequestAuth, input: { params: Record<string, unknown>; fresh: boolean; lang?: "fr" | "en" }): Promise<PageSourceRead>;
 }
 
 export class PageSourceError extends Error {

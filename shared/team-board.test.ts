@@ -2,7 +2,7 @@
 // wins, Merged, Blocked, Gate and review, Code, Design, To do.
 import { describe, expect, it } from "vitest";
 
-import { boardSummary, cardStale, cardStatus, placeCard, TEAM_BOARD_MERGED_MS, TEAM_BOARD_NO_MOVEMENT_MS, TEAM_BOARD_NO_REVIEW_MS, type PlaceCardInput, type TeamBoardCard } from "./team-board.ts";
+import { boardSummary, cardStale, cardStatus, checkBaseName, placeCard, TEAM_BOARD_MERGED_MS, TEAM_BOARD_NO_MOVEMENT_MS, TEAM_BOARD_NO_REVIEW_MS, type PlaceCardInput, type TeamBoardCard } from "./team-board.ts";
 
 const NOW = 1_800_000_000_000;
 const base = (over: Partial<PlaceCardInput> = {}): PlaceCardInput => ({ issueOpen: true, touched: false, linkedWork: false, now: NOW, ...over });
@@ -43,16 +43,16 @@ describe("placeCard", () => {
 
   it("blocks on a failed turn with its stored cause", () => {
     expect(placeCard(base({ touched: true, holder: { status: "failed", failure: "The engine stopped: usage limit" } }))).toEqual({
-      column: "blocked", stage: "design", blocked: { source: "turn", reason: "The engine stopped: usage limit" },
+      column: "blocked", stage: "design", blocked: { source: "turn", reason: "The engine stopped: usage limit", code: "turn_failed", params: { detail: "The engine stopped: usage limit" } },
     });
   });
 
   it("blocks on GitHub: changes requested, a failing check, a conflict, in that order", () => {
     const pull = { state: "open" as const, changesRequestedBy: "octo", failingCheck: "test", conflictsWith: "main" };
-    expect(placeCard(base({ linkedWork: true, pull }))?.blocked).toEqual({ source: "review", reason: "Changes requested by octo" });
-    expect(placeCard(base({ linkedWork: true, pull: { ...pull, changesRequestedBy: undefined } }))?.blocked).toEqual({ source: "checks", reason: "Check failed: test" });
+    expect(placeCard(base({ linkedWork: true, pull }))?.blocked).toMatchObject({ source: "review", reason: "Changes requested by octo" });
+    expect(placeCard(base({ linkedWork: true, pull: { ...pull, changesRequestedBy: undefined } }))?.blocked).toMatchObject({ source: "checks", reason: "Check failed: test" });
     expect(placeCard(base({ linkedWork: true, pull: { state: "open", conflictsWith: "main" } }))).toEqual({
-      column: "blocked", stage: "review", blocked: { source: "conflict", reason: "Conflicts with main" },
+      column: "blocked", stage: "review", blocked: { source: "conflict", reason: "Conflicts with main", code: "conflict", params: { base: "main" } },
     });
   });
 
@@ -83,7 +83,7 @@ describe("cardStatus (addendum P1): one status per card, first match wins", () =
     expect(cardStatus({ ...base({ linkedWork: true, pull: { state: "open", review: "approved" }, holder: { status: "finished" } }), column: "review" })).toBe("taken");
   });
 
-  it("says waiting_release for a merge (no release is read yet, lot P2)", () => {
+  it("says waiting_release for a merge no release contains", () => {
     expect(cardStatus({ ...base({ issueOpen: false, linkedWork: true, pull: { state: "merged", mergedAt: NOW } }), column: "merged" })).toBe("waiting_release");
   });
 });
@@ -118,5 +118,32 @@ describe("boardSummary (addendum P1)", () => {
       card({ key: "o/r#5", status: "waiting_release", column: "merged" }),
       card({ key: "o/r#6", status: "free", column: "todo" }),
     ], NOW)).toEqual({ inProgress: 2, waitingYou: 1, blocked: 1, mergedThisWeek: 1, oldestInProgress: { key: "o/r#2", days: 9 } });
+  });
+});
+
+describe("stable codes beside the prose (#3449)", () => {
+  it("gives each Blocked reason a code with its parameters, the prose unchanged", () => {
+    const pull = { state: "open" as const, changesRequestedBy: "octo", failingCheck: "test (ubuntu-latest, 20)", conflictsWith: "main" };
+    expect(placeCard(base({ linkedWork: true, pull }))?.blocked).toEqual({ source: "review", reason: "Changes requested by octo", code: "changes_requested", params: { by: "octo" } });
+    expect(placeCard(base({ linkedWork: true, pull: { ...pull, changesRequestedBy: undefined } }))?.blocked).toEqual({
+      source: "checks", reason: "Check failed: test (ubuntu-latest, 20)", code: "check_failed", params: { name: "test", check: "test (ubuntu-latest, 20)" },
+    });
+    expect(placeCard(base({ linkedWork: true, pull: { state: "open", conflictsWith: "main" } }))?.blocked).toEqual({ source: "conflict", reason: "Conflicts with main", code: "conflict", params: { base: "main" } });
+    expect(placeCard(base({ linkedWork: true, pull: { state: "open", conflictsWith: "" } }))?.blocked).toMatchObject({ code: "conflict", params: {} });
+    expect(placeCard(base({ touched: true, holder: { status: "failed", failure: "usage limit" } }))?.blocked).toEqual({ source: "turn", reason: "usage limit", code: "turn_failed", params: { detail: "usage limit" } });
+    expect(placeCard(base({ touched: true, holder: { status: "blocked" } }))?.blocked).toEqual({ source: "turn", reason: "The last turn failed", code: "turn_blocked", params: {} });
+  });
+
+  it("names a check without its matrix suffix", () => {
+    expect(checkBaseName("test (ubuntu-latest, 20)")).toBe("test");
+    expect(checkBaseName("build / macos (arm64)")).toBe("build / macos");
+    expect(checkBaseName("lint")).toBe("lint");
+    expect(checkBaseName("(odd)")).toBe("(odd)");
+  });
+
+  it("says released for a merge a release contains, waiting_release before the cut", () => {
+    const merged = base({ issueOpen: false, linkedWork: true, pull: { state: "merged", mergedAt: NOW } });
+    expect(cardStatus({ ...merged, column: "merged", released: true })).toBe("released");
+    expect(cardStatus({ ...merged, column: "merged", released: false })).toBe("waiting_release");
   });
 });

@@ -127,6 +127,25 @@ describe("page data: the reader's own data, never another's", () => {
     expect(seen).toEqual(["team-board:person-b"]);
   });
 
+  it("tells an organization's Deny apart from the reader's own refusal (#3449): reason org_rule, code still denied", async () => {
+    const deny = world({ orgRule: () => "deny" });
+    expect((await call(deny.routes, as("person-b"), "/api/pages/page-1/data/team-board")).body).toMatchObject({ code: "denied", reason: "org_rule" });
+  });
+
+  it("hands the source the page's parameters and the reader's language, never the reserved ones (#3449)", async () => {
+    const { routes, read } = world();
+    expect((await call(routes, as("person-b"), "/api/pages/page-1/data/team-board?team=t-1&column=todo&fresh=1&lang=fr&version=1")).status).toBe(200);
+    expect((read.mock.calls[0] as unknown[])[1]).toEqual({ params: { team: "t-1", column: "todo" }, fresh: true, lang: "fr" });
+  });
+
+  it("refuses parameters of an unknown shape before reading (#3449)", async () => {
+    const { routes, read } = world();
+    for (const query of ["team=a&team=b", `team=${"x".repeat(201)}`, "Bad-Key=1", Array.from({ length: 9 }, (_, i) => `k${i}=1`).join("&")]) {
+      expect((await call(routes, as("person-b"), `/api/pages/page-1/data/team-board?${query}`)).body.code).toBe("bad_request");
+    }
+    expect(read).not.toHaveBeenCalled();
+  });
+
   it("asks first through a card the server records: a flag is worth nothing, a bot's act cannot answer", async () => {
     const ask = world({ orgRule: () => "ask" });
     // the reviewer's scenario: a bot, through act, sends approved=1

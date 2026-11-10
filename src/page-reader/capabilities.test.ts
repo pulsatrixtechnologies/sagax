@@ -193,6 +193,27 @@ describe("Ask first", () => {
     expect(result()).toMatchObject({ ok: false, error: "denied" });
   });
 
+  it("tells the page the reader declined (#3449): code denied, reason declined", async () => {
+    const { broker, call, result } = setup({}, asking());
+    const pending = call("data.read", { name: "team-board" });
+    await flush();
+    broker.resolveApproval(broker.getState().approvals[0]!.id, "decline");
+    await pending;
+    expect(result()).toMatchObject({ ok: false, error: "denied", reason: "declined" });
+  });
+
+  it("passes the organization's reason to the page (#3449)", async () => {
+    const { call, result } = setup({}, { ...ROUTES, "/api/pages/page_12345678/data/team-board": new Refusal("Your organization refuses this read.", 403, "denied", { code: "denied", reason: "org_rule" }) });
+    await call("data.read", { name: "team-board" });
+    expect(result()).toMatchObject({ ok: false, error: "denied", reason: "org_rule" });
+  });
+
+  it("forwards the page's filter to the server, nothing else (#3449)", async () => {
+    const { call, calls } = setup({}, ROUTES);
+    await call("data.read", { name: "team-board", params: { fresh: true, team: "t 1", column: "todo", version: "9", lang: "xx", deep: { a: 1 } } });
+    expect(calls.at(-1)).toBe("/api/pages/page_12345678/data/team-board?fresh=1&team=t+1&column=todo&lang=en");
+  });
+
   it("two reads of the same source share one card", async () => {
     const { broker, call } = setup({}, asking());
     const first = call("data.read", { name: "team-board" }, 1);

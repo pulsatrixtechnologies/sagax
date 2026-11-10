@@ -83,6 +83,27 @@ describe("capability handshake (#3413 lot 1b)", () => {
     }
   });
 
+  it("hands the page who refused a denied read (#3449)", async () => {
+    const bridge = runBridge(capabilityBridgeSource(caps));
+    bridge.deliver(bridge.parent, { type: CAP_READY_MESSAGE, v: 1 });
+    const sagax = bridge.win.sagax as { data: { read(name: string, params?: unknown): Promise<unknown> } };
+    const caught = sagax.data.read("team-board", { team: "t1" }).catch((error: { code?: string; reason?: string; message?: string }) => ({ code: error.code, reason: error.reason, message: error.message }));
+    expect(bridge.posted.at(-1)).toMatchObject({ type: CAP_MESSAGE, id: 1, cap: "data.read", args: { name: "team-board", params: { team: "t1" } } });
+    bridge.deliver(bridge.parent, { type: CAP_RESULT_MESSAGE, v: 1, id: 1, ok: false, error: "denied", reason: "declined", message: "You declined this read." });
+    await expect(caught).resolves.toEqual({ code: "denied", reason: "declined", message: "You declined this read." });
+  });
+
+  it("reads a subscription again with its own parameters on a data event (#3449)", () => {
+    const bridge = runBridge(capabilityBridgeSource(caps));
+    bridge.deliver(bridge.parent, { type: CAP_READY_MESSAGE, v: 1 });
+    const sagax = bridge.win.sagax as { data: { subscribe(name: string, fn: (value: unknown) => void, params?: unknown): () => void } };
+    sagax.data.subscribe("team-board", () => {}, { team: "t1" });
+    sagax.data.subscribe("team-board", () => {});
+    bridge.deliver(bridge.parent, { type: "sagax-cap-event", v: 1, cap: "data", name: "team-board" });
+    const reads = bridge.posted.filter((message) => (message as { type?: string }).type === CAP_MESSAGE);
+    expect(reads.map((message) => (message as { args: unknown }).args)).toEqual([{ name: "team-board", params: { team: "t1" } }, { name: "team-board", params: {} }]);
+  });
+
   it("ignores a ready or a result from anyone but its parent", () => {
     const bridge = runBridge(capabilityBridgeSource(caps));
     (bridge.win.sagax as { data: { read(name: string): Promise<unknown> } }).data.read("team-board").catch(() => {});

@@ -708,7 +708,6 @@ posixOnly("connector matrix, provider columns on the real hosts (#3354)", () => 
           identity: "perspicax", restrictedByPolicy: false, driver: instance.driverKind, instanceId: instance.instanceId,
           via: via ?? "subscription", payerPrincipalId: payer, speaker: who, ownerPrincipalId: speaker, localPrincipalId: "", ...(slot ? { slot } : {}),
         }),
-        isRelayPart: () => false,
         withholdHostToolsFor: () => true,
         accounts: (principal) => { read.push(principal); return principal === speaker ? [own] : principal === payer ? [payers] : []; },
       });

@@ -950,8 +950,6 @@ import { createInstalledVoices } from "./tts/installed-voice.ts";
 import { systemVoicesAvailable } from "./tts/system-voices.ts";
 import { ClaudeAiConnectorInventory, connectorPrincipalFor, createHarnessConnectorRoutes, runClaudeCli, type ClaudeAiTurnInput } from "./harness-connectors.ts";
 import { claudeAiConnectorsOwn, createConnectorPlanForTurn } from "./connectors/turn-plan.ts";
-import { connectorSwitchText } from "./connector-switch.ts";
-import { connectorNeed } from "../shared/engine-connectors.ts";
 import { forgetTurnReach,
   registerReachProvider } from "./turns/turn-reach.ts";
 import { setTurnActiveProfileResolver } from "./turns/turn-active-profile.ts";
@@ -1530,7 +1528,6 @@ import { createAskBotAndWait } from "./index-leaves/askBotAndWait.ts";
 import { createWaitForChatRoomMember } from "./index-leaves/waitForChatRoomMember.ts";
 import { createStopCompanyInstances } from "./index-leaves/stopCompanyInstances.ts";
 import { createSpeakerTurnSelection } from "./index-leaves/speakerTurnSelection.ts";
-import { createConnectorSwitchForTurn } from "./index-leaves/connectorSwitchForTurn.ts";
 import { createConfidentialPerspicaxRefusal } from "./index-leaves/confidentialPerspicaxRefusal.ts";
 import { createCloudRoutineReadiness } from "./index-leaves/cloudRoutineReadiness.ts";
 import { createBrowserIntegration } from "./index-leaves/browserIntegration.ts";
@@ -1576,7 +1573,6 @@ import { createWipeConfidentialThread } from "./index-leaves/wipeConfidentialThr
 import { createScheduleFinishUntilRound } from "./index-leaves/scheduleFinishUntilRound.ts";
 import { createOpenMeetingBrowser } from "./index-leaves/openMeetingBrowser.ts";
 import { createGroupGoalCoordinatorTurnForEvent } from "./index-leaves/groupGoalCoordinatorTurnForEvent.ts";
-import { createConnectorsElsewhereFor } from "./index-leaves/connectorsElsewhereFor.ts";
 import { createAddMarketplaceServers } from "./index-leaves/addMarketplaceServers.ts";
 import { createCodeBranchCredentials } from "./index-leaves/codeBranchCredentials.ts";
 import { createBotReaction } from "./index-leaves/botReaction.ts";
@@ -1652,7 +1648,6 @@ import { createPrewarmNamedTeammates } from "./index-leaves/prewarmNamedTeammate
 import { createImportPackageFor } from "./index-leaves/importPackageFor.ts";
 import { createFailQueuedMessage } from "./index-leaves/failQueuedMessage.ts";
 import { createEnsureClaudeArtifactCommentsRoutine } from "./index-leaves/ensureClaudeArtifactCommentsRoutine.ts";
-import { createEngineReachFor } from "./index-leaves/engineReachFor.ts";
 import { createDiskSaverTarget } from "./index-leaves/diskSaverTarget.ts";
 import { createSurfacePeerNotice } from "./index-leaves/surfacePeerNotice.ts";
 import { createSingleBotPackage } from "./index-leaves/singleBotPackage.ts";
@@ -2722,7 +2717,6 @@ bindLeafHost({
   get claudeAiConnectorRows() { return claudeAiConnectorRows; },
   get isRelayPart() { return isRelayPart; },
   get connectorPlanForTurn() { return connectorPlanForTurn; },
-  get catalogPrice() { return catalogPrice; },
   get perspicaxKeysUrl() { return perspicaxKeysUrl; },
   get refusalPayerOf() { return refusalPayerOf; },
   get refusedModelsFor() { return refusedModelsFor; },
@@ -3506,9 +3500,7 @@ bindLeafHost({
   get personAboutMe() { return personAboutMe; },
   get configureContentEncryption() { return configureContentEncryption; },
   get configuredKeyterms() { return configuredKeyterms; },
-  get connectorNeed() { return connectorNeed; },
   get connectorPrincipalFor() { return connectorPrincipalFor; },
-  get connectorSwitchText() { return connectorSwitchText; },
   get containerComputerAction() { return containerComputerAction; },
   get containerComputerExists() { return containerComputerExists; },
   get containerComputerFrame() { return containerComputerFrame; },
@@ -3757,9 +3749,7 @@ bindLeafHost({
   get createConnectorSetupRoutes() { return createConnectorSetupRoutes; },
   get createConnectorSetupStore() { return createConnectorSetupStore; },
   get createConnectorStatusRoutes() { return createConnectorStatusRoutes; },
-  get createConnectorSwitchForTurn() { return createConnectorSwitchForTurn; },
   get createConnectorThread() { return createConnectorThread; },
-  get createConnectorsElsewhereFor() { return createConnectorsElsewhereFor; },
   get createConsoleBotCapabilities() { return createConsoleBotCapabilities; },
   get createContinueComputerSelection() { return createContinueComputerSelection; },
   get createControlIntegration() { return createControlIntegration; },
@@ -3844,7 +3834,6 @@ bindLeafHost({
   get createEngineHomes() { return createEngineHomes; },
   get createEngineInstalled() { return createEngineInstalled; },
   get createEngineMcpServers() { return createEngineMcpServers; },
-  get createEngineReachFor() { return createEngineReachFor; },
   get createEnsureCalendarCallRoom() { return createEnsureCalendarCallRoom; },
   get createEnsureClaudeArtifactCommentsRoutine() { return createEnsureClaudeArtifactCommentsRoutine; },
   get createEnsureViewerThread() { return createEnsureViewerThread; },
@@ -6944,10 +6933,7 @@ bindLeafHost({
   get turnReachPrompt() { return turnReachPrompt; },
   get turnConnectorsFor() { return turnConnectorsFor; },
   get accountConnectorInput() { return accountConnectorInput; },
-  get engineReachFor() { return engineReachFor; },
-  get connectorSwitchForTurn() { return connectorSwitchForTurn; },
   get engineConnectorsPromptFor() { return engineConnectorsPromptFor; },
-  get connectorsElsewhereFor() { return connectorsElsewhereFor; },
   get subscriptionExpiredCard() { return subscriptionExpiredCard; },
   get signInRefusalHeld() { return signInRefusalHeld; },
   get signInRefusalResent() { return signInRefusalResent; },
@@ -8021,14 +8007,10 @@ const accountConnectorInput = createAccountConnectorInput(getLeafHost);
  * every reader (server/connectors/turn-plan.ts). */
 const connectorPlanForTurn = createConnectorPlanForTurn<BotRecord, any>({
   accountConnectorInput: (bot, instance, speaker, via, slot) => accountConnectorInput(bot, instance, speaker, via, slot),
-  isRelayPart: (threadId) => isRelayPart(threadId),
   withholdHostToolsFor: (instance) => withholdHostToolsFor(instance),
   accounts: (principal) => connectorRegistry.accounts(principal),
 });
-const engineReachFor = createEngineReachFor(getLeafHost);
-const connectorSwitchForTurn = createConnectorSwitchForTurn(getLeafHost);
 const engineConnectorsPromptFor = createEngineConnectorsPromptFor(getLeafHost);
-const connectorsElsewhereFor = createConnectorsElsewhereFor(getLeafHost);
 const subscriptionExpiredCard = createSubscriptionExpiredCard(getLeafHost);
 const holdSignInRefusal = createHoldSignInRefusal(getLeafHost);
 const accessCardFor = createAccessCardFor(getLeafHost);
@@ -21901,28 +21883,6 @@ function claudeAiConnectorRows(account: ClaudeAiTurnInput): Array<{ name: string
 }
 /** The turn's account and whose it is (review of #943, point 5): engine
  * connectors only on the sign-in of the person the turn is for. */
-/** The connectors an engine reaches for the person a turn is for: their
- * own sign-in only (accountConnectorsForTurn). Claude's from the cached
- * claude.ai inventory (connected ones; read again in the background, never
- * waited on), Grok's from the xAI catalog on an organization turn. */
-/** A model's catalogue price (input + output), when known. */
-function catalogPrice(driverKind: string, model: string): number | undefined {
-  const facts = autoCatalogLookup(driverKind, model);
-  return facts?.costInput === undefined && facts?.costOutput === undefined ? undefined : (facts?.costInput ?? 0) + (facts?.costOutput ?? 0);
-}
-/** 2026-10-21 (review of #943): a request that needs a connector the
- * bot's engine lacks runs on another engine this person may use that has
- * it (server/connector-switch.ts), or null. `personText` is only what the
- * person typed (never the prompt composed around it: page, mail or data
- * context, a quoted reply). SAGAX_CONNECTOR_SWITCH=0 turns it off. */
-/** What a turn is told about mail, calendar, Teams and SharePoint
- * (server/connectors/list-prompt.ts connectorListPrompt, #3351). */
-/** 2026-10-29: the person's other engines and sign-ins a turn may hand a
- * part to (run_with_engine), with the connectors known to be there: the
- * cached claude.ai inventory of their own Claude sign-in, the reach of each
- * of their Grok sign-ins (their catalog or the reach probe). Only their own
- * accounts (accountConnectorsForTurn "own"), never someone else's; a reach
- * not known yet is left out rather than guessed. */
 /** Where a person sets their model keys (Perspicax console, slice 4). */
 function perspicaxKeysUrl(): string | undefined {
   // #1137: the console's own address for a person's model keys (anthropic,
@@ -23242,11 +23202,6 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     openerFrom,
     noteRelayParent,
     isRelayPart,
-    relayAddsAccountConnectors: (bot, speaker, selection) => {
-      const instance = registry.instances().find((candidate) => candidate.instanceId === selection.instanceId);
-      if (!instance) return false;
-      return connectorPlanForTurn(bot as unknown as BotRecord, instance, speaker as TurnSpeaker, undefined, undefined, { slot: selection.account === "second" ? "second" : "primary" }).relayAdds;
-    },
     askBotAndWait: (targetBotId, message, depth, fromBotId, fromThreadId, targetThreadId, opts) =>
       askBotAndWait(targetBotId, message, depth, fromBotId, fromThreadId, targetThreadId, opts) as Promise<{ status: string; text?: string }>,
     mcpCallTimeoutMinutes: () => mcpCallTimeoutMinutes(cfg),
@@ -33550,8 +33505,6 @@ const startTurnRunner = createStartTurn({
   computerToolsRefusal,
   confidentialThreadOwner,
   confinedWhy,
-  connectorSwitchForTurn,
-  connectorSwitchText,
   containerComputerFrame,
   containerComputerMcp,
   containerComputerStatus,

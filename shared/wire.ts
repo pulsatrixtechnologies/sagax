@@ -1048,8 +1048,8 @@ export interface WireMessage extends WaitLineField {
      * came back (shared/limit-failover.ts); drawn in the reader's language. */
     limitFailover?: LimitFailoverLine;
     /** 2026-10-21 (review of #943): a request ran on another engine that
-     * has the connector it needed (server/connector-switch.ts); drawn in
-     * the reader's language. */
+     * had the connector it needed; drawn in the reader's language. The
+     * switch is retired (#3356): only lines already stored carry it. */
     connectorSwitch?: { engine: string; connector: string };
     /** #1372: a 1:1 goal's status (server/solo-goal.ts); drawn in the
      * reader's language. */

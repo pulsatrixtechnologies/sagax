@@ -92,9 +92,6 @@ export interface ClaudeAiTurnInput extends ConnectorPrincipalInput {
   /** #2747: the bot opted in to its Grok account's grok.com connectors
    * (bot setting grokAccountConnectors, off by default). */
   grokAccountConnectors?: boolean;
-  /** This turn is a run_with_engine part on the person's own Grok CLI.
-   * Loads the account's managed connectors without the bot opt-in. */
-  engineRelay?: boolean;
 }
 
 const ACCOUNT_CONNECTOR_DRIVERS = new Set(["claudeAgent", "grokAgent", "grok"]);
@@ -121,8 +118,7 @@ export function accountConnectorsForTurn(input: ClaudeAiTurnInput): "own" | "for
 }
 
 // Which of these a turn loads (claude.ai on Claude, the Grok gateway on the
-// Grok CLI) and whether a run_with_engine part adds them is read once per
-// turn by server/connectors/turn-plan.ts, the only file that names those
+// Grok CLI) is read once per turn by server/connectors/turn-plan.ts, the only file that names those
 // rules (server/connectors/one-source.guard.test.ts).
 
 // What a turn is told about the person's connectors is the one list of
@@ -218,9 +214,8 @@ export class ClaudeAiConnectorInventory {
   }
 
   /** The cached inventory, whatever its age, without waiting; a missing
-   * or stale one is read again in the background when `input` is given.
-   * For a turn's connector switch (server/connector-switch.ts), which never
-   * waits on the CLI. */
+   * or stale one is read again in the background when `input` is given,
+   * for a reader that never waits on the CLI. */
   peek(key: string, input?: { cli: string; env: NodeJS.ProcessEnv }): ClaudeAiInventory | undefined {
     const cached = this.cache.get(key);
     if (input && (!cached || this.now() - cached.at >= this.ttlMs)) void this.read(key, input).catch(() => {});

@@ -34,7 +34,6 @@ export async function handleRunWithEngine(call: InternalRoomsCall): Promise<type
     openerFrom,
     noteRelayParent,
     isRelayPart,
-    relayAddsAccountConnectors,
     askBotAndWait,
     externalCompletion,
     activeRoutineRunForThread,
@@ -93,8 +92,6 @@ export async function handleRunWithEngine(call: InternalRoomsCall): Promise<type
       instanceId: current.instanceId,
       model: current.model,
       ...(current.account ? { account: current.account } : {}),
-      // a part on that same sign-in may load connectors this turn does not
-      ...(relayAddsAccountConnectors ? { relayAddsAccountConnectors: relayAddsAccountConnectors(from, speaker, current) } : {}),
     },
   });
   if (!choice.ok) return json(res, 200, { error: choice.error });

@@ -11,7 +11,7 @@ import type { ConnectorTurnPlan } from "../connectors/turn-plan.ts";
 export type Host = Record<string, any>;
 
 export function createEngineConnectorsPromptFor(getHost: () => Host): any {
-function engineConnectorsPromptFor(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string }, speaker: TurnSpeaker,   turn: { level?: ApprovalMode; relay?: boolean; perspicaxConventions?: boolean; threadId?: string; plan?: ConnectorTurnPlan; agents?: boolean; toolScope?: unknown } = {}) {
+function engineConnectorsPromptFor(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string }, speaker: TurnSpeaker,   turn: { level?: ApprovalMode; perspicaxConventions?: boolean; threadId?: string; plan?: ConnectorTurnPlan; agents?: boolean; toolScope?: unknown } = {}) {
   const host = getHost();
   // the turn's connector plan (server/connectors/turn-plan.ts), computed in
   // turn setup; a caller outside a turn gets the same plan computed here
@@ -39,9 +39,8 @@ function engineConnectorsPromptFor(bot: BotRecord, instance: Parameters<typeof w
     // call_connector is an agents tool: offered when the agents server is
     // mounted and the turn's tool selection keeps it (P3)
     callTool: turn.agents !== false && allowsTool(turn.toolScope, { kind: "mcp", server: "agents", name: CALL_CONNECTOR_TOOL }),
-    // what Full and run_with_engine change in the connector rules (2026-10-28)
+    // what Full changes in the connector rules (2026-10-28)
     full: turn.level === "full",
-    relay: turn.relay === true,
   }) + conventions;
 
 }

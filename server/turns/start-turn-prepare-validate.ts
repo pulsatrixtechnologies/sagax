@@ -26,7 +26,6 @@ export function createPrepareValidateStartTurn(
     cloudGuestDriven,
     cloudGuestDrivenHandoff,
     computerSelectionMoves,
-    connectorSwitchForTurn,
     delegationWakeBudget,
     directMachinePlan,
     effectiveBotOwner,
@@ -220,46 +219,15 @@ export function createPrepareValidateStartTurn(
     // Recorded on the task once the turn is admitted (below), never before.
     if (state.autoTurn) state.bot = { ...state.bot, modelSelection: state.autoTurn.pick.selection };
   }
-  // A request that needs a mail, calendar, Teams or SharePoint connector the
-  // bot's engine lacks runs on the engine of this person that has it, for
-  // this request only (server/connector-switch.ts). A card's continuation
-  // stays where the request went. Never for Auto (its own pick), a warm-up,
-  // work handed out or a routine.
-  // Only the person's own new message, never a card's continuation, a
-  // compaction or a computer choice (those stay on the bot's engine), and
-  // only its raw text (review of #943): a fresh or edited send's `text` is
-  // what they typed; a drained queue line passes the composed prompt (page,
-  // mail or data context, a quoted reply) as `text`, so only its stored
-  // message is read.
-  state.connectorSwitch = undefined;
-  const personText = state.opts?.userMessage
-    ? (state.opts.userMessage.role === "user" && state.opts.userMessage.kind === "text" ? state.opts.userMessage.text ?? "" : "")
-    : state.text;
-  if (!state.autoTurn && !state.opts?.warmOnly && !state.opts?.cardContinuation && !state.opts?.computerSelectionContinuation && !state.opts?.compactOnly && personText) {
-    const switchSpeaker = resolveTurnSpeaker({
-      speaker: state.opts?.speaker,
-      sender: state.opts?.sender ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.sender),
-      peerAsk: state.opts?.peerAsk ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.peerAsk),
-      trigger: state.opts?.trigger,
-      automationSource: state.opts?.automationSource
-    });
-    const personsRequest = (switchSpeaker.origin === "person" || switchSpeaker.origin === "operator")
-      && !state.opts?.automationSource && !state.opts?.peerAsk && !state.opts?.userMessage?.peerAsk && !(state.opts?.commsDepth ?? 0) && !state.opts?.coordination;
-    state.connectorSwitch = personsRequest ? connectorSwitchForTurn(state.bot, state.threadId, switchSpeaker, personText) : null;
-    if (state.connectorSwitch) {
-      state.bot = { ...state.bot, modelSelection: { instanceId: state.connectorSwitch.instanceId, model: state.connectorSwitch.model, ...(state.connectorSwitch.effort ? { effort: state.connectorSwitch.effort } : {}), ...(state.connectorSwitch.account ? { account: state.connectorSwitch.account } : {}) } };
-    }
-  }
   // A turn said on a live call, and the warm that prepares its process, run
   // on a fast model (server/voice/voice-turn.ts): the person waits in silence for
-  // the first word. Pinned or Auto alike; a request that needed another
-  // engine's connector keeps it. Heavy work is handed to a parallel task on
+  // the first word. Pinned or Auto alike. Heavy work is handed to a parallel task on
   // the bot's main model by the call turn itself.
   state.voiceTurnPick= null;
   /** The turn runs in the call's own session, from a short view of the
    * conversation (server/voice/voice-turn.ts), not in the conversation's session. */
   state.voiceCallTurn = false;
-  if (!state.connectorSwitch && voiceCalls.active(state.threadId) && !state.opts?.commsDepth && !state.opts?.coordination && !state.opts?.automationSource
+  if (voiceCalls.active(state.threadId) && !state.opts?.commsDepth && !state.opts?.coordination && !state.opts?.automationSource
     && !state.opts?.compactOnly && !state.opts?.unattended && !(state.opts?.peerAsk ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.peerAsk))) {
     const voiceSpeaker = resolveTurnSpeaker({
       speaker: state.opts?.speaker,
@@ -288,7 +256,7 @@ export function createPrepareValidateStartTurn(
   // A wake a usage limit already moved (limitTakeover, above) runs on the
   // model that took it over, never on the fast pick that was refused.
   let wakePick = null;
-  if (!state.voiceTurnPick && !state.autoTurn && !state.connectorSwitch && !state.opts?.warmOnly && proactiveWake && !state.limitTakeover) {
+  if (!state.voiceTurnPick && !state.autoTurn && !state.opts?.warmOnly && proactiveWake && !state.limitTakeover) {
     wakePick = voicePickForTurn(state.bot, state.autoBaseSelection, resolveTurnSpeaker({ speaker: state.opts?.speaker, automationSource: state.opts?.automationSource }), botmailConfined(state.threadId));
     if (wakePick) state.bot = { ...state.bot, modelSelection: wakePick.selection };
   }

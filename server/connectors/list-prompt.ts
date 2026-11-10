@@ -16,8 +16,8 @@
 //   - its direct tools, when this turn also mounts it natively (Claude's
 //     claude.ai connectors on the person's own subscription, the Grok
 //     gateway on the person's own Grok sign-in), under today's rules.
-//   - neither yet (a provider whose host is a later lot): the line says so,
-//     and a direct turn that has run_with_engine is pointed at that account.
+//   - neither yet (a provider with no host): the line says so. No turn is
+//     sent to run_with_engine or to another engine for a connector (#3356).
 //   - a connector that needs a sign-in: open_connector_setup.
 //
 // Only the turn's connector principal's own accounts are listed (never
@@ -52,8 +52,6 @@ export interface ConnectorListPromptInput {
   callTool: boolean;
   /** The turn runs in Full access. */
   full?: boolean;
-  /** run_with_engine is offered on this turn (a person's own direct turn). */
-  relay?: boolean;
 }
 
 const OUTWARD_ACTS = "Sending, forwarding or replying to mail, an automatic reply, posting or replying in Teams, starting a Teams chat, creating, changing or cancelling a calendar event (it mails the attendees), answering an invitation, and any SharePoint or OneDrive write";
@@ -115,7 +113,6 @@ function line(account: ConnectorAccount, entry: ConnectorEntry, input: Connector
   if (mountedNatively(account, native)) ways.push(directTools(account.provider, entry));
   if (input.callTool && input.callable(account.provider)) ways.push(`call_connector with connector ${quote(entry.name)}`);
   if (ways.length) return `${head} Use ${ways.join(", or ")}.`;
-  if (input.relay) return `${head} Not callable from this turn yet: call run_with_engine with engine ${quote(account.label)} and the complete request.`;
   return `${head} Not callable from this turn yet.`;
 }
 
@@ -127,7 +124,6 @@ function accountLine(label: string, provider: ConnectorProvider, unread: boolean
   if (mounted) ways.push(directTools(provider));
   if (input.callTool && input.callable(provider)) ways.push("call_connector with a connector name the connectors tool lists for it");
   if (ways.length) return `${head} Use ${ways.join(", or ")}.`;
-  if (input.relay) return `${head} Not callable from this turn yet: call run_with_engine with engine ${quote(label)} and the complete request.`;
   return `${head} Not callable from this turn yet.`;
 }
 

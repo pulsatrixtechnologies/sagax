@@ -26,13 +26,13 @@ function solo(driver: string, speaker: TurnSpeaker, more: Partial<ClaudeAiTurnIn
 const person = (principalId: string): TurnSpeaker => ({ origin: "person", principalId });
 const flags = (plan: ReturnType<typeof connectorPlanFrom>) => ({
   principal: plan.principal, account: plan.account, claudeAi: plan.claudeAi, claudeAiMounted: plan.claudeAiMounted,
-  grokCloud: plan.grokCloud, grokCloudOnTurn: plan.grokCloudOnTurn, relayAdds: plan.relayAdds, relayLoads: plan.relayLoads,
+  grokCloud: plan.grokCloud, grokCloudOnTurn: plan.grokCloudOnTurn,
 });
 
 describe("connectorPlanFrom (today's rules, one place)", () => {
   it("own: a Claude turn on the speaker's own subscription keeps the claude.ai connectors", () => {
     expect(flags(connectorPlanFrom(org("claudeAgent", person(A)), { withholdsHostTools: true }))).toEqual({
-      principal: A, account: "own", claudeAi: true, claudeAiMounted: true, grokCloud: false, grokCloudOnTurn: false, relayAdds: false, relayLoads: false,
+      principal: A, account: "own", claudeAi: true, claudeAiMounted: true, grokCloud: false, grokCloudOnTurn: false,
     });
   });
 
@@ -40,7 +40,7 @@ describe("connectorPlanFrom (today's rules, one place)", () => {
     const plan = connectorPlanFrom(org("claudeAgent", person(A), { payerPrincipalId: B }), { withholdsHostTools: true });
     expect(flags(plan)).toMatchObject({ principal: A, account: "foreign", claudeAi: false, claudeAiMounted: false });
     const grok = connectorPlanFrom(org("grokAgent", person(A), { payerPrincipalId: B, grokAccountConnectors: true }), { withholdsHostTools: true });
-    expect(flags(grok)).toMatchObject({ account: "foreign", grokCloud: false, grokCloudOnTurn: false, relayAdds: false, relayLoads: false });
+    expect(flags(grok)).toMatchObject({ account: "foreign", grokCloud: false, grokCloudOnTurn: false });
   });
 
   it("key: a turn on a key brings none", () => {
@@ -75,8 +75,8 @@ describe("connectorPlanFrom (today's rules, one place)", () => {
   it("policy: a managed policy that restricts MCP gives none", () => {
     const plan = connectorPlanFrom(org("claudeAgent", person(A), { restrictedByPolicy: true }), { withholdsHostTools: true });
     expect(flags(plan)).toMatchObject({ account: "none", claudeAi: false, claudeAiMounted: false });
-    const grok = connectorPlanFrom(org("grokAgent", person(A), { restrictedByPolicy: true, grokAccountConnectors: true }), { withholdsHostTools: true, relayPart: true });
-    expect(flags(grok)).toMatchObject({ account: "none", grokCloud: false, relayLoads: false });
+    const grok = connectorPlanFrom(org("grokAgent", person(A), { restrictedByPolicy: true, grokAccountConnectors: true }), { withholdsHostTools: true });
+    expect(flags(grok)).toMatchObject({ account: "none", grokCloud: false });
   });
 
   it("solo: the operator's own sign-in, and nobody else's", () => {
@@ -88,20 +88,21 @@ describe("connectorPlanFrom (today's rules, one place)", () => {
     expect(flags(connectorPlanFrom(solo("grokAgent", { origin: "operator" }, { grokAccountConnectors: true })))).toMatchObject({ grokCloud: true, grokCloudOnTurn: true });
   });
 
-  it("organization Grok: the gateway needs the opt-in or a part, and an engine that withholds host tools", () => {
+  it("organization Grok: the gateway needs the opt-in and an engine that withholds host tools", () => {
     const plain = org("grokAgent", person(A));
-    // default settings: nothing on the turn, a part on this sign-in would add it
-    expect(flags(connectorPlanFrom(plain, { withholdsHostTools: true }))).toMatchObject({ grokCloud: false, grokCloudOnTurn: false, relayAdds: true, relayLoads: true });
+    // default settings: nothing on the turn (the hub serves the connectors)
+    expect(flags(connectorPlanFrom(plain, { withholdsHostTools: true }))).toMatchObject({ grokCloud: false, grokCloudOnTurn: false });
     // the bot opted in
     const optedIn = connectorPlanFrom({ ...plain, grokAccountConnectors: true }, { withholdsHostTools: true });
-    expect(flags(optedIn)).toMatchObject({ grokCloud: true, grokCloudOnTurn: true, relayAdds: false });
+    expect(flags(optedIn)).toMatchObject({ grokCloud: true, grokCloudOnTurn: true });
     expect(flags(connectorPlanFrom({ ...plain, grokAccountConnectors: true }, { withholdsHostTools: false }))).toMatchObject({ grokCloud: true, grokCloudOnTurn: false });
-    // a run_with_engine part loads them without the opt-in
-    const part = connectorPlanFrom(plain, { withholdsHostTools: true, relayPart: true });
-    expect(part.input.engineRelay).toBe(true);
-    expect(flags(part)).toMatchObject({ grokCloud: true, grokCloudOnTurn: true, relayAdds: false });
+    // #3356: the relay exception of #3174 is retired. A run_with_engine
+    // part, marked the old way, is a turn like any other: no gateway
+    // without the opt-in.
+    const part = connectorPlanFrom({ ...plain, engineRelay: true } as ClaudeAiTurnInput, { withholdsHostTools: true, relayPart: true } as never);
+    expect(flags(part)).toMatchObject({ grokCloud: false, grokCloudOnTurn: false });
     // the xAI API engine never loads them
-    expect(flags(connectorPlanFrom(org("grok", person(A), { grokAccountConnectors: true }), { withholdsHostTools: true, relayPart: true }))).toMatchObject({ account: "own", grokCloud: false, relayLoads: false });
+    expect(flags(connectorPlanFrom(org("grok", person(A), { grokAccountConnectors: true }), { withholdsHostTools: true }))).toMatchObject({ account: "own", grokCloud: false });
   });
 
   it("nobody: an unknown person on an organization server has no connectors and no accounts", () => {
@@ -120,6 +121,9 @@ describe("connectorPlanForTurn (computed once per turn)", () => {
   const grok: Instance = { instanceId: "grok", driverKind: "grokAgent" };
 
   function deps(more: { payer?: string; relayThreads?: string[]; accounts?: Record<string, ConnectorAccount[]> } = {}) {
+    // the old relay hook (#3174), passed as the server used to: the plan
+    // must not read it any more (#3356)
+    const oldRelayHook = { isRelayPart: (threadId: string) => (more.relayThreads ?? []).includes(threadId) } as Record<string, unknown>;
     const calls: Array<{ instance: string; via?: AccessVia; slot?: string }> = [];
     const read: string[] = [];
     const planFor = createConnectorPlanForTurn<Bot, Instance>({
@@ -127,24 +131,23 @@ describe("connectorPlanForTurn (computed once per turn)", () => {
         calls.push({ instance: instance.instanceId, ...(via ? { via } : {}), ...(slot ? { slot } : {}) });
         return org(instance.driverKind, speaker, { instanceId: instance.instanceId, via: via ?? "subscription", payerPrincipalId: more.payer ?? A });
       },
-      isRelayPart: (threadId) => (more.relayThreads ?? []).includes(threadId),
+      ...oldRelayHook,
       withholdHostToolsFor: () => true,
       accounts: (principal) => { read.push(principal); return more.accounts?.[principal] ?? []; },
     });
     return { planFor, calls, read };
   }
 
-  it("a direct turn: the relay part is read from the thread, never from the bot", () => {
+  it("a run_with_engine part gets the same plan as any turn of the bot (#3356)", () => {
     const { planFor } = deps({ relayThreads: ["part-1"] });
     expect(planFor({ id: "b" }, grok, person(A), "thread-1").grokCloud).toBe(false);
-    expect(planFor({ id: "b" }, grok, person(A), "part-1").grokCloud).toBe(true);
+    expect(flags(planFor({ id: "b" }, grok, person(A), "part-1"))).toEqual(flags(planFor({ id: "b" }, grok, person(A), "thread-1")));
   });
 
   it("a room turn: the person the turn answers, in that room", () => {
     const { planFor } = deps();
     const plan = planFor({ id: "b" }, claude, { origin: "person", principalId: A, groupId: "room-1" }, "room-thread");
     expect(flags(plan)).toMatchObject({ principal: A, account: "own", claudeAi: true, claudeAiMounted: true });
-    expect(plan.relayPart).toBe(false);
   });
 
   it("the bot's tool selection is the plan's, unless the turn gives its own", () => {

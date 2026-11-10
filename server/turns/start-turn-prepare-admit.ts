@@ -31,7 +31,6 @@ export function createPrepareAdmitStartTurn(
     clearInternalTurn,
     cloudOnlyBot,
     confidentialThreadOwner,
-    connectorSwitchText,
     coordinator,
     decideWorkplace,
     deliverableNotification,
@@ -436,10 +435,6 @@ export function createPrepareAdmitStartTurn(
       });
     }
   } else autoTurnsByThread.delete(state.threadId);
-  if (state.connectorSwitch) {
-    state.line = { engine: state.connectorSwitch.engineLabel, connector: state.connectorSwitch.connector };
-    store.appendMessage(state.threadId, { role: "bot", kind: "activity", tool: { name: `notice: ${connectorSwitchText(state.line, turnLanguage(state.userMessage?.text, languageOfPerson(state.turnPrincipal)))}`, ok: true, connectorSwitch: state.line } });
-  }
   return claim(state);
   };
 }

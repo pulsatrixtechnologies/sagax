@@ -36,6 +36,7 @@ import { sanitizePageLook, type PageLook } from "../../src/lib/page-look.ts";
 import { applyDesignSystem, BUILTIN_DESIGN_SYSTEMS, DEFAULT_DESIGN_SYSTEM, DESIGN_SYSTEM_LIMITS, findDesignSystem, ownDesignSystemId, parseDesignTokens, type DesignSystem } from "../../src/lib/design-systems.ts";
 import { threadOwner } from "../threads/thread-privacy.ts";
 import { pageAudienceOf, samePageAudience, type PageAudience } from "../../shared/page-audience.ts";
+import { pageCapabilitiesOf, type PageCapabilities } from "../../shared/page-capabilities.ts";
 import { ANON_STATE_LIMITS, anonymousBy, STATE_LIMITS, stateRulesOf, stateValueJson, type PageStateEntry, type StateRules } from "../../shared/page-state.ts";
 import { THREAD_LIMITS, type PageQuote, type PageSuggestion, type PageThread, type PageThreadReply } from "../../shared/page-threads.ts";
 import {
@@ -717,6 +718,20 @@ export class PublishedPages {
     if (!version || !pageIsHtml(version.kind)) return {};
     const content = this.content(id, version.n);
     return content === null ? {} : stateRulesOf(content);
+  }
+
+  /** What a version declares it uses (#3413, shared/page-capabilities.ts):
+   * the published one by default. Read from the stored version itself, so
+   * it is what that version holds, whatever the reader's browser sends. Null
+   * for a version with no declaration (or not HTML). */
+  capabilities(id: string, n?: number): PageCapabilities | null {
+    const page = this.get(id);
+    const at = n ?? page?.currentVersion ?? null;
+    if (!page || at === null) return null;
+    const version = page.versions.find((entry) => entry.n === at);
+    if (!version || !pageIsHtml(version.kind)) return null;
+    const content = this.content(id, version.n);
+    return content === null ? null : pageCapabilitiesOf(content);
   }
 
   /** The keys its person made read-only. */

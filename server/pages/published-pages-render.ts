@@ -17,6 +17,7 @@ import type { WidgetThemeTokens } from "../../src/lib/widget-kit.ts";
 import { READER_ACTIONS_ID, READER_BOOT_ID, READER_MASCOT_ID, readerByline, type ReaderBoot } from "../../shared/page-reader.ts";
 import { readerBarThemeCss, type PageLook } from "../../src/lib/page-look.ts";
 import { STATE_ASK_MESSAGE, STATE_MESSAGE, STATE_RESULT_MESSAGE, STATE_SET_MESSAGE } from "../../shared/page-state.ts";
+import { CAP_EVENT_MESSAGE, CAP_MESSAGE, CAP_RESULT_MESSAGE, pageCapabilitiesAny, type PageCapabilities } from "../../shared/page-capabilities.ts";
 import { ANNOTATE_FOCUS_MESSAGE, ANNOTATE_FOUND_MESSAGE, ANNOTATE_MARKS_MESSAGE, ANNOTATE_MODE_MESSAGE, ANNOTATE_SELECT_MESSAGE, THREAD_LIMITS } from "../../shared/page-threads.ts";
 import { PAGE_ANNOTATION_MESSAGE, PAGE_BANNER_NAME_MAX, PAGE_HEIGHT_MAX, PAGE_LIMITS, PAGE_OPEN_MESSAGE, PAGE_SCROLL_MAX, PAGE_SCROLL_MESSAGE, PAGE_SIZE_ASK, PAGE_SIZE_MESSAGE, pageCsp, pageFrameSandbox, pageIsHtml, type PageKind, type PageTheme, type ReaderComment } from "../../shared/published-pages.ts";
 
@@ -245,6 +246,44 @@ try{Object.defineProperty(W,"sagax",{value:Object.freeze({page:Object.freeze(pag
 try{P.postMessage({type:"${STATE_ASK_MESSAGE}",v:1},"*")}catch(x){}
 })();`;
 
+/** The capability calls of a page that declares them (#3413,
+ * shared/page-capabilities.ts), as members of window.sagax: `capabilities`
+ * (what this version was granted, written here by the server), `data.read`,
+ * `data.subscribe` (read again on the wrapper's `data` event), `viewer.get`
+ * and `open`. Every call is one message to the parent, the wrapper, which
+ * asks the server with the reader's own session; the server checks it
+ * again. No network. Defines `caps` for the code that follows. Pure. */
+function capabilityParts(caps: PageCapabilities): string {
+  const granted = JSON.stringify({ data: caps.data, viewer: caps.viewer, open: caps.open }).replace(/</g, "\\u003c");
+  return String.raw`var C=${granted},cpend={},cseq=0,dsubs={},CP=window.parent;
+function capCall(c,a){return new Promise(function(ok,no){var id=++cseq;cpend[id]={ok:ok,no:no};try{CP.postMessage({type:"${CAP_MESSAGE}",v:1,id:id,cap:c,args:a||{}},"*")}catch(x){delete cpend[id];no(x)}})}
+window.addEventListener("message",function(e){if(e.source!==CP||!e.data||e.data.v!==1)return;var d=e.data;
+if(d.type==="${CAP_RESULT_MESSAGE}"&&typeof d.id==="number"&&cpend[d.id]){var p=cpend[d.id];delete cpend[d.id];if(d.ok===true)p.ok(d.value);else{var er=new Error(String(d.message||d.error||"refused"));er.code=String(d.error||"");p.no(er)}}
+else if(d.type==="${CAP_EVENT_MESSAGE}"&&d.cap==="data"&&typeof d.name==="string"&&dsubs[d.name]){var n=d.name;capCall("data.read",{name:n}).then(function(v){(dsubs[n]||[]).slice().forEach(function(f){try{f(v)}catch(x){}})},function(){})}});
+var caps={capabilities:Object.freeze({data:Object.freeze(C.data.slice()),viewer:C.viewer,open:C.open}),
+data:Object.freeze({read:function(n,q){return capCall("data.read",{name:String(n),params:q&&typeof q==="object"?q:{}})},
+subscribe:function(n,f){n=String(n);if(typeof f!=="function")return function(){};(dsubs[n]=dsubs[n]||[]).push(f);return function(){dsubs[n]=(dsubs[n]||[]).filter(function(g){return g!==f})}}}),
+viewer:Object.freeze({get:function(){return capCall("viewer.get",{})}}),
+open:function(r){return capCall("open",{ref:String(r)})}};`;
+}
+
+const STATE_BRIDGE_DEFINE = `try{Object.defineProperty(W,"sagax",{value:Object.freeze({page:Object.freeze(page)}),writable:false,configurable:false,enumerable:false})}catch(x){}`;
+
+/** A reading frame's bridge: today's state bridge exactly when the version
+ * declares no capability (a golden test pins it), else the same with the
+ * capability calls beside `page`. Pure. */
+export function stateBridgeSource(caps?: PageCapabilities | null): string {
+  if (!pageCapabilitiesAny(caps)) return STATE_BRIDGE_SOURCE;
+  return STATE_BRIDGE_SOURCE.replace(STATE_BRIDGE_DEFINE,
+    `${capabilityParts(caps)}\ntry{Object.defineProperty(W,"sagax",{value:Object.freeze(Object.assign({page:Object.freeze(page)},caps)),writable:false,configurable:false,enumerable:false})}catch(x){}`);
+}
+
+/** The app's preview frame has no shared state bridge: a page that declares
+ * capabilities gets them alone on window.sagax. Pure. */
+export function capabilityBridgeSource(caps: PageCapabilities): string {
+  return `(function(){"use strict";${capabilityParts(caps)}\ntry{Object.defineProperty(window,"sagax",{value:Object.freeze(caps),writable:false,configurable:false,enumerable:false})}catch(x){}})();`;
+}
+
 /** A presentation prints one slide per sheet: each slide is this tall in
  * print, and the wrapper's sheet is 297 mm by this, with no margin. */
 export const SLIDE_PRINT_MM = 167;
@@ -432,7 +471,7 @@ export function markdownToHtml(markdown: string): string {
  * the page's person's own look when the server has it, `schemes`), and
  * the Geist face (`font`, an @font-face rule). An HTML page's own styles win
  * over it; a Markdown page or a presentation follows it entirely. Pure. */
-export function pageDocument(input: { kind: PageKind; title: string; content: string; lang?: string }, options: { meta?: boolean; annotateNonce?: string; keepScroll?: number; nonce?: string; theme?: PageTheme; skin?: WidgetThemeTokens; schemes?: Partial<Record<PageTheme, WidgetThemeTokens>>; font?: string; reportSize?: boolean } = {}): string {
+export function pageDocument(input: { kind: PageKind; title: string; content: string; lang?: string }, options: { meta?: boolean; annotateNonce?: string; keepScroll?: number; nonce?: string; theme?: PageTheme; skin?: WidgetThemeTokens; schemes?: Partial<Record<PageTheme, WidgetThemeTokens>>; font?: string; reportSize?: boolean; capabilities?: PageCapabilities | null } = {}): string {
   const meta = options.meta ? `<meta http-equiv="Content-Security-Policy" content="${escapeHtml(pageCsp(input.kind, { meta: true }))}">` : "";
   // Our own scripts: open-link bridge on every served frame (#1799);
   // annotation and place-keeping on the app's preview only. Markdown and
@@ -457,7 +496,12 @@ export function pageDocument(input: { kind: PageKind; title: string; content: st
   // the theme first, so the page's own <style> and <link> come after it
   // (and win anyway: the theme sits in its cascade layer)
   // a reading frame: its shared state is there before the page's own scripts run (#1544)
-  const head = `${meta}${FRAME_PRELUDE}${openBridge}${options.reportSize ? `<script>${STATE_BRIDGE_SOURCE}</script>` : ""}${scheme}${theme}`;
+  // #3413: a version that declares capabilities gets them on window.sagax
+  // (beside the state in a reading frame, alone in the app's preview); one
+  // that declares none gets exactly the frame it always had
+  const caps = pageCapabilitiesAny(options.capabilities) ? options.capabilities : null;
+  const bridge = options.reportSize ? `<script>${stateBridgeSource(caps)}</script>` : caps ? `<script>${capabilityBridgeSource(caps)}</script>` : "";
+  const head = `${meta}${FRAME_PRELUDE}${openBridge}${bridge}${scheme}${theme}`;
   const content = neuterPageHtml(input.content);
   const doctype = /^\s*<!doctype[^>]*>/i.exec(content);
   const page = doctype

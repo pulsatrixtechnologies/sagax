@@ -760,6 +760,8 @@ function serveFrame(options: PublicPageOptions, req: IncomingMessage, res: Serve
     nonce,
     ...(keepScroll !== undefined ? { keepScroll } : {}),
     ...(reportSize ? { reportSize: true } : {}),
+    // #3413: the capabilities this version declares (null: today's frame)
+    capabilities: pages.capabilities(target.page.id, target.version.n),
     ...(theme ? { theme } : {}),
     ...(skin ? { skin } : {}),
     ...(schemes ? { schemes } : {}),
@@ -872,6 +874,9 @@ export interface PublishedPageRouteDeps {
   /** Someone other than the page's person commented or replied: tell its
    * person (a notification). */
   onComment?(input: { page: PageRecord; by: string; text: string; reply: boolean }): void;
+  /** #3413: this reader received personal data from this page, which is not
+   * private to its person: their writes to its shared state are refused. */
+  sharedWriteRefused?(page: PageRecord, by: string): boolean;
 }
 
 const LINK_SHARING_OFF = { error: "Your organization turned off public links for pages. Choose My organization instead.", code: "link_sharing_off" };
@@ -1336,6 +1341,9 @@ async function pageThreads(deps: PublishedPageRouteDeps, ctx: ExtrasContext, thr
       return json(res, 403, locked
         ? { error: lang === "fr" ? "Cette valeur est en lecture seule." : "This value is read-only.", code: "locked" }
         : { error: lang === "fr" ? "Seule la personne de la page modifie cette valeur." : "Only the page's person changes this value.", code: "not_allowed" });
+    }
+    if (deps.sharedWriteRefused?.(page, who.by)) {
+      return json(res, 403, { error: lang === "fr" ? "Cette page a lu tes données : elle ne peut plus écrire ce que d'autres lisent." : "This page read your data: it can no longer write what others read.", code: "shared_write_after_data" });
     }
     const result = deps.pages.setState(page.id, { key: body.key, value: body.value, by: who.by });
     if (!result.ok) return json(res, result.status, { error: result.error, code: result.code });

@@ -33,7 +33,7 @@ import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
 import { waitForServerReady } from "../testing/server-ready.ts";
-import { releaseVersion } from "../environment.ts";
+import { linkVersion, releaseVersion } from "../environment.ts";
 
 // This file lives in server/org/; the paths below are relative to server/.
 const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -45,7 +45,6 @@ const ALICE: FakeOidcUser = { sub: "01J9S3ALICE00000000000000A", email: "alice@e
 const BOB: FakeOidcUser = { sub: "01J9S3BOB000000000000000B", email: "bob@example.test", name: "Bob", preferred_username: "bob", role: "employee" };
 const DAVE: FakeOidcUser = { sub: "01J9S3DAVE000000000000000D", email: "dave@example.test", name: "Dave", preferred_username: "dave", role: "employee" };
 const ERIN: FakeOidcUser = { sub: "01J9S3ERIN000000000000000E", email: "erin@example.test", name: "Erin", preferred_username: "erin", role: "employee" };
-const PACKAGE_VERSION = (JSON.parse(readFileSync(join(SERVER_DIR, "..", "package.json"), "utf8")) as { version: string }).version;
 
 let PORT = 0;
 let BASE = "";
@@ -201,7 +200,9 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     });
     expect(org).toMatchObject({ org: { name: "Acme", identity: { kind: "perspicax", issuer: idp.issuer, serverId: idp.serverId } }, viewerRole: "admin", settings: { orgKeyConfigured: true } });
     expect(org.settings).not.toHaveProperty("memberBotsUseOrgKey");
-    expect(idp.directoryRequests.at(-1)).toMatchObject({ authorization: `Bearer ${idp.linkToken}`, "x-pulsabot-version": PACKAGE_VERSION });
+    // 1d4d2a5657 (#2914): the link reports the release people know (forkVersion),
+    // never the package.json version
+    expect(idp.directoryRequests.at(-1)).toMatchObject({ authorization: `Bearer ${idp.linkToken}`, "x-pulsabot-version": linkVersion() });
     const people = (await api("GET", "/api/org/directory", alice)).body.people as Array<{ principalId: string; login: string; role: string; disabled: boolean }>;
     expect(people.map((p) => p.login)).toEqual(["alice", "bob", "dave", "erin"]);
     expect(people.find((p) => p.login === "alice")?.role).toBe("admin");

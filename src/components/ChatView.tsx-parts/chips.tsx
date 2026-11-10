@@ -12,7 +12,7 @@ import { StepRow } from "../StepRow";
 import { stepLabel } from "@/lib/step-label";
 import { ThreadChip } from "../ThreadChip";
 import { SendReceiptRow } from "../SendReceiptRow";
-import { InputRequestCard } from "../InputRequestCard";
+import { answerPersonRequest, cardPlace, InputRequestCard } from "../InputRequestCard";
 import { RenameTitle } from "../RenameTitle";
 import { delegateModelLabel } from "../DelegationList";
 import { RoutineRunCard } from "../RoutineRunCard";
@@ -64,10 +64,10 @@ export function PeerLabel({ peer, autoModel }: { peer: PeerLine; autoModel?: Mes
 /** A tool run as a quiet step row (StepRow), or a receipt that opens a conversation. */
 export const ActivityChip = memo(function ActivityChip({ message, place = "auto" }: { message: Message; place?: EffectivePlace }) {
   "use memo";
-  const { bots, dispatch, botDmIds } = useChatRows(), liveTools = useContext(LiveToolsContext);
+  const { bots, dispatch, botDmIds, threadId, botId } = useChatRows(), liveTools = useContext(LiveToolsContext);
   const tool = message.tool;
   if (!tool) return null;
-  if (message.inputRequest) return <InputRequestCard message={message} />;
+  if (message.inputRequest) return <InputRequestCard message={message} threadId={threadId} conversationBotId={botId} />;
   if (message.sendReceipt) return <SendReceiptRow message={message} />;
   if (message.threadRef) return <ThreadChip message={message} />;
   // bot⇄bot comm chip: a DM is read in this column (the exchange sheet), not
@@ -101,7 +101,7 @@ export const ActivityChip = memo(function ActivityChip({ message, place = "auto"
 
 /** What a bot's turn elsewhere left for the person (2026-11-05): its card,
  * with the thread it was said in and the run it came from one click away. */
-export function AttentionRow({ message, threadId }: { message: Message; threadId?: string }) {
+export function AttentionRow({ message, threadId, botId }: { message: Message; threadId?: string; /** the bot that owns this conversation */ botId?: string }) {
   "use memo";
   const dispatch = useStoreDispatch();
   const getState = useStoreGetter();
@@ -118,9 +118,9 @@ export function AttentionRow({ message, threadId }: { message: Message; threadId
       onOpenThread={showThreads ? (botId, threadId) => { openThread(dispatch, { botId, threadId }, getState(), showThreads); } : undefined}
       onOpenRun={(runId) => openRoutineRun(dispatch, { runId })}
       // the answer is the person's own message into the thread the bot asked in (coordinator.answer)
-      onReply={showThreads ? undefined : async (text) => {
-        await api(`/api/bots/${card.botId}/messages`, { method: "POST", body: JSON.stringify({ text, threadId: card.threadId, sendId: crypto.randomUUID() }) });
-      }}
+      // #3438: then the card is marked handled, so the pinned card over the
+      // composer and this one settle together
+      onReply={showThreads ? undefined : (text) => answerPersonRequest(card, text, cardPlace(card, message, threadId, botId))}
     />
     {/* #2694: the bot's owner says what to bring less, here as on Today */}
     <WakeFeedback botId={card.botId} topic={message.routineRun?.wakeTopic ?? "attention"} value={card.feedback} threadId={threadId} messageId={message.id} />

@@ -11,6 +11,8 @@ import { loadLocale } from "@/lib/i18n";
 import type { Bot, Message } from "@/state/store";
 import type { Pending } from "../PendingApproval";
 import { PinnedWaitingCard, pinnedItemText, usePinnedWaiting } from "./PinnedWaitingCard";
+import { pendingRequests, type PersonRequest, type TopicPending } from "@/lib/pending-question";
+import { topicPending } from "@/lib/use-topic-pending";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const { BotEditorStore, initialState } = await import("@/state/store");
@@ -37,8 +39,8 @@ let snapshot: { current?: ReturnType<typeof usePinnedWaiting> } = {};
 /** a room: the composer passes no conversation bot, each item names its own */
 interface Room { member: Bot }
 
-function Harness({ approvals, questions, room }: { approvals: Pending[]; questions: Message[]; room?: Room }) {
-  const pinned = usePinnedWaiting(approvals, questions);
+function Harness({ approvals, questions, requests = [], topics = [], room }: { approvals: Pending[]; questions: Message[]; requests?: PersonRequest[]; topics?: TopicPending[]; room?: Room }) {
+  const pinned = usePinnedWaiting(approvals, questions, requests, topics);
   snapshot.current = pinned;
   const asker = room?.member ?? bot;
   return createElement(PinnedWaitingCard, {
@@ -46,9 +48,9 @@ function Harness({ approvals, questions, room }: { approvals: Pending[]; questio
   });
 }
 
-async function render(approvals: Pending[], questions: Message[], room?: Room) {
+async function render(approvals: Pending[], questions: Message[], requests: PersonRequest[] = [], topics: TopicPending[] = [], room?: Room) {
   const value = { state: { ...initialState, bots: room ? [bot, room.member] : [bot], instances: [] }, dispatch: (action: unknown) => dispatched.push(action), flushBotPatches: async () => null, refreshInstances: async () => {}, refreshModels: async () => {} };
-  const tree: ReactNode = createElement(BotEditorStore, { value: value as never, children: createElement(Harness, { approvals, questions, room }) });
+  const tree: ReactNode = createElement(BotEditorStore, { value: value as never, children: createElement(Harness, { approvals, questions, requests, topics, room }) });
   await act(async () => { root!.render(tree); });
   await act(async () => { await new Promise((done) => setTimeout(done, 0)); });
 }
@@ -198,7 +200,7 @@ describe("the pinned waiting card (#3214)", () => {
       },
     } as unknown as Message;
     const pending: Pending = { message, requestId: "skill-s1", tool: "stage_skill", detail: "Stop a task cleanly." };
-    await render([pending], [], { member: quasar });
+    await render([pending], [], [], [], { member: quasar });
     const shown = card()!;
     expect(shown.querySelector('[data-pinned-body="approval"]')).not.toBeNull();
     expect(shown.textContent).toContain("Enable this learned skill");
@@ -206,7 +208,7 @@ describe("the pinned waiting card (#3214)", () => {
     // the answers, Always allow included, are still all there
     expect(shown.querySelector("[data-always-allow]")).not.toBeNull();
     // a tool approval whose title already names the bot adds no second line
-    await render([approval("a3", 2)], [], { member: quasar });
+    await render([approval("a3", 2)], [], [], [], { member: quasar });
     expect(card()?.textContent).toMatch(/Quasar wants to/);
     expect(card()?.querySelector("[data-approval-asker]")).toBeNull();
   });
@@ -246,5 +248,94 @@ describe("the pinned waiting card (#3214)", () => {
     expect(long.length).toBeLessThanOrEqual(72);
     expect(long.endsWith("…")).toBe(true);
     expect(pinnedItemText({ kind: "approval", key: "k", at: 1, pending: approval("a", 1) })).toBe("Run a command");
+  });
+});
+
+// #3438: an input request from handed-over work and a choice question of an
+// earlier topic of the one conversation are pinned too, and leave once answered.
+describe("the pinned card holds every kind and every topic (#3438)", () => {
+  const inputRequest = (id: string, at: number, more: Record<string, unknown> = {}): Message =>
+    ({ id, at, role: "bot", kind: "activity", text: "", tool: { name: "Kiro needs your input: Which site first?", ok: true }, from: { botId: "orla", name: "Orla", color: "violet" },
+      inputRequest: { botId: "orla", threadId: "work-1", botName: "Orla", title: "Teammate work", question: "Which site first?", ...more } }) as unknown as Message;
+
+  it("pins an input request from handed-over work as the standard card, and sends the answer to the waiting work", async () => {
+    await render([], [], pendingRequests([inputRequest("ir", 5)]));
+    expect(card()?.getAttribute("data-pinned-waiting")).toBe("open");
+    const body = host.querySelector("[data-pinned-body=request]")!;
+    expect(body.textContent).toContain("Which site first?");
+    // the standard card (QuestionSheet), never the plain box
+    expect(body.querySelector("[data-question-sheet]")).not.toBeNull();
+    expect(body.querySelector("textarea")?.closest("[data-question-sheet]")).not.toBeNull();
+    const field = body.querySelector<HTMLTextAreaElement>("textarea")!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+      setter.call(field, "North first");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+    await flush();
+    const calls = (globalThis.fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls;
+    const sent = calls.find(([url]) => String(url).includes("/api/bots/orla/messages"));
+    expect(sent).toBeDefined();
+    expect(JSON.parse(String(sent![1].body))).toMatchObject({ text: "North first", threadId: "work-1" });
+    // the server marks it answered: it leaves
+    await render([], [], pendingRequests([inputRequest("ir", 5, { answered: true })]));
+    expect(card()).toBeNull();
+  });
+
+  it("pins a choice question asked two days ago in an earlier topic, oldest first, and jumps to it there", async () => {
+    const old = ask("old-q", 1, "Keep both copies?");
+    await render([], [], pendingRequests([inputRequest("ir", 2 * 86_400_000)]), [{ threadId: "topic-1", questions: [old], requests: [] }]);
+    expect(host.textContent).toContain("1 of 2");
+    expect(host.querySelector("[data-pinned-body=question]")?.textContent).toContain("Keep both copies?");
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-pinned-jump]")!.click(); });
+    expect(dispatched).toContainEqual({ type: "focusMessage", threadId: "topic-1", messageId: "old-q" });
+    // answered there: the topic no longer holds it, the input request moves up
+    await render([], [], pendingRequests([inputRequest("ir", 2 * 86_400_000)]), [{ threadId: "topic-1", questions: [], requests: [] }]);
+    expect(host.textContent).not.toContain("1 of 2");
+    expect(host.querySelector("[data-pinned-body=request]")).not.toBeNull();
+  });
+
+  // the server counts a live approval card of an earlier topic as "Waiting
+  // for you": it is pinned with the rest, oldest first, decided in its own
+  // topic, and leaves once decided
+  it("pins an approval asked in an earlier topic, decides it there, and drops it once decided", async () => {
+    const DAY = 86_400_000;
+    const old = approval("old-ap", 1 * DAY).message;
+    const topic = (card: Record<string, unknown> = {}) =>
+      topicPending("topic-1", { messages: [{ ...old, card: { ...old.card!, ...card } } as Message], activeLeafId: null, loaded: true });
+    expect(topic().approvals?.map((pending) => pending.threadId)).toEqual(["topic-1"]);
+    await render([], [ask("now-q", 2 * DAY, "And now?")], [], [topic()]);
+    expect(host.querySelector("[data-approval-stepper]")?.textContent).toContain("1 of 2");
+    expect(host.querySelector('[data-pinned-body="approval"]')).not.toBeNull();
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-pinned-jump]")!.click(); });
+    expect(dispatched).toContainEqual({ type: "focusMessage", threadId: "topic-1", messageId: "old-ap" });
+    const allow = [...host.querySelectorAll<HTMLButtonElement>('[data-pinned-body="approval"] button')].find((button) => button.textContent?.trim() === "Allow once" || button.textContent?.trim() === "Allow")!;
+    await act(async () => { allow.click(); });
+    await flush();
+    expect(dispatched).toContainEqual(expect.objectContaining({ type: "decideRequest", threadId: "topic-1", requestId: "req-old-ap", behavior: "allow" }));
+    // decided there: the topic no longer holds it, the question moves up
+    await render([], [ask("now-q", 2 * DAY, "And now?")], [], [topic({ answered: "allow" })]);
+    expect(host.querySelector("[data-approval-stepper]")).toBeNull();
+    expect(host.querySelector('[data-pinned-body="question"]')?.textContent).toContain("And now?");
+  });
+
+  it("marks a hand-off's card handled against the bot that owns the conversation, not the bot whose work asks", async () => {
+    const handoff = { id: "handoff", at: 5, role: "bot", kind: "text", text: "Kiro has a question for you", from: { botId: "kiro", name: "Kiro" },
+      attention: { kind: "question", botId: "kiro", botName: "Kiro", threadId: "work-kiro", sourceMessageId: "src", items: [{ text: "Which site first?" }] } } as unknown as Message;
+    await render([], [], pendingRequests([handoff]));
+    const field = host.querySelector<HTMLTextAreaElement>("[data-pinned-body=request] textarea")!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+      setter.call(field, "North first");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+    await flush();
+    const calls = (globalThis.fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls;
+    const sent = calls.find(([url]) => String(url).includes("/api/bots/kiro/messages"));
+    expect(JSON.parse(String(sent![1].body))).toMatchObject({ text: "North first", threadId: "work-kiro" });
+    const handled = calls.find(([url]) => String(url).includes("/api/approvals/handled"));
+    expect(JSON.parse(String(handled![1].body))).toEqual({ botId: "orla", threadId: "main", messageId: "handoff" });
   });
 });

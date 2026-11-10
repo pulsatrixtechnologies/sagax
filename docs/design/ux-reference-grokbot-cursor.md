@@ -143,6 +143,13 @@ d'apps, puis une capsule de recherche large. Rien d'autre à l'écran.
   réponse avec une touche lettre (A, B, C) arrondie ; plusieurs questions se suivent avec
   des points de pagination et des boutons pilule Précédent et Suivant. Réponse au clic ou
   à la lettre. Voir `AGENTS.md` « One look for every interactive question ».
+- Carte épinglée au-dessus du compositeur (#3214, #3438) : tout ce que le bot attend
+  de la personne, quel que soit le sujet où il l'a demandé (question à choix, question
+  en mots, demande d'un travail confié, approbation), le plus ancien d'abord, « 1 sur N »
+  avec flèches. Le corps est la carte standard de la conversation (QuestionSheet ou
+  panneau d'approbation), jamais une boîte à part ; une seule carte par demande dans le
+  fil. Répondre à un endroit règle les deux. « Voir dans la conversation » ouvre le sujet
+  plus ancien à ce message, sans panneau de fil.
 - Ligne de travail : sous le dernier message, la mascotte, des points animés et l'étape
   en mots simples (« Lecture de ton courriel »), jamais un nom d'outil.
 - Compositeur : une capsule flottante, détachée du bas, largeur de la colonne. À gauche

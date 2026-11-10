@@ -2,86 +2,77 @@
 // 2026-10-19). The whole question, never cut, in the conversation the person
 // reads, answered in place: the answer is the person's own message into the
 // waiting work's conversation, which the runtime takes as the answer
-// (coordinator.answer). "Open the conversation" shows that conversation.
-import { useState } from "react";
-
-import { api, openThread, useStore, type Message } from "@/state/store";
+// (coordinator.answer).
+//
+// #3438: it is drawn as the standard answerable card (AttentionCard, the
+// same QuestionSheet every question in the chat uses), never a second box
+// with a bare text area. When the card of a hand-off already asks the same
+// thing in this conversation, that card is the one drawn
+// (inputRequestsDrawnElsewhere). The pinned card over the composer draws the
+// same card, so answering in either place settles both.
+import { AttentionCard } from "./AttentionCard";
+import { api, openThread, type Message } from "@/state/store";
+import { useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { t } from "@/lib/i18n";
-import { readableError } from "@/lib/plain-error";
+import { inputRequestCard } from "@/lib/pending-question";
+import type { PersonAttentionCard } from "../../shared/person-attention";
 
-export function InputRequestCard({ message }: { message: Message }) {
-  const { state, dispatch } = useStore();
+/** Where a card sits: the conversation's thread, the bot that owns that
+ * conversation (the server checks the thread against it, as Today does,
+ * never against the bot whose work asks) and the card's message. */
+export interface CardPlace {
+  botId: string;
+  threadId: string;
+  messageId: string;
+}
+
+/** The person's answer to a question in words: their own message into the
+ * thread the bot asked in, then the card it came on marked handled, so every
+ * place that draws it (the chat, the pinned card, Today) settles. */
+export async function answerPersonRequest(card: PersonAttentionCard, text: string, where?: CardPlace): Promise<void> {
+  await api(`/api/bots/${card.botId}/messages`, { method: "POST", body: JSON.stringify({ text, threadId: card.threadId, sendId: crypto.randomUUID() }) });
+  if (where) {
+    void api("/api/approvals/handled", { method: "POST", body: JSON.stringify({ botId: where.botId, threadId: where.threadId, messageId: where.messageId }) }).catch(() => undefined);
+  }
+}
+
+/** The place of a card, once the conversation's thread is known. Without
+ * the conversation's bot (a room's pinned card) the asking bot stands in. */
+export function cardPlace(card: PersonAttentionCard, message: Message, threadId: string | undefined, conversationBotId: string | undefined): CardPlace | undefined {
+  return message.attention && threadId ? { botId: conversationBotId ?? card.botId, threadId, messageId: message.id } : undefined;
+}
+
+/** One question in words, as the standard card. `threadId` is the
+ * conversation the message sits in (the pinned card may hold one of an
+ * earlier topic), `conversationBotId` the bot that owns it. */
+export function PersonRequestCard({ message, card, threadId, conversationBotId, embedded }: { message: Message; card: PersonAttentionCard; threadId?: string; conversationBotId?: string; embedded?: boolean }) {
+  const dispatch = useStoreDispatch();
+  const getState = useStoreGetter();
   const showThreads = useShowThreads();
+  const owner = useStoreSelector((state) => state.bots.find((candidate) => candidate.id === card.botId));
   const request = message.inputRequest;
-  const [answer, setAnswer] = useState("");
-  const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  if (!request) return null;
-  const expired = !sent && request.answered !== true && request.expired === true;
-  const done = sent || request.answered === true || expired;
-  const send = async () => {
-    const text = answer.trim();
-    if (!text || sending) return;
-    setSending(true);
-    setError(null);
-    try {
-      await api(`/api/bots/${request.botId}/messages`, {
-        method: "POST",
-        body: JSON.stringify({ text, threadId: request.threadId, sendId: crypto.randomUUID() }),
-      });
-      setSent(true);
-    } catch (failure) {
-      setError(readableError(failure));
-    } finally {
-      setSending(false);
-    }
-  };
+  const closedUnanswered = request && request.answered !== true && request.expired === true;
+  return (
+    <AttentionCard
+      card={card}
+      bot={owner}
+      embedded={embedded}
+      {...(closedUnanswered ? { settledNote: t(request.defaulted ? "chat.inputRequest.defaulted" : "chat.inputRequest.expired") } : {})}
+      onOpenThread={showThreads ? (botId, target) => { openThread(dispatch, { botId, threadId: target }, getState(), showThreads); } : undefined}
+      // an input request settles on the server once the work takes the
+      // answer (settleInputRequests); a hand-off's card is marked handled
+      onReply={(text) => answerPersonRequest(card, text, cardPlace(card, message, threadId, conversationBotId))}
+    />
+  );
+}
+
+export function InputRequestCard({ message, threadId, conversationBotId }: { message: Message; threadId?: string; conversationBotId?: string }) {
+  const card = inputRequestCard(message);
+  if (!card) return null;
   return (
     <div className="flex justify-start py-1" data-testid="input-request-card">
-      <div className="w-full max-w-xl rounded-xl border border-border bg-card p-3 text-sm shadow-sm">
-        <div className="mb-1 font-medium">
-          {t(request.reminder ? "chat.inputRequest.reminder" : "chat.inputRequest.title", { bot: request.botName })}
-        </div>
-        <div className="whitespace-pre-wrap break-words text-foreground" data-testid="input-request-question">{request.question}</div>
-        {done ? (
-          <div className="mt-2 text-xs text-muted-foreground" data-testid="input-request-state">
-            {t(expired ? (request.defaulted ? "chat.inputRequest.defaulted" : "chat.inputRequest.expired") : "chat.inputRequest.answered")}
-          </div>
-        ) : (
-          <div className="mt-2 flex flex-col gap-2">
-            <textarea
-              className="min-h-[3rem] w-full resize-y rounded-md border border-border bg-background p-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-              value={answer}
-              placeholder={t("chat.inputRequest.placeholder")}
-              aria-label={t("chat.inputRequest.placeholder")}
-              onChange={(event) => setAnswer(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) void send();
-              }}
-            />
-            {error ? <div className="text-xs text-destructive">{error}</div> : null}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className="rounded-md bg-accent px-3 py-1 text-xs font-medium text-accent-ink disabled:opacity-50"
-                disabled={!answer.trim() || sending}
-                onClick={() => void send()}
-              >
-                {t("chat.inputRequest.send")}
-              </button>
-              {showThreads && <button
-                type="button"
-                className="rounded-md border border-border px-3 py-1 text-xs"
-                onClick={() => openThread(dispatch, { botId: request.botId, threadId: request.threadId }, state, showThreads)}
-              >
-                {t("chat.inputRequest.open")}
-              </button>}
-            </div>
-          </div>
-        )}
-      </div>
+      <PersonRequestCard message={message} card={card} threadId={threadId} conversationBotId={conversationBotId} />
     </div>
   );
 }

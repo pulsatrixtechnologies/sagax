@@ -22,7 +22,7 @@ const text = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/&#x27;|&#3
 describe("InputRequestCard", () => {
   it("shows the whole question, an answer box and no id", () => {
     const question = `Which repository should I tag? ${"It matters because both hold a release branch. ".repeat(8)}Reply with its name.`;
-    const html = renderToStaticMarkup(createElement(InputRequestCard, {
+    const html = renderToStaticMarkup(createElement(InputRequestCard, { threadId: "conv",
       message: { id: "m1", role: "bot", kind: "activity", tool: { name: "x", ok: true }, inputRequest: { botId: BOT_ID, threadId: THREAD_ID, botName: "Mira", question } } as never,
     }));
     const visible = text(html);
@@ -34,7 +34,7 @@ describe("InputRequestCard", () => {
   });
 
   it("says when it was answered and offers no box then", () => {
-    const html = renderToStaticMarkup(createElement(InputRequestCard, {
+    const html = renderToStaticMarkup(createElement(InputRequestCard, { threadId: "conv",
       message: { id: "m2", role: "bot", kind: "activity", tool: { name: "x", ok: true }, inputRequest: { botId: BOT_ID, threadId: THREAD_ID, botName: "Mira", question: "Which one?", answered: true } } as never,
     }));
     expect(html).not.toContain("<textarea");
@@ -45,11 +45,25 @@ describe("InputRequestCard", () => {
     [{ expired: true }, "expired without your answer"],
     [{ expired: true, defaulted: true }, "default answer was used"],
   ])("says an unanswered question expired, never that an answer was sent (%j)", (state, line) => {
-    const html = renderToStaticMarkup(createElement(InputRequestCard, {
+    const html = renderToStaticMarkup(createElement(InputRequestCard, { threadId: "conv",
       message: { id: "m3", role: "bot", kind: "activity", tool: { name: "x", ok: true }, inputRequest: { botId: BOT_ID, threadId: THREAD_ID, botName: "Mira", question: "Which one?", ...state } } as never,
     }));
     expect(html).not.toContain("<textarea");
     expect(text(html)).toContain(line);
     expect(text(html)).not.toContain("Answer sent");
+  });
+});
+
+// #3438: the input request is the standard card (the QuestionSheet every
+// question in the chat uses), never a second box with a bare text area and
+// a grey "Send answer" button.
+describe("InputRequestCard as the standard card (#3438)", () => {
+  it("draws the QuestionSheet, not the plain box", () => {
+    const html = renderToStaticMarkup(createElement(InputRequestCard, { threadId: "conv",
+      message: { id: "m4", at: 5, role: "bot", kind: "activity", tool: { name: "x", ok: true }, inputRequest: { botId: BOT_ID, threadId: THREAD_ID, botName: "Mira", question: "Which one?" } } as never,
+    }));
+    expect(html).toContain("data-question-sheet");
+    expect(html).toContain("data-attention-card");
+    expect(html).not.toContain("resize-y");
   });
 });

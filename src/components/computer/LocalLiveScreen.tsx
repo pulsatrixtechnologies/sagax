@@ -10,13 +10,14 @@
 // allowed (with the button to the right System Settings pane, never a
 // prompt), allowed but still empty (relaunch), or the capture's own error.
 import { useEffect, useState } from "react";
-import { Loader2, MonitorOff } from "lucide-react";
+import { MonitorOff } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import { isMacPlatform } from "@/lib/is-mac-platform";
 import { SCREEN_PROBLEM_LINE, localScreenProblem, useScreenPermission } from "@/lib/computer-screen-state";
 import { useOsPermissions } from "@/lib/os-permissions";
 import { OsPermissionButtons, permissionActionLabel } from "@/components/settings/OsPermissions";
+import { DesktopStarting } from "./DesktopStarting";
 
 /** Empty frames in a row before the window stops waiting and says why. */
 export const LOCAL_LIVE_MISSES = 2;
@@ -104,10 +105,9 @@ export function LocalLiveScreen({ control }: { desktopId?: string; control: bool
           )}
         </div>
       ) : (
-        <p role="status" className="flex items-center gap-2 text-[12px] text-white/70">
-          <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-          {t("computer.capturingLocal")}
-        </p>
+        // #3386: the app's activity dots until the first frame, not a spinner
+        // on a still black area.
+        <DesktopStarting label={t("computer.capturingLocal")} className="text-white/75" />
       )}
     </div>
   );

@@ -72,6 +72,9 @@ describe("LocalLiveScreen", () => {
     };
     await mount();
     expect(host.textContent).toContain("Capturing this computer's screen");
+    // #3386: the app's activity dots while waiting, not a spinner
+    expect(host.querySelector("[data-desktop-starting]")).not.toBeNull();
+    expect(host.querySelector(".animate-spin")).toBeNull();
     await tick();
     expect(host.querySelector("[data-local-live-error]")?.getAttribute("data-local-live-error")).toBe("permission");
     expect(host.textContent).not.toContain("temporarily unavailable");

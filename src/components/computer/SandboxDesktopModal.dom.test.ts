@@ -91,3 +91,47 @@ describe("SandboxDesktopModal calm window", () => {
     expect(document.querySelector("[data-takeover-close]")).not.toBeNull();
   });
 });
+
+// #3386: the desktop view fills the whole app window (no dimmed backdrop, no
+// modal frame) and, while the desktop is not ready, shows the app's activity
+// dots above "Starting desktop" instead of a still black area.
+describe("SandboxDesktopModal full window (#3386)", () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("fills the app window with no dimmed backdrop and no modal frame", () => {
+    mount();
+    const takeover = document.querySelector<HTMLElement>("[data-sandbox-takeover]")!;
+    // the window itself is the dialog, over the whole app window
+    expect(takeover.getAttribute("role")).toBe("dialog");
+    expect(takeover.getAttribute("data-takeover-layout")).toBe("full-window");
+    expect(takeover.className).toContain("inset-0");
+    for (const node of [takeover, ...takeover.querySelectorAll<HTMLElement>("*")]) {
+      const classes = String(node.getAttribute("class") ?? "");
+      expect(classes).not.toMatch(/bg-black\/60|backdrop-blur|h-\[88vh\]|w-\[92vw\]|rounded-2xl/);
+    }
+    // one control at the top right, the switch at the bottom center, last
+    expect(takeover.querySelectorAll("[data-takeover-close]")).toHaveLength(1);
+    const segments = takeover.querySelector("[data-takeover-segments]")!;
+    expect(takeover.lastElementChild?.contains(segments)).toBe(true);
+    expect(segments.parentElement?.className).toContain("justify-center");
+  });
+
+  it("shows the activity dots and Starting desktop while the desktop starts", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    act(() => root.render(createElement(SandboxDesktopModal, { title: "Luna's screen", state: "running", onClose: vi.fn() })));
+    const starting = document.querySelector("[data-sandbox-takeover] [data-desktop-starting]");
+    expect(starting).not.toBeNull();
+    expect(starting!.textContent).toBe("Starting desktop");
+    expect(starting!.querySelectorAll(".animate-status-pulse")).toHaveLength(3);
+    expect(document.querySelector("[data-sandbox-takeover] .animate-spin")).toBeNull();
+    // the switch stays while the desktop starts
+    expect(document.querySelector("[data-takeover-segments]")).not.toBeNull();
+  });
+
+  it("says Démarrage du bureau in French", () => {
+    setLocale("fr");
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    act(() => root.render(createElement(SandboxDesktopModal, { title: "Écran de Luna", state: "running", onClose: vi.fn() })));
+    expect(document.querySelector("[data-desktop-starting]")?.textContent).toBe("Démarrage du bureau");
+  });
+});

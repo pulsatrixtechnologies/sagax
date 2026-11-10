@@ -4671,7 +4671,7 @@
   "sandboxDesktop.busy": "Toutes les places d'environnement serveur sont occupées. Réessaye dans quelques minutes.",
   "sandboxDesktop.closeWindow": "Fermer et rendre le contrôle (Cmd/Ctrl+Maj+Échap)",
   "sandboxDesktop.closed": "Ton environnement serveur est fermé.",
-  "sandboxDesktop.connecting": "Démarrage du bureau…",
+  "sandboxDesktop.connecting": "Démarrage du bureau",
   "sandboxDesktop.controlHint": "Tu as le contrôle. Les clics de tes bots attendent que tu le rendes.",
   "sandboxDesktop.controlling": "Tu as le contrôle",
   "sandboxDesktop.help": "Les bots qui travaillent pour toi dans ton environnement serveur utilisent ce bureau pour contrôler l'ordinateur. Toi seul peux le voir. Affiche-le pour les regarder travailler en direct.",

@@ -7,6 +7,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserComputerScreen } from "../components/BrowserPanel";
 import { ComputerScreen } from "../components/computer/ComputerScreen";
+import { LocalLiveScreen } from "../components/computer/LocalLiveScreen";
 import { SandboxDesktopModal } from "../components/computer/SandboxDesktopModal";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin } from "../lib/skins";
@@ -48,6 +49,26 @@ class StandInSource {
   close() {}
 }
 (globalThis as { EventSource: unknown }).EventSource = StandInSource;
+
+// modal=starting: the desktop viewer never answers, so the window stays in
+// its starting state. modal=needs: this computer's capture without Screen
+// Recording (the state that needs the person).
+if (params.get("modal") === "starting") {
+  const realFetch = globalThis.fetch.bind(globalThis);
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
+    String(input instanceof Request ? input.url : input).includes("/api/desktop-viewer/")
+      ? new Promise<Response>(() => {})
+      : realFetch(input, init)) as typeof fetch;
+}
+if (params.get("modal") === "needs") {
+  (window as unknown as { ogb: unknown }).ogb = {
+    screenFrame: async () => null,
+    permStatus: async () => ({ screen: "denied" }),
+    permAll: async () => ({ platform: "darwin", permissions: [{ id: "screen", status: "denied", action: { kind: "settings", url: "x-apple.systempreferences:", secondary: { kind: "relaunch" } } }] }),
+    permAct: async () => null,
+    permOpenSettings: async () => {},
+  };
+}
 
 const live = { id: "live", name: "Assistant", browserProfile: "own" } as unknown as Bot;
 const closed = { id: "closed", name: "Assistant", browserProfile: "own" } as unknown as Bot;
@@ -98,6 +119,9 @@ function Gallery() {
       {modal === "sandbox" && <SandboxDesktopModal title={t("computer.screenOf", { name: "Assistant" })} state="running"
         onClose={() => {}}
         screen={() => <img alt="" className="h-full w-full rounded-xl object-contain" src={`data:image/png;base64,${picture}`} />} />}
+      {modal === "starting" && <SandboxDesktopModal title={t("computer.screenOf", { name: "Assistant" })} state="running" onClose={() => {}} />}
+      {modal === "needs" && <SandboxDesktopModal title={t("computer.screenOf", { name: "Assistant" })} state="running" onClose={() => {}}
+        screen={(control) => <LocalLiveScreen control={control} />} />}
     </div>
   );
 }

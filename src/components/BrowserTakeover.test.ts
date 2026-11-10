@@ -133,7 +133,7 @@ describe("browser tab: take control opens the VM's window, not full screen", () 
     await render();
     await showFrame();
     await takeControl();
-    const dialog = document.querySelector("[data-sandbox-takeover][data-takeover-kind=browser] [role=dialog]") as HTMLElement;
+    const dialog = document.querySelector("[data-sandbox-takeover][data-takeover-kind=browser][role=dialog]") as HTMLElement;
     expect(dialog).not.toBeNull();
     expect(dialog.getAttribute("aria-label")).toBe("Assistant’s browser");
     expect(requestFullscreen).not.toHaveBeenCalled();

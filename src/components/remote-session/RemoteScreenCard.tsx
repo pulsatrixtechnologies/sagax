@@ -17,6 +17,7 @@ import { Maximize2, Minimize2 } from "lucide-react";
 
 import { publicText, type RemoteSessionView } from "../../../shared/remote-session";
 import { ComputerScreen, REVEALED_CONTROL, type ScreenControls } from "@/components/computer/ComputerScreen";
+import { DesktopStarting } from "@/components/computer/DesktopStarting";
 import { SandboxDesktopModal } from "@/components/computer/SandboxDesktopModal";
 import { TakeControlPill } from "@/components/SandboxDesktopView";
 import type { ScreenState } from "@/lib/desktop-local-vm";
@@ -151,6 +152,7 @@ export function RemoteLiveScreen({ botId, view, control }: { botId: string; view
   const fallback = useScreenPoll(botId, view.id, !live.frameUrl);
   const frame = live.frameUrl ?? fallback.shot;
   const ratio = live.aspect ?? 16 / 10;
+  const problem = remoteScreenProblem(view, fallback.missed);
   return (
     <div data-remote-live-screen="" data-remote-input={control && live.phase === "active" ? "control" : "none"}
       className="absolute inset-0 flex items-center justify-center" style={{ containerType: "size" }}>
@@ -169,8 +171,11 @@ export function RemoteLiveScreen({ botId, view, control }: { botId: string; view
         >
           <img data-remote-session-shot="" src={frame} alt={remoteScreenCaption(view)} draggable={false} className="block h-full w-full select-none object-contain" />
         </div>
+      ) : problem ? (
+        <p role="status" className="text-[12px] text-white/70">{problem}</p>
       ) : (
-        <p role="status" className="text-[12px] text-white/70">{remoteScreenProblem(view, fallback.missed) ?? t("remoteSession.screenLoading")}</p>
+        // #3386: the app's activity dots until the first frame
+        <DesktopStarting label={t("remoteSession.screenLoading")} className="text-white/75" />
       )}
       {live.error && <p role="alert" className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-[12px] text-white">{live.error}</p>}
     </div>

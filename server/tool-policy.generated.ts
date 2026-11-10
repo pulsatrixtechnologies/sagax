@@ -734,6 +734,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/org\\/people\\/(pr_[A-Za-z0-9_.:-]{1,117})\\/connections(\\/revoke)?$","tier":"admin","readOnly":false,"scope":"org:admin","defaultEnabled":false,"destructive":true},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/org\\/sections\\/([^/]+)(?:\\/(members|bots))?$","tier":"admin","readOnly":false,"scope":"org:admin","defaultEnabled":false},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)(?:\\/(publish|decline|revoke)|\\/versions\\/(\\d+))?$","tier":"admin","readOnly":false,"scope":"pages:admin","defaultEnabled":false,"destructive":true},
+  {"method":"GET","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/(capabilities|viewer|data\\/([\\w-]+))$","tier":"read","readOnly":true,"scope":"pages:read","defaultEnabled":true},
   {"method":"DELETE","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/comments\\/([\\w-]+)$","tier":"admin","readOnly":false,"scope":"pages:admin","defaultEnabled":false,"destructive":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/comments$","tier":"read","readOnly":true,"scope":"pages:read","defaultEnabled":false},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/comments$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},

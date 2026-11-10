@@ -137,6 +137,7 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   autoApprove: "settings",
   approvalMode: "settings",
   proactiveMode: "settings",
+  proactiveModeSet: { drop: "who set the switch on this server" },
   directTriggers: "settings",
   pageTargetDefault: "settings",
   alwaysAllow: "host",

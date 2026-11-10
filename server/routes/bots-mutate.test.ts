@@ -147,6 +147,23 @@ describe("bots-mutate routes", () => {
     expect((await run({ modelSelection: selection, botWide: true }))?.code).not.toBe("thread_required");
   });
 
+  it("#3423: a change of the proactive switch records who set it", async () => {
+    const known: Record<string, unknown> = {
+      store: { bot: () => bot, tasks: () => [{ threadId: "thread-1" }] },
+      auth: { kind: "session", scopes: ["client"] }, req: { headers: {} },
+      parseBotProfilePatch: () => ({ ok: true, patch: {} }), lockedLookRefusal: () => null,
+      isProactiveMode: (value: unknown) => value === "off" || value === "proactive",
+      normalizeProactiveMode: (value: unknown) => value === "off" ? "off" : "proactive",
+      sessionPrincipal: () => "pr_osprey", json: vi.fn(),
+    };
+    const env = new Proxy(known, { get: (target, key: string) => key in target ? target[key] : vi.fn(() => undefined) });
+    const state = { ...createBotPatchState(["/api/bots/osprey", "osprey"] as unknown as RegExpMatchArray), body: { proactiveMode: "off" } } as unknown as BotPatchState;
+    const before = Date.now();
+    expect(await buildBotPatchProfile(env as unknown as BotsMutateEnv, state)).toBe(false);
+    expect(state.patch).toMatchObject({ proactiveMode: "off", proactiveModeSet: { principalId: "pr_osprey" } });
+    expect((state.patch as { proactiveModeSet: { at: number } }).proactiveModeSet.at).toBeGreaterThanOrEqual(before);
+  });
+
   it("marks the open conversation read", async () => {
     const deps = baseDeps();
     const { ctx, json } = context("/api/bots/osprey/read", "POST", { threadId: "thread-1" });

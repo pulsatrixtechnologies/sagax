@@ -131,7 +131,9 @@ import { createBotEventSubscriptionRoutes } from "./routes/bot-event-subscriptio
 import { BotEventSubscriptions } from "./bot-events/bot-event-subscriptions.ts";
 import { ProactiveMetricsLedger } from "./proactive/proactive-metrics.ts";
 import { ProactiveBudget, ProactiveEngine, proactiveDryRunSummary } from "./proactive/proactive.ts";
-import { FlowWatchLoop, WATCH_TICK_MS, WatchMemory } from "./proactive/flow-watches.ts";
+import { domainLabel, FlowWatchLoop, WATCH_TICK_MS, WatchMemory } from "./proactive/flow-watches.ts";
+import { ProactiveChoices, watchMovedLine, watchPauseLine } from "./proactive/proactive-choices.ts";
+import { createProactiveChoicesRoutes } from "./routes/proactive-choices.ts";
 import { flowHelperIn } from "./proactive/flow-watch-helper.ts";
 import { apiNamesOf } from "./perspicax/perspicax-mcp-helpers.ts";
 import { frontMomentSampler, ScreenContextWatcher, screenContextAvailable, screenMomentKey } from "./proactive/screen-context.ts";
@@ -14510,8 +14512,18 @@ store.onChange((change) => {
       catch { console.error("[memory-upkeep] Could not forget deleted bot's upkeep state."); }
       try { cacheKeepWarm.cancelBot(change.botId); }
       catch { console.error("[cache-keepwarm] Could not cancel deleted bot's keep-warm windows."); }
-      try { commandAllowlist.clear(change.botId); mcpServersHost.botDeleted(change.botId); flowWatchLoop.forget(change.botId); }
+      try { commandAllowlist.clear(change.botId); mcpServersHost.botDeleted(change.botId); }
       catch { console.error("[command-allowlist] Could not remove deleted bot's saved rules."); }
+      // #3423: a watch domain it carried moves to the person's main bot, said in one line
+      try {
+        for (const moved of proactiveChoices.botGone(change.botId, personMainBot)) {
+          const language = briefLanguage(moved.botId);
+          // the loop may not exist yet during startup: the slug then
+          const label = (domain: string) => { try { return flowWatchLoop.label(domain, language); } catch { return domain; } };
+          watchChatLine(moved.botId, watchMovedLine(moved.domains.map(label), language));
+        }
+      }
+      catch { console.error("[proactive-choices] Could not move a deleted bot's watch domains."); }
       // Its plugins and the tokens saved for its marketplaces go with it.
       try { botPlugins.forgetBot(change.botId); }
       catch { console.error("[bot-plugins] Could not remove deleted bot's plugins."); }
@@ -20156,7 +20168,13 @@ function feedbackOnWake(botId: string, topic: string, choice: BriefFeedback, whe
   }
   // the row itself names its wake kind when it has one (a Today card sends "attention")
   const kind = message?.routineRun?.wakeTopic ?? topic;
-  backgroundBriefs.topicFeedback(bot.id, kind, choice);
+  // #3423: the "never" of a watch alert stops those watches for good, in the
+  // person's choices (so the reads stop too), never a mute of every watch
+  const watches = kind === "watch" ? message?.routineRun?.watches ?? [] : [];
+  const person = (effectiveBotOwner(bot) || "").trim().toLowerCase();
+  if (choice === "never" && watches.length && person) {
+    for (const row of watches) proactiveChoices.stopWatch(person, row.domain, row.id, "alert");
+  } else backgroundBriefs.topicFeedback(bot.id, kind, choice);
   const said = message?.routineRun?.summary ?? message?.attention?.items[0]?.text ?? message?.text ?? "";
   rememberBriefFeedback(bot.id, choice, said || kind, kind);
   if (message && where.threadId) {
@@ -24377,15 +24395,66 @@ const screenContext: ScreenContextWatcher | null = screenSampler ? new ScreenCon
   }
 }) : null;
 if (screenContext && !process.env.VITEST) screenContext.start();
-/** 2026-11-09: the Pulsatrix Flow watches of the profiles a bot holds
- * (server/proactive/flow-watches.ts). Observe as a read with the owner's
- * routine credentials, `when` true and new: one proactive wake in the bot's
- * conversation; a write goes through the ordinary approval path. */
+/** #3423 (lot 2 of #3408): the person's proactive choices: which watch
+ * domains of the organization's Pulsatrix Flow they turned on, and on which
+ * one of their bots (server/proactive/proactive-choices.ts). Absent is off;
+ * a bot's stored proactiveMode is never read as that yes. */
+const proactiveChoices = new ProactiveChoices(join(DATA_DIR, "proactive-choices.json"));
+/** The bots of a person that can carry a watch domain: their own, visible
+ * and not temporary. */
+function watchCarrierOf(person: string, botId: string): BotRecord | null {
+  const bot = store.bot(botId);
+  if (!bot || bot.hidden || bot.temporary) return null;
+  return (effectiveBotOwner(bot) || "").trim().toLowerCase() === person.trim().toLowerCase() ? bot : null;
+}
+/** The default carrier of the person's watch domains: their main bot, else
+ * another bot of theirs (so a moved domain and its lines reach a live chat). */
+function personMainBot(person: string): string | undefined {
+  return store.bots.find((bot) => bot.chiefOfStaff === true && watchCarrierOf(person, bot.id))?.id
+    ?? store.bots.find((bot) => watchCarrierOf(person, bot.id))?.id;
+}
+/** One line in a bot's own chat (never only the Events lens). */
+function watchChatLine(botId: string, line: string): void {
+  const bot = store.bot(botId);
+  const threadId = bot ? botMainThread(bot.id) ?? bot.threadId : undefined;
+  if (!bot || !threadId) return;
+  store.appendMessage(threadId, { role: "bot", kind: "activity", from: { botId: bot.id, name: bot.name, color: bot.color }, tool: { name: line, ok: false } });
+}
+ROUTES.push(createProactiveChoicesRoutes({
+  store: proactiveChoices,
+  person: (auth) => actorPrincipalId(auth),
+  ownBot: (person, botId) => Boolean(watchCarrierOf(person, botId)),
+  mainBot: personMainBot,
+  offered: (person, botId) => flowWatchLoop.offered(person, botId)
+}));
+/** 2026-11-09, walked from the person's choices since #3423: the Pulsatrix
+ * Flow watches of the domains a person turned on
+ * (server/proactive/flow-watches.ts). Observe as a read with the person's
+ * routine credentials, `when` true and new: one proactive wake in the
+ * carrying bot's conversation; a write goes through the ordinary approval
+ * path. No choice: no session, no helper call, no read. */
 const flowWatchLoop = new FlowWatchLoop({
-  bots: () => store.bots
-    .filter((bot) => !bot.hidden && !bot.temporary)
-    .map((bot) => ({ id: bot.id, owner: effectiveBotOwner(bot) || "", primary: bot.chiefOfStaff === true })),
-  bot: (botId) => store.bot(botId) ?? undefined,
+  choices: () => proactiveChoices.chosen(),
+  carrier: (botId, person) => {
+    if (!store.bot(botId)) return { ok: false, cause: "bot-gone" };
+    // the bot's turns mount the person's account connection (organization server)
+    return watchCarrierOf(person, botId) && IDENTITY.kind === "perspicax" && perspicaxMcp ? { ok: true } : { ok: false, cause: "bot-not-eligible" };
+  },
+  // the same resolution as the Skills index of a turn
+  holdsSkill: (botId, person, skill) => {
+    const bot = store.bot(botId);
+    if (!bot) return false;
+    const instance = bot.modelSelection ? registry.get(bot.modelSelection.instanceId) : null;
+    try {
+      return scopedSkillInventory(bot, instance, person).rows.some((row) => row.kind === "skill" && row.enabled && row.name === skill);
+    } catch {
+      return false;
+    }
+  },
+  owner: (botId) => {
+    const bot = store.bot(botId);
+    return bot ? (effectiveBotOwner(bot) || "").trim().toLowerCase() || undefined : undefined;
+  },
   // the organization's Flow plugin only: no person's or bot's plugin code
   // runs on the shared server (a local server runs its own)
   helper: (botId, owner) => {
@@ -24415,7 +24484,11 @@ const flowWatchLoop = new FlowWatchLoop({
   hostTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
   // its own budget: a watch is a scheduled read, not a wake loop (12 an hour)
   engine: new ProactiveEngine({
-    bot: (botId) => store.bot(botId) ?? undefined,
+    // #3423: the person's choice passes the bot's switch, as a direct trigger
+    bot: (botId) => {
+      const bot = store.bot(botId);
+      return bot ? { ...bot, proactiveMode: "proactive" as const } : undefined;
+    },
     coveredByRules: () => false,
     approvalLevel: (botId) => {
       const bot = store.bot(botId);
@@ -24425,12 +24498,17 @@ const flowWatchLoop = new FlowWatchLoop({
   }),
   offer: (event) => offerProactive(event),
   log: (botId, line) => proactiveEventsLine(botId, line),
-  memory: new WatchMemory(join(DATA_DIR, "proactive-watches.json"))
+  pause: (botId, person, domain, cause, listing) => {
+    // a gone carrier has no chat: the line goes to the person's main bot
+    const target = store.bot(botId) ? botId : personMainBot(person);
+    if (!target) return;
+    const language = briefLanguage(target);
+    watchChatLine(target, watchPauseLine(domainLabel(listing, domain, language), cause, language));
+  },
+  // per person; the per-bot file of before (proactive-watches.json) is not read
+  memory: new WatchMemory(join(DATA_DIR, "proactive-watch-memory.json"))
 });
-// Pulsatrix watches are off for every bot: createBot stores the default mode, so the
-// stored mode is not a choice. The per-person choice of #3408 turns them back on.
-const PULSATRIX_WATCHES_ENABLED = false;
-if (PULSATRIX_WATCHES_ENABLED && !process.env.VITEST && IDENTITY.kind === "perspicax") {
+if (!process.env.VITEST && IDENTITY.kind === "perspicax") {
   setInterval(() => void flowWatchLoop.tick(), WATCH_TICK_MS).unref();
 }
 if (!process.env.VITEST) {

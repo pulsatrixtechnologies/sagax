@@ -541,6 +541,10 @@ export interface WireBot {
    * webhook and acts at its approval level and rules. Absent reads as the
    * default "proactive" (proactiveModeFor). Never a Chief orchestrator. */
   proactiveMode?: ProactiveMode;
+  /** #3423: who last set proactiveMode, and when. Absent: nobody did (the
+   * server wrote the default), so the stored mode is never read as a
+   * person's choice. */
+  proactiveModeSet?: { principalId: string; at: number };
   /** #2691: per channel direct triggers (email, calendar invitation, text)
    * with declarative filters (shared/direct-triggers.ts). Absent channel:
    * follows proactiveMode. */

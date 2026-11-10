@@ -1,34 +1,34 @@
-// Pulsatrix Flow watches (2026-11-09): every product task of Pulsatrix
-// tied to a profile includes proactive work, and a bot that holds a
-// Pulsatrix profile is proactive by default (shared/proactive-mode.ts: no
-// stored mode reads as proactive, the old "follow-rules"; a chosen off is
-// stored and kept).
+// Pulsatrix Flow watches (2026-11-09; walked from the person's choices
+// since #3423, lot 2 of #3408). A watch is the organization's: it is ambient
+// (the server goes looking on the person's behalf), so it never runs until
+// the person said yes to its domain, for one of their bots
+// (server/proactive/proactive-choices.ts). A bot's stored proactiveMode is
+// never read as that yes: createBot and the startup both write "proactive".
 //
-// This is the observe loop ProactiveEngine was waiting for. For each bot
-// whose mode is not off:
-//   1. the products of the Pulsatrix profiles it holds: the APIs its owner's
-//      account connection serves (api_list), matched to Flow's products;
-//   2. the watches of those products from the Flow plugin's helper
+// For each person with a chosen domain (no choice: no session, no helper
+// call, no read, no offer):
+//   1. the carrying bot must be eligible: the person's own, visible, not
+//      temporary, its turns mounting the person's account connection;
+//   2. the products the person's connection serves (api_list), read once a
+//      day per person, matched to Flow's products;
+//   3. the watches of the chosen domains from the Flow plugin's helper
 //      (`px_flow.py proactive --product ...`), cached and reloaded hourly;
-//   3. each watch on its cadence (`15m`, `1h`, `daily@HH:MM`,
+//      a watch runs only when the connection serves every product it names
+//      and the bot holds its skill, and not when the person switched it off;
+//   4. each watch on its cadence (`15m`, `1h`, `daily@HH:MM`,
 //      `weekly:sun@HH:MM`, local time of the tenant);
-//   4. `observe` runs as a READ on a short-lived connection with the owner's
-//      routine credentials (as a routine of the bot): a tool Perspicax marks
-//      read-only (or a plainly read-named one), `flow_run read recipe plan`,
-//      or `flow_action` without `confirm` (Perspicax sends no write then).
-//      An observe that is not a read never runs;
-//   5. `when` (JMESPath) on the observed value; true and not already seen
-//      (watch id + key of the result) goes through ProactiveEngine.consider
-//      (stored mode, per-bot budget) and decideProactiveStep;
-//   6. the step becomes a proactive wake (source "watch") of the bot: one
-//      background turn whose report lands in the bot's one conversation
-//      (unified chat, never a separate thread). A read runs; a write is
-//      planned as a dry run and goes through the ordinary approval path
-//      (the card in that same conversation). The proactive layer never runs
-//      a write on its own.
+//   5. `observe` runs as a READ on a short-lived connection with the
+//      person's routine credentials: a tool Perspicax marks read-only (or a
+//      plainly read-named one), `flow_run read recipe plan`, or
+//      `flow_action` without `confirm` (Perspicax sends no write then);
+//   6. `when` (JMESPath) on the observed value; true and not already seen
+//      (watch id + key of the result, per person) wakes the carrying bot
+//      with a proactive wake (source "watch"). The person's choice passes
+//      the bot's switch, as a direct trigger does. A read runs; a write is
+//      planned as a dry run and goes through the ordinary approval path.
 //
-// One bot per person (#3394): a watch is the organization's, so only one
-// bot of a person watches it (the Primary Bot first); see tick().
+// A chosen domain that cannot run pauses and says so once in the carrying
+// bot's chat, with its cause; it resumes by itself.
 //
 // Dedup: a condition that stays true with the same key never wakes again;
 // it can fire again once it turned false, or when its key changes.
@@ -40,7 +40,7 @@ import jmespath from "jmespath";
 import { writeFileAtomic } from "../atomic.ts";
 import { classifyProactiveActionKind, type ProactiveEngine } from "./proactive.ts";
 import type { ProactiveEvent, ProactiveOfferVerdict } from "./proactive-wake.ts";
-import { proactiveMayObserve, proactiveModeFor } from "../../shared/proactive-mode.ts";
+import type { WatchPauseCause } from "./proactive-choices.ts";
 import { factsOfReference, factTopics, resolveWatchTokens, type WatchTokenContext } from "./watch-tokens.ts";
 
 type Json = Record<string, unknown>;
@@ -68,15 +68,56 @@ export interface FlowWatch {
   propose: WatchPropose;
   kind: "read" | "write";
   prompt: string;
+  /** The tools its skill declares (Flow lot `flow-domains`); empty: the
+   * observe tool stands for them. */
+  tools: string[];
+}
+
+/** A watch domain as Flow describes it (Flow lot `flow-domains`); absent:
+ * the label falls back to the slug. */
+export interface FlowDomain {
+  label?: { fr?: string; en?: string };
+  audience?: { fr?: string; en?: string };
 }
 
 export interface FlowWatchListing {
   watches: FlowWatch[];
+  /** The domains Flow describes, by slug. */
+  domains?: Record<string, FlowDomain>;
   /** The tenant's time zone when the helper says it. */
   timeZone?: string;
   /** Rows dropped because they did not match the contract. */
   rejected: number;
+  /** The helper could not be read (tried again soon). */
+  failed?: true;
 }
+
+/** One watch of a domain the person may choose, as a bot shows it. */
+export interface OfferedWatch {
+  id: string;
+  summary: string;
+  cadence: string;
+  products: string[];
+  /** It would run for this person on this bot; else what is missing. */
+  runs: boolean;
+  missing?: "product" | "skill";
+}
+
+/** One domain of the organization's Flow, as the person may choose it. */
+export interface OfferedDomain {
+  domain: string;
+  label: { fr?: string; en?: string };
+  audience?: { fr?: string; en?: string };
+  watches: OfferedWatch[];
+  /** At least one of its watches runs for this person on this bot. */
+  eligible: boolean;
+}
+
+/** The domains a person may choose on one of their bots, or why none can
+ * be listed now. */
+export type OfferedListing =
+  | { ok: true; botId: string; domains: OfferedDomain[] }
+  | { ok: false; botId: string; cause: "bot-gone" | "bot-not-eligible" | "no-flow" | "flow-failed" | "no-access" };
 
 const ID = /^[\w.:-]{1,120}$/;
 
@@ -141,7 +182,47 @@ export function watchOf(row: unknown): FlowWatch | null {
     // anything but an explicit read is a write: fail safe
     kind: row.kind === "read" ? "read" : "write",
     prompt,
+    tools: Array.isArray(row.tools) ? [...new Set(row.tools.flatMap((item) => (text(item, 160) ? [text(item, 160)!] : [])))].slice(0, 40) : [],
   };
+}
+
+function wordsOf(value: unknown): { fr?: string; en?: string } | undefined {
+  if (typeof value === "string") return text(value, 200) ? { en: text(value, 200)! } : undefined;
+  if (!isObject(value)) return undefined;
+  const fr = text(value.fr, 200);
+  const en = text(value.en, 200);
+  return fr || en ? { ...(fr ? { fr } : {}), ...(en ? { en } : {}) } : undefined;
+}
+
+/** The domains of the helper's output, known fields only. */
+function domainsOf(value: unknown): Record<string, FlowDomain> | undefined {
+  if (!isObject(value)) return undefined;
+  const out: Record<string, FlowDomain> = {};
+  for (const [slug, row] of Object.entries(value)) {
+    if (!ID.test(slug) || !isObject(row)) continue;
+    const label = wordsOf(row.label);
+    const audience = wordsOf(row.for ?? row.audience);
+    out[slug] = { ...(label ? { label } : {}), ...(audience ? { audience } : {}) };
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** A domain's label for the person, else its slug. */
+export function domainLabel(listing: Pick<FlowWatchListing, "domains"> | undefined, slug: string, language: "fr" | "en"): string {
+  const label = listing?.domains?.[slug]?.label;
+  return (language === "fr" ? label?.fr ?? label?.en : label?.en ?? label?.fr) ?? slug;
+}
+
+/** The read tools a chosen domain's alerts may run without a card
+ * (decision 3): those its watches declare, kept only when the connection
+ * marks them read-only; without Flow's list, the observe tools. */
+export function watchReadTools(watches: readonly FlowWatch[], readOnly: ReadonlySet<string>): string[] {
+  const out = new Set<string>();
+  for (const watch of watches) {
+    const declared = watch.tools.length ? watch.tools : "tool" in watch.observe ? [watch.observe.tool] : [];
+    for (const tool of declared) if (readOnly.has(tool)) out.add(tool);
+  }
+  return [...out].sort();
 }
 
 /** The helper's stdout, read whole. Bad JSON is no watch at all. */
@@ -166,7 +247,8 @@ export function parseWatchListing(stdout: string): FlowWatchListing {
     watches.push(watch);
   }
   const zone = isObject(parsed) ? text(parsed.timezone ?? parsed.timeZone, 64) : undefined;
-  return { watches, rejected, ...(zone && validTimeZone(zone) ? { timeZone: zone } : {}) };
+  const domains = isObject(parsed) ? domainsOf(parsed.domains) : undefined;
+  return { watches, rejected, ...(domains ? { domains } : {}), ...(zone && validTimeZone(zone) ? { timeZone: zone } : {}) };
 }
 
 // ── cadence ────────────────────────────────────────────────────────────────
@@ -313,10 +395,11 @@ export function productsForApis(apis: ReadonlyArray<{ id: string; name: string }
   return [...out].sort();
 }
 
-/** Watches of a bot: those of its products, and those that name none. */
+/** Watches a person's connection can run: every product a watch names is
+ * served (all, not one), or it names none. */
 export function watchesForProducts(watches: readonly FlowWatch[], products: readonly string[]): FlowWatch[] {
   const held = new Set(products);
-  return watches.filter((watch) => watch.products.length === 0 || watch.products.some((product) => held.has(product)));
+  return watches.filter((watch) => watch.products.every((product) => held.has(product)));
 }
 
 // ── the observe step ───────────────────────────────────────────────────────
@@ -386,6 +469,9 @@ export function watchEvent(input: { botId: string; runAs?: string; watch: FlowWa
       prompt: watch.prompt,
       propose: proposeLabel(watch.propose),
       disposition: input.disposition,
+      domain: watch.domain,
+      // #3423: only a domain the person turned on fires: it passes the switch
+      chosen: true,
     },
   };
 }
@@ -397,18 +483,23 @@ interface WatchState {
   last?: number;
   /** The key of the condition that already fired and is still true. */
   fired?: string;
-  /** #3140: the cause of the skip already posted in the chat; the same
-   * cause stays silent until it changes or an observe succeeds. */
+  /** #3140: the cause of the skip already posted; the same cause stays
+   * silent until it changes or an observe succeeds. */
   skip?: string;
   /** #3140: observe at the next tick, whatever the cadence (a pending wake
    * replayed after a restart). */
   due?: true;
 }
 
-/** Per bot and watch: when it last ran and which true condition already
- * fired. Kept on disk so a restart neither re-fires nor catches up. */
+/** Per person and watch (#3423: a watch is the person's, not a bot's):
+ * when it last ran and which true condition already fired, and the pause
+ * already told per chosen domain. Kept on disk so a restart neither
+ * re-fires nor catches up. The per-bot memory of before is not read: it
+ * restarts per person. */
 export class WatchMemory {
   private items: Record<string, Record<string, WatchState>> = {};
+
+  private pauses: Record<string, Record<string, string>> = {};
 
   private readonly file: string | undefined;
 
@@ -416,9 +507,9 @@ export class WatchMemory {
     this.file = file;
     if (!file) return;
     try {
-      const parsed = JSON.parse(readFileSync(file, "utf8")) as { bots?: unknown };
-      if (isObject(parsed.bots)) {
-        for (const [botId, rows] of Object.entries(parsed.bots)) {
+      const parsed = JSON.parse(readFileSync(file, "utf8")) as { version?: unknown; people?: unknown; pauses?: unknown };
+      if (parsed.version === 2 && isObject(parsed.people)) {
+        for (const [person, rows] of Object.entries(parsed.people)) {
           if (!isObject(rows)) continue;
           const kept: Record<string, WatchState> = {};
           for (const [watchId, row] of Object.entries(rows)) {
@@ -430,7 +521,13 @@ export class WatchMemory {
               ...(row.due === true ? { due: true as const } : {}),
             };
           }
-          this.items[botId] = kept;
+          this.items[person] = kept;
+        }
+      }
+      if (parsed.version === 2 && isObject(parsed.pauses)) {
+        for (const [person, rows] of Object.entries(parsed.pauses)) {
+          if (!isObject(rows)) continue;
+          this.pauses[person] = Object.fromEntries(Object.entries(rows).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
         }
       }
     } catch {
@@ -438,72 +535,86 @@ export class WatchMemory {
     }
   }
 
-  get(botId: string, watchId: string): WatchState {
-    return this.items[botId]?.[watchId] ?? {};
+  get(person: string, watchId: string): WatchState {
+    return this.items[person]?.[watchId] ?? {};
   }
 
-  private set(botId: string, watchId: string, state: WatchState): void {
-    (this.items[botId] ??= {})[watchId] = state;
+  private set(person: string, watchId: string, state: WatchState): void {
+    (this.items[person] ??= {})[watchId] = state;
   }
 
-  noteRun(botId: string, watchId: string, at: number): void {
-    const { due: _due, ...state } = this.get(botId, watchId);
-    this.set(botId, watchId, { ...state, last: at });
+  noteRun(person: string, watchId: string, at: number): void {
+    const { due: _due, ...state } = this.get(person, watchId);
+    this.set(person, watchId, { ...state, last: at });
   }
 
   /** #3140: true the first time a cause is seen (post its line), false
    * while the same cause repeats. */
-  skipped(botId: string, watchId: string, cause: string): boolean {
-    const state = this.get(botId, watchId);
+  skipped(person: string, watchId: string, cause: string): boolean {
+    const state = this.get(person, watchId);
     if (state.skip === cause) return false;
-    this.set(botId, watchId, { ...state, skip: cause });
+    this.set(person, watchId, { ...state, skip: cause });
     return true;
   }
 
   /** An observe went through: the next skip posts again. */
-  observed(botId: string, watchId: string): void {
-    const { skip: _skip, ...state } = this.get(botId, watchId);
-    this.set(botId, watchId, state);
+  observed(person: string, watchId: string): void {
+    const { skip: _skip, ...state } = this.get(person, watchId);
+    this.set(person, watchId, state);
   }
 
   /** #3140: a fired condition whose wake never started (a restart): it
    * is observed again at the next tick and may fire again. */
-  replay(botId: string, watchId: string): void {
-    const { fired: _fired, ...state } = this.get(botId, watchId);
-    this.set(botId, watchId, { ...state, due: true });
+  replay(person: string, watchId: string): void {
+    const { fired: _fired, ...state } = this.get(person, watchId);
+    this.set(person, watchId, { ...state, due: true });
   }
 
   /** The condition's verdict: "fire" the first time a key is true, then
    * "duplicate" while it stays true with that key; false clears it. */
-  settle(botId: string, watchId: string, holds: boolean, key: string): "fire" | "duplicate" | "clear" {
-    const state = this.get(botId, watchId);
+  settle(person: string, watchId: string, holds: boolean, key: string): "fire" | "duplicate" | "clear" {
+    const state = this.get(person, watchId);
     if (!holds) {
       if (state.fired !== undefined) {
         const { fired: _fired, ...rest } = state;
-        this.set(botId, watchId, rest);
+        this.set(person, watchId, rest);
       }
       return "clear";
     }
     if (state.fired === key) return "duplicate";
-    this.set(botId, watchId, { ...state, fired: key });
+    this.set(person, watchId, { ...state, fired: key });
     return "fire";
   }
 
   /** A fired condition that could not start: let it fire again. */
-  unfire(botId: string, watchId: string): void {
-    const { fired: _fired, ...state } = this.get(botId, watchId);
-    this.set(botId, watchId, state);
+  unfire(person: string, watchId: string): void {
+    const { fired: _fired, ...state } = this.get(person, watchId);
+    this.set(person, watchId, state);
   }
 
-  forget(botId: string): void {
-    delete this.items[botId];
+  /** A chosen domain paused for `cause`: true the first time (say it once). */
+  paused(person: string, domain: string, cause: string): boolean {
+    const rows = (this.pauses[person] ??= {});
+    if (rows[domain] === cause) return false;
+    rows[domain] = cause;
+    return true;
+  }
+
+  /** A chosen domain runs again: a later pause is told again. */
+  resumed(person: string, domain: string): void {
+    if (this.pauses[person]?.[domain] !== undefined) delete this.pauses[person]![domain];
+  }
+
+  forget(person: string): void {
+    delete this.items[person];
+    delete this.pauses[person];
   }
 
   save(): void {
     if (!this.file) return;
     try {
       mkdirSync(dirname(this.file), { recursive: true, mode: 0o700 });
-      writeFileAtomic(this.file, JSON.stringify({ version: 1, bots: this.items }), { mode: 0o600 });
+      writeFileAtomic(this.file, JSON.stringify({ version: 2, people: this.items, pauses: this.pauses }), { mode: 0o600 });
     } catch {
       // kept in memory
     }
@@ -513,8 +624,10 @@ export class WatchMemory {
 // ── the loop ───────────────────────────────────────────────────────────────
 
 export const WATCH_TICK_MS = 60_000;
-/** The watch list and a bot's products are reloaded this often. */
+/** The watch list is reloaded this often. */
 export const WATCH_RELOAD_MS = 60 * 60_000;
+/** A person's products are read once a day (3.4 of the design). */
+export const WATCH_PRODUCTS_MS = 24 * 60 * 60_000;
 /** After a failed helper or connection, try again this soon. */
 export const WATCH_RETRY_MS = 5 * 60_000;
 
@@ -546,21 +659,40 @@ export function resolveWatch(watch: FlowWatch, ctx: WatchTokenContext): { watch:
   return { watch: { ...watch, observe: observe.value, when: when.value } };
 }
 
+/** One domain a person turned on, the bot that carries it, and the watches
+ * they switched off inside it (shared/proactive-choices.ts chosenDomains). */
+export interface ChosenDomain {
+  domain: string;
+  botId: string;
+  watchesOff: readonly string[];
+}
+
+export type ObserveConnection = ObserveSession & { apis(): Promise<Array<{ id: string; name: string }>>; holdsProfile(): Promise<boolean> };
+
 export interface FlowWatchLoopDeps {
-  /** The bots to watch for (not hidden, not temporary), with their owner
-   * and whether the bot is its person's Primary Bot. */
-  bots(): Array<{ id: string; owner: string; primary?: boolean }>;
-  /** The stored bot (its proactiveMode), undefined if gone. */
-  bot(botId: string): { proactiveMode?: unknown } | undefined;
-  /** The organization's Flow plugin of this bot's owner, or null. */
-  helper(botId: string, owner: string): FlowHelper | null;
-  /** A routine connection as the owner (null: no Pulsatrix access). */
-  session<T>(owner: string, botId: string, fn: (session: ObserveSession & { apis(): Promise<Array<{ id: string; name: string }>>; holdsProfile(): Promise<boolean> }) => Promise<T>): Promise<T | null>;
-  /** The owner's time zone, when set. */
-  timeZone(owner: string): string | undefined;
+  /** Every person with a chosen domain (none: the loop does nothing). */
+  choices(): ReadonlyArray<{ person: string; domains: readonly ChosenDomain[] }>;
+  /** Whether this bot can carry the person's watches: the person's own,
+   * visible, not temporary, its turns mounting the person's account
+   * connection. */
+  carrier(botId: string, person: string): { ok: true } | { ok: false; cause: "bot-gone" | "bot-not-eligible" };
+  /** Whether the bot holds a skill (the resolution of a turn's Skills index). */
+  holdsSkill(botId: string, person: string, skill: string): boolean;
+  /** The bot's person, for a replay or a release keyed by bot. */
+  owner(botId: string): string | undefined;
+  /** The organization's Flow plugin for this bot and person, or null. */
+  helper(botId: string, person: string): FlowHelper | null;
+  /** A routine connection as the person (null: no Pulsatrix access). */
+  session<T>(person: string, botId: string, fn: (session: ObserveConnection) => Promise<T>): Promise<T | null>;
+  /** The person's time zone, when set. */
+  timeZone(person: string): string | undefined;
   engine: ProactiveEngine;
   offer(event: ProactiveEvent): ProactiveOfferVerdict | undefined;
+  /** A line in the bot's Events lens. */
   log(botId: string, line: string): void;
+  /** A chosen domain paused: one line in the carrying bot's chat (the
+   * person's main bot, or another of theirs, when that bot is gone). */
+  pause(botId: string, person: string, domain: string, cause: WatchPauseCause, listing: FlowWatchListing | undefined): void;
   memory: WatchMemory;
   now?: () => number;
   hostTimeZone?: () => string;
@@ -596,7 +728,7 @@ export class FlowWatchLoop {
       value = parseWatchListing(await helper.proactive(products));
       if (value.rejected) this.deps.log(botId, `Pulsatrix watches: ${value.rejected} watch(es) of the Flow plugin do not match the contract and were left out.`);
     } catch (error) {
-      value = { watches: [], rejected: 0 };
+      value = { watches: [], rejected: 0, failed: true };
       ttl = WATCH_RETRY_MS;
       this.deps.log(botId, `Pulsatrix watches could not load: ${error instanceof Error ? error.message.slice(0, 160) : "error"}`);
     }
@@ -622,27 +754,23 @@ export class FlowWatchLoop {
     return value;
   }
 
-  /** One pass over every bot. Never throws; never two at once.
+  /** One pass over the people who chose a domain. Never throws; never two
+   * at once. No choice: no session, no helper call, no read, no offer.
    *
-   * #3394: a watch belongs to the organization's Flow plugin, not to a bot,
-   * so it is watched once per person: by the Primary Bot when it watches,
-   * else by the person's first bot (store order) that watches it. Every
-   * other bot of the same person leaves that watch alone, so one event
-   * wakes one bot, once. Another person's bots keep their own watch. */
+   * #3394: a watch is the organization's; a domain is carried by the one
+   * bot the person named, so one event wakes one bot, once. */
   async tick(): Promise<void> {
     if (this.running) return;
     this.running = true;
     try {
-      const bots = this.deps.bots();
-      const ordered = [...bots.filter((bot) => bot.primary), ...bots.filter((bot) => !bot.primary)];
-      const claimed = new Map<string, Set<string>>();
-      for (const { id, owner } of ordered) {
-        let taken = claimed.get(owner);
-        if (!taken) claimed.set(owner, (taken = new Set()));
+      for (const { person, domains } of this.deps.choices()) {
+        if (!person || !domains.length) continue;
         try {
-          await this.tickBot(id, owner, taken);
+          await this.tickPerson(person, domains);
         } catch (error) {
-          this.deps.log(id, `Pulsatrix watches failed: ${error instanceof Error ? error.message.slice(0, 160) : "error"}`);
+          for (const botId of new Set(domains.map((row) => row.botId))) {
+            this.deps.log(botId, `Pulsatrix watches failed: ${error instanceof Error ? error.message.slice(0, 160) : "error"}`);
+          }
         }
       }
       this.deps.memory.save();
@@ -651,36 +779,121 @@ export class FlowWatchLoop {
     }
   }
 
-  /** `taken`: the watches another bot of the same person already watches
-   * in this pass; this bot skips them and adds the ones it watches. */
-  async tickBot(botId: string, owner: string, taken: Set<string> = new Set()): Promise<void> {
-    const bot = this.deps.bot(botId);
-    if (!bot || !proactiveMayObserve(proactiveModeFor(bot))) return;
-    const helper = this.deps.helper(botId, owner);
-    if (!helper) return;
-    // the products of the profiles the bot holds (needs a connection, hourly)
-    let products = this.fresh(this.products, botId);
-    if (!products) {
-      const universe = (await this.listing(helper, [], botId)).watches.flatMap((watch) => watch.products);
-      const found = await this.deps.session(owner, botId, async (session) => {
-        if (!(await session.holdsProfile())) return [];
-        return productsForApis(await session.apis(), universe);
-      }).catch(() => null);
-      products = found ?? [];
-      this.products.set(botId, { at: this.now(), value: products, ttl: found === null ? WATCH_RETRY_MS : WATCH_RELOAD_MS });
+  private pause(person: string, chosen: ChosenDomain, cause: WatchPauseCause, listing?: FlowWatchListing): void {
+    if (this.deps.memory.paused(person, chosen.domain, cause)) this.deps.pause(chosen.botId, person, chosen.domain, cause, listing);
+  }
+
+  /** The person's products, read once a day (null: no access now). */
+  private async productsOf(person: string, botId: string, helper: FlowHelper): Promise<string[] | null> {
+    const hit = this.fresh(this.products, person);
+    if (hit) return hit;
+    const universe = (await this.listing(helper, [], botId)).watches.flatMap((watch) => watch.products);
+    const found = await this.deps.session(person, botId, async (session) => {
+      if (!(await session.holdsProfile())) return [];
+      return productsForApis(await session.apis(), universe);
+    }).catch(() => null);
+    this.products.set(person, { at: this.now(), value: found ?? [], ttl: found === null ? WATCH_RETRY_MS : WATCH_PRODUCTS_MS });
+    return found;
+  }
+
+  /** The domains the person may choose on this bot of theirs: each with
+   * its label and watches, and whether it would run here (the person's
+   * products, read once a day, and the bot's skills). Called when the
+   * person asks (GET and PUT /api/me/proactive), never by the loop. */
+  async offered(person: string, botId: string): Promise<OfferedListing> {
+    const verdict = this.deps.carrier(botId, person);
+    if (!verdict.ok) return { ok: false, botId, cause: verdict.cause };
+    const helper = this.deps.helper(botId, person);
+    if (!helper) return { ok: false, botId, cause: "no-flow" };
+    const universe = await this.listing(helper, [], botId);
+    if (universe.failed) return { ok: false, botId, cause: "flow-failed" };
+    const products = await this.productsOf(person, botId, helper);
+    if (products === null) return { ok: false, botId, cause: "no-access" };
+    const held = new Set(products);
+    const byDomain = new Map<string, OfferedWatch[]>();
+    for (const watch of universe.watches) {
+      const missing = !watch.products.every((product) => held.has(product)) ? "product" as const
+        : watch.skill && !this.deps.holdsSkill(botId, person, watch.skill) ? "skill" as const : undefined;
+      const row: OfferedWatch = { id: watch.id, summary: watch.summary, cadence: watch.cadence, products: watch.products, runs: !missing, ...(missing ? { missing } : {}) };
+      byDomain.set(watch.domain, [...(byDomain.get(watch.domain) ?? []), row]);
     }
-    if (!products.length) return;
-    const listing = await this.listing(helper, products, botId);
-    const zone = listing.timeZone ?? this.deps.timeZone(owner) ?? this.deps.hostTimeZone?.() ?? "UTC";
+    const domains = [...byDomain].sort(([a], [b]) => a.localeCompare(b)).map(([domain, watches]): OfferedDomain => {
+      const described = universe.domains?.[domain];
+      return {
+        domain,
+        label: described?.label ?? { en: domain },
+        ...(described?.audience ? { audience: described.audience } : {}),
+        watches,
+        eligible: watches.some((watch) => watch.runs),
+      };
+    });
+    return { ok: true, botId, domains };
+  }
+
+  /** A domain's label from the listings read so far, else its slug. */
+  label(domain: string, language: "fr" | "en"): string {
+    for (const { value } of this.listings.values()) {
+      if (value.domains?.[domain]) return domainLabel(value, domain, language);
+    }
+    return domain;
+  }
+
+  /** One person's chosen domains, each on its own bot. */
+  async tickPerson(person: string, chosen: readonly ChosenDomain[]): Promise<void> {
+    const byBot = new Map<string, ChosenDomain[]>();
+    for (const row of chosen) {
+      const verdict = this.deps.carrier(row.botId, person);
+      if (!verdict.ok) {
+        this.pause(person, row, verdict.cause);
+        continue;
+      }
+      byBot.set(row.botId, [...(byBot.get(row.botId) ?? []), row]);
+    }
+    for (const [botId, rows] of byBot) await this.tickBot(person, botId, rows);
+  }
+
+  /** The chosen domains one bot carries for its person. */
+  private async tickBot(person: string, botId: string, rows: readonly ChosenDomain[]): Promise<void> {
+    const helper = this.deps.helper(botId, person);
+    if (!helper) {
+      for (const row of rows) this.pause(person, row, "no-flow");
+      return;
+    }
+    const products = await this.productsOf(person, botId, helper);
+    if (products === null) {
+      for (const row of rows) this.pause(person, row, "no-access");
+      return;
+    }
+    const listing = products.length ? await this.listing(helper, products, botId) : { watches: [], rejected: 0 };
+    const served = watchesForProducts(listing.watches, products);
+    const mine: FlowWatch[] = [];
+    for (const row of rows) {
+      const off = new Set(row.watchesOff);
+      const runnable = served.filter((watch) => watch.domain === row.domain && !off.has(watch.id)
+        && (!watch.skill || this.deps.holdsSkill(botId, person, watch.skill)));
+      if (!runnable.length) {
+        // against every watch of the organization, not only the served ones:
+        // a domain Flow does not have is said, never skipped in silence
+        const universe = await this.listing(helper, [], botId);
+        const inDomain = universe.watches.filter((watch) => watch.domain === row.domain);
+        if (universe.failed) this.pause(person, row, "flow-failed", universe);
+        else if (!inDomain.length) this.pause(person, row, "unknown-domain", universe);
+        // nothing left on purpose (every watch switched off) is no pause
+        else if (inDomain.some((watch) => !off.has(watch.id))) this.pause(person, row, "no-watch", universe);
+        continue;
+      }
+      this.deps.memory.resumed(person, row.domain);
+      mine.push(...runnable);
+    }
+    if (!mine.length) return;
+    const zone = listing.timeZone ?? this.deps.timeZone(person) ?? this.deps.hostTimeZone?.() ?? "UTC";
     const now = this.now();
     const due: FlowWatch[] = [];
-    const mine = watchesForProducts(listing.watches, products).filter((watch) => !taken.has(watch.id));
-    for (const watch of mine) taken.add(watch.id);
     for (const watch of mine) {
       const cadence = parseCadence(watch.cadence)!;
-      const { last, due: replayed } = this.deps.memory.get(botId, watch.id);
+      const { last, due: replayed } = this.deps.memory.get(person, watch.id);
       if (replayed || cadenceDue(cadence, last, now, zone)) due.push(watch);
-      else if (last === undefined) this.deps.memory.noteRun(botId, watch.id, now);
+      else if (last === undefined) this.deps.memory.noteRun(person, watch.id, now);
     }
     if (!due.length) return;
     const topics = factTopics(due.map((watch) => [watch.observe, watch.when]));
@@ -695,30 +908,30 @@ export class FlowWatchLoop {
         continue;
       }
       // never a call with a raw template: skipped until the tenant sets it
-      this.deps.memory.noteRun(botId, watch.id, now);
+      this.deps.memory.noteRun(person, watch.id, now);
       const tokens = resolved.unresolved.join(", ").slice(0, 200);
-      this.skip(botId, watch.id, `unresolved:${tokens}`, `Pulsatrix watch ${watch.id} skipped: ${tokens} not set for this organization.`);
+      this.skip(person, botId, watch.id, `unresolved:${tokens}`, `Pulsatrix watch ${watch.id} skipped: ${tokens} not set for this organization.`);
     }
     if (!ready.length) return;
     // #3140: marked before the connection, so a missing access waits for
     // the next cadence instead of retrying on every tick
-    for (const watch of ready) this.deps.memory.noteRun(botId, watch.id, now);
+    for (const watch of ready) this.deps.memory.noteRun(person, watch.id, now);
     let failure: string | undefined;
-    const reached = await this.deps.session(owner, botId, async (session) => {
+    const reached = await this.deps.session(person, botId, async (session) => {
       for (const watch of ready) {
         const call = observeCall(watch.observe, session);
         if ("refused" in call) {
-          this.skip(botId, watch.id, `refused:${call.refused}`, `Pulsatrix watch ${watch.id} skipped: ${call.refused}.`);
+          this.skip(person, botId, watch.id, `refused:${call.refused}`, `Pulsatrix watch ${watch.id} skipped: ${call.refused}.`);
           continue;
         }
         const answer = await session.call(call.name, call.args);
         if (!answer.ok || answer.isError) {
           const error = answer.ok ? "" : answer.error.slice(0, 120);
-          this.skip(botId, watch.id, `observe:${error}`, `Pulsatrix watch ${watch.id} could not observe${error ? `: ${error}` : ""}.`);
+          this.skip(person, botId, watch.id, `observe:${error}`, `Pulsatrix watch ${watch.id} could not observe${error ? `: ${error}` : ""}.`);
           continue;
         }
-        this.deps.memory.observed(botId, watch.id);
-        this.consider(botId, owner, watch, answer.value);
+        this.deps.memory.observed(person, watch.id);
+        this.consider(botId, person, watch, answer.value);
       }
       return true;
     }).catch((error: unknown) => {
@@ -727,40 +940,45 @@ export class FlowWatchLoop {
     });
     if (reached) return;
     for (const watch of ready) {
-      if (failure === undefined) this.skip(botId, watch.id, "access", `Pulsatrix watch ${watch.id} skipped: no Pulsatrix access for this person.`);
-      else this.skip(botId, watch.id, `failed:${failure}`, `Pulsatrix watch ${watch.id} could not run: ${failure}`);
+      if (failure === undefined) this.skip(person, botId, watch.id, "access", `Pulsatrix watch ${watch.id} skipped: no Pulsatrix access for this person.`);
+      else this.skip(person, botId, watch.id, `failed:${failure}`, `Pulsatrix watch ${watch.id} could not run: ${failure}`);
     }
   }
 
-  /** #3140: a skip posts its line in the chat once per cause; the same
-   * cause stays silent until it changes or an observe succeeds. */
-  private skip(botId: string, watchId: string, cause: string, line: string): void {
-    if (this.deps.memory.skipped(botId, watchId, cause)) this.deps.log(botId, line);
+  /** #3140: a skip posts its line once per cause; the same cause stays
+   * silent until it changes or an observe succeeds. */
+  private skip(person: string, botId: string, watchId: string, cause: string, line: string): void {
+    if (this.deps.memory.skipped(person, watchId, cause)) this.deps.log(botId, line);
   }
 
   /** #3140: a pending wake of this watch was lost to a restart: observe it
    * again at the next tick, so the condition fires again if it still holds. */
   replay(botId: string, watchId: string): void {
-    this.deps.memory.replay(botId, watchId);
+    const person = this.deps.owner(botId);
+    if (!person) return;
+    this.deps.memory.replay(person, watchId);
     this.deps.memory.save();
   }
 
   /** #3140: a gathered watch event no wake will run for (dropped): the
    * condition is no longer marked as sent and fires again at its cadence. */
   released(botId: string, watchId: string): void {
-    this.deps.memory.unfire(botId, watchId);
+    const person = this.deps.owner(botId);
+    if (!person) return;
+    this.deps.memory.unfire(person, watchId);
     this.deps.memory.save();
   }
 
-  /** A watch observed: its condition, then the gate, then the wake. */
-  consider(botId: string, owner: string, watch: FlowWatch, observed: unknown): "fired" | "false" | "duplicate" | "off" | "budget" | "refused" {
+  /** A watch observed: its condition, then the budget, then the wake of the
+   * carrying bot. The person's choice passes the bot's switch. */
+  consider(botId: string, person: string, watch: FlowWatch, observed: unknown): "fired" | "false" | "duplicate" | "off" | "budget" | "refused" {
     const { holds, key } = evaluateWhen(watch.when, observed);
-    const verdict = this.deps.memory.settle(botId, watch.id, holds, key);
+    const verdict = this.deps.memory.settle(person, watch.id, holds, key);
     if (verdict === "clear") return "false";
     if (verdict === "duplicate") return "duplicate";
     const considered = this.deps.engine.consider(botId, { tool: proposeTool(watch), request: watch.propose });
     if (!considered.acted || considered.decision.disposition === "blocked") {
-      this.deps.memory.unfire(botId, watch.id);
+      this.deps.memory.unfire(person, watch.id);
       if (considered.reason === "budget" || considered.reason === "cadence") {
         this.deps.log(botId, `Pulsatrix watch ${watch.id} waits: the hour's limit of proactive steps is reached.`);
         return "budget";
@@ -768,18 +986,12 @@ export class FlowWatchLoop {
       return "off";
     }
     const disposition = considered.decision.disposition;
-    const offered = this.deps.offer(watchEvent({ botId, runAs: owner || undefined, watch, key, observed, disposition }));
+    const offered = this.deps.offer(watchEvent({ botId, runAs: person || undefined, watch, key, observed, disposition }));
     if (offered !== "gathered" && offered !== "duplicate") {
-      this.deps.memory.unfire(botId, watch.id);
+      this.deps.memory.unfire(person, watch.id);
       this.deps.log(botId, `Pulsatrix watch ${watch.id} did not wake the bot (${offered ?? "error"}).`);
       return "refused";
     }
     return "fired";
-  }
-
-  /** A deleted bot. */
-  forget(botId: string): void {
-    this.products.delete(botId);
-    this.deps.memory.forget(botId);
   }
 }

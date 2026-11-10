@@ -3,6 +3,8 @@
  * Provides language display normalization, accurate line counting, and line count formatting.
  */
 
+import { activeLocale, t } from "./i18n";
+
 /** Known language identifier mappings for user-friendly display labels. */
 const KNOWN_LANGUAGES: Record<string, string> = {
   // JavaScript & TypeScript
@@ -134,19 +136,23 @@ export function countLines(code?: string | null): number {
 }
 
 /**
- * Formats a numeric line count into a readable label with proper singular/plural grammar.
- *
- * @param count - Total line count.
- * @returns Formatted label such as "1 line" or "42 lines".
+ * A code block's line count in the active language, by its plural rule
+ * (French: 0 and 1 use the singular form).
  *
  * @example
  * ```ts
- * formatLineCount(1);  // "1 line"
- * formatLineCount(15); // "15 lines"
+ * formatLineCount(1);  // "1 line", "1 ligne"
+ * formatLineCount(15); // "15 lines", "15 lignes"
  * ```
  */
 export function formatLineCount(count: number): string {
-  return count === 1 ? "1 line" : `${count} lines`;
+  let one = count === 1;
+  try {
+    one = new Intl.PluralRules(activeLocale()).select(count) === "one";
+  } catch {
+    /* an unknown locale keeps the English rule */
+  }
+  return one ? t("rich.code.linesOne", { count }) : t("rich.code.lines", { count });
 }
 
 /** Known file extension mappings for language identifiers. */

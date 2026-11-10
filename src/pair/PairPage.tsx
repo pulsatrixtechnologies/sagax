@@ -5,6 +5,7 @@ import { fetchEnvironmentDescriptor } from "@/lib/environment-descriptor";
 
 import {
   defaultDeviceLabel,
+  environmentReleaseVersion,
   isConnected,
   newAttemptId,
   pairWithCode,
@@ -99,6 +100,11 @@ export async function finishReturnedSignIn<R>({ code, bridge, pair }: { code: st
     handed = false;
   }
   return handed ? pair() : "ask";
+}
+
+/** "Version 0.8.81 on linux.": the Sagax release, never the base version. */
+export function pairVersionText(environment: EnvironmentDescriptor): string {
+  return t("pair.version", { version: environmentReleaseVersion(environment), platform: environment.platform });
 }
 
 /** A returned sign-in credential the server refused: spent (an older server
@@ -260,7 +266,7 @@ export function PairPage({ initialCode: handedCode, initialEmail = null, reason,
       <div className="w-full max-w-[420px]">
         <h1 className="text-[20px] font-semibold">{t(mode === "email" || mode === "pulsatrix" ? "pair.heading.signIn" : "pair.heading.connect", { name: environment?.label ?? t("pair.heading.thisServer") })}</h1>
         <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-secondary">
-          {environment ? `${t("pair.version", { version: environment.version, platform: environment.platform })} ` : ""}
+          {environment ? `${pairVersionText(environment)} ` : ""}
           {mode === "pulsatrix"
             ? t("pair.pulsatrix.intro")
             : mode === "email"

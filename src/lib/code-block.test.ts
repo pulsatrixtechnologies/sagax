@@ -8,6 +8,7 @@ import {
   getLanguageDisplayName,
   getSnippetFileName,
 } from "./code-block";
+import { setLocale } from "./i18n";
 
 describe("getLanguageDisplayName", () => {
   it("maps common programming language identifiers to clean names", () => {
@@ -90,6 +91,17 @@ describe("formatLineCount", () => {
     expect(formatLineCount(0)).toBe("0 lines");
     expect(formatLineCount(2)).toBe("2 lines");
     expect(formatLineCount(42)).toBe("42 lines");
+  });
+
+  it("says the line count in Quebec French, with the French plural rule (#3262)", () => {
+    setLocale("fr");
+    try {
+      expect(formatLineCount(1)).toBe("1 ligne");
+      expect(formatLineCount(15)).toBe("15 lignes");
+      expect(formatLineCount(0)).toBe("0 ligne");
+    } finally {
+      setLocale("en");
+    }
   });
 });
 

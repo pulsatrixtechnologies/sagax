@@ -5865,6 +5865,8 @@
   "rich.cw.invalid.version": "unsupported version",
   "rich.code.collapse": "Collapse",
   "rich.code.expand": "Show all {count} lines",
+  "rich.code.lines": "{count} lines",
+  "rich.code.linesOne": "{count} line",
   "rich.copied": "Copied",
   "rich.email.aria": "Email draft: {subject}",
   "rich.email.bcc": "Bcc",

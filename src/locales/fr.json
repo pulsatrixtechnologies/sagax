@@ -4537,6 +4537,8 @@
   "rich.cw.invalid.version": "version non prise en charge",
   "rich.code.collapse": "Réduire",
   "rich.code.expand": "Afficher les {count} lignes",
+  "rich.code.lines": "{count} lignes",
+  "rich.code.linesOne": "{count} ligne",
   "rich.copied": "Copié",
   "rich.email.aria": "Brouillon de courriel : {subject}",
   "rich.email.bcc": "Cci",

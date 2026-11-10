@@ -47,6 +47,21 @@ const QUESTION_NAMES = 3;
 
 export type AskLanguage = "fr" | "en";
 
+/** How long a turn waits on the first listing of the day. */
+export const PROACTIVE_ASK_WAIT_MS = 2_000;
+/** #3470: a listing just read serves the person's next turns for this
+ * long (dropped sooner when the person's choices or bots change). */
+export const ASK_LISTING_FRESH_MS = 5 * 60_000;
+
+/** The work, or `fallback` once `ms` passed: a turn never waits longer. */
+export function withinWait<T>(work: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([work, new Promise<T>((resolve) => { setTimeout(() => resolve(fallback), ms).unref?.(); })]);
+}
+
+/** #3470: a macrotask boundary, so timers and requests run between two
+ * bots of a listing. */
+const yieldLoop = () => new Promise<void>((resolve) => { setImmediate(resolve); });
+
 // ── words ──────────────────────────────────────────────────────────────────
 
 const STOP = new Set([
@@ -389,17 +404,34 @@ export class ProactiveAsk {
 
   private readonly now: () => number;
 
+  /** #3470: the person's last listing (or the one being read), with the
+   * bots and choices it was read for. */
+  private readonly listings = new Map<string, { at: number; key: string; value: Promise<AskListing> }>();
+
   constructor(deps: ProactiveAskDeps) {
     this.deps = deps;
     this.now = deps.now ?? (() => Date.now());
   }
 
   /** Every bot of the person read once: what each can carry, and who
-   * proposes what. Nothing eligible: empty maps. */
-  async listing(person: string): Promise<AskListing> {
+   * proposes what. Nothing eligible: empty maps. #3470: one listing serves
+   * a turn and the person's next turns for a short time; a change of their
+   * bots or choices reads it again. */
+  listing(person: string): Promise<AskListing> {
     const bots = this.deps.bots(person);
+    const key = JSON.stringify([bots, this.deps.choices.get(person).domains]);
+    const hit = this.listings.get(person);
+    const now = this.now();
+    if (hit && hit.key === key && now - hit.at < ASK_LISTING_FRESH_MS) return hit.value;
+    const value = this.read(person, bots);
+    this.listings.set(person, { at: now, key, value });
+    return value;
+  }
+
+  private async read(person: string, bots: AskBot[]): Promise<AskListing> {
     const byBot = new Map<string, OfferedDomain[]>();
-    for (const bot of bots) {
+    for (const [index, bot] of bots.entries()) {
+      if (index > 0) await yieldLoop();
       const offered = await this.deps.offered(person, bot.id).catch(() => null);
       if (offered?.ok) byBot.set(bot.id, offered.domains.filter((domain) => domain.eligible));
     }

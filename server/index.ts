@@ -133,7 +133,7 @@ import { ProactiveMetricsLedger } from "./proactive/proactive-metrics.ts";
 import { ProactiveBudget, ProactiveEngine, proactiveDryRunSummary } from "./proactive/proactive.ts";
 import { domainLabel, FlowWatchLoop, WATCH_TICK_MS, WatchMemory } from "./proactive/flow-watches.ts";
 import { ProactiveChoices, watchMovedLine, watchPauseLine } from "./proactive/proactive-choices.ts";
-import { askTurnRefusal, ProactiveAsk, type AskBot, type AskTurnFacts } from "./proactive/proactive-ask.ts";
+import { askTurnRefusal, PROACTIVE_ASK_WAIT_MS, ProactiveAsk, withinWait, type AskBot, type AskTurnFacts } from "./proactive/proactive-ask.ts";
 import { createProactiveAskInternalRoutes } from "./routes/proactive-ask.ts";
 import { createProactiveChoicesRoutes } from "./routes/proactive-choices.ts";
 import { flowHelperIn } from "./proactive/flow-watch-helper.ts";
@@ -24563,15 +24563,15 @@ const flowWatchLoop = new FlowWatchLoop({
     // the bot's turns mount the person's account connection (organization server)
     return watchCarrierOf(person, botId) && IDENTITY.kind === "perspicax" && perspicaxMcp ? { ok: true } : { ok: false, cause: "bot-not-eligible" };
   },
-  // the same resolution as the Skills index of a turn
-  holdsSkill: (botId, person, skill) => {
+  // the same resolution as the Skills index of a turn; #3470: one inventory per bot of a walk
+  skills: (botId, person) => {
     const bot = store.bot(botId);
-    if (!bot) return false;
+    if (!bot) return new Set();
     const instance = bot.modelSelection ? registry.get(bot.modelSelection.instanceId) : null;
     try {
-      return scopedSkillInventory(bot, instance, person).rows.some((row) => row.kind === "skill" && row.enabled && row.name === skill);
+      return new Set(scopedSkillInventory(bot, instance, person).rows.flatMap((row) => (row.kind === "skill" && row.enabled ? [row.name] : [])));
     } catch {
-      return false;
+      return new Set();
     }
   },
   owner: (botId) => {
@@ -24638,8 +24638,6 @@ if (!process.env.VITEST && IDENTITY.kind === "perspicax") {
  * receive and proposes one watch domain with a choice card
  * (server/proactive/proactive-ask.ts). The watch loop's listing and the
  * person's choices are its only sources. */
-/** How long a turn waits on the first listing of the day. */
-const PROACTIVE_ASK_WAIT_MS = 2_000;
 function proactiveAskBots(person: string): AskBot[] {
   return store.bots.flatMap((bot) => {
     if (!watchCarrierOf(person, bot.id)) return [];
@@ -24717,7 +24715,7 @@ async function proactiveAskForTurn(bot: BotRecord, threadId: string, depth: numb
   })().catch(() => "");
   // the first listing of the day reads the person's products: a turn never
   // waits on it long; the next turn finds it read
-  const section = await Promise.race([work, new Promise<string>((resolve) => { setTimeout(() => resolve(""), PROACTIVE_ASK_WAIT_MS).unref?.(); })]);
+  const section = await withinWait(work, PROACTIVE_ASK_WAIT_MS, "");
   if (section) proactiveAskTurns.set(threadId, section);
   return section;
 }

@@ -694,8 +694,10 @@ export interface FlowWatchLoopDeps {
    * visible, not temporary, its turns mounting the person's account
    * connection. */
   carrier(botId: string, person: string): { ok: true } | { ok: false; cause: "bot-gone" | "bot-not-eligible" };
-  /** Whether the bot holds a skill (the resolution of a turn's Skills index). */
-  holdsSkill(botId: string, person: string, skill: string): boolean;
+  /** #3470: the names of the bot's enabled skills (the resolution of a
+   * turn's Skills index): one inventory, read once per bot of a walk,
+   * never once per watch. */
+  skills(botId: string, person: string): ReadonlySet<string>;
   /** The bot's person, for a replay or a release keyed by bot. */
   owner(botId: string): string | undefined;
   /** The organization's Flow plugin for this bot and person, or null. */
@@ -734,6 +736,22 @@ export class FlowWatchLoop {
   private fresh<T>(cache: Map<string, Cached<T>>, key: string): T | undefined {
     const hit = cache.get(key);
     return hit && this.now() - hit.at < hit.ttl ? hit.value : undefined;
+  }
+
+  /** #3470: the bot's skills, read at most once (on the first watch that
+   * names one), whatever the number of watches. */
+  private skillsOnce(botId: string, person: string): () => ReadonlySet<string> {
+    let read: ReadonlySet<string> | undefined;
+    return () => {
+      if (!read) {
+        try {
+          read = this.deps.skills(botId, person);
+        } catch {
+          read = new Set();
+        }
+      }
+      return read;
+    };
   }
 
   private async listing(helper: FlowHelper, products: readonly string[], botId: string): Promise<FlowWatchListing> {
@@ -828,10 +846,11 @@ export class FlowWatchLoop {
     const products = await this.productsOf(person, botId, helper);
     if (products === null) return { ok: false, botId, cause: "no-access" };
     const held = new Set(products);
+    const skills = this.skillsOnce(botId, person);
     const byDomain = new Map<string, OfferedWatch[]>();
     for (const watch of universe.watches) {
       const missing = !watch.products.every((product) => held.has(product)) ? "product" as const
-        : watch.skill && !this.deps.holdsSkill(botId, person, watch.skill) ? "skill" as const : undefined;
+        : watch.skill && !skills().has(watch.skill) ? "skill" as const : undefined;
       const row: OfferedWatch = { id: watch.id, summary: watch.summary, cadence: watch.cadence, products: watch.products, runs: !missing, ...(missing ? { missing } : {}), tools: declaredTools(watch) };
       byDomain.set(watch.domain, [...(byDomain.get(watch.domain) ?? []), row]);
     }
@@ -889,11 +908,12 @@ export class FlowWatchLoop {
     }
     const listing = products.length ? await this.listing(helper, products, botId) : { watches: [], rejected: 0 };
     const served = watchesForProducts(listing.watches, products);
+    const skills = this.skillsOnce(botId, person);
     const mine: FlowWatch[] = [];
     for (const row of rows) {
       const off = new Set(row.watchesOff);
       const runnable = served.filter((watch) => watch.domain === row.domain && !off.has(watch.id)
-        && (!watch.skill || this.deps.holdsSkill(botId, person, watch.skill)));
+        && (!watch.skill || skills().has(watch.skill)));
       if (!runnable.length) {
         // against every watch of the organization, not only the served ones:
         // a domain Flow does not have is said, never skipped in silence

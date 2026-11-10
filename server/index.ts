@@ -15985,7 +15985,11 @@ const limitReset = createLimitResetHost({
     catch (error) {
       console.warn(`limit-reset: could not retime ${routineId}: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }
+  },
+  // A usage-limit hold outlives a restart: the server's own in limit-holds.json, a person's in a file of its own.
+  holdsFile: (scope) => scope === SERVER_LIMIT_SCOPE
+    ? join(DATA_DIR, "limit-holds.json")
+    : join(DATA_DIR, `limit-holds-${createHash("sha256").update(scope).digest("hex").slice(0, 16)}.json`),
 });
 
 /** A backup the usage-limit failover moved this thread to could not run

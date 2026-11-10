@@ -144,7 +144,13 @@ export function dispatchTasksEffects(action: Action, env: DispatchEnv): void {
             : `/api/bots/${action.botId}/tasks/${action.threadId}${action.whole ? "" : `?messages=${MESSAGE_PAGE_SIZE}`}`, { method: "POST", body: JSON.stringify(action.type === "newTask" ? { projectId: action.projectId, cwd: action.cwd, ...(action.confidential !== undefined ? { confidential: action.confidential } : {}), ...(action.stream ?? singleStreamTurnField().singleStream ? { stream: true } : {}) } : {}) }))
             .then((r) => {
               if (action.type === "newTask") action.onCreated?.();
-              if (!r?.bot || navigation.get(action.botId) !== revision) return;
+              if (navigation.get(action.botId) !== revision) return;
+              // A reply without the bot ends the switch like a failure, so
+              // "switching" never stays on with the thread it was on shown.
+              if (!r?.bot) {
+                if (action.type === "switchTask") rawDispatch({ type: "switchTaskFailed", botId: action.botId, threadId: action.threadId });
+                return;
+              }
               const selectsAfterCreation = action.type === "newTask" && action.cwd !== undefined;
               if (selectsAfterCreation && env.shared.selectionRevision !== selectedAtStart) return;
               if (Array.isArray(r.bot.messages)) threadPages.set(r.bot.threadId, { messages: r.bot.messages, hasMore: r.bot.hasMore, activeLeafId: r.bot.activeLeafId, at: Date.now() });

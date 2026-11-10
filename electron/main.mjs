@@ -118,7 +118,7 @@ import { createLocalModelKeyStore } from "./local-model-keys.mjs";
 import { createLocalVm } from "./local-vm.mjs";
 import { acquireDataDirLease } from "./data-dir-lease.mjs";
 import { defaultDataDir, fetchEnvironmentDescriptor, isAppLink, URL_SCHEME } from "./legacy-names.mjs";
-import { switchLocalEnvironment } from "./environment-switch.mjs";
+import { reviveAfterFailedSwitch, switchLocalEnvironment } from "./environment-switch.mjs";
 import { createManagedDesktopClient, createManagedDesktopRelay, createManagedDesktopStore } from "./managed-desktop.mjs";
 import { createOrgLibrary } from "./org-library.mjs";
 import { createCompanyBackups } from "./company-backups.mjs";
@@ -3146,23 +3146,34 @@ async function switchLocalEnvironmentTo(targetDir, targetId) {
     slog(`environment switch to ${targetDir} failed (${error?.message ?? error})`);
     return failedSwitch();
   } finally {
-    localSwitchInFlight = false;
     serverSupervisor.resume();
     // The rollback above owns the restart on most failure paths, but an
     // orchestrator rejection before rollback runs (a throwing releaseLease)
-    // or a failed rollback leaves this environment with no server at all.
-    // Fork once more onto whatever is ACTIVE — the default dataDir argument
-    // follows environmentsState. Never on success.
+    // or a failed rollback leaves this environment with no server at all,
+    // sometimes with no lease either (the rollback released the target's
+    // and could not take the previous folder's back). Take that lease back
+    // when none is held, then fork once more on the previous folder (the
+    // registry never moved off it). Never on success.
     if (!switchSucceeded && (!serverProc || !serverSupervisor.isCurrent(serverProc))) {
       slog(`environment switch to ${targetDir} left no server child; restarting the active environment`);
-      try {
-        const revived = await startServerOn(SERVER_PORT);
-        if (revived.proc) serverSupervisor.ready(revived.proc);
-        else slog(`could not restart the server after the failed environment switch`);
-      } catch (error) {
-        slog(`restart after failed environment switch threw (${error?.message ?? error})`);
-      }
+      await reviveAfterFailedSwitch({
+        previousDir,
+        hasLease: () => Boolean(desktopDataDirLease),
+        log: slog,
+        acquireLease: async (dir) => {
+          desktopDataDirLease = acquireDataDirLeaseFor(dir);
+          runningDataDir = dir;
+        },
+        startChild: async (dir) => {
+          const revived = await startServerOn(SERVER_PORT, dir);
+          if (revived.proc) serverSupervisor.ready(revived.proc);
+          return revived.proc;
+        },
+      });
     }
+    // Held through the revive, so a second switch cannot start while the
+    // previous folder is being taken back.
+    localSwitchInFlight = false;
   }
 }
 

@@ -2,6 +2,8 @@
 // automation knows when to run and the app can warn before a limit is reached.
 import { readFileSync } from "node:fs";
 
+import { writeFileAtomic } from "../atomic.ts";
+
 import { NEAR_LIMIT_PERCENT, type EngineLimit, type EngineLimitsReport, type LimitWindowName } from "../../shared/limit-reset.ts";
 import { reportBackgroundError } from "../background-error.ts";
 import { claudeHasExtraUsageRoom, loadPlanUsage, type PlanAccount, type PlanProviderRow, type PlanUsageReport, type PlanWindow } from "./plan-usage.ts";
@@ -77,6 +79,8 @@ export interface LimitClockOptions {
   /** The known reset times changed. */
   onChange?: () => void;
   now?: () => number;
+  /** Where the refusals held now are kept, with the time each began, so a restart does not end a hold. Absent: memory only. */
+  file?: string;
 }
 
 /** A test fixture's plan usage, read fresh each time so a test can move a reset. Never set outside tests. */
@@ -96,6 +100,8 @@ export class LimitResetClock {
   /** #0867: per instance, every instance folded on the same login, from the last usage read. */
   private siblings = new Map<string, string[]>();
   private readonly refusals = new Map<string, number>();
+  /** When each refusal held now began; saved with it, so a restart keeps the hold and its start. */
+  private readonly heldAt = new Map<string, number>();
   private checkedAt = 0;
   private loading: Promise<void> | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -104,6 +110,7 @@ export class LimitResetClock {
   constructor(options: LimitClockOptions) {
     this.options = options;
     this.now = options.now ?? Date.now;
+    this.loadHolds();
   }
 
   /** The reset a limit-reset automation for this engine waits for: a refusal's own time unless usage shows a later
@@ -148,12 +155,15 @@ export class LimitResetClock {
   noteRefusal(engine: string | undefined, resetsAt: number | undefined): void {
     if (!engine || resetsAt === undefined || !Number.isFinite(resetsAt) || resetsAt <= this.now()) return;
     let changed = false;
+    const at = this.now();
     for (const id of this.sameLogin(engine)) {
       if (this.refusals.get(id) === resetsAt) continue;
       this.refusals.set(id, resetsAt);
+      this.heldAt.set(id, at);
       changed = true;
     }
     if (!changed) return;
+    this.saveHolds();
     this.options.onChange?.();
     this.refreshSoon();
   }
@@ -170,14 +180,17 @@ export class LimitResetClock {
   noteSuccess(engine: string | undefined): void {
     if (!engine) return;
     let changed = false;
+    let released = false;
     for (const id of this.sameLogin(engine)) {
-      if (this.refusals.delete(id)) changed = true;
+      this.heldAt.delete(id);
+      if (this.refusals.delete(id)) changed = released = true;
       const usage = this.usage.get(id);
       if (usage?.blocked === true) {
         this.usage.set(id, { ...usage, blocked: false });
         changed = true;
       }
     }
+    if (released) this.saveHolds();
     if (changed) this.options.onChange?.();
   }
 
@@ -241,9 +254,36 @@ export class LimitResetClock {
     if (at === undefined) return null;
     if (at < this.now() - REFUSAL_GRACE_MS) {
       this.refusals.delete(engine);
+      this.heldAt.delete(engine);
+      this.saveHolds();
       return null;
     }
     return at;
+  }
+
+  /** The holds a previous run saved. A hold saved without its start (an earlier version's file) counts from this start. */
+  private loadHolds(): void {
+    if (!this.options.file) return;
+    let saved: unknown;
+    try { saved = JSON.parse(readFileSync(this.options.file, "utf8")); } catch { return; }
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) return;
+    for (const [engine, hold] of Object.entries(saved as Record<string, { until?: unknown; heldAt?: unknown } | null>)) {
+      const until = hold?.until;
+      if (typeof until !== "number" || !Number.isFinite(until) || until < this.now() - REFUSAL_GRACE_MS) continue;
+      this.refusals.set(engine, until);
+      const heldAt = hold?.heldAt;
+      this.heldAt.set(engine, typeof heldAt === "number" && Number.isFinite(heldAt) ? heldAt : this.now());
+    }
+  }
+
+  private saveHolds(): void {
+    if (!this.options.file) return;
+    const holds = Object.fromEntries([...this.refusals].map(([engine, until]) => [engine, { until, heldAt: this.heldAt.get(engine) ?? this.now() }]));
+    try {
+      writeFileAtomic(this.options.file, JSON.stringify(holds), { mode: 0o600 });
+    } catch (error) {
+      reportBackgroundError(error);
+    }
   }
 
   private unnamed(engine: string): EngineLimit {

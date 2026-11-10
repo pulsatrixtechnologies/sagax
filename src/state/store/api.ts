@@ -336,3 +336,16 @@ export function runtimeFrameAction(event: RuntimeEvent): Action | null {
 }
 
 bindModerationApi(api);
+
+const RETRY_REQUEST_MS = [2_000, 5_000, 15_000, 30_000];
+
+/** Sends `attempt` again after each failure, waiting longer each time
+ * (2 s, 5 s, 15 s, then every 30 s), for as long as `wanted()` holds. */
+export function retryRequest(wanted: () => boolean, attempt: () => Promise<unknown>): void {
+  const run = (tries: number) => {
+    attempt().catch(() => {
+      if (wanted()) setTimeout(() => run(tries + 1), RETRY_REQUEST_MS[Math.min(tries, RETRY_REQUEST_MS.length - 1)]);
+    });
+  };
+  run(0);
+}

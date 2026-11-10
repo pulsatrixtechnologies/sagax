@@ -64,12 +64,10 @@ describe("the Run now button", () => {
     expect(markup).not.toContain("disabled");
   });
 
-  it("is disabled with a tooltip while a run of the routine is queued, running or waiting", () => {
+  it("is hidden while a run of the routine is queued, running or waiting, never greyed (#3294)", () => {
     for (const status of ["queued", "running", "waiting"] as const) {
       fixture.state = { ...fixture.state!, routineRuns: [run(status)] };
-      const markup = render();
-      expect(markup).toContain('disabled=""');
-      expect(markup).toContain('title="A run of this routine is already in progress"');
+      expect(render()).toBe("");
     }
     expect(routineRunInFlight([run("completed"), run("failed")], "r1")).toBe(false);
     expect(routineRunInFlight([{ ...run("running"), routineId: "other" }], "r1")).toBe(false);

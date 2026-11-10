@@ -3357,9 +3357,9 @@ Settings > Security (`MyApprovalRules`, also `rules.owner` and
   site (`POST /api/bots/:id/vault-cards/:msg/onepassword`, names, vault and
   sites only, listing kept 30 s per person). A pick is checked again
   against 1Password's own listing and saved once as a reference
-  (`findOnePassword`). A 1Password item is allowed ONCE only (card and
-  Settings refuse Always, `onepassword_once_only`; an Always saved before
-  is ignored by `activeGrants`), and once is one
+  (`findOnePassword`). A 1Password item is allowed once or always, like
+  any login (#3294: the card and Settings offer Always allow; the value is
+  still read from 1Password at fill time only), and once is one
   sign-in: the grant ends `VAULT_SINGLE_USE_MS` (60 s) after its first
   fill. The bot is never told the item's title ("a login from their
   1Password"), in the note, the fill result or a refusal. The value is read from 1Password only at fill time; the
@@ -4283,9 +4283,10 @@ covered by `server/mail/bot-inbound-mail.test.ts`,
   is deleted or changes owner.
   A 404 (older Perspicax), any refusal, a timeout, a wrong shape or inbound
   mail off: `available: false`. Never logs the token or a body.
-- Addresses are OFF by default (decision 1): `enabled: false` until the
-  administrator turns them on; the address shows greyed with "En attente
-  d'activation par l'administrateur".
+- Addresses are OFF by default (decision 1): `enabled: false` until
+  Perspicax turns them on. #3294: an address that is not on yet is hidden
+  (the bot's settings show no address card; a Bot email trigger reads as
+  no address), never shown greyed with a wait for an administrator.
 - Owner's change (decision 4): `PUT /api/bots/:id/inbound-mail
   {localPart}` (session): the person acting must own the bot (checked
   here), the format `^[a-z0-9]([a-z0-9.-]{0,38}[a-z0-9])?$` is checked here,
@@ -5343,8 +5344,9 @@ Covered by `src/components/SettingsModal.orgCleanup.test.ts`,
   service account, a disabled person, an interim or local principal
   (`run_as_not_person`). The person must be able to run the bot's routines
   (`principalMayRunRoutine`: owner, or a grant at `run` or above, and the
-  room for a goal); otherwise listed disabled with the reason and refused
-  403 `run_as_no_right`. A manager out of reach gets 403
+  room for a goal); otherwise left out of the list (#3294: never listed
+  greyed; a person already chosen keeps their row with the reason) and
+  refused 403 `run_as_no_right`. A manager out of reach gets 403
   `run_as_out_of_scope`; the unchanged person sent back by someone who could
   not choose them is ignored (D5 decides). Every change of the effective
   person is one `routine.run_as` row in the admin activity log (`bot`,
@@ -5366,7 +5368,7 @@ Covered by `src/components/SettingsModal.orgCleanup.test.ts`,
   `run_now_not_allowed`; the renderer hides the button with
   `canRunRoutineNow`); a solo server keeps the bot-level `run` rule. A run
   queued, running or waiting refuses another (409 `run_in_flight`; the
-  button is disabled with a tooltip). Each one writes `routine.run_now`
+  button is hidden meanwhile, #3294). Each one writes `routine.run_now`
   (`trigger: "manual"`, the run id and run-as person, who clicked) to the
   admin activity log; the run reaches the lists at once through the run
   event and `routineRunPatched`.
@@ -5390,7 +5392,8 @@ Covered by `src/components/SettingsModal.orgCleanup.test.ts`,
   Off: `POST /api/me/credentials/export` answers 403
   `export_blocked_by_org` before any other check, for everyone (admins
   too), the vault list carries `exportBlocked` and Settings > Credentials
-  shows Export disabled with the reason. Imports are not affected. Each
+  leaves Export out of its menu (#3294: hidden, never greyed; with no
+  action left the menu itself is hidden). Imports are not affected. Each
   change is an `org.settings` audit row. Tests:
   `server/routes/credential-vault.test.ts`,
   `server/perspicax/perspicax-org-routes.test.ts`, `server/org/org-admin-ops.test.ts`, C5
@@ -5479,7 +5482,8 @@ routines. `server/routines/routine-scope.ts` (rules), `shared/routine-scope.ts`
   runs, or every run in scope with `scope=all` and `routines.viewAll` (or an
   admin); the filters narrow it. Audit rows unchanged.
 - The page: a scope control at the top (organization servers only; My teams
-  and Everyone disabled with a tooltip naming the missing permission), then
+  and Everyone left out without their permission, and with Mine alone the
+  control is hidden, #3294), then
   Team, Owner and Status (advanced mode only), the All bots select listing
   the bots of the scope. Others' routines show their owner's avatar and name
   and stay read-only. The problems and paused pills count within the scope;
@@ -5530,16 +5534,12 @@ the driver tests or `src/components/ApprovalModeSelector.fullAccess.test.ts`:
   conversation on Full (`POST /api/bots/<id>/tasks` with `approvalMode:
   "full"`, `newConversationFullAllowed`), on an organization server and on a
   solo server from any of the operator's apps once the desktop confirmed it.
-- Settings > Organization > Allow full access (`organization.allowFullAccess`,
-  admin only, `PATCH /api/org/settings`). Off until an admin turns it on
-  (2026-10-11, `orgFullAccessAllowed` reads `=== true`); a saved value
-  stays. Once per data directory (`org-full-access-default.v1`), an
-  organization that never saved it and already has a bot or thread on Full
-  with its owner's consent gets `allowFullAccess: true` written
-  (`orgFullAccessGrandfathered`, an `org.settings` row, actor worker), so no
-  bot changes level. Off: grants answer
-  403 `org_full_access_disabled`, a send to a Full thread is refused with the
-  same code, and stored Full runs as Ask (`approvalModeForTurn`).
+- No organization switch (2026-10-26): Full access on a member's own bot
+  stays in that person's environment, so a saved
+  `organization.allowFullAccess` is ignored (`orgFullAccessAllowed` is always
+  true) and no admin turns it on first. The approval menu never shows Full
+  greyed for the bot's owner (#3294, `src/lib/full-access.ts`: `allowed` or
+  `hidden`, never `disabled`).
 - A turn runs Full only while the policy is on and the consent is the bot's
   current owner's: a routine (run as the owner) gets Full only when that
   owner set it on that bot. Custom stays refused for members' bots.
@@ -6319,9 +6319,10 @@ they share no stem) and `context_length` becomes `contextWindow`.
   `/v1/messages`, as DwarfStar, Ollama, LM Studio and llama-server do) and a
   desktop row when the desktop's probe saw `/v1/messages` answer on that
   server (`anthropic: true` on the published endpoint and the option; else the
-  row is greyed with "This local server does not speak the Anthropic
-  protocol."). Any other engine keeps its own endpoint. The picker greys a row the engine cannot run, with one line
-  saying why, and `DesktopLocalModels.assertAvailable` refuses it at turn time.
+  row is left out). Any other engine keeps its own endpoint. #3294: the
+  picker leaves out a local row the engine cannot run (never greyed); the
+  model in use stays, with one line saying why, and
+  `DesktopLocalModels.assertAvailable` refuses it at turn time.
 - Solo: `server/drivers/local-inject.ts` `LOCAL_HOSTS` probes the same ports
   as the desktop (`shared/desktop-local-models.ts` `SEED_ENDPOINTS`).
 - Organization server: only the person's own computer counts
@@ -8111,9 +8112,13 @@ builds no Graph client, no Teams bot registration and no mailbox for this.
   Reads, drafts and reply drafts send nothing. Full access and the primary
   bot rule are unchanged. Regression: `server/safety/safety-review.test.ts` uses
   the measured Outlook catalog in `server/testing/`.
-- An outward card never offers "always for this session", and the ACP
-  driver answers Grok's ask once, never `allow_always`
-  (`server/drivers/acp/connector-ask.ts`). A Grok `use_tool` call to a
+- An outward card offers Always allow like every card (#3294): the owner
+  rule for this bot and this tool (`cardRuleCandidate`,
+  `server/approvals/always-allow-sends.regressions.test.ts`), which answers
+  the next call of that tool. The engine's own session-wide allow is not
+  what it uses: the ACP driver answers Grok's ask once, never
+  `allow_always`, since Grok's `allow_always` on `use_tool` would cover
+  every other connector call too (`server/drivers/acp/connector-ask.ts`). A Grok `use_tool` call to a
   server Sagax did not mount is an engine connector: the card gets its
   `tool_input`, or says Grok did not share the details
   (`approval.held.connectorNoDetails`), and is outward unless its name
@@ -10307,7 +10312,7 @@ An organization server never offers it unless that file says
   `@eN` refs. A payment or purchase, a send (form, email, message, post,
   save, confirm) or a delete waits on the same Allow / Deny card as a safety
   hold (`confirmHeldCard` in server/index.ts; Full access and Approve for me
-  do not answer it). It is named from the role and name of the ref in the
+  do not answer it, its own Always allow below does). It is named from the role and name of the ref in the
   bot's last snapshot, the key (Enter or Space, except after typing in a
   search box), text with a line break, or an address (`/delete`,
   `/checkout`...). An unknown ref or a button with no name is a card too.

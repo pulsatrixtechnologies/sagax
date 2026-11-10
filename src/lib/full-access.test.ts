@@ -9,10 +9,10 @@ describe("Full access in the menu", () => {
     expect(orgFullAccessFor(null, { ownerUserId: "alice" }, "alice")).toBeUndefined();
   });
 
-  it("is the owner's on an organization server, allowed unless the organization turned it off", () => {
+  it("is the owner's on an organization server, never greyed by an organization switch (#3294)", () => {
     expect(orgFullAccessFor(org(), { ownerUserId: "Alice" }, "alice")).toBe("allowed");
     expect(orgFullAccessFor(org(true), { ownerUserId: "alice" }, "alice")).toBe("allowed");
-    expect(orgFullAccessFor(org(false), { ownerUserId: "alice" }, "alice")).toBe("disabled");
+    expect(orgFullAccessFor(org(false), { ownerUserId: "alice" }, "alice")).toBe("allowed");
     expect(orgFullAccessFor(org(), { ownerUserId: "alice" }, "bob")).toBe("hidden");
     expect(orgFullAccessFor(org(), {}, "alice")).toBe("hidden");
   });

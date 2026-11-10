@@ -46,8 +46,12 @@ export function RunNowButton({ routine, bot, className, labelClassName, onStarte
   const pending = useRef(false);
   const [starting, setStarting] = useState(false);
   if (!canRunRoutineNow(state.config, routine, bot)) return null;
+  // #3294: while a run of this routine is queued, running or waiting, Run
+  // now cannot apply (the server answers 409 run_in_flight): hidden, never
+  // shown greyed. The click's own start keeps its spinner.
   const inFlight = routineRunInFlight(state.routineRuns, routine.id);
-  const disabled = starting || inFlight;
+  if (inFlight && !starting) return null;
+  const disabled = starting;
   const run = () => {
     if (disabled || pending.current) return;
     pending.current = true;
@@ -64,7 +68,7 @@ export function RunNowButton({ routine, bot, className, labelClassName, onStarte
     });
   };
   return (
-    <button type="button" data-run-now onClick={run} disabled={disabled} aria-label={t("routines.runNow")} title={inFlight ? t("routines.runNow.inFlight") : t("routines.runNow")} className={className}>
+    <button type="button" data-run-now onClick={run} disabled={disabled} aria-label={t("routines.runNow")} title={t("routines.runNow")} className={className}>
       {starting ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} fill="currentColor" />}
       <span className={labelClassName}>{starting ? t("routines.runNow.starting") : t("routines.runNow")}</span>
     </button>

@@ -58,7 +58,7 @@ export function approvalModeOptionsFor(driverKind: string, trustedModesAvailable
       // grant as Auto instead of a second choice that actually behaves as Ask.
       && (driverKind !== "antigravityAgent" || option.mode !== "auto")
       // Full is available from any client (omb #2701). Custom stays desktop
-      // only. Organization: the owner sees Full (greyed when turned off).
+      // only. Organization: the owner sees Full.
       && (option.mode !== "custom" || trustedModesAvailable)
       && (option.mode !== "full" || orgFullAccess !== "hidden"))
     .map((option) => {
@@ -352,9 +352,7 @@ export function ApprovalModeSelector({
       {advanced && visibleOptions.map((option) => {
         const selected = option.mode === mode;
         const Icon = option.Icon;
-        // The organization turned Full off: shown, greyed, with why.
-        const orgOff = option.mode === "full" && orgFullAccess === "disabled";
-        const optionDisabled = modesDisabled || orgOff;
+        const optionDisabled = modesDisabled;
         return (
           <Fragment key={option.mode}>
             <button
@@ -364,7 +362,7 @@ export function ApprovalModeSelector({
               disabled={optionDisabled}
               data-approval-mode={option.mode}
               title={
-                requiresLocalDesktop ? t("approvalMode.customLocalOnly") : orgOff ? t("approvalMode.full.orgDisabled") : undefined
+                requiresLocalDesktop ? t("approvalMode.customLocalOnly") : undefined
               }
               onClick={() => {
                 if (optionDisabled) return;
@@ -386,11 +384,6 @@ export function ApprovalModeSelector({
                 <span className="text-[12px] leading-4 text-ink-tertiary">
                   {option.description}
                 </span>
-                {orgOff && (
-                  <span className="mt-0.5 text-[12px] leading-4 text-warning" data-full-access-org-off>
-                    {t("approvalMode.full.orgDisabled")}
-                  </span>
-                )}
               </span>
             </button>
             {option.mode === "full" && allowlistAction}

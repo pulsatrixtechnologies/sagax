@@ -256,7 +256,8 @@ export function RoutineDetail({ routine, runs, bots, groups = [], now = Date.now
       </div>
       {actions && (
         <div data-routine-actions className="flex flex-wrap items-center gap-2 border-t border-hairline/40 px-4 py-3">
-          {canRun && onRunNow && <button type="button" data-run-now onClick={onRunNow} disabled={working || inFlight} title={inFlight ? t("routines.runNow.inFlight") : t("routines.runNow")} className={cn(PRIMARY_PILL, "gap-1.5")}>{starting ? <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Play size={13} fill="currentColor" aria-hidden="true" />}{starting ? t("routines.runNow.starting") : t("routines.runNow")}</button>}
+          {/* #3294: hidden while a run is in flight, never greyed */}
+          {canRun && onRunNow && (!inFlight || starting) && <button type="button" data-run-now onClick={onRunNow} disabled={working} title={t("routines.runNow")} className={cn(PRIMARY_PILL, "gap-1.5")}>{starting ? <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Play size={13} fill="currentColor" aria-hidden="true" />}{starting ? t("routines.runNow.starting") : t("routines.runNow")}</button>}
           {canRun && <RoutineCheckButton control={readiness} disabled={working} />}
           {editable && onEdit && <button type="button" data-routine-edit onClick={onEdit} title={t("routines.edit")} className={cn(PILL, "gap-1.5")}><Pencil size={13} aria-hidden="true" />{t("routines.edit")}</button>}
           {editable && onToggle && <button type="button" data-routine-toggle onClick={onToggle} disabled={working} title={routine.enabled ? t("routines.disable") : t("routines.enable")} className={cn(PILL, "gap-1.5")}>{routine.enabled ? <Pause size={13} aria-hidden="true" /> : <CirclePlay size={13} aria-hidden="true" />}{routine.enabled ? t("routines.disable") : t("routines.enable")}</button>}

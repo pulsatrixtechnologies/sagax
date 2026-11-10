@@ -3,8 +3,8 @@
 // the built app in a headless Chromium. Settings > Organization and Settings
 // > Credentials are shot, then the admin turns vault exports off through
 // the console API (the same POST /api/org/admin/settings Perspicax sends)
-// and both pages are shot again: Export must be disabled with the reason,
-// and the server must refuse the export. With --phase before (a build
+// and both pages are shot again: the vault menu must leave Export out
+// (#3294: never greyed with a reason), and the server must refuse the export. With --phase before (a build
 // without the setting), only the first shots are taken. Isolated:
 // temporary home and free ports, never ~/.sagax. Fake values only.
 //
@@ -124,16 +124,22 @@ try {
     await page.waitForTimeout(400);
     await open("Identifiants", "[data-credentials-settings]");
     await page.screenshot({ path: join(shotsDir, `${label}-credentials.png`) });
-    const exportButton = page.locator("[data-credentials-export]");
-    const disabled = await exportButton.isDisabled();
-    const reason = await page.locator("[data-credentials-export-blocked]").innerText().catch(() => "");
-    console.log(`[verify] ${label}: Export disabled=${disabled} reason=${JSON.stringify(reason)}`);
+    // #3294: Export sits in the vault's More menu and is left out, not
+    // greyed, once the organization turns exports off.
+    const menu = page.locator("[data-vault-menu]");
+    if (await menu.count()) {
+      await menu.first().click();
+      await page.waitForTimeout(300);
+    }
+    const listed = (await page.locator("[data-credentials-export]").count()) > 0;
+    await page.screenshot({ path: join(shotsDir, `${label}-credentials-menu.png`) });
+    console.log(`[verify] ${label}: Export listed=${listed}`);
     await context.close();
     if (errors.length) console.log(`[verify] ${label} page errors: ${errors.join(" | ")}`);
-    return { disabled, reason, switchState };
+    return { listed, switchState };
   };
   const first = await shoot(phase === "before" ? "before" : "after-allowed");
-  if (first.disabled) fail("Export is disabled while exports are allowed");
+  if (!first.listed) fail("Export is left out while exports are allowed");
   if (phase === "after") {
     if (first.switchState !== "on") fail("the Settings > Organization switch is not on by default");
     const bearer = idp.consoleAssertion({ sub: ADMIN.sub, aud: origin, role: "admin", teams: [] });
@@ -144,8 +150,7 @@ try {
     if (refused.text.includes("fake-pass-verify-1")) fail("the refusal carries a value");
     console.log(`[verify] export after the policy: ${refused.status} ${refused.body?.code}`);
     const blocked = await shoot("after-blocked");
-    if (!blocked.disabled) fail("Export is still enabled once the organization turned exports off");
-    if (!blocked.reason) fail("Settings > Credentials does not say why Export is off");
+    if (blocked.listed) fail("Export is still listed once the organization turned exports off");
     if (blocked.switchState !== "off") fail("the Settings > Organization switch does not show off");
   }
   await browser.close();

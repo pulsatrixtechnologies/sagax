@@ -17,12 +17,15 @@ const render = (options: RunAsOptions | null, value?: string) => renderToStaticM
 describe("the Runs as field", () => {
   const admin: RunAsOptions = { canChoose: true, people: [ALICE, BOB, ERIN, FRANK], current: { principalId: "pr_alice", name: "Alice" } };
 
-  it("an admin gets a select of people, the current one chosen, someone without rights disabled with the reason", () => {
+  it("an admin gets a select of people, the current one chosen, someone without rights left out (#3294)", () => {
     const markup = render(admin);
     expect(markup).toContain("<select");
     expect(markup).toContain("Runs as</label>");
     expect(markup).toMatch(/<option value="pr_alice" selected="">Alice<\/option>/);
-    expect(markup).toContain('<option value="pr_frank" disabled="">Frank (cannot run this bot&#x27;s routines)</option>');
+    expect(markup).not.toContain('value="pr_frank"');
+    expect(markup).not.toContain('disabled=""');
+    // already chosen, the row stays with its reason
+    expect(render(admin, "pr_frank")).toContain("Frank (cannot run this bot&#x27;s routines)");
     expect(markup).not.toContain('type="search"');
     expect(markup).not.toContain("data-run-as-pending");
   });
@@ -49,7 +52,8 @@ describe("the Runs as field", () => {
   });
 
   it("filters by name and keeps the chosen person, and a current person outside the list first", () => {
-    expect(runAsRows(admin, "pr_bob", "fra").map((row) => row.principalId)).toEqual(["pr_bob", "pr_frank"]);
+    expect(runAsRows(admin, "pr_bob", "fra").map((row) => row.principalId)).toEqual(["pr_bob"]);
+    expect(runAsRows(admin, "pr_frank", "").map((row) => row.principalId)).toContain("pr_frank");
     const manager: RunAsOptions = { canChoose: true, people: [ALICE], current: { principalId: "pr_bob", name: "Bob", pending: true } };
     expect(runAsRows(manager, "pr_bob", "")).toEqual([{ principalId: "pr_bob", name: "Bob", selectable: true, pending: true }, ALICE]);
   });

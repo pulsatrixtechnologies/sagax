@@ -1,23 +1,25 @@
 // Full access in the approval menu (server/org/org-full-access.ts holds the
 // rules the server enforces). On a solo server Full is granted through the
 // packaged desktop app's private channel; on an organization server the
-// bot's owner grants it over HTTP while the organization allows it.
+// bot's owner grants it over HTTP.
 
 /** How Full access shows in the menu on an organization server:
- * `allowed` (the owner may pick it), `disabled` (the organization turned
- * it off: shown greyed with a note), `hidden` (not the bot's owner).
- * undefined on a solo server, where the desktop rules apply. */
-export type OrgFullAccess = "allowed" | "disabled" | "hidden";
+ * `allowed` (the owner may pick it) or `hidden` (not the bot's owner).
+ * undefined on a solo server, where the desktop rules apply. #3294: a
+ * member's own bot is the member's to set, so there is no organization
+ * switch (the server ignores a saved `allowFullAccess`, org-full-access.ts)
+ * and Full is never shown greyed. */
+export type OrgFullAccess = "allowed" | "hidden";
 
 export function orgFullAccessFor(
-  org: { settings: { allowFullAccess?: boolean } } | null | undefined,
+  org: { settings: object } | null | undefined,
   bot: { ownerUserId?: string } | null | undefined,
   viewerId: string | null | undefined,
 ): OrgFullAccess | undefined {
   if (!org) return undefined;
   const owner = bot?.ownerUserId?.trim().toLowerCase();
   if (!owner || !viewerId || owner !== viewerId.trim().toLowerCase()) return "hidden";
-  return org.settings.allowFullAccess === false ? "disabled" : "allowed";
+  return "allowed";
 }
 
 /** Whether choosing Full asks for the warning. Always false since omb #2701

@@ -134,7 +134,9 @@ export function BotEmailAddressCard({ mail, onChange, tags = [], onOpenRoutine }
   tags?: readonly TagRoutingRow[];
   onOpenRoutine?: (routineId: string) => void;
 }) {
-  const address = mail?.available ? mail.address : null;
+  // #3294: an address that does not receive mail yet cannot apply: hidden,
+  // never shown greyed with a wait for an administrator
+  const address = mail?.available && mail.enabled ? mail.address : null;
   const { state, copy } = useCopyFeedback(address ?? "");
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -143,7 +145,6 @@ export function BotEmailAddressCard({ mail, onChange, tags = [], onOpenRoutine }
   if (!mail || !address) return null;
   const copyLabel = t("botPanel.email.copy");
   const at = address.lastIndexOf("@");
-  const pending = !mail.enabled;
   const save = async () => {
     if (!onChange) return;
     setBusy(true);
@@ -160,11 +161,7 @@ export function BotEmailAddressCard({ mail, onChange, tags = [], onOpenRoutine }
           <BotEmailAddressForm domain={address.slice(at + 1)} value={draft} error={error} busy={busy} onValue={setDraft} onSave={() => void save()} onCancel={() => { setEditing(false); setError(undefined); }} />
         ) : (
           <div className="flex min-w-0 items-center gap-2 px-3.5 py-2">
-            <span
-              className={cn("min-w-0 flex-1 truncate text-[13px] leading-[18px]", pending ? "text-ink-tertiary" : "text-ink")}
-              data-bot-email-value=""
-              {...(pending ? { "data-bot-email-pending": "" } : {})}
-            >{address}</span>
+            <span className="min-w-0 flex-1 truncate text-[13px] leading-[18px] text-ink" data-bot-email-value="">{address}</span>
             {mail.canChange && onChange && (
               <button type="button" onClick={() => { setDraft(address.slice(0, at)); setEditing(true); }} className="shrink-0 rounded-md px-2 py-1 text-[12px] font-medium text-accent-text hover:bg-accent/10">{t("botPanel.email.change")}</button>
             )}
@@ -180,7 +177,6 @@ export function BotEmailAddressCard({ mail, onChange, tags = [], onOpenRoutine }
           </div>
         )}
         <p className="px-3.5 pb-2 text-[12px] leading-4 text-ink-secondary">{t("botPanel.email.help")}</p>
-        {pending && <p data-bot-email-off="" className="px-3.5 pb-2 text-[12px] leading-4 text-ink-secondary">{t("botPanel.email.pending")}</p>}
         <BotMailTagRouting rows={tags} onOpenRoutine={onOpenRoutine} />
       </SettingsGroup>
     </div>

@@ -88,7 +88,8 @@ export function typedSourceLabel(type: TriggerSourceType): string {
 export function BotMailAddressLine({ mail }: { mail: BotInboundMail | null }) {
   const [copied, setCopied] = useState(false);
   if (!mail) return null;
-  const address = mail.available ? mail.address : null;
+  // #3294: an address not turned on yet receives nothing: the same line as no address
+  const address = mail.available && mail.enabled ? mail.address : null;
   if (!address) return <p data-botmail-no-address="" className="text-[11px] text-ink-secondary">{t("triggers.botmail.noAddress")}</p>;
   const copy = () => void copyText(address).then((result) => {
     if (result !== "copied") return;
@@ -104,7 +105,6 @@ export function BotMailAddressLine({ mail }: { mail: BotInboundMail | null }) {
           {copied ? <Check size={12} className="text-success" /> : <Copy size={12} />}{t(copied ? "triggers.copied" : "triggers.botmail.copy")}
         </button>
       </div>
-      {!mail.enabled && <p className="mt-1 text-[11px] text-ink-secondary">{t("botPanel.email.pending")}</p>}
     </div>
   );
 }

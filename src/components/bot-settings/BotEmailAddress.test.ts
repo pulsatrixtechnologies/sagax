@@ -40,12 +40,10 @@ describe("Bot email address", () => {
     expect(html).not.toContain("data-bot-email-tags-empty");
   });
 
-  it("greys an address the administrator has not turned on yet (off by default, Owner decision 1)", () => {
+  it("hides an address that is not turned on yet, never greyed with a wait for an administrator (#3294)", () => {
     const html = render({ available: true, address: "ember@bots.example.org", enabled: false });
-    expect(html).toContain("ember@bots.example.org");
-    expect(html).toContain("Waiting for the administrator to turn it on");
-    expect(html).toContain("data-bot-email-pending");
-    expect(html).toContain("text-ink-tertiary");
+    expect(html).toBe("");
+    expect(html).not.toContain("Waiting for the administrator to turn it on");
   });
 
   it("offers Change to the owner only (Owner decision 4)", () => {

@@ -396,9 +396,7 @@ function domainsFrom(value: unknown): string[] {
 }
 
 function activeGrants(item: StoredVaultItem, now: number): StoredVaultItem["grants"] {
-  // a 1Password item is allowed once only (review of #954): an Always saved
-  // before that rule answers nothing and is dropped at the next write
-  if (item.source === "1password") return item.grants.filter((grant) => grant.mode === "once" && (grant.expiresAt ?? 0) > now);
+  // #3294: a 1Password item keeps an Always like any other item
   return item.grants.filter((grant) => grant.mode === "always" || (grant.expiresAt ?? 0) > now);
 }
 

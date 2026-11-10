@@ -9,6 +9,7 @@ import { discoverItems, entryIcon, privateSkills } from "@/lib/installed-model";
 import { connectedSummary } from "@/lib/plugins-model";
 import { organizationRows } from "@/lib/capabilities";
 import { openSettings } from "@/lib/settings-link";
+import { SavedKeysResetNotice } from "../SavedKeysReset";
 import { setMine } from "@/lib/org-capabilities";
 import {
   McpImportForm,
@@ -73,6 +74,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     <>
       {panelError && <div role="alert" className="mx-6 mt-2 rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger sm:mx-8">{panelError}</div>}
       {panelNotice && <div role="status" className="mx-6 mt-2 rounded-lg bg-warning/10 px-3 py-2 text-[12px] text-warning sm:mx-8">{panelNotice}</div>}
+      <SavedKeysResetNotice panel />
     </>
   );
 

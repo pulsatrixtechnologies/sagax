@@ -101,7 +101,60 @@ export function ensureContentKeySchema(db: DatabaseSync): void {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS content_keys_owner ON content_keys(owner) WHERE thread_id IS NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS content_keys_thread ON content_keys(thread_id) WHERE thread_id IS NOT NULL;
+    -- Keys wrapped by a vault key that "Reset saved keys" dropped (retireLocalContentKeys): kept, never deleted, so
+    -- what they sealed opens again if the old credential file is put back; no longer an owner's or a thread's key.
+    CREATE TABLE IF NOT EXISTS content_keys_retired (
+      key_id TEXT PRIMARY KEY,
+      owner TEXT NOT NULL,
+      thread_id TEXT,
+      parent_id TEXT,
+      provider TEXT NOT NULL,
+      ref TEXT NOT NULL DEFAULT '',
+      wrapped BLOB NOT NULL,
+      created_at INTEGER NOT NULL,
+      retired_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS content_keys_retired_owner ON content_keys_retired(owner);
   `);
+}
+
+/** After "Reset saved keys" (server/vault/vault-key-reset.ts) the vault key is new, so the keys the local provider
+ * wrapped with the old one never unwrap again. Left in content_keys, an owner would keep that key forever (one owner
+ * row, content_keys_owner) and every new row would be written plain. They move, with the thread keys chained under
+ * them, to content_keys_retired: ownerKey() then makes fresh keys under the new vault key, and what the old keys
+ * sealed reports locked (ContentKeyUnavailable), never erased. Only keys made before `madeBefore` (the reset, in ms).
+ * Returns the keys moved. */
+export function retireLocalContentKeys(db: DatabaseSync, resetAt: string, madeBefore: number): number {
+  ensureContentKeySchema(db);
+  // only keys made before the reset: one the new vault key wrapped stays
+  const ids = new Set((db.prepare("SELECT key_id FROM content_keys WHERE provider = 'local' AND parent_id IS NULL AND created_at < ?").all(madeBefore) as Array<{ key_id: string }>).map((row) => row.key_id));
+  if (!ids.size) return 0;
+  const children = db.prepare("SELECT key_id FROM content_keys WHERE parent_id = ?");
+  for (let frontier = [...ids]; frontier.length;) {
+    const next: string[] = [];
+    for (const parent of frontier) {
+      for (const { key_id } of children.all(parent) as Array<{ key_id: string }>) if (!ids.has(key_id)) { ids.add(key_id); next.push(key_id); }
+    }
+    frontier = next;
+  }
+  const hasBindings = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'thread_keys'").get());
+  const keep = db.prepare(`INSERT OR IGNORE INTO content_keys_retired (key_id, owner, thread_id, parent_id, provider, ref, wrapped, created_at, retired_at)
+    SELECT key_id, owner, thread_id, parent_id, provider, ref, wrapped, created_at, ? FROM content_keys WHERE key_id = ?`);
+  const unbind = hasBindings ? db.prepare("DELETE FROM thread_keys WHERE key_id = ?") : null;
+  const drop = db.prepare("DELETE FROM content_keys WHERE key_id = ?");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    for (const keyId of ids) {
+      keep.run(resetAt, keyId);
+      unbind?.run(keyId);
+      drop.run(keyId);
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  return ids.size;
 }
 
 function live(row: { key_id: string; owner: string; thread_id: string | null }, raw: Buffer): LiveKey {
@@ -144,12 +197,17 @@ export class ContentKeyring {
     return this.database().prepare(`SELECT key_id, owner, thread_id, parent_id, provider, ref, wrapped FROM content_keys WHERE ${where}`).get(value) as KeyRow | undefined;
   }
 
+  /** A key a reset retired: it still exists (locked, not erased). */
+  private retiredRow(keyId: string): KeyRow | undefined {
+    return this.database().prepare("SELECT key_id, owner, thread_id, parent_id, provider, ref, wrapped FROM content_keys_retired WHERE key_id = ?").get(keyId) as KeyRow | undefined;
+  }
+
   /** "destroyed": no such key any more (its rows are erased); null: it
    * exists but cannot be unwrapped synchronously on this launch. */
   key(keyId: string): LiveKey | "destroyed" | null {
     const cached = this.cache.get(keyId);
     if (cached) return cached;
-    const row = this.row("key_id = ?", keyId);
+    const row = this.row("key_id = ?", keyId) ?? this.retiredRow(keyId);
     if (!row) return "destroyed";
     return this.unwrapSync(row);
   }
@@ -272,7 +330,8 @@ export class ContentKeyring {
 
   /** Key ids of an owner: their own key and every thread key under it. */
   ownerKeyIds(owner: string): string[] {
-    return (this.database().prepare("SELECT key_id FROM content_keys WHERE owner = ?").all(owner) as Array<{ key_id: string }>).map((row) => row.key_id);
+    // a retired key is still the owner's: erasing the owner erases it too
+    return (this.database().prepare("SELECT key_id FROM content_keys WHERE owner = ? UNION SELECT key_id FROM content_keys_retired WHERE owner = ?").all(owner, owner) as Array<{ key_id: string }>).map((row) => row.key_id);
   }
 
   threadKeyId(threadId: string): string | null {
@@ -287,7 +346,8 @@ export class ContentKeyring {
     db.exec("PRAGMA secure_delete = ON");
     try {
       const remove = db.prepare("DELETE FROM content_keys WHERE key_id = ? OR parent_id = ?");
-      for (const keyId of keyIds) remove.run(keyId, keyId);
+      const removeRetired = db.prepare("DELETE FROM content_keys_retired WHERE key_id = ? OR parent_id = ?");
+      for (const keyId of keyIds) { remove.run(keyId, keyId); removeRetired.run(keyId, keyId); }
       const gone = new Set(keyIds);
       // and the thread keys that were wrapped under a destroyed owner key
       for (const [id, key] of this.cache) if (gone.has(id) || (key.threadId !== null && !this.row("key_id = ?", id))) this.cache.delete(id);
@@ -309,7 +369,7 @@ export class ContentKeyring {
   /** Keys that exist but do not open on this launch. */
   lockedCount(): number {
     let locked = 0;
-    for (const { key_id } of this.database().prepare("SELECT key_id FROM content_keys").all() as Array<{ key_id: string }>) if (this.key(key_id) === null) locked++;
+    for (const { key_id } of this.database().prepare("SELECT key_id FROM content_keys UNION SELECT key_id FROM content_keys_retired").all() as Array<{ key_id: string }>) if (this.key(key_id) === null) locked++;
     return locked;
   }
 

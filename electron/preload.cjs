@@ -548,6 +548,11 @@ const bridge = {
   localFilesExist: (filePaths) => ipcRenderer.invoke("desktop:files-exist", filePaths),
   /** Store a provider credential with OS-backed encryption. */
   setCredential: (name, value) => ipcRenderer.invoke("credential:set", name, value),
+  /** Saved keys this launch could not read, and "Reset saved keys": main moves the unreadable file aside (kept) and restarts. */
+  credentialStore: {
+    unreadable: () => ipcRenderer.invoke("credential-store:unreadable"),
+    reset: () => ipcRenderer.invoke("credential-store:reset"),
+  },
 
   /** In-app auto-update. Updates download by themselves; install is the
    *  person's "Restart to install": install({ confirmed: true }) from the

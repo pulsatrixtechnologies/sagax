@@ -19,6 +19,7 @@ import { ExportPanel, ImportPanel, importOutcomeText } from "./CredentialsTransf
 import { FilterChips, StatusText } from "./SettingsPatterns";
 import { ItemForm, injectionLabel } from "./VaultItemForm";
 import { PaymentsPanel } from "./VaultPayments";
+import { SavedKeysResetButton, useSavedKeysUnreadable } from "../SavedKeysReset";
 
 export { ItemForm, draftInjection, injectionLabel } from "./VaultItemForm";
 export type { Draft } from "./VaultItemForm";
@@ -39,6 +40,8 @@ const TAB_LABEL: Record<VaultFilterTab, LocaleKey> = {
 
 export function CredentialsSettings() {
   const { state } = useStore();
+  // Unreadable saved keys hold the vault key: restarting never opens it, "Reset saved keys" starts it empty.
+  const keysUnreadable = useSavedKeysUnreadable();
   const [data, setData] = useState<CredentialVaultState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -103,7 +106,9 @@ export function CredentialsSettings() {
 
   return (
     <div className="flex min-w-0 flex-col gap-3" data-credentials-settings data-vault-tab={tab}>
-      {data.unavailable && <SettingsNotice tone="danger">{t("vault.settings.unavailable")}</SettingsNotice>}
+      {data.unavailable && (keysUnreadable
+        ? <SettingsNotice tone="danger" action={<SavedKeysResetButton />}>{t("savedKeys.unreadable")}</SettingsNotice>
+        : <SettingsNotice tone="danger">{t("vault.settings.unavailable")}</SettingsNotice>)}
       {error && <SettingsNotice tone="danger">{error}</SettingsNotice>}
       <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
         <FilterChips

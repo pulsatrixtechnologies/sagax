@@ -575,6 +575,13 @@ const __BASE_VERSION__: string;
        * main writes the bytes to a new private temp .pdf and opens it.
        * Resolves true, or rejects with a short message. */
       openPdf?(bytes: Uint8Array, name: string): Promise<boolean>;
+      /** Saved keys this launch could not read (this app's own page only). `reset` moves the unreadable file aside
+       * (kept, never deleted) and restarts: "reset"; "quitting" (nothing moved) when the app is already quitting;
+       * "failed" with the reason when the file could not be moved; "readable" (nothing done) when the keys were read. */
+      credentialStore?: {
+        unreadable(): Promise<boolean>;
+        reset(): Promise<{ status: "reset" | "quitting" | "failed" | "readable"; error?: string }>;
+      };
       /** Save a provider credential through Electron's OS-backed store. */
       setCredential?(
         name: "xaiApiKey" | "boxToken" | "opencodeGoApiKey" | "ttsKey" | "fishAudioKey" | "xaiVoiceKey" | "jevApiKey" | "openaiImageApiKey" | "customImageApiKey" | "openaiApiKey",

@@ -67,7 +67,7 @@
     "test:shards": "node scripts/testing/vitest-shards.mjs",
     "routines:dry-run": "node --experimental-strip-types scripts/routines-dry-run.ts",
     "test:routine-smoke": "vitest run server/testing/fake-perspicax-mcp-server.test.ts server/routines/routine-smoke/routine-smoke.test.ts",
-    "test:connector-matrix": "vitest run server/connectors/connector-matrix.e2e.test.ts server/connectors/launch-profile.contract.test.ts",
+    "test:connector-matrix": "vitest run server/connectors/connector-matrix.e2e.test.ts server/connectors/launch-profile.contract.test.ts scripts/verify/release/connectors-live.test.ts",
     "test:cua": "pnpm build:cua && node scripts/smoke-cua.mjs",
     "test:cua-container": "node scripts/smoke-cua-container.mjs",
     "check:electron": "node scripts/check-electron.mjs",

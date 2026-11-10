@@ -226,10 +226,37 @@ export function isTeammateStep(name: string | undefined): boolean {
   return kind === "coordinate" || kind === "ask" || kind === "delegate" || kind === "sendTo";
 }
 
-/** A teammate hand-off that failed: shown even with tool calls off, so the
- * person sees why the teammate never answered (2026-11-09). */
+/** A teammate hand-off that failed, or a delivery the server could not make
+ * (a failed send, a Full access answer the engine never got): shown even
+ * with tool calls off, so the person sees why the teammate never answered
+ * or why a question card expired (2026-11-09, #3288). */
 export function isFailedTeammateStep(step: { kind?: string; tool?: { name?: string; ok?: boolean } }): boolean {
-  return step.kind === "activity" && step.tool?.ok === false && isTeammateStep(step.tool.name);
+  if (step.kind !== "activity" || step.tool?.ok !== false) return false;
+  return isTeammateStep(step.tool.name) || Boolean(step.tool.name && deliveryFailure(step.tool.name.trim()));
+}
+
+/** Delivery failures the server writes in English (server/index.ts report(),
+ * server/index-leaves/finalizeDelegationWatch.ts,
+ * server/runtime-events/request-opened-present.ts). Rows stored before #3288
+ * carry a long dash where the server now writes a hyphen. */
+const SEND_FAILED = /^Send failed [-–—] ([\s\S]+)$/;
+const SEND_TO_DELETED = /^Send to (.+) failed [-–—] its thread was deleted( before it could start)?$/;
+const FULL_ACCESS_UNDELIVERED = "Full access could not deliver the answer to the engine; retry the task after reconnecting.";
+
+/** One of those rows in the person's language, with no dash: a failed
+ * send's cause stays quiet after the label, in the app's language when it
+ * is a known server line. */
+function deliveryFailure(name: string): StepReading | undefined {
+  let match = SEND_FAILED.exec(name);
+  if (match) {
+    const cause = localizedServerLine(match[1]!.trim());
+    const target = oneLine(cause);
+    return { label: t("step.sendFailed"), target, ...(target !== cause ? { title: cause } : {}) };
+  }
+  match = SEND_TO_DELETED.exec(name);
+  if (match) return { label: t(match[2] ? "step.sendTo.deletedEarly" : "step.sendTo.deleted", { name: match[1]! }) };
+  if (name === FULL_ACCESS_UNDELIVERED) return { label: t("step.fullAccess.undelivered") };
+  return undefined;
 }
 
 function kindOf(name: string): Kind | undefined {
@@ -393,6 +420,11 @@ export type StepReading = {
  * language, for any surface that shows a stored tool name or failure cause
  * as text (task timeline, screen reader). Other words stay as they are. */
 export function localizedServerLine(name: string): string {
+  const delivery = deliveryFailure(name);
+  if (delivery) {
+    const cause = delivery.title ?? delivery.target;
+    return cause ? t("step.sendFailed.cause", { cause }) : delivery.label;
+  }
   return localizedEngineCause(name) ?? commSentence(name, "done") ?? serverSentence(name) ?? name;
 }
 
@@ -491,6 +523,8 @@ export function readStep(tool: StepTool, nameOf?: StepNameOf, live?: boolean): S
   if (stuck) return stuck;
   const comm = commSentence(name, phase);
   if (comm) return { label: comm };
+  const delivery = deliveryFailure(name);
+  if (delivery) return delivery;
   const sentence = serverSentence(name);
   if (sentence) return { label: sentence };
   if (isSentence(name)) return { label: name };

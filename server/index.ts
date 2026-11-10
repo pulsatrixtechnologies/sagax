@@ -13752,12 +13752,12 @@ const coordinator: Coordinator = createCoordinator({
         if (child.result !== THREAD_DELETED && store.taskByThread(child.botId, child.threadId)) {
           // Named by its runtime id: a restart's recovery finds it was told.
           store.appendMessage(child.threadId, { role: "bot", kind: "activity",
-            tool: { name: `Send failed — ${child.result.split("\n", 1)[0]!.slice(0, 180)}`, ok: false, handoffId: child.id } });
+            tool: { name: `Send failed - ${child.result.split("\n", 1)[0]!.slice(0, 180)}`, ok: false, handoffId: child.id } });
         } else if (parent && !parent.groupId && store.taskByThread(parent.botId, parent.threadId)) {
           // Its thread is gone: only the sender's conversation is left to say so.
           const name = store.bot(child.botId)?.name ?? "Teammate";
           store.appendMessage(parent.threadId, { role: "bot", kind: "activity", tool: { name: child.executions === 0
-            ? `Send to ${name} failed — its thread was deleted before it could start` : `Send to ${name} failed — its thread was deleted`, ok: false } });
+            ? `Send to ${name} failed - its thread was deleted before it could start` : `Send to ${name} failed - its thread was deleted`, ok: false } });
         }
         return;
       }
@@ -13811,7 +13811,7 @@ const coordinator: Coordinator = createCoordinator({
       if (child.mode === "notify") {
         if (child.status !== "completed" && store.taskByThread(child.botId, child.threadId)) {
           store.appendMessage(child.threadId, { role: "bot", kind: "activity",
-            tool: { name: `Send failed — ${child.result.split("\n", 1)[0]!.slice(0, 180)}`, ok: false, ...(child.id ? { handoffId: child.id } : {}) } });
+            tool: { name: `Send failed - ${child.result.split("\n", 1)[0]!.slice(0, 180)}`, ok: false, ...(child.id ? { handoffId: child.id } : {}) } });
         }
         return;
       }

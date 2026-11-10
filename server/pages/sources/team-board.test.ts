@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { RequestAuth } from "../../auth/request-auth.ts";
 import type { BotActivityItem } from "../../../shared/bot-activity.ts";
 import type { TeamBoard } from "../../../shared/team-board.ts";
-import { createGithubBoardReader, TEAM_BOARD_GITHUB_TTL_MS } from "../../team-board/github-board.ts";
+import { createGithubBoardReader, TEAM_BOARD_GITHUB_TTL_MS, TEAM_BOARD_RELEASE_LABEL_CHARS, TEAM_BOARD_RELEASES } from "../../team-board/github-board.ts";
 import { waitingCardOf, type BoardBot, type BoardEntry, type BoardTeam } from "../../team-board/board.ts";
 import { createTeamBoardSource, teamBoardExits, type TeamBoardSourceDeps } from "./team-board.ts";
 
@@ -372,7 +372,7 @@ describe("release of a card (#3449, lot P2 of #3409)", () => {
       refs: { nodes: [] },
     } },
   };
-  function released(compare: (base: string, head: string) => string | null) {
+  function released(compare: (base: string, head: string) => string | null, releases?: unknown[]) {
     const fetch = vi.fn(async (url: string | URL | Request) => {
       const address = String(url);
       const match = /\/repos\/acme\/shared\/compare\/([\w.-]+)\.\.\.([\w.-]+)/.exec(address);
@@ -380,7 +380,7 @@ describe("release of a card (#3449, lot P2 of #3409)", () => {
         const status = compare(match[1]!, match[2]!);
         return status ? json({ status, ahead_by: 0, behind_by: 1, commits: [], files: [] }) : json({}, 500);
       }
-      return json(graph);
+      return json(releases ? { data: { repository: { ...graph.data.repository, releases: { nodes: releases } } } } : graph);
     });
     const github = createGithubBoardReader({ token: () => TOKEN_A, fetch: fetch as unknown as typeof globalThis.fetch, now: () => NOW });
     const source = createTeamBoardSource({
@@ -406,7 +406,7 @@ describe("release of a card (#3449, lot P2 of #3409)", () => {
     const shipped = cardOf(board, 11);
     expect(shipped.status).toBe("released");
     expect(shipped.mergedAt).toBe(NOW - 2 * DAY);
-    expect(shipped.release).toEqual({ kind: "shipped", label: "0.8.83", tag: "pulsa-v0.8.83", url: "https://github.com/acme/shared/releases/tag/pulsa-v0.8.83", at: NOW - 1.5 * DAY });
+    expect(shipped.release).toEqual({ kind: "shipped", label: "0.8.83", tag: "pulsa-v0.8.83", url: "https://github.com/acme/shared/releases/tag/pulsa-v0.8.83", at: NOW - 1.5 * DAY, confirmed: true });
     expect(shipped.waiting).toBeUndefined();
     expect(fetch.mock.calls.some(([url]) => String(url).includes(`/compare/${TAG_83}...${OLD_MERGE_OID}`))).toBe(true);
     // the release address opens without a question: a release of a board repository
@@ -451,10 +451,68 @@ describe("release of a card (#3449, lot P2 of #3409)", () => {
     expect(compares()).toBe(first);
   });
 
-  it("keeps the date rule when GitHub's compare does not answer", async () => {
+  it("keeps the date rule when GitHub's compare does not answer, marked not confirmed", async () => {
     const { source } = released(() => null);
     const board = (await source.read(session("person-a"), { params: {}, fresh: false })).value as TeamBoard;
-    expect(cardOf(board, 11).release).toMatchObject({ kind: "shipped", label: "0.8.83" });
+    expect(cardOf(board, 11).release).toMatchObject({ kind: "shipped", label: "0.8.83", confirmed: false });
+  });
+
+  // review of #3450: a full list whose oldest release is newer than the
+  // merge cannot name its release (the real one may be older, unread)
+  const many = (count: number, newestAt: number, step: number, tagOf = (index: number) => `v1.${count - index}`) =>
+    Array.from({ length: count }, (_, index) => ({ tagName: tagOf(index), name: tagOf(index), publishedAt: iso(newestAt - index * step), isDraft: false, isPrerelease: false,
+      tagCommit: { oid: index.toString(16).padStart(40, "f"), committedDate: iso(newestAt - index * step) } }));
+
+  it("never names a release when the list read is full and the merge is older than its oldest release", async () => {
+    // TEAM_BOARD_RELEASES releases, all newer than the merge of #20 (2 days ago), every one contains it
+    const { source } = released(() => "behind", many(TEAM_BOARD_RELEASES, NOW - DAY, 60_000));
+    const board = (await source.read(session("person-a"), { params: {}, fresh: false })).value as TeamBoard;
+    const card = cardOf(board, 11);
+    expect(card.release).toBeUndefined();
+    expect(card.status).toBe("waiting_release");
+    expect(card.waiting).toMatchObject({ on: "release", code: "release_unknown" });
+  });
+
+  it("reads enough releases to cover Merged's 7 days", () => {
+    expect(TEAM_BOARD_RELEASES).toBeGreaterThanOrEqual(100);
+  });
+
+  it("confirms the candidate and that the release just before does not contain the merge", async () => {
+    // a full list that reaches before the merge: v1.(n) newest ... one release per 2 hours
+    const releases = many(TEAM_BOARD_RELEASES, NOW - DAY, 2 * 3_600_000);
+    const oldestFirst = [...releases].reverse();
+    const first = oldestFirst.findIndex((release) => Date.parse(release.tagCommit.committedDate) >= NOW - 2 * DAY);
+    const candidate = oldestFirst[first]!;
+    const before = oldestFirst[first - 1]!;
+    const seen: string[] = [];
+    const { source } = released((base) => { seen.push(base); return base === before.tagCommit.oid ? "ahead" : "behind"; }, releases);
+    const board = (await source.read(session("person-a"), { params: {}, fresh: false })).value as TeamBoard;
+    expect(cardOf(board, 11).release).toMatchObject({ kind: "shipped", tag: candidate.tagName, confirmed: true });
+    expect(seen).toEqual(expect.arrayContaining([candidate.tagCommit.oid, before.tagCommit.oid]));
+  });
+
+  it("walks back when the release before also contains the merge (a history that is not linear)", async () => {
+    const releases = many(TEAM_BOARD_RELEASES, NOW - DAY, 2 * 3_600_000);
+    const oldestFirst = [...releases].reverse();
+    const first = oldestFirst.findIndex((release) => Date.parse(release.tagCommit.committedDate) >= NOW - 2 * DAY);
+    const twoBefore = oldestFirst[first - 2]!;
+    const { source } = released((base) => (base === twoBefore.tagCommit.oid ? "ahead" : "behind"), releases);
+    const board = (await source.read(session("person-a"), { params: {}, fresh: false })).value as TeamBoard;
+    expect(cardOf(board, 11).release).toMatchObject({ tag: oldestFirst[first - 1]!.tagName, confirmed: true });
+  });
+
+  it("never counts a prerelease or a draft as shipped, and bounds a label taken from a name", async () => {
+    const long = "x".repeat(300);
+    const { source } = released(() => "behind", [
+      { tagName: "nightly", name: long, publishedAt: iso(NOW - 1.8 * DAY), isDraft: false, isPrerelease: false, tagCommit: { oid: "1".repeat(40), committedDate: iso(NOW - 1.8 * DAY) } },
+      { tagName: "v2.0.0-rc.1", name: "rc", publishedAt: iso(NOW - 1.9 * DAY), isDraft: false, isPrerelease: true, tagCommit: { oid: "2".repeat(40), committedDate: iso(NOW - 1.9 * DAY) } },
+      { tagName: "v1.9.9", name: "draft", publishedAt: iso(NOW - 1.95 * DAY), isDraft: true, isPrerelease: false, tagCommit: { oid: "3".repeat(40), committedDate: iso(NOW - 1.95 * DAY) } },
+    ]);
+    const board = (await source.read(session("person-a"), { params: {}, fresh: false })).value as TeamBoard;
+    const release = cardOf(board, 11).release!;
+    expect(release.tag).toBe("nightly");
+    expect(release.label.length).toBeLessThanOrEqual(TEAM_BOARD_RELEASE_LABEL_CHARS);
+    expect(board.releases.map((entry) => entry.tag)).toEqual(["nightly"]);
   });
 });
 

@@ -15,16 +15,22 @@
 //
 // Release of a merged pull request (#3449, lot P2 of #3409): the GitHub
 // release is the source. The same request brings the merge commit, the
-// newest releases (drafts left out) and, for a repository without one, the
+// TEAM_BOARD_RELEASES newest releases (GitHub's largest page: Sagax cuts
+// about 30 in 4 days, so 100 cover Merged's 7 days with no extra call;
+// drafts and prereleases left out) and, for a repository without one, the
 // newest tags. The release of a merge is the oldest one whose tag contains
-// its merge commit: the candidates are the releases whose tag commit is not
-// older than the merge commit (exact on a linear default branch), and each
-// is confirmed by GitHub's compare (tag...merge: `behind` or `identical`
-// means the tag contains it). Those compares are bounded per read
-// (TEAM_BOARD_RELEASE_CHECKS) and their answers cached per person,
-// repository, tag commit and merge commit (immutable, so kept until the
-// bounded cache drops them). When a compare cannot be asked, the date rule
-// stands.
+// its merge commit. The candidate is the oldest release whose tag commit is
+// not older than the merge commit (exact on a linear default branch); when
+// the list read is full and no release read is older than the merge, the
+// real one may be unread: the release stays unknown, never guessed. GitHub's
+// compare (tag...merge: `behind` or `identical` means the tag contains it)
+// confirms the candidate AND that the release just before does not contain
+// the merge (when it does, the walk goes back). Those compares are bounded
+// per repository read (TEAM_BOARD_RELEASE_CHECKS) and their answers cached
+// per person, repository, tag commit and merge commit (immutable, so kept
+// until the bounded cache drops them); a later read confirms what the budget
+// left. When a compare cannot be asked, the release found by date is given
+// with `confirmed: false`.
 import type { GitExec } from "../code-branches.ts";
 import { githubAccessFailure, type GithubAccessFailure, type GithubAccessFix } from "../github/github-access.ts";
 import type { TeamBoardGithubReason } from "../../shared/team-board.ts";
@@ -37,12 +43,15 @@ export const TEAM_BOARD_GITHUB_TTL_MS = 60_000;
 export const TEAM_BOARD_OPEN_ISSUES = 300;
 /** Pull requests read per repository, newest by update (open or merged). */
 export const TEAM_BOARD_PULLS = 50;
-/** Releases (else tags) read per repository, newest first. */
-export const TEAM_BOARD_RELEASES = 30;
-/** GitHub compares one repository read may ask to confirm a release. */
-export const TEAM_BOARD_RELEASE_CHECKS = 20;
-/** Release candidates tried per merge, oldest first. */
-const RELEASE_CANDIDATES = 3;
+/** Releases (else tags) read per repository, newest first, in the same
+ * request: GitHub's largest page, a hard bound (review of #3450). */
+export const TEAM_BOARD_RELEASES = 100;
+/** GitHub compares one repository read may ask to confirm releases. */
+export const TEAM_BOARD_RELEASE_CHECKS = 40;
+/** Steps tried per merge, forward or back, before it stays unconfirmed. */
+const RELEASE_STEPS = 3;
+/** A label taken from a release's name (free text) is cut to this. */
+export const TEAM_BOARD_RELEASE_LABEL_CHARS = 60;
 /** Containment answers kept (per person, repository, tag and merge). */
 const CONTAINS_CACHE_MAX = 5_000;
 const ISSUE_PAGE = 100;
@@ -95,9 +104,10 @@ export interface BoardPull {
   lastReviewAt?: number;
   mergeCommit?: { oid: string; at?: number };
   milestone?: string;
-  /** A merge's release (#3449): the release, null when none contains it
-   * yet (not cut yet), absent when it could not be told. */
-  release?: BoardRelease | null;
+  /** A merge's release (#3449): the release (`confirmed` by GitHub's
+   * compare, else found by date), null when none contains it yet (not cut
+   * yet), absent when it could not be told. */
+  release?: (BoardRelease & { confirmed: boolean }) | null;
 }
 
 export interface RepoSnapshot {
@@ -168,7 +178,7 @@ export const BOARD_QUERY = `query($owner: String!, $name: String!, $after: Strin
       nodes { ${PULL_FIELDS} }
     }
     releases(first: ${TEAM_BOARD_RELEASES}, orderBy: { field: CREATED_AT, direction: DESC }) @include(if: $withPulls) {
-      nodes { tagName name url publishedAt isDraft tagCommit { oid committedDate } }
+      nodes { tagName name url publishedAt isDraft isPrerelease tagCommit { oid committedDate } }
     }
     refs(refPrefix: "refs/tags/", first: ${TEAM_BOARD_RELEASES}, orderBy: { field: TAG_COMMIT_DATE, direction: DESC }) @include(if: $withPulls) {
       nodes { name target { __typename ... on Commit { oid committedDate } ... on Tag { target { ... on Commit { oid committedDate } } } } }
@@ -257,7 +267,8 @@ export function boardPull(node: Json, repo: string): BoardPull | undefined {
  * ("0.8.83" for `pulsa-v0.8.83`), else its name, else the tag. Pure. */
 export function releaseLabel(tag: string, name?: string): string {
   const version = /\d+(?:\.\d+)+(?:-[\w.]+)?/.exec(tag)?.[0];
-  return version ?? (name?.trim() || tag);
+  const label = version ?? (name?.replace(/\s+/g, " ").trim() || tag);
+  return label.length > TEAM_BOARD_RELEASE_LABEL_CHARS ? `${label.slice(0, TEAM_BOARD_RELEASE_LABEL_CHARS - 1).trimEnd()}…` : label;
 }
 
 /** The release address the board names, built here (never GitHub's own
@@ -266,20 +277,23 @@ function releaseUrl(repo: string, tag: string): string | undefined {
   return /^[\w.+-]{1,100}$/.test(tag) ? `https://github.com/${repo}/releases/tag/${encodeURIComponent(tag)}` : undefined;
 }
 
-/** The releases a repository's answer names, newest first, drafts left out;
- * its tags when it has no release. Pure. */
-export function boardReleases(repository: Json, repo: string): BoardRelease[] {
-  const releases = list(repository.releases).flatMap((node): BoardRelease[] => {
+/** The releases a repository's answer names, newest first, drafts and
+ * prereleases left out; its tags when it has no release. `complete`: GitHub
+ * gave fewer than TEAM_BOARD_RELEASES, so nothing older is unread. Pure. */
+export function boardReleases(repository: Json, repo: string): { releases: BoardRelease[]; complete: boolean } {
+  const read = list(repository.releases);
+  const releases = read.flatMap((node): BoardRelease[] => {
     const tag = str(node.tagName);
     const at = time(node.publishedAt);
-    if (!tag || node.isDraft === true || at === undefined) return [];
+    if (!tag || node.isDraft === true || node.isPrerelease === true || at === undefined) return [];
     const commit = obj(node.tagCommit);
     const oid = str(commit.oid);
     const tagAt = time(commit.committedDate);
     const url = releaseUrl(repo, tag);
     return [{ tag, label: releaseLabel(tag, str(node.name)), at, ...(url ? { url } : {}), ...(oid ? { oid } : {}), ...(tagAt !== undefined ? { tagAt } : {}) }];
   });
-  const out = releases.length ? releases : list(repository.refs).flatMap((node): BoardRelease[] => {
+  const tags = list(repository.refs);
+  const out = releases.length ? releases : tags.flatMap((node): BoardRelease[] => {
     const tag = str(node.name);
     const target = obj(node.target);
     const commit = target.__typename === "Tag" ? obj(target.target) : target;
@@ -289,7 +303,8 @@ export function boardReleases(repository: Json, repo: string): BoardRelease[] {
     const url = releaseUrl(repo, tag);
     return [{ tag, label: releaseLabel(tag), at, tagAt: at, ...(url ? { url } : {}), ...(oid ? { oid } : {}) }];
   });
-  return out.sort((a, b) => b.at - a.at).slice(0, TEAM_BOARD_RELEASES);
+  const complete = (releases.length ? read : tags).length < TEAM_BOARD_RELEASES;
+  return { releases: out.sort((a, b) => b.at - a.at).slice(0, TEAM_BOARD_RELEASES), complete };
 }
 
 /** A failed GraphQL answer's stable cause (#3449). */
@@ -426,32 +441,56 @@ export function createGithubBoardReader(deps: GithubBoardDeps): GithubBoardReade
     return verdict;
   }
 
-  /** Each merge's release (#3449): the oldest release, by its tag commit,
-   * not older than the merge commit, confirmed by a bounded compare. */
-  async function resolveReleases(person: string, token: string | undefined, repo: string, pulls: BoardPull[], releases: readonly BoardRelease[]): Promise<void> {
+  /** Each merge's release (#3449): the oldest release whose tag contains
+   * the merge commit, found by date, then confirmed by bounded compares: the
+   * release contains the merge and the one just before does not. */
+  async function resolveReleases(person: string, token: string | undefined, repo: string, pulls: BoardPull[], releases: readonly BoardRelease[], complete: boolean): Promise<void> {
     const oldestFirst = [...releases].sort((a, b) => (a.tagAt ?? a.at) - (b.tagAt ?? b.at));
     const budget = { left: TEAM_BOARD_RELEASE_CHECKS };
     for (const pull of pulls) {
       if (pull.state !== "merged" || !releases.length) continue;
       const mergedAt = pull.mergeCommit?.at ?? pull.mergedAt;
       if (mergedAt === undefined) continue;
-      const candidates = oldestFirst.filter((release) => (release.tagAt ?? release.at) >= mergedAt);
-      if (!candidates.length) {
+      let index = oldestFirst.findIndex((release) => (release.tagAt ?? release.at) >= mergedAt);
+      if (index < 0) {
+        // the newest releases are always read: none is that recent
         pull.release = null;
         continue;
       }
+      // a full list with nothing read before the merge: the real release may be unread
+      if (index === 0 && !complete) continue;
       if (!pull.mergeCommit) {
-        pull.release = candidates[0]!;
+        pull.release = { ...oldestFirst[index]!, confirmed: false };
         continue;
       }
-      for (const candidate of candidates.slice(0, RELEASE_CANDIDATES)) {
-        const verdict = await contains(person, token, repo, candidate, pull.mergeCommit.oid, budget);
-        // a compare that could not be asked leaves the date rule
-        if (verdict !== false) {
-          pull.release = candidate;
+      const merge = pull.mergeCommit.oid;
+      const has = (at: number) => contains(person, token, repo, oldestFirst[at]!, merge, budget);
+      // forward: the first release by date that contains the merge
+      let verdict = await has(index);
+      for (let step = 1; verdict === false && step < RELEASE_STEPS && index + 1 < oldestFirst.length; step++) verdict = await has(++index);
+      if (verdict === false) continue; // not found within the steps: unknown
+      if (verdict === undefined) {
+        pull.release = { ...oldestFirst[index]!, confirmed: false };
+        continue;
+      }
+      // back: the release just before must not contain it
+      let confirmed = false;
+      for (let step = 0; step < RELEASE_STEPS; step++) {
+        if (index === 0) {
+          confirmed = complete;
           break;
         }
+        const before = await has(index - 1);
+        if (before === false) {
+          confirmed = true;
+          break;
+        }
+        if (before === undefined) break;
+        index -= 1;
       }
+      // walked back to the oldest read in a full list: it may be older still
+      if (index === 0 && !complete) continue;
+      pull.release = { ...oldestFirst[index]!, confirmed };
     }
   }
 
@@ -460,6 +499,7 @@ export function createGithubBoardReader(deps: GithubBoardDeps): GithubBoardReade
     const issues: BoardIssue[] = [];
     let pulls: BoardPull[] = [];
     let releases: BoardRelease[] = [];
+    let releasesComplete = true;
     let after: string | undefined;
     let openIssues = 0;
     for (let page = 0; ; page++) {
@@ -471,7 +511,7 @@ export function createGithubBoardReader(deps: GithubBoardDeps): GithubBoardReade
       const repository = obj(obj(answer.data).repository);
       if (page === 0) {
         pulls = list(repository.pullRequests).flatMap((node) => boardPull(node, repo) ?? []);
-        releases = boardReleases(repository, repo);
+        ({ releases, complete: releasesComplete } = boardReleases(repository, repo));
       }
       const block = obj(repository.issues);
       if (typeof block.totalCount === "number") openIssues = block.totalCount;
@@ -486,7 +526,7 @@ export function createGithubBoardReader(deps: GithubBoardDeps): GithubBoardReade
       after = str(info.endCursor);
       if (info.hasNextPage !== true || !after || issues.length >= TEAM_BOARD_OPEN_ISSUES) break;
     }
-    await resolveReleases(person, token, repo, pulls, releases);
+    await resolveReleases(person, token, repo, pulls, releases, releasesComplete);
     return { ok: true, snapshot: { issues, pulls, openIssues: Math.max(openIssues, issues.length), releases } };
   }
 

@@ -33,15 +33,21 @@ export interface TeamBoardCard {
   /** When its pull request was merged (Merged column only). */
   mergedAt?: number;
   /** Where the card ships. Merged: `shipped` (the oldest GitHub release whose
-   * tag contains the merge commit; `label` its version, `tag` as GitHub has
-   * it, `url` the release page, `at` its publication) or `unreleased` (no
-   * release contains it yet: `label` "Not cut yet", in the reader's
-   * language). Open: `planned` with the milestone's title, when the issue
-   * (else its pull request) has one. Absent on an open card: not scheduled
-   * (or GitHub was not read). */
+   * tag contains the merge commit; `label` its version, else its name cut
+   * to 60 characters, `tag` as GitHub has it, `url` the release page, `at`
+   * its publication, `confirmed` true when GitHub's compare showed that the
+   * release contains the merge and the one before it does not, false when
+   * it was found by date only (compare not answered or out of budget this
+   * read)) or `unreleased` (no release contains it yet: `label` "Not cut
+   * yet", in the reader's language). Drafts and prereleases never count.
+   * Absent on a merged card: the release could not be told (the merge is
+   * older than every release read, or no release contains it within the
+   * steps tried); never a guess. Open: `planned` with the milestone's
+   * title, when the issue (else its pull request) has one. Absent on an
+   * open card: not scheduled (or GitHub was not read). */
   release?: TeamBoardRelease;
 }
-export interface TeamBoardRelease { kind: "shipped" | "unreleased" | "planned"; label: string; tag?: string; url?: string; at?: number }
+export interface TeamBoardRelease { kind: "shipped" | "unreleased" | "planned"; label: string; tag?: string; url?: string; at?: number; confirmed?: boolean }
 
 /** Why a card is Blocked, stable (#3449). `turn_failed`: the holder's newest
  * turn failed; `turn_blocked`: it was refused or stalled (a routine run);
@@ -66,13 +72,16 @@ export type TeamBoardBlockedCode = TeamBoardBlockedCause["code"];
  * could not read which card (the conversation is not readable by this
  * reader, or the card was already gone; `what` the step the chat shows, when
  * known). On `review`: `review_required` (ready, no verdict yet). On
- * `release`: `not_released` (merged, no release contains it yet). */
+ * `release`: `not_released` (merged, no release contains it yet; the card's
+ * release is `unreleased`) or `release_unknown` (merged, its release could
+ * not be told; the card has no `release`). */
 export type TeamBoardWaitingCause =
   | { code: "approval"; params: { what?: string; tool?: string } }
   | { code: "question"; params: { what?: string } }
   | { code: "waiting_you"; params: { what?: string } }
   | { code: "review_required"; params: Record<string, never> }
-  | { code: "not_released"; params: Record<string, never> };
+  | { code: "not_released"; params: Record<string, never> }
+  | { code: "release_unknown"; params: Record<string, never> };
 export type TeamBoardWaitingCode = TeamBoardWaitingCause["code"];
 
 /** Why GitHub was not read, stable (#3449), beside `github.fix` (the prose

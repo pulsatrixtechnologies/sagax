@@ -328,7 +328,7 @@ function cardFor(
   if (!place) return undefined;
   // the release (lot P2): a merge's from GitHub's releases, an open card's milestone
   const release: TeamBoardRelease | undefined = place.column === "merged"
-    ? github?.release ? { kind: "shipped", label: github.release.label, tag: github.release.tag, ...(github.release.url ? { url: github.release.url } : {}), at: github.release.at }
+    ? github?.release ? { kind: "shipped", label: github.release.label, tag: github.release.tag, ...(github.release.url ? { url: github.release.url } : {}), at: github.release.at, confirmed: github.release.confirmed }
       : github?.release === null ? { kind: "unreleased", label: NOT_CUT_YET[lang] }
       : undefined
     : (issue?.milestone ?? github?.milestone) ? { kind: "planned", label: (issue?.milestone ?? github?.milestone)! }
@@ -352,7 +352,7 @@ function cardFor(
   const waiting: TeamBoardCard["waiting"] | undefined = status === "waiting_you"
     ? { on: "you", ...(step ? { reason: step } : {}), ...(holder ? { since: holder.entry.item.startedAt } : {}), ...youCause }
     : status === "waiting_review" ? { on: "review", ...(reviewSince !== undefined ? { since: reviewSince } : {}), code: "review_required", params: {} }
-    : status === "waiting_release" ? { on: "release", ...(mergedAt !== undefined ? { since: mergedAt } : {}), code: "not_released", params: {} }
+    : status === "waiting_release" ? { on: "release", ...(mergedAt !== undefined ? { since: mergedAt } : {}), ...(release?.kind === "unreleased" ? { code: "not_released" as const } : { code: "release_unknown" as const }), params: {} }
     : undefined;
   const bot = holder ? bots.get(holder.botId) : undefined;
   const since = holder ? (activityStatusActive(holder.status) ? holder.entry.item.startedAt : holder.at) : undefined;

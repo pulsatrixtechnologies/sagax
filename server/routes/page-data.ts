@@ -6,6 +6,14 @@
 //   GET  /api/pages/:id/data/:source?fresh=1&version=n   PageDataAnswer
 //   GET  /api/pages/:id/viewer?version=n             PageViewerInfo
 //   POST /api/pages/:id/data-approvals/:approvalId   PageDataApprovalAnswer -> { ok, answer }
+//   GET    /api/pages/:id/link-approvals?origin=<origin>  PageLinkApprovalState
+//   POST   /api/pages/:id/link-approvals  { origin, answer: "always" } -> { ok: true }
+//   DELETE /api/pages/:id/link-approvals?origin=<origin>  -> { ok: true }  forget it
+// Link approvals ("Always allow this site"): per reader, page and exact
+// origin (scheme, host, port; normalizePageLinkOrigin); anything else, the
+// former `host` included, answers 400 origin_required;
+// on disk (server/pages/page-link-approvals.ts); the person only, never a
+// bot's act session.
 //
 // `version`: the published version for every reader; the page's own person
 // may name any version (the app's preview, the publish card). `lang=fr|en`
@@ -34,10 +42,13 @@ import {
   type PageDataAnswer,
   type PageDataAskFirst,
   type PageDataSource,
+  type PageLinkApprovalState,
   type PageViewerInfo,
+  normalizePageLinkOrigin,
 } from "../../shared/page-capabilities.ts";
 import type { PagesPolicy } from "../../shared/published-pages.ts";
 import type { PageDataApprovals } from "../pages/page-data-approvals.ts";
+import type { PageLinkApprovals } from "../pages/page-link-approvals.ts";
 import { PageSourceError, type PageDataWatch, type PageSources } from "../pages/page-sources.ts";
 import type { PageRecord } from "../pages/published-pages.ts";
 import { pageAnnotator, pageMayEdit, type PageViewer } from "./published-pages.ts";
@@ -62,12 +73,15 @@ export interface PageDataRouteDeps {
    * on this source, in the reader's context (never the page owner's bot). */
   orgRule?(input: { source: string; auth: RequestAuth }): "deny" | "ask" | "none";
   approvals: PageDataApprovals;
+  /** "Always allow this site" answers of the link card. */
+  links?: PageLinkApprovals;
   watch?: PageDataWatch;
   now?(): number;
 }
 
 const ROUTE = /^\/api\/pages\/([\w-]+)\/(capabilities|viewer|data\/([\w-]+))$/;
 const APPROVAL_ROUTE = /^\/api\/pages\/([\w-]+)\/data-approvals\/([\w-]+)$/;
+const LINK_ROUTE = /^\/api\/pages\/([\w-]+)\/link-approvals$/;
 
 type Lang = "fr" | "en";
 
@@ -110,7 +124,8 @@ export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
   return async ({ req, res, url, path, method, auth, json, readBody }) => {
     const approval = method === "POST" ? APPROVAL_ROUTE.exec(path) : null;
     const match = method === "GET" ? ROUTE.exec(path) : null;
-    if (!approval && !match) return PASS;
+    const link = deps.links && (method === "GET" || method === "POST" || method === "DELETE") ? LINK_ROUTE.exec(path) : null;
+    if (!approval && !match && !link) return PASS;
     res.setHeader?.("cache-control", "no-store");
     const lang = langOf(url, req);
     const refuse = (status: number, code: PageCapError, extra: Record<string, unknown> = {}) => json(res, status, { error: TEXTS[code][lang], code, ...extra });
@@ -118,9 +133,32 @@ export function createPageDataRoutes(deps: PageDataRouteDeps): RouteHandler {
     // a reader who is not signed in: no personal capability, and nothing
     // that says whether the page or its owner has data
     if (!viewer || (!viewer.principalId && !viewer.computerOwner)) return refuse(401, "sign_in");
-    const page = deps.pages.get((approval ?? match)![1]!);
+    const page = deps.pages.get((approval ?? match ?? link)![1]!);
     const who = page ? pageAnnotator(page, viewer, { policy: deps.pages.policy(), now: now(), ...(deps.teamsOf ? { teamsOf: deps.teamsOf } : {}), ownerActive: deps.ownerActive?.(page) ?? true }) : null;
     if (!page || !who) return refuse(404, "not_found");
+
+    if (link) {
+      // the reader's own answer: never a bot's act copy, to read, write or forget
+      if (deps.botAct(auth)) return json(res, 403, { error: lang === "fr" ? "Seule la personne répond à cette carte, jamais un bot." : "Only the person answers this card, never a bot.", code: "person_only" });
+      const links = deps.links!;
+      const originRequired = () => json(res, 400, { error: lang === "fr" ? "Envoie l'origine du site (https://exemple.com), pas son hôte." : "Send the site's origin (https://example.com), not its host.", code: "origin_required" });
+      if (method === "POST") {
+        const body = await readBody(req) as Record<string, unknown> | null;
+        const origin = normalizePageLinkOrigin(body?.origin);
+        if (!origin) return originRequired();
+        if (body?.answer !== "always") return refuse(400, "bad_request");
+        if (!links.allow(who.by, page.id, origin)) return json(res, 409, { error: lang === "fr" ? "Trop de sites sont déjà permis sur ce serveur." : "Too many sites are already allowed on this server.", code: "too_many" });
+        return json(res, 200, { ok: true });
+      }
+      const origin = normalizePageLinkOrigin(url.searchParams.get("origin"));
+      if (!origin) return originRequired();
+      if (method === "DELETE") {
+        links.forget(who.by, page.id, origin);
+        return json(res, 200, { ok: true });
+      }
+      const state: PageLinkApprovalState = { allowed: links.allowed(who.by, page.id, origin) };
+      return json(res, 200, state);
+    }
 
     if (approval) {
       // the reader's own answer to the card: never a bot's act copy

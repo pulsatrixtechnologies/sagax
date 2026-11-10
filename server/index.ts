@@ -1173,6 +1173,7 @@ import { createBotActivityReader, createBotActivityRoutes, type BotActivityRoute
 import { createPageDataRoutes } from "./routes/page-data.ts";
 import { PageDataWatch, PageSources } from "./pages/page-sources.ts";
 import { PageDataApprovals } from "./pages/page-data-approvals.ts";
+import { PageLinkApprovals } from "./pages/page-link-approvals.ts";
 import { createTeamBoardSource } from "./pages/sources/team-board.ts";
 import { TEAM_BOARD_ENTRIES_PER_BOT, TEAM_BOARD_WORK_WINDOW_MS } from "./team-board/board.ts";
 import { createGithubBoardReader, ghGraphqlVia } from "./team-board/github-board.ts";
@@ -12503,6 +12504,14 @@ const personalHostChecks = new Map<string, { at: number; refused: boolean }>();
 const pageSources = new PageSources();
 // Ask first answers of page data reads: "Always allow" kept on disk per person
 const pageDataApprovals = new PageDataApprovals(join(DATA_DIR, "page-data-approvals.json"));
+// "Always allow this site" answers of a page's link card, per person, page and origin; a revoke forgets them
+const pageLinkApprovals = new PageLinkApprovals(join(DATA_DIR, "page-link-approvals.jsonl"));
+publishedPages.onRevoked((pageId) => pageLinkApprovals.forgetPage(pageId));
+// a deleted page takes its link and data approvals with it
+publishedPages.onRemoved((pageId) => {
+  pageLinkApprovals.forgetPage(pageId);
+  pageDataApprovals.forgetPage(pageId);
+});
 const pageDataWatch = new PageDataWatch(pageLive);
 store.onChange((change) => {
   if (change.type === "bot") pageDataWatch.botChanged(change.botId);
@@ -12529,6 +12538,7 @@ ROUTES.push(createPageDataRoutes({
     return decision.kind === "deny" ? "deny" : decision.kind === "ask" ? "ask" : "none";
   },
   approvals: pageDataApprovals,
+  links: pageLinkApprovals,
   watch: pageDataWatch
 }));
 ROUTES.push(createPublishedPageRoutes({

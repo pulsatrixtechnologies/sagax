@@ -427,6 +427,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // the reader's own answer to an Ask first card of a data read (never a
   // bot's act copy: the handler refuses it)
   { methods: ["POST"], path: /^\/api\/pages\/[\w-]+\/data-approvals\/[\w-]+$/ },
+  // "Always allow this site" on a page's link card: the reader's own (the
+  // handler refuses a bot's act copy), read, kept or forgotten
+  { methods: ["GET", "POST", "DELETE"], path: /^\/api\/pages\/[\w-]+\/link-approvals$/ },
   { methods: ["PATCH"], path: /^\/api\/bots\/[\w-]+\/cards\/[\w-]+$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/secret-cards\/[\w-]+\/(?:resume|dismiss)$/ },
   // A sign-in card's Done or Cancel. The bot's browser itself stays admin

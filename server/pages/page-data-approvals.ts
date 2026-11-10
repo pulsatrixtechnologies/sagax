@@ -104,6 +104,22 @@ export class PageDataApprovals {
     return id;
   }
 
+  /** The page was deleted: every answer about it goes (pending, once,
+   * always). */
+  forgetPage(pageId: string): void {
+    for (const [id, entry] of this.pending) if (entry.pageId === pageId) this.pending.delete(id);
+    for (const key of this.once.keys()) if (key.split("\u0000")[1] === pageId) this.once.delete(key);
+    const always = this.alwaysMap();
+    let changed = false;
+    for (const [key, entry] of always) {
+      if (entry.pageId === pageId) {
+        always.delete(key);
+        changed = true;
+      }
+    }
+    if (changed) this.saveAlways();
+  }
+
   /** The reader's answer to a pending card: only theirs counts. */
   answer(id: string, person: string, input: { allow: boolean; always?: boolean }): { ok: true; ask: PageDataAsk } | { ok: false; code: "not_found" } {
     const entry = this.pending.get(id);

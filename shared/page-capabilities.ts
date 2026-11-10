@@ -259,3 +259,42 @@ export function pageGithubExit(url: unknown, repos: ReadonlySet<string>): string
 export function pageLinkOpensDirectly(url: string, input: { receivedData: boolean; links: ReadonlySet<string> }): boolean {
   return !input.receivedData || input.links.has(url);
 }
+
+/** "Always allow this site" on a link card (#3413): the reader's answer,
+ * kept by the server per reader, page and origin (scheme, host and port:
+ * an approval of https://example.com never opens http://example.com nor
+ * https://example.com:8080, nor a subdomain or another host).
+ *   GET    /api/pages/:id/link-approvals?origin=<origin>  -> PageLinkApprovalState
+ *   POST   /api/pages/:id/link-approvals  PageLinkApprovalAnswer -> { ok: true }
+ *   DELETE /api/pages/:id/link-approvals?origin=<origin>  -> { ok: true } (forget)
+ * `origin` as normalizePageLinkOrigin gives it, on both sides. A request
+ * with anything else (the former `host`) answers 400 `origin_required`. */
+export interface PageLinkApprovalState {
+  allowed: boolean;
+}
+
+export interface PageLinkApprovalAnswer {
+  origin: string;
+  answer: "always";
+}
+
+/** An origin as a link approval keeps it: an http or https address with
+ * nothing after its origin (an empty path or "/", no query, no fragment, no
+ * credentials), given back as the browser's own origin: lower case host,
+ * punycode as is, default port folded. Null for anything else. The client
+ * passes a link's own origin (`new URL(link).origin`) through it too. Pure. */
+export function normalizePageLinkOrigin(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const raw = value.trim();
+  if (!raw || raw.length > 300 || /\s/.test(raw)) return null;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  if (!url.hostname || url.username || url.password || url.search || url.hash || (url.pathname !== "/" && url.pathname !== "")) return null;
+  if (/[?#]/.test(raw)) return null;
+  return url.origin;
+}

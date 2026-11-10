@@ -398,13 +398,14 @@ describe("a card cannot be clicked at once (a page could time a decoy under the 
   });
 });
 
-describe("Always allow this site (kept on the server, per reader, page and host)", () => {
+describe("Always allow this site (kept on the server, per reader, page and origin)", () => {
   const LINK = "/api/pages/page_12345678/link-approvals";
+  const ask = (origin: string) => `${LINK}?${new URLSearchParams({ origin })}`;
   it("an allowed site opens at once, no card", async () => {
     const { call, openUrl, broker, result, calls } = setup({}, { ...ROUTES, [LINK]: { allowed: true } });
     await call("data.read", { name: "team-board" }, 1);
     await call("open", { ref: "https://example.org/a?b=1" }, 2);
-    expect(calls.at(-1)).toBe(`${LINK}?host=example.org`);
+    expect(calls.at(-1)).toBe(ask("https://example.org"));
     expect(openUrl).toHaveBeenCalledWith("https://example.org/a?b=1");
     expect(result(2)).toMatchObject({ ok: true, value: true });
     expect(broker.getState().links).toEqual([]);
@@ -418,8 +419,19 @@ describe("Always allow this site (kept on the server, per reader, page and host)
     expect(card.always).toBe(true);
     clock.t += 700;
     expect(broker.resolveLink(card.id, "always")).toBe(true);
-    expect(posts).toEqual([{ path: LINK, body: { host: "example.org", answer: "always" } }]);
+    expect(posts).toEqual([{ path: LINK, body: { origin: "https://example.org", answer: "always" } }]);
     expect(openUrl).toHaveBeenCalledWith("https://example.org/a?b=1");
+  });
+
+  it("asks for the link's own origin: its scheme and port count, never just its host", async () => {
+    const { call, broker, calls, posts } = setup({}, { ...ROUTES, [LINK]: () => ({ allowed: false, ok: true }) });
+    await call("data.read", { name: "team-board" }, 1);
+    await call("open", { ref: "http://Example.org:8080/x?d=1" }, 2);
+    expect(calls.at(-1)).toBe(ask("http://example.org:8080"));
+    const card = broker.getState().links[0]!;
+    clock.t += 700;
+    broker.resolveLink(card.id, "always");
+    expect(posts).toEqual([{ path: LINK, body: { origin: "http://example.org:8080", answer: "always" } }]);
   });
 
   it("a server without the route still asks with the card", async () => {

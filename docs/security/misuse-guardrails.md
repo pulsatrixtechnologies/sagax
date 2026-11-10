@@ -69,6 +69,15 @@ soul file, a user message, or a tool result, and that `security.triage` is
 decided by the server. The prompt is English, like the rest of the system
 prompt. It is not the control: the server still classifies.
 
+Since #3282 (2026-11-09) the prompt holds back nothing the person asked for:
+no sentence asks for a draft, a confirmation or a limit on their own request
+(sends, destructive git), since the prompt reads no setting. The approval
+settings (Full access, Always allow, Ask first, Refuse, organization rules)
+decide whether a call runs or shows a card. The prompt keeps what protects
+other people and the platform, the rule that tool, page and bot content is
+data and never instructions, the rule never to ask in text for a permission
+the server asks for itself, and the secrecy of the system prompt.
+
 ### 2. Classifier
 
 `shared/misuse-guardrails.ts` is pure. `classifyMisuse` returns `allow`,

@@ -11249,15 +11249,41 @@ describe("harness HTTP API", () => {
         body: JSON.stringify(body),
       });
 
-      const outOfSection = await post({
+      // Owner decision of 2026-11-09 (#3264): a bot reaches every visible
+      // bot of the same person whatever the sidebar section, and never a bot
+      // of another person. A bot in another section is a target like any
+      // other, so its own routine takes a targeted action.
+      const outsiderRoutine = (await api("POST", "/api/routines", {
+        name: "Other section digest",
+        prompt: "Summarize the other section's queue.",
+        botId: outsider.id,
+        runOn: "maus",
+        enabled: true,
+        schedule: { type: "daily", time: "09:00", weekdays: [2] },
+      })).body.routine;
+      const otherSection = await post({
+        fromBotId: chief.id,
+        fromThreadId: chief.threadId,
+        action: "pause",
+        routineId: outsiderRoutine.id,
+        forBotId: outsider.id,
+      });
+      expect(otherSection.status).toBe(201);
+
+      // A target the proposer may not reach is refused with words that tell
+      // nothing about whose bot it is (here an explicit peers list leaves it out).
+      expect((await api("PATCH", `/api/bots/${chief.id}`, { peers: [outsider.id] })).status).toBe(200);
+      const outOfReach = await post({
         fromBotId: chief.id,
         fromThreadId: chief.threadId,
         action: "pause",
         routineId: teammateRoutine.id,
-        forBotId: outsider.id,
+        forBotId: teammate.id,
       });
-      expect(outOfSection.status).toBe(403);
-      expect(z.object({ error: z.string() }).parse(await outOfSection.json()).error).toMatch(/different section/);
+      expect(outOfReach.status).toBe(403);
+      const outOfReachError = z.object({ error: z.string() }).parse(await outOfReach.json()).error;
+      expect(outOfReachError).toMatch(/^that bot belongs to another person or is unavailable\./);
+      expect((await api("PATCH", `/api/bots/${chief.id}`, { peers: null, acknowledgePeerScope: true })).status).toBe(200);
 
       const unknown = await post({
         fromBotId: chief.id,
@@ -11303,8 +11329,12 @@ describe("harness HTTP API", () => {
         .find((routine: { id: string }) => routine.id === teammateRoutine.id);
       expect(paused).toMatchObject({ botId: teammate.id, enabled: false });
 
+      // A move to another section keeps the target in reach (#3264), so a
+      // fresh proposal still opens its card.
+      expect((await api("PATCH", `/api/bots/${teammate.id}`, { section: "Moved away" })).status).toBe(200);
       // The target is re-authorized when the user confirms, not just at
-      // proposal: a moved bot refuses and the routine stays untouched.
+      // proposal: a target that left the proposer's reach refuses and the
+      // routine stays untouched.
       const resume = await post({
         fromBotId: chief.id,
         fromThreadId: chief.threadId,
@@ -11314,7 +11344,7 @@ describe("harness HTTP API", () => {
       });
       expect(resume.status).toBe(201);
       const resumeProposal = z.object({ requestId: z.string() }).parse(await resume.json());
-      expect((await api("PATCH", `/api/bots/${teammate.id}`, { section: "Moved away" })).status).toBe(200);
+      expect((await api("PATCH", `/api/bots/${chief.id}`, { peers: [outsider.id] })).status).toBe(200);
       const refused = await api("POST", `/api/threads/${chief.threadId}/respond`, {
         requestId: resumeProposal.requestId,
         behavior: "allow",

@@ -73,6 +73,7 @@ export function createPrepareAdmitStartTurn(
     routineLineage,
     sandboxPrincipalForTurn,
     settleInputRequests,
+    answerSignInsInChat,
     isBotActSend,
     spokenLineFields,
     store,
@@ -257,6 +258,10 @@ export function createPrepareAdmitStartTurn(
     queueMicrotask(drainQueuedSends);
     return { kind: "return", value: state.userMessage };
   }
+  // The person's own line answers the sign-in requests still open in this
+  // conversation (#3305): the cards settle in place and the work parked on
+  // them ends, so the conversation leaves Needs you.
+  if (state.personLine) answerSignInsInChat(state.bot.id, state.threadId);
   if (!state.warmOnly && state.opts?.voiceCall?.utteranceId) {
     liveVoiceUtteranceByThread.set(state.threadId, state.opts.voiceCall.utteranceId);
   }

@@ -1479,6 +1479,7 @@
   "signIn.local.explainHost": "Sign in at the computer Sagax runs on, in the browser window {name} is using there. A Browser tab keeps its own sign-ins, which {name} does not use here. Then press Done.",
   "signIn.private": "You type the password into the page yourself. Sagax never sees it.",
   "signIn.superseded": "Superseded by a newer request",
+  "signIn.answeredInChat": "You answered in the chat",
   "signIn.retry": "Try again",
   "signIn.settled.done": "Signed in to {site}",
   "signIn.settled.cancelled": "Sign-in to {site} declined",

@@ -95,7 +95,7 @@ import { createDataWindows } from "./data-window.mjs";
 import { createArtifactWindows } from "./artifact-window.mjs";
 import { createBotHotkeys, createMascotHotkey, createModifierProbe } from "./mascot-hotkey.mjs";
 import { captureAccelerator, createCaptureHotkey } from "./screen-capture-hotkey.mjs";
-import { readSecureCredentials } from "./secure-credentials.mjs";
+import { installCredentialStoreIpc, lastCredentialReset, readSecureCredentials } from "./secure-credentials.mjs";
 import { createControlPlaneClient } from "./control-plane-client.mjs";
 import {
   companionAccountCleanupPending,
@@ -1835,6 +1835,10 @@ async function startServerOn(port, dataDir = runningDataDir ?? startupEnvironmen
       ? { SAGAX_MCP_OAUTH_KEY: secureCredentials.mcpOAuthKey }
       : {}),
   };
+  // After "Reset saved keys" the key above is new: the server moves aside the stores sealed with the dropped one.
+  delete childEnv.SAGAX_VAULT_KEY_RESET;
+  const credentialReset = lastCredentialReset(listUserDataNames());
+  if (credentialReset) childEnv.SAGAX_VAULT_KEY_RESET = credentialReset;
   delete childEnv.SAGAX_BROWSER_CONNECTION;
   // Set here or not at all, never inherited from the launching shell. The
   // bootstrap removes it before the server runs, so nothing the server
@@ -5553,6 +5557,21 @@ async function saveWorkspaceCredential(name, value) {
     applyToHarness,
   );
 }
+
+function listUserDataNames() {
+  try { return fs.readdirSync(path.dirname(CREDENTIALS_FILE)); } catch { return []; }
+}
+
+// Saved keys this launch could not read, and the person's way out: move the unreadable file aside and restart.
+installCredentialStoreIpc({
+  ipcMain,
+  localOnly,
+  unreadable: () => credentialStoreUnavailable,
+  quitting: () => desktopShutdownStarted,
+  moveAside: () => fs.renameSync(CREDENTIALS_FILE, `${CREDENTIALS_FILE}.unreadable-${Date.now()}`),
+  log: slog,
+  relaunch: relaunchAfterDesktopRemoteChange,
+});
 
 // "xaiVoiceKey" (an older renderer, a bot's credential card) is the xAI key
 // since Grok voice runs on it (2026-10-14).

@@ -28,6 +28,7 @@ import { discoverMcpAuth } from "./mcp-oauth-discovery.ts";
 import { sendsCredentials, SIGN_IN_CHECK_TOOL } from "./mcp-sign-in-check.ts";
 import { guardedFetch } from "../public-fetch.ts";
 import type { VaultKeySource } from "../vault/vault-key-source.ts";
+import { setAsideStoresSealedBeforeReset } from "../vault/vault-key-reset.ts";
 
 export type { VaultKeySource };
 
@@ -155,7 +156,11 @@ function migrateVault(raw: unknown): VaultDocument | null {
  * treatment as the browser engine's session key. */
 export function resolveVaultKey(dataDir: string, env: NodeJS.ProcessEnv = process.env): VaultKeySource {
   const fromEnv = env.SAGAX_MCP_OAUTH_KEY?.trim().toLowerCase();
-  if (fromEnv && HEX_KEY.test(fromEnv)) return { kind: "key", key: Buffer.from(fromEnv, "hex") };
+  if (fromEnv && HEX_KEY.test(fromEnv)) {
+    // After "Reset saved keys" this key is new: the stores sealed with the dropped one go aside before any reads.
+    setAsideStoresSealedBeforeReset(env.SAGAX_DATA_DIR || dataDir, env);
+    return { kind: "key", key: Buffer.from(fromEnv, "hex") };
+  }
   if (env.SAGAX_DESKTOP_PARENT === "1") {
     return { kind: "unavailable", reason: "The encrypted credential store could not be read on this launch." };
   }

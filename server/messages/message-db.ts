@@ -19,6 +19,7 @@ import { ContentSealError, fieldAad, messageAad, openField, openText, seal, seal
 import { provideContentKeys, type ExportedContentKey } from "../content-export.ts";
 import { ContentKeyring, ContentKeyUnavailable, ensureContentKeySchema, localKekProvider, WORKSPACE_OWNER, type KekProvider, type LiveKey } from "../encryption/content-keys.ts";
 import { resolveVaultKey } from "../mcp/mcp-oauth.ts";
+import { setAsideStoresSealedBeforeReset } from "../vault/vault-key-reset.ts";
 import { blindSnippet, indexColumns, indexSourcesOf, recallHolds, recallMatch, recallTermsFor, skeletonOf, type RecallTerm } from "../encryption/message-sealing.ts";
 import { peerProvenanceAuthor, WEBHOOK_AUTHOR, type WorkOrigin } from "../peers/peer-provenance.ts";
 import type { ResolvedSender, SteerQueueReason, WireMessage as Message } from "../../shared/wire.ts";
@@ -49,6 +50,9 @@ function open(): DatabaseSync {
   try {
     chmodSync(file, 0o600);
   } catch {}
+  // After "Reset saved keys" the content keys the dropped vault key wrapped retire before this database
+  // opens (server/vault/vault-key-reset.ts): read lazily from a key unwrap, the first new rows were written plain.
+  setAsideStoresSealedBeforeReset(DATA_DIR);
   const db = new DatabaseSync(file);
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA synchronous = NORMAL");

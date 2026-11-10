@@ -6,6 +6,7 @@
  * ?section=account|security|credentials|providers|engines|voice &skin=<id> &lang=<code>
  * &providers=1: several engines, keys, a named server and a local server
  * &org=1: an organization server, the viewer an admin (with providers=1)
+ * &keys=unreadable (#3320): the desktop could not read its saved keys, so Vault and Providers offer Reset saved keys
  * ?picker=1: the models window (ModelManager); ?picker=bar: the composer's chip and menu
  * scripts/capture/settings-pages.mjs shoots each page in light and dark. */
 import { StrictMode, useEffect } from "react";
@@ -56,6 +57,11 @@ if (permPlatform) {
   const ogb = ((window as { ogb?: Record<string, unknown> }).ogb ??= {});
   ogb.permAll = async () => answer;
   ogb.permAct = async () => ({ ok: true });
+}
+
+if (params.get("keys") === "unreadable") {
+  const ogb = ((window as { ogb?: Record<string, unknown> }).ogb ??= {});
+  ogb.credentialStore ??= { unreadable: async () => true, reset: async () => ({ status: "failed", error: "gallery" }) };
 }
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });

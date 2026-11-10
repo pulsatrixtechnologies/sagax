@@ -9926,7 +9926,7 @@
   "pages.localOnly": "Cette adresse fonctionne sur cet ordinateur seulement.",
   "pages.caps.reads": "Lit : {what}",
   "pages.caps.adds": "Nouveau dans cette version : {what}",
-  "pages.caps.source.team-board": "le travail de tes équipes de bots",
+  "pages.caps.source.team-board": "le travail de tes équipes de codage",
   "pages.caps.viewer": "ton nom et ton rôle",
   "pages.caps.open": "ouvre des liens et des chats",
   "pages.caps.title": "Ce que cette page peut lire",

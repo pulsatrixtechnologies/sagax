@@ -120,6 +120,19 @@
 //                   servers only when GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED=true).
 //   FAKE_ACP_DUMP   path to write {argv, env} as JSON, so a test can assert
 //                   argv shape (agent/stdio flags) and env hygiene
+//   Replays of grok 1.0.77 captures (fixtures/connectors/, issue #3343):
+//   FAKE_ACP_INITIALIZE_REPLAY  initialize answers this file (grok-initialize.json)
+//   FAKE_ACP_MCP_CALL=1  serve _x.ai/mcp/call {sessionId, server, tool, arguments}
+//                   as 1.0.77 does: a server mounted on the session is called
+//                   with no model turn and no permission request; any other
+//                   server, the managed gateway included, is "not found"
+//   FAKE_ACP_MODE=connector-replay with FAKE_ACP_CONNECTOR_REPLAY (grok-pinned-use-tool.json):
+//                   a prompt naming a gateway tool and its input JSON plays the
+//                   measured use_tool call with that tool and input: the
+//                   tool_call, Grok's own ask (allow it once), the tool result,
+//                   then the prompt stays open until session/cancel, which
+//                   ends it "cancelled" with the measured usage. A refused ask
+//                   ends the prompt with no result frame (not measured).
 //   FAKE_ACP_GROK_LEADER=1  grok's leader: an `agent` run without
 //                   `--no-leader` whose leader socket exists
 //                   ($GROK_LEADER_SOCKET, else $GROK_HOME/leader.sock; the
@@ -643,6 +656,8 @@ const configCalls: Array<{ method: string; params: unknown }> = [];
 let pendingPermissionId: number | null = null;
 let onPermissionAnswered: ((allowed: boolean) => void) | null = null;
 let lastPermissionCancelled = false;
+/** the optionId of the last answered permission request (null when cancelled) */
+let lastPermissionChoice: string | null = null;
 // pending server→client vendor question request (ask-question mode) → resolver
 let pendingAskQuestionId: number | null = null;
 let onAskQuestionAnswered: (() => void) | null = null;
@@ -660,6 +675,45 @@ const honorCancel = () => process.env.FAKE_ACP_HONOR_CANCEL === "1";
 let stallPrompts = 0;
 let reasoningErrors = 0;
 let hangKeepAlive: ReturnType<typeof setInterval> | null = null;
+/** connector-replay: the measured _meta of the prompt a cancel ends */
+let replayCancelMeta: unknown = null;
+
+/** connector-replay: the use_tool call grok 1.0.77 made for a pinned prompt
+ * (fixtures/connectors/grok-pinned-use-tool.json), with the tool and input
+ * the prompt names put in place of the captured ones. */
+function playConnectorReplay(msg: any): void {
+  const fixture = JSON.parse(readFileSync(process.env.FAKE_ACP_CONNECTOR_REPLAY ?? "", "utf8")) as {
+    tool: string; input: unknown; frames: Array<{ method: string; params: unknown }>; promptResult: { _meta: unknown };
+  };
+  const text = String(msg.params?.prompt?.[0]?.text ?? "");
+  const named = /with tool "([^"]+)" and this input JSON[^\n]*\n([\s\S]+)$/.exec(text);
+  const tool = named?.[1] ?? fixture.tool;
+  let input: unknown = fixture.input;
+  try { if (named) input = JSON.parse(named[2]!.trim()); } catch { /* keep the captured input */ }
+  const sessionId = msg.params?.sessionId;
+  const swap = (value: unknown): any => JSON.parse(JSON.stringify(value)
+    .split(JSON.stringify(fixture.tool)).join(JSON.stringify(tool))
+    .split(JSON.stringify(fixture.input)).join(JSON.stringify(input))
+    .split('"fixture-session"').join(JSON.stringify(sessionId)));
+  const frames = fixture.frames.map(swap);
+  const ask = frames.findIndex((frame) => frame.method === "session/request_permission");
+  frames.slice(0, ask).forEach((frame) => out({ jsonrpc: "2.0", method: frame.method, params: frame.params }));
+  pendingPermissionId = 9400;
+  const options = (frames[ask]!.params as { options?: Array<{ optionId?: string; kind?: string }> }).options ?? [];
+  onPermissionAnswered = () => {
+    // grok's own ids: "always-allow", "allow-once", "reject-once"; read the kind
+    const kind = options.find((option) => option.optionId === lastPermissionChoice)?.kind ?? "";
+    if (!kind.startsWith("allow")) {
+      result(msg.id, { stopReason: "end_turn", _meta: {} });
+      return;
+    }
+    frames.slice(ask + 1).forEach((frame) => out({ jsonrpc: "2.0", method: frame.method, params: frame.params }));
+    replayCancelMeta = fixture.promptResult._meta;
+    hangingPromptId = msg.id;
+    hangKeepAlive = setInterval(() => {}, 1_000);
+  };
+  out({ jsonrpc: "2.0", id: pendingPermissionId, method: "session/request_permission", params: frames[ask]!.params });
+}
 
 // ask-peer mode: the "agents" MCP server entry from session/new's mcpServers
 type McpEntry = { command: string; args?: string[]; env?: Array<{ name: string; value: string }> };
@@ -911,6 +965,7 @@ function handle(msg: any) {
     lastPermissionCancelled = msg.result?.outcome?.outcome === "cancelled";
     // which option the client picked, for tests asserting allow_always
     if (process.env.FAKE_ACP_PERMISSION_ANSWER) writeFileSync(process.env.FAKE_ACP_PERMISSION_ANSWER, String(chosen ?? "cancelled"));
+    lastPermissionChoice = typeof chosen === "string" ? chosen : null;
     onPermissionAnswered?.(typeof chosen === "string" && chosen.startsWith("allow"));
     return;
   }
@@ -920,6 +975,10 @@ function handle(msg: any) {
   switch (msg.method) {
     case "initialize": {
       if (failRpc(msg)) break;
+      if (process.env.FAKE_ACP_INITIALIZE_REPLAY) {
+        result(msg.id, JSON.parse(readFileSync(process.env.FAKE_ACP_INITIALIZE_REPLAY, "utf8")));
+        break;
+      }
       if (["1", "stuck"].includes(process.env.FAKE_ACP_CURSOR_FAST ?? "") && msg.params?.clientCapabilities?._meta?.parameterizedModelPicker === true) {
         currentFast = "true";
       }
@@ -974,6 +1033,32 @@ function handle(msg: any) {
       const managed = process.env.GROK_MANAGED_MCPS_ENABLED === "true" && process.env.GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED === "true";
       const servers = (recorded?.servers ?? []).filter((server) => server.type !== "managedGateway" || managed);
       result(msg.id, { result: { servers, sessionMcpResolved: true } });
+      break;
+    }
+    case "_x.ai/mcp/call": {
+      if (process.env.FAKE_ACP_MCP_CALL !== "1") {
+        out({ jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: "method not found" } });
+        break;
+      }
+      const server = String(msg.params?.server ?? "");
+      const entry = msg.params?.sessionId === liveSession ? sessionMcp.find((candidate) => candidate.name === server && candidate.command) : undefined;
+      if (!entry?.command) {
+        out({ jsonrpc: "2.0", id: msg.id, error: { code: -32603, message: "Internal error", data: `server '${server}' not found` } });
+        break;
+      }
+      const tool = String(msg.params?.tool ?? "");
+      const args = (msg.params?.arguments ?? {}) as object;
+      driveMcp({ command: entry.command, args: entry.args, env: entry.env }, [{ name: tool, args: () => args }], true)
+        .then((text) => result(msg.id, { result: { content: [{ type: "text", text }] } }))
+        .catch((error: unknown) => {
+          // 1.0.77's wording: "tool call failed: MCP service error: Mcp error: -32601: unknown tool"
+          let reason = (error as Error).message;
+          try {
+            const failed = JSON.parse(reason.replace(/^Fixture MCP request failed: /, "")) as { code?: unknown; message?: unknown };
+            if (failed.code !== undefined) reason = `Mcp error: ${failed.code}: ${failed.message}`;
+          } catch { /* keep the plain reason */ }
+          out({ jsonrpc: "2.0", id: msg.id, error: { code: -32603, message: "Internal error", data: `tool call failed: MCP service error: ${reason}` } });
+        });
       break;
     }
     case "session/new": {
@@ -1168,6 +1253,10 @@ function handle(msg: any) {
         writeFileSync(`${process.env.FAKE_ACP_DUMP}.prompt.json`, JSON.stringify(msg.params?.prompt ?? null, null, 2));
       }
       if (failRpc(msg)) return;
+      if (mode === "connector-replay") {
+        playConnectorReplay(msg);
+        return;
+      }
       if (mode === "reply-then-exit-0") {
         // #2632: the agent streams its whole answer, then its process ends
         // with code 0 before it ever answers session/prompt.
@@ -1911,7 +2000,7 @@ function handle(msg: any) {
       if (hangingPromptId !== null) {
         const cancelReply = process.env.FAKE_ACP_CANCEL_REPLY;
         if (cancelReply === "error") out({ jsonrpc: "2.0", id: hangingPromptId, error: { code: -32800, message: "Request cancelled" } });
-        else result(hangingPromptId, { stopReason: cancelReply || "cancelled", _meta: {} });
+        else result(hangingPromptId, { stopReason: cancelReply || "cancelled", _meta: replayCancelMeta ?? {} });
         if (hangKeepAlive) clearInterval(hangKeepAlive);
         hangingPromptId = null;
         hangKeepAlive = null;

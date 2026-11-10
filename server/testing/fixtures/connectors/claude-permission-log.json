@@ -1,0 +1,36 @@
+{
+  "note": "Calls the local server received, in order, for the allowed run then the denied run (M2). The permission prompt tool sees the exact input before the tool runs; a deny leaves the tool uncalled.",
+  "approvedInput": {
+    "item": "alpha"
+  },
+  "allowed": [
+    {
+      "call": "permission_check",
+      "args": {
+        "tool_name": "mcp__probe__echo_read",
+        "input": {
+          "item": "alpha"
+        },
+        "tool_use_id": "toolu_fixture_call"
+      }
+    },
+    {
+      "call": "echo_read",
+      "args": {
+        "item": "alpha"
+      }
+    }
+  ],
+  "denied": [
+    {
+      "call": "permission_check",
+      "args": {
+        "tool_name": "mcp__probe__echo_read",
+        "input": {
+          "item": "beta"
+        },
+        "tool_use_id": "toolu_fixture_call"
+      }
+    }
+  ]
+}

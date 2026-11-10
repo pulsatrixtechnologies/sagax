@@ -1,0 +1,32 @@
+{
+  "cli": "0.166.0",
+  "note": "mcpServer/tool/call on codex_apps with no model turn (M6). The provider's own error comes back as isError with structuredContent; Codex sent no approval request to the client.",
+  "request": {
+    "server": "codex_apps",
+    "threadId": "fixture-thread",
+    "tool": "example_mail.list_categories",
+    "arguments": {}
+  },
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "HTTPError: 404: The mailbox is either inactive, soft-deleted, or is hosted on-premise. (Response: {\"error\":{\"code\":\"MailboxNotEnabledForRESTAPI\",\"message\":\"The mailbox is either inactive, soft-deleted, or is hosted on-premise.\"}})"
+      }
+    ],
+    "structuredContent": {
+      "error": "HTTPError: 404: The mailbox is either inactive, soft-deleted, or is hosted on-premise. (Response: {\"error\":{\"code\":\"MailboxNotEnabledForRESTAPI\",\"message\":\"The mailbox is either inactive, soft-deleted, or is hosted on-premise.\"}})",
+      "error_code": "NOT_FOUND"
+    },
+    "isError": true
+  },
+  "serverRequests": [],
+  "turnStartSent": 0,
+  "timing": {
+    "initialize": 232,
+    "thread/start": 778,
+    "mcpServerStatus/list": 59,
+    "app/list": 29963,
+    "mcpServer/tool/call": 1354
+  }
+}

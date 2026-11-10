@@ -1,0 +1,87 @@
+{
+  "cli": "2.1.322",
+  "note": "What `claude -p` loaded (init.mcp_servers, and the deferred tool count when init left them out) on a config dir signed in to a claude.ai subscription, by launch switches (M8). runs = how many launches were read; claudeAi is the claude.ai connectors, userConfig the servers of the account's own Claude Code config.",
+  "cases": [
+    {
+      "settingSources": null,
+      "strictMcpConfig": false,
+      "claudeAiEnvFalse": false,
+      "claudeAi": "connected",
+      "userConfig": "connected",
+      "runs": 1,
+      "claudeAiLoadedRuns": 1
+    },
+    {
+      "settingSources": "user,project",
+      "strictMcpConfig": false,
+      "claudeAiEnvFalse": false,
+      "claudeAi": "connected",
+      "userConfig": "connected",
+      "runs": 6,
+      "claudeAiLoadedRuns": 6
+    },
+    {
+      "settingSources": "project",
+      "strictMcpConfig": false,
+      "claudeAiEnvFalse": false,
+      "claudeAi": "absent",
+      "userConfig": "absent",
+      "runs": 11,
+      "claudeAiLoadedRuns": 1
+    },
+    {
+      "settingSources": "",
+      "strictMcpConfig": false,
+      "claudeAiEnvFalse": false,
+      "claudeAi": "absent",
+      "userConfig": "absent",
+      "runs": 12,
+      "claudeAiLoadedRuns": 3
+    },
+    {
+      "settingSources": "project",
+      "strictMcpConfig": true,
+      "claudeAiEnvFalse": false,
+      "claudeAi": "absent",
+      "userConfig": "absent",
+      "runs": 1,
+      "claudeAiLoadedRuns": 0
+    },
+    {
+      "settingSources": null,
+      "strictMcpConfig": true,
+      "claudeAiEnvFalse": false,
+      "claudeAi": "absent",
+      "userConfig": "absent",
+      "runs": 2,
+      "claudeAiLoadedRuns": 0
+    },
+    {
+      "settingSources": null,
+      "strictMcpConfig": false,
+      "claudeAiEnvFalse": true,
+      "claudeAi": "absent",
+      "userConfig": "connected",
+      "runs": 1,
+      "claudeAiLoadedRuns": 0
+    },
+    {
+      "settingSources": "",
+      "strictMcpConfig": false,
+      "claudeAiEnvFalse": true,
+      "claudeAi": "absent",
+      "userConfig": "absent",
+      "runs": 1,
+      "claudeAiLoadedRuns": 0
+    },
+    {
+      "settingSources": "project",
+      "strictMcpConfig": false,
+      "claudeAiEnvFalse": true,
+      "claudeAi": "absent",
+      "userConfig": "absent",
+      "runs": 1,
+      "claudeAiLoadedRuns": 0
+    }
+  ]
+}

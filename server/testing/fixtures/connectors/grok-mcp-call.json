@@ -1,0 +1,78 @@
+{
+  "cli": "1.0.77",
+  "note": "_x.ai/mcp/call {sessionId, server, tool, arguments} (M4): calls a tool of a server mounted on the session with no model turn and no permission request; the managed gateway servers are not among its servers, under any name tried.",
+  "sessionServer": {
+    "request": {
+      "sessionId": "fixture-session",
+      "server": "probe",
+      "tool": "echo_read",
+      "arguments": {
+        "item": "alpha"
+      }
+    },
+    "result": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "PROBE_MARKER {\"item\":\"alpha\"}"
+          }
+        ]
+      }
+    }
+  },
+  "unknownTool": {
+    "request": {
+      "sessionId": "fixture-session",
+      "server": "probe",
+      "tool": "no_such_tool",
+      "arguments": {}
+    },
+    "error": {
+      "code": -32603,
+      "message": "Internal error",
+      "data": "tool call failed: MCP service error: Mcp error: -32601: unknown tool"
+    }
+  },
+  "gatewayServer": {
+    "request": {
+      "sessionId": "fixture-session",
+      "server": "managed_gateway:cursor",
+      "tool": "no_such_tool",
+      "arguments": {}
+    },
+    "error": {
+      "code": -32603,
+      "message": "Internal error",
+      "data": "server 'managed_gateway:cursor' not found"
+    }
+  },
+  "triedGatewayNames": [
+    "managed_gateway:cursor",
+    "managed_gateway:tasks",
+    "cursor",
+    "tasks",
+    "the displayName of each gateway server",
+    "managed_gateway",
+    "managedGateway"
+  ],
+  "otherMethods": {
+    "_x.ai/mcp/tool/call": {
+      "code": -32601,
+      "message": "Method not found"
+    },
+    "_x.ai/mcp/call_tool": {
+      "code": -32601,
+      "message": "Method not found"
+    },
+    "_x.ai/mcp/callTool": {
+      "code": -32601,
+      "message": "Method not found"
+    },
+    "_x.ai/mcp/tools/call": {
+      "code": -32601,
+      "message": "Method not found"
+    }
+  },
+  "permissionRequests": 0
+}

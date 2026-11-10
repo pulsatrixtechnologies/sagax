@@ -85,7 +85,7 @@ internal publish-from-file route notes the new owned URL.
 | Comment reply / resolve cards + per-person wake routine | `/api/claude-artifacts/comments`, `comments-routine.ts` |
 | `claude_artifact` agents tool for non-Claude engines | `agents-artifact-tools.ts`, `/api/internal/claude-artifact`, `runner.ts` |
 
-Rules (also in `AGENTS.md`):
+Rules (also in `docs/code/pages.md`):
 
 - Calls run only in the speaking person's Claude config dir. No account pick
   by the runner. No Claude login is `409 claude_not_signed_in`.

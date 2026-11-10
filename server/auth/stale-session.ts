@@ -16,7 +16,7 @@ export const DEFAULT_STALE_SESSION_HOURS = 6;
 
 /** Size on disk of a saved engine session (Claude's session file) past
  * which it is not resumed. Measured 2026-10-20 (bench, real Claude CLI):
- * see AGENTS.md, "Stale engine sessions and small talk". */
+ * see docs/code/turns.md, "Stale engine sessions and small talk". */
 export const DEFAULT_STALE_SESSION_BYTES = 2_000_000;
 
 /** Quiet time before the size check applies: the provider's prompt cache

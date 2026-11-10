@@ -1,5 +1,5 @@
 // A server's public descriptor. Served at /.well-known/sagax/environment and,
-// kept on purpose (AGENTS.md, "Legacy names kept for compatibility"), at
+// kept on purpose (docs/code/repository.md, "Legacy names kept for compatibility"), at
 // /.well-known/openmausbot/environment, which is all a
 // server from before Sagax serves (electron/legacy-names.mjs). The page may
 // be this app's own bundle drawing an older organization server, so it asks

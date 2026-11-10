@@ -1,6 +1,6 @@
 // Engine slash commands on an organization server through the real server,
 // the fake provider and the fake Claude CLI (server/harness-commands.ts,
-// AGENTS.md "Engine slash commands in the chat"):
+// docs/code/engines.md "Engine slash commands in the chat"):
 //
 //   speaker   the list is the SPEAKER's: alice and bob, each on their own
 //             Claude subscription, get their own login directory's commands

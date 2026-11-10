@@ -386,10 +386,11 @@ const DOCS_LEFT_OUT = new Set([
 /** First line of a docs/ page generated from apps/docs/content (scripts/docs-copies.mjs). */
 const GENERATED_COPY = "<!-- Generated from apps/docs/content/";
 
-/** AGENTS.md sections left out: the misuse policy's internals (the bots
+/** Developer notes left out: the misuse policy's internals (the bots
  * already get the policy itself), whose older text names a product the
- * public repository's term scan refuses in a new file. */
-const NOTES_LEFT_OUT = new Set(["doc:AGENTS.md#misuse-guardrails-2026-10-12"]);
+ * public repository's term scan refuses in a new file. The notes moved from
+ * AGENTS.md to docs/code/ (#3292). */
+const NOTES_LEFT_OUT = new Set(["doc:docs/code/security.md#misuse-guardrails-2026-10-12"]);
 
 function versionKey(version: string): number[] { return version.split(".").map((part) => Number(part) || 0); }
 function newerFirst(a: string, b: string): number {
@@ -427,8 +428,13 @@ function docsSections(root: string): KnowledgeSection[] {
     if (markdown.startsWith(GENERATED_COPY)) continue;
     out.push(...docSections({ path, markdown, kind: "doc", fallbackTitle: path.replace(/^docs\//, "").replace(/\.md$/, ""), maxLevel: 2 }));
   }
-  out.push(...docSections({ path: "AGENTS.md", markdown: read(root, "AGENTS.md"), kind: "notes", fallbackTitle: "Sagax", maxLevel: 2 })
-    .filter((section) => !NOTES_LEFT_OUT.has(section.id)));
+  // The developer notes: the rules of AGENTS.md, and the descriptions of the
+  // code that moved out of it into docs/code/ (#3292).
+  out.push(...docSections({ path: "AGENTS.md", markdown: read(root, "AGENTS.md"), kind: "notes", fallbackTitle: "Sagax", maxLevel: 2 }));
+  for (const path of walk(root, "docs/code", (file) => /^docs\/code\/[^/]+\.md$/.test(file))) {
+    out.push(...docSections({ path, markdown: read(root, path), kind: "notes", fallbackTitle: path.replace(/^docs\/code\//, "").replace(/\.md$/, ""), maxLevel: 2 })
+      .filter((section) => !NOTES_LEFT_OUT.has(section.id)));
+  }
   return out;
 }
 

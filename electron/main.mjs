@@ -3050,7 +3050,7 @@ function acquireDataDirLeaseFor(dir) {
  * orchestrator, the supervisor must not stay paused. */
 async function switchLocalEnvironmentTo(targetDir, targetId) {
   if (!app.isPackaged) return { ok: false, error: "dev" };
-  // Server mode runs no local server (AGENTS.md "Launch flow"): moving the
+  // Server mode runs no local server (docs/code/apps.md "Launch flow"): moving the
   // child onto a data dir would start one. Only leaving server mode does.
   if (serverModeEnvironment(environmentsState)) return { ok: false, error: "server_mode" };
   // One switch owns the child and the lease until it settles; its probe can
@@ -3295,7 +3295,7 @@ async function leaveServerMode() {
  * and every later lease/child on it take this exact string. */
 function createLocalEnvironment(name, dataDir) {
   if (!app.isPackaged) return { ok: false, error: "dev", state: environmentsState };
-  // Server mode locks the app to its organization server (AGENTS.md "Launch
+  // Server mode locks the app to its organization server (docs/code/apps.md "Launch
   // flow"): no local environment is created while it is set.
   if (serverModeEnvironment(environmentsState)) return { ok: false, error: "server_mode", state: environmentsState };
   const state = environmentsState;

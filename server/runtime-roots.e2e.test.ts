@@ -611,7 +611,7 @@ const failedLines = async (f: any, threadId: string) => (await f.messages(thread
   .filter((message: any) => message.kind === "activity" && String(message.tool?.name ?? "").startsWith("error:"));
 
 /** A bot that works in its built-in browser: where a sign-in request can be made. */
-/** Sagax reads a requested place as Auto (AGENTS.md "Workspace: always
+/** Sagax reads a requested place as Auto (docs/code/computers.md "Workspace: always
  * Auto"); the sign-in scenarios name the browser through the test seam
  * that keeps a fixed Works on. */
 const FIXED_PLACE = { fake: { SAGAX_TEST_FIXED_WORKSPACE: "1" } };

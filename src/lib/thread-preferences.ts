@@ -87,7 +87,7 @@ export function useShowThreadsChoice(): boolean {
 }
 
 /** Whether the sidebar shows threads: the person's choice, in Simple and
- * Advanced mode alike. Off by default (AGENTS.md, "Single stream is the
+ * Advanced mode alike. Off by default (docs/code/chat.md, "Single stream is the
  * default"): one conversation per bot until the person turns threads on. */
 export function useShowThreads(): boolean {
   return useShowThreadsChoice();

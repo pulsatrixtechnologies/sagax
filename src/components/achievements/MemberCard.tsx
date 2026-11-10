@@ -4,7 +4,7 @@
 // Title and points never sit on the name line on their own. A colleague's
 // card comes from the public card, which only has unlocked ids. The list
 // scrolls inside the card. The sidebar never shows titles or points
-// (AGENTS.md, Achievements).
+// (docs/code/apps.md, Achievements).
 import { Trophy } from "lucide-react";
 import { ACHIEVEMENTS, achievementById } from "../../../shared/achievements-catalog";
 import type { AchievementItemState, AchievementSnapshot } from "../../../shared/achievements";

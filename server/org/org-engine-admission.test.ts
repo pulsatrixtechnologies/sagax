@@ -32,7 +32,7 @@ describe("organization server engine admission", () => {
     expect(orgHostToolsRefusal(name, driverKind)).toBe(message);
   });
 
-  // The matrix of AGENTS.md "Engines on an organization server", read from
+  // The matrix of docs/code/organization.md "Engines on an organization server", read from
   // the drivers themselves: a driver's flag is what the server checks.
   it("admits exactly the engines verified with their real CLI", async () => {
     const expected: Record<string, boolean> = {

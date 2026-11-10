@@ -89,6 +89,8 @@ const GUARD_TESTS = [
   "scripts/testing/docs-media.guard.test.ts",
   // #2085 / #2125 (Refs #2086): the bot panel has only Activity and Library (no Roles tab)
   "src/components/bot-settings/panel-tabs.guard.test.ts",
+  // #3292: AGENTS.md stays rules only (size ceiling, no dated journal section)
+  "scripts/testing/agents-md.guard.test.ts",
 ];
 
 /** Tests that hold a whole area: they run when the diff touches any of its

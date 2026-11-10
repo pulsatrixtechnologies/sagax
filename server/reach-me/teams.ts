@@ -1,8 +1,8 @@
 // "Me joindre" by Microsoft Teams (2026-10-26), through the person's OWN
 // engine connector (claude.ai's Microsoft 365, Grok's Microsoft Teams;
 // shared/engine-connectors.ts). Sagax builds no Graph client, registers no
-// Teams app and no Entra application (AGENTS.md, "Mail, Teams, calendar and
-// SharePoint through the engines' connectors").
+// Teams app and no Entra application (docs/code/reach.md, "Reach me: one setting per
+// bot to reach the person outside the app").
 //
 // Those connectors are only reachable inside an engine turn, so each step is
 // one small run of a bot the person owns (the card's bot when it is theirs,

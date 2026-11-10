@@ -7,7 +7,7 @@
 // Sagax started as a modified distribution of an Apache-2.0 project (see
 // NOTICE). Its identifiers, paths, environment variables and copy were
 // renamed in one pass; an upstream merge brings the old names back in the
-// files it touches. Run this after `git merge upstream/main` (AGENTS.md,
+// files it touches. Run this after `git merge upstream/main` (docs/code/repository.md,
 // "Upstream sync"), review the diff, then run the usual checks.
 //
 //   node scripts/rebrand-upstream.mjs           # report what would change
@@ -82,14 +82,17 @@ const SKIP_EXACT = new Set([
   // compose files read an operator's own .env (OMB_* interpolation)
   "compose.yaml",
   ".env.example",
-  // generated from the docs and AGENTS.md: regenerate it (pnpm gen:self-knowledge)
+  // generated from the docs, AGENTS.md and docs/code/: regenerate it (pnpm gen:self-knowledge)
   "server/self-knowledge/knowledge.generated.json",
 ]);
 /** Vendored code, deployed configuration and the native apps (renamed with a
  * store release of their own). */
 const SKIP_PREFIX = ["third_party/", ".git/", "node_modules/", "deploy/", "ios/", "android/",
   // versioned judge prompts pinned by checksum: a new wording is a new version
-  "evals/live/judge/prompts/"];
+  "evals/live/judge/prompts/",
+  // the code descriptions moved out of AGENTS.md (#3292): they name the legacy
+  // spellings on purpose, like AGENTS.md
+  "docs/code/"];
 
 const re = (source, flags = "g") => new RegExp(source, flags);
 
@@ -117,7 +120,7 @@ const PROTECT = [
   re(`applicationId\\s*=\\s*"[^"]*"`),
   // file format ids, stored preference names and notification ids
   re(`${OLD_SHORT}\\.[a-z][A-Za-z0-9_.-]*`),
-  // compatibility kept on purpose (AGENTS.md, "Legacy names kept for
+  // compatibility kept on purpose (docs/code/repository.md, "Legacy names kept for
   // compatibility"): both data folder names, the lease files old and new
   // copies share, the runtime name that names the keychain secret, the
   // health word. The URL scheme is not protected: it becomes sagax://.
@@ -165,7 +168,7 @@ const PROTECT_NATIVE = [re(`com\\.${OLD}\\.[A-Za-z0-9.-]+`)];
 /** [pattern, replacement], in order. Only the product name and the
  * environment variables: lowercase identifiers (storage keys, headers, IPC
  * channels, labels, the `openmausbot` command, host paths) are wire or
- * stored names and stay (AGENTS.md, "Legacy names kept for compatibility"). */
+ * stored names and stay (docs/code/repository.md, "Legacy names kept for compatibility"). */
 const RULES = [
   [re(`OpenMausBot Pro`), "Sagax Pro"],
   [re(`\\b([Aa])n (?=OpenMaus)`), "$1 "],

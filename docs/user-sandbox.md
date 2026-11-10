@@ -11,7 +11,7 @@ open a shared machine.
 
 | Target | When | Where |
 |---|---|---|
-| `user-desktop` | the bot's Works on (or the conversation's pin) is Local VM or This computer | their own computer, through the desktop bridge (`sagax-desktop`, see AGENTS.md "Desktop bridge"), while their Sagax desktop app is connected |
+| `user-desktop` | the bot's Works on (or the conversation's pin) is Local VM or This computer | their own computer, through the desktop bridge (`sagax-desktop`, see `docs/code/computers.md` "Desktop bridge"), while their Sagax desktop app is connected |
 | `user-sandbox` | organization mode, any other turn | one person's environment (below) |
 | `host` | solo server | this machine, unchanged |
 | `none` | organization mode without a provisioner | nothing is mounted |
@@ -319,7 +319,7 @@ exactly that). So on an organization server every turn sets
   on this machine.
 - **Grok Build, pi, Gemini CLI, Qwen Code, Kimi Code, OpenCode, Hermes
   Agent:** each one's own tool profile leaves it Sagax's MCP tools only
-  (AGENTS.md, "Engines on an organization server", has the mechanism per
+  (`docs/code/organization.md`, "Engines on an organization server", has the mechanism per
   engine), in an empty folder Sagax owns, and a request to run a command
   or change a file is declined before any card.
 - **Droid, Cursor Agent, Antigravity, a custom ACP agent** are refused on an

@@ -24,6 +24,10 @@ import { capThreadLog, currentThreadLogCap } from "../threads/thread-log-rotatio
 import { newId, type ProviderInstance, type RuntimeEvent, type RuntimeEventListener } from "../contracts.ts";
 import { reportBackgroundError } from "../background-error.ts";
 import { SpecialTokenFilter } from "./special-token-filter.ts";
+import { isHeldRequestId, type HeldRequests } from "./held-requests.ts";
+
+/** Marks an adapter whose respondToRequest already answers held ids. */
+const HELD_WRAPPED = Symbol("sagax.heldRequestsWrapped");
 
 const INCOMPLETE_LOG_MESSAGE =
   "Canonical event history is incomplete: Sagax could not write one or more events to disk. Live updates will continue.";
@@ -131,9 +135,17 @@ export class EventBus {
     this.appendLog = appendLog;
   }
 
+  /** #3346: requests the server holds outside any engine. */
+  private heldRequests: HeldRequests | null = null;
+
+  setHeldRequests(held: HeldRequests | null): void {
+    this.heldRequests = held;
+  }
+
   attach(instances: ProviderInstance[]) {
     for (const instance of instances) {
       this.detach(instance.instanceId);
+      this.wrapRespond(instance);
       const unsub = instance.adapter.onEvent((event) => {
         // hard invariant borrowed from correlateRuntimeEventWithInstance:
         // an adapter may only emit events for its own driver kind
@@ -141,10 +153,33 @@ export class EventBus {
           console.error(`bus: dropped cross-driver event from ${instance.instanceId}`);
           return;
         }
+        // #3346: only the server sets connectorHub (a request it holds
+        // itself): whatever an adapter wrote there is dropped, like screenApp
+        if (event.type === "request.opened" && "connectorHub" in event) {
+          const { connectorHub: _dropped, ...clean } = event;
+          event = clean as RuntimeEvent;
+        }
         this.publish({ ...event, providerInstanceId: instance.instanceId });
       });
       this.unsubscribes.set(instance.instanceId, unsub);
     }
+  }
+
+  /** #3346: every answer to a request goes through the engine instance's
+   * respondToRequest (a person's card, auto mode, an org or owner rule, the
+   * approval expiry). A held id is the server's own request: it is answered
+   * here and never reaches the engine; a held id nobody holds (an answer
+   * after a restart) is "unavailable". Wrapped once per adapter, in place,
+   * so every caller that already holds the adapter goes through it. */
+  private wrapRespond(instance: ProviderInstance) {
+    const adapter = instance.adapter as ProviderInstance["adapter"] & { [HELD_WRAPPED]?: true };
+    if (adapter[HELD_WRAPPED]) return;
+    const original = adapter.respondToRequest.bind(adapter);
+    adapter.respondToRequest = async (threadId, requestId, decision) => {
+      if (!isHeldRequestId(requestId)) return original(threadId, requestId, decision);
+      return this.heldRequests?.respond(threadId, requestId, decision) ?? "unavailable";
+    };
+    adapter[HELD_WRAPPED] = true;
   }
 
   /** 2026-10-21 (parité R10, ligne 80): a gate that may hold one event while

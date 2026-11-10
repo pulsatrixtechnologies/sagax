@@ -249,6 +249,12 @@ export type RuntimeEvent = RuntimeEventBase &
          * connector call that is not plainly a read): the outbound guard
          * holds it and no session-wide allow is offered (review of #943). */
         outbound?: boolean;
+        /** #3346: a request the server holds itself, outside any engine
+         * (server/harness/held-requests.ts), for a connector call it runs
+         * with the turn's own principal. It is that person's own connector,
+         * so the person answers its card, never an admin. Server only:
+         * EventBus.attach drops it from adapter events. */
+        connectorHub?: true;
       }
     | {
         type: "request.resolved";

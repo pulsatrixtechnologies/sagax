@@ -587,6 +587,7 @@ import { RoutableSteers } from "./busy-routing.ts";
 import { restoreChannelMessages } from "./rooms/channel-queue.ts";
 import { acceptedSendMatch, sendFingerprint, SendSequencer } from "./messages/send-idempotency.ts";
 import { EventBus, withoutPrivateFields } from "./harness/bus.ts";
+import { HeldRequests } from "./harness/held-requests.ts";
 import { enginesByUse, ProviderRegistry } from "./harness/registry.ts";
 import { holdUntilFirstEngineRead } from "./first-engine-read.ts";
 import { ManagedDesktopProviders } from "./computer/managed-desktop.ts";
@@ -4711,6 +4712,7 @@ bindLeafHost({
   get endedToolOutput() { return endedToolOutput; },
   get engineAccessNotice() { return engineAccessNotice; },
   get engineAccountConnectorCall() { return engineAccountConnectorCall; },
+  get heldRequests() { return heldRequests; },
   get engineAllowed() { return engineAllowed; },
   get engineApprovalMode() { return engineApprovalMode; },
   get engineBrowsers() { return engineBrowsers; },
@@ -9884,6 +9886,14 @@ utilityParentPort?.on("message", (event) => {
 });
 
 const bus = new EventBus();
+// #3346: permission requests the server holds outside any engine, decided by
+// the same request.opened pipeline; each turn's end retires the ones it left.
+// Published through bus.publish read at call time (the saved-steps override).
+const heldRequests = new HeldRequests((event) => bus.publish(event));
+bus.setHeldRequests(heldRequests);
+bus.subscribe((event) => {
+  if (event.type === "turn.completed" || event.type === "session.exited") heldRequests.retireTurn(event.threadId, event.turnId);
+});
 bus.attach(registry.instances());
 const personalProviderInstances = new PersonalProviderInstances({
   load: async (configs) => {

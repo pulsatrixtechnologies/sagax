@@ -103,12 +103,54 @@ async function runTestingInternalCapability(host: Host, req: IncomingMessage, re
   return true;
 }
 
+/** POST /api/testing/held-request (#3346): open a request the server holds
+ * for a connector call in the thread's running turn, behind the internal
+ * capability test key, and answer once it is decided. The principal is the
+ * turn's (its engine and its speaker), never the body's. */
+async function runTestingHeldRequest(host: Host, req: IncomingMessage, res: ServerResponse) {
+  const expected = Buffer.from(process.env.SAGAX_TEST_INTERNAL_CAPABILITY_KEY ?? "");
+  const header = req.headers["x-openmausbot-test-capability"];
+  const actual = Buffer.from(Array.isArray(header) ? "" : String(header ?? ""));
+  if (expected.length < 32 || actual.length !== expected.length || !timingSafeEqual(actual, expected) || !host.heldRequests) {
+    json(res, 404, { error: "not found" });
+    return true;
+  }
+  const parsed = z.object({
+    threadId: z.string().regex(/^[\w-]{1,128}$/),
+    mcpTool: z.string().regex(/^[\w.-]{1,128}$/),
+    summary: z.string().max(500).optional(),
+    input: z.string().max(10_000).optional(),
+    outbound: z.boolean().optional(),
+  }).strict().safeParse(await readBody(req));
+  if (!parsed.success) {
+    json(res, 400, { error: "invalid held request" });
+    return true;
+  }
+  const { threadId, ...call } = parsed.data;
+  const engine = host.runningTurnEngines.get(threadId);
+  if (!engine) {
+    json(res, 409, { error: "no running turn" });
+    return true;
+  }
+  const turnId = host.liveTurnByThread.get(threadId);
+  const { requestId, decision } = host.heldRequests.open({
+    threadId,
+    ...(turnId ? { turnId } : {}),
+    providerInstanceId: engine.instanceId,
+    provider: engine.driverKind,
+    ...call,
+  });
+  json(res, 200, { requestId, ...(await decision) });
+  return true;
+}
+
 export function createRunInternal(getHost: () => Host): any {
 async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, path: string, method: string, auth: RequestAuth) {
   const host = getHost();
 
   if (method === "POST" && path === "/api/testing/org-library") return runTestingOrgLibrary(host, req, res);
   if (method === "POST" && path === "/api/testing/internal-capability") return runTestingInternalCapability(host, req, res);
+  if (method === "POST" && path === "/api/testing/held-request") return runTestingHeldRequest(host, req, res);
   // ── internal peer-agent comms (localhost + bot capability only) ───
   // The agents-proxy (spawned inside a bot's agent process) calls these to
   // discover peers and hand a message to one. Not part of the public API.

@@ -273,7 +273,9 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
         workspaceRoot: join(realpathSync(DATA_DIR), "task-workspaces", asker.id),
         readRoots: [workspaceDir(asker.id)],
         ownerScopedMcpServer: host.ownerScopedMcpServerFor(asker, event.threadId),
-        // #1930: the speaker's own grok.com connector, like a claude.ai one
+        // #1930: the speaker's own grok.com connector, like a claude.ai one;
+        // #3346: and a request the server holds for a connector it runs with
+        // the turn's own principal (connectorHub, server only)
         ownAccountConnector: host.engineAccountConnectorCall(event, host.turnAccessByThread.get(event.threadId)?.via),
         ownEnvironment,
         ownDestination,

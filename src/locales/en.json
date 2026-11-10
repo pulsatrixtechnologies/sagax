@@ -1996,6 +1996,8 @@
   "chat.openProfileAria": "Open {name}'s profile",
   "chat.openThread": "Open #{title}",
   "chat.messaged": "Messaged",
+  "chat.messagedOthers.one": "{count} other",
+  "chat.messagedOthers.other": "{count} others",
   "chat.openThreadOn": "Open #{title} on {name}",
   "chat.parallel.backgrounded": "Backgrounded agent",
   "chat.parallel.open": "Open",

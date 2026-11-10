@@ -10,6 +10,7 @@ import { voiceCallVisibleSpan } from "@/lib/voice-call-transcript";
 import { VoiceCallCard } from "../VoiceCallCard";
 import { BotExchangeChip, TranscriptDate } from "../BotExchangeChip";
 import { GotoGroupChip } from "../GotoGroupChip";
+import { MessagedLine } from "../MessagedLine";
 import type { GotoTarget } from "@/lib/goto-lines";
 import { StatusActivityRow } from "@/components/StatusActivityRow";
 import { CancelledTurnRow } from "../CancelledTurnRow";
@@ -149,7 +150,7 @@ export function MessagesListItem({
   const edgeOf = (entry: ListedItem) =>
     entry.kind === "voiceCall"
       ? voiceCallVisibleSpan(entry.messages, windowIds)
-      : entry.kind === "gotoGroup"
+      : entry.kind === "gotoGroup" || entry.kind === "messagedLine"
         ? { first: entry.messages[0]!, last: entry.messages.at(-1)! }
         : visibleEdge(entry);
   const hiddenRun = (entry: ListedItem) => entry.kind === "run" && !showToolCalls && entry.messages.every((step) => step.kind === "activity");
@@ -195,6 +196,16 @@ export function MessagesListItem({
             }}
           />
         </div>
+      </VirtualRow>
+    );
+  }
+  if (item.kind === "messagedLine") {
+    const self = bots.find((candidate) => candidate.id === botId);
+    return (
+      <VirtualRow key={item.id} rowKey={rowKey} eager={eager} estimate={TRANSCRIPT_ROW_ESTIMATE} className={rowClass}>
+        {newDay && <TranscriptDate at={first.at} />}
+        {divider}
+        <MessagedLine line={item} self={self} bots={bots} groups={storeGroups} />
       </VirtualRow>
     );
   }

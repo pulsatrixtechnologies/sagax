@@ -7332,6 +7332,8 @@
   "chat.newMessagesAria": "Nouveaux messages",
   "chat.openThread": "Ouvrir #{title}",
   "chat.messaged": "Écrit à",
+  "chat.messagedOthers.one": "{count} autre",
+  "chat.messagedOthers.other": "{count} autres",
   "chat.openThreadOn": "Ouvrir #{title} sur {name}",
   "chat.peer.asked": "a demandé via ask_bot",
   "chat.peer.delegated": "a délégué une tâche",

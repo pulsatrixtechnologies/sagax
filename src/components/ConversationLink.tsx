@@ -11,6 +11,28 @@ import { mausInk, type MausColor } from "@/lib/mascot";
 import type { Bot } from "@/state/store";
 import { PartyAvatar } from "./PartyAvatar";
 
+/** The centered row of a quiet transcript line (this one, the "Messaged"
+ * line of a turn that wrote to other bots). */
+export const QUIET_LINE_ROW = "flex justify-center py-1";
+/** The line itself: small, muted, no bubble. */
+export const QUIET_LINE = "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] text-ink-secondary";
+
+/** A bot on a quiet line: its face, then its name in its ink. */
+export function QuietLineParty({ bot, agentId, name, color, nameClassName }: {
+  bot: { name: string; color: MausColor } & Partial<Bot>;
+  agentId?: string;
+  name: string;
+  color: MausColor;
+  nameClassName?: string;
+}) {
+  return (
+    <>
+      <PartyAvatar id={agentId} bot={bot} size={16} />
+      <span className={nameClassName ? `font-medium ${nameClassName}` : "font-medium"} style={{ color: mausInk(color) }}>{name}</span>
+    </>
+  );
+}
+
 export function ConversationLink({
   bot,
   agentId,
@@ -43,7 +65,7 @@ export function ConversationLink({
   const showThreads = useShowThreads();
   if (!showThreads) return null;
   return (
-    <div className={compact ? "flex justify-start py-0.5" : "flex justify-center py-1"}>
+    <div className={compact ? "flex justify-start py-0.5" : QUIET_LINE_ROW}>
       <button
         type="button"
         {...(testId ? { "data-testid": testId } : {})}
@@ -51,11 +73,10 @@ export function ConversationLink({
         onClick={onClick}
         {...(label ? { "aria-label": label } : {})}
         {...(title ? { title } : {})}
-        className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] text-ink-secondary hover:bg-raised"
+        className={`${QUIET_LINE} hover:bg-raised`}
       >
         <span>{t("chat.goToConversation")}</span>
-        <PartyAvatar id={agentId} bot={bot} size={16} />
-        <span className="font-medium" style={{ color: mausInk(color) }}>{name}</span>
+        <QuietLineParty bot={bot} agentId={agentId} name={name} color={color} />
       </button>
       {children}
     </div>

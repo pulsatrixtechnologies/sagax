@@ -119,7 +119,7 @@ describe("chat bot-to-bot collapse and dates", () => {
     }
   });
 
-  it("leaves a Messaged chip as a receipt when it points at a bot-to-bot DM", () => {
+  it("draws a Messaged chip to a bot-to-bot DM as the quiet Messaged line (#3270)", () => {
     fixture.dispatch.mockClear();
     const markup = renderToStaticMarkup(createElement(ChatView, {
       bot: bot([
@@ -134,11 +134,11 @@ describe("chat bot-to-bot collapse and dates", () => {
         } as Message,
       ]),
     }));
-    expect(markup).toContain("Messaged @Quasar");
-    expect(markup).toContain('data-testid="bot-comm-chip"');
-    const chipAt = markup.indexOf('data-testid="bot-comm-chip"');
-    const before = markup.lastIndexOf("<", chipAt);
-    expect(markup.slice(before, chipAt)).toContain("<div");
-    expect(markup.slice(before, chipAt)).not.toContain("<button");
+    // one centered line naming the bot, no "@", no row that selects the channel
+    expect(markup).toContain('data-testid="messaged-line"');
+    expect(markup).not.toContain('data-testid="bot-comm-chip"');
+    expect(markup).not.toContain("@Quasar");
+    expect(markup).toContain("Quasar");
+    expect(fixture.dispatch).not.toHaveBeenCalled();
   });
 });

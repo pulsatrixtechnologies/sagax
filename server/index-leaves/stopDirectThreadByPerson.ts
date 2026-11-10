@@ -15,7 +15,12 @@ async function stopDirectThreadByPerson(botId: string, threadId: string, utteran
     host.finishUntilRuns.reset(threadId);
     if (spent > 0 && bot?.finishUntil) host.appendFinishUntilRow(threadId, { status: "stopped", condition: bot.finishUntil, round: spent, max: host.finishUntilRounds(bot.finishUntilMaxRounds) });
   }
+  // #3300: read before the interrupt drops the dispatch claim. A busy flag
+  // nothing runs for (or a setup that never returns) is freed once
+  // interrupted; a turn an engine has ends on its own.
+  const free = host.idleThreads.stopping(botId, threadId);
   await host.stopDirectThread(botId, threadId, utteranceId);
+  free();
   // the bot's own sub-agents of this conversation stop with it
   await host.stopOwnSubagents(botId, threadId);
 

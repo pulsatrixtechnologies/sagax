@@ -205,6 +205,7 @@ export function buildCodexInstanceApi(bag: Record<string, any>): ProviderInstanc
         ?? (decision.behavior === "allow" ? "allowed-once" : decision.behavior === "answer" ? "answered" : "rejected");
     },
     hasSession: (threadId) => active.has(threadId) || sessions.has(threadId),
+    enginePid: (threadId) => (active.has(threadId) ? sessions.pid(threadId) : undefined),
     releaseWarmSession: (threadId) => {
       if (!active.has(threadId)) void sessions.close(threadId);
     },

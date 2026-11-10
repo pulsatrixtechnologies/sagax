@@ -6,9 +6,11 @@ import type { TurnState } from "./start-turn-state.ts";
 
 export function createComputerWorkspaceStartTurn(host: StartTurnHost) {
   const {
+    DirectTurnSetupCancelled,
     IDENTITY,
     beginMemoryTurn,
     cloudGuestOpened,
+    directTurnClaimIsCurrent,
     ensureTaskWorkspace,
     ensureWorkspace,
     inheritedTeamComputer,
@@ -24,6 +26,11 @@ export function createComputerWorkspaceStartTurn(host: StartTurnHost) {
   } = host;
 
   return async function(state: TurnState): Promise<void> {
+    // #3300: a setup that resumes after a Stop freed its conversation must not
+    // start memory tracking over the turn that replaced it.
+    if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) {
+      throw new DirectTurnSetupCancelled("turn stopped while its tools were prepared");
+    }
     state.worksInWorkspace = supportsWorkspaceFiles(state.instance.driverKind);
     if (state.worksInWorkspace) {
       ensureWorkspace(state.bot.id);

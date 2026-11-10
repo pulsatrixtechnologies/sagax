@@ -35,6 +35,9 @@ export class CodexSessions {
 
   has(threadId: string): boolean { return this.sessions.has(threadId); }
 
+  /** The app-server process serving the thread, if one runs. */
+  pid(threadId: string): number | undefined { return this.sessions.get(threadId)?.session?.child.pid; }
+
   async isolate(threadId: string, identity: string): Promise<void> {
     const process = this.sessions.get(threadId);
     if (process && process.identity !== identity && !await this.close(threadId)) {

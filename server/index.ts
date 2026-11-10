@@ -629,7 +629,8 @@ import { Handoffs, handedStateUsable, isContextMessage, recordHanded, renderUnse
 import { extractTurnImages, videoFramesWithin } from "./turns/turn-images.ts";
 import { fitImageForModel, fitTurnImagesForModel, MODEL_IMAGE_MAX_BYTES, modelImageCopyPath } from "./models/model-image.ts";
 import { callTitleExcerpt } from "./threads/thread-title.ts";
-import { stallLimitMs, TurnWatchdog } from "./turns/turn-watchdog.ts";
+import { engineProcessGone, stallLimitMs, TurnWatchdog } from "./turns/turn-watchdog.ts";
+import { createIdleThreads } from "./host/idle-threads.ts";
 import { TurnResources, type TurnOwner } from "./turns/turn-resources.ts";
 import { ensureWorkspace,
   ensureTaskWorkspace,
@@ -6069,6 +6070,7 @@ bindLeafHost({
   get threadStoppedUtterance() { return threadStoppedUtterance; },
   get markThreadStopping() { return markThreadStopping; },
   get stopDirectThreadByPerson() { return stopDirectThreadByPerson; },
+  get idleThreads() { return idleThreads; },
   get interruptDirectThread() { return interruptDirectThread; },
   get noteTeammatesLeftRunning() { return noteTeammatesLeftRunning; },
   get interruptAllDirectThreads() { return interruptAllDirectThreads; },
@@ -16258,7 +16260,12 @@ const turnStops = new TurnStops();
  * reason; with whatever the turn last said. */
 const watchdog = new TurnWatchdog({
   stallMs: TURN_STALL_MS, toolStallMs: TOOL_STALL_MS,
+  // #3300: a parked turn whose engine has no process left waits on nothing.
+  parkedStallMs: COMPUTER_WAIT_MAX_MS + TURN_STALL_MS,
   checkMs: 60_000,
+  engineGone: (turn) => engineProcessGone(runningTurnInstance(botForThread(turn.botId, turn.threadId), turn.threadId)?.adapter, turn.threadId),
+  // #3300: a conversation shown working that nothing holds is freed.
+  unheld: { threads: () => idleThreads.unheld(), free: (threadId, botId) => idleThreads.free(botId, threadId) },
   onStall: (turn, silentMs) => {
     const stalledResourceOwner = turnResourceOwners.get(turn.threadId);
     const stalledGeneration = directTurnGenerationByThread.get(turn.threadId);
@@ -16356,6 +16363,25 @@ const watchdog = new TurnWatchdog({
   }
 });
 watchdog.start();
+/** #3300: frees a conversation shown working that no turn holds, on a
+ * person's Stop and from the watchdog (server/host/idle-threads.ts). */
+const idleThreads = createIdleThreads({
+  store, claims: directTurnDispatchClaims, generations: directTurnGenerationByThread, drain: () => drainQueuedSends(),
+  engineTurn: (threadId) => runningTurnEngines.has(threadId) || liveTurnByThread.has(threadId) || settlingResourceOwners.has(threadId) ||
+    [...machineTurnDone.values()].some((turn) => turn.threadId === threadId),
+  settle: (botId, threadId) => {
+    watchdog.settle(threadId);
+    settleDirectFollowup(directTurnGenerationByThread.get(threadId));
+    stopScreenPoller(botId, threadId);
+    directTurnBots.delete(threadId);
+  },
+  releaseComputer: (botId, threadId) => {
+    releaseTurnResources(turnResourceOwners.get(threadId));
+    releaseLocalVmThread(threadId);
+    vpsThreadEnded(botId, threadId);
+  },
+  notice: (threadId) => confirmStop(threadId, undefined),
+});
 
 bus.subscribe((event: RuntimeEvent) => {
   if (shouldIgnoreProviderEvent(event)) return;
@@ -31532,7 +31558,14 @@ ROUTES.push(createRoutinesHttpRoutes({
   runStanding: (runId) => routines!.runStanding(runId),
   markAllSeen: (allow) => routines!.markAllSeen(allow),
   clearRuns: (allow) => routines!.clearRuns(allow),
-  cancelRun: (id) => routines!.cancelRun(id),
+  cancelRun: async (id) => {
+    // #3300: a run whose setup never returns leaves its conversation free
+    const run = routines!.listRunsRaw().find((one) => one.id === id);
+    const free = run?.threadId && run.target !== "room-goal" ? idleThreads.stopping(run.botId, run.threadId) : () => {};
+    const cancelled = await routines!.cancelRun(id);
+    free();
+    return cancelled;
+  },
   markSeen: (id) => routines!.markSeen(id),
   routineBotId,
   inFlightRun: (routineId) => routineInFlightRun(routineId),
@@ -31766,6 +31799,7 @@ ROUTES.push(createBotsMessagesRoutes({
   startTurn,
   stepUpAnswerOf,
   stepUpGate,
+  idleThreads,
   stopDirectThreadByPerson,
   stopParallelTask,
   stoppingThreads,

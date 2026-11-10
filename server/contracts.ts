@@ -603,6 +603,10 @@ export interface ProviderAdapter {
    * read one refuses the whole steer rather than drop the picture. */
   steer?(threadId: ThreadId, text: string, options?: { steerId?: string; images?: readonly TurnImageInput[] }): Promise<SteerOutcome>;
   hasSession(threadId: ThreadId): boolean;
+  /** The engine process running this thread's turn, for a driver that
+   * tracks one; undefined when no turn of the thread is active. A driver
+   * that tracks no process leaves this out (server/turns/turn-watchdog.ts). */
+  enginePid?(threadId: ThreadId): number | undefined;
   /** Close an idle warm process on this thread. A process whose turn is
    * already running is left alone. */
   releaseWarmSession?(threadId: ThreadId): void;

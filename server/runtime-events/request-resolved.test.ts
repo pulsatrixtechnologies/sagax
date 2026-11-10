@@ -8,8 +8,11 @@ const prompt = (id: string, at: number): Row => ({ id, role: "user", kind: "text
 
 /** A thread whose cards are all still unpatched (request.resolved runs
  * before the card is marked answered). */
-function hostWith(rows: Row[]) {
+function hostWith(rows: Row[], { turnRunning = true } = {}) {
   const activity: Record<string, string> = { t1: "waiting-on-you" };
+  // busy: a running turn waits on the person; false: the turn ended and the
+  // conversation only rests on its card (#3300).
+  const busy: Record<string, boolean> = { t1: turnRunning };
   const host: Record<string, any> = {
     pendingCommandRules: new Map(),
     agentCardGuard: { resolved: () => undefined },
@@ -20,7 +23,7 @@ function hostWith(rows: Row[]) {
     store: {
       bot: () => undefined,
       messagesFor: () => rows,
-      taskByThread: (_bot: string, t: string) => ({ activity: activity[t] }),
+      taskByThread: (_bot: string, t: string) => ({ activity: activity[t], busy: busy[t] }),
       setTaskActivity: (_bot: string, t: string, value: string) => {
         activity[t] = value;
       },
@@ -56,5 +59,13 @@ describe("request.resolved and the cards still open (#2922)", () => {
     const { host, activity } = hostWith([prompt("p", 10), perm("m0", 11, "req_a"), perm("m1", 12, "req_rev", { reviewing: true })]);
     resolve(host, "req_a");
     expect(activity.t1).toBe("working");
+  });
+});
+
+describe("request.resolved on a conversation no turn runs in (#3300)", () => {
+  it("the card's answer leaves a conversation resting on its card waiting, never working with nothing running", () => {
+    const { host, activity } = hostWith([prompt("p", 10), perm("m0", 11, "req_a")], { turnRunning: false });
+    resolve(host, "req_a");
+    expect(activity.t1).toBe("waiting-on-you");
   });
 });

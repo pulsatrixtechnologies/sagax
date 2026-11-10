@@ -10,10 +10,17 @@ async function handleInterrupt(deps: BotsMessagesRouteDeps, ctx: RouteContext): 
   const { req, res, path, method, auth, json, readBody } = ctx;
   const {
     activeGroupTurnForBot, botForThread, cancelDirectTurnDispatch, cancelGroupTurnOperations, closeOpenApprovals,
-    directTurnDispatchClaims, liveVoiceUtteranceByThread, registry, requirePinnedClientThread, revokeInternalCapabilitiesForThread,
+    directTurnDispatchClaims, idleThreads, liveVoiceUtteranceByThread, registry, requirePinnedClientThread, revokeInternalCapabilitiesForThread,
     routeThreadId, routines, scopedThreadViewer, stopDirectThreadByPerson, store, videoGenerations, viewerBotLevel,
   } = deps;
   let m: RegExpMatchArray | null = null;
+  // #3300: a Stop that cancels a routine run frees its conversation too when
+  // the run's setup never returns (server/host/idle-threads.ts).
+  const cancelRoutineRun = async (runId: string, botId: string, threadId: string) => {
+    const free = idleThreads.stopping(botId, threadId);
+    await routines!.cancelRun(runId);
+    free();
+  };
 
   m = path.match(/^\/api\/bots\/([\w-]+)\/interrupt$/);
   if (m && method === "POST") {
@@ -42,7 +49,7 @@ async function handleInterrupt(deps: BotsMessagesRouteDeps, ctx: RouteContext): 
         return json(res, 200, { ok: true, skipped: true });
       }
       const run = routines!.activeBotRunForBot(bot.id);
-      if (run?.threadId === own) await routines!.cancelRun(run.id);
+      if (run?.threadId === own) await cancelRoutineRun(run.id, bot.id, own);
       else await stopDirectThreadByPerson(bot.id, own, expectedUtteranceId);
       return json(res, 200, { ok: true });
     }
@@ -61,7 +68,7 @@ async function handleInterrupt(deps: BotsMessagesRouteDeps, ctx: RouteContext): 
     // channel just because it belongs to the same bot.
     if (typeof expectedThreadId === "string" && store.taskByThread(bot.id, expectedThreadId)) {
       const routine = routines!.activeBotRunForBot(bot.id);
-      if (routine?.threadId === expectedThreadId) await routines!.cancelRun(routine.id);
+      if (routine?.threadId === expectedThreadId) await cancelRoutineRun(routine.id, bot.id, expectedThreadId);
       else await stopDirectThreadByPerson(bot.id, expectedThreadId, expectedUtteranceId);
       return json(res, 200, { ok: true });
     }
@@ -71,11 +78,14 @@ async function handleInterrupt(deps: BotsMessagesRouteDeps, ctx: RouteContext): 
       if (expectedThreadId !== undefined && routineRun.threadId !== expectedThreadId) {
         return json(res, 409, { error: "this bot is running a routine in another conversation" });
       }
+      // read before the dispatch claim goes
+      const free = routineRun.threadId ? idleThreads.stopping(bot.id, routineRun.threadId) : () => {};
       cancelDirectTurnDispatch(bot.id, routineRun.threadId ?? expectedThreadId);
       if (routineRun.threadId) {
         revokeInternalCapabilitiesForThread(routineRun.threadId);
       }
       await routines!.cancelRun(routineRun.id);
+      free();
       return json(res, 200, { ok: true });
     }
     const instance = registry.get((botForThread(bot.id, expectedThreadId ?? bot.threadId) ?? bot).modelSelection.instanceId);

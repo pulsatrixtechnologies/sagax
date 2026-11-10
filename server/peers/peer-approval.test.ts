@@ -173,6 +173,21 @@ describe("peer approval card lifecycle", () => {
     expect(store.taskByThread(from.id, threadA)?.activity).toBe("working");
   });
 
+  it("never turns a conversation resting on the card into working once its turn ended (#3300)", async () => {
+    const threadA = from.threadId;
+    store.setTaskActivity(from.id, threadA, "working");
+    const answer = requestPeerApproval(bus, from, target, "A request", "ask_bot", threadA);
+    const card = store.messagesFor(threadA).find((message) => message.card?.requestId)!;
+    // the turn that raised the card ended: the conversation only rests on it
+    store.setTaskActivity(from.id, threadA, "waiting-on-you", { settledQuestion: true });
+    expect(store.taskByThread(from.id, threadA)).toMatchObject({ activity: "waiting-on-you", busy: false });
+
+    resolvePeerComms(bus, card.card!.requestId!, "allow");
+    await expect(answer).resolves.toBe("allow");
+    expect(store.taskByThread(from.id, threadA)).toMatchObject({ busy: false });
+    expect(store.taskByThread(from.id, threadA)?.activity).not.toBe("working");
+  });
+
   it("stays quiet when a standing grant answers without a card", async () => {
     const frames: Array<Notification | null> = [];
     bus = { store, broadcast: () => {}, notify: (frame) => frames.push(frame) };

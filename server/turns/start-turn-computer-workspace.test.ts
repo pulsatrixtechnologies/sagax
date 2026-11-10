@@ -19,6 +19,7 @@ describe("turn plugin preparation", () => {
       mountUserSandbox: vi.fn(), mountPersonalMcp: vi.fn(), mountPluginMcp: vi.fn(),
       store: { pinTaskCwd: () => "/fixture/task", isConfidentialThread: () => false, taskByThread: () => ({}) },
       syncPluginsForTurn,
+      directTurnClaimIsCurrent: () => true, DirectTurnSetupCancelled: class extends Error {},
     } as unknown as StartTurnHost;
     const state = createTurnState({ botId: "bot", text: "Run the pass", opts: {}, startTurn: async () => {} });
     Object.assign(state, {
@@ -33,5 +34,24 @@ describe("turn plugin preparation", () => {
     finish();
     await preparing;
     expect(order).toEqual(["copy", "ready", "dispatch"]);
+  });
+
+  it("never starts memory tracking for a setup a Stop already freed (#3300)", async () => {
+    class DirectTurnSetupCancelled extends Error {}
+    const beginMemoryTurn = vi.fn();
+    const ensureWorkspace = vi.fn();
+    const host = {
+      supportsWorkspaceFiles: () => true, ensureWorkspace, beginMemoryTurn,
+      directTurnClaimIsCurrent: () => false, DirectTurnSetupCancelled,
+    } as unknown as StartTurnHost;
+    const state = createTurnState({ botId: "bot", text: "Run the pass", opts: {}, startTurn: async () => {} });
+    Object.assign(state, {
+      bot: { id: "bot", modelSelection: { instanceId: "primary-claude" } },
+      instance: { driverKind: "claudeAgent", adapter: { capabilities: {} } },
+      threadId: "thread", dispatchClaimId: "stopped-turn",
+    });
+    await expect(createComputerWorkspaceStartTurn(host)(state)).rejects.toBeInstanceOf(DirectTurnSetupCancelled);
+    expect(ensureWorkspace).not.toHaveBeenCalled();
+    expect(beginMemoryTurn).not.toHaveBeenCalled();
   });
 });

@@ -633,6 +633,16 @@ a d'autres n'est pas dessinée du tout.
 - Système : la notification dit qui (le bot), quoi (une phrase), et offre les réponses
   directes quand c'est une approbation. Par bot, un interrupteur « me prévenir quand ce
   bot finit ou a besoin de moi » dans Détails.
+- « Ce que je reçois » (Réglages, Notifications, sous le budget quotidien et les heures
+  calmes ; #3432) : tout ce que les bots de la personne peuvent envoyer d'eux-mêmes, en
+  groupes de rangées (titre gris « Ce que je reçois · <groupe> ») : alertes de
+  l'organisation (domaine, bot qui le suit en pilule quand plusieurs peuvent, dernière
+  alerte, puis chaque veille avec son interrupteur), brief du jour, contexte de l'écran,
+  listes de vérification, adressé à mes bots (l'interrupteur du bot et ses déclencheurs
+  directs). Chaque interrupteur agit tout de suite, sans confirmation ; une rangée qui ne
+  peut pas fonctionner n'est pas dessinée ; jamais un identifiant. Sur la page du bot,
+  Permissions, sous les rangées Proactif : le groupe « Ce que ce bot suit pour toi », les
+  mêmes rangées pour les domaines que ce bot peut suivre.
 
 ### 2.17 Panneau de détail d'une page, calendrier des automatisations
 

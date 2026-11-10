@@ -392,16 +392,15 @@ export function SettingsModal() {
                     diagnostics and the former Advanced rows live on App. */}
                 <SettingsGroup groupId="account">
                   <AccountCard lockedServer={lockedServer} />
-                  {(!state.config?.viewer || state.config.viewer.operator) && (
-                    <SettingsSubPageRow
-                      bare
-                      cardId="general.aboutMe"
-                      title={t("settings.profile.aboutMe")}
-                      summary={aboutMeFirstLine(state.config?.profile?.aboutMe)}
-                      actionLabel={t("settings.aboutMe.edit")}
-                      onOpen={() => openSubPage("general.aboutMe")}
-                    />
-                  )}
+                  {/* #3432: each person's own About me (#3424), for a member too */}
+                  <SettingsSubPageRow
+                    bare
+                    cardId="general.aboutMe"
+                    title={t("settings.profile.aboutMe")}
+                    summary={aboutMeFirstLine(state.config?.profile?.aboutMe)}
+                    actionLabel={t("settings.aboutMe.edit")}
+                    onOpen={() => openSubPage("general.aboutMe")}
+                  />
                 </SettingsGroup>
                 <SettingsGroup title={t("settings.group.languageRegion")} groupId="languageRegion">
                   <LanguageRow />

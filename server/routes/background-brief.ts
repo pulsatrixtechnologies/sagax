@@ -7,7 +7,9 @@
 //        desktop app on macOS or Windows); elsewhere a PUT of it is ignored.
 //        `at` (HH:MM) in `timeZone` is when the brief runs on its own each
 //        day (server/proactive/background-brief-schedule.ts). On by default for a
-//        Primary Bot; `enabled: false` turns it off.
+//        Primary Bot; `enabled: false` turns it off. `checklist` (#3432):
+//        a plain switch of the checklist wakes (heartbeat): false blocks
+//        them, true clears the block and its votes; no memory line.
 //   POST /api/bots/:id/background-brief/pass { costUsd? }
 //        Reads the apps already connected. No app: an empty queue.
 //   POST /api/bots/:id/background-brief/:suggestionId/reject
@@ -76,17 +78,20 @@ export function createBackgroundBriefRoutes(deps: BackgroundBriefRouteDeps): Rou
       return json(res, 200, { ...deps.store.view(botId), apps, screenContextAvailable, ...(apps ? {} : { notice: "no_apps" as const }) });
     }
     if (!suggestionId && method === "PUT") {
-      const body = await readBody(req) as Partial<BriefSettings>;
+      const body = await readBody(req) as Partial<BriefSettings> & { checklist?: unknown };
       const subjects = Array.isArray(body.subjects) ? body.subjects.filter((item): item is string => typeof item === "string") : undefined;
-      const settings = deps.store.saveSettings(botId, {
+      const patch: Partial<BriefSettings> = {
         ...(typeof body.enabled === "boolean" ? { enabled: body.enabled } : {}),
         ...(typeof body.everyHours === "number" ? { everyHours: body.everyHours } : {}),
         ...(subjects ? { subjects } : {}),
         ...(typeof body.at === "string" ? { at: body.at } : {}),
         ...(typeof body.timeZone === "string" ? { timeZone: body.timeZone } : {}),
         ...(typeof body.screenContext === "boolean" && deps.screenContextAvailable?.() === true ? { screenContext: body.screenContext } : {}),
-      });
-      return json(res, 200, { settings });
+      };
+      // #3432: the checklist switch sets or clears the heartbeat mute, with no vote and no memory line
+      const checklist = typeof body.checklist === "boolean" ? !deps.store.setWakeMuted(botId, "heartbeat", !body.checklist) : undefined;
+      const settings = checklist !== undefined && !Object.keys(patch).length ? deps.store.settings(botId) : deps.store.saveSettings(botId, patch);
+      return json(res, 200, { settings, ...(checklist !== undefined ? { checklist } : {}) });
     }
     if (suggestionId === "pass" && method === "POST") {
       const connected = deps.connected(botId);

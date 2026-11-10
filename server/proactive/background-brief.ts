@@ -722,6 +722,20 @@ export class BriefStore {
     return { ...topics[key]! };
   }
 
+  /** #3432: a plain switch on a wake kind, from Settings: off blocks it,
+   * on clears it with its votes. No vote counted, no memory line. */
+  setWakeMuted(botId: string, topic: string, muted: boolean): boolean {
+    const row = this.bot(botId);
+    const topics = row.topics ?? {};
+    const key = `wake:${topic.trim().toLowerCase().slice(0, 60)}`;
+    if (muted) topics[key] = { up: 0, down: 0, less: 0, at: this.now(), blocked: true };
+    else delete topics[key];
+    row.topics = topics;
+    this.data.bots[botId] = row;
+    this.save();
+    return this.wakeMuted(botId, topic);
+  }
+
   /** #2694: whether a wake kind is muted by the person's feedback now. */
   wakeMuted(botId: string, topic: string): boolean {
     const row = this.data.bots[botId];

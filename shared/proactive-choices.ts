@@ -14,6 +14,49 @@
 
 export const PROACTIVE_CHOICES_PATH = "/api/me/proactive";
 
+/** #3432: GET ?view=all adds `receive`, what the person's pages draw
+ * (Settings, Notifications, « Ce que je reçois », and each bot's
+ * « Ce que ce bot suit pour toi »). */
+export const PROACTIVE_RECEIVE_VIEW = "all";
+
+/** One watch of an eligible domain: the person's bots it runs on, and the
+ * last time it alerted the person. */
+export interface ReceiveWatch {
+  id: string;
+  summary: string;
+  cadence: string;
+  runsOn: string[];
+  lastAlertAt?: number;
+}
+
+/** One domain the person can choose: only eligible ones are listed, with
+ * the person's bots that can carry it. */
+export interface ReceiveDomain {
+  domain: string;
+  label: { fr?: string; en?: string };
+  audience?: { fr?: string; en?: string };
+  carriers: string[];
+  watches: ReceiveWatch[];
+  lastAlertAt?: number;
+}
+
+/** One bot of the person: the ambient rows it can draw. A field that is
+ * absent is a row that cannot work there (no screen context off the
+ * desktop app, no checklist without HEARTBEAT.md items). */
+export interface ReceiveBot {
+  id: string;
+  brief: boolean;
+  screen?: boolean;
+  checklist?: boolean;
+}
+
+export interface ReceiveView {
+  bots: ReceiveBot[];
+  domains: ReceiveDomain[];
+  /** Why no domain can be listed now, when none can. */
+  unavailable?: string;
+}
+
 export const DOMAIN_STATES = ["on", "off", "never"] as const;
 export type DomainState = (typeof DOMAIN_STATES)[number];
 

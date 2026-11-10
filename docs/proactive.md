@@ -35,7 +35,13 @@ both write `proactive`).
   loop's listing on that bot, else their main bot): each with its slug,
   label, audience, `eligible`, and its watches (id, summary, cadence,
   products, `runs`, `missing: product|skill`). When none can be listed,
-  `unavailable` says why.
+  `unavailable` says why. With `?view=all` (#3432) it adds `receive`, what
+  Settings, Notifications, « Ce que je reçois » and each bot's « Ce que ce
+  bot suit pour toi » draw: `bots` (the person's own visible bots, main bot
+  first, with `brief`, `screen` only on the desktop app and `checklist` only
+  when HEARTBEAT.md has items) and `domains` (only eligible ones, each with
+  `carriers`, the bots that can carry it, and its running watches with
+  `runsOn` and `lastAlertAt`, the last time the watch woke its bot).
 - `PUT /api/me/proactive`: `{domain, state: on|off|never, botId?}` (a yes
   without `botId` goes to the person's main bot, else another bot of
   theirs; the bot must be the person's own, visible and not temporary) or
@@ -44,9 +50,15 @@ both write `proactive`).
   no to a domain the listing does not have is stored only when it cannot be
   checked or is already in the choices. Client scope, the person only, no
   admin.
-- There is no screen yet (a later lot). A person chooses by asking any of
-  their bots in words: the bot reads `available` and writes through
-  `sagax_settings` `notifications.proactiveChoices`.
+- A person chooses in Settings, Notifications, « Ce que je reçois » (What
+  I receive), on each bot's page (Permissions, Proactive), or in words by
+  asking any of their bots: the bot reads `available` and writes through
+  `sagax_settings` `notifications.proactiveChoices`. On those pages each
+  switch acts at once; the checklist switch sets or clears the checklist
+  mute (`PUT /api/bots/:id/background-brief` `{checklist}`), with no
+  memory line. A domain stored on with a bot that can no longer carry it
+  runs nowhere: those pages draw it off with its pause stated, and turning
+  it on there moves it to a bot that can.
 - One bot per person and domain, by construction. A carrying bot that is
   deleted hands its domains to the person's main bot, else another bot of
   theirs, which says so in one line with the domain's label; without any

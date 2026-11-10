@@ -2,8 +2,9 @@
 // the screen says so. A pass only reads. A server without the route yet (an
 // older one) says it comes with the server update, never an error.
 // 2026-10-29: the brief runs on its own each day at the time the person
-// picks (on by default for a Primary Bot), and arrives in the conversation
-// and through "Me joindre". The person turns it off or moves its time here.
+// picks, once they turned it on, and arrives in the conversation and
+// through "Me joindre". The person turns it on or off or moves its time
+// here, or in Settings, Notifications, « Ce que je reçois » (#3432).
 // #2699: screen context, off by default, on the desktop app only (hidden
 // elsewhere): the bot sees the app and window in front, to propose at the
 // right time.

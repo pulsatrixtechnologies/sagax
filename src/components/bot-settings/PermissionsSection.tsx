@@ -30,6 +30,7 @@ import { api, useStore, type Bot } from "@/state/store";
 import { type ApprovalMode } from "../../../shared/approval-mode";
 import { AppliedLevelNote } from "./AppliedLevelNote";
 import { DirectTriggersRows } from "./DirectTriggersRows";
+import { BotFollowsRows } from "./BotFollowsRows";
 import { proactiveModeFor, type ProactiveMode } from "../../../shared/proactive-mode";
 import { builtInPageTargets } from "../../../shared/page-targets";
 import { pageTargetKeys } from "@/lib/page-target-copy";
@@ -431,6 +432,9 @@ export function PermissionsSection({
       {showOwnerPermissions
         ? <OwnerPermissionsCard key={bot.id} bot={bot} leading={approvalRows} />
         : approvalRows && <SettingsGroup title={t(part === "actsAlone" ? "botProfile.v6.group.actsAlone" : part === "advanced" ? "botProfile.v6.group.behaviour" : "botPanel.permissions.approvals")} groupId="approvals">{approvalRows}</SettingsGroup>}
+      {/* #3432: « Ce que ce bot suit pour toi », the person's watch domains
+          this bot can carry, beside the Proactive rows (one bot's own) */}
+      {showProactive && !draft && !bulk && <BotFollowsRows key={`follows:${bot.id}`} bot={bot} />}
 
       {/* 2026-10-16: the person's custom rules, in their own words */}
       {showCustomRules && <CustomRulesCard key={`custom-rules:${bot.id}`} bot={bot} />}

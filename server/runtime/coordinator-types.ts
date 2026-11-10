@@ -268,6 +268,8 @@ export interface Coordinator {
   poll(owner: Owner): { items: StatusView["inbox"]; assignments: HandoffView[] };
   /** Non-terminal work the conversation in this thread is waiting on, rooms included. */
   outstandingFor(threadId: string): HandoffView[];
+  /** Running assignments whose turn happens in this thread; reads only that thread's rows, so it stays cheap to ask often. */
+  runningIn(threadId: string): HandoffView[];
   /** A person's or routine's own turn begins: its root, running. */
   beginTurn(req: BeginTurnRequest): HandoffView;
   /** That turn ended (completed, failed, parked on cards, or continuing in place). */

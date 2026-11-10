@@ -281,6 +281,44 @@ describe("RuntimeCoordinator: the requesting turn and its tree", () => {
     expect(w.coordinator.active()).toEqual([]);
   });
 
+  // Upstream port (#3324): runningIn reads one thread's open rows.
+  it("runningIn() is active()'s running nodes in that thread", async () => {
+    const w = world(hold);
+    const { node } = send(w, chief, "gen-1", undefined, builder, "Build it");
+    const same = () => { for (const threadId of ["chief-chat", node.threadId, "nobody"]) expect(w.coordinator.runningIn(threadId)).toEqual(w.coordinator.active().filter(n => n.threadId === threadId && n.status === "running")); };
+    same();
+    w.coordinator.tick(); await flush();
+    same(); expect(w.coordinator.runningIn(node.threadId).map(n => n.id)).toContain(node.id);
+    w.coordinator.sourceSettled("gen-1", true); w.coordinator.tick(); await flush();
+    same();
+    w.coordinator.tick(); await flush();
+    same();
+  });
+
+  // Upstream port (#3324): outstandingFor and runningIn no longer parse every
+  // open assignment to answer for one thread.
+  it("runningIn() and outstandingFor() read only the thread's own rows, however many other assignments are open", () => {
+    const w = world(hold);
+    for (let at = 0; at < 25; at++) send(w, chief, `gen-${at}`, undefined, builder, `Job ${at}`);
+    const store = (w.coordinator as unknown as { store: Record<"all" | "get" | "children", (...args: unknown[]) => unknown> }).store;
+    let read = 0;
+    for (const name of ["all", "get", "children"] as const) {
+      const real = store[name]!.bind(store);
+      store[name] = (...args: unknown[]) => { const rows = real(...args); read += Array.isArray(rows) ? rows.length : rows ? 1 : 0; return rows; };
+    }
+    const reads = (ask: () => unknown) => { read = 0; ask(); return read; };
+    expect(reads(() => w.coordinator.active()), "the whole tree, for comparison").toBeGreaterThanOrEqual(50);
+    expect(reads(() => w.coordinator.runningIn("tester-work"))).toBe(0);
+    expect(reads(() => w.coordinator.outstandingFor("tester-work"))).toBe(0);
+    expect(reads(() => w.coordinator.runningIn("builder-work"))).toBeLessThanOrEqual(50);
+    const live = w.coordinator.active();
+    const mine = new Set(live.filter(n => n.threadId === "chief-chat").map(n => n.id));
+    const expected = live.filter(n => n.parentId !== undefined && mine.has(n.parentId)).map(n => n.id);
+    expect(expected).toHaveLength(25);
+    expect(w.coordinator.outstandingFor("chief-chat").map(n => n.id)).toEqual(expected);
+    expect(w.coordinator.outstandingFor("chief-chat")).toEqual(live.filter(n => expected.includes(n.id)));
+  });
+
   // port de OpenMausBot #3325: the watchdog's stop reaches the runtime as a
   // stall (the requesting turn's own end is runtime.test.ts's).
   it("fails a turn the host's watchdog stopped as stalled, not as a provider error", async () => {

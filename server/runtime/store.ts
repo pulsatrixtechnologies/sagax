@@ -115,7 +115,8 @@ export interface RuntimeStore {
   childrenOfAssignee(botId: string, threadId: string): Assignment[];
   /** The root of this id's tree. */
   root(id: string): Assignment | undefined;
-  all(filter?: { rootId?: string; nonTerminal?: boolean; ownerThreadId?: string }): Assignment[];
+  /** `assigneeThreadId`: only rows whose turn happens in that thread (any bot). */
+  all(filter?: { rootId?: string; nonTerminal?: boolean; ownerThreadId?: string; assigneeThreadId?: string }): Assignment[];
   /** Insert a new row and its event in one transaction. */
   insert(a: Assignment, event: { kind: EventKind; detail?: string; at?: number }): void;
   /** Write the whole row and (optionally) an event in one transaction. */
@@ -437,6 +438,7 @@ export function openRuntimeStore(path: string): RuntimeStore {
       if (filter.rootId !== undefined) { where.push("root_id = ?"); params.push(filter.rootId); }
       if (filter.nonTerminal) where.push(LIVE);
       if (filter.ownerThreadId !== undefined) { where.push("requester_thread_id = ?"); params.push(filter.ownerThreadId); }
+      if (filter.assigneeThreadId !== undefined) { where.push("assignee_thread_id = ?"); params.push(filter.assigneeThreadId); }
       const sql = `SELECT id, json FROM assignments${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY created_at, rowid`;
       // At most eight shapes, and the coordinator asks on every bus event,
       // so each shape is prepared once.

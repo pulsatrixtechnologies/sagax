@@ -692,6 +692,7 @@ function projectMessage(message: Record<string, any>) {
         done: message.signIn.done,
         cancelled: message.signIn.cancelled,
         superseded: message.signIn.superseded,
+        answeredInChat: message.signIn.answeredInChat,
         resumed: message.signIn.resumed,
       }
     : undefined;
@@ -731,7 +732,7 @@ function messageNeedsInput(message: Record<string, any>): boolean {
     !message.connector.resumed &&
     message.connector.status !== "connected";
   const secret = isRecord(message.secret) && !message.secret.provided && !message.secret.dismissed && !message.secret.superseded;
-  const signIn = isRecord(message.signIn) && !message.signIn.done && !message.signIn.cancelled && !message.signIn.superseded;
+  const signIn = isRecord(message.signIn) && !message.signIn.done && !message.signIn.cancelled && !message.signIn.superseded && !message.signIn.answeredInChat;
   return Boolean(card || connector || secret || signIn);
 }
 

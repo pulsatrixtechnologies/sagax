@@ -18377,7 +18377,8 @@
       "chat.askLine.trace.stopped": "de34d3f5e3cc5caf2854438153032db617193b12163fd8592f46a5d869c3876b",
       "chat.askLine.trace.failed": "64df366eed4ae23ed0d82226192db78274a9d7be9187672b626776165ba12317",
       "chat.askLine.trace.silent": "c28c5f0d98ded0f5a2f11bfa44820bec024840eaf7809432dc01406d22e45e88",
-      "chat.askLine.aTeammate": "89271b7400a2d432ae5de564a47867ee31a5d986e0e19a25c5eb4335520314ff"
+      "chat.askLine.aTeammate": "89271b7400a2d432ae5de564a47867ee31a5d986e0e19a25c5eb4335520314ff",
+      "signIn.answeredInChat": "77883f86ed4b5a0b328c72376ebdb53cd30508f75674b57c6c62e3643ee0e004"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

@@ -8336,6 +8336,7 @@
   "signIn.local.explainHost": "Connecte-toi à l'ordinateur où tourne Sagax, dans la fenêtre de navigateur que {name} utilise là. Un onglet Navigateur garde ses propres connexions, que {name} n'utilise pas ici. Puis appuie sur Terminé.",
   "signIn.private": "Tu tapes le mot de passe dans la page toi-même. Sagax ne le voit jamais.",
   "signIn.superseded": "Remplacée par une demande plus récente",
+  "signIn.answeredInChat": "Tu as répondu dans le chat",
   "signIn.retry": "Réessayer",
   "signIn.settled.done": "Connecté à {site}",
   "signIn.settled.cancelled": "Connexion à {site} refusée",

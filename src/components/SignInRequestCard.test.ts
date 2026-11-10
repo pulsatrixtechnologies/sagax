@@ -145,6 +145,13 @@ describe("SignInRequestCard once settled", () => {
     expect(html).toContain("Superseded by a newer request");
     expect(html).not.toMatch(/>Done<|>Open<|>Cancel</);
   });
+
+  it("stays in the chat as one settled line once answered in the chat (#3305)", () => {
+    const html = view({ answeredInChat: true });
+    expect(html).toContain("example.com");
+    expect(html).toContain("You answered in the chat");
+    expect(html).not.toMatch(/>Done<|>Open<|>Cancel</);
+  });
 });
 
 describe("SignInBanner", () => {

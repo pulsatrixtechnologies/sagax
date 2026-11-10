@@ -177,6 +177,8 @@ async function acceptDirectSend(
           }
           // Offered to the next turn again unless the person stops this one.
           host.handoffs.steered(threadId, steerTarget, instance?.instanceId, message.id, steerId);
+          // A line steered into a running turn answers its open sign-in requests too (#3305).
+          host.answerSignInsInChat(botId, threadId);
           return { ok: true as const, steered: true as const, threadId, message };
         }
         if (!current.busy) {

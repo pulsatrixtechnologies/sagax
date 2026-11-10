@@ -1497,6 +1497,9 @@ export interface SignInRequestCardData {
   /** Stop ended the turn this card paused: it offers no Done or Cancel,
    * and an answer given afterwards is kept but continues nothing. */
   stopped?: boolean;
+  /** The person answered in the conversation instead of pressing Done: it
+   * offers no Done or Cancel, and the turn their line started goes on. */
+  answeredInChat?: boolean;
 }
 
 /** The open sign-in request a bot's computer plea stands for, so whichever

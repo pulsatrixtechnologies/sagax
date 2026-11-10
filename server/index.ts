@@ -582,7 +582,7 @@ import {
   type Surface
 } from "./surface.ts";
 import type { RoomLine } from "./memory/memory-capture.ts";
-import { signInOutcome, signInResumePrompt, normalizeSignInSite, signInFallbackText, isPendingSignInRequest } from "../shared/sign-in-request.ts";
+import { signInOutcome, signInResumePrompt, normalizeSignInSite, signInFallbackText, isPendingSignInRequest, signInWaits } from "../shared/sign-in-request.ts";
 import { RoutableSteers } from "./busy-routing.ts";
 import { restoreChannelMessages } from "./rooms/channel-queue.ts";
 import { acceptedSendMatch, sendFingerprint, SendSequencer } from "./messages/send-idempotency.ts";
@@ -6346,6 +6346,7 @@ bindLeafHost({
   get openInputRequests() { return openInputRequests; },
   get postInputRequest() { return postInputRequest; },
   get settleInputRequests() { return settleInputRequests; },
+  get answerSignInsInChat() { return answerSignInsInChat; },
   get groupUsageReader() { return groupUsageReader; },
   get publicGroupState() { return publicGroupState; },
   get announcedProfiles() { return announcedProfiles; },
@@ -10311,7 +10312,7 @@ function resumableCards(threadId: string, since: number, memberId?: string): Arr
       continue;
     }
     const signIn = message.signIn;
-    if (signIn && !signIn.resumed && !signIn.superseded) {
+    if (signIn && !signIn.resumed && !signIn.superseded && !signIn.answeredInChat) {
       open.push({ id: message.id, waits: `sign in to ${signIn.site}` });
     }
   }
@@ -21242,16 +21243,13 @@ function settleSignIn(botId: string, threadId: string, messageId: string, outcom
   if (!bot || !message?.signIn) return { status: 404, body: { error: "no such sign-in request" } };
   const card = message.signIn;
   if (card.superseded) return { status: 409, body: { error: "this sign-in request was superseded by a newer one" } };
+  if (card.answeredInChat) return { status: 409, body: { error: "this sign-in request was already answered in the chat" } };
   const settled = signInOutcome(card);
   if (settled && settled !== outcome) {
     return { status: 409, body: { error: `this sign-in request was already ${settled === "done" ? "marked done" : "cancelled"}` } };
   }
   if (settled && card.resumed) return { status: 200, body: { [outcome]: true, resumed: true } };
-  if (!settled) {
-    const pleaded = computerControl.settleHelp(message.id);
-    if (card.place === "browser") browserLive.handBack(currentBrowserSession(bot.id, bot.browserProfile));
-    else for (const key of pleaded.length ? pleaded : [botComputerControlKey(bot)]) computerControl.release(key);
-  }
+  if (!settled) handSignInPlaceBack(bot, message.id, card.place);
   // The node parked on this card runs again with the sign-in's line, as a
   // credential card's does (answerCardNode); `resumed` only once the
   // runtime took the answer, so a second press, or one after a Stop, starts
@@ -21261,6 +21259,48 @@ function settleSignIn(botId: string, threadId: string, messageId: string, outcom
     signIn: { ...card, ...(outcome === "done" ? { done: true } : { cancelled: true }), ...(resumed ? { resumed: true, error: undefined } : {}) },
   });
   return { status: 200, body: { [outcome]: true, resumed } };
+}
+
+/** The person is through with the place the card lent them: its plea goes,
+ * and the browser or computer goes back to the bot. */
+function handSignInPlaceBack(bot: BotRecord, messageId: string, place: Surface): void {
+  const pleaded = computerControl.settleHelp(messageId);
+  if (place === "browser") browserLive.handBack(currentBrowserSession(bot.id, bot.browserProfile));
+  else for (const key of pleaded.length ? pleaded : [botComputerControlKey(bot)]) computerControl.release(key);
+}
+
+/** The person's own line answers every sign-in request still open in their
+ * conversation, as Done would: the card stays in the chat, marked answered
+ * in place, the place it lent goes back to the bot, and the work parked on
+ * those cards ends quietly, so the conversation leaves Needs you and nothing
+ * resumes it twice. The turn the line starts goes on with the conversation.
+ * Work that also waits on another card (a key, a team setup) keeps waiting
+ * on that. */
+function answerSignInsInChat(botId: string, threadId: string): void {
+  const bot = store.bot(botId);
+  if (!bot) return;
+  const answered: string[] = [];
+  for (const message of store.activePath(threadId)) {
+    const card = message.signIn;
+    if (message.kind !== "signin" || !card || card.stopped || !signInWaits(card)) continue;
+    handSignInPlaceBack(bot, message.id, card.place);
+    store.patchMessage(threadId, message.id, { signIn: { ...card, answeredInChat: true, error: undefined } });
+    answered.push(message.id);
+  }
+  const parked = coordinator.parkedDirect(threadId);
+  const card = parked?.cards?.find((id) => answered.includes(id));
+  if (!parked || !card || resumableCards(threadId, parked.startedAt ?? parked.createdAt).some((open) => parked.cards!.includes(open.id))) return;
+  releaseCardNode(threadId, card, "The person answered in the chat");
+}
+
+/** The node parked on this card ends without running again: the only live
+ * work in the thread, with no teammate still working under it. */
+function releaseCardNode(threadId: string, messageId: string, reason: string): void {
+  const live = coordinator.active().filter((n) => n.threadId === threadId && !ENDED.has(n.status));
+  const node = live.find((n) => n.cards?.includes(messageId) && n.status === "waiting");
+  if (!node || live.length !== 1 || coordinator.children(node.id).some((child) => !ENDED.has(child.status))) return;
+  if (node.groupId) coordinator.cancelRoom(node.groupId, threadId, reason);
+  else coordinator.cancelDirect(threadId, reason);
 }
 
 /** Pre-save probe for a CLI path override: run `<cli> --version` with the
@@ -33469,6 +33509,7 @@ const startTurnRunner = createStartTurn({
   settleDirectCoordination,
   settleDirectFollowup,
   settleInputRequests,
+  answerSignInsInChat,
   isBotActSend,
   settleTrackedRequest,
   settlingResourceOwners,

@@ -120,6 +120,11 @@ export function isHarnessOwnedMcpEnvName(name: string): boolean {
   return name === "ELECTRON_RUN_AS_NODE" || name.startsWith("SAGAX_") || name.startsWith("OGB_");
 }
 
+/** The variable a restart adds to a command server's environment, counting restarts since this server started. Sagax
+ * adds it itself, so a driver that refuses harness names in a custom server's environment lets this one through; a
+ * person still cannot set it (isReservedMcpEnvEntry keeps refusing it). */
+export const MCP_RESTART_ENV = "SAGAX_MCP_RESTART";
+
 /** Port de OpenMausBot #2865 : a server bundled inside an Electron app (its
  * binary as the command) needs ELECTRON_RUN_AS_NODE=1 to run as node. That
  * value is the one the built-in proxies use, so it is accepted; any other

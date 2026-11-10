@@ -25,8 +25,33 @@ import {
   PersonConnectionsError,
   type PersonalMcpInput,
 } from "../people/person-connections.ts";
+import type { McpProbeResult } from "../mcp/mcp-probe.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
+
+const MAX_TOOL_NAMES = 100;
+const RESTART_WHEN = "This turn keeps talking to the old process; your next turn starts the new code.";
+
+/** What a test shows, in plain words: that the server started and listed its tools, never that the tools work. */
+export function mcpTestText(result: McpProbeResult): string {
+  if (!result.ok) return `Test: it did not start: ${result.error}`;
+  const names = result.tools.slice(0, MAX_TOOL_NAMES).map((tool) => tool.name);
+  const total = result.total ?? result.tools.length;
+  const more = total > names.length ? ` and ${total - names.length} more` : "";
+  return names.length
+    ? `Test: it started and listed its tools: ${names.join(", ")}${more}. That does not show what they return: call one to check.`
+    : "Test: it started, but it has no tools.";
+}
+
+/** The add_mcp_server body without its action, and which action it asks for. */
+function mcpAction(body: unknown): { action: "add" | "restart" | string; body: unknown; name: string } {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return { action: "add", body, name: "" };
+  const { action, ...rest } = body as Record<string, unknown>;
+  const name = typeof rest.name === "string" ? rest.name.trim() : "";
+  return { action: action === undefined ? "add" : String(action), body: rest, name };
+}
+
+const RESTART_UNKNOWN_ACTION = "Unknown action: send add (the default) or restart.";
 
 function credentialDesktopHandoff(label: string): string {
   return `Securely provide the ${label} from Sagax on your phone or computer. It is never added to chat.`;
@@ -75,6 +100,11 @@ export interface InternalIntegrationsDeps {
   mcpPolicyRefusal(name: string, server: object): string | undefined;
   persistMcpServers(next: Record<string, unknown>): void;
   healthChanged?(name: string): void;
+  /** Reloads an enabled command server for the next turn of every bot that uses it and tests it as this bot; null when
+   * no enabled command server has that name here. */
+  restartMcpServer?(name: string, botId: string): Promise<McpProbeResult | null>;
+  /** A person's own server (Settings > Connections) on an organization server, as stored. */
+  personalMcpServer?(principalId: string, name: string): { url?: unknown; command?: unknown; enabled?: unknown } | undefined;
   turnSpeaker(threadId: string): { origin: string; principalId?: string } | undefined;
   turnIsRoutine(threadId: string): boolean;
   turnIsInternal(threadId: string): boolean;
@@ -173,7 +203,18 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
       if (!deps.principalIsOrgAdmin(principalId) && !deps.principalCan(principalId, "apps.ownIntegrations")) {
         return json(res, 403, deps.permissionRefusal("apps.ownIntegrations"));
       }
-      const input = personalMcpInputFromAgent(await readBody());
+      const asked = mcpAction(await readBody());
+      if (asked.action === "restart") {
+        // The person's own command runs through their relay: closing it makes the next call start the new code.
+        const server = deps.personalMcpServer?.(principalId, asked.name);
+        if (!asked.name || !server) return json(res, 404, { error: `There is no MCP server named ${asked.name || "(no name)"} in your own servers.` });
+        if (typeof server.url === "string") return json(res, 400, { error: `${asked.name} is reached by its address, so it has no process to restart.` });
+        if (server.enabled === false) return json(res, 403, { error: `${asked.name} is off. The person turns it on in Settings > Connections.` });
+        deps.closePersonalStdio(principalId, asked.name);
+        return json(res, 200, { name: asked.name, restarted: true, personal: true, text: `Restarted MCP server ${asked.name}. Its saved keys stay. ${RESTART_WHEN}` });
+      }
+      if (asked.action !== "add") return json(res, 400, { error: RESTART_UNKNOWN_ACTION });
+      const input = personalMcpInputFromAgent(asked.body);
       if (typeof input === "string") return json(res, 400, { error: input });
       try {
         await deps.addPersonalMcpServer(principalId, input);
@@ -203,11 +244,32 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
     }
 
     if (method === "POST" && path === "/api/internal/mcp-servers") {
+      const asked = mcpAction(await readBody());
+      if (asked.action === "restart") {
+        // Restart runs what is already on, as the next turn would anyway: no secretRef is spent and the saved keys,
+        // sign-in included, stay as they are.
+        const stored = asked.name ? deps.mcpServers()[asked.name] : undefined;
+        if (!stored || typeof stored !== "object") return json(res, 404, { error: `There is no MCP server named ${asked.name || "(no name)"}.` });
+        if (typeof (stored as { url?: unknown }).url === "string") {
+          return json(res, 400, { error: `${asked.name} is reached by its address, so it has no process to restart.` });
+        }
+        if ((stored as { enabled?: unknown }).enabled !== true) {
+          return json(res, 403, { error: `${asked.name} is off. The person turns it on in MCP server settings.` });
+        }
+        const tested = await deps.restartMcpServer?.(asked.name, sender.id);
+        if (!tested) return json(res, 404, { error: `${asked.name} does not run here, so there is no process to restart.` });
+        return json(res, 200, {
+          name: asked.name,
+          restarted: true,
+          text: `Restarted MCP server ${asked.name}. Its saved keys stay. ${mcpTestText(tested)} ${RESTART_WHEN}`,
+        });
+      }
       // Same single-flight lock as POST /api/mcp/servers: two writers must
       // not interleave a read of cfg.mcpServers with a save.
       if (!deps.tryBeginMcpConfigUpdate()) return json(res, 409, { error: "MCP servers are already being updated." });
       try {
-        let body = await readBody();
+        if (asked.action !== "add") return json(res, 400, { error: RESTART_UNKNOWN_ACTION });
+        let body = asked.body;
         let commitRedeem: (() => void) | undefined;
         if (deps.redeemMcpBody) {
           const redeemed = deps.redeemMcpBody(body, sender.id, capability.threadId);

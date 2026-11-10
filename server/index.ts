@@ -23267,6 +23267,10 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     mcpPolicyRefusal,
     persistMcpServers,
     healthChanged: (name) => mcpServersHost.health.changed(name),
+    restartMcpServer: (name, botId) => mcpServersHost.restart(name, botId),
+    personalMcpServer: (person, name) => {
+      try { return personConnections.servers(person)[name]; } catch { return undefined; }
+    },
     turnSpeaker: (threadId) => turnSpeakers.get(threadId),
     turnIsRoutine: (threadId) => turnRoutineLineage.has(threadId),
     turnIsInternal: (threadId) => isInternalTurn(threadId),

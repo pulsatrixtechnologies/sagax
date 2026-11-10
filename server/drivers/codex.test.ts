@@ -39,6 +39,8 @@ import * as procs from "../procs.ts";
 import { autoVerdict } from "../approvals/auto-approve.ts";
 import { codexFullApprovalPolicy } from "./codex/approvals.ts";
 import { perspicaxTokenFile } from "./spawn-contract.ts";
+import { withRestarts } from "../host/mcp-servers-host.ts";
+import { isReservedMcpEnvEntry, MCP_RESTART_ENV } from "../mcp/mcp-registry.ts";
 
 /** #1977: Full access on Codex lets MCP tool approvals reach Sagax's gate. */
 const CODEX_FULL_POLICY = codexFullApprovalPolicy();
@@ -1307,6 +1309,22 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     const gateKey = Object.keys(seen.env).find((name) => name.startsWith("SAGAX_GATE_CONFIG_"));
     expect(gateKey).toBeTruthy();
     expect(JSON.parse(JSON.parse(seen.env[gateKey!]).SAGAX_GATE_UPSTREAM).env.NOTES_TOKEN).toBe("tok-notes");
+  });
+
+  it("still starts a turn with a custom server that was restarted or toggled (#3304)", async () => {
+    await create();
+    const dump = join(scratch, "restarted-mcp.json");
+    process.env.FAKE_CODEX_DUMP = dump;
+    // The mount mcp-servers-host hands the driver after a restart, an edit or an off-and-on.
+    const restarted = withRestarts({ notes: { command: "notes-mcp", args: [], env: { NOTES_TOKEN: "tok-notes" } } }, new Map([["notes", 2]]));
+    expect(restarted.notes).toMatchObject({ env: { [MCP_RESTART_ENV]: "2" } });
+
+    await instance.adapter.sendTurn({ threadId: "t-restarted-mcp", text: "go", integrations: { custom: restarted } });
+    await recorder.until((event) => event.type === "turn.completed");
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.argv.join(" ")).toContain("mcp_servers.notes.command");
+    // A person still cannot set the name themselves.
+    expect(isReservedMcpEnvEntry(MCP_RESTART_ENV, "2")).toBe(true);
   });
 
   it("mounts a custom server under its own name when the user's config.toml already has one by that name", async () => {

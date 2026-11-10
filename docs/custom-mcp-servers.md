@@ -13,7 +13,15 @@ MCP server you trust. A server is one of two things:
 Sagax saves a new server switched off. Use **Test** to start the command
 (or connect to the address), complete the MCP handshake, and see the tools it
 advertises. Then turn it on. It becomes available to compatible bots on their
-next task; no app restart is needed.
+next task; no app restart is needed. **Test** shows that the server started
+and listed its tools, not what those tools return: call one to check.
+
+A server you run as a command keeps running between a bot's tasks. A bot that
+changes the server's code reloads it with `add_mcp_server` action `restart`,
+which keeps the server's saved keys and sign-in; its next task starts the new
+code. Turning the server off and on does the same. Removing it deletes its
+saved keys, and a key the person entered on a card works once, so they would
+have to enter it again.
 
 Tokens for URL servers go in headers, never in the address.
 

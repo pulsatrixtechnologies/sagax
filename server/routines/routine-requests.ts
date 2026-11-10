@@ -1184,18 +1184,18 @@ export function scheduleText(schedule: RoutineRequestSchedule, timeZone: string,
   }
   if (schedule.type === "webhook") {
     return fr
-      ? "Déclencheur : webhook entrant (l’URL et la clé vous sont montrées après l’approbation)"
+      ? "Déclencheur : webhook entrant (l’URL et la clé te sont montrées après l’approbation)"
       : "Trigger: incoming webhook (URL and key are shown to you after approval)";
   }
   if (schedule.type === "event" && schedule.source === "github") {
     const events = githubEventScheduleLabel(schedule).slice("GitHub: ".length);
     return fr
-      ? `Déclencheur : événements GitHub (${events}); l’URL et le secret du webhook GitHub vous sont montrés après l’approbation`
+      ? `Déclencheur : événements GitHub (${events}); l’URL et le secret du webhook GitHub te sont montrés après l’approbation`
       : `Trigger: GitHub events (${events}); the GitHub webhook URL and secret are shown to you after approval`;
   }
   if (schedule.type === "event") {
     return fr
-      ? "Déclencheur : courriel entrant (la configuration de la boîte vous est montrée après l’approbation)"
+      ? "Déclencheur : courriel entrant (la configuration de la boîte t’est montrée après l’approbation)"
       : "Trigger: incoming email (the mailbox setup is shown to you after approval)";
   }
   const days = weekdaysText(schedule.weekdays, locale);
@@ -1371,7 +1371,7 @@ function frenchWatchLine(watch: RoutineWatchPrecheck | undefined): string {
 
 /** The line a create card carries when new routines start paused. */
 export const CREATED_PAUSED_LINE = "Created paused; resume it when ready.";
-const CREATED_PAUSED_LINE_FR = "Créée en pause; reprenez-la quand vous serez prêt.";
+const CREATED_PAUSED_LINE_FR = "Créée en pause; reprends-la quand tu seras prêt.";
 
 const ACTION_DETAIL_FR: Record<RoutineRequestOperation["action"], string> = {
   create: "Créer la routine",
@@ -1445,7 +1445,7 @@ function cardCopy(
   const nextDescriptionFr = remainsPaused
     ? "Aucune : cette routine reste en pause"
     : createsPaused
-      ? "Aucune : créée en pause; reprenez-la quand vous serez prêt"
+      ? "Aucune : créée en pause; reprends-la quand tu seras prêt"
     : deferredInterval
       ? deferredRestrictedInterval
         ? `Prochain moment permis après la confirmation (${plainTimeZone(timeZone, locale)})`

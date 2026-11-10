@@ -209,7 +209,7 @@ const CARD_COPY = {
     by: "Partagé par",
     release: "Version",
     howTitle: "Utiliser ce modèle",
-    how: "Dans Sagax, ouvrez Parcourir les bots, puis Modèles, puis Importer, et collez l'adresse de cette page.",
+    how: "Dans Sagax, ouvre Parcourir les bots, puis Modèles, puis Importer, et colle l'adresse de cette page.",
     never: "Les notes de départ, les apps connectées, les clés et les choix de modèle ne font jamais partie d'un modèle partagé.",
   },
 } as const;

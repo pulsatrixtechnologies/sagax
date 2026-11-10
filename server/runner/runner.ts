@@ -525,7 +525,7 @@ class Runner {
     // the pull request carried it in clear.
     const leaked = await this.leakedFiles(from, rawDiff, maskedDiff);
     if (leaked) {
-      this.warn(`Branche non publiée : un secret de l'environnement figure dans ${leaked}. Retirez-le puis demandez une suite.`);
+      this.warn(`Branche non publiée : un secret de l'environnement figure dans ${leaked}. Retire-le puis demande une suite.`);
       return;
     }
     let bundle: Buffer;

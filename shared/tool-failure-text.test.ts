@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { toolFailureText } from "./tool-failure-text.ts";
 
 const GRAPH_404 = "Managed MCP gateway tool call failed: Microsoft Graph API error: 404 Not Found: {\"error\":{\"code\":\"ErrorItemNotFound\",\"message\":\"The specified object was not found in the store.\"}}";
-const REFUSED = "Refusé : ce chemin ou ce fichier appartient au serveur Sagax, pas à votre environnement. Vos fichiers sont dans /workspace.";
+const REFUSED = "Refusé : ce chemin ou ce fichier appartient au serveur Sagax, pas à ton environnement. Tes fichiers sont dans /workspace.";
 
 describe("toolFailureText", () => {
   it("keeps a plain string, without Claude's tool_use_error tags", () => {

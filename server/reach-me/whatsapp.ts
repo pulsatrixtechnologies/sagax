@@ -376,7 +376,7 @@ export class ReachWhatsApp {
     if (check?.state !== "approved") return { ok: false, status: 409, error: templateReason(this.templateView(person, this.deps.settings.whatsapp(person, botId) ?? link) ?? { state: "unchecked", language: "" }, link.templateName) };
     const code = linkCode();
     const fr = this.deps.language(person) === "fr";
-    const sent = await this.sendTemplate(secret.token, link, number, fr ? `Votre code Sagax : ${code}` : `Your Sagax code: ${code}`, fr ? "fr" : "en");
+    const sent = await this.sendTemplate(secret.token, link, number, fr ? `Ton code Sagax : ${code}` : `Your Sagax code: ${code}`, fr ? "fr" : "en");
     if (!sent.ok) {
       if (this.templateRefusal(sent.body)) await this.checkTemplate(person, botId);
       return { ok: false, status: 502, error: `WhatsApp refused the message (${sent.status}). Check the template name and language in your Meta account.` };

@@ -65,8 +65,8 @@ const REFUSALS: Record<"en" | "fr", Record<ModelImageRefusalReason, string>> = {
     unreadable: "This WebP picture could not be read (it is damaged or animated). Send it as a PNG or JPEG.",
   },
   fr: {
-    "too-big": "Cette image WebP est trop grande pour être réduite avant d'aller au modèle (plus de 16 mégapixels). Envoyez-la en PNG ou en JPEG, ou réduisez-la.",
-    unreadable: "Cette image WebP est illisible (abîmée ou animée). Envoyez-la en PNG ou en JPEG.",
+    "too-big": "Cette image WebP est trop grande pour être réduite avant d'aller au modèle (plus de 16 mégapixels). Envoie-la en PNG ou en JPEG, ou réduis-la.",
+    unreadable: "Cette image WebP est illisible (abîmée ou animée). Envoie-la en PNG ou en JPEG.",
   },
 };
 

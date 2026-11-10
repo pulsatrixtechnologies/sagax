@@ -10,7 +10,7 @@ beforeEach(() => { rmSync(DATA_DIR, { recursive: true, force: true }); });
 it("greets in the creating device's language over the server default", () => {
   const store = new Store(() => ({ instanceId: "claude", model: "claude-sonnet-5" }), undefined as never, undefined as never, () => "en");
   const fr = store.createBot({ name: "Gaston" }, { language: "fr" });
-  expect(store.messagesFor(fr.threadId)[0]?.text).toBe("Bonjour, je suis Gaston. Que puis-je faire pour vous ?");
+  expect(store.messagesFor(fr.threadId)[0]?.text).toBe("Bonjour, je suis Gaston. Que puis-je faire pour toi ?");
   const en = store.createBot({ name: "Juno" });
   expect(store.messagesFor(en.threadId)[0]?.text).toBe("Hi, I'm Juno. What would you like me to do?");
 });

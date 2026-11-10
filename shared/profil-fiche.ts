@@ -34,7 +34,7 @@ export function preparerProfilDepuisFiche(fiche: string, demande: DemandeProfil 
   if (valeurSecrete(fiche)) {
     return refuser(
       "secret",
-      "La fiche contient un secret. Retirez-le. Une clé se dépose dans le magasin seulement après une approbation explicite.",
+      "La fiche contient un secret. Retire-le. Une clé se dépose dans le magasin seulement après une approbation explicite.",
     );
   }
 

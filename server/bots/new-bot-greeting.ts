@@ -18,7 +18,7 @@ export function greetingLanguage(levels: readonly (string | null | undefined)[])
 
 export function newBotGreeting(name: string, language: "fr" | "en"): string {
   return language === "fr"
-    ? `Bonjour, je suis ${name}. Que puis-je faire pour vous ?`
+    ? `Bonjour, je suis ${name}. Que puis-je faire pour toi ?`
     : `Hi, I'm ${name}. What would you like me to do?`;
 }
 

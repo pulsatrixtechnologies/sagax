@@ -107,7 +107,7 @@ const MIME: Record<string, string> = { ".js": "text/javascript", ".css": "text/c
     await expect.poll(async () => first.frame.locator("#tally").textContent()).toContain("mardi=1 jeudi=0");
     // a key the page leaves at its default: refused, on the server too
     await first.frame.locator("#close").press("Enter");
-    await expect.poll(async () => first.frame.locator("#status").textContent(), { timeout: 10_000 }).toBe("refused: Connectez-vous pour modifier cette page.");
+    await expect.poll(async () => first.frame.locator("#status").textContent(), { timeout: 10_000 }).toBe("refused: Connecte-toi pour modifier cette page.");
     expect(pages.state(made.page.id).closed).toBeUndefined();
 
     // the server kept one vote, as Anonyme, under a hash of the browser's id

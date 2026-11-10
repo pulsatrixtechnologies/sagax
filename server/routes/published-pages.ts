@@ -300,7 +300,7 @@ const NOT_FOUND_STYLE = "<meta name=\"viewport\" content=\"width=device-width, i
   + "@media (prefers-color-scheme:dark){body{background:#0d1117;color:#e6edf3}main{background:#161b22;box-shadow:none}a{background:#e6edf3;color:#0d1117}}</style>";
 
 const NOT_FOUND_HTML = (language: "fr" | "en", signIn?: string) => (language === "fr"
-  ? "<!doctype html><meta charset=\"utf-8\"><title>Page introuvable</title>" + NOT_FOUND_STYLE + "<main><p>Cette page n'existe pas, n'est plus publiée ou vous n'y avez pas accès. Si elle vous a été partagée, connectez-vous à Sagax dans ce navigateur, puis rouvrez le lien.</p>"
+  ? "<!doctype html><meta charset=\"utf-8\"><title>Page introuvable</title>" + NOT_FOUND_STYLE + "<main><p>Cette page n'existe pas, n'est plus publiée ou tu n'y as pas accès. Si elle t'a été partagée, connecte-toi à Sagax dans ce navigateur, puis rouvre le lien.</p>"
   : "<!doctype html><meta charset=\"utf-8\"><title>Page not found</title>" + NOT_FOUND_STYLE + "<main><p>This page does not exist, is no longer published, or you cannot see it. If it was shared with you, sign in to Sagax in this browser, then open the link again.</p>")
   // a reader who is not signed in (#1486): sign in, then back to this link
   + (signIn ? `<p><a href="${escapeHtml(signIn)}">${language === "fr" ? "Se connecter et revenir à cette page" : "Sign in and come back to this page"}</a></p>` : "")
@@ -541,7 +541,7 @@ function serveReaderComment(options: PublicPageOptions, req: IncomingMessage, re
     const text = (form.get("text") ?? "").trim();
     if (!name || name.length > PAGE_LIMITS.readerNameChars || !text || text.length > PAGE_LIMITS.readerCommentChars) return reply(400, false);
     if (!pages.allowReaderPost(requestSource(req))) {
-      return reply(429, false, lang === "fr" ? "Trop de commentaires depuis cette adresse. Réessayez plus tard." : "Too many comments from this address. Try again later.");
+      return reply(429, false, lang === "fr" ? "Trop de commentaires depuis cette adresse. Réessaie plus tard." : "Too many comments from this address. Try again later.");
     }
     const redact = options.redact ?? redactSecretsInText;
     const added = pages.addReaderComment(opened.page.id, { name: redact(name), text: redact(text), version: opened.version.n });
@@ -698,7 +698,7 @@ function serveStateWrite(options: PublicPageOptions, req: IncomingMessage, res: 
     if (!stateMayWrite("anon", level, { publicLink: true, locked })) {
       return reply(403, locked
         ? { error: lang === "fr" ? "Cette valeur est en lecture seule." : "This value is read-only.", code: "locked" }
-        : { error: lang === "fr" ? "Connectez-vous pour modifier cette page." : "Sign in to change this page.", code: "sign_in" });
+        : { error: lang === "fr" ? "Connecte-toi pour modifier cette page." : "Sign in to change this page.", code: "sign_in" });
     }
     const by = pages.anonymousWriter(readerId);
     const result = pages.setState(page.id, { key: body.key, value: body.value, by, anon: { source: requestSource(req) } });

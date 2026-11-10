@@ -20,7 +20,15 @@ describe("system bot copy (#3202)", () => {
   it("keeps French when the app is French", () => {
     setLocale("fr");
     expect(botTitleText(feedback)).toBe("Bogues, idées, questions");
-    expect(botDescriptionText(feedback)).toMatch(/^Signalez un bogue/);
+    expect(botDescriptionText(feedback)).toBe("Signale un bogue, propose une idée ou pose une question à l'équipe Sagax.");
+  });
+
+  it("reads the stored default written with tu (#3261) like the older one", () => {
+    const current = { ...feedback, description: "Signale un bogue, propose une idée ou pose une question à l'équipe Sagax. / Report a bug, suggest an idea or ask the Sagax team a question." };
+    setLocale("en");
+    expect(botDescriptionText(current)).toBe("Report a bug, suggest an idea or ask the Sagax team a question.");
+    setLocale("fr");
+    expect(botDescriptionText(current)).toBe(botDescriptionText(feedback));
   });
 
   it("never swaps a title someone wrote, nor an ordinary bot's", () => {

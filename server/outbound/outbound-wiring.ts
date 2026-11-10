@@ -263,9 +263,9 @@ export function outboundWiring(deps: OutboundWiringDeps) {
         text: "Phone calls need your consent once before a bot may place them.",
         card: {
           requestId,
-          title: fr ? "Autoriser les appels téléphoniques pour vos bots" : "Allow phone calls for your bots",
+          title: fr ? "Autoriser les appels téléphoniques pour tes bots" : "Allow phone calls for your bots",
           subtitle: fr
-            ? "Avant que vos bots puissent placer des appels pour vous, confirmez que vous acceptez ces règles."
+            ? "Avant que tes bots puissent placer des appels pour toi, confirme que tu acceptes ces règles."
             : "Before your bots can place calls for you, confirm you accept these rules.",
           options: [approve, decline],
           phoneCallConsent: data,

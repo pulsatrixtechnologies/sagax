@@ -76,10 +76,10 @@ const after = params.get("state") === "after";
 // ?gif=1: Iris's last message is a GIF the person sent (#3204)
 const gif = params.get("gif") === "1";
 const kindCard = fr
-  ? { title: "Qu'est-ce qu'on signale?", subtitle: "Choisissez, ou décrivez-le dans vos mots.", options: ["Un bogue", "Une idée", "Une question"] }
+  ? { title: "Qu'est-ce qu'on signale?", subtitle: "Choisis, ou décris-le dans tes mots.", options: ["Un bogue", "Une idée", "Une question"] }
   : { title: "What would you like to report?", subtitle: "Pick one, or describe it in your own words.", options: ["A bug", "An idea", "A question"] };
 const feedbackMessages: Message[] = [
-  { id: "f1", role: "bot", kind: "text", text: fr ? "Je m'occupe de votre rapport. Je pose quelques questions." : "I'll take care of your report. A few questions first.", at: at + 200 * 60_000 } as Message,
+  { id: "f1", role: "bot", kind: "text", text: fr ? "Je m'occupe de ton rapport. Je pose quelques questions." : "I'll take care of your report. A few questions first.", at: at + 200 * 60_000 } as Message,
   { id: "f2", role: "bot", kind: "options", card: { ...kindCard, requestId: "fb-r1-kind-x", requestType: "question" }, at: at + 201 * 60_000 } as unknown as Message,
 ];
 const team: Bot[] = [
@@ -88,7 +88,7 @@ const team: Bot[] = [
   gif
     ? { ...bot("iris", "Iris", { title: "Dev Ops", color: "orange", mascotBody: "drop", section: "My team" }, "", 42), messages: [line("m-iris-gif", "user", '<attached-image path="/data/attachments/ab12/cat.gif" name="cat.gif" meme-provider="giphy" meme-attribution="GIPHY" />', 42)] } as Bot
     : bot("iris", "Iris", { title: "Dev Ops", color: "orange", mascotBody: "drop", section: "My team" }, fr ? "Mémoire nettoyée." : "Memory tidied up.", 42),
-  ...(after ? [{ ...bot("feedback", "Feedback", { title: "Bogues, idées, questions", description: "Signalez un bogue, proposez une idée ou posez une question à l'équipe Sagax. / Report a bug, suggest an idea or ask the Sagax team a question.", color: "teal", mascotBody: "blob", section: "My team", systemBot: "feedback" } as Partial<Bot>, "", 201), messages: feedbackMessages, activeLeafId: "f2" } as Bot] : []),
+  ...(after ? [{ ...bot("feedback", "Feedback", { title: "Bogues, idées, questions", description: "Signale un bogue, propose une idée ou pose une question à l'équipe Sagax. / Report a bug, suggest an idea or ask the Sagax team a question.", color: "teal", mascotBody: "blob", section: "My team", systemBot: "feedback" } as Partial<Bot>, "", 201), messages: feedbackMessages, activeLeafId: "f2" } as Bot] : []),
 ];
 const start: AppState = {
   ...initialState,

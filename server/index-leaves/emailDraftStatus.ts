@@ -22,7 +22,7 @@ function emailDraftStatus(auth: RequestAuth, threadId: string, draftKey: string)
   if (status === "handed-off" && !host.emailSendPasses.waiting(threadId, request.id)) {
     status = "failed";
     error = host.languageOfRequest(auth).toLowerCase().startsWith("fr")
-      ? "Le robot n'a pas envoyé ce courriel à temps. Réessayez."
+      ? "Le robot n'a pas envoyé ce courriel à temps. Réessaie."
       : "The bot did not send this email in time. Try again.";
   }
   return { status: 200, body: { send: { requestId: request.id, status, ...(error ? { error } : {}), connector: request.connector, at: request.at } } };

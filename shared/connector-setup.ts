@@ -217,12 +217,12 @@ export function connectorSetupText(view: Pick<ConnectorSetupView, "label" | "pro
   const link = `[${HOST_LABEL[view.provider]}](${view.url})`;
   const account = view.provider === "grok" && view.account ? ACCOUNT_LABEL[language][view.account] : "";
   return language === "fr"
-    ? `Connectez ${view.label} sur ${link}${account ? `, avec ${account}` : ""}.`
+    ? `Connecte ${view.label} sur ${link}${account ? `, avec ${account}` : ""}.`
     : `Connect ${view.label} on ${link}${account ? `, with ${account}` : ""}.`;
 }
 
 const ACCOUNT_LABEL = {
-  fr: { personal: "votre compte Grok personnel", team: "votre compte Grok d'équipe" },
+  fr: { personal: "ton compte Grok personnel", team: "ton compte Grok d'équipe" },
   en: { personal: "your personal Grok account", team: "your team Grok account" },
 } as const;
 
@@ -299,11 +299,11 @@ export function connectorReauthProblem(failure: ConnectorReauthFailure): string 
 export function connectorReauthText(failure: Pick<ConnectorReauthFailure, "label" | "provider" | "url">, language: "fr" | "en"): string {
   if (failure.provider === "mac") {
     return language === "fr"
-      ? `${failure.label} n'a plus accès à ce Mac : redonnez l'accès complet au disque à Sagax dans Réglages Système, Confidentialité et sécurité. Ses appels échouent d'ici là.`
+      ? `${failure.label} n'a plus accès à ce Mac : redonne l'accès complet au disque à Sagax dans Réglages Système, Confidentialité et sécurité. Ses appels échouent d'ici là.`
       : `${failure.label} lost access to this Mac: give Sagax Full Disk Access again in System Settings, Privacy & Security. Its calls fail until then.`;
   }
   const link = `[${HOST_LABEL[failure.provider]}](${failure.url})`;
   return language === "fr"
-    ? `${failure.label} demande une nouvelle connexion : reconnectez-le sur ${link}. Ses appels échouent d'ici là.`
+    ? `${failure.label} demande une nouvelle connexion : reconnecte-le sur ${link}. Ses appels échouent d'ici là.`
     : `${failure.label} needs a new sign-in: reconnect it on ${link}. Its calls fail until then.`;
 }

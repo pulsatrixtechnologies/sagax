@@ -94,7 +94,7 @@ export function parseReaderBoot(value: unknown): ReaderBoot | null {
  * the bar. Pure. */
 export function readerNotice(input: { bot: string; person: string; lang: ReaderLang }): { who: string; warning: string } {
   return input.lang === "fr"
-    ? { who: `Page publiée par ${input.bot} pour ${input.person}`, warning: "Ceci n'est pas un écran Sagax, n'y entrez jamais de mot de passe." }
+    ? { who: `Page publiée par ${input.bot} pour ${input.person}`, warning: "Ceci n'est pas un écran Sagax, n'y entre jamais de mot de passe." }
     : { who: `Page published by ${input.bot} for ${input.person}`, warning: "This is not a Sagax screen, never enter a password here." };
 }
 
@@ -190,35 +190,35 @@ const STRINGS = {
   fr: {
     share: "Partager",
     pdf: "Télécharger le PDF",
-    pdfHint: "Ouvre la fenêtre d'impression : choisissez Enregistrer au format PDF.",
+    pdfHint: "Ouvre la fenêtre d'impression : choisis Enregistrer au format PDF.",
     shareTitle: "Partager « {title} »",
     add: "Ajouter des personnes ou des groupes",
     people: "Qui a accès",
     owner: "Propriétaire",
-    you: "Vous",
-    someone: "Une personne de votre organisation",
-    someGroup: "Un groupe de votre organisation",
+    you: "Toi",
+    someone: "Une personne de ton organisation",
+    someGroup: "Un groupe de ton organisation",
     remove: "Retirer {name}",
     group: "Groupe · {count} personnes",
     noMatch: "Personne ne correspond.",
     general: "Accès général",
     invited: "Personnes invitées",
-    invitedHint: "Vous seul et les personnes ou groupes ajoutés.",
+    invitedHint: "Toi seul et les personnes ou groupes ajoutés.",
     onlyYou: "Moi seulement",
-    onlyYouHint: "Vous seulement, connecté à ce serveur.",
-    org: "Toute votre organisation",
+    onlyYouHint: "Toi seulement, connecté à ce serveur.",
+    org: "Toute ton organisation",
     orgHint: "Les personnes connectées à ce serveur.",
     link: "Toute personne ayant le lien",
     linkHint: "Quiconque a le lien, sans se connecter.",
-    linkOff: "Désactivé par votre organisation.",
-    linkConfirm: "Toute personne ayant le lien verra cette page, sans se connecter. Confirmez pour la passer en lien public.",
+    linkOff: "Désactivé par ton organisation.",
+    linkConfirm: "Toute personne ayant le lien verra cette page, sans se connecter. Confirme pour la passer en lien public.",
     confirm: "Partager avec toute personne ayant le lien",
     cancel: "Annuler",
     copy: "Copier le lien",
     copied: "Copié",
     close: "Fermer",
-    failed: "Ça n'a pas fonctionné. Réessayez.",
-    linkOffError: "Votre organisation a désactivé les liens publics. Choisissez plutôt Toute votre organisation.",
+    failed: "Ça n'a pas fonctionné. Réessaie.",
+    linkOffError: "Ton organisation a désactivé les liens publics. Choisis plutôt Toute ton organisation.",
     info: "À propos de cette page",
     annotate: "Annoter",
     hereNow: "Lisent aussi en ce moment : {names}",
@@ -230,7 +230,7 @@ const STRINGS = {
     decline: "Refuser",
     accepted: "Acceptée · version {n}",
     declined: "Refusée",
-    annotateHint: "Sélectionnez du texte ou cliquez sur une partie de la page, puis écrivez votre commentaire.",
+    annotateHint: "Sélectionne du texte ou clique sur une partie de la page, puis écris ton commentaire.",
     comments: "Commentaires",
     noComments: "Aucun commentaire pour l'instant.",
     newComment: "Commenter",
@@ -262,7 +262,7 @@ const STRINGS = {
     levelAnyone: "Toute personne ayant le lien",
     levelSigned: "Lecteurs connectés",
     levelEditors: "Éditeurs",
-    levelOwner: "Vous seulement",
+    levelOwner: "Toi seulement",
   },
 } as const;
 

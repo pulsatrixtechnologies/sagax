@@ -582,11 +582,11 @@ export function wrapperBanner(input: Pick<WrapperInput, "botName" | "personName"
   const person = bannerName(input.personName);
   if (input.preview) {
     return input.lang === "fr"
-      ? `Aperçu d'une page proposée par ${bot} pour ${person} : ceci n'est pas un écran Sagax, n'y entrez jamais de mot de passe.`
+      ? `Aperçu d'une page proposée par ${bot} pour ${person} : ceci n'est pas un écran Sagax, n'y entre jamais de mot de passe.`
       : `Preview of a page proposed by ${bot} for ${person}: this is not a Sagax screen, never enter a password here.`;
   }
   return input.lang === "fr"
-    ? `Page publiée par ${bot} pour ${person} : ceci n'est pas un écran Sagax, n'y entrez jamais de mot de passe.`
+    ? `Page publiée par ${bot} pour ${person} : ceci n'est pas un écran Sagax, n'y entre jamais de mot de passe.`
     : `Page published by ${bot} for ${person}: this is not a Sagax screen, never enter a password here.`;
 }
 
@@ -645,10 +645,10 @@ function commentsSection(comments: { action: string; approved: ReaderComment[] }
   return `<details class="sagax-comments"${comments.approved.length ? " open" : ""}><summary>${fr ? "Commentaires" : "Comments"} (${comments.approved.length})</summary>`
     + (items ? `<ul>${items}</ul>` : "")
     + `<form method="post" action="${escapeHtml(comments.action)}">`
-    + `<label>${fr ? "Votre nom" : "Your name"} <input name="name" required maxlength="${PAGE_LIMITS.readerNameChars}" autocomplete="name"></label>`
+    + `<label>${fr ? "Ton nom" : "Your name"} <input name="name" required maxlength="${PAGE_LIMITS.readerNameChars}" autocomplete="name"></label>`
     + `<label>${fr ? "Commentaire" : "Comment"} <textarea name="text" required rows="3" maxlength="${PAGE_LIMITS.readerCommentChars}"></textarea></label>`
     + `<label class="trap" aria-hidden="true">Website <input name="website" tabindex="-1" autocomplete="off"></label>`
-    + `<small>${escapeHtml(fr ? `Votre commentaire sera visible après l'approbation de ${bannerName(personName)}. N'y mettez aucun renseignement personnel ni mot de passe.` : `Your comment shows once ${bannerName(personName)} approves it. Never put personal information or a password in it.`)}</small>`
+    + `<small>${escapeHtml(fr ? `Ton commentaire sera visible après l'approbation de ${bannerName(personName)}. N'y mets aucun renseignement personnel ni mot de passe.` : `Your comment shows once ${bannerName(personName)} approves it. Never put personal information or a password in it.`)}</small>`
     + `<button type="submit">${fr ? "Envoyer" : "Send"}</button></form></details>`;
 }
 
@@ -656,7 +656,7 @@ function commentsSection(comments: { action: string; approved: ReaderComment[] }
 export function commentAnswerDocument(input: { lang: "fr" | "en"; back: string; ok: boolean; message?: string }): string {
   const fr = input.lang === "fr";
   const text = input.message ?? (input.ok
-    ? (fr ? "Merci. Votre commentaire attend l'approbation de la personne qui a publié la page." : "Thank you. Your comment waits for the approval of the person who published the page.")
+    ? (fr ? "Merci. Ton commentaire attend l'approbation de la personne qui a publié la page." : "Thank you. Your comment waits for the approval of the person who published the page.")
     : (fr ? "Ce commentaire n'a pas pu être envoyé." : "This comment could not be sent."));
   return `<!doctype html><html lang="${input.lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">`
     + `<title>${fr ? "Commentaire" : "Comment"}</title><style>body{font:15px/1.5 system-ui,sans-serif;max-width:36rem;margin:3rem auto;padding:0 1rem}</style></head>`

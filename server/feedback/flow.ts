@@ -61,11 +61,11 @@ export type FlowStep =
   | { kind: "preview" };
 
 const KIND_CARD: Record<FeedbackLanguage, FlowCard> = {
-  fr: { title: "Qu'est-ce qu'on signale?", subtitle: "Choisissez, ou décrivez-le dans vos mots.", options: ["Un bogue", "Une idée", "Une question"] },
+  fr: { title: "Qu'est-ce qu'on signale?", subtitle: "Choisis, ou décris-le dans tes mots.", options: ["Un bogue", "Une idée", "Une question"] },
   en: { title: "What would you like to report?", subtitle: "Pick one, or describe it in your own words.", options: ["A bug", "An idea", "A question"] },
 };
 const IMPACT_CARD: Record<FeedbackLanguage, FlowCard> = {
-  fr: { title: "Quel est l'impact pour vous?", subtitle: "Ça aide l'équipe à trier.", options: ["Bloquant", "Gênant", "Mineur"] },
+  fr: { title: "Quel est l'impact pour toi?", subtitle: "Ça aide l'équipe à trier.", options: ["Bloquant", "Gênant", "Mineur"] },
   en: { title: "How much does it affect you?", subtitle: "It helps the team sort reports.", options: ["Blocking", "Annoying", "Minor"] },
 };
 export const SEND_OPTIONS: Record<FeedbackLanguage, [string, string]> = {
@@ -98,9 +98,9 @@ export function offerCard(lang: FeedbackLanguage, summary: string): FlowCard {
 const QUESTIONS: Record<FeedbackLanguage, Record<AnswerField, string>> = {
   fr: {
     steps: "Quelles étapes mènent au problème? Une par ligne, si possible.",
-    expected: "Qu'est-ce que vous attendiez?",
+    expected: "Qu'est-ce que tu attendais?",
     actual: "Et qu'est-ce qui s'est passé à la place?",
-    describe: "Décrivez-le en quelques phrases.",
+    describe: "Décris-le en quelques phrases.",
   },
   en: {
     steps: "What steps lead to the problem? One per line, if you can.",
@@ -110,15 +110,15 @@ const QUESTIONS: Record<FeedbackLanguage, Record<AnswerField, string>> = {
   },
 };
 const DESCRIBE: Record<FeedbackLanguage, Record<"idea" | "question", string>> = {
-  fr: { idea: "Décrivez l'idée: qu'est-ce que ça vous permettrait de faire?", question: "Quelle est votre question?" },
+  fr: { idea: "Décris l'idée: qu'est-ce que ça te permettrait de faire?", question: "Quelle est ta question?" },
   en: { idea: "Describe the idea: what would it let you do?", question: "What is your question?" },
 };
 const FOLLOWUPS: Record<FeedbackLanguage, Record<AnswerField, string>> = {
   fr: {
-    steps: "Pouvez-vous préciser les étapes: sur quelle page, quel bouton, dans quel ordre?",
-    expected: "Pouvez-vous préciser ce que vous attendiez exactement?",
-    actual: "Qu'avez-vous vu exactement: un message d'erreur, un écran vide, rien du tout?",
-    describe: "Pouvez-vous donner un exemple concret?",
+    steps: "Peux-tu préciser les étapes: sur quelle page, quel bouton, dans quel ordre?",
+    expected: "Peux-tu préciser ce que tu attendais exactement?",
+    actual: "Qu'as-tu vu exactement: un message d'erreur, un écran vide, rien du tout?",
+    describe: "Peux-tu donner un exemple concret?",
   },
   en: {
     steps: "Could you be more precise about the steps: which page, which button, in what order?",

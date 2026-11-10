@@ -14711,7 +14711,7 @@ const terminalFeature = installTerminalFeature({
         if (!status?.runtime || status.container === "missing") return null;
         return status.container === "running"
           ? { hostLabel: target.containerName, status: "online" }
-          : { hostLabel: target.containerName, status: "offline", statusNote: "La VM locale est arrêtée; démarrez-la avant d'ouvrir le terminal." };
+          : { hostLabel: target.containerName, status: "offline", statusNote: "La VM locale est arrêtée; démarre-la avant d'ouvrir le terminal." };
       },
       async open(ctx) {
         if (IDENTITY.kind === "perspicax") return bridgeTerminal(ctx, "vm");

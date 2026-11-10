@@ -11,364 +11,364 @@ public extension AchievementDefinition {
         AchievementDefinition(
             id: "first-words", category: .onboarding, icon: "MessageCircle", points: 5, hidden: false,
             name: AchievementText(en: "First Words", fr: "Premiers mots", ptBR: "First Words"),
-            description: AchievementText(en: "Send your first message to a bot.", fr: "Envoyez votre premier message à un robot.", ptBR: "Send your first message to a bot."),
+            description: AchievementText(en: "Send your first message to a bot.", fr: "Envoie ton premier message à un robot.", ptBR: "Send your first message to a bot."),
             hint: nil,
             rewards: [.title(id: "rookie", name: AchievementText(en: "Rookie", fr: "Recrue", ptBR: "Rookie"))]
         ),
         AchievementDefinition(
             id: "hello-bot", category: .onboarding, icon: "Bot", points: 10, hidden: false,
             name: AchievementText(en: "It's Alive!", fr: "Il est vivant!", ptBR: "It's Alive!"),
-            description: AchievementText(en: "Create your first bot.", fr: "Créez votre premier robot.", ptBR: "Create your first bot."),
+            description: AchievementText(en: "Create your first bot.", fr: "Crée ton premier robot.", ptBR: "Create your first bot."),
             hint: nil,
             rewards: [.skin(character: "shape", skin: "outline", name: AchievementText(en: "Outline", fr: "Contour", ptBR: "Outline"), characterName: AchievementText(en: "Shapes", fr: "Formes", ptBR: "Shapes")), .skin(character: "crab", skin: "pearl", name: AchievementText(en: "Pearl", fr: "Perle", ptBR: "Pearl"), characterName: AchievementText(en: "Crab", fr: "Crabe", ptBR: "Caranguejo"))]
         ),
         AchievementDefinition(
             id: "grok-linked", category: .onboarding, icon: "Link", points: 10, hidden: false,
             name: AchievementText(en: "Grok Linked", fr: "Compte Grok lié", ptBR: "Grok Linked"),
-            description: AchievementText(en: "Sign in to Grok, or save your own xAI key.", fr: "Connectez-vous à Grok, ou enregistrez votre propre clé xAI.", ptBR: "Sign in to Grok, or save your own xAI key."),
+            description: AchievementText(en: "Sign in to Grok, or save your own xAI key.", fr: "Connecte-toi à Grok, ou enregistre ta propre clé xAI.", ptBR: "Sign in to Grok, or save your own xAI key."),
             hint: nil,
             rewards: [.character(id: "shape", name: AchievementText(en: "Shapes", fr: "Formes", ptBR: "Shapes"))]
         ),
         AchievementDefinition(
             id: "makeover", category: .onboarding, icon: "Palette", points: 10, hidden: false,
             name: AchievementText(en: "Makeover", fr: "Relooking", ptBR: "Makeover"),
-            description: AchievementText(en: "Change a bot's look: its character, color or skin.", fr: "Changez l'allure d'un robot : son personnage, sa couleur ou son skin.", ptBR: "Change a bot's look: its character, color or skin."),
+            description: AchievementText(en: "Change a bot's look: its character, color or skin.", fr: "Change l'allure d'un robot : son personnage, sa couleur ou son skin.", ptBR: "Change a bot's look: its character, color or skin."),
             hint: nil,
             rewards: [.skin(character: "owl", skin: "gold", name: AchievementText(en: "Gold", fr: "Or", ptBR: "Gold"), characterName: AchievementText(en: "Owl", fr: "Hibou", ptBR: "Owl"))]
         ),
         AchievementDefinition(
             id: "right-hand", category: .onboarding, icon: "Crown", points: 20, hidden: false,
             name: AchievementText(en: "Right Hand", fr: "Bras droit", ptBR: "Right Hand"),
-            description: AchievementText(en: "Choose a Primary Bot.", fr: "Choisissez un Robot principal.", ptBR: "Choose a Primary Bot."),
+            description: AchievementText(en: "Choose a Primary Bot.", fr: "Choisis un Robot principal.", ptBR: "Choose a Primary Bot."),
             hint: nil,
             rewards: [.skin(character: "owl", skin: "frost", name: AchievementText(en: "Ice", fr: "Glace", ptBR: "Ice"), characterName: AchievementText(en: "Owl", fr: "Hibou", ptBR: "Owl"))]
         ),
         AchievementDefinition(
             id: "dressing-room", category: .onboarding, icon: "Shirt", points: 20, hidden: false,
             name: AchievementText(en: "Dressing Room", fr: "Salle d'essayage", ptBR: "Dressing Room"),
-            description: AchievementText(en: "Dress bots as three different characters.", fr: "Habillez des robots en trois personnages différents.", ptBR: "Dress bots as three different characters."),
+            description: AchievementText(en: "Dress bots as three different characters.", fr: "Habille des robots en trois personnages différents.", ptBR: "Dress bots as three different characters."),
             hint: nil,
             rewards: [.skin(character: "shape", skin: "gold", name: AchievementText(en: "Gold", fr: "Or", ptBR: "Gold"), characterName: AchievementText(en: "Shapes", fr: "Formes", ptBR: "Shapes")), .skin(character: "crab", skin: "gold", name: AchievementText(en: "Gold", fr: "Or", ptBR: "Gold"), characterName: AchievementText(en: "Crab", fr: "Crabe", ptBR: "Caranguejo"))]
         ),
         AchievementDefinition(
             id: "small-family", category: .onboarding, icon: "Users", points: 20, hidden: false,
             name: AchievementText(en: "Small Family", fr: "Petite famille", ptBR: "Small Family"),
-            description: AchievementText(en: "Create three bots.", fr: "Créez trois robots.", ptBR: "Create three bots."),
+            description: AchievementText(en: "Create three bots.", fr: "Crée trois robots.", ptBR: "Create three bots."),
             hint: nil,
             rewards: [.character(id: "bunbu", name: AchievementText(en: "Bunbu", fr: "Bunbu", ptBR: "Bunbu"))]
         ),
         AchievementDefinition(
             id: "on-schedule", category: .productivity, icon: "CalendarClock", points: 10, hidden: false,
             name: AchievementText(en: "On Schedule", fr: "Réglé comme une horloge", ptBR: "On Schedule"),
-            description: AchievementText(en: "Create your first routine.", fr: "Créez votre première routine.", ptBR: "Create your first routine."),
+            description: AchievementText(en: "Create your first routine.", fr: "Crée ta première routine.", ptBR: "Create your first routine."),
             hint: nil,
             rewards: [.skin(character: "bunbu", skin: "velvet", name: AchievementText(en: "Velvet", fr: "Velours", ptBR: "Velvet"), characterName: AchievementText(en: "Bunbu", fr: "Bunbu", ptBR: "Bunbu"))]
         ),
         AchievementDefinition(
             id: "routine-five", category: .productivity, icon: "Repeat", points: 20, hidden: false,
             name: AchievementText(en: "Automation Fan", fr: "Fan d'automatisation", ptBR: "Automation Fan"),
-            description: AchievementText(en: "Create five routines.", fr: "Créez cinq routines.", ptBR: "Create five routines."),
+            description: AchievementText(en: "Create five routines.", fr: "Crée cinq routines.", ptBR: "Create five routines."),
             hint: nil,
             rewards: [.title(id: "automator", name: AchievementText(en: "Automator", fr: "Automatiseur", ptBR: "Automator"))]
         ),
         AchievementDefinition(
             id: "clockwork", category: .productivity, icon: "Timer", points: 50, hidden: false,
             name: AchievementText(en: "Clockwork", fr: "Mécanique de précision", ptBR: "Clockwork"),
-            description: AchievementText(en: "Have your routines run on seven different days.", fr: "Faites rouler vos routines sept jours différents.", ptBR: "Have your routines run on seven different days."),
+            description: AchievementText(en: "Have your routines run on seven different days.", fr: "Fais rouler tes routines sept jours différents.", ptBR: "Have your routines run on seven different days."),
             hint: nil,
             rewards: [.skin(character: "owl", skin: "chrome", name: AchievementText(en: "Chrome", fr: "Chrome", ptBR: "Chrome"), characterName: AchievementText(en: "Owl", fr: "Hibou", ptBR: "Owl"))]
         ),
         AchievementDefinition(
             id: "well-oiled", category: .productivity, icon: "Cog", points: 100, hidden: false,
             name: AchievementText(en: "Well-Oiled Machine", fr: "Machine bien huilée", ptBR: "Well-Oiled Machine"),
-            description: AchievementText(en: "Have your routines complete fifty runs.", fr: "Faites compléter cinquante exécutions à vos routines.", ptBR: "Have your routines complete fifty runs."),
+            description: AchievementText(en: "Have your routines complete fifty runs.", fr: "Fais compléter cinquante exécutions à tes routines.", ptBR: "Have your routines complete fifty runs."),
             hint: nil,
             rewards: [.skin(character: "shape", skin: "molten", name: AchievementText(en: "Molten", fr: "Magma", ptBR: "Molten"), characterName: AchievementText(en: "Shapes", fr: "Formes", ptBR: "Shapes")), .skin(character: "crab", skin: "molten", name: AchievementText(en: "Molten", fr: "Magma", ptBR: "Molten"), characterName: AchievementText(en: "Crab", fr: "Crabe", ptBR: "Caranguejo"))]
         ),
         AchievementDefinition(
             id: "gatekeeper", category: .productivity, icon: "ShieldCheck", points: 5, hidden: false,
             name: AchievementText(en: "Gatekeeper", fr: "Gardien", ptBR: "Gatekeeper"),
-            description: AchievementText(en: "Answer a bot's approval request.", fr: "Répondez à une demande d'approbation d'un robot.", ptBR: "Answer a bot's approval request."),
+            description: AchievementText(en: "Answer a bot's approval request.", fr: "Réponds à une demande d'approbation d'un robot.", ptBR: "Answer a bot's approval request."),
             hint: nil,
             rewards: [.title(id: "gatekeeper", name: AchievementText(en: "Gatekeeper", fr: "Gardien", ptBR: "Gatekeeper"))]
         ),
         AchievementDefinition(
             id: "trusted-judge", category: .productivity, icon: "Scale", points: 20, hidden: false,
             name: AchievementText(en: "Trusted Judge", fr: "Juge de confiance", ptBR: "Trusted Judge"),
-            description: AchievementText(en: "Answer twenty-five approval requests.", fr: "Répondez à vingt-cinq demandes d'approbation.", ptBR: "Answer twenty-five approval requests."),
+            description: AchievementText(en: "Answer twenty-five approval requests.", fr: "Réponds à vingt-cinq demandes d'approbation.", ptBR: "Answer twenty-five approval requests."),
             hint: nil,
             rewards: [.skin(character: "shape", skin: "neon", name: AchievementText(en: "Neon", fr: "Néon", ptBR: "Neon"), characterName: AchievementText(en: "Shapes", fr: "Formes", ptBR: "Shapes")), .skin(character: "crab", skin: "neon", name: AchievementText(en: "Neon", fr: "Néon", ptBR: "Neon"), characterName: AchievementText(en: "Crab", fr: "Crabe", ptBR: "Caranguejo"))]
         ),
         AchievementDefinition(
             id: "slash-and-learn", category: .productivity, icon: "Slash", points: 5, hidden: false,
             name: AchievementText(en: "Slash and Learn", fr: "Barre oblique", ptBR: "Slash and Learn"),
-            description: AchievementText(en: "Run a slash command from the composer.", fr: "Lancez une commande « / » depuis la zone de saisie.", ptBR: "Run a slash command from the composer."),
+            description: AchievementText(en: "Run a slash command from the composer.", fr: "Lance une commande « / » depuis la zone de saisie.", ptBR: "Run a slash command from the composer."),
             hint: nil,
             rewards: [.title(id: "commander", name: AchievementText(en: "Commander", fr: "Commandant", ptBR: "Commander"))]
         ),
         AchievementDefinition(
             id: "command-collector", category: .productivity, icon: "SquareTerminal", points: 20, hidden: false,
             name: AchievementText(en: "Command Collector", fr: "Collectionneur de commandes", ptBR: "Command Collector"),
-            description: AchievementText(en: "Use five different slash commands.", fr: "Utilisez cinq commandes « / » différentes.", ptBR: "Use five different slash commands."),
+            description: AchievementText(en: "Use five different slash commands.", fr: "Utilise cinq commandes « / » différentes.", ptBR: "Use five different slash commands."),
             hint: nil,
             rewards: [.skin(character: "shape", skin: "circuit", name: AchievementText(en: "Circuit", fr: "Circuit", ptBR: "Circuit"), characterName: AchievementText(en: "Shapes", fr: "Formes", ptBR: "Shapes")), .skin(character: "crab", skin: "circuit", name: AchievementText(en: "Circuit", fr: "Circuit", ptBR: "Circuit"), characterName: AchievementText(en: "Crab", fr: "Crabe", ptBR: "Caranguejo"))]
         ),
         AchievementDefinition(
             id: "paperclip", category: .productivity, icon: "Paperclip", points: 10, hidden: false,
             name: AchievementText(en: "See Attached", fr: "Voir pièce jointe", ptBR: "See Attached"),
-            description: AchievementText(en: "Attach a file or an image to a message.", fr: "Joignez un fichier ou une image à un message.", ptBR: "Attach a file or an image to a message."),
+            description: AchievementText(en: "Attach a file or an image to a message.", fr: "Joins un fichier ou une image à un message.", ptBR: "Attach a file or an image to a message."),
             hint: nil,
             rewards: [.skin(character: "bunbu", skin: "gold", name: AchievementText(en: "Gold", fr: "Or", ptBR: "Gold"), characterName: AchievementText(en: "Bunbu", fr: "Bunbu", ptBR: "Bunbu"))]
         ),
         AchievementDefinition(
             id: "zip-it", category: .productivity, icon: "FileArchive", points: 10, hidden: false,
             name: AchievementText(en: "Zip It", fr: "Tout compressé", ptBR: "Zip It"),
-            description: AchievementText(en: "Hand a bot a .zip archive.", fr: "Donnez une archive .zip à un robot.", ptBR: "Hand a bot a .zip archive."),
+            description: AchievementText(en: "Hand a bot a .zip archive.", fr: "Donne une archive .zip à un robot.", ptBR: "Hand a bot a .zip archive."),
             hint: nil,
             rewards: [.skin(character: "trombi", skin: "gold", name: AchievementText(en: "Gold", fr: "Or", ptBR: "Gold"), characterName: AchievementText(en: "Trombi", fr: "Trombi", ptBR: "Trombi"))]
         ),
         AchievementDefinition(
             id: "librarian", category: .productivity, icon: "FolderOpen", points: 5, hidden: false,
             name: AchievementText(en: "Librarian", fr: "Bibliothécaire", ptBR: "Librarian"),
-            description: AchievementText(en: "Open a bot's Library to see its files.", fr: "Ouvrez la Bibliothèque d'un robot pour voir ses fichiers.", ptBR: "Open a bot's Library to see its files."),
+            description: AchievementText(en: "Open a bot's Library to see its files.", fr: "Ouvre la Bibliothèque d'un robot pour voir ses fichiers.", ptBR: "Open a bot's Library to see its files."),
             hint: nil,
             rewards: [.title(id: "librarian", name: AchievementText(en: "Librarian", fr: "Bibliothécaire", ptBR: "Librarian"))]
         ),
         AchievementDefinition(
             id: "chatterbox", category: .productivity, icon: "MessagesSquare", points: 20, hidden: false,
             name: AchievementText(en: "Chatterbox", fr: "Moulin à paroles", ptBR: "Chatterbox"),
-            description: AchievementText(en: "Send one hundred messages.", fr: "Envoyez cent messages.", ptBR: "Send one hundred messages."),
+            description: AchievementText(en: "Send one hundred messages.", fr: "Envoie cent messages.", ptBR: "Send one hundred messages."),
             hint: nil,
             rewards: [.skin(character: "bunbu", skin: "neon", name: AchievementText(en: "Neon", fr: "Néon", ptBR: "Neon"), characterName: AchievementText(en: "Bunbu", fr: "Bunbu", ptBR: "Bunbu"))]
         ),
         AchievementDefinition(
             id: "wordsmith", category: .productivity, icon: "Feather", points: 50, hidden: false,
             name: AchievementText(en: "Wordsmith", fr: "Plume d'or", ptBR: "Wordsmith"),
-            description: AchievementText(en: "Send one thousand messages.", fr: "Envoyez mille messages.", ptBR: "Send one thousand messages."),
+            description: AchievementText(en: "Send one thousand messages.", fr: "Envoie mille messages.", ptBR: "Send one thousand messages."),
             hint: nil,
             rewards: [.skin(character: "owl", skin: "inferno", name: AchievementText(en: "Inferno", fr: "Brasier", ptBR: "Inferno"), characterName: AchievementText(en: "Owl", fr: "Hibou", ptBR: "Owl"))]
         ),
         AchievementDefinition(
             id: "multitasker", category: .power, icon: "Split", points: 20, hidden: false,
             name: AchievementText(en: "Multitasker", fr: "Multitâche", ptBR: "Multitasker"),
-            description: AchievementText(en: "Send a request as a parallel task while the bot is busy.", fr: "Envoyez une demande en tâche parallèle pendant que le robot travaille.", ptBR: "Send a request as a parallel task while the bot is busy."),
+            description: AchievementText(en: "Send a request as a parallel task while the bot is busy.", fr: "Envoie une demande en tâche parallèle pendant que le robot travaille.", ptBR: "Send a request as a parallel task while the bot is busy."),
             hint: nil,
             rewards: [.skin(character: "shape", skin: "chrome", name: AchievementText(en: "Chrome", fr: "Chrome", ptBR: "Chrome"), characterName: AchievementText(en: "Shapes", fr: "Formes", ptBR: "Shapes")), .skin(character: "crab", skin: "chrome", name: AchievementText(en: "Chrome", fr: "Chrome", ptBR: "Chrome"), characterName: AchievementText(en: "Crab", fr: "Crabe", ptBR: "Caranguejo"))]
         ),
         AchievementDefinition(
             id: "juggler", category: .power, icon: "Layers", points: 50, hidden: false,
             name: AchievementText(en: "Juggler", fr: "Jongleur", ptBR: "Juggler"),
-            description: AchievementText(en: "Start ten parallel tasks.", fr: "Lancez dix tâches parallèles.", ptBR: "Start ten parallel tasks."),
+            description: AchievementText(en: "Start ten parallel tasks.", fr: "Lance dix tâches parallèles.", ptBR: "Start ten parallel tasks."),
             hint: nil,
             rewards: [.skin(character: "shape", skin: "holo", name: AchievementText(en: "Holographic", fr: "Holographique", ptBR: "Holographic"), characterName: AchievementText(en: "Shapes", fr: "Formes", ptBR: "Shapes")), .skin(character: "crab", skin: "holo", name: AchievementText(en: "Holographic", fr: "Holographique", ptBR: "Holographic"), characterName: AchievementText(en: "Crab", fr: "Crabe", ptBR: "Caranguejo"))]
         ),
         AchievementDefinition(
             id: "delegator", category: .power, icon: "Network", points: 20, hidden: false,
             name: AchievementText(en: "Delegator", fr: "Délégateur", ptBR: "Delegator"),
-            description: AchievementText(en: "Have a bot of yours hand work to a sub-agent.", fr: "Faites confier du travail à un sous-agent par un de vos robots.", ptBR: "Have a bot of yours hand work to a sub-agent."),
+            description: AchievementText(en: "Have a bot of yours hand work to a sub-agent.", fr: "Fais confier du travail à un sous-agent par un de tes robots.", ptBR: "Have a bot of yours hand work to a sub-agent."),
             hint: nil,
             rewards: [.skin(character: "trombi", skin: "neon", name: AchievementText(en: "Neon", fr: "Néon", ptBR: "Neon"), characterName: AchievementText(en: "Trombi", fr: "Trombi", ptBR: "Trombi"))]
         ),
         AchievementDefinition(
             id: "hands-on", category: .power, icon: "MousePointerClick", points: 20, hidden: false,
             name: AchievementText(en: "Hands On", fr: "Aux commandes", ptBR: "Hands On"),
-            description: AchievementText(en: "Take control of a bot's computer.", fr: "Prenez le contrôle de l'ordinateur d'un robot.", ptBR: "Take control of a bot's computer."),
+            description: AchievementText(en: "Take control of a bot's computer.", fr: "Prends le contrôle de l'ordinateur d'un robot.", ptBR: "Take control of a bot's computer."),
             hint: nil,
             rewards: [.skin(character: "bunbu", skin: "chrome", name: AchievementText(en: "Chrome", fr: "Chrome", ptBR: "Chrome"), characterName: AchievementText(en: "Bunbu", fr: "Bunbu", ptBR: "Bunbu"))]
         ),
         AchievementDefinition(
             id: "autopilot", category: .power, icon: "Navigation", points: 20, hidden: false,
             name: AchievementText(en: "Autopilot", fr: "Pilote automatique", ptBR: "Autopilot"),
-            description: AchievementText(en: "Let a bot pick the right computer by itself (Works on: Auto).", fr: "Laissez un robot choisir le bon ordinateur lui-même (Travaille sur : Auto).", ptBR: "Let a bot pick the right computer by itself (Works on: Auto)."),
+            description: AchievementText(en: "Let a bot pick the right computer by itself (Workspace: Auto).", fr: "Laisse un robot choisir le bon ordinateur lui-même (Zone de travail : Auto).", ptBR: "Let a bot pick the right computer by itself (Workspace: Auto)."),
             hint: nil,
             rewards: [.skin(character: "trombi", skin: "chrome", name: AchievementText(en: "Chrome", fr: "Chrome", ptBR: "Chrome"), characterName: AchievementText(en: "Trombi", fr: "Trombi", ptBR: "Trombi"))]
         ),
         AchievementDefinition(
             id: "great-power", category: .power, icon: "Zap", points: 50, hidden: false,
             name: AchievementText(en: "With Great Power", fr: "Grands pouvoirs", ptBR: "With Great Power"),
-            description: AchievementText(en: "Grant a bot Full access, then bring it back to Ask.", fr: "Accordez l'Accès complet à un robot, puis ramenez-le à Demander.", ptBR: "Grant a bot Full access, then bring it back to Ask."),
+            description: AchievementText(en: "Grant a bot Full access, then bring it back to Ask.", fr: "Accorde l'Accès complet à un robot, puis ramène-le à Demander.", ptBR: "Grant a bot Full access, then bring it back to Ask."),
             hint: nil,
             rewards: [.skin(character: "owl", skin: "holo", name: AchievementText(en: "Holographic", fr: "Holographique", ptBR: "Holographic"), characterName: AchievementText(en: "Owl", fr: "Hibou", ptBR: "Owl"))]
         ),
         AchievementDefinition(
             id: "palette", category: .power, icon: "Search", points: 5, hidden: false,
             name: AchievementText(en: "Quick Finder", fr: "Trouve-tout", ptBR: "Quick Finder"),
-            description: AchievementText(en: "Open the command palette.", fr: "Ouvrez la palette de commandes.", ptBR: "Open the command palette."),
+            description: AchievementText(en: "Open the command palette.", fr: "Ouvre la palette de commandes.", ptBR: "Open the command palette."),
             hint: nil,
             rewards: [.appIcon(id: "glyph:cube")]
         ),
         AchievementDefinition(
             id: "keyboard-ninja", category: .power, icon: "Keyboard", points: 5, hidden: false,
             name: AchievementText(en: "Keyboard Ninja", fr: "Ninja du clavier", ptBR: "Keyboard Ninja"),
-            description: AchievementText(en: "Open the keyboard shortcuts.", fr: "Ouvrez les raccourcis clavier.", ptBR: "Open the keyboard shortcuts."),
+            description: AchievementText(en: "Open the keyboard shortcuts.", fr: "Ouvre les raccourcis clavier.", ptBR: "Open the keyboard shortcuts."),
             hint: nil,
             rewards: [.appIcon(id: "glyph:spark")]
         ),
         AchievementDefinition(
             id: "first-call", category: .voice, icon: "Phone", points: 20, hidden: false,
             name: AchievementText(en: "On the Line", fr: "En ligne", ptBR: "On the Line"),
-            description: AchievementText(en: "Call a bot with voice mode.", fr: "Appelez un robot en mode voix.", ptBR: "Call a bot with voice mode."),
+            description: AchievementText(en: "Call a bot with voice mode.", fr: "Appelle un robot en mode voix.", ptBR: "Call a bot with voice mode."),
             hint: nil,
             rewards: [.skin(character: "owl", skin: "neon", name: AchievementText(en: "Neon", fr: "Néon", ptBR: "Neon"), characterName: AchievementText(en: "Owl", fr: "Hibou", ptBR: "Owl"))]
         ),
         AchievementDefinition(
             id: "long-call", category: .voice, icon: "PhoneCall", points: 20, hidden: false,
             name: AchievementText(en: "Long Distance", fr: "Interurbain", ptBR: "Long Distance"),
-            description: AchievementText(en: "Stay on a voice call for ten minutes.", fr: "Restez dix minutes en appel vocal.", ptBR: "Stay on a voice call for ten minutes."),
+            description: AchievementText(en: "Stay on a voice call for ten minutes.", fr: "Reste dix minutes en appel vocal.", ptBR: "Stay on a voice call for ten minutes."),
             hint: nil,
             rewards: [.skin(character: "bunbu", skin: "crystal", name: AchievementText(en: "Crystal", fr: "Cristal", ptBR: "Crystal"), characterName: AchievementText(en: "Bunbu", fr: "Bunbu", ptBR: "Bunbu"))]
         ),
         AchievementDefinition(
             id: "polite-interrupt", category: .voice, icon: "Hand", points: 10, hidden: false,
-            name: AchievementText(en: "Excuse Me", fr: "Pardon de vous interrompre", ptBR: "Excuse Me"),
-            description: AchievementText(en: "Interrupt a bot mid-sentence on a call.", fr: "Interrompez un robot au milieu d'une phrase pendant un appel.", ptBR: "Interrupt a bot mid-sentence on a call."),
+            name: AchievementText(en: "Excuse Me", fr: "Pardon de t'interrompre", ptBR: "Excuse Me"),
+            description: AchievementText(en: "Interrupt a bot mid-sentence on a call.", fr: "Interromps un robot au milieu d'une phrase pendant un appel.", ptBR: "Interrupt a bot mid-sentence on a call."),
             hint: nil,
             rewards: [.title(id: "polite", name: AchievementText(en: "Polite", fr: "Poli", ptBR: "Polite"))]
         ),
         AchievementDefinition(
             id: "hotline", category: .voice, icon: "PhoneForwarded", points: 50, hidden: false,
             name: AchievementText(en: "Hotline", fr: "Ligne directe", ptBR: "Hotline"),
-            description: AchievementText(en: "Make ten voice calls.", fr: "Faites dix appels vocaux.", ptBR: "Make ten voice calls."),
+            description: AchievementText(en: "Make ten voice calls.", fr: "Fais dix appels vocaux.", ptBR: "Make ten voice calls."),
             hint: nil,
             rewards: [.skin(character: "bunbu", skin: "holo", name: AchievementText(en: "Holographic", fr: "Holographique", ptBR: "Holographic"), characterName: AchievementText(en: "Bunbu", fr: "Bunbu", ptBR: "Bunbu"))]
         ),
         AchievementDefinition(
             id: "claude-linked", category: .claude, icon: "Link", points: 10, hidden: false,
             name: AchievementText(en: "Claude Linked", fr: "Compte Claude lié", ptBR: "Claude Linked"),
-            description: AchievementText(en: "Sign in to Claude, or save your own Anthropic key.", fr: "Connectez-vous à Claude, ou enregistrez votre propre clé Anthropic.", ptBR: "Sign in to Claude, or save your own Anthropic key."),
+            description: AchievementText(en: "Sign in to Claude, or save your own Anthropic key.", fr: "Connecte-toi à Claude, ou enregistre ta propre clé Anthropic.", ptBR: "Sign in to Claude, or save your own Anthropic key."),
             hint: nil,
             rewards: [.character(id: "crab", name: AchievementText(en: "Crab", fr: "Crabe", ptBR: "Caranguejo")), .emote(character: "crab", id: "neutral"), .emote(character: "crab", id: "happy"), .emote(character: "crab", id: "curious"), .emote(character: "crab", id: "sleepy")]
         ),
         AchievementDefinition(
             id: "first-pinch", category: .claude, icon: "MessageCircle", points: 5, hidden: false,
             name: AchievementText(en: "First Pinch", fr: "Premier pincement", ptBR: "First Pinch"),
-            description: AchievementText(en: "Finish your first Claude turn.", fr: "Terminez votre premier tour Claude.", ptBR: "Finish your first Claude turn."),
+            description: AchievementText(en: "Finish your first Claude turn.", fr: "Termine ton premier tour Claude.", ptBR: "Finish your first Claude turn."),
             hint: nil,
             rewards: [.emote(character: "crab", id: "proud")]
         ),
         AchievementDefinition(
             id: "claude-regular", category: .claude, icon: "Repeat", points: 50, hidden: false,
             name: AchievementText(en: "Regular Claw", fr: "Pince régulière", ptBR: "Regular Claw"),
-            description: AchievementText(en: "Finish 100 Claude turns.", fr: "Terminez 100 tours Claude.", ptBR: "Finish 100 Claude turns."),
+            description: AchievementText(en: "Finish 100 Claude turns.", fr: "Termine 100 tours Claude.", ptBR: "Finish 100 Claude turns."),
             hint: nil,
             rewards: [.move(character: "crab", id: "claw-dance")]
         ),
         AchievementDefinition(
             id: "claude-devotee", category: .claude, icon: "Flame", points: 100, hidden: false,
             name: AchievementText(en: "Devotee", fr: "Dévoué", ptBR: "Devotee"),
-            description: AchievementText(en: "Finish 1000 Claude turns.", fr: "Terminez 1000 tours Claude.", ptBR: "Finish 1000 Claude turns."),
+            description: AchievementText(en: "Finish 1000 Claude turns.", fr: "Termine 1000 tours Claude.", ptBR: "Finish 1000 Claude turns."),
             hint: nil,
             rewards: [.effect(id: "fireworks")]
         ),
         AchievementDefinition(
             id: "crab-army", category: .claude, icon: "Network", points: 20, hidden: false,
             name: AchievementText(en: "Crab Army", fr: "Armée de crabes", ptBR: "Crab Army"),
-            description: AchievementText(en: "Have a bot of yours hand work to a sub-agent on Claude.", fr: "Faites confier du travail à un sous-agent par un de vos robots sur Claude.", ptBR: "Have a bot of yours hand work to a sub-agent on Claude."),
+            description: AchievementText(en: "Have a bot of yours hand work to a sub-agent on Claude.", fr: "Fais confier du travail à un sous-agent par un de tes robots sur Claude.", ptBR: "Have a bot of yours hand work to a sub-agent on Claude."),
             hint: nil,
             rewards: [.move(character: "crab", id: "clone")]
         ),
         AchievementDefinition(
             id: "tide-keeper", category: .claude, icon: "CalendarClock", points: 50, hidden: false,
             name: AchievementText(en: "Tide Keeper", fr: "Gardien de la marée", ptBR: "Tide Keeper"),
-            description: AchievementText(en: "Have 25 Claude routines complete.", fr: "Faites compléter 25 routines Claude.", ptBR: "Have 25 Claude routines complete."),
+            description: AchievementText(en: "Have 25 Claude routines complete.", fr: "Fais compléter 25 routines Claude.", ptBR: "Have 25 Claude routines complete."),
             hint: nil,
             rewards: [.accessory(id: "captain")]
         ),
         AchievementDefinition(
             id: "three-tides", category: .claude, icon: "Layers", points: 20, hidden: false,
             name: AchievementText(en: "Three Tides", fr: "Trois marées", ptBR: "Three Tides"),
-            description: AchievementText(en: "Use Opus, Sonnet and Haiku.", fr: "Utilisez Opus, Sonnet et Haiku.", ptBR: "Use Opus, Sonnet and Haiku."),
+            description: AchievementText(en: "Use Opus, Sonnet and Haiku.", fr: "Utilise Opus, Sonnet et Haiku.", ptBR: "Use Opus, Sonnet and Haiku."),
             hint: nil,
             rewards: [.accessory(id: "crown")]
         ),
         AchievementDefinition(
             id: "claw-streak", category: .claude, icon: "CalendarCheck", points: 20, hidden: false,
             name: AchievementText(en: "Claw Streak", fr: "Série de pinces", ptBR: "Claw Streak"),
-            description: AchievementText(en: "Finish a Claude turn seven days in a row.", fr: "Terminez un tour Claude sept jours de suite.", ptBR: "Finish a Claude turn seven days in a row."),
+            description: AchievementText(en: "Finish a Claude turn seven days in a row.", fr: "Termine un tour Claude sept jours de suite.", ptBR: "Finish a Claude turn seven days in a row."),
             hint: nil,
             rewards: [.effect(id: "bubbles")]
         ),
         AchievementDefinition(
             id: "hands-on-claw", category: .claude, icon: "MousePointerClick", points: 20, hidden: false,
             name: AchievementText(en: "Hands on Claw", fr: "Pince aux commandes", ptBR: "Hands on Claw"),
-            description: AchievementText(en: "Use Computer Use on a Claude turn.", fr: "Utilisez Computer Use pendant un tour Claude.", ptBR: "Use Computer Use on a Claude turn."),
+            description: AchievementText(en: "Use Computer Use on a Claude turn.", fr: "Utilise Computer Use pendant un tour Claude.", ptBR: "Use Computer Use on a Claude turn."),
             hint: nil,
             rewards: [.accessory(id: "hard-hat")]
         ),
         AchievementDefinition(
             id: "shell-talk", category: .claude, icon: "Phone", points: 20, hidden: false,
             name: AchievementText(en: "Shell Talk", fr: "Parler dans la coquille", ptBR: "Shell Talk"),
-            description: AchievementText(en: "Have a voice conversation with Claude.", fr: "Ayez une conversation vocale avec Claude.", ptBR: "Have a voice conversation with Claude."),
+            description: AchievementText(en: "Have a voice conversation with Claude.", fr: "Aie une conversation vocale avec Claude.", ptBR: "Have a voice conversation with Claude."),
             hint: nil,
             rewards: [.emote(character: "crab", id: "laughing")]
         ),
         AchievementDefinition(
             id: "sharing-is-caring", category: .collaboration, icon: "Share2", points: 20, hidden: false,
             name: AchievementText(en: "Sharing Is Caring", fr: "Partager, c'est donner", ptBR: "Sharing Is Caring"),
-            description: AchievementText(en: "Share a bot with someone.", fr: "Partagez un robot avec quelqu'un.", ptBR: "Share a bot with someone."),
+            description: AchievementText(en: "Share a bot with someone.", fr: "Partage un robot avec quelqu'un.", ptBR: "Share a bot with someone."),
             hint: nil,
             rewards: [.skin(character: "shape", skin: "crystal", name: AchievementText(en: "Crystal", fr: "Cristal", ptBR: "Crystal"), characterName: AchievementText(en: "Shapes", fr: "Formes", ptBR: "Shapes")), .skin(character: "crab", skin: "crystal", name: AchievementText(en: "Crystal", fr: "Cristal", ptBR: "Crystal"), characterName: AchievementText(en: "Crab", fr: "Crabe", ptBR: "Caranguejo"))]
         ),
         AchievementDefinition(
             id: "dream-team", category: .collaboration, icon: "UsersRound", points: 50, hidden: false,
             name: AchievementText(en: "Dream Team", fr: "Équipe de rêve", ptBR: "Dream Team"),
-            description: AchievementText(en: "Talk in a group with another person and two bots.", fr: "Discutez dans un groupe avec une autre personne et deux robots.", ptBR: "Talk in a group with another person and two bots."),
+            description: AchievementText(en: "Talk in a group with another person and two bots.", fr: "Discute dans un groupe avec une autre personne et deux robots.", ptBR: "Talk in a group with another person and two bots."),
             hint: nil,
             rewards: [.skin(character: "shape", skin: "galaxy", name: AchievementText(en: "Galaxy", fr: "Galaxie", ptBR: "Galaxy"), characterName: AchievementText(en: "Shapes", fr: "Formes", ptBR: "Shapes")), .skin(character: "crab", skin: "galaxy", name: AchievementText(en: "Galaxy", fr: "Galaxie", ptBR: "Galaxy"), characterName: AchievementText(en: "Crab", fr: "Crabe", ptBR: "Caranguejo"))]
         ),
         AchievementDefinition(
             id: "direct-line", category: .collaboration, icon: "Send", points: 10, hidden: false,
             name: AchievementText(en: "Direct Line", fr: "Message direct", ptBR: "Direct Line"),
-            description: AchievementText(en: "Send a direct message to a colleague.", fr: "Envoyez un message direct à un collègue.", ptBR: "Send a direct message to a colleague."),
+            description: AchievementText(en: "Send a direct message to a colleague.", fr: "Envoie un message direct à un collègue.", ptBR: "Send a direct message to a colleague."),
             hint: nil,
             rewards: [.title(id: "connector", name: AchievementText(en: "Connector", fr: "Rassembleur", ptBR: "Connector"))]
         ),
         AchievementDefinition(
             id: "group-chat", category: .collaboration, icon: "MessageSquareMore", points: 10, hidden: false,
             name: AchievementText(en: "Round Table", fr: "Table ronde", ptBR: "Round Table"),
-            description: AchievementText(en: "Send ten messages in groups.", fr: "Envoyez dix messages dans des groupes.", ptBR: "Send ten messages in groups."),
+            description: AchievementText(en: "Send ten messages in groups.", fr: "Envoie dix messages dans des groupes.", ptBR: "Send ten messages in groups."),
             hint: nil,
             rewards: [.title(id: "host", name: AchievementText(en: "Host", fr: "Animateur", ptBR: "Host"))]
         ),
         AchievementDefinition(
             id: "three-day", category: .streaks, icon: "Flame", points: 10, hidden: false,
             name: AchievementText(en: "Warming Up", fr: "On se réchauffe", ptBR: "Warming Up"),
-            description: AchievementText(en: "Use Sagax three days in a row.", fr: "Utilisez Sagax trois jours de suite.", ptBR: "Use Sagax three days in a row."),
+            description: AchievementText(en: "Use Sagax three days in a row.", fr: "Utilise Sagax trois jours de suite.", ptBR: "Use Sagax three days in a row."),
             hint: nil,
             rewards: [.title(id: "regular", name: AchievementText(en: "Regular", fr: "Habitué", ptBR: "Regular"))]
         ),
         AchievementDefinition(
             id: "week-streak", category: .streaks, icon: "CalendarCheck", points: 20, hidden: false,
             name: AchievementText(en: "Week Warrior", fr: "Guerrier de la semaine", ptBR: "Week Warrior"),
-            description: AchievementText(en: "Use Sagax seven days in a row.", fr: "Utilisez Sagax sept jours de suite.", ptBR: "Use Sagax seven days in a row."),
+            description: AchievementText(en: "Use Sagax seven days in a row.", fr: "Utilise Sagax sept jours de suite.", ptBR: "Use Sagax seven days in a row."),
             hint: nil,
             rewards: [.skin(character: "trombi", skin: "glitch", name: AchievementText(en: "Glitch", fr: "Glitch", ptBR: "Glitch"), characterName: AchievementText(en: "Trombi", fr: "Trombi", ptBR: "Trombi"))]
         ),
         AchievementDefinition(
             id: "month-streak", category: .streaks, icon: "Rocket", points: 100, hidden: false,
             name: AchievementText(en: "Unstoppable", fr: "Inarrêtable", ptBR: "Unstoppable"),
-            description: AchievementText(en: "Use Sagax thirty days in a row.", fr: "Utilisez Sagax trente jours de suite.", ptBR: "Use Sagax thirty days in a row."),
+            description: AchievementText(en: "Use Sagax thirty days in a row.", fr: "Utilise Sagax trente jours de suite.", ptBR: "Use Sagax thirty days in a row."),
             hint: nil,
             rewards: [.skin(character: "owl", skin: "galaxy", name: AchievementText(en: "Galaxy", fr: "Galaxie", ptBR: "Galaxy"), characterName: AchievementText(en: "Owl", fr: "Hibou", ptBR: "Owl"))]
         ),
         AchievementDefinition(
             id: "regular", category: .streaks, icon: "CalendarDays", points: 50, hidden: false,
             name: AchievementText(en: "Part of the Team", fr: "Membre de l'équipe", ptBR: "Part of the Team"),
-            description: AchievementText(en: "Use Sagax on twenty different days.", fr: "Utilisez Sagax vingt jours différents.", ptBR: "Use Sagax on twenty different days."),
+            description: AchievementText(en: "Use Sagax on twenty different days.", fr: "Utilise Sagax vingt jours différents.", ptBR: "Use Sagax on twenty different days."),
             hint: nil,
             rewards: [.skin(character: "bunbu", skin: "molten", name: AchievementText(en: "Molten", fr: "Magma", ptBR: "Molten"), characterName: AchievementText(en: "Bunbu", fr: "Bunbu", ptBR: "Bunbu"))]
         ),
         AchievementDefinition(
             id: "hands-off", category: .mastery, icon: "Dog", points: 100, hidden: false,
             name: AchievementText(en: "Hands Off", fr: "Déléguer sans surveiller", ptBR: "Delegar sem vigiar"),
-            description: AchievementText(en: "One of your routines completes 10 runs in a row without a failure.", fr: "Une de vos routines complète 10 exécutions de suite sans un seul échec.", ptBR: "Uma das suas rotinas completa 10 execuções seguidas sem nenhuma falha."),
+            description: AchievementText(en: "One of your routines completes 10 runs in a row without a failure.", fr: "Une de tes routines complète 10 exécutions de suite sans un seul échec.", ptBR: "Uma das suas rotinas completa 10 execuções seguidas sem nenhuma falha."),
             hint: nil,
             rewards: [.character(id: "shiba", name: AchievementText(en: "Shiba", fr: "Shiba", ptBR: "Shiba")), .title(id: "hands-off", name: AchievementText(en: "Hands Off", fr: "Déléguer sans surveiller", ptBR: "Delegar sem vigiar"))]
         ),
         AchievementDefinition(
             id: "second-wind", category: .mastery, icon: "LifeBuoy", points: 100, hidden: false,
             name: AchievementText(en: "Second Wind", fr: "Second souffle", ptBR: "Segundo fôlego"),
-            description: AchievementText(en: "Twice, fix a routine that failed: change it, then see its next 3 runs complete.", fr: "Deux fois, réparez une routine qui a échoué : modifiez-la, puis voyez ses 3 exécutions suivantes réussir.", ptBR: "Duas vezes, conserte uma rotina que falhou: altere-a e veja as 3 execuções seguintes concluírem."),
+            description: AchievementText(en: "Twice, fix a routine that failed: change it, then see its next 3 runs complete.", fr: "Deux fois, répare une routine qui a échoué : modifie-la, puis vois ses 3 exécutions suivantes réussir.", ptBR: "Duas vezes, conserte uma rotina que falhou: altere-a e veja as 3 execuções seguintes concluírem."),
             hint: nil,
             rewards: [.skin(character: "shiba", skin: "cream", name: AchievementText(en: "Cream", fr: "Crème", ptBR: "Creme"), characterName: AchievementText(en: "Shiba", fr: "Shiba", ptBR: "Shiba")), .skin(character: "shiba", skin: "blacktan", name: AchievementText(en: "Black and Tan", fr: "Noir et feu", ptBR: "Preto e castanho"), characterName: AchievementText(en: "Shiba", fr: "Shiba", ptBR: "Shiba")), .title(id: "second-wind", name: AchievementText(en: "Second Wind", fr: "Second souffle", ptBR: "Segundo fôlego"))]
         ),
@@ -382,7 +382,7 @@ public extension AchievementDefinition {
         AchievementDefinition(
             id: "quiet-nights", category: .mastery, icon: "MoonStar", points: 150, hidden: false,
             name: AchievementText(en: "Quiet Nights", fr: "Nuit calme", ptBR: "Noites tranquilas"),
-            description: AchievementText(en: "30 days in a row where your routines ran and none failed.", fr: "30 jours de suite où vos routines ont roulé sans un seul échec.", ptBR: "30 dias seguidos em que suas rotinas rodaram sem nenhuma falha."),
+            description: AchievementText(en: "30 days in a row where your routines ran and none failed.", fr: "30 jours de suite où tes routines ont roulé sans un seul échec.", ptBR: "30 dias seguidos em que suas rotinas rodaram sem nenhuma falha."),
             hint: nil,
             rewards: [.skin(character: "shiba", skin: "white", name: AchievementText(en: "White", fr: "Blanc", ptBR: "Branco"), characterName: AchievementText(en: "Shiba", fr: "Shiba", ptBR: "Shiba")), .title(id: "quiet-nights", name: AchievementText(en: "Quiet Nights", fr: "Nuit calme", ptBR: "Noites tranquilas"))]
         ),
@@ -396,35 +396,35 @@ public extension AchievementDefinition {
         AchievementDefinition(
             id: "reviewer", category: .mastery, icon: "ThumbsDown", points: 100, hidden: false,
             name: AchievementText(en: "Reviewer", fr: "Relecteur", ptBR: "Revisor"),
-            description: AchievementText(en: "Deny 5 approvals that would have written to a system, and each time the bot still completes the task another way.", fr: "Refusez 5 approbations qui auraient écrit dans un système, et chaque fois le robot termine quand même la tâche autrement.", ptBR: "Negue 5 aprovações que teriam escrito em um sistema e, a cada vez, o robô conclui a tarefa de outro jeito."),
+            description: AchievementText(en: "Deny 5 approvals that would have written to a system, and each time the bot still completes the task another way.", fr: "Refuse 5 approbations qui auraient écrit dans un système, et chaque fois le robot termine quand même la tâche autrement.", ptBR: "Negue 5 aprovações que teriam escrito em um sistema e, a cada vez, o robô conclui a tarefa de outro jeito."),
             hint: nil,
             rewards: [.character(id: "grump", name: AchievementText(en: "Grump", fr: "Grognon", ptBR: "Rabugento")), .title(id: "reviewer", name: AchievementText(en: "Reviewer", fr: "Relecteur", ptBR: "Revisor"))]
         ),
         AchievementDefinition(
             id: "prompter", category: .mastery, icon: "MessageSquareWarning", points: 100, hidden: false,
             name: AchievementText(en: "Prompter", fr: "Souffleur", ptBR: "Ponto"),
-            description: AchievementText(en: "15 times, correct a bot while it works (a message into its running turn) and the turn completes.", fr: "15 fois, corrigez un robot pendant qu'il travaille (un message dans son tour en cours) et le tour se termine bien.", ptBR: "15 vezes, corrija um robô enquanto ele trabalha (uma mensagem no turno em andamento) e o turno conclui."),
+            description: AchievementText(en: "15 times, correct a bot while it works (a message into its running turn) and the turn completes.", fr: "15 fois, corrige un robot pendant qu'il travaille (un message dans son tour en cours) et le tour se termine bien.", ptBR: "15 vezes, corrija um robô enquanto ele trabalha (uma mensagem no turno em andamento) e o turno conclui."),
             hint: nil,
             rewards: [.skin(character: "grump", skin: "tuxedo", name: AchievementText(en: "Tuxedo", fr: "Smoking", ptBR: "Smoking"), characterName: AchievementText(en: "Grump", fr: "Grognon", ptBR: "Rabugento")), .skin(character: "grump", skin: "calico", name: AchievementText(en: "Calico", fr: "Calico", ptBR: "Tricolor"), characterName: AchievementText(en: "Grump", fr: "Grognon", ptBR: "Rabugento")), .title(id: "prompter", name: AchievementText(en: "Prompter", fr: "Souffleur", ptBR: "Ponto"))]
         ),
         AchievementDefinition(
             id: "red-pen", category: .mastery, icon: "PenLine", points: 150, hidden: false,
             name: AchievementText(en: "Red Pen", fr: "Stylo rouge", ptBR: "Caneta vermelha"),
-            description: AchievementText(en: "On 5 different days, revise a bot's standing instructions and see it complete 5 turns with them.", fr: "5 jours différents, révisez les instructions permanentes d'un robot et voyez-le compléter 5 tours avec elles.", ptBR: "Em 5 dias diferentes, revise as instruções permanentes de um robô e veja-o concluir 5 turnos com elas."),
+            description: AchievementText(en: "On 5 different days, revise a bot's standing instructions and see it complete 5 turns with them.", fr: "5 jours différents, révise les instructions permanentes d'un robot et vois-le compléter 5 tours avec elles.", ptBR: "Em 5 dias diferentes, revise as instruções permanentes de um robô e veja-o concluir 5 turnos com elas."),
             hint: nil,
             rewards: [.skin(character: "grump", skin: "tabby", name: AchievementText(en: "Tabby", fr: "Tigré", ptBR: "Tigrado"), characterName: AchievementText(en: "Grump", fr: "Grognon", ptBR: "Rabugento")), .skin(character: "grump", skin: "siamese", name: AchievementText(en: "Siamese", fr: "Siamois", ptBR: "Siamês"), characterName: AchievementText(en: "Grump", fr: "Grognon", ptBR: "Rabugento")), .title(id: "red-pen", name: AchievementText(en: "Red Pen", fr: "Stylo rouge", ptBR: "Caneta vermelha"))]
         ),
         AchievementDefinition(
             id: "not-so-fast", category: .mastery, icon: "OctagonPause", points: 150, hidden: true,
             name: AchievementText(en: "Not So Fast", fr: "Pas si vite", ptBR: "Calma lá"),
-            description: AchievementText(en: "Stop a bot 10 times, and each time its next turn completes.", fr: "Arrêtez un robot 10 fois, et chaque fois son tour suivant se termine bien.", ptBR: "Pare um robô 10 vezes e, a cada vez, o turno seguinte conclui."),
+            description: AchievementText(en: "Stop a bot 10 times, and each time its next turn completes.", fr: "Arrête un robot 10 fois, et chaque fois son tour suivant se termine bien.", ptBR: "Pare um robô 10 vezes e, a cada vez, o turno seguinte conclui."),
             hint: AchievementText(en: "Sometimes the best move is the stop button, then a better ask.", fr: "Parfois, le meilleur coup est le bouton Arrêter, puis une meilleure demande.", ptBR: "Às vezes, o melhor lance é o botão Parar e depois um pedido melhor."),
             rewards: [.skin(character: "grump", skin: "void", name: AchievementText(en: "Void", fr: "Néant", ptBR: "Vazio"), characterName: AchievementText(en: "Grump", fr: "Grognon", ptBR: "Rabugento")), .title(id: "not-so-fast", name: AchievementText(en: "Not So Fast", fr: "Pas si vite", ptBR: "Calma lá"))]
         ),
         AchievementDefinition(
             id: "justice-of-peace", category: .mastery, icon: "Gavel", points: 200, hidden: false,
             name: AchievementText(en: "Justice of the Peace", fr: "Juge de paix", ptBR: "Juiz de paz"),
-            description: AchievementText(en: "Answer 100 approvals, at least 20 of them denials.", fr: "Répondez à 100 approbations, dont au moins 20 refus.", ptBR: "Responda 100 aprovações, com pelo menos 20 negativas."),
+            description: AchievementText(en: "Answer 100 approvals, at least 20 of them denials.", fr: "Réponds à 100 approbations, dont au moins 20 refus.", ptBR: "Responda 100 aprovações, com pelo menos 20 negativas."),
             hint: nil,
             rewards: [.skin(character: "grump", skin: "retro98", name: AchievementText(en: "Retro 98", fr: "Rétro 98", ptBR: "Retrô 98"), characterName: AchievementText(en: "Grump", fr: "Grognon", ptBR: "Rabugento")), .skin(character: "grump", skin: "gold", name: AchievementText(en: "Gold", fr: "Or", ptBR: "Ouro"), characterName: AchievementText(en: "Grump", fr: "Grognon", ptBR: "Rabugento")), .title(id: "justice-of-peace", name: AchievementText(en: "Justice of the Peace", fr: "Juge de paix", ptBR: "Juiz de paz"))]
         ),
@@ -445,7 +445,7 @@ public extension AchievementDefinition {
         AchievementDefinition(
             id: "plugged-in", category: .mastery, icon: "PlugZap", points: 150, hidden: false,
             name: AchievementText(en: "Plugged In", fr: "Branché", ptBR: "Conectado"),
-            description: AchievementText(en: "Your bots use tools from 3 different integrations within one week.", fr: "Vos robots utilisent les outils de 3 intégrations différentes en une semaine.", ptBR: "Seus robôs usam ferramentas de 3 integrações diferentes em uma semana."),
+            description: AchievementText(en: "Your bots use tools from 3 different integrations within one week.", fr: "Tes robots utilisent les outils de 3 intégrations différentes en une semaine.", ptBR: "Seus robôs usam ferramentas de 3 integrações diferentes em uma semana."),
             hint: nil,
             rewards: [.skin(character: "ogre", skin: "stone", name: AchievementText(en: "Stone", fr: "Pierre", ptBR: "Pedra"), characterName: AchievementText(en: "Ogre", fr: "Ogre", ptBR: "Ogro")), .skin(character: "ogre", skin: "lava", name: AchievementText(en: "Lava", fr: "Lave", ptBR: "Lava"), characterName: AchievementText(en: "Ogre", fr: "Ogre", ptBR: "Ogro")), .title(id: "plugged-in", name: AchievementText(en: "Plugged In", fr: "Branché", ptBR: "Conectado"))]
         ),
@@ -459,14 +459,14 @@ public extension AchievementDefinition {
         AchievementDefinition(
             id: "full-house", category: .mastery, icon: "Orbit", points: 200, hidden: false,
             name: AchievementText(en: "Full House", fr: "Salle comble", ptBR: "Casa cheia"),
-            description: AchievementText(en: "3 of your bots work at the same time, and all of them finish well.", fr: "3 de vos robots travaillent en même temps, et tous terminent bien.", ptBR: "3 dos seus robôs trabalham ao mesmo tempo e todos terminam bem."),
+            description: AchievementText(en: "3 of your bots work at the same time, and all of them finish well.", fr: "3 de tes robots travaillent en même temps, et tous terminent bien.", ptBR: "3 dos seus robôs trabalham ao mesmo tempo e todos terminam bem."),
             hint: nil,
             rewards: [.skin(character: "ogre", skin: "retro98", name: AchievementText(en: "Retro 98", fr: "Rétro 98", ptBR: "Retrô 98"), characterName: AchievementText(en: "Ogre", fr: "Ogre", ptBR: "Ogro")), .skin(character: "ogre", skin: "gold", name: AchievementText(en: "Gold", fr: "Or", ptBR: "Ouro"), characterName: AchievementText(en: "Ogre", fr: "Ogre", ptBR: "Ogro")), .title(id: "full-house", name: AchievementText(en: "Full House", fr: "Salle comble", ptBR: "Casa cheia"))]
         ),
         AchievementDefinition(
             id: "polyglot", category: .mastery, icon: "GitCompare", points: 100, hidden: false,
             name: AchievementText(en: "Polyglot", fr: "Polyglotte", ptBR: "Poliglota"),
-            description: AchievementText(en: "Run one conversation on models from 3 different providers.", fr: "Faites rouler une même conversation sur des modèles de 3 fournisseurs différents.", ptBR: "Rode uma mesma conversa em modelos de 3 provedores diferentes."),
+            description: AchievementText(en: "Run one conversation on models from 3 different providers.", fr: "Fais rouler une même conversation sur des modèles de 3 fournisseurs différents.", ptBR: "Rode uma mesma conversa em modelos de 3 provedores diferentes."),
             hint: nil,
             rewards: [.character(id: "frog", name: AchievementText(en: "Frog", fr: "Grenouille", ptBR: "Sapo")), .title(id: "polyglot", name: AchievementText(en: "Polyglot", fr: "Polyglotte", ptBR: "Poliglota"))]
         ),
@@ -480,28 +480,28 @@ public extension AchievementDefinition {
         AchievementDefinition(
             id: "translator", category: .mastery, icon: "Languages", points: 150, hidden: false,
             name: AchievementText(en: "Translator", fr: "Traducteur", ptBR: "Tradutor"),
-            description: AchievementText(en: "5 conversations of at least 6 turns entirely in French: your messages and the bot's answers.", fr: "5 conversations d'au moins 6 tours entièrement en français : vos messages et les réponses du robot.", ptBR: "5 conversas de pelo menos 6 turnos inteiramente em francês: suas mensagens e as respostas do robô."),
+            description: AchievementText(en: "5 conversations of at least 6 turns entirely in French: your messages and the bot's answers.", fr: "5 conversations d'au moins 6 tours entièrement en français : tes messages et les réponses du robot.", ptBR: "5 conversas de pelo menos 6 turnos inteiramente em francês: suas mensagens e as respostas do robô."),
             hint: nil,
             rewards: [.skin(character: "frog", skin: "poison", name: AchievementText(en: "Poison dart", fr: "Dendrobate", ptBR: "Sapo-flecha"), characterName: AchievementText(en: "Frog", fr: "Grenouille", ptBR: "Sapo")), .skin(character: "frog", skin: "bullfrog", name: AchievementText(en: "Bullfrog", fr: "Ouaouaron", ptBR: "Rã-touro"), characterName: AchievementText(en: "Frog", fr: "Grenouille", ptBR: "Sapo")), .title(id: "translator", name: AchievementText(en: "Translator", fr: "Traducteur", ptBR: "Tradutor"))]
         ),
         AchievementDefinition(
             id: "skill-smith", category: .mastery, icon: "BookOpenCheck", points: 150, hidden: false,
             name: AchievementText(en: "Skill Smith", fr: "Forgeron de skills", ptBR: "Ferreiro de skills"),
-            description: AchievementText(en: "A skill a bot wrote from one of your conversations (/learn) is used in 20 turns.", fr: "Une skill qu'un robot a écrite à partir d'une de vos conversations (/learn) sert dans 20 tours.", ptBR: "Uma skill que um robô escreveu a partir de uma conversa sua (/learn) é usada em 20 turnos."),
+            description: AchievementText(en: "A skill a bot wrote from one of your conversations (/learn) is used in 20 turns.", fr: "Une skill qu'un robot a écrite à partir d'une de tes conversations (/learn) sert dans 20 tours.", ptBR: "Uma skill que um robô escreveu a partir de uma conversa sua (/learn) é usada em 20 turnos."),
             hint: nil,
             rewards: [.skin(character: "frog", skin: "ghost", name: AchievementText(en: "Ghost", fr: "Fantôme", ptBR: "Fantasma"), characterName: AchievementText(en: "Frog", fr: "Grenouille", ptBR: "Sapo")), .title(id: "skill-smith", name: AchievementText(en: "Skill Smith", fr: "Forgeron de skills", ptBR: "Ferreiro de skills"))]
         ),
         AchievementDefinition(
             id: "total-recall", category: .mastery, icon: "BrainCircuit", points: 200, hidden: false,
             name: AchievementText(en: "Total Recall", fr: "Mémoire vive", ptBR: "Memória viva"),
-            description: AchievementText(en: "Write a bot's memory yourself, then see it recalled in 10 different conversations.", fr: "Écrivez vous-même la mémoire d'un robot, puis voyez-la rappelée dans 10 conversations différentes.", ptBR: "Escreva você mesmo a memória de um robô e veja-a lembrada em 10 conversas diferentes."),
+            description: AchievementText(en: "Write a bot's memory yourself, then see it recalled in 10 different conversations.", fr: "Écris toi-même la mémoire d'un robot, puis vois-la rappelée dans 10 conversations différentes.", ptBR: "Escreva você mesmo a memória de um robô e veja-a lembrada em 10 conversas diferentes."),
             hint: nil,
             rewards: [.skin(character: "frog", skin: "retro98", name: AchievementText(en: "Retro 98", fr: "Rétro 98", ptBR: "Retrô 98"), characterName: AchievementText(en: "Frog", fr: "Grenouille", ptBR: "Sapo")), .skin(character: "frog", skin: "gold", name: AchievementText(en: "Gold", fr: "Or", ptBR: "Ouro"), characterName: AchievementText(en: "Frog", fr: "Grenouille", ptBR: "Sapo")), .title(id: "total-recall", name: AchievementText(en: "Total Recall", fr: "Mémoire vive", ptBR: "Memória viva"))]
         ),
         AchievementDefinition(
             id: "ferryman", category: .mastery, icon: "Ship", points: 250, hidden: false,
             name: AchievementText(en: "Ferryman", fr: "Passeur", ptBR: "Barqueiro"),
-            description: AchievementText(en: "Publish a bot to your organization's catalogue, and 3 people import it.", fr: "Publiez un robot dans le catalogue de votre organisation, et 3 personnes l'importent.", ptBR: "Publique um robô no catálogo da sua organização e 3 pessoas o importam."),
+            description: AchievementText(en: "Publish a bot to your organization's catalogue, and 3 people import it.", fr: "Publie un robot dans le catalogue de ton organisation, et 3 personnes l'importent.", ptBR: "Publique um robô no catálogo da sua organização e 3 pessoas o importam."),
             hint: nil,
             rewards: [.skin(character: "shiba", skin: "neon", name: AchievementText(en: "Neon", fr: "Néon", ptBR: "Neon"), characterName: AchievementText(en: "Shiba", fr: "Shiba", ptBR: "Shiba")), .skin(character: "grump", skin: "neon", name: AchievementText(en: "Neon", fr: "Néon", ptBR: "Neon"), characterName: AchievementText(en: "Grump", fr: "Grognon", ptBR: "Rabugento")), .skin(character: "ogre", skin: "neon", name: AchievementText(en: "Neon", fr: "Néon", ptBR: "Neon"), characterName: AchievementText(en: "Ogre", fr: "Ogre", ptBR: "Ogro")), .skin(character: "frog", skin: "neon", name: AchievementText(en: "Neon", fr: "Néon", ptBR: "Neon"), characterName: AchievementText(en: "Frog", fr: "Grenouille", ptBR: "Sapo")), .title(id: "ferryman", name: AchievementText(en: "Ferryman", fr: "Passeur", ptBR: "Barqueiro"))]
         ),
@@ -515,98 +515,98 @@ public extension AchievementDefinition {
         AchievementDefinition(
             id: "clean-slate", category: .mastery, icon: "Eraser", points: 250, hidden: false,
             name: AchievementText(en: "Clean Slate", fr: "Table rase", ptBR: "Tudo em dia"),
-            description: AchievementText(en: "20 days where every approval asked of you was answered the same day and none of your routines failed.", fr: "20 jours où chaque approbation demandée a reçu sa réponse le jour même et où aucune de vos routines n'a échoué.", ptBR: "20 dias em que toda aprovação pedida a você foi respondida no mesmo dia e nenhuma rotina sua falhou."),
+            description: AchievementText(en: "20 days where every approval asked of you was answered the same day and none of your routines failed.", fr: "20 jours où chaque approbation demandée a reçu sa réponse le jour même et où aucune de tes routines n'a échoué.", ptBR: "20 dias em que toda aprovação pedida a você foi respondida no mesmo dia e nenhuma rotina sua falhou."),
             hint: nil,
             rewards: [.skin(character: "shiba", skin: "glitch", name: AchievementText(en: "Glitch", fr: "Glitch", ptBR: "Glitch"), characterName: AchievementText(en: "Shiba", fr: "Shiba", ptBR: "Shiba")), .skin(character: "grump", skin: "glitch", name: AchievementText(en: "Glitch", fr: "Glitch", ptBR: "Glitch"), characterName: AchievementText(en: "Grump", fr: "Grognon", ptBR: "Rabugento")), .skin(character: "ogre", skin: "glitch", name: AchievementText(en: "Glitch", fr: "Glitch", ptBR: "Glitch"), characterName: AchievementText(en: "Ogre", fr: "Ogre", ptBR: "Ogro")), .skin(character: "frog", skin: "glitch", name: AchievementText(en: "Glitch", fr: "Glitch", ptBR: "Glitch"), characterName: AchievementText(en: "Frog", fr: "Grenouille", ptBR: "Sapo")), .title(id: "clean-slate", name: AchievementText(en: "Clean Slate", fr: "Table rase", ptBR: "Tudo em dia"))]
         ),
         AchievementDefinition(
             id: "sagax-master", category: .mastery, icon: "GraduationCap", points: 300, hidden: false,
             name: AchievementText(en: "Sagax Master", fr: "Sagax accompli", ptBR: "Mestre Sagax"),
-            description: AchievementText(en: "Unlock 20 other Mastery achievements.", fr: "Débloquez 20 autres succès de Maîtrise.", ptBR: "Desbloqueie 20 outras conquistas de Maestria."),
+            description: AchievementText(en: "Unlock 20 other Mastery achievements.", fr: "Débloque 20 autres succès de Maîtrise.", ptBR: "Desbloqueie 20 outras conquistas de Maestria."),
             hint: nil,
             rewards: [.skin(character: "shiba", skin: "holo", name: AchievementText(en: "Holographic", fr: "Holographique", ptBR: "Holográfico"), characterName: AchievementText(en: "Shiba", fr: "Shiba", ptBR: "Shiba")), .skin(character: "shiba", skin: "molten", name: AchievementText(en: "Molten", fr: "Magma", ptBR: "Magma"), characterName: AchievementText(en: "Shiba", fr: "Shiba", ptBR: "Shiba")), .skin(character: "grump", skin: "holo", name: AchievementText(en: "Holographic", fr: "Holographique", ptBR: "Holográfico"), characterName: AchievementText(en: "Grump", fr: "Grognon", ptBR: "Rabugento")), .skin(character: "grump", skin: "molten", name: AchievementText(en: "Molten", fr: "Magma", ptBR: "Magma"), characterName: AchievementText(en: "Grump", fr: "Grognon", ptBR: "Rabugento")), .skin(character: "ogre", skin: "holo", name: AchievementText(en: "Holographic", fr: "Holographique", ptBR: "Holográfico"), characterName: AchievementText(en: "Ogre", fr: "Ogre", ptBR: "Ogro")), .skin(character: "ogre", skin: "molten", name: AchievementText(en: "Molten", fr: "Magma", ptBR: "Magma"), characterName: AchievementText(en: "Ogre", fr: "Ogre", ptBR: "Ogro")), .skin(character: "frog", skin: "holo", name: AchievementText(en: "Holographic", fr: "Holographique", ptBR: "Holográfico"), characterName: AchievementText(en: "Frog", fr: "Grenouille", ptBR: "Sapo")), .skin(character: "frog", skin: "molten", name: AchievementText(en: "Molten", fr: "Magma", ptBR: "Magma"), characterName: AchievementText(en: "Frog", fr: "Grenouille", ptBR: "Sapo")), .title(id: "sage", name: AchievementText(en: "Sagax Master", fr: "Sagax accompli", ptBR: "Sagax Master"))]
         ),
         AchievementDefinition(
             id: "bronze", category: .tiers, icon: "Medal", points: 10, hidden: false,
             name: AchievementText(en: "Bronze", fr: "Bronze", ptBR: "Bronze"),
-            description: AchievementText(en: "Earn 100 points.", fr: "Obtenez 100 points.", ptBR: "Earn 100 points."),
+            description: AchievementText(en: "Earn 100 points.", fr: "Obtiens 100 points.", ptBR: "Earn 100 points."),
             hint: nil,
             rewards: [.title(id: "bronze", name: AchievementText(en: "Bronze Operator", fr: "Opérateur bronze", ptBR: "Bronze Operator"))]
         ),
         AchievementDefinition(
             id: "silver", category: .tiers, icon: "Award", points: 20, hidden: false,
             name: AchievementText(en: "Silver", fr: "Argent", ptBR: "Silver"),
-            description: AchievementText(en: "Earn 300 points.", fr: "Obtenez 300 points.", ptBR: "Earn 300 points."),
+            description: AchievementText(en: "Earn 300 points.", fr: "Obtiens 300 points.", ptBR: "Earn 300 points."),
             hint: nil,
             rewards: [.title(id: "silver", name: AchievementText(en: "Silver Operator", fr: "Opérateur argent", ptBR: "Silver Operator"))]
         ),
         AchievementDefinition(
             id: "gold-tier", category: .tiers, icon: "Trophy", points: 50, hidden: false,
             name: AchievementText(en: "Gold", fr: "Or", ptBR: "Gold"),
-            description: AchievementText(en: "Earn 600 points.", fr: "Obtenez 600 points.", ptBR: "Earn 600 points."),
+            description: AchievementText(en: "Earn 600 points.", fr: "Obtiens 600 points.", ptBR: "Earn 600 points."),
             hint: nil,
             rewards: [.skin(character: "trombi", skin: "holo", name: AchievementText(en: "Holographic", fr: "Holographique", ptBR: "Holographic"), characterName: AchievementText(en: "Trombi", fr: "Trombi", ptBR: "Trombi"))]
         ),
         AchievementDefinition(
             id: "platinum", category: .tiers, icon: "Gem", points: 100, hidden: false,
             name: AchievementText(en: "Platinum", fr: "Platine", ptBR: "Platinum"),
-            description: AchievementText(en: "Unlock every achievement that is not a secret, Mastery aside.", fr: "Débloquez tous les succès qui ne sont pas secrets, hors Maîtrise.", ptBR: "Unlock every achievement that is not a secret, Mastery aside."),
+            description: AchievementText(en: "Unlock every achievement that is not a secret, Mastery aside.", fr: "Débloque tous les succès qui ne sont pas secrets, hors Maîtrise.", ptBR: "Unlock every achievement that is not a secret, Mastery aside."),
             hint: nil,
             rewards: [.skin(character: "bunbu", skin: "galaxy", name: AchievementText(en: "Galaxy", fr: "Galaxie", ptBR: "Galaxy"), characterName: AchievementText(en: "Bunbu", fr: "Bunbu", ptBR: "Bunbu")), .title(id: "platinum", name: AchievementText(en: "Platinum Sage", fr: "Sage platine", ptBR: "Platinum Sage"))]
         ),
         AchievementDefinition(
             id: "trombi-summoned", category: .secrets, icon: "Paperclip", points: 20, hidden: true,
-            name: AchievementText(en: "It Looks Like You're Writing", fr: "On dirait que vous écrivez", ptBR: "It Looks Like You're Writing"),
-            description: AchievementText(en: "Summon Trombi with its command. Trombi is yours for good.", fr: "Invoquez Trombi avec sa commande. Trombi est à vous pour de bon.", ptBR: "Summon Trombi with its command. Trombi is yours for good."),
+            name: AchievementText(en: "It Looks Like You're Writing", fr: "On dirait que tu écris", ptBR: "It Looks Like You're Writing"),
+            description: AchievementText(en: "Summon Trombi with its command. Trombi is yours for good.", fr: "Invoque Trombi avec sa commande. Trombi est à toi pour de bon.", ptBR: "Summon Trombi with its command. Trombi is yours for good."),
             hint: AchievementText(en: "A retro command, typed alone in the composer, brings back an old office friend.", fr: "Une commande rétro, tapée seule dans la zone de saisie, ramène un vieil ami de bureau.", ptBR: "A retro command, typed alone in the composer, brings back an old office friend."),
             rewards: [.character(id: "trombi", name: AchievementText(en: "Trombi", fr: "Trombi", ptBR: "Trombi"))]
         ),
         AchievementDefinition(
             id: "konami", category: .secrets, icon: "Gamepad2", points: 50, hidden: true,
             name: AchievementText(en: "Up Up Down Down", fr: "Haut haut bas bas", ptBR: "Up Up Down Down"),
-            description: AchievementText(en: "Enter the old cheat code.", fr: "Entrez le vieux code de triche.", ptBR: "Enter the old cheat code."),
+            description: AchievementText(en: "Enter the old cheat code.", fr: "Entre le vieux code de triche.", ptBR: "Enter the old cheat code."),
             hint: AchievementText(en: "Gamers of a certain age know a code made of arrows.", fr: "Les joueurs d'une certaine époque connaissent un code fait de flèches.", ptBR: "Gamers of a certain age know a code made of arrows."),
             rewards: [.skin(character: "owl", skin: "lightning", name: AchievementText(en: "Lightning", fr: "Foudre", ptBR: "Lightning"), characterName: AchievementText(en: "Owl", fr: "Hibou", ptBR: "Owl"))]
         ),
         AchievementDefinition(
             id: "night-owl", category: .secrets, icon: "Moon", points: 50, hidden: true,
             name: AchievementText(en: "Night Owl", fr: "Oiseau de nuit", ptBR: "Night Owl"),
-            description: AchievementText(en: "Talk to your desktop mascot between midnight and 1 a.m.", fr: "Parlez à votre mascotte de bureau entre minuit et 1 h.", ptBR: "Talk to your desktop mascot between midnight and 1 a.m."),
+            description: AchievementText(en: "Talk to your desktop mascot between midnight and 1 a.m.", fr: "Parle à ta mascotte de bureau entre minuit et 1 h.", ptBR: "Talk to your desktop mascot between midnight and 1 a.m."),
             hint: AchievementText(en: "Owls are at their best after midnight.", fr: "Les hiboux sont à leur meilleur après minuit.", ptBR: "Owls are at their best after midnight."),
             rewards: [.skin(character: "owl", skin: "spirit", name: AchievementText(en: "Spirit", fr: "Esprit", ptBR: "Spirit"), characterName: AchievementText(en: "Owl", fr: "Hibou", ptBR: "Owl"))]
         ),
         AchievementDefinition(
             id: "good-bot", category: .secrets, icon: "Heart", points: 10, hidden: true,
             name: AchievementText(en: "Who's a Good Bot?", fr: "Qui est un bon robot?", ptBR: "Who's a Good Bot?"),
-            description: AchievementText(en: "Pet your mascot fifty times.", fr: "Flattez votre mascotte cinquante fois.", ptBR: "Pet your mascot fifty times."),
-            hint: AchievementText(en: "Your mascot loves a little affection.", fr: "Votre mascotte adore un peu d'affection.", ptBR: "Your mascot loves a little affection."),
+            description: AchievementText(en: "Pet your mascot fifty times.", fr: "Flatte ta mascotte cinquante fois.", ptBR: "Pet your mascot fifty times."),
+            hint: AchievementText(en: "Your mascot loves a little affection.", fr: "Ta mascotte adore un peu d'affection.", ptBR: "Your mascot loves a little affection."),
             rewards: [.title(id: "petter", name: AchievementText(en: "Bot Whisperer", fr: "Charmeur de robots", ptBR: "Bot Whisperer"))]
         ),
         AchievementDefinition(
             id: "best-friends", category: .secrets, icon: "HeartHandshake", points: 50, hidden: true,
             name: AchievementText(en: "Best Friends Forever", fr: "Meilleurs amis pour la vie", ptBR: "Best Friends Forever"),
-            description: AchievementText(en: "Pet your mascot five hundred times.", fr: "Flattez votre mascotte cinq cents fois.", ptBR: "Pet your mascot five hundred times."),
+            description: AchievementText(en: "Pet your mascot five hundred times.", fr: "Flatte ta mascotte cinq cents fois.", ptBR: "Pet your mascot five hundred times."),
             hint: AchievementText(en: "Lots and lots of affection.", fr: "Beaucoup, beaucoup d'affection.", ptBR: "Lots and lots of affection."),
             rewards: [.skin(character: "trombi", skin: "molten", name: AchievementText(en: "Molten", fr: "Magma", ptBR: "Molten"), characterName: AchievementText(en: "Trombi", fr: "Trombi", ptBR: "Trombi"))]
         ),
         AchievementDefinition(
             id: "desk-buddy", category: .secrets, icon: "Monitor", points: 10, hidden: false,
             name: AchievementText(en: "Desk Buddy", fr: "Copain de bureau", ptBR: "Desk Buddy"),
-            description: AchievementText(en: "Put a bot on your desktop.", fr: "Mettez un robot sur votre bureau.", ptBR: "Put a bot on your desktop."),
+            description: AchievementText(en: "Put a bot on your desktop.", fr: "Mets un robot sur ton bureau.", ptBR: "Put a bot on your desktop."),
             hint: nil,
             rewards: [.title(id: "buddy", name: AchievementText(en: "Desk Buddy", fr: "Copain de bureau", ptBR: "Desk Buddy"))]
         ),
         AchievementDefinition(
             id: "trophy-case", category: .secrets, icon: "Trophy", points: 5, hidden: true,
             name: AchievementText(en: "Trophy Case", fr: "Vitrine à trophées", ptBR: "Trophy Case"),
-            description: AchievementText(en: "Admire your achievements.", fr: "Admirez vos succès.", ptBR: "Admire your achievements."),
-            hint: AchievementText(en: "Take a look at your trophies.", fr: "Jetez un œil à vos trophées.", ptBR: "Take a look at your trophies."),
+            description: AchievementText(en: "Admire your achievements.", fr: "Admire tes succès.", ptBR: "Admire your achievements."),
+            hint: AchievementText(en: "Take a look at your trophies.", fr: "Jette un œil à tes trophées.", ptBR: "Take a look at your trophies."),
             rewards: [.title(id: "collector", name: AchievementText(en: "Collector", fr: "Collectionneur", ptBR: "Collector"))]
         ),
         AchievementDefinition(
             id: "icon-swap", category: .secrets, icon: "AppWindow", points: 10, hidden: true,
             name: AchievementText(en: "New Look, Who Dis?", fr: "Nouvelle tête", ptBR: "New Look, Who Dis?"),
-            description: AchievementText(en: "Change the app's icon.", fr: "Changez l'icône de l'application.", ptBR: "Change the app's icon."),
+            description: AchievementText(en: "Change the app's icon.", fr: "Change l'icône de l'application.", ptBR: "Change the app's icon."),
             hint: AchievementText(en: "The Dock could use a new face.", fr: "Le Dock aurait bien besoin d'une nouvelle tête.", ptBR: "The Dock could use a new face."),
             rewards: [.title(id: "stylist", name: AchievementText(en: "Stylist", fr: "Styliste", ptBR: "Stylist"))]
         ),

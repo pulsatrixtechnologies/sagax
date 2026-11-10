@@ -17,9 +17,9 @@ applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? ski
 const lang = params.get("lang") ?? "en";
 await loadLocale(lang);
 document.documentElement.lang = lang;
-const active = Number(params.get("active") ?? "7");
+const active = Number(params.get("active") ?? "8");
 
-const CLAUDE = ["Claude Fable 5.1", "Claude Fable 5", "Claude Opus 5.5", "Claude Opus 5", "Claude Sonnet 5.5", "Claude Sonnet 5", "Claude Haiku 5", "Claude Sonnet 4.6", "Claude Opus 4.6", "Claude Haiku 4.5"];
+const CLAUDE = ["Claude Fable 5.2", "Claude Fable 5.1", "Claude Fable 5", "Claude Opus 5.5", "Claude Opus 5", "Claude Sonnet 5.5", "Claude Sonnet 5", "Claude Haiku 5", "Claude Sonnet 4.6", "Claude Opus 4.6", "Claude Haiku 4.5"];
 const OPENAI = ["GPT-6.1", "GPT-6.1 mini", "GPT-6", "GPT-6 mini", "GPT-5.5", "o5", "o5 mini", "GPT-5", "GPT-5 mini"];
 const rows = (engine: string, names: string[], current: number): ModelMenuRow[] =>
   names.map((label, index) => ({

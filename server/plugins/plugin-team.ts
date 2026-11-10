@@ -2,7 +2,7 @@
  * plugin agent asks for (`model:` in its frontmatter), matched to this
  * server's engines. A Claude Code alias (sonnet, opus, haiku, fable) takes
  * the newest model of that family the Claude engine offers; an exact id
- * (claude-fable-5-1) must be in that engine's catalog. `inherit`, an empty
+ * (claude-fable-5-2) must be in that engine's catalog. `inherit`, an empty
  * value or a model no engine offers keeps the team's default model. */
 import type { ModelSelection } from "../../shared/wire.ts";
 import { readyToRun, type SelectableInstance } from "../models/default-model-selection.ts";

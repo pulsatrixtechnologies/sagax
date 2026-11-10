@@ -39,7 +39,8 @@ const sections: ModelMenuSection[] = [
   ] },
   // Claude Code has two accounts: the subscription and an API key (step 2)
   { key: "claude", label: "Anthropic (Max)", ...claude, rows: [
-    model("claude", "claude-fable-5-1", "Claude Fable 5.1", { detail: "Élevé", current: true }),
+    model("claude", "claude-fable-5-2", "Claude Fable 5.2", { detail: "Élevé", current: true }),
+    model("claude", "claude-fable-5-1", "Claude Fable 5.1", { detail: "Élevé" }),
     model("claude", "claude-fable-5", "Claude Fable 5", { detail: "Élevé" }),
     model("claude", "claude-opus-5-5", "Claude Opus 5.5", { detail: "Élevé" }),
     model("claude", "claude-opus-5", "Claude Opus 5", { detail: "Élevé" }),
@@ -85,7 +86,7 @@ const initialPath = pathHarness ? { harness: pathHarness, provider: pathProvider
 /** The chat bar under the menu, for the side-by-side: the chip reads the
  * three steps (#3116) or, before, the model alone. */
 function ChatBar({ narrow }: { narrow: boolean }) {
-  const chip = before ? "Claude Fable 5.1 Élevé" : "Claude Code · Anthropic (Max) · Fable 5.1 Élevé";
+  const chip = before ? "Claude Fable 5.2 Élevé" : "Claude Code · Anthropic (Max) · Fable 5.2 Élevé";
   return (
     <div data-chat-bar
       style={narrow ? { left: 8, right: 8, bottom: 8 } : { left: 24, right: 24, bottom: 16 }}

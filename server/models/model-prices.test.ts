@@ -33,6 +33,12 @@ describe("built-in list prices", () => {
     expect(listPriceFor("gemini-3.8-flash", new Date("2027-01-01T00:00:00Z"))).toEqual({ inputPerMillion: 1.5, cachedInputPerMillion: 0.15, outputPerMillion: 7.5 });
   });
 
+  it("prices Claude Fable 5.2 on the Anthropic and OpenRouter keys (#3256)", () => {
+    expect(listPriceFor("claude-fable-5-2")).toEqual({ inputPerMillion: 8, cachedInputPerMillion: 0.2, outputPerMillion: 40 });
+    expect(listPriceFor("anthropic/claude-fable-5.2")).toEqual({ inputPerMillion: 8, cachedInputPerMillion: 0.2, outputPerMillion: 40 });
+    expect(listPriceFor("claude-fable-5-1")).toEqual({ inputPerMillion: 10, cachedInputPerMillion: 0.25, outputPerMillion: 50 });
+  });
+
   it("leaves models without a published price unpriced rather than guessing from a sibling", () => {
     for (const model of ["gpt-5.3-codex-spark", "grok-4", "grok-4-fast", "grok-3-mini", "meta-llama/llama-3.3-70b-instruct", "kimi-code/k3", "claude-fake", ""]) {
       expect(listPriceFor(model), model).toBeNull();

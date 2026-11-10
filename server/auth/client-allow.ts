@@ -419,6 +419,14 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // The person's own share and the check that a person-marked page does not
   // enter a room or a group (server/routes/published-pages.ts). Not an admin route.
   { methods: ["POST"], path: /^\/api\/pages\/[\w-]+\/(?:share|place)$/ },
+  // #3413: a page's capability bridge, called by its wrapper with the
+  // reader's own session (server/routes/page-data.ts): what the version
+  // declares, the reader's own data from a declared source, and who reads.
+  // The handler answers for the session's person only.
+  { methods: ["GET"], path: /^\/api\/pages\/[\w-]+\/(?:capabilities|viewer|data\/[\w-]+)$/ },
+  // the reader's own answer to an Ask first card of a data read (never a
+  // bot's act copy: the handler refuses it)
+  { methods: ["POST"], path: /^\/api\/pages\/[\w-]+\/data-approvals\/[\w-]+$/ },
   { methods: ["PATCH"], path: /^\/api\/bots\/[\w-]+\/cards\/[\w-]+$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/secret-cards\/[\w-]+\/(?:resume|dismiss)$/ },
   // A sign-in card's Done or Cancel. The bot's browser itself stays admin

@@ -36,6 +36,7 @@ import { sanitizePageLook, type PageLook } from "../../src/lib/page-look.ts";
 import { applyDesignSystem, BUILTIN_DESIGN_SYSTEMS, DEFAULT_DESIGN_SYSTEM, DESIGN_SYSTEM_LIMITS, findDesignSystem, ownDesignSystemId, parseDesignTokens, type DesignSystem } from "../../src/lib/design-systems.ts";
 import { threadOwner } from "../threads/thread-privacy.ts";
 import { pageAudienceOf, samePageAudience, type PageAudience } from "../../shared/page-audience.ts";
+import { pageCapabilitiesOf, pageCapabilitiesPersonal, type PageCapabilities } from "../../shared/page-capabilities.ts";
 import { ANON_STATE_LIMITS, anonymousBy, STATE_LIMITS, stateRulesOf, stateValueJson, type PageStateEntry, type StateRules } from "../../shared/page-state.ts";
 import { THREAD_LIMITS, type PageQuote, type PageSuggestion, type PageThread, type PageThreadReply } from "../../shared/page-threads.ts";
 import {
@@ -118,6 +119,12 @@ export interface PageRecord {
   /** The person allows the bot (and their own later edit) to replace the
    * published version. Never set by the bot. Off unless they turn it on. */
   keepUpdated?: boolean;
+  /** #3413: a version that declares a personal data capability was current
+   * at some point. Never removed, revoke included (versions are trimmed, so
+   * their contents cannot tell it later, and a reader's frame may outlive a
+   * revoke): while it is set and the page is shared with anyone but its
+   * person, its shared state is read only. */
+  personalData?: true;
   /** #3128: the person shares this page in the bot's Library. Everyone who
    * may use the bot reads it and asks the bot to refresh it. Absent means
    * personal, the default. */
@@ -472,8 +479,16 @@ export class PublishedPages {
     const page = pages.find((entry) => entry.id === id);
     if (!page) return refuse(404, "not_found", "This page does not exist.");
     const now = this.clock();
+    const sharedBefore = pageSharedWithOthers(page);
+    const currentBefore = page.currentVersion;
     const result = change(page, now);
     if ("ok" in result) return result;
+    // the version that stops being current counts too: a page stored before
+    // the mark existed gets it as its data version goes
+    if (page.currentVersion !== currentBefore) this.notePersonalData(page, [currentBefore, page.currentVersion]);
+    // #3413: a page that reads personal data and becomes shared loses the
+    // shared state it kept while private, so nothing it received goes out
+    if (!sharedBefore && pageSharedWithOthers(page) && page.state && (page.personalData === true || this.declaresPersonalData(page))) delete page.state;
     if (touch) page.updatedAt = now;
     this.save(pages);
     return page;
@@ -570,8 +585,10 @@ export class PublishedPages {
     if (page.keepUpdated === true && page.status === "published" && page.currentVersion !== null) {
       for (const entry of page.versions) if (entry.state === "published" && entry.n !== version.n) entry.state = "proposed";
       version.state = "published";
+      const outgoing = page.currentVersion;
       page.currentVersion = version.n;
       page.history.push({ at: now, action: "keep", version: n });
+      this.notePersonalData(page, [outgoing, version.n]);
     }
     page.updatedAt = now;
     this.save(pages);
@@ -719,6 +736,53 @@ export class PublishedPages {
     return content === null ? {} : stateRulesOf(content);
   }
 
+  /** What a version declares it uses (#3413, shared/page-capabilities.ts):
+   * the published one by default. Read from the stored version itself, so
+   * it is what that version holds, whatever the reader's browser sends. Null
+   * for a version with no declaration (or not HTML). */
+  capabilities(id: string, n?: number): PageCapabilities | null {
+    const page = this.get(id);
+    const at = n ?? page?.currentVersion ?? null;
+    if (!page || at === null) return null;
+    const version = page.versions.find((entry) => entry.n === at);
+    if (!version || !pageIsHtml(version.kind)) return null;
+    const content = this.content(id, version.n);
+    return content === null ? null : pageCapabilitiesOf(content);
+  }
+
+  /** Whether any HTML version of the page declares a capability that
+   * hands it the reader's personal data (#3413). */
+  private declaresPersonalData(page: PageRecord): boolean {
+    return page.versions.some((version) => pageIsHtml(version.kind) && pageCapabilitiesPersonal(pageCapabilitiesOf(this.content(page.id, version.n) ?? "")));
+  }
+
+  /** #3413, the first isolation rule, held by the declaration itself: while
+   * the page is shared with anyone but its person and its served version
+   * declares a personal data capability, or one ever did (`personalData`,
+   * kept on the page for good), its shared state is read only for
+   * everyone, its person included. Nothing in memory: it holds across a
+   * restart and across a change of version. */
+  stateReadOnlyForData(id: string): boolean {
+    const page = this.get(id);
+    return Boolean(page && pageSharedWithOthers(page) && (page.personalData === true || pageCapabilitiesPersonal(this.capabilities(id))));
+  }
+
+  /** The version that becomes current, or the one that stops being current,
+   * declares a personal data capability: mark the page for good, revoke
+   * included (a reader's frame may still be open on it). Called whenever the
+   * current version changes (publish, a kept-updated proposal, revoke). */
+  private notePersonalData(page: PageRecord, numbers: ReadonlyArray<number | null>): void {
+    if (page.personalData === true) return;
+    for (const n of numbers) {
+      if (n === null) continue;
+      const version = page.versions.find((entry) => entry.n === n);
+      if (version && pageIsHtml(version.kind) && pageCapabilitiesPersonal(pageCapabilitiesOf(this.content(page.id, version.n) ?? ""))) {
+        page.personalData = true;
+        return;
+      }
+    }
+  }
+
   /** The keys its person made read-only. */
   stateLocks(id: string): string[] {
     return [...(this.get(id)?.stateLocks ?? [])];
@@ -729,6 +793,7 @@ export class PublishedPages {
    * in (`anon`) has tighter limits, and the writes from their network
    * address are counted too. Never moves the page in its person's list. */
   setState(id: string, input: { key: string; value: unknown; by: string; anon?: { source: string } }): { ok: true; state: Record<string, PageStateEntry> } | PageError {
+    if (this.stateReadOnlyForData(id)) return refuse(409, "shared_write_after_data", "This page reads personal data: its shared state is read only while it is shared.");
     const json = stateValueJson(input.value);
     if (json === null) return refuse(400, "bad_value", `value: plain JSON data, at most ${STATE_LIMITS.valueBytes / 1024} KB.`);
     if (input.anon && new TextEncoder().encode(json).length > ANON_STATE_LIMITS.valueBytes) return refuse(400, "bad_value", `value: at most ${ANON_STATE_LIMITS.valueBytes / 1024} KB without signing in.`);
@@ -1113,4 +1178,17 @@ export class PublishedPages {
       ...(path ? { path, url: `${origin.replace(/\/+$/, "")}${path}`, reachable } : {}),
     };
   }
+}
+
+/** A page private to its person: shared with nobody (no invite, no editor,
+ * not in a bot's Library for others). Pure. */
+export function pagePrivateToPerson(page: Pick<PageRecord, "access" | "invites" | "editors" | "botShared">): boolean {
+  if (page.access !== "private" || page.botShared === true) return false;
+  const invited = (page.invites?.people.length ?? 0) + (page.invites?.teams.length ?? 0);
+  return invited === 0 && !(page.editors?.length);
+}
+
+/** Someone other than its person may read the page now. Pure. */
+export function pageSharedWithOthers(page: Pick<PageRecord, "status" | "access" | "invites" | "editors" | "botShared">): boolean {
+  return page.status === "published" && !pagePrivateToPerson(page);
 }

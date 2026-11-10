@@ -5,6 +5,8 @@
 //   event: presence  { people: [{ id, name }] }  who has the page open
 //   event: threads   {}                          the annotations changed: read them again
 //   event: state     {}                          the page's shared state changed (#1544)
+//   event: data      { name }                    a data source this person's page
+//                                                reads changed (#3413): to that person only
 // The stream carries no comment: a bar reads the threads with its own rights
 // (GET /api/pages/:id/threads). Nothing is stored; a stream that closes
 // leaves at once. Comment lines every 25 s keep proxies from closing it.
@@ -82,6 +84,27 @@ export class PageLive {
   /** The page's shared state changed: every open bar reads it again. */
   stateChanged(pageId: string): void {
     this.send(pageId, sseEvent("state", {}));
+  }
+
+  /** Whether this person has the page open now. */
+  isOpen(pageId: string, personId: string): boolean {
+    const me = personId.toLowerCase();
+    for (const entry of this.rooms.get(pageId) ?? []) if (entry.id.toLowerCase() === me) return true;
+    return false;
+  }
+
+  /** A data source this person's page reads changed (#3413): their own
+   * streams on that page only, never another reader's (each reads their own
+   * data). */
+  data(pageId: string, personId: string, name: string): void {
+    const me = personId.toLowerCase();
+    const frame = sseEvent("data", { name });
+    for (const entry of this.rooms.get(pageId) ?? []) {
+      if (entry.id.toLowerCase() !== me) continue;
+      try {
+        entry.res.write(frame);
+      } catch { /* closed */ }
+    }
   }
 
   /** The page is gone or no longer readable: every stream closes. */

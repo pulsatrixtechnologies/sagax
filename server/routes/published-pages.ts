@@ -99,6 +99,7 @@ import type { PageError, PageRecord, PageVersionRecord, PublishedPages } from ".
 import { commentAnswerDocument, escapeHtml, pageDocument, parseReaderAssets, splitSlides, wrapperDocument, type ReaderAssets } from "../pages/published-pages-render.ts";
 import type { ReaderBoot } from "../../shared/page-reader.ts";
 import type { PageLive } from "../pages/page-live.ts";
+import { pageCapabilitiesAny } from "../../shared/page-capabilities.ts";
 import { anonymousBy, anonymousName, READER_ID, READER_ID_HEADER, STATE_LIMITS, STATE_PREFIX, stateLevelFor, stateMayWrite, stateRoleFor, validStateKey, type PageStateEntry, type PageStateView, type StateAccess, type StateRole } from "../../shared/page-state.ts";
 import { applySuggestion, parsePageQuote, parseSuggestion, parseThreadText, suggestable, type PageThread, type PageThreadsAnswer } from "../../shared/page-threads.ts";
 import { geistFace } from "../geist-face.ts";
@@ -408,6 +409,8 @@ function sendWrapper(options: PublicPageOptions, req: IncomingMessage, res: Serv
     lang,
     openNonce,
     preview: input.preview,
+    // #3413: the preview of a version that declares capabilities relays them to the app's broker
+    ...(input.preview && pageCapabilitiesAny(options.pages?.capabilities(input.page.id, input.version.n)) ? { capsRelay: true } : {}),
     ...(!input.preview && input.version.kind === "presentation" ? { slides: splitSlides(options.pages?.content(input.page.id, input.version.n) ?? "").length } : {}),
     ...(input.preview ? {} : { reader: { boot: readerBoot({ page: input.page, version: input.version, viewer, lang, personName: names.personName, ...(meName ? { meName } : {}),
       ...(drawn?.bot ? { bot: drawn.bot } : {}),
@@ -760,6 +763,8 @@ function serveFrame(options: PublicPageOptions, req: IncomingMessage, res: Serve
     nonce,
     ...(keepScroll !== undefined ? { keepScroll } : {}),
     ...(reportSize ? { reportSize: true } : {}),
+    // #3413: the capabilities this version declares (null: today's frame)
+    capabilities: pages.capabilities(target.page.id, target.version.n),
     ...(theme ? { theme } : {}),
     ...(skin ? { skin } : {}),
     ...(schemes ? { schemes } : {}),

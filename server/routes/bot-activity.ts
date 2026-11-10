@@ -37,6 +37,7 @@
 // is another person's private one, and nothing else of that thread.
 import { redactSecretsInText } from "../redact.ts";
 import { toolFailureText } from "../../shared/tool-failure-text.ts";
+import { failedTurnCause } from "../../shared/failed-turn.ts";
 import { shortPathsIn } from "../../shared/working-step.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { WireAccessCard } from "../../shared/wire.ts";
@@ -314,6 +315,41 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
   return (ctx) => handleBotActivityRequest(state, listed, detail, ctx);
 }
 
+/** The bot activity list read by another server surface (#3409, the Team
+ * board): the same entries, statuses and code work the bot panel shows,
+ * narrowed by the same threadReadable and runSeen. Fresh message pages per
+ * call. `failureCause` is the cause a failed turn stored in its thread
+ * (shared/failed-turn.ts, the row the chat shows and the incident sent to
+ * the Primary Bot carries), first line only, redacted. */
+export interface BotActivityReader {
+  list(bot: ActivityBot, viewerId: string | undefined, limit: number, windowMs?: number): BotActivityItem[];
+  failureCause(threadId: string): string | undefined;
+}
+
+export function createBotActivityReader(deps: BotActivityRouteDeps): BotActivityReader {
+  const state = createBotActivityState(deps);
+  const listed = activityListMethods(state);
+  return {
+    list(bot, viewerId, limit, windowMs) {
+      state.messagePages.clear();
+      return listed.list(bot, viewerId, Math.min(limit, LIST_MAX), windowMs);
+    },
+    failureCause(threadId) {
+      const rows = listed.messages(threadId, CURRENT_SCAN).messages;
+      for (let index = rows.length - 1; index >= 0; index--) {
+        const message = rows[index]!;
+        const cause = message.kind === "activity" && message.tool?.name ? failedTurnCause(message.tool.name) : null;
+        if (cause) {
+          const line = cause.split(/\r?\n/).map((part) => part.trim()).find(Boolean);
+          return line ? redactSecretsInText(line) : undefined;
+        }
+        if (asksForWork(message)) return undefined;
+      }
+      return undefined;
+    },
+  };
+}
+
 interface BotActivityState {
   deps: BotActivityRouteDeps;
   now: () => number;
@@ -480,12 +516,15 @@ function activityListMethods(state: BotActivityState) {
     // this is the turn that scan read.
     const sameTurn = start < 0 && page.hasMore && cached?.scan.lastId !== undefined && rows.some((message) => message.id === cached.scan.lastId);
     const coding = isCodingWork(turn, repo) || (!teammateTurn && repo && everCoding) || (sameTurn && cached!.scan.coding);
-    const code: BotCodeWork | undefined = everCoding
+    const work = collector.result();
+    // #3409: an issue a bot read or commented on (a design note) is code
+    // work of its own for the Team board, even in a turn that is not coding.
+    const code: BotCodeWork | undefined = everCoding || work.issues
       ? {
         ...(repository ? { folder: repository.root } : {}),
         ...(repository?.branch ? { branch: repository.branch } : {}),
         ...(repository?.origin ? { repo: repository.origin.repo, ...(repository.origin.url ? { repoUrl: repository.origin.url } : {}) } : {}),
-        ...collector.result(),
+        ...work,
       }
       : undefined;
     const request = newestRequest(rows);
@@ -564,8 +603,8 @@ function activityListMethods(state: BotActivityState) {
   }
 
   /** The list, newest first with running work on top. */
-  function list(bot: ActivityBot, viewerId: string | undefined, limit: number): BotActivityItem[] {
-    const since = now() - BOT_ACTIVITY_WINDOW_MS;
+  function list(bot: ActivityBot, viewerId: string | undefined, limit: number, windowMs = BOT_ACTIVITY_WINDOW_MS): BotActivityItem[] {
+    const since = now() - windowMs;
     const runs = deps.runs(bot.id).filter((run) => deps.runSeen(run, viewerId));
     const runById = new Map(runs.map((run) => [run.id, run]));
     const items: BotActivityItem[] = [];

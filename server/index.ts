@@ -51,7 +51,7 @@ import { groupLeftFrameAllowed } from "./groups/group-leave.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, hostname, userInfo } from "node:os";
+import { homedir, hostname, tmpdir, userInfo } from "node:os";
 import { ToolGrantStore } from "./tools/tool-grants.ts";
 import { foreignToolSpelling, sagaxInternalSelfAnswers, sagaxInternalTool } from "./sagax-internal-tools.ts";
 import { createAgentCardGuard } from "./tools/agent-tool-card-guard.ts";
@@ -1169,12 +1169,18 @@ import { createShownPathRoutes } from "./routes/shown-path.ts";
 import { docsIndexPrompt, readWorkspaceText, rulesSystemPrompt } from "./workspace/workspace-files.ts";
 import { updateDoc, updateRules } from "./workspace/workspace-tools.ts";
 import { markWorkspaceUse, promptSectionPaths } from "./workspace/workspace-usage.ts";
-import { createBotActivityRoutes } from "./routes/bot-activity.ts";
+import { createBotActivityReader, createBotActivityRoutes, type BotActivityRouteDeps } from "./routes/bot-activity.ts";
+import { createPageDataRoutes } from "./routes/page-data.ts";
+import { PageDataWatch, PageSources } from "./pages/page-sources.ts";
+import { PageDataApprovals } from "./pages/page-data-approvals.ts";
+import { createTeamBoardSource } from "./pages/sources/team-board.ts";
+import { TEAM_BOARD_ENTRIES_PER_BOT, TEAM_BOARD_WORK_WINDOW_MS } from "./team-board/board.ts";
+import { createGithubBoardReader, ghGraphqlVia } from "./team-board/github-board.ts";
 import { createBotCodeBranchRoutes } from "./routes/bot-code-branches.ts";
 import { branchRemoteDeps } from "./remote-support/branch-channels.ts";
 import type { SandboxExecInput } from "./sandbox/sandboxd-core.ts";
 import { createDevPullRoutes } from "./routes/dev-pull.ts";
-import { BranchArchive } from "./code-branches.ts";
+import { BranchArchive, hostGit } from "./code-branches.ts";
 import { CloudAgentStore } from "./cloud-agents/store.ts";
 import { CloudAgentCredentialStore } from "./cloud-agents/credentials.ts";
 import { CloudAgentManager } from "./cloud-agents/manager.ts";
@@ -12491,6 +12497,40 @@ const personalHostChecks = new Map<string, { at: number; refused: boolean }>();
 // only by that person on an organization server, or by this computer's owner
 // on a one-person server (never another paired session, never a bot's shell
 // on a shared server).
+// #3413: a page's capability bridge (server/routes/page-data.ts), before
+// the pages routes so a reader who is not signed in reads `sign_in`. The
+// sources are registered where their own wiring lives (team-board below).
+const pageSources = new PageSources();
+// Ask first answers of page data reads: "Always allow" kept on disk per person
+const pageDataApprovals = new PageDataApprovals(join(DATA_DIR, "page-data-approvals.json"));
+const pageDataWatch = new PageDataWatch(pageLive);
+store.onChange((change) => {
+  if (change.type === "bot") pageDataWatch.botChanged(change.botId);
+});
+ROUTES.push(createPageDataRoutes({
+  pages: publishedPages,
+  reader: (auth) => pageReaderFor(auth),
+  botAct: (auth) => auth.kind === "session" && isBotActSession(auth.session),
+  teamsOf: (principalId) => IDENTITY.kind === "perspicax" ? (principals.byId(principalId)?.teams ?? []).map((team) => team.id) : [],
+  ownerActive: (page) => {
+    if (IDENTITY.kind !== "perspicax" || !page.ownerId) return true;
+    const person = principals.byId(page.ownerId);
+    return Boolean(person && person.disabledAt === undefined && !person.consoleDisabled);
+  },
+  names: (ids) => Object.fromEntries(ids.map((id) => [id, pageThreadName(id)])),
+  sources: pageSources,
+  // the organization's Deny and Ask first for the action page_data, in the
+  // reader's context: no bot of the page's owner is named (an organization
+  // rule applies to every bot and person)
+  orgRule: ({ source }) => {
+    const rules = customRules.orgRules().filter((rule) => rule.enabled);
+    if (!rules.length) return "none";
+    const { decision } = reviewCustomRules(rules, { tool: "page_data", mcpTool: `page_data_${source.replace(/-/g, "_")}`, summary: `A page reads ${source} for the person reading it`, input: JSON.stringify({ source }), hints: { readOnly: true } }, "");
+    return decision.kind === "deny" ? "deny" : decision.kind === "ask" ? "ask" : "none";
+  },
+  approvals: pageDataApprovals,
+  watch: pageDataWatch
+}));
 ROUTES.push(createPublishedPageRoutes({
   pages: publishedPages,
   owner: (auth) => IDENTITY.kind === "perspicax" && auth.kind === "session" ? auth.session.principalId?.trim() || undefined : undefined,
@@ -25139,7 +25179,7 @@ ROUTES.push(createCodeRoutes({
 
 // What a bot is doing (server/routes/bot-activity.ts): its threads, the
 // work it handed other bots and its routine runs, as the viewer may read them.
-ROUTES.push(createBotActivityRoutes({
+const botActivityDeps: BotActivityRouteDeps = {
   bot: (id) => store.bot(id),
   tasks: (botId) => store.tasks(botId),
   viewerId: (auth) => channelFilterViewerId(auth),
@@ -25181,6 +25221,51 @@ ROUTES.push(createBotActivityRoutes({
     inRepository: (cwd) => inGitRepository(cwd),
     repository: (cwd) => repositoryInfo(cwd)
   }, viewerId)
+};
+ROUTES.push(createBotActivityRoutes(botActivityDeps));
+// The Team board (#3409), the `team-board` page source (#3413,
+// server/pages/sources/team-board.ts): the reader's own teams and bots,
+// their code work as the reader may read it, and GitHub read with the
+// reader's own account. Computed on demand, read only.
+const teamBoardActivity = createBotActivityReader(botActivityDeps);
+const teamBoardGithub = createGithubBoardReader({
+  token: (person) => githubAccountToken(person),
+  // a solo server without a stored credential: the host's own gh sign-in
+  ...(IDENTITY.kind === "perspicax" ? {} : { ghGraphql: ghGraphqlVia(hostGit, tmpdir()) })
+});
+function teamBoardBots(auth: RequestAuth): BotRecord[] {
+  const person = actorPrincipalId(auth);
+  if (!person) return [];
+  const visible = visibleTo(viewerFor(auth));
+  return store.bots.filter((bot) => !bot.hidden && visible.bot(bot.id)
+    && (IDENTITY.kind !== "perspicax" || effectiveBotOwner(bot).trim().toLowerCase() === person.trim().toLowerCase()));
+}
+pageSources.register(createTeamBoardSource({
+  person: (auth) => actorPrincipalId(auth) || undefined,
+  viewerId: (auth) => channelFilterViewerId(auth),
+  teams: (auth) => {
+    const person = actorPrincipalId(auth);
+    const bots = teamBoardBots(auth);
+    const names = sectionChannels ? orgVisibleSections(orgSectionNames(), person || undefined) : store.sections;
+    return (names as string[]).map((name) => ({
+      sectionId: (sectionChannels && person ? sectionChannels.byNameForOwner(name, person)?.id : undefined) ?? name,
+      name,
+      bots: bots.filter((bot) => sectionKey(bot.section) === sectionKey(name)).map((bot) => ({ id: bot.id, name: bot.name })),
+    })).filter((team) => team.bots.length > 0);
+  },
+  bots: (auth) => teamBoardBots(auth).map((bot) => ({ id: bot.id, name: bot.name, ...(bot.managedSections ? { managedSections: bot.managedSections } : {}) })),
+  entries: (board, viewerId) => {
+    const bot = store.bot(board.id);
+    if (!bot) return [];
+    return teamBoardActivity.list(bot, viewerId, TEAM_BOARD_ENTRIES_PER_BOT, TEAM_BOARD_WORK_WINDOW_MS)
+      .filter((item) => item.code)
+      .map((item) => {
+        const failure = (item.status === "failed" || item.status === "blocked") && item.threadId ? teamBoardActivity.failureCause(item.threadId) : undefined;
+        return { botId: bot.id, item, ...(failure ? { failure } : {}) };
+      });
+  },
+  queued: () => coordinator.liveEdges().filter((edge) => edge.state === "queued").map((edge) => edge.threadId),
+  github: teamBoardGithub
 }));
 // The bot panel's Coding branches, acted on by the person
 // (server/routes/bot-code-branches.ts): commit, push, pull request, diff,

@@ -10,6 +10,7 @@ import { withResultBudget, type McpMessage } from "./McpResultBudgetField";
 import {
   EMPTY_DRAFT,
   draftFor,
+  fixedKeysHeaders,
   isRemoteMcpListing,
   parseMcpArguments,
   parseMcpEnvironment,
@@ -34,6 +35,9 @@ export function useMcpServers() {
   const [reserved, setReserved] = useState<ReservedMcpListing[]>([]);
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const [draft, setDraft] = useState<McpDraft>(EMPTY_DRAFT);
+  /** Fix the keys: the editor asks only for the header values, typed again. */
+  const [fixingKeys, setFixingKeys] = useState(false);
+  const [keyValues, setKeyValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | McpMessage | null>(null);
   const [notice, setNotice] = useState<(McpMessage & { stateKey?: LocaleKey }) | null>(null);
@@ -113,12 +117,15 @@ export function useMcpServers() {
   const closeEditor = () => {
     setEditing(null);
     setDraft(EMPTY_DRAFT);
+    setFixingKeys(false);
+    setKeyValues({});
   };
 
   /** The request body for the draft, or the message that stops it. Its Result
    * size limit is checked and added by withResultBudget (save, below). */
   const draftBody = (
     existing: McpServerListing | undefined,
+    draft: McpDraft,
   ): { ok: true; body: Record<string, unknown> } | { ok: false; error: McpMessage } => {
     const name = draft.name.trim();
     if (draft.transport === "remote") {
@@ -144,7 +151,12 @@ export function useMcpServers() {
   const save = async () => {
     const name = draft.name.trim();
     const existing = editing === "new" ? undefined : servers?.find((server) => server.name === editing);
-    const prepared = withResultBudget(draft.resultBudget, () => draftBody(existing));
+    // Fix the keys saves the same server with only the header values typed again.
+    const fixed = fixingKeys && existing && isRemoteMcpListing(existing) && existing.headerKeys.length
+      ? { ...draft, headers: fixedKeysHeaders(existing.headerKeys, keyValues) }
+      : draft;
+    const retest = fixingKeys && existing !== undefined;
+    const prepared = withResultBudget(fixed.resultBudget, () => draftBody(existing, fixed));
     if (!prepared.ok) {
       setError(prepared.error);
       return;
@@ -171,10 +183,13 @@ export function useMcpServers() {
       const needsSignIn = saved && isRemoteMcpListing(saved) && (saved.auth === "required" || saved.auth === "expired");
       setNotice({ key: needsSignIn && editing === "new" ? "mcp.oauth.addedNeedsSignIn" : editing === "new" ? "mcp.saved" : "mcp.updated", params: { name } });
       closeEditor();
+      setBusy(null);
+      // The keys typed again are tested at once: the row says what the server answers now.
+      if (retest && saved) await test(saved);
     } catch (cause) {
       setError(readableError(cause));
     } finally {
-      setBusy(null);
+      setBusy((current) => current === "save" ? null : current);
     }
   };
 
@@ -301,8 +316,16 @@ export function useMcpServers() {
   const startEdit = (server: McpServerListing) => {
     setEditing(server.name);
     setDraft(draftFor(server));
+    setFixingKeys(false);
+    setKeyValues({});
     setError(null);
     setNotice(null);
+  };
+  /** Fix the keys, after a test the server refused: the editor asks only for
+   * the values of the headers it was sent. */
+  const startFixKeys = (server: McpServerListing) => {
+    startEdit(server);
+    setFixingKeys(isRemoteMcpListing(server));
   };
   const toggleImport = () => {
     setImportOpen((open) => !open);
@@ -310,9 +333,9 @@ export function useMcpServers() {
     setNotice(null);
   };
   return {
-    store, dispatch, servers, reserved, renameReserved, policy, restricted, editing, draft, setDraft, busy, error, notice, probe, importOpen, setImportOpen, importText, setImportText,
+    store, dispatch, servers, reserved, renameReserved, policy, restricted, editing, draft, setDraft, fixingKeys, keyValues, setKeyValues, busy, error, notice, probe, importOpen, setImportOpen, importText, setImportText,
     oauthError, waiting, signingIn, clientDraft, setClientDraft, forgetClientDraft, load, signIn, signOut, save, toggle, test, remove,
-    importServers, closeEditor, setDisabledTools, startAdd, startEdit, toggleImport,
+    importServers, closeEditor, setDisabledTools, startAdd, startEdit, startFixKeys, toggleImport,
     whopServer, whopConnected, whopLoading, connectWhop, cancelWhop,
   };
 }

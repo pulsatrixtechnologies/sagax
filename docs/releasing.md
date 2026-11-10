@@ -120,7 +120,15 @@ sha you pass) is not an ancestor of `origin/main`. Run it after
 4. Gates: `pnpm test:routine-smoke` (production routine paths against a fake
    Perspicax MCP and the real Sagax routine pipeline: readiness, run start,
    approvals, credits failover, error reporting, token usage; see
-   `docs/verification/routine-smoke.md`), `scripts/smoke-browser-bundle.mjs`
+   `docs/verification/routine-smoke.md`), `pnpm test:connector-matrix` (a
+   bot on every engine row calls a connector of every provider, on fakes:
+   list, read with no card, one card per send at Ask, Always allow and Refuse
+   rules across engines, Full access, the turn's own person only, room, peer
+   and restart turns; and the connector hosts' launch contract against the
+   CLI pins of `engines.lock.json`, which turns red at a pin bump until the
+   connector shapes are captured again; see
+   `docs/design/connectors-across-engines.md`, section 6),
+   `scripts/smoke-browser-bundle.mjs`
    (live on the host arch, `--check-only` for the others) and
    `SAGAX_SMOKE_DIST=<resources>/server node scripts/smoke-packaged-server.mjs`
    for every package.
@@ -128,6 +136,16 @@ sha you pass) is not an ancestor of `origin/main`. Run it after
    `pnpm smoke:launch --app release/mac-arm64/Sagax.app`, and again with
    `--user-data-copy` pointing at an existing userData folder (it is copied,
    never modified). Both must load the main window within 60 s.
+   Then the live connector check, on the release candidate signed in as the
+   QA person (about five minutes, reads only; the one send per provider is
+   denied at its card):
+   `SAGAX_LIVE_TOKEN=... node scripts/verify/release/connectors-live.mjs --plan <qa plan> --server <origin> --doc --notes docs/releases/X.Y.Z.md --issue-repo <owner>/<repo>`.
+   It writes the grid, engine by provider, to
+   `docs/verification/connectors-live.md` and to the release notes before
+   they are checked and published. A red cell (exit 1) opens an issue and
+   stops the release announcement until it is fixed. The plan, the QA
+   accounts and the `--fake` proof (run in `pnpm test:connector-matrix`) are
+   in `docs/verification/connectors-live.md`.
 5. Dispatch CI on the release candidate SHA (Actions → CI → Run workflow) and
    wait until the Windows and macOS vitest jobs on that SHA have succeeded. A
    green push only ran Ubuntu. Squash-merge the release PR into `main`, then

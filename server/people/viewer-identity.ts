@@ -94,14 +94,15 @@ export function sessionIsOperator(input: {
 }
 
 /** A config status as this viewer may see it: someone who is not the
- * operator gets their own identity in `profile` (no operator email, no
- * about-me, their own avatar, which is none yet), and everyone gets a
- * `viewer` block. */
+ * operator gets their own identity in `profile` (no operator email, their
+ * own About me (#3424), never the operator's, their own avatar), and
+ * everyone gets a `viewer` block. */
 export function configForViewer<T extends { profile: { name: string; email: string; aboutMe?: string; avatarUrl?: string } }>(
   status: T,
   viewer: ViewerIdentity | null,
+  ownAboutMe = "",
 ): T & { viewer?: ViewerIdentity } {
   if (!viewer) return status;
   if (viewer.operator) return { ...status, viewer };
-  return { ...status, profile: { name: viewer.name, email: viewer.email, aboutMe: "", avatarUrl: viewer.avatarUrl ?? "" }, viewer };
+  return { ...status, profile: { name: viewer.name, email: viewer.email, aboutMe: ownAboutMe, avatarUrl: viewer.avatarUrl ?? "" }, viewer };
 }

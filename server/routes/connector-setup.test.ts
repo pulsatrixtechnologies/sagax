@@ -202,6 +202,10 @@ describe("the card's check (person route)", () => {
     const out = await open({ connector: "Microsoft Teams" });
     expect(out.body).toMatchObject({ ok: true, route: "grok", status: "connected", card: "none" });
     expect(String(out.body.note)).toMatch(/already connected/);
+    // #3356: the bot calls it through the hub from any engine, never told to
+    // reach it through Grok's own use_tool
+    expect(String(out.body.note)).toContain("call_connector");
+    expect(String(out.body.note)).not.toMatch(/use_tool|search_tool|run_with_engine/);
     expect(rows).toHaveLength(0);
     // Outlook is not there: its card is posted
     expect((await open({ connector: "Outlook" })).body).toMatchObject({ card: "posted" });
@@ -274,12 +278,15 @@ describe("2026-10-29: no account of their own, and the other Grok account", () =
     expect(signInCards).toEqual([]);
   });
 
-  it("a connector on the person's other Grok account: no card, the bot hands that part there", async () => {
+  it("a connector on the person's other Grok account: no card, the bot calls it with call_connector (#3356)", async () => {
     grokReach = { pr_a: { connectors: [], at: 500, elsewhere: { engine: "Grok (personal account)", connectors: ["microsoft-teams"] } } };
     const out = await open({ connector: "Teams" });
     expect(out.status).toBe(200);
     expect(out.body).toMatchObject({ ok: true, route: "grok", status: "connected", card: "none" });
-    expect(String((out.body as { note: string }).note)).toContain('run_with_engine with engine "Grok (personal account)"');
+    const note = String((out.body as { note: string }).note);
+    expect(note).toContain('other Grok account, "Grok (personal account)"');
+    expect(note).toContain("call_connector");
+    expect(note).not.toMatch(/run_with_engine|use_tool/);
     expect(rows).toHaveLength(0);
   });
 });

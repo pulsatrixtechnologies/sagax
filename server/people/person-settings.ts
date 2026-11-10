@@ -42,7 +42,14 @@ export interface PersonSettings {
    * (0 = never). Absent follows the organization setting, then the env /
    * default (7). */
   pendingApprovalExpireDays?: number;
+  /** #3424: this person's own About me on an organization server, the text
+   * every bot of theirs receives with each turn (the operator's stays the
+   * server's profile). Absent when empty. */
+  aboutMe?: string;
 }
+
+/** The server's limit for About me (server/config.ts profile.aboutMe). */
+export const ABOUT_ME_MAX = 24_000;
 
 export class PersonSettingsError extends Error {
   readonly status: number;
@@ -93,12 +100,14 @@ function parse(value: unknown): PersonSettings {
   const disabledModels = cleanDisabledModels(raw.disabledModels);
   const favoriteModels = cleanFavoriteModels(raw.favoriteModels);
   const pendingApprovalExpireDays = parseExpireDays(raw.pendingApprovalExpireDays);
+  const aboutMe = typeof raw.aboutMe === "string" && raw.aboutMe.length <= ABOUT_ME_MAX ? raw.aboutMe : "";
   return {
     features,
     browserProfiles,
     ...(disabledModels.length ? { disabledModels } : {}),
     ...(favoriteModels.length ? { favoriteModels } : {}),
     ...(pendingApprovalExpireDays !== undefined ? { pendingApprovalExpireDays } : {}),
+    ...(aboutMe ? { aboutMe } : {}),
   };
 }
 
@@ -179,6 +188,15 @@ export class PersonSettingsStore {
       throw new PersonSettingsError("pendingApprovalExpireDays is a whole number from 0 to 365 (0 means never).");
     }
     return this.save(principalId, { ...rest, pendingApprovalExpireDays: days as number });
+  }
+
+  /** #3424: the person's own About me, the whole text ("" clears it). */
+  setAboutMe(principalId: string, text: unknown): PersonSettings {
+    if (typeof text !== "string") throw new PersonSettingsError("aboutMe must be text.");
+    if (text.length > ABOUT_ME_MAX) throw new PersonSettingsError(`About me holds at most ${ABOUT_ME_MAX} characters.`);
+    const current = this.get(principalId);
+    const { aboutMe: _, ...rest } = current;
+    return this.save(principalId, { ...rest, ...(text ? { aboutMe: text } : {}) });
   }
 
   /** The whole list: an entry with no id is a new profile; an id must be one

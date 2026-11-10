@@ -88,7 +88,8 @@ async function screenCalls(server: AgentsIntegration, count: number): Promise<Ar
  * `screenCalls` makes that many calls on the computer the turn mounted. */
 export async function runRoomHandoffAgent(argv: string[], planPath: string, prompt?: unknown,
   launch?: { integration: AgentsIntegration; system: string; evidence?: Record<string, unknown> },
-  progress?: (text: string) => void): Promise<string> {
+  progress?: (text: string) => void,
+  tools?: { started?: (id: string, step: any) => void; completed?: (id: string, step: any, response: any) => void }): Promise<string> {
   const arg = (flag: string) => argv[argv.indexOf(flag) + 1];
   // The agents server, by the token only it carries: a connected-apps bridge
   // mounted beside it names the same bot (SAGAX_BOT_ID) and relays to Composio.
@@ -126,7 +127,9 @@ export async function runRoomHandoffAgent(argv: string[], planPath: string, prom
   // `byPrompt` picks a bot's plan by what its turn was sent, for turns whose
   // order no index can pin (a thread the bot opened on itself runs beside
   // the turn that opened it): [{ promptIncludes, plan }], first match wins.
-  const botPlan = JSON.parse(readFileSync(planPath, "utf8"))[botId] ?? {};
+  // `*`: the plan of every bot the file does not name.
+  const plans = JSON.parse(readFileSync(planPath, "utf8"));
+  const botPlan = plans[botId] ?? plans["*"] ?? {};
   const basePlan = (botPlan.byPrompt as Array<{ promptIncludes: string; plan: any }> | undefined)
     ?.find(rule => turnContext.includes(rule.promptIncludes))?.plan ?? botPlan;
   const previous = existsSync(`${planPath}.evidence.jsonl`) ? readFileSync(`${planPath}.evidence.jsonl`, "utf8").trim().split("\n").filter(Boolean).map(line => JSON.parse(line)) : [];
@@ -212,9 +215,15 @@ export async function runRoomHandoffAgent(argv: string[], planPath: string, prom
           if (step.internal.saveAs && typeof body.taskId === "string") writeFileSync(varsPath, JSON.stringify({ ...vars, [step.internal.saveAs]: body.taskId }));
           continue;
         }
+        // `tools`: the engine streams each call as its own tool item, as a
+        // real engine shows it in the chat. `anyOutcome`: a call the person
+        // may allow or refuse, so either outcome is the plan's.
+        const itemId = `tool-${evidence.length}`;
+        tools?.started?.(itemId, step);
         const response = await call("tools/call", { name: step.tool ?? "coordinate_bots", arguments: step.arguments });
+        tools?.completed?.(itemId, step, response);
         evidence.push({ step, response });
-        if (Boolean(response.error || response.result?.isError) !== Boolean(step.expectError)) throw new Error(`Unexpected tool outcome: ${JSON.stringify(response)}`);
+        if (!step.anyOutcome && Boolean(response.error || response.result?.isError) !== Boolean(step.expectError)) throw new Error(`Unexpected tool outcome: ${JSON.stringify(response)}`);
       }
       // All MCP calls have completed. A person's answer, like an explicit
       // test gate, is owned by the parent test's timeout, not the transport

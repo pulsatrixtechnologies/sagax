@@ -91,6 +91,13 @@ MCP configuration. Scoped Codex checks its effective MCP configuration before
 starting the prompt. Each Codex MCP mount keeps independent private gate
 settings on new and resumed threads; custom servers retain approval prompts.
 
+A selection never mounts an engine's own account connectors (Claude's
+claude.ai connectors, Grok's managed gateway). The person's connectors stay
+reachable through the connector hub, from any engine, when the selection
+keeps `mcp:agents:connectors` and `mcp:agents:call_connector`; each call is
+decided by the bot's approval level and rules as a native one would be. No
+selection moves a turn to another engine for a connector.
+
 Unsupported restrictions and malformed saved selections stop the turn with a
 setup error. The settings warning is deliberate: it does not claim an engine
 can enforce a restriction that its contract does not support. Native selection

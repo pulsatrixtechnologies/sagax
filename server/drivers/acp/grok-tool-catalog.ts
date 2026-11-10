@@ -286,8 +286,8 @@ export function grokGatewayConnectors(
 
 /** What the xAI account of a Grok sign-in brought on its last turn, by its
  * engine home (the person's subscription folder), so Sagax knows a Grok
- * engine's reach (index.ts engineReachFor, the connector switch and the
- * setup card) instead of guessing. In memory, bounded. */
+ * engine's reach (the connector registry and the setup card) instead of
+ * guessing. In memory, bounded. */
 export interface GrokAccountReach {
   /** any managed gateway server at all in the catalog */
   gateway: boolean;

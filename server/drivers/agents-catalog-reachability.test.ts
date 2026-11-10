@@ -236,9 +236,9 @@ describe("reachability guard: what a person's direct chat is told", () => {
     rosterCreator: peerRosterSystemPrompt(team.slice(1), true, true),
     // #3351: the one connector list, whatever engine the bot runs on
     connectorsNone: connectorListPrompt({ principal: "person-a", accounts: [], callable: () => false, callTool: true }),
-    // 2026-10-28: a person's own direct turn is pointed at run_with_engine for a provider with no host yet, in Full or not
-    connectorsRelay: connectorListPrompt({ principal: "person-a", accounts: LIST_ACCOUNTS, callable: (provider) => provider === "grok-com", callTool: true, relay: true }),
-    connectorsRelayFull: connectorListPrompt({ principal: "person-a", accounts: LIST_ACCOUNTS, callable: (provider) => provider === "grok-com", callTool: true, relay: true, full: true }),
+    // a person's own direct turn with a provider with no host yet, in Full or not (#3356: never pointed at run_with_engine)
+    connectorsList: connectorListPrompt({ principal: "person-a", accounts: LIST_ACCOUNTS, callable: (provider) => provider === "grok-com", callTool: true }),
+    connectorsListFull: connectorListPrompt({ principal: "person-a", accounts: LIST_ACCOUNTS, callable: (provider) => provider === "grok-com", callTool: true, full: true }),
     // the Team incidents report: a turn of the Primary Bot with no automation source
     incident: incidentText({ kind: "failed", bot: { id: "b2", name: "Nova" }, threadId: "t1", detail: "crash" }, { count: 1, mayRetry: true, muted: false }),
     credential: CREDENTIAL_PROMPT,

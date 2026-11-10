@@ -762,10 +762,10 @@ add({
 });
 add({
   key: "account.aboutMe", family: "account", target: "none", value: "text", label: "About me", where: "Settings > Account > About me",
-  // the server's profile: on an organization server it is the operator's
-  classes: serverWide,
-  read: () => ({ path: "/api/config", field: "profile.aboutMe" }),
-  write: (_ids, v) => ({ method: "PUT", path: "/api/config", body: { profile: { aboutMe: v } } }),
+  // #3424: the person's own on an organization server (the operator's is the
+  // server's profile), read by their own bots only
+  read: () => ({ path: "/api/me/about-me", field: "aboutMe" }),
+  write: (_ids, v) => ({ method: "PUT", path: "/api/me/about-me", body: { aboutMe: v } }),
 });
 add({
   key: "account.botOverride", family: "account", target: "bot", value: "object", label: "Your own model and notifications for a shared bot", where: "Shared bot > Model / Notifications",

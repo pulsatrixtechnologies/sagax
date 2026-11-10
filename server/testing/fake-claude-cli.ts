@@ -238,6 +238,10 @@
 //                      mcp:<tool>:ok, mcp:<tool>:error or mcp:absent.
 //                      A call with `when` runs only on a turn whose prompt
 //                      contains that text.
+//   FAKE_CLAUDE_MCP_ROWS 1: each of those calls is also played as the real
+//                      CLI streams it, a tool_use frame (mcp__<server>__<tool>,
+//                      its arguments) then its tool_result, before the reply
+//                      text, so the turn's chat holds one tool row per call.
 //                      An argument "$ATTACHED_FILE" becomes the path the
 //                      prompt's first <attached-file> tag names.
 //                      An argument "$PROMPT_ID" becomes the id the prompt
@@ -1427,6 +1431,8 @@ async function proxyFetch(target: string): Promise<string> {
 // The real CLI reads --mcp-config once, at launch, and keeps its servers
 // for every turn of the process; the harness may remove the file after.
 let launchServers: Record<string, FakeMcpServer> | null = null;
+/** FAKE_CLAUDE_MCP_ROWS: the calls of this turn, played as tool rows. */
+let mcpRows: Array<{ name: string; input: Record<string, unknown>; ok: boolean; text: string }> = [];
 async function runFakeMcpCalls(calls: FakeMcpCall[], configPath: string | null): Promise<string> {
   let servers: Record<string, FakeMcpServer> = launchServers ?? {};
   if (configPath && !launchServers) {
@@ -1465,6 +1471,7 @@ async function runFakeMcpCalls(calls: FakeMcpCall[], configPath: string | null):
         const ok = Boolean(result) && result?.isError !== true && !answer.error;
         const text = answer.error ? String((answer.error as { message?: unknown }).message ?? "error") : (result?.content ?? []).map((part) => part.text ?? "").join(" ").slice(0, Number(process.env.FAKE_CLAUDE_MCP_TEXT_LIMIT) || 500);
         results.push({ server: name, tool: call.tool, listed: tools.includes(call.tool), ok, text });
+        mcpRows.push({ name: `mcp__${name}__${call.tool}`, input: call.arguments, ok, text });
         notes.push(`mcp:${call.tool}:${ok ? "ok" : "error"}`);
       } finally {
         session.close();
@@ -1506,6 +1513,13 @@ const playReply = (prompt: JsonValue, mcpNote: string) => {
   // (keep-warm arms only above 50k), default 2.
   const cacheRead = Number(process.env.FAKE_CLAUDE_CACHE_READ_TOKENS);
   const usage = { input_tokens: 10, cache_read_input_tokens: Number.isSafeInteger(cacheRead) && cacheRead > 0 ? cacheRead : 2, output_tokens: 5 };
+  if (process.env.FAKE_CLAUDE_MCP_ROWS === "1") {
+    for (const row of mcpRows.splice(0)) {
+      const id = `tu-${process.pid}-${++toolUseCount}`;
+      out({ type: "assistant", message: { content: [{ type: "tool_use", id, name: row.name, input: row.input }], usage } });
+      out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, is_error: !row.ok, content: [{ type: "text", text: row.text }] }] } });
+    }
+  }
   if (scriptedToolCalls) {
     // scripted calls come first, each settled before the reply text
     // A call with `parent` is a sub-agent's (parent_tool_use_id); the

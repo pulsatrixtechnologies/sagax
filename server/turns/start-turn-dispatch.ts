@@ -217,7 +217,6 @@ export function createDispatchStartTurn(host: StartTurnHost) {
         return userSkillsDir ? { userSkillsDir } : {};
       })(),
       // the plan of turn setup, for the access this dispatch materialized
-      // (a run_with_engine part loads this person's grok.com connectors)
       ...(() => {
         const plan = dispatchedConnectorPlan(state.threadId, state.connectorPlan ?? connectorPlanForTurn(state.bot, state.instance, state.speaker, state.threadId), turnAccess?.via);
         return { claudeAiConnectors: plan.claudeAi, grokCloudConnectors: plan.grokCloud };

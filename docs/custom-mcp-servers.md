@@ -15,6 +15,11 @@ Sagax saves a new server switched off. Use **Test** to start the command
 advertises. Then turn it on. It becomes available to compatible bots on their
 next task; no app restart is needed. **Test** shows that the server started
 and listed its tools, not what those tools return: call one to check.
+When the server refused the keys (HTTP 401 or 403 with no sign-in to offer,
+or an MCP "unauthorized" error), the line names the headers to check, never
+their values, and **Fix the keys** asks for just those values, then tests
+again. A server sent no header gets the header lines, to add the key it asks
+for.
 
 A server you run as a command keeps running between a bot's tasks. A bot that
 changes the server's code reloads it with `add_mcp_server` action `restart`,

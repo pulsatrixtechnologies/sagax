@@ -1,4 +1,4 @@
-import { t } from "@/lib/i18n";
+import { activeLocale, t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
 import { resultBudgetDraft, type McpMessage, type McpResultBudgetDraft, type McpResultBudgetListing } from "./McpResultBudgetField";
 
@@ -85,6 +85,32 @@ export interface ProbeResult {
   /** tools Grok registers under another name or cannot register (server/mcp/mcp-probe.ts) */
   engineNames?: { grok: { renamed: Array<{ upstream: string; registered: string; reason: string }>; unregistrable: Array<{ upstream: string; reason: string }> } };
   error?: string;
+  /** `keys`: the server refused the headers it was sent (server/mcp/mcp-probe.ts);
+   * `unreachable` and `timeout` may pass on a second try. */
+  reason?: "keys" | "unreachable" | "timeout";
+  /** the HTTP status of a refused key */
+  status?: number;
+}
+
+/** Whether a failed test refused the keys of a URL server, so Fix the keys
+ * can ask for just their values. */
+export function refusedKeys(server: McpServerListing, result: ProbeResult | undefined): server is RemoteMcpListing {
+  return Boolean(result && !result.ok && result.reason === "keys" && isRemoteMcpListing(server));
+}
+
+/** What a failed test says. A refused key names the headers to check, never
+ * their values. */
+export function probeFailureLabel(server: McpServerListing, result: ProbeResult): string {
+  if (!refusedKeys(server, result)) return result.error ?? "";
+  const reason = result.status ? `HTTP ${result.status}` : "unauthorized";
+  if (!server.headerKeys.length) return t("mcp.check.keysNeeded", { reason });
+  return t("mcp.check.keysRefused", { reason, names: new Intl.ListFormat(activeLocale(), { style: "long", type: "conjunction" }).format(server.headerKeys) });
+}
+
+/** The header lines Fix the keys saves: each named header with the value
+ * typed again, or a blank one that keeps the saved value. */
+export function fixedKeysHeaders(names: readonly string[], values: Readonly<Record<string, string>>): string {
+  return names.map((name) => `${name}: ${(values[name] ?? "").trim()}`).join("\n");
 }
 
 /** After a sign-in, list the server's tools once. A failure is one plain

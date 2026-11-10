@@ -6,8 +6,9 @@
 //   GET  /api/approvals/journal  ?days=7|30: the Journal, every action of
 //                                this person's own bots with what decided it
 //                                (2026-10-26, shared/action-journal.ts)
-//   POST /api/approvals/handled { botId, threadId, messageId }: a bot's
-//                                "needs you" card marked handled (#2689)
+//   POST /api/approvals/handled { botId, threadId, messageId, skip? }: a bot's
+//                                "needs you" card marked handled (#2689);
+//                                with skip, a question in words skipped (#3471)
 //   POST /api/approvals/journal/test { rule: { id?, when, behavior, botId, riskScope } }:
 //                                that rule replayed on the last 7 days
 //
@@ -64,6 +65,9 @@ export interface ApprovalsInboxDeps {
   /** #2689: mark one of the viewer's "needs you" cards handled; false when
    * it is not one of their open cards. */
   handled?(auth: RequestAuth, viewer: InboxViewer, item: { botId: string; threadId: string; messageId: string }): boolean;
+  /** #3471: the person skipped a question in words (`skip: true`): closed
+   * as skipped, the waiting work told there is no answer. */
+  skip?(auth: RequestAuth, viewer: InboxViewer, item: { botId: string; threadId: string; messageId: string }): boolean;
 }
 
 /** A rule test's body, or why not. Nothing is saved. */
@@ -139,6 +143,10 @@ export function createApprovalsInboxRoutes(deps: ApprovalsInboxDeps): RouteHandl
       const botId = body?.botId, threadId = body?.threadId, messageId = body?.messageId;
       if (typeof botId !== "string" || !ID.test(botId) || typeof threadId !== "string" || !ID.test(threadId) || typeof messageId !== "string" || !ID.test(messageId)) {
         return json(res, 400, { error: "botId, threadId and messageId are required" });
+      }
+      if (body?.skip === true) {
+        if (!deps.skip?.(auth, viewer, { botId, threadId, messageId })) return json(res, 404, { error: "no such card", code: "gone" });
+        return json(res, 200, { ok: true, outcome: "skipped" });
       }
       if (!deps.handled(auth, viewer, { botId, threadId, messageId })) return json(res, 404, { error: "no such card", code: "gone" });
       return json(res, 200, { ok: true });

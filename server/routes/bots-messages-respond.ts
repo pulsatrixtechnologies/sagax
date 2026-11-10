@@ -246,6 +246,12 @@ async function handleThreadRespond(deps: BotsMessagesRouteDeps, ctx: RouteContex
       const refusal = commandRememberRefusal(auth, threadId, requestId, behavior);
       if (refusal) return json(res, 403, { error: refusal });
     }
+    // #3471: a skip closes the card as skipped (never a deny), and the
+    // waiting turn hears one plain line: no rule is saved, nothing runs
+    if (body.skip === true && deps.skipWaitingCard) {
+      const skipped = await deps.skipWaitingCard(threadId, requestId);
+      return json(res, skipped.status, skipped.body);
+    }
     const ruleRefusal = saveOwnerRuleFromCard(auth, threadId, requestId, body.rule, behavior, body.ruleScope);
     if (ruleRefusal) return json(res, ruleRefusal.status, { error: ruleRefusal.error });
     return await answeringCardAs(auth, threadId, requestId, async () => {

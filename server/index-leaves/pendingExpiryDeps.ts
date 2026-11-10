@@ -14,11 +14,12 @@ function pendingExpiryDeps() {
     note: (threadId, text) => {
       host.store.appendMessage(threadId, { role: "bot", kind: "text", text });
     },
-    release: ({ threadId, requestId, note }) => {
+    release: ({ threadId, requestId, card, note }) => {
       const bot = host.store.botByThread(threadId);
       const instanceId = bot?.modelSelection?.instanceId;
       const instance = host.runningTurnEngines.get(threadId) ?? (instanceId ? host.registry.get(instanceId) : undefined);
-      void instance?.adapter.respondToRequest(threadId, requestId, { behavior: "deny", message: note }).catch(() => { /* request may already be gone */ });
+      // #3471: a question refuses a deny, so it is answered with the note
+      void instance?.adapter.respondToRequest(threadId, requestId, { behavior: card?.tool ? "deny" : "answer", message: note }).catch(() => { /* request may already be gone */ });
       host.askMessageByRequest.delete(`${threadId}:${requestId}`);
       host.pendingCommandRules.delete(`${threadId}:${requestId}`);
       host.settleWaitingActivity(threadId);

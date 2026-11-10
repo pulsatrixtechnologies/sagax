@@ -83,8 +83,12 @@ describe("QuestionCard keys", () => {
     expect(host.textContent).toContain("0 of 2 answered");
   });
 
-  it("offers no X on a waiting question, since the server only takes an answer", () => {
+  // #3471: the one quiet X is a skip (the server closes it as skipped), the
+  // only labelled button on a waiting question
+  it("offers one X on a waiting question, and it skips", () => {
     mount([plan]);
-    expect(host.querySelector('button[aria-label]')).toBeNull();
+    const labelled = host.querySelectorAll('button[aria-label]');
+    expect(labelled).toHaveLength(1);
+    expect(labelled[0]!.hasAttribute("data-card-skip")).toBe(true);
   });
 });

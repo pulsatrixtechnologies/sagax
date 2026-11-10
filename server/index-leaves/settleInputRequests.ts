@@ -3,7 +3,7 @@
 export type Host = Record<string, any>;
 
 export function createSettleInputRequests(getHost: () => Host): any {
-function settleInputRequests(threadId: string, how: "answered" | "expired" | "defaulted" = "answered") {
+function settleInputRequests(threadId: string, how: "answered" | "expired" | "defaulted" | "skipped" = "answered") {
   const host = getHost();
 
   const rows = host.openInputRequests.get(threadId);
@@ -20,12 +20,13 @@ function settleInputRequests(threadId: string, how: "answered" | "expired" | "de
       swept.add(row.threadId);
       for (const candidate of path) {
         const attention = candidate.attention;
-        if (attention && attention.threadId === threadId && !attention.handledAt) host.store.patchMessage(row.threadId, candidate.id, { attention: { ...attention, handledAt: now } });
+        // #3471: one closed without the person says how
+        if (attention && attention.threadId === threadId && !attention.handledAt) host.store.patchMessage(row.threadId, candidate.id, { attention: { ...attention, handledAt: now, ...(how === "skipped" || how === "expired" ? { closed: how } : {}) } });
       }
     }
     const message = path.find((candidate) => candidate.id === row.messageId);
     if (!message?.inputRequest || message.inputRequest.answered || message.inputRequest.expired) continue;
-    const settled = how === "answered" ? { answered: true } : { expired: true, ...(how === "defaulted" ? { defaulted: true } : {}) };
+    const settled = how === "answered" ? { answered: true } : { expired: true, ...(how === "defaulted" ? { defaulted: true } : how === "skipped" ? { skipped: true } : {}) };
     host.store.patchMessage(row.threadId, row.messageId, { inputRequest: { ...message.inputRequest, ...settled } });
   }
 

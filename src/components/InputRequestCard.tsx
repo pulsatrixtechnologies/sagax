@@ -37,10 +37,36 @@ export async function answerPersonRequest(card: PersonAttentionCard, text: strin
   }
 }
 
+/** #3471: the person skips a question in words: the server closes it as
+ * skipped and tells the waiting work there is no answer. The card is folded
+ * in the store at once, so the pinned card moves to the next item. */
+export async function skipPersonRequest(where: CardPlace, dispatch?: ReturnType<typeof useStoreDispatch>, message?: Message): Promise<void> {
+  if (dispatch && message) dispatch({ type: "messagePatched", threadId: where.threadId, message: skippedRequestMessage(message) });
+  try {
+    await api("/api/approvals/handled", { method: "POST", body: JSON.stringify({ ...where, skip: true }) });
+  } catch (error) {
+    if (dispatch && message) dispatch({ type: "messagePatched", threadId: where.threadId, message });
+    throw error;
+  }
+}
+
+/** The message as it reads once skipped (the server writes the same). */
+export function skippedRequestMessage(message: Message): Message {
+  if (message.inputRequest) return { ...message, inputRequest: { ...message.inputRequest, expired: true, skipped: true } };
+  if (message.attention) return { ...message, attention: { ...message.attention, handledAt: Date.now(), closed: "skipped" } };
+  return message;
+}
+
 /** The place of a card, once the conversation's thread is known. Without
  * the conversation's bot (a room's pinned card) the asking bot stands in. */
 export function cardPlace(card: PersonAttentionCard, message: Message, threadId: string | undefined, conversationBotId: string | undefined): CardPlace | undefined {
   return message.attention && threadId ? { botId: conversationBotId ?? card.botId, threadId, messageId: message.id } : undefined;
+}
+
+/** Where a question in words is skipped: an attention card or an input
+ * request row of the conversation (#3471). */
+export function skipPlace(card: PersonAttentionCard, message: Message, threadId: string | undefined, conversationBotId: string | undefined): CardPlace | undefined {
+  return (message.attention || message.inputRequest) && threadId ? { botId: conversationBotId ?? card.botId, threadId, messageId: message.id } : undefined;
 }
 
 /** One question in words, as the standard card. `threadId` is the
@@ -53,12 +79,15 @@ export function PersonRequestCard({ message, card, threadId, conversationBotId, 
   const owner = useStoreSelector((state) => state.bots.find((candidate) => candidate.id === card.botId));
   const request = message.inputRequest;
   const closedUnanswered = request && request.answered !== true && request.expired === true;
+  const where = skipPlace(card, message, threadId, conversationBotId);
   return (
     <AttentionCard
       card={card}
       bot={owner}
       embedded={embedded}
-      {...(closedUnanswered ? { settledNote: t(request.defaulted ? "chat.inputRequest.defaulted" : "chat.inputRequest.expired") } : {})}
+      {...(closedUnanswered ? { settledNote: t(request.skipped ? "waitingCard.skipped" : request.defaulted ? "chat.inputRequest.defaulted" : "chat.inputRequest.expired") } : {})}
+      // #3471: on the pinned card the control is on its own top row
+      onSkip={!embedded && where ? () => skipPersonRequest(where, dispatch, message) : undefined}
       onOpenThread={showThreads ? (botId, target) => { openThread(dispatch, { botId, threadId: target }, getState(), showThreads); } : undefined}
       // an input request settles on the server once the work takes the
       // answer (settleInputRequests); a hand-off's card is marked handled

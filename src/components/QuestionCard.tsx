@@ -184,6 +184,8 @@ export function QuestionCard({
   const [sent, setSent] = useState<string | null>(null);
   // the last answer did not reach the bot: said on the card until the next try
   const [failed, setFailed] = useState(false);
+  /** #3471: skipped here, before the server's patch lands */
+  const [skippedHere, setSkippedHere] = useState(false);
   /** #2048: remember this publish target as the bot's default. */
   const [rememberTarget, setRememberTarget] = useState(false);
 
@@ -193,15 +195,19 @@ export function QuestionCard({
   );
 
   if (!card || !questions.length) return null;
-  const settled = Boolean(card.answered) || sent !== null;
+  const skipped = Boolean(card.skipped) || skippedHere;
+  // expired (#1940), it is closed too: never a live sheet again
+  const settled = Boolean(card.answered) || sent !== null || skipped || card.expired === true;
   const single = questions.length === 1;
 
   if (settled) {
-    const answer = card.answeredText ?? sent;
+    const answer = skipped ? null : card.answeredText ?? sent;
     // A question nobody answered (the run ended, or it was closed) is not
     // "answered": say so, the rows dimmed.
-    const closed = !answer && Boolean(card.answered) && card.answered !== "answer";
-    return <SettledQuestion questions={questions} answer={answer} closed={closed} title={bot ? t("question.card.named", { name: bot.name }) : t("question.card.title")} />;
+    const closed = skipped || (!answer && card.expired === true) || (!answer && Boolean(card.answered) && card.answered !== "answer");
+    // #3471: skipped or expired, it says so in one quiet line
+    const closedNote = skipped ? t("waitingCard.skipped") : card.expired ? t("waitingCard.expired") : undefined;
+    return <SettledQuestion questions={questions} answer={answer} closed={closed} closedNote={closedNote} title={bot ? t("question.card.named", { name: bot.name }) : t("question.card.title")} />;
   }
 
   const currentIndex = Math.min(active, questions.length - 1);
@@ -329,6 +335,16 @@ export function QuestionCard({
   // a send of its own only where one tap is not the answer: several picks,
   // several questions; a typed answer sends from its field
   const showSend = !oneTap && (multi || !single);
+  // #3471: skipped without an answer, never denied; on the pinned card the
+  // control sits on the pinned card's own top row
+  const requestId = card.requestId;
+  const skip = !embedded && requestId
+    ? () => {
+      setSkippedHere(true);
+      dispatch({ type: "skipCard", threadId, requestId });
+      returnFocusToComposer();
+    }
+    : undefined;
 
   return (
     <QuestionSheet
@@ -336,6 +352,8 @@ export function QuestionCard({
       title={title}
       meta={meta}
       embedded={embedded}
+      onDismiss={skip}
+      dismissLabel={t("waitingCard.skipAria")}
       onKeyDown={sheetKeyHandler(choices.length, (index) => choose(choices[index]!.id ?? choices[index]!.label))}
     >
       {card.questionRequest?.origin === "output" && (
@@ -411,7 +429,7 @@ export function QuestionCard({
 
 /** The answered card: the same card, each question with what was chosen
  * marked and the rest dimmed, and an answer in words under its rows. */
-function SettledQuestion({ questions, answer, closed, title }: { questions: readonly AskQuestion[]; answer: string | null; closed: boolean; title: string }) {
+function SettledQuestion({ questions, answer, closed, closedNote, title }: { questions: readonly AskQuestion[]; answer: string | null; closed: boolean; closedNote?: string; title: string }) {
   const byQuestion = answer ? questionAnswersByQuestion(answer, questions) : {};
   const single = questions.length === 1;
   const fallback = answer ? answerWithoutPreamble(answer) : "";
@@ -433,7 +451,7 @@ function SettledQuestion({ questions, answer, closed, title }: { questions: read
       ))}
       {/* an answer the questions cannot be read back from is shown whole */}
       {fallback && parts.every((part) => !part.picked.length && !part.rest) && <SheetNote>{fallback}</SheetNote>}
-      {closed && <SheetNote closed>{t("question.status.closed")}</SheetNote>}
+      {closed && <SheetNote closed>{closedNote ?? t("question.status.closed")}</SheetNote>}
       {!closed && !answer && <SheetNote>{t("question.status.answered")}</SheetNote>}
     </QuestionSheet>
   );

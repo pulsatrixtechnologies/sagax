@@ -581,6 +581,15 @@ cartes d'envoi ordinaires, pas cet onglet.
   quitte le fil (le message reste stocké). Voir `docs/code/approvals.md` « Always allow on every card »
   et « Settled approvals in the chat ».
 - Une approbation née sans la personne (routine, autre bot) le dit sur la carte et expire.
+- **Passer une carte qui attend** (#3471) : chaque carte qui attend la personne
+  (approbation, question à choix ou en mots, question d'un travail confié ou d'une
+  routine, proposition) a un seul × discret au bout de sa rangée du haut, dans le fil
+  et sur la carte épinglée sur le compositeur (infobulle « Passer sans répondre »).
+  Passer n'est pas refuser : la carte se replie en une ligne discrète (« Passé, sans
+  réponse »), le bot qui attend entend une ligne simple une fois et rien n'est fait ;
+  la carte épinglée passe à la suivante. Toutes ces cartes expirent selon le même
+  délai (#1940 : celui de la personne, sinon celui de l'organisation, sinon 7 jours),
+  repliées en « Expiré, sans réponse ». « Toujours permettre » reste sur l'approbation.
 - **Carte de choix d'un domaine de veilles** (#3457) : la carte compacte de l'approbation
   (#3414), avec une cloche au lieu du bouclier : le titre (« Recevoir les alertes de
   répartition ? »), une ou deux lignes simples, « Pas maintenant » en pilule neutre et

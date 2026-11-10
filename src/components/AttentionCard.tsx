@@ -26,6 +26,7 @@ import type { Bot } from "@/state/store";
 import { attentionChoices, type PersonAttentionCard, type PersonAttentionItem } from "../../shared/person-attention";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { QuestionSheet, SheetChoices, SheetField, SheetNote, sheetKeyHandler } from "./QuestionSheet";
+import { CardCloseButton } from "./AskCard";
 
 const TICKET_PILL = "inline-flex shrink-0 items-center gap-1 rounded-full border border-hairline/50 px-2 py-0.5 text-[11.5px] font-medium text-ink transition-colors hover:bg-control focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent";
 const LINE_LINK = "inline-flex items-center gap-0.5 rounded font-medium text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent";
@@ -95,6 +96,7 @@ function AttentionSheet({
   onReply,
   embedded = false,
   settledNote,
+  onSkip,
 }: {
   card: PersonAttentionCard;
   bot?: Bot;
@@ -103,13 +105,30 @@ function AttentionSheet({
   onReply: (text: string) => Promise<void>;
   embedded?: boolean;
   settledNote?: string;
+  onSkip?: () => Promise<void>;
 }) {
   const choices = useMemo(() => attentionChoices(card), [card]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState<Answer | null>(null);
   const [answer, setAnswer] = useState<Answer | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const settled = Boolean(answer) || Boolean(card.handledAt);
+  /** #3471: skipped here, before the server's patch lands */
+  const [skipped, setSkipped] = useState(false);
+  const settled = Boolean(answer) || Boolean(card.handledAt) || skipped;
+  const skip = onSkip && !settled
+    ? async () => {
+      setSkipped(true);
+      setError(null);
+      try {
+        await onSkip();
+      } catch (failure) {
+        setSkipped(false);
+        setError(readableError(failure));
+      }
+    }
+    : undefined;
+  // closed without an answer: skipped or expired, said in one quiet line
+  const closedNote = skipped || card.closed === "skipped" ? t("waitingCard.skipped") : card.closed === "expired" ? t("waitingCard.expired") : settledNote;
   const send = async (next: Answer) => {
     if (!next.text.trim() || sending || settled) return;
     setSending(next);
@@ -143,6 +162,7 @@ function AttentionSheet({
           <div data-attention-bot className="truncate text-[13px] font-semibold text-ink">{card.botName}</div>
           {provenance}
         </div>
+        {skip && <CardCloseButton label={t("waitingCard.skipAria")} onClick={() => void skip()} className="-mt-1 self-start" />}
       </div>
       <div data-attention-question className="text-[14px] font-medium leading-relaxed text-ink">
         <AttentionItems items={card.items} />
@@ -176,7 +196,7 @@ function AttentionSheet({
       {settled && (
         <div data-attention-answered>
           {answer && !answer.picked ? <SheetNote>{answer.text}</SheetNote> : null}
-          {!answer || answer.picked ? <SheetNote>{!answer && settledNote ? settledNote : t("chat.inputRequest.answered")}</SheetNote> : null}
+          {!answer || answer.picked ? <SheetNote closed={!answer && Boolean(closedNote)}>{!answer && closedNote ? closedNote : t("chat.inputRequest.answered")}</SheetNote> : null}
         </div>
       )}
     </QuestionSheet>
@@ -191,8 +211,11 @@ export function AttentionCard({
   onReply,
   embedded,
   settledNote,
+  onSkip,
 }: {
   card: PersonAttentionCard;
+  /** #3471: the person skips it without an answer (the waiting work is told). */
+  onSkip?: () => Promise<void>;
   /** Inside the pinned card over the composer (#3438): no frame of its own. */
   embedded?: boolean;
   /** What a card closed without the person's answer says (an input request that expired). */
@@ -256,7 +279,7 @@ export function AttentionCard({
   if (onReply) {
     return (
       <section data-attention-card data-attention-kind={card.kind} data-attention-sheet aria-label={title} className="relative w-full">
-        <AttentionSheet card={card} bot={bot} title={title} provenance={provenance(true)} onReply={onReply} embedded={embedded} settledNote={settledNote} />
+        <AttentionSheet card={card} bot={bot} title={title} provenance={provenance(true)} onReply={onReply} embedded={embedded} settledNote={settledNote} onSkip={onSkip} />
       </section>
     );
   }

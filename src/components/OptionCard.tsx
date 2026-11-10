@@ -80,6 +80,10 @@ export function OptionCard({
         onNever={async () => {
           await api(`/api/bots/${botId}/proactive/${card.proactiveProposal!.id}/feedback`, { method: "POST", body: JSON.stringify({ choice: "never" }) });
         }}
+        onSkip={threadId ?? bot?.threadId ? () => {
+          dispatch({ type: "skipCard", threadId: (threadId ?? bot?.threadId)!, proposal: { botId, id: card.proactiveProposal!.id } });
+          returnFocusToComposer();
+        } : undefined}
       />
     );
   }
@@ -107,16 +111,31 @@ export function OptionCard({
     if (card.requestId || card.proactiveProposal) returnFocusToComposer();
   };
 
-  const dismiss = canDismissOptionCard(card) && !card.proactiveProposal
-    ? () => dispatch({ type: "dismissCard", botId, threadId, messageId: message.id, groupId })
+  // #3471: a card that still waits (a live ask, a proposal) is skipped,
+  // never denied; an answered one is put away as before
+  const waiting = !card.answered && !card.expired && !card.dismissed && Boolean(card.requestId || card.proactiveProposal);
+  const skipThread = threadId ?? bot?.threadId;
+  const skip = waiting && skipThread
+    ? () => {
+      dispatch({
+        type: "skipCard",
+        threadId: skipThread,
+        ...(card.requestId ? { requestId: card.requestId, tool: Boolean(card.tool) } : {}),
+        ...(card.proactiveProposal && !card.requestId ? { proposal: { botId, id: card.proactiveProposal.id } } : {}),
+      });
+      returnFocusToComposer();
+    }
     : undefined;
+  const dismiss = skip ?? (canDismissOptionCard(card) && !card.proactiveProposal
+    ? () => dispatch({ type: "dismissCard", botId, threadId, messageId: message.id, groupId })
+    : undefined);
 
   // A live ask that has been answered keeps its card: what was picked is
   // marked and the rest dimmed. The first-run quiz never gets here, it hides.
-  const settled = Boolean((card.requestId || card.proactiveProposal) && card.answered);
+  const settled = Boolean((card.requestId || card.proactiveProposal) && (card.answered || card.expired));
   // `answered` is the verdict for a permission-shaped ask and the picked
   // label for a flat one; a deny or a run that ended is no answer at all.
-  const closed = settled && !card.answeredText && (card.answered === "deny" || card.answered === "unavailable");
+  const closed = settled && !card.answeredText && (card.answered === "deny" || card.answered === "unavailable" || card.skipped === true || card.expired === true);
   const given = settled && !closed
     ? card.answeredText ?? (card.answered === "answer" || card.answered === "allow" ? "" : card.answered ?? "")
     : "";
@@ -147,7 +166,7 @@ export function OptionCard({
       title={title}
       settled={settled}
       onDismiss={dismiss}
-      dismissLabel={t("onboarding.card.dismiss")}
+      dismissLabel={skip ? t("waitingCard.skipAria") : t("onboarding.card.dismiss")}
       onKeyDown={settled ? undefined : sheetKeyHandler(choices.length, (index) => pick(choices[index]!.id ?? choices[index]!.label))}
     >
       {subtitle && <ExpandableText text={subtitle} className="-mt-1 mb-2.5 text-[13px] leading-snug text-ink-secondary" />}
@@ -179,7 +198,7 @@ export function OptionCard({
       {settled && !closed && (reading.rest || (!reading.picked.length && !given)) && (
         <SheetNote>{reading.rest || t("question.status.answered")}</SheetNote>
       )}
-      {closed && <SheetNote closed>{t("question.status.closed")}</SheetNote>}
+      {closed && <SheetNote closed>{card.skipped ? t("waitingCard.skipped") : card.expired ? t("waitingCard.expired") : t("question.status.closed")}</SheetNote>}
       {card.proactiveProposal && (!groupId || (bot && viewerOwnsBot(state.config, bot))) && (
         <SuggestionFeedback
           className="mt-2"

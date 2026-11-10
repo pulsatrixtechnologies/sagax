@@ -26,6 +26,8 @@ let answered: Array<{ requestId: string; decision: string; rule?: string }> = []
 let historyCalls = 0;
 let journalDaysAsked: number[] = [];
 let testedDrafts: unknown[] = [];
+let handledCalls: string[] = [];
+let skippedCalls: string[] = [];
 
 beforeEach(async () => {
   pending = [entry("r1"), entry("r2"), entry("q1", { kind: "question", bulk: "question" }), entry("k1", { needsKey: true, bulk: "needs-key" })];
@@ -34,7 +36,11 @@ beforeEach(async () => {
   historyCalls = 0;
   journalDaysAsked = [];
   testedDrafts = [];
+  handledCalls = [];
+  skippedCalls = [];
   const deps: ApprovalsInboxDeps = {
+    handled: (_auth, _viewer, item) => { handledCalls.push(item.messageId); return item.messageId !== "gone"; },
+    skip: (_auth, _viewer, item) => { skippedCalls.push(item.messageId); return item.messageId !== "gone"; },
     viewer: () => (person ? { principalId: person } : null),
     pending: () => pending,
     history: () => {
@@ -198,5 +204,28 @@ describe("the Journal and Tester cette règle (2026-10-26)", () => {
     expect((await test({ rule: { when: "x", behavior: "allow", riskScope: ["everything"] } })).status).toBe(400);
     expect((await test({ rule: { when: "x", behavior: "allow", botId: "../etc" } })).status).toBe(400);
     expect(testedDrafts).toHaveLength(1);
+  });
+});
+
+// #3471: a question in words (an input request, a hand-off's or a routine
+// run's card) is skipped through the same route, never marked answered.
+describe("POST /api/approvals/handled with skip", () => {
+  const handled = async (body: unknown) => {
+    const res = await fetch(`${base}/api/approvals/handled`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    return { status: res.status, body: await res.json() as any };
+  };
+  it("skips the card instead of marking it handled", async () => {
+    const reply = await handled({ botId: "b1", threadId: "t1", messageId: "m1", skip: true });
+    expect(reply).toEqual({ status: 200, body: { ok: true, outcome: "skipped" } });
+    expect(skippedCalls).toEqual(["m1"]);
+    expect(handledCalls).toEqual([]);
+  });
+  it("says gone for a card already closed", async () => {
+    expect((await handled({ botId: "b1", threadId: "t1", messageId: "gone", skip: true })).status).toBe(404);
+  });
+  it("still marks handled without skip", async () => {
+    expect((await handled({ botId: "b1", threadId: "t1", messageId: "m2" })).status).toBe(200);
+    expect(handledCalls).toEqual(["m2"]);
+    expect(skippedCalls).toEqual([]);
   });
 });

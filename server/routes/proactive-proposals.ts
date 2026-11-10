@@ -2,6 +2,7 @@
 // server/proactive/proactive-wake.ts).
 //
 //   POST /api/bots/:id/proactive/:proposalId   { accept: boolean, watches?: string[] }
+//        or { skip: true } (#3471): closed as skipped, no yes and no no.
 //        #3431: on a choice card, `watches` is the card's switches (the
 //        watches kept on with the yes).
 //   POST /api/bots/:id/proactive/:proposalId/feedback   { choice }
@@ -18,6 +19,8 @@ import { PASS, type RouteHandler } from "./table.ts";
 export interface ProactiveProposalRouteDeps {
   /** Answer one proposal of this bot; the status and body to send. */
   answer(botId: string, proposalId: string, accept: boolean, watchesOn?: readonly string[]): { status: number; body: Record<string, unknown> };
+  /** #3471: the person skipped the card. */
+  skip?(botId: string, proposalId: string): { status: number; body: Record<string, unknown> };
   /** #2694: the person's feedback on the card. */
   feedback?(botId: string, proposalId: string, choice: "up" | "down" | "less" | "never"): { status: number; body: Record<string, unknown> };
 }
@@ -37,7 +40,11 @@ export function createProactiveProposalRoutes(deps: ProactiveProposalRouteDeps):
       const done = deps.feedback(match[1]!, match[2]!, choice as "up" | "down" | "less" | "never");
       return json(res, done.status, done.body);
     }
-    const body = await readBody(req) as { accept?: unknown; watches?: unknown } | null;
+    const body = await readBody(req) as { accept?: unknown; watches?: unknown; skip?: unknown } | null;
+    if (body?.skip === true && deps.skip) {
+      const skipped = deps.skip(match[1]!, match[2]!);
+      return json(res, skipped.status, skipped.body);
+    }
     if (!body || typeof body !== "object" || typeof body.accept !== "boolean") {
       return json(res, 400, { error: "accept must be true or false" });
     }

@@ -42,10 +42,11 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("QuestionCard has no skip", () => {
-  it("offers no X, Ignore or countdown, and never answers by itself", () => {
+describe("QuestionCard skips only on the person's tap", () => {
+  // #3471: one quiet X skips it; no Ignore, no countdown, nothing by itself
+  it("offers only the skip X, no Ignore or countdown, and never answers by itself", () => {
     mount([plan]);
-    expect(host.querySelector("button[aria-label]")).toBeNull();
+    expect([...host.querySelectorAll("button[aria-label]")].every((button) => button.hasAttribute("data-card-skip"))).toBe(true);
     expect(host.textContent).not.toMatch(/Ignore|closes automatically/);
     act(() => { vi.advanceTimersByTime(600_000); });
     expect(dispatch).not.toHaveBeenCalled();

@@ -13893,9 +13893,9 @@
   "routineReadiness.requiresComputer": "Computer required",
   "routineReadiness.requiresHelp": "Names separated by commas, up to 20 names of 100 characters each.",
   "routines.failures.grouped": "Failed routine runs ({count})",
-  "approval.pending.expiredNote": "This approval expired after {days} days without an answer; ask again if it is still needed.",
-  "settings.org.pendingApprovalExpireDays": "Pending approvals expire after (days)",
-  "settings.me.pendingApprovalExpireDays": "My pending approvals expire after (days)",
+  "approval.pending.expiredNote": "This request expired after {days} days without an answer: there is no answer and nothing was run. Ask again if it is still needed.",
+  "settings.org.pendingApprovalExpireDays": "Waiting cards expire after (days)",
+  "settings.me.pendingApprovalExpireDays": "My waiting cards expire after (days)",
   "limitFailover.exhausted": "Limits were reached on {tried}: no other engine could answer. Pick another model, add credit, or try again when a limit resets (around {time}).",
   "limitFailover.ownerExhausted": "This bot's owner hit usage limits on {tried}: no other engine could answer. Pick another model, add credit, or try again when a limit resets (around {time}).",
   "limitFailover.exhaustedNoTime": "Limits were reached on {tried}: no other engine could answer. Pick another model, add credit, or try again later.",
@@ -14716,5 +14716,10 @@
   "teamWork.wait.bot": "waiting for another bot",
   "teamWork.wait.computer": "waiting for the computer",
   "teamWork.wait.start": "waiting to start",
-  "teamWork.work.aria": "{name}, {done} of {total} steps"
+  "teamWork.work.aria": "{name}, {done} of {total} steps",
+  "waitingCard.skipAria": "Skip this without answering",
+  "waitingCard.skipped": "Skipped, no answer",
+  "waitingCard.expired": "Expired, no answer",
+  "approval.pill.skipped": "Skipped",
+  "approval.status.skipped": "Skipped, nothing was run"
 }

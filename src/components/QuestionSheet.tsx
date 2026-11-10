@@ -14,7 +14,7 @@
 import type { KeyboardEvent, ReactNode } from "react";
 import { ArrowUp, Box, Check, FileText, LayoutDashboard, Sparkles, X, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { moveChoiceFocus } from "./AskCard";
+import { CardCloseButton, moveChoiceFocus } from "./AskCard";
 
 const CHOICE_ICONS: Record<string, LucideIcon> = {
   "file-text": FileText,
@@ -97,17 +97,7 @@ export function QuestionSheet({
             <bdi dir="auto">{title}</bdi>
           </div>
           {meta && <span className="shrink-0 pt-px text-[11.5px] tabular-nums text-ink-tertiary">{meta}</span>}
-          {onDismiss && dismissLabel && (
-            <button
-              type="button"
-              onClick={onDismiss}
-              aria-label={dismissLabel}
-              title={dismissLabel}
-              className="-me-1.5 -mt-1 flex size-7 shrink-0 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/[0.07] hover:text-ink"
-            >
-              <X size={14} />
-            </button>
-          )}
+          {onDismiss && dismissLabel && <CardCloseButton label={dismissLabel} onClick={onDismiss} className="-mt-1" />}
         </div>
       )}
       {children}

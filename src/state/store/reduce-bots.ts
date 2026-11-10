@@ -77,6 +77,7 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
       if (action.groupId) return patchGroupCard(state, action.groupId, action.messageId, { dismissed: true });
       return patchCard(state, action.botId, action.messageId, { dismissed: true });
     case "decideRequest":
+    case "skipCard":
       return state; // the server's request.resolved patch settles the card
     case "botAdded":
       return withMascotMotion({

@@ -1211,7 +1211,10 @@ export interface WireMessage extends WaitLineField {
     answered?: boolean;
     /** Closed without the person's answer (0.8.46): it expired, or with
      * `defaulted` the requester's declared default answer was used. */
-    expired?: boolean; defaulted?: boolean };
+    expired?: boolean; defaulted?: boolean;
+    /** #3471: the person skipped it (`expired` is set too, so it reads
+     * closed everywhere): the waiting work was told there is no answer. */
+    skipped?: boolean };
   /** A bot's page proposal (shared/published-pages.ts): the card the person
    * reviews and publishes it from. `text` is the fallback line. */
   pagePublish?: { pageId: string; version: number; title: string };
@@ -1318,6 +1321,10 @@ export interface OptionCardData extends WaitCardField {
    * verdict. */
   answeredText?: string;
   dismissed?: boolean;
+  /** #3471: the person skipped it without an answer (`answered` reads
+   * "skipped", so every reader of `answered` sees it settled). Not a
+   * refusal: the waiting bot was told there is no answer and nothing ran. */
+  skipped?: boolean;
   /** Who settled the card, when a person or service answered it. */
   answeredBy?: CardAnswerer;
   /** Present when this card is a live provider ask (approval/question). */

@@ -195,6 +195,9 @@ export interface PersonAttentionCard extends PersonAttention {
   routineName?: string;
   /** The person marked it handled. */
   handledAt?: number;
+  /** #3471: how it closed without the person's answer (handledAt is set
+   * too): they skipped it, or it waited past the waiting cards' delay. */
+  closed?: "skipped" | "expired";
   /** #2694: the person's feedback on it (Today box or chat). */
   feedback?: "up" | "down" | "less" | "never";
 }

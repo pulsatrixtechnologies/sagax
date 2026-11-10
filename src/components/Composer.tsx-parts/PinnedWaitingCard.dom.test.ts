@@ -339,3 +339,53 @@ describe("the pinned card holds every kind and every topic (#3438)", () => {
     expect(JSON.parse(String(handled![1].body))).toEqual({ botId: "orla", threadId: "main", messageId: "handoff" });
   });
 });
+
+// #3471: every kind pinned over the composer has the one quiet skip at the
+// end of its top row; a skip is never a deny, and the pinned card moves to
+// the next item, never back to the first.
+describe("the pinned card skips every kind (#3471)", () => {
+  const skipButton = () => host.querySelector<HTMLButtonElement>("[data-pinned-waiting] [data-card-skip]");
+  const calls = () => (globalThis.fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls;
+
+  it("skips a question by its request, never a deny", async () => {
+    await render([], [ask("q1", 1, "Which one?")]);
+    expect(skipButton()?.getAttribute("aria-label")).toBe("Skip this without answering");
+    await act(async () => { skipButton()!.click(); });
+    expect(dispatched).toContainEqual({ type: "skipCard", threadId: "main", requestId: "req-q1" });
+    expect(dispatched.some((action) => (action as { type?: string }).type === "decideRequest")).toBe(false);
+  });
+
+  it("skips an approval as a skip, never a deny", async () => {
+    await render([approval("a1", 1)], []);
+    await act(async () => { skipButton()!.click(); });
+    expect(dispatched).toContainEqual({ type: "skipCard", threadId: "main", requestId: "req-a1", tool: true });
+  });
+
+  it("skips a question in words a routine run left, through the card's skip", async () => {
+    const routine = { id: "rq", at: 5, role: "bot", kind: "text", text: "Orla has a question for you", from: { botId: "orla", name: "Orla" },
+      attention: { kind: "question", botId: "orla", botName: "Orla", threadId: "run-1", sourceMessageId: "src", routineName: "Morning check", items: [{ text: "Close the ticket?" }] } } as unknown as Message;
+    await render([], [], pendingRequests([routine]));
+    expect(skipButton()).not.toBeNull();
+    await act(async () => { skipButton()!.click(); });
+    await flush();
+    const skipped = calls().find(([url]) => String(url).includes("/api/approvals/handled"));
+    expect(JSON.parse(String(skipped![1].body))).toEqual({ botId: "orla", threadId: "main", messageId: "rq", skip: true });
+    // folded at once in the store: the pinned card moves on
+    expect(dispatched).toContainEqual(expect.objectContaining({ type: "messagePatched", threadId: "main", message: expect.objectContaining({ attention: expect.objectContaining({ closed: "skipped" }) }) }));
+  });
+
+  it("moves to the next item after a skip, not back to the first", async () => {
+    const q1 = ask("q1", 1, "First question?");
+    const q2 = ask("q2", 2, "Second question?");
+    const q3 = ask("q3", 3, "Third question?");
+    await render([], [q1, q2, q3]);
+    await act(async () => { snapshot.current!.go(1); });
+    expect(host.textContent).toContain("Second question?");
+    await act(async () => { skipButton()!.click(); });
+    expect(dispatched).toContainEqual({ type: "skipCard", threadId: "main", requestId: "req-q2" });
+    // the server closes it: the one after it moves up into its place
+    await render([], [q1, q3]);
+    expect(host.textContent).toContain("Third question?");
+    expect(host.querySelector("[data-approval-stepper]")?.textContent).toContain("2 of 2");
+  });
+});

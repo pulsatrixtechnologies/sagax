@@ -17,7 +17,7 @@ import { t } from "@/lib/i18n";
 import type { OptionCardData } from "@/state/store";
 import { ApprovalHeading, RiskChip } from "./ApprovalParts";
 import { toolLabel } from "./ApprovalCard";
-import { ASK_CHIP, ASK_CHIP_IDLE, ASK_PRIMARY_BUTTON } from "./AskCard";
+import { ASK_CHIP, ASK_CHIP_IDLE, ASK_PRIMARY_BUTTON, CardCloseButton } from "./AskCard";
 import { Switch } from "./SettingsPrimitives";
 import { StepRow } from "./StepRow";
 import { SuggestionFeedback } from "./SuggestionFeedback";
@@ -81,12 +81,14 @@ function WatchList({ watches, switched, onSwitch }: {
   );
 }
 
-export function ProactiveChoiceCard({ card, onAnswer, onNever, showNever = true, defaultOpen = false }: {
+export function ProactiveChoiceCard({ card, onAnswer, onNever, onSkip, showNever = true, defaultOpen = false }: {
   card: OptionCardData;
   /** the answer: a yes with the watches kept on, or « Pas maintenant » */
   onAnswer: (accept: boolean, watches: string[]) => void;
   /** « Ne plus proposer »: final for bots (the proposal feedback route) */
   onNever: () => Promise<void>;
+  /** #3471: closed as skipped, neither a yes nor a « Pas maintenant » */
+  onSkip?: () => void;
   /** the bot's owner only, in a room too */
   showNever?: boolean;
   /** the details start unfolded (the gallery's captures) */
@@ -100,7 +102,7 @@ export function ProactiveChoiceCard({ card, onAnswer, onNever, showNever = true,
 
   if (card.answered || card.expired) {
     const accepted = !card.expired && card.answered === yes;
-    const said = card.expired ? t("question.status.closed") : card.answeredText ?? card.answered ?? "";
+    const said = card.skipped ? t("waitingCard.skipped") : card.expired ? t("waitingCard.expired") : card.answeredText ?? card.answered ?? "";
     return (
       <StepRow
         testId="proactive-choice-receipt"
@@ -130,7 +132,7 @@ export function ProactiveChoiceCard({ card, onAnswer, onNever, showNever = true,
       // #3414: the compact surface every ask of the chat shares (AskCard)
       className="w-full max-w-[600px] rounded-3xl bg-composer px-4 py-3 text-start ring-1 ring-composer-ring"
     >
-      <ApprovalHeading icon={<BellRing size={15} />} title={card.title} summary={card.subtitle} />
+      <ApprovalHeading icon={<BellRing size={15} />} title={card.title} summary={card.subtitle} aside={onSkip ? <CardCloseButton label={t("waitingCard.skipAria")} onClick={onSkip} className="-mt-1" /> : undefined} />
       {choice.watches.length > 0 && (
         <div className="mt-2" data-choice-details={open ? "open" : "closed"}>
           <button

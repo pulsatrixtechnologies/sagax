@@ -86,6 +86,8 @@ export function adminWillAnswerLine(adminNames: readonly string[] | undefined): 
 
 export function approvalCardOutcome(card: OptionCardData): string | undefined {
   if (card.expired === true) return t("approval.status.expired");
+  // #3471: skipped is not a refusal: nothing ran, and it says so
+  if (card.skipped === true) return t("approval.status.skipped");
   if (!card.answered) return undefined;
   if (card.undone === true) return t("approval.status.undone");
   const isProposal = Boolean(card.routineRequest || card.skillRequest || card.profileRequest || card.modelRequest || card.ruleRequest || card.teamSetupRequest);
@@ -125,8 +127,9 @@ export function approvalCardStaysInChat(
 }
 
 /** The status pill of a settled tool approval, as the reference design shows it. */
-export function approvalPill(card: Pick<OptionCardData, "answered" | "expired" | "undone" | "alwaysAllowed" | "ruleSaved">): { label: string; tone: "success" | "danger" | "neutral" } | undefined {
+export function approvalPill(card: Pick<OptionCardData, "answered" | "expired" | "undone" | "alwaysAllowed" | "ruleSaved" | "skipped">): { label: string; tone: "success" | "danger" | "neutral" } | undefined {
   if (card.expired === true) return { label: t("approval.pill.expired"), tone: "neutral" };
+  if (card.skipped === true) return { label: t("approval.pill.skipped"), tone: "neutral" };
   if (!card.answered) return undefined;
   if (card.undone === true) return { label: t("approval.status.undone"), tone: "neutral" };
   if (card.answered === "allow" && card.ruleSaved?.behavior === "allow") return { label: t("approval.pill.alwaysAllowed"), tone: "success" };

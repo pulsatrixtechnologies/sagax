@@ -1697,6 +1697,10 @@ export type Action =
       /** #3457: a choice card's switches, the watches kept on with its yes. */
       proactiveWatches?: string[] }
   | { type: "dismissCard"; botId: string; messageId: string; threadId?: string; groupId?: string }
+  /** #3471: skip a waiting card (an approval, a question, a proposal):
+   * closed as skipped, never a deny; the waiting bot hears there is no
+   * answer. `tool`: an approval (the turn declines with that line). */
+  | { type: "skipCard"; threadId: string; requestId?: string; tool?: boolean; proposal?: { botId: string; id: string } }
   // permission cards answer by THREAD, so a request raised inside a room
   // can be answered the same way as one in a 1:1 chat
   | {

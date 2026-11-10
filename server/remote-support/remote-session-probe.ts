@@ -1,6 +1,6 @@
 // Fixed read-only probes for a Tailcat session. The command text is ours:
 // nothing the person or the model typed is interpolated into it.
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -15,7 +15,9 @@ export interface CommandResult {
   timedOut?: boolean;
 }
 
-export type RunCommand = (argv: string[], timeoutMs: number) => Promise<CommandResult>;
+/** `signal`: stop the command now (its session closed). It resolves with
+ * exit code 255 then, like a tunnel that dropped: the command may have run. */
+export type RunCommand = (argv: string[], timeoutMs: number, options?: { signal?: AbortSignal }) => Promise<CommandResult>;
 
 const SHOT_NAME = "px-sagax-shot.png";
 
@@ -511,13 +513,77 @@ export function tailcatEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.Process
   return out;
 }
 
-export const runCommand: RunCommand = (argv, timeoutMs) => new Promise((resolve) => {
-  execFile(argv[0]!, argv.slice(1), { timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024, windowsHide: true, encoding: "utf8", env: tailcatEnv() }, (error, stdout, stderr) => {
-    const failed = error as { code?: number; killed?: boolean; signal?: string | null } | null;
-    const code = typeof failed?.code === "number" ? failed.code : error ? 1 : 0;
-    const timedOut = Boolean(failed && (failed.killed || failed.signal === "SIGTERM") && typeof failed.code !== "number");
-    resolve({ code, stdout: stdout ?? "", stderr: stderr ?? "", ...(timedOut ? { timedOut } : {}) });
+/** After SIGTERM, how long a tailcat call has to exit before SIGKILL. */
+export const KILL_GRACE_MS = 5_000;
+/** After SIGKILL, how long before its queue slot is freed anyway. */
+export const KILL_RELEASE_MS = 2_000;
+const OUTPUT_MAX = 8 * 1024 * 1024;
+
+/** Run one tailcat call (#3430). `tailcat ssh` replaces itself with the
+ * system ssh (same pid), and ssh keeps a `tailcat` ProxyCommand child;
+ * `tailcat cp` keeps scp as its child, which keeps ssh and its proxy. So
+ * the call runs in its own process group and a stop (time limit or abort)
+ * signals the whole group: SIGTERM, then SIGKILL after `killGraceMs`, then
+ * the promise resolves after `releaseMs` even if a pipe is still held, so a
+ * hung process never holds its tunnel's queue. No orphan is left behind.
+ * Windows has no process groups: the child alone is signalled there. */
+export function createRunCommand(options: { killGraceMs?: number; releaseMs?: number; platform?: NodeJS.Platform } = {}): RunCommand {
+  const killGraceMs = options.killGraceMs ?? KILL_GRACE_MS;
+  const releaseMs = options.releaseMs ?? KILL_RELEASE_MS;
+  const group = (options.platform ?? process.platform) !== "win32";
+  return (argv, timeoutMs, extra) => new Promise((resolve) => {
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    let stopping = false;
+    let timedOut = false;
+    let aborted = false;
+    const timers: NodeJS.Timeout[] = [];
+    const signal = extra?.signal;
+    const finish = (code: number) => {
+      if (settled) return;
+      settled = true;
+      for (const timer of timers) clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      resolve({ code: aborted && !timedOut ? 255 : code, stdout, stderr, ...(timedOut ? { timedOut } : {}) });
+    };
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(argv[0]!, argv.slice(1), { detached: group, windowsHide: true, env: tailcatEnv(), stdio: ["ignore", "pipe", "pipe"] });
+    } catch (error) {
+      stderr = error instanceof Error ? error.message : "";
+      finish(1);
+      return;
+    }
+    const kill = (sig: NodeJS.Signals) => {
+      try {
+        if (group && child.pid) process.kill(-child.pid, sig);
+        else child.kill(sig);
+      } catch { /* already gone */ }
+    };
+    const stop = () => {
+      if (stopping || settled) return;
+      stopping = true;
+      kill("SIGTERM");
+      timers.push(setTimeout(() => {
+        kill("SIGKILL");
+        timers.push(setTimeout(() => finish(1), releaseMs));
+      }, killGraceMs));
+    };
+    function onAbort() { aborted = true; stop(); }
+    child.stdout?.setEncoding("utf8");
+    child.stderr?.setEncoding("utf8");
+    child.stdout?.on("data", (chunk: string) => {
+      if (stdout.length + chunk.length > OUTPUT_MAX) { stdout += chunk.slice(0, Math.max(0, OUTPUT_MAX - stdout.length)); stop(); return; }
+      stdout += chunk;
+    });
+    child.stderr?.on("data", (chunk: string) => { if (stderr.length < OUTPUT_MAX) stderr += chunk.slice(0, OUTPUT_MAX - stderr.length); });
+    child.on("error", (error) => { stderr ||= error.message; finish(1); });
+    child.on("close", (code) => finish(typeof code === "number" ? code : 1));
+    timers.push(setTimeout(() => { timedOut = true; stop(); }, timeoutMs));
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener("abort", onAbort, { once: true });
   });
-});
+}
 
-
+export const runCommand: RunCommand = createRunCommand();

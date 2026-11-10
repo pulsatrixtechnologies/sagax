@@ -58,6 +58,16 @@ import { remoteJoin, safeRemoteDir, scpSafePath, sensitiveRemoteDir } from "../.
 import type { AdminSessionInput } from "../../shared/remote-session-admin.ts";
 import type { RemoteSessionActionEvent } from "./remote-session-actions-audit.ts";
 import { remoteCommandReadOnly } from "./remote-session-exec.ts";
+import { createTunnelQueue, isTunnelRefusal, type TunnelRefusal } from "./tunnel-queue.ts";
+
+/** A call the tunnel queue never sent. `closed` starts with the words the
+ * host router reads as "not sent" (host-computer-router.ts NOT_SENT), so it
+ * opens a new session and sends the command once there (#3404). */
+export function refusalText(refusal: TunnelRefusal): string {
+  return refusal.notSent === "closed"
+    ? "No remote session is connected any more: it closed before this command's turn, so the command was not sent."
+    : "The host is busy with other bots' commands, so this command was not sent. Try again in a moment.";
+}
 
 const FILE = "remote-sessions.json";
 const UPLOAD_MAX = 8 * 1024 * 1024;
@@ -224,6 +234,8 @@ export type RemoteSessionDeps = {
   controlSpawn?: SpawnControl;
   /** The system ssh client tailcat execs (default: looked up on this host). */
   systemSsh?: () => string | null;
+  /** How long a tailcat call waits for its turn on a busy tunnel (tests). */
+  tunnelWaitMaxMs?: number;
   /** The per-session action audit (exec, file transfers), for the Remote
    * Sessions logs view. The command is redacted again at the sink. */
   actionsAudit?: { write(event: RemoteSessionActionEvent): void };
@@ -247,9 +259,13 @@ type RemoteSessionEnv = {
   owned: (principalId: string, botId: string, id: string) => StoredSession | null;
   hostLabel: (session: StoredSession) => string;
   tailcatBin: () => string;
-  ssh: (session: StoredSession, command: string, timeoutMs: number) => Promise<CommandResult | null>;
-  /** One tailcat call on a tunnel, after the ones already running on its key. */
-  tunnelRun: (keyPath: string, argv: string[], timeoutMs: number) => Promise<CommandResult>;
+  ssh: (session: StoredSession, command: string, timeoutMs: number, force?: boolean) => Promise<CommandResult | null>;
+  /** The same, telling a refusal of the queue (never sent) apart. */
+  sshQueued: (session: StoredSession, command: string, timeoutMs: number, force?: boolean) => Promise<CommandResult | TunnelRefusal | null>;
+  /** One tailcat call for a session, after the ones already on its tunnel. */
+  tunnelRun: (session: StoredSession, argv: (tunnel: { keyPath: string; address: string }) => string[], timeoutMs: number, force?: boolean) => Promise<CommandResult | TunnelRefusal | null>;
+  /** The session closed: drop its queue and stop its running call. */
+  endTunnel: (session: StoredSession) => Promise<void>;
   reading: Map<string, Promise<void>>;
   inspect: (session: StoredSession) => Promise<void>;
   refresh: (session: StoredSession) => void;
@@ -324,27 +340,48 @@ function buildRemoteSessionEnv(deps: RemoteSessionDeps): RemoteSessionEnv {
 
   const tailcatBin = () => resolveTailcatBinary() ?? "tailcat";
 
-  // One tailcat process at a time per tunnel key (#3430). Each `tailcat ssh`
-  // or `tailcat cp` is its own WireGuard endpoint with the session's client
-  // key; a second one started while the first still runs sends the host a
-  // new handshake for the same peer, and the host drops the first one's
-  // connection (ssh 255). A session shared by every bot of the person
-  // (#3393) therefore runs their commands one after the other. The command
-  // timeout starts when its own turn comes.
-  const tunnelQueues = new Map<string, Promise<unknown>>();
-  const tunnelRun = (keyPath: string, argv: string[], timeoutMs: number): Promise<CommandResult> => {
-    const before = tunnelQueues.get(keyPath) ?? Promise.resolve();
-    const mine = before.then(() => run(argv, timeoutMs));
-    const tail = mine.then(() => undefined, () => undefined);
-    tunnelQueues.set(keyPath, tail);
-    void tail.then(() => { if (tunnelQueues.get(keyPath) === tail) tunnelQueues.delete(keyPath); });
-    return mine;
+  // One tailcat call at a time per tunnel key (#3430): see tunnel-queue.ts.
+  const queue = createTunnelQueue({ run, ...(deps.tunnelWaitMaxMs ? { waitMaxMs: deps.tunnelWaitMaxMs } : {}) });
+  /** The row is still the live session behind that key when the call's
+   * turn comes: connected, same tunnel, and its end time did not pass while
+   * the call waited (one already past when the call came is the caller's
+   * to judge: the host router replaces it before sending, #3404). */
+  const stillLive = (session: StoredSession, keyPath: string) => {
+    const endedAlready = (row: StoredSession) => {
+      const end = Date.parse(row.endAt);
+      return Number.isFinite(end) && end <= now();
+    };
+    const pastAtSubmit = endedAlready(session);
+    return () => {
+      const row = rows.find((candidate) => candidate.id === session.id && candidate.principalId === session.principalId && candidate.botId === session.botId);
+      if (!row || row.state !== "connected") return false;
+      if (!pastAtSubmit && endedAlready(row)) return false;
+      return tunnelOf(row)?.keyPath === keyPath;
+    };
+  };
+  /** One tailcat call for a session, in its tunnel's queue. `force`: the
+   * session's own stop command, sent while it closes. */
+  const tunnelRun = (session: StoredSession, argv: (tunnel: { keyPath: string; address: string }) => string[], timeoutMs: number, force = false): Promise<CommandResult | TunnelRefusal | null> => {
+    const tunnel = tunnelOf(session);
+    if (!tunnel) return Promise.resolve(null);
+    return queue.submit(tunnel.keyPath, argv(tunnel), timeoutMs, force ? () => true : stillLive(session, tunnel.keyPath));
+  };
+  /** The session closed: its waiting calls are refused (never sent) and the
+   * running one stopped; resolves once the tunnel is free. */
+  const endTunnel = async (session: StoredSession): Promise<void> => {
+    const tunnel = tunnelOf(session);
+    if (tunnel) await queue.end(tunnel.keyPath);
   };
 
-  async function ssh(session: StoredSession, command: string, timeoutMs: number) {
-    const tunnel = tunnelOf(session);
-    if (!tunnel) return null;
-    return tunnelRun(tunnel.keyPath, tailcatSshArgv(tailcatBin(), tunnel.keyPath, tunnel.address, command), timeoutMs);
+  /** A call through the queue; null when it was not sent (no tunnel, or
+   * refused: the caller reads both as "could not reach"). */
+  async function ssh(session: StoredSession, command: string, timeoutMs: number, force = false): Promise<CommandResult | null> {
+    const out = await sshQueued(session, command, timeoutMs, force);
+    return isTunnelRefusal(out) ? null : out;
+  }
+
+  function sshQueued(session: StoredSession, command: string, timeoutMs: number, force = false) {
+    return tunnelRun(session, (tunnel) => tailcatSshArgv(tailcatBin(), tunnel.keyPath, tunnel.address, command), timeoutMs, force);
   }
 
   /** Ask the computer its OS: uname, then PowerShell. Sets osGuessed off only
@@ -486,7 +523,9 @@ function buildRemoteSessionEnv(deps: RemoteSessionDeps): RemoteSessionEnv {
     hostLabel,
     tailcatBin,
     ssh,
+    sshQueued,
     tunnelRun,
+    endTunnel,
     reading,
     inspect,
     refresh,
@@ -498,7 +537,7 @@ function buildRemoteSessionEnv(deps: RemoteSessionDeps): RemoteSessionEnv {
 function createRemoteSessionLifecycle(env: RemoteSessionEnv) {
   const {
     deps, rows, prune, persist, exclusive, owned, tunnelOf, refresh, writeCard, inspect,
-    sagaxOpened, controls, ssh, supportDir, home, now,
+    sagaxOpened, controls, ssh, supportDir, home, now, endTunnel,
   } = env;
   return {
     viewOf,
@@ -606,7 +645,10 @@ function createRemoteSessionLifecycle(env: RemoteSessionEnv) {
       controls.closeSession(session.id);
       if (wasConnected) {
         const ours = sagaxOpened(session);
-        try { if (!session.osGuessed) await ssh(session, stopCommand(session.id, session.os), 8_000); } catch { /* the screen still closes */ }
+        // the waiting calls are refused and the running one stopped first,
+        // so the stop command never waits behind them (#3430)
+        await endTunnel(session);
+        try { if (!session.osGuessed) await ssh(session, stopCommand(session.id, session.os), 8_000, true); } catch { /* the screen still closes */ }
         if (ours) {
           // Delete the address and leave a `closed` marker first, so even if
           // Perspicax cannot be reached the tunnel no longer resolves here and
@@ -631,6 +673,7 @@ function createRemoteSessionLifecycle(env: RemoteSessionEnv) {
         controls.closeSession(session.id);
         writeCard(session);
         persist();
+        void endTunnel(session);
         return viewOf(session);
       });
     },
@@ -675,7 +718,10 @@ function createRemoteSessionLifecycle(env: RemoteSessionEnv) {
       const { session, wasConnected } = closing;
       controls.closeSession(session.id);
       if (wasConnected) {
-        try { if (!session.osGuessed) await ssh(session, stopCommand(session.id, session.os), 8_000); } catch { /* the screen still closes */ }
+        // the waiting calls are refused and the running one stopped first,
+        // so the stop command never waits behind them (#3430)
+        await endTunnel(session);
+        try { if (!session.osGuessed) await ssh(session, stopCommand(session.id, session.os), 8_000, true); } catch { /* the screen still closes */ }
         if (sagaxOpened(session)) {
           const dir = supportDir?.();
           if (dir) await markSessionClosed(dir, session.code).catch(() => {});
@@ -726,7 +772,7 @@ function activeFromEnv(env: RemoteSessionEnv, principalId: string, botId: string
 function createRemoteSessionOps(env: RemoteSessionEnv) {
   const {
     deps, rows, persist, exclusive, owned, tunnelOf, refresh, writeCard, inspect,
-    hostLabel, tailcatBin, ssh, tunnelRun, now, actionsAudit, systemSsh, home, controls,
+    hostLabel, tailcatBin, ssh, sshQueued, tunnelRun, now, actionsAudit, systemSsh, home, controls,
   } = env;
 
   const ops = {
@@ -831,9 +877,9 @@ function createRemoteSessionOps(env: RemoteSessionEnv) {
       const local = path.join(localDir, `${randomBytes(8).toString("hex")}-${safeName.replaceAll(" ", "_")}`);
       writeFileSync(local, bytes, { mode: 0o600 });
       try {
-        const tunnel = tunnelOf(session);
-        if (!tunnel) return { error: "The tunnel for this remote computer is not on this server yet." };
-        const copied = await tunnelRun(tunnel.keyPath, tailcatCopyArgv(tailcatBin(), tunnel.keyPath, local, `${tunnel.address}:${remotePath}`), 60_000);
+        const copied = await tunnelRun(session, (tunnel) => tailcatCopyArgv(tailcatBin(), tunnel.keyPath, local, `${tunnel.address}:${remotePath}`), 60_000);
+        if (!copied) return { error: "The tunnel for this remote computer is not on this server yet." };
+        if (isTunnelRefusal(copied)) return { error: refusalText(copied) };
         if (copied.code !== 0) return { error: "The file did not arrive on the remote computer." };
         actionsAudit?.write({ at: now(), sessionId: session.id, principalId: session.principalId, botId: session.botId, kind: "transfer", direction: "upload", file: safeName });
         return { name: safeName };
@@ -846,14 +892,15 @@ function createRemoteSessionOps(env: RemoteSessionEnv) {
       const session = owned(principalId, botId, id);
       if (!session || session.state !== "connected") return { error: "That remote session is not open." };
       if (!safe || !scpSafePath(safe)) return { error: "That path cannot be downloaded." };
-      const tunnel = tunnelOf(session);
-      if (!tunnel) return { error: "The tunnel for this remote computer is not on this server yet." };
+      if (!tunnelOf(session)) return { error: "The tunnel for this remote computer is not on this server yet." };
       const localDir = path.join(deps.dataDir, "remote-session-transfers");
       mkdirSync(localDir, { recursive: true, mode: 0o700 });
       const name = safe.split(/[\\/]/).pop() || "download";
       const local = path.join(localDir, `${randomBytes(8).toString("hex")}`);
-      const copied = await tunnelRun(tunnel.keyPath, tailcatCopyArgv(tailcatBin(), tunnel.keyPath, `${tunnel.address}:${safe}`, local), 60_000);
+      const copied = await tunnelRun(session, (tunnel) => tailcatCopyArgv(tailcatBin(), tunnel.keyPath, `${tunnel.address}:${safe}`, local), 60_000);
       try {
+        if (!copied) return { error: "The tunnel for this remote computer is not on this server yet." };
+        if (isTunnelRefusal(copied)) return { error: refusalText(copied) };
         if (copied.code !== 0) return { error: "That file could not be read on the remote computer." };
         const bytes = readFileSync(local);
         if (bytes.length > DOWNLOAD_MAX) return { error: "That file is over 32 MB." };
@@ -917,8 +964,9 @@ function createRemoteSessionOps(env: RemoteSessionEnv) {
       const command = input.command.trim();
       if (!command || command.length > 8000) return { error: "command: one command line, under 8,000 characters." };
       const timeout = Math.min(EXEC_TIMEOUT_MAX_MS, Math.max(1000, input.timeoutMs ?? EXEC_TIMEOUT_DEFAULT_MS));
-      const result = await ssh(session, command, timeout);
+      const result = await sshQueued(session, command, timeout);
       if (!result) return { error: "This server does not have the tunnel of that session." };
+      if (isTunnelRefusal(result)) return { error: refusalText(result) };
       if (result.code === TRANSPORT_FAILED && !result.stdout) return { error: "The remote computer did not answer (the tunnel is down or the session ended)." };
       // Audit what ran (never the output): a read-only command needs no card;
       // a write that reached here was approved (the route gates it first).

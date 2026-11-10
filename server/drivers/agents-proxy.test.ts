@@ -763,6 +763,9 @@ describe("agents-proxy MCP surface", () => {
       "request_login",
       "request_sign_in",
       "open_connector_setup",
+      // #3286: the person's connectors on any engine (#3377 lists, #3380 calls)
+      "connectors",
+      "call_connector",
       "list_terminal_resources",
       "offer_shell_terminal",
       "resource_usage",
@@ -868,7 +871,8 @@ describe("agents-proxy MCP surface", () => {
       properties: { surface: { type: "string", enum: ["auto", "cloud", "vm", "local", "browser"] } } });
     expect(tool.inputSchema.required ?? []).not.toContain("surface");
     expect(tool.description).toContain("end this turn at once");
-    expect(tool.description).toContain("or provisions one with a configured provider when needed");
+    // #3281 shortened this sentence to fit the catalog byte budget.
+    expect(tool.description).toContain("reuses a computer or provisions one when needed");
     expect(tool.description).toContain("not for ordinary chat or just to inspect");
     expect(tool.annotations?.readOnlyHint).not.toBe(true);
   });
@@ -923,6 +927,8 @@ describe("agents-proxy MCP surface", () => {
       "sagax_help",
       "list_waits",
       "list_team_setup",
+      // #3377: connectors only lists; call_connector acts and stays unannotated.
+      "connectors",
       "workspace_read", "workspace_search",
       "session_search", "session_read",
       "list_cloud_agents", "get_cloud_agent", "find_cloud_agent_by_pr", "cloud_agent_transcript", "list_cloud_agent_artifacts",

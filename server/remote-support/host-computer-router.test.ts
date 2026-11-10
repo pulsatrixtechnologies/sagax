@@ -382,3 +382,106 @@ describe("hosts shared with the bot, no pick", () => {
     expect(exec).not.toHaveBeenCalled();
   });
 });
+
+// #3393: one unattended session per person and host, shared by every bot of
+// that person; an ended session is replaced; a command that did not run is
+// an error with its reason.
+describe("the person's session on a host (#3393)", () => {
+  const BOB_PERSON = "bob@example.test";
+
+  function shared(opts: { endAt?: string; failReused?: boolean } = {}) {
+    const dir = mkdtempSync(path.join(tmpdir(), "host-computer-"));
+    dirs.push(dir);
+    const store = createHostComputerStore({ dataDir: dir, now: () => NOW });
+    // session id -> the bot whose row it is, its end time, still connected
+    const rows = new Map<string, { botId: string; principalId: string; endAt: string; connected: boolean }>();
+    let opened = 0;
+    const open = vi.fn(async (viewer: { principalId: string }, _hostId: string, options: { seatFor?: { botId: string } }) => {
+      opened += 1;
+      const session = `s${opened}`;
+      rows.set(session, { botId: options.seatFor?.botId ?? "primary", principalId: viewer.principalId, endAt: opts.endAt ?? new Date(NOW + 30 * 60_000).toISOString(), connected: true });
+      return { ok: true as const, code: `K7QMN${opened}`, botId: options.seatFor?.botId ?? "primary", threadId: "t", session };
+    });
+    const target = ({ principalId, botId, id }: { principalId: string; botId: string; id?: string }) => {
+      const found = id ? rows.get(id) : undefined;
+      return found && found.connected && found.botId === botId && found.principalId === principalId ? { id: id!, os: "linux", endAt: found.endAt } : null;
+    };
+    const exec = vi.fn(async (input: { principalId: string; botId: string; id?: string; command: string }) => {
+      if (!target({ principalId: input.principalId, botId: input.botId, id: input.id })) return { error: "No remote session is connected in this conversation." };
+      if (opts.failReused && input.id === "s1" && exec.mock.calls.length > 1) return { error: "The remote computer did not answer (the tunnel is down or the session ended)." };
+      return { host: "FS-01", os: "linux" as const, exitCode: 0, stdout: `${input.botId}\n`, stderr: "", timedOut: false };
+    });
+    const close = vi.fn(async (_principalId: string, _botId: string, id: string) => { const found = rows.get(id); if (found) found.connected = false; });
+    const router = createHostComputerRouter({
+      store,
+      hosts: {
+        list: async () => ({ available: true as const, hosts: [row(FS01, "FS-01")] }),
+        open,
+        installCode: async () => ({ ok: false as const, error: "unavailable" as const, message: "no" }),
+      },
+      sessions: { target, exec, screen: async () => null, close, markQuiet: vi.fn() },
+      botThread: (botId) => `t-${botId}`,
+      botName: () => "Bot",
+      access: () => "always",
+      consumeApproval: () => false,
+      raiseQuestion: () => "req-1",
+      now: () => NOW,
+      sleep: () => Promise.resolve(),
+    });
+    for (const person of [ALICE, BOB_PERSON]) store.update(person, FS01, { botComputer: true });
+    const run = (principalId: string, botId: string) => router.call({ principalId, botId, threadId: `t-${botId}`, action: "exec", command: "whoami", host: "FS-01" });
+    return { router, open, exec, close, rows, run };
+  }
+
+  it("every bot of the same person reaches the host through the one open session", async () => {
+    const { open, exec, run } = shared();
+    for (const bot of ["sagax-test", "ember", "architect"]) {
+      const out = await run(ALICE, bot);
+      expect(out).not.toHaveProperty("isError");
+      expect(JSON.parse(out.text)).toMatchObject({ where: "FS-01", exitCode: 0 });
+    }
+    expect(open).toHaveBeenCalledTimes(1);
+    // the session row is the opener's: every exec goes through it
+    expect(exec.mock.calls.map(([input]) => [input.id, input.botId])).toEqual([["s1", "sagax-test"], ["s1", "sagax-test"], ["s1", "sagax-test"]]);
+  });
+
+  it("never shares a session with another person", async () => {
+    const { open, exec, run } = shared();
+    await run(ALICE, "sagax-test");
+    await run(BOB_PERSON, "ember");
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(exec.mock.calls.map(([input]) => [input.principalId, input.id])).toEqual([[ALICE, "s1"], [BOB_PERSON, "s2"]]);
+  });
+
+  it("a session past its end time is closed and the next exec opens a new one", async () => {
+    const { open, exec, close, run } = shared({ endAt: new Date(NOW - 1_000).toISOString() });
+    await run(ALICE, "sagax-test");
+    const out = await run(ALICE, "perspicax-core");
+    expect(JSON.parse(out.text)).toMatchObject({ exitCode: 0 });
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(close).toHaveBeenCalledWith(ALICE, "sagax-test", "s1");
+    expect(exec.mock.calls.at(-1)![0]).toMatchObject({ id: "s2", botId: "perspicax-core" });
+  });
+
+  it("a reused session whose tunnel no longer answers is replaced and the command runs once there", async () => {
+    const { open, exec, close, run } = shared({ failReused: true });
+    await run(ALICE, "sagax-test");
+    const out = await run(ALICE, "sagax-test");
+    expect(out).not.toHaveProperty("isError");
+    expect(JSON.parse(out.text)).toMatchObject({ where: "FS-01", exitCode: 0 });
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(close).toHaveBeenCalledWith(ALICE, "sagax-test", "s1");
+    expect(exec.mock.calls.map(([input]) => input.id)).toEqual(["s1", "s1", "s2"]);
+  });
+
+  it("a command that did not run is an error naming the host and the reason", async () => {
+    const { exec, run, rows } = shared();
+    await run(ALICE, "sagax-test");
+    exec.mockImplementation(async () => ({ error: "The remote computer did not answer (the tunnel is down or the session ended)." }));
+    rows.set("s2", { botId: "x", principalId: ALICE, endAt: new Date(NOW + 60_000).toISOString(), connected: true });
+    const out = await run(ALICE, "ember");
+    expect(out).toMatchObject({ isError: true });
+    expect(out.text).toMatch(/^The command did not run on FS-01: The remote computer did not answer/);
+    expect(out.text).not.toMatch(/exit code/);
+  });
+});

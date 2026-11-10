@@ -1,7 +1,8 @@
 // A bot computer that is an enrolled host (#2726, #2727): the bot's shell and
 // screen calls run there through the remote channel, without a Remote session
-// card. The session opens on demand (through that bot's own Perspicax link),
-// is reused, and closes when idle. The host's own access rule (Always allow /
+// card. The session opens on demand (through the calling bot's own Perspicax
+// link), is shared by every bot of the same person on that host (#3393), is
+// opened again once it ended, and closes when idle. The host's own access rule (Always allow /
 // Ask / Never) holds. When the person chose "Isolated environment", the calls
 // go to a VM the bot provisioned on that host, enrolled as a host of its own.
 import {
@@ -64,6 +65,11 @@ export function hostComputerHostName(input: string | undefined): string | undefi
   }
 }
 
+/** The answers of server/remote-support/remote-sessions.ts exec when the
+ * session itself is gone (ended at the server, tunnel down, row closed):
+ * nothing ran, and a new session is the cure. */
+const SESSION_GONE = /No remote session is connected|does not have the tunnel|did not answer \(the tunnel is down or the session ended\)/;
+
 /** Idle sessions close after this long without a call. */
 export const HOST_SESSION_IDLE_MS = 10 * 60_000;
 const CONNECT_WAIT_MS = 60_000;
@@ -86,12 +92,16 @@ export interface HostComputerCallInput {
   host?: string;
 }
 
+/** The person's session on a host: `botId` is the bot that opened it (its
+ * row), `reused` when an earlier call opened it. */
+interface HostSession { sessionId: string; botId: string; reused: boolean }
+
 export type HostComputerCallResult =
   | { text: string; isError?: boolean }
   | { image: Buffer; text: string };
 
 interface SessionDeps {
-  target(input: { principalId: string; botId: string; threadId: string; id?: string }): { id: string; os: string; osGuessed?: boolean; headless?: boolean } | null;
+  target(input: { principalId: string; botId: string; threadId: string; id?: string }): { id: string; os: string; osGuessed?: boolean; headless?: boolean; endAt?: string } | null;
   exec(input: { principalId: string; botId: string; threadId: string; id?: string; command: string; timeoutMs?: number }): Promise<RemoteExecResult | { error: string }>;
   screen(principalId: string, botId: string, id: string): Promise<Buffer | null>;
   close(principalId: string, botId: string, id: string): Promise<unknown>;
@@ -130,11 +140,20 @@ export function createHostComputerRouter(deps: {
   const now = deps.now ?? (() => Date.now());
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms).unref?.()));
   const log = deps.log ?? (() => undefined);
-  /** principal|bot|host: the quiet session this bot uses there. */
+  /** principal|host: the quiet session the person's bots use there (#3393).
+   * `botId` is the bot that opened it: the session row is its own, so every
+   * later call of any bot of that person goes through that row. Another
+   * person never shares it (the key and the row both carry the principal). */
   const open = new Map<string, { sessionId: string; lastUsed: number; principalId: string; botId: string }>();
-  const opening = new Map<string, Promise<{ sessionId: string } | { error: string }>>();
+  const opening = new Map<string, Promise<HostSession | { error: string }>>();
   const polling = new Set<string>();
-  const key = (principalId: string, botId: string, hostId: string) => `${principalId.trim().toLowerCase()}|${botId}|${hostId}`;
+  const key = (principalId: string, hostId: string) => `${principalId.trim().toLowerCase()}|${hostId}`;
+  const vmKey = (principalId: string, botId: string, hostId: string) => `${principalId.trim().toLowerCase()}|${botId}|${hostId}`;
+  /** The session ended at Perspicax (its end time passed): never reused. */
+  const expired = (endAt: string | undefined) => {
+    const end = endAt ? Date.parse(endAt) : Number.NaN;
+    return Number.isFinite(end) && end <= now();
+  };
 
   const ownedRows = async (principalId: string): Promise<{ rows: UnattendedHostRow[]; error?: string }> => {
     const listed = await deps.hosts.list({ principalId });
@@ -253,15 +272,29 @@ export function createHostComputerRouter(deps: {
     return { ok: true, host, asked };
   }
 
-  /** Open (or reuse) the quiet session of this bot on that host. */
-  async function sessionOn(principalId: string, botId: string, hostId: string): Promise<{ sessionId: string } | { error: string }> {
-    const k = key(principalId, botId, hostId);
+  /** Forget the person's session on that host and close it (it ended, or
+   * its tunnel no longer answers): the next call opens a new one. */
+  async function drop(principalId: string, hostId: string, sessionId: string): Promise<void> {
+    const k = key(principalId, hostId);
     const known = open.get(k);
-    if (known && deps.sessions.target({ principalId, botId, threadId: "", id: known.sessionId })) {
-      known.lastUsed = now();
-      return { sessionId: known.sessionId };
-    }
+    if (!known || known.sessionId !== sessionId) return;
     open.delete(k);
+    await deps.sessions.close(known.principalId, known.botId, known.sessionId).catch(() => null);
+  }
+
+  /** Open (or reuse) the person's quiet session on that host. Any bot of
+   * theirs reuses it; one that ended is closed and a new one opens. */
+  async function sessionOn(principalId: string, botId: string, hostId: string): Promise<HostSession | { error: string }> {
+    const k = key(principalId, hostId);
+    const known = open.get(k);
+    if (known) {
+      const live = deps.sessions.target({ principalId, botId: known.botId, threadId: "", id: known.sessionId });
+      if (live && !expired(live.endAt)) {
+        known.lastUsed = now();
+        return { sessionId: known.sessionId, botId: known.botId, reused: true };
+      }
+      await drop(principalId, hostId, known.sessionId);
+    }
     const pending = opening.get(k);
     if (pending) return pending;
     const run = (async () => {
@@ -277,7 +310,7 @@ export function createHostComputerRouter(deps: {
       while (now() < deadline) {
         if (deps.sessions.target({ principalId, botId, threadId, id: outcome.session })) {
           open.set(k, { sessionId: outcome.session, lastUsed: now(), principalId, botId });
-          return { sessionId: outcome.session };
+          return { sessionId: outcome.session, botId, reused: false };
         }
         await sleep(CONNECT_POLL_MS);
       }
@@ -287,17 +320,30 @@ export function createHostComputerRouter(deps: {
     return run;
   }
 
-  const execOn = async (principalId: string, botId: string, hostId: string, command: string, timeoutMs?: number) => {
-    const session = await sessionOn(principalId, botId, hostId);
-    if ("error" in session) return session;
-    return deps.sessions.exec({ principalId, botId, threadId: "", id: session.sessionId, command, ...(timeoutMs ? { timeoutMs } : {}) });
+  /** Run one command on the person's session there. A reused session whose
+   * tunnel no longer answers (it ended at the server) is closed and the
+   * command goes once through a new session. */
+  const execOn = async (principalId: string, botId: string, hostId: string, command: string, timeoutMs?: number): Promise<RemoteExecResult | { error: string }> => {
+    const run = async (): Promise<{ out: RemoteExecResult | { error: string }; session: HostSession | null }> => {
+      const session = await sessionOn(principalId, botId, hostId);
+      if ("error" in session) return { out: session, session: null };
+      const out = await deps.sessions.exec({ principalId, botId: session.botId, threadId: "", id: session.sessionId, command, ...(timeoutMs ? { timeoutMs } : {}) });
+      return { out, session };
+    };
+    const first = await run();
+    if (!("error" in first.out) || !first.session || !SESSION_GONE.test(first.out.error)) return first.out;
+    // the command did not run: this session is no longer usable
+    await drop(principalId, hostId, first.session.sessionId);
+    if (!first.session.reused) return first.out;
+    return (await run()).out;
   };
 
-  /** Close the sessions nobody used for a while. */
+  /** Close the sessions nobody used for a while, and the ones that ended. */
   async function sweep(): Promise<number> {
     let closed = 0;
     for (const [k, row] of open) {
-      if (now() - row.lastUsed < HOST_SESSION_IDLE_MS) continue;
+      const live = deps.sessions.target({ principalId: row.principalId, botId: row.botId, threadId: "", id: row.sessionId });
+      if (live && !expired(live.endAt) && now() - row.lastUsed < HOST_SESSION_IDLE_MS) continue;
       open.delete(k);
       await deps.sessions.close(row.principalId, row.botId, row.sessionId).catch(() => null);
       closed += 1;
@@ -418,7 +464,7 @@ export function createHostComputerRouter(deps: {
   }
 
   async function follow(principalId: string, botId: string, hostId: string): Promise<void> {
-    const k = key(principalId, botId, hostId);
+    const k = vmKey(principalId, botId, hostId);
     if (polling.has(k)) return;
     polling.add(k);
     try {
@@ -508,7 +554,7 @@ export function createHostComputerRouter(deps: {
       if (view.shellOnly && route.hostId === hostId) return { text: `${view.name} is shell only (no desktop), so there is no screenshot. Use action exec.`, isError: true };
       const session = await sessionOn(principalId, botId, route.hostId);
       if ("error" in session) return { text: session.error, isError: true };
-      const image = await deps.sessions.screen(principalId, botId, session.sessionId);
+      const image = await deps.sessions.screen(principalId, session.botId, session.sessionId);
       if (!image) {
         if (route.hostId === hostId) deps.store.update(principalId, hostId, { shellOnly: true });
         return { text: `${view.name} has no screen to capture (shell only). Use action exec.`, isError: true };
@@ -521,7 +567,7 @@ export function createHostComputerRouter(deps: {
       return { text: `${view.name} asks before any change and the person has not allowed this command. Call host_computer again so Sagax asks them; never work around the card.`, isError: true };
     }
     const out = await execOn(principalId, botId, route.hostId, command, input.timeoutMs);
-    if ("error" in out) return { text: out.error, isError: true };
+    if ("error" in out) return { text: `The command did not run on ${view.name}: ${out.error}`, isError: true };
     if (!view.os && route.hostId === hostId) {
       const learned = parseHostOs(out.os);
       if (learned) deps.store.update(principalId, hostId, { os: learned });

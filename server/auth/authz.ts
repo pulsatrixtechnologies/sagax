@@ -72,8 +72,7 @@ export interface BotFacts {
   grants: readonly BotGrant[];
   /** The shared section the bot sits in, if any. */
   sections?: readonly SectionAccess[];
-  /** A level every signed-in person holds (#2618: the shared Feedback bot,
-   * which each person writes to in their own conversation). */
+  /** A level every signed-in person holds on the bot. */
   everyone?: Level;
 }
 

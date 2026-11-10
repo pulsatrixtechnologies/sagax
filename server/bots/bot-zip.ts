@@ -103,7 +103,6 @@ type FieldPolicy =
  * (memberImportReset). */
 export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy } = {
   id: { drop: "a new id on import" },
-  systemBot: { drop: "the shared Feedback bot is the server's own (#2618), never a package" },
   name: "identity",
   title: "identity",
   description: "identity",

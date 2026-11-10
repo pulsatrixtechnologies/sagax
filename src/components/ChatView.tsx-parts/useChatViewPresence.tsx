@@ -19,7 +19,6 @@ import { splitTranscriptAttachments } from "@/lib/composer-attachments";
 import { latestPageVersionIn } from "@/lib/open-page";
 import type { Action, Bot, ConfigStatus, Message } from "@/state/store";
 import type { SideChat } from "./sideChat";
-import { botTitleText } from "@/lib/system-bot-copy";
 
 export function useChatViewPresence({
   bot,
@@ -172,7 +171,7 @@ export function useChatViewPresence({
   const botPill = (
     <BotHeaderPill
       name={bot.name}
-      label={botTitleText(bot)}
+      label={(bot.title ?? "")}
       panelOpen={panelPillOpen}
       onToggle={togglePanelFromPill}
       avatar={
@@ -194,7 +193,7 @@ export function useChatViewPresence({
   const chatHeader = side ? null : (
     <BotChatHeader
       name={bot.name}
-      label={botTitleText(bot)}
+      label={(bot.title ?? "")}
       panelOpen={pillPanelOpen}
       onToggle={() => {
         if (state.panelOwner) dispatch({ type: "toggleSettings", open: true, owner: null });

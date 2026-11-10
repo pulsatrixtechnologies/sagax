@@ -1,27 +1,16 @@
-// The one action every feedback entry point calls (#2618): the sidebar
-// button, Help > Send Feedback…, Cmd/Ctrl+Shift+F and an error card's
-// "Report this problem". It attaches what the app knows (version, OS,
-// platform, page, the window's own screenshot, recent console lines), asks
-// the server to open a report with the shared Feedback bot, and returns the
-// bot and thread to open. Anonymization happens on the server.
-import type { FeedbackSource, FeedbackStartRequest, FeedbackStartResponse } from "../../shared/feedback";
+// What the app attaches when the person types /feedback (#2618, #3299):
+// version, OS, surface, page and recent console lines (no picture: a
+// picture cannot be anonymized). The command goes to the chat it is typed in; the server reads that
+// chat, anonymizes everything and shows the exact report before it leaves.
+import type { FeedbackAppContext } from "../../shared/feedback";
 
-export interface FeedbackOpenDeps {
-  post(body: FeedbackStartRequest): Promise<FeedbackStartResponse>;
-  capture?: () => Promise<string | null>;
+export interface FeedbackContextDeps {
   appVersion?: string;
   userAgent?: string;
   desktop: boolean;
   page?: string;
   locale: string;
   logs?: () => string[];
-}
-
-export interface FeedbackOpenOptions {
-  source: FeedbackSource;
-  error?: string;
-  /** The words typed after /feedback. */
-  text?: string;
 }
 
 /** A short OS name from the user agent: never the full string. */
@@ -38,20 +27,15 @@ export function osFromUserAgent(userAgent: string | undefined): string | undefin
   return undefined;
 }
 
-export async function requestFeedback(deps: FeedbackOpenDeps, options: FeedbackOpenOptions): Promise<FeedbackStartResponse> {
-  const screenshot = deps.capture ? await deps.capture().catch(() => null) : null;
+export function feedbackAppContext(deps: FeedbackContextDeps): FeedbackAppContext {
   const logs = deps.logs?.().slice(-40) ?? [];
-  const body: FeedbackStartRequest = {
-    source: options.source,
+  const os = osFromUserAgent(deps.userAgent);
+  return {
     platform: deps.desktop ? "desktop" : "web",
     locale: deps.locale.toLowerCase().startsWith("en") ? "en" : "fr",
     ...(deps.appVersion ? { appVersion: deps.appVersion } : {}),
-    ...(osFromUserAgent(deps.userAgent) ? { os: osFromUserAgent(deps.userAgent) } : {}),
+    ...(os ? { os } : {}),
     ...(deps.page ? { page: deps.page } : {}),
-    ...(options.error ? { error: options.error.slice(0, 4000) } : {}),
-    ...(options.text?.trim() ? { text: options.text.trim().slice(0, 4000) } : {}),
     ...(logs.length ? { clientLogs: logs } : {}),
-    ...(screenshot?.startsWith("data:image/png;base64,") ? { screenshot } : {}),
   };
-  return deps.post(body);
 }

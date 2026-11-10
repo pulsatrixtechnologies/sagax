@@ -465,10 +465,6 @@ const __BASE_VERSION__: string;
       onOpenAppSettings?(cb: (section?: "organization" | "cloud" | "cloud-settings") => void): () => void;
       /** Sagax → About / Help → About: the in-app About modal. Absent in the browser. */
       onOpenAbout?(cb: () => void): () => void;
-      /** Help > Send Feedback… and Cmd/Ctrl+Shift+F (#2618). */
-      onSendFeedback?(cb: () => void): () => void;
-      /** A PNG data URL of this window only, for a feedback report (#2618). */
-      captureWindow?(): Promise<string | null>;
       /** Help → Release notes. Absent in the browser and on a remote page. */
       /** Updates the native Dock/taskbar unread indicator. */
       setUnreadCount?(count: number): void;

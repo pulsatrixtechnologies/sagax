@@ -33,7 +33,7 @@ import {
 import { forgetAttachmentUploads, startAttachmentUpload } from "@/lib/attachment-uploads";
 import { isStopIntent } from "../../../shared/stop-intent";
 import { isFeedbackCommand } from "../../../shared/feedback";
-import { useOpenFeedback } from "@/lib/use-open-feedback";
+import { useSendFeedback } from "@/lib/use-send-feedback";
 import { dataWindowEnabled } from "@/lib/feature-flags";
 import { serializeThreadRefs, threadTokenFromPaste, threadTokenSpacing } from "@/lib/thread-refs";
 import { goalSubcommandBlock, goalSubcommandFromComposer, type GoalSubcommand } from "@/lib/composer-commands";
@@ -205,7 +205,7 @@ export function useComposerSend({
       retryFailedSendRef.current(queued);
     }
   }, [online, draftId]);
-  const openFeedback = useOpenFeedback();
+  const sendFeedback = useSendFeedback();
   const send = () => {
     // The Hibou 98 easter egg: the secret command toggles the retro owl and
     // is never sent to anyone.
@@ -216,10 +216,10 @@ export function useComposerSend({
       refocusInput();
       return;
     }
-    // /feedback never joins the running turn's queue (#2955): the Feedback
-    // bot opens in the sidebar and the report goes on there, at once.
-    if (!group && attachments.length === 0 && isFeedbackCommand(text)) {
-      void openFeedback({ source: "slash", text: text.trim().replace(/^\/feedback\b/i, "") });
+    // /feedback never joins the running turn's queue (#2955): it goes to
+    // this chat at once, where the report is drafted and shown (#3299).
+    if (!group && bot && attachments.length === 0 && isFeedbackCommand(text)) {
+      void sendFeedback({ botId: bot.id, threadId, text });
       setText("");
       refocusInput();
       return;

@@ -6,62 +6,40 @@ function bot(step: FlowMessage["feedback"], message: Omit<FlowMessage, "role" | 
 }
 const user = (text: string): FlowMessage => ({ role: "user", kind: "text", text });
 
-describe("feedback flow", () => {
-  it("asks the kind first, then steps, expected, actual and impact for a bug", () => {
-    const first = nextFeedbackStep("en", { followups: [] }, "r1");
+describe("feedback flow (#3299: at most one question)", () => {
+  it("asks one question when nothing says what went wrong, and never a second", () => {
+    const first = nextFeedbackStep("en", { said: "" }, "r1");
     expect(first.kind).toBe("ask");
     if (first.kind !== "ask") return;
-    expect(first.marker.step).toBe("kind");
-    expect(first.message.kind).toBe("options");
-    const thread: FlowMessage[] = [bot(first.marker, first.message), user("A bug")];
-    const answers = feedbackAnswers(thread, "r1");
-    expect(answers.kind).toBe("bug");
-    const order: string[] = [];
-    let current = thread;
-    for (const reply of ["Open settings, click Save", "It saves the change", "Nothing happens, spinner forever", "Blocking"]) {
-      const next = nextFeedbackStep("en", feedbackAnswers(current, "r1"), "r1");
-      if (next.kind !== "ask") throw new Error("expected a question");
-      order.push(next.marker.field ?? next.marker.step);
-      current = [...current, bot(next.marker, next.message), user(reply)];
-    }
-    expect(order).toEqual(["steps", "expected", "actual", "impact"]);
-    expect(nextFeedbackStep("en", feedbackAnswers(current, "r1"), "r1").kind).toBe("preview");
+    expect(first.marker).toEqual({ step: "detail", reportId: "r1" });
+    const thread: FlowMessage[] = [bot(first.marker, first.message), user("ok")];
+    const answers = feedbackAnswers(thread, "r1", "");
+    expect(answers).toMatchObject({ said: "", detail: "ok", asked: true });
+    expect(nextFeedbackStep("en", answers, "r1").kind).toBe("preview");
   });
 
-  it("asks one to three follow-ups only when answers are vague", () => {
-    const vague = { kind: "bug" as const, steps: "idk", expected: "ok", actual: "?", impact: "Minor", followups: [] };
-    const first = nextFeedbackStep("fr", vague, "r2");
-    expect(first.kind).toBe("ask");
-    if (first.kind !== "ask") return;
-    expect(first.marker.step).toBe("followup");
-    const three = { ...vague, followups: [{ field: "steps", question: "a", answer: "b" }, { field: "expected", question: "a", answer: "b" }, { field: "actual", question: "a", answer: "b" }] };
-    expect(nextFeedbackStep("fr", three, "r2").kind).toBe("preview");
-    const clear = { kind: "bug" as const, steps: "Ouvrir les réglages puis cliquer Enregistrer", expected: "Le changement est gardé", actual: "Rien ne se passe, la roue tourne", impact: "Bloquant", followups: [] };
-    expect(nextFeedbackStep("fr", clear, "r2").kind).toBe("preview");
+  it("asks nothing when the words or the chat's error say what went wrong", () => {
+    expect(nextFeedbackStep("en", { said: "the routine list never loads at all" }, "r2").kind).toBe("preview");
+    expect(nextFeedbackStep("fr", { said: "" }, "r2", "Provider returned 529 overloaded").kind).toBe("preview");
+    expect(nextFeedbackStep("fr", { said: "bug" }, "r2").kind).toBe("ask");
   });
 
-  it("asks only a description and impact for an idea, and only the question for a question", () => {
-    const idea = nextFeedbackStep("en", { kind: "idea", followups: [] }, "r3");
-    expect(idea.kind === "ask" && idea.marker.step).toBe("describe");
-    const ideaDone = nextFeedbackStep("en", { kind: "idea", describe: "Let me pin a conversation to the top of the list", followups: [] }, "r3");
-    expect(ideaDone.kind === "ask" && ideaDone.marker.step).toBe("impact");
-    expect(nextFeedbackStep("en", { kind: "question", describe: "How do I share a bot with my team?", followups: [] }, "r3").kind).toBe("preview");
-  });
-
-  it("reads the open step and ignores another report's messages", () => {
+  it("reads the open step, keeps details added at the preview and ignores another report's messages", () => {
     const thread: FlowMessage[] = [
-      bot({ step: "kind", reportId: "old" }, { kind: "text", text: "x" }), user("A bug"),
+      bot({ step: "detail", reportId: "old" }, { kind: "text", text: "x" }), user("old answer"),
       bot({ step: "status", reportId: "old" }, { kind: "text", text: "sent" }),
-      bot({ step: "describe", reportId: "new" }, { kind: "text", text: "?" }),
+      bot({ step: "preview", reportId: "new" }, { kind: "options", text: "?" }), user("It started after the update"),
+      bot({ step: "preview", reportId: "new" }, { kind: "options", text: "?" }),
     ];
     expect(openFeedbackStep(thread)?.reportId).toBe("new");
-    expect(feedbackAnswers(thread, "new").kind).toBeUndefined();
+    expect(feedbackAnswers(thread, "new", "words")).toEqual({ said: "words", extra: ["It started after the update"] });
   });
 
-  it("parses a kind from the card or from free words, and detects vague answers and language", () => {
+  it("parses a kind from free words, and detects vague answers and language", () => {
     expect(parseKind("Un bogue")).toBe("bug");
     expect(parseKind("j'ai une idée")).toBe("idea");
     expect(parseKind("How do I do this?")).toBe("question");
+    expect(parseKind("")).toBeUndefined();
     expect(isVague("je sais pas")).toBe(true);
     expect(isVague("Le bouton Enregistrer ne fait rien")).toBe(false);
     expect(feedbackLanguage("Ça marche pas quand je clique")).toBe("fr");

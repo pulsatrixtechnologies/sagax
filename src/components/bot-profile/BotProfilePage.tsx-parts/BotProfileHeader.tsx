@@ -4,7 +4,6 @@
 // under it, who sees it, who owns it and its description edited in place,
 // all aligned left and tight. The mascot editor
 // itself is the Appearance tab.
-import { botTitleText } from "@/lib/system-bot-copy";
 import { lazy, Suspense, useCallback, useState, type ReactNode } from "react";
 import { Lock, Star, Users } from "lucide-react";
 
@@ -55,7 +54,7 @@ export function useBotProfileHero({ bot, derived }: {
   const [heroDropping, setHeroDropping] = useState(false);
   // a name stored with its title glued on ("Heron · Chief of Staff")
   // shows as two lines too; saving either line writes both fields apart
-  const shown = splitBotNameTitle(bot.name, botTitleText(bot));
+  const shown = splitBotNameTitle(bot.name, (bot.title ?? ""));
   const gluedTitle = shown.merged && !bot.title?.trim() ? { title: shown.title } : {};
   const heroTitle = (
     // The name alone on its line at 28px, the label under it, smaller and

@@ -18,7 +18,6 @@ import { useChatWindow, WindowHeaderPill } from "./BotHeaderPill";
 import { CHAT_UNDER_BAR_PAD, ChatBottomEdge, ChatHeaderBar } from "./ChatHeaderBar";
 import { WindowCloseButton } from "./WindowCloseButton";
 import { PILL } from "./SettingsPrimitives";
-import { botTitleText } from "@/lib/system-bot-copy";
 import { getExchangeColumnHost, setExchangeColumnHost, subscribeExchangeColumnHost } from "@/lib/exchange-column-host";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ClusterLabel } from "./ClusterLabel";
@@ -179,7 +178,7 @@ export function ExchangeSheet({
       {run.ends.map((party, index) => {
         const bot = avatarBot(party, bots);
         // The bot's title goes under its name, never "Name · Title".
-        const title = windowed ? "" : botTitleText(bot).trim();
+        const title = windowed ? "" : (bot.title ?? "").trim();
         return (
           <span key={`${party.id ?? party.name}:${index}`} className="flex min-w-0 items-center gap-1.5">
             {index > 0 && <ArrowLeftRight size={14} className="shrink-0 text-ink-tertiary" />}

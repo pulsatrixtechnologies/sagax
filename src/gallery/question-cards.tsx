@@ -17,7 +17,6 @@ import { StoreProvider, type Message } from "@/state/store";
 import { WIDGET_SAMPLES } from "../../shared/widget-samples";
 import { parseWidgetInput } from "../../shared/widget";
 import type { AskQuestion } from "../../shared/ask-question";
-import { offerCard } from "../../server/feedback/flow";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -71,13 +70,9 @@ function Row({ id, label, children }: { id: string; label: string; children: Rea
 
 function Preview() {
   const bot = { name: "Quasar" };
-  const lang = params.get("lang") === "en" ? "en" : "fr";
   return (
     <div className="min-h-screen bg-app text-ink">
       <div className="mx-auto flex max-w-[760px] flex-col">
-        <Row id="feedback-offer" label="Offre de signalement (Feedback, #2618)">
-          <OptionCard botId="preview-bot" threadId="t" message={{ id: "fb", role: "bot", kind: "options", at: 1, card: { ...offerCard(lang, lang === "fr" ? "ça marche toujours pas, le bouton Enregistrer ne fait rien" : "it still doesn't work, the Save button does nothing"), requestId: "fb-offer", requestType: "question" } } as Message} />
-        </Row>
         <Row id="ask-single" label="AskUserQuestion, un choix">
           <QuestionCard threadId="t" bot={bot} message={ask("a", [WEBHOOKS])} />
         </Row>

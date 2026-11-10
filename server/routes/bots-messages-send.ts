@@ -31,6 +31,7 @@ import { claudeActivityEvents } from "../engines/claude-activity.ts";
 import { cloudGuestSendRefusal } from "../cloud-thread-refusal.ts";
 import { DATA_DIR } from "../config.ts";
 import { parseDataContext } from "../data-context.ts";
+import { parseFeedbackAppContext } from "./feedback.ts";
 import { parseDevPods } from "../dev-pods-prompt.ts";
 import {
   typedCommandForTurn,
@@ -474,24 +475,23 @@ async function handleBotMessagePost(deps: BotsMessagesRouteDeps, ctx: RouteConte
     // marked or not (typed words, a retry, an old page): server state,
     // not only the page's mark (server/voice/voice-call-session.ts).
     const voiceCall = guarded ? sentVoiceCall : voiceCalls.markFor(threadId, sentVoiceCall);
-    // #2618: the Feedback bot's conversation, a /feedback typed in any chat
-    // and the answers to its questions are the server's own short flow: no
-    // turn runs (server/feedback/service.ts). Ahead of the engine command
-    // check, which would refuse /feedback as an unknown command.
+    // #2618, #3299: a /feedback typed in any chat and the answers to its one
+    // question or its Send card are the server's own short flow: no turn
+    // runs (server/feedback/service.ts). Ahead of the engine command check,
+    // which would refuse /feedback as an unknown command.
     if (feedback && !guarded && !pressed && !voiceCall) {
       const feedbackSendId = parseSendId(body.sendId);
       const sameSendId = feedbackSendId ? store.messagesFor(threadId).find((m: any) => m.role === "user" && m.sendId === feedbackSendId) : undefined;
-      // #2842: every bot passes here. Only a retry of the same text gets the
-      // earlier receipt; a different text under that sendId goes on to the
-      // send path's own conflict check (409), or is refused in the Feedback
-      // conversation itself, which never reaches that path.
-      if (sameSendId && sameSendId.text !== typed && bot.systemBot === "feedback") {
-        return json(res, 409, { error: "sendId already belongs to another message" });
-      }
+      // #2842: only a retry of the same text gets the earlier receipt; a
+      // different text under that sendId goes on to the send path's own
+      // conflict check (409).
       const earlier = sameSendId && sameSendId.text === typed ? sameSendId : undefined;
+      const app = parseFeedbackAppContext(body.feedback);
+      const userAgent = typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : undefined;
       const handled = earlier ?? feedback.handleMessage({
         botId: bot.id, threadId, text: typed, principalId: actorPrincipalId(auth) || null,
         ...(feedbackSendId ? { sendId: feedbackSendId } : {}), sender: messageSender(auth),
+        ...(app ? { app } : {}), ...(userAgent ? { userAgent } : {}),
       });
       if (handled) return json(res, 202, { ok: true, threadId, message: handled });
     }
@@ -686,8 +686,6 @@ async function handleBotMessagePost(deps: BotsMessagesRouteDeps, ctx: RouteConte
     }
     // a correction into the running turn (steer, queued into it) counts for Prompter
     recordMastery(masterySendFacts({ threadId, text, steered: busyMode === "steer" && (receipt as { queued?: unknown }).queued === true }, person));
-    // #2618: one ready-made report offered when the person sounds frustrated
-    if (feedback && !guarded && !pressed && !voiceCall) feedback.maybeOffer({ botId: bot.id, threadId, text, principalId: person || null });
     return json(res, 202, receipt);
   }
   return PASS;

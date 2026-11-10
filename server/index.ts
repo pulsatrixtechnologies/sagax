@@ -26308,8 +26308,8 @@ function botGrants(bot: { grants?: unknown; directGrants?: unknown; ownerUserId?
 /** Owner and grants of a bot, for server/auth/authz.ts. Sections are personal:
  * a bot takes no access from one (the legacy shared sections became bot
  * grants at boot, section-channels.ts header). */
-function botFacts(bot: { id?: unknown; ownerUserId?: unknown; grants?: unknown; directGrants?: unknown; section?: unknown; createdAt?: unknown; systemBot?: unknown }): BotFacts {
-  return { ownerPrincipalId: effectiveBotOwner(bot), grants: botGrants(bot), sections: [], ...(bot.systemBot === "feedback" ? { everyone: "use" as const } : {}) };
+function botFacts(bot: { id?: unknown; ownerUserId?: unknown; grants?: unknown; directGrants?: unknown; section?: unknown; createdAt?: unknown }): BotFacts {
+  return { ownerPrincipalId: effectiveBotOwner(bot), grants: botGrants(bot), sections: [] };
 }
 /** A person's teams, for the manager rules. */
 function principalTeams(principalId: string): TeamRef[] {
@@ -31794,19 +31794,36 @@ ROUTES.push(createWebhooksRoutes({
   savePollerCredentials: (id, credentials) => savePollerCredentials(id, credentials),
   isBotAct: (auth) => auth.kind === "session" && isBotActSession(auth.session)
 }));
-// #2618: the shared Feedback bot. Reports are anonymized on the server and
-// filed as GitHub issues with the server's own token (feedback/config.json
-// or SAGAX_FEEDBACK_GITHUB_TOKEN); without one they wait in a local queue.
+// #2618, #3299: /feedback in any chat. Reports are anonymized on the server
+// and filed as GitHub issues with the server's own token
+// (feedback/config.json or SAGAX_FEEDBACK_GITHUB_TOKEN); without one they
+// wait in a local queue. No Feedback bot: one left by an older version is
+// retired here.
 const feedbackService = createFeedbackService({
   dataDir: DATA_DIR,
   store,
   config: () => readFeedbackConfig(DATA_DIR),
-  threadFor: (bot) => routeThreadId(store.bot(bot.id)!, undefined),
-  names: () => ({
-    people: principals.list().map((person) => personDisplayName(person)).filter((name): name is string => Boolean(name)),
-    orgs: [process.env.SAGAX_ORG_NAME?.trim() ?? ""].filter(Boolean),
-    bots: store.bots.filter((bot) => bot.systemBot !== "feedback").map((bot) => bot.name),
-  }),
+  names: () => {
+    const { name: ownerName, computerName } = computerOwnerFields();
+    let osUser = "";
+    try { osUser = userInfo().username; } catch { /* no passwd entry */ }
+    return {
+      people: [
+        ownerName,
+        ...principals.list().flatMap((person) => [personDisplayName(person), person.name, person.login, person.email?.split("@")[0]]),
+      ].filter((name): name is string => typeof name === "string" && Boolean(name.trim()) && name !== "Owner"),
+      orgs: [process.env.SAGAX_ORG_NAME?.trim() ?? ""].filter(Boolean),
+      bots: store.bots.map((bot) => bot.name),
+      hosts: [computerName, computerName.replace(/\.local$/i, "")].filter(Boolean),
+      other: [osUser].filter(Boolean),
+    };
+  },
+  engine: (botId) => {
+    const bot = store.bot(botId);
+    if (!bot) return {};
+    const { driver } = engineOfBot(bot);
+    return { ...(driver ? { engine: driver } : {}), ...(bot.modelSelection?.model ? { model: bot.modelSelection.model } : {}) };
+  },
   serverLines: () => serverLog.read({ level: "warn", limit: 40 }).lines.reverse().map((line) => `${new Date(line.at).toISOString()} ${line.level} ${line.message}`),
   spans: () => readToolSpans(DATA_DIR, { from: new Date(Date.now() - 15 * 60_000), to: new Date() })
     .slice(-20).map((span) => ({ name: span.toolName ? `${span.name} ${span.toolName}` : span.name, ms: span.endMs - span.startMs, ok: span.ok })),
@@ -31814,10 +31831,9 @@ const feedbackService = createFeedbackService({
   language: (person) => languageOfPerson(person),
 });
 try {
-  feedbackService.ensureBot();
-  feedbackService.sweepOrphanCards();
+  feedbackService.retireFeedbackBot();
 } catch (error) {
-  console.warn(`[feedback] the Feedback bot could not be created: ${error instanceof Error ? error.message : String(error)}`);
+  console.warn(`[feedback] the old Feedback bot could not be removed: ${error instanceof Error ? error.message : String(error)}`);
 }
 setInterval(() => { void feedbackService.tick().catch(() => {}); }, 5 * 60_000).unref();
 ROUTES.push(createFeedbackRoutes({ dataDir: DATA_DIR, service: feedbackService, actorPrincipalId }));

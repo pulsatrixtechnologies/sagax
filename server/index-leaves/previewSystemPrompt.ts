@@ -86,7 +86,7 @@ function previewSystemPrompt(bot: BotRecord, principal?: string) {
     { id: "reactions", label: "Reactions", text: agentsMounted ? REACTION_PROMPT : "" },
     { id: "memes", label: "Memes", text: agentsMounted && bot.memeReplies !== "off" ? MEME_PROMPT : "" },
     { id: "images", label: "Images", text: agentsMounted ? IMAGE_PROMPT : "" },
-    { id: "feedback", label: "Feedback", text: agentsMounted && bot.systemBot !== "feedback" ? FEEDBACK_PROMPT : "" },
+    { id: "feedback", label: "Feedback", text: agentsMounted ? FEEDBACK_PROMPT : "" },
     { id: "routine", label: "Routines", text: agentsMounted ? ROUTINE_PROMPT : "" },
     { id: "profile", label: "Profile changes", text: agentsMounted ? host.botProfilePrompt(bot) : "" },
     { id: "rich-output", label: "Rich output", text: richOutputPrompt(bot.emailDrafts !== false) },

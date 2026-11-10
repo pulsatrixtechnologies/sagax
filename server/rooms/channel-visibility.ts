@@ -88,7 +88,7 @@ export function seesBotForViewer(input: {
   viewer?: Viewer;
   grants?: readonly BotGrant[];
   sections?: readonly SectionAccess[];
-  /** The level every signed-in person holds (the shared Feedback bot, #2618). */
+  /** The level every signed-in person holds on the bot. */
   everyone?: Level;
   /** Whether a channel that contains the bot opens the bot itself (its
    * Direct and its routes). Default true; an organization passes false:

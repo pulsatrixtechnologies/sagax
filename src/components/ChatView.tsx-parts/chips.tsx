@@ -22,7 +22,6 @@ import { useShowThreads } from "@/lib/thread-preferences";
 import { t } from "@/lib/i18n";
 import { WakeFeedback } from "../WakeFeedback";
 import { useChatRows } from "./types";
-import { botDescriptionText } from "@/lib/system-bot-copy";
 
 export function PeerLabel({ peer, autoModel }: { peer: PeerLine; autoModel?: Message["autoModel"] }) {
   "use memo";
@@ -190,7 +189,7 @@ export function EmptyChat({ bot }: { bot: Bot }) {
         inputClassName="rounded bg-inset px-1.5 py-0.5 text-center text-[17px] font-semibold"
       />}
       <div className="max-w-[360px] text-[14px] text-ink-secondary">
-        {botDescriptionText(bot) || t("chat.emptyPrompt")}
+        {(bot.description ?? "") || t("chat.emptyPrompt")}
       </div>
     </div>
   );

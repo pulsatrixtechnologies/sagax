@@ -20,7 +20,7 @@ export interface FiledIssue {
 
 const API = "https://api.github.com";
 const LABEL_STYLE: Record<string, { color: string; description: string }> = {
-  feedback: { color: "5319e7", description: "Filed from the in-app Feedback bot" },
+  feedback: { color: "5319e7", description: "Filed in the app with /feedback" },
   [FEEDBACK_UNTRIAGED_LABEL]: { color: "fbca04", description: "In-app feedback not triaged yet" },
   [FEEDBACK_IN_PROGRESS_LABEL]: { color: "0e8a16", description: "In-app feedback being handled" },
 };

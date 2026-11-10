@@ -79,14 +79,11 @@ describe("buildApplicationMenu", () => {
     expect(onOpenAbout).toHaveBeenCalledTimes(1);
   });
 
-  it.each(["darwin", "linux", "win32"])("Help > Send Feedback… opens the Feedback bot with Cmd/Ctrl+Shift+F on %s (#2618)", (platform) => {
-    const onSendFeedback = vi.fn();
-    const template = build(platform, { onSendFeedback });
+  it.each(["darwin", "linux", "win32"])("Help has no Send Feedback item on %s: /feedback is the one way in (#3299)", (platform) => {
+    const template = build(platform);
     const help = template.find((entry) => entry.role === "help");
-    const item = help.submenu.find((entry) => entry.label === "Send Feedback…");
-    expect(item.accelerator).toBe("CmdOrCtrl+Shift+F");
-    item.click();
-    expect(onSendFeedback).toHaveBeenCalledTimes(1);
+    expect(help.submenu.some((entry) => /feedback/i.test(entry.label ?? ""))).toBe(false);
+    expect(help.submenu.some((entry) => entry.accelerator === "CmdOrCtrl+Shift+F")).toBe(false);
   });
 
   it.each(["darwin", "linux", "win32"])("does not offer hosted organisation sign-in on %s", platform => {

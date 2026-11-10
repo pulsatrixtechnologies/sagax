@@ -1,13 +1,13 @@
-// In-app feedback (#2618): open the Feedback bot's conversation with what the
-// app attaches on its own, list the person's own reports and their status,
-// and (admin) set the GitHub token the server files with. The token is never
-// sent back: the view only says whether one is set.
+// In-app feedback (#2618, #3299): list the person's own reports and their
+// status, and (admin) set the GitHub token the server files with. The token
+// is never sent back: the view only says whether one is set. A report starts
+// from /feedback typed in a chat (POST /api/bots/:id/messages, with what the
+// app attaches in its `feedback` field, read by parseFeedbackAppContext).
 //
-//   POST /api/feedback/start          (client)
 //   GET  /api/feedback                (client: the session person's reports)
 //   GET  /api/admin/feedback-config   (admin)
 //   PUT  /api/admin/feedback-config   (admin)
-import { FEEDBACK_SOURCES, type FeedbackPlatform, type FeedbackSource, type FeedbackStartRequest } from "../../shared/feedback.ts";
+import { FEEDBACK_PLATFORMS, type FeedbackAppContext, type FeedbackPlatform } from "../../shared/feedback.ts";
 import { feedbackConfigView, readFeedbackConfig, writeFeedbackConfig } from "../feedback/config.ts";
 import type { FeedbackService } from "../feedback/service.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
@@ -19,38 +19,27 @@ export interface FeedbackRouteDeps {
   actorPrincipalId: (auth: RequestAuth) => string;
 }
 
-const PLATFORMS: readonly FeedbackPlatform[] = ["desktop", "ios", "web"];
-const MAX_BODY = 12 * 1024 * 1024;
-
-export function parseFeedbackStart(body: unknown): FeedbackStartRequest | null {
-  if (!body || typeof body !== "object") return null;
-  const raw = body as Record<string, unknown>;
-  const source = FEEDBACK_SOURCES.includes(raw.source as FeedbackSource) ? raw.source as FeedbackSource : "menu";
-  const platform = PLATFORMS.includes(raw.platform as FeedbackPlatform) ? raw.platform as FeedbackPlatform : "web";
+/** The `feedback` field the app attaches to a /feedback message
+ * (POST /api/bots/:id/messages), cut to size; undefined when absent. */
+export function parseFeedbackAppContext(raw: unknown): FeedbackAppContext | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const body = raw as Record<string, unknown>;
+  const platform = FEEDBACK_PLATFORMS.includes(body.platform as FeedbackPlatform) ? body.platform as FeedbackPlatform : "web";
   const text = (value: unknown, max: number) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : undefined);
-  const request: FeedbackStartRequest = { source, platform, locale: raw.locale === "en" ? "en" : "fr" };
-  const appVersion = text(raw.appVersion, 80);
-  const os = text(raw.os, 120);
-  const page = text(raw.page, 120);
-  const error = text(raw.error, 4000);
-  const words = text(raw.text, 4000);
-  if (appVersion) request.appVersion = appVersion;
-  if (os) request.os = os;
-  if (page) request.page = page;
-  if (error) request.error = error;
-  if (words) request.text = words;
-  if (Array.isArray(raw.clientLogs)) request.clientLogs = raw.clientLogs.filter((line): line is string => typeof line === "string").slice(-60);
-  if (typeof raw.screenshot === "string" && raw.screenshot.startsWith("data:image/png;base64,")) request.screenshot = raw.screenshot;
-  return request;
+  const context: FeedbackAppContext = { platform };
+  if (body.locale === "en" || body.locale === "fr") context.locale = body.locale;
+  const appVersion = text(body.appVersion, 80);
+  const os = text(body.os, 120);
+  const page = text(body.page, 120);
+  if (appVersion) context.appVersion = appVersion;
+  if (os) context.os = os;
+  if (page) context.page = page;
+  if (Array.isArray(body.clientLogs)) context.clientLogs = body.clientLogs.filter((line): line is string => typeof line === "string").slice(-60);
+  return context;
 }
 
 export function createFeedbackRoutes(deps: FeedbackRouteDeps): RouteHandler {
   return async ({ req, res, path, method, auth, json, readBody }) => {
-    if (path === "/api/feedback/start" && method === "POST") {
-      const request = parseFeedbackStart(await readBody(req, MAX_BODY));
-      if (!request) return json(res, 400, { error: "a JSON body is required" });
-      return json(res, 200, deps.service.start(deps.actorPrincipalId(auth) || null, request));
-    }
     if (path === "/api/feedback" && method === "GET") {
       res.setHeader("cache-control", "no-store");
       return json(res, 200, { reports: deps.service.list(deps.actorPrincipalId(auth) || null) });

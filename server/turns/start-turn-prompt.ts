@@ -211,7 +211,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       { id: "reactions", label: "Reactions", text: state.integrations.agents && !state.onCall ? REACTION_PROMPT : "" },
       { id: "memes", label: "Memes", text: state.integrations.agents && !state.onCall && (state.liveBot ?? state.bot).memeReplies !== "off" ? MEME_PROMPT : "" },
       { id: "images", label: "Images", text: state.integrations.agents && !state.onCall ? IMAGE_PROMPT : "" },
-      { id: "feedback", label: "Feedback", text: state.integrations.agents && !state.onCall && !state.opts?.automationSource && (state.liveBot ?? state.bot).systemBot !== "feedback" ? FEEDBACK_PROMPT : "" },
+      { id: "feedback", label: "Feedback", text: state.integrations.agents && !state.onCall && !state.opts?.automationSource ? FEEDBACK_PROMPT : "" },
       { id: "recall", label: "Recall", text: state.recallPrompt },
       { id: "routine", label: "Routines", text: state.routinePrompt },
       { id: "routine-execution", label: "Routine execution", text: state.opts?.automationSource === "schedule" || state.opts?.automationSource === "manual" ? ROUTINE_EXECUTION_PROMPT : "" },

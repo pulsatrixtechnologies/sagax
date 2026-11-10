@@ -56,8 +56,10 @@ export function selectPushScope(files, show) {
 
 // Pull requests, main pushes and merge groups run the suite on Linux
 // (ubuntu-latest) and skip the Windows, macOS and iOS jobs (platforms=false).
-// Only workflow_dispatch runs every platform.
+// A manual dispatch and the nightly schedule run every platform.
 const ALL_OS = ["macos-latest", "ubuntu-latest", "windows-latest"];
+/** The events that run Windows, macOS and iOS as well as Linux. */
+export const everyPlatform = (event) => event === "workflow_dispatch" || event === "schedule";
 const PR_OS = ["ubuntu-latest"];
 const SHA = /^[a-f\d]{40}(?:[a-f\d]{24})?$/i;
 
@@ -89,7 +91,7 @@ async function previousCommitGreen(sha) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   let scope = { runtime: true, mobile: true };
-  const manual = process.env.GITHUB_EVENT_NAME === "workflow_dispatch";
+  const manual = everyPlatform(process.env.GITHUB_EVENT_NAME);
   let vitestOs = manual ? ALL_OS : PR_OS;
   let platforms = manual;
   if (process.env.GITHUB_EVENT_NAME === "pull_request") {

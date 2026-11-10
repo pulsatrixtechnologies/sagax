@@ -1,0 +1,4 @@
+{
+  "$comment": "Tests that fail on main today. A CI run is green when every failure it sees is in this list. The list can only shrink: a listed test that passes is dropped by the run's report (artifact known-failures, file known-failures.json), never added by hand. The first fill comes from one manual CI run with fill_known_failures set, which also sets 'seeded'. Same shape as ci-retry-list.json. docs/ci.md, 'Known failures'.",
+  "tests": []
+}

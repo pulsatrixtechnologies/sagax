@@ -249,7 +249,8 @@ try{P.postMessage({type:"${STATE_ASK_MESSAGE}",v:1},"*")}catch(x){}
 /** The capability calls of a page that declares them (#3413,
  * shared/page-capabilities.ts), as members of window.sagax: `capabilities`
  * (what this version was granted, written here by the server), `data.read`,
- * `data.subscribe` (read again on the wrapper's `data` event), `viewer.get`
+ * `data.subscribe(name, fn, params?)` (read again, with its own params, on
+ * the wrapper's `data` event; #3449), `viewer.get`
  * and `open`. Every call is one message to the parent, the wrapper, which
  * asks the server with the reader's own session; the server checks it
  * again. No network. Defines `caps` for the code that follows. Pure. */
@@ -265,12 +266,12 @@ function capCall(c,a){return new Promise(function(ok,no){var id=++cseq,m={type:"
 if(cready){capPost(m);return}cqueue.push(m);cpend[id].t=setTimeout(function(){if(!cpend[id])return;delete cpend[id];cqueue=cqueue.filter(function(q){return q.id!==id});var er=new Error("The page's wrapper did not answer.");er.code="unavailable";no(er)},${CAP_READY_TIMEOUT_MS})})}
 window.addEventListener("message",function(e){if(e.source!==CP||!e.data||e.data.v!==1)return;var d=e.data;
 if(d.type==="${CAP_READY_MESSAGE}"){if(cready)return;cready=true;var q=cqueue;cqueue=[];q.forEach(function(m){var p=cpend[m.id];if(p){clearTimeout(p.t);capPost(m)}})}
-else if(d.type==="${CAP_RESULT_MESSAGE}"&&typeof d.id==="number"&&cpend[d.id]){var p=cpend[d.id];delete cpend[d.id];clearTimeout(p.t);if(d.ok===true)p.ok(d.value);else{var er=new Error(String(d.message||d.error||"refused"));er.code=String(d.error||"");p.no(er)}}
-else if(d.type==="${CAP_EVENT_MESSAGE}"&&d.cap==="data"&&typeof d.name==="string"&&dsubs[d.name]){var n=d.name;capCall("data.read",{name:n}).then(function(v){(dsubs[n]||[]).slice().forEach(function(f){try{f(v)}catch(x){}})},function(){})}});
+else if(d.type==="${CAP_RESULT_MESSAGE}"&&typeof d.id==="number"&&cpend[d.id]){var p=cpend[d.id];delete cpend[d.id];clearTimeout(p.t);if(d.ok===true)p.ok(d.value);else{var er=new Error(String(d.message||d.error||"refused"));er.code=String(d.error||"");if(typeof d.reason==="string")er.reason=d.reason;p.no(er)}}
+else if(d.type==="${CAP_EVENT_MESSAGE}"&&d.cap==="data"&&typeof d.name==="string"&&dsubs[d.name]){var n=d.name,gs={};(dsubs[n]||[]).forEach(function(s){var k=JSON.stringify(s.q);(gs[k]=gs[k]||{q:s.q,l:[]}).l.push(s.f)});Object.keys(gs).forEach(function(k){var g=gs[k];capCall("data.read",{name:n,params:g.q}).then(function(v){g.l.forEach(function(f){try{f(v)}catch(x){}})},function(){})})}});
 try{CP.postMessage({type:"${CAP_HELLO_MESSAGE}",v:1},"*")}catch(x){}
 var caps={capabilities:Object.freeze({data:Object.freeze(C.data.slice()),viewer:C.viewer,open:C.open}),
 data:Object.freeze({read:function(n,q){return capCall("data.read",{name:String(n),params:q&&typeof q==="object"?q:{}})},
-subscribe:function(n,f){n=String(n);if(typeof f!=="function")return function(){};(dsubs[n]=dsubs[n]||[]).push(f);return function(){dsubs[n]=(dsubs[n]||[]).filter(function(g){return g!==f})}}}),
+subscribe:function(n,f,q){n=String(n);if(typeof f!=="function")return function(){};var s={f:f,q:q&&typeof q==="object"?q:{}};(dsubs[n]=dsubs[n]||[]).push(s);return function(){dsubs[n]=(dsubs[n]||[]).filter(function(g){return g!==s})}}}),
 viewer:Object.freeze({get:function(){return capCall("viewer.get",{})}}),
 open:function(r){return capCall("open",{ref:String(r)})}};`;
 }

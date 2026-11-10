@@ -1177,8 +1177,8 @@ import { PageDataWatch, PageSources } from "./pages/page-sources.ts";
 import { PageDataApprovals } from "./pages/page-data-approvals.ts";
 import { PageLinkApprovals } from "./pages/page-link-approvals.ts";
 import { createTeamBoardSource } from "./pages/sources/team-board.ts";
-import { TEAM_BOARD_ENTRIES_PER_BOT, TEAM_BOARD_WORK_WINDOW_MS } from "./team-board/board.ts";
-import { createGithubBoardReader, ghGraphqlVia } from "./team-board/github-board.ts";
+import { TEAM_BOARD_ENTRIES_PER_BOT, TEAM_BOARD_WORK_WINDOW_MS, waitingCardOf } from "./team-board/board.ts";
+import { createGithubBoardReader, ghGraphqlVia, ghRestVia } from "./team-board/github-board.ts";
 import { createBotCodeBranchRoutes } from "./routes/bot-code-branches.ts";
 import { branchRemoteDeps } from "./remote-support/branch-channels.ts";
 import type { SandboxExecInput } from "./sandbox/sandboxd-core.ts";
@@ -25406,8 +25406,11 @@ const teamBoardActivity = createBotActivityReader(botActivityDeps);
 const teamBoardGithub = createGithubBoardReader({
   token: (person) => githubAccountToken(person),
   // a solo server without a stored credential: the host's own gh sign-in
-  ...(IDENTITY.kind === "perspicax" ? {} : { ghGraphql: ghGraphqlVia(hostGit, tmpdir()) })
+  ...(IDENTITY.kind === "perspicax" ? {} : { ghGraphql: ghGraphqlVia(hostGit, tmpdir()), ghRest: ghRestVia(hostGit, tmpdir()) })
 });
+function teamBoardWaitingCard(threadId: string) {
+  return waitingCardOf(store.messagesTail(threadId, 40).messages);
+}
 function teamBoardBots(auth: RequestAuth): BotRecord[] {
   const person = actorPrincipalId(auth);
   if (!person) return [];
@@ -25436,7 +25439,9 @@ pageSources.register(createTeamBoardSource({
       .filter((item) => item.code)
       .map((item) => {
         const failure = (item.status === "failed" || item.status === "blocked") && item.threadId ? teamBoardActivity.failureCause(item.threadId) : undefined;
-        return { botId: bot.id, item, ...(failure ? { failure } : {}) };
+        // the card a waiting conversation waits on, only when this reader may read it (threadId)
+        const waitingOn = item.status === "waiting" && item.threadId ? teamBoardWaitingCard(item.threadId) : undefined;
+        return { botId: bot.id, item, ...(failure ? { failure } : {}), ...(waitingOn ? { waitingOn } : {}) };
       });
   },
   queued: () => coordinator.liveEdges().filter((edge) => edge.state === "queued").map((edge) => edge.threadId),

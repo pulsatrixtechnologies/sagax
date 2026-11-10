@@ -12,8 +12,28 @@
 import type { BotActivityItem, BotActivityStatus, BotCodeWork } from "../../shared/bot-activity.ts";
 import { activityStatusActive } from "../../shared/bot-activity.ts";
 import { pageOpenRef } from "../../shared/page-capabilities.ts";
-import { cardStale, cardStatus, placeCard, type PlaceCardInput, type TeamBoardCard, type TeamBoardLane } from "../../shared/team-board.ts";
+import { cardStale, cardStatus, placeCard, type PlaceCardInput, type TeamBoardCard, type TeamBoardLane, type TeamBoardRelease, type TeamBoardWaitingCause } from "../../shared/team-board.ts";
 import type { BoardIssue, BoardPull, RepoSnapshot } from "./github-board.ts";
+import { waitingOnText } from "../approvals/waiting-on.ts";
+import { liveCardKind } from "../../shared/live-approval.ts";
+import type { WireMessage } from "../../shared/wire.ts";
+
+/** The open card a waiting conversation waits on (#3449), read from its
+ * newest messages: an approval (a tool or a proposal) or a question. Read
+ * only; the card itself is never touched. Pure. */
+export function waitingCardOf(messages: readonly WireMessage[]): BoardEntry["waitingOn"] | undefined {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index]!;
+    const card = message.kind === "options" ? message.card : undefined;
+    const kind = liveCardKind(card);
+    if (!card || !kind) continue;
+    const what = waitingOnText(card);
+    return kind === "question"
+      ? { kind: "question", ...(what ? { what } : {}) }
+      : { kind: "approval", ...(what ? { what } : {}), ...(card.tool ? { tool: card.tool } : {}) };
+  }
+  return undefined;
+}
 
 /** How far back a team's work names its repositories and links cards. */
 export const TEAM_BOARD_WORK_WINDOW_MS = 30 * 24 * 60 * 60_000;
@@ -38,6 +58,9 @@ export interface BoardEntry {
   item: BotActivityItem;
   /** The cause its failed turn stored (first line), when it failed. */
   failure?: string;
+  /** While it waits on the person: the open card it waits on (#3449), when
+   * the reader may read the conversation. */
+  waitingOn?: { kind: "approval" | "question"; what?: string; tool?: string };
 }
 
 export interface BoardInput {
@@ -50,7 +73,12 @@ export interface BoardInput {
   /** GitHub per repository; a repository missing here has no snapshot. */
   github: ReadonlyMap<string, RepoSnapshot>;
   now: number;
+  /** The reader's language, for the one label the board writes ("Not cut yet"). */
+  lang?: "fr" | "en";
 }
+
+/** The label of a merge no release contains yet (#3449). */
+export const NOT_CUT_YET: Record<"fr" | "en", string> = { en: "Not cut yet", fr: "Pas encore coupé" };
 
 interface Work {
   botId: string;
@@ -188,7 +216,7 @@ export function buildTeamBoard(input: BoardInput): TeamBoardLane[] {
       if (seen.has(key)) return;
       seen.add(key);
       const snapshot = snapshots.get(repoKey(repo));
-      const card = cardFor(repo, number, issue, facts, snapshot, botById, input.now, lane.team.sectionId);
+      const card = cardFor(repo, number, issue, facts, snapshot, botById, input.now, lane.team.sectionId, input.lang ?? "en");
       if (card) cards.push(card);
     };
     for (const [key, facts] of lane.facts) {
@@ -209,12 +237,20 @@ export function buildTeamBoard(input: BoardInput): TeamBoardLane[] {
       }
     }
     const lead = input.bots.find((bot) => bot.managedSections?.some((section) => sectionName(section) === sectionName(lane.team.name)));
+    // the open issues of its To do repositories the read did not load
+    let todoNotLoaded = 0;
+    for (const key of lane.repos.keys()) {
+      if (ownerOfRepo.get(key) !== index) continue;
+      const snapshot = snapshots.get(key);
+      if (snapshot) todoNotLoaded += Math.max(0, snapshot.openIssues - snapshot.issues.length);
+    }
     return [{
       sectionId: lane.team.sectionId,
       name: lane.team.name,
       ...(lead ? { lead: { botId: lead.id, name: lead.name } } : {}),
       repos: [...lane.repos.values()].sort((a, b) => a.localeCompare(b)),
       cards: cards.sort((a, b) => b.order - a.order).map(({ card }) => card),
+      todoNotLoaded,
     }];
   });
 }
@@ -253,6 +289,7 @@ function cardFor(
   bots: ReadonlyMap<string, BoardBot>,
   now: number,
   sectionId: string,
+  lang: "fr" | "en",
 ): { card: TeamBoardCard; order: number } | undefined {
   const github = pullFor(number, snapshot, facts);
   // without GitHub, what the bot did to its pull request
@@ -275,7 +312,7 @@ function cardFor(
         ...(github?.reviewDecision ? { review: github.reviewDecision } : {}),
         ...(github?.changesRequestedBy ? { changesRequestedBy: github.changesRequestedBy } : {}),
         ...(github?.failingCheck ? { failingCheck: github.failingCheck } : {}),
-        ...(github?.conflicting ? { conflictsWith: github.baseRefName ?? "the base branch" } : {}),
+        ...(github?.conflicting ? { conflictsWith: github.baseRefName ?? "" } : {}),
       },
     } : {}),
     ...(holder ? {
@@ -289,7 +326,14 @@ function cardFor(
   };
   const place = placeCard(placeInput);
   if (!place) return undefined;
-  const status = cardStatus({ ...placeInput, column: place.column });
+  // the release (lot P2): a merge's from GitHub's releases, an open card's milestone
+  const release: TeamBoardRelease | undefined = place.column === "merged"
+    ? github?.release ? { kind: "shipped", label: github.release.label, tag: github.release.tag, ...(github.release.url ? { url: github.release.url } : {}), at: github.release.at }
+      : github?.release === null ? { kind: "unreleased", label: NOT_CUT_YET[lang] }
+      : undefined
+    : (issue?.milestone ?? github?.milestone) ? { kind: "planned", label: (issue?.milestone ?? github?.milestone)! }
+    : undefined;
+  const status = cardStatus({ ...placeInput, column: place.column, released: release?.kind === "shipped" });
   const work = [...(facts?.linked ?? []), ...(facts?.touched ?? [])];
   const firstWork = work.length ? Math.min(...work.map((entry) => entry.entry.item.startedAt)) : undefined;
   const createdAt = issue?.createdAt ?? firstWork ?? github?.createdAt ?? now;
@@ -298,10 +342,17 @@ function cardFor(
   const movedAt = moves.length ? Math.max(...moves) : undefined;
   const reviewSince = github && github.state === "open" && !github.draft ? Math.max(github.createdAt ?? 0, github.lastCommitAt ?? 0) || undefined : undefined;
   const stale = cardStale({ column: place.column, status, ...(movedAt !== undefined ? { movedAt } : {}), ...(reviewSince !== undefined ? { reviewSince } : {}), ...(place.stage ? { stage: place.stage } : {}), now });
+  const step = holder?.entry.item.currentStep;
+  const open = holder?.entry.waitingOn;
+  const what = open?.what ?? step;
+  // the card it waits on when the reader may read it, else only the step
+  const youCause: Extract<TeamBoardWaitingCause, { code: "approval" | "question" | "waiting_you" }> = open?.kind === "approval"
+    ? { code: "approval", params: { ...(what ? { what } : {}), ...(open.tool ? { tool: open.tool } : {}) } }
+    : { code: open?.kind === "question" ? "question" : "waiting_you", params: what ? { what } : {} };
   const waiting: TeamBoardCard["waiting"] | undefined = status === "waiting_you"
-    ? { on: "you", ...(holder?.entry.item.currentStep ? { reason: holder.entry.item.currentStep } : {}), ...(holder ? { since: holder.entry.item.startedAt } : {}) }
-    : status === "waiting_review" ? { on: "review", ...(reviewSince !== undefined ? { since: reviewSince } : {}) }
-    : status === "waiting_release" ? { on: "release", ...(mergedAt !== undefined ? { since: mergedAt } : {}) }
+    ? { on: "you", ...(step ? { reason: step } : {}), ...(holder ? { since: holder.entry.item.startedAt } : {}), ...youCause }
+    : status === "waiting_review" ? { on: "review", ...(reviewSince !== undefined ? { since: reviewSince } : {}), code: "review_required", params: {} }
+    : status === "waiting_release" ? { on: "release", ...(mergedAt !== undefined ? { since: mergedAt } : {}), code: "not_released", params: {} }
     : undefined;
   const bot = holder ? bots.get(holder.botId) : undefined;
   const since = holder ? (activityStatusActive(holder.status) ? holder.entry.item.startedAt : holder.at) : undefined;
@@ -341,6 +392,8 @@ function cardFor(
     createdAt,
     ...(movedAt !== undefined ? { movedAt } : {}),
     ...(stale ? { stale } : {}),
+    ...(place.column === "merged" && mergedAt !== undefined ? { mergedAt } : {}),
+    ...(release ? { release } : {}),
   };
   const order = place.column === "merged" ? mergedAt ?? 0 : since ?? 0;
   return { card, order };

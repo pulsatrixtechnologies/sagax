@@ -37,7 +37,10 @@
 //
 // In the page (window.sagax, beside `page`): `capabilities` (what this
 // version was granted), `data.read(name, params?)`, `data.subscribe(name,
-// fn)`, `viewer.get()`, `open(ref)`.
+// fn, params?)`, `viewer.get()`, `open(ref)`. `params` (#3449): `fresh: true`
+// skips the source's cache; other keys are the source's filter, string
+// values (PAGE_DATA_PARAMS). A `denied` refusal carries `reason`
+// (PageCapDenyReason) on the Error.
 
 export const PAGE_CAPABILITIES_TYPE = "application/sagax-capabilities+json";
 
@@ -87,7 +90,9 @@ export const PAGE_CAP_LIMITS = {
 
 /** Why a call was refused. `sign_in`: the reader is not signed in (a personal
  * capability is never given to them); `not_declared`: the published version
- * does not declare it; `denied` and `ask_first`: an organization rule;
+ * does not declare it; `denied`: refused, by an organization rule or by the
+ * reader on its Ask first card (`reason` tells which, PageCapDenyReason);
+ * `ask_first`: an organization rule asks the reader first;
  * `shared_write_after_data`: a frame that received personal data writes to
  * what other readers read on a page that is not private. */
 export type PageCapError =
@@ -102,6 +107,39 @@ export type PageCapError =
   | "bad_request"
   | "shared_write_after_data";
 
+/** Who refused a `denied` read (#3449): `org_rule`, an organization's Deny
+ * rule; `declined`, the reader on the Ask first card. The code stays
+ * `denied` for both, so an older page keeps working. */
+export type PageCapDenyReason = "org_rule" | "declined";
+export const PAGE_CAP_DENY_REASONS: readonly PageCapDenyReason[] = ["org_rule", "declined"];
+
+/** What a page may pass to a data source (#3449): `sagax.data.read(name,
+ * { team, column, fresh })`. Beside `fresh`, string values only, keys in
+ * lower camel case, at most PAGE_DATA_PARAMS_MAX of them, each value at most
+ * PAGE_DATA_PARAM_CHARS; the source checks their meaning (for `team-board`:
+ * `team`, one of the reader's lanes by its sectionId, and `column`). The
+ * wrapper passes them in the route's query; `fresh`, `version` and `lang`
+ * are the route's own and never a source's. */
+export const PAGE_DATA_PARAMS_MAX = 8;
+export const PAGE_DATA_PARAM_CHARS = 200;
+const PAGE_DATA_RESERVED = new Set(["fresh", "version", "lang"]);
+const PAGE_DATA_KEY = /^[a-z][A-Za-z0-9]{0,30}$/;
+
+/** A page's data parameters, without the reserved ones, or null when their
+ * shape is not one a source accepts. Pure. */
+export function pageDataParams(entries: Iterable<[string, unknown]>): Record<string, string> | null {
+  const out: Record<string, string> = {};
+  let count = 0;
+  for (const [key, value] of entries) {
+    if (PAGE_DATA_RESERVED.has(key)) continue;
+    if (!PAGE_DATA_KEY.test(key) || Object.prototype.hasOwnProperty.call(out, key)) return null;
+    if (typeof value !== "string" || value.length > PAGE_DATA_PARAM_CHARS) return null;
+    if (++count > PAGE_DATA_PARAMS_MAX) return null;
+    out[key] = value;
+  }
+  return out;
+}
+
 export interface PageCapRequest {
   type: typeof CAP_MESSAGE;
   v: 1;
@@ -112,7 +150,7 @@ export interface PageCapRequest {
 
 export type PageCapResult =
   | { type: typeof CAP_RESULT_MESSAGE; v: 1; id: number; ok: true; value: unknown }
-  | { type: typeof CAP_RESULT_MESSAGE; v: 1; id: number; ok: false; error: PageCapError; message?: string };
+  | { type: typeof CAP_RESULT_MESSAGE; v: 1; id: number; ok: false; error: PageCapError; message?: string; reason?: PageCapDenyReason };
 
 export interface PageCapEvent {
   type: typeof CAP_EVENT_MESSAGE;
@@ -237,7 +275,7 @@ export function pageCapGranted(caps: PageCapabilities | null | undefined, cap: P
 
 /** An exit a source names, kept only when it is an https://github.com/
  * address of one of `repos` (owner/name): the issue or pull request of a
- * card. Pure. */
+ * card, or a release page (`/releases/tag/<tag>`, #3449). Pure. */
 export function pageGithubExit(url: unknown, repos: ReadonlySet<string>): string | null {
   if (typeof url !== "string") return null;
   let parsed: URL;
@@ -247,7 +285,7 @@ export function pageGithubExit(url: unknown, repos: ReadonlySet<string>): string
     return null;
   }
   if (parsed.protocol !== "https:" || parsed.hostname !== "github.com" || parsed.username || parsed.password || parsed.port) return null;
-  const match = /^\/([\w.-]+\/[\w.-]+)\/(?:issues|pull)\/\d+$/.exec(parsed.pathname);
+  const match = /^\/([\w.-]+\/[\w.-]+)\/(?:(?:issues|pull)\/\d+|releases\/tag\/[\w.+%-]{1,300})$/.exec(parsed.pathname);
   if (!match || parsed.search || parsed.hash) return null;
   const repo = match[1]!.toLowerCase();
   return [...repos].some((name) => name.toLowerCase() === repo) ? parsed.href : null;

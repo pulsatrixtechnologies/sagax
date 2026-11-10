@@ -37,9 +37,12 @@ import {
   normalizePageLinkOrigin,
   pageLinkOpensDirectly,
   parsePageCapabilities,
+  PAGE_CAP_DENY_REASONS,
+  pageDataParams,
   parsePageCapRequest,
   parsePageOpenRef,
   type PageCapabilities,
+  type PageCapDenyReason,
   type PageCapError,
   type PageCapRequest,
 } from "../../shared/page-capabilities";
@@ -71,15 +74,18 @@ export function parseDataEvent(data: unknown): string | null {
 
 /** What a failed call tells the page: the server's own code when it is one
  * the contract knows, else the one its status means. Pure. */
-export function capFailure(cause: unknown): { error: PageCapError; message?: string } {
-  const record = cause && typeof cause === "object" ? cause as { status?: unknown; code?: unknown; body?: { code?: unknown }; message?: unknown } : {};
+export function capFailure(cause: unknown): { error: PageCapError; message?: string; reason?: PageCapDenyReason } {
+  const record = cause && typeof cause === "object" ? cause as { status?: unknown; code?: unknown; reason?: unknown; body?: { code?: unknown; reason?: unknown }; message?: unknown } : {};
   const code = typeof record.code === "string" ? record.code : typeof record.body?.code === "string" ? record.body.code : "";
   const status = typeof record.status === "number" ? record.status : 0;
   const error: PageCapError = (KNOWN_ERRORS as readonly string[]).includes(code) ? code as PageCapError
     : status === 401 ? "sign_in" : status === 403 ? "not_declared" : status === 404 ? "not_found" : status === 409 ? "ask_first"
       : status === 413 ? "too_large" : status === 429 ? "rate_limited" : status === 400 ? "bad_request" : "unavailable";
   const message = status > 0 && typeof record.message === "string" && record.message ? record.message.slice(0, 200) : undefined;
-  return { error, ...(message ? { message } : {}) };
+  // who refused a `denied` read (#3449): the organization or the reader
+  const said = typeof record.reason === "string" ? record.reason : record.body?.reason;
+  const reason = error === "denied" && (PAGE_CAP_DENY_REASONS as readonly unknown[]).includes(said) ? said as PageCapDenyReason : undefined;
+  return { error, ...(message ? { message } : {}), ...(reason ? { reason } : {}) };
 }
 
 /** A card ignores the clicks that follow its appearance by this long: the
@@ -212,7 +218,7 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
     // an opaque origin cannot be named: the target is that one window
     deps.frame()?.postMessage({ v: 1, ...message }, "*");
   };
-  const answer = (id: number, outcome: { ok: true; value: unknown } | { ok: false; error: PageCapError; message?: string }) => post({ type: CAP_RESULT_MESSAGE, id, ...outcome });
+  const answer = (id: number, outcome: { ok: true; value: unknown } | { ok: false; error: PageCapError; message?: string; reason?: PageCapDenyReason }) => post({ type: CAP_RESULT_MESSAGE, id, ...outcome });
 
   // the route's query: the version the preview shows, the reader's language
   const route = (path: string, extra: Record<string, string> = {}) => {
@@ -253,9 +259,9 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
     return pending;
   };
 
-  const readData = async (name: string, fresh: boolean, asked = false): Promise<unknown> => {
+  const readData = async (name: string, fresh: boolean, params: Record<string, string> = {}, asked = false): Promise<unknown> => {
     try {
-      const body = await deps.api<{ value?: unknown; links?: unknown; refs?: unknown }>(route(`data/${encodeURIComponent(name)}`, fresh ? { fresh: "1" } : {}));
+      const body = await deps.api<{ value?: unknown; links?: unknown; refs?: unknown }>(route(`data/${encodeURIComponent(name)}`, { ...(fresh ? { fresh: "1" } : {}), ...params }));
       receivedData = true;
       readNames.add(name);
       // the exits the source named, as the server sent them: nothing is computed here
@@ -271,8 +277,8 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
       // data read again (no flag in the request is ever trusted)
       const choice = await askFirst(name);
       await deps.api(`/api/pages/${encodeURIComponent(deps.pageId!)}/data-approvals/${encodeURIComponent(approvalId)}?lang=${deps.lang}`, { method: "POST", body: { answer: choice === "decline" ? "deny" : choice } });
-      if (choice === "decline") throw Object.assign(new Error(deps.lang === "fr" ? "Tu as refusé cette lecture." : "You declined this read."), { code: "denied", status: 403 });
-      return readData(name, fresh, true);
+      if (choice === "decline") throw Object.assign(new Error(deps.lang === "fr" ? "Tu as refusé cette lecture." : "You declined this read."), { code: "denied", reason: "declined", status: 403 });
+      return readData(name, fresh, params, true);
     }
   };
 
@@ -364,7 +370,14 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
         if (request.cap === "data.read") {
           const params = request.args?.params;
           const fresh = Boolean(params && typeof params === "object" && (params as { fresh?: unknown }).fresh === true);
-          answer(id, { ok: true, value: await readData(source as string, fresh) });
+          // the page's filter (#3449): string values only, the route's own keys left out
+          const record = params && typeof params === "object" && !Array.isArray(params) ? params as Record<string, unknown> : {};
+          const passed = pageDataParams(Object.entries(record).filter(([, value]) => typeof value === "string"));
+          if (!passed) {
+            answer(id, { ok: false, error: "bad_request", message: "These data parameters are not valid." });
+            return true;
+          }
+          answer(id, { ok: true, value: await readData(source as string, fresh, passed) });
         } else if (request.cap === "viewer.get") {
           const info = await deps.api<unknown>(route("viewer"));
           // the reader's name is personal data too: a link opens only with a question from now on

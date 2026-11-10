@@ -7,7 +7,7 @@ import type { RequestAuth } from "../../auth/request-auth.ts";
 import type { BotActivityItem } from "../../../shared/bot-activity.ts";
 import type { TeamBoard } from "../../../shared/team-board.ts";
 import { createGithubBoardReader, TEAM_BOARD_GITHUB_TTL_MS } from "../../team-board/github-board.ts";
-import type { BoardBot, BoardEntry, BoardTeam } from "../../team-board/board.ts";
+import { waitingCardOf, type BoardBot, type BoardEntry, type BoardTeam } from "../../team-board/board.ts";
 import { createTeamBoardSource, teamBoardExits, type TeamBoardSourceDeps } from "./team-board.ts";
 
 const NOW = 1_800_000_000_000;
@@ -175,7 +175,7 @@ describe("team-board source", () => {
   it("says not connected, with no token and no gh sign-in, and never reads GitHub", async () => {
     const fetch = vi.fn();
     const reader = createGithubBoardReader({ token: () => undefined, fetch: fetch as unknown as typeof globalThis.fetch });
-    expect(await reader.read("person-a", ["acme/shared"])).toEqual({ snapshots: new Map(), state: "not_connected", fix: "connect_or_token" });
+    expect(await reader.read("person-a", ["acme/shared"])).toEqual({ snapshots: new Map(), state: "not_connected", fix: "connect_or_token", reason: "not_connected" });
     expect(fetch).not.toHaveBeenCalled();
   });
 });
@@ -217,5 +217,270 @@ describe("open issues read (#3413 review)", () => {
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(read.snapshots.get("acme/big")?.issues).toHaveLength(300);
     expect(read.snapshots.get("acme/big")?.openIssues).toBe(450);
+  });
+});
+
+// #3449: stable codes, a filter, the To do count per team, and the release
+// of a merged card.
+const json = (body: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
+const readOnce = async (fetch: (url: string | URL | Request, init?: RequestInit) => Promise<Response>, token: string | null = TOKEN_A, extra: Partial<Parameters<typeof createGithubBoardReader>[0]> = {}) =>
+  createGithubBoardReader({ token: () => token ?? undefined, fetch: fetch as unknown as typeof globalThis.fetch, now: () => NOW, ...extra }).read("person-a", ["acme/shared"]);
+
+describe("github.reason (#3449): a stable code beside github.fix", () => {
+  it("says not_connected without a token or a gh sign-in", async () => {
+    const read = await readOnce(vi.fn(), null);
+    expect(read.reason).toBe("not_connected");
+  });
+
+  it("tells sso, token_scope, rate_limited (primary and secondary), no_access and outage apart", async () => {
+    expect((await readOnce(async () => json({}, 403, { "x-github-sso": "required; url=https://github.com/orgs/acme/sso?x=1" }))).reason).toBe("sso");
+    expect((await readOnce(async () => json({}, 403))).reason).toBe("token_scope");
+    expect((await readOnce(async () => json({}, 403, { "x-ratelimit-remaining": "0" }))).reason).toBe("rate_limited");
+    expect((await readOnce(async () => json({}, 403, { "retry-after": "60" }))).reason).toBe("rate_limited");
+    expect((await readOnce(async () => json({}, 401))).reason).toBe("bad_token");
+    expect((await readOnce(async () => json({}, 502))).reason).toBe("outage");
+    expect((await readOnce(async () => { throw new Error("socket hang up"); })).reason).toBe("outage");
+    // GraphQL answers 200 with typed errors
+    expect((await readOnce(async () => json({ data: { repository: null }, errors: [{ type: "NOT_FOUND" }] }))).reason).toBe("no_access");
+    expect((await readOnce(async () => json({ data: null, errors: [{ type: "RATE_LIMITED" }] }))).reason).toBe("rate_limited");
+    expect((await readOnce(async () => json({ data: { repository: null }, errors: [{ type: "INSUFFICIENT_SCOPES" }] }))).reason).toBe("token_scope");
+    expect((await readOnce(async () => json({ data: { repository: null }, errors: [{ type: "FORBIDDEN" }] }))).reason).toBe("token_scope");
+  });
+
+  it("never puts the token in the reason, the fix or anything it answers", async () => {
+    const read = await readOnce(async () => json({ message: `bad ${TOKEN_A}` }, 401));
+    expect(JSON.stringify({ ...read, snapshots: [...read.snapshots] })).not.toContain(TOKEN_A);
+  });
+
+  it("reaches the board's github block, beside the prose fix", async () => {
+    const { routes } = world({ failFor: TOKEN_B });
+    const board = (await call(routes, session("person-b"))).sent[0]!.body as TeamBoard;
+    expect(board.github).toMatchObject({ state: "unavailable", reason: "outage" });
+  });
+});
+
+describe("filter (#3449): one team, one column, validated by the source", () => {
+  const TWO: World = {
+    teams: [
+      { sectionId: "team-1", name: "One", bots: [{ id: "bot-1", name: "Bot one" }] },
+      { sectionId: "team-2", name: "Two", bots: [{ id: "bot-2", name: "Bot two" }] },
+    ],
+    bots: [{ id: "bot-1", name: "Bot one" }, { id: "bot-2", name: "Bot two" }],
+    entries: [
+      { botId: "bot-1", item: item("bot-1", "Bot one", "th-1", { repo: "acme/one", pullRequests: [], branches: [], commits: [], issues: [{ repo: "acme/one", number: 1, action: "viewed", at: NOW - 1_000 }] }) },
+      { botId: "bot-2", item: item("bot-2", "Bot two", "th-2", { repo: "acme/two", pullRequests: [], branches: [], commits: [], issues: [{ repo: "acme/two", number: 2, action: "viewed", at: NOW - 1_000 }] }) },
+    ],
+    token: TOKEN_A,
+  };
+  function two() {
+    const fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const name = (JSON.parse(String(init?.body)) as { variables: { name: string } }).variables.name;
+      return json({ data: { repository: { issues: { totalCount: 2, pageInfo: { hasNextPage: false }, nodes: [{ number: name === "one" ? 1 : 2, title: `t ${name}`, url: `https://github.com/acme/${name}/issues/${name === "one" ? 1 : 2}` }, { number: 50, title: "free", url: `https://github.com/acme/${name}/issues/50` }] }, pullRequests: { nodes: [] } } } });
+    });
+    const github = createGithubBoardReader({ token: () => TOKEN_A, fetch: fetch as unknown as typeof globalThis.fetch, now: () => NOW });
+    const deps: TeamBoardSourceDeps = {
+      person: (auth) => (auth as { session: { principalId: string } }).session.principalId,
+      viewerId: () => "person-a",
+      teams: () => TWO.teams,
+      bots: () => TWO.bots,
+      entries: (bot) => TWO.entries.filter((entry) => entry.botId === bot.id),
+      github,
+      now: () => NOW,
+    };
+    return { source: createTeamBoardSource(deps), fetch };
+  }
+  const repoNames = (fetch: ReturnType<typeof vi.fn>) => fetch.mock.calls.map(([, init]) => (JSON.parse(String((init as RequestInit).body)) as { variables: { name: string } }).variables.name);
+
+  it("keeps one team's lane and reads GitHub for its repositories only", async () => {
+    const { source, fetch } = two();
+    const board = (await source.read(session("person-a"), { params: { team: "team-2" }, fresh: false })).value as TeamBoard;
+    expect(board.lanes.map((lane) => lane.sectionId)).toEqual(["team-2"]);
+    expect(repoNames(fetch)).toEqual(["two"]);
+    expect(Object.keys(board.todoTotal)).toEqual(["acme/two"]);
+  });
+
+  it("keeps one column", async () => {
+    const { source } = two();
+    const board = (await source.read(session("person-a"), { params: { column: "todo" }, fresh: false })).value as TeamBoard;
+    expect(board.lanes.flatMap((lane) => lane.cards.map((card) => card.column))).toEqual(["todo", "todo"]);
+  });
+
+  it("refuses a team that is not the reader's, a column that does not exist and an unknown parameter, without reading", async () => {
+    const { source, fetch } = two();
+    for (const params of [{ team: "team-a" }, { column: "doing" }, { lane: "x" }, { team: 3 }]) {
+      await expect(source.read(session("person-a"), { params, fresh: false })).rejects.toMatchObject({ code: "bad_request", status: 400 });
+    }
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps the cache per person: B filtered never gets A's snapshot", async () => {
+    const { routes, fetch } = world({ failFor: TOKEN_B });
+    await routes.read(session("person-a"), { params: {}, fresh: false });
+    const b = await routes.read(session("person-b"), { params: { team: "team-b" }, fresh: false });
+    expect(JSON.stringify(b.value)).not.toContain("Secret A issue");
+    expect(fetch.mock.calls.length).toBeGreaterThan(1);
+  });
+});
+
+describe("To do count per team (#3449)", () => {
+  it("says, per lane, how many open issues of its repositories were not loaded", async () => {
+    let page = 0;
+    const fetch = vi.fn(async () => {
+      page += 1;
+      const nodes = Array.from({ length: 100 }, (_, index) => ({ number: page * 1000 + index, title: "t", url: `https://github.com/acme/shared/issues/${page * 1000 + index}` }));
+      return json({ data: { repository: { issues: { totalCount: 450, pageInfo: { hasNextPage: true, endCursor: `c${page}` }, nodes }, pullRequests: { nodes: [] } } } });
+    });
+    const github = createGithubBoardReader({ token: () => TOKEN_A, fetch: fetch as unknown as typeof globalThis.fetch, now: () => NOW });
+    const source = createTeamBoardSource({
+      person: () => "person-a", viewerId: () => "person-a",
+      teams: () => [{ sectionId: "team-b", name: "Beta team", bots: [{ id: "bot-b", name: "Beta bot" }] }],
+      bots: () => [{ id: "bot-b", name: "Beta bot" }],
+      entries: () => PEOPLE["person-b"]!.entries,
+      github, now: () => NOW,
+    });
+    const board = (await source.read(session("person-a"), { params: {}, fresh: false })).value as TeamBoard;
+    expect(board.lanes[0]!.todoNotLoaded).toBe(150);
+    expect(board.todoTotal["acme/shared"]).toBe(450);
+  });
+});
+
+describe("release of a card (#3449, lot P2 of #3409)", () => {
+  const DAY = 86_400_000;
+  const iso = (at: number) => new Date(at).toISOString();
+  const MERGE_OID = "a".repeat(40);
+  const OLD_MERGE_OID = "c".repeat(40);
+  const TAG_84 = "d".repeat(40);
+  const TAG_83 = "e".repeat(40);
+  const graph = {
+    data: { repository: {
+      issues: { totalCount: 1, pageInfo: { hasNextPage: false }, nodes: [
+        { number: 30, title: "Planned", url: "https://github.com/acme/shared/issues/30", createdAt: iso(NOW - DAY), milestone: { title: "0.9.0", state: "OPEN" } },
+      ] },
+      pullRequests: { nodes: [
+        { number: 20, url: "https://github.com/acme/shared/pull/20", title: "Fix", state: "MERGED", isDraft: false, mergedAt: iso(NOW - 2 * DAY), headRefName: "feat/11-fix", baseRefName: "main",
+          mergeCommit: { oid: OLD_MERGE_OID, committedDate: iso(NOW - 2 * DAY) },
+          closingIssuesReferences: { nodes: [{ number: 11, title: "Shipped one", url: "https://github.com/acme/shared/issues/11", state: "CLOSED", repository: { nameWithOwner: "acme/shared" } }] } },
+        { number: 21, url: "https://github.com/acme/shared/pull/21", title: "New", state: "MERGED", isDraft: false, mergedAt: iso(NOW - 3_600_000), headRefName: "feat/12-new", baseRefName: "main",
+          mergeCommit: { oid: MERGE_OID, committedDate: iso(NOW - 3_600_000) },
+          closingIssuesReferences: { nodes: [{ number: 12, title: "Not cut", url: "https://github.com/acme/shared/issues/12", state: "CLOSED", repository: { nameWithOwner: "acme/shared" } }] } },
+      ] },
+      releases: { nodes: [
+        { tagName: "pulsa-v0.8.84", name: "pulsa-v0.8.84", url: "https://github.com/acme/shared/releases/tag/pulsa-v0.8.84", publishedAt: iso(NOW - DAY), isDraft: false, tagCommit: { oid: "d".repeat(40), committedDate: iso(NOW - DAY) } },
+        { tagName: "pulsa-v0.8.83", name: "", url: "https://github.com/acme/shared/releases/tag/pulsa-v0.8.83", publishedAt: iso(NOW - 1.5 * DAY), isDraft: false, tagCommit: { oid: "e".repeat(40), committedDate: iso(NOW - 1.5 * DAY) } },
+        { tagName: "draft", name: "draft", url: "https://github.com/acme/shared/releases/tag/untagged", publishedAt: null, isDraft: true, tagCommit: null },
+      ] },
+      refs: { nodes: [] },
+    } },
+  };
+  function released(compare: (base: string, head: string) => string | null) {
+    const fetch = vi.fn(async (url: string | URL | Request) => {
+      const address = String(url);
+      const match = /\/repos\/acme\/shared\/compare\/([\w.-]+)\.\.\.([\w.-]+)/.exec(address);
+      if (match) {
+        const status = compare(match[1]!, match[2]!);
+        return status ? json({ status, ahead_by: 0, behind_by: 1, commits: [], files: [] }) : json({}, 500);
+      }
+      return json(graph);
+    });
+    const github = createGithubBoardReader({ token: () => TOKEN_A, fetch: fetch as unknown as typeof globalThis.fetch, now: () => NOW });
+    const source = createTeamBoardSource({
+      person: () => "person-a", viewerId: () => "person-a",
+      teams: () => [{ sectionId: "team-a", name: "Alpha team", bots: [{ id: "bot-a", name: "Alpha bot" }] }],
+      bots: () => [{ id: "bot-a", name: "Alpha bot" }],
+      entries: () => [{ botId: "bot-a", item: item("bot-a", "Alpha bot", "thread-a", {
+        repo: "acme/shared", pullRequests: [], commits: [],
+        branches: [{ name: "feat/11-fix", repo: "acme/shared", pushed: true, at: NOW - 2 * DAY }, { name: "feat/12-new", repo: "acme/shared", pushed: true, at: NOW - 3_600_000 }],
+        issues: [{ repo: "acme/shared", number: 30, action: "viewed", at: NOW - 1_000 }],
+      }) }],
+      github, now: () => NOW,
+    });
+    return { source, fetch };
+  }
+  const cardOf = (board: TeamBoard, number: number) => board.lanes.flatMap((lane) => lane.cards).find((card) => card.number === number)!;
+
+  it("gives a merged card the oldest release whose tag contains its merge, its merge date and the released status", async () => {
+    // the tag of 0.8.83 contains the merge (the merge is behind the tag)
+    const { source, fetch } = released((base) => (base === TAG_83 ? "behind" : "ahead"));
+    const read = await source.read(session("person-a"), { params: {}, fresh: false });
+    const board = read.value as TeamBoard;
+    const shipped = cardOf(board, 11);
+    expect(shipped.status).toBe("released");
+    expect(shipped.mergedAt).toBe(NOW - 2 * DAY);
+    expect(shipped.release).toEqual({ kind: "shipped", label: "0.8.83", tag: "pulsa-v0.8.83", url: "https://github.com/acme/shared/releases/tag/pulsa-v0.8.83", at: NOW - 1.5 * DAY });
+    expect(shipped.waiting).toBeUndefined();
+    expect(fetch.mock.calls.some(([url]) => String(url).includes(`/compare/${TAG_83}...${OLD_MERGE_OID}`))).toBe(true);
+    // the release address opens without a question: a release of a board repository
+    expect(read.links).toContain("https://github.com/acme/shared/releases/tag/pulsa-v0.8.83");
+    expect(board.releases.map((release) => release.label)).toEqual(["0.8.84", "0.8.83"]);
+  });
+
+  it("takes the next release when the first by date does not contain the merge", async () => {
+    const { source } = released((base) => (base === TAG_84 ? "behind" : "diverged"));
+    const board = (await source.read(session("person-a"), { params: {}, fresh: false })).value as TeamBoard;
+    expect(cardOf(board, 11).release).toMatchObject({ kind: "shipped", label: "0.8.84" });
+  });
+
+  it("says not cut yet for a merge newer than every release, without asking GitHub more", async () => {
+    const { source, fetch } = released(() => "behind");
+    const board = (await source.read(session("person-a"), { params: {}, fresh: false }, ) ).value as TeamBoard;
+    const card = cardOf(board, 12);
+    expect(card.status).toBe("waiting_release");
+    expect(card.release).toEqual({ kind: "unreleased", label: "Not cut yet" });
+    expect(card.waiting).toMatchObject({ on: "release", code: "not_released" });
+    expect(fetch.mock.calls.some(([url]) => String(url).includes(MERGE_OID))).toBe(false);
+  });
+
+  it("says not cut yet in Quebec French for a French reader", async () => {
+    const { source } = released(() => "behind");
+    const board = (await source.read(session("person-a"), { params: {}, fresh: false, lang: "fr" })).value as TeamBoard;
+    expect(cardOf(board, 12).release?.label).toBe("Pas encore coupé");
+  });
+
+  it("gives an open card its milestone as planned", async () => {
+    const { source } = released(() => "behind");
+    const board = (await source.read(session("person-a"), { params: {}, fresh: false })).value as TeamBoard;
+    expect(cardOf(board, 30).release).toEqual({ kind: "planned", label: "0.9.0" });
+  });
+
+  it("caches each containment answer per person: a second read asks GitHub's compare nothing more", async () => {
+    const { source, fetch } = released((base) => (base === TAG_83 ? "behind" : "ahead"));
+    await source.read(session("person-a"), { params: {}, fresh: false });
+    const compares = () => fetch.mock.calls.filter(([url]) => String(url).includes("/compare/")).length;
+    const first = compares();
+    await source.read(session("person-a"), { params: {}, fresh: true });
+    expect(compares()).toBe(first);
+  });
+
+  it("keeps the date rule when GitHub's compare does not answer", async () => {
+    const { source } = released(() => null);
+    const board = (await source.read(session("person-a"), { params: {}, fresh: false })).value as TeamBoard;
+    expect(cardOf(board, 11).release).toMatchObject({ kind: "shipped", label: "0.8.83" });
+  });
+});
+
+describe("waiting codes (#3449)", () => {
+  const waitingWorld = (waitingOn?: BoardEntry["waitingOn"]) => createTeamBoardSource({
+    person: () => "person-a", viewerId: () => "person-a",
+    teams: () => [{ sectionId: "team-a", name: "Alpha team", bots: [{ id: "bot-a", name: "Alpha bot" }] }],
+    bots: () => [{ id: "bot-a", name: "Alpha bot" }],
+    entries: () => [{ botId: "bot-a", ...(waitingOn ? { waitingOn } : {}), item: item("bot-a", "Alpha bot", "thread-a", {
+      repo: "acme/shared", pullRequests: [], branches: [], commits: [], issues: [{ repo: "acme/shared", number: 7, action: "viewed", at: NOW - 1_000 }],
+    }, { status: "waiting", currentStep: "git push origin main" }) }],
+    github: createGithubBoardReader({ token: () => undefined }),
+    now: () => NOW,
+  });
+  const waitingOf = async (source: ReturnType<typeof createTeamBoardSource>) => ((await source.read(session("person-a"), { params: {}, fresh: false })).value as TeamBoard).lanes[0]!.cards[0]!.waiting;
+
+  it("names an approval with its tool, a question, and falls back when the card cannot be read", async () => {
+    expect(await waitingOf(waitingWorld({ kind: "approval", what: "Push to main", tool: "Bash" }))).toMatchObject({ on: "you", reason: "git push origin main", code: "approval", params: { what: "Push to main", tool: "Bash" } });
+    expect(await waitingOf(waitingWorld({ kind: "question", what: "Which repo?" }))).toMatchObject({ code: "question", params: { what: "Which repo?" } });
+    expect(await waitingOf(waitingWorld())).toMatchObject({ code: "waiting_you", params: { what: "git push origin main" } });
+  });
+
+  it("reads the open card of a conversation, never an answered one", () => {
+    const card = (over: Record<string, unknown>) => ({ id: "m", role: "bot", kind: "options", card: { title: "Approval needed", subtitle: "Push to main", options: ["Allow", "Deny"], requestId: "r1", ...over } });
+    expect(waitingCardOf([card({ tool: "Bash" })] as never)).toEqual({ kind: "approval", what: "Push to main", tool: "Bash" });
+    expect(waitingCardOf([card({ answered: true, tool: "Bash" })] as never)).toBeUndefined();
+    expect(waitingCardOf([card({ title: "Your bot has a question", subtitle: "Which repo?" })] as never)).toEqual({ kind: "question", what: "Which repo?" });
   });
 });

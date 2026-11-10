@@ -233,7 +233,7 @@ export const DEF_ADD_MCP_SERVER = {
           type: "string",
           minLength: 1,
           maxLength: 32,
-          description: "Server name: 1–32 lowercase letters, numbers, underscores, or hyphens, starting with a letter.",
+          description: "Server name: 1 to 32 lowercase letters, numbers, underscores, or hyphens, starting with a letter.",
         },
         command: {
           type: "string",

@@ -329,7 +329,7 @@ export function normalizeScheduleInput(args: Json): NormalizedSchedule {
       weekdays = Array.isArray(raw.weekdays) && raw.weekdays.length ? raw.weekdays : [...WEEKDAYS];
     } else {
       if (!Array.isArray(raw.weekdays) || raw.weekdays.length === 0) {
-        return { error: `A weekly schedule needs "weekdays", for example ["monday","friday"] — or use {"type":"daily"} to run every day.` };
+        return { error: `A weekly schedule needs "weekdays", for example ["monday","friday"], or use {"type":"daily"} to run every day.` };
       }
       weekdays = raw.weekdays;
     }
@@ -462,7 +462,7 @@ export const capResult = (text: string, context: ToolCallContext) => boundedAgen
     body: JSON.stringify({ text: retained, truncated }) });
 });
 
-/** "1st", "2nd", "3rd", "4th" — the queue position as a person says it. */
+/** "1st", "2nd", "3rd", "4th": the queue position as a person says it. */
 export function ordinal(n: number): string {
   const rem100 = n % 100;
   if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
@@ -684,7 +684,7 @@ export function confirmationResult(r: Json, fallback: string, noun = "routine"):
  * recalled as the user's request is the misattribution the note exists to
  * prevent. */
 export function recallSpeaker(hit: Json): string {
-  if (typeof hit.peer === "string" && hit.peer) return `@${hit.peer} (another bot, via ask_bot — not your user)`;
+  if (typeof hit.peer === "string" && hit.peer) return `@${hit.peer} (another bot, via ask_bot, not your user)`;
   if (typeof hit.from === "string" && hit.from) return hit.from;
   return hit.role === "user" ? "user" : "you";
 }
@@ -717,7 +717,7 @@ export function deliveryNote(r: Json): string {
  * bare `since`/`until` date is read as local midnight (recent-work.ts
  * parseSince), the recent-work brief's times are local (whenLabel), and the
  * daily memory logs are named after the local day. East of UTC a message
- * from this morning was being dated yesterday — so a search for today's work
+ * from this morning was being dated yesterday, so a search for today's work
  * came back stamped with the wrong date. */
 export function recallWhen(at: unknown, dateOnly: boolean): string {
   if (typeof at !== "number" || !Number.isFinite(at)) return "";

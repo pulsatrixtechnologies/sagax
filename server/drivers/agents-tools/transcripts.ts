@@ -9,14 +9,14 @@ import { jsonRecord, recallSpeaker, recallWhen } from "./shared.ts";
 export const DEF_LIST_THREADS = {
     name: "list_threads",
     description:
-      "See your own threads and the threads you opened on teammates, newest first: each with its bot, title, state (running, waiting on the person, queued, idle, or closed), whether the person has unread there, and the delegation id if it was a handoff. Use it to check how the threads you started are going before reporting to the person; write a thread's title as #Title when you mention it. A teammate's other threads are never listed — only the ones you opened. This is a read: it starts nothing and changes nothing.",
+      "See your own threads and the threads you opened on teammates, newest first: each with its bot, title, state (running, waiting on the person, queued, idle, or closed), whether the person has unread there, and the delegation id if it was a handoff. Use it to check how the threads you started are going before reporting to the person; when you mention one to the person, name the work by its subject, never as a thread to open. A teammate's other threads are never listed, only the ones you opened. This is a read: it starts nothing and changes nothing.",
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   };
 
 export const DEF_CLOSE_THREAD = {
     name: "close_thread",
     description:
-      "Mark a thread you opened (or one of your own) as finished once you have read its result: it leaves the person's default sidebar list (still under all threads, with a note saying you closed it) and list_threads reports it as closed. Nothing is deleted — deleting stays the person's decision — and a thread that is still running cannot be closed; wait for it or leave it. Use the thread id from list_threads. If a close is refused, do not retry it.",
+      "Mark a thread you opened (or one of your own) as finished once you have read its result: it is marked closed, with a note saying you closed it, and list_threads reports it as closed. Nothing is deleted (deleting stays the person's decision), and a thread that is still running cannot be closed; wait for it or leave it. Use the thread id from list_threads. If a close is refused, do not retry it.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -124,7 +124,7 @@ export async function callTranscriptsTool(name: string, args: Json, context: Too
       const state = stateWord[String(thread.state)] ?? String(thread.state);
       const unread = thread.unread === true ? ", unread for the person" : "";
       const handoff = typeof thread.delegationId === "string" && thread.delegationId ? ` [delegation id: ${thread.delegationId}]` : "";
-      return `- #${String(thread.title)} (${where}, ${state}${unread}) [thread id: ${String(thread.threadId)}]${handoff}`;
+      return `- "${String(thread.title)}" (${where}, ${state}${unread}) [thread id: ${String(thread.threadId)}]${handoff}`;
     });
     return { text: `Threads, newest first:\n${lines.join("\n")}` };
   }
@@ -133,7 +133,7 @@ export async function callTranscriptsTool(name: string, args: Json, context: Too
     if (!threadId) return { text: "close_thread needs the thread_id from list_threads or start_thread.", isError: true };
     const r = await api(`/api/internal/threads/${encodeURIComponent(threadId)}/close`, { method: "POST", body: JSON.stringify({ fromBotId: BOT_ID, fromThreadId: THREAD_ID }) });
     if (r.error) return { text: `Couldn't close that thread: ${String(r.error)}`, isError: true };
-    return { text: `Closed #${String(r.title)}${r.botName ? ` on @${String(r.botName)}` : ""}. It stays in the person's sidebar, idle, with a note that you closed it.` };
+    return { text: `Closed "${String(r.title)}"${r.botName ? ` on @${String(r.botName)}` : ""}. It stays idle, with a note that you closed it.` };
   }
   if (name === "workspace_read") {
     if (typeof args.path !== "string" || !args.path.trim()) return { text: "workspace_read needs a path, for example docs/onboarding.md.", isError: true };

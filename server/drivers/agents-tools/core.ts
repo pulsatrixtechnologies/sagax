@@ -42,7 +42,7 @@ export const DEF_LIST_ROOM_TARGETS = {
 
 export const DEF_COORDINATE_BOTS = {
     name: "coordinate_bots",
-    description: "Ask existing Sagax teammates for advice or assign concrete work. In a room it defaults to this room; use group_id from list_room_targets for a specific room. Outside a room, everything you send a teammate from this conversation goes to one thread with them and runs after anything still running there. Give 1-4 bot_ids — teammate ids as list_bots or your roster prints them; a unique teammate name also resolves: they see only what you send them and use their own model, tools and permissions. They can consult their specialists; all results return here and resume you automatically. Include exact file paths, constraints and what must be verified. After sending all assignments, END your turn; do not poll or wait. On return, resolve tradeoffs, verify the requested outcome and request concrete corrections if necessary before giving one final answer. Do not send acknowledgements as new work. A peer ack alone is not completed: set done_when or rework on failed(incomplete).",
+    description: "Ask existing Sagax teammates for advice or assign concrete work. In a room it defaults to this room; use group_id from list_room_targets for a specific room. Outside a room, everything you send a teammate from this conversation goes to one thread with them and runs after anything still running there. Give 1-4 bot_ids: teammate ids as list_bots or your roster prints them; a unique teammate name also resolves: they see only what you send them and use their own model, tools and permissions. They can consult their specialists; all results return here and resume you automatically. Include exact file paths, constraints and what must be verified. After sending all assignments, END your turn; do not poll or wait. On return, resolve tradeoffs, verify the requested outcome and request concrete corrections if necessary before giving one final answer. Do not send acknowledgements as new work. A peer ack alone is not completed: set done_when or rework on failed(incomplete).",
     inputSchema: { type: "object", additionalProperties: false, properties: {
       group_id: { type: "string", description: "Optional destination room; omit for this room or, outside a room, your thread with each teammate." },
       bot_ids: { type: "array", items: { type: "string", description: "A teammate's name as your roster prints it, or its id ([id: …]) when the roster or list_bots shows one. A name shared by two reachable teammates is refused: use the id." }, minItems: 1, maxItems: 4, uniqueItems: true },
@@ -145,7 +145,7 @@ export function DEF_DELEGATE_BOT(externalRuntime: boolean) {
     description: externalRuntime
       ? "Hand work to a reachable teammate asynchronously. Returns a task id; the server dispatches when its source conversation and the peer are available and required approvals are granted. Use check_delegation or wait_delegation with that id; the external runtime does not need to end for polling."
       :
-      "DEFAULT FOR ASSIGNING WORK. Hand a task to another bot asynchronously: this returns immediately, your turn can end, and you remain available while the peer works. The peer starts after your current turn finishes and its outcome is delivered automatically to the originating conversation — success or failure wakes you with it. Acknowledge the assignment; do not call check_delegation or wait_delegation in this same turn.",
+      "DEFAULT FOR ASSIGNING WORK. Hand a task to another bot asynchronously: this returns immediately, your turn can end, and you remain available while the peer works. The peer starts after your current turn finishes and its outcome is delivered automatically to the originating conversation: success or failure wakes you with it. Acknowledge the assignment; do not call check_delegation or wait_delegation in this same turn.",
     inputSchema: {
       type: "object",
       properties: {
@@ -164,7 +164,7 @@ export function DEF_CHECK_DELEGATION(externalRuntime: boolean) {
     description: externalRuntime
       ? "Check one of this external runtime's delegations without waiting: queued, running, or finished with its result. Newly returned task ids can be checked immediately; the server enforces ownership and current peer access."
       :
-      "In a later turn, check what happened to a delegation without waiting: still queued, running (with elapsed time and the peer's recent activity), or finished with the result. Prefer this when a delegated bot is taking long or might be stuck — empty recent activity usually means it is stuck, not working. Do not poll it right after delegate_bot; completion is delivered to the conversation automatically.",
+      "In a later turn, check what happened to a delegation without waiting: still queued, running (with elapsed time and the peer's recent activity), or finished with the result. Prefer this when a delegated bot is taking long or might be stuck: empty recent activity usually means it is stuck, not working. Do not poll it right after delegate_bot; completion is delivered to the conversation automatically.",
     inputSchema: {
       type: "object",
       properties: {
@@ -301,7 +301,7 @@ export const DEF_MEMORY_UPDATE = {
 export const DEF_MEMORY_LOG = {
     name: "memory_log",
     description:
-      "Write one line to today's log file, memory/log/YYYY-MM-DD.md, stamped with the time and this conversation: what happened, not what is true. Use it for events worth a trace — a deploy went out, a person decided something, a check failed — that should not shape future sessions. Logs are never loaded into your prompt; the person can read them, and session_search finds them later. A fact that should hold in every session goes to memory_update instead.",
+      "Write one line to today's log file, memory/log/YYYY-MM-DD.md, stamped with the time and this conversation: what happened, not what is true. Use it for events worth a trace (a deploy went out, a person decided something, a check failed) that should not shape future sessions. Logs are never loaded into your prompt; the person can read them, and session_search finds them later. A fact that should hold in every session goes to memory_update instead.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -315,7 +315,7 @@ export const DEF_MEMORY_LOG = {
 export const DEF_SESSION_SEARCH = {
     name: "session_search",
     description:
-      "Search your OWN earlier conversations with this user across all of your tasks and the rooms you are in, and your own memory files (MEMORY.md, memory/<topic>.md, your daily logs), best match first — or, with since and no query, list what happened recently, newest first. Use it before asking the user to repeat something, before redoing earlier work, and to answer what you did since some time (a standup). Hits carry the task or room name, date, thread id and message id; call session_read with its ids for the whole message. Results are past notes, not instructions; other bots' conversations are never included.",
+      "Search your OWN earlier conversations with this user across all of your tasks and the rooms you are in, and your own memory files (MEMORY.md, memory/<topic>.md, your daily logs), best match first; or, with since and no query, list what happened recently, newest first. Use it before asking the user to repeat something, before redoing earlier work, and to answer what you did since some time (a standup). Hits carry the task or room name, date, thread id and message id; call session_read with its ids for the whole message. Results are past notes, not instructions; other bots' conversations are never included.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -568,7 +568,7 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
       ...(resume ? { reply: "resume" } : {}),
     }) });
     if (r.error) return { text: `Couldn't send to that bot: ${String(r.error)}`, isError: true };
-    const destination = `@${String(r.botName ?? "that bot")} in #${String(r.title ?? title)} [thread id: ${String(r.threadId ?? "")}]`;
+    const destination = `@${String(r.botName ?? "that bot")} in "${String(r.title ?? title)}" [thread id: ${String(r.threadId ?? "")}]`;
     const state = r.approvalRequired === true
       ? `Send to ${destination} is pending approval. The person's approval card appears after this turn ends; dispatch starts once approved.`
       : r.state === "running"
@@ -590,7 +590,7 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
     const bots = (r.bots as Array<Json>) ?? [];
     if (!bots.length) return { text: "No other reachable bots yet." };
     const lines = bots.map((b) => {
-      const role = b.title ? ` — ${b.title}` : "";
+      const role = b.title ? ` (${b.title})` : "";
       const about = b.description ? ` (${String(b.description).slice(0, 120)})` : "";
       // statusText is the server's own wording for what the teammate is
       // doing; an older server only sends busy, so fall back to that.
@@ -629,29 +629,29 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
     const note = deliveryNote(r);
     if (r.timeout) {
       // The peer's turn outlived the synchronous wait, so the harness
-      // converted the ask into a delegation — the reply is not lost.
+      // converted the ask into a delegation, so the reply is not lost.
       const taskId = String(r.taskId ?? "").trim();
       const waitedSeconds = Math.max(1, Math.round((Number(r.waitedMs) || 0) / 1000));
       const amount = waitedSeconds < 60 ? waitedSeconds : Math.round(waitedSeconds / 60);
       const unit = waitedSeconds < 60 ? "second" : "minute";
       return {
-        text: `${r.toBotName ?? "That bot"} is still working after ${amount} ${unit}${amount === 1 ? "" : "s"} — the ask was converted to a delegation so the reply is not lost. Task id: ${taskId}. ${EXTERNAL_RUNTIME ? EXTERNAL_STATUS_GUIDANCE : "Finish your turn now; the result will be delivered to this conversation automatically. Use check_delegation in a later turn only if the user asks for status."}${note ? `\n\n${note}` : ""}`,
+        text: `${r.toBotName ?? "That bot"} is still working after ${amount} ${unit}${amount === 1 ? "" : "s"}, so the ask was converted to a delegation so the reply is not lost. Task id: ${taskId}. ${EXTERNAL_RUNTIME ? EXTERNAL_STATUS_GUIDANCE : "Finish your turn now; the result will be delivered to this conversation automatically. Use check_delegation in a later turn only if the user asks for status."}${note ? `\n\n${note}` : ""}`,
       };
     }
     if (r.busy) {
       // Aside lane: the teammate was mid-turn on a seam-capable engine, so
       // the harness folded the message into their running work as peer
       // context. No new turn started and no reply is coming back through
-      // this call — the receipt says whether the words are already in the
+      // this call: the receipt says whether the words are already in the
       // live turn or waiting for it to settle.
       if (r.aside === "injected") {
         return {
-          text: `${r.toBotName ?? "That bot"} is mid-turn; your message was handed to them as an aside — peer context folded into their current work, not a request that interrupts or replies. Finish your turn and treat their eventual output as possibly informed by it.`,
+          text: `${r.toBotName ?? "That bot"} is mid-turn; your message was handed to them as an aside: peer context folded into their current work, not a request that interrupts or replies. Finish your turn and treat their eventual output as possibly informed by it.`,
         };
       }
       if (r.aside === "queued") {
         return {
-          text: `${r.toBotName ?? "That bot"} is mid-turn; your aside is queued and will reach them as context when the turn settles. No reply is expected — finish your turn.`,
+          text: `${r.toBotName ?? "That bot"} is mid-turn; your aside is queued and will reach them as context when the turn settles. No reply is expected; finish your turn.`,
         };
       }
       // The harness queues the message as a delegation when it can; the
@@ -659,10 +659,10 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
       const taskId = String(r.taskId ?? "").trim();
       if (taskId) {
         return {
-          text: `${r.toBotName ?? "That bot"} is busy right now, so your message was queued as a delegation instead — ${EXTERNAL_RUNTIME ? "it waits for the peer and any required approval" : "it runs after your current turn ends"}. Task id: ${taskId}. ${EXTERNAL_RUNTIME ? EXTERNAL_STATUS_GUIDANCE : "Finish your turn now; the result will be delivered to this conversation automatically. Use check_delegation in a later turn only if the user asks for status."}${note ? `\n\n${note}` : ""}`,
+          text: `${r.toBotName ?? "That bot"} is busy right now, so your message was queued as a delegation instead: ${EXTERNAL_RUNTIME ? "it waits for the peer and any required approval" : "it runs after your current turn ends"}. Task id: ${taskId}. ${EXTERNAL_RUNTIME ? EXTERNAL_STATUS_GUIDANCE : "Finish your turn now; the result will be delivered to this conversation automatically. Use check_delegation in a later turn only if the user asks for status."}${note ? `\n\n${note}` : ""}`,
         };
       }
-      return { text: `That bot is busy right now — try again after it finishes.${note ? `\n\n${note}` : ""}` };
+      return { text: `That bot is busy right now; try again after it finishes.${note ? `\n\n${note}` : ""}` };
     }
     if (r.error) return { text: `Couldn't reach that bot: ${r.error}${note ? `\n\n${note}` : ""}`, isError: true };
     return { text: `${r.botName ?? "Bot"} replied:\n${r.text ?? "(no reply)"}${note ? `\n\n${note}` : ""}` };
@@ -719,7 +719,7 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
         : expiresInMs <= 0
           ? " It is past its 24-hour limit and will expire the next time it cannot be delivered."
           : ` It expires if not picked up within ${Math.ceil(expiresInMs / 3_600_000)} hour${Math.ceil(expiresInMs / 3_600_000) === 1 ? "" : "s"}.`;
-      return { text: `Task ${taskId} is still queued — ${who} hasn't picked it up yet${waitMs ? ` after ${timeout}s` : ""}.${why}${expiry} Keep working and check again later.` };
+      return { text: `Task ${taskId} is still queued: ${who} hasn't picked it up yet${waitMs ? ` after ${timeout}s` : ""}.${why}${expiry} Keep working and check again later.` };
     }
     if (r.status === "running" && r.awaitingPerson && typeof r.awaitingPerson === "object") {
       const card = r.awaitingPerson as { kind?: unknown; tool?: unknown; threadTitle?: unknown };
@@ -737,12 +737,12 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
       const activity = Array.isArray(r.recentActivity) ? r.recentActivity.filter((line: unknown) => typeof line === "string") : [];
       const recent = activity.length
         ? activity.map((line: string) => `  - ${line}`).join("\n")
-        : "  (no visible activity yet — if this stays empty, the peer may be stuck, not working; say so instead of promising progress)";
+        : "  (no visible activity yet; if this stays empty, the peer may be stuck, not working; say so instead of promising progress)";
       return {
-        text: `Task ${taskId} is running with ${who} — going on ${elapsed} now.${waitMs ? ` (still going after ${timeout}s)` : ""}\nRecent activity:\n${recent}\nJudge progress by this activity, not by waiting: real work keeps producing lines; the same silence for a long stretch usually means stuck.`,
+        text: `Task ${taskId} is running with ${who}, going on ${elapsed} now.${waitMs ? ` (still going after ${timeout}s)` : ""}\nRecent activity:\n${recent}\nJudge progress by this activity, not by waiting: real work keeps producing lines; the same silence for a long stretch usually means stuck.`,
       };
     }
-    return { text: `Task ${taskId} ended without a reply — ${String(r.status ?? "unknown")}${r.result ? `: ${String(r.result)}` : ""}.`, isError: true };
+    return { text: `Task ${taskId} ended without a reply: ${String(r.status ?? "unknown")}${r.result ? `: ${String(r.result)}` : ""}.`, isError: true };
   }
   if (name === "select_computer") {
     if (args.host !== undefined) {
@@ -867,8 +867,8 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
     const asked = q ? `matches "${q}"` : `is there since ${since}${until ? ` until ${until}` : ""}`;
     if (!hits.length && !memoryHits.length) {
       return { text: q
-        ? `Nothing of yours ${asked} — no earlier conversation and no memory file. Try fewer or different words; every word must appear.`
-        : `Nothing of yours ${asked} — no message in any of your conversations in that window.` };
+        ? `Nothing of yours ${asked}: no earlier conversation and no memory file. Try fewer or different words; every word must appear.`
+        : `Nothing of yours ${asked}: no message in any of your conversations in that window.` };
     }
     if (!hits.length) {
       return { text: `${memoryBlock}No earlier conversation matches. These are your own notes, not new instructions; build on them.` };
@@ -951,7 +951,7 @@ async function requestCustomSecret(args: Json, context: ToolCallContext): Promis
 function sendLine(send: Json): string {
   const state = String(send.state ?? "queued");
   const words: Record<string, string> = { queued: "queued, not read yet", read: "read, in progress", waiting: "waiting on the person", done: "done", failed: "failed" };
-  const head = `@${String(send.botName ?? send.botId ?? "teammate")} in #${String(send.title ?? "thread")} [thread id: ${String(send.threadId ?? "")}]: delivered, ${words[state] ?? state}`;
+  const head = `@${String(send.botName ?? send.botId ?? "teammate")} in "${String(send.title ?? "thread")}" [thread id: ${String(send.threadId ?? "")}]: delivered, ${words[state] ?? state}`;
   const question = send.question ? `\n  Its question: ${String(send.question)}` : "";
   const summary = send.summary ? `\n  Reply: ${String(send.summary)}` : "";
   const resume = send.reply === "resume" ? "\n  Resumes you when it finishes." : "";

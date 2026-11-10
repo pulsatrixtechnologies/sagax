@@ -3313,7 +3313,6 @@
   "voice.fish.modelFree": "s2.1-pro-free（開発者向け無料）",
   "voice.fish.modelHint": "Fish Audio のプランで利用できるモデルを選んでください。このインストール環境のすべてのエージェントに適用されます。",
   "toolDetail.label": "{name} · {status} · ツールの詳細",
-  "toolDetail.input": "入力",
   "toolDetail.output": "結果",
   "toolDetail.running": "実行中",
   "toolDetail.failed": "失敗",

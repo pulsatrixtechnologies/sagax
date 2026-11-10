@@ -11,6 +11,8 @@ import { VoiceCallCard } from "../VoiceCallCard";
 import { BotExchangeChip, TranscriptDate } from "../BotExchangeChip";
 import { GotoGroupChip } from "../GotoGroupChip";
 import { MessagedLine } from "../MessagedLine";
+import { AskLine } from "../AskLine";
+import { askAlreadyLined } from "@/lib/ask-line";
 import type { GotoTarget } from "@/lib/goto-lines";
 import { StatusActivityRow } from "@/components/StatusActivityRow";
 import { CancelledTurnRow } from "../CancelledTurnRow";
@@ -32,7 +34,7 @@ import { ConversationRoutineToggle } from "../RoutineToggleLine";
 import { CallRecordRow } from "../CallRecordRow";
 import { DataResultChip } from "../DataResultChip";
 import { ParallelResultLabel, ParallelTaskCard } from "../ParallelTaskCard";
-import { RelayTraceLine, RelayViaLabel } from "../RelayViaLabel";
+import { RelayProvenance } from "../RelayViaLabel";
 import { CompactionChip, DigestChip } from "../DigestChip";
 import { ScreenFrame } from "../ScreenFrame";
 import { VideoPlayerWidget } from "../video/VideoPlayerWidget";
@@ -150,7 +152,7 @@ export function MessagesListItem({
   const edgeOf = (entry: ListedItem) =>
     entry.kind === "voiceCall"
       ? voiceCallVisibleSpan(entry.messages, windowIds)
-      : entry.kind === "gotoGroup" || entry.kind === "messagedLine"
+      : entry.kind === "gotoGroup" || entry.kind === "messagedLine" || entry.kind === "askLine"
         ? { first: entry.messages[0]!, last: entry.messages.at(-1)! }
         : visibleEdge(entry);
   const hiddenRun = (entry: ListedItem) => entry.kind === "run" && !showToolCalls && entry.messages.every((step) => step.kind === "activity");
@@ -162,6 +164,12 @@ export function MessagesListItem({
     break;
   }
   const first = edgeOf(item).first;
+  // The single-message rows right above this one, nearest first.
+  const rowsAbove = () => {
+    const rows: Message[] = [];
+    for (let j = index - 1; j >= 0 && items[j]!.kind === "message"; j--) rows.push((items[j] as { message: Message }).message);
+    return rows;
+  };
   const newDay = startsNewStretch(prev?.at, first.at);
   const rowKey = transcriptRowKey(item);
   const rowClass = index >= items.length - DRAWN_TAIL_ROWS || listedItemMessages(item).some((row) => row.id === focusedId)
@@ -206,6 +214,16 @@ export function MessagesListItem({
         {newDay && <TranscriptDate at={first.at} />}
         {divider}
         <MessagedLine line={item} self={self} bots={bots} groups={storeGroups} />
+      </VirtualRow>
+    );
+  }
+  if (item.kind === "askLine") {
+    const self = bots.find((candidate) => candidate.id === botId);
+    return (
+      <VirtualRow key={item.id} rowKey={rowKey} eager={eager} estimate={TRANSCRIPT_ROW_ESTIMATE} className={rowClass}>
+        {newDay && <TranscriptDate at={first.at} />}
+        {divider}
+        <AskLine asks={item.asks} self={self} bots={bots} mid={item.messages[0]?.id} />
       </VirtualRow>
     );
   }
@@ -357,7 +375,7 @@ export function MessagesListItem({
       case "options":
         if (m.relayVia) {
           const card = optionsCardRow({ message: m, transcript, botId, botName, threadId });
-          return card && <><RelayViaLabel message={m} />{card}</>;
+          return card && <><RelayProvenance message={m} bots={bots} />{card}</>;
         }
         return optionsCardRow({ message: m, transcript, botId, botName, threadId });
       case "widget":
@@ -444,11 +462,11 @@ export function MessagesListItem({
           return null;
         }
         // #2915: a background turn that left nothing to copy: one trace line
-        if (!user && m.relayVia && m.relayTrace) return <><RelayViaLabel message={m} /><RelayTraceLine message={m} /></>;
+        if (!user && m.relayVia && m.relayTrace) return <RelayProvenance message={m} bots={bots} trace />;
         return (
           <>
           {m.parallelTask?.role === "result" && <ParallelResultLabel message={m} />}
-          {!user && m.relayVia && <RelayViaLabel message={m} />}
+          {!user && m.relayVia && !askAlreadyLined(m, rowsAbove(), botId) && <RelayProvenance message={m} bots={bots} />}
           <Bubble
             message={m}
             emerging={m.id === emergingId}

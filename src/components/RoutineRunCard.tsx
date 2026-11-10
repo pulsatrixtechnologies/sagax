@@ -9,7 +9,7 @@ import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { AttentionItems } from "./AttentionCard";
-import { DelegationList, type DelegationEntry } from "./DelegationList";
+import { DelegationLine, DelegationList, type DelegationEntry } from "./DelegationList";
 import type { RoutineRunCardData } from "../../shared/routine-run";
 import type { Bot, Message } from "@/state/store";
 
@@ -397,7 +397,8 @@ export function RoutineRunCard({
           )}
         </div>
       )}
-      {handedTo.length > 0 && <DelegationList entries={handedTo} owner={bot} botOf={botOf} modelOf={modelOf} onOpen={onOpenThread} />}
+      {/* #3289: the teammates as the quiet Asked line, never a "Teammates" card */}
+      {handedTo.length > 0 && <DelegationLine entries={handedTo} owner={bot} botOf={botOf} modelOf={modelOf} onOpen={onOpenThread} />}
     </section>
   );
 }

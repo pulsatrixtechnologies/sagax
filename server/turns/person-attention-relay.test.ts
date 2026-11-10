@@ -402,3 +402,27 @@ describe("askedWords (QA 0.8.77: no internal note in the mirrored ask)", () => {
     expect(askedWords("[urgent] call the client")).toBe("[urgent] call the client");
   });
 });
+
+describe("mirrorBackgroundReply, a teammate's ask (#3289)", () => {
+  const teammate = () => {
+    const w = world();
+    w.deps.relayVia = (_botId, threadId) => threadId === "work" ? "teammate" : undefined;
+    return w;
+  };
+
+  it("names the teammate that asked, with its bot id, so the chat draws its face", () => {
+    const w = teammate();
+    const list = w.threads.get("work") ?? [];
+    list.push({ id: "ask", at: 0, role: "bot", kind: "text", text: "Check the duplicates", from: { botId: "bot-nova", name: "Nova", color: "blue" } } as unknown as WireMessage);
+    w.threads.set("work", list);
+    w.say("work", "Three found.");
+    mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps);
+    expect(w.threads.get("main")!.at(-1)).toMatchObject({ relayVia: "teammate", relayAsk: { text: "Check the duplicates", by: "Nova", botId: "bot-nova" } });
+  });
+
+  it("a turn stopped before its ask could be read still names who asked, never a bare line", () => {
+    const w = teammate();
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-9", ok: true, stopped: true }, w.deps)).toBe(true);
+    expect(w.threads.get("main")!.at(-1)).toMatchObject({ relayTrace: "stopped", relayAsk: { text: "", by: "Nova", botId: "bot-nova" } });
+  });
+});

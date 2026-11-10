@@ -6,10 +6,17 @@
 // #2915: the label also says what was asked and by whom (the full request in
 // its tooltip), and a background turn that left nothing to copy (failed,
 // stopped, no reply) is one discreet trace line under it.
+//
+// #3289: work a teammate asked for reads as the quiet centered line every
+// bot-to-bot trace uses (BotNamesLine): "[face] Scout asked “first words”",
+// and a request that left nothing to copy says so on that same line
+// ("· stopped before an answer"), never a "Teammate" label over an italic
+// line of its own.
 import { BellRing, Plug, Repeat, Users } from "lucide-react";
-import type { Message } from "@/state/store";
+import type { Bot, Message } from "@/state/store";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
+import { ActorLine } from "./BotNamesLine";
 
 const ICON = { mcp: Plug, routine: Repeat, proactive: BellRing, teammate: Users } as const;
 
@@ -39,4 +46,36 @@ export function RelayTraceLine({ message }: { message: Pick<Message, "relayTrace
       {known ? t(`chat.relayVia.trace.${trace}` as LocaleKey) : message.text}
     </div>
   );
+}
+
+/** #3289: a teammate's request copied into this bot's chat, as one quiet
+ * line: who asked (face and name), what (the first words, the whole ask in
+ * the tooltip), and, when the turn left nothing to copy, why. */
+export function TeammateAskLine({ message, bots }: { message: Pick<Message, "id" | "relayAsk" | "relayTrace">; bots: readonly Bot[] }) {
+  const ask = message.relayAsk;
+  const byId = ask?.botId ? bots.find((bot) => bot.id === ask.botId) : undefined;
+  const by = byId ?? (ask?.by ? bots.find((bot) => bot.name === ask.by) : undefined);
+  const name = by?.name ?? ask?.by?.trim() ?? t("chat.askLine.aTeammate");
+  const trace = message.relayTrace;
+  const known = trace === "failed" || trace === "stopped" || trace === "silent";
+  return (
+    <ActorLine
+      testId="teammate-ask-line"
+      party={{ key: by?.id ?? name, botId: by?.id, name, color: by?.color }}
+      verb={t("chat.askLine.incoming")}
+      words={ask?.text}
+      bots={bots}
+      tail={known ? t(`chat.askLine.trace.${trace}` as LocaleKey) : undefined}
+      tailTone={trace === "failed" || trace === "stopped" ? "danger" : undefined}
+      mid={message.id}
+      data={{ "data-relay-via": "teammate", ...(trace ? { "data-relay-trace": trace } : {}) }}
+    />
+  );
+}
+
+/** The provenance of a relayed row: a teammate's request as its quiet line,
+ * any other relay as its label (and its trace line, when it left nothing). */
+export function RelayProvenance({ message, bots, trace = false }: { message: Pick<Message, "id" | "relayVia" | "relayAsk" | "relayTrace" | "text">; bots: readonly Bot[]; trace?: boolean }) {
+  if (message.relayVia === "teammate") return <TeammateAskLine message={message} bots={bots} />;
+  return <><RelayViaLabel message={message} />{trace && <RelayTraceLine message={message} />}</>;
 }

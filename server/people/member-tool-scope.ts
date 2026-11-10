@@ -117,6 +117,8 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   request_sign_in: "conversation",
   // a sign-in card in the member's own conversation, for their own engine account
   open_connector_setup: "conversation",
+  // #3347: the speaker's own connectors (the turn's connector principal), a read
+  connectors: "conversation",
   // claims (perspicax-claims.ts): a lease in Perspicax held by this bot for
   // its person, through the turn's own Perspicax token; claim_list is a read
   claim: "conversation",

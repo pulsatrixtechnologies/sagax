@@ -40,6 +40,7 @@ describe("built-in agent tool read policy", () => {
       "claim_list",
       "bridge_list_leases",
       "list_artifacts",
+      "connectors",
     ]);
     for (const name of READ_ONLY_AGENT_TOOL_NAMES) {
       expect(isReadOnlyAgentTool(name)).toBe(true);

@@ -129,6 +129,8 @@ export const GROK_CATALOG_CHARS_MAX = 3_600;
 export const GROK_AGENT_SHORTCUTS: readonly { tool: string; args: string; when: string }[] = [
   { tool: "sagax_approvals", args: `{"action":"list"}`, when: "the Today box or what waits for the person (approvals, questions, needs-you cards, offers)" },
   { tool: "remote_support_hosts", args: "{}", when: "Sagax Remote Access or Pulsatrix Assist, the person's own computers (install, status, open)" },
+  // #3347: the person's connectors on every account of theirs, any engine
+  { tool: "connectors", args: "{}", when: "the person's connectors on every account of theirs (with connector and query: that connector's tools)" },
 ];
 const AGENTS_SERVER = "agents";
 

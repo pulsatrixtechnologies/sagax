@@ -47,6 +47,9 @@ export const READ_ONLY_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "bridge_list_leases",
   // Artifacts (server/artifacts/artifacts.ts): the bot's own saved widgets, settings only.
   "list_artifacts",
+  // Connectors (server/routes/internal-connectors.ts, #3347): the speaker's own
+  // connectors and their tools, as the registry holds them.
+  "connectors",
 ]);
 
 const READ_ONLY_ANNOTATIONS = Object.freeze({

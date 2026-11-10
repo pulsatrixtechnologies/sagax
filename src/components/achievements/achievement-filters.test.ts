@@ -46,7 +46,7 @@ const trombiCharacter = achievement({
 const titled = achievement({
   id: "titled",
   name: { en: "First Words", fr: "Premiers mots" },
-  description: { en: "Send your first message to a bot.", fr: "Envoyez votre premier message à un robot." },
+  description: { en: "Send your first message to a bot.", fr: "Envoie ton premier message à un robot." },
   rewards: [{ kind: "title", id: "rookie", name: { en: "Rookie", fr: "Recrue" } }],
 });
 
@@ -64,7 +64,7 @@ const both = achievement({
 const iconOnly = achievement({
   id: "icon-only",
   name: { en: "New Face", fr: "Nouveau visage" },
-  description: { en: "Change the app icon.", fr: "Changez l'icône de l'application." },
+  description: { en: "Change the app icon.", fr: "Change l'icône de l'application." },
   rewards: [{ kind: "appIcon", id: "glyph:cube" }],
 });
 
@@ -73,7 +73,7 @@ const secret = achievement({
   category: "secrets",
   hidden: true,
   name: { en: "Up Up Down Down", fr: "Haut haut bas bas" },
-  description: { en: "Enter the old cheat code.", fr: "Entrez le vieux code de triche." },
+  description: { en: "Enter the old cheat code.", fr: "Entre le vieux code de triche." },
   hint: { en: "Gamers of a certain age know a code made of arrows.", fr: "Les joueurs d'une certaine époque connaissent un code fait de flèches." },
   rewards: [{ kind: "skin", character: "owl", skin: "lightning" }],
 });

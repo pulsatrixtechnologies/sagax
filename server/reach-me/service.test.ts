@@ -260,7 +260,7 @@ describe("Reach me: a notice (the background brief)", () => {
     const text = composeReachText(sent[0]!.out);
     expect(text).toContain("Brief du jour");
     expect(text).toContain("- Trois factures");
-    expect(text).not.toMatch(/Répondez/);
+    expect(text).not.toMatch(/Réponds/);
     expect(audit.filter((row) => row.action === "send_failed").map((row) => row.channel)).toEqual(["teams"]);
   });
 

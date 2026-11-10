@@ -35,7 +35,7 @@ while (visite.length > 0) {
     if (cle !== "secrets" && (SECRET_CLE.test(cle) || valeurSecrete(cle))) {
       return refuser(
         "secret",
-        "La fiche contient un secret. Retirez-le. Une clé se dépose dans le magasin seulement après une approbation explicite.",
+        "La fiche contient un secret. Retire-le. Une clé se dépose dans le magasin seulement après une approbation explicite.",
       );
     }
     const valeur = noeud[cle];
@@ -46,7 +46,7 @@ while (visite.length > 0) {
           caractereInterdit(texte, false) ? "fiche_interdite" : "secret",
           caractereInterdit(texte, false)
             ? "La fiche contient un caractère interdit."
-            : "La fiche contient un secret. Retirez-le. Une clé se dépose dans le magasin seulement après une approbation explicite.",
+            : "La fiche contient un secret. Retire-le. Une clé se dépose dans le magasin seulement après une approbation explicite.",
         );
       }
     }
@@ -186,7 +186,7 @@ else {
         if (typeof palier !== "string" || !NIVEAU.test(palier)) {
           erreurs.push({
             code: "niveau_perspicax",
-            message: `Le niveau Perspicax « ${affiche(palier)} » du bot « ${etiquette} » est refusé. Écrivez organisation, equipe ou personnel, puis lecture, proposition ou ecriture.`,
+            message: `Le niveau Perspicax « ${affiche(palier)} » du bot « ${etiquette} » est refusé. Écris organisation, equipe ou personnel, puis lecture, proposition ou ecriture.`,
           });
         } else niveau.push(palier);
       }

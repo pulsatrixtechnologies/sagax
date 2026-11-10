@@ -197,13 +197,13 @@ describe("a run no other engine could take", () => {
     expect(routineLimitStoppedText(off, UTC))
       .toBe("Usage limit reached on Claude. Automatic switching to another engine is off on this server. Claude resets around Nov 5, 1:16 PM (UTC); runs on it work again then. Or choose another engine for this bot now.");
     expect(routineLimitStoppedText(off, FR))
-      .toBe("Limite d'utilisation atteinte sur Claude. Le passage automatique à un autre moteur est désactivé sur ce serveur. Claude se réinitialise vers le 5 nov. à 13 h 16 (UTC) ; les exécutions sur ce moteur reprendront alors. Ou choisissez dès maintenant un autre moteur pour ce bot.");
+      .toBe("Limite d'utilisation atteinte sur Claude. Le passage automatique à un autre moteur est désactivé sur ce serveur. Claude se réinitialise vers le 5 nov. à 13 h 16 (UTC) ; les exécutions sur ce moteur reprendront alors. Ou choisis dès maintenant un autre moteur pour ce bot.");
   });
 
   it("names the engine out of credit, and the bot's own engine when that one stood in for it", () => {
     const own = { kind: "quota" as const, from: "Codex", resetsAt: NOW + HOUR, estimated: true, noTaker: "none" as const };
     expect(routineLimitCreditsText(own, UTC)).toBe("The Codex account is out of credit. Add credit with the provider, or choose another engine for this bot.");
-    expect(routineLimitCreditsText(own, FR)).toBe("Le compte Codex n'a plus de crédit. Ajoutez du crédit chez le fournisseur, ou choisissez un autre moteur pour ce bot.");
+    expect(routineLimitCreditsText(own, FR)).toBe("Le compte Codex n'a plus de crédit. Ajoute du crédit chez le fournisseur, ou choisis un autre moteur pour ce bot.");
     const chain = { ...own, home: { name: "Claude", resetsAt: NOW + 3 * 24 * HOUR, estimated: false } };
     const en = routineLimitCreditsText(chain, UTC);
     expect(en).toBe("The Codex account, which was standing in for Claude, is out of credit. Claude resets around Nov 5, 1:16 PM (UTC); runs on it work again then.");
@@ -214,7 +214,7 @@ describe("a run no other engine could take", () => {
 
   it("names no engine it cannot know, and says this run (never \"it\") starts again", () => {
     expect(routineLimitUnknownEngineText(UTC)).toBe("This run's engine reached its usage limit. Runs on it work again once it resets. Or choose another engine for this bot now.");
-    expect(routineLimitUnknownEngineText(FR)).toBe("Le moteur de cette exécution a atteint sa limite d'utilisation. Les exécutions sur ce moteur reprendront à sa réinitialisation. Ou choisissez dès maintenant un autre moteur pour ce bot.");
+    expect(routineLimitUnknownEngineText(FR)).toBe("Le moteur de cette exécution a atteint sa limite d'utilisation. Les exécutions sur ce moteur reprendront à sa réinitialisation. Ou choisis dès maintenant un autre moteur pour ce bot.");
     expect(routineLimitUnknownEngineText(UTC, NOW)).toBe("This run's engine reached its usage limit. This run starts again at the reset, Nov 2, 1:16 PM (UTC).");
     expect(routineLimitUnknownEngineText(FR, NOW)).toBe("Le moteur de cette exécution a atteint sa limite d'utilisation. Cette exécution repart à la réinitialisation, le 2 nov. à 13 h 16 (UTC).");
     plain(routineLimitUnknownEngineText(FR, NOW));

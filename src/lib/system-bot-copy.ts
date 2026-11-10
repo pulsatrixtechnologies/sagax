@@ -9,6 +9,8 @@ const STORED_DEFAULTS = {
   title: new Set(["Bogues, idées, questions", "Bugs, ideas, questions"]),
   description: new Set([
     "Signalez un bogue, proposez une idée ou posez une question à l'équipe Sagax. / Report a bug, suggest an idea or ask the Sagax team a question.",
+    // #3261: the same default, written with tu since then.
+    "Signale un bogue, propose une idée ou pose une question à l'équipe Sagax. / Report a bug, suggest an idea or ask the Sagax team a question.",
   ]),
 };
 

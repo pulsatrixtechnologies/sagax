@@ -10,7 +10,7 @@ describe("a new bot's greeting (#1075)", () => {
     expect(greetingLanguage([])).toBe("en");
   });
   it("greets in French or English", () => {
-    expect(newBotGreeting("Juno", "fr")).toBe("Bonjour, je suis Juno. Que puis-je faire pour vous ?");
+    expect(newBotGreeting("Juno", "fr")).toBe("Bonjour, je suis Juno. Que puis-je faire pour toi ?");
     expect(newBotGreeting("Juno", "en")).toBe("Hi, I'm Juno. What would you like me to do?");
   });
 });

@@ -101,7 +101,7 @@ describe("open_connector_setup (bot route)", () => {
     expect(out.status).toBe(200);
     expect(out.body).toMatchObject({ ok: true, route: "grok", label: "Microsoft Teams", status: "waiting" });
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.text).toBe("Connectez Microsoft Teams sur [grok.com](https://grok.com/connectors).");
+    expect(rows[0]!.text).toBe("Connecte Microsoft Teams sur [grok.com](https://grok.com/connectors).");
     expect(rows[0]!.connectorSetup).toMatchObject({ provider: "grok", url: "https://grok.com/connectors", status: "waiting", owner: connectorSetupOwner("pr_a") });
     // the card carries no person id
     expect(JSON.stringify(rows[0])).not.toContain("pr_a");
@@ -113,7 +113,7 @@ describe("open_connector_setup (bot route)", () => {
     expect(out.body).toMatchObject({ card: "posted", route: "grok" });
     expect(String(out.body.note)).toContain("team Grok account");
     expect(rows[0]!.connectorSetup).toMatchObject({ provider: "grok", account: "team", url: "https://grok.com/connectors" });
-    expect(rows[0]!.text).toBe("Connectez Outlook sur [grok.com](https://grok.com/connectors), avec votre compte Grok d'équipe.");
+    expect(rows[0]!.text).toBe("Connecte Outlook sur [grok.com](https://grok.com/connectors), avec ton compte Grok d'équipe.");
   });
 
   it("asked twice in one conversation: the same card, not a second one", async () => {

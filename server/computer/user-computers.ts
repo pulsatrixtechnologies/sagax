@@ -29,7 +29,7 @@ export interface UserComputerProvider<Computer = unknown, Operation extends { co
 }
 
 /** The settings row a person actually sees (settings.serverMode.computerTitle). */
-const COMPUTER_ROW = 'Settings > Organization, the row "This computer for your bots" (French: "Cet ordinateur pour vos bots")';
+const COMPUTER_ROW = 'Settings > Organization, the row "This computer for your bots" (French: "Cet ordinateur pour tes bots")';
 
 export const USER_COMPUTER_MESSAGES = {
   noPerson: "No person asked in this turn, so no one's computer can be used: only the person's own words, or a routine of their own bot (scheduled or run by hand), can reach the computer they shared. A webhook, an email or someone else's routine cannot. Ask the person to request it themselves.",

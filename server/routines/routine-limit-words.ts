@@ -186,7 +186,7 @@ export function routineLimitStoppedText(limit: Pick<RoutineUsageLimit, "from" | 
   const head = `${reachedOn(limit, fr)}. ${noTakerText(limit.noTaker, fr)}`;
   if (limit.detour) return `${head} ${detourSkipText(limit, limitWhen(limit.resetsAt, options), fr)}`;
   const own = limit.home ?? { name: limit.from, resetsAt: limit.resetsAt, estimated: limit.estimated };
-  const advice = limit.noTaker === "off" ? (fr ? " Ou choisissez dès maintenant un autre moteur pour ce bot." : " Or choose another engine for this bot now.") : "";
+  const advice = limit.noTaker === "off" ? (fr ? " Ou choisis dès maintenant un autre moteur pour ce bot." : " Or choose another engine for this bot now.") : "";
   return `${head} ${resetText(own.name, own.resetsAt, own.estimated, options, fr)}${advice}`;
 }
 
@@ -209,7 +209,7 @@ export function routineLimitCreditsText(limit: Pick<RoutineUsageLimit, "from" | 
       : `The ${limit.from} account, which was standing in for ${limit.home.name}, is out of credit. ${back}`;
   }
   return fr
-    ? `Le compte ${limit.from} n'a plus de crédit. Ajoutez du crédit chez le fournisseur, ou choisissez un autre moteur pour ce bot.`
+    ? `Le compte ${limit.from} n'a plus de crédit. Ajoute du crédit chez le fournisseur, ou choisis un autre moteur pour ce bot.`
     : `The ${limit.from} account is out of credit. Add credit with the provider, or choose another engine for this bot.`;
 }
 
@@ -218,7 +218,7 @@ export function routineLimitCreditsText(limit: Pick<RoutineUsageLimit, "from" | 
 export function routineLimitUnknownEngineText(options: RoutineLimitWordsOptions = {}, startsAt?: number): string {
   if (isFrench(options.language)) {
     return startsAt === undefined
-      ? "Le moteur de cette exécution a atteint sa limite d'utilisation. Les exécutions sur ce moteur reprendront à sa réinitialisation. Ou choisissez dès maintenant un autre moteur pour ce bot."
+      ? "Le moteur de cette exécution a atteint sa limite d'utilisation. Les exécutions sur ce moteur reprendront à sa réinitialisation. Ou choisis dès maintenant un autre moteur pour ce bot."
       : `Le moteur de cette exécution a atteint sa limite d'utilisation. Cette exécution repart à la réinitialisation, le ${limitWhen(startsAt, options)}.`;
   }
   return startsAt === undefined

@@ -1347,7 +1347,7 @@ export function callbackPage(result: CallbackResult, acceptLanguage: string | un
     ? (french ? "Connexion terminée" : "Sign-in complete")
     : (french ? "La connexion a échoué" : "Sign-in failed");
   const body = result.ok
-    ? (french ? "Connexion terminée, vous pouvez fermer cet onglet." : "Sign-in complete. You can close this tab.")
+    ? (french ? "Connexion terminée, tu peux fermer cet onglet." : "Sign-in complete. You can close this tab.")
     : result.error;
   const nonce = base64url(randomBytes(16));
   const message = JSON.stringify({ type: "mcp-oauth", ok: result.ok, name: result.name ?? null }).replace(/</g, "\\u003c");

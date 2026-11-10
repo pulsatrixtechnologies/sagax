@@ -884,7 +884,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
   });
 
   it("a failed MCP call's completion carries its words, not the content envelope (2026-11-03)", async () => {
-    const refused = "Refusé : ce chemin ou ce fichier appartient au serveur Sagax, pas à votre environnement. Vos fichiers sont dans /workspace.";
+    const refused = "Refusé : ce chemin ou ce fichier appartient au serveur Sagax, pas à ton environnement. Tes fichiers sont dans /workspace.";
     process.env.FAKE_CLAUDE_TOOL_CALLS = JSON.stringify([
       { name: "mcp__sagax-environment__read_file", input: { path: "../../notes/README.md" }, ok: false, output: [{ type: "text", text: refused }] },
     ]);

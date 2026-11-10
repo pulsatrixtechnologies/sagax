@@ -59,7 +59,7 @@ describe("net-tools findings catalogue", () => {
   it("keeps the spec's example texts", () => {
     const words = (language: "en" | "fr" | "pt-BR") => netFindingWords({ code: "spf.softfail_all", severity: "warn" }, language);
     expect(`${words("en").text} ${words("en").fix}`).toBe("SPF ends with ~all: mail from unlisted servers is marked suspicious but still accepted. Use -all once every sender is listed.");
-    expect(`${words("fr").text} ${words("fr").fix}`).toBe("Le SPF se termine par ~all : le courriel d'un serveur non listé est marqué comme suspect mais accepté. Passez à -all quand tous les expéditeurs sont listés.");
+    expect(`${words("fr").text} ${words("fr").fix}`).toBe("Le SPF se termine par ~all : le courriel d'un serveur non listé est marqué comme suspect mais accepté. Passe à -all quand tous les expéditeurs sont listés.");
     expect(`${words("pt-BR").text} ${words("pt-BR").fix}`).toBe("O SPF termina com ~all: e-mails de servidores não listados são marcados como suspeitos, mas ainda aceitos. Use -all quando todos os remetentes estiverem listados.");
   });
 

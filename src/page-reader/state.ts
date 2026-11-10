@@ -92,7 +92,7 @@ export function watchPageState(frame: HTMLIFrameElement | null, boot: ReaderBoot
       const locked = access.locked.includes(set.key);
       const fr = boot?.lang === "fr";
       answer(false, locked ? (fr ? "Cette valeur est en lecture seule." : "This value is read-only.")
-        : access.role === "anon" ? (fr ? "Connectez-vous pour modifier cette page." : "Sign in to change this page.")
+        : access.role === "anon" ? (fr ? "Connecte-toi pour modifier cette page." : "Sign in to change this page.")
           : (fr ? "Seule la personne de la page modifie cette valeur." : "Only the page's person changes this value."));
       return;
     }

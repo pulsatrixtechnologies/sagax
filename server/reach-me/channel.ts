@@ -95,7 +95,7 @@ function noticeLines(text: string): string[] {
  * what it asks, and how to answer with the code. */
 export function composeReachText(out: ReachOutbound): string {
   const fr = out.language === "fr";
-  const bot = clip(out.botName || (fr ? "Votre bot" : "Your bot"), 60);
+  const bot = clip(out.botName || (fr ? "Ton bot" : "Your bot"), 60);
   const lines: string[] = [];
   if (out.kind === "notice") {
     lines.push(`${bot} : ${words(out.title, MAX_TITLE)}`);
@@ -104,14 +104,14 @@ export function composeReachText(out: ReachOutbound): string {
   }
   if (out.confidential) {
     lines.push(fr
-      ? `${bot} attend votre réponse dans une conversation confidentielle (son contenu reste dans Sagax).`
+      ? `${bot} attend ta réponse dans une conversation confidentielle (son contenu reste dans Sagax).`
       : `${bot} is waiting on you in a confidential conversation (its content stays in Sagax).`);
   } else if (out.kind === "question") {
-    lines.push(fr ? `${bot} vous pose une question :` : `${bot} asks you:`);
+    lines.push(fr ? `${bot} te pose une question :` : `${bot} asks you:`);
     lines.push(words(out.title, MAX_TITLE));
     if (out.line) lines.push(words(out.line, MAX_LINE));
   } else {
-    lines.push(fr ? `${bot} demande votre approbation :` : `${bot} needs your approval:`);
+    lines.push(fr ? `${bot} demande ton approbation :` : `${bot} needs your approval:`);
     lines.push(words(out.title, MAX_TITLE));
     // the line is what gets allowed (a command, a path): it reads exactly as
     // it will run, never with a `*` or `_` taken for emphasis
@@ -119,15 +119,15 @@ export function composeReachText(out: ReachOutbound): string {
   }
   if (out.kind === "question") {
     lines.push(fr
-      ? `Répondez « ${out.code} » suivi de votre réponse.`
+      ? `Réponds « ${out.code} » suivi de ta réponse.`
       : `Reply "${out.code}" followed by your answer.`);
   } else if (out.needsKey) {
     lines.push(fr
-      ? `Autoriser demande votre clé de sécurité : ouvrez Sagax. Répondez « ${out.code} non » pour refuser.`
+      ? `Autoriser demande ta clé de sécurité : ouvre Sagax. Réponds « ${out.code} non » pour refuser.`
       : `Allowing needs your security key: open Sagax. Reply "${out.code} no" to deny.`);
   } else {
     lines.push(fr
-      ? `Répondez « ${out.code} oui » pour autoriser ou « ${out.code} non » pour refuser.`
+      ? `Réponds « ${out.code} oui » pour autoriser ou « ${out.code} non » pour refuser.`
       : `Reply "${out.code} yes" to allow or "${out.code} no" to deny.`);
   }
   return lines.join("\n").slice(0, 1_100);
@@ -141,11 +141,11 @@ export function reachAckText(outcome: "allowed" | "denied" | "answered" | "needs
     case "allowed": return fr ? "Autorisé. Le bot reprend." : "Allowed. The bot continues.";
     case "denied": return fr ? "Refusé. Le bot est prévenu." : "Denied. The bot was told.";
     case "answered": return fr ? "Réponse transmise. Le bot reprend." : "Answer sent. The bot continues.";
-    case "needs_key": return fr ? "Autoriser demande votre clé de sécurité : ouvrez Sagax." : "Allowing needs your security key: open Sagax.";
-    case "unclear": return fr ? "Je n'ai pas compris. Répondez le code suivi de oui ou non." : "I did not understand. Reply the code followed by yes or no.";
+    case "needs_key": return fr ? "Autoriser demande ta clé de sécurité : ouvre Sagax." : "Allowing needs your security key: open Sagax.";
+    case "unclear": return fr ? "Je n'ai pas compris. Réponds le code suivi de oui ou non." : "I did not understand. Reply the code followed by yes or no.";
     case "settled": return fr ? "Cette carte est déjà réglée." : "This card is already settled.";
     case "unknown_code": return fr ? "Code inconnu ou expiré." : "Unknown or expired code.";
-    case "rate_limited": return fr ? "Trop d'essais. Réessayez plus tard." : "Too many tries. Try again later.";
-    default: return fr ? "Sagax n'a pas pu transmettre la réponse : ouvrez Sagax." : "Sagax could not pass the answer on: open Sagax.";
+    case "rate_limited": return fr ? "Trop d'essais. Réessaie plus tard." : "Too many tries. Try again later.";
+    default: return fr ? "Sagax n'a pas pu transmettre la réponse : ouvre Sagax." : "Sagax could not pass the answer on: open Sagax.";
   }
 }

@@ -122,7 +122,7 @@ describe("whose computer a bot may use", () => {
     expect(() => refused.list(ada)).toThrow(USER_COMPUTER_MESSAGES.notAccepted);
     for (const message of [USER_COMPUTER_MESSAGES.notConnected, USER_COMPUTER_MESSAGES.notAccepted, HOST_COMPUTER_REFUSAL]) {
       expect(message).toContain("This computer for your bots");
-      expect(message).toContain("Cet ordinateur pour vos bots");
+      expect(message).toContain("Cet ordinateur pour tes bots");
       expect(message).not.toContain("Share this computer");
     }
     expect(USER_COMPUTER_MESSAGES.notConnected).toContain("Choose access");

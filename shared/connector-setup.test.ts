@@ -209,7 +209,7 @@ describe("evidence that the connector works (review of #966)", () => {
 
 describe("the card's own text", () => {
   it("says where to sign in, in the person's language, with the link for clients without the card", () => {
-    expect(connectorSetupText(view(), "fr")).toBe("Connectez Microsoft Teams sur [grok.com](https://grok.com/connectors).");
+    expect(connectorSetupText(view(), "fr")).toBe("Connecte Microsoft Teams sur [grok.com](https://grok.com/connectors).");
     expect(connectorSetupText(view({ provider: "claude", url: CLAUDE_AI_CONNECTORS_URL }), "en")).toBe("Connect Microsoft Teams on [claude.ai](https://claude.ai/customize/connectors).");
   });
 

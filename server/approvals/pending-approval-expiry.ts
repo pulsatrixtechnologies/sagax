@@ -60,7 +60,7 @@ export function isPendingApprovalPastExpiry(createdAt: number, days: number, now
 /** Plain note the waiting bot / requester reads when a card expires by age. */
 export function pendingApprovalExpiryNote(days: number, locale: "en" | "fr" = "en"): string {
   if (locale === "fr") {
-    return `Cette approbation a expiré après ${days} jours sans réponse; redemandez-la si elle est encore nécessaire.`;
+    return `Cette approbation a expiré après ${days} jours sans réponse; redemande-la si elle est encore nécessaire.`;
   }
   return `This approval expired after ${days} days without an answer; ask again if it is still needed.`;
 }

@@ -44,32 +44,32 @@ export const MISUSE_POLICY_PROMPT =
  * and read as an accusation of all of them. `MISUSE_REFUSAL_BLOCK` is only
  * the fallback when no category is known. */
 export const MISUSE_REFUSAL_BLOCK =
-  "Refusé par la politique de sécurité de Sagax. Reformulez la demande sans cette action.";
+  "Refusé par la politique de sécurité de Sagax. Reformule la demande sans cette action.";
 
 export const MISUSE_REFUSAL_APPROVAL =
   "Cette demande exige une autorisation de sécurité. Un administrateur peut l'accorder dans Perspicax au rôle prévu pour le travail de défense.";
 
 export const MISUSE_REFUSAL_LOCKED =
-  "Trop de demandes refusées en peu de temps. Patientez avant de réessayer.";
+  "Trop de demandes refusées en peu de temps. Patiente avant de réessayer.";
 
 /** One reason per category, then what to do instead. */
 export const MISUSE_REFUSAL_REASON: Record<MisuseCategory, string> = {
   privilege_escalation:
-    "Refusé : cette action demande des droits d'administrateur hors de votre propre environnement. Faites le travail sans droits supplémentaires, dans votre environnement.",
+    "Refusé : cette action demande des droits d'administrateur hors de ton propre environnement. Fais le travail sans droits supplémentaires, dans ton environnement.",
   sandbox_escape:
-    "Refusé : cette action sort de votre environnement isolé pour atteindre le serveur qui l'héberge. Restez dans /workspace.",
+    "Refusé : cette action sort de ton environnement isolé pour atteindre le serveur qui l'héberge. Reste dans /workspace.",
   security_evasion:
-    "Refusé : cette action désactive ou contourne une protection (antivirus, journaux, protection en temps réel). Laissez la protection en place.",
+    "Refusé : cette action désactive ou contourne une protection (antivirus, journaux, protection en temps réel). Laisse la protection en place.",
   offensive_hacking:
-    "Refusé : cet outil sert à attaquer ou à balayer un système qui ne vous appartient pas. Visez seulement vos propres systèmes.",
+    "Refusé : cet outil sert à attaquer ou à balayer un système qui ne t'appartient pas. Vise seulement tes propres systèmes.",
   malware:
     "Refusé : cette action crée ou lance un programme malveillant. Ce travail n'est pas permis ici.",
   platform_exfiltration:
-    "Refusé : ce chemin ou ce fichier appartient au serveur Sagax, pas à votre environnement. Vos fichiers sont dans /workspace.",
+    "Refusé : ce chemin ou ce fichier appartient au serveur Sagax, pas à ton environnement. Tes fichiers sont dans /workspace.",
   destruction:
-    "Refusé : cette action arrêterait ou effacerait le serveur partagé. Visez seulement vos propres fichiers.",
+    "Refusé : cette action arrêterait ou effacerait le serveur partagé. Vise seulement tes propres fichiers.",
   resource_abuse:
-    "Refusé : cette action épuiserait le disque, la mémoire ou le processeur partagés. Réduisez la taille ou la durée du travail.",
+    "Refusé : cette action épuiserait le disque, la mémoire ou le processeur partagés. Réduis la taille ou la durée du travail.",
   security_operations: MISUSE_REFUSAL_APPROVAL,
 };
 

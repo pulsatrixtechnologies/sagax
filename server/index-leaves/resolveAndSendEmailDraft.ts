@@ -58,7 +58,7 @@ async function resolveAndSendEmailDraft(res: ServerResponse, auth: RequestAuth, 
     host.emailSendPasses.revoke(threadId, requestId);
     host.patchEmailSend(threadId, requestId, {
       status: "failed",
-      error: host.languageOfRequest(auth).toLowerCase().startsWith("fr") ? "Le robot n'a pas pu recevoir la demande d'envoi. Réessayez." : "The bot could not be asked to send it. Try again."
+      error: host.languageOfRequest(auth).toLowerCase().startsWith("fr") ? "Le robot n'a pas pu recevoir la demande d'envoi. Réessaie." : "The bot could not be asked to send it. Try again."
     });
     json(res, 502, { error: "The bot could not be asked to send this email. Try again." });
     return true;

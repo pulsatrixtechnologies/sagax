@@ -24,7 +24,7 @@ const TASK: Record<IntroLanguage, Card> = {
   },
   fr: {
     title: "Par quoi on commence?",
-    subtitle: "Choisissez. Ou écrivez ce que vous voulez.",
+    subtitle: "Choisis. Ou écris ce que tu veux.",
     options: ["Le quotidien", "Un projet", "Juste discuter"],
   },
 };
@@ -37,7 +37,7 @@ const APPROVAL: Record<IntroLanguage, Card> = {
   },
   fr: {
     title: "Comment je dois agir?",
-    subtitle: "Vous pourrez changer ça dans les réglages du bot.",
+    subtitle: "Tu pourras changer ça dans les réglages du bot.",
     options: ["Demander d'abord", "Décider et me montrer"],
   },
 };
@@ -55,7 +55,7 @@ function languageOf(title: string): IntroLanguage | null {
 
 function closing(language: IntroLanguage, task: string, approval: string): string {
   if (language === "fr") {
-    return `C'est noté. On commence par « ${task} », et je vais ${approval === APPROVAL.fr.options[0] ? "vous demander avant d'agir" : "décider et vous montrer le résultat"}. Écrivez-moi quand vous voulez commencer.`;
+    return `C'est noté. On commence par « ${task} », et je vais ${approval === APPROVAL.fr.options[0] ? "te demander avant d'agir" : "décider et te montrer le résultat"}. Écris-moi quand tu veux commencer.`;
   }
   return `Noted. We'll start with "${task}", and I will ${approval === APPROVAL.en.options[0] ? "ask before I act" : "decide and show you the result"}. Write whenever you want to begin.`;
 }

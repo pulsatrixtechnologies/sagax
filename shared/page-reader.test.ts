@@ -50,7 +50,7 @@ describe("the bar's words", () => {
 
   it("the notice keeps every word of the old banner", () => {
     expect(readerNotice({ bot: "Scout", person: "P", lang: "en" })).toEqual({ who: "Page published by Scout for P", warning: "This is not a Sagax screen, never enter a password here." });
-    expect(readerNotice({ bot: "Scout", person: "P", lang: "fr" }).warning).toBe("Ceci n'est pas un écran Sagax, n'y entrez jamais de mot de passe.");
+    expect(readerNotice({ bot: "Scout", person: "P", lang: "fr" }).warning).toBe("Ceci n'est pas un écran Sagax, n'y entre jamais de mot de passe.");
   });
 
   it("every key has French and English, with the same placeholders", () => {

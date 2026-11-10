@@ -584,7 +584,7 @@ describe("callback page", () => {
     expect(page.html).toContain("&lt;script&gt;");
     expect(page.html).toContain(`nonce="${page.nonce}"`);
     const done = callbackPage({ ok: true, name: "notes" }, "fr-CA,fr;q=0.9");
-    expect(done.html).toContain("Connexion terminée, vous pouvez fermer cet onglet.");
+    expect(done.html).toContain("Connexion terminée, tu peux fermer cet onglet.");
     expect(done.html).toContain("window.close()");
     expect(callbackPage({ ok: true, name: "notes" }, "en").html).toContain("Sign-in complete. You can close this tab.");
   });

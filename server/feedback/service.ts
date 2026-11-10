@@ -117,16 +117,16 @@ const MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024;
 
 const WORDS = {
   fr: {
-    hello: "Je m'occupe de votre signalement. J'ai joint la version, la page et les journaux récents; tout est anonymisé et rien ne part sans votre accord.",
+    hello: "Je m'occupe de ton signalement. J'ai joint la version, la page et les journaux récents; tout est anonymisé et rien ne part sans ton accord.",
     previewIntro: "Voici ce qui sera envoyé à l'équipe, une fois anonymisé :",
     previewTitle: "Envoyer ce signalement?",
-    previewSubtitle: "Écrivez un détail pour l'ajouter, ou envoyez tel quel. La capture d'écran reste sur le serveur.",
+    previewSubtitle: "Écris un détail pour l'ajouter, ou envoie tel quel. La capture d'écran reste sur le serveur.",
     cancelled: "Annulé : rien n'a été envoyé.",
-    queuedNoToken: (manual: string) => `En file d'attente : signalement prêt et gardé ici. Ce serveur n'a pas de jeton GitHub pour l'envoyer à l'équipe : un administrateur du serveur doit définir la variable SAGAX_FEEDBACK_GITHUB_TOKEN (ou l'enregistrer par PUT /api/admin/feedback-config). Il part dès que le jeton est défini. En attendant, vous pouvez ${manual}.`,
-    manualLink: (url: string) => `[ouvrir le signalement sur GitHub](${url}) vous-même (il est déjà rempli)`,
+    queuedNoToken: (manual: string) => `En file d'attente : signalement prêt et gardé ici. Ce serveur n'a pas de jeton GitHub pour l'envoyer à l'équipe : un administrateur du serveur doit définir la variable SAGAX_FEEDBACK_GITHUB_TOKEN (ou l'enregistrer par PUT /api/admin/feedback-config). Il part dès que le jeton est défini. En attendant, tu peux ${manual}.`,
+    manualLink: (url: string) => `[ouvrir le signalement sur GitHub](${url}) toi-même (il est déjà rempli)`,
     queuedError: "L'envoi n'a pas passé pour l'instant; le signalement est gardé ici et je réessaie automatiquement.",
-    sent: (link: string) => `Envoyé à l'équipe : ${link}. Je vous tiens au courant ici.`,
-    duplicate: (link: string) => `Un signalement semblable est déjà ouvert (${link}) : j'y ai ajouté le vôtre.`,
+    sent: (link: string) => `Envoyé à l'équipe : ${link}. Je te tiens au courant ici.`,
+    duplicate: (link: string) => `Un signalement semblable est déjà ouvert (${link}) : j'y ai ajouté le tien.`,
     received: (link: string) => `Reçu par l'équipe (${link}).`,
     in_progress: (link: string) => `L'équipe y travaille (${link}).`,
     resolved: (link: string) => `Résolu (${link}). Merci pour le signalement!`,
@@ -211,7 +211,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
     const bot = store.createBot({
       name: "Feedback",
       title: "Bogues, idées, questions",
-      description: "Signalez un bogue, proposez une idée ou posez une question à l'équipe Sagax. / Report a bug, suggest an idea or ask the Sagax team a question.",
+      description: "Signale un bogue, propose une idée ou pose une question à l'équipe Sagax. / Report a bug, suggest an idea or ask the Sagax team a question.",
       color: "#7c5cff",
     }, { seedMessages: false });
     return store.patchBot(bot.id, { systemBot: "feedback" }) ?? bot;

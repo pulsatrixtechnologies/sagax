@@ -227,6 +227,7 @@ import { CompanyMemoryCache, companyTextForBots } from "./memory/memory-company.
 import { COMPANY_TOPIC } from "./memory/memory-dream.ts";
 import { procedureSignal, recordProcedure } from "./memory/memory-procedures.ts";
 import { appendAboutMe, commitLearned, planLearned } from "./profiles/profile-learned.ts";
+import { createPersonAboutMe, type AboutMeOwner } from "./profiles/person-about-me.ts";
 import { archivedAgent, canAccessBot, canAccessTeam, primaryCovers, canReachPeer, peerAllowed, peerName, peerRosterSystemPrompt, peerInScope, reachablePeers, sameOwnerBots, setPeerScope, setPrimaryCover, setSameOwner, roomPeerRosterSystemPrompt, roomRosterLine, uniquePeerName, PEER_ACCESS_HELP } from "./peers/peer-roster.ts";
 import { orgPeerInScope } from "./peers/peer-scope.ts";
 import {
@@ -3502,6 +3503,7 @@ bindLeafHost({
   get computersRoutes() { return computersRoutes; },
   get confidentialBrowserSession() { return confidentialBrowserSession; },
   get configForViewer() { return configForViewer; },
+  get personAboutMe() { return personAboutMe; },
   get configureContentEncryption() { return configureContentEncryption; },
   get configuredKeyterms() { return configuredKeyterms; },
   get connectorNeed() { return connectorNeed; },
@@ -11995,6 +11997,38 @@ const personSettings = new PersonSettingsStore(DATA_DIR);
 function personSettingsOwner(principalId: string | null | undefined): string | null {
   return IDENTITY.kind === "perspicax" ? personSettingsPrincipal(principalId) : null;
 }
+// #3424: About me per person (server/profiles/person-about-me.ts). The
+// operator's is the server's profile; on an organization server anyone else
+// has their own, read by their own bots and written by them and by what
+// their bots learn.
+const personAboutMe = createPersonAboutMe({
+  organization: () => IDENTITY.kind === "perspicax",
+  localPrincipalId: () => localPrincipalId(),
+  operator: {
+    read: () => cfg.profile?.aboutMe ?? "",
+    save: (aboutMe) => {
+      saveConfig({ profile: { ...cfg.profile, aboutMe } });
+      Object.assign(cfg, loadConfig());
+      broadcast({ kind: "config", ...configStatus() });
+    },
+  },
+  people: {
+    read: (principalId) => personSettings.get(principalId).aboutMe ?? "",
+    save: (principalId, aboutMe) => {
+      personSettings.setAboutMe(principalId, aboutMe);
+      // each stream gets its own person's About me (configForPerson), so an
+      // open Settings sees what the person's bot just learned
+      broadcast({ kind: "config", ...configStatus() });
+    },
+  },
+});
+/** Whose About me a request reads and writes in Settings: the operator's
+ * with the right to change the installation (as PUT /api/config asked), a
+ * signed-in person's own, or none. */
+function aboutMeOwnerOf(auth: RequestAuth): AboutMeOwner | null {
+  if (viewerIsOperator(auth)) return auth.scopes.includes("admin") ? { person: null } : null;
+  return personAboutMe.ofViewer({ operator: false, principalId: sessionPrincipal(auth) });
+}
 /** A personal Experimental switch for this person: their own value, else the installation's. */
 function personalFeatureOn(feature: PersonalFeature, installation: boolean, principalId: string | null | undefined): boolean {
   const owner = personSettingsOwner(principalId);
@@ -16534,17 +16568,12 @@ const memoryUpkeep = createMemoryUpkeep({
   bot: (id) => store.bot(id) ?? undefined,
   engine: (botId) => sideJobs.text("memory", botId),
   busy: (botId) => botHasActiveTurn(botId),
+  // #3424: what a bot learns lands in its own person's About me, never the
+  // operator's for a member's bot
   addToAboutMe: (from, texts) => {
-    const current = cfg.profile?.aboutMe ?? "";
-    const facts = planLearned(from, texts, current, memoryDate());
-    const next = appendAboutMe(current, facts.map((fact) => fact.line));
-    // a full About me takes nothing more; the person trims it first
-    if (!facts.length || next === null) return 0;
-    saveConfig({ profile: { ...cfg.profile, aboutMe: next } });
-    Object.assign(cfg, loadConfig());
-    commitLearned(facts);
-    broadcast({ kind: "config", ...configStatus() });
-    return facts.length;
+    const bot = store.bot(from.botId);
+    const owner = bot ? personAboutMe.ofBot(effectiveBotOwner(bot)) : null;
+    return owner ? personAboutMe.learn(owner, from, texts, memoryDate()) : 0;
   },
   sourceLabel: (botId, threadId) => memorySourceLabel({ room: store.groupByThread(threadId), task: store.taskByThread(botId, threadId), threadId }),
   // A confidential thread is never captured, even a turn queued before it became one.
@@ -23851,12 +23880,9 @@ ROUTES.push(createBotMemoryRoutes({
     const bot = store.bot(botId);
     return semanticIndex.status(botId, bot ? [bot.threadId, ...(bot.tasks ?? []).map((task) => task.threadId)] : []);
   },
-  aboutMe: () => cfg.profile?.aboutMe ?? "",
-  saveAboutMe: (aboutMe) => {
-    saveConfig({ profile: { ...cfg.profile, aboutMe } });
-    Object.assign(cfg, loadConfig());
-    broadcast({ kind: "config", ...configStatus() });
-  }
+  aboutMeOwner: aboutMeOwnerOf,
+  aboutMe: (owner) => personAboutMe.read(owner),
+  saveAboutMe: (owner, aboutMe) => personAboutMe.save(owner, aboutMe)
 }));
 // The persona editor's Files category: the workspace tree, downloads, and
 // document renames, RULES.md and docs/ saves (server/routes/bot-workspace.ts).
@@ -26743,11 +26769,13 @@ function computerOwnerFields(): { name: string; computerName: string } {
 function profileManagedFor(auth: RequestAuth): boolean {
   return PROFILE_MANAGEMENT !== null && auth.kind === "session";
 }
-/** The profile a bot's turns speak to: the operator's for the operator's
- * bots, as before. A bot someone else owns never carries the operator's
- * about-me, and calls its person by their own name. */
+/** The profile a bot's turns speak to: its own person's About me (#3424),
+ * the operator's for the operator's bots as before. A bot someone else owns
+ * never carries the operator's about-me, and calls its person by their own
+ * name. */
 function botUserProfile(bot: { ownerUserId?: unknown }): { aboutMe?: string } {
-  return effectiveBotOwner(bot) === localPrincipalId() ? cfg.profile ?? {} : {};
+  const owner = personAboutMe.ofBot(effectiveBotOwner(bot));
+  return owner ? { aboutMe: personAboutMe.read(owner) } : {};
 }
 function botUserName(bot: { ownerUserId?: unknown }): string {
   const owner = effectiveBotOwner(bot);

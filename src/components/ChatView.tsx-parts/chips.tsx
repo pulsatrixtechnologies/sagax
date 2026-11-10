@@ -21,7 +21,8 @@ import { normalizeState } from "@/lib/mascot";
 import { ToolActivity, botNames } from "../ToolActivity";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { t } from "@/lib/i18n";
-import { WakeFeedback } from "../WakeFeedback";
+import { WakeFeedback, useOwnsBot } from "../WakeFeedback";
+import { WatchAlertExits, watchAlertOf } from "../WatchAlertExits";
 import { useChatRows } from "./types";
 
 export function PeerLabel({ peer, autoModel }: { peer: PeerLine; autoModel?: Message["autoModel"] }) {
@@ -108,6 +109,9 @@ export function AttentionRow({ message, threadId, botId }: { message: Message; t
   const showThreads = useShowThreads();
   const card = message.attention;
   const owner = useStoreSelector((state) => state.bots.find((candidate) => candidate.id === card?.botId));
+  // #3457: a watch alert carries its two exits; the bot's owner only
+  const watchAlert = watchAlertOf(message.routineRun);
+  const ownsWatch = useOwnsBot(card?.botId);
   if (!card) return null;
   return (
     <div className="flex min-w-0 flex-col gap-1">
@@ -123,10 +127,17 @@ export function AttentionRow({ message, threadId, botId }: { message: Message; t
       onReply={showThreads ? undefined : (text) => answerPersonRequest(card, text, cardPlace(card, message, threadId, botId))}
     />
     {/* #2694: the bot's owner says what to bring less, here as on Today */}
-    <WakeFeedback botId={card.botId} topic={message.routineRun?.wakeTopic ?? "attention"} value={card.feedback} threadId={threadId} messageId={message.id} />
+    <div className="flex flex-wrap items-start gap-x-1">
+      <WakeFeedback botId={card.botId} topic={message.routineRun?.wakeTopic ?? "attention"} value={card.feedback} threadId={threadId} messageId={message.id} choices={watchAlert ? WATCH_FEEDBACK : undefined} />
+      {watchAlert && ownsWatch && <WatchAlertExits watches={watchAlert} />}
+    </div>
     </div>
   );
 }
+
+/** A watch alert's own exits replace the row's "never" (it stopped those
+ * watches too); the thumbs and « Moins de ça » stay. */
+const WATCH_FEEDBACK = ["up", "down", "less"] as const;
 
 export function RoutineRunRow({ message, botId, threadId, onResume }: { message: Message; botId: string; threadId?: string; onResume?: () => void }) {
   "use memo";
@@ -146,6 +157,10 @@ export function RoutineRunRow({ message, botId, threadId, onResume }: { message:
   const instances = useStoreSelector((state) => state.instances);
   // #2694: a heartbeat or an email or calendar wake is rated once it has finished
   const rated = run?.wakeTopic && run.status !== "running" && run.status !== "queued" && run.status !== "waiting" ? run.wakeTopic : undefined;
+  // #3457: every alert of a chosen watch carries « Arrêter cette veille » and
+  // « Arrêter ce domaine », for the bot's owner, at once
+  const watchAlert = watchAlertOf(run);
+  const ownsWatch = useOwnsBot(ownerId);
   return (
     <div className="flex min-w-0 flex-col gap-1">
     <RoutineRunCard
@@ -162,7 +177,12 @@ export function RoutineRunRow({ message, botId, threadId, onResume }: { message:
       // 2026-11-06: each teammate's row names the model it works on.
       modelOf={(id, threadId) => delegateModelLabel(bots.find((candidate) => candidate.id === id), instances, threadId)}
     />
-    {rated && <WakeFeedback botId={ownerId} topic={rated} value={run?.feedback} threadId={threadId} messageId={message.id} />}
+    {(rated || (watchAlert && ownsWatch)) && (
+      <div className="flex flex-wrap items-start gap-x-1">
+        {rated && <WakeFeedback botId={ownerId} topic={rated} value={run?.feedback} threadId={threadId} messageId={message.id} choices={watchAlert ? WATCH_FEEDBACK : undefined} />}
+        {watchAlert && ownsWatch && <WatchAlertExits watches={watchAlert} />}
+      </div>
+    )}
     </div>
   );
 }

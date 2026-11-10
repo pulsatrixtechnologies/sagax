@@ -9,7 +9,8 @@
  * Done and Running mixed, as Grok Bot's sub-agent list.
  * ?scene=feedback (#2694): a heartbeat and a mail wake rated in place, a
  * "needs you" card and each point of a brief, beside a suggestion card
- * (the compliant neighbour, OptionCard with its feedback row). */
+ * (the compliant neighbour, OptionCard with its feedback row), and a chosen
+ * watch's alert with « Stop this watch » and « Stop this domain » (#3457). */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -132,6 +133,15 @@ const question: Message = {
 
 const heartbeatWake = card("heartbeat", { routineName: "Heartbeat: Atlas", status: "completed", wakeTopic: "heartbeat", summary: "The backup service stopped at 3:10 AM. I restarted it; it is running again." }, NOW - 40 * M);
 const mailWake = card("mailwake", { routineName: "Mail", status: "completed", wakeTopic: "mail", feedback: "less", summary: "Carla asked for the signed quote; I drafted the answer in your Drafts folder." }, NOW - 30 * M);
+// #3457: a chosen watch's alert, with its two exits under the card
+const WATCH_FR = params.get("lang") === "fr";
+const watchWake = card("watchwake", {
+  routineName: WATCH_FR ? "Proactif : veille Pulsatrix" : "Proactive: Pulsatrix watch", status: "completed", wakeTopic: "watch",
+  watches: [{ id: "unassigned-tickets", domain: "dispatch" }],
+  summary: WATCH_FR
+    ? "Trois billets sont sans technicien depuis plus d'une heure : #4812, #4815 et #4821. Je peux les assigner selon la charge de chacun."
+    : "Three tickets have had no technician for over an hour: #4812, #4815 and #4821. I can assign them by each person's load.",
+}, NOW - 25 * M);
 const BRIEF_ITEMS = [
   { id: "b1", text: "Answer Carla about the signed quote (Outlook)" },
   { id: "b2", text: "Follow up with Paul on the renewal (Outlook)", feedback: "up" as const },
@@ -216,6 +226,7 @@ window.fetch = async (input, init) => {
   if (url.includes("/api/instances")) return json({ instances });
   if (url.includes("/api/threads/orla-work/messages")) return json({ messages: orlaMessages, activeLeafId: "o5", hasMore: false });
   if (url.includes("/api/routines")) return json({ routines: [], runs: [], scope: "mine", allowed: { mine: true, team: false, all: false }, facets: { teams: [], owners: [], botChoices: [] } });
+  if (url.includes("/api/me/proactive")) return json({ domains: {}, available: [{ domain: "dispatch", label: { fr: "Répartition", en: "Dispatch" }, eligible: true, watches: [{ id: "unassigned-tickets", summary: WATCH_FR ? "Billets sans technicien assigné" : "Tickets with no technician assigned", cadence: "1h", products: [], runs: true }] }] });
   if (url.includes("/api/")) return json({});
   return realFetch(input, init);
 };
@@ -260,6 +271,7 @@ function Shell() {
               <OptionCard botId="atlas" threadId="atlas-thread" message={proposal} />
               <RoutineRunRow message={heartbeatWake} botId="atlas" threadId="atlas-thread" />
               <RoutineRunRow message={mailWake} botId="atlas" threadId="atlas-thread" />
+              <div data-gallery-watch-alert><RoutineRunRow message={watchWake} botId="atlas" threadId="atlas-thread" /></div>
               <AttentionRow message={question} threadId="atlas-thread" />
               <div>
                 <NeighbourBubble text={brief.text ?? ""} />

@@ -581,6 +581,13 @@ cartes d'envoi ordinaires, pas cet onglet.
   quitte le fil (le message reste stocké). Voir `AGENTS.md` « Always allow on every card »
   et « Settled approvals in the chat ».
 - Une approbation née sans la personne (routine, autre bot) le dit sur la carte et expire.
+- **Carte de choix d'un domaine de veilles** (#3457) : la carte compacte de l'approbation
+  (#3414), avec une cloche au lieu du bouclier : le titre (« Recevoir les alertes de
+  répartition ? »), une ou deux lignes simples, « Pas maintenant » en pilule neutre et
+  « Oui » à l'accent, la rangée « Ne plus proposer » à gauche (sans pouces). Détails
+  repliés : chaque veille avec sa cadence, son interrupteur et les outils en lecture
+  qu'elle utilise, en mots (le nom d'outil reste dans l'infobulle). Le oui garde les
+  interrupteurs tels quels. Répondue, elle se replie en une rangée discrète.
 
 ### 2.11 Utilisation
 
@@ -653,6 +660,9 @@ a d'autres n'est pas dessinée du tout.
   peut pas fonctionner n'est pas dessinée ; jamais un identifiant. Sur la page du bot,
   Permissions, sous les rangées Proactif : le groupe « Ce que ce bot suit pour toi », les
   mêmes rangées pour les domaines que ce bot peut suivre.
+- Alerte d'une veille choisie (#3457) : sous sa carte de tour, deux sorties discrètes,
+  « Arrêter cette veille » et « Arrêter ce domaine ». Elles agissent tout de suite, sans
+  confirmation, et une ligne grise dit ce qui s'est arrêté, par son nom.
 
 ### 2.17 Panneau de détail d'une page, calendrier des automatisations
 

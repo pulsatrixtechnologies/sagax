@@ -66,6 +66,13 @@ both write `proactive`).
 - The "never" of a watch alert's row stops those watches for good, in the
   person's choices, so the reads stop too. It no longer mutes every watch of
   the bot.
+- Every watch alert's run card carries two exits for the bot's owner
+  (#3457, `src/components/WatchAlertExits.tsx`): « Arrêter cette veille »
+  (`{domain, watch, on: false, via: "alert"}`) and « Arrêter ce domaine »
+  (`{domain, state: "off", via: "alert"}`), both through `PUT
+  /api/me/proactive`, at once, with no confirmation. One quiet line under
+  the card then says what stopped, by its label. Those two replace the row's
+  "never" on a watch alert; the thumbs and « Moins de ça » stay.
 
 ## The bot asks, and proposes one domain (`server/proactive/proactive-ask.ts`)
 
@@ -108,6 +115,14 @@ Perspicax has watches: elsewhere nothing below runs and nothing is shown.
   watches it named on and the domain's others off (`watches` is the card's
   switches when sent); "Pas maintenant" is kept in the ledger; "Ne plus
   proposer" (`/feedback` `never`) stores `never`.
+- **The card on screen** (#3457, `src/components/ProactiveChoiceCard.tsx`):
+  the compact card of the approval card (#3414): a bell, the title, the one
+  or two plain lines, « Oui » and « Pas maintenant », and the row « Ne plus
+  proposer » (no thumbs). Folded details list each watch with its cadence,
+  its switch and the read-only tools it uses, by label (a tool name stays in
+  a tooltip). The yes sends the switches as `watches`, so a watch turned off
+  there stays off; a yes with every switch off cannot be sent. Answered, it
+  folds to one quiet row.
 - **Reads covered by the yes** (decision 3): inside a watch wake, a tool the
   watch declares and the connection marks read-only runs without a card
   (`watch-read`), while the domain is on, on that bot, with that watch on.

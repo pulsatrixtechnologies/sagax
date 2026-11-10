@@ -17,6 +17,9 @@ export interface OptionCardData {
   /** 2026-10-30: a proactive proposal; answered through its own route
    * (shared/proactive-proposal.ts), options[0] accepts. */
   proactiveProposal?: { id: string };
+  /** #3431: a choice card (propose_proactive), drawn by ProactiveChoiceCard
+   * (#3457): the domain, and each watch for the folded details. */
+  proactiveChoice?: import("../../../shared/wire").OptionCardData["proactiveChoice"];
   /** #2694: the person's feedback on this proactive card. */
   feedback?: "up" | "down" | "less" | "never";
   /** 2026-11-05: an "Agit comme" card (shared/wire.ts RoleTransitionCard). */

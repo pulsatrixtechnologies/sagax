@@ -23,7 +23,18 @@ function row(hostId: string, hostname: string, lastSeenAt: string | null = new D
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
-function setup(opts: { hypervisor?: boolean; access?: "always" | "ask" | "never"; rows?: UnattendedHostRow[] } = {}) {
+function setup(opts: {
+  hypervisor?: boolean;
+  access?: "always" | "ask" | "never";
+  rows?: UnattendedHostRow[];
+  /** Each person's own host list (person isolation); default: `rows` for everyone. */
+  rowsOf?: (principalId: string) => UnattendedHostRow[];
+  /** "Which bots" per host: absent = All bots. */
+  scopes?: Record<string, string[]>;
+  /** Which bots each person owns; default: every bot. */
+  owns?: (principalId: string, botId: string) => boolean;
+  consumeApproval?: (threadId: string, command: string) => boolean;
+} = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), "host-computer-"));
   dirs.push(dir);
   const store = createHostComputerStore({ dataDir: dir, now: () => NOW });
@@ -41,7 +52,7 @@ function setup(opts: { hypervisor?: boolean; access?: "always" | "ask" | "never"
   const router = createHostComputerRouter({
     store,
     hosts: {
-      list: async () => ({ available: true as const, hosts: rows }),
+      list: async (viewer) => ({ available: true as const, hosts: opts.rowsOf ? opts.rowsOf(viewer.principalId) : rows }),
       open,
       installCode: async () => ({ ok: true as const, code: "ABCD", enrollUrl: null, org: "Example", scope: "full-control" as const, expiresAt: null, installCommand: "sagax-remote-access install --unattended --code ABCD", installCommands: { macos: "sudo sagax-remote-access install --unattended --code ABCD", linux: "sudo sagax-remote-access install --unattended --code ABCD", windows: "sagax-remote-access.exe install --unattended --code ABCD" } }),
     },
@@ -55,7 +66,9 @@ function setup(opts: { hypervisor?: boolean; access?: "always" | "ask" | "never"
     botThread: (botId) => `t-${botId}`,
     botName: () => "Wren",
     access: () => opts.access ?? "always",
-    consumeApproval: () => false,
+    ...(opts.scopes ? { botScope: (_principalId: string, hostId: string) => opts.scopes?.[hostId] ?? null } : {}),
+    ...(opts.owns ? { ownsBot: opts.owns } : {}),
+    consumeApproval: opts.consumeApproval ?? (() => false),
     raiseQuestion,
     now: () => NOW,
     // the background follow-up never runs in a test
@@ -190,6 +203,133 @@ describe("Auto hints", () => {
     const note = router.turnNote(ALICE, "wren", "check the nas shares", true);
     expect(note).toMatch(/FS-01/);
     expect(note).toMatch(/prefer it/);
-    expect(router.turnNote(ALICE, "wren", "hello", false)).toBeNull();
+    expect(note).toMatch(/host_computer action exec and host set to its name/);
+    expect(router.turnNote(ALICE, "wren", "hello", false)).toMatch(/nobody needs to pick it first/);
+  });
+
+  it("names no host the bot may not use", async () => {
+    const { router, store } = setup({ scopes: { [FS01]: ["other-bot"], [LAPTOP]: ["other-bot"] } });
+    store.update(ALICE, LAPTOP, { botComputer: true });
+    store.update(ALICE, FS01, { botComputer: true });
+    await router.views(ALICE);
+    expect(router.turnNote(ALICE, "wren", "hello", true)).toBeNull();
+  });
+});
+
+// A host marked as a bot computer and shared with All bots (or with the bot by
+// name) is the bot's to use: no Computer menu pick first.
+describe("hosts shared with the bot, no pick", () => {
+  const BOB = "bob@example.test";
+  const BOB_HOST = `h_${"c".repeat(32)}`;
+  const isolated = () => setup({
+    rowsOf: (principalId) => principalId === ALICE ? [row(FS01, "FS-01"), row(LAPTOP, "Laptop")] : [row(BOB_HOST, "Bob-Box")],
+    owns: (principalId, botId) => (principalId === ALICE ? botId === "wren" : botId === "finch"),
+  });
+
+  it("runs exec on the owner's only All bots host without a pick", async () => {
+    const { router, store, exec } = setup({ rows: [row(FS01, "FS-01")] });
+    store.update(ALICE, FS01, { botComputer: true });
+    store.setMode(ALICE, FS01, "wren", "as_is");
+    expect(store.botHost(ALICE, "wren")).toBeNull();
+    const out = await router.call({ principalId: ALICE, botId: "wren", threadId: "t-wren", action: "exec", command: "uname -a" });
+    expect("isError" in out && out.isError).toBeFalsy();
+    expect(JSON.parse(out.text)).toMatchObject({ where: "FS-01", exitCode: 0 });
+    expect(exec).toHaveBeenCalledTimes(1);
+  });
+
+  it("with several hosts, takes one by name and the refusal lists the names", async () => {
+    const { router, store, exec } = setup();
+    store.update(ALICE, FS01, { botComputer: true });
+    store.update(ALICE, LAPTOP, { botComputer: true });
+    store.setMode(ALICE, FS01, "wren", "as_is");
+    const refused = await router.call({ principalId: ALICE, botId: "wren", threadId: "t-wren", action: "exec", command: "ls" });
+    expect(refused).toMatchObject({ isError: true });
+    expect(refused.text).toMatch(/FS-01/);
+    expect(refused.text).toMatch(/Laptop/);
+    expect(refused.text).not.toMatch(/not a host/);
+    const named = await router.call({ principalId: ALICE, botId: "wren", threadId: "t-wren", action: "exec", command: "ls", host: "fs-01" });
+    expect(JSON.parse(named.text)).toMatchObject({ where: "FS-01" });
+    expect(exec).toHaveBeenCalledTimes(1);
+  });
+
+  it("select_computer's list holds the host and the bot switches to it itself", async () => {
+    const { router, store, raiseQuestion } = setup();
+    store.update(ALICE, FS01, { botComputer: true });
+    const { hosts } = await router.botHosts(ALICE, "wren");
+    expect(hosts.map((host) => host.name)).toEqual(["FS-01"]);
+    const picked = await router.selectByBot(ALICE, "wren", "FS-01");
+    expect(picked).toMatchObject({ ok: true, host: { hostId: FS01 }, asked: true });
+    expect(store.botHost(ALICE, "wren")).toBe(FS01);
+    expect(raiseQuestion).toHaveBeenCalledTimes(1);
+  });
+
+  it("the host's access rule still decides: Ask gates a change, Never refuses", async () => {
+    const ask = setup({ access: "ask", rows: [row(FS01, "FS-01")] });
+    ask.store.update(ALICE, FS01, { botComputer: true });
+    ask.store.setMode(ALICE, FS01, "wren", "as_is");
+    await ask.router.views(ALICE);
+    expect(ask.router.needsCard(ALICE, "wren", "rm -rf /tmp/x")).toBe(true);
+    expect(ask.router.needsCard(ALICE, "wren", "ls /mnt")).toBe(false);
+    expect(await ask.router.call({ principalId: ALICE, botId: "wren", threadId: "t-wren", action: "exec", command: "rm -rf /tmp/x" })).toMatchObject({ isError: true });
+    expect(ask.exec).not.toHaveBeenCalled();
+
+    const never = setup({ access: "never", rows: [row(FS01, "FS-01")] });
+    never.store.update(ALICE, FS01, { botComputer: true });
+    never.store.setMode(ALICE, FS01, "wren", "as_is");
+    expect((await never.router.call({ principalId: ALICE, botId: "wren", threadId: "t-wren", action: "exec", command: "ls" })).text).toMatch(/Never/);
+    expect(never.exec).not.toHaveBeenCalled();
+  });
+
+  it("another person's host is neither listed nor reachable", async () => {
+    const { router, store, exec, open } = isolated();
+    store.update(ALICE, FS01, { botComputer: true });
+    store.update(BOB, BOB_HOST, { botComputer: true });
+    store.setMode(BOB, BOB_HOST, "wren", "as_is");
+    // Alice speaking to her bot: only her host
+    expect((await router.botHosts(ALICE, "wren")).hosts.map((host) => host.name)).toEqual(["FS-01"]);
+    const byName = await router.call({ principalId: ALICE, botId: "wren", threadId: "t-wren", action: "exec", command: "ls", host: "Bob-Box" });
+    expect(byName).toMatchObject({ isError: true });
+    expect(byName.text).toMatch(/Use one of: FS-01\.$/);
+    expect((await router.selectByBot(ALICE, "wren", "Bob-Box")).ok).toBe(false);
+    // Bob speaking to Alice's bot: his All bots host is for his own bots only
+    expect((await router.botHosts(BOB, "wren")).hosts).toEqual([]);
+    expect(await router.call({ principalId: BOB, botId: "wren", threadId: "t-wren", action: "exec", command: "ls" })).toMatchObject({ isError: true });
+    expect(router.turnNote(BOB, "wren", "hello", true)).toBeNull();
+    expect(exec).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("a host colleague-shared with the person is not used without a pick", async () => {
+    const shared: UnattendedHostRow = { ...row(BOB_HOST, "Bob-Box"), sharedBy: "Bob" };
+    const { router, store, exec } = setup({ rows: [shared] });
+    store.update(ALICE, BOB_HOST, { botComputer: true });
+    store.setMode(ALICE, BOB_HOST, "wren", "as_is");
+    expect((await router.botHosts(ALICE, "wren")).hosts).toEqual([]);
+    expect(await router.call({ principalId: ALICE, botId: "wren", threadId: "t-wren", action: "exec", command: "ls" })).toMatchObject({ isError: true });
+    expect(exec).not.toHaveBeenCalled();
+  });
+
+  it("a host whose Which bots leaves the bot out is refused; one naming it is used", async () => {
+    const { router, store, exec } = setup({ rows: [row(FS01, "FS-01"), row(LAPTOP, "Laptop")], scopes: { [FS01]: ["finch"], [LAPTOP]: ["wren"] } });
+    store.update(ALICE, FS01, { botComputer: true });
+    store.update(ALICE, LAPTOP, { botComputer: true });
+    store.setMode(ALICE, FS01, "wren", "as_is");
+    store.setMode(ALICE, LAPTOP, "wren", "as_is");
+    expect((await router.botHosts(ALICE, "wren")).hosts.map((host) => host.name)).toEqual(["Laptop"]);
+    const refused = await router.call({ principalId: ALICE, botId: "wren", threadId: "t-wren", action: "exec", command: "ls", host: "FS-01" });
+    expect(refused).toMatchObject({ isError: true });
+    expect(refused.text).toMatch(/Laptop/);
+    expect((await router.selectByBot(ALICE, "wren", "FS-01")).ok).toBe(false);
+    const used = await router.call({ principalId: ALICE, botId: "wren", threadId: "t-wren", action: "exec", command: "ls" });
+    expect(JSON.parse(used.text)).toMatchObject({ where: "Laptop" });
+    expect(exec).toHaveBeenCalledTimes(1);
+  });
+
+  it("a host not marked as a bot computer stays out", async () => {
+    const { router, exec } = setup({ rows: [row(FS01, "FS-01")] });
+    const out = await router.call({ principalId: ALICE, botId: "wren", threadId: "t-wren", action: "exec", command: "ls" });
+    expect(out).toMatchObject({ isError: true });
+    expect(out.text).toMatch(/Use as a bot computer/);
+    expect(exec).not.toHaveBeenCalled();
   });
 });

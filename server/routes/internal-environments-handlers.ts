@@ -66,6 +66,16 @@ function boundSharedComputerResult(
   return result;
 }
 
+/** A host the bot may use as its computer (select_computer lists it by name). */
+export type SelectableHost = {
+  name: string;
+  os: string | null;
+  online: boolean;
+  shellOnly: boolean;
+  access: string;
+  current: boolean;
+};
+
 export interface InternalEnvironmentsBot {
   id: string;
   name: string;
@@ -108,6 +118,11 @@ export interface InternalEnvironmentsDeps {
   autoVmClaim(threadId: string): { owner: { generation: string }; startsComputer?: boolean; failed?: boolean } | undefined;
   selectableComputers(bot: InternalEnvironmentsBot): Promise<SelectableComputer[]>;
   computerPreviewSurface(bot: InternalEnvironmentsBot, threadId: string | undefined): Promise<string>;
+  /** The person's hosts this bot may use as its computer (bot computers
+   * shared with All bots or with it); none outside an organization server. */
+  selectableHosts?(botId: string, threadId: string): Promise<SelectableHost[]>;
+  /** The bot makes one of those hosts its computer (the Computer menu pick). */
+  selectHost?(botId: string, threadId: string, name: string): Promise<{ ok: true; name: string; asked: boolean } | { ok: false; error: string }>;
 
   builtInBrowserEnabled(): boolean;
   effectiveBrowserProfile(botId: string, profile: string | undefined | null): string | undefined;
@@ -325,7 +340,25 @@ async function handleComputerSelect(deps: InternalEnvironmentsDeps, ctx: Interna
   const bot = deps.projectBotForTask(capability.botId, capability.threadId);
   const canSelect = Boolean(source && source.generation === capability.generation && bot && bot.computer !== "off");
   if (!bot) return json(res, 403, { error: "Computer selection belongs to a direct bot conversation." });
-  const requested = method === "POST" ? (await readBody()).surface : undefined;
+  const body = method === "POST" ? await readBody() : undefined;
+  const requested = body?.surface;
+  const hostName = typeof body?.host === "string" ? body.host.trim() : "";
+  if (method === "POST" && hostName) {
+    // A host is the bot's own setting, like the person's Computer menu pick:
+    // no tool remount, so no turn restart (host_computer runs there).
+    if (bot.computer === "off") return json(res, 403, { error: "Computer access is off for this bot." });
+    if (!deps.selectHost) return json(res, 404, { error: "No host is a bot computer here." });
+    const picked = await deps.selectHost(capability.botId, capability.threadId, hostName);
+    deps.requireActive(capability);
+    if (!picked.ok) return json(res, 409, { error: picked.error });
+    return json(res, 200, {
+      status: "ready",
+      host: picked.name,
+      message: picked.asked
+        ? `Your computer is now the host ${picked.name}. The person was asked in this chat whether you work in an isolated VM there or on the host as-is; wait for the answer, then use host_computer.`
+        : `Your computer is now the host ${picked.name}. Use host_computer (action exec) to work there.`,
+    });
+  }
   if (method === "POST" && !canSelect) {
     return json(res, 403, { error: "Computer selection is only available once per direct user request, with computer access enabled." });
   }
@@ -334,8 +367,9 @@ async function handleComputerSelect(deps: InternalEnvironmentsDeps, ctx: Interna
   }
   const options = await deps.selectableComputers(bot);
   const current = source ? source.mounted ?? "off" : await deps.computerPreviewSurface(bot, bot.threadId);
+  const hosts = method === "GET" && bot.computer !== "off" && deps.selectableHosts ? await deps.selectableHosts(capability.botId, capability.threadId).catch(() => []) : [];
   deps.requireActive(capability);
-  if (method === "GET") return json(res, 200, { current, canSelect, options });
+  if (method === "GET") return json(res, 200, { current, canSelect, options, ...(hosts.length ? { hosts } : {}) });
   if (!deps.selectionStillCurrent(capability.threadId, source!)) {
     return json(res, 409, { error: "The user request ended before its computer was selected." });
   }

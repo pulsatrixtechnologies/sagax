@@ -13,6 +13,7 @@ import { join } from "node:path";
 
 import type { BeginTurnRequest, Coordinator, CoordinatorHost, CoordinatorOptions, HandedOutOutcome, HandedOver, HandoffView, HostTurnResult, LiveHandoffEdge, RoomAddress } from "./runtime/coordinator-types.ts";
 import type { WorkOrigin } from "./peers/peer-provenance.ts";
+import type { TeamWorkLabel } from "../shared/team-work.ts";
 import { composeEnvelope, composeQuestion, composeReport, composeResume, composeRootTurn, continuationLine, envelopeNote } from "./runtime/envelope.ts";
 import { Runtime } from "./runtime/runtime.ts";
 import { importLegacyDelegations, importLegacyHandoffs, type LegacyThreadResolver } from "./runtime/import-legacy.ts";
@@ -154,6 +155,7 @@ export function handedOver(a: Assignment): HandedOver {
     ...(a.outcome !== undefined ? { outcome: a.outcome } : {}),
     ...(a.outcomeDetail !== undefined ? { outcomeDetail: a.outcomeDetail } : {}),
     ...(a.person !== undefined ? { person: a.person } : {}),
+    ...(a.work !== undefined ? { work: a.work } : {}),
   };
 }
 
@@ -317,7 +319,7 @@ export class RuntimeCoordinator implements Coordinator {
   enqueue(source: RoomAddress, generation: string, parentId: string | undefined, target: RoomAddress, _key: string, text: string,
     approvalGranted = false, rework = false, sourceText = "", requestBatchKey?: string, origin?: WorkOrigin,
     mode: "work" | "consult" | "notify" | "auto" = "work", person?: string, relay = false, doneWhen?: string, request?: string,
-    extra: { priority?: "now"; defaultAnswer?: string } = {}): { node: HandoffView; duplicate: boolean; joined?: boolean } {
+    extra: { priority?: "now"; defaultAnswer?: string; work?: TeamWorkLabel } = {}): { node: HandoffView; duplicate: boolean; joined?: boolean } {
     this.ready();
     // Prefer a continued root, then the generation, then create a parent.
     let parent = parentId ? this.store.get(parentId) : this.store.get(this.continuing.get(generation) ?? generation);
@@ -380,6 +382,8 @@ export class RuntimeCoordinator implements Coordinator {
       ...(criterion ? { doneWhen: criterion } : {}),
       ...(typeof extra.defaultAnswer === "string" && extra.defaultAnswer.trim()
         ? { defaultAnswer: extra.defaultAnswer.trim() } : {}),
+      // display only (#3463): the team work view groups and counts by it
+      ...(extra.work ? { work: extra.work } : {}),
     });
     if (!result.ok) {
       if (result.outcome === "budget") throw new Error(BUDGET);

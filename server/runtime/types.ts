@@ -9,6 +9,7 @@
 // never reads model text to decide anything: lineage, level and outcomes
 // come from the harness's own records.
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
+import type { TeamWorkLabel } from "../../shared/team-work.ts";
 
 // ── identity and lineage ───────────────────────────────────────────────
 
@@ -163,6 +164,10 @@ export interface Assignment {
   /** send_to_bot priority now: admitted ahead of other queued work, and a
    * one-way notice starts without waiting for its sender's turn to end. */
   priority?: "now";
+  /** #3463: the piece of work this hand-over is a step of, its step and the
+   * work's plan, as the requester named them. Display only (the team work
+   * view): lineage, levels and outcomes never read it. */
+  work?: TeamWorkLabel;
   /** While parked: the exact question for the person. */
   question?: string;
   /** The person's answer, harness-quoted, carried into the next turn. */
@@ -286,6 +291,8 @@ export interface EnqueueRequest {
   person?: string;
   /** Assignment.priority. */
   priority?: "now";
+  /** Assignment.work. */
+  work?: TeamWorkLabel;
   /** A bot carries its own stopped work on in another of its threads (a
    * step cap's `Continue:` thread, turn-continuation.ts): a one-way notice to
    * itself, so not work sent back up its tree. Only with mode notify. */

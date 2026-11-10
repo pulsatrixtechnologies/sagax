@@ -82,6 +82,30 @@
         { "id": "h1", "botId": "dev", "requesterBotId": "orc", "title": "Summarize the news", "mode": "work", "status": "running", "createdAt": 0, "startedAt": 0 }
       ] },
       "expect": { "live": [], "doneToday": [], "team": [] }
+    },
+    {
+      "name": "a plan of three with two steps done: 2/3, one step to come, not finished",
+      "input": { "orchestratorId": "orc", "now": 1000000, "since": 0, "steps": [
+        { "id": "h1", "botId": "dev", "requesterBotId": "orc", "title": "Fix the login form", "work": "Login fix", "step": "Write the fix", "plan": [ { "name": "Write the fix", "botId": "dev" }, { "name": "Review", "botId": "rev" }, { "name": "Ship", "botId": "dev" } ], "mode": "work", "status": "completed", "createdAt": 100000, "startedAt": 100000, "finishedAt": 300000, "coding": true },
+        { "id": "h2", "botId": "rev", "requesterBotId": "orc", "title": "Review the fix", "work": "Login fix", "step": "review", "mode": "work", "status": "completed", "createdAt": 400000, "startedAt": 400000, "finishedAt": 500000 }
+      ] },
+      "expect": { "live": [ { "key": "work:login fix", "name": "Login fix", "done": 2, "total": 3, "finished": false, "toCome": [ { "name": "Ship", "botId": "dev" } ], "steps": [ { "id": "h1", "name": "Write the fix" }, { "id": "h2", "name": "review" } ] } ], "doneToday": [] }
+    },
+    {
+      "name": "a hand-over outside the plan adds one to the total",
+      "input": { "orchestratorId": "orc", "now": 1000000, "since": 0, "steps": [
+        { "id": "h1", "botId": "dev", "requesterBotId": "orc", "title": "Write", "work": "Login fix", "step": "Write the fix", "plan": [ { "name": "Write the fix" }, { "name": "Review" } ], "mode": "work", "status": "completed", "createdAt": 100000, "startedAt": 100000, "finishedAt": 200000, "coding": true },
+        { "id": "h2", "botId": "qa", "requesterBotId": "orc", "title": "Check the docs", "work": "Login fix", "mode": "work", "status": "running", "createdAt": 300000, "startedAt": 300000, "turn": { "startedAt": 300000, "lastActionAt": 990000 } }
+      ] },
+      "expect": { "live": [ { "key": "work:login fix", "done": 1, "total": 3, "toCome": [ { "name": "Review" } ], "current": { "botId": "qa", "stepId": "h2" } } ] }
+    },
+    {
+      "name": "the latest plan declared for a piece of work wins",
+      "input": { "orchestratorId": "orc", "now": 1000000, "since": 0, "steps": [
+        { "id": "h1", "botId": "dev", "requesterBotId": "orc", "title": "Write", "work": "Login fix", "step": "Write the fix", "plan": [ { "name": "Write the fix" }, { "name": "Review" }, { "name": "Ship" } ], "mode": "work", "status": "completed", "createdAt": 100000, "startedAt": 100000, "finishedAt": 200000, "coding": true },
+        { "id": "h2", "botId": "rev", "requesterBotId": "orc", "title": "Review", "work": "Login fix", "step": "Review", "plan": [ { "name": "Write the fix" }, { "name": "Review" } ], "mode": "work", "status": "completed", "createdAt": 300000, "startedAt": 300000, "finishedAt": 400000 }
+      ] },
+      "expect": { "live": [], "doneToday": [ { "key": "work:login fix", "done": 2, "total": 2, "toCome": [], "finished": true, "endedAt": 400000 } ] }
     }
   ]
 }

@@ -87,6 +87,50 @@ function openTurn(peek: TurnPeek): TeamOpenTurn {
 
 type Settled = Pick<TeamStepFacts, "tokens" | "did" | "failure" | "merged" | "coding">;
 
+/** The orchestrator's names for a hand-over (#3463), as the builder reads them. */
+function labelFacts(row: HandedOver): Pick<TeamStepFacts, "work" | "step" | "plan"> {
+  const label = row.work;
+  if (!label) return {};
+  return {
+    ...(label.name ? { work: label.name } : {}),
+    ...(label.step ? { step: label.step } : {}),
+    ...(label.name && label.plan?.length ? { plan: label.plan } : {}),
+  };
+}
+
+/** The names of the open pieces of work this orchestrator's turns handed
+ * out for one person (a step still live, or plan steps not handed out
+ * yet), newest first: the answer of the next hand-over lists them, so the
+ * orchestrator can reuse a name instead of wording it anew (#3463).
+ * `keep` drops rows the caller may not echo (a confidential conversation). */
+export function openWorkNames(rows: readonly HandedOver[], orchestratorId: string, person: string | undefined, now: number,
+  keep: (row: HandedOver) => boolean = () => true): string[] {
+  const steps: TeamStepFacts[] = [];
+  for (const row of rows) {
+    if (!row.work?.name || row.person !== person || !keep(row)) continue;
+    steps.push({
+      id: row.id, botId: row.botId, requesterBotId: row.requesterBotId ?? "", title: stepTitle(row.brief), ...labelFacts(row),
+      mode: row.mode, ...(row.groupId !== undefined ? { room: true } : {}), status: row.status, createdAt: row.createdAt,
+      ...(row.startedAt !== undefined ? { startedAt: row.startedAt } : {}),
+      ...(row.finishedAt !== undefined ? { finishedAt: row.finishedAt } : {}),
+      // every named piece of work counts here, code work or not
+      coding: true,
+    });
+  }
+  return buildTeamWork({ orchestratorId, steps, now, since: now }).live.map((item) => item.name);
+}
+
+/** The `openWork` field of a hand-over route's answer: the open names of
+ * this bot's work for that person, none from a confidential conversation.
+ * Absent when there is none. */
+export function openWorkEcho(handedOutBy: ((botId: string, since: number) => HandedOver[]) | undefined, botId: string,
+  person: string | undefined, confidential?: (threadId: string) => boolean, now = Date.now()): { openWork?: string[] } {
+  if (!handedOutBy) return {};
+  const names = openWorkNames(handedOutBy(botId, now - TEAM_WORK_WINDOW_MS), botId, person, now,
+    (row) => !row.requesterThreadId || !confidential?.(row.requesterThreadId));
+  return names.length ? { openWork: names } : {};
+}
+
 export interface TeamWorkReader {
   /** `since`: the reader's local midnight ("Done today"). */
   read(orchestratorId: string, viewerId: string | undefined, since: number): TeamWork;
@@ -159,7 +203,7 @@ export function createTeamWorkReader(deps: TeamWorkDeps): TeamWorkReader {
       const title = (opened ? thread.title.trim() : stepTitle(row.brief)) || thread.title.trim();
       steps.push({
         id: row.id, botId: row.botId, requesterBotId: orchestratorId, threadId: row.threadId,
-        title, mode: row.mode, status: row.status, createdAt: row.createdAt,
+        title, ...labelFacts(row), mode: row.mode, status: row.status, createdAt: row.createdAt,
         ...(row.startedAt !== undefined ? { startedAt: row.startedAt } : {}),
         ...(row.finishedAt !== undefined ? { finishedAt: row.finishedAt } : {}),
         ...(peek ? { turn: openTurn(peek) } : {}),

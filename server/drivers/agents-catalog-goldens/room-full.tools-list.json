@@ -242,6 +242,33 @@
             "minLength": 1,
             "maxLength": 1000,
             "description": "Optional answer the harness applies if the person never replies to a question this work parks on them (R6). When used, the run resumes with a note that it was the requester's default. Leave out to expire the wait as status expired after the delay (and a mid-delay push reminder)."
+          },
+          "work": {
+            "type": "string",
+            "description": "Optional name of the piece of work this is a step of (one line, 80 characters). Give the same name to each of its steps: the person's panel groups them."
+          },
+          "step": {
+            "type": "string",
+            "description": "Optional name of this step (40 characters)."
+          },
+          "plan": {
+            "type": "array",
+            "description": "Optional, with work: all its steps in order (at most 12), each with the teammate that does it when known. The latest plan wins.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "step": {
+                  "type": "string"
+                },
+                "bot": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "step"
+              ]
+            }
           }
         },
         "required": [
@@ -288,6 +315,33 @@
               "resume"
             ],
             "description": "Default none: read it with send_status. resume: wake this conversation with a short summary when the recipient finishes."
+          },
+          "work": {
+            "type": "string",
+            "description": "Optional name of the piece of work this is a step of (one line, 80 characters). Give the same name to each of its steps: the person's panel groups them."
+          },
+          "step": {
+            "type": "string",
+            "description": "Optional name of this step (40 characters)."
+          },
+          "plan": {
+            "type": "array",
+            "description": "Optional, with work: all its steps in order (at most 12), each with the teammate that does it when known. The latest plan wins.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "step": {
+                  "type": "string"
+                },
+                "bot": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "step"
+              ]
+            }
           }
         },
         "required": [

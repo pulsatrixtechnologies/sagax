@@ -1,4 +1,5 @@
 import type { WorkOrigin } from "../peers/peer-provenance.ts";
+import type { TeamWorkLabel } from "../../shared/team-work.ts";
 import type { LegacyThreadResolver } from "./import-legacy.ts";
 import type {
   EnvelopeNames,
@@ -107,6 +108,8 @@ export interface HandedOver {
   outcomeDetail?: string;
   /** Who the tree acts for (Assignment.person), never shown. */
   person?: string;
+  /** #3463: the requester's name for the work, its step and plan. */
+  work?: TeamWorkLabel;
 }
 
 /** A person's or a routine's own turn, as a root (one per request). */
@@ -297,7 +300,7 @@ export interface Coordinator {
   enqueue(source: RoomAddress, generation: string, parentId: string | undefined, target: RoomAddress, key: string, text: string,
     approvalGranted?: boolean, rework?: boolean, sourceText?: string, requestBatchKey?: string, origin?: WorkOrigin,
     mode?: "work" | "consult" | "notify" | "auto", person?: string, relay?: boolean, doneWhen?: string, request?: string,
-    extra?: { priority?: "now"; defaultAnswer?: string }): { node: HandoffView; duplicate: boolean; joined?: boolean };
+    extra?: { priority?: "now"; defaultAnswer?: string; work?: TeamWorkLabel }): { node: HandoffView; duplicate: boolean; joined?: boolean };
   /** One assignment with its children and inbox (assignment_status). */
   status(id: string): StatusView | undefined;
   /** Undelivered inbox items for a polling requester, marked delivered. */

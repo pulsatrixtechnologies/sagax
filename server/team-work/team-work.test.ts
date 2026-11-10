@@ -6,7 +6,7 @@ import { openRuntimeStore, type RuntimeStore } from "../runtime/store.ts";
 import type { Assignment } from "../runtime/types.ts";
 import { handedOver } from "../runtime-coordinator.ts";
 import type { TurnPeek } from "../turns/turn-watchdog.ts";
-import { createTeamWorkReader, stepTitle, type TeamWorkDeps, type TeamWorkMessage, type TeamWorkThread } from "./team-work.ts";
+import { createTeamWorkReader, openWorkNames, stepTitle, type TeamWorkDeps, type TeamWorkMessage, type TeamWorkThread } from "./team-work.ts";
 
 const NOW = 10_000_000;
 
@@ -151,5 +151,84 @@ describe("team work reader (#3461)", () => {
     r.thread("dev", "dev-new", "ana", { title: "Login fix", openedBy: { botId: "orc", delegationId: "h1" } });
     expect(r.reader.read("orc", "ana", 0).live[0]!.name).toBe("Login fix");
     expect(stepTitle("  ## **Fix** the `login`\nmore")).toBe("Fix the login");
+  });
+});
+
+describe("named work and its plan (#3463)", () => {
+  function named(r: ReturnType<typeof rig>) {
+    const ana = root("ana-root", "orc-ana", "ana");
+    r.runtime.insert(ana, { kind: "enqueued" });
+    r.thread("orc", "orc-ana", "ana");
+    r.thread("dev", "dev-work", "ana");
+    r.thread("rev", "rev-work", "ana");
+    r.thread("dev", "dev-ship", "ana");
+    return ana;
+  }
+
+  it("two hand-overs with one name are one piece of work", () => {
+    const r = rig();
+    const ana = named(r);
+    r.runtime.insert(handOver("h1", ana, "dev", "dev-work", { status: "completed", outcome: "done", finishedAt: NOW - 300_000, work: { name: "Login fix", step: "Write the fix" } }), { kind: "enqueued" });
+    r.runtime.insert(handOver("h2", ana, "rev", "rev-work", { createdAt: NOW - 200_000, startedAt: NOW - 200_000, work: { name: "login  FIX", step: "Review" } }), { kind: "enqueued" });
+    const work = r.reader.read("orc", "ana", 0);
+    expect(work.live).toHaveLength(1);
+    expect(work.live[0]).toMatchObject({ key: "work:login fix", name: "Login fix", done: 1, total: 2, toCome: [] });
+    expect(work.live[0]!.steps.map((step) => [step.id, step.name])).toEqual([["h1", "Write the fix"], ["h2", "Review"]]);
+  });
+
+  it("matches the plan by step, and gives the total and the steps to come", () => {
+    const r = rig();
+    const ana = named(r);
+    const plan = [{ name: "Write the fix", botId: "dev" }, { name: "Review", botId: "rev" }, { name: "Ship", botId: "dev" }];
+    r.runtime.insert(handOver("h1", ana, "dev", "dev-work", { status: "completed", outcome: "done", finishedAt: NOW - 300_000, work: { name: "Login fix", step: "Write the fix", plan } }), { kind: "enqueued" });
+    r.runtime.insert(handOver("h2", ana, "rev", "rev-work", { status: "completed", outcome: "done", createdAt: NOW - 250_000, startedAt: NOW - 250_000, finishedAt: NOW - 100_000, work: { name: "Login fix", step: "review" } }), { kind: "enqueued" });
+    const work = r.reader.read("orc", "ana", 0);
+    expect(work.doneToday).toEqual([]);
+    expect(work.live[0]).toMatchObject({ key: "work:login fix", done: 2, total: 3, finished: false, toCome: [{ name: "Ship", botId: "dev" }] });
+    expect(work.live[0]!.current).toBeUndefined();
+    // the last step handed out and done: finished, nothing to come
+    r.runtime.insert(handOver("h3", ana, "dev", "dev-ship", { status: "completed", outcome: "done", createdAt: NOW - 90_000, startedAt: NOW - 90_000, finishedAt: NOW - 10_000, work: { name: "Login fix", step: "Ship" } }), { kind: "enqueued" });
+    const after = r.reader.read("orc", "ana", 0);
+    expect(after.live).toEqual([]);
+    expect(after.doneToday[0]).toMatchObject({ key: "work:login fix", done: 3, total: 3, finished: true, toCome: [] });
+  });
+
+  it("a hand-over outside the plan adds one to the total", () => {
+    const r = rig();
+    const ana = named(r);
+    r.runtime.insert(handOver("h1", ana, "dev", "dev-work", { work: { name: "Login fix", step: "Write the fix", plan: [{ name: "Write the fix" }, { name: "Review" }] } }), { kind: "enqueued" });
+    r.runtime.insert(handOver("h2", ana, "rev", "rev-work", { createdAt: NOW - 200_000, work: { name: "Login fix", step: "Check the docs" } }), { kind: "enqueued" });
+    expect(r.reader.read("orc", "ana", 0).live[0]).toMatchObject({ done: 0, total: 3, toCome: [{ name: "Review" }] });
+  });
+
+  it("the latest plan declared for a piece of work wins", () => {
+    const r = rig();
+    const ana = named(r);
+    r.runtime.insert(handOver("h1", ana, "dev", "dev-work", { work: { name: "Login fix", step: "Write the fix", plan: [{ name: "Write the fix" }, { name: "Review" }, { name: "Ship" }] } }), { kind: "enqueued" });
+    r.runtime.insert(handOver("h2", ana, "rev", "rev-work", { createdAt: NOW - 200_000, work: { name: "Login fix", step: "Review", plan: [{ name: "Write the fix" }, { name: "Review" }] } }), { kind: "enqueued" });
+    expect(r.reader.read("orc", "ana", 0).live[0]).toMatchObject({ total: 2, toCome: [] });
+  });
+
+  it("a hand-over with no name still reads as before", () => {
+    const r = rig();
+    const ana = named(r);
+    r.runtime.insert(handOver("h1", ana, "dev", "dev-work"), { kind: "enqueued" });
+    expect(r.reader.read("orc", "ana", 0).live[0]).toMatchObject({ key: "step:h1", name: "Fix the login", done: 0, total: 1, toCome: [] });
+  });
+
+  it("echoes the names of the person's open pieces of work to the next hand-over", () => {
+    const r = rig();
+    const ana = named(r);
+    const ben = root("ben-root", "orc-ben", "ben");
+    r.runtime.insert(ben, { kind: "enqueued" });
+    r.runtime.insert(handOver("h1", ana, "dev", "dev-work", { work: { name: "Login fix" } }), { kind: "enqueued" });
+    r.runtime.insert(handOver("h2", ana, "dev", "dev-ship", { status: "completed", outcome: "done", finishedAt: NOW - 1_000, work: { name: "Done work" } }), { kind: "enqueued" });
+    r.runtime.insert(handOver("h3", ana, "rev", "rev-work", { status: "completed", outcome: "done", finishedAt: NOW - 1_000, work: { name: "Release", step: "Build", plan: [{ name: "Build" }, { name: "Ship" }] } }), { kind: "enqueued" });
+    r.runtime.insert(handOver("h4", ana, "rev", "rev-other", { createdAt: NOW - 100_000 }), { kind: "enqueued" });
+    r.runtime.insert(handOver("h5", ben, "dev", "dev-ben", { work: { name: "Ben's work" } }), { kind: "enqueued" });
+    const rows = r.runtime.handedOutBy("orc", 0).map(handedOver);
+    expect(openWorkNames(rows, "orc", "ana", NOW).sort()).toEqual(["Login fix", "Release"]);
+    expect(openWorkNames(rows, "orc", "ben", NOW)).toEqual(["Ben's work"]);
+    expect(openWorkNames(rows, "orc", "ana", NOW, (row) => row.id !== "h1")).toEqual(["Release"]);
   });
 });

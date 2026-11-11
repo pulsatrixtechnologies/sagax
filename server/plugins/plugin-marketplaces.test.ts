@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -139,10 +139,10 @@ describe("the installation's marketplaces", () => {
     const prepared = await markets.prepare("devjc", "notes", undefined);
     expect(prepared.dir).toBe(join(dir, "data", "marketplaces", "plugins", "devjc", "notes"));
     expect(prepared.plan.servers.map((server) => server.name)).toEqual(["notes", "search"]);
-    markets.recordInstall("devjc", "notes", { version: prepared.version, servers: ["notes", "search"], skills: ["release-notes"] });
+    await markets.recordInstall("devjc", "notes", { version: prepared.version, servers: ["notes", "search"], skills: ["release-notes"] });
     expect((await markets.list())[0]!.plugins[0]).toMatchObject({ installed: true, servers: ["notes", "search"], skills: ["release-notes"] });
     await expect(markets.remove("devjc")).rejects.toMatchObject({ code: "has_plugins" });
-    expect(markets.recordUninstall("devjc", "notes").servers).toEqual(["notes", "search"]);
+    expect((await markets.recordUninstall("devjc", "notes")).servers).toEqual(["notes", "search"]);
     await markets.remove("devjc");
     expect(await markets.list()).toEqual([]);
   });
@@ -204,7 +204,7 @@ describe("updating an installed plugin in place", () => {
     await markets.add({ source: "acme/marketplace" }, undefined);
     const prepared = await markets.prepare("devjc", "notes", undefined);
     expect(prepared.revision).toMatch(/^sha256:[0-9a-f]{64}$/);
-    markets.recordInstall("devjc", "notes", { version: prepared.version, revision: prepared.revision, servers: ["notes", "search"], serverNames: { notes: "notes", search: "search" }, skills: ["release-notes"] });
+    await markets.recordInstall("devjc", "notes", { version: prepared.version, revision: prepared.revision, servers: ["notes", "search"], serverNames: { notes: "notes", search: "search" }, skills: ["release-notes"] });
     expect((await markets.list())[0]!.plugins[0]).not.toHaveProperty("updateAvailable");
 
     write(source, { "plugins/notes/skills/release-notes/SKILL.md": `${SKILL}\nNow with dates.\n` });
@@ -218,10 +218,10 @@ describe("updating an installed plugin in place", () => {
     expect((await markets.list())[0]!.plugins[0]).toMatchObject({ version: "1.3.0", installedVersion: "1.2.0", updateAvailable: true });
 
     const next = await markets.prepare("devjc", "notes", undefined);
-    const updated = markets.recordUpdate("devjc", "notes", { version: next.version, revision: next.revision, servers: ["notes"], serverNames: { notes: "notes" }, skills: [] });
+    const updated = await markets.recordUpdate("devjc", "notes", { version: next.version, revision: next.revision, servers: ["notes"], serverNames: { notes: "notes" }, skills: [] });
     expect(updated).toMatchObject({ version: "1.3.0", servers: ["notes"], skills: [], installedAt: 1_000, updatedAt: 1_000 });
     expect((await markets.list())[0]!.plugins[0]).not.toHaveProperty("updateAvailable");
-    expect(() => markets.recordUpdate("devjc", "remote-one", { servers: [], serverNames: {}, skills: [] })).toThrow();
+    await expect(markets.recordUpdate("devjc", "remote-one", { servers: [], serverNames: {}, skills: [] })).rejects.toThrow();
   });
 
   it("compares only what both sides know", () => {
@@ -382,5 +382,104 @@ describe("uninstalling a plugin's skills", () => {
     expect(listLibrarySkills(root).map((skill) => skill.name)).toEqual(["release-notes"]);
     expect(removeLibrarySkillFrom("release-notes", "devjc", root)).toEqual({ removed: true });
     expect(listLibrarySkills(root)).toEqual([]);
+  });
+});
+
+describe("#3636: a pull never loses a record written while it runs", () => {
+  function slowStore(source: string) {
+    let release: () => void = () => undefined;
+    let cloning: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => { cloning = resolve; });
+    let hold = false;
+    const markets = new PluginMarketplaces({
+      dataDir: join(dir, "data"),
+      gitEnvironment: () => ({}),
+      policy: () => undefined,
+      git: async (args) => {
+        if (hold) {
+          cloning();
+          await new Promise<void>((resolve) => { release = resolve; });
+        }
+        cpSync(source, args.at(-1)!, { recursive: true });
+      },
+    });
+    return { markets, started, hold: () => { hold = true; }, release: () => release() };
+  }
+
+  it("an install recorded while a pull is in flight survives the pull's write", async () => {
+    const source = join(dir, "repo");
+    marketplaceRepo(source);
+    const slow = slowStore(source);
+    await slow.markets.add({ source: "acme/marketplace" }, undefined);
+    slow.hold();
+    const pulling = slow.markets.pull("devjc", undefined);
+    await slow.started;
+    const recording = slow.markets.recordInstall("devjc", "notes", { version: "1.2.0", servers: ["notes"], skills: [] });
+    slow.release();
+    await Promise.all([pulling, recording]);
+    expect(slow.markets.installed().map((plugin) => plugin.key)).toEqual(["notes@devjc"]);
+  });
+
+  it("an uninstall recorded while a pull is in flight stays uninstalled", async () => {
+    const source = join(dir, "repo");
+    marketplaceRepo(source);
+    const slow = slowStore(source);
+    await slow.markets.add({ source: "acme/marketplace" }, undefined);
+    await slow.markets.recordInstall("devjc", "notes", { version: "1.2.0", servers: ["notes"], skills: [] });
+    slow.hold();
+    const pulling = slow.markets.pull("devjc", undefined);
+    await slow.started;
+    const removing = slow.markets.recordUninstall("devjc", "notes");
+    slow.release();
+    await Promise.all([pulling, removing]);
+    expect(slow.markets.installed()).toEqual([]);
+  });
+
+  it("a marketplace taken in while a pull is in flight (no queue) survives the pull's write", async () => {
+    const source = join(dir, "repo");
+    marketplaceRepo(source);
+    const slow = slowStore(source);
+    await slow.markets.add({ source: "acme/marketplace" }, undefined);
+    slow.hold();
+    const pulling = slow.markets.pull("devjc", undefined);
+    await slow.started;
+    slow.markets.adopt({ name: "other", record: { source: "acme/other", url: "https://github.com/acme/other.git", addedAt: 1, updatedAt: 1 } });
+    slow.release();
+    await pulling;
+    expect(slow.markets.names()).toEqual(["devjc", "other"]);
+  });
+});
+
+describe("#3636: the date of the clone in hand", () => {
+  it("is the last pull, not a visibility change", async () => {
+    const source = join(dir, "repo");
+    marketplaceRepo(source);
+    const day = 24 * 60 * 60_000;
+    let clock = day;
+    const markets = new PluginMarketplaces({
+      dataDir: join(dir, "data"), gitEnvironment: () => ({}), policy: () => undefined, now: () => clock,
+      git: async (args) => { cpSync(source, args.at(-1)!, { recursive: true }); },
+    });
+    await markets.add({ source: "acme/marketplace" }, undefined);
+    clock = 10 * day;
+    await markets.setVisibility("devjc", "org");
+    expect(markets.record("devjc")!.updatedAt).toBe(10 * day);
+    expect(markets.clonedAt("devjc")).toBe(day);
+  });
+
+  it("falls back to the clone folder's date for a record from before, never to updatedAt", async () => {
+    const source = join(dir, "repo");
+    marketplaceRepo(source);
+    const markets = new PluginMarketplaces({
+      dataDir: join(dir, "data"), gitEnvironment: () => ({}), policy: () => undefined, now: () => 5,
+      git: async (args) => { cpSync(source, args.at(-1)!, { recursive: true }); },
+    });
+    await markets.add({ source: "acme/marketplace" }, undefined);
+    const file = join(dir, "data", "marketplaces", "state.json");
+    const state = JSON.parse(readFileSync(file, "utf8")) as { marketplaces: Record<string, Record<string, unknown>> };
+    delete state.marketplaces.devjc!.pulledAt;
+    writeFileSync(file, JSON.stringify(state));
+    expect(markets.clonedAt("devjc")).toBe(Math.floor(statSync(markets.repoPath("devjc")).mtimeMs));
+    expect(markets.clonedAt("devjc")).not.toBe(5);
   });
 });

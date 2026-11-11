@@ -39,7 +39,7 @@ export { BotPluginError, type GitSource, parseGitSource, type MarketplacePolicy,
 //     plugin's skills, commands, agents and output styles stay. The MCP
 //     servers it declared mount separately in the person's environment.
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
-import { join, sep } from "node:path";
+import { basename, dirname, join, sep } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
@@ -100,7 +100,17 @@ export type LegacyPluginState = z.infer<typeof legacyStateSchema>;
 export type MarketplaceRecord = z.infer<typeof marketplaceRecord>;
 /** A plugin's declared fields and this bot's values (server/plugins/plugin-config.ts). */
 export interface PluginConfigView { fields: PluginConfigField[]; values: Record<string, PluginConfigValue> }
-export type InstalledBotPlugin = Omit<z.infer<typeof pluginRecord>, "mcpServers"> & { key: string; config?: PluginConfigView };
+/** #3635: an install whose marketplace pull failed, made from the clone
+ * already in hand: the pull's error code (and its fix), and when that clone
+ * was last pulled. */
+export interface MarketplacePullFailure {
+  pulled: false;
+  code: string;
+  fix?: string;
+  /** ISO date of the clone the plugin was installed from */
+  clonedAt: string;
+}
+export type InstalledBotPlugin = Omit<z.infer<typeof pluginRecord>, "mcpServers"> & { key: string; config?: PluginConfigView; marketplacePull?: MarketplacePullFailure };
 
 function listedPlugin(record: z.infer<typeof pluginRecord>): Omit<z.infer<typeof pluginRecord>, "mcpServers"> {
   const { mcpServers: _execution, ...listed } = record;
@@ -298,6 +308,47 @@ function readStateFile(file: string): PluginState | null {
   // still count; its own marketplaces are the migration's to take in.
   const legacy = legacyStateSchema.safeParse(raw);
   return legacy.success ? { version: 2, plugins: legacy.data.plugins } : null;
+}
+
+/** #3636: put a whole new copy in place of `target`. The old copy is moved
+ * aside first and comes back if the rename fails, so `target` is never
+ * missing while the list shows the plugin; the old copy goes once the new
+ * one is in place. */
+export function swapInPlace(staged: string, target: string, aside: string, rename: (from: string, to: string) => void = renameSync): void {
+  const hadOld = existsSync(target);
+  if (hadOld) rename(target, aside);
+  try {
+    rename(staged, target);
+  } catch (error) {
+    if (hadOld) rename(aside, target);
+    notePluginFolderChanged(target);
+    throw error;
+  }
+  // #3619: the turn's plugin copy computes this folder's digest again
+  notePluginFolderChanged(target);
+  if (hadOld) {
+    rmSync(aside, { recursive: true, force: true });
+    notePluginFolderChanged(aside);
+  }
+}
+
+/** #3636: what a process stopped mid-install left beside `target`: a
+ * `.staging-*` copy goes; a `.previous-*` copy comes back when `target` is
+ * missing (stopped between the two renames), otherwise goes. */
+export function clearSwapLeftovers(target: string): void {
+  const dir = dirname(target);
+  const base = basename(target);
+  let names: string[];
+  try { names = readdirSync(dir); } catch { return; }
+  const previous = names.filter((name) => name.startsWith(`${base}.previous-`)).sort();
+  if (previous.length && !existsSync(target)) {
+    renameSync(join(dir, previous.pop()!), target);
+    notePluginFolderChanged(target);
+  }
+  for (const name of [...previous, ...names.filter((name) => name.startsWith(`${base}.staging-`))]) {
+    rmSync(join(dir, name), { recursive: true, force: true });
+    notePluginFolderChanged(join(dir, name));
+  }
 }
 
 /** A token for a git host other than GitHub, as an extra header for that
@@ -589,11 +640,17 @@ export class BotPlugins {
   /** Pull a marketplace again (its plugins' new versions are offered; the
    * installed ones change only on their own update). */
   async updateMarketplace(botId: string, name: string, actor: string | undefined): Promise<MarketplaceListing> {
+    await this.pullMarketplace(botId, name, actor);
+    return (await this.listMarketplaces(botId)).find((listing) => listing.name === name)!;
+  }
+
+  /** The one pull of a marketplace for this bot (or person): Update, an
+   * install, and the background pull (#3612) all take it. Read with this
+   * bot's token for it first, as Add does. No listing, so no digest. */
+  async pullMarketplace(botId: string, name: string, actor: string | undefined): Promise<void> {
     this.root(botId);
     if (!this.options.marketplaces.record(name)) throw new BotPluginError("No marketplace with that name.", "not_found", 404);
-    // read with this bot's token for it first, as Add does
-    await this.options.marketplaces.refresh(name, actor, { environment: (source) => this.cloneEnvironment(botId, source, actor, {}) });
-    return (await this.listMarketplaces(botId)).find((listing) => listing.name === name)!;
+    await this.options.marketplaces.pull(name, actor, { environment: (source) => this.cloneEnvironment(botId, source, actor, {}) });
   }
 
   /** Take this bot's plugins of a marketplace off it. The marketplace itself
@@ -643,12 +700,30 @@ export class BotPlugins {
       const key = `${input.plugin}@${input.marketplace}`;
       if (!state.plugins[key] && Object.keys(state.plugins).length >= MAX_PLUGINS) throw new BotPluginError(`A bot can have at most ${MAX_PLUGINS} plugins.`, "too_many", 400);
       const marketRoot = this.options.marketplaces.repoPath(input.marketplace);
-      // #3612: an update (the plugin is on this bot already) pulls the
-      // marketplace first, as its Update button does (updateMarketplace):
-      // without it Install copied the old pull again and a copy stayed
-      // versions behind with nothing saying so
-      if (state.plugins[key]) {
-        await this.options.marketplaces.refresh(input.marketplace, actor, { environment: (source) => this.cloneEnvironment(botId, source, actor, {}) });
+      // #3612: every install, a first one too, pulls the marketplace first,
+      // as its Update button does (pullMarketplace): a first install on a bot
+      // copied a clone pulled days before, and a copy stayed versions behind
+      // with nothing saying so. #3635: a failed pull does not refuse the
+      // install while a clone is in hand: it installs from that clone and
+      // says so (the answer's marketplacePull, one log line). No clone at
+      // all: the pull's error.
+      let stalePull: MarketplacePullFailure | undefined;
+      try {
+        await this.pullMarketplace(botId, input.marketplace, actor);
+        console.log(`[plugins] install of ${input.plugin}: marketplace ${input.marketplace} pulled`);
+      } catch (error) {
+        const code = error instanceof BotPluginError ? error.code : "pull_failed";
+        const fix = error instanceof BotPluginError ? error.fix : undefined;
+        const inHand = existsSync(join(marketRoot, ".claude-plugin", "marketplace.json"));
+        // #3636: the date of the clone itself, never the record's updatedAt
+        // (a visibility change moves that one too)
+        const pulled = this.options.marketplaces.clonedAt(input.marketplace);
+        const clonedAt = pulled === undefined ? "unknown" : new Date(pulled).toISOString();
+        console.warn(inHand
+          ? `[plugins] install of ${input.plugin}: marketplace ${input.marketplace} pull failed (${code}), installing from the clone of ${clonedAt}`
+          : `[plugins] install of ${input.plugin}: marketplace ${input.marketplace} pull failed (${code}), no clone in hand`);
+        if (!inHand) throw error;
+        stalePull = { pulled: false, code, ...(fix ? { fix } : {}), clonedAt };
       }
       const entry = readMarketplaceManifest(marketRoot).plugins.find((candidate) => candidate.name === input.plugin);
       if (!entry) throw new BotPluginError("That plugin is not in this marketplace.", "not_found", 404);
@@ -662,21 +737,31 @@ export class BotPlugins {
         } catch { return undefined; }
       })();
       const target = this.pluginDir(botId, input.marketplace, input.plugin);
+      // #3635: the new copy is written beside the installed one and put in
+      // place whole, so an installed copy is never left half written; what a
+      // stopped process left beside it goes first (#3636)
+      clearSwapLeftovers(target);
+      const staged = `${target}.staging-${process.pid}-${this.now()}`;
       let result: ReturnType<typeof copySanitizedPlugin>;
       const executionRoot = `${SANDBOX_PLUGINS_DIR}/${input.plugin}`;
-      if (entry.source.kind === "path") {
-        result = copySanitizedPlugin(insideRoot(marketRoot, entry.source.path), target, rawEntry, executionRoot);
-      } else {
-        // #1098: a private marketplace (its author's own) for a bot is not
-        // held to the organization's list; a shared one is
-        if (market.visibility === "org") this.checkPolicy(entry.source.git);
-        const checkout = join(this.root(botId), "plugins", ".checkout");
-        await this.clone(entry.source.git, checkout, await this.cloneEnvironment(botId, entry.source.git, actor, { marketplaceSource: market.source }));
-        try {
-          result = copySanitizedPlugin(entry.source.path ? insideRoot(checkout, entry.source.path) : checkout, target, rawEntry, executionRoot);
-        } finally {
-          rmSync(checkout, { recursive: true, force: true });
+      try {
+        if (entry.source.kind === "path") {
+          result = copySanitizedPlugin(insideRoot(marketRoot, entry.source.path), staged, rawEntry, executionRoot);
+        } else {
+          // #1098: a private marketplace (its author's own) for a bot is not
+          // held to the organization's list; a shared one is
+          if (market.visibility === "org") this.checkPolicy(entry.source.git);
+          const checkout = join(this.root(botId), "plugins", ".checkout");
+          await this.clone(entry.source.git, checkout, await this.cloneEnvironment(botId, entry.source.git, actor, { marketplaceSource: market.source }));
+          try {
+            result = copySanitizedPlugin(entry.source.path ? insideRoot(checkout, entry.source.path) : checkout, staged, rawEntry, executionRoot);
+          } finally {
+            rmSync(checkout, { recursive: true, force: true });
+          }
         }
+        swapInPlace(staged, target, `${target}.previous-${process.pid}-${this.now()}`);
+      } finally {
+        rmSync(staged, { recursive: true, force: true });
       }
       // the copy is fresh: this bot's values (or the defaults) go in again
       const fields = readPluginConfigFields(target);
@@ -704,7 +789,7 @@ export class BotPlugins {
       // Exhaustive discovery metadata for API and file engines. Built only on
       // install/update; the turn hot path never rewalks the tree.
       try { rebuildPluginMetaCache(pluginMetadataCacheRoot(this.options.dataDir), target); } catch { /* turn reports partial on miss */ }
-      return { key, ...listedPlugin(state.plugins[key]!) };
+      return { key, ...listedPlugin(state.plugins[key]!), ...(stalePull ? { marketplacePull: stalePull } : {}) };
     });
   }
 
@@ -990,6 +1075,13 @@ export class BotPlugins {
   refreshWorkspaceMarketplace(name: string, actor: string | undefined) {
     if (!this.options.marketplaces.record(name)) throw new BotPluginError("No marketplace with that name.", "not_found", 404);
     return this.options.marketplaces.refresh(name, actor, { environment: (source) => this.workspaceEnvironment(source, actor) });
+  }
+
+  /** `refreshWorkspaceMarketplace` without its listing (no digest): the
+   * background pull of a marketplace installed for everyone (#3612). */
+  pullWorkspaceMarketplace(name: string, actor: string | undefined): Promise<void> {
+    if (!this.options.marketplaces.record(name)) return Promise.reject(new BotPluginError("No marketplace with that name.", "not_found", 404));
+    return this.options.marketplaces.pull(name, actor, { environment: (source) => this.workspaceEnvironment(source, actor) });
   }
 
   /** Pick a credential of the one list for a marketplace for everyone, or

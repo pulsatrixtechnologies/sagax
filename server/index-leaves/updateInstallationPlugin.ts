@@ -69,7 +69,7 @@ async function updateInstallationPlugin(marketplace: string, plugin: string, { a
     for (const name of installed.skills) {
       if (!plan.skills.some((skill) => skill.name === name)) removeLibrarySkillFrom(name, marketplace);
     }
-    const record = host.pluginMarketplaces.recordUpdate(marketplace, plugin, {
+    const record = await host.pluginMarketplaces.recordUpdate(marketplace, plugin, {
       ...(version ? { version } : {}), ...(revision ? { revision } : {}),
       servers: Object.values(serverNames), serverNames, skills
     });

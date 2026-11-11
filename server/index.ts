@@ -1087,7 +1087,7 @@ import { MaintenanceScheduler, MaintenanceStore } from "./computer/computer-care
 import { createPluginRoutes, pluginServerName, type InstalledPlugin } from "./routes/plugins.ts";
 import { createMarketplaceRoutes } from "./routes/marketplaces.ts";
 import { createInstallationCapabilityRoutes } from "./routes/installation-capabilities.ts";
-import { PluginMarketplaces, type MarketplaceViewer } from "./plugins/plugin-marketplaces.ts";
+import { PluginMarketplaces, startMarketplaceBackgroundRefresh, type MarketplaceBackgroundRefresh, type MarketplacePullScope, type MarketplaceViewer } from "./plugins/plugin-marketplaces.ts";
 import { createAccountRoutes, type PerspicaxDeletion } from "./routes/account.ts";
 import { ACCOUNT_REAUTH_PATH, AccountReauth, perspicaxDeletion } from "./auth/account-reauth.ts";
 import { createRegistrySearch } from "./plugins/plugin-registry.ts";
@@ -12494,6 +12494,28 @@ const personalPlugins = new BotPlugins({
 });
 const installationPlugins = new InstallationPlugins(DATA_DIR, pluginMarketplaces);
 installationPlugins.restore();
+// #3612: who holds a plugin from a marketplace, for its background pull
+// (startMarketplaceBackgroundRefresh, started once the server listens). Each
+// scope pulls through its own Update path, with its own credentials.
+function marketplacePullScopes(name: string): MarketplacePullScope[] {
+  const scopes: MarketplacePullScope[] = [];
+  if (pluginMarketplaces.installed().some((plugin) => plugin.marketplace === name)) {
+    const addedBy = pluginMarketplaces.record(name)?.addedBy;
+    scopes.push({ kind: "installation", id: "installation", ...(addedBy ? { owner: addedBy } : {}) });
+  }
+  for (const botId of botPlugins.botsUsing(name)) {
+    const bot = store.bot(botId);
+    if (bot) scopes.push({ kind: "bot", id: botId, owner: effectiveBotOwner(bot) });
+  }
+  for (const person of personalPlugins.botsUsing(name)) scopes.push({ kind: "person", id: person, owner: person });
+  return scopes;
+}
+function pullMarketplaceAs(name: string, scope: MarketplacePullScope): Promise<unknown> {
+  if (scope.kind === "installation") return botPlugins.pullWorkspaceMarketplace(name, scope.owner);
+  if (scope.kind === "bot") return botPlugins.pullMarketplace(scope.id, name, scope.owner);
+  return personalPlugins.pullMarketplace(scope.id, name, scope.owner);
+}
+let marketplaceBackgroundRefresh: MarketplaceBackgroundRefresh | null = null;
 // The linked installation downloads its signed Flow pack independently of
 // member sign-ins and engine availability. Every engine reads the same copy.
 const orgFlowPlugins = new OrgFlowPlugins({
@@ -25367,7 +25389,7 @@ ROUTES.push(createMarketplaceRoutes({
       if ("error" in installed) skipped.push(`skill ${skill.name} (${installed.error})`);
       else addedSkills.push(skill.name);
     }
-    const record = pluginMarketplaces.recordInstall(marketplace, plugin, {
+    const record = await pluginMarketplaces.recordInstall(marketplace, plugin, {
       ...(version ? { version } : {}), ...(revision ? { revision } : {}), servers: addedServers, serverNames, skills: addedSkills
     });
     installationPlugins.refresh(record);
@@ -25378,7 +25400,7 @@ ROUTES.push(createMarketplaceRoutes({
     category: "mcp", ...row, actor: IDENTITY.kind === "perspicax" ? orgAuditActor(auth) : decisionActorFor(auth)
   }),
   uninstall: async (marketplace, plugin) => {
-    const record = pluginMarketplaces.recordUninstall(marketplace, plugin);
+    const record = await pluginMarketplaces.recordUninstall(marketplace, plugin);
     installationPlugins.remove(record.key);
     if (record.servers.length) {
       if (mcpConfigBusy) return { status: 409, body: { error: "MCP servers are already being updated." } };
@@ -35167,6 +35189,18 @@ const onListening = async () => {
     const aged = runPendingApprovalExpirySweep.waitingRows();
     if (aged > 0) console.log(`[approval] expired ${aged} waiting card(s) older than the configured age`);
   });
+  // #3612: the marketplaces with an installed plugin are pulled in the
+  // background (first past five minutes, then daily, spread, one at a time),
+  // so the existing update badge is true without a click
+  if (!companyShutdown && !marketplaceBackgroundRefresh) {
+    marketplaceBackgroundRefresh = startMarketplaceBackgroundRefresh({
+      marketplaces: () => pluginMarketplaces.names(),
+      record: (name) => pluginMarketplaces.record(name),
+      scopes: marketplacePullScopes,
+      pull: pullMarketplaceAs,
+      singlePerson: IDENTITY.kind !== "perspicax",
+    });
+  }
 };
 // connector gateway on this machine forwards public traffic to this IPC path.
 // Nothing changes about the loopback bind above. Requests arriving here have
@@ -35255,6 +35289,7 @@ const gracefulShutdown = createGracefulShutdown({
       headlessTasks.stop();
       calendarCalls?.stop();
       memoryUpkeep.stop();
+      marketplaceBackgroundRefresh?.stop();
       skillReview.stop();
       limitReset.stop();
       cacheKeepWarm.dispose();

@@ -1,9 +1,9 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { BotPluginError, insideRoot, marketplaceAllowed, migrateBotMarketplaces, normalizePolicyEntry, parseGitSource, readMarketplaceManifest, readPluginContents, type GitRunner } from "./bot-plugins.ts";
+import { BotPluginError, BotPlugins, clearSwapLeftovers, insideRoot, swapInPlace, marketplaceAllowed, migrateBotMarketplaces, normalizePolicyEntry, parseGitSource, readMarketplaceManifest, readPluginContents, type GitRunner } from "./bot-plugins.ts";
 import { PluginMarketplaces } from "../plugins/plugin-marketplaces.ts";
 import { botPluginsWithMarketplaces } from "../testing/plugin-stores.ts";
 import { PersonCapabilities, principalDir } from "../people/person-connections.ts";
@@ -316,6 +316,196 @@ describe("BotPlugins", () => {
     expect(plugins.listPlugins("bot-2")).toEqual([]);
   });
 
+  it("#3612: a first install on a bot pulls its marketplace too, and says so in one line", async () => {
+    const dataDir = temp();
+    const repo = marketplaceRepo();
+    const plugins = botPluginsWithMarketplaces({ dataDir, git: fakeGit({ "https://github.com/acme/tools.git": repo }, []), gitEnvironment: () => ({}), policy: () => undefined });
+    await plugins.addMarketplace("bot-1", { source: "acme/tools" }, "pr_alice");
+    // the marketplace moves on after the last pull; this bot never had the plugin
+    const manifest = JSON.parse(readFileSync(join(repo, ".claude-plugin/marketplace.json"), "utf8")) as { plugins: Array<Record<string, unknown>> };
+    manifest.plugins[0]!.version = "1.8.0";
+    write(repo, ".claude-plugin/marketplace.json", JSON.stringify(manifest));
+    const lines: string[] = [];
+    const log = vi.spyOn(console, "log").mockImplementation((line: unknown) => { lines.push(String(line)); });
+    try {
+      const installed = await plugins.install("bot-2", { marketplace: "acme-tools", plugin: "reviewer" }, "pr_alice");
+      expect(installed).toMatchObject({ version: "1.8.0" });
+    } finally {
+      log.mockRestore();
+    }
+    const said = lines.filter((line) => line.includes("[plugins]") && line.includes("acme-tools"));
+    expect(said).toHaveLength(1);
+    expect(said[0]).toContain("pulled");
+    expect(said[0]).not.toContain("pr_alice");
+  });
+
+  it("#3635: a failed pull installs from the clone in hand, and says so in the answer and one log line", async () => {
+    const dataDir = temp();
+    const repo = marketplaceRepo();
+    let reachable = true;
+    const base = fakeGit({ "https://github.com/acme/tools.git": repo }, []);
+    const git: GitRunner = async (args, options) => {
+      if (!reachable) throw new BotPluginError("The git host did not let Sagax read this repository.", "bad_token", 422, "connect_or_token");
+      return base(args, options);
+    };
+    const plugins = botPluginsWithMarketplaces({ dataDir, git, gitEnvironment: () => ({}), policy: () => undefined });
+    await plugins.addMarketplace("bot-1", { source: "acme/tools" }, "pr_alice");
+    reachable = false;
+    const lines: string[] = [];
+    const warn = vi.spyOn(console, "warn").mockImplementation((line: unknown) => { lines.push(String(line)); });
+    let installed: Awaited<ReturnType<typeof plugins.install>>;
+    try {
+      installed = await plugins.install("bot-1", { marketplace: "acme-tools", plugin: "reviewer" }, "pr_alice");
+    } finally {
+      warn.mockRestore();
+    }
+    expect(installed).toMatchObject({ key: "reviewer@acme-tools", version: "1.2.0", marketplacePull: { pulled: false, code: "bad_token", fix: "connect_or_token" } });
+    expect(installed.marketplacePull!.clonedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(plugins.listPlugins("bot-1")[0]).toMatchObject({ key: "reviewer@acme-tools" });
+    const said = lines.filter((line) => line.includes("[plugins]"));
+    expect(said).toHaveLength(1);
+    expect(said[0]).toContain("bad_token");
+    expect(said[0]).toContain(installed.marketplacePull!.clonedAt);
+    expect(said[0]).not.toContain("pr_alice");
+    expect(said[0]).not.toContain("bot-1");
+  });
+
+  it("#3635: a pull that succeeds answers with no marketplacePull", async () => {
+    const dataDir = temp();
+    const repo = marketplaceRepo();
+    const plugins = botPluginsWithMarketplaces({ dataDir, git: fakeGit({ "https://github.com/acme/tools.git": repo }, []), gitEnvironment: () => ({}), policy: () => undefined });
+    await plugins.addMarketplace("bot-1", { source: "acme/tools" }, "pr_alice");
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      expect(await plugins.install("bot-1", { marketplace: "acme-tools", plugin: "reviewer" }, "pr_alice")).not.toHaveProperty("marketplacePull");
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("#3635: a failed pull with no clone in hand refuses the install with the pull's error", async () => {
+    const dataDir = temp();
+    const repo = marketplaceRepo();
+    let reachable = true;
+    const base = fakeGit({ "https://github.com/acme/tools.git": repo }, []);
+    const git: GitRunner = async (args, options) => {
+      if (!reachable) throw new BotPluginError("The repository could not be reached from the server.", "repository_unreachable", 502);
+      return base(args, options);
+    };
+    const markets = new PluginMarketplaces({ dataDir, git, gitEnvironment: () => ({}), policy: () => undefined });
+    const plugins = botPluginsWithMarketplaces({ dataDir, git, gitEnvironment: () => ({}), policy: () => undefined });
+    await plugins.addMarketplace("bot-1", { source: "acme/tools" }, "pr_alice");
+    rmSync(markets.repoPath("acme-tools"), { recursive: true, force: true });
+    reachable = false;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      await expect(plugins.install("bot-1", { marketplace: "acme-tools", plugin: "reviewer" }, "pr_alice")).rejects.toMatchObject({ code: "repository_unreachable" });
+    } finally {
+      warn.mockRestore();
+    }
+    expect(plugins.listPlugins("bot-1")).toEqual([]);
+  });
+
+  it("#3635: an installed copy is never left half written when the new copy fails", async () => {
+    const dataDir = temp();
+    const repo = marketplaceRepo();
+    let reachable = true;
+    const base = fakeGit({ "https://github.com/acme/tools.git": repo }, []);
+    const git: GitRunner = async (args, options) => {
+      if (!reachable) throw new BotPluginError("The repository could not be reached from the server.", "repository_unreachable", 502);
+      return base(args, options);
+    };
+    const plugins = botPluginsWithMarketplaces({ dataDir, git, gitEnvironment: () => ({}), policy: () => undefined });
+    await plugins.addMarketplace("bot-1", { source: "acme/tools" }, "pr_alice");
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const unreadable = join(plugins.marketplaceFolder("acme-tools"), "plugins", "reviewer", "zz-unreadable.md");
+    try {
+      await plugins.install("bot-1", { marketplace: "acme-tools", plugin: "reviewer" }, "pr_alice");
+      const installedDir = join(dataDir, "bot-plugins", "bot-1", "plugins", "acme-tools", "reviewer");
+      const before = readFileSync(join(installedDir, "commands", "review.md"), "utf8");
+      // the clone in hand holds a file the copy cannot read: the copy fails midway
+      reachable = false;
+      writeFileSync(unreadable, "x");
+      chmodSync(unreadable, 0o000);
+      await expect(plugins.install("bot-1", { marketplace: "acme-tools", plugin: "reviewer" }, "pr_alice")).rejects.toThrow();
+      expect(readFileSync(join(installedDir, "commands", "review.md"), "utf8")).toBe(before);
+      expect(existsSync(join(installedDir, "skills", "review", "SKILL.md"))).toBe(true);
+      expect(readdirSync(join(installedDir, "..")).filter((name) => name.includes(".staging-"))).toEqual([]);
+    } finally {
+      try { chmodSync(unreadable, 0o600); } catch { /* not written */ }
+      log.mockRestore();
+      warn.mockRestore();
+    }
+  });
+
+  it("#3636: a failed pull reports the date of the last pull, not of a visibility change", async () => {
+    const dataDir = temp();
+    const repo = marketplaceRepo();
+    const day = 24 * 60 * 60_000;
+    let clock = day;
+    let reachable = true;
+    const base = fakeGit({ "https://github.com/acme/tools.git": repo }, []);
+    const git: GitRunner = async (args, options) => {
+      if (!reachable) throw new BotPluginError("The repository could not be reached from the server.", "repository_unreachable", 502);
+      return base(args, options);
+    };
+    const marketplaces = new PluginMarketplaces({ dataDir, git, gitEnvironment: () => ({}), policy: () => undefined, now: () => clock });
+    const plugins = new BotPlugins({ dataDir, git, marketplaces, gitEnvironment: () => ({}), policy: () => undefined, now: () => clock });
+    await plugins.addMarketplace("bot-1", { source: "acme/tools" }, "pr_alice");
+    clock = 10 * day;
+    await marketplaces.setVisibility("acme-tools", "org");
+    clock = 11 * day;
+    reachable = false;
+    const lines: string[] = [];
+    const warn = vi.spyOn(console, "warn").mockImplementation((line: unknown) => { lines.push(String(line)); });
+    let installed: Awaited<ReturnType<typeof plugins.install>>;
+    try {
+      installed = await plugins.install("bot-1", { marketplace: "acme-tools", plugin: "reviewer" }, "pr_alice");
+    } finally {
+      warn.mockRestore();
+    }
+    const dayOne = new Date(day).toISOString();
+    expect(installed.marketplacePull).toMatchObject({ pulled: false, code: "repository_unreachable", clonedAt: dayOne });
+    expect(lines.find((line) => line.includes("[plugins]"))).toContain(dayOne);
+  });
+
+  it("#3636: a staging copy a stopped process left is removed at the next install of that plugin", async () => {
+    const dataDir = temp();
+    const repo = marketplaceRepo();
+    const plugins = botPluginsWithMarketplaces({ dataDir, git: fakeGit({ "https://github.com/acme/tools.git": repo }, []), gitEnvironment: () => ({}), policy: () => undefined });
+    await plugins.addMarketplace("bot-1", { source: "acme/tools" }, "pr_alice");
+    const parent = join(dataDir, "bot-plugins", "bot-1", "plugins", "acme-tools");
+    write(parent, "reviewer.staging-1-1/half.md", "half");
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      await plugins.install("bot-1", { marketplace: "acme-tools", plugin: "reviewer" }, "pr_alice");
+    } finally {
+      log.mockRestore();
+    }
+    expect(readdirSync(parent).sort()).toEqual(["reviewer"]);
+  });
+
+  it("#3612: a person's first install (the same class) pulls the marketplace too", async () => {
+    const dataDir = temp();
+    const repo = marketplaceRepo();
+    const vaultKey = { kind: "key" as const, key: Buffer.alloc(32, 7) };
+    const plugins = botPluginsWithMarketplaces({
+      dataDir, git: fakeGit({ "https://github.com/acme/tools.git": repo }, []), gitEnvironment: () => ({}), policy: () => undefined,
+      storage: personalPluginStorage(dataDir, new PersonCapabilities(dataDir, () => vaultKey)),
+    });
+    await plugins.addMarketplace("pr_a", { source: "acme/tools" }, "pr_a");
+    const manifest = JSON.parse(readFileSync(join(repo, ".claude-plugin/marketplace.json"), "utf8")) as { plugins: Array<Record<string, unknown>> };
+    manifest.plugins[0]!.version = "1.8.0";
+    write(repo, ".claude-plugin/marketplace.json", JSON.stringify(manifest));
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      expect(await plugins.install("pr_a", { marketplace: "acme-tools", plugin: "reviewer" }, "pr_a")).toMatchObject({ version: "1.8.0" });
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it("restores a bot package's marketplaces into the one list, without one the organization does not allow", async () => {
     const dataDir = temp();
     const plugins = botPluginsWithMarketplaces({ dataDir, gitEnvironment: () => ({}), policy: () => ({ mode: "list", allow: ["acme/*"] }) });
@@ -546,5 +736,40 @@ describe("a marketplace's credential from the one list (2026-10-28)", () => {
     const { plugins, credential } = await setup();
     await plugins.addMarketplace("bot-1", { source: "acme/tools" }, "pr_owner");
     await expect(plugins.chooseMarketplaceCredential("bot-1", "acme-tools", credential.id, "someone-else")).rejects.toThrow(/No credential/);
+  });
+});
+
+describe("#3636: putting a new copy in place", () => {
+  it("brings the old copy back when the rename of the new one fails", () => {
+    const root = temp();
+    write(root, "plugin/old.md", "old");
+    write(root, "plugin.staging-1/new.md", "new");
+    let calls = 0;
+    const rename = (from: string, to: string) => {
+      calls++;
+      if (calls === 2) throw new Error("rename failed");
+      renameSync(from, to);
+    };
+    expect(() => swapInPlace(join(root, "plugin.staging-1"), join(root, "plugin"), join(root, "plugin.previous-1"), rename)).toThrow("rename failed");
+    expect(readFileSync(join(root, "plugin", "old.md"), "utf8")).toBe("old");
+    expect(existsSync(join(root, "plugin.previous-1"))).toBe(false);
+  });
+
+  it("puts the new copy in place and drops the old one", () => {
+    const root = temp();
+    write(root, "plugin/old.md", "old");
+    write(root, "plugin.staging-1/new.md", "new");
+    swapInPlace(join(root, "plugin.staging-1"), join(root, "plugin"), join(root, "plugin.previous-1"));
+    expect(readdirSync(root).sort()).toEqual(["plugin"]);
+    expect(readFileSync(join(root, "plugin", "new.md"), "utf8")).toBe("new");
+  });
+
+  it("restores the old copy a process stopped between the two renames left aside", () => {
+    const root = temp();
+    write(root, "plugin.previous-1-1/old.md", "old");
+    write(root, "plugin.staging-1-1/new.md", "half");
+    clearSwapLeftovers(join(root, "plugin"));
+    expect(readdirSync(root).sort()).toEqual(["plugin"]);
+    expect(readFileSync(join(root, "plugin", "old.md"), "utf8")).toBe("old");
   });
 });

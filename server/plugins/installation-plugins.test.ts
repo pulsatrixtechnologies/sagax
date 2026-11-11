@@ -9,7 +9,7 @@ import { pluginTurnFiles, pluginTurnPrompt } from "../turns/plugin-turn.ts";
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 describe("complete organization plugin copies", () => {
-  it("restores all content, keeps declared MCP private and wins the same personal/bot name", () => {
+  it("restores all content, keeps declared MCP private and wins the same personal/bot name", async () => {
     const root = mkdtempSync(join(tmpdir(), "sagax-org-plugin-")); roots.push(root);
     const marketplaces = new PluginMarketplaces({ dataDir: root, policy: () => undefined, gitEnvironment: () => ({}) });
     const raw = marketplaces.pluginDir("catalog", "packing");
@@ -20,7 +20,7 @@ describe("complete organization plugin copies", () => {
     writeFileSync(join(raw, "agents/clerk.md"), "Check the label.");
     writeFileSync(join(raw, "bin/server.js"), "process.stdin.resume();");
     writeFileSync(join(raw, ".mcp.json"), JSON.stringify({ parcel: { command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/bin/server.js"], env: {} } }));
-    const record = marketplaces.recordInstall("catalog", "packing", { servers: [], skills: [] });
+    const record = await marketplaces.recordInstall("catalog", "packing", { servers: [], skills: [] });
     const plugins = new InstallationPlugins(root, marketplaces); plugins.restore();
     const copy = plugins.folder(record.key)!;
     expect(copy.contents).toEqual({ skills: ["check"], commands: ["ship"], agents: ["clerk"] });
@@ -35,9 +35,9 @@ describe("complete organization plugin copies", () => {
       const prompt = pluginTurnPrompt({ driverKind, files: pluginTurnFiles([copy.dir]) });
       expect(prompt).toContain("check"); expect(prompt).toContain("ship"); expect(prompt).toContain("clerk");
     }
-    marketplaces.recordUpdate("catalog", "packing", { servers: ["parcel-renamed"], serverNames: { parcel: "parcel-renamed" }, skills: [] });
+    await marketplaces.recordUpdate("catalog", "packing", { servers: ["parcel-renamed"], serverNames: { parcel: "parcel-renamed" }, skills: [] });
     expect(plugins.mcpServers()).toEqual([]); // configuration owns selection and sign-in now
-    plugins.remove(record.key); marketplaces.recordUninstall("catalog", "packing");
+    plugins.remove(record.key); await marketplaces.recordUninstall("catalog", "packing");
     expect(plugins.enabledPlugins()).toEqual([]); expect(plugins.mcpServers()).toEqual([]);
   });
 });

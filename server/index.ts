@@ -25641,7 +25641,7 @@ pageSources.register(createTeamBoardSource({
   entries: (board, viewerId) => {
     const bot = store.bot(board.id);
     if (!bot) return [];
-    return teamBoardActivity.list(bot, viewerId, TEAM_BOARD_ENTRIES_PER_BOT, TEAM_BOARD_WORK_WINDOW_MS)
+    return teamBoardActivity.list(bot, viewerId, TEAM_BOARD_ENTRIES_PER_BOT, TEAM_BOARD_WORK_WINDOW_MS, { archived: true })
       .filter((item) => item.code)
       .map((item) => {
         const failure = (item.status === "failed" || item.status === "blocked") && item.threadId ? teamBoardActivity.failureCause(item.threadId) : undefined;

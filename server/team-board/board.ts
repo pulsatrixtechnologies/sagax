@@ -97,6 +97,12 @@ interface IssueFacts {
 }
 
 const sectionName = (name: string) => name.trim().toLowerCase();
+/** A bot manages a lane when its managedSections holds the team's name or
+ * its section id (#2045 stores ids), whichever the setting kept (#3464). */
+const managesTeam = (bot: BoardBot, team: BoardTeam) => bot.managedSections?.some((section) => {
+  const key = sectionName(section);
+  return key === sectionName(team.name) || key === sectionName(team.sectionId);
+}) ?? false;
 const repoKey = (repo: string) => repo.toLowerCase();
 
 /** Issue numbers a branch name carries: `feat/3409-team-board`, `issue-12`. */
@@ -236,7 +242,7 @@ export function buildTeamBoard(input: BoardInput): TeamBoardLane[] {
         place(repo, issue.number, issue, undefined);
       }
     }
-    const lead = input.bots.find((bot) => bot.managedSections?.some((section) => sectionName(section) === sectionName(lane.team.name)));
+    const lead = input.bots.find((bot) => managesTeam(bot, lane.team));
     // the open issues of its To do repositories the read did not load
     let todoNotLoaded = 0;
     for (const key of lane.repos.keys()) {

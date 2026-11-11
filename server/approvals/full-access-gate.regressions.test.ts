@@ -219,25 +219,34 @@ describe("#1819: an invented may-I card under Full access", () => {
     expect(rows.filter((row) => row.kind === "options" && row.card && !row.card.answered)).toHaveLength(1);
   });
 
-  // #2911: ask_choice with Yes/No on "A, or B?" becomes the two paths
-  // (#2901). Two paths are a real decision: Full access keeps the card.
-  it("an either/or ask_choice at Full shows its two paths on a card, never answered", () => {
+  // #2911: an either/or question is a real decision, so Full access never
+  // takes one of its paths for the person. #2909 (merged after #2911, item 5
+  // of its fix: "ask_choice / list_pending_approvals: per-choice {label,
+  // detail}, server rejects Yes/No answers to an \"A or B?\" question")
+  // changed how such a card is drawn: Yes / No on it is refused, so the model
+  // gives the two paths themselves (#3508).
+  it("an either/or ask_choice with Yes / No at Full is refused, never answered for the person (#2909)", () => {
     const { store, rows } = fakeStore();
     const either = { tool: ASK_CHOICE_TOOL, question: "Veux-tu que je refasse la collecte à neuf, ou qu'on avance directement avec ta validation ?", options: ["Oui", "Non"] };
     const result = createAgentCard({ store, bot: BOT, threadId: "t-2911", input: either, approvalLevel: "full" });
+    expect(result).toMatchObject({ ok: false, status: 400 });
+    expect("answered" in result).toBe(false);
+    expect(rows).toHaveLength(0);
+  });
+
+  it.each([
+    ["Veux-tu que je refasse la collecte à neuf, ou qu'on avance directement avec ta validation ?", ["Que je refasse la collecte à neuf", "Qu'on avance directement avec ta validation"]],
+    ["Veux-tu continuer l'import, ou attendre la validation ?", ["Continuer l'import", "Attendre la validation"]],
+    ["Should I continue the import, or wait for the review?", ["Continue the import", "Wait for the review"]],
+  ])("an either/or ask_choice with its two paths at Full keeps its card, never the first path for the person (#2909, #3508): %s", (question, options) => {
+    const { store, rows } = fakeStore();
+    const result = createAgentCard({ store, bot: BOT, threadId: "t-2911", input: { tool: ASK_CHOICE_TOOL, question, options }, approvalLevel: "full" });
+    expect(result).toMatchObject({ ok: true });
     expect("answered" in result).toBe(false);
     const open = rows.filter((row) => row.kind === "options" && row.card && !row.card.answered);
     expect(open).toHaveLength(1);
-    expect(open[0]?.card?.options).toEqual(["Que je refasse la collecte à neuf", "Qu'on avance directement avec ta validation"]);
-  });
-
-  it("an either/or ask_choice with a permission word at Full does not take the first path for the person", () => {
-    const { store, rows } = fakeStore();
-    const either = { tool: ASK_CHOICE_TOOL, question: "Veux-tu continuer l'import, ou attendre la validation ?", options: ["Oui", "Non"] };
-    const result = createAgentCard({ store, bot: BOT, threadId: "t-2911", input: either, approvalLevel: "full" });
-    expect("answered" in result).toBe(false);
-    expect(rows.find((row) => row.kind === "options")?.card).toMatchObject({ options: ["Continuer l'import", "Attendre la validation"] });
-    expect(rows.find((row) => row.kind === "options")?.card?.answered).toBeUndefined();
+    expect(open[0]?.card?.options).toEqual(options);
+    expect(fullAccessChoiceAnswer("full", { title: "Question", question, options })).toBeNull();
   });
 
   it("a plain may-I with Yes/No at Full is still answered Yes", () => {
@@ -245,6 +254,21 @@ describe("#1819: an invented may-I card under Full access", () => {
     const mayIYesNo = { tool: ASK_CHOICE_TOOL, question: "Puis-je continuer l'import?", options: ["Oui", "Non"] };
     const result = createAgentCard({ store, bot: BOT, threadId: "t-2911", input: mayIYesNo, approvalLevel: "full" });
     expect(result).toMatchObject({ ok: true, answered: { choice: "Oui" } });
+  });
+
+  // #3508: a list of steps is not two paths. A may-I with Yes / No whose
+  // question names several items stays answered at Full on the engine's own
+  // question tool, exactly as before; below Full its card stays.
+  it.each([
+    ["Veux-tu que je crée la soumission, la facture et le billet ?", ["Oui", "Non"]],
+    ["Je lance l'import, je vérifie les totaux, puis je t'écris ?", ["Oui", "Non"]],
+    ["Je supprime les doublons, les fichiers vides ?", ["Oui", "Non"]],
+    ["Should I create the quote, the invoice and the ticket?", ["Yes", "No"]],
+  ])("a may-I listing several items with Yes / No at Full is answered with its first option (#3508): %s", (question, options) => {
+    // request-opened-present.ts passes the engine's question and its raw
+    // options to fullAccessChoiceAnswer: the may-I is answered, no card.
+    expect(fullAccessChoiceAnswer("full", { question, options })).toEqual({ choice: options[0] });
+    expect(fullAccessChoiceAnswer("ask", { question, options })).toBeNull();
   });
 
   it("the engine's own question tool with Yes/No on A or B keeps its card too", () => {

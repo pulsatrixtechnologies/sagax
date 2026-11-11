@@ -89,6 +89,7 @@ export class HeldRequests {
       createdAt: new Date().toISOString(),
       type: "request.opened",
       requestId,
+      // full-access: connector-held
       requestType: "permission",
       tool: "other",
       mcpTool: input.mcpTool,

@@ -30,7 +30,7 @@
 // without one, and a marker without a registered id).
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import { permissionQuestion, recommendedPermissionAnswer, type ChoiceQuestion } from "../../shared/permission-question.ts";
-import { choiceOptionsFor } from "./final-confirmation.ts";
+import { alternativeChoices, choiceOptionsFor, yesNoOptions } from "./final-confirmation.ts";
 
 export const FULL_ACCESS_HOLDS = ["org-rule", "person-rule", "isolation", "sensitive-path", "question"] as const;
 export type FullAccessHold = (typeof FULL_ACCESS_HOLDS)[number];
@@ -77,6 +77,11 @@ export function fullAccessChoiceAnswer(level: ApprovalMode | undefined, card: Ch
   // a real decision on every surface (ask_choice, the engine's own question
   // tool), never a may-I: the card stays.
   if (choiceOptionsFor(card.question, card.options) !== card.options) return null;
+  // #3508: since #2909 ask_choice refuses Yes/No on such a question, so the
+  // model gives the two paths themselves as options. Those options must not
+  // turn the question back into a may-I answered with its first path. A
+  // Yes/No may-I (a list of steps included) is answered as above.
+  if (!yesNoOptions(card.options) && alternativeChoices(card.question)) return null;
   if (!permissionQuestion(card)) return null;
   const choice = recommendedPermissionAnswer(card);
   return choice ? { choice } : null;
@@ -109,6 +114,12 @@ export const FULL_ACCESS_SURFACES = {
   /** index.ts request.opened: an engine's own question tool; a may-I is
    * answered, a real question keeps its card. */
   "question": "server/index.ts request.opened question card",
+  /** #3376: a connector call the server runs for a turn (call_connector)
+   * opens a request.opened of its own (server/harness/held-requests.ts).
+   * It is judged in server/runtime-events/request-opened.ts like an
+   * engine's ask: this decision answers it at Full (a send included), the
+   * five holds keep its card, and below Full a read passes and a send asks. */
+  "connector-held": "server/harness/held-requests.ts request.opened, judged in request.opened",
   /** The safety review's safer path and confirmation (shared/safety-review.ts)
    * on a permission request and before a server-side tool runs. */
   "safety-review": "server/safety/safety-review.ts safetyPermissionEffect and safetyToolHold",

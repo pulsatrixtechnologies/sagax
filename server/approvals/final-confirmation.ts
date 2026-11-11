@@ -120,9 +120,14 @@ export function finalAlternative(input: Parameters<typeof finalConfirmation>[0])
 
 const YES_NO = /^(?:oui|non|yes|no)$/i;
 
+/** Exactly two options, Yes and No (in either language). */
+export function yesNoOptions(options: readonly string[]): boolean {
+  return options.length === 2 && options.every((option) => YES_NO.test(option.trim().replace(/[.!]$/, "")));
+}
+
 /** ask_choice with Yes/No on an "A, or B?" question (#2901): the two paths
  * become the options so the card answers the question it asks. */
 export function choiceOptionsFor<T extends readonly string[]>(question: string, options: T): T | [string, string] {
-  if (options.length !== 2 || !options.every((option) => YES_NO.test(option.trim().replace(/[.!]$/, "")))) return options;
+  if (!yesNoOptions(options)) return options;
   return alternativeChoices(question) ?? options;
 }

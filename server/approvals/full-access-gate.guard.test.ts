@@ -38,6 +38,9 @@ const DECIDED_IN: Record<FullAccessSurface, string | null> = {
   // The card and the Full access choice answer moved with the present split.
   "tool-approval": "server/runtime-events/request-opened-present.ts",
   "question": "server/runtime-events/request-opened-present.ts",
+  // #3508: the server's own connector request is judged where every
+  // request.opened is (the Full access decision is read there)
+  "connector-held": "server/runtime-events/request-opened.ts",
   "safety-review": "server/safety/safety-review.ts",
   // safety-confirm card is in index-leaves/confirmHeldCard.ts; Full access is
   // still wired from index.ts via setSafetyFullAccess (central, like send)
@@ -141,7 +144,7 @@ describe("every approval or choice card reads the Full access decision", () => {
     // a surface decided and emitted in one file never sits elsewhere; the
     // central ones (decided in index.ts or the review, emitted by the
     // route modules / index-leaves) may be emitted anywhere
-    const central = new Set<string>(["proposal", "peer-contact", "safety-review", "safety-confirm", "send", "engine-bridge", "isolation", "exempt"]);
+    const central = new Set<string>(["proposal", "peer-contact", "safety-review", "safety-confirm", "send", "engine-bridge", "connector-held", "isolation", "exempt"]);
     for (const hit of hits) {
       if (!hit.marker || central.has(hit.marker)) continue;
       const decidedIn = DECIDED_IN[hit.marker as FullAccessSurface];
@@ -180,6 +183,20 @@ describe("every approval or choice card reads the Full access decision", () => {
     const index = readFileSync(join(SERVER, "index.ts"), "utf8");
     expect(index).toMatch(/function myChromeHeldLevel[\s\S]{0,600}approvalModeForTurn\(/);
     expect(index).toMatch(/\n    myChromeHeldLevel,\n    myChromeLevelAnswered,\n/);
+  });
+
+  it("the server's own connector request is marked and reaches the one request.opened decision (#3508)", () => {
+    const held = hits.filter((hit) => hit.file === "server/harness/held-requests.ts" && hit.emitter === "permission request");
+    expect(held).toHaveLength(1);
+    expect(held[0]?.marker).toBe("connector-held");
+    const source = readFileSync(join(SERVER, "harness", "held-requests.ts"), "utf8");
+    // it is published on the bus as a request.opened, never answered where it is emitted
+    expect(source).toMatch(/this\.publish\(\{[\s\S]{0,400}type: "request\.opened"/);
+    expect(source).not.toMatch(/fullAccess(?:Decision|Acts)\(/);
+    // and request.opened reads its connector facts into the verdict the level decides
+    const opened = readFileSync(join(SERVER, "runtime-events", "request-opened.ts"), "utf8");
+    expect(opened).toMatch(/const connectorRead = Boolean\(permission && event\.accountConnector === true && event\.engineConnector === true && event\.outbound !== true/);
+    expect(opened).toMatch(/autoVerdict\(strictCard \|\| foreignDestination \? "ask" : effectiveApprovalMode/);
   });
 
   it("every peer card sits behind peerReviewRequired, which reads the gate, as do fullAccessForSource and the safety resolver", () => {

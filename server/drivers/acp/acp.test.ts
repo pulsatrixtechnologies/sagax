@@ -647,13 +647,13 @@ describe("ACP turns (fake CLI)", () => {
     process.env.FAKE_ACP_RPC_FAILURE_AFTER_USAGE = "1";
     const { usage, send } = await usageThread("rejected-compaction");
     usage(100000);
-    expect(await send("turn 1")).toBe(FULL + "\n\nturn 1");
+    expect(await send("turn 1")).toBe(OPENING + "\n\nturn 1");
     usage(used);
     writeFileSync(failureFile, JSON.stringify({ code: -32603, message: "Internal error after compaction" }));
     expect(await send("turn 2", false)).toBe("turn 2");
     unlinkSync(failureFile);
     usage();
-    expect(await send("turn 3")).toBe(used < 60000 ? FULL + "\n\nturn 3" : "turn 3");
+    expect(await send("turn 3")).toBe(used < 60000 ? OPENING + "\n\nturn 3" : "turn 3");
     expect(await send("turn 4")).toBe("turn 4");
   });
 

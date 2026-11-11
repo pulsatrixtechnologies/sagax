@@ -133,6 +133,27 @@ describe("fast-gate.sh", () => {
     expect(line).not.toContain("near-name");
   });
 
+  // A store or a test helper is imported by hundreds of tests: its importers
+  // wait for the run after the merge, and the gate says how many they are.
+  it("leaves the importers of a source that more than 25 tests import to the run after the merge, and says so", () => {
+    for (let i = 1; i <= 26; i++) write(`tests/many/i${i}.test.ts`, 'import { b } from "../../src/b.ts";\n');
+    for (let i = 1; i <= 25; i++) write(`tests/few/i${i}.test.ts`, 'import { a } from "../../src/a.ts";\n');
+    write("src/b.test.ts", "// its own test\n");
+    git("add", "-A");
+    git("commit", "-q", "-m", "tests");
+    write("src/a.ts", "export const a = 2;\n");
+    write("src/b.ts", "export const b = 2;\n");
+    const { out } = gate("--base", "HEAD", "--only", "tests", "--dry-run");
+    const line = out.split("\n").find((l) => l.startsWith("[tests]")) ?? "";
+    expect(line).toContain("'src/a.test.ts'");
+    expect(line).toContain("'src/b.test.ts'");
+    expect(line).toContain("'tests/few/i1.test.ts'");
+    expect(line).toContain("'tests/few/i25.test.ts'");
+    expect(line).not.toContain("tests/many/");
+    expect(out).toContain("fast-gate: src/b.ts is imported by 26 test files: only the tests of its own name run here, the others run after the merge");
+    expect(out).not.toContain("src/a.ts is imported by");
+  });
+
   it("runs the checks in parallel, never more than the cap, and is green", () => {
     write("src/a.ts", "export const a = 2;\n");
     const { code, out } = gate("--base", "main", "--jobs", "2");

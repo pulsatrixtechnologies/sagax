@@ -141,6 +141,8 @@ if [ -f package.json ]; then
     # whole suite on the author's machine, which the rule of this gate
     # forbids (the tests of the touched files only; every test runs by
     # itself after the merge, names the pull request and opens an issue).
+    # For the same reason a source imported by more than 25 test files
+    # brings only the tests of its own name, and the gate prints its count.
     TESTS="$LOG_DIR/tests.txt"
     : > "$TESTS"
     FAST_GATE_TOUCHED_JS="$JS" node -e '
@@ -162,6 +164,7 @@ if [ -f package.json ]; then
       if (sources.size) {
         const names = [...new Set([...sources.keys()].map((s) => path.basename(s)))];
         const spec = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|\bvi\.(?:mock|doMock|importActual)\s*(?:<[^>]*>)?\s*\(\s*)["\x27](\.{1,2}\/[^"\x27]+)["\x27]/g;
+        const importers = new Map();
         for (const t of all) {
           if (out.has(t)) continue;
           let text;
@@ -169,8 +172,19 @@ if [ -f package.json ]; then
           if (!names.some((n) => text.includes(n))) continue;
           for (const m of text.matchAll(spec)) {
             const target = path.normalize(path.join(path.dirname(t), m[1]));
-            if (sources.has(noExt(target)) || sources.has(path.join(target, "index"))) { out.add(t); break; }
+            const key = sources.has(noExt(target)) ? noExt(target) : sources.has(path.join(target, "index")) ? path.join(target, "index") : null;
+            if (!key) continue;
+            if (!importers.has(key)) importers.set(key, new Set());
+            importers.get(key).add(t);
           }
+        }
+        // A source that a large part of the suite imports (a store, a test
+        // helper) would bring hundreds of files: past the bound its importers
+        // wait for the run after the merge, and the gate says so.
+        const most = 25;
+        for (const [key, tests] of importers) {
+          if (tests.size <= most) { for (const t of tests) out.add(t); continue; }
+          console.error(`fast-gate: ${sources.get(key)} is imported by ${tests.size} test files: only the tests of its own name run here, the others run after the merge`);
         }
       }
       process.stdout.write([...out].sort().map((f) => f + "\n").join(""));

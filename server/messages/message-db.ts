@@ -1448,6 +1448,54 @@ export function openCardCandidates(): Array<{ threadId: string; message: Message
 export function openWaitingRowCandidates(): Array<{ threadId: string; message: Message }> {
   const rows = cached(`SELECT thread_id, id, json, sealed, key_id FROM messages WHERE ${OPEN_WAITING_ROW}`)
     .all() as unknown as Array<StoredRow & { thread_id: string }>;
+  return openableWithThread(rows);
+}
+
+/** #3542: every row holding an option card with a request id still open
+ * (neither answered, dismissed nor expired), through the
+ * messages_open_request_cards index: the inbox's approval and question
+ * cards are read from these rows, never from each transcript. A superset:
+ * the caller checks the decoded card. A row whose key is locked is left out
+ * (it cannot be shown). */
+export function openRequestCardRows(): Array<{ threadId: string; message: Message }> {
+  const rows = cached(
+    "SELECT thread_id, id, json, sealed, key_id FROM messages " +
+    "WHERE json_extract(json, '$.card.requestId') IS NOT NULL " +
+    "AND COALESCE(json_extract(json, '$.card.answered'), 0) IN (0, '') " +
+    "AND COALESCE(json_extract(json, '$.card.dismissed'), 0) IN (0, '') " +
+    "AND COALESCE(json_extract(json, '$.card.expired'), 0) IN (0, '')",
+  ).all() as unknown as Array<StoredRow & { thread_id: string }>;
+  return openableWithThread(rows);
+}
+
+/** #3542: the rows of one thread between two times (inclusive) that may be
+ * one half of an ask (a "needs you" card, an input request): Today pairs an
+ * open ask's two halves from these, through messages_thread_at, never from
+ * the whole transcript. In time order. */
+export function askRowsBetween(threadId: string, from: number, to: number): Message[] {
+  const rows = cached(
+    "SELECT thread_id, id, json, sealed, key_id FROM messages WHERE thread_id = ? AND at >= ? AND at <= ? " +
+    "AND (json_extract(json, '$.inputRequest') IS NOT NULL OR json_extract(json, '$.attention') IS NOT NULL) ORDER BY at, rowid",
+  ).all(threadId, from, to) as unknown as Array<StoredRow & { thread_id: string }>;
+  return openableWithThread(rows).map((hit) => hit.message);
+}
+
+/** #3542: whether the person wrote in this thread after `at` (a "needs you"
+ * card is settled by their words): one indexed row at most. */
+export function personWroteAfter(threadId: string, at: number): boolean {
+  return Boolean(cached("SELECT 1 FROM messages WHERE thread_id = ? AND at > ? AND role = 'user' LIMIT 1").get(threadId, at));
+}
+
+/** #3542: one message of a thread by its id, or null (gone, or its key
+ * locked or destroyed). */
+export function readOneMessage(threadId: string, id: string): Message | null {
+  const row = cached("SELECT thread_id, id, json, sealed, key_id FROM messages WHERE thread_id = ? AND id = ?")
+    .get(threadId, id) as (StoredRow & { thread_id: string }) | undefined;
+  return row ? openableWithThread([row])[0]?.message ?? null : null;
+}
+
+/** Decoded rows with their thread; a row whose key is locked is left out. */
+function openableWithThread(rows: Array<StoredRow & { thread_id: string }>): Array<{ threadId: string; message: Message }> {
   const out: Array<{ threadId: string; message: Message }> = [];
   for (const row of rows) {
     let message: Message | null;

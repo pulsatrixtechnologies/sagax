@@ -531,7 +531,7 @@ import { BUILT_IN_DRIVERS } from "./drivers/builtIn.ts";
 import { orgWithholdHostTools } from "./org/org-engine-admission.ts";
 import { openCodeProviderKeysAllowed, setOpenCodeProviderKeyPolicy } from "./drivers/acp/opencode-go.ts";
 import { getOrCreateChannel, mirrorActivity, mirrorReply, type CommsBus } from "./comms-visibility.ts";
-import { openApprovalCardMessages, openPendingInboxCards, openWaitingRowCandidates, hasUnprojectedSealedRows, reprojectSealedRows, readCommandReceipt, putCommandReceipt, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, threadsReferencingAsync, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./messages/message-db.ts";
+import { openApprovalCardMessages, openPendingInboxCards, openWaitingRowCandidates, openRequestCardRows, askRowsBetween, personWroteAfter, readOneMessage, hasUnprojectedSealedRows, reprojectSealedRows, readCommandReceipt, putCommandReceipt, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, threadsReferencingAsync, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./messages/message-db.ts";
 import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
 import { contentEncryptionFromEnv } from "./encryption/content-encryption-env.ts";
 import { briefCrossingLabel, claimRecallCrossings } from "./recall/recall-disclosure.ts";
@@ -5810,6 +5810,10 @@ bindLeafHost({
   get waitingCardSkip() { return waitingCardSkip; },
   get openPendingInboxCards() { return openPendingInboxCards; },
   get openWaitingRowCandidates() { return openWaitingRowCandidates; },
+  get openRequestCardRows() { return openRequestCardRows; },
+  get askRowsBetween() { return askRowsBetween; },
+  get personWroteAfter() { return personWroteAfter; },
+  get readOneMessage() { return readOneMessage; },
   get hasUnprojectedSealedRows() { return hasUnprojectedSealedRows; },
   get reprojectSealedRows() { return reprojectSealedRows; },
   get openApprovalCardMessages() { return openApprovalCardMessages; },

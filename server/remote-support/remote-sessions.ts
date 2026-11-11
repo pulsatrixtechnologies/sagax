@@ -47,6 +47,7 @@ import {
   stopCommand,
   supportOwnersOfId,
   tailcatCopyArgv,
+  tailcatPingArgv,
   tailcatSshArgv,
   TRANSPORT_FAILED,
   transferDirCommand,
@@ -137,6 +138,8 @@ export const INVENTORY_RETRY_MS = 30_000;
 export const EXEC_OUTPUT_MAX = 64 * 1024;
 export const EXEC_TIMEOUT_DEFAULT_MS = 30_000;
 export const EXEC_TIMEOUT_MAX_MS = 120_000;
+/** The tunnel probe after a 255 (`tailcat ping --timeout=8s`), with room to start. */
+const REACHABLE_TIMEOUT_MS = 12_000;
 
 /** `uname -s` answers Darwin or Linux. Anything else is not an answer: the
  * OS stays unknown (null) and is asked again, never Windows by default. */
@@ -980,6 +983,17 @@ function createRemoteSessionOps(env: RemoteSessionEnv) {
         stderr: capped(result.stderr),
         timedOut: Boolean(result.timedOut),
       };
+    },
+    /** Whether the session's tunnel still answers (#3492): one tailcat ping,
+     * in the tunnel's queue like every call on that key (#3430). Null when
+     * it could not be asked: not a connected session of this person and bot,
+     * no tunnel here, or refused by the queue. */
+    async reachable(input: { principalId: string; botId: string; id: string }): Promise<boolean | null> {
+      const session = owned(normPrincipal(input.principalId), input.botId, input.id);
+      if (!session || session.state !== "connected") return null;
+      const out = await tunnelRun(session, (tunnel) => tailcatPingArgv(tailcatBin(), tunnel.keyPath, tunnel.address), REACHABLE_TIMEOUT_MS);
+      if (!out || isTunnelRefusal(out)) return null;
+      return out.code === 0;
     },
     /** OS, uptime, CPU, memory, disk and the busiest processes in one call. */
     async snapshot(input: { principalId: string; botId: string; threadId: string; id?: string }): Promise<RemoteExecResult | { error: string }> {

@@ -76,6 +76,25 @@ const TRANSPORT_FAILED = /did not answer \(the tunnel is down or the session end
 
 /** Idle sessions close after this long without a call. */
 export const HOST_SESSION_IDLE_MS = 10 * 60_000;
+/** How long a quiet session lives on the host, counted from the moment
+ * Sagax asked for it (#3492). The end time kept here is the one Sagax asked
+ * Perspicax for (2 hours), but the host ends the session at its first grant
+ * renewal: the grant lives 1 hour (Perspicax `GRANT_TTL_SECONDS`), the host
+ * asks to renew it 30 minutes before its end (sagax-remote-access
+ * `DefaultRenewBefore`), and Perspicax refuses that renewal (the status
+ * call carries no host assertion), so the host stops serving 30 minutes
+ * after it took the session ("closed by the server"), while the row here
+ * still says connected. The session therefore counts as ended at the
+ * earlier of its end time and this. Fixed at the open: a use never pushes
+ * it back. */
+export const HOST_SESSION_LIFE_MS = 30 * 60_000;
+/** A session that answered a command (or connected) this recently is sent
+ * the next command without asking its tunnel first (#3492). */
+export const HOST_SESSION_FRESH_MS = 60_000;
+/** The time a command is given when the call names none: the default of
+ * server/remote-support/remote-sessions.ts exec, and its ceiling. */
+const COMMAND_TIME_DEFAULT_MS = 30_000;
+const COMMAND_TIME_MAX_MS = 120_000;
 const CONNECT_WAIT_MS = 60_000;
 const CONNECT_POLL_MS = 1_500;
 const VM_POLL_MS = 15_000;
@@ -114,6 +133,9 @@ interface SessionDeps {
   screen(principalId: string, botId: string, id: string): Promise<Buffer | null>;
   close(principalId: string, botId: string, id: string): Promise<unknown>;
   markQuiet(id: string): void;
+  /** Whether the session's tunnel still answers (one ping in the tunnel's
+   * queue, #3492): null when it could not be asked. */
+  reachable?(input: { principalId: string; botId: string; id: string }): Promise<boolean | null>;
 }
 
 interface HostsDeps {
@@ -152,18 +174,24 @@ export function createHostComputerRouter(deps: {
    * `botId` is the bot that opened it: the session row is its own, so every
    * later call of any bot of that person goes through that row. Another
    * person never shares it (the key and the row both carry the principal). */
-  const open = new Map<string, { sessionId: string; lastUsed: number; principalId: string; botId: string }>();
+  const open = new Map<string, { sessionId: string; lastUsed: number; principalId: string; botId: string; askedAt: number; answeredAt: number }>();
   const opening = new Map<string, Promise<HostSession | { error: string }>>();
   const polling = new Set<string>();
   /** principal|host: commands running (or queued) on the person's session. */
   const busy = new Map<string, number>();
   const key = (principalId: string, hostId: string) => `${principalId.trim().toLowerCase()}|${hostId}`;
   const vmKey = (principalId: string, botId: string, hostId: string) => `${principalId.trim().toLowerCase()}|${botId}|${hostId}`;
-  /** The session ended at Perspicax (its end time passed): never reused. */
-  const expired = (endAt: string | undefined) => {
+  /** How long the session still has: up to its end time, and never past
+   * its life on the host (#3492). Zero or less: it ended, never reused. */
+  const timeLeft = (known: { askedAt: number }, endAt: string | undefined) => {
     const end = endAt ? Date.parse(endAt) : Number.NaN;
-    return Number.isFinite(end) && end <= now();
+    const life = known.askedAt + HOST_SESSION_LIFE_MS;
+    return (Number.isFinite(end) ? Math.min(end, life) : life) - now();
   };
+  /** The tunnel was asked and did not answer. Could not ask (no probe, the
+   * queue refused) is not a no. */
+  const tunnelGone = async (principalId: string, botId: string, sessionId: string) =>
+    (await deps.sessions.reachable?.({ principalId, botId, id: sessionId }).catch(() => null)) === false;
 
   const ownedRows = async (principalId: string): Promise<{ rows: UnattendedHostRow[]; error?: string }> => {
     const listed = await deps.hosts.list({ principalId });
@@ -293,13 +321,24 @@ export function createHostComputerRouter(deps: {
   }
 
   /** Open (or reuse) the person's quiet session on that host. Any bot of
-   * theirs reuses it; one that ended is closed and a new one opens. */
-  async function sessionOn(principalId: string, botId: string, hostId: string): Promise<HostSession | { error: string }> {
+   * theirs reuses it; one that ended is closed and a new one opens. Checked
+   * before anything is sent (#3492): a session with less time left than the
+   * command may take (`needMs`), or whose tunnel no longer answers, is
+   * replaced too. Neither is asked of a session running another command:
+   * closing it would stop that command, and the tunnel is in use. */
+  async function sessionOn(principalId: string, botId: string, hostId: string, needMs = 0): Promise<HostSession | { error: string }> {
     const k = key(principalId, hostId);
     const known = open.get(k);
     if (known) {
       const live = deps.sessions.target({ principalId, botId: known.botId, threadId: "", id: known.sessionId });
-      if (live && !expired(live.endAt)) {
+      const left = live ? timeLeft(known, live.endAt) : 0;
+      const inUse = busy.has(k);
+      let usable = left > 0 && (inUse || left > needMs);
+      if (usable && !inUse && now() - known.answeredAt >= HOST_SESSION_FRESH_MS) {
+        if (await tunnelGone(principalId, known.botId, known.sessionId)) usable = false;
+        else known.answeredAt = now();
+      }
+      if (usable) {
         known.lastUsed = now();
         return { sessionId: known.sessionId, botId: known.botId, reused: true };
       }
@@ -310,6 +349,8 @@ export function createHostComputerRouter(deps: {
     const run = (async () => {
       const threadId = deps.botThread(botId);
       if (!threadId) return { error: "That bot has no conversation to open the session on." };
+      // the host takes the session after this: its life there ends no earlier
+      const askedAt = now();
       const outcome = await deps.hosts.open({ principalId }, hostId, {
         seatFor: { botId, threadId },
         onSession: (id) => deps.sessions.markQuiet(id),
@@ -319,7 +360,7 @@ export function createHostComputerRouter(deps: {
       const deadline = now() + CONNECT_WAIT_MS;
       while (now() < deadline) {
         if (deps.sessions.target({ principalId, botId, threadId, id: outcome.session })) {
-          open.set(k, { sessionId: outcome.session, lastUsed: now(), principalId, botId });
+          open.set(k, { sessionId: outcome.session, lastUsed: now(), principalId, botId, askedAt, answeredAt: now() });
           return { sessionId: outcome.session, botId, reused: false };
         }
         await sleep(CONNECT_POLL_MS);
@@ -334,11 +375,13 @@ export function createHostComputerRouter(deps: {
    * A reused session that refused the command before sending it (no live
    * row, no tunnel here) is closed and the command goes once through a new
    * session. A transport failure (ssh 255) is never run again: the command
-   * may have run. The session is closed then only if `target` sees it dead
-   * or ended; a live one (maybe running another bot's command) stays open. */
+   * may have run. The session is closed then only if it is dead, ended or
+   * its tunnel no longer answers (#3492); a live one (maybe running another
+   * bot's command) stays open. */
   const execOn = async (principalId: string, botId: string, hostId: string, command: string, timeoutMs?: number): Promise<RemoteExecResult | HostExecError> => {
+    const needMs = Math.min(COMMAND_TIME_MAX_MS, Math.max(1000, timeoutMs ?? COMMAND_TIME_DEFAULT_MS));
     const run = async (): Promise<{ out: RemoteExecResult | { error: string }; session: HostSession | null }> => {
-      const session = await sessionOn(principalId, botId, hostId);
+      const session = await sessionOn(principalId, botId, hostId, needMs);
       if ("error" in session) return { out: session, session: null };
       // in flight (or waiting its turn on the tunnel, #3430): the idle sweep
       // never closes the session under it, and its end counts as a use
@@ -346,6 +389,9 @@ export function createHostComputerRouter(deps: {
       busy.set(k, (busy.get(k) ?? 0) + 1);
       try {
         const out = await deps.sessions.exec({ principalId, botId: session.botId, threadId: "", id: session.sessionId, command, actor: botId, ...(timeoutMs ? { timeoutMs } : {}) });
+        // an exit code came back through the tunnel: it answers
+        const known = open.get(k);
+        if (!("error" in out) && known && known.sessionId === session.sessionId) known.answeredAt = now();
         return { out, session };
       } finally {
         const left = (busy.get(k) ?? 1) - 1;
@@ -361,8 +407,12 @@ export function createHostComputerRouter(deps: {
       // The session was live when the command was sent: dead now means it
       // died during the command, which may have run. Never run it again; a
       // dead or ended session is closed so the next call opens a new one.
+      // The row alone does not say it (#3492: it stays connected after the
+      // host ended the session), so the tunnel is asked too.
       const live = deps.sessions.target({ principalId, botId: session.botId, threadId: "", id: session.sessionId });
-      if (!live || expired(live.endAt)) await drop(principalId, hostId, session.sessionId);
+      const known = open.get(key(principalId, hostId));
+      const ended = !live || (known?.sessionId === session.sessionId && timeLeft(known, live.endAt) <= 0);
+      if (ended || await tunnelGone(principalId, session.botId, session.sessionId)) await drop(principalId, hostId, session.sessionId);
       return { error: first.out.error, mayHaveRun: true };
     }
     if (!NOT_SENT.test(first.out.error)) return first.out;
@@ -377,7 +427,7 @@ export function createHostComputerRouter(deps: {
     let closed = 0;
     for (const [k, row] of open) {
       const live = deps.sessions.target({ principalId: row.principalId, botId: row.botId, threadId: "", id: row.sessionId });
-      if (live && !expired(live.endAt) && (busy.has(k) || now() - row.lastUsed < HOST_SESSION_IDLE_MS)) continue;
+      if (live && timeLeft(row, live.endAt) > 0 && (busy.has(k) || now() - row.lastUsed < HOST_SESSION_IDLE_MS)) continue;
       open.delete(k);
       await deps.sessions.close(row.principalId, row.botId, row.sessionId).catch(() => null);
       closed += 1;

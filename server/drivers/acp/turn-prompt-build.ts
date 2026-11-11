@@ -34,9 +34,14 @@ export function openingSystem(input: {
   const present = new Set([...(stableParts ?? []), ...(volatileParts ?? [])].map((section) => section.id));
   return {
     present,
-    compose: (leftOut) =>
-      (stableParts ? join(stableParts, leftOut) + input.hint : input.stable)
-      + (volatileParts ? volatileOf(leftOut) : input.volatile),
+    compose: (leftOut) => {
+      const head = stableParts ? join(stableParts, leftOut) + input.hint : input.stable;
+      const tail = volatileParts ? volatileOf(leftOut) : input.volatile;
+      // Prompt sections carry their own leading break; a half that does not
+      // (a driver's own section alone, a caller's plain halves) still starts
+      // a paragraph of its own, never glued to the last sentence before it.
+      return head && tail && !/^\s/.test(tail) && !/\s$/.test(head) ? `${head}\n\n${tail}` : head + tail;
+    },
   };
 }
 

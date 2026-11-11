@@ -489,9 +489,11 @@ describe("ACP turns (fake CLI)", () => {
       return promptOf();
     };
 
-    // The establishing turn carries the full prompt, exactly as before.
+    // The establishing turn carries the full prompt. Since #3534 it opens
+    // with the stable half and its standing line, then the volatile half, so
+    // two conversations of one bot share the same opening bytes.
     expect(await send("first", "Memory: likes quiet hours."))
-      .toBe("Standing rules.\n\nMemory: likes quiet hours." + HINT + "\n\nfirst");
+      .toBe("Standing rules." + HINT + "\n\nMemory: likes quiet hours.\n\nfirst");
     // The pooled session already carries it: later turns go through bare.
     expect(await send("second", "Memory: likes quiet hours.")).toBe("second");
     // A changed volatile half rides the next prompt as a labelled note.

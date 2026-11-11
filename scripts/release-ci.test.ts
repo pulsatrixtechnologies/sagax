@@ -84,7 +84,18 @@ describe("what a CI run proves", () => {
     expect(judgeRun(green())).toBe("green");
     expect(judgeRun(scoped())).toBe("scoped");
     expect(judgeRun([gate("success")])).toBe("scoped");
-    expect(judgeRun([gate("success"), vitest("ubuntu-latest", "success"), vitest("windows-latest", "skipped")])).toBe("scoped");
+    expect(judgeRun([gate("success"), vitest("ubuntu-latest", "failure"), vitest("windows-latest", "success")])).toBe("scoped");
+  });
+
+  it("is green for a Linux push run next to the skipped macOS job (#3672)", () => {
+    // ci.yml's vitest-macos is skipped on every Linux-only run and reports
+    // under its raw matrix name; the shards that ran are the proof.
+    const shards = Array.from({ length: 20 }, (_, i) => ({ name: `vitest (ubuntu-latest, shard ${i + 1}/20)`, conclusion: "success", steps: started }));
+    const macosTemplate: Job = { name: "vitest (${{ matrix.os }}, shard ${{ matrix.shard }}/20)", conclusion: "skipped", steps: [] };
+    expect(judgeRun([gate("success"), ...shards, macosTemplate])).toBe("green");
+    expect(judgeRun([gate("success"), vitest("ubuntu-latest", "success"), vitest("windows-latest", "skipped")])).toBe("green");
+    // one shard that ran and did not pass still keeps it from proof
+    expect(judgeRun([gate("success"), ...shards.slice(1), { ...shards[0]!, conclusion: "cancelled" }, macosTemplate])).toBe("scoped");
   });
 
   it("tells a runner that never came from a test that failed", () => {

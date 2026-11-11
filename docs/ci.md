@@ -76,8 +76,8 @@ platform (November 2026, 3,579 test files): each Linux shard took 8 to 12
 minutes, each Windows shard 7 to 15 and each macOS shard 8 to 15, with
 setup. A push to main runs the twenty Linux shards side by side, so its
 tests finish in about 15 minutes after `typecheck + lint`. A run of every
-platform (the nightly run, a manual run) takes about an hour, because the
-account runs at most five macOS jobs at a time (see "macOS runners").
+platform (the nightly run, a manual run) takes longer, because the macOS
+shards run three at a time (see "macOS runners").
 
 Refresh the times from a few recent runs when shards drift apart (a
 cancelled shard's finished files count too):
@@ -103,6 +103,15 @@ half hours. Now:
   nightly schedule.
 - The macOS packaged-server and Electron smokes, and the Windows CUA smoke,
   run only from a manual dispatch or the nightly schedule.
+- The macOS Vitest shards run in their own job, `vitest-macos`, with the
+  same shards and steps as `vitest` (YAML anchors) and `max-parallel: 3`.
+  GitHub allows five hosted macOS jobs at a time on Free, Pro and Team plans
+  ("Actions limits" in GitHub's documentation), and the macOS smokes and the
+  Swift job take one each. When all twenty macOS shards were asked for at
+  once, the last ones waited about an hour and GitHub dropped six of them and
+  the Swift job unstarted ("not acquired by Runner of type hosted even after
+  multiple attempts", #3672). A shard that has not started now waits in the
+  workflow, not in GitHub's runner queue. No paid runner is used.
 - `ci-stop-closed.yml` cancels a PR's CI run when the PR is merged or closed. PR runs share a group named by the PR number (`ci-pr-<n>`), never by `github.ref`: a merged PR's closed event reports the base branch as `github.ref`, which made every merge cancel main's CI (fixed Oct 3 2026).
 
 ## Main and releases
@@ -114,8 +123,10 @@ runs instead of one per merge (fifteen queued behind each other in October
 
 `release.yml` ships only a commit whose code passed CI
 (`scripts/release-ci.mjs`, overlapping the platform builds). A run counts only
-when its `CI` gate passed and every vitest job actually ran and passed, so a
-scoped run (docs- or version-only, vitest skipped) is never proof. The script
+when its `CI` gate passed, at least one vitest job ran, and every vitest job
+that ran passed. A skipped vitest job (`vitest-macos` on a Linux-only run) is
+a platform the run did not cover, and a scoped run (docs- or version-only,
+vitest skipped) is never proof. The script
 accepts, in order:
 
 1. a finished run on the release commit itself;
@@ -192,15 +203,23 @@ How a run decides (`scripts/testing/known-failures.mjs`):
    instead of failing, and uploads its results (`extract`): one entry per
    test, plus `(whole file)` for a file that did not load, plus a failure of
    its own when vitest exited non-zero with no failing test (an unhandled
-   error). A job that crashed or timed out sends nothing.
-2. The `known failures` job (`report`) reads every job's results. The run is
-   red when a failure is not in the list, or when fewer jobs sent results
-   than were scheduled. Each unlisted failure is an error annotation and a
-   row of the job summary. The `CI` gate requires this job.
+   error). A job that crashed or timed out sends nothing, and so does a job
+   that never got a runner.
+2. The `known failures` job (`report`) reads every job's results and the
+   run's job list (`--jobs`, from the Actions API). The run is red when a
+   failure is not in the list, or when a job ran and sent no results (it
+   crashed or timed out). A test job with no started step and no results
+   got no runner (the release gate's own rule, `neverStarted`): the summary says, per platform, how many jobs and which shards
+   did not run, and that this is not a test failure. The `CI` gate still
+   reads the unstarted job itself as not passed. Each unlisted failure is an
+   error annotation and a row of the job summary. The `CI` gate requires
+   this job.
 3. Only a run on every platform (the nightly schedule or a manual dispatch;
    `report --platforms`) shrinks the list: a listed test that passed there
    leaves it, the job uploads the shrunk file as the `known-failures`
-   artifact and names the entries in its summary. Commit that file. A push
+   artifact and names the entries in its summary. Commit that file. A listed
+   test whose file did not run on one of the platforms (its job got no
+   runner) stays, and the summary counts it. A push
    runs Linux only, so a listed test that passes on a push stays listed (the
    summary says so): it may still fail on Windows or macOS. The list can only shrink: on a
    push, `check-shrink` compares the list at the commit before the push and
@@ -208,7 +227,10 @@ How a run decides (`scripts/testing/known-failures.mjs`):
 4. On main (pushes and the nightly run), a failure not in the list is
    remembered from run to run (the `known-failures-sightings` artifact). The
    second run that sees it opens one issue per test with the label
-   `regression`, unless an open issue already carries that test's marker.
+   `regression`, unless an open issue already carries that test's marker
+   (the step prints `Tracked by open issue #<n>` for it). A sighting whose
+   issue was closed counts again from its next failure, so a test that
+   still fails after its fix gets a new issue once seen twice more.
    Before opening it, `scripts/stability/bisect.mjs` runs only that test
    file on main's merges between the last run where it passed and the first
    where it failed, halving the interval, and the issue names the pull
@@ -221,7 +243,13 @@ How a run decides (`scripts/testing/known-failures.mjs`):
    next merge's run does. A test that passes again is forgotten only by a run
    on every platform (`open-issues --platforms`, the same rule as the list):
    a push runs Linux only, so a test that fails only on Windows or macOS
-   keeps its count through it. Nothing here blocks a merge.
+   keeps its count through it, and so does a test whose file did not run on
+   one platform of a nightly run. Nothing here blocks a merge.
+
+The Linux package smoke installs its tools with apt retries
+(`Acquire::Retries=3`), each attempt bounded by `timeout`, three attempts
+with a pause, and a 13 minute cap on the step: a resolver that stops
+answering cannot take the job's 25 minutes (#3672).
 
 A red quick check does not hide the tests (#3493). The vitest jobs and the
 `known failures` job need `static` only for its selection: they run whenever

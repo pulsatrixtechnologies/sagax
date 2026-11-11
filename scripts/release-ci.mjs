@@ -9,8 +9,9 @@
 //   (c) when the release commit only changes package.json's "version" from
 //       its parent, the parent's proof by (a) or (b). A parent run that is
 //       still going is waited for; a red or missing one never counts.
-// A run counts only when its `CI` job passed AND every vitest job ran and
-// passed, so a docs-only or version-only run (vitest skipped) is no proof.
+// A run counts only when its `CI` job passed AND at least one vitest job ran
+// and every one that ran passed, so a docs-only or version-only run (vitest
+// skipped) is no proof.
 //
 // Main keeps at most one CI run going and one waiting, and each merge
 // replaces the waiting one, so the release commit's own push run can be
@@ -37,13 +38,17 @@ export const MAX_WAIT_MS = 170 * 60_000;
 /** @typedef {{ id: number, event: string, status: string, head_branch: string, head_sha?: string, created_at: string, run_attempt?: number, head_commit?: { tree_id?: string } | null }} Run */
 
 const isVitestJob = (job) => job.name === "vitest" || job.name.startsWith("vitest (");
-/** A job that never started a step never got a runner: GitHub gave up acquiring one. */
-const neverStarted = (job) => !(job.steps ?? []).some((step) => step.conclusion != null || step.status === "in_progress");
+/** A job that never started a step never got a runner: GitHub gave up acquiring one.
+ * scripts/testing/known-failures.mjs uses the same rule for the nightly. */
+export const neverStarted = (job) => !(job.steps ?? []).some((step) => step.conclusion != null || step.status === "in_progress");
 
 /**
  * What one finished CI run proves.
- * - "green": the gate passed and every vitest job ran and passed.
- * - "scoped": the gate passed but vitest did not run (docs- or version-only).
+ * - "green": the gate passed and every vitest job that ran passed. A skipped
+ *   vitest job is a platform the run did not cover (vitest-macos on a
+ *   Linux-only run, #3672), not a failure.
+ * - "scoped": the gate passed but vitest did not run (docs- or version-only),
+ *   or a vitest job that ran did not pass.
  * - "runner-lost": the gate failed, and every other failed job never started.
  * - "red": the gate failed for any other reason.
  * - anything else: the gate's own conclusion, or "no gate job".
@@ -53,8 +58,8 @@ export function judgeRun(jobs) {
   const gate = jobs.find((job) => job.name === "CI");
   if (!gate) return "no gate job";
   if (gate.conclusion === "success") {
-    const vitest = jobs.filter(isVitestJob);
-    return vitest.length > 0 && vitest.every((job) => job.conclusion === "success") ? "green" : "scoped";
+    const ran = jobs.filter((job) => isVitestJob(job) && job.conclusion !== "skipped");
+    return ran.length > 0 && ran.every((job) => job.conclusion === "success") ? "green" : "scoped";
   }
   if (gate.conclusion === "failure") {
     const failed = jobs.filter((job) => job !== gate && !["success", "skipped", "neutral"].includes(job.conclusion ?? ""));

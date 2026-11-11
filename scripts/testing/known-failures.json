@@ -338,13 +338,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/grok-account-connectors.e2e.test.ts",
-      "test": "organization server: the person's own Grok sign-in > Full access: a send goes with no card",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/notification-routing.e2e.test.ts",
       "test": "bot-to-bot coordination is recorded, not announced > still buzzes when a peer's turn stops to ask the person a question",
       "owner": "unassigned",
@@ -744,13 +737,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "src/components/ChatView.follow.test.ts",
-      "test": "scrolls a following transcript to the bottom when the finished reply arrives",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/peers/room-coordination.e2e.test.ts",
       "test": "enforces the 4001-character request boundary on the real server",
       "owner": "unassigned",
@@ -802,13 +788,6 @@
     {
       "file": "server/mcp-restart.e2e.test.ts",
       "test": "restart keeps the key and replaces the warm process, and so does turning the server off and on",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/mail/email-draft-send.e2e.test.ts",
-      "test": "sends an email draft only after its approval card is allowed, once",
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
       "since": "2026-11-11"
@@ -2235,13 +2214,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/context/prompt-budget.test.ts",
-      "test": "prompt size by engine and turn kind (#1997) > measures each section and both cache halves using the production builders",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/engines/claude-account-api.test.ts",
       "test": "Claude account HTTP API > keeps per-bot account selections separate and protects directories referenced by bots or past tasks",
       "owner": "unassigned",
@@ -3453,13 +3425,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/groups/group-goal-run.e2e.test.ts",
-      "test": "goal-driven channel runs > waits for a busy coordinator without spending a goal turn, then completes on the same card",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/org/org-flow-plugins.test.ts",
       "test": "Pulsatrix Flow for every member, from Perspicax's private marketplace > installs the product and the tenant once, with the server link token never on disk, and loads them for members only",
       "owner": "unassigned",
@@ -3476,13 +3441,6 @@
     {
       "file": "server/proactive/proactive-wake.test.ts",
       "test": "pending wakes survive a restart; a two-bot DM post always reports (2026-11-02) > the file keeps ids only (never the words), mode 0600, and hands them back once",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/voice/voice-call-prompt.e2e.test.ts",
-      "test": "gives call turns the hidden phone-call instruction and stores only the words",
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
       "since": "2026-11-11"

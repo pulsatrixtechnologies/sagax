@@ -771,4 +771,22 @@
     <string name="mobile_density_compact">紧凑</string>
     <string name="mobile_density_comfortable_caption">头像更大，机器人名称下会显示最新消息。</string>
     <string name="mobile_density_compact_caption">每个机器人占一行。拥有多个活跃对话的机器人会显示对话数量；点按数字即可列出对话。</string>
+
+    <string name="mobile_coding_title">编程</string>
+    <string name="mobile_coding_loading">正在加载活动…</string>
+    <string name="mobile_coding_empty">最近 7 天没有编程任务。</string>
+    <string name="mobile_coding_continue">继续</string>
+    <string name="mobile_coding_stop">停止</string>
+    <string name="mobile_coding_close">关闭聊天</string>
+    <string name="mobile_group_panel_done">完成</string>
+    <string name="mobile_group_title">群组</string>
+    <string name="mobile_group_action_subtitle">成员、说明、记忆和电脑</string>
+    <string name="mobile_group_tab_details">详情</string>
+    <string name="mobile_group_tab_members">成员</string>
+    <string name="mobile_group_tab_instructions">说明</string>
+    <string name="mobile_group_tab_memory">记忆</string>
+    <string name="mobile_group_tab_library">资料库</string>
+    <string name="mobile_group_tab_computer">电脑</string>
+    <string name="mobile_group_owner_only">只有群组所有者可以更改这些设置。</string>
+    <string name="mobile_group_leave">退出群组</string>
 </resources>

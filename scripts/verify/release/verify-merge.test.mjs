@@ -66,7 +66,7 @@ describe("iOS stage without Swift (#3639)", () => {
     const logs = [];
     const stops = [];
     const spawn = (cmd) => {
-      if (cmd === "swift") return swiftStatus === "missing" ? { error: new Error("ENOENT"), status: null } : { status: 0 };
+      if (cmd === "swift") return swiftStatus === "missing" ? { error: Object.assign(new Error("ENOENT"), { code: "ENOENT" }), status: null } : { status: 0 };
       return { status: extra.xcode ? 0 : 1 };
     };
     const run = (label, command) => { ran.push(command[0]); return label.startsWith("swift test") && swiftStatus === "red" ? { label, ok: false, seconds: "1" } : ok(label); };

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { failedTurnTool } from "../../shared/failed-turn.ts";
 import { RESTART_TURN_NOTE } from "../../shared/restart-words.ts";
 import { INTERRUPTED_OUTWARD } from "../runtime/tree.ts";
-import { heldCutTurnSpeakers, RUNTIME_RESUME_GRACE_MS, saveInterruptedTurns, TURN_NOT_RESUMED } from "../turns/interrupted-turns.ts";
+import { RUNTIME_RESUME_GRACE_MS, saveInterruptedTurns, TURN_NOT_RESUMED } from "../turns/interrupted-turns.ts";
 import { ENGINE_EXITED_SENTENCE } from "../../shared/engine-exit-words.ts";
 import { createResumeTurnsCutByRestart, watchDirectResumes } from "./resumeTurnsCutByRestart.ts";
 
@@ -139,10 +139,10 @@ describe("resumeTurnsCutByRestart (#3217)", () => {
   it("a runtime-held turn with a speaker gets its answer from the runtime's own rerun, as that person", async () => {
     const messages = cutConversation({ name: "read_setting" });
     const speaker = { origin: "person", principalId: "p1" };
-    saveInterruptedTurns(dataDir, [{ botId: "b1", threadId: "t1", at: 95_000, runtimeHeld: true, speaker }]);
-    // Read at load, before the runtime's first tick, without taking the record.
-    expect(heldCutTurnSpeakers(dataDir)).toEqual([{ threadId: "t1", speaker }]);
+    saveInterruptedTurns(dataDir, [{ botId: "b1", threadId: "t1", at: 95_000, runtimeHeld: true }]);
     const host = bootHost(messages, { runtimeHoldsAtBoot: true });
+    // #3609: the thread keeps whom it speaks for (read back at start).
+    host.turnSpeakers.set("t1", speaker);
     createResumeTurnsCutByRestart(() => host)();
     // The runtime's rerun (runRootTurn) speaks for turnSpeakers' entry; with
     // none the engine gate fails closed and the turn ends on a failed row.
@@ -172,8 +172,11 @@ describe("resumeTurnsCutByRestart (#3217)", () => {
     const messages = cutConversation({ name: "read_setting" });
     saveInterruptedTurns(dataDir, [{ botId: "b1", threadId: "t1", at: 95_000 }]);
     const host = bootHost(messages);
+    host.turnSpeakers.set("t1", { origin: "person", principalId: "p1" });
     createResumeTurnsCutByRestart(() => host)();
     expect(host.startTurn).toHaveBeenCalledTimes(1);
+    // #3609: as the person its thread keeps
+    expect((host.startTurn.mock.calls[0] as unknown[])[2]).toMatchObject({ speaker: { origin: "person", principalId: "p1" } });
     const prompt = String((host.startTurn.mock.calls[0] as unknown[])[1]);
     expect(prompt).toContain("Lis le réglage de sauvegarde et dis-moi sa valeur");
     expect(prompt).toContain("Steps that turn already completed");

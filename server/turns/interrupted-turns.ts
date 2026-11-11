@@ -10,6 +10,8 @@ import { join } from "node:path";
 
 import { failedTurnCause } from "../../shared/failed-turn.ts";
 import { writeFileAtomic } from "../atomic.ts";
+import type { TurnSpeaker } from "../engines/engine-access.ts";
+import { storedTurnSpeaker } from "./thread-speakers.ts";
 import { outwardActions } from "./turn-outcome.ts";
 
 export interface InterruptedTurn {
@@ -17,7 +19,9 @@ export interface InterruptedTurn {
   threadId: string;
   /** When the shutdown cut it (ms). */
   at: number;
-  /** Who the cut turn spoke for (TurnSpeaker), carried to its resume. */
+  /** Who the cut turn spoke for, in a file an older release wrote: read
+   * once into the thread (legacyCutTurnSpeakers, #3609); never written now,
+   * the thread keeps its speaker itself. */
   speaker?: Record<string, unknown>;
   /** #2602: the runtime holds this turn as a root and resumes it itself;
    * kept here only so the next start can check the promise was kept. */
@@ -215,20 +219,17 @@ function readInterruptedTurns(path: string, now: number): { resume: InterruptedT
   return out;
 }
 
-/** #3217: who each cut turn the runtime holds spoke for, read without
- * taking the record (the start's resume still takes it). The runtime's own
- * rerun of such a root speaks for that person; a process that just started
- * knows nobody, and the engine gate fails closed without it. Read before
- * the runtime's first tick. */
-export function heldCutTurnSpeakers(dataDir: string, now = Date.now()): Array<{ threadId: string; speaker: Record<string, unknown> }> {
+/** #3609: the speakers a stop written by an older release kept in this
+ * file, read without taking the record (the start's resume still takes
+ * it). They move into their threads once (server/turns/thread-speakers.ts),
+ * where every speaker is kept now; this file no longer holds any. */
+export function legacyCutTurnSpeakers(dataDir: string, now = Date.now()): Array<{ threadId: string; speaker: TurnSpeaker }> {
   const path = join(dataDir, FILE);
   if (!existsSync(path)) return [];
-  return restorableSpeakers(readInterruptedTurns(path, now).resume);
-}
-
-/** The cut turns (runtime-held, with a saved speaker) whose speaker a new process restores. */
-export function restorableSpeakers(turns: readonly InterruptedTurn[]): Array<{ threadId: string; speaker: Record<string, unknown> }> {
-  const out: Array<{ threadId: string; speaker: Record<string, unknown> }> = [];
-  for (const turn of turns) if (turn.runtimeHeld && turn.speaker) out.push({ threadId: turn.threadId, speaker: turn.speaker });
+  const out: Array<{ threadId: string; speaker: TurnSpeaker }> = [];
+  for (const turn of readInterruptedTurns(path, now).resume) {
+    const speaker = storedTurnSpeaker(turn.speaker);
+    if (speaker) out.push({ threadId: turn.threadId, speaker });
+  }
   return out;
 }

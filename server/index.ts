@@ -871,7 +871,8 @@ import { modelContextWindow } from "./models/model-context-window.ts";
 import { cloudRefusal } from "../shared/place-view.ts";
 import { PendingTurnCancellations, ProviderTurnGenerationRegistry, RetiredTurnRegistry, guardTurnDispatch } from "./turns/turn-dispatch-guard.ts";
 import { createGracefulShutdown } from "./process/graceful-shutdown.ts";
-import { heldCutTurnSpeakers, shutdownDrainMs } from "./turns/interrupted-turns.ts";
+import { legacyCutTurnSpeakers, shutdownDrainMs } from "./turns/interrupted-turns.ts";
+import { SpeakerDerivedMap, SpeakerDerivedSet, ThreadSpeakers } from "./turns/thread-speakers.ts";
 import { clearHeldSteersForThread,
   recordHeldSteer } from "./turns/held-steers.ts";
 import { continuationSpeaker } from "./turns/continuation-speaker.ts";
@@ -9216,32 +9217,49 @@ void runEngineSelfCheck(readEngineManifest())
 const turnTriggers = new Map<string, UsageTrigger>();
 /** Who the turn last admitted on a thread speaks for (slice 3 engine
  * access), and that speaker's principal ("" for an unknown person): what a
- * continuation of that turn, or a bot hop it starts, speaks for too. */
-const turnSpeakers = new Map<string, TurnSpeaker>();
-// #3217: a root the runtime held when the last process stopped is rerun by
-// the runtime itself, and speaks for the person its turn was admitted for:
-// restored from the stop's record before the runtime's first tick, so the
-// rerun does not fail closed on an unknown speaker.
-try {
-  for (const { threadId, speaker } of heldCutTurnSpeakers(DATA_DIR)) if (!turnSpeakers.has(threadId)) turnSpeakers.set(threadId, speaker as TurnSpeaker);
-} catch (error) { console.warn(`startup: the speakers of cut turns could not be read: ${error instanceof Error ? error.message : String(error)}`); }
+ * continuation of that turn, or a bot hop it starts, speaks for too.
+ * #3609: kept with the thread (TaskRecord.speaker) and read back from it
+ * after a restart, clean or not: a root that waited on a teammate or a
+ * card continues as the same person. What the admitted turn derived from
+ * its speaker is derived again when it is read back. */
+/** True once `store` exists: a speaker read before it is not marked as read. */
+let storeReady = false;
+const turnSpeakers = new ThreadSpeakers(
+  () => storeReady ? { read: (threadId) => store.threadSpeaker(threadId), write: (threadId, speaker) => store.setThreadSpeaker(threadId, speaker) } : undefined,
+  (threadId, speaker) => restoreThreadSpeakerFields(threadId, speaker),
+);
 /** Settled tool calls by conversation, for "Connect ..." cards (server/routes/connector-setup.ts). */
 const connectorSetupProofs = createConnectorSetupProofs();
-const turnSpeakerPrincipals = new Map<string, string>();
+const turnSpeakerPrincipals = new SpeakerDerivedMap<string>((threadId) => turnSpeakers.get(threadId));
 /** Who ran each thread's current turn, for a key the provider refuses. */
 const turnAccessByThread = new Map<string, { via: TurnAccess["via"]; payer: AccessPayer; payerPrincipalId?: string; routine?: true; payerSub?: string; provider?: ModelProvider }>();
 /** Threads whose last admitted turn (Direct or room) descends from a routine
  * or other automation: a bot hop it starts carries the mark, so no turn a
  * routine started ever reaches someone's Perspicax access (slice 5, D5). */
-const turnRoutineLineage = new Set<string>();
+const turnRoutineLineage = new SpeakerDerivedSet((threadId) => turnSpeakers.get(threadId));
 /** For a thread whose last admitted turn descends from a routine: whose
  * credentials that routine runs on (its bot's owner, 2026-10-01), carried
  * to the bot hops it starts. */
-const turnRoutinePayers = new Map<string, string>();
+const turnRoutinePayers = new SpeakerDerivedMap<string>((threadId) => turnSpeakers.get(threadId));
 /** 2026-10-26: what started the routine a thread's lineage descends from
  * ("schedule", "manual", "webhook"), carried along bot hops so a relay
  * between the person's own bots knows it (routineTriggerOf). */
-const turnRoutineTriggers = new Map<string, string>();
+const turnRoutineTriggers = new SpeakerDerivedMap<string>((threadId) => turnSpeakers.get(threadId));
+/** #3609: what a turn's claim derives from its speaker
+ * (start-turn-prepare-claim.ts), derived again for a speaker read back from
+ * its thread after a restart: the person it speaks for, and a routine
+ * lineage's payer and trigger. */
+function restoreThreadSpeakerFields(threadId: string, speaker: TurnSpeaker): void {
+  const bot = store.botByThread(threadId);
+  if (!bot) return;
+  turnSpeakerPrincipals.set(threadId, orgSpeakerPrincipal(bot, speaker));
+  if (!routineLineage(speaker)) return;
+  turnRoutineLineage.add(threadId);
+  const payer = turnPayer({ speaker, owner: { principalId: effectiveBotOwner(bot) }, peerOwnerPrincipalId: peerOwnerPrincipal(speaker) }).principalId;
+  if (payer) turnRoutinePayers.set(threadId, payer);
+  const trigger = speaker.origin === "peer" ? speaker.routineTrigger : undefined;
+  if (trigger) turnRoutineTriggers.set(threadId, trigger);
+}
 /** What started this thread's request or the routine its lineage comes
  * from, when known. */
 function routineTriggerOf(threadId: string): string | undefined {
@@ -11479,6 +11497,13 @@ const store = new Store(
   newBotApprovalMode,
   newBotGreetingLanguage,
 );
+storeReady = true;
+// #3609: a stop written by an older release kept the cut turns' speakers in
+// its own file; they move into their threads once, before the runtime's
+// first tick, so those turns resume as the person they spoke for.
+try {
+  for (const { threadId, speaker } of legacyCutTurnSpeakers(DATA_DIR)) if (!store.threadSpeaker(threadId)) turnSpeakers.set(threadId, speaker);
+} catch (error) { console.warn(`startup: the speakers of cut turns could not be read: ${error instanceof Error ? error.message : String(error)}`); }
 /** #3480: quiet mode, per bot and for all of a person's bots
  * (shared/quiet-mode.ts). Its line when it goes off is written in the bot's
  * one conversation. */

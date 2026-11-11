@@ -24,6 +24,8 @@ import { peerAllowKey, type PeerAction } from "./peers/peer-approval-key.ts";
 import { DATA_DIR, EVENTS_DIR, NATIVE_DIR, loadBrowserProfileIdAliases } from "./config.ts";
 import * as mdb from "./messages/message-db.ts";
 import { ThreadCache, type ThreadState } from "./threads/thread-cache.ts";
+import { sameStoredSpeaker, storedTurnSpeaker } from "./turns/thread-speakers.ts";
+import type { TurnSpeaker } from "./engines/engine-access.ts";
 import { forgetBotMemoryJournal, journalFile } from "./memory/memory-journal.ts";
 import { forgetLogMemory } from "./encryption/content-at-rest.ts";
 import { forgetWorkspaceUsage } from "./workspace/workspace-usage.ts";
@@ -169,6 +171,10 @@ export interface TaskRecord extends Omit<WireTask, TaskWireDerivedKeys> {
    * confidential or a confidential one is deleted, after a reset replaced
    * the cursor (server/engines/engine-transcripts.ts). Ids only. */
   engineSessions?: string[];
+  /** #3609: whom this thread's last admitted turn speaks for
+   * (server/turns/thread-speakers.ts), so a continuation after a restart
+   * speaks for the same person. Ids and flags only. */
+  speaker?: TurnSpeaker;
 }
 
 /** How many native session ids a task keeps (TaskRecord.engineSessions). */
@@ -177,7 +183,7 @@ export const ENGINE_SESSIONS_KEPT = 64;
 /** TaskRecord fields no client may see. Everything else must be on WireTask:
  * the exactness assertion below fails to compile when either side drifts,
  * so a new server field forces a decision — wire-visible or private here. */
-export type TaskWirePrivateKeys = "resumeCursors" | "lastInstanceId" | "handedMessages" | "appliedCompactionId" | "contextSummaries" | "contextFloor" | "lastContextModel" | "surfaceSource" | "askedAt" | "autoWorkspace" | "streamSegment" | "segmentDigest" | "engineSessions";
+export type TaskWirePrivateKeys = "resumeCursors" | "lastInstanceId" | "handedMessages" | "appliedCompactionId" | "contextSummaries" | "contextFloor" | "lastContextModel" | "surfaceSource" | "askedAt" | "autoWorkspace" | "streamSegment" | "segmentDigest" | "engineSessions" | "speaker";
 /** WireTask fields computed by toWireTask and never stored on a TaskRecord. */
 export type TaskWireDerivedKeys = "surfaceAuto" | "followsBotModel" | "personWrote";
 export type TaskWireProjection = Pick<TaskRecord, Exclude<keyof TaskRecord, TaskWirePrivateKeys>> & Pick<WireTask, TaskWireDerivedKeys>;
@@ -196,7 +202,7 @@ export function toWireTask(task: TaskRecord, botModel: ModelSelection): WireTask
   const { resumeCursors: _resumeCursors, lastInstanceId: _lastInstanceId, handedMessages: _handedMessages,
     appliedCompactionId: _appliedCompactionId, contextSummaries: _contextSummaries, contextFloor: _contextFloor, lastContextModel: _lastContextModel,
     surfaceSource, askedAt: _askedAt, autoWorkspace: _autoWorkspace, streamSegment: _streamSegment, segmentDigest: _segmentDigest,
-    engineSessions: _engineSessions, ...stored } = task;
+    engineSessions: _engineSessions, speaker: _speaker, ...stored } = task;
   const wire: WireTask = { ...stored, modelSelection: structuredClone(task.modelSelection ?? botModel), followsBotModel: task.modelSelection === undefined,
     // only the fact, never when (shared/background-threads.ts)
     ...(task.askedAt !== undefined ? { personWrote: true as const } : {}) };
@@ -3946,6 +3952,30 @@ const patch = { approvalMode: mode, autoApprove: false, alwaysAllow: [] };
     this.commitBotChange(bot, "the thread's link to its conversation", () => { task.parallelOf = structuredClone(parallelOf); });
     this.emit({ type: "bot", botId });
     return task;
+  }
+
+  /** #3609: whom the thread's last admitted turn speaks for, as kept with
+   * the thread (any bot's), or undefined. */
+  threadSpeaker(threadId: string): TurnSpeaker | undefined {
+    for (const bot of this.bots) {
+      const task = bot.tasks?.find((t) => t.threadId === threadId);
+      if (task) return storedTurnSpeaker(task.speaker);
+    }
+    return undefined;
+  }
+
+  /** #3609: keep whom a thread's admitted turn speaks for with the thread,
+   * saved before the turn runs, so a restart (clean or not) never loses it.
+   * False when no bot thread has this id (a room's turn keeps its own).
+   * Never reachable from the HTTP task PATCH: speaker is not a TASK_PATCH_FIELD. */
+  setThreadSpeaker(threadId: string, speaker: TurnSpeaker): boolean {
+    const bot = this.botByThread(threadId);
+    const task = bot?.tasks?.find((t) => t.threadId === threadId);
+    const kept = storedTurnSpeaker(speaker);
+    if (!bot || !task || !kept) return false;
+    if (sameStoredSpeaker(task.speaker, kept)) return true;
+    this.commitBotChange(bot, "whom the thread speaks for", () => { task.speaker = kept; }, undefined, true);
+    return true;
   }
 
   /** A person wrote in this thread at `at` (startTurn and a steer decide

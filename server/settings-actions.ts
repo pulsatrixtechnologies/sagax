@@ -19,6 +19,7 @@ import { BULK_TARGETS_MAX, splitBulkTargets } from "../shared/bulk-bot-edit.ts";
 import { withRequiredComputer, type RoutineRequirements } from "../shared/routine-readiness.ts";
 import { STEP_UP_CLASSES, botActClasses, type StepUpClass } from "../shared/step-up.ts";
 import { valueDigest, type ActRuleCandidate, type BotActResult, type BotActService } from "./bots/bot-act.ts";
+import { personWord, readerLanguage } from "./people/person-words.ts";
 
 export type SettingsActionDeps = {
   organization: () => boolean;
@@ -50,11 +51,9 @@ export type SettingsActionDeps = {
   /** `quote` (2026-10-20): the person asked their own Primary Bot for this
    * change in this turn's message; true, or why not. */
   personAsked?: (input: SettingsActionInput, quote: unknown) => { message: string; quote?: string; primary?: { botId: string; botName: string; messageId: string } } | string;
-  /** #3480: null when this turn is the bot's person writing to it in their
-   * own words (the check of the proactive ask, primaryTurnGate "cards"),
-   * else why not: a routine, a wake, a webhook or another bot's turn. Quiet
-   * mode changes only then; without it, never. */
-  ownWords?: (input: SettingsActionInput) => string | null;
+  /** The language of the person whose bot speaks (their saved choice, else
+   * the language their app asks in): the server's own lines are said in it. */
+  language?: (input: SettingsActionInput) => string | undefined;
   /** A rule's own words (its when, its description), for the person's
    * message to name it; undefined when it is not theirs. */
   ruleText?: (person: string | null, kind: "custom" | "owner", id: string) => string | undefined;
@@ -81,10 +80,10 @@ export type SettingsActionInput = {
   botColor: string;
 };
 
-/** #3480: the person tells a bot in words to be quiet or to speak again;
- * the bot sets it at once, at every level, like a word to the bot itself:
- * it only changes what reaches the person, never what runs. */
-const QUIET_MODE_KEYS: ReadonlySet<string> = new Set(["bot.quietMode", "notifications.quietMode"]);
+/** #3581: quiet mode is retired: what it did is how every bot behaves. A
+ * bot that still sets one of its keys (the person said "be quiet") gets the
+ * one line it says, in the person's language, and nothing changes. */
+const RETIRED_QUIET_KEYS: ReadonlySet<string> = new Set(["bot.quietMode", "notifications.quietMode"]);
 /** What a Primary Bot may change at once on the person's words (security
  * review 2026-10-20): turning cards off or back on, nothing else. */
 const PERSON_ASKED_KEYS: ReadonlySet<string> = new Set([
@@ -531,6 +530,10 @@ export function createSettingsActions(deps: SettingsActionDeps) {
     // answers every value that family can read, instead of a refusal the bot retries
     const familyName = action === "get" ? familyOfGet(args) : undefined;
     if (familyName) return familyRead(input, familyName);
+    if (typeof args.key === "string" && RETIRED_QUIET_KEYS.has(args.key)) {
+      const line = personWord(readerLanguage(deps.language?.(input)), "chat.quietRetired");
+      return text(200, `Nothing to change: bots already keep their work out of the person's chat. Tell the person this one line, then end your turn: ${line}`);
+    }
     const spec = settingSpec(args.key);
     if (!spec) return text(400, "Unknown setting key. Call sagax_settings with action list (and a family) to see them.");
     const facts = deps.facts(input.threadId, input.generation);
@@ -727,12 +730,6 @@ export function createSettingsActions(deps: SettingsActionDeps) {
       built = { method: "POST", path: DEVICE_APPLY_PATH, body: { op: "set", key: device.key, value: device.value, botName: input.botName } };
     }
 
-    // #3480: a text a bot reads never switches quiet mode on or off: only
-    // the person's own message to their bot does; elsewhere one line, no card
-    if (QUIET_MODE_KEYS.has(spec.key)) {
-      const notOwn = deps.ownWords ? deps.ownWords(input) : "No message of the person started this turn.";
-      if (notOwn !== null) return text(403, `Quiet mode changes only when your person tells you so in their own message (never a routine, a wake, a webhook or another bot's turn): not changed. ${notOwn} Do not retry; say nothing about it.`);
-    }
     // the path the server will route, as act requires (no dot segment, no
     // encoded character, never internal)
     if (!acceptablePath(built.path)) return text(400, `${spec.key}: that target or value cannot name a record.`);
@@ -755,7 +752,7 @@ export function createSettingsActions(deps: SettingsActionDeps) {
       : askedChange(proof.message, spec.key, value, subjectBot ? deps.targetName?.("bot", subjectBot) : undefined, !subjectBot || subjectBot === input.botId,
         spec.target === "rule" && ids.target ? deps.ruleText?.(speaker, spec.key.startsWith("rules.custom") ? "custom" : "owner", ids.target) : undefined,
         typeof args.quote === "string" ? args.quote : proof.message, input.botName);
-    const decided = decideSettingEffect({ classes, mode: deps.turnMode(input.botId, input.threadId), ownerWork, keyProtected, ...(approvalTo ? { approvalTo } : {}), personAsked: asked === true || QUIET_MODE_KEYS.has(spec.key), ...reach });
+    const decided = decideSettingEffect({ classes, mode: deps.turnMode(input.botId, input.threadId), ownerWork, keyProtected, ...(approvalTo ? { approvalTo } : {}), personAsked: asked === true, ...reach });
     const secret = classes.includes("secret");
     // the card says what and where (a name, never an id) and the whole value
     // a person allows, or its keys and fingerprint when it is long; a
@@ -810,9 +807,6 @@ export function createSettingsActions(deps: SettingsActionDeps) {
     const after = spec.key === "routine.webhook"
       ? " The new key waits for the person: they copy it once in the app (Bot panel > Webhooks > Show the token). Never ask them for it; the address stays the same (get routine.webhook)."
       : "";
-    // #3480: the one line the bot says (quiet mode), then it stops
-    const said = QUIET_MODE_KEYS.has(spec.key) ? routeSaid(result.body.text) : undefined;
-    if (said) return text(200, `Done: ${spec.label.split(" (")[0]} changed. Tell the person this one line, then end your turn: ${said}`);
     return text(200, `Done: ${spec.label} changed${via}${on}.${nextTurn}${after}`);
   }
 
@@ -837,14 +831,4 @@ export function createSettingsActions(deps: SettingsActionDeps) {
   }
 
   return { handle: async (input: SettingsActionInput) => finalRefusal(await handleMany(input)) };
-}
-
-/** The `said` line of a route's JSON answer (quiet mode), if any. */
-function routeSaid(body: unknown): string | undefined {
-  try {
-    const said = (JSON.parse(String(body ?? "{}")) as { said?: unknown }).said;
-    return typeof said === "string" && said.trim() ? said.trim() : undefined;
-  } catch {
-    return undefined;
-  }
 }

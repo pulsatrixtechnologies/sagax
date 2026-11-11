@@ -62,9 +62,6 @@ import { unwrapAgentsBridge } from "../shared/searched-tool-call.ts";
 import { safetyArm, safetyHttpRefusal, safetyPermissionEffect, safetyToolHold, setSafetyConfirm, setSafetyFullAccess } from "./safety/safety-review.ts";
 import { writeFileAtomic } from "./atomic.ts";
 import { createSignalSettingsRoutes } from "./routes/signal-settings.ts";
-import { createQuietModeRoutes } from "./routes/quiet-mode.ts";
-import { QuietMode, quietModeFileStorage } from "./quiet-mode/quiet-mode.ts";
-import { quietModeLevel } from "../shared/quiet-mode.ts";
 import { signalGateFileStorage } from "./proactive/signal-gate-store.ts";
 import { hideServerPathsInSections } from "./server-path-prompt.ts";
 import { rm as removeDirectory } from "node:fs/promises";
@@ -2293,7 +2290,7 @@ import { createHoldSignInRefusal } from "./index-leaves/holdSignInRefusal.ts";
 import { createIndexSettingsActions } from "./index-leaves/settingsActions.ts";
 import { createIndexPrimaryApprovals } from "./index-leaves/primaryApprovals.ts";
 import { createSafetyReviewer } from "./index-leaves/safetyReviewer.ts";
-import { createSyncRoutineRunToSource } from "./index-leaves/syncRoutineRunToSource.ts";
+import { createRoutineRunLateCard, createSyncRoutineRunToSource } from "./index-leaves/syncRoutineRunToSource.ts";
 import { createBotForViewer } from "./index-leaves/botForViewer.ts";
 import { createSettleProposalByRule } from "./index-leaves/settleProposalByRule.ts";
 import { createScopeApprovalMessage } from "./index-leaves/scopeApprovalMessage.ts";
@@ -2323,10 +2320,7 @@ function getLeafHost(): Record<string, any> { return leafHostBindings; }
 // Add a binding a leaf reads HERE, never in an Object.assign further down
 // (server/boot-host-order.test.ts).
 bindLeafHost({
-  get botQuietMode() { return botQuietMode; },
-  get keepQuietRun() { return keepQuietRun; },
   get relayViaOf() { return relayViaOf; },
-  get routinePostResultsOwn() { return routinePostResultsOwn; },
   get modelName() { return modelName; },
   get stderrOf() { return stderrOf; },
   get handoffOpener() { return handoffOpener; },
@@ -11504,28 +11498,6 @@ storeReady = true;
 try {
   for (const { threadId, speaker } of legacyCutTurnSpeakers(DATA_DIR)) if (!store.threadSpeaker(threadId)) turnSpeakers.set(threadId, speaker);
 } catch (error) { console.warn(`startup: the speakers of cut turns could not be read: ${error instanceof Error ? error.message : String(error)}`); }
-/** #3480: quiet mode, per bot and for all of a person's bots
- * (shared/quiet-mode.ts). Its line when it goes off is written in the bot's
- * one conversation. */
-const quietMode = new QuietMode<BotRecord>({
-  storage: quietModeFileStorage(join(DATA_DIR, "quiet-mode.json")),
-  bot: (botId) => store.bot(botId) ?? undefined,
-  bots: () => store.bots,
-  owner: (bot) => effectiveBotOwner(bot),
-  language: (person) => languageOfPerson(person),
-  line: (bot, text, kept) => {
-    const threadId = botMainThread(bot.id) ?? bot.threadId;
-    if (threadId) store.appendMessage(threadId, { role: "bot", kind: "text", text, quietSummary: kept, from: { botId: bot.id, name: bot.name, color: bot.color } });
-  },
-});
-/** Whether this bot is in quiet mode now (its own switch or its person's). */
-function botQuietMode(botId: string): boolean {
-  return quietMode.quiet(botId);
-}
-/** A run quiet mode kept out of the chat, for the line when it goes off. */
-function keepQuietRun(botId: string, runId: string, problem: boolean): void {
-  quietMode.keep(botId, runId, problem);
-}
 // #1388: boot leaves (refreshUnsetModelSelectionsFrom, moveOffComputerEngine, …)
 // read these before the final bag assign. Function decls below are hoisted.
 /** Bot-owned MCP claim + leave-out of servers that do not start (OMB #3751 / #2115).
@@ -18281,9 +18253,14 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
   },
   ticketUrl: attentionTicketUrl,
   notify: (bot, threadId, title, body) => notify(deliverableNotification("needs-you", bot, threadId, body, { avatarUrl: bot.avatarUrl, title })),
-  // #3480: quiet mode shows an attention card without ringing it
-  feedback: (botId, topic) => quietModeLevel(backgroundBriefs.wakeLevel(botId, topic), botQuietMode(botId)),
-  quiet: (botId) => botQuietMode(botId),
+  feedback: (botId, topic) => backgroundBriefs.wakeLevel(botId, topic),
+  // #3581: a run's late answer goes onto the run's own card (the card write
+  // of syncRoutineRunToSource, with that answer as its report)
+  runCard: createRoutineRunLateCard(getLeafHost),
+  runPostsResults: (runThreadId) => {
+    const run = routines?.runForThread(runThreadId);
+    return Boolean(run && routineEffectivePostResults(run));
+  },
   relayVia: (botId, threadId) => relayViaOf(botId, threadId),
   // #2915: the mirror reads the chat's newest rows, never its whole path
   recent: (threadId, limit) => store.messagesTail(threadId, limit).messages,
@@ -19363,14 +19340,7 @@ function routineRunNeedsPerson(run: RoutineRun): boolean {
  * (2026-10-22): the routine's own choice, else the installation default
  * (features.routinesInConversation). A deleted routine falls back to the
  * default. Approvals, questions and errors surface regardless. */
-function routineEffectivePostResults(run: Pick<RoutineRun, "routineId" | "proactive" | "botId">): boolean {
-  // #3480: a bot in quiet mode posts no result; its routines keep their own
-  // setting, which comes back when quiet mode goes off
-  if (botQuietMode(run.botId)) return false;
-  return routinePostResultsOwn(run);
-}
-/** The routine's own choice (or a wake's), quiet mode aside. */
-function routinePostResultsOwn(run: Pick<RoutineRun, "routineId" | "proactive">): boolean {
+function routineEffectivePostResults(run: Pick<RoutineRun, "routineId" | "proactive">): boolean {
   // a proactive wake reports whenever it has something (quiet otherwise)
   if (run.proactive) return true;
   const own = routines?.getRoutine(run.routineId)?.postResults;
@@ -24158,15 +24128,7 @@ ROUTES.push(createDesktopBridgeRoutes({
 }));
 // A personal computer hands its look to the paired phone (shared/desktop-appearance.ts).
 ROUTES.push(createDesktopAppearanceRoutes({ store: createDesktopAppearanceStore(DATA_DIR), organization: () => IDENTITY.kind === "perspicax" }));
-// #3480: quiet mode, per bot and for all the person's bots; the person's own bots only
-ROUTES.push(createQuietModeRoutes<BotRecord>({
-  quiet: quietMode,
-  person: (auth) => actorPrincipalId(auth),
-  ownBot: (auth, botId) => {
-    const bot = store.bot(botId);
-    return bot && !bot.hidden && ownerOrAdminOf(auth, bot) ? bot : undefined;
-  },
-}));
+
 // #2695: budget and quiet hours on a personal computer (no preference sync)
 ROUTES.push(createSignalSettingsRoutes({
   store: {

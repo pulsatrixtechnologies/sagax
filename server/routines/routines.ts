@@ -439,14 +439,13 @@ export interface RoutineRunStanding {
   reason?: string;
 }
 
-/** 2026-11-02 (peer inbox, second pass): in production five wakes of six on
- * teammates' messages ended NOTHING_TO_REPORT ("already told you"), the
- * bot taking the reply of the notice's own thread, which the person never
- * sees, for one they had read. A wake with a teammate's message (or a post
- * in a two-bot DM, alwaysReport) always reports: what the bot wrote without
- * the marker, else the events' digest. */
+/** A wake on what the person chose (an accepted suggestion, a watch they
+ * keep: alwaysReport, wakeAlwaysReports) always reports: what the bot wrote
+ * without the marker, else the events' digest. #3581: a wake on teammates'
+ * messages or a two-bot DM is quiet like any other when it ends with nothing
+ * for the person (2026-11-02 forced it to report). */
 export function peerWakeOutcome(run: Pick<RoutineRun, "proactive">, outcome: RoutineReportOutcome): RoutineReportOutcome {
-  if (!outcome.quiet || !(run.proactive?.alwaysReport === true || run.proactive?.sources.includes("peer"))) return outcome;
+  if (!outcome.quiet || run.proactive?.alwaysReport !== true) return outcome;
   const report = outcome.report || run.proactive!.peerDigest || "A teammate sent a message; its thread has the details.";
   return { ...outcome, quiet: false, report };
 }

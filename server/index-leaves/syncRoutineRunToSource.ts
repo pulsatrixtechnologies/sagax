@@ -5,19 +5,53 @@ import type { RoutineRun } from "../routines/routines.ts";
 import { textLanguage } from "../../shared/looks-french.ts";
 import { withoutRoutineMarkers } from "../../shared/routine-result.ts";
 import { needsYouNotificationWords } from "../runtime-events/question-notification-words.ts";
-import { quietModeLevel, quietRunHadProblems } from "../../shared/quiet-mode.ts";
 export type Host = Record<string, any>;
 
 /** #2694: the person's feedback on this run's attention cards (thumbs-down,
  * "less", "never"), read as on the relayed card: muted, quiet or normal. */
 export function routineAttentionLevel(host: Host, run: Pick<RoutineRun, "botId" | "webhookId" | "proactive">): "muted" | "quiet" | "normal" {
-  // #3480: a bot in quiet mode shows the card, never rings it
-  const quiet = host.botQuietMode?.(run.botId) === true;
   // #3423: a chosen watch's alert is what the person asked for; its exits
   // are the person's choice, never an old mute of every watch of the bot
-  if (run.proactive?.watches?.length) return quietModeLevel("normal", quiet);
+  if (run.proactive?.watches?.length) return "normal";
   const level = host.backgroundBriefs?.wakeLevel?.(run.botId, wakeTopicOf(run) ?? "attention");
-  return quietModeLevel(level === "muted" || level === "quiet" ? level : "normal", quiet);
+  return level === "muted" || level === "quiet" ? level : "normal";
+}
+
+/** #3479: the zone a run's card and its fallback text give times in: the
+ * person's, else the routines' own. */
+function routineRunZone(host: Host, run: RoutineRun): string | undefined {
+  const person = run.runAs ?? host.effectiveRunAs?.({ botId: run.botId });
+  return (person && host.isPrincipalId?.(person) ? host.botSettings?.person?.(person)?.timeZone : null) ?? host.routineTimeZone?.();
+}
+
+/** The one card write of a run's routine.run row: the card from its report,
+ * the person's feedback on a wake (#2694) and the lasting-problem count later
+ * runs put on the row (#3479) kept across updates, the fallback text in the
+ * language the run wrote in (#3219) and the person's zone. */
+function routineRunCardRow(host: Host, run: RoutineRun, sourceThreadId: string, report: string | undefined, existing: any, languageText: string | undefined): { text: string; routineRun: any } {
+  const fresh = host.routineRunCard(run, sourceThreadId, report);
+  const kept = existing?.routineRun;
+  const card = {
+    ...fresh,
+    ...(kept?.feedback ? { feedback: kept.feedback } : {}),
+    ...(kept?.repeat && !fresh.repeat ? { repeat: kept.repeat } : {}),
+  };
+  const language = textLanguage(`${languageText ?? ""}\n${run.routineName ?? ""}`)
+    ?? (run.runAs ? host.languageOfPerson?.(run.runAs) : undefined);
+  return { text: host.routineRunFallbackText(card, language, routineRunZone(host, run)), routineRun: card };
+}
+
+/** #3581: a run's late answer (a teammate's reply after the run ended) goes
+ * onto the run's own card through the same card write, with that answer as
+ * its report. The answer is what the run says now, even after a quiet end. */
+export function createRoutineRunLateCard(getHost: () => Host): (runThreadId: string, target: string, report: string) => { text: string; routineRun: any } | undefined {
+  return (runThreadId, target, report) => {
+    const host = getHost();
+    const run = host.routines?.runForThread(runThreadId);
+    if (!run) return undefined;
+    const existing = host.store.messagesFor(target)?.findLast?.((message) => message.kind === "routine.run" && message.routineRun?.runId === run.id);
+    return routineRunCardRow(host, { ...run, quiet: undefined }, target, report, existing, report);
+  };
 }
 
 export function createSyncRoutineRunToSource(getHost: () => Host): any {
@@ -41,20 +75,11 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   const attentionFound = run.status === "completed" && !run.quiet && attentionLevel !== "muted" ? host.personAttention(host.routineFullReport(run) ?? run.output) : undefined;
   // Thumbs-down or "less": the card still comes, without ringing or unread.
   const attentionRings = attentionLevel === "normal";
-  // #3480: a bot in quiet mode posts only what needs the person's answer,
-  // and nothing it posts turns the conversation unread
-  const quietMode = host.botQuietMode?.(run.botId) === true;
-  const reportableRun = { ...run, needsPerson: run.status === "waiting" && host.routineRunNeedsPerson(run), postResults: host.routineEffectivePostResults(run), quietMode };
+  // #3581: what the run posts is the shared rule (routineRunReportable)
+  const reportableRun = { ...run, needsPerson: run.status === "waiting" && host.routineRunNeedsPerson(run), postResults: host.routineEffectivePostResults(run) };
   const reportable = host.routineRunReportable({ ...reportableRun, attention: Boolean(attentionFound) });
   // A card posted only for quieted attention items: in the chat, never unread.
-  const reportableUnread = quietMode ? false : attentionRings ? reportable : host.routineRunReportable({ ...reportableRun, attention: false });
-  // What quiet mode kept out of the chat, counted once per run for the line
-  // written when it goes off (the run itself stays in its routine's runs).
-  if (quietMode && ["completed", "failed", "blocked"].includes(run.status)
-    && host.routineRunReportable({ ...reportableRun, quietMode: false, postResults: host.routinePostResultsOwn?.(run) ?? reportableRun.postResults, attention: Boolean(attentionFound) })
-    && !reportable) {
-    host.keepQuietRun?.(run.botId, run.id, quietRunHadProblems(run));
-  }
+  const reportableUnread = attentionRings ? reportable : host.routineRunReportable({ ...reportableRun, attention: false });
   // A bot run's task stays hidden (Automations, Open run) from its start.
   // 2026-10-28: a webhook's run too (it used to take the bot's live chat;
   // now it runs in its own task and reports into the one conversation).
@@ -97,9 +122,7 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   );
   // Never posted and nothing for the person: the chat is left alone.
   if (!existing && !reportable) return sourceThreadId;
-  // #3479: the fallback text gives times in the person's zone, as the card.
-  const person = run.runAs ?? host.effectiveRunAs?.({ botId: run.botId });
-  const zone = (person && host.isPrincipalId?.(person) ? host.botSettings?.person?.(person)?.timeZone : null) ?? host.routineTimeZone?.();
+  const zone = routineRunZone(host, run);
   // #3479: the same problem as the previous run is said once. The row of the
   // first run with it is updated in place (how many runs, since when): no
   // new row, no unread, no notification. The run stays in the run list.
@@ -117,13 +140,7 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
       return sourceThreadId;
     }
   }
-  const fresh = host.routineRunCard(run, sourceThreadId, host.routineFullReport(run));
-  // #2694: the person's feedback on a wake stays on its card across updates
-  const card = existing?.routineRun?.feedback ? { ...fresh, feedback: existing.routineRun.feedback } : fresh;
-  // #3219: the line follows the language the run wrote in, else the person's.
-  const language = textLanguage(`${run.output ?? ""}\n${run.routineName ?? ""}`)
-    ?? (run.runAs ? host.languageOfPerson?.(run.runAs) : undefined);
-  const text = host.routineRunFallbackText(card, language, zone);
+  const { text, routineRun: card } = routineRunCardRow(host, run, sourceThreadId, host.routineFullReport(run), existing, run.output);
   const statusChanged = existing?.routineRun?.status !== run.status;
   const runBotRecord = host.store.bot(run.botId);
   const attention = attentionFound && runBotRecord && run.threadId

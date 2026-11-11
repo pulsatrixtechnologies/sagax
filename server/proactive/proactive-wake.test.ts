@@ -497,13 +497,15 @@ describe("teammates' messages, second pass (production, 2026-11-02)", () => {
     text: `Sam answered on ${n}.`, senderId: "osprey", senderName: "Osprey", ...extra,
   });
 
-  it("the wake is told the person never sees the notice threads and never ends quiet on them", () => {
+  it("#3581: the wake tells the person only what needs them, and is quiet otherwise", () => {
     const h = harness({ wren: "proactive" });
     h.waker.offer(notice("wren", 1));
     h.advance(30_000);
     const prompt = proactiveWakePrompt(h.woken[0]!);
     expect(prompt).toContain("The person never sees those threads");
-    expect(prompt).toContain("never ends with NOTHING_TO_REPORT");
+    expect(prompt).toContain("Tell the person only what needs them");
+    expect(prompt).not.toContain("never ends with NOTHING_TO_REPORT");
+    expect(wakeAlwaysReports([notice("m", 1)])).toBe(false);
   });
 
   it("the digest names who wrote and about what, with a status other than done", () => {
@@ -628,17 +630,18 @@ describe("pending wakes survive a restart; a two-bot DM post always reports (202
     }
   });
 
-  it("a wake on a two-bot DM post, like one on a teammate's message, always reports; a room post that names the bot does not have to", () => {
-    expect(wakeAlwaysReports([notice("m", 1)])).toBe(true);
-    expect(wakeAlwaysReports([dmPost("m")])).toBe(true);
+  it("#3581: a wake on a two-bot DM post, like one on a teammate's message, is quiet unless something needs the person", () => {
+    expect(wakeAlwaysReports([notice("m", 1)])).toBe(false);
+    expect(wakeAlwaysReports([dmPost("m")])).toBe(false);
     expect(wakeAlwaysReports([dmPost("m", { dm: undefined })])).toBe(false);
     expect(wakeAlwaysReports([{ botId: "m", source: "mail", key: "k", label: "Email", detail: "d" }])).toBe(false);
+    expect(wakeAlwaysReports([{ botId: "m", source: "watch", key: "k", label: "Watch", detail: "d" }])).toBe(true);
     const h = harness({ wren: "proactive" });
     h.waker.offer(dmPost("wren"));
     h.advance(30_000);
     const prompt = proactiveWakePrompt(h.woken[0]!);
     expect(prompt).toContain(DM_WAKE_RULES);
-    expect(prompt).toContain("never ends with NOTHING_TO_REPORT");
+    expect(prompt).not.toContain("never ends with NOTHING_TO_REPORT");
     expect(peerWakeDigest([dmPost("m")])).toBe("Messages from teammates:\n- Post by Osprey in Osprey and Wren");
     expect(proactiveWakePrompt({ mode: "proactive", events: [dmPost("m", { dm: undefined })], more: 0 })).not.toContain(DM_WAKE_RULES);
   });

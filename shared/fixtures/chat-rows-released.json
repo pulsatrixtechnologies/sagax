@@ -1,0 +1,29 @@
+{
+  "note": "#3581: the row shapes each released app draws in a bot's main chat, read at the release commit. desktop: KNOWN_KINDS in src/components/MessageBoundary.tsx, the relayVia names of RelayViaLabel and the traces of RelayTraceLine. phone: Message.Kind in ios/Sources/CompanionCore/Models.swift (a relayVia is drawn as its label whatever its name; a relayTrace is not read, so its row carries the trace in plain words in text). A server is rolled before people update their apps: a shape missing here draws an update notice or an empty row in that release. Add a release only once it ships; never remove the oldest supported one.",
+  "releases": {
+    "0.8.87": {
+      "desktop": {
+        "kinds": ["text", "options", "activity", "screen", "video", "secret", "routine.run", "goal.run", "digest", "compaction", "access", "nudge", "call", "widget", "routines"],
+        "relayVia": ["mcp", "routine", "proactive", "teammate"],
+        "relayTrace": ["failed", "stopped", "silent"]
+      },
+      "phone": {
+        "kinds": ["text", "options", "activity", "screen", "video", "secret", "digest", "compaction", "routine.run", "connector", "access", "goal.run", "widget", "roster"],
+        "relayVia": ["mcp", "routine", "proactive", "teammate"],
+        "relayTrace": []
+      }
+    },
+    "0.8.88": {
+      "desktop": {
+        "kinds": ["text", "options", "activity", "screen", "video", "secret", "routine.run", "goal.run", "digest", "compaction", "access", "nudge", "call", "widget", "routines"],
+        "relayVia": ["mcp", "routine", "proactive", "teammate"],
+        "relayTrace": ["failed", "stopped", "silent"]
+      },
+      "phone": {
+        "kinds": ["text", "options", "activity", "screen", "video", "secret", "digest", "compaction", "routine.run", "connector", "access", "goal.run", "widget", "roster"],
+        "relayVia": ["mcp", "routine", "proactive", "teammate"],
+        "relayTrace": []
+      }
+    }
+  }
+}

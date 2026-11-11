@@ -173,12 +173,17 @@ describe("run markers in a stored message (#3515)", () => {
     expect([old?.text, old?.routineRun?.summary]).toEqual(["Encore hors ligne.", "Encore."]);
   });
 
-  it("a run's late reply is mirrored without the same-problem line", () => {
+  it("a run's late reply reaches its card without the same-problem line (#3581)", () => {
     const w = relayWorld();
+    w.store.appendMessage(w.owner.threadId, { role: "bot", kind: "routine.run", text: "Veille", routineRun: { runId: "run-1", routineId: "rt", routineName: "Veille", status: "completed" } });
     w.store.appendMessage(w.work, { role: "bot", kind: "text", text: "Le serveur est toujours hors ligne.\nSame problem", turnId: "turn-1" });
-    const deps = { ...w.deps, routineRun: (threadId: string) => (threadId === w.work ? { id: "run-1", routineName: "Veille", status: "completed" } : null) } as AttentionRelayDeps<AttentionBot>;
+    const deps = {
+      ...w.deps,
+      routineRun: (threadId: string) => (threadId === w.work ? { id: "run-1", routineName: "Veille", status: "completed" } : null),
+      runCard: (_runThreadId: string, _target: string, report: string) => ({ text: report, routineRun: { runId: "run-1", routineId: "rt", routineName: "Veille", status: "completed", summary: report } }),
+    } as AttentionRelayDeps<AttentionBot>;
     expect(mirrorLateRunReply({ bot: w.bot, threadId: w.work, turnId: "turn-1", ok: true }, deps)).toBe(true);
-    expect(w.store.activePath(w.owner.threadId).at(-1)?.text).toBe("Le serveur est toujours hors ligne.");
+    expect(w.store.activePath(w.owner.threadId).at(-1)?.routineRun?.summary).toBe("Le serveur est toujours hors ligne.");
   });
 
   it("a marker inside a fenced code block is what the bot quoted: kept whole, never read as a status", () => {

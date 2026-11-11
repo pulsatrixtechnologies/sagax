@@ -154,25 +154,46 @@ describe("relayPersonAttention", () => {
   });
 });
 
-describe("mirrorLateRunReply", () => {
-  it("mirrors the bot's answer in a run's task once the run has ended, once", () => {
-    const w = world({ run: { id: "run-1", routineName: "Hourly pass", status: "completed" } });
+/** #3581: a run's card, as the routine's card write builds it. */
+function withRunCard(w: ReturnType<typeof world>, postsResults = false) {
+  w.deps.runCard = (_runThreadId, _target, report) => ({ text: `Hourly pass: ${report}`, routineRun: { runId: "run-1", routineId: "rt-1", routineName: "Hourly pass", status: "completed", summary: report } });
+  w.deps.runPostsResults = () => postsResults;
+  return w;
+}
+
+describe("mirrorLateRunReply (#3581: one result, one card)", () => {
+  it("puts the bot's late answer onto the run's own card in the chat: patched in place, no new row, once", () => {
+    const w = withRunCard(world({ run: { id: "run-1", routineName: "Hourly pass", status: "completed" } }));
+    w.threads.set("main", [{ id: "card", at: 1, role: "bot", kind: "routine.run", text: "Hourly pass: waiting on Nova.", routineRun: { runId: "run-1", routineId: "rt-1", routineName: "Hourly pass", status: "completed", summary: "Waiting on Nova." } } as WireMessage]);
     w.say("run", "Nova's result is in: the three tickets are assigned.");
     // the turn that completed the run itself: its card reports it
     expect(mirrorLateRunReply({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true, runTurn: true }, w.deps)).toBe(false);
     expect(relayPersonAttention({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true, runTurn: true }, w.deps).posted).toBe(false);
     expect(mirrorLateRunReply({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, w.deps)).toBe(true);
     expect(mirrorLateRunReply({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, w.deps)).toBe(false);
-    const row = w.threads.get("main")!.at(-1)!;
-    expect(row).toMatchObject({ text: "Nova's result is in: the three tickets are assigned.", threadRef: { threadId: "run" } });
+    const rows = w.threads.get("main")!;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: "card", kind: "routine.run", routineRun: { runId: "run-1", summary: "Nova's result is in: the three tickets are assigned." } });
+    expect(rows.some((row) => row.kind === "text")).toBe(false);
     expect(w.notified).toHaveLength(1);
+  });
+
+  it("a run with no card in the chat posts its late answer as the rule says for any result", () => {
+    const kept = withRunCard(world({ run: { id: "run-1", routineName: "Hourly pass", status: "completed" } }));
+    kept.say("run", "Nova's result is in.");
+    expect(mirrorLateRunReply({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, kept.deps)).toBe(false);
+    expect(kept.threads.get("main") ?? []).toEqual([]);
+    const posted = withRunCard(world({ run: { id: "run-1", routineName: "Hourly pass", status: "completed" } }), true);
+    posted.say("run", "Nova's result is in.");
+    expect(mirrorLateRunReply({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, posted.deps)).toBe(true);
+    expect(posted.threads.get("main")).toEqual([expect.objectContaining({ kind: "routine.run", routineRun: expect.objectContaining({ summary: "Nova's result is in." }) })]);
   });
 
   it("leaves an active run's task to the run, and a quiet answer unsaid", () => {
     const active = world({ run: { id: "run-1", routineName: "Hourly pass", status: "waiting" } });
     active.say("run", "Still waiting on Nova.");
     expect(mirrorLateRunReply({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, active.deps)).toBe(false);
-    const quiet = world({ run: { id: "run-1", routineName: "Hourly pass", status: "completed" } });
+    const quiet = withRunCard(world({ run: { id: "run-1", routineName: "Hourly pass", status: "completed" } }), true);
     quiet.say("run", "NOTHING_TO_REPORT");
     expect(mirrorLateRunReply({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, quiet.deps)).toBe(false);
   });
@@ -228,15 +249,30 @@ describe("#2694: feedback on a run's card, relayed", () => {
 });
 
 describe("mirrorBackgroundReply (#2901: nothing invisible)", () => {
-  it("#3480: a bot in quiet mode posts its background work nowhere in the main chat", () => {
+  it("#3581: a thread a bot opened on itself leaves no copy and no trace row: its trace is its own receipt", () => {
     const w = world();
-    w.deps.relayVia = (_botId, threadId) => threadId === "work" ? "mcp" : undefined;
-    w.deps.quiet = (botId) => botId === ATLAS.id;
-    w.say("work", "Le lot est prêt.");
+    w.deps.task = (_botId, threadId) => ({ threadId, title: "Draft the renewal email", openedBy: { botId: ATLAS.id, name: "Atlas", at: 1 } }) as never;
+    w.deps.relayVia = (_botId, threadId) => threadId === "work" ? "teammate" : undefined;
+    w.say("work", "The draft is ready.");
     expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toBe(false);
     expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-2", ok: false }, w.deps)).toBe(false);
-    expect((w.threads.get("main") ?? []).filter((row) => row.relayOf)).toEqual([]);
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-3", ok: true, stopped: true }, w.deps)).toBe(false);
+    expect(w.threads.get("main") ?? []).toEqual([]);
     expect(w.notified).toEqual([]);
+    expect(w.unread).toEqual([]);
+  });
+
+  it("#3581: an AI client's finished turn appends one row of today's shape, and its failed turn one trace row", () => {
+    const w = world();
+    w.deps.relayVia = (_botId, threadId) => threadId === "work" ? "mcp" : undefined;
+    w.say("work", "Le lot est prêt.");
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toBe(true);
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-2", ok: false }, w.deps)).toBe(true);
+    const rows = (w.threads.get("main") ?? []).filter((row) => row.relayOf);
+    expect(rows).toEqual([
+      expect.objectContaining({ role: "bot", kind: "text", text: "Le lot est prêt.", relayVia: "mcp" }),
+      expect.objectContaining({ role: "bot", kind: "text", relayVia: "mcp", relayTrace: "failed" }),
+    ]);
   });
 
   it("copies an MCP send_prompt answer into the bot's chat once, labelled, without ringing", () => {
@@ -252,14 +288,14 @@ describe("mirrorBackgroundReply (#2901: nothing invisible)", () => {
     expect(w.unread).toHaveLength(0);
   });
 
-  it("labels a teammate's work and leaves the person's own, confidential and routine threads alone", () => {
+  it("#3581: leaves a teammate's work, the person's own, confidential and routine threads alone", () => {
     const w = world({ run: { id: "run-1", routineName: "Hourly pass", status: "succeeded" } });
     w.deps.relayVia = (_botId, threadId) => threadId === "work" ? "teammate" : threadId === "run" ? "routine" : undefined;
     w.say("work", "Fini.");
     w.say("main", "Bonjour.");
     w.say("run", "Rapport.");
-    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toBe(true);
-    expect(w.threads.get("main")!.at(-1)).toMatchObject({ relayVia: "teammate", text: "Fini." });
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toBe(false);
+    expect(w.threads.get("main")!.at(-1)).toMatchObject({ text: "Bonjour." });
     expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "main", turnId: "turn-1", ok: true }, w.deps)).toBe(false);
     expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, w.deps)).toBe(false);
     const secret = world();
@@ -414,30 +450,6 @@ describe("askedWords (QA 0.8.77: no internal note in the mirrored ask)", () => {
   });
 });
 
-describe("mirrorBackgroundReply, a teammate's ask (#3289)", () => {
-  const teammate = () => {
-    const w = world();
-    w.deps.relayVia = (_botId, threadId) => threadId === "work" ? "teammate" : undefined;
-    return w;
-  };
-
-  it("names the teammate that asked, with its bot id, so the chat draws its face", () => {
-    const w = teammate();
-    const list = w.threads.get("work") ?? [];
-    list.push({ id: "ask", at: 0, role: "bot", kind: "text", text: "Check the duplicates", from: { botId: "bot-nova", name: "Nova", color: "blue" } } as unknown as WireMessage);
-    w.threads.set("work", list);
-    w.say("work", "Three found.");
-    mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps);
-    expect(w.threads.get("main")!.at(-1)).toMatchObject({ relayVia: "teammate", relayAsk: { text: "Check the duplicates", by: "Nova", botId: "bot-nova" } });
-  });
-
-  it("a turn stopped before its ask could be read still names who asked, never a bare line", () => {
-    const w = teammate();
-    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-9", ok: true, stopped: true }, w.deps)).toBe(true);
-    expect(w.threads.get("main")!.at(-1)).toMatchObject({ relayTrace: "stopped", relayAsk: { text: "", by: "Nova", botId: "bot-nova" } });
-  });
-});
-
 describe("#3503: what two bots of the same person say to each other stays in their thread", () => {
   // "work" is a thread the orchestrator bot (Nova) opened with Atlas
   const ownTeam = (owners: Record<string, string> = { "bot-atlas": "person-a", "bot-nova": "person-a" }) => {
@@ -486,11 +498,12 @@ describe("#3503: what two bots of the same person say to each other stays in the
     expect(failed.notified).toHaveLength(1);
   });
 
-  it("a thread a bot of another person opened keeps today's rules", () => {
+  it("a thread a bot of another person opened: its question still reaches the person, its answer stays in the thread", () => {
     const w = ownTeam({ "bot-atlas": "person-a", "bot-nova": "person-b" });
     ask(w, "Which branch holds the fix?");
     w.say("work", "The queue branch.");
-    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toBe(true);
+    // #3581: its content stays in its thread; the receipt of the ask is its trace
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toBe(false);
     const question = ownTeam({ "bot-atlas": "person-a", "bot-nova": "person-b" });
     question.say("work", "NEEDS INPUT: which one goes first?");
     expect(relayPersonAttention({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, question.deps)).toMatchObject({ posted: true, card: { kind: "question" } });

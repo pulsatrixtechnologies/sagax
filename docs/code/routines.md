@@ -6,34 +6,41 @@ description here and a rule in `AGENTS.md` disagree, the rule wins and this
 text is fixed. A pointer such as `AGENTS.md, "<section>"` in an older comment
 now means the section of that title in one of the files of `docs/code/`.
 
-## Quiet mode (#3480, 2026-11-10)
+## What enters a bot's main chat (#3581, 2026-11-11)
 
-A person tells a bot, or all their bots, to be quiet. `shared/quiet-mode.ts`
-holds the contract and the rules; `server/quiet-mode/quiet-mode.ts` keeps
-the two switches (per bot, per person) and the count of runs kept quiet in
-`DATA_DIR/quiet-mode.json`; `server/routes/quiet-mode.ts` answers
-`GET/PUT /api/bots/:id/quiet` and `GET/PUT /api/me/quiet`. A bot sets it
-through `sagax_settings` (`bot.quietMode`, `notifications.quietMode`) at
-every level, only on a turn where its person wrote to it in their own words
-(`ownWords`, the proactive ask's `primaryTurnGate` "cards" check): a routine,
-a wake or another bot's turn is refused in one line and nothing is shown, so
-a text a bot reads never switches it. The bot then says the answer's `said`
-line, built from the state after the change: when the other switch still
-keeps a bot quiet, the line says so and names that switch.
+One rule, `shared/chat-relevance.ts` (`chatPlace`, `chatOrigin`,
+`routineRunSignal`), with its cases in `shared/chat-relevance.vectors.json`
+that the server runs (the desktop and the phone run them from later lots of
+#3581). A row is for the person when
+it is an answer to their own message, something that waits for them, a
+result they asked to receive or a problem that needs them; everything else
+is work, which stays in its own thread. It is how every bot behaves, with no
+switch: quiet mode (#3480) is retired. Its routes (`/api/me/quiet`,
+`/api/bots/:id/quiet`) are gone and answer 404; a bot that still sets
+`bot.quietMode` or `notifications.quietMode` gets one line to say
+(`chat.quietRetired`, in the person's language) and nothing changes; a line
+it wrote in a chat when it went off (`quietSummary`) is still read
+(`shared/quiet-mode.ts`, `QuietModeLine`). The per bot notification switch
+and quiet hours (`shared/signal-levels.ts`) stay the controls of sound.
 
-While a bot is quiet: `routineEffectivePostResults` is false (the routine's
-own `postResults` is untouched and comes back when quiet mode goes off),
-`routineRunReportable` posts only what needs the person's answer, nothing is
-marked unread, `notify` drops background news and sends an ask with
-`notify: false`, the attention cards take the `quiet` level of a wake's
-feedback, and `mirrorBackgroundReply` posts nothing. A failed routine
-starts no Primary Bot report (`reportIncident` keeps it in the problem log
-only), nor does a failed or stalled background turn (`relayViaOf` defined),
-which is also counted in the line written when quiet mode goes off; a run that works again after problems and a repeat of the same
-problem (#3479) post nothing and patch no row. Quiet hours
-(`shared/signal-levels.ts`) are unchanged: they hold pushes only, for the
-bots that are not quiet. When quiet mode goes off, one line in the bot's chat
-gives the runs kept quiet, those with problems, and where to see them.
+On the server: `routineRunReportable` reads the rule for a routine's row (a
+result posts when the routine posts its results or a person started the run;
+a wait, a failure, a block, a result with problems, items for the person and
+"works again" always do). A wake on teammates' messages or on a post in a
+two-bot DM reports only what needs the person and may end with
+`NOTHING_TO_REPORT` (`PEER_WAKE_RULES`, `DM_WAKE_RULES`); only a wake on what
+the person chose (a watch, an accepted suggestion: `wakeAlwaysReports`)
+always reports. A run's late answer goes onto the run's own card
+(`mirrorLateRunReply` patches it in place), or posts as any result when the
+run has no card in the chat. A failed or stalled turn of an AI client's
+conversation starts no Primary Bot report (`reportIncident`; the problem log
+keeps it). Tests: `shared/chat-relevance.test.ts`,
+`server/routines/routine-report.test.ts`,
+`server/index-leaves/syncRoutineRunToSource.test.ts`,
+`server/index-leaves/reportIncident.test.ts`,
+`server/routes/quiet-mode-retired.test.ts`,
+`server/turns/chat-rows-released.test.ts` (every row this writes is a shape
+the released apps draw, `shared/fixtures/chat-rows-released.json`).
 
 ## Event subscriptions (#2700, 2026-11-08)
 

@@ -91,10 +91,13 @@ const composedText = support.buildPromptText
     ? `${promptInput.system}\n\n${promptInput.text}`
     : promptInput.text;
 // 2026-11-02: under the size the agent takes whole, so nothing is moved to
-// a file the bot cannot read (prompt-fit.ts)
+// a file the bot cannot read. #3510: whole lines only, never a cut in the
+// middle (prompt-fit.ts); the opening block was already fitted by section.
 const fitted = fitPromptBytes(composedText, support.promptByteLimit);
-if (fitted.cut) console.info(`[acp] ${DRIVER_KIND} prompt shortened by ${fitted.cut} bytes to fit ${support.promptByteLimit} (thread ${threadId})`);
+if (fitted.cut) console.info(`[acp] ${DRIVER_KIND} prompt over ${support.promptByteLimit} bytes: left out the earlier-context line (${fitted.cut} bytes) (thread ${threadId})`);
 const text = fitted.text;
+const overLimit = support.promptByteLimit ? Buffer.byteLength(text, "utf8") - support.promptByteLimit : 0;
+if (overLimit > 0) console.info(`[acp] ${DRIVER_KIND} prompt over the engine's limit ${support.promptByteLimit} by ${overLimit} bytes, sent whole (thread ${threadId})`);
 const imageBlocks = support.images === true && runtimeAcceptsImages
   ? await readAcpImageBlocks(turn.images ?? [])
   : [];

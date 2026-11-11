@@ -278,6 +278,10 @@ export interface SendTurnInput {
   /** systemVolatile by section (id and text, in prompt order). A session
    * driver re-sends only the sections that changed (prompt-split.ts). */
   systemVolatileSections?: Array<{ id: string; text: string }>;
+  /** systemStable by section (id and text, in prompt order), so a driver
+   * whose engine takes a bounded request can leave out whole sections of an
+   * opening prompt, never cut one in the middle (drivers/acp/prompt-fit.ts). */
+  systemStableSections?: Array<{ id: string; text: string }>;
   /** True when this turn's user message tags teammates: the mentions part of
    * systemVolatile describes this turn even when its text is unchanged from
    * the previous turn, so digest-based delivery must not suppress the note. */

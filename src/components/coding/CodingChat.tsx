@@ -3,7 +3,8 @@
 // chat column (ExchangeSheet shell), drawn for development. A routine run
 // no longer opens a sheet: it opens in the chat (#2098).
 //
-// Drawn like the Claude Code terminal (JC, 2026-11-05, #2099 + #2108):
+// Claude Code's way of working, in the application's own look (JC,
+// 2026-11-05, #2099 + #2108; #3581 lot 5, 2026-11-10):
 // - Header (#2108 + #2149): compact, left-aligned. Back arrow (the chat is one
 //   chat: no thread to close), small mascot + bot name, task title truncated
 //   on one line (click or chevron expands it), Stop at the right of the title
@@ -11,12 +12,13 @@
 //   the bot is the chat's own pill (BotHeaderPill, toggles the bot panel);
 //   status, duration and tokens moved to the panel's "This session" card.
 // - Transcript (#2099): the task's own thread (useSideTranscript: the newest
-//   page, older pages on demand, then the live frames). A person's words are a
-//   highlighted row with "›", the bot's plain text; every tool call is one
-//   ToolLine (`● Bash(pnpm vitest run …)` then `⎿` the first lines of its
-//   result and "… +N lines"; an edit `⎿ +2 -0` with its diff folded). A task
-//   the viewer may not read the thread of shows its steps (the activity
-//   entry's).
+//   page, older pages on demand, then the live frames). A person's words are
+//   the chat's right bubble, the bot's a bot bubble; every tool call is one
+//   ToolLine, the chat's step row ("Ran src/board tests  11 passed · 1
+//   failed  4s", opened: the command and its output in a code block; an edit
+//   "Edited a file  column.ts  +2 -0" with its diff behind the row). No
+//   terminal font, dot or `⎿` outside a code block. A task the viewer may
+//   not read the thread of shows its steps (the activity entry's).
 // - Changes band, above the composer: files changed with their counts (a
 //   click jumps to the file's diff and opens it), the newest test run, the
 //   commit and pull request its own calls made (the branch is in the header).
@@ -70,13 +72,13 @@ import { useSideTranscript } from "@/lib/use-side-transcript";
 import { useWaitingCards } from "@/lib/use-waiting-cards";
 import { waitingSources } from "@/lib/activity-waiting-sources";
 import { openExternalLink } from "@/lib/app-links";
-import { useChatColumnClass } from "@/lib/chat-bubble-width";
+import { chatBubbleWidth, useChatBubbleWidthClasses, useChatColumnClass } from "@/lib/chat-bubble-width";
 import { useCodingPanelHost } from "@/lib/coding-panel-host";
 import { useTeamWorkRead } from "@/lib/use-team-work";
 import { teamQuietSince, teamStepMetaLine, teamStepOf, teamWorkAt } from "@/lib/team-work";
 import { PANEL_CARD, PANEL_LABEL, PANEL_ROW } from "@/lib/grouped-card";
 import { cn } from "@/lib/cn";
-import { t } from "@/lib/i18n";
+import { activeLocale, t } from "@/lib/i18n";
 import { formatTokens } from "@/lib/usage";
 import { avatarBot, useExchangePortalHost } from "../BotExchangeChip";
 import { Composer } from "../Composer";
@@ -89,7 +91,10 @@ import { ChatMarkdown } from "../ChatMarkdown";
 import { MessageBoundary } from "../MessageBoundary";
 import { PartyAvatar } from "../PartyAvatar";
 import { WaitingOnYou } from "../task/WaitingOnYou";
-import { TestCounts, ToolLine } from "./ToolLine";
+import { ActivityStatusIcon } from "../bot-settings/ActivityCard";
+import { DottedSpinner } from "../bot-settings/CodingSessionRow";
+import { prefersWideBubble } from "@/lib/rich-blocks";
+import { DiffCounts, TestCounts, ToolLine } from "./ToolLine";
 
 
 const POLL_MS = 3_000;
@@ -100,34 +105,32 @@ export type { CodingChatTarget };
 
 type Reveal = { rowId: string; path: string; nonce: number };
 
-/** A person's words: a quietly highlighted row with "›" (the terminal's
- * prompt). The bot's words: plain text between the tool lines. */
+/** A person's words: the chat's right bubble. The bot's: a bot bubble, the
+ * same shapes as the main chat and the exchange window (BotExchangeChip). */
 function Line({ message, bot, bots }: { message: Message; bot: { name: string; color: string } & Partial<Bot>; bots: readonly Bot[] }) {
+  const bubbleWidths = useChatBubbleWidthClasses();
   const mine = message.role === "user";
   const speaker = mine ? null : message.from?.botId ? avatarBot({ id: message.from.botId, name: message.from.name ?? bot.name, color: message.from.color }, bots) : bot;
   const text = message.text ?? "";
-  if (mine) {
-    return (
-      <div data-mid={message.id} data-coding-line="user" className="flex gap-2 rounded-lg bg-raised/60 px-3 py-1.5 text-[13px] leading-5 text-ink">
-        <span aria-hidden="true" className="shrink-0 select-none font-mono text-ink-tertiary">›</span>
-        <div className="min-w-0 flex-1">
-          <MessageBoundary fallbackText={text}><ChatMarkdown text={text} /></MessageBoundary>
-        </div>
-      </div>
-    );
-  }
+  const width = bubbleWidths[chatBubbleWidth({ terminal: false, wide: !mine && prefersWideBubble(text) })];
   return (
-    <div data-mid={message.id} data-coding-line="bot" className="px-1 text-[13px] leading-5 text-ink">
-      <MessageBoundary fallbackText={text}>
-        <ChatMarkdown text={text} botId={speaker?.id} />
-      </MessageBoundary>
+    <div data-mid={message.id} data-coding-line={mine ? "user" : "bot"} className={cn("flex w-full flex-col", mine ? "items-end" : "items-start")}>
+      <div
+        data-chat-bubble
+        className={cn("rounded-[18px] px-3 py-[7px] text-[13px] leading-5 text-ink", width, mine ? "bg-bubble-user" : "bg-bubble-bot")}
+        title={new Date(message.at).toLocaleString(activeLocale())}
+      >
+        <MessageBoundary fallbackText={text}>
+          <ChatMarkdown text={text} botId={speaker?.id} />
+        </MessageBoundary>
+      </div>
     </div>
   );
 }
 
-function Row({ row, bot, bots, reveal }: { row: CodingRow; bot: { name: string; color: string } & Partial<Bot>; bots: readonly Bot[]; reveal?: Reveal }) {
+function Row({ row, bot, bots, reveal, live }: { row: CodingRow; bot: { name: string; color: string } & Partial<Bot>; bots: readonly Bot[]; reveal?: Reveal; live: boolean }) {
   if (row.kind === "line") return <Line message={row.message} bot={bot} bots={bots} />;
-  return <ToolLine row={row} reveal={reveal?.rowId === row.id ? { path: reveal.path, nonce: reveal.nonce } : undefined} />;
+  return <ToolLine row={row} live={live} reveal={reveal?.rowId === row.id ? { path: reveal.path, nonce: reveal.nonce } : undefined} />;
 }
 
 /** The band above the footer: what changed, the newest tests, and where it
@@ -161,7 +164,7 @@ export function ChangesBand({ files, tests, place, onJump }: {
             >
               {open ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronUp size={13} aria-hidden="true" />}
               {t(files.length === 1 ? "codingChat.changes.files.one" : "codingChat.changes.files", { count: files.length })}
-              <span className="font-mono text-[11.5px] tabular-nums"><span className="text-success">+{added}</span> <span className="text-danger">-{removed}</span></span>
+              <DiffCounts added={added} removed={removed} />
             </button>
           ) : <span className="px-1 text-[12.5px] text-ink-secondary">{t("codingChat.changes.none")}</span>}
           {tests && <TestCounts tests={tests} />}
@@ -190,7 +193,7 @@ export function ChangesBand({ files, tests, place, onJump }: {
                   className="flex w-full min-w-0 items-center gap-2 px-3 py-1 text-left hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60"
                 >
                   <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink">{file.path}</span>
-                  <span className="shrink-0 font-mono text-[11.5px] tabular-nums"><span className="text-success">+{file.added}</span> <span className="text-danger">-{file.removed}</span></span>
+                  <DiffCounts added={file.added} removed={file.removed} />
                 </button>
               </li>
             ))}
@@ -291,7 +294,7 @@ export interface CodingChatSheetProps {
 
 /** #2285: what the header used to say on its meta line (status, duration,
  * tokens), as a card of the bot panel, like its neighbours. */
-function SessionCard({ glyph, lead, live, elapsed, tokens }: { glyph: string; lead: string; live: boolean; elapsed: string; tokens?: string }) {
+function SessionCard({ glyph, lead, live, elapsed, tokens }: { glyph: ReactNode; lead: string; live: boolean; elapsed: string; tokens?: string }) {
   const row = cn(PANEL_ROW, "flex min-w-0 items-center justify-between gap-3 text-[13px] leading-[18px]");
   return (
     <section data-coding-session-card="" className="flex flex-col gap-2">
@@ -300,7 +303,7 @@ function SessionCard({ glyph, lead, live, elapsed, tokens }: { glyph: string; le
         <div className={row}>
           <span className="shrink-0 text-ink-secondary">{t("codingChat.panel.status")}</span>
           <span data-coding-state="" className="inline-flex min-w-0 items-center gap-1.5 text-ink">
-            <span data-coding-glyph aria-hidden="true">{glyph}</span>
+            <span data-coding-glyph aria-hidden="true" className="flex shrink-0 items-center">{glyph}</span>
             <span className={cn("min-w-0 truncate", live && "thinking-shimmer animate-shimmer motion-reduce:animate-none")}>{lead}</span>
           </span>
         </div>
@@ -378,7 +381,9 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
   const elapsed = formatActivityDuration((shown.endedAt ?? now) - shown.startedAt);
   const folderText = place.folder ?? place.repo;
   const title = titleAsked?.trim() || activityTitle(shown);
-  const statusGlyph = live ? "○" : "●";
+  // The marks of the Coding rows: the dotted spinner while it runs, else the
+  // state's own icon (a finished check, a failure, a hand that waits).
+  const statusGlyph = live ? <DottedSpinner size={14} /> : <ActivityStatusIcon status={shown.status} size={14} />;
   // Prefer the humanized step from #2099; fall back to the raw step or Working.
   const statusLead = live
     ? (humanStep(shown.currentStep) || shown.currentStep?.trim() || t("codingChat.working"))
@@ -501,7 +506,7 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
           ) : rows.length === 0 ? (
             <p role="status" data-coding-empty className="py-8 text-center text-[13px] text-ink-secondary">{live ? t("codingChat.starting") : t("codingChat.empty")}</p>
           ) : null}
-          {rows.map((row) => <Row key={row.id} row={row} bot={party} bots={bots} reveal={reveal} />)}
+          {rows.map((row) => <Row key={row.id} row={row} bot={party} bots={bots} reveal={reveal} live={live} />)}
         </div>
       </div>
       </div>

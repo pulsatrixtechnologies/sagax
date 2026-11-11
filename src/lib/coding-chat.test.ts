@@ -1,9 +1,11 @@
 // The coding chat's reading of a task's thread (src/lib/coding-chat.ts):
 // commands, edits, reads, test counts, the Changes summary, and no server
-// path or id in what it shows; and the terminal lines of #2099: the short
-// argument of `● Bash(…)`, the waiting commands, the step in words, the
-// preview of a result.
-import { describe, expect, it } from "vitest";
+// path or id in what it shows; and the step rows (#3581, lot 5): each call
+// said in words on the chat's own step row, never `Name(arg)`, the waiting
+// commands, the preview of a result.
+import { beforeAll, describe, expect, it } from "vitest";
+
+import { setLocale } from "@/lib/i18n";
 
 import type { Message } from "@/state/store";
 import {
@@ -26,8 +28,8 @@ import {
   shortCommand,
   shortPath,
   stepMessages,
+  stepWords,
   testSummary,
-  toolLineOf,
   type Tool,
 } from "./coding-chat";
 
@@ -172,7 +174,9 @@ describe("rows", () => {
   });
 });
 
-describe("tool lines (#2099)", () => {
+describe("step rows (#2099, #3581)", () => {
+  beforeAll(() => setLocale("en"));
+
   it("cuts the leading cd and the length of a command", () => {
     expect(shortCommand(`cd ${ROOT} && pnpm vitest run src/board`)).toBe("pnpm vitest run src/board");
     expect(shortCommand("cd 'my dir'; pnpm typecheck")).toBe("pnpm typecheck");
@@ -187,14 +191,36 @@ describe("tool lines (#2099)", () => {
     expect(isWaitCommand("pnpm vitest run")).toBe(false);
   });
 
-  it("names the tool and its short argument", () => {
+  it("says a command in words: the work it did, a program as the target, never its arguments nor Name(arg)", () => {
     const run = codingStep("s1", tool("Bash", { command: `cd ${ROOT} && pnpm vitest run src/board` }, { output: "ok" }).tool!, ROOT)!;
-    expect(toolLineOf(run)).toMatchObject({ name: "Bash", arg: "pnpm vitest run src/board" });
-    const edit = codingStep("s2", tool("Edit", { file_path: `${ROOT}/src/board/column.ts`, old_string: "a", new_string: "b" }).tool!, ROOT)!;
-    expect(toolLineOf(edit)).toMatchObject({ name: "Edit", arg: "src/board/column.ts" });
-    const write = codingStep("s3", tool("Write", { file_path: `${ROOT}/src/board/order.ts`, content: "x" }).tool!, ROOT)!;
-    expect(toolLineOf(write)).toMatchObject({ name: "Write", arg: "src/board/order.ts" });
-    expect(toolLineOf({ kind: "reads", paths: ["src/board/column.ts", "src/board/card.ts"] })).toMatchObject({ name: "Read", arg: "column.ts, card.ts" });
+    expect(stepWords(run, "done")).toEqual({ label: "Ran src/board tests", title: "pnpm vitest run src/board" });
+    expect(stepWords(run, "running")).toMatchObject({ label: "Running src/board tests" });
+    // a test run that failed still ran its tests: the counts and the danger ink say the rest
+    expect(stepWords({ ...run, tests: { passed: 11, failed: 1, skipped: 0 } } as typeof run, "failed")).toMatchObject({ label: "Ran src/board tests" });
+    const list = codingStep("s2", tool("Bash", { command: `cd ${ROOT} && ls src` }, { output: "a" }).tool!, ROOT)!;
+    expect(stepWords(list, "done")).toMatchObject({ label: "Ran a command", target: "ls src" });
+    const push = codingStep("s3", tool("Bash", { command: "git push -u origin feat/x" }, { ok: false, output: pretty({ output: "rejected", exitCode: 1 }) }).tool!, ROOT)!;
+    expect(stepWords(push, "failed")).toMatchObject({ label: "Could not run a command", target: "git push" });
+    expect(stepWords(push, "done")).toMatchObject({ label: "Pushed" });
+    const wait = codingStep("s4", tool("Bash", { command: "sleep 30; pgrep -f vite" }, { output: "" }).tool!, ROOT)!;
+    expect(stepWords(wait, "done")).toMatchObject({ label: "Waited" });
+    for (const words of [stepWords(run, "done"), stepWords(list, "done"), stepWords(push, "failed")]) {
+      expect(words.label).not.toMatch(/^Bash|\(/);
+    }
+  });
+
+  it("says an edit and a read in words, the file names as the target", () => {
+    const edit = codingStep("s1", tool("Edit", { file_path: `${ROOT}/src/board/column.ts`, old_string: "a", new_string: "b" }).tool!, ROOT)!;
+    expect(stepWords(edit, "done")).toEqual({ label: "Edited a file", target: "column.ts", title: "src/board/column.ts" });
+    expect(stepWords(edit, "failed")).toMatchObject({ label: "Could not edit a file", target: "column.ts" });
+    const write = codingStep("s2", tool("Write", { file_path: `${ROOT}/src/board/order.ts`, content: "x" }).tool!, ROOT)!;
+    expect(stepWords(write, "done")).toMatchObject({ label: "Wrote a file", target: "order.ts" });
+    const filesOf = (step: typeof edit) => (step.kind === "edit" ? step.files : []);
+    const both = { ...edit, files: [...filesOf(edit), ...filesOf(write)] } as typeof edit;
+    expect(stepWords(both, "done")).toMatchObject({ label: "Edited 2 files", target: "column.ts, order.ts" });
+    expect(stepWords({ kind: "reads", paths: ["src/board/column.ts", "src/board/card.ts"] }, "done")).toEqual({ label: "Read 2 files", target: "column.ts, card.ts", title: "src/board/column.ts\nsrc/board/card.ts" });
+    expect(stepWords({ kind: "reads", paths: ["src/board/column.ts"] }, "running")).toMatchObject({ label: "Reading a file", target: "column.ts" });
+    expect(stepWords({ kind: "reads", paths: ["a.ts", "b.ts", "c.ts"] }, "running")).toMatchObject({ label: "Reading 3 files" });
   });
 
   it("says the step in words, never the raw command", () => {

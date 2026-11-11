@@ -1,10 +1,13 @@
 // @vitest-environment happy-dom
-// The coding chat (2026-11-03; terminal shape #2099, the owner 2026-11-05): a coding
-// task over the chat column, drawn the way Claude Code prints a session. One
-// line per tool call (`● Bash(pnpm vitest run src/board …)` then `⎿` and the
-// first lines of the result, "… +N lines" to unfold), edits folded behind
-// `+A -R`, the human's line with "›", the bot's as plain text; the status
-// once, in the head, with Stop beside it; the composer always there; no
+// The coding chat (2026-11-03; #2099; #3581 lot 5, the owner 2026-11-10: "the
+// way it works, with the look of the reference product"): a coding task over
+// the chat column, in the application's own look. One step row per tool call
+// (the chat's StepRow: the step in words, a file or a program as the target,
+// the test counts, the duration; opened, the command and its output in a code
+// block, "… +N lines" to unfold), an edit's "+A -R" with its diff behind the
+// row, the person's words in the right bubble, the bot's in a bot bubble; no
+// terminal font, no dot, no `⎿`, no `Name(arg)` outside a code block; the
+// status once, with Stop beside it; the composer always there; no
 // "Continue", no "Close Chat", no "Open thread", no side panel; and no server
 // path or id on the screen. A coding window (#2149): the X of a page opened
 // by Sagax closes it, the bot's real composer (+, micro, voice) is aimed at the
@@ -117,7 +120,8 @@ function typeInto(field: HTMLTextAreaElement, value: string) {
 }
 
 const lines = () => [...column.querySelectorAll<HTMLElement>("[data-coding-row]")];
-const headOf = (row: HTMLElement) => `${row.querySelector("[data-tool-name]")?.textContent ?? ""}${row.querySelector("[data-tool-arg]")?.textContent ?? ""}`;
+const labelOf = (row: HTMLElement) => [row.querySelector("[data-step-label]")?.firstChild?.textContent ?? "", row.querySelector("[data-step-target]")?.textContent ?? ""].filter(Boolean).join(" ");
+const toggleOf = (row: HTMLElement) => row.querySelector<HTMLButtonElement>("[data-step-row] > button")!;
 
 describe("CodingChatSheet", () => {
   it("opens over the chat column with the chat's floating bar: back and title at the left, the bot pill centered, folder and branch atop the transcript", () => {
@@ -146,7 +150,9 @@ describe("CodingChatSheet", () => {
     expect(header.querySelector("[data-coding-state]")).toBeNull();
     expect(header.querySelector("[data-coding-elapsed]")).toBeNull();
     expect(header.querySelector("[data-coding-tokens]")).toBeNull();
-    expect(panel.querySelector("[data-coding-glyph]")?.textContent).toBe("○");
+    // the marks of the Coding rows, never a text glyph
+    expect(panel.querySelector("[data-coding-glyph] [data-coding-spinner]")).not.toBeNull();
+    expect(panel.querySelector("[data-coding-glyph]")?.textContent).toBe("");
     expect(panel.querySelector("[data-coding-state]")?.textContent).toMatch(/Checking types/);
     expect(panel.querySelector("[data-coding-elapsed]")?.textContent).toBe("4m");
     expect(header.querySelector("[data-coding-stop-header]")).not.toBeNull();
@@ -171,7 +177,8 @@ describe("CodingChatSheet", () => {
     const header = column.querySelector<HTMLElement>("[data-coding-header]")!;
     expect(header.textContent).not.toContain("Finished");
     expect(panel.querySelector("[data-coding-session-card] h2")?.textContent).toBe("This session");
-    expect(panel.querySelector("[data-coding-glyph]")?.textContent).toBe("●");
+    expect(panel.querySelector("[data-coding-glyph] [data-activity-icon=finished]")).not.toBeNull();
+    expect(panel.querySelector("[data-coding-glyph]")?.textContent).toBe("");
     expect(panel.querySelector("[data-coding-state]")?.textContent).toMatch(/Finished/);
     expect(panel.querySelector("[data-coding-elapsed]")?.textContent).toBe("3m");
     expect(header.querySelector("[data-coding-stop-header]")).toBeNull();
@@ -184,46 +191,69 @@ describe("CodingChatSheet", () => {
     expect(header.textContent).not.toContain("cd dispatch-board");
   });
 
-  it("draws each tool call as one terminal line: the dot, Name(arg), ⎿ the first lines, then … +N lines", () => {
+  it("draws each tool call as the chat's step row: words, a target, the counts, the duration; the command and output in a code block once opened", () => {
     mountSheet("running");
-    expect(lines().map(headOf)).toEqual([
-      "Read(src/board/column.ts)",
-      "Edit(src/board/column.ts)",
-      "Bash(pnpm vitest run src/board)",
-      "Bash(sleep 30; pgrep -f vite)",
-      "Write(src/board/order.ts)",
+    expect(lines().map(labelOf)).toEqual([
+      "Read a file column.ts",
+      "Edited a file column.ts",
+      "Ran src/board tests",
+      "Waited",
+      "Wrote a file order.ts",
     ]);
+    for (const row of lines()) expect(row.querySelector("[data-step-row]")).not.toBeNull();
     const bash = lines()[2]!;
-    expect(bash.querySelector("[data-tool-dot]")?.getAttribute("data-tool-dot")).toBe("failed");
+    expect(bash.querySelector("[data-step-row]")?.getAttribute("data-phase")).toBe("failed");
     expect(bash.querySelector("[data-coding-tests]")?.textContent).toMatch(/11 passed.*1 failed/);
-    const output = bash.querySelector<HTMLElement>("[data-tool-output]")!;
+    expect(bash.querySelector("[data-step-duration]")?.textContent).toBe("4s");
+    // folded: nothing of the command or its output on the row
+    expect(bash.querySelector("[data-tool-output]")).toBeNull();
+    flushSync(() => toggleOf(bash).click());
+    const command = bash.querySelector<HTMLElement>("[data-step-detail] [data-tool-command]")!;
+    expect(command.textContent).toBe("cd dispatch-board && pnpm vitest run src/board");
+    const output = bash.querySelector<HTMLElement>("[data-step-detail] [data-tool-output]")!;
     expect(output.textContent).toContain("FAIL src/board/column.test.ts");
     expect(output.textContent).not.toContain("line five");
     const more = bash.querySelector<HTMLButtonElement>("[data-tool-more]")!;
-    expect(more.textContent).toBe("… +3 lines");
+    expect(more.textContent).toBe("… +2 lines");
     flushSync(() => more.click());
     expect(bash.querySelector("[data-tool-output]")?.textContent).toContain("line five");
     expect(more.textContent).toBe("Show less");
-    // a command that only waits is a muted line with no result
+    // a command that only waits is a quiet row with nothing to open
     const wait = lines()[3]!;
-    expect(wait.querySelector("[data-tool-result]")).toBeNull();
-    // no card, no border around a line
+    expect(wait.querySelector("[data-step-row] > button")).toBeNull();
+    expect(wait.querySelector("[data-coding-wait]")).not.toBeNull();
+    // no card, no border around a row
     expect(column.querySelector("[data-coding-terminal]")).toBeNull();
     expect(column.querySelector("[data-coding-file-chip]")).toBeNull();
   });
 
-  it("folds an edit behind +A -R, a jump from the Changes band opens its diff", () => {
+  it("draws nothing that looks like a terminal outside a code block, a diff, a path, a branch or a commit id", () => {
+    mountSheet("finished");
+    for (const row of lines()) flushSync(() => toggleOf(row)?.click());
+    const scroll = column.querySelector<HTMLElement>("[data-testid=coding-chat-scroll]")!;
+    const allowed = "pre, [data-coding-diff], [data-coding-branch]";
+    for (const node of scroll.querySelectorAll<HTMLElement>("[class*='font-mono']")) {
+      expect(node.closest(allowed), node.outerHTML.slice(0, 120)).not.toBeNull();
+    }
+    expect(scroll.querySelector("[data-tool-dot], [data-tool-name], [data-tool-arg], [data-tool-result]")).toBeNull();
+    const words = [...scroll.querySelectorAll<HTMLElement>("[data-step-row] > button, [data-step-row] > div, [data-coding-line]")].map((node) => node.textContent ?? "").join("\n");
+    expect(words).not.toMatch(/[⎿●›]/);
+    expect(words).not.toMatch(/\b(?:Bash|Edit|Write|Read)\(/);
+  });
+
+  it("an edit says +A -R on its row and opens its diff; a jump from the Changes band still opens it", () => {
     mountSheet("finished");
     const edit = lines()[1]!;
-    const toggle = edit.querySelector<HTMLButtonElement>("[data-coding-diff-toggle]")!;
-    expect(toggle.textContent).toMatch(/\+1 -1/);
+    const counts = edit.querySelector<HTMLElement>("[data-coding-diff-counts]")!;
+    expect(counts.textContent).toBe("+1 -1");
+    expect(counts.className).not.toMatch(/font-mono/);
     expect(edit.querySelector("[data-coding-diff]")).toBeNull();
-    flushSync(() => toggle.click());
-    const diff = edit.querySelector<HTMLElement>("[data-coding-diff]")!;
+    flushSync(() => toggleOf(edit).click());
+    const diff = edit.querySelector<HTMLElement>("[data-step-detail] [data-coding-diff]")!;
     expect(diff.dataset.codingDiff).toBe("src/board/column.ts");
     expect(diff.querySelectorAll("[data-diff-line=del]")).toHaveLength(1);
     expect(diff.querySelectorAll("[data-diff-line=add]")).toHaveLength(1);
-    flushSync(() => toggle.click());
+    flushSync(() => toggleOf(edit).click());
     expect(edit.querySelector("[data-coding-diff]")).toBeNull();
     // the band: files, tests, commit, pull request; a file opens its diff
     const band = column.querySelector<HTMLElement>("[data-coding-changes]")!;
@@ -234,14 +264,26 @@ describe("CodingChatSheet", () => {
     flushSync(() => band.querySelector<HTMLButtonElement>("[data-coding-changes-toggle]")!.click());
     flushSync(() => band.querySelector<HTMLButtonElement>('[data-coding-changed-file="src/board/order.ts"]')!.click());
     expect(lines()[4]!.querySelector("[data-coding-diff]")?.getAttribute("data-coding-diff")).toBe("src/board/order.ts");
+    // closed by hand, a second jump to the same file opens it again
+    flushSync(() => toggleOf(lines()[4]!).click());
+    expect(lines()[4]!.querySelector("[data-coding-diff]")).toBeNull();
+    flushSync(() => band.querySelector<HTMLButtonElement>('[data-coding-changed-file="src/board/order.ts"]')!.click());
+    expect(lines()[4]!.querySelector("[data-coding-diff]")).not.toBeNull();
   });
 
-  it("draws the person's line with › and the bot's as plain text, no bubbles", () => {
+  it("draws the person's words in the right bubble and the bot's in a bot bubble", () => {
     mountSheet("running");
     const user = column.querySelector<HTMLElement>('[data-coding-line="user"]')!;
-    expect(user.textContent).toMatch(/^›/);
-    expect(user.textContent).toContain("garde l'ordre des cartes");
-    expect(column.querySelector('[data-coding-line="bot"]')?.textContent).toBe("I'll look at the column first.");
+    expect(user.className).toMatch(/items-end/);
+    const mine = user.querySelector<HTMLElement>("[data-chat-bubble]")!;
+    expect(mine.className).toMatch(/bg-bubble-user/);
+    expect(mine.textContent).toContain("garde l'ordre des cartes");
+    expect(user.textContent).not.toMatch(/›/);
+    const bot = column.querySelector<HTMLElement>('[data-coding-line="bot"]')!;
+    expect(bot.className).toMatch(/items-start/);
+    const theirs = bot.querySelector<HTMLElement>("[data-chat-bubble]")!;
+    expect(theirs.className).toMatch(/bg-bubble-bot/);
+    expect(theirs.textContent).toBe("I'll look at the column first.");
   });
 
   it("shows Stop in the header while live (one place), and none once finished", () => {

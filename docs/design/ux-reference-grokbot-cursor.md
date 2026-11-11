@@ -880,26 +880,39 @@ transport synthétique, aucun compte réel.
 
 ### 2.24 Chat de code (une tâche de code ouverte) et section Coding
 
-Décision de JC (2026-11-03, refaite le 2026-11-05, #2099) : une tâche de la
-section Coding du panneau du bot s'ouvre comme un chat, là où est le chat, et
-ce chat ressemble au terminal de Claude Code. Rien n'est une carte ; tout est
-du texte en lignes.
+Décision de JC (2026-11-03, refaite le 2026-11-05, #2099, puis le
+2026-11-10, #3581) : une tâche de la section Coding du panneau du bot s'ouvre
+comme un chat, là où est le chat. Il fonctionne comme Claude Code (une rangée
+compacte par appel, qui se déplie), avec le look de l'application : les
+rangées d'étape et les bulles du chat principal, jamais une police de
+terminal, un point d'état, « ⎿ » ou « Bash(…) » hors d'un bloc de code.
 
-- En-tête (une seule fois) : flèche Retour au chat, pilule du bot, titre de la
-  tâche, puis une ligne grise : dossier (jamais le chemin), branche, un seul
-  état « ● Running · 4m · Running src/board tests » (l'étape en mots, jamais la
-  commande brute), un carré Arrêter tant qu'elle roule.
-- Chaque appel d'outil = une ligne compacte : point de statut (accent en cours,
-  vert fini, rouge échoué), nom d'outil en gras, argument court entre
-  parenthèses coupé « … » : « ● Bash(pnpm vitest run src/board …) ». Dessous,
-  en retrait « ⎿ », 1 à 3 premières lignes du résultat (compte des tests,
-  code de sortie en rouge), puis « … +N lines » cliquable, « Show less » pour
-  replier. Une modification lit « ⎿ +14 -0 · Show the diff » ; le diff reste
-  replié (un saut depuis la bande Changes l'ouvre). Les lectures d'affilée
-  font une ligne « Read(a.ts, b.ts) ». Une commande d'attente (sleep, pgrep)
-  est une ligne grise sans résultat.
-- Message du bot = texte simple. Message humain = rangée légèrement surlignée
-  avec « › ». Aucune bulle.
+- En-tête (une seule fois) : flèche Retour au chat, titre de la tâche, pilule
+  du bot, un carré Arrêter tant qu'elle roule ; sous la barre, une ligne
+  grise : dossier (jamais le chemin) et branche. L'état est dans la carte
+  « Cette session » du panneau, avec les marques des rangées Coding : le
+  spinner pointillé tant qu'elle roule, sinon l'icône de l'état (crochet vert
+  fini, rouge échoué), puis l'étape en mots (« Running src/board tests »,
+  jamais la commande brute).
+- Chaque appel d'outil = la rangée d'étape du chat principal (`StepRow`, la
+  même que les étapes avec Outils affichés) : 13 px, gris secondaire, aucun
+  cadre, l'étape en mots, une cible plus pâle (un fichier ou un programme,
+  jamais les arguments), la durée plus pâle, un chevron de 13 px qui déplie
+  le détail sous un trait fin à gauche. En cours, les mots scintillent ;
+  échoué, ils passent à l'encre danger ; fini, rien de plus (aucun point,
+  aucun crochet). Une commande : « Ran src/board tests  11 passed · 1 failed
+  4s » (ou « Exit 1 » en rouge) ; dépliée, la commande puis les 3 premières
+  lignes de sa sortie dans un bloc de code, « … +N lines » pour tout voir,
+  « Show less » pour replier. Une modification : « Edited a file  column.ts
+  +14 -0 » (vert et rouge, police de l'interface), « Edited 3 files » pour
+  plusieurs ; dépliée, le diff (un saut depuis la bande Changes l'ouvre). Les
+  lectures d'affilée : « Read 3 files  a.ts, b.ts, c.ts », sans détail. Une
+  commande d'attente (sleep, pgrep) : « Waited », gris tertiaire, rien à
+  déplier. Tout autre outil : la rangée `ToolActivity` du chat principal.
+- Messages : celui de la personne = la bulle de droite du chat, celui du bot
+  = une bulle de bot (18 px de rayon, 12 px sur 7 px, 13 px). La police
+  monospace reste dans un bloc de code, un diff, un chemin, une branche et un
+  identifiant de commit.
 - Bande Changes au-dessus du compositeur : « N files changed +A -R » (déplie
   la liste ; un clic saute au diff et l'ouvre), le dernier compte de tests, la
   branche, le commit, la PR (ouvre le navigateur).
@@ -919,7 +932,7 @@ du texte en lignes.
 
 Code : `src/components/coding/CodingChat.tsx`, `ToolLine.tsx`, `CodingDiff.tsx`,
 `src/components/bot-settings/AgentRows.tsx`, `src/components/ParallelTaskCard.tsx`
-(mode unifié), lecture pure dans `src/lib/coding-chat.ts` (`toolLineOf`,
+(mode unifié), lecture pure dans `src/lib/coding-chat.ts` (`stepWords`,
 `humanStep`, `previewLines`). Captures : `node scripts/capture/coding-chat.mjs`
 (galeries `src/gallery/coding-chat.html`, `bot-panel-coding.html`). iOS et
 Android : la section Coding liste les tâches en cours seulement ; le chat de

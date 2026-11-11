@@ -1,29 +1,34 @@
-// One tool call of the coding chat as a terminal line (JC, 2026-11-05, #2099),
-// the way Claude Code prints it:
+// One tool call of the coding chat (#2099; #3581 lot 5, the owner
+// 2026-11-10: "the way it works, with the look of the reference product").
+// Every call is the chat's own step row (StepRow), the same row as a tool
+// step of the main chat with Tool calls on, so "a step" has one look:
 //
-//   ● Bash(pnpm vitest run src/board …)        4s
-//     ⎿ 11 passed · 1 failed
-//       FAIL src/board/column.test.ts
-//       … +14 lines
+//   Ran src/board tests   11 passed · 1 failed   4s  v
+//   Edited a file  column.ts   +14 -0  v
+//   Read 3 files  a.ts, b.ts, c.ts
 //
-// The dot is the status (accent while it runs, green done, red failed), the
-// tool's name is bold, its argument short and cut with "…". Below, `⎿` and the
-// first lines of the result, then "… +N lines" to unfold the rest. An edit
-// reads `⎿ +2 -0`, its diff folded behind that click (a jump from the Changes
-// band opens it). A command that only waits (sleep, pgrep) is a muted line
-// with no result. Text only: no card, no border.
+// The step in words, a file or a program as the quiet target (never the
+// arguments), the test counts or the exit code, the duration. State is the
+// row's: the words shimmer while it runs, turn the danger ink when it
+// failed, and nothing marks a success. Opened: the command and its output in
+// a code block (the first lines, then "… +N lines" and "Show less"), an
+// edit's diff. A command that only waits (sleep, pgrep) is a quiet row with
+// nothing to open. Any other tool is the main chat's ToolActivity itself.
+// Monospace stays inside the code block and the diff.
 import { useState } from "react";
 
 import type { CodingRow, CodingStep, TestSummary } from "@/lib/coding-chat";
-import { isWaitCommand, previewLines, toolLineOf } from "@/lib/coding-chat";
-import { stepDuration, stepPhase, type StepPhase } from "@/lib/step-label";
+import { isWaitCommand, previewLines, stepWords } from "@/lib/coding-chat";
+import { stepDuration, type StepPhase } from "@/lib/step-label";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { StepRow } from "../StepRow";
+import { ToolActivity } from "../ToolActivity";
 import { CodingDiff } from "./CodingDiff";
 
 type CommandStep = Extract<CodingStep, { kind: "command" }>;
 type EditStep = Extract<CodingStep, { kind: "edit" }>;
-type ReadsRow = Extract<CodingRow, { kind: "reads" }>;
+type Reveal = { path: string; nonce: number };
 
 /** "12 passed · 1 failed · 2 skipped": the counts that are not zero, passed always. */
 export function TestCounts({ tests, className }: { tests: TestSummary; className?: string }) {
@@ -36,12 +41,18 @@ export function TestCounts({ tests, className }: { tests: TestSummary; className
   );
 }
 
-const DOT: Record<StepPhase, string> = {
-  running: "text-accent-text animate-pulse motion-reduce:animate-none",
-  done: "text-success",
-  failed: "text-danger",
-  unverified: "text-ink-tertiary",
-};
+/** "+14 -0" in the interface font, green and red. */
+export function DiffCounts({ added, removed }: { added: number; removed: number }) {
+  return (
+    <span data-coding-diff-counts className="shrink-0 text-[12px] tabular-nums">
+      <span className="text-success">+{added}</span> <span className="text-danger">-{removed}</span>
+    </span>
+  );
+}
+
+// The code block of an opened step: the look of the main chat's step
+// detail (ToolStepDetail), with the coding chat's longer reach.
+const CODE_BLOCK = "overflow-auto rounded-md bg-inset px-2 py-1.5 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap break-words text-ink";
 
 function commandPhase(step: CommandStep): StepPhase {
   if (step.ok === false || (step.exitCode !== undefined && step.exitCode !== 0)) return "failed";
@@ -53,140 +64,102 @@ function editPhase(step: EditStep): StepPhase {
   return step.ok === false ? "failed" : "done";
 }
 
-/** The first line: the dot, `Name(arg)`, the duration at the right. */
-function Head({ phase, name, arg, title, duration, muted }: { phase: StepPhase; name: string; arg: string; title?: string; duration?: string; muted?: boolean }) {
-  return (
-    <div className="flex items-baseline gap-2">
-      <span data-tool-dot={phase} aria-hidden="true" className={cn("shrink-0 select-none text-[10px] leading-5", muted ? "text-ink-tertiary" : DOT[phase])}>●</span>
-      <span className="min-w-0 flex-1 truncate" title={title ?? (arg || undefined)}>
-        <span data-tool-name className={cn("font-semibold", muted ? "text-ink-secondary" : "text-ink")}>{name}</span>
-        {arg && <span data-tool-arg className="text-ink-secondary">({arg})</span>}
-      </span>
-      {duration && <span className="shrink-0 text-[11px] tabular-nums text-ink-tertiary">{duration}</span>}
-    </div>
-  );
-}
-
-/** The indented result under the head: `⎿` then whatever is passed. */
-function Tail({ children }: { children: React.ReactNode }) {
-  return (
-    <div data-tool-result className="flex gap-2">
-      <span aria-hidden="true" className="w-[1ch] shrink-0 select-none text-ink-tertiary">⎿</span>
-      <div className="min-w-0 flex-1">{children}</div>
-    </div>
-  );
-}
-
-function MoreButton({ count, open, onClick }: { count: number; open: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      data-tool-more
-      aria-expanded={open}
-      onClick={onClick}
-      className="rounded px-0.5 text-left text-[12px] text-ink-tertiary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-    >
-      {open ? t("codingChat.less") : t("codingChat.more", { count })}
-    </button>
-  );
-}
-
-function CommandLine({ step }: { step: CommandStep }) {
-  const phase = commandPhase(step);
-  const line = toolLineOf(step);
-  const muted = isWaitCommand(step.command);
+function CommandDetail({ step }: { step: CommandStep }) {
   const [open, setOpen] = useState(false);
   const output = step.output?.replace(/\s+$/, "") ?? "";
-  const preview = previewLines(output, step.tests ? 2 : 3);
-  const hasTail = !muted && (step.tests !== undefined || preview.lines.length > 0 || phase === "failed");
+  const preview = previewLines(output, 3);
   return (
-    <>
-      <Head phase={phase} name={line.name} arg={line.arg} title={line.title} duration={stepDuration(step.durationMs)} muted={muted} />
-      {hasTail && (
-        <Tail>
-          {step.tests && <div><TestCounts tests={step.tests} /></div>}
-          {phase === "failed" && step.exitCode !== undefined && step.exitCode !== 0 && !step.tests && <div data-tool-exit className="text-[12px] text-danger">{t("codingChat.exit", { code: step.exitCode })}</div>}
-          {open
-            ? <pre data-tool-output className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words text-[12px] leading-5 text-ink-secondary">{output}</pre>
-            : preview.lines.length > 0 && <pre data-tool-output className="whitespace-pre-wrap break-words text-[12px] leading-5 text-ink-secondary">{preview.lines.join("\n")}</pre>}
-          {preview.more > 0 && <MoreButton count={preview.more} open={open} onClick={() => setOpen((value) => !value)} />}
-          {step.diff && step.diff.length > 0 && open && <div className="mt-1"><CodingDiff files={step.diff} /></div>}
-        </Tail>
+    <div className="flex flex-col gap-1.5 py-1">
+      <pre dir="ltr" data-tool-command className={cn(CODE_BLOCK, "max-h-32")}>{step.command}</pre>
+      {preview.lines.length > 0 && (
+        <pre dir="ltr" data-tool-output className={cn(CODE_BLOCK, open ? "max-h-[60vh]" : "max-h-52")}>{open ? output : preview.lines.join("\n")}</pre>
       )}
-    </>
-  );
-}
-
-function EditLine({ step, reveal }: { step: EditStep; reveal?: { path: string; nonce: number } }) {
-  const phase = editPhase(step);
-  const line = toolLineOf(step);
-  // A jump from the Changes band (each jump a new nonce) opens the diff at
-  // once; the toggle then remembers its own choice for that nonce.
-  const [folded, setFolded] = useState<{ nonce?: number; open: boolean }>({ open: false });
-  const open = reveal !== undefined && reveal.nonce !== folded.nonce ? true : folded.open;
-  const setOpen = (next: (value: boolean) => boolean) => setFolded({ nonce: reveal?.nonce, open: next(open) });
-  const added = step.files.reduce((sum, file) => sum + file.added, 0);
-  const removed = step.files.reduce((sum, file) => sum + file.removed, 0);
-  return (
-    <>
-      <Head phase={phase} name={line.name} arg={line.arg} title={line.title} />
-      <Tail>
-        {phase === "failed" && (
-          <p data-coding-edit-failed className="text-[12px] text-danger">{step.error ? t("codingChat.edit.failedWhy", { why: step.error.split("\n")[0]!.slice(0, 200) }) : t("codingChat.edit.failed")}</p>
-        )}
+      {preview.more > 0 && (
         <button
           type="button"
           data-tool-more
-          data-coding-diff-toggle
           aria-expanded={open}
           onClick={() => setOpen((value) => !value)}
-          className="rounded px-0.5 text-left text-[12px] tabular-nums hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+          className="self-start rounded text-[11px] text-ink-tertiary hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
         >
-          <span className="text-success">+{added}</span> <span className="text-danger">-{removed}</span>
-          <span className="ms-1.5 text-ink-tertiary">{open ? t("codingChat.diff.hide") : t("codingChat.diff.show")}</span>
+          {open ? t("codingChat.less") : t("codingChat.more", { count: preview.more })}
         </button>
-        {open && <div className="mt-1"><CodingDiff files={step.files} reveal={reveal} /></div>}
-      </Tail>
-    </>
-  );
-}
-
-function ReadsLine({ row }: { row: ReadsRow }) {
-  const line = toolLineOf({ kind: "reads", paths: row.paths });
-  return <div data-coding-reads><Head phase={row.running ? "running" : "done"} name={line.name} arg={line.arg} title={line.title} /></div>;
-}
-
-function OtherLine({ step }: { step: Extract<CodingStep, { kind: "tool" }> }) {
-  const phase = stepPhase(step.tool);
-  const line = toolLineOf(step);
-  const [open, setOpen] = useState(false);
-  const output = step.tool.output?.replace(/\s+$/, "") ?? "";
-  const preview = previewLines(output, 3);
-  return (
-    <>
-      <Head phase={phase} name={line.name} arg={line.arg} title={line.title} duration={stepDuration(step.tool.durationMs)} />
-      {(preview.lines.length > 0 || phase === "failed") && (
-        <Tail>
-          {open
-            ? <pre data-tool-output className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words text-[12px] leading-5 text-ink-secondary">{output}</pre>
-            : <pre data-tool-output className="whitespace-pre-wrap break-words text-[12px] leading-5 text-ink-secondary">{preview.lines.join("\n")}</pre>}
-          {preview.more > 0 && <MoreButton count={preview.more} open={open} onClick={() => setOpen((value) => !value)} />}
-        </Tail>
       )}
-    </>
+      {step.diff && step.diff.length > 0 && <CodingDiff files={step.diff} />}
+    </div>
   );
 }
 
-/** One coding row that is a tool call (a step or a burst of reads). */
-export function ToolLine({ row, reveal }: { row: Exclude<CodingRow, { kind: "line" }>; reveal?: { path: string; nonce: number } }) {
+function CommandRow({ step }: { step: CommandStep }) {
+  const phase = commandPhase(step);
+  const words = stepWords(step, phase);
+  const waits = isWaitCommand(step.command);
+  const exit = phase === "failed" && step.exitCode !== undefined && step.exitCode !== 0 && !step.tests
+    ? <span data-tool-exit className="shrink-0 text-[12px] text-danger">{t("codingChat.exit", { code: step.exitCode })}</span>
+    : undefined;
+  const row = (
+    <StepRow
+      label={words.label}
+      target={words.target}
+      title={words.title}
+      phase={phase}
+      duration={phase === "running" ? undefined : stepDuration(step.durationMs)}
+      extra={step.tests ? <TestCounts tests={step.tests} /> : exit}
+    >
+      {waits ? undefined : () => <CommandDetail step={step} />}
+    </StepRow>
+  );
+  // A command that only waits is a quiet row: the tertiary ink, nothing to open.
+  return waits ? <div data-coding-wait className="[&_[data-step-row]>*]:text-ink-tertiary">{row}</div> : row;
+}
+
+function EditRow({ step, reveal }: { step: EditStep; reveal?: Reveal }) {
+  const phase = editPhase(step);
+  const words = stepWords(step, phase);
+  const added = step.files.reduce((sum, file) => sum + file.added, 0);
+  const removed = step.files.reduce((sum, file) => sum + file.removed, 0);
+  return (
+    // A jump from the Changes band (each jump a new nonce) opens the diff,
+    // even when the row was closed by hand since the last jump.
+    <StepRow
+      key={reveal?.nonce ?? "folded"}
+      label={words.label}
+      target={words.target}
+      title={words.title}
+      phase={phase}
+      forceOpen={reveal !== undefined}
+      wide
+      extra={<DiffCounts added={added} removed={removed} />}
+    >
+      {() => (
+        <div className="flex flex-col gap-1.5 py-1">
+          {phase === "failed" && (
+            <p data-coding-edit-failed className="text-[12px] text-danger">{step.error ? t("codingChat.edit.failedWhy", { why: step.error.split("\n")[0]!.slice(0, 200) }) : t("codingChat.edit.failed")}</p>
+          )}
+          <CodingDiff files={step.files} reveal={reveal} />
+        </div>
+      )}
+    </StepRow>
+  );
+}
+
+function ReadsRow({ paths, running }: { paths: readonly string[]; running: boolean }) {
+  const phase: StepPhase = running ? "running" : "done";
+  const words = stepWords({ kind: "reads", paths }, phase);
+  return <StepRow label={words.label} target={words.target} title={words.title} phase={phase} />;
+}
+
+/** One coding row that is a tool call (a step or a burst of reads). `live`:
+ * the task still runs, so a call without a result is running, not unverified. */
+export function ToolLine({ row, reveal, live = true }: { row: Exclude<CodingRow, { kind: "line" }>; reveal?: Reveal; live?: boolean }) {
   const step = row.kind === "step" ? row.step : undefined;
   return (
-    <div data-coding-row={row.id} data-coding-step={row.kind === "reads" ? "read" : step!.kind} className="font-mono text-[12.5px] leading-5">
-      {row.kind === "reads" && <ReadsLine row={row} />}
-      {step?.kind === "command" && <CommandLine step={step} />}
-      {step?.kind === "edit" && <EditLine step={step} reveal={reveal} />}
-      {step?.kind === "read" && <ReadsLine row={{ kind: "reads", id: row.id, at: row.at, paths: step.paths, running: false }} />}
-      {step?.kind === "tool" && <OtherLine step={step} />}
+    <div data-coding-row={row.id} data-coding-step={row.kind === "reads" ? "read" : step!.kind} className="flex min-w-0 flex-col">
+      {row.kind === "reads" && <ReadsRow paths={row.paths} running={row.running} />}
+      {step?.kind === "command" && <CommandRow step={step} />}
+      {step?.kind === "edit" && <EditRow step={step} reveal={reveal} />}
+      {step?.kind === "read" && <ReadsRow paths={step.paths} running={false} />}
+      {step?.kind === "tool" && <ToolActivity tool={step.tool} live={live} />}
     </div>
   );
 }

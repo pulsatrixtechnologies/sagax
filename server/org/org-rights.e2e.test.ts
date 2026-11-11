@@ -22,7 +22,7 @@
 //   S4-12 a shared section opens only what its owners consented to; a
 //         read-only member changes nothing; moving rooms needs moderators
 import { spawn, type ChildProcess } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -32,6 +32,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
+import { turnWithPrompt } from "../testing/turn-dump-log.ts";
 
 const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
@@ -53,7 +54,7 @@ let PORT = 0;
 let BASE = "";
 let child: ChildProcess;
 let home: string;
-let dump = "";
+let turns = "";
 let log = "";
 let idp: FakeOidcProvider;
 
@@ -179,10 +180,10 @@ posixOnly("Perspicax organization, slice 4: rights, teams, owner keys, sections"
     writeFileSync(join(home, "link", "pulsabot.json"), JSON.stringify({
       version: 1, issuer: idp.issuer, client_id: "pulsa-bot", server_id: idp.serverId, origin: BASE, link_token: idp.linkToken,
     }), { mode: 0o640 });
-    dump = join(home, "claude-dump.json");
+    turns = join(home, "claude-turns.jsonl");
     writeFileSync(join(data, "config.json"), JSON.stringify({
       instances: {
-        claude: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_DUMP: dump }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
+        claude: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_DUMP_LOG: turns }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
         codex: { driver: "codex", environment: { SAGAX_DEVICE_AUTH_FIXTURE: "1" }, config: { cli: FAKE_CODEX_LOGIN } },
       },
     }));
@@ -233,8 +234,7 @@ posixOnly("Perspicax organization, slice 4: rights, teams, owner keys, sections"
     expect((await api("GET", "/api/me/engines", bob)).body.engines?.find((e: { instanceId: string }) => e.instanceId === "claude")).toMatchObject({ myKey: true, orgKey: true, myTurns: "key" });
     expect((await api("POST", `/api/bots/${x.id}/messages`, bob, { text: "ping from bob" })).status).toBe(202);
     await waitFor(async () => (await botOf(bob, x.id))?.messages.some((m) => m.role === "bot" && m.kind === "text" && m.text), 30_000);
-    await waitFor(async () => existsSync(dump));
-    const env = (JSON.parse(readFileSync(dump, "utf8")) as { env: Record<string, string> }).env;
+    const { env } = await turnWithPrompt(turns, "ping from bob");
     expect(env.ANTHROPIC_API_KEY).toBe(BOB_KEY);
     expect(idp.resolveRequests.map((r) => r.sub)).not.toContain(ALICE.sub);
     expect(idp.resolveRequests.at(-1)).toEqual({ sub: BOB.sub, provider: "anthropic" });
@@ -332,8 +332,7 @@ posixOnly("Perspicax organization, slice 4: rights, teams, owner keys, sections"
     expect((await botOf(bob, z.id))?.messages.some((m) => m.kind === "access")).toBe(false);
     // read from Perspicax (or its 60 s cache) with bob's subject only
     expect(idp.resolveRequests.slice(resolvedBefore).map((r) => r.sub).filter((sub) => sub !== BOB.sub)).toEqual([]);
-    await waitFor(async () => existsSync(dump) && JSON.stringify(JSON.parse(readFileSync(dump, "utf8")).prompt).includes("hello erin's bot"));
-    expect((JSON.parse(readFileSync(dump, "utf8")) as { env: Record<string, string> }).env.ANTHROPIC_API_KEY).toBe(BOB_KEY);
+    expect((await turnWithPrompt(turns, "hello erin's bot")).env.ANTHROPIC_API_KEY).toBe(BOB_KEY);
   }, 60_000);
 
   it("S4-4: leaving the team through the directory, then through a refreshed id_token, narrows at once", async () => {
@@ -400,13 +399,11 @@ posixOnly("Perspicax organization, slice 4: rights, teams, owner keys, sections"
     expect((await api("PATCH", `/api/bots/${w.id}/runtime-settings`, erin, { turnPayer: "speaker" })).status).toBe(200);
     const textReplies = async () => ((await botOf(bob, w.id))?.messages ?? []).filter((m) => m.role === "bot" && m.kind === "text" && m.text);
     const firstReplies = (await textReplies()).length;
-    rmSync(dump, { force: true });
     expect((await api("POST", `/api/bots/${w.id}/messages`, bob, { text: "hi again wendy" })).status).toBe(202);
     await waitFor(async () => (await textReplies()).length > firstReplies, 30_000);
     const moved = (await textReplies()).at(-1) as unknown as { turnRun?: { instanceId: string; requested?: { instanceId: string; model: string } } };
     expect(moved.turnRun).toMatchObject({ instanceId: "claude", requested: { instanceId: "codex" } });
-    await waitFor(async () => existsSync(dump));
-    expect((JSON.parse(readFileSync(dump, "utf8")) as { env: Record<string, string> }).env.ANTHROPIC_API_KEY).toBe(BOB_KEY);
+    expect((await turnWithPrompt(turns, "hi again wendy")).env.ANTHROPIC_API_KEY).toBe(BOB_KEY);
     expect((await botOf(bob, w.id))?.messages.some((m) => m.kind === "access")).toBe(false);
     // with a default model of his own (his first starred one: Claude, on his
     // own key), the bot answers bob on that one first
@@ -415,19 +412,16 @@ posixOnly("Perspicax organization, slice 4: rights, teams, owner keys, sections"
     const accessCards = async () => ((await botOf(bob, w.id))?.messages ?? []).filter((m) => m.kind === "access").length;
     const repliesBefore = (await textReplies()).length;
     const cardsBefore = await accessCards();
-    rmSync(dump, { force: true });
     expect((await api("POST", `/api/bots/${w.id}/messages`, bob, { text: "third time wendy" })).status).toBe(202);
     await waitFor(async () => (await textReplies()).length > repliesBefore, 30_000);
     expect(((await textReplies()).at(-1) as unknown as { turnRun?: unknown }).turnRun).toMatchObject({ instanceId: "claude", model: "fake-model", requested: { instanceId: "codex" } });
-    await waitFor(async () => existsSync(dump));
-    expect((JSON.parse(readFileSync(dump, "utf8")) as { env: Record<string, string> }).env.ANTHROPIC_API_KEY).toBe(BOB_KEY);
+    expect((await turnWithPrompt(turns, "third time wendy")).env.ANTHROPIC_API_KEY).toBe(BOB_KEY);
     expect(await accessCards()).toBe(cardsBefore);
     // #1154 in a group: bob's turn there runs on a model he pays for too,
     // and the reply names the bot's model it left
     const room = await api("POST", "/api/groups", erin, { name: "Wendy room", memberIds: [w.id], humanIds: [ids.bob], setup: { bulletin: "", defaultResponder: { kind: "everyone" } } });
     expect(room.status, room.text).toBe(201);
     const roomThread = room.body.group.threadId as string;
-    rmSync(dump, { force: true });
     const posted = await api("POST", `/api/groups/${room.body.group.id}/messages`, bob, { text: "hi room", threadId: roomThread });
     expect(posted.status, posted.text).toBeLessThan(300);
     const roomReply = await waitFor(async () => {
@@ -435,8 +429,8 @@ posixOnly("Perspicax organization, slice 4: rights, teams, owner keys, sections"
       return ((read.body.messages ?? []) as Array<{ role: string; kind: string; text?: string; turnRun?: unknown }>).find((m) => m.role === "bot" && m.kind === "text" && m.text) ?? null;
     }, 30_000);
     expect(roomReply.turnRun).toMatchObject({ instanceId: "claude", model: "fake-model", requested: { instanceId: "codex", model: "fake-model" } });
-    await waitFor(async () => existsSync(dump));
-    expect((JSON.parse(readFileSync(dump, "utf8")) as { env: Record<string, string> }).env.ANTHROPIC_API_KEY).toBe(BOB_KEY);
+    // a room turn is given the words with their sender, on a line of their own
+    expect((await turnWithPrompt(turns, "Bob: hi room")).env.ANTHROPIC_API_KEY).toBe(BOB_KEY);
     expect(log).not.toContain(BOB_KEY);
     expect((await api("POST", "/api/me/engines/codex/login/sign-out", erin, {})).status).toBe(200);
     expect(existsSync(join(dir, ".pulsabot-login.json"))).toBe(false);

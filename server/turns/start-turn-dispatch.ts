@@ -238,6 +238,13 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     // time the person's message arrived (server/turns/turn-clock.ts).
     }, (input: any) => state.instance.adapter.sendTurn(clockAtHandoff(input, new Date())));
     })), () => !directTurnClaimExists(state.bot.id, state.dispatchClaimId, state.threadId), async () => {
+      // #3703: a warm runs no turn of its own. Its claim is gone because the
+      // person's message took the thread over (or the warm was cancelled):
+      // the turn running there now is that message's, never the warm's to
+      // stop. A message taking the thread over keeps the process for itself,
+      // and a cancelled warm keeps it too: the warm branch below releases it
+      // only when the warm's signal is aborted (hangup).
+      if (state.warmOnly) return;
       await state.instance.adapter.interruptTurn(state.threadId).catch(() => {});
     });
     // Adapter accepted the turn (process reused or spawned).

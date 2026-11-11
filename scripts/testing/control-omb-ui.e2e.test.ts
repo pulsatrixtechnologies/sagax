@@ -374,15 +374,9 @@ describe("control-omb ui drives the real renderer", () => {
     const pressed = await ui("press", info.ui, "--keys", "Enter");
     expect(pressed).toMatchObject({ ok: true, pressed: "Enter" });
 
-    let settled = await ui("wait-settle", info.ui, "--timeout", "60");
-    // Known (#3703): a message sent while the typing pre-warm relaunches
-    // the engine can end with no reply. Until that is fixed the same message
-    // is sent once more from the composer.
-    if (!String((await ui("snapshot", info.ui)).snapshot).includes(`StaticText "${REPLY}"`)) {
-      await ui("type", info.ui, "--name", "Message Pepper", "--text", "hello");
-      await ui("press", info.ui, "--keys", "Enter");
-      settled = await ui("wait-settle", info.ui, "--timeout", "60");
-    }
+    // #3703: one send answers, even while the typing pre-warm relaunches
+    // the engine.
+    const settled = await ui("wait-settle", info.ui, "--timeout", "60");
     expect(settled).toMatchObject({ ok: true, status: "settled", browser: { state: "networkidle" }, renderer: { rendered: true } });
     expect((settled.bots as Array<{ busy: boolean }>).every((bot) => !bot.busy)).toBe(true);
 
@@ -432,8 +426,7 @@ describe("control-omb ui drives the real renderer", () => {
 
     // One mode (2026-10-09): a model chosen in the thread becomes the bot's
     // model; same-provider model changes preserve permissions. The models
-    // are one dropdown. Known (#3703): a message sent after this change
-    // fails with no reply, so the turn above runs first.
+    // are one dropdown.
     const originalModel = originalBot.modelSelection.model;
     const models = await runControlOmb(["models", "--url", info.url]) as any;
     const options = models.instances.find((instance: any) => instance.instanceId === originalBot.modelSelection.instanceId).models.options;
@@ -540,7 +533,7 @@ describe("control-omb ui drives the real renderer", () => {
     await expect.poll(async () => (await ui("snapshot", info.ui)).snapshot, { timeout: 10_000 }).toContain('complementary "Inspector"');
     const inspected = await ui("snapshot", info.ui);
     const runLog = (inspected.snapshot as string).slice((inspected.snapshot as string).indexOf('complementary "Inspector"'));
-    expect(runLog).toContain('tab "Run Log" [selected');
+    expect(runLog).toContain('tab "Run log" [selected');
     expect(runLog).toContain("pnpm control:omb doctor");
     expect(runLog).toContain("pnpm control:omb ui click --name Missing");
     expect(runLog).toContain('StaticText "Failed"');

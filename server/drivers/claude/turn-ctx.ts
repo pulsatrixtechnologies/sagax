@@ -72,4 +72,7 @@ export type ClaudeTurnCtx = SendTurnDeps & {
   finalizeClose: (code: number | null) => Promise<void>;
   sendTurn: (turn: SendTurnInput, logicalTurnId?: string) => Promise<ClaudeTurnEarly>;
   authRecovery: any;
+  /** A warm that kept a live process: it waits for that process's init once
+   * the thread's launch is released (turn-send.ts). */
+  prewarmWait?: ClaudeSession;
 };

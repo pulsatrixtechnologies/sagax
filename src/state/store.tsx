@@ -6,7 +6,7 @@
 // Types, pure helpers and the sliced reducer live under ./store/.
 // This file re-exports the public API and hosts StoreProvider.
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { forgetConversation, readLastConversation, rememberConversation } from "@/lib/last-conversation";
 import { selectionListed } from "@/lib/selection-fallback";
 import { hiddenKeySet, readSidebarHidden, useSidebarHidden } from "@/lib/sidebar-hidden";
@@ -20,7 +20,7 @@ import { t, activeLocale } from "@/lib/i18n";
 import { createBotPatchQueue } from "./bot-patch-queue";
 import { useChatErrorClear } from "./chat-error";
 import { migrateInstalledVoiceSettings } from "@/lib/voice-mode/settings";
-import { StoreCommandsContext, StoreSourceContext, usePublishedStoreSource } from "./store-source";
+import { StoreCommandsContext, StoreSourceContext, StreamSourceContext, usePublishedStoreSource, type StoreSource } from "./store-source";
 import { ThreadPrefetchContext } from "./thread-prefetch";
 import { createThreadPrefetcher, ThreadPageCache } from "@/lib/thread-page-cache";
 import { PERSON_THREADS_HEADER, currentTaskBot, threadApprovalModes, visibleMessages, configStatusFromFrame, pinBotThreadAction, openRoutineRun, continueRoutineRunInConversation, routineRunOfThread, visibleNotificationThread, openNotificationTarget, opensBesideStream, sendsToFreshTopic, freshTopicCovers, botOpensTo, awayFromMainThread, openBot, landOnBot, startNewTopic, openBotThread, openThread, threadsReadOnScreen, folderOwnerPath, personThreadKept, peopleDmReadTarget, panelFollowsSelection, openBotCatalog, closeBotCatalog, dataTablesFromResponse, dataSheetFromResponse, initialState, liveCallFromFrame, nextLiveCallLookup, ApiError, taskPatchFields, type OptionCardData, type SecretRequestCardData, type Message, type GroupDefaultResponder, type Group, type GroupTask, type ModelSelection, type Task, type ThreadOpener, type ThreadCloser, type TaskUsage, type Bot, type BotProject, type ProjectUpdatePatch, type FolderOwnerKind, type GroupTaskUpdatePatch, type TaskUpdatePatch, type ConfigStatus, type ConfigViewer, type ManagedPolicySummary, type BrowserEngineSummary, type BrowserProfile, type ConfigStatusFrame, type EngineInstall, type InstanceInfo, type AchievementsCategory, type ModelVariantSession, type AppState, type BotAnnouncement, type Action, type ThreadTarget, type BotCatalogTarget, type PanelOwner } from "./store/model";
@@ -125,7 +125,7 @@ export type {
  * floating bots' balloons), while every useStore consumer (sidebar, mascots,
  * pickers, the settled transcript) keeps its render tree untouched during a
  * stream. */
-interface StreamState {
+export interface StreamState {
   /** in-flight assistant text per threadId */
   streaming: Record<string, string>;
   /** in-flight extended thinking per threadId (ephemeral) */
@@ -135,12 +135,11 @@ const EMPTY_STREAM: StreamState = { streaming: {}, reasoning: {} };
 /** How long a newer topic must hold before the chat on screen follows it
  * (the follow effect in StoreProvider). */
 export const FOLLOW_SETTLE_MS = 600;
-const StreamContext = createContext<StreamState>(EMPTY_STREAM);
 
 type PendingDelta = { text: string; reasoning: string };
 
 /** Stream APIs the SSE fold calls. Owned by StreamRoot so a delta's setState
- * re-renders only StreamContext consumers, not StoreProvider's tree. */
+ * re-renders only the stream's readers, not StoreProvider's tree. */
 type StreamApi = {
   clearStream: (threadId: string) => void;
   flushDeltas: () => void;
@@ -203,14 +202,32 @@ export function createStreamDeltaBuffer(onFlush: (entries: Array<[string, Pendin
   };
 }
 
-export function useStreaming() {
-  return useContext(StreamContext);
+const noStreamSubscribe = () => () => {};
+const emptyStream = () => EMPTY_STREAM;
+
+/** The whole stream map: renders on every delta of every thread. A component
+ * that draws one thread reads it with useStreamSelector (store-selector.ts).
+ * Read from the stream's source, not a context whose value changes per
+ * delta: a context change walks the whole tree for its readers twenty
+ * times a second while any bot streams (#3624). */
+export function useStreaming(): StreamState {
+  const source = useContext(StreamSourceContext) as StoreSource<StreamState, unknown> | null;
+  return useSyncExternalStore(source?.subscribe ?? noStreamSubscribe, source?.getState ?? emptyStream, source?.getState ?? emptyStream);
+}
+
+const noStreamDispatch = () => {};
+
+/** Publishes the stream to its source (a stable context value): useStreaming
+ * and selector reads subscribe to it. */
+function StreamProviders({ value, children }: { value: StreamState; children?: ReactNode }) {
+  const source = usePublishedStoreSource(value, noStreamDispatch);
+  return <StreamSourceContext.Provider value={source as never}>{children}</StreamSourceContext.Provider>;
 }
 
 /** The in-flight text a gallery or a test draws, without the whole store. */
 export function StreamingPreview({ streaming, children }: { streaming: Record<string, string>; children?: ReactNode }) {
   const value = useMemo(() => ({ streaming, reasoning: {} }), [streaming]);
-  return <StreamContext.Provider value={value}>{children}</StreamContext.Provider>;
+  return <StreamProviders value={value}>{children}</StreamProviders>;
 }
 
 const StoreContext = createContext<{
@@ -682,7 +699,7 @@ function StreamRoot({
     setStream(EMPTY_STREAM);
   };
   apiRef.current = { clearStream, flushDeltas, resetStreams, deltaBuffer };
-  return <StreamContext.Provider value={stream}>{children}</StreamContext.Provider>;
+  return <StreamProviders value={stream}>{children}</StreamProviders>;
 }
 
 /** The store when there is one; null outside a provider (static renders, tests). */

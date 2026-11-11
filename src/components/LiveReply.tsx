@@ -18,7 +18,7 @@ import { splitLiveMarkdown } from "@/lib/live-markdown-blocks";
 import { prefersWideBubble } from "@/lib/rich-blocks";
 import { useStreamReplies } from "@/lib/stream-replies-preference";
 import type { MentionPeer } from "@/lib/mentions";
-import { useStreaming } from "@/state/store";
+import { useStreamSelector } from "@/state/store-selector";
 import { stripLeakedSystemHarnessMessages } from "../../shared/system-message-guard.ts";
 import { ChatMarkdown } from "./ChatMarkdown";
 
@@ -51,8 +51,8 @@ export function LiveReply({
   shownRef?: MutableRefObject<boolean>;
 }) {
   const enabled = useStreamReplies();
-  const { streaming } = useStreaming();
-  const raw = threadId ? streaming[threadId] ?? "" : "";
+  // this thread's text only: another bot's stream does not render it (#3624)
+  const raw = useStreamSelector((stream) => (threadId ? stream.streaming[threadId] ?? "" : ""));
   const text = enabled && !hidden ? liveReplyText(raw) : "";
   const visible = Boolean(text.trim());
   useLayoutEffect(() => {

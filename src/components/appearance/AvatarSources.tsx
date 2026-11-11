@@ -6,7 +6,8 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
 import { Download, ImagePlus, Loader2, Trash2 } from "lucide-react";
 
-import { useStore, type Bot } from "@/state/store";
+import type { Bot } from "@/state/store";
+import { useStoreCommands } from "@/state/store-selector";
 import { avatarFileProblem, avatarImageFrom, dragMayCarryImage, exportAvatarImage } from "@/lib/avatar-input";
 import { cn } from "@/lib/cn";
 import { imageAttachmentFromFile } from "@/lib/composer-attachments";
@@ -36,7 +37,8 @@ const FRAME_SIZE = 168;
  * patch lane as an upload.
  */
 export function useAvatarSources(bot: Bot, onPatch: (patch: AvatarPatch) => void) {
-  const { flushBotPatches } = useStore();
+  // a command, not the state: another bot's frame renders nothing here (#3624)
+  const { flushBotPatches } = useStoreCommands();
   const { request: api, uploadAvatar } = useBotEditor();
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);

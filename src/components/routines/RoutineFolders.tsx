@@ -24,7 +24,8 @@ import { ArrowDown, ArrowUp, Check, ChevronRight, Folder, FolderInput, FolderPlu
 import { Fragment, useEffect, useImperativeHandle, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
-import { api, openRoutineRun, useStore, type Bot } from "@/state/store";
+import { api, openRoutineRun, type Bot } from "@/state/store";
+import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -106,16 +107,18 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
    * no folder headers. Calendar and the Routines page keep the grouped list. */
   leadingClock?: boolean;
 }) {
-  const { state, dispatch } = useStore();
-  const order = state.routineFolders?.[bot.id] ?? EMPTY;
+  // only what the list draws: another bot's frame renders nothing here (#3624)
+  const dispatch = useStoreDispatch();
+  const order = useStoreSelector((current) => current.routineFolders?.[bot.id] ?? EMPTY);
+  const storeRoutines = useStoreSelector((current) => current.routines);
   // What a folder action reaches: the bot's routines in the store and the
   // caller's full list, the shown rows winning (their copy is the newest).
   const botRoutines = useMemo(() => {
     const byId = new Map<string, Routine>();
-    for (const routine of [...(state.routines ?? []), ...(allRoutines ?? [])]) if (routine.botId === bot.id) byId.set(routine.id, routine);
+    for (const routine of [...(storeRoutines ?? []), ...(allRoutines ?? [])]) if (routine.botId === bot.id) byId.set(routine.id, routine);
     for (const routine of routines) byId.set(routine.id, routine);
     return [...byId.values()];
-  }, [state.routines, allRoutines, routines, bot.id]);
+  }, [storeRoutines, allRoutines, routines, bot.id]);
   const groups = useMemo(() => groupRoutinesByFolder(routines, order), [routines, order]);
   const folders = groups.flatMap((group) => group.folder ? [group.folder] : []);
   const editable = routines.length === 0 || routines.some((routine) => routine.canEdit !== false);
@@ -125,6 +128,8 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
   const [serverNote, setServerNote] = useState(false);
   const [collapsed, setCollapsed] = useState(() => collapsedRoutineFolders(bot.id));
   const [menu, setMenu] = useState<MenuState | null>(null);
+  // a row's menu acts on the whole state, read only while it is open
+  const rowMenuState = useStoreSelector((current) => (menu?.kind === "row" ? current : null));
   const [renaming, setRenaming] = useState<string | null>(null);
   // 2026-10-29: the routine whose name is typed in place (its row).
   const [renamingRoutine, setRenamingRoutine] = useState<string | null>(null);
@@ -362,7 +367,7 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
           {showSortAction && <SortByPrefixItem autoFocus={!supported} onSelect={() => { closeMenu(); void sortByPrefix(); }} />}
         </>)
         : menu.kind === "row" ? <RoutineRowMenuItems routine={menu.routine} actions={routineRowActions({
-          routine: menu.routine, bot, state, dispatch, close: closeMenu,
+          routine: menu.routine, bot, state: rowMenuState!, dispatch, close: closeMenu,
           onOpen: () => onOpen(menu.routine),
           onDuplicate: onDuplicate ? () => onDuplicate(menu.routine) : undefined,
           onRename: () => setRenamingRoutine(menu.routine.id),

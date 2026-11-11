@@ -5,7 +5,8 @@ import { LogOut } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import { leaveOutcome } from "@/lib/group-leave";
-import { useStore, type Group } from "@/state/store";
+import type { Group } from "@/state/store";
+import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 export function leaveGroupCopy(group: Pick<Group, "name" | "ownerId" | "humanIds" | "dm" | "peopleDm">, outcome: ReturnType<typeof leaveOutcome>) {
@@ -23,12 +24,14 @@ export function leaveGroupCopy(group: Pick<Group, "name" | "ownerId" | "humanIds
 }
 
 export function LeaveGroupDialog({ groupId, onClose, returnFocusRef }: { groupId: string | null; onClose: () => void; returnFocusRef?: RefObject<HTMLElement | null> }) {
-  const { state, dispatch } = useStore();
-  const group = groupId ? state.groups.find((candidate) => candidate.id === groupId) : undefined;
+  // closed, it reads nothing that changes: a bot's frame renders nothing here (#3624)
+  const dispatch = useStoreDispatch();
+  const group = useStoreSelector((current) => (groupId ? current.groups.find((candidate) => candidate.id === groupId) : undefined));
+  const config = useStoreSelector((current) => (group ? current.config : null));
   return (
     <ConfirmDialog
       open={Boolean(group)}
-      {...leaveGroupCopy(group ?? { name: "" }, group ? leaveOutcome(group, state.config) : "member")}
+      {...leaveGroupCopy(group ?? { name: "" }, group ? leaveOutcome(group, config) : "member")}
       icon={<LogOut size={18} />}
       {...(returnFocusRef ? { returnFocusRef } : {})}
       onCancel={onClose}

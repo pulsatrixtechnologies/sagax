@@ -2748,10 +2748,11 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
           onMakePrimary={(bot) => void actions.makePrimaryBot(bot.id)}
           onReplacePrimary={(bot) => actions.setPrimaryPicker({ currentId: bot.id, pending: false, error: null })}
         />
-      <ConfirmDialog
-        open={actions.confirm !== null}
-        {...(actions.confirm ? botConfirmCopy(actions.confirm.kind, actions.confirm.bot.name) : botConfirmCopy("archive", ""))}
-        icon={actions.confirm?.kind === "delete" ? <Trash2 size={18} /> : <Archive size={18} />}
+      {/* mounted only while asked: the sidebar renders on every bot frame (#3624) */}
+      {actions.confirm !== null && <ConfirmDialog
+        open
+        {...botConfirmCopy(actions.confirm.kind, actions.confirm.bot.name)}
+        icon={actions.confirm.kind === "delete" ? <Trash2 size={18} /> : <Archive size={18} />}
         onCancel={actions.cancelConfirm}
         returnFocusRef={sidebarRef}
         onConfirm={() => {
@@ -2761,7 +2762,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
           if (kind === "archive") void actions.archiveBot(bot);
           else dispatch({ type: "deleteBot", botId: bot.id });
         }}
-      />
+      />}
       {actions.teamFeedback &&
         createPortal(
           <div

@@ -4,7 +4,7 @@
 // the canonical transcript row performs the settle-in animation above it.
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
-import { useStreaming } from "@/state/store";
+import { useStreamSelector } from "@/state/store-selector";
 import { useStreamReplies } from "@/lib/stream-replies-preference";
 import { liveReplyText } from "@/components/LiveReply";
 import type { BotAvatarProps } from "@/components/Avatar";
@@ -62,12 +62,16 @@ export function TurnPresence({
    * adds how long nothing has come out once it runs a while. */
   quietSince?: number | null;
 }) {
-  const { streaming } = useStreaming();
-  const streamingText = streamThreadId ? Boolean(streaming[streamThreadId]) : false;
+  // what this line needs of its thread's stream, not the text itself: a new
+  // word, or another bot's stream, does not render it (#3624)
+  const streamed = useStreamSelector((stream) => {
+    const raw = streamThreadId ? stream.streaming[streamThreadId] : undefined;
+    return raw ? (liveReplyText(raw) ? "words" : "text") : "none";
+  });
+  const streamingText = streamed !== "none";
   const mode = (typing ?? streamingText) ? "typing" : "thinking";
   // the words themselves are on screen (LiveReply): no "Typing…" line under them
-  const liveReply = useStreamReplies() && typing === undefined && streamingText &&
-    Boolean(liveReplyText(streaming[streamThreadId!]));
+  const liveReply = useStreamReplies() && typing === undefined && streamed === "words";
   const [mounted, setMounted] = useState(visible);
   const [presencePhase, setPhase] = useState<"think" | "answer" | "out">(answering ? "answer" : "think");
   const wasAnswering = useRef(answering);

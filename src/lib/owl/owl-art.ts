@@ -228,6 +228,16 @@ export interface OwlPoseFrame {
 }
 
 const TAU = Math.PI * 2;
+/** The resting breath: sy = 1 + depth * sin(2 pi t / period), about the
+ * ground. A resting owl breathes in CSS (styles.css `owl-breathe`, sampled
+ * from these numbers; owl-breath.test.ts holds them equal), on the
+ * compositor, with no script per frame (#3624). */
+export const OWL_BREATH_PERIOD_S = 3.4;
+export const OWL_BREATH_DEPTH = 0.016;
+/** Working: the wing flaps at 6 Hz and the body bounces 3 times a second on
+ * |sin|, so both repeat every sixth of a second (styles.css
+ * `owl-working-wing`, `owl-working-bounce`, held equal by the same test). */
+export const OWL_WORKING_PERIOD_S = 1 / 6;
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const easeOut = (u: number) => 1 - (1 - u) * (1 - u);
 
@@ -292,7 +302,7 @@ export function owlPose(state: OwlState, t: number, loop = true, hop = 1): OwlPo
       break;
     default:
       // idle: breathing, feet planted; the top moves ~1.1px at 72px
-      pose.sy = 1 + 0.016 * Math.sin((TAU * t) / 3.4);
+      pose.sy = 1 + OWL_BREATH_DEPTH * Math.sin((TAU * t) / OWL_BREATH_PERIOD_S);
   }
   return pose;
 }

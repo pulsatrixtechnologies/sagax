@@ -274,6 +274,20 @@ export function teamToComeLine(planned: { botId?: string }, nameOf: (botId: stri
   return planned.botId ? { botId: planned.botId, who: teamBotName(named), parts: [toCome] } : { parts: [toCome] };
 }
 
+/** Everything the Coding section draws that moves with the clock or the
+ * live events (each row's grey line, what it spent, its state), as one
+ * string: a tick whose face is the same draws nothing (#3624). */
+export function teamWorkFace(work: TeamWork, now: number): string {
+  const nameless = () => undefined;
+  const parts: string[] = [];
+  for (const item of [...work.live, ...work.doneToday]) {
+    parts.push(item.key, item.live.state, teamLineText(teamWorkLine(item, nameless, now)), teamWorkSpend(item));
+    for (const step of item.steps) parts.push(step.id, step.live.state, teamLineText(teamStepLine(step, nameless, now)));
+  }
+  for (const bot of work.team) parts.push(bot.botId, bot.live.state, bot.live.wait ?? "");
+  return parts.join("\n");
+}
+
 /** "Done today · 6 merged", "Done today · 6 done, 2 merged", "Done today · 6". */
 export function teamDoneLabel(items: readonly Pick<TeamWorkItem, "merged">[]): string {
   const merged = items.filter((item) => item.merged).length;

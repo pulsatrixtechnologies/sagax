@@ -4,7 +4,8 @@
 import { CalendarClock, MoreHorizontal, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useServerFeature } from "@/lib/server-features";
-import { openRoutineRun, useStore, type Bot } from "@/state/store";
+import { openRoutineRun, type Bot } from "@/state/store";
+import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import type { Routine, RoutineRun, RoutineRunOn } from "@/lib/routines";
 import { t } from "@/lib/i18n";
 import { RoutineEditor } from "../RoutinesPage";
@@ -27,7 +28,13 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
    * Routines sub-page, where openRoutine sends it (#2624). */
   followFocus?: boolean;
 }) {
-  const { state, dispatch } = useStore();
+  // only what the list draws: another bot's frame renders nothing here (#3624)
+  const dispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({
+    routineFocus: current.routineFocus,
+    routinesLoadState: current.routinesLoadState,
+    viewerPrincipalId: current.config?.viewer?.principalId ?? null,
+  }), shallowEqual);
   // The bot's profile page (#3400): the shared group, a grey label with its
   // actions at the right and one card of rows, as every card of the page.
   const plain = useSettingsSurface() === "plain";
@@ -129,7 +136,7 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
             </span>
           </p>
         ) : (
-          <RoutineFolderList controlRef={folderControl} bot={bot} routines={routines} viewerPrincipalId={state.config?.viewer?.principalId ?? null} runs={runs} loading={state.routinesLoadState === "loading" && routines.length === 0} error={state.routinesLoadState === "error"} onOpen={(routine) => setDetailId(routine.id)} grouped={grouped}
+          <RoutineFolderList controlRef={folderControl} bot={bot} routines={routines} viewerPrincipalId={state.viewerPrincipalId} runs={runs} loading={state.routinesLoadState === "loading" && routines.length === 0} error={state.routinesLoadState === "error"} onOpen={(routine) => setDetailId(routine.id)} grouped={grouped}
             onCreateIn={(folder) => { setNewFolder(folder); setEditing("new"); }}
             onDuplicate={(routine) => setEditing({ copyOf: routine })} />
         )}
@@ -150,7 +157,7 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
           and asking the bot create one there (#2125) */}
       {!upcoming && createButton}
     </div>
-    <RoutineFolderList controlRef={folderControl} bot={bot} routines={routines} viewerPrincipalId={state.config?.viewer?.principalId ?? null} runs={runs} loading={state.routinesLoadState === "loading" && routines.length === 0} error={state.routinesLoadState === "error"} onOpen={(routine) => setDetailId(routine.id)} grouped={grouped}
+    <RoutineFolderList controlRef={folderControl} bot={bot} routines={routines} viewerPrincipalId={state.viewerPrincipalId} runs={runs} loading={state.routinesLoadState === "loading" && routines.length === 0} error={state.routinesLoadState === "error"} onOpen={(routine) => setDetailId(routine.id)} grouped={grouped}
       collapseAfter={upcoming ? 5 : undefined} leadingClock={upcoming}
       onCreateIn={(folder) => { setNewFolder(folder); setEditing("new"); }}
       onDuplicate={(routine) => setEditing({ copyOf: routine })} />

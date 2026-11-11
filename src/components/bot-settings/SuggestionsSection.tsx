@@ -10,7 +10,8 @@ import { CalendarPlus, ChevronRight, Sparkles } from "lucide-react";
 import type { ComponentType } from "react";
 import { SlackLogo } from "../SlackLogo";
 import { useEffect, useMemo, useState } from "react";
-import { api, openBotThread, useStore, type Bot } from "@/state/store";
+import { api, openBotThread, type Bot } from "@/state/store";
+import { useStoreDispatch } from "@/state/store-selector";
 import type { BotOverview } from "@/lib/bot-overview-types";
 import { botSuggestions, type BotSuggestion } from "@/lib/bot-suggestions";
 import { GROUPED_CARD, GROUPED_ROW, PANEL_CARD, PANEL_LABEL, PANEL_ROW } from "@/lib/grouped-card";
@@ -27,7 +28,7 @@ export function SuggestionsSection({ bot, routineCount, slackUrl = null, onAddTo
   /** Add to meeting: a new routine in the panel's Upcoming card. */
   onAddToMeeting?: () => void;
 }) {
-  const { dispatch } = useStore();
+  const dispatch = useStoreDispatch();
   const threadsShown = useShowThreads();
   const [setup, setSetup] = useState<BotOverview["setup"] | null>(null);
   const shown = useShowSuggestions();

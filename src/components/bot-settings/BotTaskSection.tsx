@@ -21,7 +21,7 @@
 // line. The cause goes to the console, the last known list stays on screen,
 // and the section reads again by itself (backoff) until a read works.
 import { Check, CircleDashed, ListTodo, MessageCircleQuestion, MoreHorizontal, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { BOT_TASKS_EVENT, type BotTasksEventDetail } from "@/lib/bot-task-events";
@@ -32,7 +32,8 @@ import { t } from "@/lib/i18n";
 import { relativeTime } from "@/lib/memory";
 import { routeMissingOnServer } from "@/lib/server-route";
 import { useShowThreads } from "@/lib/thread-preferences";
-import { api, ApiError, openBotThread, useStoreOptional } from "@/state/store";
+import { api, ApiError, openBotThread, useStoreOptional, type AppState } from "@/state/store";
+import { StoreSourceContext, useSourceSelector, type StoreSource } from "@/state/store-selector";
 import { BOT_TASK_DONE_FOLD_MS, BOT_TASK_DONE_LINGER_MS, listBotTasks, personBotTaskActions, type BotTask, type BotTaskAction, type BotTaskState } from "../../../shared/bot-task-list";
 import { navigateThreadMenu } from "../BotProjects";
 import { PanelPageHeader as RoutineDetailHeader } from "./PanelPage";
@@ -107,10 +108,24 @@ export function mergeTaskLists(results: ReadonlyArray<PromiseSettledResult<{ tas
   return { tasks };
 }
 
-export function BotTaskSection({ botId, scope }: { botId: string; scope?: BotTaskScope }) {
+/** This bot and the store's dispatch, or null outside a store. Read through
+ * the store's source when the tree has one, so another bot's frame renders
+ * nothing here (#3624); a tree has a source or not for the life of the
+ * component, so the hooks called stay the same (store-selector.ts). */
+function useOptionalBotStore(botId: string) {
+  const source = useContext(StoreSourceContext) as StoreSource<AppState, unknown> | null;
+  if (source) {
+    const bot = useSourceSelector(source, (state) => state.bots.find((candidate) => candidate.id === botId));
+    return { bot, dispatch: source.dispatch as NonNullable<ReturnType<typeof useStoreOptional>>["dispatch"] };
+  }
   const store = useStoreOptional();
+  return store ? { bot: store.state.bots.find((candidate) => candidate.id === botId), dispatch: store.dispatch } : null;
+}
+
+export function BotTaskSection({ botId, scope }: { botId: string; scope?: BotTaskScope }) {
+  const store = useOptionalBotStore(botId);
   const threadsShown = useShowThreads();
-  const bot = store?.state.bots.find((candidate) => candidate.id === botId);
+  const bot = store?.bot;
   // The lists read: this bot's, or every bot of the group's scope.
   const listIds = scope ? scope.botIds : [botId];
   const listKey = listIds.join(",");

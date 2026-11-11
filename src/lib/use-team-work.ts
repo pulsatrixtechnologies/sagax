@@ -7,8 +7,10 @@
 // 3. between the two, no request: the runtime events of the step threads,
 //    which the app's one live stream already carries, move the last action,
 //    the tool call in flight and the computer wait (one map lookup per
-//    frame, no React state written per frame), and a clock redraws the ages
-//    every second while a step is open;
+//    frame, no React state written per frame), and a clock looks every
+//    second while a step is open, and redraws only when what the section
+//    shows changed (an age in seconds, a minute passed, a state): "6 min"
+//    redraws once a minute, not sixty times (#3624);
 // 4. a safety read every 60 seconds while a step is open, and one when the
 //    stream lost frames it could not replay.
 // The last read is kept per orchestrator so a step's coding chat words its
@@ -17,7 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 
 import { TEAM_WORK_FRAME, type TeamWork } from "../../shared/team-work";
 import { listenLiveFrames } from "@/lib/live-events";
-import { foldTeamEvent, teamLiveThreads, teamWorkAt, teamWorkTicking, type TeamOverlay } from "@/lib/team-work";
+import { foldTeamEvent, teamLiveThreads, teamWorkAt, teamWorkFace, teamWorkTicking, type TeamOverlay } from "@/lib/team-work";
 
 /** One read after a burst of frames, at most this often. */
 export const TEAM_WORK_DEBOUNCE_MS = 1_000;
@@ -166,14 +168,27 @@ export function useTeamWork(botId: string, options: { load?: TeamWorkLoader; clo
   }, [botId, refresh]);
 
   const ticking = teamWorkTicking(read);
+  const readRef = useRef(read);
+  readRef.current = read;
+  // what the last render shows (teamWorkFace), for the clock to compare
+  const shown = useRef("");
   useEffect(() => {
     if (!ticking) return;
-    const tick = setInterval(() => setNow(clockRef.current()), TEAM_WORK_TICK_MS);
+    const tick = setInterval(() => {
+      const at = clockRef.current();
+      const current = readRef.current;
+      if (current && teamWorkFace(teamWorkAt(current, overlays.current, at), at) === shown.current) return;
+      setNow(at);
+    }, TEAM_WORK_TICK_MS);
     const safety = setInterval(() => void refresh(), TEAM_WORK_SAFETY_MS);
     return () => { clearInterval(tick); clearInterval(safety); };
   }, [ticking, refresh]);
 
   // the overlays (a ref) are read again at each tick
-  const work = useMemo(() => (read ? teamWorkAt(read, overlays.current, now) : null), [read, now]);
+  const work = useMemo(() => {
+    const next = read ? teamWorkAt(read, overlays.current, now) : null;
+    shown.current = next ? teamWorkFace(next, now) : "";
+    return next;
+  }, [read, now]);
   return { work, failed: failed && read === null, now };
 }

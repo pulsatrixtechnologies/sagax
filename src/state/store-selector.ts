@@ -9,8 +9,8 @@
 // hooks read `useStore()` instead, so a migrated component keeps working
 // under the existing mocks.
 import { useContext, useRef, useSyncExternalStore, type Dispatch } from "react";
-import { useStore, type Action, type AppState } from "./store";
-import { StoreCommandsContext, StoreSourceContext, type StoreCommands, type StoreSource } from "./store-source";
+import { useStore, useStreaming, type Action, type AppState, type StreamState } from "./store";
+import { StoreCommandsContext, StoreSourceContext, StreamSourceContext, type StoreCommands, type StoreSource } from "./store-source";
 
 export { createStoreSource, StoreSourceContext, usePublishedStoreSource, type PublishingStoreSource, type StoreSource } from "./store-source";
 
@@ -55,6 +55,16 @@ export function useStoreSelector<T>(selector: (state: AppState) => T, isEqual?: 
   // hooks called below stay the same from one render to the next.
   if (!source) return selector(useStore().state);
   return useSourceSelector(source as StoreSource<AppState, unknown>, selector, isEqual);
+}
+
+/** A slice of the in-flight stream (a thread's text, whether it has any):
+ * renders only when that slice changes, never for another thread's delta
+ * (#3624). Outside a stream provider it reads useStreaming. */
+export function useStreamSelector<T>(selector: (stream: StreamState) => T, isEqual?: (a: T, b: T) => boolean): T {
+  const source = useContext(StreamSourceContext);
+  // a tree has a stream provider or not for the life of the component
+  if (!source) return selector(useStreaming());
+  return useSourceSelector(source as StoreSource<StreamState, unknown>, selector, isEqual);
 }
 
 /** The store's dispatch, without subscribing to the state. */

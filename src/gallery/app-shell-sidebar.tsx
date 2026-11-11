@@ -10,8 +10,10 @@
  * message box ignores. ?blocked=connect is the neighbouring state, an engine
  * not connected, which keeps its bar.
  * #3576: ?hidden=N adds N bots the person hid from the sidebar; the sidebar
- * draws nothing for them (Settings > Appearance lists them). */
-import { StrictMode, useCallback, useMemo, useReducer, useState } from "react";
+ * draws nothing for them (Settings > Appearance lists them).
+ * #3624: ?scene=idle|background|open is the idle cost measure's window
+ * (app-shell-scene.ts, scripts/capture/idle-cost.mjs). */
+import { memo, StrictMode, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { AppSidebar } from "../components/AppSidebar";
@@ -19,10 +21,16 @@ import { ChatView } from "../components/ChatView";
 import { BotSettingsDialog } from "../components/BotSettingsDialog";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
-import { BotEditorStore, initialState, reducer, type Action, type AppState, type Bot, type InstanceInfo, type Message } from "../state/store";
+import { BotEditorStore, createStreamDeltaBuffer, initialState, reducer, StreamingPreview, type Action, type AppState, type Bot, type InstanceInfo, type Message } from "../state/store";
+import { foldLiveFrame } from "../state/store/fold-live-frame";
+import { useStoreSelector } from "../state/store-selector";
+import { publishLiveFrame } from "../lib/live-events";
+import { longConversation, moreBots, readScene, sceneTeamWork, startWorking } from "./app-shell-scene";
+import type { ServerFrame } from "../../shared/wire";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
+const scene = readScene(params);
 const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
 const lang = params.get("lang") ?? "en";
@@ -54,6 +62,7 @@ window.fetch = async (input, init) => {
     return reply({ block: { reason: "engine_limit", name: "Claude", message: "Claude limit reached.", action: { kind: "switch_engine" },
       limit: credits ? { cause: "credits" } : { cause: "usage_limit", resetsAt: limitResetsAt } } });
   }
+  if (scene && url.pathname.endsWith("/team-work")) return reply(sceneTeamWork("atlas", fr, Date.now()));
   if (url.pathname.startsWith("/api/")) return reply({});
   return realFetch(input, init);
 };
@@ -79,7 +88,7 @@ const bot = (id: string, name: string, extra: Partial<Bot>, last: string, minute
   tasks: [{ threadId: `t-${id}`, title: fr ? "Général" : "General", createdAt: at, updatedAt: at + minute * 60_000 }],
   ...extra,
 } as Bot);
-const conversation: Message[] = Array.from({ length: 6 }, (_, i) => [
+const conversation: Message[] = scene ? longConversation(fr, at, 40) : Array.from({ length: 6 }, (_, i) => [
   line(`u${i}`, "user", fr ? `Question de suivi ${i + 1} sur la file des billets.` : `Follow-up ${i + 1} on the ticket queue.`, i * 2, i === 0 ? undefined : `b${i - 1}`),
   line(`b${i}`, "bot", fr ? `Réponse ${i + 1} : ${i + 3} billets fermés depuis ce matin.` : `Answer ${i + 1}: ${i + 3} tickets closed since this morning.`, i * 2 + 1, `u${i}`),
 ]).flat();
@@ -101,7 +110,7 @@ const team: Bot[] = [
   bot("nova", "Nova", { chiefOfStaff: true, title: fr ? "Chef de cabinet" : "Chief of staff", mascotBody: "squircle", pinned: true }, fr ? "Je coordonne la semaine." : "Coordinating the week.", 4),
   { ...bot("atlas", "Atlas", { title: "Service Desk Ops", color: "pink", mascotBody: "squircle", section: "My team" }, "", 8), messages: conversation, activeLeafId: conversation.at(-1)?.id } as Bot,
   bot("iris", "Iris", { title: "Dev Ops", color: "orange", mascotBody: "drop", section: "My team", unread: true }, fr ? "Mémoire nettoyée." : "Memory tidied up.", 42),
-  bot("milo", "Milo", { title: fr ? "Vérification" : "Review", color: "teal", mascotBody: "blob", section: "My team", busy: true }, fr ? "Je vérifie la règle." : "Checking the rule.", 70),
+  bot("milo", "Milo", { title: fr ? "Vérification" : "Review", color: "teal", mascotBody: "blob", section: "My team", busy: !scene }, fr ? "Je vérifie la règle." : "Checking the rule.", 70),
   bot("lina", "Lina", { title: fr ? "Juridique" : "Legal", color: "purple", mascotBody: "circle", section: "My team" }, fr ? "Aucune routine restante." : "No routine left.", 130),
   bot("veille", fr ? "Veille" : "Watch", { color: "blue", mascotBody: "capsule" }, fr ? "Trois avis à lire." : "Three advisories to read.", 320),
 ];
@@ -121,10 +130,10 @@ const start: AppState = {
   hydrated: true,
   selectedId: "atlas",
   config: { profile: { name: "Alex Gagnon" } } as AppState["config"],
-  bots: [...team, ...hiddenTeam],
-  sections: ["My team"],
+  bots: [...team, ...(scene ? moreBots(fr, at) : []), ...hiddenTeam],
+  sections: scene ? ["My team", "Ops"] : ["My team"],
   // ?panel=1 opens the bot panel beside the chat, as App.tsx docks it (#2141).
-  settingsOpen: params.get("panel") === "1",
+  settingsOpen: params.get("panel") === "1" || Boolean(scene),
   // #3552: with ?limit= or ?blocked=, the bot's engine is the one the limit
   // (or the connect bar) names, so the picker's dot sits beside its name.
   instances: [params.get("limit") || params.get("blocked")
@@ -140,26 +149,85 @@ function galleryReducer(state: AppState, action: Action): AppState {
   }
 }
 
+const galleryCommands = { flushBotPatches: async () => null, refreshInstances: async () => {}, refreshModels: async () => {} };
+
 function Gallery() {
   const [state, apply] = useReducer(galleryReducer, start);
-  const [drawerOpen, setDrawerOpen] = useState(params.get("drawer") === "1");
   const dispatch = useCallback((action: Action) => apply(action), []);
-  const value = useMemo(() => ({ state, dispatch, flushBotPatches: async () => null, refreshInstances: async () => {}, refreshModels: async () => {} }), [state, dispatch]);
-  const selected = state.bots.find((entry) => entry.id === state.selectedId) ?? state.bots[1]!;
+  // the commands are stable, as StoreProvider's are (useCallback): a fresh
+  // one per state would refetch the bot panel's overview on every frame
+  const value = useMemo(() => ({ state, dispatch, ...galleryCommands }), [state, dispatch]);
+  // #3624: the server's frames of working bots, through the store's own fold
+  const stream = useRef<SceneStream | null>(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  useEffect(() => {
+    if (scene !== "background" && scene !== "open") return;
+    const feed = (frame: ServerFrame) => {
+      const live = stream.current;
+      if (!live) return;
+      publishLiveFrame(frame);
+      foldLiveFrame(frame, {
+        rawDispatch: dispatch, dispatch, stateRef, clearStream: live.clear, flushDeltas: live.buffer.flush, deltaBuffer: live.buffer,
+        withTaskWrites: (bot) => bot, botPatchQueue: { overlayFor: () => ({}), cancel: () => {} }, showThreadsRef: { current: false },
+        refreshInstancesPeripheral: () => {},
+      });
+    };
+    // let the window settle first, so the measure starts on a drawn page
+    let stop = () => {};
+    const start = setTimeout(() => {
+      stop = startWorking(scene === "open" ? ["atlas"] : ["iris", "milo", "lina"], (botId) => stateRef.current.bots.find((entry) => entry.id === botId), feed);
+    }, 1_000);
+    return () => { clearTimeout(start); stop(); };
+  }, [dispatch]);
   return (
-    <BotEditorStore value={value as never}>
-      {/* App.tsx's shell: the row, the sidebar, the content frame */}
-      <div className="flex h-dvh flex-col" data-app-shell="">
-        <div className="app-shell-row relative flex min-h-0 flex-1">
-          <AppSidebar drawerOpen={drawerOpen} onDrawerOpenChange={setDrawerOpen} composeOpen={false} onCompose={() => {}} />
-          <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col" data-sidebar-follower="">
-            <ChatView bot={selected} />
-          </div>
-          {state.settingsOpen && <BotSettingsDialog bot={selected} />}
-        </div>
-      </div>
-    </BotEditorStore>
+    <SceneStreamRoot streamRef={stream}>
+      <BotEditorStore value={value as never}>
+        <Shell />
+      </BotEditorStore>
+    </SceneStreamRoot>
   );
+}
+
+/** App.tsx's shell: the row, the sidebar, the content frame. It reads the
+ * store through selectors, as App does, so a store change renders only the
+ * components that read what changed (#3624). */
+const Shell = memo(function Shell() {
+  const [drawerOpen, setDrawerOpen] = useState(params.get("drawer") === "1");
+  const selected = useStoreSelector((current) => current.bots.find((entry) => entry.id === current.selectedId) ?? current.bots[1]!);
+  const settingsOpen = useStoreSelector((current) => current.settingsOpen);
+  return (
+    <div className="flex h-dvh flex-col" data-app-shell="">
+      <div className="app-shell-row relative flex min-h-0 flex-1">
+        <AppSidebar drawerOpen={drawerOpen} onDrawerOpenChange={setDrawerOpen} composeOpen={false} onCompose={() => {}} />
+        <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col" data-sidebar-follower="">
+          <ChatView bot={selected} />
+        </div>
+        {settingsOpen && <BotSettingsDialog bot={selected} />}
+      </div>
+    </div>
+  );
+});
+
+/** The live text a turn streams, kept as StoreProvider's StreamRoot keeps it:
+ * its own state, so a delta re-renders only the components that read it. */
+interface SceneStream { buffer: ReturnType<typeof createStreamDeltaBuffer>; clear: (threadId: string) => void }
+function SceneStreamRoot({ streamRef, children }: { streamRef: { current: SceneStream | null }; children: ReactNode }) {
+  const [streaming, setStreaming] = useState<Record<string, string>>({});
+  const buffer = useMemo(() => createStreamDeltaBuffer((entries) => setStreaming((prev) => {
+    const next = { ...prev };
+    for (const [threadId, delta] of entries) next[threadId] = (next[threadId] ?? "") + delta.text;
+    return next;
+  })), []);
+  useEffect(() => () => buffer.dispose(), [buffer]);
+  streamRef.current = {
+    buffer,
+    clear: (threadId) => {
+      buffer.clear(threadId);
+      setStreaming((prev) => (threadId in prev ? Object.fromEntries(Object.entries(prev).filter(([key]) => key !== threadId)) : prev));
+    },
+  };
+  return <StreamingPreview streaming={streaming}>{children}</StreamingPreview>;
 }
 
 createRoot(document.getElementById("root")!).render(<StrictMode><Gallery /></StrictMode>);

@@ -13,7 +13,8 @@ import { useState } from "react";
 import { avatarImageFrom, dragMayCarryImage } from "@/lib/avatar-input";
 import { cn } from "@/lib/cn";
 
-import { useStore, type Bot } from "@/state/store";
+import type { Bot } from "@/state/store";
+import { useStoreDispatch } from "@/state/store-selector";
 import { useBotEditor } from "./bot-settings/BotEditorContext";
 import { t } from "@/lib/i18n";
 import { type MausMotion, type MausState } from "@/lib/mascot";
@@ -45,7 +46,7 @@ export function BotProfileAvatarCard({
    * page goes to its Appearance section). */
   onOpen?: () => void;
 }) {
-  const { dispatch } = useStore();
+  const dispatch = useStoreDispatch();
   const { draft } = useBotEditor();
   const [draftOpen, setDraftOpen] = useState(false);
   const [dropping, setDropping] = useState(false);

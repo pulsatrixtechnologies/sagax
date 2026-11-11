@@ -11,7 +11,7 @@ import { json, readBody } from "../harness/http.ts";
 import { requiredScope } from "../auth/request-auth.ts";
 import type { RoutineRun } from "../../shared/routines.ts";
 import type { BotActivityDetail, BotActivityItem } from "../../shared/bot-activity.ts";
-import { createBotActivityRoutes, stepError, STEP_ERROR_CHARS, type ActivityMessage, type ActivityTask, type BotActivityRouteDeps } from "./bot-activity.ts";
+import { createBotActivityReader, createBotActivityRoutes, stepError, STEP_ERROR_CHARS, type ActivityMessage, type ActivityTask, type BotActivityRouteDeps } from "./bot-activity.ts";
 import { dispatchRoutes } from "./table.ts";
 import { commandSummary, toolDetailPreview } from "../tools/tool-summary.ts";
 
@@ -291,6 +291,18 @@ describe("bot activity API", () => {
     expect(JSON.stringify(bob.body)).not.toContain("Write the tests");
     // the coding filter carries no sub-agents
     expect((await get(base, "/api/bots/pepper/activity?filter=coding", "alice")).body.subagents).toEqual([]);
+  });
+
+  it("lists an archived thread only when the reader asks for it (#3464)", async () => {
+    const archived: ActivityTask = { threadId: "t-arch", title: "Ended hand-over", createdAt: NOW - 90_000, updatedAt: NOW - 3_000_000, archivedAt: NOW - 2_000_000, ownerPrincipalId: "alice" };
+    const reader = createBotActivityReader(deps({
+      tasks: (botId) => (botId === "pepper" ? [...tasks, archived] : []),
+      threadReadable: () => true,
+      messages: (threadId, limit) => ({ messages: (threadId === "t-arch" ? [{ id: "x1", role: "user", kind: "text", at: NOW - 3_100_000, text: "go" }] as ActivityMessage[] : messages[threadId] ?? []).slice(-limit), hasMore: false }),
+    }));
+    const bot = { id: "pepper", name: "Pepper" };
+    expect(reader.list(bot, "alice", 50).map((item) => item.id)).not.toContain("thread:t-arch");
+    expect(reader.list(bot, "alice", 50, undefined, { archived: true }).map((item) => item.id)).toContain("thread:t-arch");
   });
 
   it("leaves out a conversation nobody wrote in yet, greeting or not", async () => {

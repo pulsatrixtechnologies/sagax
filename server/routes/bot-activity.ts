@@ -322,7 +322,9 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
  * (shared/failed-turn.ts, the row the chat shows and the incident sent to
  * the Primary Bot carries), first line only, redacted. */
 export interface BotActivityReader {
-  list(bot: ActivityBot, viewerId: string | undefined, limit: number, windowMs?: number): BotActivityItem[];
+  /** `options.archived` (#3464): also the conversations the sweep archived,
+   * so a reader that keeps facts (the Team board) does not lose them. */
+  list(bot: ActivityBot, viewerId: string | undefined, limit: number, windowMs?: number, options?: { archived?: boolean }): BotActivityItem[];
   failureCause(threadId: string): string | undefined;
   /** #3461: one conversation's entry, the same as in `list`, archived ones
    * included (a team bot's step thread the sweep archived). Undefined when
@@ -334,9 +336,9 @@ export function createBotActivityReader(deps: BotActivityRouteDeps): BotActivity
   const state = createBotActivityState(deps);
   const listed = activityListMethods(state);
   return {
-    list(bot, viewerId, limit, windowMs) {
+    list(bot, viewerId, limit, windowMs, options) {
       state.messagePages.clear();
-      return listed.list(bot, viewerId, Math.min(limit, LIST_MAX), windowMs);
+      return listed.list(bot, viewerId, Math.min(limit, LIST_MAX), windowMs, options?.archived ?? false);
     },
     thread(bot, threadId, viewerId) {
       state.messagePages.clear();
@@ -614,7 +616,7 @@ function activityListMethods(state: BotActivityState) {
   }
 
   /** The list, newest first with running work on top. */
-  function list(bot: ActivityBot, viewerId: string | undefined, limit: number, windowMs = BOT_ACTIVITY_WINDOW_MS): BotActivityItem[] {
+  function list(bot: ActivityBot, viewerId: string | undefined, limit: number, windowMs = BOT_ACTIVITY_WINDOW_MS, withArchived = false): BotActivityItem[] {
     const since = now() - windowMs;
     const runs = deps.runs(bot.id).filter((run) => deps.runSeen(run, viewerId));
     const runById = new Map(runs.map((run) => [run.id, run]));
@@ -622,7 +624,7 @@ function activityListMethods(state: BotActivityState) {
     const listedRuns = new Set<string>();
     const listedThreads = new Set<string>();
     for (const task of deps.tasks(bot.id)) {
-      if (task.archivedAt) continue;
+      if (task.archivedAt && !withArchived) continue;
       if (!deps.threadReadable(bot.id, task.threadId, viewerId)) continue;
       const recent = task.busy || (task.updatedAt ?? task.createdAt) >= since;
       if (!recent) continue;

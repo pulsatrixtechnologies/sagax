@@ -7,7 +7,7 @@ import type { RequestAuth } from "../../auth/request-auth.ts";
 import type { BotActivityItem } from "../../../shared/bot-activity.ts";
 import type { TeamBoard } from "../../../shared/team-board.ts";
 import { createGithubBoardReader, TEAM_BOARD_GITHUB_TTL_MS, TEAM_BOARD_RELEASE_LABEL_CHARS, TEAM_BOARD_RELEASES } from "../../team-board/github-board.ts";
-import { waitingCardOf, type BoardBot, type BoardEntry, type BoardTeam } from "../../team-board/board.ts";
+import { buildTeamBoard, waitingCardOf, type BoardBot, type BoardEntry, type BoardTeam } from "../../team-board/board.ts";
 import { createTeamBoardSource, teamBoardExits, type TeamBoardSourceDeps } from "./team-board.ts";
 
 const NOW = 1_800_000_000_000;
@@ -540,5 +540,24 @@ describe("waiting codes (#3449)", () => {
     expect(waitingCardOf([card({ tool: "Bash" })] as never)).toEqual({ kind: "approval", what: "Push to main", tool: "Bash" });
     expect(waitingCardOf([card({ answered: true, tool: "Bash" })] as never)).toBeUndefined();
     expect(waitingCardOf([card({ title: "Your bot has a question", subtitle: "Which repo?" })] as never)).toEqual({ kind: "question", what: "Which repo?" });
+  });
+});
+
+describe("the lead of a lane (#3464)", () => {
+  const lead = (managedSections: string[]) => buildTeamBoard({
+    teams: [{ sectionId: "sec-9f2", name: "Alpha team", bots: [{ id: "bot-a", name: "Alpha bot" }] }],
+    bots: [{ id: "bot-a", name: "Alpha bot" }, { id: "lead-a", name: "Alpha lead", managedSections }],
+    entries: [{ botId: "bot-a", item: item("bot-a", "Alpha bot", "thread-x", { repo: "acme/shared", pullRequests: [], branches: [], commits: [], issues: [{ repo: "acme/shared", number: 7, action: "commented", at: NOW - 1_000 }] }) }],
+    github: new Map(),
+    now: NOW,
+  })[0]!.lead;
+  it("is found when managedSections holds the section name", () => {
+    expect(lead(["alpha team "])).toEqual({ botId: "lead-a", name: "Alpha lead" });
+  });
+  it("is found when managedSections holds the section id", () => {
+    expect(lead(["sec-9f2"])).toEqual({ botId: "lead-a", name: "Alpha lead" });
+  });
+  it("is not found for another section", () => {
+    expect(lead(["sec-other", "Beta team"])).toBeUndefined();
   });
 });

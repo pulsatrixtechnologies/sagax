@@ -6,7 +6,6 @@
 import { activeEngineRefusal, firstSignedOut, noteEngineRefusal, signedOutHeld } from "../engines/engine-refusals.ts";
 import { signedOutCarryOn } from "../engines/signed-out-carry-on.ts";
 import { buildNoticeNotification } from "../notify.ts";
-import { limitFailoverText } from "../../shared/limit-failover.ts";
 
 export type Host = Record<string, any>;
 
@@ -54,7 +53,7 @@ function signedOutTurnSelection(bot: BotRecord, threadId: string, speaker: TurnS
   if (engine && firstSignedOut(engine.engine, engine.account, `notice:${bot.id}`)) {
     const line = { kind: "signedOutNotice" as const, ...words };
     host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: host.limitFailoverRow(threadId, line) });
-    host.notify(buildNoticeNotification(bot, threadId, limitFailoverText(line, host.limitClockText)));
+    host.notify(buildNoticeNotification(bot, threadId, host.limitLineWords(threadId, line)));
   }
   return selection;
 }

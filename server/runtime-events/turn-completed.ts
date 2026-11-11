@@ -160,7 +160,7 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
       })();
       const limitTaken = !event.ok && !stopped && !lazyClaimAlreadyReported && !computerParked && Boolean(bot) &&
         host.limitFailover.turnFailed({ threadId: event.threadId, turnId: completedTurnId, cause: failureCause, stopReason: event.stopReason,
-          routineRun: routineForFailover });
+          routineRun: routineForFailover, engine: event.providerInstanceId ?? bot?.modelSelection.instanceId });
       // reasoning_only / empty model on a chat turn: one automatic resend of
       // the same user message before an incident (server/empty-response-retry.ts).
       const emptyDetail = failureCause ?? event.stopReason;

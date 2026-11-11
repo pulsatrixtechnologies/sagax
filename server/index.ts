@@ -509,7 +509,7 @@ import { LimitFailoverStore } from "./usage/limit-failover.ts";
 import { createLimitFailoverHost, limitBackupRefusedText } from "./usage/limit-failover-host.ts";
 import { sendBlockFor } from "../shared/send-state.ts";
 import { repeatsShownFailure } from "../shared/failure-dedup.ts";
-import { limitFailoverText, resetClockText } from "../shared/limit-failover.ts";
+import { limitFailoverText, resetClockText, type LimitFailoverLine } from "../shared/limit-failover.ts";
 import { isTechnicalNoticeName } from "../shared/chat-notices.ts";
 import { renewalPrompt } from "./context/context-renewal.ts";
 import { ModelCatalogStore } from "./model-catalog/catalog.ts";
@@ -1792,7 +1792,7 @@ import { createBookTurnUsage } from "./index-leaves/bookTurnUsage.ts";
 import { createResendUserMessage } from "./index-leaves/resendUserMessage.ts";
 import { createPiKitIdentityFor } from "./index-leaves/piKitIdentityFor.ts";
 import { createSendStateFor } from "./index-leaves/sendStateFor.ts";
-import { writeLimitLine } from "./usage/limit-line.ts";
+import { limitLineText, writeLimitLine } from "./usage/limit-line.ts";
 import { createLimitFailoverRow } from "./index-leaves/limitFailoverRow.ts";
 import { createOrgSettings } from "./index-leaves/orgSettings.ts";
 import { createSweepBackgroundThreads } from "./index-leaves/sweepBackgroundThreads.ts";
@@ -2575,6 +2575,7 @@ bindLeafHost({
   get limitScopeFor() { return limitScopeFor; },
   get limitScopeOfTurn() { return limitScopeOfTurn; },
   get limitClockText() { return limitClockText; },
+  get limitLineWords() { return limitLineWords; },
   get routineRunThread() { return routineRunThread; },
   get harnessQuestionThread() { return harnessQuestionThread; },
   get routineApprovalWaitMs() { return routineApprovalWaitMs; },
@@ -16253,6 +16254,13 @@ const limitReset = createLimitResetHost({
 /** A reset as the English line says it, in this server's zone. */
 function limitClockText(at: number): string {
   return resetClockText(at, "en-US", hostTimeZone());
+}
+/** #3530: a conversation's limit line in plain words (a notification), in
+ * the language and the time zone of the person who owns the conversation,
+ * as the agent API says it to them (readerTimeZone). */
+function limitLineWords(threadId: string, line: LimitFailoverLine): string {
+  const person = achievementThreadPerson(threadId);
+  return limitLineText(line, { language: personLanguageCode(languageOfPerson(person)), timeZone: readerTimeZone(person) });
 }
 bus.subscribe((event: RuntimeEvent) => {
   if (shouldIgnoreProviderEvent(event)) return;

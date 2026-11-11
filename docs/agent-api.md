@@ -104,7 +104,12 @@ cut carries `interrupted: true` (#3217): `status: "interrupted"` with
 `finished: false` means it is being resumed, so keep waiting; `status:
 "finished"` with `resumed: true` is the resumed answer; `finished: true` with
 `resumed: false` (`status: "interrupted"`, `error` in the person's language)
-means the turn was not answered, so send the request again. When the wait ends and the turn is still going, `status` is
+means the turn was not answered, so send the request again. A turn no engine
+could answer under its usage limits or credit reads the same way (#3530), with
+`reason: "usage_limit"` (and `resets_at`, the reset as an ISO timestamp) or
+`reason: "credits"`: `finished: false` means the server sends the message
+again by itself after `resets_at`, so wait; `finished: true` means nothing
+sends it again. A restart's answers carry `reason: "restart"`. When the wait ends and the turn is still going, `status` is
 `still_working` (HTTP 200, not an error): `progress` holds a short summary,
 `turn_state` and the recent `steps`; `wait_cursor` and `recommended_wait_ms`
 tell the caller how to resume (`cursor` + `timeout_ms` on the next

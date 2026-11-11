@@ -185,6 +185,9 @@ export interface LimitFailoverHost {
     threadId: string; turnId?: string; cause: string | undefined; stopReason?: string | null;
     /** The routine run this failure just failed (RoutineManager.handleRuntimeEvent), if any. */
     routineRun?: { id: string; routineId: string } | null;
+    /** #3530: the engine the turn ran on, as the runtime said it: names the
+     * line of a refused turn Sagax never saw dispatched. */
+    engine?: string;
   }): boolean;
   /** A routine run's, webhook run's or proactive wake's failed turn, read at
    * once (RoutineManager's usageLimit, before the run fails): null when it is
@@ -258,6 +261,11 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
   });
   const dispatches = new Map<string, LimitDispatch>();
   const errors = new Map<string, { message: string; resetsAt?: number; scope?: "model" }>();
+  /** #3530: the threads whose refused run routineLimit already settled (the
+   * run's own words say the limit and who takes it over). The turn.completed
+   * that follows finds no dispatch, and must not add a second line saying no
+   * engine could answer. */
+  const runLimitSettled = new Set<string>();
   const pending = new Set<Promise<unknown>>();
   let timer: { cancel(): void } | null = null;
   let started = false;
@@ -634,9 +642,29 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       deps.replaceFailure(threadId, turnId, creditLine(dispatch), dispatch.at);
       return;
     }
-    // #1942: already failed over once and nothing further can take over: mark
-    // the turn failed with the engines that refused (never silent empty done).
+    // #3530: already failed over once and the backup refused too: the
+    // message waits for the soonest reset and goes again then, once, as it
+    // does with one engine (the holds file keeps it across a restart). The
+    // backup the conversation stands on resets first: the message goes again
+    // there; else it waits for the conversation's own engine (its return is
+    // due at that reset).
     if (home) {
+      const standInFirst = resetsAt < homeReset;
+      const wait: LimitFailoverLine = standInFirst
+        ? { kind: "waiting", from: deps.engineName(dispatch.engine.instanceId), resetsAt, ...(estimated ? { estimated: true as const } : {}) }
+        : { kind: "waiting", ...waitFor };
+      if (store.schedule({
+        kind: "message", botId: dispatch.botId, threadId, messageId: own.messageId, engine: (standInFirst ? dispatch.engine : homeEngine).instanceId,
+        at: (standInFirst ? resetsAt : homeReset) + store.afterResetMs, ...(dispatch.speaker !== undefined ? { speaker: dispatch.speaker } : {}),
+        ...(dispatch.trigger !== undefined ? { trigger: dispatch.trigger } : {}),
+      })) {
+        deps.replaceFailure(threadId, turnId, { ...wait, ...(dispatch.owner ? { owner: true as const } : {}) }, dispatch.at);
+        held(dispatch.botId, threadId);
+        arm();
+        return;
+      }
+      // #1942: the reset already sent it again once and every engine refused
+      // again: nothing is held now, the line names the engines that refused.
       const tried = [...new Set([
         deps.engineName(home.from.instanceId),
         deps.engineName(dispatch.engine.instanceId),
@@ -644,16 +672,8 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       ].filter(Boolean))];
       console.warn(`[limit-failover] ${threadId}: exhausted after ${tried.join(" -> ")}`);
       deps.replaceFailure(threadId, turnId, {
-        kind: "exhausted", tried, resetsAt: homeReset, ...(dispatch.owner ? { owner: true as const } : {}),
+        kind: "exhausted", tried, resetsAt: Math.min(resetsAt, homeReset), ...(dispatch.owner ? { owner: true as const } : {}),
       }, dispatch.at);
-      if (store.schedule({
-        kind: "message", botId: dispatch.botId, threadId, messageId: own.messageId, engine: homeEngine.instanceId,
-        at: homeReset + store.afterResetMs, ...(dispatch.speaker !== undefined ? { speaker: dispatch.speaker } : {}),
-        ...(dispatch.trigger !== undefined ? { trigger: dispatch.trigger } : {}),
-      })) {
-        held(dispatch.botId, threadId);
-        arm();
-      }
       return;
     }
     // Nothing can take over: the message goes again once the limit resets, once.
@@ -673,6 +693,22 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     deps.replaceFailure(threadId, turnId, { kind: "waiting", ...waitFor, ...(dispatch.owner ? { owner: true as const } : {}) }, dispatch.at);
     held(dispatch.botId, threadId);
     arm();
+  };
+
+  /** #3530: a turn Sagax never saw dispatched (no engine, payer or person
+   * known for it) that a usage limit or a used-up credit refused. The
+   * runtime error wrote no row for it (it holds the engine), so the one line
+   * still says it: nothing is held, since no resend can be sent as its person. */
+  const undispatched = (threadId: string, turnId: string | undefined, cause: string | undefined, stopReason: string | null | undefined,
+    error: { message: string; resetsAt?: number; scope?: "model" } | undefined, engine: string | undefined): boolean => {
+    if (!engine) return false;
+    const credits = creditRefusal(error?.message, stopReason, error) || creditRefusal(cause, stopReason, error);
+    const kind: LimitKind | null = credits ? "quota" : limitKindOf(cause ?? error?.message, stopReason);
+    if (!kind) return false;
+    const name = deps.engineName(engine);
+    const line: LimitFailoverLine = credits ? { kind: "exhausted", tried: [name], cause: "credits" } : { kind: "exhausted", tried: [name], resetsAt: resetOf(kind, cause, error).resetsAt };
+    deps.replaceFailure(threadId, turnId, line, deps.now());
+    return true;
   };
 
   const held = (botId: string, threadId: string) => {
@@ -764,6 +800,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     noteDispatch(threadId, dispatch) {
       dispatches.set(threadId, dispatch);
       errors.delete(threadId);
+      runLimitSettled.delete(threadId);
     },
 
     noteError(threadId, message, limitResetsAt, scope) {
@@ -792,6 +829,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         if (!kind) return null;
         dispatches.delete(threadId);
         errors.delete(threadId);
+        runLimitSettled.add(threadId);
         const { resetsAt, estimated } = resetOf(kind, cause, error);
         const current = deps.threadSelection(dispatch.botId, threadId);
         hold(dispatch, current, resetsAt, estimated, error?.scope);
@@ -950,13 +988,14 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       }
     },
 
-    turnFailed({ threadId, turnId, cause, stopReason, routineRun }) {
+    turnFailed({ threadId, turnId, cause, stopReason, routineRun, engine }) {
       const dispatch = dispatches.get(threadId);
       const error = errors.get(threadId);
       dispatches.delete(threadId);
       errors.delete(threadId);
       try {
-        if (!dispatch) return false;
+        // A run whose limit routineLimit took: its words already say it.
+        if (!dispatch) return runLimitSettled.delete(threadId) ? false : undispatched(threadId, turnId, cause, stopReason, error, engine);
         const message = cause ?? error?.message;
         // #3552: one verdict for credit, the one the runtime error took
         // (runtime-lifecycle's engineLimited, which writes no error row):

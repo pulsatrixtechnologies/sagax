@@ -324,7 +324,7 @@ struct ApprovalReceiptRow: View {
                 HStack(spacing: 6) {
                     if !quiet {
                         icon(pill, ink: ink)
-                        Text(verbatim: pill.map(ApprovalWords.pill) ?? CardView.outcomeText(ApprovalOutcome.of(card) ?? .denied))
+                        Text(verbatim: Self.outcomeWords(card, pill: pill))
                             .foregroundStyle(ink.secondary)
                         Text(verbatim: "·").foregroundStyle(ink.tertiary)
                     }
@@ -368,6 +368,15 @@ struct ApprovalReceiptRow: View {
         .sheet(item: $detail) { pending in
             ApprovalDetailSheet(chat: chat, pending: pending)
         }
+    }
+
+    /// The row's word: the pill of a tool ask; a proposal says what it did
+    /// ("Routine scheduled"), #3415. Skipped and expired read as such.
+    static func outcomeWords(_ card: OptionCard, pill: ApprovalPill?) -> String {
+        if ApprovalDockRules.isProposal(card), pill != .skipped, pill != .expired, let outcome = ApprovalOutcome.of(card) {
+            return CardView.outcomeText(outcome)
+        }
+        return pill.map(ApprovalWords.pill) ?? CardView.outcomeText(ApprovalOutcome.of(card) ?? .denied)
     }
 
     @ViewBuilder
@@ -434,5 +443,105 @@ struct ApprovalReceiptRow: View {
         }
         .padding(.leading, 18)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - The compact card's parts on the phone (#3415)
+
+/// The read or write mark: a quiet word with its icon in the risk's ink,
+/// never a filled pill (ApprovalParts.tsx `RiskChip` since #3414).
+struct PhoneRiskMark: View {
+    let risk: ApprovalRisk
+
+    var body: some View {
+        let tone: Color = switch risk {
+        case .read: Theme.success
+        case .write, .execute: Theme.warning
+        case .destructive: Theme.danger
+        }
+        let icon = switch risk {
+        case .read: "eye"
+        case .write: "pencil.line"
+        case .execute: "play"
+        case .destructive: "trash"
+        }
+        HStack(spacing: 3) {
+            Image(systemName: icon).font(.system(size: 11, weight: .medium))
+            Text(verbatim: DesktopApprovalText.riskLabel(risk)).font(.system(size: 13, weight: .medium))
+        }
+        .foregroundStyle(tone)
+        .fixedSize()
+        .accessibilityIdentifier("approval-risk-\(risk.rawValue)")
+    }
+}
+
+/// The raw detail folded: one inset row with a chevron and what runs on one
+/// line (or "Details"); open, the whole text on its block and the full
+/// request (the tool and its arguments) one tap away.
+struct PhoneApprovalFold: View {
+    let text: String?
+    let accent: Color
+    let fullRequest: () -> Void
+    @State private var open = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                Haptics.selection()
+                withAnimation(.easeOut(duration: 0.15)) { open.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.attentionSecondary)
+                        .rotationEffect(.degrees(open ? 0 : -90))
+                    if let text, !open {
+                        Text(verbatim: text.split(whereSeparator: \.isWhitespace).joined(separator: " "))
+                            .font(Theme.mono(12))
+                            .foregroundStyle(Theme.attentionText)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    } else {
+                        Text("Details")
+                            .font(.system(size: 12.5))
+                            .foregroundStyle(Theme.attentionSecondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 32)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.inset, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Approval details to review"))
+            .accessibilityValue(text.map { Text(verbatim: $0) } ?? Text(verbatim: ""))
+            .accessibilityIdentifier("approval-dock-fold")
+            if open {
+                if let text {
+                    ScrollView(.vertical) {
+                        Text(text)
+                            .font(Theme.mono(12))
+                            .foregroundStyle(Theme.attentionText)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("approval-dock-detail")
+                    }
+                    .frame(maxHeight: 120)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(Theme.inset, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                Button(action: fullRequest) {
+                    Text("See the full request")
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(accent)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("approval-full-request")
+            }
+        }
     }
 }

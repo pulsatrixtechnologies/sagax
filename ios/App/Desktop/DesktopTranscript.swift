@@ -699,40 +699,48 @@ enum DesktopApprovalText {
     }
 }
 
-/// ApprovalParts.tsx `ApprovalHeading`: the 30 pt avatar, 12 pt, then the
-/// title (15 semibold) and the risk chip on one wrapping row; `aside` on
-/// the right (the dock's stepper).
+/// ApprovalParts.tsx `ApprovalHeading` since #3414 (#3415 on the iPad): the
+/// compact card's head. A shield icon, the ask in one line (14 semibold)
+/// naming the bot once, never again by an avatar; under it one line with
+/// the read or write mark and what it does; `aside` on the right (the
+/// dock's stepper and its skip).
 struct DesktopApprovalHeading: View {
+    /// Who asks. Named in the title only (#3415): kept for the callers.
     let bot: Bot?
     let title: String
     let risk: ApprovalRisk?
     let theme: DesktopTheme
     var aside: AnyView? = nil
-    /// ApprovalParts.tsx's summary under the title (`mt-0.5 text-[13px]`).
+    /// ApprovalParts.tsx's summary after the mark (`text-[13px]`).
     var summary: String? = nil
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            if let bot {
-                BotMascotView(bot: bot, size: 30, state: .idle, animated: false)
-                    .frame(width: 30, height: 30)
-            }
+        HStack(alignment: .top, spacing: 8) {
+            DesktopLucideGlyph(paths: DesktopLucide.shieldCheck, size: 15)
+                .foregroundStyle(theme.accent)
+                .frame(height: 20)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .center, spacing: 8) {
-                    Text(verbatim: title)
-                        .font(theme.font(15, .semibold))
-                        .foregroundStyle(theme.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("approval-heading")
-                    if let risk { DesktopRiskChip(risk: risk, theme: theme) }
-                }
-                .frame(minHeight: 22.5)
-                if let summary {
-                    Text(verbatim: summary)
-                        .font(theme.font(13))
-                        .foregroundStyle(theme.inkSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("approval-summary")
+                Text(verbatim: title)
+                    .font(theme.font(14, .semibold))
+                    .foregroundStyle(theme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(minHeight: 20, alignment: .leading)
+                    .accessibilityIdentifier("approval-heading")
+                if risk != nil || summary != nil {
+                    HStack(spacing: 6) {
+                        if let risk { DesktopRiskChip(risk: risk, theme: theme) }
+                        if risk != nil, summary != nil {
+                            Text(verbatim: "·").accessibilityHidden(true)
+                        }
+                        if let summary {
+                            Text(verbatim: summary)
+                                .lineLimit(2)
+                                .accessibilityIdentifier("approval-summary")
+                        }
+                    }
+                    .font(theme.font(13))
+                    .foregroundStyle(theme.inkSecondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -756,7 +764,8 @@ enum DesktopApprovalLine {
     }
 }
 
-/// `RiskChip`: 11 pt medium on a 10 % wash, a 35 % ring (40 % destructive).
+/// `RiskChip` since #3414: a quiet word with its icon in the risk's ink,
+/// never a filled pill (12 pt medium).
 struct DesktopRiskChip: View {
     let risk: ApprovalRisk
     let theme: DesktopTheme
@@ -774,15 +783,11 @@ struct DesktopRiskChip: View {
         case .destructive: DesktopLucide.trash
         }
         HStack(spacing: 4) {
-            DesktopLucideGlyph(paths: icon, size: 11)
+            DesktopLucideGlyph(paths: icon, size: 12)
             Text(verbatim: DesktopApprovalText.riskLabel(risk))
-                .font(theme.font(11, .medium))
+                .font(theme.font(12, .medium))
         }
         .foregroundStyle(tone)
-        .padding(.horizontal, 8)
-        .frame(height: 22.5)
-        .background(tone.opacity(0.1), in: Capsule())
-        .overlay(Capsule().strokeBorder(tone.opacity(risk == .destructive ? 0.4 : 0.35), lineWidth: 1))
         .fixedSize()
     }
 }

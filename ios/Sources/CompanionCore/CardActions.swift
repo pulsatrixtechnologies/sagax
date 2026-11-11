@@ -364,7 +364,27 @@ public enum ApprovalDockRules {
         return actions
     }
 
-    public enum Choice: Sendable { case allowOnce, deny, alwaysAllowTool, alwaysAllowSession, alwaysAllowCommand, alwaysAllowRule, alwaysAllowFolder }
+    public enum Choice: Hashable, Sendable { case allowOnce, deny, alwaysAllowTool, alwaysAllowSession, alwaysAllowCommand, alwaysAllowRule, alwaysAllowFolder }
+
+    /// #3415: the compact card's answers on one row, least destructive
+    /// last: Deny, the one Always allow this card can keep (its folder one
+    /// beside it), Allow once. A card an admin answers offers none here.
+    public static func answers(_ actions: ApprovalDockActions) -> [Choice] {
+        guard !actions.waitingForAdmin else { return [] }
+        var row: [Choice] = [.deny]
+        if actions.alwaysAllowRule {
+            row.append(.alwaysAllowRule)
+            if actions.alwaysAllowFolder { row.append(.alwaysAllowFolder) }
+        } else if actions.alwaysAllowTool {
+            row.append(.alwaysAllowTool)
+        } else if actions.alwaysAllowCommand {
+            row.append(.alwaysAllowCommand)
+        } else if actions.alwaysAllowSession {
+            row.append(.alwaysAllowSession)
+        }
+        row.append(.allowOnce)
+        return row
+    }
 
     /// The respond body for one dock button (`decideRequest` in the store).
     public static func decision(_ choice: Choice, for pending: PendingApproval) -> ApprovalDecision {

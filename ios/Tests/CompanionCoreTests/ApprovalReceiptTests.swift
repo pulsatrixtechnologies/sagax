@@ -98,8 +98,11 @@ final class ApprovalReceiptTests: XCTestCase {
         XCTAssertFalse(ApprovalReceiptRules.isReceipt(try card("{\(base)}")), "an open ask waits on the dock")
         XCTAssertFalse(ApprovalReceiptRules.isReceipt(try card("{\(base),\"answered\":\"unavailable\"}")))
         XCTAssertFalse(ApprovalReceiptRules.isReceipt(try card("{\(base),\"answered\":\"allow\",\"dismissed\":true}")))
-        XCTAssertFalse(ApprovalReceiptRules.isReceipt(try card(#"{"title":"t","subtitle":"s","options":["Confirm"],"requestId":"r","tool":"schedule_routine","answered":"allow","routineRequest":{}}"#)),
-                       "a proposal keeps its card")
+        // #3415: an answered card folds into one row, a proposal too
+        XCTAssertTrue(ApprovalReceiptRules.isReceipt(try card(#"{"title":"t","subtitle":"s","options":["Confirm"],"requestId":"r","tool":"schedule_routine","answered":"allow","routineRequest":{}}"#)),
+                      "an answered proposal folds into one row")
+        XCTAssertFalse(ApprovalReceiptRules.isReceipt(try card(#"{"title":"t","subtitle":"s","options":["Confirm"],"requestId":"r","tool":"schedule_routine","routineRequest":{}}"#)),
+                       "an open proposal waits on the dock")
     }
 
     /// #1982: a bot-created routine's Undo receipt stays in the chat even

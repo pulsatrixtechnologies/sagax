@@ -207,9 +207,10 @@ public enum ApprovalReceiptRules {
         return card.dismissed != true && card.answered != "unavailable"
     }
 
-    /// A settled tool ask (not a proposal) draws as the one-line receipt.
+    /// A settled approval draws as the one-line receipt (#3415: an answered
+    /// card folds into one row, a proposal too).
     public static func isReceipt(_ card: OptionCard) -> Bool {
-        card.isPermission && !card.isPending && !ApprovalDockRules.isProposal(card) && staysInChat(card)
+        card.isPermission && !card.isPending && staysInChat(card)
     }
 
     /// The server's "wants to" phrase when it is in the reader's language

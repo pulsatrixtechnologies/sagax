@@ -210,19 +210,27 @@ describe("chat transcript rows", () => {
         ? { ...pepper, busy, turnStartedAt: running.at, tasks, messages: transcript, activeLeafId: transcript.at(-1)!.id }
         : bot) };
     };
-    const started = await rowRendersAfter(turn(true));
-    expect(started).toMatchObject({ botText: 0, userText: 0, speak: 0 });
-    // the running step turns live: its chip, and no other row
-    expect(started.toolChip).toBe(1);
-    const next = message("m8", running.id, { kind: "activity", tool: { name: "Read file 3" } });
-    const grown = await rowRendersAfter(turn(true, [...messages, next]));
-    expect(grown).toMatchObject({ botText: 0, userText: 0, speak: 0 });
-    // #3581: the running turn's row says "Working" and nothing more; the
-    // working line under the transcript names the new step
-    const live = document.querySelector('[data-testid="activity-run"][data-live="true"]');
-    expect(live?.textContent).toContain(t("chat.activity.working"));
-    expect(document.querySelector(".turn-presence")?.textContent).toContain(liveActivityPhrases(next).phrases[0]);
-    expect(await rowRendersAfter(turn(false))).toMatchObject({ botText: 0, userText: 0, speak: 0 });
+    // #3646: the turn ends even when a line below fails, so the cases after
+    // this one never start with a busy bot
+    let ended = false;
+    try {
+      const started = await rowRendersAfter(turn(true));
+      expect(started).toMatchObject({ botText: 0, userText: 0, speak: 0 });
+      // the running step turns live: its chip, and no other row
+      expect(started.toolChip).toBe(1);
+      const next = message("m8", running.id, { kind: "activity", tool: { name: "Read file 3" } });
+      const grown = await rowRendersAfter(turn(true, [...messages, next]));
+      expect(grown).toMatchObject({ botText: 0, userText: 0, speak: 0 });
+      // #3581: the running turn's row says "Working" and nothing more; the
+      // working line under the transcript names the new step
+      const live = document.querySelector('[data-testid="activity-run"][data-live="true"]');
+      expect(live?.textContent).toContain(t("chat.activity.working"));
+      expect(document.querySelector(".turn-presence")?.textContent).toContain(liveActivityPhrases(next).phrases[0]);
+      expect(await rowRendersAfter(turn(false))).toMatchObject({ botText: 0, userText: 0, speak: 0 });
+      ended = true;
+    } finally {
+      if (!ended) await rowRendersAfter(turn(false));
+    }
   });
 
   // The separator used to follow every store event; now it follows the date.

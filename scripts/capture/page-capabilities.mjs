@@ -3,6 +3,8 @@
  * Headless captures for a page's capabilities (#3413 lot 1b).
  * Default launch is channel chrome. CAPTURE_CHROMIUM, when set, is the
  * chromium binary used instead of that channel.
+ * Reference set: docs/screenshots/page-capabilities (cited here so the #1386
+ * docs-media guard keeps the PNGs on the product branch).
  *  - the publication card with what the page reads (gallery page-viewer.html);
  *  - the reading link's bar with "Reads", the Ask first card and the link
  *    confirmation, light and dark, wide and narrow, around a test page that
@@ -23,7 +25,7 @@ import { build } from "esbuild";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const arg = (name) => { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : undefined; };
-const outDir = resolve(arg("--out") ?? join(root, "docs", "screenshots", "page-capabilities"));
+const outDir = resolve(arg("--out") ?? join(root, "docs/screenshots/page-capabilities"));
 const galleryPort = Number(arg("--port") ?? 5190);
 const readerPort = galleryPort + 1;
 const scratch = resolve(arg("--scratch") ?? join(outDir, ".build"));

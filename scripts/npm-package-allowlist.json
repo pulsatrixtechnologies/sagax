@@ -170,5 +170,17 @@
     "files": "^(?:dist-server/self-knowledge/knowledge\\.generated\\.json|dist/assets/index-[^/]+\\.js)$",
     "context": "(?:matches|follows the|Link to|Lier à|Lier \\\\xE0|mise en page de|as in|comme dans|closer to|bot de|size of|alignée sur|ceux de|Loops\\*\\*:|Loops:|\\bA) Grok [Bb]ot",
     "reason": "Release notes (docs/releases) that name the third-party x.ai product as a design or behaviour reference or as the target of Link with Grok Bot, phrase by phrase, embedded in the web bundle and the help index."
+  },
+  {
+    "term": "initials",
+    "files": "^scripts/testing/known-failures\\.json$",
+    "context": "scripts/testing/jc-rules\\.guard\\.test\\.ts",
+    "reason": "The list of known failing tests names each test by its file: this is the path of an existing guard test file, written as it is so a run can match it."
+  },
+  {
+    "term": "grok-bot",
+    "files": "^scripts/testing/known-failures\\.json$",
+    "context": "Grok ?Bot",
+    "reason": "The list of known failing tests names each test by its full name: the iPad wording test is named after the English strings of the agent import (x.ai's export format), which the app really shows."
   }
 ]

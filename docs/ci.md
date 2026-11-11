@@ -63,13 +63,21 @@ fit: every Linux shard was cancelled at 30 minutes with most of its files
 never run, and the Windows shards that finished took 42 to 45 of their 45
 (#3521). The count is sized from measured runs, not guessed:
 `scripts/testing/duration-sequencer.test.ts` plans the shards from the
-recorded seconds and fails when the slowest one, at 1.25 times its recorded
+recorded seconds and fails when the slowest one, at 1.1 times its recorded
 seconds (vitest's own overhead on CI) plus two minutes of setup, would take
 more than 60% of the Linux cap. When the suite grows past that, add shards
 rather than raising the cap. The count is written in three places in
 `ci.yml` (the matrix, the `--shard` flag with the job name, and the
 `known failures` job's expected result count); `scripts/ci-workflow.test.ts`
 keeps them equal.
+
+How long a run takes now, measured on the first complete run of every
+platform (November 2026, 3,579 test files): each Linux shard took 8 to 12
+minutes, each Windows shard 7 to 15 and each macOS shard 8 to 15, with
+setup. A push to main runs the twenty Linux shards side by side, so its
+tests finish in about 15 minutes after `typecheck + lint`. A run of every
+platform (the nightly run, a manual run) takes about an hour, because the
+account runs at most five macOS jobs at a time (see "macOS runners").
 
 Refresh the times from a few recent runs when shards drift apart (a
 cancelled shard's finished files count too):

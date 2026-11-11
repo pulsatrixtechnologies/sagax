@@ -28,10 +28,13 @@ const VITEST_JOB_CONFIG = parse(readFileSync(path.join(ROOT, ".github/workflows/
 const CI_SHARDS: number = VITEST_JOB_CONFIG.strategy.matrix.shard.length;
 // The Linux shards run after every merge and have the shortest cap.
 const LINUX_CAP_MINUTES = Number(/ubuntu-latest' && (\d+)/.exec(VITEST_JOB_CONFIG["timeout-minutes"])?.[1]);
-// Measured on CI (#3521): vitest's wall time is about 1.25x the files'
-// recorded seconds (imports, setup, transform), and checkout, install and the
-// Electron download take up to two minutes before it starts.
-const WALL_PER_RECORDED_SECOND = 1.25;
+// Calibrated on a complete run of every platform (#3521): the weights take
+// each file at its slowest platform, a job's wall time is about 1.1x its
+// files' recorded seconds (imports, setup, transform), and checkout, install
+// and the Electron download take up to two minutes before vitest starts.
+// That predicts 15.7 minutes for the slowest of twenty shards; the slowest
+// measured took 15.1 (Windows), and the slowest Linux one 11.8.
+const WALL_PER_RECORDED_SECOND = 1.1;
 const SETUP_SECONDS = 120;
 
 function context(index: number, count: number, log: (line: string) => void = () => {}) {

@@ -20613,7 +20613,7 @@ ROUTES.push(createOrgLibraryRoutes({
 // RoutineRun's terminal truth; an uncorrelated manual goal is simply failed
 // because no in-memory orchestrator can survive a restart.
 const recoveredRoutineGoalRuns = new Map(
-  routines.listRuns().filter((run) => run.target === "room-goal").map((run) => [run.id, run]),
+  routines.listRoomGoalRuns().map((run) => [run.id, run]),
 );
 const groupGoalRecoveryAt = Date.now();
 store.reconcileInterruptedGroupGoals((runId, threadId) => {

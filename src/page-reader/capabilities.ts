@@ -233,7 +233,9 @@ function pageCapFileBytes(data: unknown): { ok: true; bytes: Uint8Array } | { ok
 /** Default files.download save: one anchor, download set to the cleaned name,
  * a blob of the allowed MIME, then the object URL is revoked. */
 function defaultSaveFile(file: { name: string; mime: string; bytes: Uint8Array }): void {
-  const url = URL.createObjectURL(new Blob([file.bytes], { type: file.mime }));
+  const body = new ArrayBuffer(file.bytes.byteLength);
+  new Uint8Array(body).set(file.bytes);
+  const url = URL.createObjectURL(new Blob([body], { type: file.mime }));
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = file.name;

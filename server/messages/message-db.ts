@@ -20,7 +20,7 @@ import { provideContentKeys, type ExportedContentKey } from "../content-export.t
 import { ContentKeyring, ContentKeyUnavailable, ensureContentKeySchema, localKekProvider, WORKSPACE_OWNER, type KekProvider, type LiveKey } from "../encryption/content-keys.ts";
 import { resolveVaultKey } from "../mcp/mcp-oauth.ts";
 import { setAsideStoresSealedBeforeReset } from "../vault/vault-key-reset.ts";
-import { blindSnippet, indexColumns, indexSourcesOf, recallHolds, recallMatch, recallTermsFor, skeletonOf, type RecallTerm } from "../encryption/message-sealing.ts";
+import { blindSnippet, indexColumns, indexSourcesOf, recallHolds, recallMatch, recallTermsFor, skeletonOf, SKELETON_VERSION, type RecallTerm } from "../encryption/message-sealing.ts";
 import { peerProvenanceAuthor, WEBHOOK_AUTHOR, type WorkOrigin } from "../peers/peer-provenance.ts";
 import type { ResolvedSender, SteerQueueReason, WireMessage as Message } from "../../shared/wire.ts";
 import type { UsageTrigger } from "../usage/usage-ledger.ts";
@@ -111,6 +111,29 @@ function open(): DatabaseSync {
   return db;
 }
 
+/** A row holding a waiting row that may still be open (#3517): an input
+ * request neither a reminder, answered nor expired; an attention card not
+ * handled (when no input request); a proposal card neither answered,
+ * dismissed nor expired. Falsy is any value JavaScript reads as false, so
+ * no row the decoded check (personRequestOpen, the proposal check) keeps is
+ * left out. The same text is the index's predicate and the query's, so
+ * SQLite plans the query on messages_open_waiting_rows. */
+const OPEN_WAITING_ROW =
+  "((json_extract(json, '$.inputRequest') IS NOT NULL " +
+  "AND COALESCE(json_extract(json, '$.inputRequest.reminder'), 0) IN (0, '') " +
+  "AND COALESCE(json_extract(json, '$.inputRequest.answered'), 0) IN (0, '') " +
+  "AND COALESCE(json_extract(json, '$.inputRequest.expired'), 0) IN (0, '')) " +
+  "OR (json_extract(json, '$.inputRequest') IS NULL AND json_extract(json, '$.attention') IS NOT NULL " +
+  "AND COALESCE(json_extract(json, '$.attention.handledAt'), 0) IN (0, '')) " +
+  "OR (json_extract(json, '$.card.proactiveProposal') IS NOT NULL " +
+  "AND COALESCE(json_extract(json, '$.card.answered'), 0) IN (0, '') " +
+  "AND COALESCE(json_extract(json, '$.card.dismissed'), 0) IN (0, '') " +
+  "AND COALESCE(json_extract(json, '$.card.expired'), 0) IN (0, '')))";
+
+/** A sealed row whose projection has no version: written before the
+ * waiting flags were projected (SKELETON_VERSION). */
+const SEALED_UNPROJECTED = "sealed IS NOT NULL AND json_extract(json, '$.v') IS NULL";
+
 // Content encryption at rest (docs/content-encryption.md): a sealed row has
 // `sealed` (AES-256-GCM of the whole message), `key_id` (its content key),
 // no `text`, and a cleartext projection in `json` (message-sealing.ts).
@@ -152,6 +175,16 @@ function ensureSealedSchema(db: DatabaseSync): void {
       WHERE json_extract(json, '$.card.requestId') IS NOT NULL
         AND COALESCE(json_extract(json, '$.card.answered'), 0) IN (0, '')
         AND COALESCE(json_extract(json, '$.card.dismissed'), 0) IN (0, '');
+    -- #3517: the waiting rows still open (a question in words, a person's
+    -- attention card, a proposal card): the age expiry of waiting cards
+    -- (openWaitingRowCandidates) reads only these rows instead of every
+    -- transcript. A sealed row carries these flags in its projection.
+    CREATE INDEX IF NOT EXISTS messages_open_waiting_rows ON messages(thread_id)
+      WHERE ${OPEN_WAITING_ROW};
+    -- Sealed rows whose projection predates its version 2 (no waiting
+    -- flags): rewritten once by reprojectSealedRows, then this is empty.
+    CREATE INDEX IF NOT EXISTS messages_sealed_unprojected ON messages(thread_id)
+      WHERE ${SEALED_UNPROJECTED};
     CREATE VIRTUAL TABLE IF NOT EXISTS messages_sealed_fts USING fts5(
       words, prefixes, content='', contentless_delete=1, detail=column
     );
@@ -1402,6 +1435,95 @@ export function openCardCandidates(): Array<{ threadId: string; message: Message
     )
     .all() as unknown as Array<StoredRow & { thread_id: string }>;
   return decodedWithThread(rows);
+}
+
+/** #3517: every row that may hold an open waiting row (a question in words,
+ * a person's attention card, a proposal card), through the
+ * messages_open_waiting_rows index: only those rows are decoded, where
+ * reading each transcript decoded every message of every conversation in
+ * one synchronous stretch. A superset: the caller checks the decoded row.
+ * A row whose key is locked is left for the next sweep. Sealed rows from
+ * before the projection's version 2 are found once reprojectSealedRows
+ * has rewritten them. */
+export function openWaitingRowCandidates(): Array<{ threadId: string; message: Message }> {
+  const rows = cached(`SELECT thread_id, id, json, sealed, key_id FROM messages WHERE ${OPEN_WAITING_ROW}`)
+    .all() as unknown as Array<StoredRow & { thread_id: string }>;
+  const out: Array<{ threadId: string; message: Message }> = [];
+  for (const row of rows) {
+    let message: Message | null;
+    try {
+      message = decodeRow(row, row.thread_id);
+    } catch (error) {
+      if (error instanceof ContentKeyUnavailable) continue;
+      throw error;
+    }
+    if (message) out.push({ threadId: row.thread_id, message });
+  }
+  return out;
+}
+
+/** Whether a sealed row still has a projection from before version 2. */
+export function hasUnprojectedSealedRows(): boolean {
+  return Boolean(cached(`SELECT 1 FROM messages WHERE ${SEALED_UNPROJECTED} LIMIT 1`).get());
+}
+
+/** One batch of reprojectSealedRows: rewrites the projection of up to
+ * `limit` sealed rows after `after` (rowid). The row's sealed copy and key
+ * stay as they are. A row whose key is locked is passed over (the next
+ * pass tries again); one whose key was destroyed only takes the version.
+ * Returns the rowid to go on after and how many were rewritten, or null
+ * when none is left. */
+export function reprojectSealedBatch(after: number, limit = 64): { next: number; rewritten: number } | null {
+  const rows = cached(
+    `SELECT rowid, thread_id, id, json, sealed, key_id FROM messages WHERE ${SEALED_UNPROJECTED} AND rowid > ? ORDER BY rowid LIMIT ?`,
+  ).all(after, limit) as unknown as Array<StoredRow & { rowid: number; thread_id: string }>;
+  if (!rows.length) return null;
+  let rewritten = 0;
+  transaction(() => {
+    const update = cached("UPDATE messages SET json = ? WHERE rowid = ?");
+    for (const row of rows) {
+      let message: Message | null;
+      try {
+        message = decodeRow(row, row.thread_id);
+      } catch (error) {
+        if (error instanceof ContentKeyUnavailable) continue;
+        throw error;
+      }
+      let json: string;
+      if (message) json = skeletonOf(message, JSON.stringify(message));
+      else {
+        try { json = JSON.stringify({ ...(JSON.parse(row.json) as Record<string, unknown>), v: SKELETON_VERSION }); }
+        catch { continue; }
+      }
+      update.run(json, row.rowid);
+      rewritten += 1;
+    }
+  });
+  return { next: Number(rows[rows.length - 1]!.rowid), rewritten };
+}
+
+let reprojecting: Promise<number> | null = null;
+
+/** #3517, once per store: the sealed rows written before the projection
+ * carried the waiting flags get them, a small batch at a time with the
+ * event loop given back between two (a store may hold many sealed rows).
+ * Resolves with how many were rewritten; a second call while one runs
+ * joins it. */
+export function reprojectSealedRows(pause: () => Promise<void> = () => new Promise((resolve) => setImmediate(resolve))): Promise<number> {
+  if (reprojecting) return reprojecting;
+  const run = (async () => {
+    let after = 0;
+    let rewritten = 0;
+    for (;;) {
+      const batch = reprojectSealedBatch(after);
+      if (!batch) return rewritten;
+      after = batch.next;
+      rewritten += batch.rewritten;
+      await pause();
+    }
+  })();
+  reprojecting = run.finally(() => { reprojecting = null; });
+  return reprojecting;
 }
 
 /** Every open inbox card (permission, question, request): still waiting on

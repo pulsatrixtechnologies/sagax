@@ -14,8 +14,14 @@ const STORED_NAME = /[A-Za-z0-9-]{16,}\.[a-z0-9]{1,8}(?![A-Za-z0-9])/g;
 
 const flag = (value: unknown): unknown => (value === undefined || value === null ? undefined : typeof value === "object" ? true : value);
 
+/** The projection's version. 2 (#3517) added the open flags of the waiting
+ * rows (a question in words, a person's attention card, a proposal card), so
+ * the age expiry finds them by a query. A sealed row without `v` predates
+ * it: its projection is rewritten once (reprojectSealedRows). */
+export const SKELETON_VERSION = 2;
+
 export function skeletonOf(message: Message, full: string): string {
-  const out: Record<string, unknown> = { id: message.id, at: message.at, role: message.role, kind: message.kind, sealed: 1 };
+  const out: Record<string, unknown> = { id: message.id, at: message.at, role: message.role, kind: message.kind, sealed: 1, v: SKELETON_VERSION };
   if (typeof message.text === "string") out.hasText = 1;
   if (message.from && typeof message.from === "object") out.from = { name: message.from.name, botId: message.from.botId };
   if (message.peerAsk && typeof message.peerAsk === "object") out.peerAsk = { name: message.peerAsk.name };
@@ -28,7 +34,17 @@ export function skeletonOf(message: Message, full: string): string {
     out.card = {
       requestType: card.requestType, requestId: card.requestId,
       answered: flag(card.answered), dismissed: flag(card.dismissed), expired: flag(card.expired),
+      proactiveProposal: flag(card.proactiveProposal),
     };
+  }
+  const request = (message as { inputRequest?: unknown }).inputRequest;
+  if (request && typeof request === "object") {
+    const fields = request as Record<string, unknown>;
+    out.inputRequest = { reminder: flag(fields.reminder), answered: flag(fields.answered), expired: flag(fields.expired) };
+  }
+  const attention = (message as { attention?: unknown }).attention;
+  if (attention && typeof attention === "object") {
+    out.attention = { handledAt: flag((attention as Record<string, unknown>).handledAt) };
   }
   const refs = [...new Set(full.match(STORED_NAME) ?? [])];
   if (refs.length) out.refs = refs;

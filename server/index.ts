@@ -527,7 +527,7 @@ import { BUILT_IN_DRIVERS } from "./drivers/builtIn.ts";
 import { orgWithholdHostTools } from "./org/org-engine-admission.ts";
 import { openCodeProviderKeysAllowed, setOpenCodeProviderKeyPolicy } from "./drivers/acp/opencode-go.ts";
 import { getOrCreateChannel, mirrorActivity, mirrorReply, type CommsBus } from "./comms-visibility.ts";
-import { openApprovalCardMessages, openPendingInboxCards, readCommandReceipt, putCommandReceipt, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, threadsReferencingAsync, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./messages/message-db.ts";
+import { openApprovalCardMessages, openPendingInboxCards, openWaitingRowCandidates, hasUnprojectedSealedRows, reprojectSealedRows, readCommandReceipt, putCommandReceipt, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, threadsReferencingAsync, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./messages/message-db.ts";
 import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
 import { contentEncryptionFromEnv } from "./encryption/content-encryption-env.ts";
 import { briefCrossingLabel, claimRecallCrossings } from "./recall/recall-disclosure.ts";
@@ -5802,6 +5802,9 @@ bindLeafHost({
   get pendingExpiryDeps() { return pendingExpiryDeps; },
   get waitingCardSkip() { return waitingCardSkip; },
   get openPendingInboxCards() { return openPendingInboxCards; },
+  get openWaitingRowCandidates() { return openWaitingRowCandidates; },
+  get hasUnprojectedSealedRows() { return hasUnprojectedSealedRows; },
+  get reprojectSealedRows() { return reprojectSealedRows; },
   get openApprovalCardMessages() { return openApprovalCardMessages; },
   get appendDecision() { return appendDecision; },
   get runPendingApprovalExpirySweep() { return runPendingApprovalExpirySweep; },
@@ -34683,7 +34686,8 @@ try {
   });
   if (closed > 0) console.log(`[approval] expired ${closed} approval card(s) left open by the previous run`);
   // #1940: age-based expiry of every inbox kind (permission, question, request).
-  const aged = runPendingApprovalExpirySweep();
+  // #3517: the waiting rows' part runs once the server listens (onListening).
+  const aged = runPendingApprovalExpirySweep({ waitingRows: false });
   // Durable questions have no live engine after a restart. Restore their
   // attention state (iOS Needs you) without occupying a new turn's slot.
   for (const { threadId, message } of openPendingInboxCards()) {
@@ -34906,6 +34910,12 @@ const onListening = async () => {
     }
   }
   importLegacyDelegations();
+  // #3517: the waiting rows' age expiry at the start, after the server
+  // listens, never holding the start.
+  setImmediate(() => {
+    const aged = runPendingApprovalExpirySweep.waitingRows();
+    if (aged > 0) console.log(`[approval] expired ${aged} waiting card(s) older than the configured age`);
+  });
 };
 // connector gateway on this machine forwards public traffic to this IPC path.
 // Nothing changes about the loopback bind above. Requests arriving here have

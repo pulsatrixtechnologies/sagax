@@ -50,21 +50,25 @@ export function createWaitingCardSkip(getHost: () => Host): any {
   }
 
   /** The open person requests and proposal cards of every bot's
-   * conversations (the same reach as the inbox's cards). */
+   * conversations (the same reach as the inbox's cards). #3517: found by
+   * the store's query on its open waiting rows, never by reading each
+   * conversation: that decoded every message of every conversation in one
+   * synchronous pass, at the start and every hour. */
   function openWaitingRows() {
     const host = getHost();
-    const out = [];
+    const candidates = host.openWaitingRowCandidates();
+    if (!candidates.length) return [];
     const threads = new Set<string>();
     for (const bot of host.store.bots) {
       if (bot.threadId) threads.add(bot.threadId);
       for (const task of host.store.tasks(bot.id)) threads.add(task.threadId);
     }
-    for (const threadId of threads) {
-      for (const message of host.store.messagesFor(threadId)) {
-        const card = message.card;
-        const proposal = Boolean(card?.proactiveProposal && !card.answered && !card.dismissed && !card.expired);
-        if (proposal || personRequestOpen(message)) out.push({ threadId, message });
-      }
+    const out = [];
+    for (const { threadId, message } of candidates) {
+      if (!threads.has(threadId)) continue;
+      const card = message.card;
+      const proposal = Boolean(card?.proactiveProposal && !card.answered && !card.dismissed && !card.expired);
+      if (proposal || personRequestOpen(message)) out.push({ threadId, message });
     }
     return out;
   }

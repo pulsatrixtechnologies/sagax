@@ -15,7 +15,7 @@ import { contentEncryptionFromEnv } from "./encryption/content-encryption-env.ts
 import {
   vacuumAfterSealing,
   chatFollowups, closeMessageDb, closeMessageSearch, configureContentEncryption, contentEncryptionModeFromEnv, contentEncryptionStatus,
-  contentKeyChanged, deleteThread, eraseContentOwner, flushContentIndex, insertMessage, latestSaidByBot, openApprovalCardMessages,
+  contentKeyChanged, deleteThread, eraseContentOwner, flushContentIndex, hasUnprojectedSealedRows, insertMessage, latestSaidByBot, openApprovalCardMessages, openWaitingRowCandidates, reprojectSealedRows,
   readCommandReceipt, readMessageText, readThread, readThreadTail, recallMessages, recentMessages, runContentMigration, saveChatFollowup,
   searchMessages, searchMessagesAsync, setMigrationFaultForTests, threadsReferencing, unlockContentKeys, updateMessage, withCommandReceipt, type ContentOwnerResolver,
 } from "./messages/message-db.ts";
@@ -106,6 +106,42 @@ describe("sealing", () => {
     expect(withCommandReceipt("digest.append", "t1:turn1", () => "again", 2)).toEqual({ result: JSON.stringify({ text: "receipt orchid" }), replayed: true });
     expect(chatFollowups().map((followup) => followup.payload.text)).toEqual(["queued orchid"]);
     expect(onDisk()).not.toContain("orchid");
+  });
+});
+
+describe("waiting rows in a sealed store (#3517)", () => {
+  const asked = (id: string, extra: Record<string, unknown> = {}) =>
+    msg(id, "which one, zebra?", { role: "bot", kind: "activity", inputRequest: { botId: "b1", threadId: "w", botName: "Ada", question: "which one, zebra?", ...extra } } as unknown as Partial<Message>);
+
+  it("finds an open waiting row by its projection, never its text", () => {
+    insertMessage("t1", asked("open"));
+    insertMessage("t1", asked("done", { answered: true }));
+    insertMessage("t1", msg("att", "close it?", { role: "bot", attention: { kind: "question", botId: "b1", threadId: "w", items: [] } } as unknown as Partial<Message>));
+    insertMessage("t1", msg("prop", "", { role: "bot", kind: "options", card: { title: "t", options: ["Yes"], proactiveProposal: { id: "p1" } } } as unknown as Partial<Message>));
+    expect(openWaitingRowCandidates().map((hit) => hit.message.id).sort()).toEqual(["att", "open", "prop"]);
+    const db = raw();
+    const json = (db.prepare("SELECT json FROM messages WHERE id = 'open'").get() as { json: string }).json;
+    db.close();
+    expect(json).not.toContain("zebra");
+    expect(hasUnprojectedSealedRows()).toBe(false);
+  });
+
+  it("rewrites the projection of older sealed rows once, a batch at a time, then finds them", async () => {
+    insertMessage("t1", asked("open"));
+    insertMessage("t1", asked("done", { answered: true }));
+    closeMessageDb();
+    // a sealed row written before the projection carried the waiting flags
+    const older = new DatabaseSync(file());
+    older.exec("UPDATE messages SET json = json_remove(json, '$.v', '$.inputRequest')");
+    older.close();
+    expect(hasUnprojectedSealedRows()).toBe(true);
+    expect(openWaitingRowCandidates()).toEqual([]);
+    const pause = vi.fn(async () => {});
+    expect(await reprojectSealedRows(pause)).toBe(2);
+    expect(pause).toHaveBeenCalled();
+    expect(hasUnprojectedSealedRows()).toBe(false);
+    expect(openWaitingRowCandidates().map((hit) => hit.message.id)).toEqual(["open"]);
+    expect(readThread("t1", legacy("t1")).messages.map((message) => message.id)).toEqual(["open", "done"]);
   });
 });
 

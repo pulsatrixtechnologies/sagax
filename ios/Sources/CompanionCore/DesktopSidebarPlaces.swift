@@ -140,10 +140,16 @@ public enum DesktopComposeTo {
         if mode == .browse { results += people.map { (Row.person($0.principalId), $0.name.isEmpty ? $0.login : $0.name) } }
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if !q.isEmpty {
-            results = results.enumerated()
-                .map { (index: $0.offset, rank: matchRank($0.element.name, q), item: $0.element) }
-                .sorted { $0.rank != $1.rank ? $0.rank < $1.rank : $0.index < $1.index }
-                .map(\.item)
+            // Typed step by step: one chain of untyped closures here took
+            // the compiler seconds to type-check.
+            typealias Ranked = (index: Int, rank: Int, item: (row: Row, name: String))
+            let ranked: [Ranked] = results.indices.map { (index: Int) -> Ranked in
+                (index: index, rank: matchRank(results[index].name, q), item: results[index])
+            }
+            let ordered: [Ranked] = ranked.sorted { (a: Ranked, b: Ranked) -> Bool in
+                a.rank != b.rank ? a.rank < b.rank : a.index < b.index
+            }
+            results = ordered.map { (entry: Ranked) -> (row: Row, name: String) in entry.item }
         }
         let shown = results.prefix(resultLimit).map(\.row)
         if mode == .group { return [.createGroup] + shown }

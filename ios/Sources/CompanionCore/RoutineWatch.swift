@@ -339,14 +339,18 @@ extension RoutineWatchCheck: Decodable {
             self = .skipped(skipped)
             return
         }
-        let condition = (try? c.decodeIfPresent(ConditionWire.self, forKey: .condition)) ?? nil
-        self = .read(
-            summary: (try? c.decodeIfPresent(String.self, forKey: .summary)) ?? "",
-            excerpt: (try? c.decodeIfPresent(String.self, forKey: .excerpt)) ?? "",
-            items: (try? c.decodeIfPresent(Int.self, forKey: .items)) ?? nil,
-            condition: condition.map { Condition(holds: $0.holds == true, seen: $0.seen ?? "") },
-            ms: Int((try? c.decodeIfPresent(Double.self, forKey: .ms)) ?? 0)
-        )
+        // Each piece is typed on its own: one expression chaining these
+        // optionals took the older compiler past its type-check limit.
+        let wire: ConditionWire? = (try? c.decodeIfPresent(ConditionWire.self, forKey: .condition)) ?? nil
+        let summary: String = (try? c.decodeIfPresent(String.self, forKey: .summary)) ?? ""
+        let excerpt: String = (try? c.decodeIfPresent(String.self, forKey: .excerpt)) ?? ""
+        let items: Int? = (try? c.decodeIfPresent(Int.self, forKey: .items)) ?? nil
+        let condition: Condition? = wire.map { (found: ConditionWire) -> Condition in
+            Condition(holds: found.holds == true, seen: found.seen ?? "")
+        }
+        let elapsed: Double = (try? c.decodeIfPresent(Double.self, forKey: .ms)) ?? 0
+        let ms: Int = Int(elapsed)
+        self = .read(summary: summary, excerpt: excerpt, items: items, condition: condition, ms: ms)
     }
 }
 

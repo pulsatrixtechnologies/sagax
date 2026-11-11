@@ -76,6 +76,10 @@ export type SettingsActionInput = {
   botColor: string;
 };
 
+/** #3480: the person tells a bot in words to be quiet or to speak again;
+ * the bot sets it at once, at every level, like a word to the bot itself:
+ * it only changes what reaches the person, never what runs. */
+const QUIET_MODE_KEYS: ReadonlySet<string> = new Set(["bot.quietMode", "notifications.quietMode"]);
 /** What a Primary Bot may change at once on the person's words (security
  * review 2026-10-20): turning cards off or back on, nothing else. */
 const PERSON_ASKED_KEYS: ReadonlySet<string> = new Set([
@@ -740,7 +744,7 @@ export function createSettingsActions(deps: SettingsActionDeps) {
       : askedChange(proof.message, spec.key, value, subjectBot ? deps.targetName?.("bot", subjectBot) : undefined, !subjectBot || subjectBot === input.botId,
         spec.target === "rule" && ids.target ? deps.ruleText?.(speaker, spec.key.startsWith("rules.custom") ? "custom" : "owner", ids.target) : undefined,
         typeof args.quote === "string" ? args.quote : proof.message, input.botName);
-    const decided = decideSettingEffect({ classes, mode: deps.turnMode(input.botId, input.threadId), ownerWork, keyProtected, ...(approvalTo ? { approvalTo } : {}), personAsked: asked === true, ...reach });
+    const decided = decideSettingEffect({ classes, mode: deps.turnMode(input.botId, input.threadId), ownerWork, keyProtected, ...(approvalTo ? { approvalTo } : {}), personAsked: asked === true || QUIET_MODE_KEYS.has(spec.key), ...reach });
     const secret = classes.includes("secret");
     // the card says what and where (a name, never an id) and the whole value
     // a person allows, or its keys and fingerprint when it is long; a
@@ -795,6 +799,9 @@ export function createSettingsActions(deps: SettingsActionDeps) {
     const after = spec.key === "routine.webhook"
       ? " The new key waits for the person: they copy it once in the app (Bot panel > Webhooks > Show the token). Never ask them for it; the address stays the same (get routine.webhook)."
       : "";
+    // #3480: the one line the bot says (quiet mode), then it stops
+    const said = QUIET_MODE_KEYS.has(spec.key) ? routeSaid(result.body.text) : undefined;
+    if (said) return text(200, `Done: ${spec.label.split(" (")[0]} changed. Tell the person this one line, then end your turn: ${said}`);
     return text(200, `Done: ${spec.label} changed${via}${on}.${nextTurn}${after}`);
   }
 
@@ -819,4 +826,14 @@ export function createSettingsActions(deps: SettingsActionDeps) {
   }
 
   return { handle: async (input: SettingsActionInput) => finalRefusal(await handleMany(input)) };
+}
+
+/** The `said` line of a route's JSON answer (quiet mode), if any. */
+function routeSaid(body: unknown): string | undefined {
+  try {
+    const said = (JSON.parse(String(body ?? "{}")) as { said?: unknown }).said;
+    return typeof said === "string" && said.trim() ? said.trim() : undefined;
+  } catch {
+    return undefined;
+  }
 }

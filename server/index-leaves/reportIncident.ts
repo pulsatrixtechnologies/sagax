@@ -47,6 +47,12 @@ function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: s
     ...(failedCause === null && input.kind === "failed" ? { reason: problemReason("failed", `${input.detail} ${host.incidentContext(threadId).lastReply ?? ""}`) } : {}),
     detail: redactSecretsInText(failedCause ?? input.detail)
   }).catch(reportBackgroundError);
+  // #3480: a failed routine of a bot in quiet mode posts nothing and rings
+  // nothing: no Primary Bot report (its reply would land unread in the main
+  // conversation with a sound). The run keeps its outcome in its routine's
+  // runs, the problem log above keeps the incident, and the line written
+  // when quiet mode goes off counts it.
+  if (input.kind === "routine-failed" && host.botQuietMode?.(bot.id) === true) return;
   // A thread another bot opened and is watching is that bot's to handle:
   // the delegator is woken with the failure already (wakeDelegationSource).
   // A thread running coordinated work is its requester's to handle: the

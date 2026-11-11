@@ -50,6 +50,24 @@ function harness(over: Partial<SettingsActionDeps> & { mode?: "ask" | "auto" | "
 }
 
 describe("sagax_settings", () => {
+  it("#3480: the person's words set the bot's own quiet mode at once, at Ask too, and the bot says the one line", async () => {
+    const planned: Array<{ effect: string; method: string; path: string; body?: unknown }> = [];
+    const said = "Done: I am staying quiet and will reach you only when I need your answer.";
+    const acts = {
+      async handlePlanned(input: Parameters<BotActService["handlePlanned"]>[0]) {
+        const target = input.target as { method: string; path: string; body?: unknown };
+        planned.push({ effect: input.plan.effect, method: target.method, path: target.path, body: target.body });
+        return { status: 200, body: { text: JSON.stringify({ botId: "b1", quiet: true, said }) } };
+      },
+    } as unknown as BotActService;
+    const h = harness({ mode: "ask", acts: () => acts });
+    const done = await h.call({ action: "set", key: "bot.quietMode", value: true });
+    expect(planned).toEqual([{ effect: "run", method: "PUT", path: "/api/bots/b1/quiet", body: { on: true, via: "words" } }]);
+    expect(String(done.body.text)).toBe(`Done: Quiet mode for this bot changed. Tell the person this one line, then end your turn: ${said}`);
+    await h.call({ action: "set", key: "notifications.quietMode", value: false });
+    expect(planned[1]).toEqual({ effect: "run", method: "PUT", path: "/api/me/quiet", body: { on: false, via: "words" } });
+  });
+
   it("Full on the person's own request runs at once and says so to the route(2026-10-20), even for the speaking bot", async () => {
     const primary = { botId: "b1", botName: "Scout", messageId: "m1" };
     const h = harness({ mode: "ask", personAsked: () => ({ message: "Mets-toi en Full.", primary }) });

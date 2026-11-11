@@ -5,16 +5,19 @@ import type { RoutineRun } from "../routines/routines.ts";
 import { textLanguage } from "../../shared/looks-french.ts";
 import { ROUTINE_QUIET_MARKER, isSameProblemLine } from "../routines/routine-report.ts";
 import { needsYouNotificationWords } from "../runtime-events/question-notification-words.ts";
+import { quietModeLevel, quietRunHadProblems } from "../../shared/quiet-mode.ts";
 export type Host = Record<string, any>;
 
 /** #2694: the person's feedback on this run's attention cards (thumbs-down,
  * "less", "never"), read as on the relayed card: muted, quiet or normal. */
 export function routineAttentionLevel(host: Host, run: Pick<RoutineRun, "botId" | "webhookId" | "proactive">): "muted" | "quiet" | "normal" {
+  // #3480: a bot in quiet mode shows the card, never rings it
+  const quiet = host.botQuietMode?.(run.botId) === true;
   // #3423: a chosen watch's alert is what the person asked for; its exits
   // are the person's choice, never an old mute of every watch of the bot
-  if (run.proactive?.watches?.length) return "normal";
+  if (run.proactive?.watches?.length) return quietModeLevel("normal", quiet);
   const level = host.backgroundBriefs?.wakeLevel?.(run.botId, wakeTopicOf(run) ?? "attention");
-  return level === "muted" || level === "quiet" ? level : "normal";
+  return quietModeLevel(level === "muted" || level === "quiet" ? level : "normal", quiet);
 }
 
 export function createSyncRoutineRunToSource(getHost: () => Host): any {
@@ -40,10 +43,20 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   const attentionFound = run.status === "completed" && !run.quiet && attentionLevel !== "muted" ? host.personAttention(host.routineFullReport(run) ?? run.output) : undefined;
   // Thumbs-down or "less": the card still comes, without ringing or unread.
   const attentionRings = attentionLevel === "normal";
-  const reportableRun = { ...run, needsPerson: run.status === "waiting" && host.routineRunNeedsPerson(run), postResults: host.routineEffectivePostResults(run) };
+  // #3480: a bot in quiet mode posts only what needs the person's answer,
+  // and nothing it posts turns the conversation unread
+  const quietMode = host.botQuietMode?.(run.botId) === true;
+  const reportableRun = { ...run, needsPerson: run.status === "waiting" && host.routineRunNeedsPerson(run), postResults: host.routineEffectivePostResults(run), quietMode };
   const reportable = host.routineRunReportable({ ...reportableRun, attention: Boolean(attentionFound) });
   // A card posted only for quieted attention items: in the chat, never unread.
-  const reportableUnread = attentionRings ? reportable : host.routineRunReportable({ ...reportableRun, attention: false });
+  const reportableUnread = quietMode ? false : attentionRings ? reportable : host.routineRunReportable({ ...reportableRun, attention: false });
+  // What quiet mode kept out of the chat, counted once per run for the line
+  // written when it goes off (the run itself stays in its routine's runs).
+  if (quietMode && ["completed", "failed", "blocked"].includes(run.status)
+    && host.routineRunReportable({ ...reportableRun, quietMode: false, postResults: host.routinePostResultsOwn?.(run) ?? reportableRun.postResults, attention: Boolean(attentionFound) })
+    && !reportable) {
+    host.keepQuietRun?.(run.botId, run.id, quietRunHadProblems(run));
+  }
   // A bot run's task stays hidden (Automations, Open run) from its start.
   // 2026-10-28: a webhook's run too (it used to take the bot's live chat;
   // now it runs in its own task and reports into the one conversation).

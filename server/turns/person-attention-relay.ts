@@ -53,6 +53,9 @@ export interface AttentionRelayDeps<B extends AttentionBot> {
    * run card's wake kind): "muted" posts nothing, "quiet" posts the card
    * without ringing or marking unread. Absent: "normal". */
   feedback?(botId: string, topic: string): "muted" | "quiet" | "normal";
+  /** #3480: the bot is in quiet mode: its background work posts nothing in
+   * the main conversation (its attention cards show through `feedback`). */
+  quiet?(botId: string): boolean;
   /** #2901: why this thread is out of the person's sight (MCP send_prompt,
    * routine, proactive wake, teammate work); undefined for their own,
    * confidential or parallel threads. */
@@ -279,6 +282,8 @@ export function mirrorBackgroundReply<B extends AttentionBot>(
 ): boolean {
   const { bot, threadId } = input;
   if (bot.hidden || input.runTurn || deps.routineRun(threadId)) return false;
+  // #3480: quiet mode: background work stays in its own thread
+  if (deps.quiet?.(bot.id)) return false;
   const via = deps.relayVia?.(bot.id, threadId);
   if (!via || via === "routine" || via === "proactive") return false;
   const task = deps.task(bot.id, threadId);

@@ -38,6 +38,10 @@ import {
   pageLinkOpensDirectly,
   parsePageCapabilities,
   PAGE_CAP_DENY_REASONS,
+  PAGE_CAP_FILE_MIMES,
+  PAGE_CAP_LIMITS,
+  pageCapFileData,
+  pageCapFileName,
   pageDataParams,
   parsePageCapRequest,
   parsePageOpenRef,
@@ -161,6 +165,8 @@ export interface BrokerDeps {
   /** Open a bot's chat or one of its conversations; false: not possible here. */
   openRef(ref: { botId: string; threadId?: string }): boolean;
   now?(): number;
+  /** Replaces the default files.download save (one anchor, cleaned name). */
+  saveFile?(file: { name: string; mime: string; bytes: Uint8Array }): void;
 }
 
 export type ApprovalChoice = "once" | "always" | "decline";
@@ -168,7 +174,7 @@ export type ApprovalChoice = "once" | "always" | "decline";
 export interface CapabilityBroker {
   start(): Promise<void>;
   /** A message from any window: answers it when it is the page's call. */
-  onMessage(event: { source: unknown; origin: string; data: unknown }): Promise<boolean>;
+  onMessage(event: { source: unknown; origin: string; data: unknown; userActivation?: { isActive?: boolean } | null }): Promise<boolean>;
   /** A link the page asked to open through the wrapper's own bridge: true
    * when this took it (the reader is asked first), so the caller stops it. */
   guardOpen(event: { source: unknown; data: unknown }): boolean;
@@ -190,6 +196,55 @@ function boundedAdd(set: Set<string>, values: readonly string[]) {
   for (const value of values) {
     if (set.size >= SET_MAX) return;
     if (typeof value === "string") set.add(value);
+  }
+}
+
+/** pageCapFileData checks the whole string at once. Near fileBytes that check
+ * overflows, so a large payload is read in pieces through the same helper. */
+const PAGE_CAP_FILE_CHUNK = 1_048_576;
+
+function pageCapFileBytes(data: unknown): { ok: true; bytes: Uint8Array } | { ok: false; error: "bad_request" | "too_large" } {
+  try {
+    return pageCapFileData(data);
+  } catch (cause) {
+    if (!(cause instanceof RangeError) || typeof data !== "string" || data.length % 4 !== 0) {
+      if (cause instanceof RangeError) return { ok: false, error: "bad_request" };
+      throw cause;
+    }
+    const parts: Uint8Array[] = [];
+    let total = 0;
+    for (let i = 0; i < data.length; i += PAGE_CAP_FILE_CHUNK) {
+      const part = pageCapFileData(data.slice(i, i + PAGE_CAP_FILE_CHUNK));
+      if (!part.ok) return part;
+      total += part.bytes.length;
+      if (total > PAGE_CAP_LIMITS.fileBytes) return { ok: false, error: "too_large" };
+      parts.push(part.bytes);
+    }
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const part of parts) {
+      bytes.set(part, offset);
+      offset += part.length;
+    }
+    return { ok: true, bytes };
+  }
+}
+
+/** Default files.download save: one anchor, download set to the cleaned name,
+ * a blob of the allowed MIME, then the object URL is revoked. */
+function defaultSaveFile(file: { name: string; mime: string; bytes: Uint8Array }): void {
+  const body = new ArrayBuffer(file.bytes.byteLength);
+  new Uint8Array(body).set(file.bytes);
+  const url = URL.createObjectURL(new Blob([body], { type: file.mime }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = file.name;
+  document.body.appendChild(anchor);
+  try {
+    anchor.click();
+  } finally {
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
   }
 }
 
@@ -331,6 +386,26 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
     return false;
   };
 
+  const downloadFile = (request: PageCapRequest, fromClick: boolean): { ok: true; value: true } | { ok: false; error: PageCapError; message?: string } => {
+    // fromClick was read off this message before the capabilities load.
+    // The gesture flag is the page's own boolean, so it is not a click.
+    if (!fromClick) return { ok: false, error: "bad_request", message: "A download starts from a click." };
+    const mime = request.args?.mime;
+    if (typeof mime !== "string" || !(PAGE_CAP_FILE_MIMES as readonly string[]).includes(mime)) {
+      return { ok: false, error: "bad_request", message: "This file type is not allowed." };
+    }
+    const name = pageCapFileName(request.args?.name);
+    if (!name) return { ok: false, error: "bad_request", message: "This file name is not allowed." };
+    const decoded = pageCapFileBytes(request.args?.data);
+    if (!decoded.ok) {
+      return { ok: false, error: decoded.error, message: decoded.error === "too_large" ? "This file is too large." : "This file data is not valid." };
+    }
+    const file = { name, mime, bytes: decoded.bytes };
+    if (deps.saveFile) deps.saveFile(file);
+    else defaultSaveFile(file);
+    return { ok: true, value: true };
+  };
+
   return {
     start() {
       // the frame's calls wait for this: it listens now
@@ -354,6 +429,9 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
         answer(id, { ok: false, error: deps.signedIn ? "not_found" : "sign_in", message: deps.signedIn ? "This page is not available." : "Sign in to use this page's data." });
         return true;
       }
+      // Transient activation ends across the wait below. Read it now.
+      // A page can set gesture true on a load, so that flag is not the click.
+      const fromClick = event.userActivation?.isActive === true;
       await (started ??= load());
       const source = request.cap === "data.read" ? request.args?.name : undefined;
       if (request.cap === "data.read" && (typeof source !== "string" || !SOURCE_NAME.test(source))) {
@@ -383,6 +461,8 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
           // the reader's name is personal data too: a link opens only with a question from now on
           receivedData = true;
           answer(id, { ok: true, value: info });
+        } else if (request.cap === "files.download" && state.caps) {
+          answer(id, downloadFile(request, fromClick));
         } else if (!state.caps) {
           answer(id, { ok: false, error: "unavailable", message: "This page's capabilities could not be read." });
         } else {

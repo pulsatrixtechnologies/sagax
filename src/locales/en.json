@@ -12765,6 +12765,7 @@
   "pages.caps.source.team-board": "the work of your coding teams",
   "pages.caps.viewer": "your name and role",
   "pages.caps.open": "opens links and chats",
+  "pages.caps.files.download": "a file it hands you",
   "pages.caps.title": "What this page may read",
   "pages.caps.ask": "Your organization asks you first. This page wants to read: {what}",
   "pages.caps.allow": "Allow",

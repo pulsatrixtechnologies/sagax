@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 
-import { CAP_HELLO_MESSAGE, CAP_MESSAGE, CAP_READY_MESSAGE, CAP_READY_TIMEOUT_MS, CAP_RESULT_MESSAGE, pageCapabilitiesOf } from "../../shared/page-capabilities.ts";
+import { CAP_HELLO_MESSAGE, CAP_MESSAGE, CAP_READY_MESSAGE, CAP_READY_TIMEOUT_MS, CAP_RESULT_MESSAGE, pageCapabilitiesAny, pageCapabilitiesOf, pageCapabilitiesPersonal, pageCapGranted, parsePageCapabilities, type PageCapCall, type PageCapabilities } from "../../shared/page-capabilities.ts";
 import { capabilityBridgeSource, pageDocument, PREVIEW_CAP_RELAY_SOURCE, STATE_BRIDGE_SOURCE, stateBridgeSource, wrapperDocument } from "./published-pages-render.ts";
 
 const HTML = `<!doctype html><html><head><title>t</title></head><body><h1>Board</h1><script>document.body.dataset.x="1"</script></body></html>`;
@@ -26,10 +26,10 @@ describe("page capabilities in the frame", () => {
   it("puts the declared capabilities beside the state, posting to the parent only", () => {
     const html = HTML.replace("<body>", `<body><script type="application/sagax-capabilities+json">{ "data": ["team-board", "other"], "viewer": true }</script>`);
     const caps = pageCapabilitiesOf(html)!;
-    expect(caps).toEqual({ data: ["team-board"], viewer: true, open: false });
+    expect(caps).toEqual({ data: ["team-board"], viewer: true, open: false, files: [] });
     const bridge = stateBridgeSource(caps);
     expect(bridge).not.toBe(STATE_BRIDGE_SOURCE);
-    expect(bridge).toContain(`var C={"data":["team-board"],"viewer":true,"open":false}`);
+    expect(bridge).toContain(`var C={"data":["team-board"],"viewer":true,"open":false,"files":[]}`);
     expect(bridge).toContain("Object.assign({page:Object.freeze(page)},caps)");
     expect(bridge).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|window\.top/);
     const reading = pageDocument({ kind: "html", title: "T", content: html, lang: "en" }, { nonce: "n0nce", reportSize: true, font: "", capabilities: caps });
@@ -39,7 +39,7 @@ describe("page capabilities in the frame", () => {
   });
 
   it("ignores a wildcard or an unknown name", () => {
-    expect(pageCapabilitiesOf(`<script type="application/sagax-capabilities+json">{"data":["*","team-*"]}</script>`)).toEqual({ data: [], viewer: false, open: false });
+    expect(pageCapabilitiesOf(`<script type="application/sagax-capabilities+json">{"data":["*","team-*"]}</script>`)).toEqual({ data: [], viewer: false, open: false, files: [] });
   });
 });
 
@@ -55,7 +55,7 @@ function runBridge(source: string) {
 }
 
 describe("capability handshake (#3413 lot 1b)", () => {
-  const caps = { data: ["team-board" as const], viewer: true, open: false };
+  const caps = { data: ["team-board" as const], viewer: true, open: false, files: [] };
 
   it("says hello, queues calls until the wrapper is ready, then sends them", async () => {
     const bridge = runBridge(capabilityBridgeSource(caps));
@@ -143,5 +143,38 @@ describe("the app preview's relay (#3413 lot 1b)", () => {
     expect(wrapperDocument({ ...base, capsRelay: true })).toContain(PREVIEW_CAP_RELAY_SOURCE);
     expect(wrapperDocument(base)).not.toContain(PREVIEW_CAP_RELAY_SOURCE);
     expect(wrapperDocument({ ...base, preview: false, capsRelay: true })).not.toContain(PREVIEW_CAP_RELAY_SOURCE);
+  });
+});
+
+describe("files.download in the frame", () => {
+  const downloadCall = "files.download" as PageCapCall;
+
+  it("parses files, drops unknown names, and grants only download", () => {
+    const html = `<script type="application/sagax-capabilities+json">{ "files": ["download"] }</script>`;
+    expect(pageCapabilitiesOf(html)).toEqual({ data: [], viewer: false, open: false, files: ["download"] });
+    expect(parsePageCapabilities({ files: ["download", "add", "nope"] })).toEqual({ data: [], viewer: false, open: false, files: ["download"] });
+    expect(parsePageCapabilities({ data: ["team-board"], viewer: true })).toEqual({ data: ["team-board"], viewer: true, open: false, files: [] });
+    expect(parsePageCapabilities({})).toEqual({ data: [], viewer: false, open: false, files: [] });
+
+    const filesOnly = parsePageCapabilities({ files: ["download"] })!;
+    const openOnly = parsePageCapabilities({ open: true, files: ["nope"] })!;
+    const dataOnly = parsePageCapabilities({ data: ["team-board"] })!;
+    expect(pageCapabilitiesAny(filesOnly)).toBe(true);
+    expect(pageCapabilitiesAny(parsePageCapabilities({ files: ["nope"] }))).toBe(false);
+    expect(pageCapGranted(filesOnly, downloadCall)).toBe(true);
+    expect(pageCapGranted(openOnly, downloadCall)).toBe(false);
+    expect(pageCapGranted(parsePageCapabilities({ files: [] }), downloadCall)).toBe(false);
+    expect(pageCapabilitiesPersonal(filesOnly)).toBe(false);
+    expect(pageCapabilitiesPersonal(dataOnly)).toBe(true);
+  });
+
+  it("injects files.download with userActivation and freezes files last", () => {
+    const caps = { data: [], viewer: false, open: false, files: ["download"] } as PageCapabilities;
+    const frozen = '{"data":[],"viewer":false,"open":false,"files":["download"]}';
+    for (const source of [stateBridgeSource(caps), capabilityBridgeSource(caps)]) {
+      expect(source).toContain("files.download");
+      expect(source).toContain("userActivation");
+      expect(source).toContain(frozen);
+    }
   });
 });

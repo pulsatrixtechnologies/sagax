@@ -9,7 +9,7 @@ import type { CapabilityBroker, CapabilityState } from "./capabilities";
 import { ReaderCapabilities } from "./ReaderCapabilities";
 
 const BOOT: ReaderBoot = { v: 1, lang: "en", title: "Board", kind: "html", version: 1, pageId: "page_12345678", me: { id: "pr_a", name: "Ada" }, can: { share: false, annotate: true } };
-const CAPS = { data: ["team-board" as const], viewer: true, open: true };
+const CAPS = { data: ["team-board" as const], viewer: true, open: true, files: [] };
 
 function brokerOf(state: Partial<CapabilityState>): CapabilityBroker {
   const full: CapabilityState = { loaded: true, caps: null, reads: [], approvals: [], links: [], ...state };
@@ -20,7 +20,7 @@ const render = (state: Partial<CapabilityState>, boot: ReaderBoot = BOOT) => ren
 describe("ReaderCapabilities", () => {
   it("draws nothing for a page that declares nothing: the bar is as it was", () => {
     expect(render({ caps: null })).toBe("");
-    expect(render({ caps: { data: [], viewer: false, open: false } })).toBe("");
+    expect(render({ caps: { data: [], viewer: false, open: false, files: [] } })).toBe("");
   });
 
   it("shows a button with an accessible name, closed until it is clicked", () => {
@@ -59,5 +59,17 @@ describe("ReaderCapabilities", () => {
     expect(html).toContain("…");
     expect(/<code[^>]*data-cap-rest[^>]*>([^<]*)<\/code>/.exec(html)![1]!.length).toBeLessThan(130);
     expect(html).not.toContain("data-cap-link-always");
+  });
+});
+
+describe("a file the page hands the reader", () => {
+  it("shows one row, in the reader language", () => {
+    const caps = { data: [], viewer: false, open: false, files: ["download"] } as NonNullable<CapabilityState["caps"]>;
+    const pending = { approvals: [{ id: 1, name: "file", label: "pending", at: 0 }] };
+    const en = render({ caps, ...pending });
+    expect(en.match(/A file it hands you/g)).toEqual(["A file it hands you"]);
+    const fr = render({ caps, ...pending }, { ...BOOT, lang: "fr" });
+    expect(fr.match(/Un fichier que cette page te remet/g)).toEqual(["Un fichier que cette page te remet"]);
+    expect(fr).not.toContain("A file it hands you");
   });
 });

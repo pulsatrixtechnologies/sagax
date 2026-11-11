@@ -4,10 +4,14 @@
 // capability says so before it is published. The declaration is the
 // server's own reading of that version.
 import { t } from "@/lib/i18n";
-import { pageCapabilitiesAny, parsePageCapabilities, type PageCapabilities, type PageDataSource } from "../../shared/page-capabilities";
+import { pageCapabilitiesAny, parsePageCapabilities, type PageCapabilities, type PageCapFile, type PageDataSource } from "../../shared/page-capabilities";
 
 const SOURCE_WORDS: Record<PageDataSource, () => string> = {
   "team-board": () => t("pages.caps.source.team-board"),
+};
+
+const FILE_WORDS: Record<PageCapFile, () => string> = {
+  download: () => t("pages.caps.files.download"),
 };
 
 /** The parts of a declaration, in words: each data source, the reader's
@@ -18,6 +22,7 @@ export function capabilityParts(caps: PageCapabilities | null | undefined): stri
     ...caps.data.map((name) => SOURCE_WORDS[name]?.() ?? name),
     ...(caps.viewer ? [t("pages.caps.viewer")] : []),
     ...(caps.open ? [t("pages.caps.open")] : []),
+    ...(caps.files ?? []).map((name) => FILE_WORDS[name]?.() ?? name),
   ];
 }
 
@@ -25,10 +30,12 @@ export function capabilityParts(caps: PageCapabilities | null | undefined): stri
 export function capabilitiesAdded(next: PageCapabilities | null | undefined, before: PageCapabilities | null | undefined): PageCapabilities | null {
   if (!pageCapabilitiesAny(next)) return null;
   const known = new Set<string>(before?.data ?? []);
+  const knownFiles = new Set<string>(before?.files ?? []);
   const added: PageCapabilities = {
     data: next.data.filter((name) => !known.has(name)),
     viewer: next.viewer && !before?.viewer,
     open: next.open && !before?.open,
+    files: (next.files ?? []).filter((name) => !knownFiles.has(name)),
   };
   return pageCapabilitiesAny(added) ? added : null;
 }

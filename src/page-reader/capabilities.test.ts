@@ -1,7 +1,7 @@
 // The wrapper's broker for a page's capabilities (src/page-reader/capabilities.ts).
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CAP_EVENT_MESSAGE, CAP_HELLO_MESSAGE, CAP_MESSAGE, CAP_READY_MESSAGE, CAP_RESULT_MESSAGE } from "../../shared/page-capabilities";
+import { CAP_EVENT_MESSAGE, CAP_HELLO_MESSAGE, CAP_MESSAGE, CAP_READY_MESSAGE, CAP_RESULT_MESSAGE, PAGE_CAP_LIMITS } from "../../shared/page-capabilities";
 import { PAGE_OPEN_MESSAGE } from "../../shared/published-pages";
 import { capFailure, CARD_GUARD_MS, createCapabilityBroker, fromPageFrame, parseDataEvent, splitAddress, type BrokerDeps } from "./capabilities";
 
@@ -511,5 +511,252 @@ describe("splitAddress", () => {
     expect(parts.short.startsWith("/?d=")).toBe(true);
     expect(parts.short.endsWith("END")).toBe(true);
     expect(parts.rest).toBe(long.slice("https://example.org".length));
+  });
+});
+
+interface DownloadAnchor {
+  tag: string;
+  download: string;
+  href: string;
+  clicked: number;
+  click(): void;
+  setAttribute(name: string, value: string): void;
+}
+
+function installDocument(): { made: DownloadAnchor[]; restore(): void } {
+  const made: DownloadAnchor[] = [];
+  const host = globalThis as { document?: unknown; URL: { createObjectURL?: (value: unknown) => string; revokeObjectURL?: (value: string) => void } };
+  const previous = host.document;
+  host.document = {
+    createElement(tag: string): DownloadAnchor {
+      const node: DownloadAnchor = {
+        tag,
+        download: "",
+        href: "",
+        clicked: 0,
+        click() { node.clicked += 1; },
+        setAttribute(name: string, value: string) {
+          if (name === "download") node.download = value;
+          if (name === "href") node.href = value;
+        },
+      };
+      made.push(node);
+      return node;
+    },
+    body: { appendChild() { return undefined; }, removeChild() { return undefined; } },
+  };
+  const url = host.URL;
+  const previousCreate = url.createObjectURL;
+  const previousRevoke = url.revokeObjectURL;
+  if (typeof previousCreate !== "function") url.createObjectURL = () => "blob:cap-test";
+  if (typeof previousRevoke !== "function") url.revokeObjectURL = () => undefined;
+  return {
+    made,
+    restore() {
+      try {
+        if (previous === undefined) delete host.document;
+        else host.document = previous;
+      } catch { /* the host kept its own document */ }
+      try {
+        if (typeof previousCreate !== "function") delete url.createObjectURL;
+        else url.createObjectURL = previousCreate;
+        if (typeof previousRevoke !== "function") delete url.revokeObjectURL;
+        else url.revokeObjectURL = previousRevoke;
+      } catch { /* the host kept its own URL helpers */ }
+    },
+  };
+}
+
+const TEXT = "aGVsbG8=";
+
+describe("files.download", () => {
+  let made: DownloadAnchor[] = [];
+  let restoreDocument = () => {};
+  beforeEach(() => {
+    const installed = installDocument();
+    made = installed.made;
+    restoreDocument = installed.restore;
+  });
+  afterEach(() => restoreDocument());
+
+  function withFiles(capabilities: Record<string, unknown> = { data: [], viewer: false, open: false, files: ["download"] }) {
+    made.length = 0;
+    const saveFile = vi.fn();
+    const ctx = setup({ saveFile } as Partial<BrokerDeps>, {
+      ...ROUTES,
+      "/api/pages/page_12345678/capabilities": {
+        capabilities,
+        reads: [{ name: "team-board", label: "The work of your coding teams" }],
+      },
+    });
+    const ask = (args: Record<string, unknown>, options: { gesture?: boolean; id?: number; omitGesture?: boolean; active?: boolean } = {}) => {
+      const data: Record<string, unknown> = { type: CAP_MESSAGE, v: 1, id: options.id ?? 1, cap: "files.download", args };
+      if (!options.omitGesture) data.gesture = options.gesture ?? true;
+      return ctx.broker.onMessage({
+        source: ctx.frame,
+        origin: "null",
+        data,
+        userActivation: { isActive: options.active !== false },
+      });
+    };
+    return { ...ctx, saveFile, ask };
+  }
+
+  function saved(saveFile: ReturnType<typeof vi.fn>): { name?: string; mime?: string } | undefined {
+    const call = saveFile.mock.calls[0] as unknown[] | undefined;
+    if (call) {
+      const first = call[0];
+      if (typeof first === "string") return { name: first, mime: typeof call[1] === "string" ? call[1] : undefined };
+      if (first && typeof first === "object") {
+        const record = first as { name?: unknown; mime?: unknown };
+        return {
+          name: typeof record.name === "string" ? record.name : undefined,
+          mime: typeof record.mime === "string" ? record.mime : undefined,
+        };
+      }
+    }
+    const anchor = made.find((node) => node.tag === "a" && (node.clicked > 0 || node.download !== ""));
+    return anchor ? { name: anchor.download } : undefined;
+  }
+
+  function noSave(saveFile: ReturnType<typeof vi.fn>) {
+    expect(saveFile).not.toHaveBeenCalled();
+    expect(made.filter((node) => node.tag === "a")).toEqual([]);
+  }
+
+  it("is not_declared when download is not in the declaration", async () => {
+    const saveFile = vi.fn();
+    const ctx = setup({ saveFile } as Partial<BrokerDeps>, ROUTES);
+    await ctx.broker.onMessage({
+      source: ctx.frame,
+      origin: "null",
+      data: { type: CAP_MESSAGE, v: 1, id: 1, cap: "files.download", gesture: true, args: { name: "note.txt", mime: "text/plain", data: TEXT } },
+    });
+    expect(ctx.result()).toMatchObject({ ok: false, error: "not_declared" });
+    noSave(saveFile);
+  });
+
+  it("refuses a download when the message has no live click, and saves nothing", async () => {
+    for (const options of [{ active: false }, { active: false, gesture: true }, { active: false, omitGesture: true }]) {
+      const { ask, result, saveFile } = withFiles();
+      await ask({ name: "note.txt", mime: "text/plain", data: TEXT }, options);
+      expect(result()).toMatchObject({ ok: false, error: "bad_request" });
+      noSave(saveFile);
+    }
+  });
+
+  it("saves from a live click even when the page omits gesture or sets it false", async () => {
+    for (const options of [{ gesture: false }, { omitGesture: true }]) {
+      const { ask, result, saveFile } = withFiles();
+      await ask({ name: "note.txt", mime: "text/plain", data: TEXT }, options);
+      expect(result()).toMatchObject({ ok: true });
+      expect(saved(saveFile)?.name).toBe("note.txt");
+    }
+  });
+
+  it("keeps a click that was active on arrival and ends while capabilities load", async () => {
+    let live = true;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const saveFile = vi.fn();
+    const ctx = setup({ saveFile } as Partial<BrokerDeps>, {});
+    ctx.api.mockImplementation(async () => {
+      await gate;
+      return { capabilities: { data: [], viewer: false, open: false, files: ["download"] }, reads: [] };
+    });
+    const pending = ctx.broker.onMessage({
+      source: ctx.frame,
+      origin: "null",
+      data: { type: CAP_MESSAGE, v: 1, id: 1, cap: "files.download", gesture: true, args: { name: "note.txt", mime: "text/plain", data: TEXT } },
+      userActivation: { get isActive() { return live; } },
+    });
+    live = false;
+    release();
+    await pending;
+    expect(ctx.result()).toMatchObject({ ok: true });
+    expect(saved(saveFile)?.name).toBe("note.txt");
+  });
+
+  it("saves a file of each allowed mime", async () => {
+    const allowed = ["text/plain", "text/csv", "text/markdown", "application/json", "application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp"];
+    for (const mime of allowed) {
+      const { ask, result, saveFile } = withFiles();
+      await ask({ name: "note.txt", mime, data: TEXT });
+      expect(result(), mime).toMatchObject({ ok: true });
+      expect(saved(saveFile)?.name, mime).toBe("note.txt");
+      expect(saved(saveFile)?.mime ?? mime, mime).toBe(mime);
+    }
+  });
+
+  it("refuses a mime outside the closed list, including parameters", async () => {
+    const refused = ["text/html", "image/svg+xml", "application/javascript", "text/csv;charset=utf-8", "Text/Plain"];
+    for (const mime of refused) {
+      const { ask, result, saveFile } = withFiles();
+      await ask({ name: "note.txt", mime, data: TEXT });
+      expect(result(), mime).toMatchObject({ ok: false, error: "bad_request" });
+      noSave(saveFile);
+    }
+  });
+
+  it("keeps only the last segment of a name", async () => {
+    const cases = ["folder/note.txt", "folder\\note.txt", "a/b\\c/note.txt", "a".repeat(200), "a".repeat(201)];
+    for (const name of cases) {
+      const { ask, result, saveFile } = withFiles();
+      await ask({ name, mime: "text/plain", data: TEXT });
+      const kept = name.split(/[/\\]/).at(-1);
+      expect(result(), name).toMatchObject({ ok: true });
+      expect(saved(saveFile)?.name, name).toBe(kept);
+    }
+  });
+
+  it("refuses an empty, dot, or control name", async () => {
+    const refused = ["", ".", "..", "dir/..", "dir/.", "dir/", "bad\nname", "bad\u0000name"];
+    for (const name of refused) {
+      const { ask, result, saveFile } = withFiles();
+      await ask({ name, mime: "text/plain", data: TEXT });
+      expect(result(), JSON.stringify(name)).toMatchObject({ ok: false, error: "bad_request" });
+      noSave(saveFile);
+    }
+  });
+
+  it("refuses bad base64", async () => {
+    const bad = ["@@@@", "aGVs bG8=", "data:text/plain;base64,aGVsbG8="];
+    for (const data of bad) {
+      const { ask, result, saveFile } = withFiles();
+      await ask({ name: "note.txt", mime: "text/plain", data });
+      expect(result(), data).toMatchObject({ ok: false, error: "bad_request" });
+      noSave(saveFile);
+    }
+  });
+
+  it("refuses bytes over fileBytes, including a string whose length already implies it", async () => {
+    const limit = PAGE_CAP_LIMITS.fileBytes;
+    let implied = 4 * Math.ceil((limit + 3) / 3);
+    while (Math.floor(implied / 4) * 3 - 2 <= limit) implied += 4;
+    const { ask, result, saveFile } = withFiles();
+    await ask({ name: "note.txt", mime: "text/plain", data: "A".repeat(implied) });
+    expect(result(), "length").toMatchObject({ ok: false, error: "too_large" });
+    noSave(saveFile);
+
+    const over = withFiles();
+    await over.ask({ name: "note.txt", mime: "text/plain", data: Buffer.alloc(limit + 1).toString("base64") });
+    expect(over.result(), "decoded").toMatchObject({ ok: false, error: "too_large" });
+    noSave(over.saveFile);
+
+    const exact = withFiles();
+    await exact.ask({ name: "note.txt", mime: "text/plain", data: Buffer.alloc(limit).toString("base64") });
+    expect(exact.result(), "exact").toMatchObject({ ok: true });
+    expect(saved(exact.saveFile)?.name).toBe("note.txt");
+  });
+
+  it("does not answer shared_write_after_data and does not mark received data", async () => {
+    const { ask, result, call, openUrl, broker } = withFiles({ data: [], viewer: false, open: true, files: ["download"] });
+    await ask({ name: "note.txt", mime: "text/plain", data: TEXT }, { id: 1 });
+    expect(result(1)).toMatchObject({ ok: true });
+    expect(result(1)).not.toMatchObject({ error: "shared_write_after_data" });
+    await call("open", { ref: "https://example.com/after-file" }, 2);
+    expect(result(2)).toMatchObject({ ok: true, value: true });
+    expect(openUrl).toHaveBeenCalledWith("https://example.com/after-file");
+    expect(broker.getState().links).toEqual([]);
   });
 });

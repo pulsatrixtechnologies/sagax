@@ -15,6 +15,7 @@ enum WaitingCardWords {
         switch fold {
         case .skipped: String(localized: "waitingCard.skipped", defaultValue: "Skipped, no answer")
         case .expired: String(localized: "waitingCard.expired", defaultValue: "Expired, no answer")
+        case .defaulted: String(localized: "waitingCard.defaulted", defaultValue: "No answer from you in time: the default answer was used.")
         }
     }
 }

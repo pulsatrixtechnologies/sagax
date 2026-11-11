@@ -397,6 +397,9 @@ public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showTh
     // The same failure of the same bot, repeated since it last answered,
     // draws once: the last row (FailureDedup, desktop repeatedFailureIds).
     let repeatedFailures = FailureDedup.repeatedIds(messages, threadBotId: threadBotId)
+    // #3438: one card per request: the input request rows the card of the
+    // same ask already draws
+    let drawnElsewhere = InputRequestRules.drawnElsewhere(messages)
     // Fold only explicitly completed turns; never guess that the last reply
     // is final on an older server or while the bot is still working.
     // Spoken call lines are already in the voice card, so they are not a
@@ -456,6 +459,15 @@ public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showTh
             continue
         case .keep:
             break
+        }
+        // #3471: a teammate's parked question is a card of its own (answered
+        // in place, skipped, folded once closed), never a step of a run nor
+        // a thread chip
+        if message.inputRequest != nil {
+            if drawnElsewhere.contains(message.id) { continue }
+            flush()
+            rows.append(.message(message))
+            continue
         }
         if isHiddenStatusNotice(message) || isHiddenReceipt(message) { continue }
         if repeatedFailures.contains(message.id) { continue }

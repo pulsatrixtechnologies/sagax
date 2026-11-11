@@ -23,8 +23,10 @@ public enum WaitingCardSkip {
         case proposal(botId: String, proposalId: String)
     }
 
-    /// How a card closed without the person's answer.
-    public enum Fold: Hashable, Sendable { case skipped, expired }
+    /// How a card closed without the person's answer. `defaulted`: a
+    /// parked teammate's question expired and its declared default answer
+    /// was used.
+    public enum Fold: Hashable, Sendable { case skipped, expired, defaulted }
 
     /// Whether this option card still waits for the person (a live ask or
     /// a proposal not yet answered).
@@ -35,6 +37,14 @@ public enum WaitingCardSkip {
 
     /// Whether this attention card still waits for the person.
     public static func waits(_ card: PersonAttentionCard) -> Bool { card.isWaiting }
+
+    /// Whether this message still waits for the person: an option card, a
+    /// question in words or a parked teammate's input request.
+    public static func waits(_ message: Message) -> Bool {
+        if let card = message.card, waits(card) { return true }
+        if let attention = message.attention, waits(attention) { return true }
+        return message.inputRequest?.isOpen == true
+    }
 
     /// The skip of one option card. `threadId` is the thread the ask waits
     /// in (a parallel task's own thread for its approvals), `botId` the
@@ -58,6 +68,24 @@ public enum WaitingCardSkip {
         return .handled(botId: botId ?? card.botId, threadId: threadId, messageId: messageId)
     }
 
+    /// The skip of a question in words, whichever row carries it: an
+    /// attention card or a parked teammate's input request (the desktop's
+    /// `skipPlace`). Both close through the same route.
+    public static func route(forWords message: Message, threadId: String, botId: String?) -> Route? {
+        if let attention = message.attention {
+            return route(for: attention, messageId: message.id, threadId: threadId, botId: botId)
+        }
+        guard let request = message.inputRequest, request.isOpen, !threadId.isEmpty else { return nil }
+        return .handled(botId: botId ?? request.botId, threadId: threadId, messageId: message.id)
+    }
+
+    /// The skip of any waiting message (the pinned card's ×): an option
+    /// card, a question in words or an input request.
+    public static func route(for message: Message, threadId: String, botId: String?) -> Route? {
+        if let card = message.card, let route = route(for: card, threadId: threadId, botId: botId) { return route }
+        return route(forWords: message, threadId: threadId, botId: botId)
+    }
+
     /// The message as it reads once skipped, folded at once before the
     /// server's patch lands (the server writes the same).
     public static func skipped(_ message: Message, now: Date = Date()) -> Message {
@@ -71,6 +99,11 @@ public enum WaitingCardSkip {
             attention.handledAt = now.timeIntervalSince1970 * 1_000
             attention.closed = "skipped"
             folded.attention = attention
+        }
+        if var request = folded.inputRequest, request.isOpen {
+            request.expired = true
+            request.skipped = true
+            folded.inputRequest = request
         }
         return folded
     }
@@ -97,6 +130,7 @@ public enum WaitingCardSkip {
         switch card.closed {
         case "skipped": .skipped
         case "expired": .expired
+        case "defaulted": .defaulted
         default: nil
         }
     }

@@ -621,6 +621,44 @@ public struct PersonAttentionCard: Codable, Hashable, Sendable {
     public var threadRef: ThreadRef { ThreadRef(botId: botId, threadId: threadId, title: threadTitle ?? botName) }
 }
 
+/// A teammate parked on a question for the person, from handed-over work
+/// (server park and remind, shared/wire.ts `Message.inputRequest`). The
+/// answer is the person's own message into `threadId`, the waiting work.
+public struct InputRequestCardData: Codable, Hashable, Sendable {
+    public var botId: String
+    public var threadId: String
+    public var botName: String
+    public var title: String? = nil
+    public var question: String
+    /// A reminder of an earlier question of the same work.
+    public var reminder: Bool? = nil
+    /// The person's own answer reached the waiting work.
+    public var answered: Bool? = nil
+    /// Closed without the person's answer: it expired, or with `defaulted`
+    /// the requester's declared default answer was used.
+    public var expired: Bool? = nil
+    public var defaulted: Bool? = nil
+    /// #3471: the person skipped it (`expired` is set too).
+    public var skipped: Bool? = nil
+
+    public init(botId: String, threadId: String, botName: String, title: String? = nil, question: String, reminder: Bool? = nil,
+                answered: Bool? = nil, expired: Bool? = nil, defaulted: Bool? = nil, skipped: Bool? = nil) {
+        self.botId = botId
+        self.threadId = threadId
+        self.botName = botName
+        self.title = title
+        self.question = question
+        self.reminder = reminder
+        self.answered = answered
+        self.expired = expired
+        self.defaulted = defaulted
+        self.skipped = skipped
+    }
+
+    /// Still waits for the person: neither answered nor closed.
+    public var isOpen: Bool { answered != true && expired != true }
+}
+
 public struct Message: Codable, Hashable, Identifiable, Sendable {
     public enum Kind: String, Codable, Sendable {
         case text, options, activity, screen, video, secret
@@ -703,6 +741,10 @@ public struct Message: Codable, Hashable, Identifiable, Sendable {
     /// conversation with that bot (shared/person-attention.ts). On a
     /// routine-run row it rides beside the report.
     public var attention: PersonAttentionCard? = nil
+    /// A teammate parked on a question for the person (shared/wire.ts
+    /// `inputRequest`): the whole question, answered in place
+    /// (InputRequest.swift).
+    public var inputRequest: InputRequestCardData? = nil
     /// The message this one follows; nil at the thread root. Two messages
     /// sharing a parent are a fork.
     public var parentId: String?

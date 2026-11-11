@@ -11,7 +11,9 @@
 // them, with its card), numbers and their webhooks, streams, payments,
 // conferences, applications, SIP domains, short codes, caller ids, keys,
 // accounts (a new key or auth token would let a bot reach Twilio around
-// Sagax). A `_dry_run` sends nothing and stays allowed.
+// Sagax). A `_dry_run` sends nothing and stays allowed. The tools of the
+// person's own Perspicax Voice line (VOICE_LINE_TOOLS) are not raw vendor
+// writes: they go, and the bot's directives decide (#3603).
 //
 // Tool names are compared with separators folded (`twilio_api_write`,
 // `twilio_api-write`, `mcp__perspicax_example__twilio_api_write`) and with
@@ -65,10 +67,12 @@ export function telephonyRefusal(toolName: string, args: unknown, context: Telep
     }
     return FLOW_TWILIO.test(text.replace(/[\s_.-]/g, "")) || /api\.twilio\.com/i.test(text) ? TELEPHONY_WRITE_REFUSAL : null;
   }
-  // Perspicax Voice's voice_line is a read of the line (shared/outbound.ts),
-  // even when its description names Twilio and lands in twilioTools. Empty
-  // args and every other read go through; changes use voice_number.
-  if (/(?:^|_)voice_line$/.test(name)) return null;
+  // #3603: the tools of the bot's own line are the line's, not raw vendor
+  // writes, even when their descriptions name Twilio and land in
+  // twilioTools. The bot's directives and the gateway decide what they do
+  // (a card for a third party or not); texts keep their outbound card
+  // (shared/outbound.ts). Known by name only, never by a description.
+  if (voiceLineTool(toolName)) return null;
   const at = name.search(/(?:^|_)twilio/);
   const aliased = at < 0 && [...(context.twilioTools ?? [])].some((tool) => fold(tool) === name || name.endsWith(`_${fold(tool)}`));
   if (at < 0 && !aliased) return null;
@@ -95,6 +99,19 @@ export function telephonyRefusal(toolName: string, args: unknown, context: Telep
   return TELEPHONY_WRITE_REFUSAL;
 }
 
+/** The tools of a person's Perspicax Voice line (contract
+ * `perspicax-voice/1`): the one list that tells a line tool from a raw
+ * vendor write. */
+export const VOICE_LINE_TOOLS = ["voice_line", "voice_sms", "voice_call", "voice_number", "voice_client_code"] as const;
+export type VoiceLineTool = (typeof VOICE_LINE_TOOLS)[number];
+
+/** The line tool a name spells (bare, or with a server prefix or other
+ * separators), or null. */
+export function voiceLineTool(raw: string): VoiceLineTool | null {
+  const name = fold(raw);
+  return VOICE_LINE_TOOLS.find((tool) => name === tool || name.endsWith(`_${tool}`)) ?? null;
+}
+
 /** 2026-10-28: the Perspicax Voice tools Sagax watches on a bot's own frame:
  * `voice_call` (every call goes through place_phone_call) and `voice_sms`
  * (a text, with the same card and allowed recipients as any text). */
@@ -106,10 +123,8 @@ export type VoiceTool = "voice_call" | "voice_sms";
 const META_CALL = /(?:^|_)(?:call_tool|use_tool)$/;
 
 function voiceName(raw: string): VoiceTool | null {
-  const name = fold(raw);
-  if (/(?:^|_)voice_call$/.test(name)) return "voice_call";
-  if (/(?:^|_)voice_sms$/.test(name)) return "voice_sms";
-  return null;
+  const tool = voiceLineTool(raw);
+  return tool === "voice_call" || tool === "voice_sms" ? tool : null;
 }
 
 /** The Perspicax Voice tool one frame runs, whatever the path (its own name,

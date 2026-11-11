@@ -39,6 +39,22 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
     /// 2026-11-04: the teammates this run handed work to, each with the
     /// thread that work runs in (shared/routine-run.ts handedTo).
     public var handedTo: [Handoff]
+    /// #2694: the kind of wake this run was (heartbeat, mail, calendar,
+    /// watch...); nil for a plain routine run.
+    public var wakeTopic: String?
+    /// #3423: the watches a watch wake reported, with their domain
+    /// (`watches` of shared/routine-run.ts): the alert's two exits stop them.
+    public var watches: [WatchRef]
+
+    /// One watch an alert reported.
+    public struct WatchRef: Codable, Hashable, Sendable {
+        public var id: String
+        public var domain: String
+        public init(id: String, domain: String) {
+            self.id = id
+            self.domain = domain
+        }
+    }
 
     /// One teammate a run handed work to.
     public struct Handoff: Codable, Hashable, Sendable {
@@ -58,7 +74,8 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         runId: String, routineId: String, routineName: String, status: String,
         scheduledFor: Double? = nil, deferredAt: Double? = nil, goalStatus: String? = nil,
         executionThreadId: String? = nil, summary: String? = nil, error: String? = nil,
-        autoPausedAfter: Int? = nil, problems: String? = nil, handedTo: [Handoff] = []
+        autoPausedAfter: Int? = nil, problems: String? = nil, handedTo: [Handoff] = [],
+        wakeTopic: String? = nil, watches: [WatchRef] = []
     ) {
         self.runId = runId
         self.routineId = routineId
@@ -73,11 +90,14 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         self.autoPausedAfter = autoPausedAfter
         self.problems = problems
         self.handedTo = handedTo
+        self.wakeTopic = wakeTopic
+        self.watches = watches
     }
 
     private enum CodingKeys: String, CodingKey {
         case runId, routineId, routineName, scheduledFor, status, deferredAt
         case goalStatus, executionThreadId, summary, error, autoPausedAfter, problems, handedTo
+        case wakeTopic, watches
     }
 
     /// Field by field and forgiving: a card is a decoration on a message the
@@ -100,6 +120,8 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         let rawProblems = try? c.decodeIfPresent(String.self, forKey: .problems)
         problems = rawProblems.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
         handedTo = ((try? c.decodeIfPresent([Handoff].self, forKey: .handedTo)) ?? nil) ?? []
+        wakeTopic = try? c.decodeIfPresent(String.self, forKey: .wakeTopic)
+        watches = ((try? c.decodeIfPresent([Lossy<WatchRef>].self, forKey: .watches)) ?? nil)?.compactMap(\.value) ?? []
     }
 
     /// "Paused after 5 failures in a row" when this failure paused its routine.

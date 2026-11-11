@@ -99917,6 +99917,282 @@
         }
       }
     },
+    "approval.verb.create": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "create {resource}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "créer {resource}"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "create {resource}"
+          }
+        }
+      }
+    },
+    "approval.verb.create.bare": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "create a record"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "créer un enregistrement"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "create a record"
+          }
+        }
+      }
+    },
+    "approval.verb.delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "delete {resource}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "supprimer {resource}"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "delete {resource}"
+          }
+        }
+      }
+    },
+    "approval.verb.delete.bare": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "delete data"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "supprimer des données"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "delete data"
+          }
+        }
+      }
+    },
+    "approval.verb.read": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "view {resource}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "consulter {resource}"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "view {resource}"
+          }
+        }
+      }
+    },
+    "approval.verb.read.bare": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "read data"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "consulter des données"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "read data"
+          }
+        }
+      }
+    },
+    "approval.verb.run": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "run the {resource} action"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "exécuter l'action {resource}"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "run the {resource} action"
+          }
+        }
+      }
+    },
+    "approval.verb.run.bare": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "run an action"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "exécuter une action"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "run an action"
+          }
+        }
+      }
+    },
+    "approval.verb.update": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "change {resource}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "modifier {resource}"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "change {resource}"
+          }
+        }
+      }
+    },
+    "approval.verb.update.bare": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "change data"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "modifier des données"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "change data"
+          }
+        }
+      }
+    },
+    "approval.verb.use": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "use {name}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "utiliser {name}"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "usar {name}"
+          }
+        }
+      }
+    },
+    "approval.tool.runCommand": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "run a command"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "exécuter une commande"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "executar um comando"
+          }
+        }
+      }
+    },
     "approval.receipt.autoReview": {
       "localizations": {
         "en": {
@@ -115568,6 +115844,296 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connaissances"
+          }
+        }
+      }
+    },
+    "Never suggest again": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ne plus proposer"
+          }
+        }
+      }
+    },
+    "Every day at %@:%@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chaque jour à %1$@:%2$@"
+          }
+        }
+      }
+    },
+    "Every %@ at %@:%@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chaque %1$@ à %2$@:%3$@"
+          }
+        }
+      }
+    },
+    "Last alert %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dernière alerte %@"
+          }
+        }
+      }
+    },
+    "Paused: %@ can no longer follow it, turn it on to move it": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En pause : %@ ne peut plus le suivre, active-le pour le déplacer"
+          }
+        }
+      }
+    },
+    "Paused: the bot that followed it can no longer do so, turn it on to move it": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En pause : le bot qui le suivait ne peut plus le faire, active-le pour le déplacer"
+          }
+        }
+      }
+    },
+    "Followed by %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suivi par %@"
+          }
+        }
+      }
+    },
+    "a bot": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "un bot"
+          }
+        }
+      }
+    },
+    "You said “Never suggest again”, you can still turn it on": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu as dit « Ne plus proposer », tu peux quand même l'activer"
+          }
+        }
+      }
+    },
+    "No alert yet": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune alerte pour l'instant"
+          }
+        }
+      }
+    },
+    "Bot that follows %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bot qui suit %@"
+          }
+        }
+      }
+    },
+    "What I receive": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce que je reçois"
+          }
+        }
+      }
+    },
+    "Alerts from your organization": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alertes de l'organisation"
+          }
+        }
+      }
+    },
+    "Daily brief": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brief du jour"
+          }
+        }
+      }
+    },
+    "Screen context": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contexte de l'écran"
+          }
+        }
+      }
+    },
+    "Checklists": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listes de vérification"
+          }
+        }
+      }
+    },
+    "Addressed to my bots": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adressé à mes bots"
+          }
+        }
+      }
+    },
+    "Wakes on what is sent to it: another bot, an email, an invitation, a text or a webhook.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se réveille sur ce qu'on lui envoie : un autre bot, un courriel, une invitation, un texto ou un webhook."
+          }
+        }
+      }
+    },
+    "What this bot follows for you": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce que ce bot suit pour toi"
+          }
+        }
+      }
+    },
+    "Hide the watches": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masquer les veilles"
+          }
+        }
+      }
+    },
+    "Watches and tools": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Veilles et outils"
+          }
+        }
+      }
+    },
+    "Noted: this will not be suggested again.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noté : elle ne sera plus proposée."
+          }
+        }
+      }
+    },
+    "Stop this watch": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêter cette veille"
+          }
+        }
+      }
+    },
+    "Stop this domain": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêter ce domaine"
+          }
+        }
+      }
+    },
+    "Stop this alert": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêter cette alerte"
+          }
+        }
+      }
+    },
+    "Watch stopped: %@. You can turn it back on in Settings, Notifications.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Veille arrêtée : %@. Tu peux la remettre dans Réglages, Notifications."
+          }
+        }
+      }
+    },
+    "This watch is stopped. You can turn it back on in Settings, Notifications.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette veille est arrêtée. Tu peux la remettre dans Réglages, Notifications."
+          }
+        }
+      }
+    },
+    "Domain stopped: %@. None of its alerts will come. You can turn it back on in Settings, Notifications.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Domaine arrêté : %@. Plus aucune de ses alertes ne viendra. Tu peux le remettre dans Réglages, Notifications."
+          }
+        }
+      }
+    },
+    "This domain is stopped. None of its alerts will come. You can turn it back on in Settings, Notifications.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce domaine est arrêté. Plus aucune de ses alertes ne viendra. Tu peux le remettre dans Réglages, Notifications."
           }
         }
       }

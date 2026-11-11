@@ -369,6 +369,8 @@ struct BotPermissionsSection: View {
     @State private var hooks: BotLifecycleHooks?
     @State private var engineKind: String?
     @State private var grokConnectors: Bool?
+    /// #3465: « Ce que ce bot suit pour toi »
+    @StateObject private var follows = ProactiveReceiveModel()
 
     private func shows(_ group: BotPermissionsPart) -> Bool { part == .all || part == group }
 
@@ -504,12 +506,15 @@ struct BotPermissionsSection: View {
             }
             .disabled(!edits("proactiveMode"))
             .accessibilityIdentifier("permissions-proactive")
+            .task(id: bot.id) { await follows.load(session) }
         } footer: {
             VStack(alignment: .leading, spacing: 6) {
                 Text(ProactiveMode.of(current.proactiveMode).hint)
                 Text("How this bot acts on its own on an email, a calendar entry, a failed run, another bot's post or a webhook.")
             }
         }
+        // #3465: « Ce que ce bot suit pour toi », beside Proactive
+        BotFollowsSection(bot: current, model: follows)
         // PermissionsSection.tsx: Allowed recipients, beside Proactive
         if edits("allowedRecipients") {
             let count = (current.allowedRecipients ?? []).count

@@ -59,6 +59,129 @@ public enum ProactiveProposalRules {
     }
 }
 
+/// #3465: the choice card (`proactiveChoice`) on the phone and the tablet,
+/// as the desktop's `ProactiveChoiceCard.tsx` (#3457): « Oui » (options[0])
+/// writes the choice with the bot that proposed it and the watches its
+/// switches keep on; « Pas maintenant » (options[1]) is kept in the ledger;
+/// « Ne plus proposer » goes to the card's feedback route (`choice: never`)
+/// and is final for bots. Answered, the card folds to one quiet row.
+public extension ProactiveProposalRules {
+    /// A choice card: its yes turns a watch domain on.
+    static func isChoice(_ card: OptionCard) -> Bool {
+        card.proactiveProposal != nil && card.proactiveChoice != nil
+    }
+
+    /// The third answer's label (the desktop's `suggestionFeedback.never`).
+    static var neverLabel: String { String(localized: "Never suggest again") }
+
+    /// « Ne plus proposer » was given (the card's feedback).
+    static func saidNever(_ card: OptionCard) -> Bool {
+        card.feedback == "never"
+    }
+
+    /// Answered or expired: the card is one quiet row (its receipt).
+    static func isFolded(_ card: OptionCard) -> Bool {
+        card.answered != nil || card.expired == true
+    }
+
+    /// The receipt's mark: the yes was given (not expired).
+    static func receiptAccepted(_ card: OptionCard) -> Bool {
+        card.expired != true && card.answered.map { accepts(card, answer: $0) } == true
+    }
+
+    /// The watches the yes keeps on (desktop `watchesKeptOn`): each switch
+    /// the person moved, else the card's own mark. Nil when the card carries
+    /// no watch (the server then keeps its default).
+    static func watchesOn(_ card: OptionCard, switches: [String: Bool]) -> [String]? {
+        guard let watches = card.proactiveChoice?.watches, !watches.isEmpty else { return nil }
+        return watches.filter { switches[$0.id] ?? $0.on }.map(\.id)
+    }
+
+    /// A yes with every watch off would turn on nothing: it cannot be sent.
+    static func canSayYes(_ card: OptionCard, switches: [String: Bool]) -> Bool {
+        watchesOn(card, switches: switches).map { !$0.isEmpty } ?? true
+    }
+
+    /// A watch's tool in words, the desktop's `watchToolLabel`: a bare
+    /// connector tool reads as the action it does in its product ("View
+    /// tickets in Acme"), in the card's language, never its name (which
+    /// stays in the accessibility hint).
+    static func toolWords(_ tool: String, words: StepWords) -> String {
+        let id = tool.contains("__") ? tool : "mcp__perspicax__\(tool)"
+        let parsed = StepLabel.parseToolId(id)
+        guard let server = parsed.server else {
+            return StepLabel.capitalize(VisibleRoles.toolWords(tool))
+        }
+        let reading = ApprovalReading.describe(id, input: nil, words: words, verb: { key, vars in words.t(key, vars) })
+        let action = reading.action ?? parsed.name.replacingOccurrences(of: #"_+"#, with: " ", options: .regularExpression)
+        // the bot's own servers are the bot itself: never "in Sagax ..."
+        let phrase = reading.product.map { server.hasPrefix("sagax-") ? action : words.t("approval.phrase.inProduct", ["action": action, "product": $0]) } ?? action
+        return StepLabel.capitalize(phrase.trimmingCharacters(in: .whitespaces))
+    }
+
+    /// #3465: the answer the card holds once the request ends. Kept by the
+    /// server, the card folds to its receipt; lost (offline, a conflict),
+    /// it comes back so the person can answer again.
+    static func heldAnswer(_ option: String, kept: Bool) -> String? {
+        kept ? option : nil
+    }
+}
+
+/// The choice card's payload (`proactiveChoice` of `shared/wire.ts`):
+/// labels on screen, ids for the route. Decoding is forgiving.
+public struct ProactiveChoiceCardData: Codable, Hashable, Sendable {
+    public struct Watch: Codable, Hashable, Sendable, Identifiable {
+        public var id: String
+        public var label: String
+        /// Already in words, in the card's language.
+        public var cadence: String
+        /// Whether the yes turns it on.
+        public var on: Bool
+        public var tools: [String]
+
+        public init(id: String, label: String, cadence: String, on: Bool, tools: [String] = []) {
+            self.id = id
+            self.label = label
+            self.cadence = cadence
+            self.on = on
+            self.tools = tools
+        }
+
+        private enum CodingKeys: String, CodingKey { case id, label, cadence, on, tools }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(String.self, forKey: .id)
+            label = (try? container.decodeIfPresent(String.self, forKey: .label)) ?? ""
+            cadence = (try? container.decodeIfPresent(String.self, forKey: .cadence)) ?? ""
+            on = (try? container.decodeIfPresent(Bool.self, forKey: .on)) ?? false
+            tools = (try? container.decodeIfPresent([String].self, forKey: .tools)) ?? []
+        }
+    }
+
+    public var domain: String
+    public var label: String
+    public var botName: String
+    public var watches: [Watch]
+
+    public init(domain: String, label: String, botName: String, watches: [Watch]) {
+        self.domain = domain
+        self.label = label
+        self.botName = botName
+        self.watches = watches
+    }
+
+    private enum CodingKeys: String, CodingKey { case domain, label, botName, watches }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        domain = (try? container.decodeIfPresent(String.self, forKey: .domain)) ?? ""
+        label = (try? container.decodeIfPresent(String.self, forKey: .label)) ?? ""
+        botName = (try? container.decodeIfPresent(String.self, forKey: .botName)) ?? ""
+        watches = (try? container.decodeIfPresent([Lossy<Watch>].self, forKey: .watches))?.compactMap(\.value) ?? []
+    }
+}
+
 /// The proposal a card carries (only its id crosses the wire).
 public struct ProactiveProposalRef: Codable, Hashable, Sendable {
     public var id: String

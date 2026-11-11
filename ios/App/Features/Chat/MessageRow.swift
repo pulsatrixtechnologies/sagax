@@ -272,6 +272,11 @@ struct MessageRow: View {
                 openRun: attention.routineRunId.map { runId in { Task { await session.openRoutineRunInChat(id: runId) } } },
                 reply: threadsShown ? nil : { text in try await session.answerAttention(attention, text: text) }
             )
+            // #3465: a watch alert's two exits, for the bot's owner
+            if let watches = WatchAlertRules.alert(of: message.routineRun), let bot = session.state.bot(attention.botId),
+               session.surfaceGate.ownsBot(bot) {
+                WatchAlertExitsView(watches: watches)
+            }
         } else {
             kindContent
         }
@@ -568,6 +573,9 @@ private struct OptionsKindRow: View {
             )
         } else if message.card?.questions.isEmpty == false {
             QuestionCardView(chat: chat, message: message)
+        } else if let card = message.card, ProactiveChoiceCardView.draws(card) {
+            // #3465: a watch domain's choice card, in the compact look (#3457)
+            ProactiveChoiceCardView(chat: chat, message: message)
         } else if let card = message.card, FlatQuestionCardView.draws(card) {
             // a bot's flat ask: the same question card (QuestionSheet)
             FlatQuestionCardView(chat: chat, message: message)
@@ -706,6 +714,10 @@ private struct RoutineRunKindRow: View {
             // 2026-11-05: items only the person can do, each with its ticket
             if let attention = message.attention, !attention.items.isEmpty, card.knownStatus == .completed {
                 AttentionItemsView(items: attention.items)
+            }
+            // #3465: a watch alert's two exits, for the bot's owner
+            if let watches = WatchAlertRules.alert(of: card), let bot = runBot, session.surfaceGate.ownsBot(bot) {
+                WatchAlertExitsView(watches: watches)
             }
         } else {
             // A computer that sent the kind without its card: the text

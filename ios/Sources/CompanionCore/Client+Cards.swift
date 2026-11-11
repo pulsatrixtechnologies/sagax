@@ -71,7 +71,20 @@ extension CompanionClient {
         ))
     }
 
-    public func answerProactiveProposal(botId: String, proposalId: String, accept: Bool) async throws {
-        try await send(try makeRequest("POST", "/api/bots/\(botId)/proactive/\(proposalId)", body: ["accept": accept]))
+    /// #3465: a choice card's yes carries `watches`, the watches its
+    /// switches keep on (nil: the server keeps the card's default).
+    public func answerProactiveProposal(botId: String, proposalId: String, accept: Bool, watches: [String]? = nil) async throws {
+        guard Self.validRouteID(botId), Self.validRouteID(proposalId) else { throw APIError.badURL }
+        var body: [String: Any] = ["accept": accept]
+        if accept, let watches { body["watches"] = watches }
+        try await send(try makeRequest("POST", "/api/bots/\(botId)/proactive/\(proposalId)", body: body))
+    }
+
+    /// #3465: « Ne plus proposer » on a choice card (and the feedback of
+    /// any proactive card): `POST /api/bots/:id/proactive/:p/feedback`.
+    public func proactiveProposalFeedback(botId: String, proposalId: String, choice: String) async throws {
+        guard Self.validRouteID(botId), Self.validRouteID(proposalId),
+              ["up", "down", "less", "never"].contains(choice) else { throw APIError.badURL }
+        try await send(try makeRequest("POST", "/api/bots/\(botId)/proactive/\(proposalId)/feedback", body: ["choice": choice]))
     }
 }

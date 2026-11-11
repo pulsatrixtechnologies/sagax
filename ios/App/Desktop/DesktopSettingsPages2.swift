@@ -440,6 +440,8 @@ struct DesktopNotificationsSettings: View {
     @State private var persistentStyle = false
     @State private var reports: [Moderation.Report]?
     @State private var reportsError: String?
+    /// #3465: « Ce que je reçois »
+    @StateObject private var receive = ProactiveReceiveModel()
 
     private var admin: Bool {
         let role = session.surfaceGate.viewer?.role
@@ -506,6 +508,8 @@ struct DesktopNotificationsSettings: View {
                 }
             }
         }
+        // #3465: « Ce que je reçois », the person's proactive choices
+        DesktopReceiveGroups(model: receive)
         DesktopSettingsGroup(Text("Nudges"), accessory: thisIPad, identifier: "nudges") {
             DesktopCompactRow(Text("Nudge sound"), identifier: "nudgeSound") {
                 DesktopSwitch(isOn: nudgeSound, label: Text("Nudge sound"), identifier: "desktop-settings.notifications.nudge-sound") { nudgeSound.toggle() }
@@ -545,6 +549,7 @@ struct DesktopNotificationsSettings: View {
         Color.clear.frame(height: 0)
             .task {
                 await session.loadModeration()
+                await receive.load(session)
                 let settings = await UNUserNotificationCenter.current().notificationSettings()
                 authorized = settings.authorizationStatus == .authorized
                 persistentStyle = settings.alertStyle == .alert

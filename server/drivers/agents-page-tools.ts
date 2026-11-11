@@ -7,7 +7,7 @@ export const PAGE_TOOL_DEFINITIONS = [
   {
     name: "propose_page",
     description:
-      "Propose a web page shared by link (report, site, app); the person reviews, publishes it. A live widget in Sagax: save_artifact. kind html: one complete document, inline CSS and JS; markdown: text; presentation: Markdown slides split by --- lines; kind design: mockups, app screens, a prototype, HTML whose <section data-screen=\"Name\" data-device=\"phone|tablet|desktop\"> are screens on a canvas, styled with design system tokens (var(--accent), var(--bg), var(--fg); guide designs). Sagax theme applied: no hard-coded colors or fonts. Sandboxed, no network: inline everything (data: URIs). Never publishes itself. Revise: pass its page_id. content or path, not both; a file already written or reviewed: pass path, never retype it. The answer gives bytes and sha256; read back with page_comments action source. Shared votes in html: window.sagax.page (ready, get, set(key, v) (null clears), subscribe, entry, me(), canWrite(key)); writers per key: <script type=application/sagax-state+json>{\"vote:*\":\"anyone\"}</script>: anyone (public link), signed_in (default), editors, owner. Not available in rooms.",
+      "Propose a web page shared by link (report, site, app); the person reviews, publishes it. A live widget in Sagax: save_artifact. kind html: one complete document, inline CSS and JS; markdown: text; presentation: Markdown slides split by --- lines; kind design: mockups, app screens, a prototype, HTML whose <section data-screen=\"Name\" data-device=\"phone|tablet|desktop\"> are screens on a canvas, styled with design system tokens (var(--accent), var(--bg), var(--fg); guide designs). Sagax theme applied: no hard-coded colors or fonts. Sandboxed, no network: inline everything (data: URIs). Never publishes itself. Revise: pass its page_id. content or path, not both. The answer gives bytes and sha256; read back with page_comments action source. Shared votes in html: window.sagax.page (ready, get, set(key, v) (null clears), subscribe, entry, me(), canWrite(key)); writers per key: <script type=application/sagax-state+json>{\"vote:*\":\"anyone\"}</script>: anyone (public link), signed_in (default), editors, owner. Not available in rooms.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -15,7 +15,7 @@ export const PAGE_TOOL_DEFINITIONS = [
         title: { type: "string", maxLength: 120 },
         kind: { type: "string", enum: ["html", "markdown", "presentation", "design"] },
         content: { type: "string", description: "The whole page, max 512 KB." },
-        path: { type: "string", description: "A UTF-8 file of your workspace, relative (no hidden file, no plugins/)." },
+        path: { type: "string", description: "A file written or reviewed, never retyped: in your workspace or plugins/<name>/, relative. Missing: retyping won't do; say so, stop." },
         page_id: { type: "string", description: "This conversation's page, for a new version." },
         design_system: { type: "string", maxLength: 60, description: "kind design: sagax (default), minimal, editorial, clean, modern or a saved one; with design_tokens, its name." },
         design_tokens: { type: "string", description: "kind design: the person's CSS :root block from their code; saved and applied." },

@@ -235,12 +235,14 @@ export function readWorkspaceText(botId: string, input: unknown, offset = 0, plu
 }
 
 /** #3488: a file of the bot's own workspace as a page's source, read byte
- * for byte (decrypted when sealed at rest) through resolveWorkspaceFile (no
- * traversal, no link, no hidden file, this bot's workspace only). Refused
- * over `maxBytes` and when it is not valid UTF-8 text, so the text stored is
- * exactly the file's bytes. */
-export function readWorkspaceSourceFile(botId: string, input: unknown, maxBytes: number): { path: string; content: string; bytes: number } {
-  const file = resolveWorkspaceFile(botId, input);
+ * for byte (decrypted when sealed at rest). Refused over `maxBytes` and when
+ * it is not valid UTF-8 text, so the text stored is exactly the file's bytes.
+ * #3612: the path resolves as workspace_read resolves it (resolveOwnReadable),
+ * so `plugins/<name>/...` names a file of one of this bot's installed
+ * `plugins`; the stricter grammar first keeps hidden files and absolute
+ * paths (the sandbox mount alias included) out. */
+export function readWorkspaceSourceFile(botId: string, input: unknown, maxBytes: number, plugins: readonly ReadablePlugin[] = []): { path: string; content: string; bytes: number } {
+  const file = resolveOwnReadable(botId, normaliseWorkspacePath(input), plugins);
   if (file.stat.size > maxBytes * 2 + 4096) throw new WorkspacePathError(`${file.path} is over ${Math.floor(maxBytes / 1024)} KB.`);
   const buffer = readAtRestSync(file.absolute);
   if (buffer.length > maxBytes) throw new WorkspacePathError(`${file.path} is over ${Math.floor(maxBytes / 1024)} KB.`);

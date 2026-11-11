@@ -161,6 +161,9 @@ export interface InternalMemoryDeps {
 }
 
 export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRouteHandler {
+  // whose plugins a bot's own read sees: the person of the turn
+  // (workspace_read and propose_page path, #3612)
+  const readerPerson = (threadId: string): string => deps.isPerspicax() ? deps.turnSpeaker(threadId) ?? "" : deps.localPrincipalId();
   return async (ctx) => {
     const { res, path, method, json, capability, readBody, url } = ctx;
     const sender = deps.bot(capability.botId);
@@ -214,7 +217,9 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
           let raw = rest.content;
           if (file !== undefined) {
             try {
-              raw = readWorkspaceSourceFile(sender.id, file, PAGE_LIMITS.contentBytes).content;
+              // #3612: plugins/<name>/... as workspace_read reads it (the
+              // calling bot's plugins for the person of this turn)
+              raw = readWorkspaceSourceFile(sender.id, file, PAGE_LIMITS.contentBytes, deps.scopedPluginFolders(sender, readerPerson(capability.threadId))).content;
             } catch (error) {
               if (error instanceof WorkspacePathError) return { ok: false as const, status: error.status === 404 ? 404 as const : 400 as const, error: `path: ${error.message}` };
               throw error;
@@ -409,7 +414,7 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
     }
     if (method === "GET" && path === "/api/internal/workspace/read") {
       try {
-        const person = deps.isPerspicax() ? deps.turnSpeaker(capability.threadId) ?? "" : deps.localPrincipalId();
+        const person = readerPerson(capability.threadId);
         const asked = url?.searchParams.get("path") ?? "";
         const librarySkills = asked.startsWith("skill-library/") && deps.skillsLibraryEnabled()
           ? (() => {

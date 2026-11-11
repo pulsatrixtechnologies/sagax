@@ -55,6 +55,8 @@ const COUNTED_MAX = 500;
 
 export interface QuietModeBot {
   id: string;
+  /** The bot's name, for the line that says which bots are still quiet. */
+  name?: string;
   hidden?: boolean;
   temporary?: boolean;
 }
@@ -167,7 +169,10 @@ export class QuietMode<B extends QuietModeBot> {
     const language = quietModeLanguage(this.deps.language(this.deps.owner(bot)));
     const summary = before && !this.quiet(botId) ? this.endFor(bot, language, true) : undefined;
     this.persist();
-    return { ...this.view(botId), said: quietModeSaid(on, "bot", language), ...(summary ? { summary } : {}) };
+    // the line says the state after the change: still quiet through the
+    // person's all-bots switch, it says so and names that switch
+    const view = this.view(botId);
+    return { ...view, said: quietModeSaid(on, "bot", language, { all: !on && view.all }), ...(summary ? { summary } : {}) };
   }
 
   /** Set the person's switch for all their bots. Each bot that stops being
@@ -186,7 +191,11 @@ export class QuietMode<B extends QuietModeBot> {
       else if (was && !now) this.endFor(bot, language, false);
     }
     this.persist();
-    return { ...this.personView(person), said: quietModeSaid(on, "all", language) };
+    // the line says the state after the change: the bots still quiet through
+    // their own switch are named
+    const view = this.personView(person);
+    const stillQuiet = on ? [] : view.bots.filter((row) => row.bot).map((row) => own.find((bot) => bot.id === row.botId)?.name?.trim() || row.botId);
+    return { ...view, said: quietModeSaid(on, "all", language, { bots: stillQuiet }) };
   }
 
   /** The bot stopped being quiet: its line (always for its own switch; for

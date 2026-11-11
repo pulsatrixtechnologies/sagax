@@ -4,8 +4,8 @@ import { QuietMode } from "./quiet-mode.ts";
 
 function world() {
   const bots = [
-    { id: "nova", owner: "ada" },
-    { id: "atlas", owner: "ada" },
+    { id: "nova", name: "Nova", owner: "ada" },
+    { id: "atlas", name: "Atlas", owner: "ada" },
     { id: "other", owner: "grace" },
   ];
   const lines: Array<{ botId: string; text: string }> = [];
@@ -80,6 +80,34 @@ describe("quiet mode per bot and for all the person's bots (#3480)", () => {
     quiet.keep("atlas", "r1", true);
     quiet.setPerson("ada", false);
     expect(lines.map((line) => line.botId)).toEqual(["atlas"]);
+  });
+
+  it("a bot told to speak again while all bots stay quiet says it is still quiet and names the all-bots switch", () => {
+    const { make } = world();
+    const quiet = make();
+    quiet.setPerson("ada", true);
+    const view = quiet.setBot("nova", false);
+    expect(view.quiet).toBe(true);
+    expect(view.said).toBe("J'ai retiré mon propre mode silencieux, mais je reste silencieux : le mode silencieux de tous tes bots est encore actif. Dis-moi que tous tes bots peuvent reparler pour l'enlever.");
+    expect(view.said).not.toContain("au courant de nouveau");
+    // once nothing keeps it quiet, the line says so
+    quiet.setPerson("ada", false);
+    expect(quiet.setBot("nova", false).said).toBe("C'est fait : je te tiens au courant de nouveau.");
+  });
+
+  it("all bots told to speak again while one keeps its own switch name that bot and its switch", () => {
+    const { make } = world();
+    const quiet = make();
+    quiet.setBot("nova", true);
+    quiet.setPerson("ada", true);
+    const view = quiet.setPerson("ada", false);
+    expect(view.bots.map((bot) => [bot.botId, bot.quiet])).toEqual([["nova", true], ["atlas", false]]);
+    expect(view.said).toBe("C'est fait : le mode silencieux de tous tes bots est retiré, mais Nova reste silencieux par son propre réglage ; dis-lui de reparler.");
+    quiet.setBot("atlas", true);
+    expect(quiet.setPerson("ada", false).said).toBe("C'est fait : le mode silencieux de tous tes bots est retiré, mais Nova, Atlas restent silencieux par leur propre réglage ; dis-le à chacun de reparler.");
+    quiet.setBot("nova", false);
+    quiet.setBot("atlas", false);
+    expect(quiet.setPerson("ada", false).said).toBe("C'est fait : tes bots te tiennent au courant de nouveau.");
   });
 
   it("survives a restart", () => {

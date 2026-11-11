@@ -2315,6 +2315,7 @@ function getLeafHost(): Record<string, any> { return leafHostBindings; }
 bindLeafHost({
   get botQuietMode() { return botQuietMode; },
   get keepQuietRun() { return keepQuietRun; },
+  get relayViaOf() { return relayViaOf; },
   get routinePostResultsOwn() { return routinePostResultsOwn; },
   get modelName() { return modelName; },
   get stderrOf() { return stderrOf; },

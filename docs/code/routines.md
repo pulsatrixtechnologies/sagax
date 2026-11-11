@@ -14,7 +14,12 @@ the two switches (per bot, per person) and the count of runs kept quiet in
 `DATA_DIR/quiet-mode.json`; `server/routes/quiet-mode.ts` answers
 `GET/PUT /api/bots/:id/quiet` and `GET/PUT /api/me/quiet`. A bot sets it
 through `sagax_settings` (`bot.quietMode`, `notifications.quietMode`) at
-every level, then says the answer's `said` line.
+every level, only on a turn where its person wrote to it in their own words
+(`ownWords`, the proactive ask's `primaryTurnGate` "cards" check): a routine,
+a wake or another bot's turn is refused in one line and nothing is shown, so
+a text a bot reads never switches it. The bot then says the answer's `said`
+line, built from the state after the change: when the other switch still
+keeps a bot quiet, the line says so and names that switch.
 
 While a bot is quiet: `routineEffectivePostResults` is false (the routine's
 own `postResults` is untouched and comes back when quiet mode goes off),
@@ -23,7 +28,8 @@ marked unread, `notify` drops background news and sends an ask with
 `notify: false`, the attention cards take the `quiet` level of a wake's
 feedback, and `mirrorBackgroundReply` posts nothing. A failed routine
 starts no Primary Bot report (`reportIncident` keeps it in the problem log
-only), a run that works again after problems and a repeat of the same
+only), nor does a failed or stalled background turn (`relayViaOf` defined),
+which is also counted in the line written when quiet mode goes off; a run that works again after problems and a repeat of the same
 problem (#3479) post nothing and patch no row. Quiet hours
 (`shared/signal-levels.ts`) are unchanged: they hold pushes only, for the
 bots that are not quiet. When quiet mode goes off, one line in the bot's chat

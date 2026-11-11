@@ -53,6 +53,16 @@ function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: s
   // runs, the problem log above keeps the incident, and the line written
   // when quiet mode goes off counts it.
   if (input.kind === "routine-failed" && host.botQuietMode?.(bot.id) === true) return;
+  // #3480: a failed or stalled background turn of a quiet bot (a wake, a
+  // teammate's or an AI client's work: relayViaOf) is the same: no report,
+  // no sound. The problem log keeps it and the line written when quiet mode
+  // goes off counts it as a run with problems. The person's own
+  // conversation still reports as before.
+  if ((input.kind === "failed" || input.kind === "stalled") && host.botQuietMode?.(bot.id) === true && host.relayViaOf?.(bot.id, threadId)) {
+    const runId = host.routines?.runForThread?.(threadId)?.id ?? `${input.kind}:${threadId}:${Date.now()}`;
+    host.keepQuietRun?.(bot.id, runId, true);
+    return;
+  }
   // A thread another bot opened and is watching is that bot's to handle:
   // the delegator is woken with the failure already (wakeDelegationSource).
   // A thread running coordinated work is its requester's to handle: the

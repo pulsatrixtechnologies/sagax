@@ -150,17 +150,33 @@ export function quietModeLanguage(language: string | null | undefined): Language
   return String(language ?? "").toLowerCase().startsWith("fr") ? "fr" : "en";
 }
 
-/** The one line the bot says when it changed its own mode. */
-export function quietModeSaid(on: boolean, scope: "bot" | "all", language: Language): string {
+/** What is still quiet after a change, through the other switch: the
+ * all-bots switch (`all`) after a bot's own switch went off, or the bots
+ * whose own switch is still on (`bots`, their names) after the all-bots
+ * switch went off. */
+export interface QuietStill {
+  all?: boolean;
+  bots?: readonly string[];
+}
+
+/** The one line the bot says when it changed the mode. It is built from the
+ * state after the change: when the other switch still keeps a bot quiet, the
+ * line says so and names that switch, never "I keep you posted again". */
+export function quietModeSaid(on: boolean, scope: "bot" | "all", language: Language, still: QuietStill = {}): string {
+  const names = (still.bots ?? []).filter((name) => name.trim()).join(", ");
   if (language === "fr") {
     if (on) return scope === "all"
       ? "C'est fait : tous tes bots restent silencieux et te joignent seulement quand ils ont besoin de ta réponse."
       : "C'est fait : je reste silencieux et je te joins seulement quand j'ai besoin de ta réponse.";
+    if (scope === "bot" && still.all) return "J'ai retiré mon propre mode silencieux, mais je reste silencieux : le mode silencieux de tous tes bots est encore actif. Dis-moi que tous tes bots peuvent reparler pour l'enlever.";
+    if (scope === "all" && names) return `C'est fait : le mode silencieux de tous tes bots est retiré, mais ${names} ${still.bots!.length === 1 ? "reste silencieux par son propre réglage ; dis-lui" : "restent silencieux par leur propre réglage ; dis-le à chacun"} de reparler.`;
     return scope === "all" ? "C'est fait : tes bots te tiennent au courant de nouveau." : "C'est fait : je te tiens au courant de nouveau.";
   }
   if (on) return scope === "all"
     ? "Done: all your bots stay quiet and reach you only when they need your answer."
     : "Done: I am staying quiet and will reach you only when I need your answer.";
+  if (scope === "bot" && still.all) return "I turned my own quiet mode off, but I am still quiet: quiet mode for all your bots is still on. Tell me all your bots can speak again to turn it off.";
+  if (scope === "all" && names) return `Done: quiet mode for all your bots is off, but ${names} ${still.bots!.length === 1 ? "stays quiet through its own switch; tell it" : "stay quiet through their own switch; tell each one"} to speak again.`;
   return scope === "all" ? "Done: your bots keep you posted again." : "Done: I will keep you posted again.";
 }
 

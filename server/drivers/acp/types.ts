@@ -13,7 +13,7 @@ import type { DeviceSignIn } from "../device-auth.ts";
 import type { LinkSignIn } from "../link-sign-in.ts";
 import type { LogSignal } from "./quiet-status.ts";
 import type { AcpQuestionRequest } from "./question-requests.ts";
-import type { TurnLatency } from "./turn-latency.ts";
+import type { TurnLatency, TurnToolWait } from "./turn-latency.ts";
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 import type { WarmResourceLease } from "../../resources/warm-resources.ts";
@@ -455,6 +455,12 @@ export interface AcpSupport {
     /** True when this turn prompts a live session that did not run
      * session/new or session/load (same MCP mounts still connected). */
     reused?: boolean;
+    /** The names of the servers this turn sent with session/new or load
+     * (its mcpServers), to tell Sagax's mounts from the engine's own. */
+    mcpServerNames?: readonly string[];
+    /** #3623: the wait for the engine's tool servers, for the turn's
+     * latency line (toolsBy). Absent outside a turn (a warm session). */
+    noteToolWait?: (wait: TurnToolWait) => void;
     /** Show the person one plain line (a runtime.notice) for this turn:
      * for instance that the session runs another model than the one picked.
      * Said once per conversation for the same message. */

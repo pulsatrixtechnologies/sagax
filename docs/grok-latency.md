@@ -27,6 +27,18 @@ Every ACP turn logs one line when it settles (server/drivers/acp/turn-latency.ts
     handshake), session (session/new or load), model (model and mode), tools (Grok's tool
     servers answering, the wait kept since hotfix 0.5.10), prompt (the rest until the prompt
     is sent).
+- toolsBy (#3623): which tool servers the tools part waited for, right after setupBy. Each
+  of the servers Sagax mounts for the turn by its product name (`agents`, `browser`,
+  `perspicax`...; a mount under any other name, which may carry a person's or a bot's
+  identifier, prints as `connector`) with the ms from the wait's start to the first poll of
+  `_x.ai/mcp/list` where it no longer waited (pending, connecting or starting), slowest first,
+  at most eight. Then the other servers of the engine's catalog (the person's own connections
+  of their engine account) as one entry `own:<count>:<longest ms>`, never by name, and
+  `pending:<count>` when the wait ended on its limit with servers still connecting. The poll
+  interval (50 to 100 ms plus the request) bounds the precision. A turn that skipped the wait
+  (a reused session) or waited under 50 ms prints no toolsBy.
+
+      setupBy=prepare:100,init:300,session:100,tools:2700,prompt:10 toolsBy=perspicax:2650,agents:410,browser:380,own:2:900
 
   Example of a turn that opened a conversation on a new process:
 

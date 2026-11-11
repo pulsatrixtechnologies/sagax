@@ -18565,7 +18565,8 @@
       "codingChat.stepDone.edits": "343c45c80d47c201c1cdc232d34be429579a657dad5d81cef007d8bbe38383ca",
       "codingChat.stepDone.writes": "651c931fc71ea0683a8571389298f7aedcc3346e904ac009c20e9f37dd4472f7",
       "codingChat.stepDone.reads": "dc55fa7ae1c2565c28aa9801781c5cfad279c1ff87cc5f2942f677fe0a28a480",
-      "chat.quietRetired": "4e02f352c5f39fa9f8730e1951063774fbb613d58c5e998f6eb52b11e294b65f"
+      "chat.quietRetired": "4e02f352c5f39fa9f8730e1951063774fbb613d58c5e998f6eb52b11e294b65f",
+      "routineRun.stateLine": "f28a2eec88c902e80c1ebfdece97bf849c2ffde80fe720c7b78c9a51be19e299"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

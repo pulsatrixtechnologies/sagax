@@ -74,7 +74,8 @@ try {
     const t0 = performance.now();
     const sample = () => {
       const now = card();
-      const bubble = now?.querySelector("[data-routine-run-bubble]") ?? now?.firstElementChild ?? null;
+      // #3581: the run's one form (the live row, then the result card)
+      const bubble = now?.firstElementChild ?? null;
       samples.push({
         t: Math.round(performance.now() - t0),
         status: now?.querySelector("[aria-live]")?.textContent ?? "",

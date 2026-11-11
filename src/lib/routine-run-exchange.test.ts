@@ -30,6 +30,13 @@ describe("routineRunToExchange", () => {
     expect(exchange.messages[0]?.from?.botId).toBeUndefined();
   });
 
+  // #3581: Details opens the whole report, never the record's 2,000 characters
+  it("ends with the whole report when the single-run read gave it", () => {
+    const whole = `${"Line. ".repeat(500)}Closing line.`;
+    const exchange = routineRunToExchange({ run: { ...run, output: whole.slice(0, 2_000), report: whole }, routine, bot });
+    expect(exchange.messages.at(-1)?.text).toBe(whole);
+  });
+
   it("keeps failed tool steps in the transcript", () => {
     const messages = routineRunExchangeMessages({
       run, routine, bot,

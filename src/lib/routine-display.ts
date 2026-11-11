@@ -5,12 +5,19 @@ import { activeLocale, t } from "./i18n";
 import { scheduleLabel } from "./schedule-label";
 import { ROUTINE_AUTO_PAUSE_CHOICES } from "../../shared/routine-auto-pause";
 import { readableRoutineProblems } from "../../shared/routine-problems";
-import { routineResultParts } from "../../shared/routine-result";
+import { reportBrief, routineResultParts } from "../../shared/routine-result";
+import type { RoutineRunCardData } from "../../shared/routine-run";
 
 /** A completed run's problems as a person reads them: a teammate's quoted
  * last message as plain text, rows stored before 2026-11-03 included. */
 export function routineRunProblems(run: Pick<RoutineRun, "status" | "problems">): string {
   return run.status === "completed" && run.problems?.trim() ? readableRoutineProblems(run.problems) : "";
+}
+
+/** #3581: a result's one or two lines on its card: the brief the server
+ * wrote, else the same function over the report (a card stored before it). */
+export function routineRunBrief(run: Pick<RoutineRunCardData, "brief" | "summary">): string {
+  return run.brief?.trim() || reportBrief(run.summary, "end");
 }
 
 export function routineRunTime(run: RoutineRun): number {

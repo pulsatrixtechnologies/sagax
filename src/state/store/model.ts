@@ -64,6 +64,9 @@ export function trimRoutineRuns(runs: readonly RoutineRun[]): RoutineRun[] {
 
 export type { MausColor } from "@/lib/mascot";
 export type { RoutineRunCardData } from "../../../shared/routine-run";
+/** #3581: a routine result card's own report (its message's summary) and
+ * when it posted, the run window's fallback when the run's record is gone. */
+export type RoutineRunCardReport = { text: string; at: number };
 
 export type { OptionCardData, SecretRequestCardData } from "./model-cards";
 import type { OptionCardData, SecretRequestCardData } from "./model-cards";
@@ -1304,7 +1307,7 @@ export interface AppState {
   /** #2272 (2026-11-06): a routine run open as its own window over the chat
    * column, shaped like a bot-to-bot exchange (ExchangeSheet, X to close).
    * ChatView renders it (src/components/routines/RoutineRunWindow.tsx). */
-  routineRunWindow: { runId: string; routineId?: string; botId?: string } | null;
+  routineRunWindow: { runId: string; routineId?: string; botId?: string; report?: RoutineRunCardReport } | null;
   /** 2026-11-03: a coding task of the bot panel's Coding list open as a chat
    * over the chat column (src/components/coding/CodingChat.tsx), where a
    * routine run opens. ChatView renders it. */
@@ -1797,7 +1800,9 @@ export type Action =
   | { type: "routineFocused" }
   /** 2026-11-05 (#2098): a run opens in the chat, at its message in the
    * bot's conversation. There is no run view beside the chat any more. */
-  | { type: "openRoutineRunWindow"; runId: string; routineId?: string; botId?: string }
+  /** #3581: `report` is the chat card's own report (its message's summary
+   * and time): the window shows it when the run's record is gone or holds less. */
+  | { type: "openRoutineRunWindow"; runId: string; routineId?: string; botId?: string; report?: RoutineRunCardReport }
   | { type: "closeRoutineRunWindow" }
   | { type: "openCodingChat"; target: import("../../lib/coding-chat").CodingChatTarget }
   | { type: "closeCodingChat" }
@@ -1897,13 +1902,14 @@ interface NotificationRoutingState {
  * the run's window over the bot's chat column, never a thread or a panel. */
 export function openRoutineRun(
   dispatch: (action: Action) => void,
-  run: { runId: string; routineId?: string; botId?: string },
+  run: { runId: string; routineId?: string; botId?: string; report?: RoutineRunCardReport },
 ) {
   dispatch({
     type: "openRoutineRunWindow",
     runId: run.runId,
     ...(run.routineId ? { routineId: run.routineId } : {}),
     ...(run.botId ? { botId: run.botId } : {}),
+    ...(run.report?.text?.trim() ? { report: run.report } : {}),
   });
 }
 

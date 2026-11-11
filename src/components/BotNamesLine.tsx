@@ -97,7 +97,7 @@ function Tail({ children, tone }: { children: ReactNode; tone?: "danger" | "acce
   );
 }
 
-export function NamesLine({ testId, verb, parties, bots, tail, tailTone, mid, data, className, children }: {
+export function NamesLine({ testId, verb, parties, bots, tail, tailTone, mid, data, className, align = "center", children }: {
   /** The line's test id; its names are `<testId>-recipient`, the toggle `<testId>-more`. */
   testId: string;
   verb: ReactNode;
@@ -109,6 +109,10 @@ export function NamesLine({ testId, verb, parties, bots, tail, tailTone, mid, da
   data?: Record<string, string>;
   /** Extra classes of the row (a line inside a card spans its width). */
   className?: string;
+  /** "start": a line inside a card, flush with the card's own lines (its
+   * title, words and items), also when it wraps. The chat's own quiet
+   * lines stay centered. */
+  align?: "center" | "start";
   /** Drawn beside the line: the opened exchange's sheet. */
   children?: ReactNode;
 }) {
@@ -121,8 +125,8 @@ export function NamesLine({ testId, verb, parties, bots, tail, tailTone, mid, da
   // opened: the whole list, then the control that folds it back
   const foldable = expanded && parties.length > MESSAGED_LINE_SHOWN;
   return (
-    <div className={cn(QUIET_LINE_ROW, className)} data-testid={testId} data-mid={mid} {...data}>
-      <div className={cn(QUIET_LINE, "min-w-0 max-w-full", expanded ? "flex-wrap justify-center" : "overflow-hidden whitespace-nowrap")}>
+    <div className={cn(QUIET_LINE_ROW, align === "start" && "justify-start", className)} data-testid={testId} data-mid={mid} {...data}>
+      <div className={cn(QUIET_LINE, "min-w-0 max-w-full", align === "start" && "px-0", expanded ? cn("flex-wrap", align === "start" ? "justify-start" : "justify-center") : "overflow-hidden whitespace-nowrap")}>
         <span className="shrink-0">{verb}</span>
         {parts.map((part, index) => {
           if (part.type === "literal") {

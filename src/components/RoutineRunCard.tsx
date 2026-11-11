@@ -1,17 +1,18 @@
-import { ChevronRight, Loader2, PauseCircle, Play } from "lucide-react";
-import { isValidElement, useEffect, useRef, useState, type ReactNode } from "react";
+import { Check, ChevronRight, CircleSlash, Play, Repeat, TriangleAlert } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { chatBubbleWidth, useChatBubbleWidthClasses } from "@/lib/chat-bubble-width";
 import { cn } from "@/lib/cn";
-import { prefersWideBubble } from "@/lib/rich-blocks";
-import { routineAutoPausedText, routineDateTime, routineResultText, routineRunBlockedLine, routineRunDuration, routineRunError, routineRunProblems } from "@/lib/routine-display";
+import { routineAutoPausedText, routineDateTime, routineResultText, routineRunBlockedLine, routineRunBrief, routineRunDuration, routineRunError, routineRunProblems } from "@/lib/routine-display";
+import { isRoutineResult, routineResultNeedsPerson } from "@/lib/routine-result-stack";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
-import { ChatMarkdown } from "./ChatMarkdown";
+import { ASK_QUIET_BUTTON, AskCard, AskSettledLine } from "./AskCard";
 import { AttentionItems } from "./AttentionCard";
+import { DottedSpinner } from "./bot-settings/CodingSessionRow";
 import { DelegationLine, DelegationList, type DelegationEntry } from "./DelegationList";
 import type { RoutineRunCardData } from "../../shared/routine-run";
-import type { Bot, Message } from "@/state/store";
+import { formatTime, type Bot, type Message } from "@/state/store";
+import { dayLabel, localDay } from "@/lib/transcript-derivations";
 
 const DETAIL_LIMIT = 280;
 
@@ -115,47 +116,7 @@ export function hasRoutineExecutionTask(
   );
 }
 
-/** 2026-11-04 (JC: the grey text rows were ugly and not intuitive): the
- * status reads as a colored pill, as the risk chip on an approval card. */
-const PILL: Record<string, string> = {
-  "text-accent": "border-accent/35 bg-accent/10 text-accent",
-  "text-warning": "border-warning/35 bg-warning/10 text-warning",
-  "text-danger": "border-danger/40 bg-danger/10 text-danger",
-  "text-success": "border-success/35 bg-success/10 text-success",
-  "text-ink-secondary": "border-hairline/60 bg-inset text-ink-secondary",
-};
-
-
 const DONE = { label: "routineRun.card.done" as const, tone: "text-success" };
-
-/** A status as a pill: always mounted (the flash, 2026-11-03), only its
- * text, color and icon change with the status. */
-export function RunStatusPill({ label, tone, live }: { label: string; tone: string; live?: boolean }) {
-  return (
-    <span
-      data-routine-run-status
-      aria-live="polite"
-      className={cn("inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none", PILL[tone] ?? PILL["text-ink-secondary"])}
-    >
-      {live && <Loader2 aria-hidden="true" className="size-3 animate-spin" />}
-      {label}
-    </span>
-  );
-}
-
-const QUIET_LINK = "inline-flex items-center gap-0.5 rounded text-ink-tertiary transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent";
-
-/** The parts of the quiet line, one "·" between each two present parts:
- * an absent part (false, null, undefined, "") never leaves its separator. */
-export function provenanceLine(parts: ReadonlyArray<ReactNode>): ReactNode[] {
-  const present = parts.filter((part) => part !== false && part !== null && part !== undefined && part !== "");
-  // each separator is keyed by the part it leads, so a part that leaves takes
-  // its own separator with it and the others stay the same nodes (flash rule,
-  // 2026-11-03): an index key moved them when the status settled
-  return present.flatMap((part, index) => index === 0
-    ? [part]
-    : [<span key={`sep-${isValidElement(part) && part.key != null ? part.key : index}`} aria-hidden="true" data-routine-run-sep>·</span>, part]);
-}
 
 /** Now, for a running run's elapsed time: a quarter-minute tick is enough
  * for "2 min", and nothing ticks once the run is over. */
@@ -170,22 +131,36 @@ function useNow(active: boolean): number {
   return now;
 }
 
+/** #3581: the form a run takes in the chat. The card (AskCard): a finished
+ * result with something to read, and any result that needs the person. The
+ * row (AskSettledLine): a run in progress, queued, waiting, failed,
+ * cancelled or with nothing to report, and a card a newer result folded. */
+export function routineRunForm(message: Pick<Message, "routineRun" | "attention">, run: RoutineRunCardData, folded: boolean): "card" | "row" {
+  if (folded) return "row";
+  const shown = { ...message, routineRun: run };
+  if (routineResultNeedsPerson(shown)) return "card";
+  if (!isRoutineResult(run)) return "row";
+  return routineRunBrief(run) || run.recovered || run.handedTo?.length ? "card" : "row";
+}
+
 /** One routine run in the conversation it reports to. The run works in the
  * background (2026-10-22) and the server upserts this one message per run,
  * so a running run is one live row patched in place, never a second one.
  *
- * 2026-11-05 (#2081): a finished run that has something to say reads as a
- * normal bot message (same bubble, same markdown, wide when a table is
- * present), with a small provenance line above it: Routine · name · Done
- * pill · time · View run, like "Answer from the parallel task". Cards stay
- * for real states: queued, running, waiting, blocked, failed, missed,
- * nothing to report, done with problems, hand-off chrome. One DOM tree for
- * every state (flash rule, 2026-11-03): only classes change when Running
- * settles to Done. Unified chat: no thread link unless onOpenThread is set. */
+ * #3581 (the owner, 2026-11-10: "why is it not a card"): a result is the
+ * chat's compact card (AskCard): the routine's name, the time, the report's
+ * closing line in at most two lines, "Details" opening the run window with
+ * the whole report as a normal bot message. The report never unfolds inside
+ * the card (the big card refused on 2026-11-05). A result a newer result
+ * follows, and every run with nothing to read, is the one quiet row
+ * (AskSettledLine). The form follows the settled status only, and each form
+ * is one tree whose parts only change classes and text (the flash rule,
+ * 2026-11-03). Unified chat: no thread link unless onOpenThread is set. */
 export function RoutineRunCard({
   message,
   bot,
   botOf,
+  folded = false,
   onOpen,
   onResume,
   onStop,
@@ -195,19 +170,20 @@ export function RoutineRunCard({
   message: Message;
   /** 2026-11-06: the model a teammate works on, grey in its row. */
   modelOf?: (botId: string, threadId: string) => string | undefined;
-  /** The bot that ran the routine: its mascot leads the status card. */
+  /** The bot that ran the routine (the Asked line names it). */
   bot?: Bot;
   /** A teammate a run handed work to, for its name and mascot. */
   botOf?: (botId: string) => Bot | undefined;
-  /** Opens the run's detail (2026-10-29: never a conversation beside the
-   * chat; Continue in the conversation is in the detail). */
+  /** #3581: a newer result follows this one (src/lib/routine-result-stack.ts). */
+  folded?: boolean;
+  /** Opens the run's window (2026-10-29: never a conversation beside the
+   * chat). Absent: no Details. */
   onOpen?: () => void;
   /** 2026-10-26: the failure paused its routine (N in a row): turn it back
    * on in one click, the failure count from zero. Absent: no button. */
   onResume?: () => void;
-  /** 2026-11-05 (#2096, the operator): Stop lives on the running card, beside View
-   * run, as long as the run is live; the run's sheet has no Stop of its own.
-   * Absent: no button. */
+  /** 2026-11-05 (#2096): Stop lives on the run itself, beside Details, as
+   * long as the run is live. Absent: no button. */
   onStop?: () => void;
   /** 2026-11-03: opens the thread a teammate works in (the run handed work
    * to it). Absent (threads hidden, the unified chat): the teammate is
@@ -216,11 +192,9 @@ export function RoutineRunCard({
 }) {
   const run = useSettledRoutineRun(message.routineRun);
   const running = run?.status === "running" && !run.goalStatus;
-  // A live run (queued, running, waiting on someone) keeps its own controls
-  // on the line: View run and Stop (#2096).
+  // A live run (queued, running, waiting on someone) keeps Stop beside Details (#2096).
   const live = Boolean(run && !run.goalStatus && (run.status === "queued" || run.status === "running" || run.status === "waiting"));
   const now = useNow(Boolean(running && run?.startedAt));
-  const bubbleWidths = useChatBubbleWidthClasses();
   // Newer computers can send this message kind to an older or partially
   // hydrated client. Keep the concise text fallback visible instead of
   // leaving an unexplained hole in the conversation.
@@ -233,9 +207,7 @@ export function RoutineRunCard({
     ) : null;
   }
 
-  const problems = routineRunProblems(run);
-  const withProblems = Boolean(problems);
-  const reported = run.status === "completed" && (!run.goalStatus || run.goalStatus === "completed");
+  const withProblems = Boolean(routineRunProblems(run));
   const copy = run.goalStatus
     ? (run.goalStatus === "completed" ? DONE : GOAL_COPY[run.goalStatus])
     : withProblems
@@ -246,171 +218,150 @@ export function RoutineRunCard({
           ? DONE
           : COPY[run.status];
   const statusLabel = t(copy.label);
-  // A report is the bot's words, whole; an error stays one short line.
-  // 2026-11-03 (owner report: the bubble was a lone "{"): a structured
-  // report reads as plain sentences, its whole under "Show details"; a
-  // blocked run says why in one line (the run list's own line).
-  // 2026-11-03 (JC, the flash): the report reads the same while the run is
-  // queued or running again (a retry carries the last report) as once it
-  // completed, so a Running/Completed flip never swaps the bubble's content.
-  const reportStatus = reported || ((run.status === "queued" || run.status === "running") && !run.goalStatus);
-  const readable = reportStatus && run.summary?.trim() ? routineResultText(run.summary) : null;
-  const report = readable ? (readable.structured ? readable.text : run.summary!.trim()) : undefined;
-  const details = readable?.details;
-  const detail = report ? "" : compactDetail(
-    run.status === "blocked"
-      ? routineRunBlockedLine(run)
-      : routineResultText(run.status === "failed" || run.status === "missed"
-        ? (routineRunError(run.error) ?? run.summary)
-        : (run.summary ?? run.attention ?? routineRunError(run.error))).text,
-  );
-  const handedTo = run.handedTo ?? [];
-  // 2026-11-06 (JC, Wren's chat read 7:24, 7:27, 7:30, 7:34, 7:28,
-  // 7:30): the bubble sits where the run posted it, so its time is when it
-  // posted. The trigger's time (a webhook queued behind another run, a late
-  // schedule) stays in the tooltip. Showing scheduledFor put times out of order.
+  const name = run.routineName?.trim() ?? "";
+  // 2026-11-06: the run sits where it posted, so its time is when it posted;
+  // the trigger's time (a late schedule, a queued webhook) is in the tooltip.
   const at = message.at;
   const triggeredAt = run.scheduledFor && Math.abs(run.scheduledFor - at) >= 60_000 ? run.scheduledFor : undefined;
+  // the chat's own stamps: the time alone today, the day before it otherwise
+  const posted = localDay(at) === localDay(Date.now()) ? formatTime(at) : `${dayLabel(at)} ${formatTime(at)}`;
+  const time = <time key="at" dateTime={new Date(at).toISOString()} title={triggeredAt ? routineDateTime(triggeredAt) : undefined}>{posted}</time>;
   const pausedAfter = run.autoPausedAfter && run.autoPausedAfter > 0 ? run.autoPausedAfter : null;
   const elapsed = running && run.startedAt ? routineRunDuration({ startedAt: run.startedAt, status: "running" }, now) : undefined;
-  // #2081 + JC 2026-11-06 (2 h): a routine run in the chat is never a card.
-  // Its result is the bot's own message (the same bubble as a reply), the
-  // run's detail one discreet "Details" away; no title, no badge, no
-  // "Routine · date", no "View run", no red. A pass with nothing for the
-  // person is one muted line. One DOM tree for every state (flash rule).
-  const plain = true;
-  const quiet = !report && !detail;
-  const wide = Boolean(report && prefersWideBubble(report));
-  const lead = running || (live && quiet)
-    ? t("routines.status.running")
-    : quiet || withProblems || !reported
-      ? statusLabel
-      : undefined;
+  const brief = isRoutineResult(run) || run.goalStatus ? routineRunBrief(run) : "";
+  const form = routineRunForm(message, run, folded);
+  const openLabel = t(run.goalStatus === "needs-input" ? "routines.post.reviewFor" : "routines.post.openRunFor", { name: run.routineName });
 
-  return (
+  const details = onOpen && (
+    <button key="open" type="button" data-routine-run-open onClick={onOpen} title={run.routineName} aria-label={openLabel} className={ASK_QUIET_BUTTON}>
+      {t("routineRun.details")}
+      {form === "card" && <ChevronRight aria-hidden="true" size={14} />}
+    </button>
+  );
+  const stop = live && onStop && (
+    <button key="stop" type="button" data-run-stop onClick={onStop} aria-label={t("routines.post.stopRunFor", { name: run.routineName })} className={ASK_QUIET_BUTTON}>
+      {t("routineRun.stop")}
+    </button>
+  );
+  const resume = pausedAfter && onResume && (
+    <button key="resume" type="button" data-routine-resume onClick={onResume} aria-label={t("routines.autoPause.resumeLabel", { name: run.routineName })} className={ASK_QUIET_BUTTON}>
+      <Play aria-hidden="true" size={12} />
+      {t("routines.autoPause.resume")}
+    </button>
+  );
+  const handedTo = run.handedTo ?? [];
+  const asked = handedTo.length > 0 && <DelegationLine entries={handedTo} owner={bot} botOf={botOf} modelOf={modelOf} onOpen={onOpenThread} />;
+  const shell = (body: ReactNode) => (
     <section
       data-routine-run-card
       data-routine-run={run.runId}
       data-routine-run-state={run.goalStatus ?? run.status}
-      data-routine-run-plain={plain ? "" : undefined}
-      data-routine-run-quiet={quiet ? "" : undefined}
+      data-routine-run-form={form}
       aria-label={t("routineRun.ariaLabel", { name: run.routineName, status: statusLabel })}
-      className={cn("relative flex w-full flex-col items-start", quiet && !live && "opacity-70")}
+      className="flex w-full min-w-0 flex-col items-start gap-1"
     >
-      {(report || detail) && (
-        <div
-          data-routine-run-bubble
-          className={cn(
-            "rounded-[18px] bg-bubble-bot px-3 py-[7px] text-[13px] leading-5 text-ink",
-            bubbleWidths[chatBubbleWidth({ terminal: false, wide })],
-          )}
-        >
-          {/* 2026-11-06 (#2186): a routine report is the bot's own message.
-              Widgets (```widget / ```widget-imperfect) draw like chat, never
-              as a raw CodeBlock. An unclosed fence at the end still waits as
-              a pending widget. */}
-          {report ? <ChatMarkdown text={report} /> : <p className="whitespace-pre-wrap">{detail}</p>}
-          {details && <RunResultDetails details={details} />}
-        </div>
-      )}
-      {/* The quiet line under the message: time, what is still going on,
-          and the run's detail behind a discreet link. */}
-      <div
-        data-routine-run-provenance
-        className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-1 pl-1 text-[11px] text-ink-tertiary", (report || detail) && "mt-1")}
-      >
-        {/* 2026-11-06 (pre-0.8.59): the separators are drawn between the
-            parts present, never beside an absent one, so two never meet.
-            Stop carries no square glyph: at this size it read as a second
-            separator ("Details · · Stop"). */}
-        {provenanceLine([
-          lead && (
-            <span
-              key="status"
-              data-routine-run-status
-              className={cn(running && "thinking-shimmer animate-shimmer motion-reduce:animate-none")}
-            >{lead}</span>
-          ),
-          // #3042 (QA 2026-11-08): the routine's name is visible, not only in
-          // a tooltip, so every posted turn says where it came from.
-          run.routineName?.trim() && (
-            <span key="name" data-routine-run-name className="max-w-[16rem] truncate font-medium text-ink-secondary">{run.routineName.trim()}</span>
-          ),
-          <time key="at" dateTime={new Date(at).toISOString()} title={triggeredAt ? routineDateTime(triggeredAt) : undefined}>{routineDateTime(at)}</time>,
-          // #3479: a lasting problem is said once; its row counts the runs
-          // since, and the first success after it says it works again.
-          withProblems && run.repeat && run.repeat.count > 1 && (
-            <span key="repeat" data-routine-run-repeat title={routineDateTime(run.repeat.lastAt)}>
-              {t("routineRun.sameProblem", { since: routineDateTime(run.repeat.since), count: run.repeat.count })}
-            </span>
-          ),
-          !withProblems && run.recovered && (
-            <span key="recovered" data-routine-run-recovered>
-              {t("routineRun.worksAgain", { since: routineDateTime(run.recovered.since) })}
-            </span>
-          ),
-          elapsed && <span key="elapsed" data-routine-run-elapsed className="tabular-nums">{elapsed}</span>,
-          onOpen && (
-            <button
-              key="open"
-              type="button"
-              data-routine-run-open
-              onClick={onOpen}
-              title={run.routineName}
-              aria-label={t(run.goalStatus === "needs-input" ? "routines.post.reviewFor" : "routines.post.openRunFor", { name: run.routineName })}
-              className={QUIET_LINK}
-            >
-              {t("routineRun.details")}
-              <ChevronRight aria-hidden="true" size={11} />
-            </button>
-          ),
-          live && onStop && (
-            <button
-              key="stop"
-              type="button"
-              data-run-stop
-              onClick={onStop}
-              aria-label={t("routines.post.stopRunFor", { name: run.routineName })}
-              className={QUIET_LINK}
-            >
-              {t("routineRun.stop")}
-            </button>
-          ),
-        ])}
-      </div>
-      {/* 2026-11-05: items only the person can do, each with its ticket. */}
-      {reported && message.attention?.items.length ? (
-        <div data-routine-run-attention className="mt-2 w-full pl-0.5">
-          <div className="mb-1.5 text-[12px] font-medium text-ink-secondary">{t("needsYou.title", { bot: message.attention.botName })}</div>
-          <AttentionItems items={message.attention.items} />
-        </div>
-      ) : null}
-      {/* The failure paused its routine: one line and the way back on. */}
-      {pausedAfter && (
-        <div className="mt-1 flex flex-wrap items-center gap-1.5 pl-1 text-[11px] text-ink-tertiary">
-          <span data-routine-auto-paused={pausedAfter} className="inline-flex items-center gap-1">
-            <PauseCircle aria-hidden="true" size={11} />
-            {routineAutoPausedText(pausedAfter)}
-          </span>
-          {onResume && (
-            <>
-              <span aria-hidden="true">·</span>
-              <button
-                type="button"
-                data-routine-resume
-                onClick={onResume}
-                aria-label={t("routines.autoPause.resumeLabel", { name: run.routineName })}
-                className={QUIET_LINK}
-              >
-                <Play aria-hidden="true" size={10} />
-                {t("routines.autoPause.resume")}
-              </button>
-            </>
-          )}
-        </div>
-      )}
-      {/* #3289: the teammates as the quiet Asked line, never a "Teammates" card */}
-      {handedTo.length > 0 && <DelegationLine entries={handedTo} owner={bot} botOf={botOf} modelOf={modelOf} onOpen={onOpenThread} />}
+      {body}
     </section>
+  );
+
+  if (form === "card") {
+    const warn = withProblems || run.status === "blocked" || (run.goalStatus && run.goalStatus !== "completed") || Boolean(message.attention?.items.length && !message.attention.handledAt);
+    // one state line, only when there is something to say: a finished result
+    // without problems has no state word (the reference's active state)
+    const state = run.status === "blocked" && !run.goalStatus
+      ? <span data-routine-run-status className={copy.tone}>{routineRunBlockedLine(run)}</span>
+      : withProblems || (run.goalStatus && run.goalStatus !== "completed")
+        ? (
+          <span data-routine-run-status className={copy.tone}>
+            {statusLabel}
+            {/* #3479: a lasting problem is said once; its card counts the runs since */}
+            {withProblems && run.repeat && run.repeat.count > 1 && (
+              <span data-routine-run-repeat title={routineDateTime(run.repeat.lastAt)}>
+                {" · "}{t("routineRun.sameProblem", { since: routineDateTime(run.repeat.since), count: run.repeat.count })}
+              </span>
+            )}
+          </span>
+        )
+        : run.recovered
+          // #3479: the first success after it says once that it works again
+          ? <span data-routine-run-recovered className="text-success">{t("routineRun.worksAgain", { since: routineDateTime(run.recovered.since) })}</span>
+          : null;
+    const items = message.attention?.items.length ? (
+      <div data-routine-run-attention className="w-full">
+        <div className="mb-1.5 text-[12px] font-medium text-ink-secondary">{t("needsYou.title", { bot: message.attention.botName })}</div>
+        <AttentionItems items={message.attention.items} />
+      </div>
+    ) : null;
+    const footer = details || stop || resume ? <>{resume}{stop}{details}</> : undefined;
+    return shell(
+      <AskCard
+        result
+        icon={live
+          ? <DottedSpinner size={16} />
+          : warn
+            ? <TriangleAlert size={16} className="text-warning" />
+            : <Repeat size={16} />}
+        title={<span data-routine-run-name title={name}>{name}</span>}
+        meta={time}
+        explanation={brief ? <p data-routine-run-brief dir="auto" title={brief} className="line-clamp-2">{brief}</p> : undefined}
+        ariaLabel={t("routineRun.ariaLabel", { name: run.routineName, status: statusLabel })}
+        footer={footer}
+      >
+        {state || items || asked ? (
+          <div className="flex flex-col gap-2">
+            {state && <div className="text-[12px] leading-snug">{state}</div>}
+            {items}
+            {asked}
+          </div>
+        ) : undefined}
+      </AskCard>,
+    );
+  }
+
+  // The row: what the run is doing, or what it said, in one quiet line.
+  const said = (() => {
+    if (running || (live && run.status !== "queued" && run.status !== "waiting")) return t("routines.status.running");
+    if (run.status === "blocked" && !run.goalStatus) return routineRunBlockedLine(run);
+    if (run.status === "failed" || run.status === "missed") {
+      const why = compactDetail(routineResultText(routineRunError(run.error) ?? run.summary).text);
+      return why ? t("routineRun.stateLine", { status: statusLabel, reason: why }) : statusLabel;
+    }
+    if (run.status === "queued" || run.status === "waiting") {
+      const why = compactDetail(routineResultText(run.attention ?? run.summary ?? routineRunError(run.error)).text);
+      return why ? t("routineRun.stateLine", { status: statusLabel, reason: why }) : statusLabel;
+    }
+    if (withProblems) return brief ? t("routineRun.stateLine", { status: statusLabel, reason: brief }) : statusLabel;
+    if (run.recovered && !brief) return t("routineRun.worksAgain", { since: routineDateTime(run.recovered.since) });
+    return brief || statusLabel;
+  })();
+  const parts: ReactNode[] = [
+    name && <span key="name" data-routine-run-name className="font-medium text-ink-secondary">{name}</span>,
+    <span key="said" data-routine-run-status className={cn(running && "thinking-shimmer animate-shimmer motion-reduce:animate-none")}>{said}</span>,
+    pausedAfter && <span key="paused" data-routine-auto-paused={pausedAfter}>{routineAutoPausedText(pausedAfter)}</span>,
+    elapsed ? <span key="elapsed" data-routine-run-elapsed className="tabular-nums">{elapsed}</span> : !live && time,
+  ].filter(Boolean);
+  const icon = run.status === "waiting"
+    ? <TriangleAlert size={13} className="text-warning" />
+    : live
+    ? <DottedSpinner size={13} />
+    : run.status === "cancelled"
+      ? <CircleSlash size={13} className="text-ink-tertiary" />
+      : run.status === "failed" || run.status === "missed" || run.status === "blocked" || withProblems || (run.goalStatus && run.goalStatus !== "completed")
+        ? <TriangleAlert size={13} className="text-warning" />
+        : <Check size={13} className="text-success/80" />;
+  return shell(
+    <>
+      <AskSettledLine
+        icon={icon}
+        ariaLabel={t("routineRun.ariaLabel", { name: run.routineName, status: statusLabel })}
+        action={details || stop || resume ? <span className="ms-auto flex shrink-0 items-center gap-1">{resume}{stop}{details}</span> : undefined}
+      >
+        {/* the line is cut with an ellipsis; its whole text is in the tooltip */}
+        <span title={[name, said, pausedAfter ? routineAutoPausedText(pausedAfter) : "", elapsed ?? (live ? "" : routineDateTime(at))].filter(Boolean).join(" · ")}>
+          {parts.flatMap((part, index) => (index === 0 ? [part] : [<span key={`sep-${index}`} aria-hidden="true">{" · "}</span>, part]))}
+        </span>
+      </AskSettledLine>
+      {asked}
+    </>,
   );
 }

@@ -11645,7 +11645,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Répondez à l'approbation ci-dessus pour continuer"
+            "value": "Réponds à l'approbation ci-dessus pour continuer"
           }
         },
         "pt-BR": {
@@ -11661,7 +11661,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Répondez à l'approbation ci-dessus, ou écrivez autre chose : elle reste en attente"
+            "value": "Réponds à l'approbation ci-dessus, ou écris autre chose : elle reste en attente"
           }
         }
       }
@@ -38194,72 +38194,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Se a execução anterior ainda estiver trabalhando"
-          }
-        }
-      }
-    },
-    "Ignore the question": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignore the question"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignorer la question"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignorar a pergunta"
-          }
-        }
-      }
-    },
-    "Ignore without answering": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignore without answering"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignorer sans répondre"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignorar sem responder"
-          }
-        }
-      }
-    },
-    "Ignore, closes automatically": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignore, closes automatically"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignorer, se ferme automatiquement"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignorar, fecha automaticamente"
           }
         }
       }
@@ -94595,7 +94529,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Attend votre approbation"
+            "value": "Attend ton approbation"
           }
         },
         "pt-BR": {
@@ -116774,6 +116708,182 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ce domaine est arrêté. Plus aucune de ses alertes ne viendra. Tu peux le remettre dans Réglages, Notifications."
+          }
+        }
+      }
+    },
+    "waitingCard.skipAria": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skip this without answering"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passer sans répondre"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pular sem responder"
+          }
+        }
+      }
+    },
+    "waitingCard.skipped": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped, no answer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passé, sans réponse"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pulado, sem resposta"
+          }
+        }
+      }
+    },
+    "waitingCard.expired": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expired, no answer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expiré, sans réponse"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expirado, sem resposta"
+          }
+        }
+      }
+    },
+    "approval.pill.skipped": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pulada"
+          }
+        }
+      }
+    },
+    "approval.status.skipped": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped, nothing was run"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passée, rien n'a été fait"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pulada, nada foi executado"
+          }
+        }
+      }
+    },
+    "pinned.waiting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is waiting for your answer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ attend ta réponse"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ está esperando sua resposta"
+          }
+        }
+      }
+    },
+    "waitingCard.defaulted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No answer from you in time: the default answer was used."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas de réponse de ta part à temps : la réponse par défaut a été utilisée."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sem resposta sua a tempo: a resposta padrão foi usada."
+          }
+        }
+      }
+    },
+    "Your answer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your answer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ta réponse"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sua resposta"
           }
         }
       }

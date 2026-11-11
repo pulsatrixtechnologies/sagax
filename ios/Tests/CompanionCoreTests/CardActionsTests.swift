@@ -150,6 +150,21 @@ final class CardActionsTests: XCTestCase {
         XCTAssertNil(ApprovalDockRules.decision(.alwaysAllowFolder, for: plain).ruleScope)
     }
 
+    /// #3415: the compact card answers on one row: Deny, Always allow
+    /// (on every card that can keep one), Allow once.
+    func testTheCompactCardAnswersOnOneRowWithAlwaysAllow() throws {
+        let rule = try XCTUnwrap(ApprovalDockRules.pendingApprovals([try ask("a", tool: "Bash", extra: #","ownerRule":{"description":"Run a command (git)"}"#)]).first)
+        XCTAssertEqual(ApprovalDockRules.answers(ApprovalDockRules.actions(for: rule, ownerOrAdmin: true, hasBot: true)), [.deny, .alwaysAllowRule, .allowOnce])
+        let folder = try XCTUnwrap(ApprovalDockRules.pendingApprovals([try ask("f", tool: "Read", extra: #","ownerRule":{"description":"Read files (a/b.md)"},"ownerRuleFolder":{"description":"Read files in a"}"#)]).first)
+        XCTAssertEqual(ApprovalDockRules.answers(ApprovalDockRules.actions(for: folder, ownerOrAdmin: true, hasBot: true)), [.deny, .alwaysAllowRule, .alwaysAllowFolder, .allowOnce])
+        let grant = try XCTUnwrap(ApprovalDockRules.pendingApprovals([try ask("g", tool: "message_bot", extra: ##","allowKey":"peer:b2""##)]).first)
+        XCTAssertEqual(ApprovalDockRules.answers(ApprovalDockRules.actions(for: grant, ownerOrAdmin: true, hasBot: true)), [.deny, .alwaysAllowTool, .allowOnce])
+        let session = try XCTUnwrap(ApprovalDockRules.pendingApprovals([try ask("s", tool: "Read", extra: #","allowSession":true"#)]).first)
+        XCTAssertEqual(ApprovalDockRules.answers(ApprovalDockRules.actions(for: session, ownerOrAdmin: true, hasBot: true)), [.deny, .alwaysAllowSession, .allowOnce])
+        let admin = try XCTUnwrap(ApprovalDockRules.pendingApprovals([try ask("x", tool: "Bash", extra: #","adminApproval":true"#)]).first)
+        XCTAssertEqual(ApprovalDockRules.answers(ApprovalDockRules.actions(for: admin, ownerOrAdmin: false, hasBot: true)), [])
+    }
+
     func testActionsForAProviderAskOfferTheSessionAllow() throws {
         let pending = try XCTUnwrap(ApprovalDockRules.pendingApprovals([try ask("a", tool: "Read", extra: #","allowSession":true"#)]).first)
         let actions = ApprovalDockRules.actions(for: pending, ownerOrAdmin: true, hasBot: true)

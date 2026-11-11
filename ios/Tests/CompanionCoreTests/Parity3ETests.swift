@@ -1,30 +1,21 @@
-// Parity 3E: ignore a question, routines paused while away, typed triggers
+// Parity 3E: an old ignored question, routines paused while away, typed triggers
 // in reading. No simulator.
 import Foundation
 import XCTest
 @testable import CompanionCore
 
 final class Parity3ETests: XCTestCase {
-    func testIgnoreIsAnAnswerAndOnlyOnAnOpenQuestion() throws {
+    func testAnOldIgnoreAnswerStillReadsAsClosed() throws {
+        // #3471: nothing sends it any more; a card answered with it folds as skipped
         var card = try question()
-        XCTAssertTrue(QuestionIgnore.canIgnore(card))
-        card.tool = "Bash"
-        XCTAssertFalse(QuestionIgnore.canIgnore(card))
-        card.tool = nil
-        card.answered = "answer"
-        XCTAssertFalse(QuestionIgnore.canIgnore(card))
         XCTAssertFalse(QuestionIgnore.answer.contains("closed this question without answering"))
         XCTAssertTrue(QuestionIgnore.isSkip(QuestionIgnore.answer))
         XCTAssertFalse(QuestionIgnore.isSkip("Ship it"))
-    }
-
-    func testIgnoreCountsDownOnlyWhileTheCardWillCloseItself() {
-        let now = Date(timeIntervalSince1970: 1_000)
-        XCTAssertEqual(QuestionIgnore.face(expiresAt: nil, now: now), .ignore)
-        XCTAssertEqual(QuestionIgnore.face(expiresAt: 1_000_000, now: now), .ignore, "already past")
-        XCTAssertEqual(QuestionIgnore.face(expiresAt: 1_090_000, now: now), .closesAutomatically(remaining: 90))
-        XCTAssertEqual(QuestionIgnore.clock(90), "1:30")
-        XCTAssertEqual(QuestionIgnore.clock(3_660), "1:01:00")
+        card.answered = "answer"
+        card.answeredText = QuestionIgnore.answer
+        XCTAssertEqual(WaitingCardSkip.fold(card), .skipped)
+        card.answeredText = "Ship it"
+        XCTAssertNil(WaitingCardSkip.fold(card))
     }
 
     func testAPausedCreateReadsAsPaused() throws {

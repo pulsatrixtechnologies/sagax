@@ -167,10 +167,13 @@ public enum ApprovalHeldNote {
 /// The status pill of a settled tool ask (`approvalPill`).
 public enum ApprovalPill: Hashable, Sendable {
     case expired, undone, alwaysAllowed, alwaysDenied, allowedOnce, declined
+    /// #3471: skipped without an answer, never a refusal.
+    case skipped
 
     public enum Tone: Hashable, Sendable { case success, danger, neutral }
 
     public static func of(_ card: OptionCard) -> ApprovalPill? {
+        if card.skipped == true { return .skipped }
         if card.expired == true { return .expired }
         guard let answered = card.answered else { return nil }
         if card.undone == true { return .undone }
@@ -185,7 +188,7 @@ public enum ApprovalPill: Hashable, Sendable {
         switch self {
         case .alwaysAllowed, .allowedOnce: .success
         case .alwaysDenied, .declined: .danger
-        case .expired, .undone: .neutral
+        case .expired, .undone, .skipped: .neutral
         }
     }
 }
@@ -204,9 +207,10 @@ public enum ApprovalReceiptRules {
         return card.dismissed != true && card.answered != "unavailable"
     }
 
-    /// A settled tool ask (not a proposal) draws as the one-line receipt.
+    /// A settled approval draws as the one-line receipt (#3415: an answered
+    /// card folds into one row, a proposal too).
     public static func isReceipt(_ card: OptionCard) -> Bool {
-        card.isPermission && !card.isPending && !ApprovalDockRules.isProposal(card) && staysInChat(card)
+        card.isPermission && !card.isPending && staysInChat(card)
     }
 
     /// The server's "wants to" phrase when it is in the reader's language

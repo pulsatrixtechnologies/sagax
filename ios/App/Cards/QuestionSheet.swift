@@ -42,6 +42,9 @@ struct QuestionSheet<Content: View>: View {
     let title: String
     var meta: String? = nil
     var onDismiss: (() -> Void)? = nil
+    /// #3471: the × of a waiting card skips it ("Skip this without answering").
+    var dismissLabel: String? = nil
+    var dismissId: String? = nil
     @ViewBuilder var content: () -> Content
 
     var body: some View {
@@ -72,7 +75,8 @@ struct QuestionSheet<Content: View>: View {
                     .buttonStyle(.plain)
                     .padding(.top, -5)
                     .padding(.trailing, -6)
-                    .accessibilityLabel(Text("Dismiss"))
+                    .accessibilityLabel(dismissLabel.map { Text(verbatim: $0) } ?? Text("Dismiss"))
+                    .accessibilityIdentifier(dismissId ?? "question-dismiss")
                 }
             }
             content()
@@ -260,49 +264,6 @@ struct QuestionSheetNote: View {
                 .font(.system(size: 11, weight: .semibold))
         }
         .foregroundStyle(colors.inkSecondary)
-    }
-}
-
-/// "Ignore the question". When the card carries `expiresAt`, the label
-/// says it closes on its own and shows the time left.
-struct QuestionIgnoreControl: View {
-    let colors: QuestionSheetColors
-    let expiresAt: Double?
-    let disabled: Bool
-    let action: () -> Void
-
-    var body: some View {
-        if expiresAt == nil {
-            control(.ignore)
-        } else {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                control(QuestionIgnore.face(expiresAt: expiresAt, now: context.date))
-            }
-        }
-    }
-
-    private func control(_ face: QuestionIgnore.Face) -> some View {
-        Button(action: action) {
-            Text(Self.words(face))
-                .font(colors.font(13, .medium))
-                .foregroundStyle(colors.inkSecondary)
-                .padding(.horizontal, 12)
-                .frame(minHeight: 28)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(disabled)
-        .opacity(disabled ? 0.4 : 1)
-        .accessibilityLabel(Text("Ignore without answering"))
-    }
-
-    private static func words(_ face: QuestionIgnore.Face) -> String {
-        switch face {
-        case .ignore:
-            String(localized: "Ignore the question")
-        case let .closesAutomatically(remaining):
-            String(localized: "Ignore, closes automatically") + " · " + QuestionIgnore.clock(remaining)
-        }
     }
 }
 

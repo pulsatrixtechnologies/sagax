@@ -98,8 +98,13 @@ and adds:
   on: `id`, `at`, `role`, `kind`, `sealed: 1`, `hasText`, `from.name` and
   `from.botId`, `peerAsk.name`, `relayed`, `sendId`, `webhookPost`,
   `goalRun.status`, the open-card flags (`card.requestType`, `requestId`,
-  `answered`, `dismissed`, `expired`) and `refs` (stored attachment names
-  the message points at, for `threadsReferencing`).
+  `answered`, `dismissed`, `expired`, `proactiveProposal`), the open flags
+  of a waiting row (`inputRequest.reminder`, `answered`, `expired` and
+  `attention.handledAt`, so the age expiry finds the open ones by a query),
+  the projection's version `v` and `refs` (stored attachment names the
+  message points at, for `threadsReferencing`). A sealed row without `v`
+  predates the waiting flags: its projection is rewritten once, a small
+  batch at a time, by `reprojectSealedRows`.
 
 A plain row has `sealed` and `key_id` empty: a database never encrypted
 reads exactly as before, and every read accepts both. Receipts

@@ -30,6 +30,8 @@ function fakeHost(rows: Record<string, Row[]>) {
       },
       appendMessage: (threadId: string, message: Record<string, unknown>) => { appended.push([threadId, message]); return { id: "n1" }; },
     },
+    // #3517: the store's query on its open waiting rows (a superset)
+    openWaitingRowCandidates: () => Object.entries(rows).flatMap(([threadId, list]) => list.map((message) => ({ threadId, message }))),
     runningTurnEngines: new Map(),
     registry: new Map([["i1", { adapter: { respondToRequest: respond } }]]),
     askMessageByRequest: new Map(),

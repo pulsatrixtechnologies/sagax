@@ -3,14 +3,20 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { approvalModeFor } from "../shared/approval-mode.ts";
+import { flushOwnedFilesSync } from "./atomic.ts";
 import { DATA_DIR } from "./config.ts";
 import type { ModelSelection } from "./contracts.ts";
 import { isProjectEmoji, Store, type BotRecord, type GroupRecord, type TaskPatch } from "./store.ts";
 import { ensureTaskWorkspace } from "./workspace/workspace.ts";
 
 const selection = (): ModelSelection => ({ instanceId: "claude", model: "default" });
-const savedBots = (): BotRecord[] => JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));
-const savedGroups = (): GroupRecord[] => JSON.parse(readFileSync(join(DATA_DIR, "groups.json"), "utf8"));
+// What the store saved, its waiting bookkeeping saves included (server/atomic.ts).
+const readSaved = <T>(name: string): T => {
+  flushOwnedFilesSync();
+  return JSON.parse(readFileSync(join(DATA_DIR, name), "utf8"));
+};
+const savedBots = (): BotRecord[] => readSaved("bots.json");
+const savedGroups = (): GroupRecord[] => readSaved("groups.json");
 
 describe("independent bot task state", () => {
   // The shared Vitest setup gives this file its own disposable home.
@@ -639,6 +645,7 @@ describe("independent bot task state", () => {
     const store = new Store(selection);
     const bot = store.createBot({}, { seedMessages: false });
     const task = store.createTask(bot.id, "Pinned later")!;
+    flushOwnedFilesSync();
     const before = readFileSync(join(DATA_DIR, "bots.json"));
     const message = store.appendMessage(task.threadId, { role: "user", kind: "text", text: "still here" });
     expect(store.taskByThread(bot.id, task.threadId)?.updatedAt).toBe(message.at);

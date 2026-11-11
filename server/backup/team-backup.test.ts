@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAgentCard } from "../widgets/chat-widgets.ts";
 import { DATA_DIR } from "../config.ts";
 import { Store, UNTITLED_TASK } from "../store.ts";
+import { flushOwnedFilesSync } from "../atomic.ts";
 import { RoutineManager } from "../routines/routines.ts";
 import { createTeamBackup, importTeamBackup } from "./team-backup.ts";
 import { parseTeamBackup } from "../../shared/team-backup.ts";
@@ -242,6 +243,7 @@ describe("additive portable team backups", () => {
   it.each(["unknown-version", "duplicate-bot", "cycle", "dangling-room", "dangling-task", "duplicate-chief", "oversized-soul"])("rejects %s before any writes", (corruption) => {
     const { store, routines } = fixture();
     const backup = createTeamBackup(store, routines.listRoutines(), "My team");
+    flushOwnedFilesSync();
     const before = readFileSync(join(DATA_DIR, "bots.json"), "utf8");
     const groupsBefore = readFileSync(join(DATA_DIR, "groups.json"), "utf8");
     const source = backup.bots.find((bot) => bot.name === "Mira")!;

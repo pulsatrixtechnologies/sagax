@@ -6,6 +6,7 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { flushOwnedFilesSync } from "./atomic.ts";
 import { DATA_DIR } from "./config.ts";
 import type { ModelSelection } from "./contracts.ts";
 import { Store, type GroupRecord } from "./store.ts";
@@ -14,7 +15,11 @@ const selection = (): ModelSelection => ({ instanceId: "claude", model: "default
 const ALICE = "pr_00000000-0000-4000-8000-00000000000a";
 const BOB = "pr_00000000-0000-4000-8000-00000000000b";
 const GROUPS = () => join(DATA_DIR, "groups.json");
-const savedGroups = (): GroupRecord[] => JSON.parse(readFileSync(GROUPS(), "utf8"));
+// What the store saved, its waiting bookkeeping saves included (server/atomic.ts).
+const savedGroups = (): GroupRecord[] => {
+  flushOwnedFilesSync();
+  return JSON.parse(readFileSync(GROUPS(), "utf8"));
+};
 
 function newPersonConversation(store: Store): GroupRecord {
   return store.createGroup("Alice, Bob", [], false, undefined, { defaultResponder: { kind: "mentions" } }, [ALICE, BOB], { peopleDm: true, createdBy: ALICE });

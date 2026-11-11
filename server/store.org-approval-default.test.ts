@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { DATA_DIR } from "./config.ts";
 import type { ModelSelection } from "./contracts.ts";
 import { Store } from "./store.ts";
+import { flushOwnedFilesSync } from "./atomic.ts";
 
 const selection = (): ModelSelection => ({ instanceId: "claude", model: "default" });
 const identity = (selection: ModelSelection) => selection;
@@ -41,6 +42,7 @@ describe("the level a new bot starts on", () => {
     expect(auto).toMatchObject({ approvalMode: "auto", autoApprove: true });
     // the earlier bot does not move
     expect(store.bot(asked.id)).toMatchObject({ approvalMode: "ask" });
+    flushOwnedFilesSync();
     const saved = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8")) as Array<{ id: string; approvalMode: string }>;
     expect(saved.find((bot) => bot.id === asked.id)?.approvalMode).toBe("ask");
   });

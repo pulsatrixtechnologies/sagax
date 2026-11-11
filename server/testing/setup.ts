@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach } from "vitest";
 
+import { flushOwnedFilesSync } from "../atomic.ts";
 import { removeTempDir } from "./cleanup.ts";
 // Old names in the developer's shell (OMB_DATA_DIR) become SAGAX_* first, so
 // the deletes below catch them too.
@@ -51,6 +52,9 @@ const { closeMessageDb } = !("window" in globalThis)
   ? await import("../messages/message-db.ts")
   : { closeMessageDb: () => {} };
 afterEach(closeMessageDb);
+// A test's deferred saves (server/atomic.ts) land before the next test resets
+// the data directory, never inside the next test's fresh one.
+afterEach(flushOwnedFilesSync);
 
 // Windows holds a directory that is a live process's cwd, and a just-killed
 // CLI lets go a beat after the kill call returns — see removeTempDir.

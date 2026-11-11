@@ -12,6 +12,7 @@ import { DATA_DIR } from "../config.ts";
 import type { ModelSelection } from "../contracts.ts";
 import * as messageDb from "../messages/message-db.ts";
 import { Store, type Message } from "../store.ts";
+import { flushOwnedFilesSync } from "../atomic.ts";
 import { createIsApprovalCardMessage } from "./isApprovalCardMessage.ts";
 import { createPendingApprovalCards } from "./pendingApprovalCards.ts";
 import { createPendingInboxCards } from "./pendingInboxCards.ts";
@@ -92,6 +93,7 @@ function fixture(opts: { bots: number; tasks: number; rooms: number; roomTasks: 
   }
   // each bot's conversations, saved at once and with no stored row yet
   const botsFile = join(DATA_DIR, "bots.json");
+  flushOwnedFilesSync();
   const saved = JSON.parse(readFileSync(botsFile, "utf8")) as Array<{ tasks?: Array<{ threadId: string; title?: string }> }>;
   for (const bot of saved) {
     const template = bot.tasks?.find((task) => task.title === "Topic");

@@ -18,6 +18,7 @@ import { DATA_DIR } from "../config.ts";
 import type { ModelSelection } from "../contracts.ts";
 import * as messageDb from "../messages/message-db.ts";
 import { Store, type Message } from "../store.ts";
+import { flushOwnedFilesSync } from "../atomic.ts";
 import { createInboxPending, todayDepsFor } from "./inboxPending.ts";
 import { createPendingInboxCards } from "./pendingInboxCards.ts";
 
@@ -80,6 +81,7 @@ function fixture(bots: number, topics: number, perConversation: number): Fixture
   for (let b = 0; b < bots; b++) store.createTask(store.patchBot(store.createBot().id, { name: `Bot ${b}` })!.id, "Topic", false);
   // each bot's conversations, saved at once (one by one is a save each)
   const botsFile = join(DATA_DIR, "bots.json");
+  flushOwnedFilesSync();
   const saved = JSON.parse(readFileSync(botsFile, "utf8")) as Array<{ id: string; tasks?: Array<{ threadId: string; title?: string }> }>;
   for (const bot of saved) {
     const template = bot.tasks?.[0];

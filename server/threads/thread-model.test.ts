@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { DATA_DIR } from "../config.ts";
 import type { ModelSelection, ProviderSnapshot } from "../contracts.ts";
 import { Store, toWireTask, type BotRecord, type TaskRecord } from "../store.ts";
+import { flushOwnedFilesSync } from "../atomic.ts";
 import { threadModelFallback, type ThreadEngine } from "./thread-model.ts";
 import type { TeamSetupRequest } from "../../shared/team-setup.ts";
 
@@ -132,6 +133,7 @@ describe("threads follow their bot's model", () => {
     expect(ownModel(store, "legacy", "copy")).toBeUndefined();
     expect(ownModel(store, "legacy", "different")).toEqual(codex);
     expect(ownModel(store, "legacy", "other-effort")).toEqual({ ...sonnet, effort: "high" });
+    flushOwnedFilesSync();
     const saved = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"))[0].tasks as TaskRecord[];
     expect(saved.map((entry) => entry.modelSelection)).toEqual([undefined, codex, { ...sonnet, effort: "high" }]);
 

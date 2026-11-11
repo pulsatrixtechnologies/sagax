@@ -674,13 +674,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/turns/turn-continuation.test.ts",
-      "test": "the harness's reportsToRequester > owes a delegation's step cap to a requester that is woken or polls, not to a room's transcript",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/direct-coordination.e2e.test.ts",
       "test": "coordinates a lead and its specialist from ordinary chat, returns to Clive, and leaves unrelated tasks untouched",
       "owner": "unassigned",

@@ -1,5 +1,6 @@
-// Whole-file saves of bots.json and routines.json: fewer writes, and at every point the server yields to the event loop
-// (where a crash or an exit can land) the files hold what one write per change would have left.
+// Whole-file saves of bots.json and routines.json: fewer writes. routines.json holds, at every point the server yields to
+// the event loop (where a crash or an exit can land), what one write per change would have left; bots.json's bookkeeping
+// lands in one deferred write off the event loop (#3663), and a change of access at once, on the loop.
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,6 +13,7 @@ const fs = await import("node:fs");
 const { DATA_DIR } = await import("./config.ts");
 const { batchSaves } = await import("./save-batch.ts");
 const { Store } = await import("./store.ts");
+const { flushOwnedFiles } = await import("./atomic.ts");
 const { RoutineManager } = await import("./routines/routines.ts");
 type RuntimeEvent = import("./contracts.ts").RuntimeEvent;
 
@@ -26,36 +28,38 @@ describe("bots.json saves", () => {
     vi.mocked(fs.renameSync).mockClear();
   });
 
-  it("are compact, and skip an unchanged save without reading the file back", () => {
+  it("are compact, and skip an unchanged save without reading the file back", async () => {
     const store = new Store(selection);
     const bot = store.createBot({ name: "Pepper" });
     expect(bots()).not.toContain("\n");
     store.patchTask(bot.id, bot.threadId, { lastContextModel: "claude:claude-sonnet-5" });
+    await flushOwnedFiles();
     const writes = writesOf("bots.json");
     const before = reads("bots.json");
     store.patchTask(bot.id, bot.threadId, { lastContextModel: "claude:claude-sonnet-5" });
     store.setResumeCursor(bot.id, "claude", "session-1", bot.threadId);
     store.setResumeCursor(bot.id, "claude", "session-1", bot.threadId);
+    await flushOwnedFiles();
     expect(writesOf("bots.json")).toBe(writes + 1);
     expect(reads("bots.json")).toBe(before);
   });
 
-  it("land once per batch, and the file holds every change when the batch returns", () => {
+  it("land once for a turn's many changes, after the changes and off the event loop", async () => {
     const store = new Store(selection);
     const bot = store.createBot({ name: "Pepper" });
     const writes = writesOf("bots.json");
-    batchSaves(() => {
-      store.titleTaskFromFirstMessage(bot.id, "Plan the offsite", bot.threadId);
-      store.setTaskAskedAt(bot.id, bot.threadId, 1_000);
-      store.patchTask(bot.id, bot.threadId, { unread: false });
-      store.setResumeCursor(bot.id, "claude", "session-1", bot.threadId);
-      store.markTaskDispatched(bot.id, bot.threadId, "claude");
-      store.addTaskUsage(bot.id, bot.threadId, { input: 10, output: 5, costUsd: 0.01 });
-      store.patchTask(bot.id, bot.threadId, { unread: true });
-      expect(writesOf("bots.json")).toBe(writes);
-    });
+    const syncWrites = vi.mocked(fs.writeFileSync).mock.calls.length;
+    store.titleTaskFromFirstMessage(bot.id, "Plan the offsite", bot.threadId);
+    store.setTaskAskedAt(bot.id, bot.threadId, 1_000);
+    store.patchTask(bot.id, bot.threadId, { unread: false });
+    store.setResumeCursor(bot.id, "claude", "session-1", bot.threadId);
+    store.markTaskDispatched(bot.id, bot.threadId, "claude");
+    store.addTaskUsage(bot.id, bot.threadId, { input: 10, output: 5, costUsd: 0.01 });
+    store.patchTask(bot.id, bot.threadId, { unread: true });
+    expect(writesOf("bots.json")).toBe(writes);
+    await flushOwnedFiles();
     expect(writesOf("bots.json")).toBe(writes + 1);
-    // A crash here, with no exit handler run, starts from exactly this.
+    expect(vi.mocked(fs.writeFileSync).mock.calls.length).toBe(syncWrites);
     const task = new Store(selection).taskByThread(bot.id, bot.threadId)!;
     expect(task).toMatchObject({ title: "Plan the offsite", askedAt: 1_000, unread: true, lastInstanceId: "claude", resumeCursors: { claude: "session-1" } });
     expect(task.usage).toMatchObject({ input: 10, output: 5, turns: 1 });
@@ -70,16 +74,18 @@ describe("bots.json saves", () => {
     });
   });
 
-  it("keep a change whose batched save failed, and the next save writes it", () => {
+  it("keep a change whose deferred save failed, and the next save writes it", async () => {
     const store = new Store(selection);
     const bot = store.createBot({ name: "Pepper" });
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(fs.renameSync).mockImplementationOnce(() => { throw Object.assign(new Error("disk full"), { code: "ENOSPC" }); });
-    batchSaves(() => store.setTaskAskedAt(bot.id, bot.threadId, 2_000));
+    store.setTaskAskedAt(bot.id, bot.threadId, 2_000);
+    await flushOwnedFiles();
     expect(error).toHaveBeenCalled();
     error.mockRestore();
-    expect(new Store(selection).taskByThread(bot.id, bot.threadId)?.askedAt).toBeUndefined();
+    expect((JSON.parse(bots()) as Array<{ tasks?: Array<{ askedAt?: number }> }>)[0]?.tasks?.[0]?.askedAt).toBeUndefined();
     store.setTaskAskedAt(bot.id, bot.threadId, 3_000);
+    await flushOwnedFiles();
     expect(new Store(selection).taskByThread(bot.id, bot.threadId)?.askedAt).toBe(3_000);
   });
 });

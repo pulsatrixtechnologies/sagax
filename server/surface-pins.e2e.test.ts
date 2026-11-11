@@ -71,6 +71,7 @@ describe("surface pin provenance against the real server", () => {
       body.bots.find((bot: any) => bot.id === botId)?.tasks.find((task: any) => task.threadId === threadId));
   const busy = (botId: string, threadId: string) => until(() => threadState(botId, threadId), Boolean);
   const idle = (botId: string, threadId: string) => until(() => threadState(botId, threadId), task => !task?.busy);
+  // A thread's pin fields are bookkeeping: written off the event loop, within a second (#3663).
   const savedTask = (botId: string, threadId: string) =>
     (JSON.parse(readFileSync(join(data, "bots.json"), "utf8")) as any[])
       .find((bot: any) => bot.id === botId)?.tasks.find((task: any) => task.threadId === threadId);
@@ -150,14 +151,13 @@ describe("surface pin provenance against the real server", () => {
     const { bot } = await apiOk("POST", "/api/bots", { name: "Pin Bot" });
     const { task } = await apiOk("POST", `/api/bots/${bot.id}/tasks`, {});
     await apiOk("PATCH", `/api/bots/${bot.id}/tasks/${task.threadId}`, { surface: "local" });
-    expect(savedTask(bot.id, task.threadId)).toMatchObject({ surface: "local", surfaceSource: "user" });
+    await expect.poll(() => savedTask(bot.id, task.threadId), { timeout: 5_000 }).toMatchObject({ surface: "local", surfaceSource: "user" });
     const personPin = await threadState(bot.id, task.threadId);
     expect(personPin).toMatchObject({ surface: "local" });
     expect(personPin).not.toHaveProperty("surfaceAuto");
     await apiOk("PATCH", `/api/bots/${bot.id}/tasks/${task.threadId}`, { surface: null });
-    const cleared = savedTask(bot.id, task.threadId)!;
-    expect(cleared.surface).toBeUndefined();
-    expect(cleared.surfaceSource).toBeUndefined();
+    await expect.poll(() => savedTask(bot.id, task.threadId)?.surface, { timeout: 5_000 }).toBeUndefined();
+    expect(savedTask(bot.id, task.threadId)?.surfaceSource).toBeUndefined();
     await apiOk("DELETE", `/api/bots/${bot.id}`);
     await stop();
   });
@@ -174,7 +174,7 @@ describe("surface pin provenance against the real server", () => {
     expect(await gate(mountedComputer(await dump()))).toEqual({ held: false, helpOpen: false });
     const refused = await api("PATCH", `/api/bots/${bot.id}/tasks/${task.threadId}`, { surface: "vm" });
     expect(refused.status).toBe(409);
-    expect(savedTask(bot.id, task.threadId)).not.toHaveProperty("surface");
+    await expect.poll(() => savedTask(bot.id, task.threadId), { timeout: 5_000 }).not.toHaveProperty("surface");
     writeFileSync(finishFile, "finish");
     await idle(bot.id, task.threadId);
     await apiOk("DELETE", `/api/bots/${bot.id}`);
@@ -198,12 +198,12 @@ describe("surface pin provenance against the real server", () => {
     });
     await start(); // Auto remembers no place: both auto pins go, once.
     expect(output.match(/auto-pinned thread/g)).toHaveLength(1);
-    expect(savedTask(bot.id, autoMismatch.threadId)?.surface).toBeUndefined();
-    expect(savedTask(bot.id, autoMatch.threadId)?.surface).toBeUndefined();
-    expect(savedTask(bot.id, personMismatch.threadId)).toMatchObject({ surface: "local", surfaceSource: "user" });
+    await expect.poll(() => savedTask(bot.id, autoMismatch.threadId)?.surface, { timeout: 5_000 }).toBeUndefined();
+    await expect.poll(() => savedTask(bot.id, autoMatch.threadId)?.surface, { timeout: 5_000 }).toBeUndefined();
+    await expect.poll(() => savedTask(bot.id, personMismatch.threadId), { timeout: 5_000 }).toMatchObject({ surface: "local", surfaceSource: "user" });
     await apiOk("PATCH", `/api/bots/${bot.id}`, { computer: "vm" });
     await apiOk("PATCH", `/api/bots/${bot.id}`, { computer: null });
-    expect(savedTask(bot.id, personMismatch.threadId)).toMatchObject({ surface: "local", surfaceSource: "user" });
+    await expect.poll(() => savedTask(bot.id, personMismatch.threadId), { timeout: 5_000 }).toMatchObject({ surface: "local", surfaceSource: "user" });
     await stop();
     await start();
     expect(output).not.toContain("auto-pinned thread");
@@ -225,16 +225,16 @@ describe("surface pin provenance against the real server", () => {
     });
     await start();
     expect(output).not.toContain("auto-pinned thread");
-    expect(savedTask(bot.id, task.threadId)?.surface).toBe("local");
-    expect(savedTask(bot.id, task.threadId)?.surfaceSource).toBeUndefined();
+    await expect.poll(() => savedTask(bot.id, task.threadId)?.surface, { timeout: 5_000 }).toBe("local");
+    await expect.poll(() => savedTask(bot.id, task.threadId)?.surfaceSource, { timeout: 5_000 }).toBeUndefined();
     const place = await apiOk("GET", `/api/bots/${bot.id}/computer?threadId=${task.threadId}`);
     expect(place.surface).toBe("local");
     await apiOk("PATCH", `/api/bots/${bot.id}`, { computer: "browser" });
-    expect(savedTask(bot.id, task.threadId)?.surface).toBe("local");
+    await expect.poll(() => savedTask(bot.id, task.threadId)?.surface, { timeout: 5_000 }).toBe("local");
     await stop();
     await start();
     expect(output).not.toContain("auto-pinned thread");
-    expect(savedTask(bot.id, task.threadId)?.surface).toBe("local");
+    await expect.poll(() => savedTask(bot.id, task.threadId)?.surface, { timeout: 5_000 }).toBe("local");
     await apiOk("DELETE", `/api/bots/${bot.id}`);
     await stop();
   });
@@ -262,7 +262,7 @@ describe("surface pin provenance against the real server", () => {
     expect(sent.systemPrompt).not.toContain("You can act on the user's computer");
     writeFileSync(finishFile, "finish");
     await idle(bot.id, task.threadId);
-    expect(savedTask(bot.id, task.threadId)?.surface).toBeUndefined();
+    await expect.poll(() => savedTask(bot.id, task.threadId)?.surface, { timeout: 5_000 }).toBeUndefined();
     await apiOk("DELETE", `/api/bots/${bot.id}`);
     await stop();
   });
@@ -276,18 +276,18 @@ describe("surface pin provenance against the real server", () => {
     expect(mountedComputer(await dump()).args.some((arg: string) => arg.includes("container-mcp"))).toBe(true);
     // The first screen tools/call takes the seat, and the conversation
     // stays on Auto: nothing is recorded, before or after.
-    expect(savedTask(bot.id, task.threadId)).not.toHaveProperty("surface");
+    await expect.poll(() => savedTask(bot.id, task.threadId), { timeout: 5_000 }).not.toHaveProperty("surface");
     expect(await gate(mountedComputer(await dump()))).toEqual({ held: false, helpOpen: false });
     writeFileSync(finishFile, "finish");
     await idle(bot.id, task.threadId);
-    expect(savedTask(bot.id, task.threadId)).not.toHaveProperty("surface");
-    expect(savedTask(bot.id, task.threadId)).not.toHaveProperty("surfaceSource");
+    await expect.poll(() => savedTask(bot.id, task.threadId), { timeout: 5_000 }).not.toHaveProperty("surface");
+    await expect.poll(() => savedTask(bot.id, task.threadId), { timeout: 5_000 }).not.toHaveProperty("surfaceSource");
     const thread = await threadState(bot.id, task.threadId);
     expect(thread).not.toHaveProperty("surface");
     expect(thread).not.toHaveProperty("surfaceAuto");
     await stop();
     await start();
-    expect(savedTask(bot.id, task.threadId)).not.toHaveProperty("surface");
+    await expect.poll(() => savedTask(bot.id, task.threadId), { timeout: 5_000 }).not.toHaveProperty("surface");
     await apiOk("PATCH", `/api/bots/${bot.id}`, { computer: "off" });
     resetTurn();
     await apiOk("POST", `/api/bots/${bot.id}/messages`, { text: "Continue without a computer.", threadId: task.threadId });
@@ -307,7 +307,7 @@ describe("surface pin provenance against the real server", () => {
     editSavedBot(bot.id, saved => { saved.computer = "vm"; });
     await start();
     expect(output).not.toContain("auto-pinned thread");
-    expect(savedTask(bot.id, task.threadId)).toMatchObject({ surface: "local", surfaceSource: "user" });
+    await expect.poll(() => savedTask(bot.id, task.threadId), { timeout: 5_000 }).toMatchObject({ surface: "local", surfaceSource: "user" });
     const place = await apiOk("GET", `/api/bots/${bot.id}/computer?threadId=${task.threadId}`);
     expect(place.surface).toBe("local");
     const record = {
@@ -368,9 +368,8 @@ describe("surface pin provenance against the real server", () => {
     await until(() => lastRow(), row => row.startsWith("error:"));
     await idle(bot.id, task.threadId);
     expect(await lastRow()).toBe("error: Cloud computers can't start right now. It isn't anything you did. This conversation is back on Auto. Send your message again.");
-    const cleared = savedTask(bot.id, task.threadId)!;
-    expect(cleared.surface).toBeUndefined();
-    expect(cleared.surfaceSource).toBeUndefined();
+    await expect.poll(() => savedTask(bot.id, task.threadId)?.surface, { timeout: 5_000 }).toBeUndefined();
+    expect(savedTask(bot.id, task.threadId)?.surfaceSource).toBeUndefined();
     // The next message runs on Auto, with the Boat still down.
     resetTurn();
     await apiOk("POST", `/api/bots/${bot.id}/messages`, { text: "Carry on where you can.", threadId: task.threadId });
@@ -387,7 +386,7 @@ describe("surface pin provenance against the real server", () => {
     await until(() => lastRow(), row => row.startsWith("error:"));
     await idle(bot.id, task.threadId);
     expect(await lastRow()).toBe("error: Cloud computers can't start right now. It isn't anything you did. Clear this conversation's place in the composer to continue.");
-    expect(savedTask(bot.id, task.threadId)).toMatchObject({ surface: "cloud", surfaceSource: "user" });
+    await expect.poll(() => savedTask(bot.id, task.threadId), { timeout: 5_000 }).toMatchObject({ surface: "cloud", surfaceSource: "user" });
     boatDown = false;
     await apiOk("DELETE", `/api/bots/${bot.id}`);
     await stop();
@@ -422,7 +421,7 @@ describe("surface pin provenance against the real server", () => {
     writeFileSync(finishFile, "finish");
     await until(() => lastRow(), row => row.startsWith("error:"));
     await idle(bot.id, task.threadId);
-    expect(savedTask(bot.id, task.threadId)).not.toHaveProperty("askedAt");
+    await expect.poll(() => savedTask(bot.id, task.threadId), { timeout: 5_000 }).not.toHaveProperty("askedAt");
     boatDown = false;
     await apiOk("DELETE", `/api/bots/${bot.id}`);
     await stop();

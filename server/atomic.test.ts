@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -14,6 +14,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -24,7 +25,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("node:fs", { spy: true });
 vi.resetModules();
 const spied = await import("node:fs");
-const { OwnedFile, renameWithRetry, writeFileAtomic, writeFileAtomicIfChanged } = await import("./atomic.ts");
+const { OwnedFile, flushOwnedFiles, flushOwnedFilesSync, renameWithRetry, writeFileAtomic, writeFileAtomicIfChanged } = await import("./atomic.ts");
 
 describe("writeFileAtomic", () => {
   let dir: string;
@@ -277,4 +278,176 @@ describe("OwnedFile", () => {
     expect(file.write('{"c":3}')).toBe(true);
     expect(readFileSync(path, "utf8")).toBe('{"c":3}');
   });
+
+  // #3663: the bookkeeping path writes later, off the event loop, and in order.
+  const tempFiles = () => readdirSync(dir).filter((name) => name.endsWith(".tmp"));
+
+  it("writes a deferred save without a synchronous write or fsync, and the newest waiting state wins", async () => {
+    const path = join(dir, "bots.json");
+    const file = new OwnedFile(path, { mode: 0o600 });
+    const writes = vi.mocked(spied.writeFileSync).mock.calls.length;
+    const syncs = vi.mocked(spied.fsyncSync).mock.calls.length;
+    for (const n of [1, 2, 3]) file.writeSoon(() => JSON.stringify({ n }));
+    expect(existsSync(path)).toBe(false);
+    await file.flush();
+    expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ n: 3 });
+    expect(vi.mocked(spied.writeFileSync).mock.calls.length).toBe(writes);
+    expect(vi.mocked(spied.fsyncSync).mock.calls.length).toBe(syncs);
+    if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(tempFiles()).toEqual([]);
+  });
+
+  it("ends with the second of two changes in a row, the second asked while the first is writing", async () => {
+    const path = join(dir, "bots.json");
+    const file = new OwnedFile(path);
+    file.writeSoon(() => "first");
+    const writing = file.flush();
+    file.writeSoon(() => "second");
+    await writing;
+    expect(readFileSync(path, "utf8")).toBe("second");
+    expect(tempFiles()).toEqual([]);
+  });
+
+  it("never lands a deferred write over a later write on the loop", async () => {
+    const path = join(dir, "bots.json");
+    const file = new OwnedFile(path);
+    file.writeSoon(() => "bookkeeping");
+    const writing = file.flush();
+    file.write("bot created");
+    await writing;
+    expect(readFileSync(path, "utf8")).toBe("bot created");
+    expect(tempFiles()).toEqual([]);
+  });
+
+  it("has a write on the loop on disk when it returns, ahead of the bookkeeping waiting for its gap", async () => {
+    const path = join(dir, "bots.json");
+    const file = new OwnedFile(path);
+    file.writeSoon(() => "bookkeeping");
+    await file.flush();
+    file.writeSoon(() => "more bookkeeping");
+    file.write("bot created");
+    expect(readFileSync(path, "utf8")).toBe("bot created");
+    await file.flush();
+    expect(readFileSync(path, "utf8")).toBe("more bookkeeping");
+  });
+
+  it("throws when a write on the loop fails, leaves the old file, and the bookkeeping it interrupted is written next", async () => {
+    const path = join(dir, "bots.json");
+    const file = new OwnedFile(path);
+    file.write("before");
+    file.writeSoon(() => "bookkeeping");
+    const writing = file.flush();
+    vi.mocked(spied.renameSync).mockImplementationOnce(() => { throw Object.assign(new Error("disk full"), { code: "ENOSPC" }); });
+    expect(() => file.write("refused change")).toThrow("disk full");
+    expect(readFileSync(path, "utf8")).toBe("before");
+    await writing;
+    await file.flush();
+    expect(readFileSync(path, "utf8")).toBe("bookkeeping");
+    expect(tempFiles()).toEqual([]);
+  });
+
+  it("logs a failed deferred write once per failure streak, keeps the state, and writes it with the next save", async () => {
+    const path = join(dir, "bots.json");
+    const file = new OwnedFile(path);
+    file.write("before");
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const full = () => { throw Object.assign(new Error("disk full"), { code: "ENOSPC" }); };
+    vi.mocked(spied.renameSync).mockImplementationOnce(full).mockImplementationOnce(full);
+    file.writeSoon(() => "one");
+    await file.flush();
+    file.writeSoon(() => "two");
+    await file.flush();
+    expect(logged).toHaveBeenCalledTimes(1);
+    expect(readFileSync(path, "utf8")).toBe("before");
+    file.writeSoon(() => "three");
+    await file.flush();
+    expect(readFileSync(path, "utf8")).toBe("three");
+    logged.mockRestore();
+    expect(tempFiles()).toEqual([]);
+  });
+
+  it("writes the waiting state at shutdown, at once or awaited", async () => {
+    const path = join(dir, "bots.json");
+    const file = new OwnedFile(path);
+    file.writeSoon(() => "sync at exit");
+    flushOwnedFilesSync();
+    expect(readFileSync(path, "utf8")).toBe("sync at exit");
+    file.writeSoon(() => "awaited at shutdown");
+    await flushOwnedFiles();
+    expect(readFileSync(path, "utf8")).toBe("awaited at shutdown");
+  });
+
+  it("hands its waiting state to a new owner of the file, unless something else wrote the file since", async () => {
+    const path = join(dir, "bots.json");
+    const first = new OwnedFile(path);
+    first.write("one");
+    first.writeSoon(() => "two");
+    new OwnedFile(path);
+    expect(readFileSync(path, "utf8")).toBe("two");
+    const second = new OwnedFile(path);
+    second.write("three");
+    second.writeSoon(() => "stale");
+    writeFileSync(path, "restored");
+    new OwnedFile(path);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(readFileSync(path, "utf8")).toBe("restored");
+  });
+
+  it("logs a failed deferred write and writes it again on the next save", async () => {
+    const path = join(dir, "bots.json");
+    const file = new OwnedFile(path);
+    mkdirSync(path);
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    file.writeSoon(() => "kept");
+    await file.flush();
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
+    rmSync(path, { recursive: true });
+    await file.flush();
+    expect(readFileSync(path, "utf8")).toBe("kept");
+  });
+
+  const child = (script: string, until: string, afterMs = 0): Promise<void> => new Promise((resolve, reject) => {
+    const source = join(dir, "child.mjs");
+    writeFileSync(source, `import { OwnedFile } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "atomic.ts")).href)};\n${script}`);
+    const proc = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", source], { stdio: ["ignore", "pipe", "inherit"] });
+    let out = "";
+    proc.stdout.on("data", (chunk: Buffer) => {
+      out += chunk.toString();
+      if (out.includes(until)) setTimeout(() => proc.kill("SIGKILL"), afterMs);
+    });
+    proc.on("error", reject);
+    proc.on("exit", () => resolve());
+  });
+
+  it("keeps an acknowledged immediate change on disk when the process is killed right after", async () => {
+    const path = join(dir, "bots.json");
+    writeFileSync(path, JSON.stringify({ bots: [] }));
+    await child(`
+      const file = new OwnedFile(${JSON.stringify(path)}, { mode: 0o600 });
+      file.write(JSON.stringify({ bots: ["created"] }));
+      process.stdout.write("ack\\n");
+      setInterval(() => {}, 1000);
+    `, "ack");
+    expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ bots: ["created"] });
+  });
+
+  it("leaves the old file or the new one, never a torn one, when killed in the middle of a deferred write", async () => {
+    const path = join(dir, "bots.json");
+    const old = JSON.stringify({ n: 0 });
+    for (const afterMs of [0, 1, 3, 8, 20]) {
+      writeFileSync(path, old);
+      await child(`
+        const file = new OwnedFile(${JSON.stringify(path)});
+        const pad = "x".repeat(8_000_000);
+        let n = 0;
+        const next = () => JSON.stringify({ n: ++n, pad });
+        file.writeSoon(next);
+        setTimeout(() => process.stdout.write("writing\\n"), 0);
+        setInterval(() => file.writeSoon(next), 1);
+      `, "writing", afterMs);
+      const saved = JSON.parse(readFileSync(path, "utf8")) as { n: number; pad?: string };
+      expect(saved.n === 0 || saved.pad?.length === 8_000_000).toBe(true);
+    }
+  }, 30_000);
 });

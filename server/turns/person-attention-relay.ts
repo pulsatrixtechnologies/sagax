@@ -25,6 +25,7 @@
 
 import { personAttention, personAttentionText, type PersonAttention, type PersonAttentionCard } from "../../shared/person-attention.ts";
 import type { WireMessage, WireTask } from "../../shared/wire.ts";
+import { openedByOwnBot } from "./bot-to-bot.ts";
 
 export interface AttentionBot {
   id: string;
@@ -63,7 +64,15 @@ export interface AttentionRelayDeps<B extends AttentionBot> {
   /** #2915: the thread's newest rows (at most `limit`), oldest first: the
    * mirror's dedupe and burst read only these, never the whole chat. */
   recent?(threadId: string, limit: number): readonly WireMessage[];
+  /** #3503: whether two bots belong to the same person. What a bot says in
+   * a thread another bot of the same person opened stays between them. */
+  sameOwner?(botId: string, otherBotId: string): boolean;
   now?(): number;
+}
+
+/** #3503: a thread another bot of the same person opened (server/turns/bot-to-bot.ts). */
+function betweenOwnBots<B extends AttentionBot>(deps: AttentionRelayDeps<B>, botId: string, threadId: string, task: Parameters<typeof openedByOwnBot>[0]): boolean {
+  return deps.relayVia?.(botId, threadId) === "teammate" && openedByOwnBot(task, botId, deps.sameOwner);
 }
 
 const ACTIVE_RUN = new Set(["queued", "running", "waiting"]);
@@ -156,7 +165,7 @@ export function turnAsk(messages: readonly WireMessage[], turnId: string | undef
 /** What happened (for tests and the log): the card's thread, or why not. */
 export type AttentionRelayOutcome =
   | { posted: true; threadId: string; card: PersonAttentionCard; onRunCard?: true }
-  | { posted: false; reason: "failed" | "no-task" | "confidential" | "agent" | "no-signal" | "run-reports" | "own-conversation" | "no-conversation" | "already" | "muted" };
+  | { posted: false; reason: "failed" | "no-task" | "confidential" | "agent" | "no-signal" | "run-reports" | "own-conversation" | "no-conversation" | "already" | "muted" | "for-opener" };
 
 export function relayPersonAttention<B extends AttentionBot>(
   input: AttentionTurn<B>,
@@ -173,6 +182,9 @@ export function relayPersonAttention<B extends AttentionBot>(
   const { text, last } = turnWords(deps.messages(threadId), input.turnId);
   const found = last ? personAttention(text) : undefined;
   if (!found || !last) return { posted: false, reason: "no-signal" };
+  // #3503: a question in a thread another bot of the same person opened is
+  // for that bot: the runtime parks the work and wakes it with the question
+  if (found.kind === "question" && betweenOwnBots(deps, bot.id, threadId, task)) return { posted: false, reason: "for-opener" };
   const run = deps.routineRun(threadId);
   // the routine's own card reports it (with these items)
   if (input.runTurn || (run && ACTIVE_RUN.has(run.status))) return { posted: false, reason: "run-reports" };
@@ -288,6 +300,9 @@ export function mirrorBackgroundReply<B extends AttentionBot>(
   if (!via || via === "routine" || via === "proactive") return false;
   const task = deps.task(bot.id, threadId);
   if (!task || task.confidential === true) return false;
+  // #3503: what two bots of the same person say to each other stays in
+  // their thread: neither the answer nor a trace line reaches the chat
+  if (betweenOwnBots(deps, bot.id, threadId, task)) return false;
   const source = deps.messages(threadId);
   const { text, last } = input.ok && !input.stopped ? ownTurnWords(source, input.turnId) : { text: "", last: undefined };
   const words = text.replace(/^\s*NOTHING_TO_REPORT\s*$/gim, "").trim();

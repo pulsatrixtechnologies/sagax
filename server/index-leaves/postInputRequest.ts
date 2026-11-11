@@ -1,6 +1,7 @@
 // @ts-nocheck
 /** postInputRequest (#1388). Pure move from server/index.ts. */
 import { deliverableNotification } from "../notify.ts";
+import { questionForRequester } from "../turns/bot-to-bot.ts";
 export type Host = Record<string, any>;
 
 export function createPostInputRequest(getHost: () => Host): any {
@@ -13,6 +14,12 @@ function postInputRequest(node: HandoffView, question: string, reminder: boolean
   const bot = host.store.bot(node.botId);
   if (!bot) return;
   const full = question.trim() || "Your answer is needed to continue.";
+  const parent = node.parentId ? host.coordinator.node(node.parentId) : undefined;
+  // #3503: a team bot's question to the bot of the same person that handed
+  // it the work is for that bot: the runtime wakes it with the question
+  // (its work view shows the step waiting). No card, no Today item, no
+  // pinned item and no notification for the person.
+  if (questionForRequester(node, parent, full, host.sameBotOwner)) return;
   const title = host.store.taskByThread(bot.id, node.threadId)?.title ?? "Teammate work";
   const posted: Array<{ threadId: string; messageId: string }> = [];
   let fresh = 0;
@@ -49,7 +56,6 @@ function postInputRequest(node: HandoffView, question: string, reminder: boolean
     if (group) host.store.patchGroup(group.id, { unread: true });
     else host.store.patchTask(target.botId, target.threadId, { unread: true });
   };
-  const parent = node.parentId ? host.coordinator.node(node.parentId) : undefined;
   // 2026-11-02: a one-way notice belongs to its receiver (send_to_bot moves
   // ownership), so its question is for the receiver's person: one card in
   // the receiver's own conversation, answered in place. It used to reach

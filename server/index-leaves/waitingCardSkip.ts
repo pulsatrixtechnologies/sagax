@@ -3,6 +3,7 @@
  * age expiry (server/approvals/waiting-card-skip.ts). */
 import { skipWaitingCard, closePersonRequest, personRequestOpen } from "../approvals/waiting-card-skip.ts";
 import { PROPOSAL_TTL_MS } from "../proactive/proactive-wake.ts";
+import { sweepLeftoverBotQuestions } from "../turns/bot-to-bot.ts";
 export type Host = Record<string, any>;
 
 export function createWaitingCardSkip(getHost: () => Host): any {
@@ -83,5 +84,32 @@ export function createWaitingCardSkip(getHost: () => Host): any {
     };
   }
 
-  return { skipCard, closeRequest, openWaitingRows, waitingRowExpiryDeps };
+  /** #3503, at the upgrade: the questions a bot asked another bot of the
+   * same person that were left waiting on the person close as skipped, one
+   * conversation at a time. One whose work thread is archived or gone
+   * closes without telling the bots again. */
+  function sweepBotQuestions(): Promise<number> {
+    const host = getHost();
+    const threads = () => {
+      const out = new Set<string>();
+      for (const bot of host.store.bots) {
+        if (bot.threadId) out.add(bot.threadId);
+        for (const task of host.store.tasks(bot.id)) out.add(task.threadId);
+      }
+      return [...out];
+    };
+    return sweepLeftoverBotQuestions({
+      threads,
+      messages: (threadId) => host.store.messagesFor(threadId),
+      task: (botId, threadId) => host.store.taskByThread(botId, threadId) ?? undefined,
+      botOfThread: (threadId) => host.store.botByThread(threadId)?.id,
+      sameOwner: (botId, otherBotId) => host.sameBotOwner(botId, otherBotId),
+      close: (threadId, message, quiet) => closePersonRequest(quiet
+        ? { ...personDeps(), answerWork: () => true, noteWork: () => {} }
+        : personDeps(), threadId, message, { kind: "skipped" }),
+      pause: () => new Promise((resolve) => setImmediate(resolve)),
+    });
+  }
+
+  return { skipCard, closeRequest, openWaitingRows, waitingRowExpiryDeps, sweepBotQuestions };
 }

@@ -190,3 +190,25 @@ export function waitingItemsFrom(rows: readonly InboxApproval[], now: number): W
 export function waitingItemsOfBot(items: readonly WaitingItem[], botId: string): WaitingItem[] {
   return items.filter((item) => item.botId === botId);
 }
+
+/** #3542: a live frame (GET /api/events) that may open or close an item
+ * waiting on the person in one bot's conversations (`threads`): a card, a
+ * question in words or an offer posted or changed there, or the person's
+ * own words in a conversation where something waits (`waiting`), which
+ * settle a "needs you" card. The pinned row asks the server again on these
+ * only, never on a short timer. */
+export function waitingChangeFrame(
+  frame: { kind?: unknown; threadId?: unknown; message?: unknown },
+  threads: ReadonlySet<string>,
+  waiting: ReadonlySet<string>,
+): boolean {
+  if (frame.kind !== "message" && frame.kind !== "message.patch") return false;
+  const threadId = frame.threadId;
+  if (typeof threadId !== "string" || (!threads.has(threadId) && !waiting.has(threadId))) return false;
+  const message = frame.message && typeof frame.message === "object"
+    ? frame.message as { role?: unknown; attention?: unknown; inputRequest?: unknown; card?: { requestId?: unknown; proactiveProposal?: unknown } | null }
+    : undefined;
+  if (!message) return false;
+  if (message.attention || message.inputRequest || message.card?.requestId || message.card?.proactiveProposal) return true;
+  return frame.kind === "message" && message.role === "user" && waiting.has(threadId);
+}

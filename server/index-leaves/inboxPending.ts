@@ -26,6 +26,14 @@ export function todayDepsFor(host: Host, auth: RequestAuth, viewer: InboxViewer)
     },
     proposals: () => host.proactiveProposals.open(),
     project: (threadId, message) => host.projectMessages(threadId, [message], approvalViewer)[0],
+    // #3542: what is open, found by the store's indexes: no transcript is
+    // read, whatever the length of the person's history
+    open: {
+      rows: () => host.openWaitingRowCandidates(),
+      asks: (threadId, from, to) => host.askRowsBetween(threadId, from, to),
+      wroteAfter: (threadId, at) => host.personWroteAfter(threadId, at),
+      message: (threadId, messageId) => host.readOneMessage(threadId, messageId) ?? undefined,
+    },
   };
 }
 

@@ -15,6 +15,7 @@ import { applySideFrame, applySidePage, EMPTY_SIDE_TRANSCRIPT, type SideTranscri
 import { segmentsAbove } from "@/lib/single-stream";
 import { pendingOffers, pendingQuestions, pendingRequests, topicsToScan, type TopicPending } from "@/lib/pending-question";
 import { pendingApprovals } from "@/components/PendingApproval";
+import { waitingChangeFrame } from "../../shared/waiting-items";
 
 type Page = { messages?: Message[]; activeLeafId?: string | null };
 
@@ -27,23 +28,34 @@ export function topicPending(threadId: string, transcript: SideTranscript): Topi
   return { threadId, questions: pendingQuestions(messages), requests: pendingRequests(messages), approvals, offers: pendingOffers(messages) };
 }
 
-/** How often the threads the server says wait are read again while a
- * conversation is open (a change of the bot's waiting state reads at once). */
-export const WAITING_THREADS_POLL_MS = 60_000;
+/** #3542: the safety net only. The threads the server says wait are read
+ * again when a card, a question in words or an offer opens or closes in one
+ * of the bot's conversations (its live frames), when the bot's waiting
+ * state changes and after missed frames; this slow timer catches anything
+ * those missed. */
+export const WAITING_THREADS_POLL_MS = 10 * 60_000;
+
+/** Frames that come together (a card and its notice) read the list once. */
+const WAITING_RELOAD_DELAY_MS = 400;
 
 /** #3512: the threads of this bot's conversations where something waits on
  * the person, as the server's one list of waiting items names them (GET
  * /api/approvals?waiting=1&botId=, shared/waiting-items.ts): the same list
  * Today and the organization's connector read. A topic is read because an
- * item waits there, never because a flag guessed it. */
-export function useServerWaitingThreads(botId: string | undefined, stamp: string): string[] {
+ * item waits there, never because a flag guessed it. #3542: read when
+ * something changed, not every minute. */
+export function useServerWaitingThreads(botId: string | undefined, stamp: string, botThreads: readonly string[] = []): string[] {
   const [threads, setThreads] = useState<string[]>([]);
+  const waitingNow = useRef<Set<string>>(new Set());
+  waitingNow.current = new Set(threads);
+  const botThreadsKey = botThreads.join("\u0000");
   useEffect(() => {
     if (!botId) {
       setThreads([]);
       return;
     }
     let live = true;
+    let soon: number | undefined;
     const load = () => {
       api<{ waiting?: Array<{ threadId?: unknown }> }>(`/api/approvals?waiting=1&botId=${encodeURIComponent(botId)}`)
         .then((body) => {
@@ -53,13 +65,29 @@ export function useServerWaitingThreads(botId: string | undefined, stamp: string
         })
         .catch(() => undefined);
     };
+    const loadSoon = () => {
+      if (soon !== undefined) return;
+      soon = window.setTimeout(() => {
+        soon = undefined;
+        load();
+      }, WAITING_RELOAD_DELAY_MS);
+    };
     load();
+    const own = new Set(botThreadsKey ? botThreadsKey.split("\u0000") : []);
+    const stop = listenLiveFrames({
+      onFrame: (frame) => {
+        if (waitingChangeFrame(frame as Parameters<typeof waitingChangeFrame>[0], own, waitingNow.current)) loadSoon();
+      },
+      onMissedFrames: loadSoon,
+    });
     const timer = window.setInterval(load, WAITING_THREADS_POLL_MS);
     return () => {
       live = false;
+      stop();
+      if (soon !== undefined) window.clearTimeout(soon);
       window.clearInterval(timer);
     };
-  }, [botId, stamp]);
+  }, [botId, stamp, botThreadsKey]);
   return threads;
 }
 
@@ -75,7 +103,7 @@ export function useTopicPending(bot: Pick<Bot, "id" | "threadId" | "tasks" | "wa
   const [transcripts, setTranscripts] = useState<Readonly<Record<string, SideTranscript>>>({});
   const held = useRef<Set<string>>(new Set());
   const earlier = useMemo(() => new Set(bot ? segmentsAbove(bot.tasks, bot.threadId).map((task) => task.threadId) : []), [bot?.tasks, bot?.threadId]);
-  const waiting = useServerWaitingThreads(bot?.id, waitingStamp(bot));
+  const waiting = useServerWaitingThreads(bot?.id, waitingStamp(bot), bot ? [bot.threadId, ...(bot.tasks ?? []).map((task) => task.threadId)] : []);
   const scan = bot ? topicsToScan(bot.tasks, bot.threadId, bot.waitingOn?.threadId) : [];
   // #3512: every other thread of this bot where the server lists an item
   for (const threadId of waiting) if (bot && threadId !== bot.threadId && !scan.includes(threadId)) scan.push(threadId);

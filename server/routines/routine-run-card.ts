@@ -129,8 +129,10 @@ function shortAt(at: number, timeZone?: string): string {
 }
 
 /** #3479: how long a lasting problem has been there, for the row's text. */
-export function routineRepeatLine(repeat: { count: number; since: number }, language?: string, timeZone?: string): string {
-  return `${personWord(readerLanguage(language), "routineRun.sameProblem", { since: shortAt(repeat.since, timeZone), count: repeat.count })}.`;
+export function routineRepeatLine(repeat: { count: number; since: number; streak?: true }, language?: string, timeZone?: string): string {
+  // #3695: a repeating routine's streak counts runs with problems, whatever they said
+  const key = repeat.streak ? "routineRun.problemStreak" : "routineRun.sameProblem";
+  return `${personWord(readerLanguage(language), key, { since: shortAt(repeat.since, timeZone), count: repeat.count })}.`;
 }
 
 /** #3479: the line of the first success after runs with problems. */
@@ -186,5 +188,7 @@ export function routineRunFallbackText(card: RoutineRunCardData, language?: stri
   const line = card.autoPausedAfter
     ? say("routineRun.text.linePaused", { routine, state, count: card.autoPausedAfter })
     : say("routineRun.text.line", { routine, state });
-  return `${line}${detail ? `\n\n${detail}` : ""}`;
+  // #3695: a repeating routine's one summary card of a failure says how long it lasts
+  const streak = card.repeat?.streak && !card.autoPausedAfter ? ` ${routineRepeatLine(card.repeat, language, timeZone)}` : "";
+  return `${line}${streak ? `.${streak}` : ""}${detail ? `\n\n${detail}` : ""}`;
 }

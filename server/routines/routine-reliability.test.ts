@@ -10,7 +10,10 @@ import { LimitFailoverStore } from "../usage/limit-failover.ts";
 import type { ModelSelection } from "../../shared/wire.ts";
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
-function fixture(over: Partial<RoutineManagerOptions> = {}) {
+/** #3695: a routine that runs once a day, at the fixture's next hour. */
+const ONCE_A_DAY = { type: "cron" as const, expression: "0 15 * * *", timeZone: "UTC" };
+
+function fixture(over: Partial<RoutineManagerOptions> = {}, schedule?: typeof ONCE_A_DAY) {
   const dir = mkdtempSync(join(tmpdir(), "routine-readiness-")); dirs.push(dir);
   let now = Date.UTC(2026, 10, 4, 14);
   let serial = 0;
@@ -21,7 +24,7 @@ function fixture(over: Partial<RoutineManagerOptions> = {}) {
   const options: RoutineManagerOptions = { file: join(dir, "routines.json"), now: () => now, botState: () => "ready", createTask, startTurn,
     readiness: (routine, run, mode) => checkRoutineReadiness(routine, run, probes, mode), engineForRun: () => ({ engine: dir }), onRunFailed, ...over };
   const manager = new RoutineManager(options);
-  const routine = manager.create({ name: "Inbox review", prompt: "Read the inbox.", botId: "osprey", schedule: { type: "interval", everyMinutes: 60, anchorAt: now }, autoPauseAfter: 1 });
+  const routine = manager.create({ name: "Inbox review", prompt: "Read the inbox.", botId: "osprey", schedule: schedule ?? { type: "interval", everyMinutes: 60, anchorAt: now }, autoPauseAfter: 1 });
   const flush = async () => { for (let i = 0; i < 10; i++) { await manager.tick(); await new Promise(resolve => setTimeout(resolve, 0)); } };
   return { manager, routine, options, probes, flush, createTask, startTurn, onRunFailed, advance: (ms: number) => { now += ms; }, now: () => now, engine: dir };
 }
@@ -69,14 +72,14 @@ describe("routine reliability in an isolated journal", () => {
   });
   it("says a run blocked or skipped at pre-flight in the bot's chat with the person, in their language (#3130)", async () => {
     const onRunNotice = vi.fn();
-    const h = fixture({ onRunNotice, resolveResultsThread: () => ({ threadId: "chat-1" }), languageFor: () => "fr-CA" });
+    const h = fixture({ onRunNotice, resolveResultsThread: () => ({ threadId: "chat-1" }), languageFor: () => "fr-CA" }, ONCE_A_DAY);
     h.probes.engine = () => ({ engine: `${h.engine}-boot`, name: "Claude", signedIn: false, starting: true });
     h.advance(60 * 60_000); await h.flush();
     expect(onRunNotice).not.toHaveBeenCalled();
     for (let i = 0; i < ROUTINE_STARTING_MAX_ATTEMPTS; i++) { h.advance(ROUTINE_STARTING_RETRY_MS); await h.flush(); }
     expect(onRunNotice).toHaveBeenCalledTimes(1);
     expect(onRunNotice.mock.calls[0]![1]).toEqual({ threadIds: ["chat-1"], text: `La routine « Inbox review » n'a pas démarré : ${ROUTINE_STARTING_SKIPPED}` });
-    const other = fixture({ onRunNotice, resolveResultsThread: () => ({ threadId: "chat-2" }) });
+    const other = fixture({ onRunNotice, resolveResultsThread: () => ({ threadId: "chat-2" }) }, ONCE_A_DAY);
     other.probes.engine = () => ({ engine: `${other.engine}-out`, name: "Claude", signedIn: false });
     other.advance(60 * 60_000); await other.flush();
     const run = other.manager.listRuns()[0]!;
@@ -84,6 +87,15 @@ describe("routine reliability in an isolated journal", () => {
     expect(onRunNotice).toHaveBeenCalledTimes(2);
     expect(onRunNotice.mock.calls[1]![1]).toEqual({ threadIds: ["chat-2"], text: `The routine "Inbox review" did not start: ${run.error}` });
     expect(run.error).toBeTruthy();
+  });
+  it("a routine that repeats more than once a day says a pre-flight block by its streak, never a line per run (#3695)", async () => {
+    const onRunNotice = vi.fn();
+    const h = fixture({ onRunNotice, resolveResultsThread: () => ({ threadId: "chat-1" }) });
+    h.probes.engine = () => ({ engine: `${h.engine}-out`, name: "Claude", signedIn: false });
+    for (let i = 0; i < 3; i++) { h.advance(60 * 60_000); await h.flush(); }
+    const runs = h.manager.listRuns().filter((run) => run.status === "blocked");
+    expect(runs.length).toBeGreaterThanOrEqual(1);
+    expect(onRunNotice).not.toHaveBeenCalled();
   });
   it("never runs a Flow shadow probe before a routine run: a routine called by name starts (2026-11-04)", async () => {
     const h = fixture();

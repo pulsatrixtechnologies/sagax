@@ -18561,7 +18561,10 @@
       "chat.incoming.requests.other": "1e23ff6956124091cd470f5091cee8108c3766314b69871b3ff792eaf506455f",
       "chat.incoming.newer": "fe984318085f72dacedcb6323625b5ed3eef8e192446c03e2959b8f3a72dcc87",
       "chat.incoming.older": "f38a7d235a295b59568119a632517b8e9c4a5ba2e8116df80c52381e1e1507d6",
-      "chat.parallel.background": "424c555c0ff586062e0ff2a14e56084f35485a99112704056e0ed3372a957920"
+      "chat.parallel.background": "424c555c0ff586062e0ff2a14e56084f35485a99112704056e0ed3372a957920",
+      "routineRun.problemStreak": "59e75a87311b12d74222b5f69db2faee38b67636f4f33df9cac96ef4e02ea5d9",
+      "routines.postResults.helpRepeating": "eb940dd0431cabeb2a6644353f109001445ac8ea7ef2e180d7867b839376110c",
+      "routines.postResults.hintRepeating": "5439799028430380f1cb93bfd210ad84d814fa438c97651c73e62082b63e722a"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

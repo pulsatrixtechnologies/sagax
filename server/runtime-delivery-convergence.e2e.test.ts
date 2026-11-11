@@ -1102,3 +1102,61 @@ it("peer inbox (second pass): a teammate's notice gathered before a restart (a p
   await expect.poll(() => JSON.parse(readFileSync(pendingFile, "utf8")).pending, { timeout: 10_000 }).toEqual({});
 }, { env: { SAGAX_PROACTIVE_GATHER_MS: "600000" } }), 150_000);
 
+
+// #3695: a routine that repeats every five minutes, through the real server.
+// Its runs stay out of the person's chat; problems that last three runs in a
+// row are told once, as one card whose count stays true in place, and that
+// same card says when it works again. Every run stays in the routine's list.
+it("a five-minute routine: ten runs leave one summary card in the chat, told at the third problem run and turned to works again in place", () => withFixture(async (f) => {
+  const owner = (await f.cli("new-bot", "--name", "Watcher")).bot;
+  const { routine } = await f.api("/api/routines", {
+    name: "Work watch", prompt: "Make sure the work goes on as instructed.", botId: owner.id, enabled: false,
+    schedule: { type: "interval", everyMinutes: 5, anchorAt: Date.now() + 3_600_000 },
+  });
+  const OK = "Checked the work queue.\nNOTHING_TO_REPORT";
+  const problem = (why: string) => `RUN_STATUS: partial: ${why}\nCould not finish the pass.`;
+  const said = [
+    OK, "Two finished worktrees removed.",
+    problem("the merge queue is stuck on one branch"), problem("two branches wait and nothing lands"),
+    `${problem("the queue still holds the same two branches")}\nThe merge queue has been stuck for fifteen minutes on a failed check: rerun it or drop the branches.`,
+    problem("still stuck"), OK, OK, problem("one branch failed its check"), OK,
+  ];
+  const bots = (await f.api("/api/bots?messages=0", undefined, "GET")).bots as any[];
+  const main = bots.find((bot) => bot.id === owner.id).threadId as string;
+  const cards = async () => (await f.messages(main)).filter((message) => message.kind === "routine.run");
+  const seen: any[][] = [];
+  for (const [index, reply] of said.entries()) {
+    f.plan[owner.id] = { reply };
+    f.save();
+    // the next occurrence of the schedule, now: a scheduled run, not one the person started
+    await f.api(`/api/routines/${routine.id}`, { enabled: true, schedule: { type: "interval", everyMinutes: 5, anchorAt: Date.now() + 1_500 } }, "PATCH");
+    await expect.poll(async () => (await routineRuns(f, routine.id)).filter((run) => ["completed", "failed", "blocked"].includes(run.status)).length,
+      { timeout: 60_000, interval: 250 }).toBe(index + 1);
+    await f.api(`/api/routines/${routine.id}`, { enabled: false }, "PATCH");
+    await settledBots(f, [owner.id]);
+    seen.push((await cards()).map((card) => card.routineRun));
+  }
+  const runs = (await routineRuns(f, routine.id)).sort((a, b) => a.createdAt - b.createdAt);
+  expect(runs).toHaveLength(10);
+  expect(runs.every((run) => !run.startedBy && run.status === "completed")).toBe(true);
+  const thirdProblem = runs[4];
+  // nothing before the third run with problems in a row
+  expect(seen.slice(0, 4).map((rows) => rows.length)).toEqual([0, 0, 0, 0]);
+  // told once, at the third: the summary, how many runs, since when
+  expect(seen[4]).toHaveLength(1);
+  expect(seen[4]![0]).toMatchObject({ runId: thirdProblem.id, status: "completed", repeat: { count: 3, firstRunId: runs[2].id, streak: true } });
+  expect(seen[4]![0].brief).toContain("rerun it or drop the branches");
+  // the fourth: the same card counts, in place
+  expect(seen[5]).toHaveLength(1);
+  expect(seen[5]![0]).toMatchObject({ runId: thirdProblem.id, repeat: { count: 4 } });
+  // the first ok: that same card says it works again
+  expect(seen[6]).toHaveLength(1);
+  expect(seen[6]![0]).toMatchObject({ runId: thirdProblem.id, status: "completed", recovered: { afterRuns: 4 } });
+  expect(seen[6]![0].repeat).toBeUndefined();
+  // and nothing else, a later single problem included
+  expect(seen[9]).toEqual(seen[6]);
+  // every run stays in the routine's list with its report
+  expect(runs[1].output).toBe("Two finished worktrees removed.");
+  expect(runs.filter((run) => run.problems)).toHaveLength(5);
+  expect(runtimeInvariants(f)).toEqual([]);
+}), 400_000);

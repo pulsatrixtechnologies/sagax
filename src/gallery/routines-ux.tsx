@@ -97,6 +97,25 @@ export const runs: RoutineRun[] = [
   run("x14", "r4", "queued", NOW + 0.5 * H, { retryAt: NOW + 0.3 * H, attention: "Waiting for the bot to finish its current conversation." }),
   { id: "x15", routineId: "gone", routineName: "Quarterly cleanup", prompt: "Archive the closed items of the quarter.", target: "bot", botId: "cirrus", runOn: "maus", scheduledFor: NOW - 5 * H, createdAt: NOW - 5 * H, startedAt: NOW - 5 * H, finishedAt: NOW - 5 * H + 3 * 60_000, status: "completed", manual: false, output: "Archived 27 closed items.", cost: 0.02, seenAt: NOW - 4 * H } as RoutineRun,
 ];
+/** ?case=streak (#3695): a routine that repeats every five minutes, its ten
+ * runs (ok, a report, four with problems, ok, ok, one problem, ok) in its
+ * run list, the one place they are read: none of them wrote in the chat but
+ * the one summary card. */
+if (params.get("case") === "streak") {
+  routines.unshift({ ...base, id: "r10", botId: "atlas", name: "Work watch", prompt: "Make sure the work goes on as instructed.", enabled: true,
+    schedule: { type: "interval", everyMinutes: 5, anchorAt: NOW - 2 * H }, nextRunAt: NOW + 5 * 60_000, weekRuns: { ok: 5, total: 10 } } as unknown as Routine);
+  const said: Array<Partial<RoutineRun>> = [
+    { quiet: true }, { output: "Two finished worktrees removed." },
+    { output: "Could not finish the pass.", problems: "The merge queue is stuck on one branch." },
+    { output: "Could not finish the pass.", problems: "Two branches wait in the queue and nothing lands." },
+    { output: "The merge queue has been stuck for fifteen minutes on a failed check: two branches wait and nothing lands. Rerun the check or drop the two branches.", problems: "The queue still holds the same two branches." },
+    { output: "Could not finish the pass.", problems: "Still stuck." },
+    { quiet: true }, { quiet: true },
+    { output: "Could not finish the pass.", problems: "One branch failed its check." },
+    { quiet: true },
+  ];
+  said.forEach((extra, index) => runs.unshift(run(`w${index}`, "r10", "completed", NOW - (10 - index) * 5 * 60_000, { threadId: "atlas-run-thread", cost: 0.004, ...extra })));
+}
 const CASE_RUN: Record<typeof runCase, string> = { completed: "x1", waiting: "x3", failed: "x4", running: "x2" };
 
 const state: AppState = {

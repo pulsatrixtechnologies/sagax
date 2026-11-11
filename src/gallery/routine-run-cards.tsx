@@ -16,7 +16,12 @@
  * the card's own report, whole),
  * feedback (wakes rated in place, a watch alert's exits, a brief), card
  * (#2719: two runs that handed work to teammates beside a finished coding
- * job; a click on Tester's row opens its work in the chat). */
+ * job; a click on Tester's row opens its work in the chat), streak-before
+ * and streak-after (#3695: a bot's chat after ten runs of a routine that
+ * repeats every five minutes, before and after), streak-3, streak-5,
+ * streak-again, streak-failed and streak-failed-again (its one summary card
+ * at three runs with problems, at five, works again, told by a failed run,
+ * and that card turned to works again with the failure words kept). */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -183,6 +188,40 @@ const STACK: Message[] = Array.from({ length: 17 }, (_, index) => {
   } as CardRun, at);
 });
 
+/** #3695: ten runs of a routine that repeats every five minutes (ok, a
+ * report, four runs with problems reworded each time, ok, ok, one problem,
+ * ok). `before`: what the server wrote in the chat until #3695, one card per
+ * run with problems, a works again card each time and the report. `after`:
+ * the one summary card, told at the third run with problems, its count kept
+ * in place, turned to works again. */
+const STREAK_NAME = say("Work watch", "Suivi du travail");
+const streakAt = (index: number) => NOW - (10 - index) * 5 * M;
+const STREAK_PROBLEM = say("Could not finish the pass: the merge queue is stuck.", "La passe n'a pas pu finir : la file de fusion est bloquée.");
+const STREAK_SUMMARY = say(
+  "The merge queue has been stuck for fifteen minutes on a failed check: two branches wait and nothing lands. Rerun the check or drop the two branches.",
+  "La file de fusion est bloquée depuis quinze minutes sur une vérification en échec : deux branches attendent et rien n'entre. Relance la vérification ou retire les deux branches.");
+const streakCard = (id: string, index: number, run: Partial<RoutineRunCardData>) =>
+  card(id, { routineName: STREAK_NAME, routineId: "r-streak", status: "completed", ...run } as CardRun, streakAt(index));
+const STREAK_BEFORE: Message[] = [
+  streakCard("sb1", 1, { summary: say("Two finished worktrees removed.", "Deux worktrees terminés retirés.") }),
+  streakCard("sb2", 2, { summary: STREAK_PROBLEM, problems: "queue stuck" }),
+  streakCard("sb3", 3, { summary: say("Two branches wait in the queue and nothing lands.", "Deux branches attendent dans la file et rien n'entre."), problems: "queue stuck" }),
+  streakCard("sb4", 4, { summary: say("The queue still holds the same two branches.", "La file garde encore les deux mêmes branches."), problems: "queue stuck" }),
+  streakCard("sb5", 5, { summary: say("Still stuck.", "Toujours bloquée."), problems: "queue stuck" }),
+  streakCard("sb6", 6, { status: "nothing_to_report", recovered: { afterRuns: 4, since: streakAt(2) } }),
+  streakCard("sb8", 8, { summary: say("One branch failed its check.", "Une branche a échoué sa vérification."), problems: "check failed" }),
+  streakCard("sb9", 9, { status: "nothing_to_report", recovered: { afterRuns: 1, since: streakAt(8) } }),
+];
+const streakRepeat = (count: number) => ({ firstRunId: "run-sb2", count, since: streakAt(2), lastAt: streakAt(1 + count), streak: true as const });
+const STREAK_TOLD = (count: number) => streakCard("streak", 4, { runId: "run-streak", summary: STREAK_SUMMARY, brief: STREAK_SUMMARY, problems: "queue stuck", repeat: streakRepeat(count) });
+const STREAK_AGAIN = streakCard("streak", 4, { runId: "run-streak", summary: STREAK_SUMMARY, brief: STREAK_SUMMARY, recovered: { afterRuns: 4, since: streakAt(2) } });
+const STREAK_FAILED = card("streak-failed", { routineName: STREAK_NAME, routineId: "r-streak", status: "failed",
+  error: say("The engine stopped answering.\nThe merge queue did not answer after three tries.", "Le moteur a cessé de répondre.\nLa file de fusion n'a pas répondu après trois essais."), repeat: streakRepeat(3) } as CardRun, streakAt(4));
+
+/** The failed run's card turned to works again: its words became the summary. */
+const STREAK_FAILED_AGAIN = card("streak-failed", { routineName: STREAK_NAME, routineId: "r-streak", status: "completed",
+  summary: STREAK_FAILED.routineRun!.error, recovered: { afterRuns: 3, since: streakAt(2) } } as CardRun, streakAt(4));
+
 const failedRun = card("failed", { routineName: say("Backup check", "Vérification des sauvegardes"), status: "failed",
   error: say("The storage service did not answer after three tries.", "Le service de stockage n'a pas répondu après trois essais."), autoPausedAfter: 3 }, NOW - 20_000);
 
@@ -305,6 +344,19 @@ function Shell() {
               <RoutineRunRow message={reportCard} botId="server" />
               <RoutineRunRow message={card("courtesy", { routineName: say("Agreement banks", "Banques des ententes"), status: "completed", summary: COURTESY_REPORT }, NOW - 5 * M)} botId="server" />
               <RoutineRunRow message={card("structure", { routineName: say("Bank watch", "Veille des banques"), status: "completed", summary: STRUCTURE_REPORT }, NOW - 2 * M)} botId="server" />
+            </>
+          ) : scene.startsWith("streak-") ? (
+            <>
+              {neighbour}
+              <Mine>{say("Keep an eye on the work every five minutes.", "Surveille le travail aux cinq minutes.")}</Mine>
+              <NeighbourBubble text={say("Done: the routine runs every five minutes.", "C'est fait : la routine roule aux cinq minutes.")} />
+              {scene === "streak-before" && STREAK_BEFORE.map((message) => <RoutineRunRow key={message.id} message={message} botId="server" />)}
+              {scene === "streak-after" && <RoutineRunRow message={STREAK_AGAIN} botId="server" />}
+              {scene === "streak-3" && <RoutineRunRow message={STREAK_TOLD(3)} botId="server" />}
+              {scene === "streak-5" && <RoutineRunRow message={STREAK_TOLD(5)} botId="server" />}
+              {scene === "streak-again" && <RoutineRunRow message={STREAK_AGAIN} botId="server" />}
+              {scene === "streak-failed" && <RoutineRunRow message={STREAK_FAILED} botId="server" />}
+              {scene === "streak-failed-again" && <RoutineRunRow message={STREAK_FAILED_AGAIN} botId="server" />}
             </>
           ) : scene === "stack" ? (
             <>

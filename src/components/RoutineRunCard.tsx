@@ -11,6 +11,7 @@ import { AttentionItems } from "./AttentionCard";
 import { DottedSpinner } from "./bot-settings/CodingSessionRow";
 import { DelegationLine, DelegationList, type DelegationEntry } from "./DelegationList";
 import type { RoutineRunCardData } from "../../shared/routine-run";
+import { ROUTINE_PROBLEM_STREAK_TOLD } from "../../shared/routine-repeat";
 import { formatTime, type Bot, type Message } from "@/state/store";
 import { dayLabel, localDay } from "@/lib/transcript-derivations";
 
@@ -79,6 +80,19 @@ export function useSettledRoutineRun(run: RoutineRunCardData | undefined): Routi
   return pending ? shown : run;
 }
 
+/** How long a lasting problem has been there (#3479), or for a repeating
+ * routine's summary card how many runs in a row had problems (#3695). */
+function routineRepeatText(repeat: NonNullable<RoutineRunCardData["repeat"]>): string {
+  const vars = { since: routineDateTime(repeat.since), count: repeat.count };
+  return repeat.streak ? t("routineRun.problemStreak", vars) : t("routineRun.sameProblem", vars);
+}
+
+/** #3695: the one summary card of a lasting problem of a routine that
+ * repeats more than once a day (the server writes it at the third run). */
+function isProblemStreakCard(run: RoutineRunCardData): boolean {
+  return Boolean(run.repeat?.streak && run.repeat.count >= ROUTINE_PROBLEM_STREAK_TOLD);
+}
+
 function compactDetail(value: string | undefined): string {
   const clean = value?.replace(/\s+/g, " ").trim() ?? "";
   return clean.length > DETAIL_LIMIT ? `${clean.slice(0, DETAIL_LIMIT - 1).trimEnd()}…` : clean;
@@ -136,6 +150,10 @@ function useNow(active: boolean): number {
  * row (AskSettledLine): a run in progress, queued, waiting, failed,
  * cancelled or with nothing to report, and a card a newer result folded. */
 export function routineRunForm(message: Pick<Message, "routineRun" | "attention">, run: RoutineRunCardData, folded: boolean): "card" | "row" {
+  // #3695: a repeating routine's one summary card is the one thing its runs
+  // say in the chat: a card whatever the third run's status, so its count,
+  // since when and what is wrong are read whole.
+  if (isProblemStreakCard(run)) return "card";
   if (folded) return "row";
   const shown = { ...message, routineRun: run };
   if (routineResultNeedsPerson(shown)) return "card";
@@ -228,7 +246,14 @@ export function RoutineRunCard({
   const time = <time key="at" dateTime={new Date(at).toISOString()} title={triggeredAt ? routineDateTime(triggeredAt) : undefined}>{posted}</time>;
   const pausedAfter = run.autoPausedAfter && run.autoPausedAfter > 0 ? run.autoPausedAfter : null;
   const elapsed = running && run.startedAt ? routineRunDuration({ startedAt: run.startedAt, status: "running" }, now) : undefined;
-  const brief = isRoutineResult(run) || run.goalStatus ? routineRunBrief(run) : "";
+  // #3695: a summary card whose run failed or was blocked carries the
+  // streak's own failure texts (card.error): they are its brief.
+  const streakFailed = isProblemStreakCard(run) && !run.goalStatus && run.status !== "completed";
+  const brief = isRoutineResult(run) || run.goalStatus
+    ? routineRunBrief(run)
+    : streakFailed
+      ? routineResultText(routineRunError(run.error) ?? run.summary).text || (run.status === "blocked" ? routineRunBlockedLine(run) : "")
+      : "";
   const form = routineRunForm(message, run, folded);
   const openLabel = t(run.goalStatus === "needs-input" ? "routines.post.reviewFor" : "routines.post.openRunFor", { name: run.routineName });
 
@@ -264,22 +289,31 @@ export function RoutineRunCard({
     </section>
   );
 
+  // #3479: a lasting problem is said once; its card counts the runs since.
+  // #3695: a repeating routine's one summary card counts its runs with
+  // problems, whatever they said, a failure or a block included.
+  const repeat = run.repeat && run.repeat.count > 1 && (withProblems || run.repeat.streak) ? (
+    <span data-routine-run-repeat title={routineDateTime(run.repeat.lastAt)}>
+      {" · "}{routineRepeatText(run.repeat)}
+    </span>
+  ) : null;
+
   if (form === "card") {
-    const warn = withProblems || run.status === "blocked" || (run.goalStatus && run.goalStatus !== "completed") || Boolean(message.attention?.items.length && !message.attention.handledAt);
+    const warn = withProblems || streakFailed || run.status === "blocked" || (run.goalStatus && run.goalStatus !== "completed") || Boolean(message.attention?.items.length && !message.attention.handledAt);
     // one state line, only when there is something to say: a finished result
     // without problems has no state word (the reference's active state)
-    const state = run.status === "blocked" && !run.goalStatus
+    const state = streakFailed
+      // #3695: the failure words are the brief; the state line says how
+      // many runs in a row and since when, like a result with problems
+      ? <span data-routine-run-status className={copy.tone}>{statusLabel}{repeat}</span>
+      : run.status === "blocked" && !run.goalStatus
       ? <span data-routine-run-status className={copy.tone}>{routineRunBlockedLine(run)}</span>
       : withProblems || (run.goalStatus && run.goalStatus !== "completed")
         ? (
           <span data-routine-run-status className={copy.tone}>
             {statusLabel}
             {/* #3479: a lasting problem is said once; its card counts the runs since */}
-            {withProblems && run.repeat && run.repeat.count > 1 && (
-              <span data-routine-run-repeat title={routineDateTime(run.repeat.lastAt)}>
-                {" · "}{t("routineRun.sameProblem", { since: routineDateTime(run.repeat.since), count: run.repeat.count })}
-              </span>
-            )}
+            {withProblems && repeat}
           </span>
         )
         : run.recovered

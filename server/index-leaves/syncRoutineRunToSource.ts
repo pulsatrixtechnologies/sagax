@@ -3,8 +3,10 @@
 import { wakeTopicOf } from "../routines/routine-run-card.ts";
 import type { RoutineRun } from "../routines/routines.ts";
 import { textLanguage } from "../../shared/looks-french.ts";
-import { withoutRoutineMarkers } from "../../shared/routine-result.ts";
+import { clipReadable, withoutRoutineMarkers } from "../../shared/routine-result.ts";
 import { needsYouNotificationWords } from "../runtime-events/question-notification-words.ts";
+import { ROUTINE_PROBLEM_STREAK_TOLD } from "../../shared/routine-repeat.ts";
+import { redactSecretsInText } from "../redact.ts";
 export type Host = Record<string, any>;
 
 /** #2694: the person's feedback on this run's attention cards (thumbs-down,
@@ -52,6 +54,80 @@ export function createRoutineRunLateCard(getHost: () => Host): (runThreadId: str
     const existing = host.store.messagesFor(target)?.findLast?.((message) => message.kind === "routine.run" && message.routineRun?.runId === run.id);
     return routineRunCardRow(host, { ...run, quiet: undefined }, target, report, existing, report);
   };
+}
+
+const FINISHED = new Set(["completed", "failed", "blocked"]);
+
+/** #3695: what a finished run of a routine that repeats more than once a day
+ * says in the chat (shared/routine-repeat.ts). `out`: nothing. `tell`: the
+ * streak's one summary card, now. `count`: that card's count and last run,
+ * in place. `recovered`: that card says it works again, in place. Null: the
+ * run is not one of those (the ordinary rule applies). */
+type StreakSay = "out" | "tell" | "count" | "recovered";
+
+function problemRun(run: RoutineRun): boolean {
+  return run.status === "failed" || run.status === "blocked" || (run.status === "completed" && Boolean(run.problems));
+}
+
+/** The row in this conversation that tells a run of problems in a row
+ * (#3479, #3695): the row whose count started at the run's first problem
+ * run, or the first run's own row when `ownRow`; when the run ended its
+ * streak, the row of that streak. `streak` keeps to the #3695 summary card. */
+function repeatAnchor(host: Host, threadId: string, run: RoutineRun, { streak, ownRow = false }: { streak: boolean; ownRow?: boolean }): any {
+  const rows = host.store.messagesFor(threadId) ?? [];
+  const told = (message: any) => message.kind === "routine.run" && message.routineRun && (!streak || message.routineRun.repeat?.streak);
+  if (run.problemRepeat) {
+    const firstRunId = run.problemRepeat.firstRunId;
+    return rows.findLast?.((message: any) => told(message)
+      && ((ownRow && message.routineRun.runId === firstRunId) || message.routineRun.repeat?.firstRunId === firstRunId));
+  }
+  if (run.recovered) {
+    const since = run.recovered.since;
+    return rows.findLast?.((message: any) => told(message) && message.routineRun.routineId === run.routineId && message.routineRun.repeat?.since === since);
+  }
+  return undefined;
+}
+
+/** The streak's state for this run, or null outside it. */
+function streakSay(host: Host, run: RoutineRun, threadId: string): { say: StreakSay; anchor?: any } | null {
+  if (!FINISHED.has(run.status) || !host.routines?.routineRepeats?.(run)) return null;
+  const told = ROUTINE_PROBLEM_STREAK_TOLD;
+  if (problemRun(run)) {
+    const count = run.problemRepeat?.count ?? 1;
+    if (count < told) return { say: "out" };
+    const anchor = repeatAnchor(host, threadId, run, { streak: true });
+    return anchor ? { say: "count", anchor } : { say: "tell" };
+  }
+  if (run.recovered && run.recovered.afterRuns >= told) {
+    const anchor = repeatAnchor(host, threadId, run, { streak: true });
+    return anchor ? { say: "recovered", anchor } : { say: "out" };
+  }
+  return { say: "out" };
+}
+
+/** #3695: the streak's card, its count and last run, and when the run that
+ * tells the person failed before its bot could write, the streak's own
+ * failure texts (deduplicated) as its words. */
+function streakCard(host: Host, run: RoutineRun, card: any): any {
+  const repeat = run.problemRepeat
+    ? { ...run.problemRepeat, lastAt: run.finishedAt ?? run.problemRepeat.since, streak: true }
+    : { firstRunId: run.id, since: run.finishedAt ?? run.createdAt, count: 1, lastAt: run.finishedAt ?? run.createdAt, streak: true };
+  const texts = run.status === "completed" ? [] : host.routines?.problemStreakTexts?.(run) ?? [];
+  return {
+    ...card,
+    repeat,
+    ...(texts.length ? { error: clipReadable(redactSecretsInText(texts.join("\n")), 500) } : {}),
+  };
+}
+
+/** #3695: the streak's card says it works again, in place: what was wrong
+ * stays in its words (a failed run's words become its summary), the state
+ * turns to works again. */
+function recoveredCard(anchorCard: any, run: RoutineRun): any {
+  const { problems: _problems, repeat: _repeat, error, autoPausedAfter: _paused, ...rest } = anchorCard;
+  // a streak told by a failed run: its failure words stay as the card's words
+  const summary = rest.summary || error || undefined;
+  return { ...rest, ...(summary ? { summary } : {}), status: "completed", recovered: { ...run.recovered! } };
 }
 
 export function createSyncRoutineRunToSource(getHost: () => Host): any {
@@ -110,7 +186,11 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
     // Thumbs-down or "less" (quiet): it still surfaces, never unread.
     // #3479: a lasting problem was said by its first run already, unless
     // this run also has new items only the person can do.
-    if (reportable && (!run.problemRepeat || attentionFound) && own?.routineRunId === run.id) {
+    // #3695: a routine that repeats more than once a day: only the run that
+    // makes its problems last ROUTINE_PROBLEM_STREAK_TOLD runs surfaces.
+    const byStreak = FINISHED.has(run.status) && !attentionFound && !run.autoPaused && host.routines?.reportsByStreak?.(run);
+    const tells = byStreak ? problemRun(run) && (run.problemRepeat?.count ?? 1) === ROUTINE_PROBLEM_STREAK_TOLD : !run.problemRepeat || attentionFound;
+    if (reportable && tells && own?.routineRunId === run.id) {
       host.store.patchTask(run.botId, own.threadId, { routineRunId: undefined, ...(reportableUnread ? { unread: true } : {}) });
     }
     return null;
@@ -120,27 +200,52 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   const existing = host.store.messagesFor(sourceThreadId).find(
     (message) => message.kind === "routine.run" && message.routineRun?.runId === run.id,
   );
+  const zone = routineRunZone(host, run);
+  // #3695: a routine that repeats more than once a day. A run the person
+  // started, a wake they chose, a run that waits on them, items only they can
+  // do and a routine that paused itself are told as always; every other
+  // finished run writes nothing, except the streak's one card.
+  const streak = streakSay(host, run, sourceThreadId);
+  const exempt = !host.routines?.reportsByStreak?.(run) || Boolean(existing) || Boolean(attentionFound) || Boolean(run.autoPaused);
+  if (streak && (streak.say === "count" || streak.say === "recovered")) {
+    const anchorCard = streak.say === "count"
+      ? { ...streak.anchor.routineRun, repeat: { ...streak.anchor.routineRun.repeat, ...run.problemRepeat, lastAt: run.finishedAt ?? run.problemRepeat!.since, streak: true } }
+      : recoveredCard(streak.anchor.routineRun, run);
+    const anchorLanguage = textLanguage(`${anchorCard.summary ?? ""}\n${run.routineName ?? ""}`)
+      ?? (run.runAs ? host.languageOfPerson?.(run.runAs) : undefined);
+    host.store.patchMessage(sourceThreadId, streak.anchor.id, { text: host.routineRunFallbackText(anchorCard, anchorLanguage, zone), routineRun: anchorCard });
+    if (!exempt) return sourceThreadId;
+    // a run told on its own (its card below) says its state there; the
+    // streak's card already says the works again
+    if (streak.say === "recovered") run = { ...run, recovered: undefined };
+  } else if (streak && !exempt && streak.say === "out") {
+    return sourceThreadId;
+  }
   // Never posted and nothing for the person: the chat is left alone.
   if (!existing && !reportable) return sourceThreadId;
-  const zone = routineRunZone(host, run);
   // #3479: the same problem as the previous run is said once. The row of the
   // first run with it is updated in place (how many runs, since when): no
   // new row, no unread, no notification. The run stays in the run list.
   // A repeat run with new items only the person can do posts its card and
   // rings as any other run: nothing waiting for the person stays hidden.
-  if (!existing && !attentionFound && run.status === "completed" && run.problems && run.problemRepeat) {
-    const firstRunId = run.problemRepeat.firstRunId;
-    const anchor = host.store.messagesFor(sourceThreadId).findLast?.((message) => message.kind === "routine.run"
-      && (message.routineRun?.runId === firstRunId || message.routineRun?.repeat?.firstRunId === firstRunId));
+  // #3695: a routine that repeats more than once a day says its streak on
+  // the summary card above; a run of it told on its own (one the person
+  // started) posts its own card.
+  if (!existing && !attentionFound && run.status === "completed" && run.problems && run.problemRepeat && !host.routines?.routineRepeats?.(run)) {
+    const anchor = repeatAnchor(host, sourceThreadId, run, { streak: false, ownRow: true });
     if (anchor?.routineRun) {
-      const repeated = { ...anchor.routineRun, repeat: { ...run.problemRepeat, lastAt: run.finishedAt ?? run.problemRepeat.since } };
+      const repeated = { ...anchor.routineRun, repeat: { ...anchor.routineRun.repeat, ...run.problemRepeat, lastAt: run.finishedAt ?? run.problemRepeat.since } };
       const anchorLanguage = textLanguage(`${anchor.routineRun.summary ?? ""}\n${run.routineName ?? ""}`)
         ?? (run.runAs ? host.languageOfPerson?.(run.runAs) : undefined);
       host.store.patchMessage(sourceThreadId, anchor.id, { text: host.routineRunFallbackText(repeated, anchorLanguage, zone), routineRun: repeated });
       return sourceThreadId;
     }
   }
-  const { text, routineRun: card } = routineRunCardRow(host, run, sourceThreadId, host.routineFullReport(run), existing, run.output);
+  const row = routineRunCardRow(host, run, sourceThreadId, host.routineFullReport(run), existing, run.output);
+  // #3695: the streak's one summary card, with its count and since when
+  const card = streak?.say === "tell" ? streakCard(host, run, row.routineRun) : row.routineRun;
+  const text = card === row.routineRun ? row.text : host.routineRunFallbackText(card, textLanguage(`${run.output ?? ""}\n${run.routineName ?? ""}`)
+    ?? (run.runAs ? host.languageOfPerson?.(run.runAs) : undefined), zone);
   const statusChanged = existing?.routineRun?.status !== run.status;
   const runBotRecord = host.store.bot(run.botId);
   const attention = attentionFound && runBotRecord && run.threadId

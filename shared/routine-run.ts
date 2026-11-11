@@ -34,7 +34,12 @@ export interface RoutineRunCardData {
   problems?: string;
   /** #3479: the same problem came back in later runs: how many runs in a
    * row had it (this row's run included), since when, and when last. */
-  repeat?: { firstRunId: string; count: number; since: number; lastAt: number };
+  repeat?: {
+    firstRunId: string; count: number; since: number; lastAt: number;
+    /** #3695: the one summary card of a routine that repeats more than once
+     * a day: `count` runs in a row ended with problems, whatever they said. */
+    streak?: true;
+  };
   /** #3479: the first run without problems after `afterRuns` runs with them. */
   recovered?: { afterRuns: number; since: number };
   /** 2026-11-01: why a queued or waiting run has not gone on yet. */

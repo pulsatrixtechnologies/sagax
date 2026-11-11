@@ -36,20 +36,42 @@ describe("the start sweep", () => {
     };
   }
 
-  it("closes the sub-agents and calls a cut run left open in recent threads", () => {
+  it("closes the sub-agents and calls a cut run left open in recent threads", async () => {
     const store = fakeStore({
       recent: [row("agent", 100, { name: "Agent" }), row("done", 110, { name: "Bash", ok: true })],
       old: [row("old-agent", 1, { name: "Agent" })],
     }, [{ threadId: "recent", createdAt: 50, updatedAt: 1_000 }, { threadId: "old", createdAt: 1 }]);
-    expect(closeRowsLeftByRestart(store, 500, 2_000)).toBe(1);
+    expect(await closeRowsLeftByRestart(store, 500, 2_000)).toBe(1);
     expect(store.patched).toEqual([["recent", "agent", { tool: { name: "Agent", ok: false, output: RESTART_TOOL_OUTPUT, durationMs: 1_900 } }]]);
   });
 
-  it("goes on past a thread that cannot be read", () => {
+  it("goes on past a thread that cannot be read", async () => {
     const store = fakeStore({ ok: [row("a", 1, { name: "Agent" })] }, [{ threadId: "broken", createdAt: 10 }, { threadId: "ok", createdAt: 10 }]);
     const read = store.messagesTail;
     store.messagesTail = (threadId, limit) => { if (threadId === "broken") throw new Error("sealed"); return read(threadId, limit); };
-    expect(closeRowsLeftByRestart(store, 0, 5)).toBe(1);
+    expect(await closeRowsLeftByRestart(store, 0, 5)).toBe(1);
+  });
+
+  // #3599: a busy server's start read the newest rows of every recent thread
+  // in one synchronous pass (390 to 450 ms of the start on 1,850 threads).
+  it("reads a slice of threads, gives the loop back, then finishes, leaving this run's rows open", async () => {
+    const threads: Record<string, Message[]> = {};
+    const tasks = Array.from({ length: 500 }, (_, index) => {
+      threads[`t${index}`] = [row(`cut-${index}`, 100, { name: "Agent" }), row(`new-${index}`, 2_000, { name: "Bash" })];
+      return { threadId: `t${index}`, createdAt: 50, updatedAt: 1_000 };
+    });
+    const store = fakeStore(threads, tasks);
+    let reads = 0;
+    let ticks = 0;
+    const read = store.messagesTail;
+    store.messagesTail = (threadId, limit) => { reads += 1; ticks += 1; return read(threadId, limit); };
+    const sweep = closeRowsLeftByRestart(store, 500, 2_000, { sliceMs: 10, clock: () => ticks });
+    // the start goes on after one slice: ten threads, not five hundred
+    expect(reads).toBe(10);
+    expect(await sweep).toBe(500);
+    expect(reads).toBe(500);
+    // only the rows the stop cut: a row written from the start on is this run's
+    expect(store.patched.map(([, id]) => id).filter((id) => id.startsWith("new-"))).toEqual([]);
   });
 });
 

@@ -2088,7 +2088,21 @@ export class RoutineManager {
   }
 
   listRoutines(): Routine[] {
-    return this.routines.map(routine => this.routineWithHealth(routine));
+    const byRoutine = new Map<string, RoutineRun[]>();
+    for (const run of this.runList) {
+      const runs = byRoutine.get(run.routineId);
+      if (runs) runs.push(run);
+      else byRoutine.set(run.routineId, [run]);
+    }
+    return this.routines.map(routine => this.routineWithHealth(routine, byRoutine.get(routine.id) ?? []));
+  }
+
+  /** #3599: one routine's runs in stored order, a settled run read as
+   * stored. The fields a routine's health and its last outcomes read (its
+   * id, routine, status, error, problems and times) are the same before and
+   * after a stored run loads, so they never make a start load the history. */
+  private runsOfRoutine(routineId: string): RoutineRun[] {
+    return this.runList.filter(run => run.routineId === routineId);
   }
 
   /** Clear the destination v0.1.98 to v0.1.107 saved on routines as if a
@@ -2122,8 +2136,8 @@ export class RoutineManager {
 
   /** Successful delegated/provider turns are not successful runs until the
    * routine settles. Cancellation and missed schedules are not attempts. */
-  private outcomesNewestFirst(routineId: string, exceptRunId?: string): RoutineRun[] {
-    return this.runs.filter(run => run.routineId === routineId && run.id !== exceptRunId && ((run.status === "failed" && run.error !== ROUTINE_RESTARTED) || run.status === "completed")).reverse()
+  private outcomesNewestFirst(routineId: string, exceptRunId?: string, runs: readonly RoutineRun[] = this.runsOfRoutine(routineId)): RoutineRun[] {
+    return runs.filter(run => run.routineId === routineId && run.id !== exceptRunId && ((run.status === "failed" && run.error !== ROUTINE_RESTARTED) || run.status === "completed")).reverse()
       .sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt) || b.createdAt - a.createdAt);
   }
 
@@ -2174,9 +2188,9 @@ export class RoutineManager {
 
   /** Failed runs in a row since the last completed one, counting only
    * those that finished after the routine was last turned back on. */
-  private failureStreakOf(routine: Routine): number {
+  private failureStreakOf(routine: Routine, runs?: readonly RoutineRun[]): number {
     const cleared = routine.failuresClearedAt ?? -Infinity;
-    const outcomes = this.outcomesNewestFirst(routine.id).filter(run => (run.finishedAt ?? run.createdAt) > cleared);
+    const outcomes = this.outcomesNewestFirst(routine.id, undefined, runs).filter(run => (run.finishedAt ?? run.createdAt) > cleared);
     const success = outcomes.findIndex(run => run.status === "completed");
     return success < 0 ? outcomes.length : success;
   }
@@ -2226,10 +2240,10 @@ export class RoutineManager {
     if (refusal) throw new RoutineInputError(refusal);
   }
 
-  private routineWithHealth(routine: Routine): Routine {
-    const failures = this.failureStreakOf(routine);
+  private routineWithHealth(routine: Routine, runs: readonly RoutineRun[] = this.runsOfRoutine(routine.id)): Routine {
+    const failures = this.failureStreakOf(routine, runs);
     const { installedPackage: _installedPackage, ...visible } = cloneRoutine(routine);
-    const week = weekRuns(this.runs, routine.id, this.now());
+    const week = weekRuns(runs, routine.id, this.now());
     return { ...visible, ...(failures ? { failureStreak: failures } : {}), ...(week ? { weekRuns: week } : {}) };
   }
 

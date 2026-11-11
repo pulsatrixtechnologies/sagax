@@ -15,6 +15,7 @@
 //     person asked for, a teammate's work and a routine are not the bot's
 //     own sub-agents and keep their own lifecycle.
 import type { WireMessage as Message } from "../../shared/wire.ts";
+import { yieldToEventLoop } from "../harness/http.ts";
 
 /** A call cut short by a person's Stop. */
 export const CUT_TOOL_OUTPUT = "Stopped before it finished.";
@@ -57,18 +58,39 @@ export interface RowSweepStore {
  * turn's rows are among them. */
 export const RESTART_SWEEP_TAIL = 80;
 
+/** How long the start sweep reads before it gives the loop back (#3599). */
+export const RESTART_SWEEP_SLICE_MS = 8;
+
 /** At start: rows an earlier run left open can never complete (no event for
  * them can arrive any more), so they close instead of showing a sub-agent or
  * a call at work for good. Only threads touched since `since` are read, and
- * only their newest messages. Returns how many rows were closed. */
-export function closeRowsLeftByRestart(store: RowSweepStore, since: number, now: number): number {
+ * only their newest messages. Resolves to how many rows were closed.
+ *
+ * #3599: a busy server has thousands of such threads, so the sweep reads them
+ * a slice at a time and gives the loop back between slices instead of
+ * holding the start. A row written from `now` on is a turn of this run, not
+ * one the stop cut, and stays as it is. */
+export async function closeRowsLeftByRestart(
+  store: RowSweepStore,
+  since: number,
+  now: number,
+  options: { sliceMs?: number; clock?: () => number } = {},
+): Promise<number> {
+  const sliceMs = options.sliceMs ?? RESTART_SWEEP_SLICE_MS;
+  const clock = options.clock ?? (() => performance.now());
   let closed = 0;
+  let sliceStart = clock();
   for (const bot of store.bots) {
     for (const task of store.tasks(bot.id)) {
       if ((task.updatedAt ?? task.createdAt) < since) continue;
+      if (clock() - sliceStart >= sliceMs) {
+        await yieldToEventLoop();
+        sliceStart = clock();
+      }
       let tail: Message[];
       try { tail = store.messagesTail(task.threadId, RESTART_SWEEP_TAIL).messages; } catch { continue; }
       for (const row of openToolRows(tail)) {
+        if (row.at >= now) continue;
         if (store.patchMessage(task.threadId, row.id, { tool: closedTool(row, RESTART_TOOL_OUTPUT, now) })) closed += 1;
       }
     }

@@ -992,7 +992,11 @@ export function runContentMigration(budgetMs = 8): { done: boolean } {
               cached("UPDATE messages SET text = ?, json = ?, sealed = ?, key_id = ? WHERE rowid = ?").run(values.text, values.json, values.sealed, values.keyId, row.rowid);
               afterWrite(row.rowid, row.thread_id, message, key);
               migration.sealed++;
-              migration.sealedThisPass++;
+              // #3599: only a row that was plain leaves plain text behind (its
+              // words in messages_fts, its old cells): a row sealed again under
+              // another key (a thread that changed hands) never did, so it owes
+              // no compaction at the next start, like the memory rows below.
+              if (!row.sealed) migration.sealedThisPass++;
             } else if (row.sealed) {
               let message: Message | null;
               try { message = decodeRow(row, row.thread_id); } catch { migration.failed++; advanced = row.rowid; continue; }
@@ -1609,17 +1613,19 @@ export function reprojectSealedRows(pause: () => Promise<void> = () => new Promi
 
 /** Every open inbox card (permission, question, request): still waiting on
  * the person, with a requestId. Used by the age-based pending expiry policy
- * (#1940), which covers every kind list_pending_approvals lists. */
+ * (#1940), which covers every kind list_pending_approvals lists. The
+ * messages_open_request_cards predicate is repeated word for word (#3599),
+ * so SQLite reads that index's rows, not every row: a start runs this twice. */
 export function openPendingInboxCards(): Array<{ threadId: string; message: Message }> {
-  const rows = db()
-    .prepare(
-      "SELECT thread_id, id, json, sealed, key_id FROM messages " +
-      "WHERE json_extract(json, '$.card.requestId') IS NOT NULL " +
-      "AND json_extract(json, '$.card.answered') IS NULL " +
-      "AND COALESCE(json_extract(json, '$.card.dismissed'), 0) = 0 " +
-      "AND COALESCE(json_extract(json, '$.card.expired'), 0) = 0",
-    )
-    .all() as unknown as Array<StoredRow & { thread_id: string }>;
+  const rows = cached(
+    "SELECT thread_id, id, json, sealed, key_id FROM messages " +
+    "WHERE json_extract(json, '$.card.requestId') IS NOT NULL " +
+    "AND COALESCE(json_extract(json, '$.card.answered'), 0) IN (0, '') " +
+    "AND COALESCE(json_extract(json, '$.card.dismissed'), 0) IN (0, '') " +
+    "AND json_extract(json, '$.card.answered') IS NULL " +
+    "AND COALESCE(json_extract(json, '$.card.dismissed'), 0) = 0 " +
+    "AND COALESCE(json_extract(json, '$.card.expired'), 0) = 0",
+  ).all() as unknown as Array<StoredRow & { thread_id: string }>;
   return decodedWithThread(rows);
 }
 

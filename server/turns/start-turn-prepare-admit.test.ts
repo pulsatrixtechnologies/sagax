@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { effortForModel } from "../../shared/model-capabilities.ts";
 import { routineTurnEffort } from "../../shared/routine-effort.ts";
 import { effortAcceptedByEngine, resolveEngineTurnEffort } from "../../shared/ultracode-effort.ts";
+import { createConnectorPlanForTurn } from "../connectors/turn-plan.ts";
 import { createPrepareAdmitStartTurn } from "./start-turn-prepare-admit.ts";
 import { createDispatchStartTurn } from "./start-turn-dispatch.ts";
 import { createTurnState } from "./start-turn-state.ts";
@@ -20,6 +21,12 @@ describe("routine effort at turn admission and dispatch", () => {
     let routineSubagent: string | null = null;
     const receipt = new Map();
     const noOp = vi.fn();
+    // Turn setup gives every turn its connector plan (start-turn-setup.ts,
+    // #3368); this fixture skips setup, so it computes the plan the same way.
+    const connectorPlanForTurn = createConnectorPlanForTurn<typeof bot & { toolScope?: unknown }, typeof instance>({
+      accountConnectorInput: (_bot, engine, speaker) => ({ identity: "solo", restrictedByPolicy: false, driver: engine.driverKind, instanceId: engine.instanceId, speaker, ownerPrincipalId: "", localPrincipalId: "" }),
+      withholdHostToolsFor: () => false,
+    });
     const values: Record<string, unknown> = {
       IDENTITY: { kind: "solo" }, cfg: {}, turnStartLogLine: () => "fixture turn", voiceLatency: { mark: noOp },
       extractTurnImages: (text: string) => ({ text, images: [], videos: [] }), promptWithDataContext: (text: string) => text,
@@ -40,13 +47,14 @@ describe("routine effort at turn admission and dispatch", () => {
       withDesktopModelPerson: (_person: unknown, work: () => unknown) => work(), runAsBotEngine: (_botId: string, work: () => unknown) => work(),
       guardTurnDispatch: (work: unknown) => work, withRecalled: (_recalled: unknown, text: string) => text,
       savedSteps: { dispatch: { sendTurn: (_engine: unknown, _replay: unknown, input: SendTurnInput, dispatch: (input: SendTurnInput) => unknown) => dispatch(input) } },
-      managedPolicy: { restrictsMcp: () => false }, connectorPlanForTurn: () => ({}),
+      managedPolicy: { restrictsMcp: () => false }, connectorPlanForTurn,
     };
     const host = new Proxy(values, { get: (target, key: string) => target[key] ?? noOp }) as unknown as StartTurnHost;
     async function turn() {
       const state = createTurnState({ botId: bot.id, text: "Do the task", opts: { cardContinuation: true }, startTurn: async () => {} });
       Object.assign(state, { bot, instance, threadId: "thread", answer: {}, plan: {}, activeMessages: [], transcript: [], tagged: [], contextOrder: [],
         integrations: {}, dispatchContext: { turnText: "Do the task", handoff: {} }, prompt: { text: "", stable: "", volatile: "" } });
+      state.connectorPlan = connectorPlanForTurn(bot, instance, { origin: "owner-routine" }, "thread");
       const claim = vi.fn(() => ({ kind: "continue" as const }));
       await createPrepareAdmitStartTurn(host, claim)(state);
       expect(claim).toHaveBeenCalledOnce();

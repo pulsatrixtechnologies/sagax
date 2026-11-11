@@ -40,6 +40,12 @@ export const GUARD_TESTS = [
   "src/components/bot-settings/panel-tabs.guard.test.ts",
   // #3292: AGENTS.md stays rules only (size ceiling, no dated journal section)
   "scripts/testing/agents-md.guard.test.ts",
+  // #3538: two files that went red on main unseen, since only a lot that
+  // touched them ran them: routine effort at turn admission (#2038, red since
+  // the connector plan of #3368) and the agent-to-agent API on a real server
+  // with the reach rule of 2026-11-09 (#3264). About 15 s together.
+  "server/turns/start-turn-prepare-admit.test.ts",
+  "server/agent-api.e2e.test.ts",
 ];
 
 /** The guard tests present under `root` (a lot may predate one of them). */

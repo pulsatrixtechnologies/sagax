@@ -5,6 +5,9 @@ import type { TurnState, PrepareResult } from "./start-turn-state.ts";
 import { resolveModelAccount } from "../models/resolve-model-account.ts";
 import { activeEngineRefusal } from "../engines/engine-refusals.ts";
 import { pluginKey, pluginsNamedIn, type AccountCreditState } from "../../shared/model-account-pool.ts";
+import { failedTurnTool } from "../../shared/failed-turn.ts";
+import { TURN_NOT_RESUMED } from "../../shared/restart-words.ts";
+import { unknownPerson } from "./thread-speakers.ts";
 
 export function createPrepareValidateStartTurn(
   host: StartTurnHost,
@@ -100,6 +103,25 @@ export function createPrepareValidateStartTurn(
         state.onDispatchError?.(message);
       }
     };
+  }
+  // #3609: a continuation (a delegation wake, a card resume, a restart's
+  // resume, the runtime's rerun of a root) speaks for the person its thread
+  // keeps. On an organization server one that cannot know who that is (a
+  // thread kept before its speaker was) never runs as nobody: its
+  // conversation says the turn stopped at the restart and is to be asked
+  // again, and a client that waits on it reads it as interrupted.
+  if (state.opts?.cardContinuation && !state.continuingRoutine && IDENTITY.kind === "perspicax" && unknownPerson(resolveTurnSpeaker({
+    speaker: state.opts?.speaker,
+    sender: state.opts?.sender ?? state.opts?.userMessage?.sender,
+    peerAsk: state.opts?.peerAsk ?? state.opts?.userMessage?.peerAsk,
+    trigger: state.opts?.trigger,
+    automationSource: state.opts?.automationSource
+  }))) {
+    console.error(`[omb-turn] bot=${state.botId} thread=${state.threadId} continuation with no known speaker: not run`);
+    store.appendMessage(state.threadId, { role: "bot", kind: "activity", tool: failedTurnTool(TURN_NOT_RESUMED) });
+    state.opts?.coordination?.settle?.({ ok: false, text: TURN_NOT_RESUMED });
+    state.opts?.onTurnSettled?.();
+    return { kind: "return", value: undefined };
   }
   // A thread whose own model can't run runs on its bot's from now on.
   healThreadModel(state.botId, state.threadId);

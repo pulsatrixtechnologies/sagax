@@ -6,7 +6,7 @@ import { DATA_DIR } from "../config.ts";
 import { ROUTINE_RESTARTED, ROUTINE_RESUME_PROMPT } from "../routines/routines.ts";
 import { migrateLegacyHeldSteers, takeHeldSteersForThread, resumePromptWithHeld } from "../turns/held-steers.ts";
 import { outwardDetail } from "../runtime/tree.ts";
-import { cutTurnContext, cutTurnResumePrompt, directResumeStep, type DirectResumeStep, restorableSpeakers, RUNTIME_RESUME_GRACE_MS, runtimeResumeVerdict, takeInterruptedTurns, TURN_NOT_RESUMED, TURN_NOT_RESUMED_NEWER } from "../turns/interrupted-turns.ts";
+import { cutTurnContext, cutTurnResumePrompt, directResumeStep, type DirectResumeStep, RUNTIME_RESUME_GRACE_MS, runtimeResumeVerdict, takeInterruptedTurns, TURN_NOT_RESUMED, TURN_NOT_RESUMED_NEWER } from "../turns/interrupted-turns.ts";
 export type Host = Record<string, any>;
 
 export function createResumeTurnsCutByRestart(getHost: () => Host): any {
@@ -38,10 +38,6 @@ function resumeTurnsCutByRestart(): void {
   }
   const failed = (threadId: string, why: string) =>
     host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: failedTurnTool(why) });
-  // #3217: the runtime reruns the roots it held as the person each spoke
-  // for (restored at load, before its first tick; again here when that
-  // read missed), never as nobody.
-  for (const { threadId, speaker } of restorableSpeakers(cut.resume)) if (host.turnSpeakers && !host.turnSpeakers.has(threadId)) host.turnSpeakers.set(threadId, speaker);
   for (const turn of cut.stale) if (host.store.taskByThread(turn.botId, turn.threadId)) failed(turn.threadId, TURN_CUT_BY_RESTART);
   const resumedThreads = new Set<string>();
   // #3217: every cut turn is watched until it answers or says it did not
@@ -80,7 +76,7 @@ function resumeTurnsCutByRestart(): void {
   return resumeTurnsCutByRestart;
 }
 
-type DirectResume = { botId: string; threadId: string; at: number; speaker?: unknown; prompt: string; relaunched?: boolean;
+type DirectResume = { botId: string; threadId: string; at: number; prompt: string; relaunched?: boolean;
   /** The runtime accounts for this turn (it resumes it itself): only watched until it is seen lost. */
   runtime?: boolean; runtimeHeld?: boolean };
 
@@ -96,9 +92,11 @@ function resumePromptFor(host: Host, turn: { threadId: string; at: number }, fai
 }
 
 function launchDirectResume(host: Host, turn: DirectResume, failed: (threadId: string, why: string) => void): void {
+  // #3609: the person the cut turn spoke for, as its thread keeps it.
+  const speaker = host.turnSpeakers?.get(turn.threadId);
   void host.startTurn(turn.botId, turn.prompt, {
     threadId: turn.threadId, cardContinuation: true,
-    ...(turn.speaker ? { speaker: turn.speaker as TurnSpeaker } : {})
+    ...(speaker ? { speaker } : {})
   }).catch((error) => failed(turn.threadId, `${TURN_RESUME_FAILED_PREFIX}${error instanceof Error ? error.message : String(error)}`));
 }
 

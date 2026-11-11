@@ -9,6 +9,7 @@ import {
   isYesNoChoices,
   notificationChoiceLabels,
   notificationContextText,
+  offersTwoPaths,
 } from "./notification-context.ts";
 
 describe("notification context (#2909)", () => {
@@ -93,5 +94,26 @@ describe("notification context (#2909)", () => {
     expect(choiceQuestionMismatch("Is it OK to send it to Alex or Sam?", ["Yes", "No"])).toBeUndefined();
     expect(choiceQuestionMismatch("Je garde la locale ou la distante ?", ["Oui, la locale", "Non"])).toBeTruthy();
     expect(choiceQuestionMismatch("Je garde la locale ou la distante ?", ["Oui", "Non", "Autre"])).toBeTruthy();
+  });
+
+  it("an \"or\" inside a quantity or a fixed phrase is not two paths (#3537)", () => {
+    for (const question of [
+      "Should I delete one or more duplicates?",
+      "Should I create one or two tickets?",
+      "Should I merge two or three drafts?",
+      "Should I keep it more or less as is?",
+      "Should I do it now, sooner or later?",
+      "Je supprime un ou plusieurs doublons ?",
+      "Je crée une ou plusieurs factures ?",
+      "Je garde une ou deux copies ?",
+      "Je fusionne deux ou trois brouillons ?",
+      "Je le laisse plus ou moins tel quel ?",
+      "Je le fais maintenant, tôt ou tard ?",
+    ]) {
+      expect(asksForAlternative(question), question).toBe(false);
+      expect(offersTwoPaths(question), question).toBe(false);
+    }
+    expect(offersTwoPaths("Should I delete one or more duplicates now or tonight?")).toBe(true);
+    expect(offersTwoPaths("Je supprime un ou plusieurs doublons maintenant ou ce soir ?")).toBe(true);
   });
 });

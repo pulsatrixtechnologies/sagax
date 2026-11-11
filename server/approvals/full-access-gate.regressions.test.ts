@@ -315,6 +315,48 @@ describe("#1819: an invented may-I card under Full access", () => {
     expect(fullAccessChoiceAnswer("full", { question, options })).toEqual({ choice: options[0] });
   });
 
+  // #3537: an "or" / "ou" inside a quantity or a fixed phrase names no
+  // path. The may-I is answered at Full as before #3525, and the bot's own
+  // ask_choice takes Yes / No on it.
+  const quantityMayI: Array<[string, string[]]> = [
+    ["Should I delete one or more duplicates?", ["Yes", "No"]],
+    ["Should I create one or two tickets?", ["Yes", "No"]],
+    ["Should I merge two or three of the drafts?", ["Yes", "No"]],
+    ["Should I delete 1 or 2 files?", ["Yes", "No"]],
+    ["The draft is more or less ready, should I send it?", ["Yes", "No"]],
+    ["Should I clean it up now, since it has to happen sooner or later?", ["Yes", "No"]],
+    ["Veux-tu que je supprime un ou plusieurs doublons ?", ["Oui", "Non"]],
+    ["Veux-tu que je crée une ou plusieurs factures ?", ["Oui", "Non"]],
+    ["Veux-tu que je garde une ou deux copies ?", ["Oui", "Non"]],
+    ["Veux-tu que je fusionne deux ou trois brouillons ?", ["Oui", "Non"]],
+    ["Le brouillon est plus ou moins prêt, je l'envoie ?", ["Oui", "Non"]],
+    ["Il faudra le faire tôt ou tard, je le nettoie maintenant ?", ["Oui", "Non"]],
+  ];
+  it.each(quantityMayI)("a may-I whose only \"or\" is a quantity or a fixed phrase is answered at Full (#3537): %s", (question, options) => {
+    expect(choiceQuestionMismatch(question, options)).toBeUndefined();
+    expect(fullAccessChoiceAnswer("full", { question, options })).toEqual({ choice: options[0] });
+    const { store, rows } = fakeStore();
+    const result = createAgentCard({ store, bot: BOT, threadId: "t-3537", input: { tool: ASK_CHOICE_TOOL, question, options }, approvalLevel: "full" });
+    expect(result).toMatchObject({ ok: true, answered: { choice: options[0] } });
+    expect(rows.filter((row) => row.kind === "options" && row.card && !row.card.answered)).toHaveLength(0);
+  });
+
+  it.each(quantityMayI)("the bot's own ask_choice takes Yes / No on a quantity question below Full, as a card (#3537): %s", (question, options) => {
+    const { store, rows } = fakeStore();
+    const result = createAgentCard({ store, bot: BOT, threadId: "t-3537", input: { tool: ASK_CHOICE_TOOL, question, options }, approvalLevel: "auto" });
+    expect(result).toMatchObject({ ok: true });
+    expect(rows.filter((row) => row.kind === "options" && row.card && !row.card.answered)).toHaveLength(1);
+  });
+
+  it.each([
+    ["Should I delete one or more duplicates now or tonight?", ["Yes", "No"]],
+    ["Veux-tu que je supprime un ou plusieurs doublons maintenant ou ce soir ?", ["Oui", "Non"]],
+    ["Should I run version 1 or 2?", ["Yes", "No"]],
+  ])("a real either/or next to a quantity phrase stays a choice at Full (#3537): %s", (question, options) => {
+    expect(fullAccessChoiceAnswer("full", { question, options })).toBeNull();
+    expect(choiceQuestionMismatch(question, options)).toMatch(/give the alternatives themselves as options, not Yes \/ No/);
+  });
+
   it("the prompt says so, so the model does not expect a click", () => {
     expect(approvalLevelPrompt("full")).toMatch(/may-I .*answered for the person/i);
     expect(fullAccessChoiceAnswer("full", { question: "Should I continue?", options: ["Yes", "No"] })).toEqual({ choice: "Yes" });

@@ -5,7 +5,7 @@ import { orgFullAccessFor } from "@/lib/full-access";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { useBoundedLock } from "@/lib/composer-lock";
 import { pendingQuestions } from "@/lib/pending-question";
-import { useServerWaitingItems } from "@/lib/pinned-waiting";
+import { usePublishPinnedHold, useServerWaitingItems } from "@/lib/pinned-waiting";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { sendKeyLabel, useSendKey } from "@/lib/send-key";
@@ -111,6 +111,9 @@ export function useComposerSession({
     : bot ? [bot.threadId, ...(bot.tasks ?? []).map((task) => task.threadId)] : [];
   const waitingItems = useServerWaitingItems(group ? undefined : bot?.id, waitingThreads, waitingStamp(group ?? bot), Boolean(group));
   const pinned = usePinnedWaiting(waitingItems, threadId, shownMessages, approvals);
+  // #3681: what the pinned card holds, the conversation of this view does
+  // not draw while it waits (src/lib/pinned-waiting.ts)
+  usePublishPinnedHold(pinned.items);
   const approvalBotFor = (pending: Pending) => pending.message.card?.approvalOrigin
     ? storeBots.find(candidate => candidate.id === pending.message.from?.botId)
     : group

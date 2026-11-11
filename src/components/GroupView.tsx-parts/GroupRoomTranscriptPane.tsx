@@ -1,4 +1,5 @@
-import type { RefObject, MutableRefObject } from "react";
+import { useState, type RefObject, type MutableRefObject } from "react";
+import { createPinnedHold, PinnedHoldContext } from "@/lib/pinned-waiting";
 import { Square } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -114,7 +115,10 @@ export function GroupRoomTranscriptPane({
 }) {
   const { dispatch } = useStore();
   const chatColumnClassName = useChatColumnClass();
+  // #3681: the room's composer tells its transcript what its pinned card holds
+  const [pinnedHold] = useState(createPinnedHold);
   return (
+    <PinnedHoldContext value={pinnedHold}>
     <div className="relative min-h-0 flex-1">
       <div
         ref={scrollRef}
@@ -256,5 +260,6 @@ export function GroupRoomTranscriptPane({
       />
       </div>
     </div>
+    </PinnedHoldContext>
   );
 }

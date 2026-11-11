@@ -29,6 +29,9 @@ export const GUARD_TESTS = [
   "src/components/dialogs-close.test.ts",
   // #3581: chat rows in the application's look, no quiet mode switch
   "src/components/chat-rows.guard.test.ts",
+  // #3681: an ask that waits is drawn once, on the pinned card over the box;
+  // the conversation mounted with a waiting question and approval counts one each
+  "src/components/ChatView.pinned-once.dom.test.ts",
   "server/admission-golden.test.ts",
   "server/drain-coalescing-golden.test.ts",
   "server/drivers/agents-catalog-wire.test.ts",

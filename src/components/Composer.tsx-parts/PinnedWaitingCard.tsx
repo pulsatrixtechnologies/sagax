@@ -8,7 +8,11 @@
 // and its row of answers), drawn flat inside this frame: same rows, same
 // buttons, same remembered grants. A chevron folds it to one line that still
 // names who waits and for what; it never hides while something is pending.
-// "See in the conversation" scrolls the transcript to the original message.
+// "See in the conversation" scrolls the transcript to where the bot asked.
+//
+// #3681 (the owner, 2026-11-11): while an item waits here the conversation
+// draws no card for it (pinnedHeldIds, read by the transcript from this same
+// list); once answered, skipped or expired its record is back at its place.
 //
 // #3414: one compact card, the chat's ask surface (AskCard), with one row on
 // top. An approval's title is that row ("Orla wants to view alerts"), its
@@ -31,7 +35,6 @@ import { pinnedItemsFrom } from "@/lib/pinned-waiting";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { openThread, useStore, type Bot, type Message } from "@/state/store";
 import type { ServedWaitingItem } from "../../../shared/waiting-items";
-import { approvalCardStaysInChat } from "../ApprovalCard";
 import { PendingApprovalActions, PendingApprovalPanel, readOnlyApprovals, Stepper, type Pending } from "../PendingApproval";
 import { QuestionCard } from "../QuestionCard";
 import { PersonRequestCard, skipPersonRequest, skipPlace } from "../InputRequestCard";
@@ -88,13 +91,14 @@ export function pinnedItemText(item: PinnedItem): string {
 
 /** The message this item came from, when it is in this conversation's
  * transcript (this topic or an earlier one, #3438): a parallel task's
- * approval, or one whose card never stays in the chat, has nothing to
- * scroll to. An approval of an earlier topic sits in that topic. */
+ * approval has nothing to scroll to. An approval of an earlier topic sits
+ * in that topic. #3681: while it waits the conversation draws no card for
+ * it, so the conversation lands on the words before it (pinnedJumpTarget). */
 export function pinnedItemMessageId(item: PinnedItem, threadId: string): string | undefined {
   if (item.kind === "other") return item.item.messageId;
   if (item.kind === "question" || item.kind === "request" || item.kind === "offer") return item.message.id;
   if (!item.threadId && item.pending.threadId && item.pending.threadId !== threadId) return undefined;
-  return approvalCardStaysInChat(item.pending.message.card) ? item.pending.message.id : undefined;
+  return item.pending.message.id;
 }
 
 export function PinnedWaitingCard({

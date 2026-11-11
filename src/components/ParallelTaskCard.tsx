@@ -18,6 +18,7 @@ import { ChevronRight, GitFork, Loader2, Square } from "lucide-react";
 import { liveParallelState, type ParallelTaskState } from "../../shared/parallel-tasks";
 import { api, openThread, useStore, type Message } from "@/state/store";
 import { pendingQuestions } from "@/lib/pending-question";
+import { usePinnedHeld } from "@/lib/pinned-waiting";
 import { QuestionCard } from "./QuestionCard";
 import { StepRow } from "./StepRow";
 import { t } from "@/lib/i18n";
@@ -85,7 +86,9 @@ export function ParallelTaskCard({ message, botId }: { message: Message; botId: 
   const status = ref ? parallelCardState(message, task) : "queued";
   const live = status === "running" || status === "waiting" || status === "queued";
   const asked = useInlineQuestions(ref?.threadId, status === "waiting", task?.updatedAt);
-  const questions = showThreads ? [] : asked;
+  // #3681: a question the pinned card over the box holds is drawn there only
+  const held = usePinnedHeld();
+  const questions = showThreads ? [] : asked.filter((question) => !held.has(question.id));
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!live) return;

@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import type { Message } from "@/state/store";
 import type { InboxApproval } from "../../shared/approvals-inbox";
 import { servedWaitingItems, waitingEntriesFrom, type ServedWaitingItem } from "../../shared/waiting-items";
-import { pinnedItemsFrom } from "./pinned-waiting";
+import { createPinnedHold, pinnedHeldIds, pinnedItemsFrom, pinnedJumpTarget } from "./pinned-waiting";
 
 const NOW = 10_000_000;
 
@@ -83,5 +83,59 @@ describe("the pinned row draws the server's items (#3543)", () => {
     const answered = { id: "m-perm", role: "bot", kind: "options", at: 100, card: { requestId: "req_perm", tool: "Bash", title: "Run Bash?", options: [], answered: "allow" } } as unknown as Message;
     const pinned = pinnedItemsFrom(served, "conv", [answered]);
     expect(pinned.map((item) => item.item.id)).toEqual(served.slice(1).map((item) => item.id));
+  });
+});
+
+// #3681, the owner (2026-11-11): an ask that waits is drawn once, on the
+// pinned card; the conversation reads what it holds from this same list.
+describe("what the pinned card holds, the conversation does not draw (#3681)", () => {
+  const ask = (id: string, at: number, more: Record<string, unknown> = {}) => ({
+    id, role: "bot", kind: "options", at, text: "",
+    card: { title: "", subtitle: "", options: [], requestId: `req-${id}`, requestType: "question", questionRequest: { version: 1, questions: [{ question: "Which one?", options: [{ label: "A" }, { label: "B" }] }] }, ...more },
+  }) as unknown as Message;
+
+  it("holds the message of every item it draws with the conversation's card, never one of a kind it only names", () => {
+    const served = servedList();
+    const [first] = served;
+    const unknown = { ...first!, id: "later-kind:1", kind: "checklist" as unknown as ServedWaitingItem["kind"], messageId: "m-later", title: "Sign", text: "Sign" };
+    const held = pinnedHeldIds(pinnedItemsFrom([...served, unknown], "conv"));
+    expect([...held].sort()).toEqual(["m-input", "m-needs", "m-offer", "m-perm", "m-q", "m-skill"]);
+    expect(held.has("m-later")).toBe(false);
+  });
+
+  it("pins a question of this conversation the list does not carry yet, once, and lets it go once settled", () => {
+    const open = ask("q-live", 700);
+    const before = pinnedItemsFrom([], "conv", [open]);
+    expect(before.map((item) => [item.kind, item.key])).toEqual([["question", "conv:req-q-live"]]);
+    expect(pinnedHeldIds(before).has("q-live")).toBe(true);
+    const [first] = servedList();
+    const listed: ServedWaitingItem = { ...first!, id: "req-q-live", kind: "question", messageId: "q-live", threadId: "conv", message: open };
+    expect(pinnedItemsFrom([listed], "conv", [open]).map((item) => item.item)).toEqual([listed]);
+    expect(pinnedItemsFrom([], "conv", [ask("q-live", 700, { answered: "answer", answeredText: "A" })])).toEqual([]);
+  });
+
+  it("lands See in the conversation on the words before the ask, past cards it also holds", () => {
+    const words = { id: "w", role: "bot", kind: "text", at: 1, text: "Two things first." } as Message;
+    const step = { id: "s", role: "bot", kind: "activity", at: 2, tool: { name: "Read", ok: true } } as Message;
+    const first = ask("q1", 3);
+    const second = ask("q2", 4);
+    const messages = [words, step, first, second];
+    expect(pinnedJumpTarget(messages, "q2", new Set(["q1", "q2"]))).toBe("w");
+    expect(pinnedJumpTarget(messages, "q1", new Set(["q1"]))).toBe("w");
+    // nothing drawn before it: the ask itself
+    expect(pinnedJumpTarget([first], "q1", new Set(["q1"]))).toBe("q1");
+  });
+
+  it("tells the conversation only when what it holds changes", () => {
+    const hold = createPinnedHold();
+    let told = 0;
+    hold.subscribe(() => { told += 1; });
+    hold.set(new Set(["a"]));
+    hold.set(new Set(["a"]));
+    expect(told).toBe(1);
+    expect(hold.get().has("a")).toBe(true);
+    hold.set(new Set());
+    expect(told).toBe(2);
+    expect(hold.get().size).toBe(0);
   });
 });

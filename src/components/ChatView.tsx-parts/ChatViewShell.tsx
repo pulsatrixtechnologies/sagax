@@ -37,6 +37,8 @@ import { ChatViewHeader } from "./ChatViewHeader";
 import { ChatViewPagePanel } from "./ChatViewPagePanel";
 import { ChatViewSheets } from "./ChatViewSheets";
 import { ChatEdgeFade } from "@/components/ChatEdgeFade";
+import { useState } from "react";
+import { createPinnedHold, PinnedHoldContext } from "@/lib/pinned-waiting";
 
 /** Chat chrome: header, banners, transcript, composer, page panel. */
 export function ChatViewShell(m: Record<string, any>) {
@@ -61,8 +63,12 @@ export function ChatViewShell(m: Record<string, any>) {
     announcement, busySince, regenerate, threadLink, latestPageVersion, botPill, chatHeader, chatWindow, bubbleStyle, Root, preview,
   } = m;
   const chatColumnClassName = useChatColumnClass();
+  // #3681: this view's composer tells its transcript what its pinned card
+  // holds; the transcript draws no card for those while they wait
+  const [pinnedHold] = useState(createPinnedHold);
 
   return (
+<PinnedHoldContext value={pinnedHold}>
 <ThreadLinkContext value={threadLink}>
     <ChatWindowProvider value={chatWindow}>
     <ExchangeColumnProvider node={exchangeColumnNode}>
@@ -379,5 +385,6 @@ export function ChatViewShell(m: Record<string, any>) {
     </ExchangeColumnProvider>
     </ChatWindowProvider>
     </ThreadLinkContext>
+</PinnedHoldContext>
   );
 }

@@ -147,9 +147,19 @@ d'apps, puis une capsule de recherche large. Rien d'autre à l'écran.
   de la personne, quel que soit le sujet où il l'a demandé (question à choix, question
   en mots, demande d'un travail confié, approbation), le plus ancien d'abord, « 1 sur N »
   avec flèches. Le corps est la carte standard de la conversation (QuestionSheet ou
-  panneau d'approbation), jamais une boîte à part ; une seule carte par demande dans le
-  fil. Répondre à un endroit règle les deux. « Voir dans la conversation » ouvre le sujet
-  plus ancien à ce message, sans panneau de fil.
+  panneau d'approbation), jamais une boîte à part. Une demande qui attend n'est dessinée
+  qu'une fois (#3681, le propriétaire 2026-11-11) : tant que la carte épinglée la tient,
+  la conversation ne dessine aucune carte pour elle, ni carte vide ni ligne « en attente » ;
+  les mots du bot avant et après restent. Une fois répondue, passée ou expirée, sa trace
+  revient à sa place dans la conversation (la question avec la réponse donnée, le reçu de
+  l'approbation avec sa pastille). Une seule règle, lue par les deux surfaces dans la même
+  liste (`pinnedHeldIds`, `src/lib/pinned-waiting.ts`), au chat direct comme au salon. Là
+  où aucune carte épinglée ne peut la tenir (vue sans compositeur, conversation en lecture
+  seule, page Approbations, sorte de demande que l'app ne sait pas dessiner), la
+  conversation garde sa carte. « Voir dans la conversation » mène à l'endroit où le bot a
+  demandé (ses mots juste avant la demande), dans le sujet plus ancien au besoin, sans
+  panneau de fil. Test : `src/components/ChatView.pinned-once.dom.test.ts` (une carte
+  par demande, dans les tests de garde).
 - Ligne de travail : sous le dernier message, la mascotte, des points animés et l'étape
   en mots simples (« Lecture de ton courriel »), jamais un nom d'outil.
 - Rangée du tour (#3581) : dans le chat d'une personne, seule la réponse reste une
@@ -1175,6 +1185,8 @@ barre. Un point qui ne s'applique pas se dit, il ne se saute pas.
 2. Chaque information et chaque action de l'écran d'avant a une place (liste avant et
    après jointe).
 3. Chaque option n'existe qu'à un endroit ; les autres surfaces y mènent par un lien.
+   Un état se dit une fois : une demande qui attend n'est dessinée que sur la carte
+   épinglée, jamais aussi dans la conversation (#3681).
 4. Aucune fenêtre modale hors confirmation destructive ou exception listée (principe 5) ;
    le choix panneau, vue ou popover suit le tableau du principe.
 5. Seuls les composants partagés (réglages, cartes, rangées, pilules, cartes de

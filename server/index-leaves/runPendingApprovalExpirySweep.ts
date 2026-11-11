@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** runPendingApprovalExpirySweep (#1388). Pure move from server/index.ts. */
-import { sweepPendingApprovalExpiry, sweepWaitingRowExpiry } from "../approvals/pending-approval-expiry.ts";
+import { ExpiryNotes, sweepPendingApprovalExpiry, sweepWaitingRowExpiry } from "../approvals/pending-approval-expiry.ts";
 export type Host = Record<string, any>;
 
 const warn = (what: string, error: unknown) =>
@@ -11,11 +11,11 @@ export function createRunPendingApprovalExpirySweep(getHost: () => Host): any {
  * #3517: found by the store's query, never by reading every conversation.
  * Sealed rows written before their projection carried the waiting flags
  * are rewritten once, a small batch at a time, and swept when that ends. */
-function runWaitingRowExpirySweep() {
+function runWaitingRowExpirySweep(notes?: ExpiryNotes) {
   const host = getHost();
   let closed = 0;
   try {
-    closed += sweepWaitingRowExpiry(host.waitingCardSkip.waitingRowExpiryDeps());
+    closed += sweepWaitingRowExpiry(host.waitingCardSkip.waitingRowExpiryDeps(), notes);
   } catch (error) {
     warn("waiting card age expiry", error);
   }
@@ -32,17 +32,21 @@ function runWaitingRowExpirySweep() {
 }
 
 /** Every inbox card past its age, then the waiting rows; at the start, the
- * waiting rows wait for the server to listen (`waitingRows: false`). */
+ * waiting rows wait for the server to listen (`waitingRows: false`).
+ * #3522: one line per conversation for the whole pass, written at its end. */
 function runPendingApprovalExpirySweep(options: { waitingRows?: boolean } = {}) {
   const host = getHost();
+  const notes = new ExpiryNotes();
+  const deps = host.pendingExpiryDeps();
 
   let closed = 0;
   try {
-    closed += sweepPendingApprovalExpiry(host.pendingExpiryDeps());
+    closed += sweepPendingApprovalExpiry(deps, notes);
   } catch (error) {
     warn("pending age expiry", error);
   }
-  if (options.waitingRows !== false) closed += runWaitingRowExpirySweep();
+  if (options.waitingRows !== false) closed += runWaitingRowExpirySweep(notes);
+  notes.flush(deps.note);
   return closed;
 
 }

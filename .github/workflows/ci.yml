@@ -112,8 +112,12 @@ jobs:
         os: ${{ fromJSON(needs.static.outputs.vitest_os) }}
         # The shard count is written three times: this list, the --shard
         # flag below and the known-failures job's expected job count
-        # (scripts/ci-workflow.test.ts keeps them equal).
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        # (scripts/ci-workflow.test.ts keeps them equal). vitest-macos
+        # reuses this list and these steps through the YAML anchors.
+        shard: &vitest-shards [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        # macOS shards run in vitest-macos, a few at a time (#3672).
+        exclude:
+          - os: macos-latest
     runs-on: ${{ matrix.os }}
     # scripts/testing/duration-sequencer.ts splits the files by their recorded
     # CI seconds, not by count, so the heavy e2e files no longer share one
@@ -126,7 +130,7 @@ jobs:
     # scripts/testing/duration-sequencer.test.ts fails when the recorded
     # seconds no longer fit, before a run is cancelled. docs/ci.md.
     timeout-minutes: ${{ matrix.os == 'ubuntu-latest' && 30 || 45 }}
-    steps:
+    steps: &vitest-steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -180,6 +184,28 @@ jobs:
       - name: Electron unit tests
         if: matrix.shard == 1
         run: pnpm test:electron
+
+  vitest-macos:
+    # The same shards and steps as `vitest`, on macOS, at most three at once
+    # (#3672). An account gets five hosted macOS runners at a time (GitHub's
+    # documented limit for Free, Pro and Team plans, "Actions limits"), and
+    # the macOS smokes and the Swift job take one each. Twenty macOS shards
+    # asked for at once waited up to 65 minutes, and GitHub dropped six of
+    # them, and the Swift job, as "not acquired by Runner of type hosted even
+    # after multiple attempts" in the nightly run of 2026-11-11. A shard that
+    # is not started yet waits in the workflow, not in GitHub's runner queue.
+    needs: static
+    if: ${{ !cancelled() && needs.static.outputs.runtime == 'true' && contains(needs.static.outputs.vitest_os, 'macos-latest') }}
+    name: vitest (${{ matrix.os }}, shard ${{ matrix.shard }}/20)
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        os: [macos-latest]
+        shard: *vitest-shards
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps: *vitest-steps
 
   behavior-evals:
     needs: static
@@ -338,7 +364,7 @@ jobs:
     # `regression` issue per test, named after the pull request that
     # scripts/stability/bisect.mjs finds. Nothing here blocks a merge: it runs
     # after the merge. docs/ci.md, "Known failures".
-    needs: [static, vitest]
+    needs: [static, vitest, vitest-macos]
     if: ${{ !cancelled() && needs.static.outputs.runtime == 'true' }}
     name: known failures
     runs-on: ubuntu-latest
@@ -377,6 +403,17 @@ jobs:
           pattern: vitest-results-*
           path: ${{ runner.temp }}/vitest-results
           merge-multiple: true
+      - name: Read this run's test jobs
+        # A test job that never got a runner (no step ran) is told apart from
+        # one that crashed (#3672). Without this list every missing job reads
+        # as a crash.
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" \
+            --jq '.jobs[] | {name, conclusion, steps: [.steps[]? | {status, conclusion}]}' > "$RUNNER_TEMP/vitest-jobs.jsonl" \
+            || echo "::warning::The run's job list could not be read; a test job with no results reads as a crash."
       - name: Every failure is a known failure
         if: ${{ !cancelled() }}
         env:
@@ -390,7 +427,7 @@ jobs:
           # --platforms: only a run on every platform (schedule, dispatch)
           # drops a listed test that passed; a push runs Linux only.
           node scripts/testing/known-failures.mjs report --results "$RUNNER_TEMP/vitest-results" --expect "$expected" \
-            --platforms "$VITEST_OS" --out "$RUNNER_TEMP/known-failures" --run-url "$RUN_URL" $seed
+            --platforms "$VITEST_OS" --jobs "$RUNNER_TEMP/vitest-jobs.jsonl" --out "$RUNNER_TEMP/known-failures" --run-url "$RUN_URL" $seed
       - name: Upload the list as this run leaves it
         # The shrunk list (or, with fill_known_failures, the first fill):
         # commit it as scripts/testing/known-failures.json.
@@ -440,7 +477,7 @@ jobs:
   gate:
     # One aggregation, not three queued runners doing the same check.
     name: CI
-    needs: [static, vitest, known-failures, behavior-evals, packaged-server, windows-cua, electron-smokes, voice-acceptance]
+    needs: [static, vitest, vitest-macos, known-failures, behavior-evals, packaged-server, windows-cua, electron-smokes, voice-acceptance]
     # Still report failed/skipped dependencies, but don't keep a superseded
     # workflow alive just to schedule its summary jobs.
     if: ${{ !cancelled() }}
@@ -458,7 +495,7 @@ jobs:
             const runtime = needs.static.outputs.runtime;
             if (runtime !== "true" && runtime !== "false") throw new Error("Missing CI selection");
             const bad = Object.entries(needs).filter(([job, { result }]) => {
-              const platformOnly = job === "windows-cua" || job === "electron-smokes";
+              const platformOnly = job === "windows-cua" || job === "electron-smokes" || job === "vitest-macos";
               const platforms = needs.static.outputs.platforms !== "false";
               const expected = job === "static" || (runtime === "true" && (platforms || !platformOnly)) ? "success" : "skipped";
               return result !== expected;
@@ -583,9 +620,28 @@ jobs:
           node-version: 24
           cache: pnpm
       - name: Install package validation and native smoke tools
-        run: >-
-          sudo apt-get update && sudo apt-get install -y
-          at-spi2-core dbus-x11 desktop-file-utils libxi6 libxkbcommon0 openbox squashfs-tools x11-utils xdotool xvfb
+        # One failed fetch must not end the job, and a resolver that stops
+        # answering must not eat it whole (#3672): in November 2026 one push
+        # run failed on "Temporary failure resolving" and a nightly run spent
+        # its 25 minutes here, about 20 seconds per package per mirror. apt
+        # retries each fetch, each attempt is bounded, and the step tries
+        # three times with a pause; the step's own cap bounds the rest.
+        timeout-minutes: 13
+        shell: bash
+        run: |
+          packages=(at-spi2-core dbus-x11 desktop-file-utils libxi6 libxkbcommon0 openbox squashfs-tools x11-utils xdotool xvfb)
+          apt=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          for attempt in 1 2 3; do
+            sudo dpkg --configure -a || true
+            if timeout 90 sudo apt-get "${apt[@]}" update && timeout 150 sudo apt-get "${apt[@]}" install -y "${packages[@]}"; then
+              exit 0
+            fi
+            echo "::warning::Package install attempt $attempt of 3 failed; trying again."
+            sudo resolvectl flush-caches || true
+            sleep $((attempt * 15))
+          done
+          echo "::error::The smoke tools could not be installed after three attempts (package mirror or name resolution)."
+          exit 1
       - run: pnpm install --frozen-lockfile
       - name: Stage the pinned CUA runtime
         run: pnpm build:cua:linux

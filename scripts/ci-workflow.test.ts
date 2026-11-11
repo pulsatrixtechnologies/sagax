@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
 const workflow = parse(readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"));
-const requiredRuntimeJobs = ["vitest", "known-failures", "behavior-evals", "packaged-server", "windows-cua", "electron-smokes", "voice-acceptance"];
+const requiredRuntimeJobs = ["vitest", "vitest-macos", "known-failures", "behavior-evals", "packaged-server", "windows-cua", "electron-smokes", "voice-acceptance"];
 
 function runGate(needs: Record<string, unknown>) {
   // Execute the actual gate, not a duplicate of its success/failure logic.
@@ -75,6 +75,7 @@ describe("CI concurrency", () => {
     expect(workflow.permissions).toEqual({ contents: "read" });
     expect(workflow.jobs.vitest.strategy.matrix).toEqual({
       os: "${{ fromJSON(needs.static.outputs.vitest_os) }}", shard: Array.from({ length: 20 }, (_, i) => i + 1),
+      exclude: [{ os: "macos-latest" }],
     });
     expect(workflow.jobs.vitest["timeout-minutes"]).toBe("${{ matrix.os == 'ubuntu-latest' && 30 || 45 }}");
   });
@@ -91,12 +92,37 @@ describe("CI concurrency", () => {
     expect(verdict).toContain(`JSON.parse(process.env.VITEST_OS).length * ${count})`);
   });
 
+  it("runs the macOS shards a few at a time, with the same shards and steps as the other platforms (#3672)", () => {
+    // Twenty macOS shards asked for at once against five hosted macOS
+    // runners: GitHub dropped six of them unstarted after an hour.
+    const mac = workflow.jobs["vitest-macos"];
+    expect(mac.strategy).toEqual({ "fail-fast": false, "max-parallel": 3, matrix: { os: ["macos-latest"], shard: workflow.jobs.vitest.strategy.matrix.shard } });
+    expect(mac.steps).toEqual(workflow.jobs.vitest.steps);
+    expect(mac.name).toBe(workflow.jobs.vitest.name);
+    expect(mac["runs-on"]).toBe("${{ matrix.os }}");
+    expect(mac["timeout-minutes"]).toBe(45);
+    expect(mac.needs).toBe("static");
+    expect(mac.if).toBe("${{ !cancelled() && needs.static.outputs.runtime == 'true' && contains(needs.static.outputs.vitest_os, 'macos-latest') }}");
+    // The other macOS jobs keep a runner each within the five.
+    const others = Object.values(workflow.jobs as Record<string, { "runs-on"?: string }>).filter((job) => job["runs-on"] === "macos-latest");
+    expect(mac.strategy["max-parallel"] + others.length).toBeLessThanOrEqual(5);
+  });
+
+  it("retries the package smoke's tool install and bounds it (#3672)", () => {
+    const install = workflow.jobs["package-linux"].steps.find((step: { name?: string }) => step.name === "Install package validation and native smoke tools");
+    expect(install["timeout-minutes"]).toBeLessThan(workflow.jobs["package-linux"]["timeout-minutes"]);
+    expect(install.run).toContain("Acquire::Retries=3");
+    expect(install.run).toContain("for attempt in 1 2 3; do");
+    expect(install.run).toMatch(/timeout \d+ sudo apt-get "\$\{apt\[@\]\}" update/);
+    expect(install.run).toMatch(/timeout \d+ sudo apt-get "\$\{apt\[@\]\}" install -y/);
+  });
+
   it("keeps each PR to one macOS job unless native code changed", () => {
     const macosJobs = Object.entries(workflow.jobs as Record<string, { "runs-on": string; strategy?: { matrix?: { os?: unknown } } }>)
       .filter(([, job]) => job["runs-on"] === "macos-latest" || JSON.stringify(job.strategy?.matrix?.os ?? "").includes("macos"))
       .map(([name]) => name);
     // Sagax keeps its native apps: the iOS build runs only when ios/ changed.
-    expect(macosJobs.sort()).toEqual(["electron-smokes", "ios"]);
+    expect(macosJobs.sort()).toEqual(["electron-smokes", "ios", "vitest-macos"]);
     const smokes = workflow.jobs["electron-smokes"].steps.map((step: { run?: string }) => step.run);
     expect(smokes).toContain("pnpm test:packaged-server");
   });
@@ -209,8 +235,9 @@ describe("CI concurrency", () => {
       const base = gateNeeds("true");
       return { ...base, static: { ...base.static, outputs: { ...base.static.outputs, platforms: "false" } }, ...extra };
     };
-    expect(runGate(pr({ "windows-cua": { result: "skipped" }, "electron-smokes": { result: "skipped" } })).status).toBe(0);
-    expect(runGate(pr({ "windows-cua": { result: "skipped" }, "electron-smokes": { result: "skipped" }, vitest: { result: "skipped" } })).status).toBe(1);
+    const skipped = { "windows-cua": { result: "skipped" }, "electron-smokes": { result: "skipped" }, "vitest-macos": { result: "skipped" } };
+    expect(runGate(pr(skipped)).status).toBe(0);
+    expect(runGate(pr({ ...skipped, vitest: { result: "skipped" } })).status).toBe(1);
   });
 
   it("rejects failed preflight and missing or malformed selection", () => {
@@ -244,7 +271,7 @@ describe("CI concurrency", () => {
       step.run === "pnpm exec vitest run scripts/ci-scope.test.ts scripts/ci-workflow.test.ts scripts/testing/verification-docs.test.ts",
     )).toBe(true);
     for (const [name, job] of Object.entries(workflow.jobs) as [string, { needs?: string | string[]; if?: string }][]) {
-      if (["static", "gate", "known-failures", "vitest"].includes(name)) continue;
+      if (["static", "gate", "known-failures", "vitest", "vitest-macos"].includes(name)) continue;
       expect(job.needs).toBe("static");
       const selector = `needs.static.outputs.${["ios", "android"].includes(name) ? "mobile" : "runtime"} == 'true'`;
       // Windows, macOS and iOS jobs run on main pushes and merge groups only.
@@ -287,12 +314,18 @@ describe("known failures after each merge (#3482)", () => {
   });
 
   it("gives the verdict once, after every vitest job, and the CI gate requires it", () => {
-    expect(job.needs).toEqual(["static", "vitest"]);
+    expect(job.needs).toEqual(["static", "vitest", "vitest-macos"]);
     expect(job.if).toBe("${{ !cancelled() && needs.static.outputs.runtime == 'true' }}");
     expect(job["runs-on"]).toBe("ubuntu-latest");
     const verdict = job.steps.find((step) => step.name === "Every failure is a known failure")!;
     expect(verdict.run).toContain("known-failures.mjs report");
     expect(verdict.run).toContain('--expect "$expected"');
+    // A job with no runner is told apart from a crash (#3672).
+    expect(verdict.run).toContain('--jobs "$RUNNER_TEMP/vitest-jobs.jsonl"');
+    const jobs = job.steps.find((step) => step.name === "Read this run's test jobs")!;
+    expect(jobs.if).toBe("${{ !cancelled() }}");
+    expect(jobs.env).toEqual({ GH_TOKEN: "${{ github.token }}" });
+    expect(job.steps.indexOf(jobs)).toBe(job.steps.indexOf(verdict) - 1);
     // A failed shrink check must not hide this run's own failures.
     expect(verdict.if).toBe("${{ !cancelled() }}");
     const download = job.steps.find((step) => step.with?.pattern === "vitest-results-*")!;

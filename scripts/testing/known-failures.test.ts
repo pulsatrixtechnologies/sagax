@@ -9,6 +9,8 @@ import {
   coversEveryPlatform,
   EVERY_PLATFORM,
   extractResults,
+  filesRunOn,
+  jobsWithoutRunner,
   identityKey,
   listedGuardTests,
   onlyShrinks,
@@ -43,6 +45,8 @@ const report = (files: { name: string; status: string; message?: string; tests: 
   })),
 });
 const entry = (file: string, test: string) => ({ file, test, owner: "unassigned", reason: "r", since: "2026-11-10" });
+/** A job's steps as ci.yml reads them from the Actions API: one step ran. */
+const RAN = [{ status: "completed", conclusion: "success" }];
 
 describe("the known-failures list", () => {
   it("is committed in the shape of the flaky-test list, and starts empty until the first run on GitHub fills it", () => {
@@ -114,6 +118,33 @@ describe("classify and shrink", () => {
   it("lets a test fail on one platform and pass on another without leaving the list", () => {
     const both = [{ file: "a.test.ts", test: "listed and fixed", state: "pass" }, { file: "a.test.ts", test: "listed and fixed", state: "fail" }];
     expect(classify(list, both).fixed).toEqual([]);
+  });
+});
+
+describe("filesRunOn and jobsWithoutRunner (#3672)", () => {
+  it("names the files that ran on every platform, a row without a runner counting for each", () => {
+    const results = [
+      { file: "a.test.ts", test: WHOLE_FILE, state: "pass" as const, os: "ubuntu-latest" },
+      { file: "a.test.ts", test: WHOLE_FILE, state: "pass" as const, os: "macos-latest" },
+      { file: "b.test.ts", test: WHOLE_FILE, state: "pass" as const, os: "ubuntu-latest" },
+      { file: "c.test.ts", test: WHOLE_FILE, state: "pass" as const },
+    ];
+    expect([...filesRunOn(results, ["macos-latest", "ubuntu-latest"])].sort()).toEqual(["a.test.ts", "c.test.ts"]);
+  });
+
+  it("lists the vitest jobs with no step and no results, and only those", () => {
+    const jobs = [
+      { name: "vitest (macos-latest, shard 4/20)", conclusion: "cancelled", steps: [] },
+      { name: "vitest (macos-latest, shard 3/20)", conclusion: "success", steps: RAN },
+      { name: "vitest (windows-latest, shard 1/20)", conclusion: "cancelled", steps: RAN },
+      { name: "vitest (macos-latest, shard 9/20)", conclusion: "skipped", steps: [] },
+      { name: "vitest (macos-latest, shard 8/20)", conclusion: "cancelled", steps: [] },
+      // listed steps that never started: the release gate's neverStarted rule
+      { name: "vitest (macos-latest, shard 11/20)", conclusion: "failure", steps: [{ status: "queued", conclusion: null }] },
+      { name: "Swift tests + iOS build", conclusion: "cancelled", steps: [] },
+    ];
+    expect(jobsWithoutRunner(jobs, ["macos-latest-3"])).toEqual([{ os: "macos-latest", shard: 4 }, { os: "macos-latest", shard: 8 }, { os: "macos-latest", shard: 11 }]);
+    expect(jobsWithoutRunner(jobs, ["macos-latest-4", "macos-latest-8", "macos-latest-11"])).toEqual([]);
   });
 });
 
@@ -197,6 +228,31 @@ describe("updateSightings", () => {
     const failure = { file: "a.test.ts", test: "x" };
     const prev = { lastSha: "s2", tests: { [identityKey(failure)]: { ...failure, count: 2, firstSha: "s1", lastSha: "s2", good: null, issue: 12 } } };
     expect(updateSightings(prev, { newFailures: [failure], results: [{ ...failure, state: "fail" }], sha: "s3" }).due).toEqual([]);
+    expect(updateSightings(prev, { newFailures: [failure], results: [{ ...failure, state: "fail" }], sha: "s3", openIssues: new Set([12]) }).due).toEqual([]);
+  });
+
+  it("counts a test again once its issue is closed, and opens a new one when it is seen twice more (#3672)", () => {
+    // Main's runs of 2026-11-11: the peer inbox test kept failing while its
+    // sighting still named issue #3650, closed by its fix. A failure after
+    // the fix would never have opened an issue again.
+    const failure = { file: "a.test.ts", test: "x" };
+    const fail = [{ ...failure, state: "fail" as const }];
+    const prev = { lastSha: "s7", tests: { [identityKey(failure)]: { ...failure, count: 7, firstSha: "s1", lastSha: "s7", good: "s0", issue: 3650 } } };
+    const after = updateSightings(prev, { newFailures: [failure], results: fail, sha: "s8", openIssues: new Set() });
+    expect(after.due).toEqual([]);
+    expect(after.sightings.tests[identityKey(failure)]).toEqual({ ...failure, count: 1, firstSha: "s8", lastSha: "s8", good: "s7", issue: null });
+    const again = updateSightings(after.sightings, { newFailures: [failure], results: fail, sha: "s9", openIssues: new Set() });
+    expect(again.due).toEqual([{ ...failure, count: 2, firstSha: "s8", lastSha: "s9", good: "s7", issue: null }]);
+  });
+
+  it("keeps a sighting whose file did not run on every platform of a nightly run (#3672)", () => {
+    const failure = { file: "a.test.ts", test: "mac only" };
+    const first = updateSightings(null, { newFailures: [failure], results: [{ ...failure, state: "fail", os: "macos-latest" }], sha: "n1", platforms: EVERY_PLATFORM });
+    const pass = (os: string) => ({ ...failure, state: "pass" as const, os });
+    const noMacRunner = updateSightings(first.sightings, { newFailures: [], results: [pass("ubuntu-latest"), pass("windows-latest")], sha: "n2", platforms: EVERY_PLATFORM });
+    expect(noMacRunner.sightings.tests[identityKey(failure)].count).toBe(1);
+    const everywhere = updateSightings(noMacRunner.sightings, { newFailures: [], results: EVERY_PLATFORM.map(pass), sha: "n3", platforms: EVERY_PLATFORM });
+    expect(everywhere.sightings.tests).toEqual({});
   });
 });
 
@@ -289,13 +345,15 @@ describe("the command line", () => {
     const dir = tempDir();
     const list = join(dir, "list.json");
     writeFileSync(list, JSON.stringify({ $comment: "c", seeded: "s", tests: [entry("a.test.ts", "listed"), entry("a.test.ts", "fixed")] }));
-    shardResults(join(dir, "results"), "linux-1", [
-      { file: "a.test.ts", test: "listed", state: "fail" },
-      { file: "a.test.ts", test: "fixed", state: "pass" },
-      { file: "a.test.ts", test: "planted", state: "fail" },
-    ]);
+    for (const os of EVERY_PLATFORM) {
+      shardResults(join(dir, "results"), `${os}-1`, [
+        { file: "a.test.ts", test: "listed", state: "fail" },
+        { file: "a.test.ts", test: "fixed", state: "pass" },
+        { file: "a.test.ts", test: "planted", state: "fail" },
+      ]);
+    }
     const out = join(dir, "out");
-    const result = run(["report", "--results", join(dir, "results"), "--expect", "1", "--list", list, "--platforms", JSON.stringify(EVERY_PLATFORM), "--out", out]);
+    const result = run(["report", "--results", join(dir, "results"), "--expect", "3", "--list", list, "--platforms", JSON.stringify(EVERY_PLATFORM), "--out", out]);
     expect(result.status, result.stderr).toBe(1);
     expect(result.stdout).toContain("::error file=a.test.ts,title=Failure not in the known-failures list::planted");
     expect(JSON.parse(readFileSync(join(out, "known-failures.json"), "utf8")).tests.map((test: { test: string }) => test.test)).toEqual(["listed"]);
@@ -342,6 +400,39 @@ describe("the command line", () => {
     expect(missing.stdout).toContain("1 of 2 test jobs sent results");
   });
 
+  it("tells a test job that got no runner from a crash, and keeps the listed tests it did not run (#3672)", () => {
+    // The nightly run of 2026-11-11: six macOS shards never got a runner. Its
+    // check called that a crash, and listed tests of those shards that passed
+    // on Linux and Windows left the list without running on macOS.
+    const dir = tempDir();
+    const list = join(dir, "list.json");
+    writeFileSync(list, JSON.stringify({ $comment: "c", seeded: "s", tests: [entry("one.test.ts", "passes everywhere"), entry("two.test.ts", "passes where it ran")] }));
+    for (const os of EVERY_PLATFORM) shardResults(join(dir, "results"), `${os}-1`, [{ file: "one.test.ts", test: "passes everywhere", state: "pass" }, { file: "one.test.ts", test: WHOLE_FILE, state: "pass" }]);
+    for (const os of ["ubuntu-latest", "windows-latest"]) shardResults(join(dir, "results"), `${os}-2`, [{ file: "two.test.ts", test: "passes where it ran", state: "pass" }]);
+    const jobs = join(dir, "jobs.jsonl");
+    writeFileSync(jobs, [
+      { name: "vitest (macos-latest, shard 1/2)", conclusion: "success", steps: RAN },
+      { name: "vitest (macos-latest, shard 2/2)", conclusion: "cancelled", steps: [] },
+      { name: "vitest (ubuntu-latest, shard 2/2)", conclusion: "success", steps: RAN },
+      { name: "known failures", conclusion: null, steps: RAN },
+    ].map((job) => JSON.stringify(job)).join("\n"));
+    const args = ["report", "--results", join(dir, "results"), "--expect", "6", "--list", list, "--platforms", JSON.stringify(EVERY_PLATFORM)];
+    const nightly = run([...args, "--jobs", jobs, "--out", join(dir, "out")]);
+    expect(nightly.status, nightly.stdout).toBe(0);
+    expect(nightly.stdout).toContain("5 of 6 test jobs sent results.");
+    expect(nightly.stdout).toContain("1 test job(s) of macos-latest got no runner (shard 2): GitHub never gave them a machine, so their tests did not run on macos-latest. This is not a test failure");
+    expect(nightly.stdout).not.toContain("crashed");
+    expect(nightly.stdout).toContain("1 listed test(s) passed but did not run on every platform");
+    expect(JSON.parse(readFileSync(join(dir, "out", "known-failures.json"), "utf8")).tests.map((test: { test: string }) => test.test)).toEqual(["passes where it ran"]);
+    // Without the run's job list, a missing job still reads as a crash: red.
+    const crash = run([...args, "--out", join(dir, "crash")]);
+    expect(crash.status).toBe(1);
+    expect(crash.stdout).toContain("1 test job(s) crashed or timed out before writing their results, so this run is red.");
+    // A job that ran and sent nothing is a crash even with the job list.
+    writeFileSync(jobs, JSON.stringify({ name: "vitest (macos-latest, shard 2/2)", conclusion: "failure", steps: RAN }));
+    expect(run([...args, "--jobs", jobs, "--out", join(dir, "ran")]).status).toBe(1);
+  });
+
   it("fills the list from a run in seed mode and stays green", () => {
     const dir = tempDir();
     const list = join(dir, "list.json");
@@ -360,6 +451,21 @@ describe("the command line", () => {
     const result = run(["extract", "--report", join(dir, "report.json"), "--root", root, "--exit", "1", "--out", join(dir, "shard.json")]);
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(readFileSync(join(dir, "shard.json"), "utf8")).results).toContainEqual({ file: "server/a.test.ts", test: "d > t", state: "fail" });
+  });
+
+  it("still writes this run's sightings when the open issues cannot be listed (#3672)", () => {
+    const dir = tempDir();
+    const failure = { file: "a.test.ts", test: "red", os: "ubuntu" };
+    writeFileSync(join(dir, "results.json"), JSON.stringify([{ ...failure, state: "fail" }]));
+    writeFileSync(join(dir, "new.json"), JSON.stringify([failure]));
+    const out = join(dir, "sightings.json");
+    const result = run(
+      ["open-issues", "--results", join(dir, "results.json"), "--new-failures", join(dir, "new.json"), "--sha", "s1", "--out", out],
+      { GITHUB_REPOSITORY: "o/r", GH_TOKEN: "t", GITHUB_API_URL: "http://127.0.0.1:1" },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("Open regression issues not listed");
+    expect(Object.keys(JSON.parse(readFileSync(out, "utf8")).tests)).toEqual([identityKey(failure)]);
   });
 
   it("checks against a git revision that the list only shrank", () => {

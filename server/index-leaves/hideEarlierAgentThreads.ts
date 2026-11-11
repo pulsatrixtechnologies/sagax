@@ -15,7 +15,8 @@ function hideEarlierAgentThreads() {
   if (existsSync(marker)) return;
   try {
     const to = new Date();
-    const rows = readAdminActivityRange(DATA_DIR, { from: new Date(to.getTime() - 120 * 24 * 60 * 60_000), to });
+    // once per data dir (the marker); only the AI client messages are opened (#3545)
+    const rows = readAdminActivityRange(DATA_DIR, { from: new Date(to.getTime() - 120 * 24 * 60 * 60_000), to }, { action: (action) => action === "client.message" });
     const plan = host.planHiddenAgentThreads(rows, (botId, threadId) => host.store.taskByThread(botId, threadId) ?? undefined);
     for (const entry of plan) host.store.setTaskHidden(entry.botId, entry.threadId, true);
     writeFileSync(marker, `${new Date().toISOString()} ${plan.length}\n`, { mode: 0o600 });

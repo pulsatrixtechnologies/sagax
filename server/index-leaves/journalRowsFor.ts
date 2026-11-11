@@ -53,7 +53,8 @@ function journalRowsFor(viewer: InboxViewer, days: number): { rows: JournalRow[]
   const own = host.customRules.rulesOf(viewer.principalId);
   const built = buildJournal({
     decisions: readDecisionRange(DATA_DIR, { from, to }),
-    agentAudit: readAdminActivityRange(DATA_DIR, { from, to }).filter((row) => row.action.startsWith("agents.")),
+    // #3545: only the agent tools' rows are opened, never the whole window
+    agentAudit: readAdminActivityRange(DATA_DIR, { from, to }, { action: (action) => action.startsWith("agents.") }),
     runs,
     owns,
     botName: (botId) => host.store.bot(botId)?.name,

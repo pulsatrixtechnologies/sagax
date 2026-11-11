@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
- * Headless captures for a page's capabilities (#3413 lot 1b), real Chrome:
+ * Headless captures for a page's capabilities (#3413 lot 1b).
+ * Default launch is channel chrome. CAPTURE_CHROMIUM, when set, is the
+ * chromium binary used instead of that channel.
  *  - the publication card with what the page reads (gallery page-viewer.html);
  *  - the reading link's bar with "Reads", the Ask first card and the link
  *    confirmation, light and dark, wide and narrow, around a test page that
@@ -121,7 +123,10 @@ async function waitForServer(url, ms = 180_000) {
 
 let browser;
 try {
-  browser = await chromium.launch({ channel: "chrome", headless: true });
+  const chromiumPath = process.env.CAPTURE_CHROMIUM;
+  browser = await chromium.launch(chromiumPath
+    ? { executablePath: chromiumPath, headless: true }
+    : { channel: "chrome", headless: true });
   const shoot = async (page, name) => { const file = join(outDir, `${name}.png`); await page.screenshot({ path: file }); console.log(file); };
 
   // the reading link

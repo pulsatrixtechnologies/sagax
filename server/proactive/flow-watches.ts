@@ -101,6 +101,9 @@ export interface OfferedWatch {
   /** It would run for this person on this bot; else what is missing. */
   runs: boolean;
   missing?: "product" | "skill";
+  /** #3513: what is missing, by name: the products the person's connection
+   * does not serve, or the skill the bot does not hold. */
+  lacking?: string[];
   /** #3431: the tools it declares (else its observe tool), for the card's
    * details; only those the connection marks read-only pass without a card. */
   tools?: string[];
@@ -210,10 +213,18 @@ function domainsOf(value: unknown): Record<string, FlowDomain> | undefined {
   return Object.keys(out).length ? out : undefined;
 }
 
-/** A domain's label for the person, else its slug. */
+/** #3513: a readable name from a slug (`backup-health` reads "Backup
+ * health"), for a domain, a skill or a product without a label: the person
+ * never reads a raw slug. */
+export function readableName(slug: string): string {
+  const words = slug.replace(/[-_.:]+/g, " ").replace(/\s+/g, " ").trim();
+  return words ? words[0]!.toUpperCase() + words.slice(1) : slug;
+}
+
+/** A domain's label for the person, else a readable name from its slug. */
 export function domainLabel(listing: Pick<FlowWatchListing, "domains"> | undefined, slug: string, language: "fr" | "en"): string {
   const label = listing?.domains?.[slug]?.label;
-  return (language === "fr" ? label?.fr ?? label?.en : label?.en ?? label?.fr) ?? slug;
+  return (language === "fr" ? label?.fr ?? label?.en : label?.en ?? label?.fr) ?? readableName(slug);
 }
 
 /** The read tools a chosen domain's alerts may run without a card
@@ -849,16 +860,18 @@ export class FlowWatchLoop {
     const skills = this.skillsOnce(botId, person);
     const byDomain = new Map<string, OfferedWatch[]>();
     for (const watch of universe.watches) {
-      const missing = !watch.products.every((product) => held.has(product)) ? "product" as const
+      const absent = watch.products.filter((product) => !held.has(product));
+      const missing = absent.length ? "product" as const
         : watch.skill && !skills().has(watch.skill) ? "skill" as const : undefined;
-      const row: OfferedWatch = { id: watch.id, summary: watch.summary, cadence: watch.cadence, products: watch.products, runs: !missing, ...(missing ? { missing } : {}), tools: declaredTools(watch) };
+      const lacking = missing === "product" ? absent : missing === "skill" ? [watch.skill] : [];
+      const row: OfferedWatch = { id: watch.id, summary: watch.summary, cadence: watch.cadence, products: watch.products, runs: !missing, ...(missing ? { missing, lacking } : {}), tools: declaredTools(watch) };
       byDomain.set(watch.domain, [...(byDomain.get(watch.domain) ?? []), row]);
     }
     const domains = [...byDomain].sort(([a], [b]) => a.localeCompare(b)).map(([domain, watches]): OfferedDomain => {
       const described = universe.domains?.[domain];
       return {
         domain,
-        label: described?.label ?? { en: domain },
+        label: described?.label ?? { en: readableName(domain) },
         ...(described?.audience ? { audience: described.audience } : {}),
         watches,
         eligible: watches.some((watch) => watch.runs),
@@ -872,12 +885,13 @@ export class FlowWatchLoop {
     return this.deps.memory.get(person.trim().toLowerCase(), watchId).alertAt;
   }
 
-  /** A domain's label from the listings read so far, else its slug. */
+  /** A domain's label from the listings read so far, else a readable name
+   * from its slug. */
   label(domain: string, language: "fr" | "en"): string {
     for (const { value } of this.listings.values()) {
       if (value.domains?.[domain]) return domainLabel(value, domain, language);
     }
-    return domain;
+    return readableName(domain);
   }
 
   /** One person's chosen domains, each on its own bot. */

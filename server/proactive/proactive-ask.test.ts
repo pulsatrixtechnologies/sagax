@@ -7,7 +7,7 @@ import { availableTools, catalogProfileFromEnv } from "../drivers/agents-catalog
 import { createProactiveAskInternalRoutes } from "../routes/proactive-ask.ts";
 import type { OfferedDomain, OfferedListing } from "./flow-watches.ts";
 import {
-  ASK_LISTING_FRESH_MS, askTurnRefusal, BRIEF_ASK_DOMAIN, cadenceWords, choiceCard, firstQuestionText, PROACTIVE_ASK_WAIT_MS, ProactiveAsk, proposerFor, SECOND_CARD_AFTER_MS,
+  ASK_LISTING_FRESH_MS, askTurnRefusal, BRIEF_ASK_DOMAIN, cadenceWords, choiceCard, domainLabelIn, firstQuestionText, nothingYetText, PROACTIVE_ASK_WAIT_MS, ProactiveAsk, proposerFor, SECOND_CARD_AFTER_MS,
   watchReadCovered, withinWait, type AskBot, type AskTurnFacts, type ChoiceCard,
 } from "./proactive-ask.ts";
 import { briefCard } from "./brief-routine.ts";
@@ -567,5 +567,70 @@ describe("#3470: an owner turn never freezes the server on its listing", () => {
     expect(section).toBe("");
     expect(waited).toBeLessThan(100 + 3 * 30);
     expect(PROACTIVE_ASK_WAIT_MS).toBe(2_000);
+  });
+});
+
+describe("#3513: nothing can be offered yet", () => {
+  const lacking = (row: OfferedDomain, missing: "skill" | "product", names: string[]): OfferedDomain => ({
+    ...row, eligible: false, watches: row.watches.map((watch) => ({ ...watch, runs: false, missing, lacking: names })),
+  });
+  const NONE = { main: [lacking(DISPATCH, "skill", ["dispatching-tickets"]), lacking(SECURITY, "product", ["endpoint-security"])] };
+
+  it("the main bot still says once that it sends nothing on its own, and what is missing by its readable name", async () => {
+    const h = harness({ offered: NONE });
+    const first = await h.ask.onOwnerTurn(PERSON, "main");
+    expect(first).toEqual({
+      botId: "main",
+      text: "Du nouveau : je ne t'envoie plus rien de moi-même tant que tu ne l'as pas choisi. Je ne peux encore rien te proposer : il manque le skill Dispatching tickets à tes bots ; ta connexion ne donne pas accès à Endpoint security.",
+    });
+    expect(first?.text).not.toMatch(/dispatching-tickets|endpoint-security|[–—]/);
+    // nothing is sent and no card is posted
+    expect(h.posted).toEqual([]);
+    expect(h.choices.get(PERSON).asks ?? []).toEqual([]);
+    // once only, whichever bot the person writes to and whatever the day
+    expect(await h.ask.onOwnerTurn(PERSON, "main")).toBeNull();
+    h.clock.now += DAY;
+    expect(await h.ask.onOwnerTurn(PERSON, "main")).toBeNull();
+  });
+
+  it("the first question is asked once, at the next turn after something can be offered, without the upgrade sentence again", async () => {
+    const offered: Record<string, OfferedDomain[]> = { ...NONE };
+    const h = harness({ offered });
+    expect((await h.ask.onOwnerTurn(PERSON, "main"))?.text).toMatch(/^Du nouveau/);
+    offered.main = [DISPATCH];
+    h.clock.now += DAY;
+    const asked = await h.ask.onOwnerTurn(PERSON, "main");
+    expect(asked).toEqual({ botId: "main", text: expect.stringMatching(/^Je peux te prévenir de moi-même pour répartition\./) });
+    h.clock.now += DAY;
+    expect(await h.ask.onOwnerTurn(PERSON, "main")).toBeNull();
+  });
+
+  it("in English, with the connection and the Flow pack named in plain words", async () => {
+    const h = harness({ offered: NONE });
+    const listing = await h.ask.listing(PERSON);
+    expect(listing.nothing).toMatchObject({ skills: ["dispatching-tickets"], products: ["endpoint-security"], transient: false });
+    expect(nothingYetText({ skills: ["a-b", "c-d"], products: [], causes: ["no-flow", "no-access"] }, "en")).toBe(
+      "Something changed: I no longer send you anything on my own until you choose it. I cannot offer you anything yet: your bots lack the skills A b and C d; your organization's Flow pack is not on your bots; your bots do not have your connection to your organization's server.",
+    );
+    expect(nothingYetText({ skills: [], products: [], causes: [] }, "fr")).toMatch(/le pack de ton organisation ne propose encore aucune alerte\.$/);
+  });
+
+  it("a listing that cannot be read now says nothing and keeps the sentence for a later turn", async () => {
+    const store = new ProactiveChoices(undefined, () => START - DAY);
+    let fail = true;
+    const ask = new ProactiveAsk({
+      choices: store,
+      bots: () => [{ id: "main", title: "Assistant", description: "", main: true, bornAt: START - 30 * DAY }],
+      offered: async (_person, botId) => (fail ? Promise.reject(new Error("down")) : { ok: true, botId, domains: [] }),
+      aboutMe: () => "", timeZone: () => "America/Toronto", language: () => "fr", postCard: () => "p", now: () => START + (fail ? 0 : DAY),
+    });
+    expect(await ask.onOwnerTurn(PERSON, "main")).toBeNull();
+    expect(store.get(PERSON).firstAskedAt).toBeUndefined();
+    fail = false;
+    expect((await ask.onOwnerTurn(PERSON, "main"))?.text).toMatch(/^Du nouveau/);
+  });
+
+  it("a domain without a label reads a readable name, never its slug", () => {
+    expect(domainLabelIn({ domain: "backup-health", label: {} }, "fr")).toBe("Backup health");
   });
 });

@@ -139,7 +139,10 @@ export function createProactiveChoicesRoutes(deps: ProactiveChoicesRouteDeps): R
       const listing = await listingFor(person, listed);
       const known = new Map(listed && listing ? [[listed, listing]] : []);
       const receive = url?.searchParams.get("view") === PROACTIVE_RECEIVE_VIEW ? { receive: await receiveView(deps, person, known) } : {};
-      return json(res, 200, { domains: deps.store.get(person).domains, ...availableView(listing), ...receive });
+      // #3513: what was already asked, and when, beside the choices
+      const stored = deps.store.get(person);
+      const ledger = { ...(stored.asks?.length ? { asks: stored.asks } : {}), ...(stored.firstAskedAt !== undefined ? { firstAskedAt: stored.firstAskedAt } : {}), ...(stored.asked ? { asked: stored.asked } : {}) };
+      return json(res, 200, { domains: stored.domains, ...ledger, ...availableView(listing), ...receive });
     }
     if (method === "PUT") {
       if (!/^application\/json\b/i.test(String(req.headers["content-type"] ?? ""))) {

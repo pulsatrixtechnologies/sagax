@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { proactiveWriteCanExecuteUnprompted } from "../../shared/proactive-mode.ts";
 import {
   FlowWatchLoop, WatchMemory, cadenceDue, evaluateWhen, observeCall, parseCadence, parseWatchListing, productsForApis,
-  proposeTool, watchesForProducts, watchReadTools, domainLabel, type FlowHelper, type FlowWatch, type FlowWatchLoopDeps, type ObserveConnection,
+  proposeTool, readableName, watchesForProducts, watchReadTools, domainLabel, type FlowHelper, type FlowWatch, type FlowWatchLoopDeps, type ObserveConnection,
 } from "./flow-watches.ts";
 import { ProactiveBudget, ProactiveEngine, classifyProactiveActionKind } from "./proactive.ts";
 import { ProactivePendingFile, proactiveWakePrompt, type ProactiveEvent } from "./proactive-wake.ts";
@@ -359,8 +359,8 @@ describe("the loop", () => {
       // #3431: the tools it reads with (here its observe tool), for the card's details
       { id: "w-open", summary: "Open tickets.", cadence: "15m", products: ["connectwise"], runs: true, tools: ["cw_psa_service_query"] },
     ]);
-    expect(listing.domains.find((row) => row.domain === "security")?.watches[0]).toMatchObject({ runs: false, missing: "product" });
-    expect(listing.domains.find((row) => row.domain === "dispatch")?.watches[0]).toMatchObject({ runs: false, missing: "skill" });
+    expect(listing.domains.find((row) => row.domain === "security")?.watches[0]).toMatchObject({ runs: false, missing: "product", lacking: ["sentinelone"] });
+    expect(listing.domains.find((row) => row.domain === "dispatch")?.watches[0]).toMatchObject({ runs: false, missing: "skill", lacking: ["absent-skill"] });
     expect(await h.loop.offered("person-2", "b1")).toEqual({ ok: false, botId: "b1", cause: "bot-not-eligible" });
     // asked, not ambient: no observe call
     expect(h.calls.filter((call) => call.name === "cw_psa_service_query")).toEqual([]);
@@ -395,11 +395,15 @@ describe("the loop", () => {
     expect(watchReadTools([watch({ tools: ["cw_psa_time_query", "cw_psa_service_write"] })], readOnly)).toEqual(["cw_psa_time_query"]);
   });
 
-  it("the domain's label falls back to its slug", () => {
+  it("the domain's label falls back to a readable name from its slug, never the raw slug (#3513)", async () => {
     const listing = parseWatchListing(JSON.stringify({ watches: [watch()], domains: { service: { label: { fr: "Service", en: "Service desk" } } } }));
     expect(domainLabel(listing, "service", "en")).toBe("Service desk");
-    expect(domainLabel(listing, "finance", "fr")).toBe("finance");
-    expect(domainLabel(undefined, "finance", "en")).toBe("finance");
+    expect(domainLabel(listing, "finance", "fr")).toBe("Finance");
+    expect(domainLabel(undefined, "backup-health", "en")).toBe("Backup health");
+    expect(readableName("tailscale_audit.devices")).toBe("Tailscale audit devices");
+    const h = harness({ watches: [watch({ domain: "backup-health" })] });
+    const offered = await h.loop.offered("person-1", "b1");
+    expect(offered.ok && offered.domains[0]?.label).toEqual({ en: "Backup health" });
   });
 
   it("a false condition offers nothing", async () => {

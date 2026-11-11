@@ -22,6 +22,7 @@ import { PROVIDER_KEY_FIELDS, PROVIDER_KEYS, savedKeys } from "./settings-provid
 import { engineRow, type EngineRow } from "./settings-engine-row.ts";
 import { USER_PREFERENCE_KEYS } from "./user-preferences.ts";
 import { QUIET_MODE_PERSON_PATH, quietModeBotPath } from "./quiet-mode.ts";
+import { pageProactiveChoices } from "./proactive-choices-page.ts";
 
 /** `self`: the change targets the bot that is speaking. `shared` (#1545,
  * engines of an organization server): another person's bot, or the
@@ -1428,9 +1429,10 @@ add({
 // bots. A person chooses by asking any of their bots in words.
 add({
   key: "notifications.proactiveChoices", family: "notifications", target: "none", value: "object",
-  label: "What the server watches for you, by domain ({domain, state, botId?} with state on, off or never turns a domain on for one of your bots, off, or never; {domain, watch, on} switches one watch; get lists your choices (domains) and the domains you can choose (available: domain slug, label, eligible, each watch with its summary and cadence); use a slug from available; absent = off)",
+  label: "What the server watches for you, by domain ({domain, state, botId?} with state on, off or never turns a domain on for one of your bots, off, or never; {domain, watch, on} switches one watch; get answers your choices, when you were first asked and the last asks first, then the domains you can choose (available: domain slug, label, eligible, each watch with its summary, cadence and what it lacks), a page at a time: get with value {offset: nextOffset} reads on; use a slug from available; absent = off)",
   where: "No screen yet: ask any of your bots",
-  read: () => ({ path: "/api/me/proactive" }),
+  // #3513: never cut in the middle of a domain: paged, the choices and asks first
+  read: () => ({ path: "/api/me/proactive", shape: (v, arg) => pageProactiveChoices(v, arg), maxChars: 16_000 }),
   write: (_ids, v) => {
     const r = (v ?? {}) as Record<string, unknown>;
     if (typeof r.domain !== "string" || !r.domain) return "value is {domain, state (on, off or never), botId?} or {domain, watch, on}.";

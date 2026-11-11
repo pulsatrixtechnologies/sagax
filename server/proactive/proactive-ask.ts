@@ -28,7 +28,7 @@
 // a second listing or a second store.
 import type { AskEntry, PersonChoices } from "../../shared/proactive-choices.ts";
 import type { OfferedDomain, OfferedListing, OfferedWatch } from "./flow-watches.ts";
-import { parseCadence } from "./flow-watches.ts";
+import { parseCadence, readableName } from "./flow-watches.ts";
 import type { ProactiveChoices } from "./proactive-choices.ts";
 import { PROPOSAL_TTL_MS, type ProposalChoice } from "./proactive-wake.ts";
 import { briefCard } from "./brief-routine.ts";
@@ -106,7 +106,7 @@ function domainText(domain: OfferedDomain): string {
 }
 
 export function domainLabelIn(domain: Pick<OfferedDomain, "label" | "domain">, language: AskLanguage): string {
-  return (language === "fr" ? domain.label.fr ?? domain.label.en : domain.label.en ?? domain.label.fr) ?? domain.domain;
+  return (language === "fr" ? domain.label.fr ?? domain.label.en : domain.label.en ?? domain.label.fr) ?? readableName(domain.domain);
 }
 
 function audienceIn(domain: Pick<OfferedDomain, "audience">, language: AskLanguage): string | undefined {
@@ -299,6 +299,47 @@ export function firstQuestionText(labels: readonly string[], language: AskLangua
   return `${before}I can let you know on my own about ${names}. Tell me what you do, your responsibilities and your team's, and what you would like to receive.`;
 }
 
+/** #3513: why nothing can be offered to the person yet, by name: the
+ * skills their bots lack, the products their connection does not serve,
+ * and the listings that could not be read. */
+export interface NothingOffered {
+  skills: string[];
+  products: string[];
+  causes: Array<Extract<OfferedListing, { ok: false }>["cause"]>;
+}
+
+function namedList(names: readonly string[], language: AskLanguage): string {
+  const shown = names.slice(0, QUESTION_NAMES).map(readableName);
+  const more = names.length - shown.length;
+  if (more <= 0) return joinList(shown, language);
+  return language === "fr" ? `${shown.join(", ")} et ${more} autre${more > 1 ? "s" : ""}` : `${shown.join(", ")} and ${more} more`;
+}
+
+/** #3513: the main bot's one sentence of the upgrade when nothing can be
+ * offered yet: it sends nothing on its own, and what is missing, by its
+ * readable name (never an identifier). */
+export function nothingYetText(nothing: NothingOffered, language: AskLanguage): string {
+  const fr = language === "fr";
+  const reasons: string[] = [];
+  if (nothing.skills.length) {
+    const many = nothing.skills.length > 1;
+    reasons.push(fr ? `il manque ${many ? "les skills" : "le skill"} ${namedList(nothing.skills, language)} à tes bots` : `your bots lack the skill${many ? "s" : ""} ${namedList(nothing.skills, language)}`);
+  }
+  if (nothing.products.length) {
+    reasons.push(fr ? `ta connexion ne donne pas accès à ${namedList(nothing.products, language)}` : `your connection does not give access to ${namedList(nothing.products, language)}`);
+  }
+  if (nothing.causes.includes("no-flow")) {
+    reasons.push(fr ? "le pack Flow de ton organisation n'est pas sur tes bots" : "your organization's Flow pack is not on your bots");
+  }
+  if (nothing.causes.includes("no-access") || nothing.causes.includes("bot-not-eligible")) {
+    reasons.push(fr ? "tes bots n'ont pas ta connexion au serveur de ton organisation" : "your bots do not have your connection to your organization's server");
+  }
+  if (!reasons.length) reasons.push(fr ? "le pack de ton organisation ne propose encore aucune alerte" : "your organization's pack offers no alert yet");
+  return fr
+    ? `Du nouveau : je ne t'envoie plus rien de moi-même tant que tu ne l'as pas choisi. Je ne peux encore rien te proposer : ${reasons.join(" ; ")}.`
+    : `Something changed: I no longer send you anything on my own until you choose it. I cannot offer you anything yet: ${reasons.join("; ")}.`;
+}
+
 /** The card's options: options[0] is the yes (shared/proactive-proposal.ts). */
 export function choiceCardOptions(language: AskLanguage): [string, string] {
   return language === "fr" ? ["Oui", "Pas maintenant"] : ["Yes", "Not now"];
@@ -361,7 +402,7 @@ export function choiceCard(input: { domain: OfferedDomain; chosen: readonly stri
 // ── the service ──────────────────────────────────────────────────────────
 
 export interface ProactiveAskDeps {
-  choices: Pick<ProactiveChoices, "get" | "apply" | "noteAsk" | "answerAsk" | "noteQuestion" | "since" | "chosen">;
+  choices: Pick<ProactiveChoices, "get" | "apply" | "noteAsk" | "answerAsk" | "noteQuestion" | "noteFirstSaid" | "since" | "chosen">;
   /** The person's bots that can carry a watch: their own, visible, not
    * temporary. */
   bots(person: string): AskBot[];
@@ -386,6 +427,10 @@ export interface ProactiveAskDeps {
 export interface AskListing {
   byBot: Map<string, OfferedDomain[]>;
   proposer: Map<string, string>;
+  /** #3513: what the person's bots lack, by name, when no domain is
+   * eligible on any of them; `transient` when a listing could not be read
+   * now (the reason is then not said). */
+  nothing?: NothingOffered & { transient: boolean };
 }
 
 export interface ProposeInput {
@@ -430,10 +475,20 @@ export class ProactiveAsk {
 
   private async read(person: string, bots: AskBot[]): Promise<AskListing> {
     const byBot = new Map<string, OfferedDomain[]>();
+    const skills = new Set<string>();
+    const products = new Set<string>();
+    const causes = new Set<NothingOffered["causes"][number]>();
     for (const [index, bot] of bots.entries()) {
       if (index > 0) await yieldLoop();
       const offered = await this.deps.offered(person, bot.id).catch(() => null);
-      if (offered?.ok) byBot.set(bot.id, offered.domains.filter((domain) => domain.eligible));
+      if (!offered) causes.add("flow-failed");
+      else if (!offered.ok) causes.add(offered.cause);
+      else {
+        byBot.set(bot.id, offered.domains.filter((domain) => domain.eligible));
+        for (const watch of offered.domains.flatMap((domain) => domain.watches)) {
+          for (const name of watch.lacking ?? []) (watch.missing === "skill" ? skills : products).add(name);
+        }
+      }
     }
     const slugs = new Map<string, OfferedDomain>();
     for (const domains of byBot.values()) for (const domain of domains) if (!slugs.has(domain.domain)) slugs.set(domain.domain, domain);
@@ -442,7 +497,11 @@ export class ProactiveAsk {
       const picked = proposerFor(audienceText(domain), bots.map((bot) => ({ ...bot, eligible: Boolean(byBot.get(bot.id)?.some((row) => row.domain === slug)) })));
       if (picked) proposer.set(slug, picked);
     }
-    return { byBot, proposer };
+    const nothing = proposer.size ? undefined : {
+      skills: [...skills].sort(), products: [...products].sort(), causes: [...causes].filter((cause) => cause !== "flow-failed" && cause !== "bot-gone").sort(),
+      transient: causes.has("flow-failed"),
+    };
+    return { byBot, proposer, ...(nothing ? { nothing } : {}) };
   }
 
   /** #3458: the organization's domains somebody follows (a person has it
@@ -567,9 +626,17 @@ export class ProactiveAsk {
     const choices = this.deps.choices.get(person);
     const main = bots.find((bot) => bot.main);
     const listing = await this.listing(person);
-    if (!listing.proposer.size) return null;
     const existed = (bot: AskBot | undefined) => bot?.bornAt !== undefined && bot.bornAt < this.deps.choices.since;
-    if (main && choices.firstAskedAt === undefined && existed(main) && choices.asked?.[main.id] === undefined) {
+    const mainSays = main && choices.firstAskedAt === undefined && existed(main) && choices.asked?.[main.id] === undefined;
+    if (!listing.proposer.size) {
+      // #3513: nothing can be offered: the main bot still says once that it
+      // sends nothing on its own, and why nothing can be proposed yet; a
+      // listing that could not be read now waits for a later turn
+      if (!mainSays || !listing.nothing || listing.nothing.transient) return null;
+      this.deps.choices.noteFirstSaid(person);
+      return { botId: main.id, text: nothingYetText(listing.nothing, this.deps.language(person)) };
+    }
+    if (mainSays) {
       const text = await this.question(person, main.id, true, listing);
       if (text) return { botId: main.id, text };
     }

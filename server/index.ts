@@ -140,6 +140,7 @@ import { askTurnRefusal, PROACTIVE_ASK_WAIT_MS, ProactiveAsk, withinWait, type A
 import { createProactiveAskInternalRoutes } from "./routes/proactive-ask.ts";
 import { createProactiveChoicesRoutes } from "./routes/proactive-choices.ts";
 import { flowHelperIn } from "./proactive/flow-watch-helper.ts";
+import { heldSkillNames } from "./proactive/held-skills.ts";
 import { apiNamesOf } from "./perspicax/perspicax-mcp-helpers.ts";
 import { frontMomentSampler, ScreenContextWatcher, screenContextAvailable, screenMomentKey } from "./proactive/screen-context.ts";
 import { ProactiveProposals, ProactiveWaker, proactivePrompt, PeerNoticeHops, ProactivePendingFile, runFailureWakesBot, type ProactiveSource } from "./proactive/proactive-wake.ts";
@@ -24671,13 +24672,15 @@ const flowWatchLoop = new FlowWatchLoop({
     // the bot's turns mount the person's account connection (organization server)
     return watchCarrierOf(person, botId) && IDENTITY.kind === "perspicax" && perspicaxMcp ? { ok: true } : { ok: false, cause: "bot-not-eligible" };
   },
-  // the same resolution as the Skills index of a turn; #3470: one inventory per bot of a walk
+  // the same resolution as the Skills index of a turn; #3470: one inventory per bot of a walk;
+  // #3513: plus the library skills of the plugins it carries (the Flow plugin's product skills)
   skills: (botId, person) => {
     const bot = store.bot(botId);
     if (!bot) return new Set();
     const instance = bot.modelSelection ? registry.get(bot.modelSelection.instanceId) : null;
     try {
-      return new Set(scopedSkillInventory(bot, instance, person).rows.flatMap((row) => (row.kind === "skill" && row.enabled ? [row.name] : [])));
+      const plugins = scopedPluginFolders(bot, person) as Array<{ dir: string }>;
+      return heldSkillNames(scopedSkillInventory(bot, instance, person).rows, plugins.map((plugin) => plugin.dir));
     } catch {
       return new Set();
     }

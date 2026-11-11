@@ -219,7 +219,7 @@ export function createComputerHelpersStartTurn(host: StartTurnHost) {
         tool: failedTurnTool(message, placeFailure ? { place: placeFailure.row } : {})
       });
       if (state.opts?.automationSource === undefined && !state.opts?.commsDepth && !state.opts?.cardContinuation) {
-        notify(deliverableNotification("turn-failed", state.bot, state.threadId, redactSecretsInText(message), { avatarUrl: state.bot.avatarUrl }));
+        notify(deliverableNotification("turn-failed", state.bot, state.threadId, redactSecretsInText(message), { avatarUrl: state.bot.avatarUrl, personTurn: state.personLine === true }));
         reportIncident({ kind: "could-not-start", bot: state.bot, threadId: state.threadId, detail: message });
         // Claude settles the interrupt below as exit_before_result; the
         // completion fold must not report this failure a second time.

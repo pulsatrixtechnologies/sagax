@@ -1845,6 +1845,43 @@ class SessionTest {
     }
 
     @Test
+    fun aSilentNotifyFrameKeepsItsPlaceButPostsNoBanner() = runTest {
+        // #3719: an event the server marks notify false (a routine failure, a
+        // turn the person did not start) stays in the list and the badge but
+        // must not reach the phone's banner.
+        val notifications = RecordingNotifications()
+        val hang = MutableSharedFlow<StreamFrame>(extraBufferCapacity = 3)
+        val session = session(
+            connectionStore = FakeConnectionStore(
+                Connection(id = "c1", name = "Mac", host = "127.0.0.1", port = 8810),
+            ),
+            tokenStore = FakeTokenStore().apply { saved["c1"] = "tok" },
+            notifications = notifications,
+            events = { _, _ -> hang },
+        )
+        session.awaitRestored()
+        session.connect()
+        runCurrent()
+        hang.tryEmit(StreamFrame(Frame.Hello(cursor = "s:1", resumed = true), seq = 1))
+        hang.tryEmit(
+            CompanionJson.decodeFromString(
+                StreamFrame.serializer(),
+                """{"kind":"notify","seq":7,"notification":{"kind":"routine-failed","botId":"b1","botName":"Scout","threadId":"t1","title":"Scout","body":"Routine failed","notify":false}}""",
+            ),
+        )
+        hang.tryEmit(
+            CompanionJson.decodeFromString(
+                StreamFrame.serializer(),
+                """{"kind":"notify","seq":8,"notification":{"kind":"question","botId":"b1","botName":"Scout","threadId":"t1","title":"Scout","body":"Which one?"}}""",
+            ),
+        )
+        runCurrent()
+        assertEquals(listOf("routine-failed", "question"), session.state.value.notifications.map { it.kind })
+        assertEquals(listOf("question"), notifications.delivered.map { it.first.kind })
+        assertEquals(session.state.value.unreadCount, notifications.lastBadge)
+    }
+
+    @Test
     fun addressFailureWalksCandidates() {
         val failure = ConnectionAdvice.classify(ConnectException("refused"))
         assertEquals(ConnectionFailure.CANNOT_CONNECT_TO_HOST, failure)

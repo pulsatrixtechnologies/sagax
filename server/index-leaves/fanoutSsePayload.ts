@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** fanoutSsePayload (#1388). Pure move from server/index.ts. */
+import { ruleNotifyFrame } from "../notify.ts";
 import { deliverSseFrame, encodeSseDataFrame, sseKindSkipsMembershipRecheck } from "../streams/sse-fanout.ts";
 export type Host = Record<string, any>;
 
@@ -7,6 +8,8 @@ export function createFanoutSsePayload(getHost: () => Host): any {
 function fanoutSsePayload(payload: Record<string, unknown>, options: { adminOnly?: boolean } = {}) {
   const host = getHost();
   const { configForAccess } = host;
+  // #3719: the one rule on what interrupts, for every notify frame (logged)
+  payload = ruleNotifyFrame(payload, options);
 
   host.observeAchievementFrame(payload);
   host.observePushFrame(payload);

@@ -5,6 +5,8 @@ import { INTERRUPTED_OUTWARD } from "../runtime/tree.ts";
 import { RUNTIME_RESUME_GRACE_MS, saveInterruptedTurns, TURN_NOT_RESUMED } from "../turns/interrupted-turns.ts";
 import { ENGINE_EXITED_SENTENCE } from "../../shared/engine-exit-words.ts";
 import { createResumeTurnsCutByRestart, watchDirectResumes } from "./resumeTurnsCutByRestart.ts";
+import { isPersonOwnLine } from "../turns/start-turn-prepare-admit.ts";
+import { buildNotification, notificationInterrupts } from "../notify.ts";
 
 import { DATA_DIR as dataDir } from "../config.ts";
 
@@ -195,5 +197,46 @@ describe("resumeTurnsCutByRestart (#3217)", () => {
     expect(lines).toEqual([failedTurnTool(lines[0].slice("error: ".length)).name]);
     expect(lines[0]).toContain(INTERRUPTED_OUTWARD);
     expect(lines[0]).toContain("GMAIL_SEND_EMAIL");
+  });
+});
+
+// #3719: a restart announces nothing. The turn a restart cut and the boot
+// resumes is never the person's own line, so its end or failure is silent
+// (in the chat and the badge, no sound, no banner, no push).
+describe("a resumed turn after a restart interrupts nobody (#3719)", () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(100_000); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("the boot's resume is not the person's line, so its done and its failure are silent", async () => {
+    const messages = [
+      { id: "u1", role: "user", kind: "text", text: "Lis le réglage", at: 90_000 },
+      { id: "n1", role: "bot", kind: "activity", tool: { name: RESTART_TURN_NOTE, ok: true }, at: 95_500 },
+    ];
+    saveInterruptedTurns(dataDir, [{ botId: "b1", threadId: "t1", at: 95_000 }]);
+    const startTurn = vi.fn(async () => {});
+    const host = {
+      turnSpeakers: new Map<string, unknown>([["t1", { origin: "person", principalId: "p1" }]]),
+      runtimeRootWaiting: () => false,
+      routines: { takeRestartResumes: () => [] },
+      coordinator: { continuesAfterRestart: () => false },
+      runtimeHoldsRoot: () => false,
+      threadBusy: () => false,
+      store: { messagesFor: () => messages, taskByThread: () => ({ threadId: "t1" }), appendMessage: (_t: string, m: any) => { messages.push({ ...m, at: Date.now() }); } },
+      startTurn,
+      resumeHeldSteersAfterCrash: vi.fn(),
+      botForThread: () => ({ id: "b1" }),
+      mirrorBackgroundReply: vi.fn(),
+      personAttentionDeps: {},
+    };
+    createResumeTurnsCutByRestart(() => host)();
+    expect(startTurn).toHaveBeenCalledTimes(1);
+    const opts = (startTurn.mock.calls[0] as unknown[])[2] as Record<string, unknown>;
+    const personLine = isPersonOwnLine({ opts, userMessage: {} }, () => false);
+    expect(personLine).toBe(false);
+    const bot = { id: "b1", name: "Nova", threadId: "t1" };
+    for (const kind of ["done", "turn-failed"] as const) {
+      const note = buildNotification(kind, bot, "t1", "La valeur est 7 jours.", { personTurn: personLine });
+      expect(notificationInterrupts(note!)).toBe(false);
+    }
   });
 });

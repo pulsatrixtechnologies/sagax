@@ -6,13 +6,12 @@
 // a bot that *finished* is worth one if you asked for it; everything else a
 // bot does while it works is not.
 //
-// A turn that dies before it starts is the first case, not the last: the
-// bot is not working, and the fix is usually a setting only a person can
-// change, so a retry cannot clear it. A routine failure already buzzed;
-// this makes an interactive turn behave the same way.
-// A routine parked behind a busy target earns one notice after half an
-// hour: from outside the schedule looks broken, and only a person can
-// decide whether the busy work or the routine matters more.
+// #3719 (2026-11-11): one rule decides what interrupts, for every frame on
+// its way out (ruleNotifyFrame): an ask, or the answer to the person's own
+// line. A turn the person did not start that ends, fails or is cut, a
+// routine that failed or waits, an incident, a settled delegation, a notice
+// and a spend line keep their place in the chat, Today and the badge, and
+// go as `notify: false`: no sound, no banner, no bounce, no push.
 //
 // Delivery is a separate concern. The harness emits a frame; whoever is
 // listening decides what to do with it — desktop and paired-phone local
@@ -22,6 +21,7 @@ import type { Notification, NotifyKind } from "../shared/notification.ts";
 import { buildNotificationContext, notificationChoiceLabels } from "../shared/notification-context.ts";
 import { plainPreviewLine } from "../shared/plain-text.ts";
 import { serverAttachmentLabels } from "./approvals/approval-words.ts";
+import { isShuttingDown } from "./process/http-shutdown.ts";
 
 // The notification wire shape lives in shared/notification.ts now (part of
 // the wire model); re-exported here so existing importers keep working.
@@ -112,6 +112,8 @@ export function buildNotification(
     /** #2909: the chat message holding the card. */
     cardId?: string;
     proposalId?: string;
+    /** #3719: the turn began with the person's own line in this conversation. */
+    personTurn?: boolean;
   },
 ): Notification | null {
   // The toggle means what it says: off is off, including for approvals.
@@ -192,6 +194,7 @@ export function buildNotification(
     if (context) notification.context = context;
   }
   if (extra?.cardId) notification.cardId = extra.cardId.slice(0, 128);
+  if (extra?.personTurn) notification.personTurn = true;
   return notification;
 }
 
@@ -263,9 +266,76 @@ export function deliverableNotification(
     /** #2909: the chat message holding the card. */
     cardId?: string;
     proposalId?: string;
+    /** #3719: the turn began with the person's own line in this conversation. */
+    personTurn?: boolean;
   },
 ): Notification | null {
   return buildNotification(kind, { ...bot, notifications: undefined }, threadId, detail, extra);
+}
+
+/** #3719: what each kind is, for the one rule below. Typed over every kind,
+ * so a new kind cannot be added without saying whether it is an ask.
+ * - "ask": the person has something to do, or asked to be told (an
+ *   approval, a question, a sign-in, a takeover, needs-you, a proposal
+ *   within its budget, a wait they set, an admin action on their bot, a
+ *   report to an admin, a person's words to them).
+ * - "answer": interrupts only as the answer to a line the person wrote in
+ *   that conversation (`personTurn`).
+ * - "quiet": never interrupts. It keeps its place in the conversation,
+ *   Today, the run log and the unread badge, told once. */
+export const NOTIFY_KIND_INTERRUPTS: Readonly<Record<NotifyKind, "ask" | "answer" | "quiet">> = {
+  approval: "ask",
+  question: "ask",
+  "sign-in": "ask",
+  takeover: "ask",
+  "needs-you": "ask",
+  proposal: "ask",
+  wait: "ask",
+  "admin-action": "ask",
+  report: "ask",
+  "page-comment": "ask",
+  // a person's direct message is an ask; a bot's is answered below
+  message: "answer",
+  done: "answer",
+  "turn-failed": "answer",
+  "routine-failed": "quiet",
+  "routine-deferred": "quiet",
+  incident: "quiet",
+  "delegation-settled": "quiet",
+  notice: "quiet",
+  spend: "quiet",
+};
+
+/** #3719, the one rule: whether a notification sounds, shows a banner,
+ * bounces the Dock or reaches a phone. An ask always does; an answer only
+ * for the person's own line, and never while the server stops (a turn a
+ * restart cuts announces nothing; a resumed turn has no person's line in
+ * memory, so it is silent too). A message from a person (no bot) is an ask. */
+export function notificationInterrupts(note: Pick<Notification, "kind" | "botId" | "notify" | "personTurn">): boolean {
+  if (note.notify === false) return false;
+  const rule = note.kind === "message" && !note.botId ? "ask" : NOTIFY_KIND_INTERRUPTS[note.kind];
+  if (rule === "ask") return true;
+  return rule === "answer" && note.personTurn === true && !isShuttingDown();
+}
+
+/** One line per notification frame, never its words: enough to read back
+ * an hour's noise (#3719). */
+export function notifyLogLine(note: Pick<Notification, "kind" | "botId" | "threadId" | "audience">, options: { adminOnly?: boolean }, interrupts: boolean): string {
+  const audience = options.adminOnly ? "admins" : Array.isArray(note.audience) ? String(note.audience.length) : "all";
+  return `[notify] kind=${note.kind} bot=${note.botId || "-"} thread=${note.threadId || "-"} audience=${audience} interrupts=${interrupts ? "yes" : "no"}`;
+}
+
+/** Every notify frame passes here on its way out (fanoutSsePayload): the
+ * rule decides, a silent one goes as `notify: false` (the clients, the
+ * desktop shell and the push relay all skip those), and the line is logged.
+ * Any other frame is returned as it is. */
+export function ruleNotifyFrame<T extends Record<string, unknown>>(payload: T, options: { adminOnly?: boolean } = {}): T {
+  if (payload.kind !== "notify" || !payload.notification || typeof payload.notification !== "object") return payload;
+  const note = payload.notification as Notification;
+  const interrupts = notificationInterrupts(note);
+  console.log(notifyLogLine(note, options, interrupts));
+  const { personTurn: _personTurn, ...wire } = note;
+  return { ...payload, notification: interrupts ? wire : { ...wire, notify: false } };
 }
 
 /** A conversation on a live voice call does not buzz: the person hears the

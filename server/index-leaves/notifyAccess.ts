@@ -8,6 +8,10 @@ function notifyAccess(notification: Notification | null, access: WireAccessCard,
   const { DATA_DIR } = host;
 
   if (!notification) return;
+  // #3719: an access card leaves its audience something only they can do
+  // (sign in, a key, a payer): a needs-you, so it reaches them whoever
+  // started the turn (server/notify.ts notificationInterrupts)
+  notification = { ...notification, kind: "needs-you" };
   // A refused turn, for the console's Overview (server/org/org-problem-log.ts).
   const refusedBot = host.store.bot(access.botId);
   // a confidential thread's row names nothing of it (server/threads/confidential-threads.ts)

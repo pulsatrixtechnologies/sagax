@@ -9,7 +9,7 @@ import { plainPreviewText } from "./plain-preview";
 export const NATIVE_BODY_MAX = 140;
 
 /** Settings > Notifications type toggles. */
-export type NotificationType = "bots" | "people" | "groups" | "approvals" | "routines";
+export type NotificationType = "bots" | "people" | "groups" | "approvals";
 
 export type NotificationTypeSettings = Record<NotificationType, boolean>;
 
@@ -24,9 +24,6 @@ export function notificationTypeFor(
     case "needs-you":
     case "takeover":
       return "approvals";
-    case "routine-failed":
-    case "routine-deferred":
-      return "routines";
     case "message":
       // People DMs use a group record on the wire; they stay under People.
       return "people";
@@ -35,6 +32,9 @@ export function notificationTypeFor(
     case "spend":
     case "report":
     case "admin-action":
+    // #3719: never interrupts (server/notify.ts): no switch to gate it
+    case "routine-failed":
+    case "routine-deferred":
       // Workspace / admin notices: always eligible (no per-type mute).
       return null;
     case "done":

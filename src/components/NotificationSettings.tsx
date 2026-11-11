@@ -18,7 +18,6 @@ import {
   notifyPeople,
   notifyGroups,
   notifyApprovals,
-  notifyRoutines,
   setNotificationSounds,
   setNudgeSound,
   useLocalSwitch,
@@ -105,7 +104,6 @@ export function NotificationSettings({ privacy = false }: { privacy?: boolean })
   const people = useLocalSwitch(notifyPeople);
   const groups = useLocalSwitch(notifyGroups);
   const approvals = useLocalSwitch(notifyApprovals);
-  const routines = useLocalSwitch(notifyRoutines);
   return (
     <>
       <OsPermissionBanner id="notifications" />
@@ -121,9 +119,6 @@ export function NotificationSettings({ privacy = false }: { privacy?: boolean })
         </CompactRow>
         <CompactRow label={t("settings.notifications.types.approvals")} rowId="notifyApprovals">
           <Switch checked={approvals} aria-label={t("settings.notifications.types.approvals")} onClick={() => notifyApprovals.set(!approvals)} />
-        </CompactRow>
-        <CompactRow label={t("settings.notifications.types.routines")} rowId="notifyRoutines">
-          <Switch checked={routines} aria-label={t("settings.notifications.types.routines")} onClick={() => notifyRoutines.set(!routines)} />
         </CompactRow>
       </SettingsGroup>
       <SignalSettings organization={privacy} />

@@ -31,8 +31,12 @@ data class NotificationFrame(
     val threadId: String,
     val title: String,
     val body: String,
+    /** False when the server keeps this event silent (#3719): it stays in the
+     * chat, the list and the badge, but posts no banner, sound or vibration. */
+    val notify: Boolean? = null,
 ) {
     val isBlocking: Boolean get() = kind == "approval" || kind == "question"
+    val alerts: Boolean get() = notify != false
 }
 
 @Serializable

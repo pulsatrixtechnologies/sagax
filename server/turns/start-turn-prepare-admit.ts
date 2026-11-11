@@ -409,7 +409,7 @@ export function createPrepareAdmitStartTurn(
     }
     state.notice = state.backupRefused ?? engineAccessNotice(accessRefusal.reason, state.engine, accessRefusal);
     const refusedRun = routineLineage(state.speaker) ? activeRoutineRunForThread(state.threadId)?.id : undefined;
-    notifyAccess(deliverableNotification("turn-failed", state.bot, state.threadId, state.notice, { avatarUrl: state.bot.avatarUrl }), state.card, refusedRun);
+    notifyAccess(deliverableNotification("turn-failed", state.bot, state.threadId, state.notice, { avatarUrl: state.bot.avatarUrl, personTurn: state.personLine === true }), state.card, refusedRun);
     console.error(`[omb-turn] bot=${state.botId} refused: ${accessRefusal.reason}${accessRefusal.cause ? `/${accessRefusal.cause}` : ""} (${state.instance.instanceId})`);
     state.opts?.coordination?.settle({ ok: false, text: state.notice });
     state.opts?.onDispatchError?.(state.notice);

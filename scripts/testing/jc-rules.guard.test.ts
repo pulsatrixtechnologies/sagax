@@ -44,6 +44,7 @@ import type { PersonAttentionCard } from "../../shared/person-attention";
 import { FULL_ACCESS_MARKER, FULL_ACCESS_SURFACES } from "../../server/approvals/full-access-gate.ts";
 import { recipientKeysForSendCard } from "../../shared/send-card-recipients.ts";
 import { parseGoMessage } from "../../server/perspicax/go-message.ts";
+import { NOTIFY_KIND_INTERRUPTS } from "../../server/notify.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SRC = join(ROOT, "src");
@@ -777,5 +778,33 @@ describe("#2086 no em/en dash in fr.json and no raw UUID in UI locale strings", 
       }
     }
     expect(offending).toEqual([]);
+  });
+});
+
+// #3719 (2026-11-11): a bot disturbs only when needed. A notification
+// interrupts only when the person has something to do or asked to be told,
+// or it answers a line they wrote; everything else goes as notify false.
+// Every kind says which it is, in the one rule (server/notify.ts), and every
+// notify frame passes that rule on its way out (fanoutSsePayload).
+describe("#3719 a notification interrupts only for an ask", () => {
+  it("every notification kind says whether it is an ask", () => {
+    // comments out first: their own ";" would cut the union short
+    const wire = readRoot("shared/notification.ts").replace(/\/\*[\s\S]*?\*\//g, "");
+    const union = wire.slice(wire.indexOf("export type NotifyKind"), wire.indexOf(";", wire.indexOf("export type NotifyKind")));
+    const kinds = [...union.matchAll(/\|\s*"([a-z-]+)"/g)].map((match) => match[1]).sort();
+    expect(kinds.length).toBeGreaterThan(10);
+    expect(Object.keys(NOTIFY_KIND_INTERRUPTS).sort()).toEqual(kinds);
+  });
+
+  it("what never interrupts stays quiet: a turn nobody asked for, a failure, a notice", () => {
+    for (const kind of ["routine-failed", "routine-deferred", "incident", "delegation-settled", "notice", "spend"] as const) {
+      expect(NOTIFY_KIND_INTERRUPTS[kind]).toBe("quiet");
+    }
+    expect(NOTIFY_KIND_INTERRUPTS.done).toBe("answer");
+    expect(NOTIFY_KIND_INTERRUPTS["turn-failed"]).toBe("answer");
+  });
+
+  it("every notify frame goes through the one rule on its way out", () => {
+    expect(readRoot("server/index-leaves/fanoutSsePayload.ts")).toMatch(/payload = ruleNotifyFrame\(payload, options\)/);
   });
 });

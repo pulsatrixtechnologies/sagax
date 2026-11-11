@@ -145,13 +145,13 @@ export function handleRuntimeLifecycle(event: any, ctx: any, host: any): void {
       if (keyRefused && bot) {
         if (!host.repeatsShownFailure(host.store.messagesFor(event.threadId), { role: "bot", kind: "access", access: keyRefused, from: failureFrom }, bot.id)) {
           pushMessage({ role: "bot", kind: "access", access: keyRefused });
-          host.notifyAccess(deliverableNotification("turn-failed", bot, event.threadId, host.engineAccessNotice("key_refused", keyRefused.engine), { avatarUrl: bot.avatarUrl }), keyRefused);
+          host.notifyAccess(deliverableNotification("turn-failed", bot, event.threadId, host.engineAccessNotice("key_refused", keyRefused.engine), { avatarUrl: bot.avatarUrl, personTurn: host.directRequestOwners.get(event.threadId)?.personLine === true }), keyRefused);
         }
       } else if (expiredCard && bot && refusedInstance) {
         const showExpired = () => {
           if (!host.repeatsShownFailure(host.store.messagesFor(event.threadId), { role: "bot", kind: "access", access: expiredCard, from: failureFrom }, bot.id)) {
             pushMessage({ role: "bot", kind: "access", access: expiredCard });
-            host.notifyAccess(deliverableNotification("turn-failed", bot, event.threadId, host.engineAccessNotice("no_access", expiredCard.engine, expiredCard), { avatarUrl: bot.avatarUrl }), expiredCard);
+            host.notifyAccess(deliverableNotification("turn-failed", bot, event.threadId, host.engineAccessNotice("no_access", expiredCard.engine, expiredCard), { avatarUrl: bot.avatarUrl, personTurn: host.directRequestOwners.get(event.threadId)?.personLine === true }), expiredCard);
           }
         };
         // #2057: a chat turn the person sent waits on the renew; the card

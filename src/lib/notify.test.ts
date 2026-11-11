@@ -7,7 +7,6 @@ const sounds = vi.hoisted(() => ({
   people: true,
   groups: true,
   approvals: true,
-  routines: true,
 }));
 vi.mock("./notification-preferences", () => ({
   attentionSettings: () => ({
@@ -20,7 +19,6 @@ vi.mock("./notification-preferences", () => ({
     people: sounds.people,
     groups: sounds.groups,
     approvals: sounds.approvals,
-    routines: sounds.routines,
   }),
 }));
 
@@ -69,7 +67,6 @@ afterEach(() => {
   sounds.people = true;
   sounds.groups = true;
   sounds.approvals = true;
-  sounds.routines = true;
 });
 
 describe("desktop notifications", () => {

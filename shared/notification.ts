@@ -123,6 +123,11 @@ export interface Notification {
    * notification anywhere now (notify is false too), and its words wait for
    * the person's next brief. */
   level?: "fyi";
+  /** #3719, server side only (the rule in server/notify.ts reads it, then
+   * strips it): the turn this is about began with the person's own line in
+   * this conversation (the request's personLine). Only then does a `done`,
+   * a `turn-failed` or a bot's `message` interrupt. */
+  personTurn?: boolean;
 }
 
 /** Whether a notice may raise a native notification or a push: everything

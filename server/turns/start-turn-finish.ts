@@ -273,9 +273,9 @@ let e: any = cause;
         Boolean(personTurn && state.userMessage && !turnAccessByThread.get(state.threadId)?.routine), {
           show: (afterHold: boolean) => {
             store.appendMessage(state.threadId, { role: "bot", kind: "access", access: startExpired });
-            notifyAccess(deliverableNotification("turn-failed", state.bot, state.threadId, engineAccessNotice("no_access", startExpired.engine, startExpired), { avatarUrl: state.bot.avatarUrl }), startExpired);
+            notifyAccess(deliverableNotification("turn-failed", state.bot, state.threadId, engineAccessNotice("no_access", startExpired.engine, startExpired), { avatarUrl: state.bot.avatarUrl, personTurn: state.personLine === true }), startExpired);
             if (afterHold) {
-              notify(deliverableNotification("turn-failed", state.bot, state.threadId, redactSecretsInText(e.message), { avatarUrl: state.bot.avatarUrl }));
+              notify(deliverableNotification("turn-failed", state.bot, state.threadId, redactSecretsInText(e.message), { avatarUrl: state.bot.avatarUrl, personTurn: state.personLine === true }));
               reportIncident({ kind: "could-not-start", bot: state.bot, threadId: state.threadId, detail: e.message });
             }
           },
@@ -299,7 +299,7 @@ let e: any = cause;
         state.card = accessCardFor(state.bot, e.refusal, state.engine, e.detail);
         store.appendMessage(state.threadId, { role: "bot", kind: "access", access: state.card });
         message = engineAccessNotice(e.refusal.reason, state.engine, e.refusal);
-        notifyAccess(deliverableNotification("turn-failed", state.bot, state.threadId, message, { avatarUrl: state.bot.avatarUrl }), state.card);
+        notifyAccess(deliverableNotification("turn-failed", state.bot, state.threadId, message, { avatarUrl: state.bot.avatarUrl, personTurn: state.personLine === true }), state.card);
       }
       settleDirectFollowup(state.dispatchClaimId, { ok: false, text: message });
       // The wait already wrote its failure resolution; keep all dispatch
@@ -322,7 +322,7 @@ let e: any = cause;
       // for it, in its own thread, so it does not need a second channel.
       if (personTurn && !startHeld) {
         notify(
-          deliverableNotification("turn-failed", state.bot, state.threadId, redactSecretsInText(message), { avatarUrl: state.bot.avatarUrl }),
+          deliverableNotification("turn-failed", state.bot, state.threadId, redactSecretsInText(message), { avatarUrl: state.bot.avatarUrl, personTurn: state.personLine === true }),
         );
         reportIncident({ kind: "could-not-start", bot: state.bot, threadId: state.threadId, detail: message });
       }

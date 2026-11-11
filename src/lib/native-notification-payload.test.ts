@@ -14,11 +14,10 @@ const typesOn: NotificationTypeSettings = {
   people: true,
   groups: true,
   approvals: true,
-  routines: true,
 };
 
 describe("notificationTypeFor", () => {
-  it("maps bot replies, people, groups, approvals and routines", () => {
+  it("maps bot replies, people, groups and approvals", () => {
     expect(notificationTypeFor("done")).toBe("bots");
     expect(notificationTypeFor("done", "room-1")).toBe("groups");
     expect(notificationTypeFor("message")).toBe("people");
@@ -26,8 +25,9 @@ describe("notificationTypeFor", () => {
     expect(notificationTypeFor("approval")).toBe("approvals");
     expect(notificationTypeFor("question")).toBe("approvals");
     expect(notificationTypeFor("needs-you")).toBe("approvals");
-    expect(notificationTypeFor("routine-failed")).toBe("routines");
-    expect(notificationTypeFor("routine-deferred")).toBe("routines");
+    // #3719: a routine that failed or waits never interrupts: no switch
+    expect(notificationTypeFor("routine-failed")).toBeNull();
+    expect(notificationTypeFor("routine-deferred")).toBeNull();
     expect(notificationTypeFor("spend")).toBeNull();
     expect(notificationTypeFor("report")).toBeNull();
   });
@@ -39,7 +39,6 @@ describe("notificationTypeEnabled", () => {
     expect(notificationTypeEnabled("done", "g1", { ...typesOn, groups: false })).toBe(false);
     expect(notificationTypeEnabled("message", null, { ...typesOn, people: false })).toBe(false);
     expect(notificationTypeEnabled("approval", null, { ...typesOn, approvals: false })).toBe(false);
-    expect(notificationTypeEnabled("routine-failed", null, { ...typesOn, routines: false })).toBe(false);
     expect(notificationTypeEnabled("spend", null, { ...typesOn, bots: false })).toBe(true);
   });
 });

@@ -5,7 +5,6 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { GroupCostNotice } from "../components/ChatUsageNotices";
 import { EngineLimitIndicator } from "../components/LimitResetContinue";
-import { ComposerSendBlock } from "../components/ComposerSendBlock";
 import { BotChatHeader, BotHeaderPill } from "../components/BotHeaderPill";
 import { JsonViewer } from "../components/JsonViewer";
 import { rememberLimits } from "../lib/limit-resets";
@@ -152,18 +151,8 @@ function Gallery() {
             Grok
             <EngineLimitIndicator engine="grok" botId="scout" threadId="t-scout" />
           </div>
-          {/* At the limit the top banner is gone (JC 2026-11-06): the line above
-              the composer says it and carries "Continue at <reset>". */}
-          <div className="mt-auto px-5 pb-4" data-gallery-composer-line>
-            <ComposerSendBlock
-              block={{ reason: "engine_limit", message: "", action: { kind: "switch_engine" }, name: "Grok", limit: { cause: "usage_limit", resetsAt: resetAt } }}
-              botId="scout"
-              threadId="t-scout"
-              onConnect={() => {}}
-              onRetry={() => {}}
-              onSwitchEngine={() => {}}
-            />
-          </div>
+          {/* #3552: no bar above the message box at the limit; the dot holds
+              the detail and the actions. */}
         </div>
       </div>
     );

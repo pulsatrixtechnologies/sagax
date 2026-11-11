@@ -3,7 +3,12 @@
  * like App.tsx's shell row, on a synthetic store. Below 640px a drawer, 640
  * to 768px the automatic icons rail, above the person's own density.
  * Captured by scripts/capture/sidebar-rail.mjs. Every name is synthetic.
- * ?skin=<id>&lang=en|fr&density=comfortable|compact|icons&drawer=1&limit=1|credits */
+ * ?skin=<id>&lang=en|fr&density=comfortable|compact|icons&drawer=1&limit=1|credits&blocked=connect
+ * #3552: ?limit= is the bot's engine at its usage limit (or out of credit):
+ * the conversation's one line, the model picker's dot at its limit, and an
+ * older server's send-state still answering the limit as a block, which the
+ * message box ignores. ?blocked=connect is the neighbouring state, an engine
+ * not connected, which keeps its bar. */
 import { StrictMode, useCallback, useMemo, useReducer, useState } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -30,17 +35,22 @@ try {
   // the defaults still render
 }
 
+const limitResetsAt = Date.now() + 95 * 60_000;
 const reply = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.href);
   if (url.pathname === "/api/config") return reply({ profile: { name: "Alex Gagnon" } });
-  // ?limit=1|credits: the bot's engine at its limit (or out of credit), the
-  // composer locked (the maintainer, 2026-11-04, src/lib/send-state.ts engine_limit)
+  if (url.pathname.endsWith("/send-state") && params.get("blocked") === "connect") {
+    return reply({ block: { reason: "engine_not_connected", name: "Claude", message: "Claude is not connected for you.", action: { kind: "connect", instanceId: "gallery", engine: "Claude" } } });
+  }
+  if (url.pathname.startsWith("/api/limit-resets") && params.get("limit") === "1") {
+    return reply({ checkedAt: Date.now(), engines: [{ engine: "gallery", name: "Claude", driver: "claude", window: "5-hour", usedPercent: 100, resetsAt: limitResetsAt, blocked: true }] });
+  }
   if (url.pathname.endsWith("/send-state") && params.get("limit")) {
     const credits = params.get("limit") === "credits";
     return reply({ block: { reason: "engine_limit", name: "Claude", message: "Claude limit reached.", action: { kind: "switch_engine" },
-      limit: credits ? { cause: "credits" } : { cause: "usage_limit", resetsAt: Date.now() + 95 * 60_000 } } });
+      limit: credits ? { cause: "credits" } : { cause: "usage_limit", resetsAt: limitResetsAt } } });
   }
   if (url.pathname.startsWith("/api/")) return reply({});
   return realFetch(input, init);
@@ -71,6 +81,20 @@ const conversation: Message[] = Array.from({ length: 6 }, (_, i) => [
   line(`u${i}`, "user", fr ? `Question de suivi ${i + 1} sur la file des billets.` : `Follow-up ${i + 1} on the ticket queue.`, i * 2, i === 0 ? undefined : `b${i - 1}`),
   line(`b${i}`, "bot", fr ? `Réponse ${i + 1} : ${i + 3} billets fermés depuis ce matin.` : `Answer ${i + 1}: ${i + 3} tickets closed since this morning.`, i * 2 + 1, `u${i}`),
 ]).flat();
+// ?limit=1: the person's last message waits for the reset, and the
+// conversation's one line says so (what the server writes, shared/limit-failover.ts);
+// ?limit=credits: the engine is out of credit and nothing is held.
+if (params.get("limit")) {
+  const last = conversation.at(-1)!;
+  conversation.push(
+    line("u-limit", "user", fr ? "Prépare le rapport de la semaine." : "Prepare this week's report.", 13, last.id),
+    params.get("limit") === "credits"
+      ? { id: "l-limit", role: "bot", kind: "activity", at: at + 13 * 60_000 + 5_000, parentId: "u-limit", turnSucceeded: false,
+        tool: { name: "error: Claude is out of credit", ok: false, limitFailover: { kind: "credits", engine: "Claude" } } } as Message
+      : { id: "l-limit", role: "bot", kind: "activity", at: at + 13 * 60_000 + 5_000, parentId: "u-limit",
+        tool: { name: "recovery: Limit reached", ok: true, limitFailover: { kind: "waiting", from: "Claude", resetsAt: limitResetsAt } } } as Message,
+  );
+}
 const team: Bot[] = [
   bot("nova", "Nova", { chiefOfStaff: true, title: fr ? "Chef de cabinet" : "Chief of staff", mascotBody: "squircle", pinned: true }, fr ? "Je coordonne la semaine." : "Coordinating the week.", 4),
   { ...bot("atlas", "Atlas", { title: "Service Desk Ops", color: "pink", mascotBody: "squircle", section: "My team" }, "", 8), messages: conversation, activeLeafId: conversation.at(-1)?.id } as Bot,
@@ -89,7 +113,11 @@ const start: AppState = {
   sections: ["My team"],
   // ?panel=1 opens the bot panel beside the chat, as App.tsx docks it (#2141).
   settingsOpen: params.get("panel") === "1",
-  instances: [{ instanceId: "gallery", driverKind: "codex", displayName: "Gallery", snapshot: { state: "available" }, models: { options: [{ id: "m", label: "Gallery model" }] } } as unknown as InstanceInfo],
+  // #3552: with ?limit= or ?blocked=, the bot's engine is the one the limit
+  // (or the connect bar) names, so the picker's dot sits beside its name.
+  instances: [params.get("limit") || params.get("blocked")
+    ? { instanceId: "gallery", driverKind: "claudeAgent", displayName: "Claude", snapshot: { state: "available" }, models: { options: [{ id: "m", label: "Claude Opus" }] } } as unknown as InstanceInfo
+    : { instanceId: "gallery", driverKind: "codex", displayName: "Gallery", snapshot: { state: "available" }, models: { options: [{ id: "m", label: "Gallery model" }] } } as unknown as InstanceInfo],
 } as AppState;
 
 function galleryReducer(state: AppState, action: Action): AppState {

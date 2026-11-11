@@ -188,11 +188,11 @@ describe("thread control placement", () => {
     expect(markup).toContain("https://chatgpt.com/settings/usage");
     expect(markup).not.toContain(">Retry<");
   });
-  it("draws no chat card for a Codex usage limit (composer locks instead, 2026-11-04)", () => {
+  it("draws no chat card for a Codex usage limit (the conversation's one limit line says it, #3552)", () => {
     const codex = { instanceId: "codex", driverKind: "codex", displayName: "Codex", snapshot: { state: "available", authenticated: true } } as unknown as InstanceInfo;
     const limit = `${CODEX_USAGE_LIMIT_REACHED} This is OpenAI's limit, not your Sagax plan. It resets at 5:23 PM (UTC).`;
     // Engine account limits (including Codex) no longer draw a FailedTurnRow;
-    // send-state engine_limit locks the composer. ErrorRow still offers the
+    // the limit failover's one line says it (#3552). ErrorRow still offers the
     // Codex usage page when something else surfaces the same words.
     const markup = renderToStaticMarkup(createElement(FailedTurnRow, { tool: failedTurnTool(limit), engine: codex, onRetry: () => {} }));
     expect(markup).toBe("");

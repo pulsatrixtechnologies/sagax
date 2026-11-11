@@ -19,7 +19,6 @@ async function sendStateFor(bot: BotRecord, speaker: TurnSpeaker) {
       auto: false, engine, accessRefused: refused,
       ownerComputerOffline: ownerOffline ? { ownerName: ownerOffline.ownerName ?? "" } : null,
       local: host.desktopLocalModels.reach(selection.model),
-      limited: await host.sendStateLimit(bot, speaker),
       refused: preSend ? { kind: preSend.kind, cause: preSend.cause, ...(preSend.fix ? { fix: preSend.fix } : {}) } : null
     });
   } catch (error) {

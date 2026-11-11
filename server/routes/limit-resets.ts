@@ -1,7 +1,8 @@
 // The engines' usage limits and the automations that wait for them to reset.
 // Client scope (request-auth CLIENT_ALLOW): the person's own sandbox.
 //   GET  /api/limit-resets              each engine's limit: how full, when it resets, whether it refuses work
-//   POST /api/limit-resets/continue     {botId, threadId}: the stopped turn's "Continue when your limit resets"
+//   POST /api/limit-resets/continue     {botId, threadId}: the stopped turn's "Continue when your limit resets";
+//                                       while the conversation's message is held for the reset, no second run ({held})
 //   POST /api/limit-resets/after-reset  {routineId, engine}: move only that automation's next run past the reset
 import { AFTER_RESET_MS, type LimitResetSchedule } from "../../shared/limit-reset.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
@@ -21,6 +22,9 @@ export interface LimitResetRouteDeps {
   /** The engine this conversation runs on now. */
   threadEngine(botId: string, threadId: string): string | undefined;
   engineName(engine: string): string;
+  /** #3552: when the message the server holds in this conversation goes
+   * again at the reset, or null when none is held. */
+  heldUntil?(botId: string, threadId: string): number | null;
   /** The automation the button made, for whoever's it is (a Cloud home's authors). */
   created?(routineId: string, auth: RequestAuth): void;
 }
@@ -34,7 +38,8 @@ export function continueInstructions(title: string, engine: string): string {
     "what is already done. Then say in a sentence or two what you finished.";
 }
 
-function waitingIn(routines: readonly Routine[], botId: string, threadId: string): Routine | undefined {
+/** The conversation's "Continue at" automation (one at most), if any. */
+export function continueAutomationIn(routines: readonly Routine[], botId: string, threadId: string): Routine | undefined {
   return routines.find((routine) => routine.enabled && routine.botId === botId && routine.sourceThreadId === threadId &&
     routine.schedule.type === "limit_reset" && routine.schedule.repeat === "once");
 }
@@ -56,7 +61,15 @@ export function createLimitResetRoutes(deps: LimitResetRouteDeps): RouteHandler 
       if (!botId || !threadId) return json(res, 400, { error: "botId and threadId are required" });
       const title = deps.threadTitle(botId, threadId);
       if (title === null) return json(res, 404, { error: "no such conversation" });
-      const existing = waitingIn(deps.routines.listRoutines(), botId, threadId);
+      const existing = continueAutomationIn(deps.routines.listRoutines(), botId, threadId);
+      // #3552: one way to resume. The server already sends the held message
+      // again at the reset: answer that plan, never a second run, and an
+      // automation made before the message was held goes.
+      const held = deps.heldUntil?.(botId, threadId) ?? null;
+      if (held !== null) {
+        if (existing) deps.routines.remove(existing.id);
+        return json(res, 200, { held: { at: held } });
+      }
       if (existing) return json(res, 200, { routine: existing });
       const engine = deps.threadEngine(botId, threadId);
       if (!engine) return json(res, 409, { error: "This conversation has no engine to wait for." });

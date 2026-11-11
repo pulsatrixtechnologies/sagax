@@ -361,7 +361,7 @@ import { createWorkflowRoutes, resumeDueWorkflows } from "./routes/workflows.ts"
 import { WorkflowStore, workflowScope } from "./workflows.ts";
 import { createHealthReportRoutes } from "./routes/health-report.ts";
 import { createUsageMeterRoutes } from "./routes/usage-meter.ts";
-import { createLimitResetRoutes } from "./routes/limit-resets.ts";
+import { continueAutomationIn, createLimitResetRoutes } from "./routes/limit-resets.ts";
 import { UsageMeter, usageMeterScope } from "./usage/usage-meter.ts";
 import { createWebSearchStore, webSearchScope } from "./web-search/store.ts";
 import { createMemesRoutes } from "./routes/memes.ts";
@@ -1793,6 +1793,7 @@ import { createBookTurnUsage } from "./index-leaves/bookTurnUsage.ts";
 import { createResendUserMessage } from "./index-leaves/resendUserMessage.ts";
 import { createPiKitIdentityFor } from "./index-leaves/piKitIdentityFor.ts";
 import { createSendStateFor } from "./index-leaves/sendStateFor.ts";
+import { writeLimitLine } from "./usage/limit-line.ts";
 import { createLimitFailoverRow } from "./index-leaves/limitFailoverRow.ts";
 import { createOrgSettings } from "./index-leaves/orgSettings.ts";
 import { createSweepBackgroundThreads } from "./index-leaves/sweepBackgroundThreads.ts";
@@ -2106,7 +2107,6 @@ import { createThreadModelGivingWay } from "./index-leaves/threadModelGivingWay.
 import { createTemporaryAudit } from "./index-leaves/temporaryAudit.ts";
 import { createStoppedRowSinceLastPerson } from "./index-leaves/stoppedRowSinceLastPerson.ts";
 import { createSmsReplyAfter } from "./index-leaves/smsReplyAfter.ts";
-import { createSendStateLimit } from "./index-leaves/sendStateLimit.ts";
 import { createSaveOrgPendingApprovalExpireDays } from "./index-leaves/saveOrgPendingApprovalExpireDays.ts";
 import { createSaveOrgMemberEnvironmentAutonomy } from "./index-leaves/saveOrgMemberEnvironmentAutonomy.ts";
 import { createSaveOrgAllowVaultExport } from "./index-leaves/saveOrgAllowVaultExport.ts";
@@ -6957,7 +6957,6 @@ bindLeafHost({
   get ownerModelOfflineRefusal() { return ownerModelOfflineRefusal; },
   get preSendRefusals() { return preSendRefusals; },
   get sendStateFor() { return sendStateFor; },
-  get sendStateLimit() { return sendStateLimit; },
   get warmPayerAccountModels() { return warmPayerAccountModels; },
   get speakerTurnSelection() { return speakerTurnSelection; },
   get signedOutTurnSelection() { return signedOutTurnSelection; },
@@ -8043,7 +8042,6 @@ const orgEngineInput = createOrgEngineInput(getLeafHost);
 const defaultTurnPayerFor = createDefaultTurnPayerFor(getLeafHost);
 const ownerModelOfflineRefusal = createOwnerModelOfflineRefusal(getLeafHost);
 const sendStateFor = createSendStateFor(getLeafHost);
-const sendStateLimit = createSendStateLimit(getLeafHost);
 const warmPayerAccountModels = createWarmPayerAccountModels(getLeafHost);
 const speakerTurnSelection = createSpeakerTurnSelection(getLeafHost);
 const signedOutTurnSelection = createSignedOutTurnSelection(getLeafHost);
@@ -15982,25 +15980,10 @@ const limitFailover = createLimitFailoverHost({
   note: (threadId, line) => {
     store.appendMessage(threadId, { role: "bot", kind: "activity", tool: limitFailoverRow(threadId, line) });
   },
-  replaceFailure: (threadId, turnId, line, since) => {
-    const tool = limitFailoverRow(threadId, line);
-    // #1942: exhausted failover is a failed turn (readers must not treat empty as done).
-    const failed = line.kind === "exhausted";
-    // The engine's own error row for this turn becomes the line: one row,
-    // not two. A runtime.error row may carry no turn id: then the last one
-    // written since the turn was dispatched.
-    const failure = store.messagesFor(threadId).findLast((message) => message.kind === "activity" && message.tool !== undefined &&
-      failedTurnCause(message.tool.name) !== null && (turnId && message.turnId ? message.turnId === turnId : message.at >= since));
-    if (failure) store.patchMessage(threadId, failure.id, { tool, ...(failed ? { turnSucceeded: false } : {}) });
-    else store.appendMessage(threadId, { role: "bot", kind: "activity", tool, ...(failed ? { turnSucceeded: false } : {}) });
-    // Plain words in the chat so the person sees what happened (not only a chip).
-    if (failed) {
-      store.appendMessage(threadId, {
-        role: "bot", kind: "text", text: limitFailoverText(line, limitClockText), turnSucceeded: false,
-        ...(turnId ? { turnId } : {}),
-      });
-    }
-  },
+  // #3552: one line per conversation for the limit (server/usage/limit-line.ts).
+  replaceFailure: (threadId, turnId, line, since) => writeLimitLine(store, threadId, turnId, line, since, {
+    row: (written) => limitFailoverRow(threadId, written),
+  }),
   request: (threadId) => directRequestOwners.get(threadId),
   autoRefuse: (threadId, payer, until) => {
     const ran = autoTurnsByThread.get(threadId)?.entry;
@@ -16077,6 +16060,11 @@ const limitFailover = createLimitFailoverHost({
     if (prior && ["queued", "waiting"].includes(prior.status)) {
       void routines!.cancelRun(prior.id, "Waiting for the engine's usage limit to reset").catch(reportBackgroundError);
     }
+  },
+  // #3552: one way to resume a conversation whose message is held.
+  messageHeld: (botId, threadId) => {
+    const continued = routines ? continueAutomationIn(routines.listRoutines(), botId, threadId) : undefined;
+    if (continued) routines!.remove(continued.id);
   },
 });
 
@@ -22028,12 +22016,6 @@ function fixSendState(bot: BotRecord, fix: string): { ok: boolean; disabled?: st
 }
 /** The composer's send state for this person (shared/send-state.ts). Any
  * doubt, or a failure to judge, is no block: the message sends as before. */
-/** The maintainer, 2026-11-04: the engine account this person's message would run on is
- * at its usage limit or out of credit (the refusal the last turn left,
- * server/engines/engine-refusals.ts), and no backup engine would take the
- * message (limit failover): the composer locks until the reset, or until
- * the bot moves to another engine or account. A sign-out is not this: its
- * own card asks to sign in. */
 /** #1154: the model ids the session that pays for this turn on this engine
  * offers, when they are known without starting the engine: the payer's own
  * Grok subscription. Null when unknown (a key, the organization's account,
@@ -28506,7 +28488,8 @@ ROUTES.push(createLimitResetRoutes({
     const task = store.taskByThread(botId, threadId);
     return task?.modelSelection?.instanceId ?? store.bot(botId)?.modelSelection?.instanceId;
   },
-  engineName: (engine) => engineLabel(engine, registry.get(engine) ?? undefined)
+  engineName: (engine) => engineLabel(engine, registry.get(engine) ?? undefined),
+  heldUntil: (botId, threadId) => limitFailover.heldUntil(botId, threadId)
 }));
 ROUTES.push(createRoutineAwayRoutes<Routine>({
   organization: () => IDENTITY.kind === "perspicax",

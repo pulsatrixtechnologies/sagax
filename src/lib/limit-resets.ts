@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { AFTER_RESET_MS, nearLimit, type EngineLimit, type EngineLimitsReport, type LimitResetSchedule } from "../../shared/limit-reset";
 import { t } from "@/lib/i18n";
+import { limitClockText } from "@/lib/limit-failover";
 import type { Routine } from "@/lib/routines";
 import { api } from "@/state/store";
 
@@ -53,10 +54,10 @@ export function useEngineLimits(): EngineLimit[] {
 }
 
 /** A clock time today, or a weekday and time further out. */
+/** #3552: the reader's language and clock, the same helper as the
+ * conversation's limit line, so the two always agree. */
 export function resetTime(at: number, now = Date.now()): string {
-  const date = new Date(at);
-  const sameDay = date.toDateString() === new Date(now).toDateString();
-  return date.toLocaleString([], sameDay ? { hour: "numeric", minute: "2-digit" } : { weekday: "short", hour: "numeric", minute: "2-digit" });
+  return limitClockText(at, now);
 }
 
 /** "Claude: 92% used · resets 3:40 PM", or "Claude: at its limit · resets 3:40 PM". */

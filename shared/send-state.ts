@@ -7,12 +7,10 @@
 // knows; the clients ask again while blocked, so the composer comes back on
 // its own once the cause is fixed.
 
+// #3552: a usage limit or used-up credit is no block. The message goes out,
+// the server holds it for the reset, and the conversation's one line says so
+// (shared/limit-failover.ts); the model picker's dot keeps the detail.
 export type SendBlockReason = "engine_not_connected" | "computer_offline" | "local_server_offline" | "owner_computer_offline"
-  /** The engine account refused the last turn: its usage limit (Claude's
-   * 5-hour or weekly window) or its credit (a 402, out of credits). The maintainer,
-   * 2026-11-04: no message goes out and nothing can be done in the chat
-   * until it resets or the bot moves to another engine or account. */
-  | "engine_limit"
   /** #2013: the engine refused this conversation's last turn before any
    * prompt went out (not ready, or its own configuration conflicts with
    * the bot's). Advisory: the line says it, the next message still sends. */
@@ -25,8 +23,6 @@ export type SendBlockAction =
   | { kind: "connect"; instanceId: string; engine: string }
   /** Nothing to change here: try again once the computer or server is back. */
   | { kind: "retry" }
-  /** Move the bot to another engine or account (the model window). */
-  | { kind: "switch_engine" }
   /** Send the conversation's last message again. */
   | { kind: "resend" }
   /** Sagax repairs the cause itself, then sends the last message again
@@ -45,9 +41,6 @@ export interface SendBlock {
   action: SendBlockAction;
   /** The engine's display name, or the owner's for owner_computer_offline. */
   name?: string;
-  /** engine_limit: what refused, and the epoch ms of its reset when the
-   * provider said. The client words the reset in the reader's own clock. */
-  limit?: { cause: "usage_limit" | "credits"; resetsAt?: number };
   /** True: the line informs, the composer still sends (engine_refused,
    * engine_signed_out). Absent: the message does not go out. */
   advisory?: true;
@@ -70,10 +63,6 @@ export interface SendStateInput {
   /** The owner pays and the model is on the owner's computer, offline now. */
   ownerComputerOffline?: { ownerName: string } | null;
   local: LocalReach;
-  /** The engine account refused this person's last turn and holds that
-   * refusal now (server/engines/engine-refusals.ts), with no backup engine
-   * to take the message. */
-  limited?: { cause: "usage_limit" | "credits"; resetsAt?: number } | null;
   /** #2013: the engine refused this conversation's last turn before any
    * prompt went out; `fix` when Sagax can repair it in one click. */
   refused?: { kind: "config_conflict" | "engine_not_ready" | "signed_out"; cause: string; fix?: SendBlockFix } | null;
@@ -101,19 +90,6 @@ export function sendBlockFor(input: SendStateInput): SendBlock | null {
       reason: "local_server_offline",
       message: "The local model is not responding: its server on that computer is stopped. Start it, then try again.",
       action: { kind: "retry" },
-    };
-  }
-  if (input.limited) {
-    const { name } = input.engine;
-    const { cause, resetsAt } = input.limited;
-    const at = typeof resetsAt === "number" && Number.isFinite(resetsAt) ? resetsAt : undefined;
-    return {
-      reason: "engine_limit", name,
-      message: cause === "credits"
-        ? `${name} is out of credit. Switch this bot to another engine or account.`
-        : `${name} limit reached. Switch this bot to another engine or account, or wait for the reset.`,
-      action: { kind: "switch_engine" },
-      limit: { cause, ...(at !== undefined ? { resetsAt: at } : {}) },
     };
   }
   if (input.accessRefused) {

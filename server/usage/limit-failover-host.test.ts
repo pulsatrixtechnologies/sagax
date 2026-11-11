@@ -364,11 +364,15 @@ describe("a turn its engine's limit refused", () => {
     w.clock.now = resetsAt + w.store.afterResetMs;
     await w.host.tick();
     expect(w.state.resent).toEqual([{ messageId: "m1", on: A }]);
-    // It failed again on the same limit: no second resume, the error stays.
+    // It failed again on the same limit: no second resume. #3552: the
+    // message box no longer says it, so the conversation's one line does:
+    // nothing is held, try again around the new reset.
+    w.state.request = { ...w.state.request!, turnId: "turn-3" };
     w.dispatch();
     w.host.turnFailed({ threadId: "thread", turnId: "turn-3", cause: LIMIT });
     await w.host.idle();
     expect(w.store.resumes()).toEqual([]);
+    expect(w.state.lines.at(-1)).toEqual({ threadId: "thread", replaced: "turn-3", line: { kind: "exhausted", tried: ["Claude"], resetsAt: w.clock.now + 2 * 3_600_000 } });
     w.host.stop();
   });
 
@@ -1256,5 +1260,69 @@ describe("a turn whose backup standing in for the conversation's own engine is r
     await waiting.host.idle();
     expect(waiting.state.lines.at(-1)!.line).toEqual({ kind: "waitingRoutine", from: "Codex", home: "Claude", resetsAt: waiting.clock.now + 2 * HOUR });
     expect(waiting.store.resumes()).toEqual([expect.objectContaining({ kind: "routine", routineId: "routine", engine: "claude", at: waiting.clock.now + 2 * HOUR + waiting.store.afterResetMs })]);
+  });
+});
+
+// #3552 (review): an engine out of credit. The runtime error writes no row for
+// credit (runtime-lifecycle's engineLimited), and the message box draws no bar:
+// the conversation's one line says it, promising no resend and no reset, by the
+// same verdict as the runtime error (classifyRoutineFailure's "credits").
+describe("an engine out of credit (#3552)", () => {
+  const CREDIT_WORDS = [
+    "Payment required",
+    "No credits remaining on this account.",
+    "You have used all available credits.",
+    "HTTP 402: Payment Required",
+    "Your credit balance is too low to access the API.",
+  ];
+
+  it.each(CREDIT_WORDS)("tells %j once, holding nothing for a reset", async (cause) => {
+    const w = world({ allowed: ["claude"] });
+    w.dispatch();
+    expect(w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause })).toBe(true);
+    await w.host.idle();
+    expect(w.state.lines).toEqual([{ threadId: "thread", replaced: "turn-1", line: { kind: "credits", engine: "Claude" } }]);
+    expect(w.store.resumes()).toEqual([]);
+    expect(w.host.heldUntil("bot", "thread")).toBeNull();
+    expect(w.state.resent).toEqual([]);
+  });
+
+  it("names the owner's credit on a bot the owner pays for", async () => {
+    const w = world({ allowed: ["claude"] });
+    w.dispatch(undefined, true);
+    w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: "Payment required" });
+    await w.host.idle();
+    expect(w.state.lines).toEqual([{ threadId: "thread", replaced: "turn-1", line: { kind: "credits", engine: "Claude", owner: true } }]);
+  });
+
+  it("still tells it when the failover is off", async () => {
+    const w = world();
+    w.deps.enabled = () => false;
+    w.dispatch();
+    expect(w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: "Payment required" })).toBe(true);
+    expect(w.state.lines).toEqual([{ threadId: "thread", replaced: "turn-1", line: { kind: "credits", engine: "Claude" } }]);
+  });
+
+  it("goes on another engine that can answer, with the switch line", async () => {
+    const w = world();
+    w.dispatch();
+    expect(w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: "Payment required" })).toBe(true);
+    await w.host.idle();
+    expect(w.state.resent).toEqual([{ messageId: "m1", on: B }]);
+    expect(w.state.lines).toHaveLength(1);
+    expect(w.state.lines[0]!.line).toMatchObject({ kind: "switched", from: "Claude", to: "Codex" });
+  });
+
+  it("keeps the wait for a usage limit, and tells that the message is held", async () => {
+    const w = world({ allowed: ["claude"] });
+    const held: string[] = [];
+    w.deps.messageHeld = (_bot, threadId) => { held.push(threadId); };
+    w.dispatch();
+    w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT });
+    await w.host.idle();
+    expect(w.state.lines.at(-1)!.line).toMatchObject({ kind: "waiting", from: "Claude" });
+    expect(w.host.heldUntil("bot", "thread")).not.toBeNull();
+    // one way to resume: an earlier "Continue at" automation is dropped
+    expect(held).toEqual(["thread"]);
   });
 });

@@ -16,7 +16,7 @@ import { useDesktopCapabilities } from "../DesktopCapabilities";
 import { useThreadRefs } from "../ThreadRefs";
 import { useParallelCards } from "../parallel-approvals";
 import { useOnCall } from "@/lib/call";
-import { sendBlockLocks, useSendBlock } from "@/lib/send-state";
+import { useSendBlock } from "@/lib/send-state";
 
 export function useComposerSession({
   profile,
@@ -58,8 +58,8 @@ export function useComposerSession({
   // engine not connected for them, the computer or local server behind its
   // model down) does not take the message; one line says why and what to do,
   // and the draft stays. Asked again when the bot or its engines change.
-  // A turn that ends (busy drops) asks again: an engine that just refused it
-  // for its limit or credit locks the composer at once (engine_limit).
+  // A turn that ends (busy drops) asks again. #3552: a usage limit is no
+  // block: the message goes out and the server holds it for the reset.
   const sendStateKey = bot ? `${bot.modelSelection.instanceId}\u0000${bot.modelSelection.model}\u0000${bot.activity ?? ""}\u0000${bot.busy ? "busy" : ""}\u0000${instances.map((instance) => `${instance.instanceId}:${instance.snapshot?.authenticated ?? ""}`).join(",")}` : "";
   const sendState = useSendBlock(!group ? bot?.id : undefined, !group ? bot?.threadId : undefined, sendStateKey);
   const sendBlock = sendState.block;
@@ -144,10 +144,7 @@ export function useComposerSession({
 
   return {
     bot,
-    // The maintainer, 2026-11-04: an engine at its limit or out of credit locks the whole
-    // composer (no typing, no send, no actions) until it resets or the bot
-    // moves to another engine or account (src/lib/send-state.ts).
-    locked: locked || sendBlockLocks(sendBlock),
+    locked,
     dispatch,
     getState,
     storeBots,

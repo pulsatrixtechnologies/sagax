@@ -10,9 +10,22 @@ import type { ModelSelection } from "../../shared/wire.ts";
 import { isEngineExhaustedRefusal } from "../drivers/openai-chat.ts";
 import { ENGINE_REFUSAL_TTL_MS, type EngineRefusal } from "../engines/engine-refusals.ts";
 import type { RoutineUsageLimit } from "../routines/routine-limit-words.ts";
+import { classifyRoutineFailure } from "../routines/routine-recovery.ts";
 import { limitBackupAllowed, pickLimitBackup, type LimitCandidate, type LimitEngine, type LimitFailover, type LimitFailoverStore } from "./limit-failover.ts";
 import { limitKindOf, limitResetFromText, limitResetOrEstimate, type LimitKind } from "./limit-reset-time.ts";
 import { reportBackgroundError } from "../background-error.ts";
+
+/** #3552: whether the engine refused for want of credit, by the same verdict
+ * the runtime error takes (classifyRoutineFailure), never a word list of its own. */
+function creditRefusal(message: string | undefined, stopReason: string | null | undefined,
+  error: { resetsAt?: number; scope?: "model" } | undefined): boolean {
+  if (!message) return false;
+  const verdict = classifyRoutineFailure(message, {
+    ...(stopReason ? { stopReason } : {}), ...(error?.resetsAt !== undefined ? { limitResetsAt: error.resetsAt } : {}),
+    ...(error?.scope === "model" ? { limitScope: "model" as const } : {}),
+  });
+  return verdict.kind === "owner" && verdict.cause === "credits";
+}
 
 /** What a turn ran on, noted when it was dispatched. */
 export interface LimitDispatch {
@@ -121,6 +134,10 @@ export interface LimitFailoverHostDeps {
   /** Cancels a waiting or queued park without starting a new run (no-backup
    * wait path: the scheduled resume owns the restart). */
   clearRoutineRun?: (runId: string) => void;
+  /** #3552: the person's message in this conversation is now held and goes
+   * again at the reset: one way to resume, so a "Continue at" automation
+   * made for it before is dropped. */
+  messageHeld?: (botId: string, threadId: string) => void;
   /** Schedules `run` in `ms`; the default is an unref'd timer. */
   after?: (ms: number, run: () => void) => { cancel(): void };
 }
@@ -203,6 +220,10 @@ export interface LimitFailoverHost {
    * promise, to await before the turn reads its model). Null when nothing
    * is left to wait for, so an ordinary turn never yields. Never throws. */
   beforeTurn(botId: string, threadId: string, speaker: unknown, resolvedSelection?: ModelSelection): Promise<void> | null;
+  /** #3552: when the person's message held in this conversation goes again
+   * (the reset plus a minute), or null when none waits. While one waits,
+   * nothing else offers to resume the conversation. */
+  heldUntil(botId: string, threadId: string): number | null;
   /** Runs what waits for a reset and arms the timer again. */
   tick(): Promise<void>;
   start(): void;
@@ -442,12 +463,17 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     timer = after(Math.max(1_000, next - deps.now()), () => { void host.tick().catch(reportBackgroundError); });
   };
 
+  /** #3552: the conversation's one line for an engine out of credit. */
+  const creditLine = (dispatch: LimitDispatch): LimitFailoverLine => ({
+    kind: "credits", engine: deps.engineName(dispatch.engine.instanceId), ...(dispatch.owner ? { owner: true as const } : {}),
+  });
+
   /** `modelOnly`: the refusal held nothing on the engine, it bound only the
    * turn's model (Claude's limitScope "model"); a move records it
    * (LimitFailover.modelOnly). */
   const failed = async (threadId: string, turnId: string | undefined, dispatch: LimitDispatch, resetsAt: number,
     own: { messageId: string } | null, run: { id: string; routineId: string } | null,
-    auto: { modelOnly: boolean } | null = null, exhausted = false, estimated = false, modelOnly = false) => {
+    auto: { modelOnly: boolean } | null = null, exhausted = false, estimated = false, modelOnly = false, credits = false) => {
     const failover = store.failover(dispatch.botId, threadId);
     // The engine the thread goes back to: the one it started on.
     const home = failover && same(failover.to, dispatch.selection) ? failover : null;
@@ -530,6 +556,12 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       }
       // Exhausted with no backup: leave the engine's own error (no reset to wait for).
       if (exhausted) return;
+      // #3552: credit never resets by itself: no run waits for a reset that
+      // will not come; the routine's own recovery reports it to its owner.
+      if (credits) {
+        deps.replaceFailure(threadId, turnId, creditLine(dispatch), dispatch.at);
+        return;
+      }
       // Drop recoverRun's competing queued / reconnect wait so only this
       // scheduled resume restarts the routine.
       deps.clearRoutineRun?.(run.id);
@@ -596,6 +628,12 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     }
     // Exhausted with no backup: leave the engine's own error (choose another model).
     if (exhausted) return;
+    // #3552: out of credit and no other engine took it: the one line says
+    // so, with what to do; nothing is held for a reset that will not come.
+    if (credits) {
+      deps.replaceFailure(threadId, turnId, creditLine(dispatch), dispatch.at);
+      return;
+    }
     // #1942: already failed over once and nothing further can take over: mark
     // the turn failed with the engines that refused (never silent empty done).
     if (home) {
@@ -612,7 +650,10 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         kind: "message", botId: dispatch.botId, threadId, messageId: own.messageId, engine: homeEngine.instanceId,
         at: homeReset + store.afterResetMs, ...(dispatch.speaker !== undefined ? { speaker: dispatch.speaker } : {}),
         ...(dispatch.trigger !== undefined ? { trigger: dispatch.trigger } : {}),
-      })) arm();
+      })) {
+        held(dispatch.botId, threadId);
+        arm();
+      }
       return;
     }
     // Nothing can take over: the message goes again once the limit resets, once.
@@ -620,9 +661,26 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       kind: "message", botId: dispatch.botId, threadId, messageId: own.messageId, engine: homeEngine.instanceId,
       at: homeReset + store.afterResetMs, ...(dispatch.speaker !== undefined ? { speaker: dispatch.speaker } : {}),
       ...(dispatch.trigger !== undefined ? { trigger: dispatch.trigger } : {}),
-    })) return;
+    })) {
+      // #3552: the reset already sent it again once and the limit refused it
+      // again: nothing is held now, and the conversation's one line says so
+      // (the message box draws no bar for a limit).
+      deps.replaceFailure(threadId, turnId, {
+        kind: "exhausted", tried: [deps.engineName(dispatch.engine.instanceId)], resetsAt: homeReset, ...(dispatch.owner ? { owner: true as const } : {}),
+      }, dispatch.at);
+      return;
+    }
     deps.replaceFailure(threadId, turnId, { kind: "waiting", ...waitFor, ...(dispatch.owner ? { owner: true as const } : {}) }, dispatch.at);
+    held(dispatch.botId, threadId);
     arm();
+  };
+
+  const held = (botId: string, threadId: string) => {
+    try {
+      deps.messageHeld?.(botId, threadId);
+    } catch (failure) {
+      console.warn(`[limit-failover] ${threadId}: ${failure instanceof Error ? failure.message : String(failure)}`);
+    }
   };
 
   /** A person's message whose turn ran on a quick model Sagax picked (a
@@ -900,7 +958,11 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       try {
         if (!dispatch) return false;
         const message = cause ?? error?.message;
-        const kind = limitKindOf(message, stopReason, { local: dispatch.local === true });
+        // #3552: one verdict for credit, the one the runtime error took
+        // (runtime-lifecycle's engineLimited, which writes no error row):
+        // classifyRoutineFailure's cause. A local server has no credit.
+        const credits = dispatch.local !== true && (creditRefusal(error?.message, stopReason, error) || creditRefusal(cause, stopReason, error));
+        const kind: LimitKind | null = credits ? "quota" : limitKindOf(message, stopReason, { local: dispatch.local === true });
         // #1696: the engine had no conversation model left. Same host path as
         // a usage limit (another engine continues), without blocking the
         // engine or waiting for a reset.
@@ -916,8 +978,15 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         // exhausted catalog never blocks the whole engine: other models may
         // still work later.
         if (kind) hold(dispatch, current, resetsAt, estimated, error?.scope);
-        if (!deps.enabled()) return false;
-        if (!current) return false;
+        // #3552: the runtime error wrote no row for credit: when nothing
+        // below takes the turn, its one line still says so (never silent).
+        const unanswered = (): boolean => {
+          if (!credits) return false;
+          deps.replaceFailure(threadId, turnId, creditLine(dispatch), dispatch.at);
+          return true;
+        };
+        if (!deps.enabled()) return unanswered();
+        if (!current) return unanswered();
         // Auto goes on with its own next pick (failed's `auto`); a chosen
         // model moves to a backup, unless the person changed it meanwhile.
         const auto = current.auto === true;
@@ -929,17 +998,17 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         // turn's): it goes again at once, its conversation untouched, and no
         // incident relays the raw limit as the bot's (detourFailed).
         if (!auto && kind && !run && own && detoured(dispatch, current)) {
-          if (!store.takeResend(own.messageId)) return false;
+          if (!store.takeResend(own.messageId)) return unanswered();
           track(detourFailed(threadId, turnId, dispatch, current, resetsAt, estimated, own).catch((failure) => {
             console.warn(`[limit-failover] ${threadId}: ${failure instanceof Error ? failure.message : String(failure)}`);
           }));
           return true;
         }
-        if (!auto && !same(current, dispatch.selection)) return false;
+        if (!auto && !same(current, dispatch.selection)) return unanswered();
         if (auto && kind) deps.autoRefuse?.(threadId, dispatch.payer, resetsAt);
-        if (!run && !own) return false;
+        if (!run && !own) return unanswered();
         track(failed(threadId, turnId, dispatch, resetsAt, own, run, auto ? { modelOnly: error?.scope === "model" || exhausted } : null, exhausted, estimated,
-          Boolean(kind) && error?.scope === "model").catch((failure) => {
+          Boolean(kind) && error?.scope === "model", credits).catch((failure) => {
           console.warn(`[limit-failover] ${threadId}: ${failure instanceof Error ? failure.message : String(failure)}`);
         }));
         return true;
@@ -1056,6 +1125,11 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         console.warn(`[limit-failover] before turn ${threadId}: ${failure instanceof Error ? failure.message : String(failure)}`);
         return null;
       }
+    },
+
+    heldUntil(botId, threadId) {
+      const held = store.resumes().filter((resume) => resume.kind === "message" && resume.botId === botId && resume.threadId === threadId);
+      return held.length ? Math.min(...held.map((resume) => resume.at)) : null;
     },
 
     async tick() {

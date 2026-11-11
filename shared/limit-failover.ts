@@ -38,6 +38,11 @@ export type LimitFailoverLine =
    * engines that refused. `resetsAt` is the soonest known reset when one
    * was said. */
   | { kind: "exhausted"; tried: string[]; resetsAt?: number; owner?: true }
+  /** #3552: `engine`'s account is out of credit (a refusal whose cause is
+   * credit, server/routines/routine-recovery.ts) and no other engine could
+   * take the message: credit never resets by itself, so nothing is held and
+   * no time is promised. The turn is failed (#1942). */
+  | { kind: "credits"; engine: string; owner?: true }
   /** #3315: `from` is known to be signed out for this turn's payer, so the
    * turn runs on `to`, a backup the person chose, for this turn only: the
    * conversation keeps its own model and is back on `from` once it is signed
@@ -124,9 +129,54 @@ export function limitFailoverText(line: LimitFailoverLine, clock: (at: number) =
       if (line.owner) return `This bot's owner hit usage limits on ${tried}: no other engine could answer.${when}`;
       return `Limits were reached on ${tried}: no other engine could answer.${when}`;
     }
+    case "credits":
+      if (line.owner) return `This bot's owner is out of credit on ${line.engine}, so this message got no answer. Add credit with the provider, or switch engine from the model picker.`;
+      return `${line.engine} is out of credit, so this message got no answer. Add credit with the provider, or switch engine from the model picker.`;
     case "signedOut":
       return `${line.from} is signed out, so ${line.to} took over this turn.`;
     case "signedOutNotice":
       return `${line.from} is signed out, so ${line.to} answers meanwhile. Sign in again in Settings → Model providers and accounts to keep using ${line.from}.`;
   }
+}
+
+/** The usage-limit lines a chat draws: a switch and a return are quiet rows
+ * (2026-10-29), and a sign-out's lines are another state (#3315). */
+const SHOWN_LIMIT_LINES = new Set<LimitFailoverLine["kind"]>(["waiting", "waitingRoutine", "exhausted", "credits"]);
+
+/** The fields of a conversation row the limit line reads. */
+export interface LimitLineRow {
+  id: string;
+  role: string;
+  kind: string;
+  turnSucceeded?: boolean;
+  tool?: { name: string; limitFailover?: LimitFailoverLine };
+}
+
+/** #3552: the conversation's limit lines that still stand, oldest first:
+ * drawn in the chat, with no answer from the bot since. A conversation keeps
+ * one; a newer one retires the others (server/usage/limit-line.ts). */
+export function standingLimitLines<Row extends LimitLineRow>(messages: readonly Row[]): Row[] {
+  const standing: Row[] = [];
+  for (const message of messages) {
+    if (message.role === "bot" && message.kind === "text" && message.turnSucceeded !== false) {
+      standing.length = 0;
+      continue;
+    }
+    const line = message.kind === "activity" ? message.tool?.limitFailover : undefined;
+    if (line && SHOWN_LIMIT_LINES.has(line.kind)) standing.push(message);
+  }
+  return standing;
+}
+
+/** #3552: whether the server holds this conversation's message and sends it
+ * again at the reset (its standing line is a wait). Then nothing else offers
+ * to resume it. */
+export function limitMessageHeld(messages: readonly LimitLineRow[]): boolean {
+  return standingLimitLines(messages).at(-1)?.tool?.limitFailover?.kind === "waiting";
+}
+
+/** A retired limit line: a quiet notice (shared/chat-notices.ts), kept for
+ * the Events lens, never drawn. */
+export function limitLineRetiredName(name: string): string {
+  return `notice: ${name.replace(/^(?:error|recovery|notice):\s*/, "")}`;
 }

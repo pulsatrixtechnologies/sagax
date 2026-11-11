@@ -147,46 +147,33 @@ describe("composer while the bot cannot answer", () => {
     expect($("[data-composer-send-block]")).toBeNull();
   });
 
-  // The maintainer, 2026-11-04: an engine at its limit or out of credit takes nothing:
-  // no typing, no send, one line with the reset in local time and a switch.
-  it("locks the whole composer while the engine is at its limit, and says when it is back", async () => {
-    // A reset later today reads as a bare clock time; one past midnight gets its
-    // weekday (shared/limit-failover.ts resetClockText). Pin the clock to 10:00
-    // local so "in two hours" is always today, whatever hour the suite runs.
-    const morning = new Date();
-    morning.setHours(10, 0, 0, 0);
-    vi.useFakeTimers({ toFake: ["Date"], now: morning });
+  // #3552: a usage limit or used-up credit is told once, by the
+  // conversation's own line and the model picker's dot. The message box draws
+  // no bar for it and takes the message: the server holds it for the reset.
+  // An older server still answering the limit as a block changes nothing.
+  it("draws no bar above the message box at a usage limit and sends the message", async () => {
     const resetsAt = Date.now() + 2 * 3_600_000;
     fixture.sendState = { block: { reason: "engine_limit", name: "Claude", message: "Claude limit reached.", action: { kind: "switch_engine" }, limit: { cause: "usage_limit", resetsAt } } };
     render(createElement(Composer, { bot }));
     await settle();
-    const line = $("[data-composer-send-block]")!;
-    expect(line.getAttribute("data-composer-send-block")).toBe("engine_limit");
-    const local = new Date(resetsAt).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" });
-    expect(line.textContent).toContain(`Claude limit reached, back at ${local}`);
-    expect(line.textContent).not.toMatch(/UTC/);
-    expect(textarea().disabled).toBe(true);
+    expect($("[data-composer-send-block]")).toBeNull();
+    expect($("[data-composer-notice-band]")).toBeNull();
+    expect(host.textContent).not.toMatch(/limit reached|Continue at|Nothing was sent/);
+    expect(textarea().disabled).toBe(false);
+    type("hello");
     pressEnter();
-    expect(sent()).toEqual([]);
-    expect($("[data-composer-send]")).toBeNull();
-    expect($("[data-composer-cta]")).toBeNull();
-    flushSync(() => $<HTMLButtonElement>('[data-composer-send-block-action="switch_engine"]')!.click());
-    expect(modelWindow.open).toHaveBeenCalledWith("bot");
+    expect(sent()).toHaveLength(1);
   });
 
-  it("comes back once the bot moves to another engine", async () => {
+  it("draws no bar for used-up credit either, and sends", async () => {
     fixture.sendState = { block: { reason: "engine_limit", name: "Claude", message: "Claude is out of credit.", action: { kind: "switch_engine" }, limit: { cause: "credits" } } };
     render(createElement(Composer, { bot }));
     await settle();
-    expect($("[data-composer-send-block]")!.textContent).toContain("Claude is out of credit");
-    expect(textarea().disabled).toBe(true);
-    fixture.sendState = { block: null };
-    // the model window moves this conversation (and the bot) to another engine
-    const grok = { instanceId: "grok", model: "grok-4" };
-    render(createElement(Composer, { bot: { ...bot, modelSelection: grok, tasks: bot.tasks!.map((task) => ({ ...task, modelSelection: grok })) } }));
-    await settle();
     expect($("[data-composer-send-block]")).toBeNull();
-    expect(textarea().disabled).toBe(false);
+    expect(host.textContent).not.toMatch(/out of credit/);
+    type("hello");
+    pressEnter();
+    expect(sent()).toHaveLength(1);
   });
 
   // #2013: a refusal before any prompt went out is said here, never as a red

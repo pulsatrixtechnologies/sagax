@@ -5146,6 +5146,26 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     for (const name of names) expect(seen.env[name]).toBeUndefined();
   });
 
+  it("signs a one-shot call in with the account its turn uses, not the server's own sign-in (#3519)", async () => {
+    const serverLogin = join(scratch, "server-claude-config");
+    await create(undefined, { CLAUDE_CONFIG_DIR: serverLogin });
+    const dump = join(scratch, "one-shot-access.json");
+    process.env.FAKE_CLAUDE_DUMP = dump;
+    const personLogin = join(scratch, "principals", "p1", "claude");
+    const subscription = { via: "subscription" as const, identity: "subscription:p1", claudeConfigDir: personLogin };
+    await expect(instance.generateText?.("summarize safely", { access: subscription })).resolves.toBe("fake generated text");
+    expect(JSON.parse(readFileSync(dump, "utf8")).env.CLAUDE_CONFIG_DIR).toBe(personLogin);
+    // the permission review signs in the same way
+    await expect(instance.reviewPermission?.("review this request", undefined, subscription)).resolves.toBe("fake generated text");
+    expect(JSON.parse(readFileSync(dump, "utf8")).env.CLAUDE_CONFIG_DIR).toBe(personLogin);
+    // a person's key rides the call, never the server's login folder
+    await expect(instance.generateText?.("summarize safely", { access: { via: "owner-key", identity: "owner-key:p1:fp", environment: { ANTHROPIC_API_KEY: "sk-ant-test-fake-oneshot" } } })).resolves.toBe("fake generated text");
+    expect(JSON.parse(readFileSync(dump, "utf8")).env.ANTHROPIC_API_KEY).toBe("sk-ant-test-fake-oneshot");
+    // no access: the instance's own configuration, as before
+    await expect(instance.generateText?.("summarize safely")).resolves.toBe("fake generated text");
+    expect(JSON.parse(readFileSync(dump, "utf8")).env.CLAUDE_CONFIG_DIR).toBe(serverLogin);
+  });
+
   it("turns thinking off for a one-shot only when asked (memory capture), never for a review", async () => {
     await create();
     const dump = join(scratch, "no-thinking.json");

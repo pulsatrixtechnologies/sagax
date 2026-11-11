@@ -192,6 +192,7 @@ export type StartTurnHost = {
   forgetTurnCheckpoint: any,
   gatedLocalComputer: any,
   generateThreadTitle: any,
+  botTitleEngine: any,
   githubWithheldPrompt: any,
   isRelayPart: any,
   guardTurnDispatch: any,

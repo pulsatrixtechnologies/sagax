@@ -281,6 +281,8 @@ export async function createAcpInstance(
 
   const { snapshot, generateMemoryText, reviewPermission } = createInstanceText({
     support, config, instanceId, childEnv,
+    driverKind: DRIVER_KIND,
+    instanceEnvironment: input.environment,
     getModels: () => models,
     getStartupModelRefresh: () => startupModelRefresh,
   });

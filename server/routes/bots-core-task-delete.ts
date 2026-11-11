@@ -92,7 +92,7 @@ export function createBotsCoreTaskDeleteRoutes(deps: BotsCoreRouteDeps): RouteHa
       const startedFrom = store.taskByThread(m[1], m[2])!.title;
       titleRegenerations.add(m[2]);
       try {
-        const title = await generateThreadTitle(gate.instance, excerpt, "conversation");
+        const title = await generateThreadTitle(gate.instance, excerpt, "conversation", current);
         if (!title) return json(res, 502, { error: "couldn't generate a title — try again, or rename the thread" });
         const task = store.retitleTask(m[1], m[2], startedFrom, title) ?? store.taskByThread(m[1], m[2]);
         if (!task) return json(res, 404, { error: "no such task" });

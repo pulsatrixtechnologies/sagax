@@ -275,7 +275,9 @@ export function createDispatchStartTurn(host: StartTurnHost) {
             void state.instance.generateText(".", {
               system: VOICE_FIRST_SENTENCE_SYSTEM,
               model: fast,
-              maxTokens: 1
+              maxTokens: 1,
+              // #3519: the account this turn signs in with
+              ...(turnAccess ? { access: turnAccess } : {})
             }).catch(() => undefined);
           }
         }

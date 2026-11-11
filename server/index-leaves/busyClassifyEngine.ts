@@ -8,7 +8,8 @@ function busyClassifyEngine(botId: string): ((prompt: string, options?: { signal
 
   const bot = host.store.bot(botId);
   const instance = bot ? host.streamDigestEngine(bot) : null;
-  return instance?.generateText ? instance.generateText.bind(instance) : undefined;
+  // #3519: on the account the bot's turn signs in with
+  return instance?.generateText ? host.botOneShotText(bot, instance, instance.generateText.bind(instance)) : undefined;
 
 }
   return busyClassifyEngine;

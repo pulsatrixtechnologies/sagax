@@ -229,5 +229,6 @@ export interface BotsCoreRouteDeps {
   rejectDeletedThreadSkillStages(cleanups: Array<{ botId: string; stagedId: string }>): void;
   threadTitleGate(bot: Pick<BotRecord, "modelSelection">, principalId?: string | null): { ok: true; instance: ProviderInstance } | { ok: false; refusal: string };
   titleRegenerations: Set<string>;
-  generateThreadTitle(instance: ProviderInstance, excerpt: string, kind: string): Promise<string | null | undefined>;
+  /** `bot`: the title signs in as that bot's turn does (#3519). */
+  generateThreadTitle(instance: ProviderInstance, excerpt: string, kind: string, bot?: BotRecord): Promise<string | null | undefined>;
 }

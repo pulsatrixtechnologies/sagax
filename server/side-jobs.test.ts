@@ -63,7 +63,7 @@ function backgroundEngine(instanceId: string, driverKind: string) {
 
 const bot = (id: string, instanceId: string): SideJobBot => ({ id, name: `Bot ${id}`, threadId: `main-${id}`, modelSelection: { instanceId } });
 
-function setup(options: { helper?: { instanceId: string; model?: string } | null; modelAllowed?: SideJobsDeps["modelAllowed"] } = {}) {
+function setup(options: { helper?: { instanceId: string; model?: string } | null; modelAllowed?: SideJobsDeps["modelAllowed"]; signIn?: SideJobsDeps["signIn"] } = {}) {
   const claude = textEngine("claude", "claudeAgent");
   const openrouter = textEngine("openrouter", "openai-compat");
   const acp = backgroundEngine("grok", "grokAgent");
@@ -90,6 +90,7 @@ function setup(options: { helper?: { instanceId: string; model?: string } | null
     refusal: (instance) => (state.refused.has(instance.instanceId) ? "the organisation does not allow this engine" : undefined),
     helper: () => state.helper,
     ...(options.modelAllowed ? { modelAllowed: options.modelAllowed } : {}),
+    ...(options.signIn ? { signIn: options.signIn } : {}),
     assertWithinBudget: () => {
       if (state.overBudget) throw new Error("this workspace has reached its monthly spend limit");
     },
@@ -234,6 +235,28 @@ describe("who writes a small job", () => {
     const controller = new AbortController();
     await jobs.text("memory", "pi")!.generateText("p", { signal: controller.signal });
     expect(claude.calls[0]!.options?.signal).toBe(controller.signal);
+  });
+});
+
+describe("the account a bot's own engine signs in with (#3519)", () => {
+  it("is the one its turn resolves, for memory upkeep, the skill review and the summary alike; never for the helper", async () => {
+    const account = { via: "subscription" as const, identity: "subscription:p1", claudeConfigDir: "/data/principals/p1/claude" };
+    const signed: string[] = [];
+    const { jobs, claude, codex } = setup({
+      signIn: (botId, instance, call) => (prompt, options) => {
+        signed.push(`${botId}/${instance.instanceId}`);
+        return call(prompt, { ...options, access: account });
+      },
+    });
+    for (const job of ["compaction", "memory", "skill-review"] as const) await jobs.text(job, "claude")!.generateText(`${job} prompt`);
+    expect(claude.calls.map((call) => call.options?.access)).toEqual([account, account, account]);
+    await jobs.text("memory", "codex")!.generateText("memory prompt");
+    expect(codex.calls[0]!.options?.access).toEqual(account);
+    expect(signed).toEqual(["claude/claude", "claude/claude", "claude/claude", "codex/codex"]);
+    // the helper is this server's own engine: it keeps its own configuration
+    await jobs.text("memory", "pi")!.generateText("helper prompt");
+    expect(claude.calls.at(-1)!.options?.access).toBeUndefined();
+    expect(signed).toHaveLength(4);
   });
 });
 

@@ -44,6 +44,7 @@ export function createPrepareAdmitStartTurn(
     explainPick,
     extractTurnImages,
     generateThreadTitle,
+    botTitleEngine,
     holdBotMemoryPlain,
     holdTurnAttachments,
     inheritedTeamComputer,
@@ -155,7 +156,7 @@ export function createPrepareAdmitStartTurn(
     // by a person has already broken that equality by then.
     const snippet = titled?.title;
     if (titled && snippet && !titled.openedBy?.botId && personalFeatureOn("llmThreadTitles", llmThreadTitlesEnabled(cfg), vaultPrincipalForThread(state.threadId)) && state.instance.generateText) {
-      void generateThreadTitle(state.instance, state.resolvedImages.text)
+      void generateThreadTitle(botTitleEngine(state.bot, state.instance), state.resolvedImages.text)
         .then((title: any) => {
           if (title) store.retitleTask(state.bot.id, state.threadId, snippet, title);
         })

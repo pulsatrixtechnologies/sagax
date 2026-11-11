@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ProviderAccounts } from "./provider-accounts.ts";
+import { createProviderAccountsFailureLog, nothingToSyncYet, ProviderAccounts, ProviderAccountsError, providerAccountsFailureLine } from "./provider-accounts.ts";
 import { ProviderKeysStore, PROVIDER_KEYS_FILE } from "./provider-keys.ts";
 
 const dirs: string[] = [];
@@ -86,4 +86,93 @@ it.each([404, 405])("names an older organization host (%s), preserves local impo
     directory.resolveProviderKey.mockResolvedValue({ ok: false, error });
     expect(await accounts.key(owner, "openai")).toBeUndefined();
   }
+});
+
+describe("the repeating provider-accounts failure (#3519)", () => {
+  const owner = { principalId: "person-a", sub: "subject-a" };
+
+  it("reads past a kind of provider or a server this server does not know, instead of refusing the whole list", async () => {
+    const { accounts, directory } = fixture();
+    directory.linkPostJson.mockResolvedValue({ ok: true, status: 200, body: {
+      keys: [{ provider: "openai", last4: "abcd" }, { provider: "provider-from-the-future", last4: "wxyz" }],
+      servers: [{ instanceId: "lab", name: "Lab", url: "http://127.0.0.1:9000/v1", protocol: "openai", models: [] }, { instanceId: "odd", protocol: "carrier-pigeon" }],
+    } } as never);
+    const view = await accounts.list(owner);
+    expect(view.keys).toEqual([{ provider: "openai", last4: "abcd" }]);
+    expect(view.servers.map((server) => server.instanceId)).toEqual(["lab"]);
+    expect(directory.rememberProviderKeys).toHaveBeenLastCalledWith(owner.sub, ["openai"]);
+  });
+
+  it("imports the keys it knows and keeps a key of an unknown kind where it is, without failing every later call", async () => {
+    const { accounts, store, saved, dataDir } = fixture();
+    store.set(owner, "openai", "lab-openai-secret");
+    store.set(owner, "provider-from-the-future", "lab-future-secret");
+    await expect(accounts.list(owner)).resolves.toMatchObject({ keys: [{ provider: "openai" }] });
+    expect(saved.get(owner.sub)?.get("openai")).toBe("lab-openai-secret");
+    expect(store.keys(owner)).toEqual({ "provider-from-the-future": "lab-future-secret" });
+    // the next poll neither fails nor imports again
+    await expect(accounts.list(owner)).resolves.toMatchObject({ keys: [{ provider: "openai" }] });
+    expect(existsSync(join(dataDir, "principals", owner.principalId, PROVIDER_KEYS_FILE))).toBe(true);
+  });
+
+  it("keeps a key the organization server refuses as unknown (400) here and imports the others", async () => {
+    const { accounts, store, saved, directory } = fixture();
+    const answer = directory.linkPostJson.getMockImplementation()!;
+    directory.linkPostJson.mockImplementation((async (path: string, input: unknown) => {
+      if ((input as { provider?: string }).provider === "deepseek") return { ok: false as const, error: "refused" as const, status: 400, body: { error: "unknown provider" } };
+      return answer(path, input);
+    }) as never);
+    store.set(owner, "deepseek", "lab-deepseek-secret");
+    store.set(owner, "openai", "lab-openai-secret");
+    await expect(accounts.list(owner)).resolves.toMatchObject({ keys: [{ provider: "openai" }] });
+    expect(saved.get(owner.sub)?.get("openai")).toBe("lab-openai-secret");
+    expect(store.keys(owner)).toEqual({ deepseek: "lab-deepseek-secret" });
+    // the next poll neither fails nor asks the organization server again
+    const calls = directory.linkPostJson.mock.calls.length;
+    await expect(accounts.list(owner)).resolves.toMatchObject({ keys: [{ provider: "openai" }] });
+    expect(directory.linkPostJson.mock.calls.slice(calls).map(([path]) => path)).toEqual(["/api/v1/pulsabot/provider-keys/list"]);
+  });
+
+  it("treats no sign-in token for the person (403 subject) as nothing to sync yet, not a failure", async () => {
+    const { accounts, directory } = fixture();
+    directory.linkPostJson.mockResolvedValue({ ok: false, error: "refused", status: 403, body: { code: "subject" } } as never);
+    const error = await accounts.list(owner).catch((failure: unknown) => failure);
+    expect(nothingToSyncYet(error)).toBe(true);
+    const lines: string[] = [];
+    const log = createProviderAccountsFailureLog((line) => lines.push(line));
+    await log.run(owner.principalId, () => accounts.list(owner).then(() => undefined));
+    expect(lines).toEqual([]);
+    directory.linkPostJson.mockResolvedValue({ ok: false, error: "refused", status: 403, body: { code: "forbidden" } } as never);
+    await log.run(owner.principalId, () => accounts.list(owner).then(() => undefined));
+    expect(lines).toEqual(["provider accounts: the list step failed (organization server: HTTP 403)"]);
+  });
+
+  it("names the step, the kind of provider and the answer in its log line, never a key or the person", async () => {
+    const { accounts, store, directory } = fixture();
+    store.set(owner, "fish", "lab-fish-secret");
+    directory.linkPostJson.mockResolvedValue({ ok: false, error: "link", status: 403 } as never);
+    const error = await accounts.list(owner).catch((failure: unknown) => failure);
+    expect(error).toBeInstanceOf(ProviderAccountsError);
+    expect((error as Error).message).toBe("Your provider accounts could not be saved. Try again.");
+    const line = providerAccountsFailureLine(error);
+    expect(line).toBe("provider accounts: the import step failed (provider fish, organization server: HTTP 403)");
+    for (const secret of ["lab-fish-secret", owner.sub, owner.principalId]) expect(line).not.toContain(secret);
+    const listed = fixture();
+    listed.directory.linkPostJson.mockResolvedValue({ ok: false, error: "unreachable" } as never);
+    expect(providerAccountsFailureLine(await listed.accounts.list(owner).catch((failure: unknown) => failure)))
+      .toBe("provider accounts: the list step failed (organization server: unreachable)");
+  });
+
+  it("logs a person's same failure once per cause, again after it worked", () => {
+    const lines: string[] = [];
+    const log = createProviderAccountsFailureLog((line) => lines.push(line));
+    const refused = Object.assign(new ProviderAccountsError(403), { step: "list" as const, upstream: "HTTP 403" });
+    log.failed("person-a", refused);
+    log.failed("person-a", refused);
+    log.failed("person-a", refused);
+    expect(lines).toEqual(["provider accounts: the list step failed (organization server: HTTP 403)"]);
+    log.worked("person-a");
+    log.failed("person-a", refused);
+    expect(lines).toHaveLength(2);
+  });
 });

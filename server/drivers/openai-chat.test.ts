@@ -85,6 +85,21 @@ describe("createOpenAIChatRuntime one-shot usage", () => {
     await instance.dispose();
   });
 
+  it("signs a one-shot and the permission review in with the key the bot's turn uses (#3519)", async () => {
+    const instance = await fixture({ model: "grok-3-mini", choices });
+    const access = { via: "owner-key" as const, identity: "owner-key:p1:fp", environment: { XAI_API_KEY: "fixture-person-key", SAGAX_PERSONAL_PROVIDER_KEY: "fixture-person-key" } };
+    const bearer = (index: number) => new Headers(vi.mocked(fetch).mock.calls[index]![1]!.headers as ConstructorParameters<typeof Headers>[0]).get("authorization");
+    await expect(instance.generateText!("summarize", { access })).resolves.toBe("helper result");
+    expect(bearer(0)).toBe("Bearer fixture-person-key");
+    await instance.generateText!("summarize");
+    expect(bearer(1)).toBe("Bearer fixture-key");
+    if (instance.reviewPermission) {
+      await instance.reviewPermission("review", undefined, access);
+      expect(bearer(2)).toBe("Bearer fixture-person-key");
+    }
+    await instance.dispose();
+  });
+
   it.each([
     [undefined, undefined],
     [{ prompt_tokens: "12", completion_tokens: -1, cost: null }, undefined],

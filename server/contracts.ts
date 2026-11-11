@@ -844,6 +844,10 @@ export interface TextGenerationOptions {
    * 4,000 thinking tokens and ran past its 60 s limit. Drivers without a
    * switch ignore it. */
   noThinking?: boolean;
+  /** Organization server: the account this call signs in with, resolved
+   * exactly as the bot's turn resolves it (SendTurnInput.access). Absent:
+   * the instance's own configuration, as a solo turn. */
+  access?: TurnAccessInput;
 }
 
 export interface ProviderInstance {
@@ -882,7 +886,7 @@ export interface ProviderInstance {
   /** Isolated, tool-free permission review on this same provider. Kept
    * separate from generateText so the UI never infers a security capability
    * from a generic helper that may expose prompts in argv or lack approvals. */
-  reviewPermission?(prompt: string, signal?: AbortSignal): Promise<string>;
+  reviewPermission?(prompt: string, signal?: AbortSignal, access?: TurnAccessInput): Promise<string>;
   /** The engine's own slash commands for turns in this scope, read without
    * a model call (shared/harness-commands.ts). */
   listCommands?(scope: HarnessCommandScope): Promise<HarnessCommand[]>;

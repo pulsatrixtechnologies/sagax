@@ -19,10 +19,12 @@ export function reviewCodexPermission(input: {
   prompt: string;
   signal?: AbortSignal;
   model?: string;
+  /** Provider arguments of the account the call signs in with (an owner key). */
+  args?: readonly string[];
 }): Promise<string> {
   if (input.signal?.aborted) return Promise.reject(new Error("Codex review aborted"));
   const cwd = mkdtempSync(join(tmpdir(), "omb-codex-review-"));
-  const child = spawnCli(input.cli, ["app-server"], {
+  const child = spawnCli(input.cli, ["app-server", ...(input.args ?? [])], {
     cwd,
     env: input.env,
     stdio: ["pipe", "pipe", "pipe"],

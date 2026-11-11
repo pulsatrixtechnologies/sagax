@@ -2,7 +2,7 @@ import { createChatCompletions, ModelUnsupportedError } from "./openai-chat-comp
 import type { Completion, RuntimeOptions } from "./openai-chat-types.ts";
 import type { OpenAIChatMessage } from "./openai-chat-message.ts";
 import { createHash } from "node:crypto";
-import type { ProviderInstance, RuntimeEvent, RuntimeEventListener, SendTurnInput } from "../contracts.ts";
+import type { ProviderInstance, RuntimeEvent, RuntimeEventListener, SendTurnInput, TurnAccessInput } from "../contracts.ts";
 import { newEventId } from "../contracts.ts";
 import { chatUserContent } from "./chat-images.ts";
 import { promptHalves, sectionDelta, sectionFingerprints, volatileContextNote, volatileSectionsUpdate, withContextNote } from "./prompt-split.ts";
@@ -125,6 +125,10 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     }
     return (typeof options.apiKey === "function" ? options.apiKey(turn) : options.apiKey).trim();
   };
+  /** A one-shot call's account (#3519): the key a turn of the same bot on
+   * the same access reads, through the same resolveKey. */
+  const oneShotTurn = (access: TurnAccessInput | undefined): SendTurnInput | undefined =>
+    access ? { threadId: "one-shot", text: "", access } as SendTurnInput : undefined;
   const listeners = new Set<RuntimeEventListener>();
   const active = new Map<string, {
     abort: AbortController;
@@ -393,7 +397,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
         return () => listeners.delete(listener);
       },
     },
-    generateText: async (prompt, { signal, onUsage, model: requested, system, onDelta, maxTokens } = {}) => {
+    generateText: async (prompt, { signal, onUsage, model: requested, system, onDelta, maxTokens, access } = {}) => {
       let model = requested ?? options.generateModel?.() ?? options.models().default;
       const tried = new Set<string>([model]);
       if (options.modelFallback && unsupportedModels.has(model)) model = nextModel(tried) ?? model;
@@ -410,7 +414,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
           reply = await complete(
             messages, model, stream, signal,
             onDelta ? (delta, kind) => { if (kind === "assistant_text") { streamed = true; onDelta(delta); } } : undefined,
-            [], onUsage, maxTokens, resolveKey(),
+            [], onUsage, maxTokens, resolveKey(oneShotTurn(access)),
           );
           break;
         } catch (error) {
@@ -427,11 +431,11 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
       return text.trim() ? text : reasoning;
     },
     ...(options.permissionReview ? {
-      reviewPermission: async (prompt: string, signal?: AbortSignal) => {
+      reviewPermission: async (prompt: string, signal?: AbortSignal, access?: TurnAccessInput) => {
         const model = options.generateModel?.() ?? options.models().default;
         const { text, reasoning, toolCalls } = await complete(
           [{ role: "user", content: prompt }], model, false, signal,
-          undefined, [], undefined, 400, resolveKey(),
+          undefined, [], undefined, 400, resolveKey(oneShotTurn(access)),
         );
         if (toolCalls.length) throw new ChatProtocolError("permission review returned a tool call");
         const answer = (text.trim() ? text : reasoning).trim();

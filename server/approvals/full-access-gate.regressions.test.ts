@@ -22,6 +22,7 @@ import type { Message } from "../store.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
 import { ASK_CHOICE_TOOL } from "../../shared/options-card.ts";
 import { isOutboundTool } from "../../shared/outbound.ts";
+import { choiceQuestionMismatch } from "../../shared/notification-context.ts";
 import { peerContactCardRequired } from "./full-access-gate.ts";
 import { cancelPeerApprovalsFor, requestPeerApproval, resolvePeerComms } from "../peers/peer-approval.ts";
 import { closeMessageDb } from "../messages/message-db.ts";
@@ -280,6 +281,38 @@ describe("#1819: an invented may-I card under Full access", () => {
       expect(fullAccessChoiceAnswer("full", { question, options: ["Oui", "Non"] }), question).toBeNull();
     }
     expect(fullAccessChoiceAnswer("full", { question: "Puis-je continuer l'import?", options: ["Oui", "Non"] })).toEqual({ choice: "Oui" });
+  });
+
+  // #3525: the engine's own question tool sends "A or B?" with Yes / No. At
+  // Full, "Yes" chooses neither path, so nothing is answered for the person:
+  // request-opened-present.ts then sends the question back with the same
+  // words as ask_choice (choiceQuestionMismatch), and the two-path question
+  // the engine asks next keeps its card.
+  it.each([
+    ["Veux-tu que je publie (ou j'attends) ?", ["Oui", "Non"]],
+    ["Do you want me to send it to the team or the vendor?", ["Yes", "No"]],
+    ["Je l'envoie à l'équipe ou au fournisseur ?", ["Oui", "Non"]],
+    ["Should I publish it (or wait)?", ["Yes", "No"]],
+  ])("an either/or question with Yes / No from the engine's question tool at Full is not answered (#3525): %s", (question, options) => {
+    expect(fullAccessChoiceAnswer("full", { question, options })).toBeNull();
+    // the path that runs next tells the engine to ask again with its two paths
+    expect(choiceQuestionMismatch(question, options)).toMatch(/give the alternatives themselves as options, not Yes \/ No/);
+  });
+
+  it.each([
+    ["Veux-tu que je publie maintenant, ou que j'attende ?", ["Que je publie maintenant", "Que j'attende"]],
+    ["Do you want me to send it to the team, or to the vendor?", ["Send it to the team", "To the vendor"]],
+  ])("the same either/or question asked again with its two paths keeps its card at Full (#3525): %s", (question, options) => {
+    expect(fullAccessChoiceAnswer("full", { question, options })).toBeNull();
+  });
+
+  it.each([
+    ["Je supprime les doublons, les fichiers vides ?", ["Oui", "Non"]],
+    ["Should I create the quote, the invoice and the ticket?", ["Yes", "No"]],
+    ["Puis-je l'envoyer à l'équipe ou au fournisseur ?", ["Oui", "Non"]],
+    ["Should I publish it or not?", ["Yes", "No"]],
+  ])("a may-I with Yes / No and no two paths is still answered at Full (#3525): %s", (question, options) => {
+    expect(fullAccessChoiceAnswer("full", { question, options })).toEqual({ choice: options[0] });
   });
 
   it("the prompt says so, so the model does not expect a click", () => {

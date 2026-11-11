@@ -265,21 +265,42 @@ const WH_START = /^\s*(?:which|what|who|whom|whose|where|when|why|how|lequel|laq
 const PERMISSION_START = /^\s*(?:is it (?:ok|okay|fine|alright|all right)|is that (?:ok|okay|fine)|can i|could i|may i|shall i|should i go ahead|do i have|est-ce (?:correct|ok|que je peux|que tu veux que je)|c'est (?:correct|ok|bon)|ça te va|ok pour|d'accord pour|puis-je|je peux|j'ai ton (?:ok|accord))\b/;
 const ARTICLE = /^(?:le|la|les|l'|l’|un|une|des|du|celle|celui|ceux|celles|the|a|an|that|this|those|these)\b/;
 
-/** The question offers alternatives ("A or B?", "A ou B ?", "Je publie (ou
- * j'attends) ?", "la locale, la distante ?") or is an open question
- * ("lequel…", "which…", "qu'est-ce que…"): yes / no cannot answer it. */
-export function asksForAlternative(question: string): boolean {
+/** The last question sentence, lower case, "?" kept; null without one. */
+function finalQuestionSentence(question: string): string | null {
   const text = notificationLine(question, 2000).toLowerCase().replace(/\s+([?!:;])/g, "$1");
-  if (!text.includes("?")) return false;
+  if (!text.includes("?")) return null;
   const lastQuestion = text.slice(0, text.lastIndexOf("?") + 1);
-  const sentence = (lastQuestion.split(/(?<=[.!?\n])\s+/).filter(Boolean).pop() ?? lastQuestion).trim();
-  if (PERMISSION_START.test(sentence)) return false;
-  if (WH_START.test(sentence)) return true;
+  return (lastQuestion.split(/(?<=[.!?\n])\s+/).filter(Boolean).pop() ?? lastQuestion).trim();
+}
+
+/** "A or B?", "A ou B ?", "Je publie (ou j'attends) ?" on a final question
+ * sentence: two paths named with "or" / "ou". "... or not?" is not. */
+function namesTwoPaths(sentence: string): boolean {
   if (/\b(?:or not|ou non|ou pas)\)?\?$/.test(sentence)) return false;
   // "(ou j'attends) ?" / "(or wait)?"
   if (/\(\s*(?:or|ou)\s+[^)]+\)\s*\?$/.test(sentence)) return true;
   // "A or B?" / "A ou B ?" / "A ou bien B ?" with words on both sides
-  if (/\S\s+(?:or|ou|ou bien|either)\s+\S[^?]*\?$/.test(sentence)) return true;
+  return /\S\s+(?:or|ou|ou bien|either)\s+\S[^?]*\?$/.test(sentence);
+}
+
+/** #3525: the question offers two paths with "or" / "ou" ("A or B?", "Je
+ * publie (ou j'attends) ?"), the case where Yes / No answers neither. A
+ * comma list of items, an open question and an "Is it OK to..." / "Puis-je"
+ * leave are not two paths. */
+export function offersTwoPaths(question: string): boolean {
+  const sentence = finalQuestionSentence(question);
+  return sentence !== null && !PERMISSION_START.test(sentence) && namesTwoPaths(sentence);
+}
+
+/** The question offers alternatives ("A or B?", "A ou B ?", "Je publie (ou
+ * j'attends) ?", "la locale, la distante ?") or is an open question
+ * ("lequel…", "which…", "qu'est-ce que…"): yes / no cannot answer it. */
+export function asksForAlternative(question: string): boolean {
+  const sentence = finalQuestionSentence(question);
+  if (sentence === null || PERMISSION_START.test(sentence)) return false;
+  if (WH_START.test(sentence)) return true;
+  if (namesTwoPaths(sentence)) return true;
+  if (/\b(?:or not|ou non|ou pas)\)?\?$/.test(sentence)) return false;
   // "la locale, la distante ?": a comma list of noun phrases
   const parts = sentence.replace(/\?$/, "").split(/\s*,\s*/);
   if (parts.length >= 2) {

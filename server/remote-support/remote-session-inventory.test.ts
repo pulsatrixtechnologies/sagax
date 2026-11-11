@@ -53,7 +53,7 @@ afterEach(() => {
 
 const ok = (stdout: string): CommandResult => ({ code: 0, stdout, stderr: "" });
 
-function harness(answer: (command: string, argv: string[], signal?: AbortSignal) => CommandResult | Promise<CommandResult>, options: { tunnel?: boolean; ssh?: boolean; audit?: RemoteSessionActionEvent[]; tunnelWaitMaxMs?: number; tunnelProbeWaitMaxMs?: number } = {}) {
+function harness(answer: (command: string, argv: string[], signal?: AbortSignal) => CommandResult | Promise<CommandResult>, options: { tunnel?: boolean; ssh?: boolean; audit?: RemoteSessionActionEvent[]; tunnelWaitMaxMs?: number; tunnelProbeWaitMaxMs?: number; osReadWaitMaxMs?: number } = {}) {
   const dataDir = mkdtempSync(path.join(tmpdir(), "sagax-inv-"));
   const home = mkdtempSync(path.join(tmpdir(), "sagax-inv-flow-"));
   roots.push(dataDir, home);
@@ -98,6 +98,7 @@ function harness(answer: (command: string, argv: string[], signal?: AbortSignal)
     systemSsh: () => (options.ssh === false ? null : "/usr/bin/ssh"),
     ...(options.tunnelWaitMaxMs ? { tunnelWaitMaxMs: options.tunnelWaitMaxMs } : {}),
     ...(options.tunnelProbeWaitMaxMs ? { tunnelProbeWaitMaxMs: options.tunnelProbeWaitMaxMs } : {}),
+    ...(options.osReadWaitMaxMs ? { osReadWaitMaxMs: options.osReadWaitMaxMs } : {}),
     ...(options.audit ? { actionsAudit: { write: (event: RemoteSessionActionEvent) => { options.audit!.push(event); } } as never } : {}),
   });
   return { service, commands, messages, placeTunnel, tick: (ms: number) => { clock += ms; } };
@@ -118,6 +119,29 @@ const open: PublishRemoteSession = {
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("OS detection through the tunnel", () => {
+  // #3518: the first read of an unknown OS never holds one exec call past its limit
+  it("an exec whose first OS read is slow answers 'not known yet' within the limit, nothing sent", async () => {
+    let down = true;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const { service, commands } = harness(async (command) => {
+      if (down) return { code: 255, stdout: "", stderr: "" };
+      if (command === OS_PROBE_UNIX) await gate;
+      return ok("Darwin\n");
+    }, { osReadWaitMaxMs: 40 });
+    await service.publish(open);
+    down = false;
+    commands.length = 0;
+    const out = await Promise.race([
+      service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "ls" }),
+      new Promise((resolve) => setTimeout(() => resolve("stuck"), 1_000)),
+    ]);
+    expect(out).toMatchObject({ error: expect.stringMatching(/not known yet/) });
+    expect(commands).toEqual([OS_PROBE_UNIX]);
+    release();
+    await settle();
+  });
+
   it("reads a Mac as macOS and uses the macOS commands (8F2NZU)", async () => {
     const { service, commands, messages } = harness((command) => {
       if (command === OS_PROBE_UNIX) return ok("Darwin\n");

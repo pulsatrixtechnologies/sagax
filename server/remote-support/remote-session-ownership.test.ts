@@ -275,6 +275,15 @@ describe("panel close and OS detection (low findings)", () => {
     expect(messages[0]?.remoteSession?.state).toBe("ended");
   });
 
+  // #3518: a gateway that does not answer never holds a session close
+  it("a close whose gateway call never answers still ends, within the limit of its own", async () => {
+    const dir = await supportFolder();
+    const { svc } = service(dir, quietRun, { closeRemote: () => new Promise<never>(() => undefined), gatewayCallMaxMs: 40 });
+    await svc.publish({ id: ID, code: CODE, botId: BOT, threadId: THREAD, principalId: A, os: "windows", elevated: false, endAt: END });
+    const closed = await Promise.race([svc.close(A, BOT, ID), new Promise((resolve) => setTimeout(() => resolve("stuck"), 1_000))]);
+    expect(closed).toMatchObject({ state: "ended" });
+  });
+
   it("does not lock in Windows when the tunnel is down, and asks again on the next publish", async () => {
     const dir = await supportFolder();
     let down = true;

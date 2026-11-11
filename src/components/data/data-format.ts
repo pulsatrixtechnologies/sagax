@@ -1,6 +1,7 @@
 // Pure helpers behind the Data tab: cell text, copy formats, page maths.
 // No React here, so the grid's behaviour is testable without a DOM.
 import type { DataCard, DataColumn, DataPage } from "../../../shared/data-surface";
+import { formatNumber } from "@/lib/i18n";
 
 export type Cell = DataPage["rows"][number][number];
 
@@ -77,7 +78,7 @@ export function cardsLatestFirst(cards: DataCard[]): DataCard[] {
   return [...cards].reverse().sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || right.createdAt.localeCompare(left.createdAt));
 }
 
-/** A count with thousands separators, in the person's locale. */
+/** A count with thousands separators, in the app's language. */
 export function formatCount(value: number | undefined | null): string {
-  return typeof value === "number" && Number.isFinite(value) ? value.toLocaleString() : "";
+  return typeof value === "number" && Number.isFinite(value) ? formatNumber(value) : "";
 }

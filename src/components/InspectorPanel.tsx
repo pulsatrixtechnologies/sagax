@@ -18,7 +18,7 @@ import { cn } from "@/lib/cn";
 import { TabIndicator, TabIndicatorGroup } from "@/components/TabIndicator";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { useCaptionChrome, useMacInsetChrome } from "@/components/DesktopCapabilities";
-import { formatTime, toRows, type InspectorEntry, type InspectorPage, type InspectorRow } from "@/lib/inspector";
+import { formatTime, inspectorCountLine, toRows, type InspectorEntry, type InspectorPage, type InspectorRow } from "@/lib/inspector";
 import { listenLiveFrames } from "@/lib/live-events";
 import type { RuntimeEvent } from "../../shared/runtime-events";
 import { RunLog } from "./RunLog";
@@ -27,6 +27,9 @@ import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
 
 type Lens = "run" | "events" | "raw";
+
+/** The tabs' words, shown as the locale files write them (#3676). */
+const LENS_LABEL = { run: "inspector.run.title", events: "inspector.events.title", raw: "inspector.raw.title" } as const;
 
 export function InspectorPanel({ bot }: { bot: Bot }) {
   const { dispatch } = useStore();
@@ -177,7 +180,7 @@ export function InspectorPanel({ bot }: { bot: Bot }) {
       {(macInset || browser) && <div className="content-topbar-strip" />}
       <div {...dragProps} className={cn("content-topbar flex items-center justify-between px-4 py-3", padClass)}>
         <span className="flex items-center gap-2 text-[13px] font-medium leading-[18px] text-ink">
-          <Bug size={16} className="text-ink-secondary" /> Inspector
+          <Bug size={16} className="text-ink-secondary" /> {t("chat.inspector")}
         </span>
         <button
           onClick={() => dispatch({ type: "toggleInspector", open: false })}
@@ -190,7 +193,9 @@ export function InspectorPanel({ bot }: { bot: Bot }) {
       </div>
 
       <div className="content-card-body flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-2 border-b-[0.5px] border-hairline-weak px-4 pb-2.5">
+      {/* #3676: a longer language never breaks a word across lines: the count
+          and Reload move together to their own line when the tabs leave no room. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b-[0.5px] border-hairline-weak px-4 pb-2.5">
         <div role="tablist" aria-label={t("inspector.views")} className="flex gap-1" onKeyDown={(event) => {
           const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
           const current = tabs.indexOf(document.activeElement as HTMLButtonElement);
@@ -215,22 +220,24 @@ export function InspectorPanel({ bot }: { bot: Bot }) {
               onClick={() => setLens(l)}
               // Settings' borderless pills (2026-10-16): the chosen one filled.
               className={cn(
-                "relative inline-flex h-7 min-h-[44px] items-center rounded-full px-2.5 text-[13px] leading-[18px] capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none md:min-h-0",
+                "relative inline-flex h-7 min-h-[44px] items-center whitespace-nowrap rounded-full px-2.5 text-[13px] leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none md:min-h-0",
                 lens === l ? "text-ink" : "text-ink-secondary hover:bg-hover hover:text-ink",
               )}
             >
               {lens === l && <TabIndicator className="bg-selected" />}
-              <span className="relative">{l === "run" ? t("inspector.run.title") : l}</span>
+              <span className="relative">{t(LENS_LABEL[l])}</span>
             </button>
           ))}
           </TabIndicatorGroup>
         </div>
-        {lens !== "run" && <span className="ml-auto text-[11px] text-ink-secondary">
-          {page ? (counting ? `last ${shown} of at least ${Math.max(total, shown)}` : shown < total ? `last ${shown} of ${total}` : `${shown} entries`) : "loading…"}
+        {lens !== "run" && <span className="ml-auto flex items-center gap-2">
+          <span className="whitespace-nowrap text-[11px] text-ink-secondary">
+            {inspectorCountLine(page ? { shown, total, counting: Boolean(counting) } : null)}
+          </span>
+          <button type="button" onClick={() => managedRefresh.current()} className="ui-icon-button" title={t("inspector.reload")} aria-label={t("inspector.reload")}>
+            <RefreshCw size={14} />
+          </button>
         </span>}
-        {lens !== "run" && <button type="button" onClick={() => managedRefresh.current()} className="ui-icon-button" title={t("inspector.reload")} aria-label={t("inspector.reload")}>
-          <RefreshCw size={14} />
-        </button>}
       </div>
 
       <div role="tabpanel" id={`inspector-panel-${lens}`} aria-labelledby={`inspector-tab-${lens}`} tabIndex={0} className="flex min-h-0 flex-1 flex-col outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60">
@@ -238,7 +245,7 @@ export function InspectorPanel({ bot }: { bot: Bot }) {
         {error && <div className="px-4 py-3 text-danger">{t("inspector.loadError", { error })}</div>}
         {page && rows.length === 0 && !error && (
           <div className="px-4 py-6 text-ink-secondary">
-            {lens === "raw" ? "No native protocol messages recorded for this thread yet." : "No runtime events for this thread yet."}
+            {t(lens === "raw" ? "inspector.raw.empty" : "inspector.events.empty")}
           </div>
         )}
         {rows.map((row) => (

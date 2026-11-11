@@ -2,6 +2,7 @@
 // so the panel stays a thin renderer and the labels can be tested.
 import type { RuntimeEvent } from "../../shared/runtime-events";
 import type { InspectorEntry, NativeRecord } from "../../shared/inspector";
+import { formatNumber, t } from "@/lib/i18n";
 export type { InspectorEntry, InspectorPage, NativeRecord } from "../../shared/inspector";
 
 interface FoldPreview {
@@ -203,4 +204,16 @@ export function formatTime(iso: string): string {
   const ss = String(d.getSeconds()).padStart(2, "0");
   const ms = String(d.getMilliseconds()).padStart(3, "0");
   return `${hh}:${mm}:${ss}.${ms}`;
+}
+
+/** The count beside the Events and Raw tabs (#3676), in the app's language
+ * with its number formatting: "last 300 of 1,687", "last 300 of at least
+ * 300" while a long log is still being counted, "12 entries", or the loading
+ * word before the first page arrives. */
+export function inspectorCountLine(count: { shown: number; total: number; counting: boolean } | null): string {
+  if (!count) return t("inspector.count.loading");
+  const { shown, total, counting } = count;
+  if (counting) return t("inspector.count.atLeast", { shown: formatNumber(shown), total: formatNumber(Math.max(total, shown)) });
+  if (shown < total) return t("inspector.count.latest", { shown: formatNumber(shown), total: formatNumber(total) });
+  return t(shown === 1 ? "inspector.count.one" : "inspector.count.many", { count: formatNumber(shown) });
 }

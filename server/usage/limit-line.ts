@@ -5,7 +5,7 @@
 // The line is that row alone: it carries the state, in the reader's language,
 // and a failed turn's cause for the readers of the conversation (#1942).
 import { failedTurnCause } from "../../shared/failed-turn.ts";
-import { limitLineRetiredName, standingLimitLines, type LimitFailoverLine } from "../../shared/limit-failover.ts";
+import { limitLinePlainWords, limitLineRetiredName, standingLimitLines, type LimitFailoverLine } from "../../shared/limit-failover.ts";
 import type { WireMessage } from "../../shared/wire.ts";
 
 type Tool = NonNullable<WireMessage["tool"]>;
@@ -22,7 +22,7 @@ export function writeLimitLine(store: LimitLineStore, threadId: string, turnId: 
   words: { row: (line: LimitFailoverLine) => Tool }): void {
   const tool = words.row(line);
   // #1942: exhausted failover is a failed turn (readers must not treat empty as done).
-  const failed = line.kind === "exhausted" || line.kind === "credits";
+  const failed = line.kind === "exhausted";
   const messages = store.messagesFor(threadId);
   // The engine's own error row for this turn becomes the line: one row,
   // not two. A runtime.error row may carry no turn id: then the last one
@@ -49,8 +49,8 @@ function limitTextsToRetire(messages: readonly WireMessage[]): WireMessage[] {
   const said = new Set<string>();
   const repeats: WireMessage[] = [];
   for (const message of messages) {
-    if (message.kind === "activity" && (message.tool?.limitFailover?.kind === "exhausted" || message.tool?.limitFailover?.kind === "credits")) {
-      said.add(message.tool.name.replace(/^(?:error|recovery|notice):\s*/, ""));
+    if (message.kind === "activity" && message.tool?.limitFailover?.kind === "exhausted") {
+      said.add(limitLinePlainWords(message.tool.name));
     } else if (message.role === "bot" && message.kind === "text" && message.turnSucceeded === false && message.text && said.has(message.text)) {
       repeats.push(message);
     }

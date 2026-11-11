@@ -23,7 +23,7 @@ function thread() {
 }
 const words = {
   row: (line: LimitFailoverLine) => {
-    const failed = line.kind === "exhausted" || line.kind === "credits";
+    const failed = line.kind === "exhausted";
     return { name: `${failed ? "error:" : "recovery:"} ${limitFailoverText(line, () => "3:40 PM")}`, ok: !failed, limitFailover: line };
   },
   text: (line: LimitFailoverLine) => limitFailoverText(line, () => "3:40 PM"),
@@ -117,7 +117,7 @@ describe("the conversation's one limit line (#3552)", () => {
   // writes no error row: the one line drawn is the credit line.
   it("draws exactly one credit line, a failed turn that promises no resend", () => {
     const { messages, store } = thread();
-    const CREDITS: LimitFailoverLine = { kind: "credits", engine: "Claude" };
+    const CREDITS: LimitFailoverLine = { kind: "exhausted", tried: ["Claude"], cause: "credits" };
     store.appendMessage("t", { role: "user", kind: "text", text: "first" });
     writeLimitLine(store, "t", "turn-1", CREDITS, 0, words);
     store.appendMessage("t", { role: "user", kind: "text", text: "second" });

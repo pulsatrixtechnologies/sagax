@@ -151,4 +151,27 @@ describe("the usage-limit line", () => {
     setLocale("fr");
     expect(limitFailoverLineText(exhausted, NOW)).toContain("aucun autre moteur n'a pu répondre");
   });
+
+  // #3577: the credit case is an "exhausted" line (a kind released apps draw)
+  // whose cause says credit; this app draws the credit sentence from it.
+  it("draws the credit sentence from the line's cause, in English and Quebec French", () => {
+    const credit: LimitFailoverLine = { kind: "exhausted", tried: ["Claude"], cause: "credits" };
+    setLocale("en");
+    expect(limitFailoverLineText(credit, NOW)).toBe("Claude is out of credit, so this message got no answer. Add credit with the provider, or switch engine from the model picker.");
+    expect(limitFailoverLineText({ ...credit, owner: true }, NOW)).toBe("This bot's owner is out of credit on Claude, so this message got no answer. Add credit with the provider, or switch engine from the model picker.");
+    expect(limitFailoverText(credit, () => "")).toBe(limitFailoverLineText(credit, NOW));
+    setLocale("fr");
+    expect(limitFailoverLineText(credit, NOW)).toBe("Claude n'a plus de crédit, alors ce message n'a pas eu de réponse. Ajoute du crédit chez le fournisseur, ou change de moteur dans le sélecteur de modèle.");
+    expect(limitFailoverLineText({ ...credit, owner: true }, NOW)).toBe("Le propriétaire de ce bot n'a plus de crédit sur Claude, alors ce message n'a pas eu de réponse. Ajoute du crédit chez le fournisseur, ou change de moteur dans le sélecteur de modèle.");
+  });
+
+  // #3577: a kind this app does not know (a newer server) draws the row's
+  // plain words, never an empty row.
+  it("draws a kind it does not know with the row's plain words", () => {
+    setLocale("fr");
+    const line = { kind: "someLaterKind", engine: "Claude" } as unknown as LimitFailoverLine;
+    const message = { id: "x", at: NOW, role: "bot", kind: "activity",
+      tool: { name: "error: Claude cannot answer right now.", ok: false, limitFailover: line } } as Message;
+    expect(statusActivity(message)).toEqual({ kind: "recovery", text: "Claude cannot answer right now." });
+  });
 });

@@ -90,7 +90,7 @@ if (params.get("limit")) {
     line("u-limit", "user", fr ? "Prépare le rapport de la semaine." : "Prepare this week's report.", 13, last.id),
     params.get("limit") === "credits"
       ? { id: "l-limit", role: "bot", kind: "activity", at: at + 13 * 60_000 + 5_000, parentId: "u-limit", turnSucceeded: false,
-        tool: { name: "error: Claude is out of credit", ok: false, limitFailover: { kind: "credits", engine: "Claude" } } } as Message
+        tool: { name: "error: Claude is out of credit", ok: false, limitFailover: { kind: "exhausted", tried: ["Claude"], cause: "credits" } } } as Message
       : { id: "l-limit", role: "bot", kind: "activity", at: at + 13 * 60_000 + 5_000, parentId: "u-limit",
         tool: { name: "recovery: Limit reached", ok: true, limitFailover: { kind: "waiting", from: "Claude", resetsAt: limitResetsAt } } } as Message,
   );

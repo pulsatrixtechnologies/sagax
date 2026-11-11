@@ -1281,7 +1281,7 @@ describe("an engine out of credit (#3552)", () => {
     w.dispatch();
     expect(w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause })).toBe(true);
     await w.host.idle();
-    expect(w.state.lines).toEqual([{ threadId: "thread", replaced: "turn-1", line: { kind: "credits", engine: "Claude" } }]);
+    expect(w.state.lines).toEqual([{ threadId: "thread", replaced: "turn-1", line: { kind: "exhausted", tried: ["Claude"], cause: "credits" } }]);
     expect(w.store.resumes()).toEqual([]);
     expect(w.host.heldUntil("bot", "thread")).toBeNull();
     expect(w.state.resent).toEqual([]);
@@ -1292,7 +1292,7 @@ describe("an engine out of credit (#3552)", () => {
     w.dispatch(undefined, true);
     w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: "Payment required" });
     await w.host.idle();
-    expect(w.state.lines).toEqual([{ threadId: "thread", replaced: "turn-1", line: { kind: "credits", engine: "Claude", owner: true } }]);
+    expect(w.state.lines).toEqual([{ threadId: "thread", replaced: "turn-1", line: { kind: "exhausted", tried: ["Claude"], cause: "credits", owner: true } }]);
   });
 
   it("still tells it when the failover is off", async () => {
@@ -1300,7 +1300,7 @@ describe("an engine out of credit (#3552)", () => {
     w.deps.enabled = () => false;
     w.dispatch();
     expect(w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: "Payment required" })).toBe(true);
-    expect(w.state.lines).toEqual([{ threadId: "thread", replaced: "turn-1", line: { kind: "credits", engine: "Claude" } }]);
+    expect(w.state.lines).toEqual([{ threadId: "thread", replaced: "turn-1", line: { kind: "exhausted", tried: ["Claude"], cause: "credits" } }]);
   });
 
   it("goes on another engine that can answer, with the switch line", async () => {

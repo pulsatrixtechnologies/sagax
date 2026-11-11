@@ -7,6 +7,8 @@
  * previous topic of the one conversation.
  * approval: the same, plus an approval asked two days earlier in the
  * previous topic, decided from the pinned card in that topic.
+ * offer (#3512): only the offer card « Garder le brief du jour ? » the bot
+ * posted on its own, two days earlier, in the previous topic.
  * Every action is recorded in window.__decisions. */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -23,6 +25,7 @@ import { loadLocale, t } from "../lib/i18n";
 import * as pending from "../lib/pending-question";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { BotEditorStore, type Bot, type Message, type useStore } from "../state/store";
+import { OptionCard } from "../components/OptionCard";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -85,18 +88,28 @@ const oldApproval = {
   },
 } as unknown as Message;
 
-const current = [handoff, inputRequest];
-const earlier = which === "two" ? [oldChoice] : which === "approval" ? [oldApproval] : [];
+const briefOffer = {
+  id: "old-offer", role: "bot", kind: "options", at: now - 2 * DAY, text: "", from: { botId: bot.id, name: bot.name, color: "violet" },
+  card: fr
+    ? { title: "Garder le brief du jour ?", subtitle: "Le brief du jour était actif par défaut, sans que tu l'aies choisi : je l'ai arrêté. Si tu dis oui, je te l'envoie chaque jour à 8 h 00, comme une de mes routines, que tu peux mettre en pause, modifier ou supprimer.", options: ["Oui", "Pas maintenant"], proactiveProposal: { id: "proposal-brief" } }
+    : { title: "Keep today's brief?", subtitle: "Today's brief was on by default, without you choosing it: I stopped it. If you say yes, I send it to you every day at 08:00, as one of my routines, which you can pause, edit or delete.", options: ["Yes", "Not now"], proactiveProposal: { id: "proposal-brief" } },
+} as unknown as Message;
+
+const current = which === "offer" ? [] : [handoff, inputRequest];
+const earlier = which === "two" ? [oldChoice] : which === "approval" ? [oldApproval] : which === "offer" ? [briefOffer] : [];
 // On a build without #3438 these helpers are absent: nothing of the kind is
 // pinned and the input request is drawn as its own box (the "before").
+// Without #3512, pendingOffers is absent: an offer is pinned nowhere.
 const lib = pending as unknown as Partial<{
   pendingRequests: (messages: readonly Message[]) => unknown[];
   inputRequestsDrawnElsewhere: (messages: readonly Message[]) => Set<string>;
+  pendingOffers: (messages: readonly Message[]) => Message[];
 }>;
 const requests = lib.pendingRequests ? lib.pendingRequests(current) : [];
 const topics = lib.pendingRequests && earlier.length ? [{
   threadId: "topic-1", questions: pending.pendingQuestions(earlier), requests: lib.pendingRequests(earlier),
   approvals: pendingApprovals(earlier).map((each) => ({ ...each, threadId: each.threadId ?? "topic-1" })),
+  offers: lib.pendingOffers ? lib.pendingOffers(earlier) : [],
 }] : [];
 const hidden = lib.inputRequestsDrawnElsewhere ? lib.inputRequestsDrawnElsewhere(current) : new Set<string>();
 
@@ -115,13 +128,21 @@ function Gallery() {
             <Bubble>{fr ? "Orla : la sauvegarde de nuit a deux copies complètes." : "Orla: the nightly backup has two full copies."}</Bubble>
             {which === "approval"
               ? <div className={CHAT_BUBBLE_WIDTH_CLASS.fit}><ApprovalCard bot={bot} message={oldApproval} /></div>
-              : <div className={CHAT_BUBBLE_WIDTH_CLASS.fit}><QuestionCard threadId="topic-1" bot={{ id: bot.id, name: bot.name }} message={oldChoice} /></div>}
+              : which === "offer"
+                ? <div className={CHAT_BUBBLE_WIDTH_CLASS.fit}><OptionCard botId={bot.id} threadId="topic-1" message={briefOffer} /></div>
+                : <div className={CHAT_BUBBLE_WIDTH_CLASS.fit}><QuestionCard threadId="topic-1" bot={{ id: bot.id, name: bot.name }} message={oldChoice} /></div>}
             <TopicDivider task={{ threadId: "thread-main", title: fr ? "Migration" : "Migration", createdAt: now - DAY }} />
           </>
         )}
-        <Bubble>{fr ? "Orla : Kiro m'a passé la migration, il reste une décision pour toi." : "Orla: Kiro handed me the migration, one decision is left for you."}</Bubble>
-        <AttentionCard card={handoff.attention!} bot={bot} onReply={async () => undefined} />
-        {!hidden.has(inputRequest.id) && <InputRequestCard message={inputRequest} threadId="thread-main" />}
+        {which === "offer" ? (
+          <Bubble>{fr ? "Orla : la migration du siège est terminée." : "Orla: the head office migration is done."}</Bubble>
+        ) : (
+          <>
+            <Bubble>{fr ? "Orla : Kiro m'a passé la migration, il reste une décision pour toi." : "Orla: Kiro handed me the migration, one decision is left for you."}</Bubble>
+            <AttentionCard card={handoff.attention!} bot={bot} onReply={async () => undefined} />
+            {!hidden.has(inputRequest.id) && <InputRequestCard message={inputRequest} threadId="thread-main" />}
+          </>
+        )}
         <div className="h-10" />
       </div>
       <div data-composer-dock className={`mx-auto w-full ${narrow ? "px-3 pb-3" : "max-w-[760px] px-6 pb-6"}`}>

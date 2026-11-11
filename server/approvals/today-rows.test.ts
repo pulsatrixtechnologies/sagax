@@ -72,3 +72,44 @@ describe("markAttentionHandled", () => {
     expect(markAttentionHandled(base, "b1", "conv", "missing")).toBe(false);
   });
 });
+
+describe("#3512: an input request row is a question in words of Today too", () => {
+  const request = (over: Record<string, unknown> = {}) => ({ botId: "b2", threadId: "work", botName: "Ada", title: "Build", question: "Which host?", ...over });
+
+  it("lists an open input request once, drawn as the same card, and drops it when it closes", () => {
+    const rows = todayRows(deps({ conv: [{ id: "r1", at: 100, role: "bot", inputRequest: request() }] }));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ kind: "attention", requestId: "attention:r1", messageId: "r1", at: 100 });
+    expect((rows[0]!.message as TodayMessage).attention).toMatchObject({ kind: "question", botId: "b2", threadId: "work", items: [{ text: "Which host?" }], sourceMessageId: "r1" });
+    for (const closed of [{ answered: true }, { expired: true }, { expired: true, skipped: true }, { reminder: true }]) {
+      expect(todayRows(deps({ conv: [{ id: "r1", at: 100, inputRequest: request(closed) }] }))).toHaveLength(0);
+    }
+  });
+
+  it("the hand-off's card and the input request of the same ask are one item, and leave together", () => {
+    const ask = card({ kind: "question", threadId: "work" });
+    const both: TodayMessage[] = [{ id: "c1", at: 100, attention: ask }, { id: "r1", at: 105, inputRequest: request() }];
+    const rows = todayRows(deps({ conv: both }));
+    expect(rows.map((row) => row.requestId)).toEqual(["attention:c1"]);
+    // the work got its answer elsewhere: the card leaves with its input request
+    expect(todayRows(deps({ conv: [both[0]!, { ...both[1]!, inputRequest: request({ answered: true }) }] }))).toHaveLength(0);
+    // an input request of a later ask of the same work is its own item
+    expect(todayRows(deps({ conv: [...both, { id: "r2", at: 100 + 11 * 60_000, inputRequest: request() }] })).map((row) => row.requestId)).toEqual(["attention:c1", "attention:r2"]);
+  });
+
+  it("marking an input request handled closes it, and closes the card of the same ask", () => {
+    const rows: TodayMessage[] = [{ id: "c1", at: 100, attention: card({ kind: "question", threadId: "work" }) }, { id: "r1", at: 105, inputRequest: request() }];
+    const cards: string[] = [];
+    const requests: Array<{ id: string; answered?: boolean }> = [];
+    const base = { ...deps({ conv: rows }), patch: (_t: string, id: string) => { cards.push(id); }, patchRequest: (_t: string, id: string, value: { answered?: boolean }) => { requests.push({ id, answered: value.answered }); } };
+    expect(markAttentionHandled(base, "b1", "conv", "r1", 500)).toBe(true);
+    expect(requests).toEqual([{ id: "r1", answered: true }]);
+    expect(cards).toEqual(["c1"]);
+    // and the card handled first settles its input request
+    cards.length = 0;
+    requests.length = 0;
+    expect(markAttentionHandled(base, "b1", "conv", "c1", 500)).toBe(true);
+    expect(cards).toEqual(["c1"]);
+    expect(requests).toEqual([{ id: "r1", answered: true }]);
+  });
+});

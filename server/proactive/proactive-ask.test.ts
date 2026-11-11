@@ -634,3 +634,36 @@ describe("#3513: nothing can be offered yet", () => {
     expect(domainLabelIn({ domain: "backup-health", label: {} }, "fr")).toBe("Backup health");
   });
 });
+
+describe("#3512: the brief card speaks the person's language and sits in the bot's main conversation", () => {
+  it("words from the locale catalogs: French for a French-speaking person", () => {
+    expect(briefCard("08:00", "fr")).toEqual({
+      title: "Garder le brief du jour ?",
+      subtitle: "Le brief du jour était actif par défaut, sans que tu l'aies choisi : je l'ai arrêté. Si tu dis oui, je te l'envoie chaque jour à 8 h 00, comme une de mes routines, que tu peux mettre en pause, modifier ou supprimer.",
+      options: ["Oui", "Pas maintenant"],
+    });
+    expect(briefCard("08:00", "en").title).toBe("Keep today's brief?");
+  });
+
+  it("an open card in an older topic, in English, is posted again once in the main conversation, in French", () => {
+    const h = harness();
+    // posted before the fix: English, in an older topic
+    expect(h.ask.offerBrief({ person: PERSON, botId: "main", threadId: "t-older-topic", at: "08:00" })).toBe("posted");
+    const moved = h.ask.repostBrief({ person: PERSON, botId: "main", threadId: "t-main", at: "08:00", proposalId: "p1", postedIn: "t-older-topic", postedTitle: "Keep today's brief?" });
+    expect(moved).toBe("p2");
+    expect(h.posted[1]).toMatchObject({ threadId: "t-main", card: { title: "Garder le brief du jour ?", options: ["Oui", "Pas maintenant"] } });
+    // the same ask, under its new card: still one open card, answered once
+    expect(h.choices.get(PERSON).asks).toEqual([expect.objectContaining({ domain: BRIEF_ASK_DOMAIN, proposalId: "p2", movedAt: START })]);
+    // once: never moved again
+    expect(h.ask.repostBrief({ person: PERSON, botId: "main", threadId: "t-newer", at: "08:00", proposalId: "p2", postedIn: "t-main", postedTitle: "Garder le brief du jour ?" })).toBeNull();
+    h.ask.answer({ id: "p2", botId: "main", choice: h.posted[1]!.choice }, true);
+    expect(h.briefYes).toEqual(["main"]);
+  });
+
+  it("a card already in the main conversation, in the person's language, stays where it is", () => {
+    const h = harness();
+    h.ask.offerBrief({ person: PERSON, botId: "main", threadId: "t-main", at: "08:00" });
+    expect(h.ask.repostBrief({ person: PERSON, botId: "main", threadId: "t-main", at: "08:00", proposalId: "p1", postedIn: "t-main", postedTitle: "Garder le brief du jour ?" })).toBeNull();
+    expect(h.posted).toHaveLength(1);
+  });
+});

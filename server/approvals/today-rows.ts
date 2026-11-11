@@ -13,9 +13,19 @@
 // This module lists both for one viewer, pure, with the host's checks as
 // deps. An attention card leaves the box when the person replies in that
 // conversation after it, or marks it handled (POST /api/approvals/handled).
+//
+// #3512: a parked teammate's input request row (WireMessage.inputRequest) is
+// a question in words too, and the pinned row already drew it: Today lists
+// it as well, as an attention row, once per ask (the hand-off's card and the
+// input request of the same ask are one item, as the pinned row pairs them,
+// src/lib/pending-question.ts). Today is the one source of what waits on the
+// person (shared/waiting-items.ts): an ask whose input request closed
+// (answered elsewhere, expired, skipped, its bot-to-bot exchange ended)
+// leaves with it.
 import type { InboxApproval } from "../../shared/approvals-inbox.ts";
 import { inboxKey } from "../../shared/approvals-inbox.ts";
 import type { PersonAttentionCard } from "../../shared/person-attention.ts";
+import type { WireMessage } from "../../shared/wire.ts";
 
 export const ATTENTION_PREFIX = "attention:";
 export const PROACTIVE_PREFIX = "proactive:";
@@ -28,6 +38,7 @@ export interface TodayMessage {
   role?: string;
   kind?: string;
   attention?: PersonAttentionCard;
+  inputRequest?: WireMessage["inputRequest"];
   card?: { answered?: unknown; dismissed?: unknown; expired?: unknown; proactiveProposal?: { id: string } };
 }
 
@@ -63,11 +74,19 @@ export function todayRows(deps: TodayDeps): InboxApproval[] {
     for (const task of deps.threads(bot.id)) {
       if (task.archivedAt || task.confidential === true) continue;
       const rows = deps.messages(task.threadId);
-      const cards = rows.filter((row) => row.attention && !attentionSettled(row, rows,
-        row.attention.threadId && row.attention.threadId !== task.threadId ? deps.messages(row.attention.threadId) : []));
+      const asks = pairedAsks(rows);
+      const cards = rows.filter((row) => {
+        if (row.inputRequest) return inputRequestOpen(row) && !asks.cardOf.has(row.id);
+        if (!row.attention) return false;
+        // #3512: the ask closed with its input request (answered, expired, skipped)
+        const paired = asks.rowOf.get(row.id);
+        if (paired && !inputRequestOpen(paired)) return false;
+        return !attentionSettled(row, rows, row.attention.threadId && row.attention.threadId !== task.threadId ? deps.messages(row.attention.threadId) : []);
+      });
       if (!cards.length || !deps.isViewers(bot, task.threadId)) continue;
       for (const message of cards) {
-        const card = message.attention!;
+        const card = message.attention ?? inputRequestAttention(message)!;
+        const projected = deps.project(task.threadId, message);
         out.push({
           key: inboxKey(task.threadId, `${ATTENTION_PREFIX}${message.id}`),
           threadId: task.threadId,
@@ -82,7 +101,8 @@ export function todayRows(deps: TodayDeps): InboxApproval[] {
           at: message.at,
           decidable: true,
           bulk: "question",
-          message: deps.project(task.threadId, message),
+          // an input request row reads as the same "needs you" card
+          message: message.attention ? projected : withAttention(projected, card),
         });
       }
     }
@@ -116,17 +136,90 @@ export function todayRows(deps: TodayDeps): InboxApproval[] {
   return out;
 }
 
+/** A hand-off's question card and the parked work's input request of the
+ * same ask come seconds apart: a card pairs with the nearest input request
+ * of its work thread within this span (src/lib/pending-question.ts). */
+export const SAME_ASK_MS = 10 * 60_000;
+
+/** An input request row still waiting on the person. */
+export function inputRequestOpen(message: TodayMessage): boolean {
+  const request = message.inputRequest;
+  return Boolean(request && !request.reminder && !request.answered && !request.expired);
+}
+
+/** The asks of one transcript: each hand-off question card with the input
+ * request of the same ask, nearest first, each used once. */
+export function pairedAsks(rows: readonly TodayMessage[]): { rowOf: Map<string, TodayMessage>; cardOf: Map<string, TodayMessage> } {
+  const cards = rows.filter((row) => row.attention?.kind === "question" && !row.inputRequest && row.attention.threadId);
+  const requests = rows.filter((row) => row.inputRequest && !row.inputRequest.reminder);
+  const pairs: Array<{ card: TodayMessage; row: TodayMessage; gap: number }> = [];
+  for (const card of cards) {
+    for (const row of requests) {
+      if (row.inputRequest!.threadId !== card.attention!.threadId) continue;
+      const gap = Math.abs(row.at - card.at);
+      if (gap <= SAME_ASK_MS) pairs.push({ card, row, gap });
+    }
+  }
+  pairs.sort((a, b) => a.gap - b.gap || a.row.at - b.row.at);
+  const rowOf = new Map<string, TodayMessage>();
+  const cardOf = new Map<string, TodayMessage>();
+  for (const pair of pairs) {
+    if (rowOf.has(pair.card.id) || cardOf.has(pair.row.id)) continue;
+    rowOf.set(pair.card.id, pair.row);
+    cardOf.set(pair.row.id, pair.card);
+  }
+  return { rowOf, cardOf };
+}
+
+/** An input request row as the "needs you" card it is drawn as (the pinned
+ * row's inputRequestCard, src/lib/pending-question.ts). */
+export function inputRequestAttention(message: TodayMessage): PersonAttentionCard | undefined {
+  const request = message.inputRequest;
+  if (!request) return undefined;
+  return {
+    kind: "question",
+    botId: request.botId,
+    botName: request.botName,
+    threadId: request.threadId,
+    ...(request.title ? { threadTitle: request.title } : {}),
+    sourceMessageId: message.id,
+    items: [{ text: request.question }],
+  } as PersonAttentionCard;
+}
+
+function withAttention(projected: unknown, attention: PersonAttentionCard): unknown {
+  return projected && typeof projected === "object" ? { ...(projected as Record<string, unknown>), attention } : projected;
+}
+
 /** Mark one attention card handled; false when it is not one of this
  * viewer's open cards. */
 export function markAttentionHandled(
-  deps: Pick<TodayDeps, "bot" | "messages" | "isViewers"> & { patch(threadId: string, messageId: string, attention: PersonAttentionCard): void },
+  deps: Pick<TodayDeps, "bot" | "messages" | "isViewers"> & {
+    patch(threadId: string, messageId: string, attention: PersonAttentionCard): void;
+    /** #3512: an input request row, marked answered (the person's words went
+     * to the waiting work, or they handled it). */
+    patchRequest?(threadId: string, messageId: string, inputRequest: NonNullable<TodayMessage["inputRequest"]>): void;
+  },
   botId: string, threadId: string, messageId: string, now = Date.now(),
 ): boolean {
   const bot = deps.bot(botId);
   if (!bot) return false;
-  const message = deps.messages(threadId).find((row) => row.id === messageId);
-  if (!message?.attention || message.attention.handledAt || !deps.isViewers(bot, threadId)) return false;
+  const rows = deps.messages(threadId);
+  const message = rows.find((row) => row.id === messageId);
+  if (!message || !deps.isViewers(bot, threadId)) return false;
+  const asks = pairedAsks(rows);
+  if (message.inputRequest) {
+    if (!inputRequestOpen(message) || !deps.patchRequest) return false;
+    deps.patchRequest(threadId, messageId, { ...message.inputRequest, answered: true });
+    const card = asks.cardOf.get(message.id);
+    if (card?.attention && !card.attention.handledAt) deps.patch(threadId, card.id, { ...card.attention, handledAt: now });
+    return true;
+  }
+  if (!message.attention || message.attention.handledAt) return false;
   deps.patch(threadId, messageId, { ...message.attention, handledAt: now });
+  // the same ask's input request settles with it: every surface drops it at once
+  const row = asks.rowOf.get(message.id);
+  if (row?.inputRequest && inputRequestOpen(row)) deps.patchRequest?.(threadId, row.id, { ...row.inputRequest, answered: true });
   return true;
 }
 

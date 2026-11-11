@@ -118,6 +118,19 @@ export class ProactiveChoices {
     return true;
   }
 
+  /** #3512: an open card posted again under a new proposal: the same ask,
+   * its new card, marked moved (it moves once). False when no open entry
+   * has the old id. */
+  moveAsk(person: string, fromProposalId: string, toProposalId: string): boolean {
+    const row = this.people[personKey(person)];
+    const entry = row?.asks?.find((ask) => ask.proposalId === fromProposalId);
+    if (!entry || entry.answer) return false;
+    entry.proposalId = toProposalId;
+    entry.movedAt = this.now();
+    this.save();
+    return true;
+  }
+
   /** #3431: a bot asked its first question of this person. */
   noteQuestion(person: string, botId: string): void {
     const key = personKey(person);

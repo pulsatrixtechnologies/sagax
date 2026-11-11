@@ -4,7 +4,7 @@ import { visibleMessages, currentTaskBot, type Bot, type Group } from "@/state/s
 import { orgFullAccessFor } from "@/lib/full-access";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { useBoundedLock } from "@/lib/composer-lock";
-import { pendingQuestions, pendingRequests } from "@/lib/pending-question";
+import { pendingOffers, pendingQuestions, pendingRequests } from "@/lib/pending-question";
 import { useTopicPending } from "@/lib/use-topic-pending";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { useShowThreads } from "@/lib/thread-preferences";
@@ -98,10 +98,12 @@ export function useComposerSession({
   // the earlier topics of the one conversation still wait on: the store
   // holds the topic on screen only.
   const openRequests = pendingRequests(shownMessages);
+  // #3512: the offers a bot posted on its own wait on the person too
+  const openOffers = group ? [] : pendingOffers(shownMessages);
   const topics = useTopicPending(group ? undefined : bot);
   // #3214: the pinned card over the box, approvals and questions together,
   // and which one the person is on (typing answers that question).
-  const pinned = usePinnedWaiting(approvals, openQuestions, openRequests, topics);
+  const pinned = usePinnedWaiting(approvals, openQuestions, openRequests, topics, openOffers);
   const approvalBotFor = (pending: Pending) => pending.message.card?.approvalOrigin
     ? storeBots.find(candidate => candidate.id === pending.message.from?.botId)
     : group

@@ -14730,5 +14730,9 @@
   "waitingCard.skipped": "Passé, sans réponse",
   "waitingCard.expired": "Expiré, sans réponse",
   "approval.pill.skipped": "Passée",
-  "approval.status.skipped": "Passée, rien n'a été fait"
+  "approval.status.skipped": "Passée, rien n'a été fait",
+  "proactive.briefOffer.title": "Garder le brief du jour ?",
+  "proactive.briefOffer.body": "Le brief du jour était actif par défaut, sans que tu l'aies choisi : je l'ai arrêté. Si tu dis oui, je te l'envoie chaque jour à {time}, comme une de mes routines, que tu peux mettre en pause, modifier ou supprimer.",
+  "proactive.briefOffer.yes": "Oui",
+  "proactive.briefOffer.notNow": "Pas maintenant"
 }

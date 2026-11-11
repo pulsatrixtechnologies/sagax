@@ -96,6 +96,9 @@ export interface AskEntry {
   proposalId?: string;
   answer?: "yes" | "not-now" | "never";
   answeredAt?: number;
+  /** #3512: when the open card was posted again in the bot's main
+   * conversation, in the person's language (once). */
+  movedAt?: number;
 }
 
 export interface PersonChoices {

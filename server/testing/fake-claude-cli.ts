@@ -299,6 +299,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { runRoomHandoffAgent } from "./room-handoff-agent.ts";
 import { splitLaunchNote, volatileNoteIn } from "./launch-note.ts";
+import { isBackgroundStepPrompt } from "./background-steps.ts";
 
 const mode = process.env.FAKE_CLAUDE_MODE ?? "happy";
 
@@ -685,7 +686,7 @@ if (["text", "json"].includes(argAfter("--output-format") ?? "")) {
 // Memory upkeep's background one-shots (on for every bot) and the
   // automatic skill review never overwrite the shared turn dump a test
   // reads; FAKE_CLAUDE_TEXT_DUMP still records them.
-  const upkeepCall = /You are the (?:CAPTURE|TIDY|ORGANIZE) step of a memory system|You are the SKILL REVIEW step/.test(prompt);
+  const upkeepCall = isBackgroundStepPrompt(prompt);
   const oneShotDump = process.env.FAKE_CLAUDE_TEXT_DUMP ?? (upkeepCall ? undefined : process.env.FAKE_CLAUDE_DUMP);
   if (oneShotDump) {
     writeDumpAtomic(

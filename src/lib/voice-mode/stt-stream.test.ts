@@ -353,12 +353,12 @@ describe("a dropped listen socket", () => {
     const { sockets, transcriber } = await reconnecting({ refuse: () => refuse });
     refuse = true;
     drop(sockets[0]!);
-    await wait(120);
-    // the backoff (3) and more tries every 20 ms after it
-    expect(sockets.length).toBeGreaterThan(5);
+    // the backoff (3) and more tries every 20 ms after it. #3671: waited on,
+    // not counted after a fixed wait: how many 20 ms timers fit in one
+    // depends on the host's timer grain (about 16 ms on Windows)
+    await vi.waitFor(() => expect(sockets.length).toBeGreaterThan(5), { timeout: 5_000, interval: 5 });
     refuse = false;
-    await wait(40);
-    expect(transcriber.streaming).toBe(true);
+    await vi.waitFor(() => expect(transcriber.streaming).toBe(true), { timeout: 5_000, interval: 5 });
     const count = sockets.length;
     drop(sockets.at(-1)!);
     await wait(8);

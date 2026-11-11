@@ -2,10 +2,11 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { bisect, mergesBetween, pullRequestOf } from "./bisect.mjs";
 
-const script = new URL("./bisect.mjs", import.meta.url).pathname;
+const script = fileURLToPath(new URL("./bisect.mjs", import.meta.url));
 const repos: string[] = [];
 afterEach(() => {
   for (const repo of repos.splice(0)) rmSync(repo, { recursive: true, force: true });

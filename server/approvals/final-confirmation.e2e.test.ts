@@ -2,6 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { connect, type Socket } from "node:net";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startOrgServer, type Auth, type OrgServer } from "../testing/org-server-harness.ts";
 import type { FakeOidcUser } from "../testing/fake-oidc-provider.ts";
@@ -56,7 +57,7 @@ describe.skipIf(process.platform === "win32")("final confirmations reach their p
     mkdirSync(join(fixture.home, "link"), { recursive: true, mode: 0o750 });
     writeFileSync(env.SAGAX_PERSPICAX_LINK_FILE, JSON.stringify({ version: 1, issuer: fixture.idp.issuer,
       client_id: "pulsa-bot", server_id: fixture.idp.serverId, origin: fixture.base, link_token: fixture.idp.linkToken }), { mode: 0o640 });
-    const cli = new URL("../testing/fake-claude-cli.ts", import.meta.url).pathname;
+    const cli = fileURLToPath(new URL("../testing/fake-claude-cli.ts", import.meta.url));
     const instances = Object.fromEntries(["routine", "mcp", "card", "go"].map((engine) => [engine, {
       driver: "claudeAgent", access: "api", config: { cli, requireApiKey: true, fullAuto: false },
       environment: {

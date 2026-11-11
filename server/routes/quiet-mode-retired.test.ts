@@ -3,11 +3,12 @@
 // server's 404 (the 0.8.87 desktop catches it and draws no switch).
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { requiredScope } from "../auth/request-auth.ts";
 
-const SERVER = new URL("..", import.meta.url).pathname;
+const SERVER = fileURLToPath(new URL("..", import.meta.url));
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

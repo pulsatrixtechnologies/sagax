@@ -1007,7 +1007,7 @@ export function runContentMigration(budgetMs = 8): { done: boolean } {
       continue;
     }
     if (migration.phase === "memory") {
-      if (pendingMemoryIndex.size) flushMemoryIndex();
+      if (pendingMemoryIndex.size) flushMemoryIndex({ budgetMs: Math.max(1, budgetMs - (performance.now() - started)) });
       // the memory index (memory_files): sealed under each bot's key, verified
       // before it replaces the plain row, or opened back to plain (off)
       const rows = database.prepare("SELECT rowid AS rowid, bot_id, path, text, sealed, key_id FROM memory_files WHERE rowid > ? ORDER BY rowid LIMIT 16").all(migration.cursor) as Array<{ rowid: number; bot_id: string; path: string; text: string; sealed: Uint8Array | null; key_id: string | null }>;
@@ -2096,6 +2096,22 @@ export interface MemoryFileStat {
  * words reach the (blind) index. */
 export function indexMemoryFile(botId: string, path: string, text: string, stat: { mtimeMs: number; bytes: number }): void {
   const key = contentKeyForBot(botId);
+  // The same text under the same key (a restart, the daily refresh): keep the
+  // row and its index, so a sync after a start does not re-seal and re-index
+  // every memory file of the bot before its next recall (#3524).
+  const stored = cached("SELECT rowid AS rowid, text, sealed, key_id, mtime_ms, bytes, rowid IN (SELECT rowid FROM memory_sealed_fts WHERE rowid = memory_files.rowid) AS indexed FROM memory_files WHERE bot_id = ? AND path = ?")
+    .get(botId, path) as { rowid: number; text: string; sealed: Uint8Array | null; key_id: string | null; mtime_ms: number; bytes: number; indexed: number } | undefined;
+  if (stored && (stored.key_id ?? null) === (key?.keyId ?? null) && (key || encryptionMode() !== "on")) {
+    let same = false;
+    try { same = openMemoryRow({ bot_id: botId, path, sealed: stored.sealed, key_id: stored.key_id, text: stored.text }) === text; } catch { same = false; }
+    if (same) {
+      if (stored.mtime_ms !== Math.trunc(stat.mtimeMs) || stored.bytes !== stat.bytes) {
+        cached("UPDATE memory_files SET mtime_ms = ?, bytes = ? WHERE rowid = ?").run(Math.trunc(stat.mtimeMs), stat.bytes, stored.rowid);
+      }
+      if (key && !stored.indexed) queueMemoryIndex(stored.rowid, botId, key, text);
+      return;
+    }
+  }
   const sealed = key ? seal(key.dek, text, memoryRowAad(key, botId, path)) : null;
   const row = db()
     .prepare(
@@ -2105,7 +2121,7 @@ export function indexMemoryFile(botId: string, path: string, text: string, stat:
     )
     .get(botId, path, key ? "" : text, Math.trunc(stat.mtimeMs), stat.bytes, sealed, key?.keyId ?? null) as { rowid: number } | undefined;
   // its keyed words just after, off the write (flushed before any recall)
-  if (key && row) queueMemoryIndex(row.rowid, key, text);
+  if (key && row) queueMemoryIndex(row.rowid, botId, key, text);
   // written plain (the bot's key not available yet): the migration seals it
   else if (encryptionMode() === "on") { migration.dirty = true; scheduleMigration(); }
 }
@@ -2114,22 +2130,41 @@ function memoryRowAad(key: LiveKey, botId: string, path: string): Buffer {
   return fieldAad(key.keyId, key.owner, "memory-file", `${botId}\u0000${path}`);
 }
 
-const pendingMemoryIndex = new Map<number, { keyId: string; text: string }>();
+const pendingMemoryIndex = new Map<number, { botId: string; keyId: string; text: string }>();
 let memoryIndexTimer: ReturnType<typeof setImmediate> | null = null;
-function queueMemoryIndex(rowid: number, key: LiveKey, text: string): void {
-  pendingMemoryIndex.set(rowid, { keyId: key.keyId, text });
-  memoryIndexTimer ??= setImmediate(() => { memoryIndexTimer = null; try { flushMemoryIndex(); } catch { /* the migration reindexes */ } });
+/** One background slice of the memory index: the loop comes back between
+ * slices, however many files were re-indexed in the same tick (#3524). */
+const MEMORY_INDEX_SLICE_MS = 20;
+function queueMemoryIndex(rowid: number, botId: string, key: LiveKey, text: string): void {
+  pendingMemoryIndex.set(rowid, { botId, keyId: key.keyId, text });
+  scheduleMemoryIndex();
 }
 
-/** Write the queued keyed words of memory rows (before a recall reads them). */
-function flushMemoryIndex(): void {
-  if (memoryIndexTimer) { clearImmediate(memoryIndexTimer); memoryIndexTimer = null; }
+function scheduleMemoryIndex(): void {
+  memoryIndexTimer ??= setImmediate(() => {
+    memoryIndexTimer = null;
+    try { flushMemoryIndex({ budgetMs: MEMORY_INDEX_SLICE_MS }); } catch { /* the migration reindexes */ }
+    if (pendingMemoryIndex.size) scheduleMemoryIndex();
+  });
+}
+
+/** Write the queued keyed words of memory rows. A recall flushes only its
+ * own bot's rows (what it is about to read), whole; the background pass
+ * writes everyone's in slices of `budgetMs`. */
+function flushMemoryIndex(options: { botId?: string; budgetMs?: number } = {}): void {
+  const budgetMs = options.budgetMs ?? Infinity;
   if (!pendingMemoryIndex.size || !handle) { pendingMemoryIndex.clear(); return; }
-  const entries = [...pendingMemoryIndex];
-  pendingMemoryIndex.clear();
+  const started = performance.now();
+  const entries = [...pendingMemoryIndex].filter(([, entry]) => options.botId === undefined || entry.botId === options.botId);
+  if (!entries.length) return;
+  let done = 0;
   transaction(() => {
     const check = cached("SELECT key_id, rowid IN (SELECT rowid FROM memory_sealed_fts WHERE rowid = ?) AS indexed FROM memory_files WHERE rowid = ?");
     for (const [rowid, entry] of entries) {
+      // a background slice stops at its budget; the rest waits for the next
+      if (done % 4 === 0 && performance.now() - started > budgetMs) break;
+      done++;
+      if (pendingMemoryIndex.get(rowid) === entry) pendingMemoryIndex.delete(rowid);
       const row = check.get(rowid, rowid) as { key_id: string | null; indexed: number } | undefined;
       if (!row || row.key_id !== entry.keyId || row.indexed) continue;
       const key = keyring().key(entry.keyId);
@@ -2137,6 +2172,14 @@ function flushMemoryIndex(): void {
       indexMemoryRow(rowid, key, entry.text);
     }
   });
+  if (budgetMs === Infinity && options.botId === undefined && memoryIndexTimer && !pendingMemoryIndex.size) { clearImmediate(memoryIndexTimer); memoryIndexTimer = null; }
+}
+
+/** Rows waiting for their keyed words, all bots or one (tests). */
+export function pendingMemoryIndexCount(botId?: string): number {
+  let count = 0;
+  for (const entry of pendingMemoryIndex.values()) if (botId === undefined || entry.botId === botId) count++;
+  return count;
 }
 
 function indexMemoryRow(rowid: number, key: LiveKey, text: string): void {
@@ -2207,7 +2250,8 @@ export function recallMemory(query: string, botId: string, limit = 12, mode: Sea
     // SAFETY: the SELECT names exactly these four columns; snippet() is never null
     .all(match, botId, limit) as Array<{ path: string; mtime_ms: number; score: number; snippet: string }>;
   const hits = rows.map((row) => ({ file: row.path, at: row.mtime_ms, snippet: row.snippet.replace(/\s+/g, " ").trim(), score: row.score }));
-  flushMemoryIndex();
+  // only this bot's queued rows: another bot's wait for the background slices
+  flushMemoryIndex({ botId });
   if (cached("SELECT 1 FROM memory_files WHERE bot_id = ? AND key_id IS NOT NULL LIMIT 1").get(botId)) {
     hits.push(...sealedMemoryRecall(query, botId, limit, mode, scopeSql));
     hits.sort((a, b) => a.score - b.score || b.at - a.at);

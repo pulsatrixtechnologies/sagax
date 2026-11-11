@@ -21,6 +21,11 @@
 // SQLite read, a process start, a garbage collection) that is the frame that
 // called it. The stall line also gives the process size at that moment.
 //
+// #3524: the stack is read from one second (LONG_STALL_MS = STALL_MS), so
+// every stall line names its path; and the line gives the garbage
+// collection time inside the block, because a pause after a long collection
+// lands on whatever allocation set it off, a frame that did not do the work.
+//
 // #1750: when Debugger.pause returns nothing (common in containers, and during
 // stall bursts under the 5 min cooldown), the watchdog samples a short CPU
 // profile instead and posts its hottest frames. A failed capture uses a short
@@ -28,13 +33,14 @@
 //
 // Never throws at the caller: without workers or the inspector, the lag
 // summary and the stall line still work.
-import { monitorEventLoopDelay } from "node:perf_hooks";
+import { monitorEventLoopDelay, PerformanceObserver } from "node:perf_hooks";
 import { Worker } from "node:worker_threads";
 
 export const LAG_REPORT_MS = 60_000;
 export const STALL_MS = 1_000;
-/** A block this long gets a stack whatever the cooldown (#3473). */
-export const LONG_STALL_MS = 2_000;
+/** A block this long gets a stack whatever the cooldown (#3473); from one
+ * second, the stall threshold itself, since #3524. */
+export const LONG_STALL_MS = 1_000;
 export const STACK_COOLDOWN_MS = 5 * 60_000;
 /** After a capture that returned no frames, try again sooner (#1750). */
 export const STACK_RETRY_COOLDOWN_MS = 15_000;
@@ -59,6 +65,41 @@ export interface LoopLagOptions {
 }
 
 const ms = (ns: number) => Math.round(ns / 1e6);
+
+/** One garbage collection, on the performance timeline (milliseconds). */
+export interface GcSpan {
+  start: number;
+  duration: number;
+  /** "major" (mark-compact), "minor" (scavenge) or another kind */
+  kind: string;
+}
+
+const GC_KEEP = 64;
+
+/** The collection time inside [from, to] (performance.now() times), the
+ * major share apart. */
+export function gcWithin(spans: readonly GcSpan[], from: number, to: number): { total: number; major: number } {
+  let total = 0, major = 0;
+  for (const span of spans) {
+    const overlap = Math.min(to, span.start + span.duration) - Math.max(from, span.start);
+    if (overlap <= 0) continue;
+    total += overlap;
+    if (span.kind === "major") major += overlap;
+  }
+  return { total, major };
+}
+
+/** "major", "minor", ... from a gc performance entry (node 16+ detail.kind). */
+function gcKind(entry: { detail?: unknown; kind?: unknown }): string {
+  const kind = (entry.detail as { kind?: unknown } | undefined)?.kind ?? entry.kind;
+  switch (kind) {
+    case 4: return "major";
+    case 1: return "minor";
+    case 2: return "incremental";
+    case 8: return "weak";
+    default: return "other";
+  }
+}
 
 /** The watchdog worker: plain JavaScript, evaluated, so it needs no file in
  * the bundle. It receives heartbeats; when none came for stallMs, it pauses
@@ -198,6 +239,18 @@ export function startEventLoopLagMonitor(log: LoopLagLogger, options: LoopLagOpt
   // block, arrives first and waits here.
   let pendingStack: string[] | null = null;
   let pendingReason: string | null = null;
+  // the recent collections, so a stall line can say how much of it was one
+  const gcSpans: GcSpan[] = [];
+  let gcObserver: PerformanceObserver | null = null;
+  try {
+    gcObserver = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) gcSpans.push({ start: entry.startTime, duration: entry.duration, kind: gcKind(entry as never) });
+      if (gcSpans.length > GC_KEEP) gcSpans.splice(0, gcSpans.length - GC_KEEP);
+    });
+    gcObserver.observe({ entryTypes: ["gc"] });
+  } catch {
+    gcObserver = null;
+  }
   let last = performance.now();
   const beat = setInterval(() => {
     const now = performance.now();
@@ -210,6 +263,7 @@ export function startEventLoopLagMonitor(log: LoopLagLogger, options: LoopLagOpt
     }
     if (gap >= stallMs) {
       const blocked = Math.round(gap);
+      const from = now - gap - HEARTBEAT_MS;
       // The watchdog's stack message is delivered after this timer; give it
       // a moment, then write one line with whatever arrived.
       const write = setTimeout(() => {
@@ -223,7 +277,9 @@ export function startEventLoopLagMonitor(log: LoopLagLogger, options: LoopLagOpt
             ? ` (no stack; ${reason})`
             : " (no stack)";
         const { rss, heapUsed } = process.memoryUsage();
-        log.warn(`[loop-lag] event loop blocked ${blocked} ms (rss ${Math.round(rss / 1048576)} MB, heap ${Math.round(heapUsed / 1048576)} MB)${detail}`);
+        const gc = gcWithin(gcSpans, from, now);
+        const gcPart = gc.total >= 1 ? `, of which gc ${Math.round(gc.total)} ms${gc.major >= 1 ? ` (major ${Math.round(gc.major)} ms)` : ""}` : "";
+        log.warn(`[loop-lag] event loop blocked ${blocked} ms (rss ${Math.round(rss / 1048576)} MB, heap ${Math.round(heapUsed / 1048576)} MB)${gcPart}${detail}`);
       }, STACK_WAIT_MS);
       write.unref?.();
     }
@@ -266,6 +322,7 @@ export function startEventLoopLagMonitor(log: LoopLagLogger, options: LoopLagOpt
   return () => {
     clearInterval(report);
     clearInterval(beat);
+    gcObserver?.disconnect();
     histogram?.disable();
     void watchdog?.terminate();
     watchdog = null;

@@ -352,6 +352,9 @@ public struct ToolActivity: Codable, Hashable, Sendable {
     public var input: String? = nil
     /// How long the call ran, set when it settles.
     public var durationMs: Double? = nil
+    /// The hand-off a receipt of a request received stands for
+    /// (`noteIncomingHandoff`); its result row names it as `roomRequest.id`.
+    public var handoffId: String? = nil
     /// The product this tool serves, as the connector or the server declared
     /// it at run time (shared/wire.ts `tool.product`); the step row names it.
     public var product: String? = nil
@@ -396,7 +399,7 @@ public struct ToolActivity: Codable, Hashable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case name, ok, spoken, setup, claudeUpdate, output, summary, widget, input, durationMs, product, productId, autoApproval, finishUntil, step, limitFailover
+        case name, ok, spoken, setup, claudeUpdate, output, summary, widget, input, durationMs, handoffId, product, productId, autoApproval, finishUntil, step, limitFailover
         case limitResetsAt, place
         case role, roleNotice
     }
@@ -412,6 +415,7 @@ public struct ToolActivity: Codable, Hashable, Sendable {
         summary = try box.decodeIfPresent(String.self, forKey: .summary)
         input = try? box.decodeIfPresent(String.self, forKey: .input)
         durationMs = try? box.decodeIfPresent(Double.self, forKey: .durationMs)
+        handoffId = (try? box.decodeIfPresent(String.self, forKey: .handoffId)).flatMap { $0 }
         product = try? box.decodeIfPresent(String.self, forKey: .product)
         productId = try? box.decodeIfPresent(String.self, forKey: .productId)
         finishUntil = try? box.decodeIfPresent(FinishUntilLine.self, forKey: .finishUntil)
@@ -441,6 +445,7 @@ public struct ToolActivity: Codable, Hashable, Sendable {
         try box.encodeIfPresent(widget, forKey: .widget)
         try box.encodeIfPresent(input, forKey: .input)
         try box.encodeIfPresent(durationMs, forKey: .durationMs)
+        try box.encodeIfPresent(handoffId, forKey: .handoffId)
         try box.encodeIfPresent(product, forKey: .product)
         try box.encodeIfPresent(productId, forKey: .productId)
         try box.encodeIfPresent(autoApproval, forKey: .autoApproval)
@@ -780,6 +785,15 @@ public struct Message: Codable, Hashable, Identifiable, Sendable {
     /// #2901: a line or card copied into the bot's chat from a background
     /// conversation ("mcp", "routine", "proactive", "teammate").
     public var relayVia: String? = nil
+    /// #2915: what the AI client or the teammate asked, on a stored copy.
+    /// #3581: read only behind the name of the "Asked by" line.
+    public var relayAsk: RelayAsk? = nil
+    /// #2915: a background turn that left nothing to copy ("failed",
+    /// "stopped", "silent").
+    public var relayTrace: String? = nil
+    /// A hand-off's identity on its receipt rows (shared/wire.ts
+    /// `roomRequest`): the result row of a request received names it.
+    public var roomRequest: RoomRequestRef? = nil
     /// Flat reply reference for an inline quote; unrelated to `parentId`.
     public var replyToId: String? = nil
     /// Stable client identity for at-most-once send retries.
@@ -847,6 +861,31 @@ public struct Message: Codable, Hashable, Identifiable, Sendable {
     /// so they read as prose in full rather than as a clipped tool log.
     public var isTeammateReport: Bool {
         kind == .activity && (threadRef != nil || comm != nil) && tool?.expandableOutput != nil
+    }
+}
+
+/// The request a stored copy of a background reply answers (shared/wire.ts `RelayAsk`).
+public struct RelayAsk: Codable, Hashable, Sendable {
+    public var text: String?
+    /// Who asked: the AI client or the teammate.
+    public var by: String?
+    /// The teammate bot that asked, for its face.
+    public var botId: String?
+    public init(text: String? = nil, by: String? = nil, botId: String? = nil) {
+        self.text = text
+        self.by = by
+        self.botId = botId
+    }
+}
+
+/// A hand-off's identity on a receipt row (shared/wire.ts `roomRequest`).
+public struct RoomRequestRef: Codable, Hashable, Sendable {
+    public var id: String?
+    /// "request" or "result".
+    public var phase: String?
+    public init(id: String? = nil, phase: String? = nil) {
+        self.id = id
+        self.phase = phase
     }
 }
 
@@ -2569,6 +2608,9 @@ public struct RoutineRun: Codable, Hashable, Identifiable, Sendable {
     public var cost: Double? = nil
     /// A completed run with nothing for the person: it posted nothing.
     public var quiet: Bool? = nil
+    /// #3581: the whole report, sent only by the single-run read
+    /// (`GET /api/routines?run=<id>`); `output` keeps the record's clip.
+    public var report: String? = nil
 }
 
 /// Where a routine posts its dated results (`ResultsDestination.tsx`).

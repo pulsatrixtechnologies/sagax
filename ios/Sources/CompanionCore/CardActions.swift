@@ -303,6 +303,19 @@ public enum ApprovalDockRules {
         }
     }
 
+    /// Open question cards on a thread (a bot's structured ask), oldest
+    /// first (src/lib/pending-question.ts `pendingQuestions`). Permission
+    /// cards are not questions; answered, dismissed and expired ones drop out.
+    public static func pendingQuestions(_ messages: [Message]) -> [Message] {
+        messages.filter { message in
+            guard message.kind == .options, let card = message.card, card.requestId != nil,
+                  card.questionRequest != nil, card.tool == nil,
+                  card.answered == nil, card.dismissed != true, card.expired != true
+            else { return false }
+            return true
+        }
+    }
+
     /// The asks "Allow all read-only" covers: plain tool asks that only
     /// read, never a proposal, a question or an admin's command.
     public static func readOnly(_ approvals: [PendingApproval]) -> [PendingApproval] {
@@ -562,6 +575,28 @@ public enum ParallelCardState: String, Hashable, Sendable {
 
     /// Stop shows while the task can still be stopped.
     public var isLive: Bool { self == .running || self == .waiting || self == .queued }
+
+    /// #3581: an ended task keeps its row in the chat only when something
+    /// went wrong (failed or stopped: a `problem` in shared/chat-relevance.ts);
+    /// a done one leaves its answer to say it.
+    public var leavesTrace: Bool { self == .failed || self == .stopped }
+
+    /// #3581: the chat draws a row for this task (live, or its trace).
+    public var drawsRow: Bool { isLive || leavesTrace }
+
+    /// What a waiting task waits on, for its words (ParallelTaskCard.tsx):
+    /// a question open in its thread waits on an answer
+    /// (chat.parallel.state.waitingAnswer), anything else on an approval
+    /// (chat.parallel.state.waiting). Nil when the task is not waiting.
+    public func waitsOn(taskThread messages: [Message]?) -> ParallelWait? {
+        guard self == .waiting else { return nil }
+        return ApprovalDockRules.pendingQuestions(messages ?? []).isEmpty ? .approval : .answer
+    }
+}
+
+/// What a waiting parallel task waits on (`ParallelCardState.waitsOn`).
+public enum ParallelWait: Hashable, Sendable {
+    case approval, answer
 }
 
 // MARK: - Error row (ChatView.tsx ErrorRow)

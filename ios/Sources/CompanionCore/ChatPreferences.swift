@@ -92,6 +92,9 @@ public struct AssistantTurnFold: Hashable, Sendable {
     public let turnId: String
     public let messages: [Message]
     public let elapsed: Double
+    /// #3581: the turn has its final message. A turn without one (it runs,
+    /// or ended without an answer) folds its notes too, all but the newest.
+    public var settled: Bool = true
 
     public var label: String {
         guard elapsed >= 1_000 else { return "Worked" }
@@ -120,6 +123,9 @@ public enum TranscriptRow: Identifiable, Hashable, Sendable {
     case message(Message)
     case activityRun(StepRun)
     case voiceCall(VoiceCallCardModel)
+    /// #3581: requests received from bots or an AI client, one names line
+    /// per burst ("Asked by [face] Bot B · 5 requests").
+    case incoming(IncomingLine)
 
     /// The message a row answers for — its first, which is the one whose
     /// time and sender the transcript reads.
@@ -128,6 +134,7 @@ public enum TranscriptRow: Identifiable, Hashable, Sendable {
         case let .message(message): message
         case let .activityRun(run): run.messages[0]
         case let .voiceCall(card): card.messages[0]
+        case let .incoming(line): line.messages[0]
         }
     }
 
@@ -136,6 +143,7 @@ public enum TranscriptRow: Identifiable, Hashable, Sendable {
         case let .message(message): message.id
         case let .activityRun(run): run.id
         case let .voiceCall(card): "voice.\(card.callId)"
+        case let .incoming(line): line.id
         }
     }
 
@@ -147,6 +155,7 @@ public enum TranscriptRow: Identifiable, Hashable, Sendable {
         case let .message(message): message.at
         case let .activityRun(run): run.messages.last?.at ?? head.at
         case let .voiceCall(card): card.messages.last?.at ?? head.at
+        case let .incoming(line): line.messages.last?.at ?? head.at
         }
     }
     public var role: Message.Role { head.role }
@@ -177,6 +186,8 @@ public func rosterPreview(_ messages: [Message], detail: ActivityDetail) -> Stri
         return run.englishLabel
     case let .voiceCall(card):
         return spokenLines(card.messages).last?.text ?? ""
+    case let .incoming(line):
+        return previewText(of: line.messages[0])
     }
 }
 
@@ -409,6 +420,14 @@ public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showTh
     var lastUserAt: Double?
     var folds: [String: AssistantTurnFold] = [:]
     var hiddenIDs = Set<String>()
+    // #3581: the last row of each turn, so a turn without its final message
+    // folds every note a later row of the same turn follows
+    var lastOfTurn: [String: (index: Int, at: Double)] = [:]
+    for (index, message) in messages.enumerated() where message.role == .bot {
+        if let turnID = message.turnId, !turnID.isEmpty { lastOfTurn[turnID] = (index, message.at) }
+    }
+    var indexOf: [String: Int] = [:]
+    for (index, message) in messages.enumerated() { indexOf[message.id] = index }
     for message in messages {
         if voice.hidden.contains(message.id) { continue }
         if message.role == .user { lastUserAt = message.at }
@@ -426,21 +445,38 @@ public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showTh
             narration[turnID, default: []].append(message)
         }
     }
+    // #3581: a turn with no final message yet (it runs, or ended without
+    // one): a note folds as soon as a later row of the same turn exists, so
+    // the chat shows the turn's row, the newest line and the working line.
+    for (turnID, items) in narration {
+        guard let last = lastOfTurn[turnID] else { continue }
+        let folded = items.filter { (indexOf[$0.id] ?? last.index) < last.index }
+        guard let first = folded.first else { continue }
+        var fold = AssistantTurnFold(turnId: turnID, messages: folded, elapsed: max(0, last.at - (startedAt[turnID] ?? first.at)))
+        fold.settled = false
+        folds[first.id] = fold
+        hiddenIDs.formUnion(folded.map(\.id))
+    }
+    // #3581: requests received, folded per burst into one names line
+    let incomingReplies = IncomingLines.replies(messages)
+    let foldedReplies = Set(incomingReplies.values.map(\.id))
 
     var rows: [TranscriptRow] = []
     var run: [Message] = []
     var turnElapsed: Double?
     var turnID: String?
+    var turnSettled = true
 
     // One step on its own still reads as the step line; narration is
     // folded even alone, the answer under it is what shows.
     func flush() {
         if !run.isEmpty {
-            rows.append(.activityRun(StepRun(messages: run, elapsed: turnElapsed ?? StepGroup.span(run), turnId: turnID)))
+            rows.append(.activityRun(StepRun(messages: run, elapsed: turnElapsed ?? StepGroup.span(run), turnId: turnID, settled: turnSettled)))
         }
         run.removeAll()
         turnElapsed = nil
         turnID = nil
+        turnSettled = true
     }
     // A run is one bot's work: another speaker starts a new one.
     func join(_ message: Message) {
@@ -470,6 +506,23 @@ public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showTh
             continue
         }
         if isHiddenStatusNotice(message) || isHiddenReceipt(message) { continue }
+        // #3581: a reply to a request received is read behind the asker's
+        // name; the request itself joins its burst's names line, whatever
+        // the threads setting (it is the trace that the bot worked for a teammate)
+        if foldedReplies.contains(message.id) { continue }
+        // the place is the one rule's (ChatRelevance): a trace
+        if IncomingLines.place(message) == .trace {
+            let exchange = IncomingLines.exchange(message, replies: incomingReplies)
+            if run.isEmpty, case var .incoming(line)? = rows.last {
+                line.messages.append(message)
+                line.exchanges.append(exchange)
+                rows[rows.count - 1] = .incoming(line)
+            } else {
+                flush()
+                rows.append(.incoming(IncomingLine(messages: [message], exchanges: [exchange])))
+            }
+            continue
+        }
         if repeatedFailures.contains(message.id) { continue }
         if hidesPreSendRefusals, PreSendRefusal.kind(of: message) != nil { continue }
         // A failed routine run and a routine's access card pass as a
@@ -481,6 +534,7 @@ public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showTh
             if let fold = folds[message.id] {
                 turnElapsed = fold.elapsed
                 turnID = fold.turnId
+                turnSettled = fold.settled
             }
             continue
         }

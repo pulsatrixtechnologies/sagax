@@ -293,13 +293,21 @@ struct DesktopNewBotModal: View {
     }
 }
 
-/// A wrapping row (the desktop's `flex flex-wrap justify-center`).
+/// A wrapping row (the desktop's `flex flex-wrap justify-center`): each row
+/// centred. `lineSpacing` is the gap between rows (the same as `spacing`
+/// when nil); `centresItems` sets each item on the middle of its row's
+/// height (`items-center`) instead of its top, for a line that mixes faces
+/// and words (the names line; the new bot modal keeps the top).
 struct DesktopFlowLayout: Layout {
     var spacing: CGFloat = 8
+    var lineSpacing: CGFloat? = nil
+    var centresItems = false
+
+    private var rowGap: CGFloat { lineSpacing ?? spacing }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let rows = rows(width: proposal.width ?? .infinity, subviews: subviews)
-        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(0, rows.count - 1))
+        let height = rows.map(\.height).reduce(0, +) + rowGap * CGFloat(max(0, rows.count - 1))
         let width = rows.map(\.width).max() ?? 0
         return CGSize(width: proposal.width ?? width, height: height)
     }
@@ -307,13 +315,14 @@ struct DesktopFlowLayout: Layout {
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         var y = bounds.minY
         for row in rows(width: bounds.width, subviews: subviews) {
-            var x = bounds.minX + (bounds.width - row.width) / 2
+            var x = bounds.minX + max(0, (bounds.width - row.width) / 2)
             for index in row.items {
                 let size = subviews[index].sizeThatFits(.unspecified)
-                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                let top = centresItems ? (row.height - size.height) / 2 : 0
+                subviews[index].place(at: CGPoint(x: x, y: y + top), proposal: ProposedViewSize(size))
                 x += size.width + spacing
             }
-            y += row.height + spacing
+            y += row.height + rowGap
         }
     }
 

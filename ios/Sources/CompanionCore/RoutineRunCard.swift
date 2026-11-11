@@ -10,7 +10,7 @@ import Foundation
 
 public struct RoutineRunCard: Codable, Hashable, Sendable {
     public enum Status: String, Sendable {
-        case queued, running, waiting, completed, failed, cancelled, missed
+        case queued, running, waiting, completed, failed, blocked, cancelled, missed
         case nothingToReport = "nothing_to_report"
     }
 
@@ -28,8 +28,13 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
     public var deferredAt: Double?
     public var goalStatus: String?
     public var executionThreadId: String?
-    /// What the run said, already redacted and capped by the computer.
+    /// What the run said, already redacted and capped by the computer: the
+    /// whole report, which "Details" opens.
     public var summary: String?
+    /// #3581: the one or two lines the card shows, from the report's closing
+    /// line (ReportBrief). Absent on cards stored before it: `briefText`
+    /// reads the same function from `summary`.
+    public var brief: String?
     public var error: String?
     /// This failure paused the routine after this many failed runs in a row
     /// (RoutineAutoPause); the passing notice offers Resume.
@@ -45,6 +50,30 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
     /// #3423: the watches a watch wake reported, with their domain
     /// (`watches` of shared/routine-run.ts): the alert's two exits stop them.
     public var watches: [WatchRef]
+    /// #3479: a lasting problem is one card whose count is patched in place.
+    public var `repeat`: Repeat?
+    /// #3479: the first run without problems after runs with problems.
+    public var recovered: Recovered?
+    /// When the run started, in epoch milliseconds (its elapsed time).
+    public var startedAt: Double?
+    /// The items only the person can do, as the report wrote them.
+    public var attention: String?
+
+    /// The same problem, run after run.
+    public struct Repeat: Codable, Hashable, Sendable {
+        public var count: Int
+        public var since: Double
+        public init(count: Int, since: Double) {
+            self.count = count
+            self.since = since
+        }
+    }
+
+    /// Works again after problems.
+    public struct Recovered: Codable, Hashable, Sendable {
+        public var since: Double
+        public init(since: Double) { self.since = since }
+    }
 
     /// One watch an alert reported.
     public struct WatchRef: Codable, Hashable, Sendable {
@@ -75,7 +104,8 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         scheduledFor: Double? = nil, deferredAt: Double? = nil, goalStatus: String? = nil,
         executionThreadId: String? = nil, summary: String? = nil, error: String? = nil,
         autoPausedAfter: Int? = nil, problems: String? = nil, handedTo: [Handoff] = [],
-        wakeTopic: String? = nil, watches: [WatchRef] = []
+        wakeTopic: String? = nil, watches: [WatchRef] = [], brief: String? = nil,
+        repeat: Repeat? = nil, recovered: Recovered? = nil, startedAt: Double? = nil
     ) {
         self.runId = runId
         self.routineId = routineId
@@ -92,12 +122,16 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         self.handedTo = handedTo
         self.wakeTopic = wakeTopic
         self.watches = watches
+        self.brief = brief
+        self.repeat = `repeat`
+        self.recovered = recovered
+        self.startedAt = startedAt
     }
 
     private enum CodingKeys: String, CodingKey {
         case runId, routineId, routineName, scheduledFor, status, deferredAt
         case goalStatus, executionThreadId, summary, error, autoPausedAfter, problems, handedTo
-        case wakeTopic, watches
+        case wakeTopic, watches, brief, `repeat`, recovered, startedAt, attention
     }
 
     /// Field by field and forgiving: a card is a decoration on a message the
@@ -122,6 +156,18 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         handedTo = ((try? c.decodeIfPresent([Handoff].self, forKey: .handedTo)) ?? nil) ?? []
         wakeTopic = try? c.decodeIfPresent(String.self, forKey: .wakeTopic)
         watches = ((try? c.decodeIfPresent([Lossy<WatchRef>].self, forKey: .watches)) ?? nil)?.compactMap(\.value) ?? []
+        brief = (try? c.decodeIfPresent(String.self, forKey: .brief)).flatMap { $0 }
+        `repeat` = (try? c.decodeIfPresent(Repeat.self, forKey: .repeat)).flatMap { $0 }
+        recovered = (try? c.decodeIfPresent(Recovered.self, forKey: .recovered)).flatMap { $0 }
+        startedAt = (try? c.decodeIfPresent(Double.self, forKey: .startedAt)).flatMap { $0 }
+        attention = (try? c.decodeIfPresent(String.self, forKey: .attention)).flatMap { $0 }
+    }
+
+    /// #3581: the card's one or two lines: the server's brief, or the same
+    /// function read from the report of a card stored without one.
+    public var briefText: String {
+        if let brief = brief?.trimmingCharacters(in: .whitespacesAndNewlines), !brief.isEmpty { return brief }
+        return ReportBrief.of(summary, from: .end)
     }
 
     /// "Paused after 5 failures in a row" when this failure paused its routine.
@@ -155,6 +201,7 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         case .waiting: return "needs your attention"
         case .completed: return "completed"
         case .failed: return "failed"
+        case .blocked: return "was blocked"
         case .cancelled: return "was cancelled"
         case .missed: return "was missed"
         case .nothingToReport: return "had nothing to report"
@@ -193,6 +240,7 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         case .waiting: return String(localized: "Waiting")
         case .completed: return String(localized: "Done")
         case .failed: return String(localized: "Failed")
+        case .blocked: return String(localized: "Blocked")
         case .cancelled: return String(localized: "Cancelled")
         case .missed: return String(localized: "Missed")
         case .nothingToReport: return String(localized: "Nothing to report")
@@ -216,7 +264,7 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         case .running: return .active
         case .waiting: return .attention
         case .queued: return deferredAt != nil ? .attention : .neutral
-        case .failed, .missed: return .danger
+        case .failed, .missed, .blocked: return .danger
         case .completed, .cancelled, .nothingToReport, nil: return .neutral
         }
     }

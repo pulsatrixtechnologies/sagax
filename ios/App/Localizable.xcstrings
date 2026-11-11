@@ -11590,28 +11590,6 @@
         }
       }
     },
-    "Answer from the parallel task · %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Answer from the parallel task · %@"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Réponse de la tâche en parallèle · %@"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Resposta da tarefa paralela · %@"
-          }
-        }
-      }
-    },
     "Answer sent: %@": {
       "localizations": {
         "en": {
@@ -27622,28 +27600,6 @@
         }
       }
     },
-    "Did not finish": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Did not finish"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Non terminée"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Não terminou"
-          }
-        }
-      }
-    },
     "Diff, retry, steer and more": {
       "localizations": {
         "en": {
@@ -28352,28 +28308,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Terminée %@"
-          }
-        }
-      }
-    },
-    "Done · answer below": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Done · answer below"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Terminée · réponse ci-dessous"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Concluída · resposta abaixo"
           }
         }
       }
@@ -56931,22 +56865,6 @@
         }
       }
     },
-    "Open %@'s thread": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open %@'s thread"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ouvrir le fil de %@"
-          }
-        }
-      }
-    },
     "Open API keys": {
       "localizations": {
         "en": {
@@ -73775,22 +73693,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enviado enquanto o bot trabalhava: ele levou em conta na hora, dentro do trabalho em andamento."
-          }
-        }
-      }
-    },
-    "Sent work to %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sent work to %@"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Travail envoyé à %@"
           }
         }
       }
@@ -116862,6 +116764,329 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sua resposta"
+          }
+        }
+      }
+    },
+    "chat.activity.working": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Working"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Au travail"
+          }
+        }
+      }
+    },
+    "chat.askLine.asked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Asked"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A demandé à"
+          }
+        }
+      }
+    },
+    "chat.askLine.trace.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "did not finish"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "n'a pas abouti"
+          }
+        }
+      }
+    },
+    "chat.askLine.trace.silent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "finished without a reply"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "terminée sans réponse"
+          }
+        }
+      }
+    },
+    "chat.askLine.trace.stopped": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "stopped before an answer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "arrêtée avant une réponse"
+          }
+        }
+      }
+    },
+    "chat.incoming.askedBy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Asked by"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demandé par"
+          }
+        }
+      }
+    },
+    "chat.incoming.requests": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld requests"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld demandes"
+          }
+        }
+      }
+    },
+    "chat.messagedOthers.one": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld other"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld autre"
+          }
+        }
+      }
+    },
+    "chat.messagedOthers.other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld others"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld autres"
+          }
+        }
+      }
+    },
+    "chat.names.and": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "and"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "et"
+          }
+        }
+      }
+    },
+    "chat.parallel.background": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Working in the background"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Travaille en arrière-plan"
+          }
+        }
+      }
+    },
+    "chat.parallel.state.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Did not finish"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non terminée"
+          }
+        }
+      }
+    },
+    "chat.parallel.state.stopped": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêtée"
+          }
+        }
+      }
+    },
+    "chat.parallel.state.waiting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for your approval"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attend ton approbation"
+          }
+        }
+      }
+    },
+    "chat.parallel.state.waitingAnswer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for your answer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attend ta réponse"
+          }
+        }
+      }
+    },
+    "Same problem since %@, %lld runs in a row": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Same problem since %1$@, %2$lld runs in a row"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Même problème depuis %1$@, %2$lld exécutions de suite"
+          }
+        }
+      }
+    },
+    "Works again (problems since %@)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Works again (problems since %@)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fonctionne de nouveau (problèmes depuis %@)"
+          }
+        }
+      }
+    },
+    "AI client": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI client"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Client IA"
+          }
+        }
+      }
+    },
+    "Open the exchange with %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the exchange with %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir l'échange avec %@"
           }
         }
       }

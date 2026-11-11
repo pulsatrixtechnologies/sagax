@@ -1,30 +1,35 @@
 import CompanionCore
 import SwiftUI
 
-/// One routine run, in the conversation that set the routine up.
+/// One routine run, in the conversation that set the routine up: the
+/// desktop's `src/components/RoutineRunCard.tsx`, for a phone and the iPad.
 ///
-/// The desktop's `src/components/RoutineRunCard.tsx`, for a phone and the iPad.
-///
-/// 2026-11-06 (desktop ff87bf7daf, #2283): a routine run in the chat is never
-/// a card. Its result is the bot's own message (the same bubble as a reply)
-/// with one muted line under it: what is still going on, the time, a quiet
-/// "Details" and, while the run is live, Stop. No title, no badge, no
-/// "Routine · date", no red. A pass with nothing for the person is that one
-/// muted line, dimmed. A hand-off names the teammate; its thread is a button
-/// only with threads shown.
+/// #3581 (the owner, 2026-11-10: "why is it not a card"): a result is the
+/// chat's compact card: the routine's glyph and name, the time, the report's
+/// closing line in at most two lines (`briefText`), one state line only when
+/// there is something to say, the items for the person, the teammates it
+/// asked, and "Details" opening the run with the whole report as a normal
+/// bot message. The report never unfolds inside the card (the big card
+/// refused on 2026-11-05). A run in progress, queued, waiting, failed,
+/// cancelled or with nothing to report, and a result a newer result follows
+/// (RoutineResultStack), is the one quiet row: icon, name, what it says, the
+/// time, Details and Stop while live.
 ///
 /// The computer patches the same message as the run moves, so the row
-/// redraws in place from queued to its result; nothing here keeps state
-/// about the run.
+/// redraws in place; nothing here keeps state about the run.
 struct RoutineRunCardView: View {
     @Environment(\.themePalette) var themePalette
+    @Environment(\.desktopChatText) private var desktop
     @EnvironmentObject private var session: Session
     let card: RoutineRunCard
-    /// When the message landed; stands in for runs with no scheduled time.
+    /// When the message landed: the card's time (the trigger's in the hint).
     let at: Date
     let tint: Color
-    /// The bot that ran the routine (kept for callers; the message has no
-    /// mascot of its own, as on desktop).
+    /// What the run left for the person (its items, inside the card).
+    var attention: PersonAttentionCard? = nil
+    /// #3581: a newer result follows this one: the row.
+    var folded = false
+    /// The bot that ran the routine (kept for callers).
     var bot: Bot? = nil
     /// Opens the run's detail (#2098); nil when this device cannot reach it.
     var openRun: (() -> Void)? = nil
@@ -33,8 +38,7 @@ struct RoutineRunCardView: View {
     /// 2026-10-26: the failure paused its routine (RoutineAutoPause): turn
     /// it back on in one click. Nil: no button.
     var resume: (() -> Void)? = nil
-    /// Threads shown only: opens the thread a teammate works in (the run
-    /// handed work to it). Nil: the teammate is named without a button.
+    /// Threads shown only: opens the thread a teammate works in.
     var openThread: ((ThreadRef) -> Void)? = nil
 
     private var routineName: String {
@@ -51,189 +55,289 @@ struct RoutineRunCardView: View {
         card.knownStatus == .running && (card.goalStatus?.isEmpty ?? true)
     }
 
-    /// Desktop `reported`: completed with no goal outcome or a completed goal.
-    private var reported: Bool {
-        guard card.knownStatus == .completed || card.status == "completed" else { return false }
-        guard let goal = card.goalStatus, !goal.isEmpty else { return true }
-        return goal == "completed"
+    private var form: RoutineResultStack.Form {
+        RoutineResultStack.form(card, attention: attention, folded: folded)
     }
 
-    /// The bot's words, whole: shown while the run reports (a retry carries
-    /// the last report, so Running/Done never swaps the bubble).
-    private var report: String? {
-        guard reported || ((card.knownStatus == .queued || card.knownStatus == .running) && (card.goalStatus?.isEmpty ?? true)) else { return nil }
-        guard let text = card.summary?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
-        return text
+    /// The brief, for a result or a team goal's outcome only.
+    private var brief: String {
+        RoutineResultStack.isResult(card) || card.goalStatus != nil ? card.briefText : ""
     }
 
-    /// Otherwise one short line: why it failed or what it says.
-    private var detail: String? {
-        guard report == nil else { return nil }
-        let failed = card.knownStatus == .failed || card.knownStatus == .missed
-        let raw = failed ? (card.error ?? card.summary) : (card.summary ?? card.error)
-        guard let text = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
-        return text
-    }
+    private var withProblems: Bool { card.hasProblems && card.status == "completed" }
 
-    private var quiet: Bool { report == nil && detail == nil }
-
-    /// What leads the muted line: Running while it runs, else the state when
-    /// there is no clean report.
-    private var lead: String? {
-        if running || (live && quiet) { return String(localized: "Running") }
-        if quiet || card.hasProblems || !reported { return card.stateLabel }
-        return nil
-    }
-
-    private var wideReport: Bool {
-        guard let report else { return false }
-        return RichBlocks.prefersWideBubble(report)
+    private var warns: Bool {
+        withProblems || card.status == "blocked" || (card.goalStatus.map { $0 != "completed" } ?? false)
+            || (attention.map { !$0.items.isEmpty && $0.handledAt == nil } ?? false)
     }
 
     var body: some View {
+        let ink = ApprovalInk.of(desktop, accent: Theme.readable(tint))
         VStack(alignment: .leading, spacing: 4) {
-            if report != nil || detail != nil {
-                reportBubble
-            }
-            provenance
-            if let failures = card.autoPausedAfter {
-                autoPausedLine(failures)
-            }
-            ForEach(card.handedTo, id: \.threadId) { entry in
-                handoffLine(entry)
+            if form == .card {
+                cardForm(ink)
+            } else {
+                rowForm(ink)
+                asked(ink)
             }
         }
-        .opacity(quiet && !live ? 0.7 : 1)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(card.headline)
+        .accessibilityLabel(Text(verbatim: "\(routineName), \(card.stateLabel)"))
         .accessibilityIdentifier("routine-run-message")
     }
 
-    /// The bot's bubble: the report as Markdown (tables are tables, full width).
-    private var reportBubble: some View {
-        Group {
-            if let report {
-                MarkdownText(source: report, inert: true)
-            } else if let detail {
-                Text(verbatim: detail)
-            }
-        }
-        .foregroundStyle(BubbleColor.theirsText)
-        .textSelection(.enabled)
-        .fixedSize(horizontal: false, vertical: true)
-        .padding(.horizontal, Theme.Chat.bubblePaddingH)
-        .padding(.vertical, Theme.Chat.bubblePaddingV)
-        .frame(maxWidth: wideReport ? .infinity : nil, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.Metric.bubbleRadius, style: .continuous).fill(BubbleColor.theirs)
-        )
-        .accessibilityIdentifier("routine-run-report")
-    }
+    // MARK: The card
 
-    /// The quiet line under the message: what is still going on, the time,
-    /// the run's detail behind a discreet link, Stop while live.
-    private var provenance: some View {
-        HStack(spacing: 6) {
-            if let lead {
-                Text(verbatim: lead)
+    /// The desktop's AskCard measures (result): 16 / 12 around, title
+    /// 13.5 semibold in the accent ink, time 11.5, brief 13 four points
+    /// under it, the rest 10 under, the footer 12 under; a radius of 24.
+    private func cardForm(_ ink: ApprovalInk) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 8) {
+                cardIcon(ink)
+                Text(verbatim: routineName)
+                    .font(ink.font(13.5, .semibold))
+                    .foregroundStyle(ink.accent)
                     .lineLimit(1)
-                    .modifier(RunningPulse(active: running))
-                    .accessibilityIdentifier("routine-run-status")
-                dot
+                    .truncationMode(.tail)
+                    .help(Text(verbatim: routineName))
+                    .accessibilityIdentifier("routine-run-name")
+                Spacer(minLength: 6)
+                Text(verbatim: posted)
+                    .font(ink.font(11.5, .regular).monospacedDigit())
+                    .foregroundStyle(ink.tertiary)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .help(Text(verbatim: triggerHint ?? ""))
             }
-            Text(scheduled, format: .dateTime.hour().minute())
-                .lineLimit(1)
-            if let openRun {
-                dot
-                Button {
-                    Haptics.selection()
-                    openRun()
-                } label: {
-                    HStack(spacing: 2) {
-                        Text(String(localized: "Details"))
-                        Image(systemName: "chevron.right").font(.system(size: 8, weight: .semibold))
+            if !brief.isEmpty {
+                Text(verbatim: brief)
+                    .font(ink.font(13, .regular))
+                    .foregroundStyle(ink.secondary)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(Text(verbatim: brief))
+                    .accessibilityIdentifier("routine-run-brief")
+                    .padding(.top, 4)
+            }
+            let hasState = stateLine != nil
+            let hasItems = attention.map { !$0.items.isEmpty } ?? false
+            if hasState || hasItems || !card.handedTo.isEmpty || card.autoPausedAfter != nil {
+                VStack(alignment: .leading, spacing: 8) {
+                    if let state = stateLine {
+                        Text(verbatim: state.text)
+                            .font(ink.font(12, .regular))
+                            .foregroundStyle(state.success ? ink.success : Theme.warning)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("routine-run-status")
+                    }
+                    if let attention, !attention.items.isEmpty {
+                        AttentionItemsView(items: attention.items)
+                    }
+                    asked(ink)
+                    if let failures = card.autoPausedAfter {
+                        autoPausedLine(failures, ink: ink)
                     }
                 }
-                .buttonStyle(.plain)
-                .help(Text(verbatim: routineName))
-                .accessibilityLabel(Text(card.goalStatus == "needs-input" ? "Review for \(routineName)" : "View run for \(routineName)"))
-                .accessibilityIdentifier("routine-run-open")
+                .padding(.top, 10)
             }
-            if live, let stop {
-                dot
-                Button {
-                    Haptics.selection()
-                    stop()
-                } label: {
-                    HStack(spacing: 3) {
-                        Image(systemName: "stop.fill").font(.system(size: 7, weight: .semibold))
-                        Text(String(localized: "Stop"))
-                    }
+            if openRun != nil || (live && stop != nil) {
+                HStack(spacing: 8) {
+                    Spacer(minLength: 0)
+                    if live, let stop { quietButton(String(localized: "Stop"), id: "routine-run-stop", ink: ink, label: Text("Stop the run of \(routineName)"), action: stop) }
+                    if let openRun { quietButton(String(localized: "Details"), chevron: true, id: "routine-run-open", ink: ink, label: detailsLabel, action: openRun) }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text("Stop the run of \(routineName)"))
-                .accessibilityIdentifier("routine-run-stop")
+                .padding(.top, 12)
             }
-            Spacer(minLength: 0)
         }
-        .font(.system(size: 11))
-        .foregroundStyle(Theme.textTertiary)
-        .padding(.leading, 4)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("routine-run-provenance")
-    }
-
-    private var scheduled: Date {
-        card.scheduledFor.map { Date(timeIntervalSince1970: $0 / 1_000) } ?? at
-    }
-
-    private var dot: some View {
-        Text(verbatim: "·").accessibilityHidden(true)
-    }
-
-    /// One teammate the run handed work to: one muted line (desktop plain).
-    /// Thread button only with threads shown.
-    private func handoffLine(_ entry: RoutineRunCard.Handoff) -> some View {
-        let teammate = session.state.bot(entry.botId)
-        let name: String = {
-            if let named = entry.name, !named.isEmpty { return named }
-            if let teammate, !teammate.name.isEmpty { return teammate.name }
-            return String(localized: "a teammate")
-        }()
-        let state = RoutineRunCard(runId: "", routineId: "", routineName: "", status: entry.status)
-        return HStack(spacing: 6) {
-            Text(String(localized: "Sent work to \(name)"))
-                .lineLimit(1)
-            if state.knownStatus != nil {
-                dot
-                Text(verbatim: state.stateLabel)
-            }
-            if let openThread {
-                dot
-                Button {
-                    Haptics.selection()
-                    openThread(ThreadRef(botId: entry.botId, threadId: entry.threadId, title: name))
-                } label: {
-                    HStack(spacing: 2) {
-                        Text(String(localized: "Open \(name)'s thread"))
-                        Image(systemName: "chevron.right").font(.system(size: 8, weight: .semibold))
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text(verbatim: String(localized: "Open \(name)'s thread")))
-                .accessibilityIdentifier("routine-run-teammate-thread")
-            }
-            Spacer(minLength: 0)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        // a result is as wide as the approval card: the message column
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(desktop?.composer ?? Theme.card)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(desktop?.composerRing ?? Theme.hairline.opacity(0.6), lineWidth: 1)
         }
-        .font(.system(size: 11))
-        .foregroundStyle(Theme.textTertiary)
-        .padding(.leading, 4)
-        .accessibilityIdentifier("routine-run-handoff")
+        .accessibilityIdentifier("routine-run-card")
+    }
+
+    @ViewBuilder
+    private func cardIcon(_ ink: ApprovalInk) -> some View {
+        Group {
+            if live {
+                ProgressView().controlSize(.mini)
+            } else if warns {
+                Image(systemName: "exclamationmark.triangle").foregroundStyle(Theme.warning)
+            } else {
+                Image(systemName: "repeat").foregroundStyle(ink.accent)
+            }
+        }
+        .font(.system(size: 15, weight: .medium))
+        .frame(width: 16, height: 16)
+        .accessibilityHidden(true)
+    }
+
+    /// One state line, only when there is something to say: a finished
+    /// result without problems has no state word.
+    private var stateLine: (text: String, success: Bool)? {
+        if card.status == "blocked", card.goalStatus == nil {
+            return (blockedLine, false)
+        }
+        if withProblems || (card.goalStatus.map { $0 != "completed" } ?? false) {
+            var text = card.stateLabel
+            if withProblems, let lasting = card.`repeat`, lasting.count > 1 {
+                text += " · " + String(localized: "Same problem since \(Self.dateTime(lasting.since)), \(lasting.count) runs in a row")
+            }
+            return (text, false)
+        }
+        if let recovered = card.recovered {
+            return (String(localized: "Works again (problems since \(Self.dateTime(recovered.since)))"), true)
+        }
+        return nil
+    }
+
+    private var blockedLine: String {
+        let why = (card.problems ?? card.error ?? card.summary).map { ReportBrief.of($0, from: .start) } ?? ""
+        return why.isEmpty ? card.stateLabel : "\(card.stateLabel): \(why)"
+    }
+
+    /// The desktop's card time: the hour today, else the day and the hour
+    /// ("Yesterday 9:12 AM", "Mon, Sep 28 11:31 AM").
+    private var posted: String {
+        Calendar.current.isDateInToday(at)
+            ? at.formatted(date: .omitted, time: .shortened)
+            : DesktopChatMetrics.dayLabel(at)
+    }
+
+    private var triggerHint: String? {
+        guard let scheduled = card.scheduledFor, abs(scheduled - at.timeIntervalSince1970 * 1000) >= 60_000 else { return nil }
+        return Self.dateTime(scheduled)
+    }
+
+    static func dateTime(_ ms: Double) -> String {
+        Date(timeIntervalSince1970: ms / 1000).formatted(.dateTime.month(.abbreviated).day().hour().minute())
+    }
+
+    // MARK: The row
+
+    /// What the run is doing, or what it said, in one quiet line.
+    private var said: String {
+        if running || (live && card.knownStatus != .queued && card.knownStatus != .waiting) { return String(localized: "Running") }
+        if card.status == "blocked", card.goalStatus == nil { return blockedLine }
+        if card.knownStatus == .failed || card.knownStatus == .missed {
+            let why = ReportBrief.of(card.error ?? card.summary, from: .start)
+            return why.isEmpty ? card.stateLabel : "\(card.stateLabel): \(why)"
+        }
+        if card.knownStatus == .queued || card.knownStatus == .waiting {
+            let why = ReportBrief.of(card.attention ?? card.summary ?? card.error, from: .start)
+            return why.isEmpty ? card.stateLabel : "\(card.stateLabel): \(why)"
+        }
+        if withProblems { return brief.isEmpty ? card.stateLabel : "\(card.stateLabel): \(brief)" }
+        if let recovered = card.recovered, brief.isEmpty {
+            return String(localized: "Works again (problems since \(Self.dateTime(recovered.since)))")
+        }
+        return brief.isEmpty ? card.stateLabel : brief
+    }
+
+    private func rowForm(_ ink: ApprovalInk) -> some View {
+        HStack(spacing: 6) {
+            rowIcon(ink)
+            (Text(verbatim: routineName).font(ink.font(12.5, .medium)).foregroundColor(ink.secondary)
+                + Text(verbatim: " · \(said)")
+                + Text(verbatim: card.autoPausedAfter.map { " · " + RoutineWording.autoPaused($0) } ?? "")
+                + Text(verbatim: live ? "" : " · ")
+                + (live ? Text(verbatim: "") : Text(at, format: .dateTime.hour().minute())))
+                .font(ink.font(12.5, .regular))
+                .foregroundStyle(ink.tertiary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .modifier(RunningPulse(active: running))
+                .help(Text(verbatim: "\(routineName) · \(said)"))
+                .accessibilityIdentifier("routine-run-status")
+            Spacer(minLength: 4)
+            if let failures = card.autoPausedAfter, let resume, failures > 0 {
+                quietButton(String(localized: "Resume (routine paused after failures)"), id: "routine-run-resume", ink: ink, action: resume)
+            }
+            if live, let stop { quietButton(String(localized: "Stop"), id: "routine-run-stop", ink: ink, label: Text("Stop the run of \(routineName)"), action: stop) }
+            if let openRun { quietButton(String(localized: "Details"), id: "routine-run-open", ink: ink, label: detailsLabel, action: openRun) }
+        }
+        .padding(.leading, 2)
+        .accessibilityIdentifier("routine-run-row")
+    }
+
+    @ViewBuilder
+    private func rowIcon(_ ink: ApprovalInk) -> some View {
+        Group {
+            if card.knownStatus == .waiting {
+                Image(systemName: "exclamationmark.triangle").foregroundStyle(Theme.warning)
+            } else if live {
+                ProgressView().controlSize(.mini)
+            } else if card.knownStatus == .cancelled {
+                Image(systemName: "nosign").foregroundStyle(ink.tertiary)
+            } else if card.knownStatus == .failed || card.knownStatus == .missed || card.status == "blocked" || warns {
+                Image(systemName: "exclamationmark.triangle").foregroundStyle(Theme.warning)
+            } else {
+                Image(systemName: "checkmark").foregroundStyle(ink.success.opacity(0.8))
+            }
+        }
+        .font(.system(size: 11, weight: .semibold))
+        .frame(width: 13, height: 13)
+        .accessibilityHidden(true)
+    }
+
+    private func quietButton(_ title: String, chevron: Bool = false, id: String, ink: ApprovalInk, label: Text? = nil, action: @escaping () -> Void) -> some View {
+        Button {
+            Haptics.selection()
+            action()
+        } label: {
+            HStack(spacing: 2) {
+                Text(verbatim: title)
+                if chevron { Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)) }
+            }
+            // the desktop's ASK_QUIET_BUTTON: 28 tall, 12 aside, 13 medium, tertiary
+            .font(ink.font(13, .medium))
+            .foregroundStyle(ink.tertiary)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 28)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label ?? Text(verbatim: title))
+        .accessibilityIdentifier(id)
+    }
+
+    private var detailsLabel: Text {
+        card.goalStatus == "needs-input" ? Text("Review for \(routineName)") : Text("View run for \(routineName)")
+    }
+
+    // MARK: Teammates and pause
+
+    /// The teammates the run asked: the one names line ("Asked [faces]").
+    @ViewBuilder
+    private func asked(_ ink: ApprovalInk) -> some View {
+        if !card.handedTo.isEmpty {
+            NamesLineView(
+                verb: String(localized: "chat.askLine.asked", defaultValue: "Asked"),
+                parties: card.handedTo.map { entry in
+                    let name = entry.name?.isEmpty == false ? entry.name! : (session.state.bot(entry.botId)?.name ?? String(localized: "a teammate"))
+                    return NamesLineParty(
+                        id: entry.threadId, botId: entry.botId, name: name,
+                        open: openThread.map { open in { open(ThreadRef(botId: entry.botId, threadId: entry.threadId, title: name)) } }
+                    )
+                },
+                testId: "routine-run-handoff"
+            )
+        }
     }
 
     /// The failure paused its routine: one muted line and the way back on.
-    private func autoPausedLine(_ failures: Int) -> some View {
+    private func autoPausedLine(_ failures: Int, ink: ApprovalInk) -> some View {
         HStack(spacing: 6) {
             Label {
                 Text(verbatim: RoutineWording.autoPaused(failures))
@@ -243,7 +347,7 @@ struct RoutineRunCardView: View {
             .labelStyle(TightLabel())
             .accessibilityIdentifier("routine-run-auto-paused")
             if let resume {
-                dot
+                Text(verbatim: "·").accessibilityHidden(true)
                 Button {
                     Haptics.selection()
                     resume()
@@ -256,9 +360,8 @@ struct RoutineRunCardView: View {
                 .accessibilityIdentifier("routine-run-resume")
             }
         }
-        .font(.system(size: 11))
-        .foregroundStyle(Theme.textTertiary)
-        .padding(.leading, 4)
+        .font(ink.font(12, .regular))
+        .foregroundStyle(ink.tertiary)
     }
 }
 
@@ -288,6 +391,78 @@ private struct RunningPulse: ViewModifier {
                 }
         } else {
             content
+        }
+    }
+}
+
+/// #3581: the routine card's "Details": the run's whole report, drawn as the
+/// chat draws a bot's long text, in the sheet a chat row's detail opens in
+/// (DigestSheet, IncomingExchangeSheet). The card's own report shows at
+/// once; a finished run whose card may hold only a clip is read by its id
+/// and its longer report replaces it (RoutineResults.wholeReport).
+struct RoutineReportTarget: Identifiable {
+    let card: RoutineRunCard
+    let at: Date
+    /// Threads shown: the run's own thread, when this phone can reach it.
+    var thread: ThreadRef? = nil
+    var id: String { card.runId }
+}
+
+struct RoutineReportSheet: View {
+    @Environment(\.themePalette) var themePalette
+    let target: RoutineReportTarget
+    var openThread: ((ThreadRef) -> Void)? = nil
+    @Environment(\.dismiss) private var dismiss
+    @State private var run: RoutineRun?
+
+    private var report: String { RoutineResults.wholeReport(card: target.card, run: run) }
+
+    private var title: String {
+        target.card.routineName.isEmpty ? String(localized: "Routine") : target.card.routineName
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(target.at, format: .dateTime.month(.abbreviated).day().hour().minute())
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Theme.textTertiary)
+                    MarkdownText(source: report, inert: true)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("routine-run-report")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(String(localized: "Done")) { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Copy", systemImage: "doc.on.doc") {
+                        PlatformBridge.copyToPasteboard(report)
+                        Haptics.selection()
+                    }
+                }
+                if let thread = target.thread, let openThread {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(String(localized: "Open")) {
+                            dismiss()
+                            openThread(thread)
+                        }
+                        .accessibilityIdentifier("routine-run-report-thread")
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .task(id: target.card.runId) {
+            guard RoutineResults.wantsWholeReport(target.card) else { return }
+            run = await SessionHub.session.routineRunRead(id: target.card.runId)
         }
     }
 }

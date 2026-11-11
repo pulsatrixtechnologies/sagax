@@ -186,8 +186,24 @@ describe("#2098 on iOS: a run opens in the bot's chat", () => {
     const row = readSwift("App/Cards/RoutineRunCardView.swift");
     expect(row).toContain('"routine-run-stop"');
     expect(row).toContain("if live, let stop {");
-    // #2432 (iPad parity round 6): the report reads as the bot's bubble.
-    expect(row).toContain("MarkdownText(source: report, inert: true)");
+    // #3581: the result is the compact card with its brief; the report
+    // opens behind Details, never inside the chat row.
+    expect(row).toContain('"routine-run-brief"');
+    const sheetAt = row.indexOf("struct RoutineReportSheet");
+    expect(sheetAt).toBeGreaterThan(0);
+    const card = row.slice(0, sheetAt);
+    expect(card).toContain("private func cardForm(");
+    expect(card).toContain("private func rowForm(");
+    expect(card).not.toContain("MarkdownText(");
+    expect(row.slice(sheetAt)).toContain("MarkdownText(source: report");
+    // #3581: a waiting task says the desktop's words ("tu"), approval or answer
+    const task = readSwift("App/Cards/ParallelTaskCardView.swift");
+    expect(task).toContain('"chat.parallel.state.waiting"');
+    expect(task).toContain('"chat.parallel.state.waitingAnswer"');
+    expect(task).not.toContain('String(localized: "Waiting for your answer")');
+    const catalog = readSwift("App/Localizable.xcstrings");
+    expect(catalog).toContain('"value": "Attend ton approbation"');
+    expect(catalog).toContain('"value": "Attend ta réponse"');
     const chat = readSwift("App/Features/Chat/MessageRow.swift");
     expect(chat).toContain("openThread: threadsShown ? openThread : nil");
     // #2432: the row always hands Stop; the card shows it while live

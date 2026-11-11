@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { carryAutoComputerMoves, pinnedWorkspaceStart } from "../computer/auto-computer.ts";
 import { turnLanguage } from "./turn-language.ts";
+import { turnClockIn } from "./turn-clock.ts";
 import { withHelpPrefetch } from "../self-knowledge/help-prefetch.ts";
 import { effortForEngine } from "../../shared/ultracode-effort.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
@@ -360,9 +361,14 @@ export function createPrepareAdmitStartTurn(
   state.placedText = state.opts.cardContinuation ? { text: state.providerText, staging: null } : workplaceTurnText(state.providerText, state.turnPlace);
   state.providerText = withWorkplaceNote(state.placedText.text, state.turnPlace, state.turnAuto, state.bot.id, state.threadId);
   // The engine's container runs in UTC: tell it the time where its person is
-  // (server/turns/turn-clock.ts), so times are said in their zone.
+  // (server/turns/turn-clock.ts), so times are said in their zone. The
+  // dispatch reads it again when it hands the turn to the engine.
   const clockZone = state.opts.cardContinuation || !turnClockEnabled() ? null : turnZoneFor(state.bot, state.speaker);
-  if (clockZone) state.providerText = withTurnClock(state.providerText, new Date(), clockZone);
+  if (clockZone) {
+    const clocked = withTurnClock(state.providerText, new Date(), clockZone);
+    if (clocked !== state.providerText) state.turnClock = turnClockIn(clocked, clockZone);
+    state.providerText = clocked;
+  }
   // A question about Sagax itself: the sagax_help lookup runs here, before
   // the engine, so it answers in one model round (server/self-knowledge/help-prefetch.ts).
   if (state.personLine && !state.warmOnly && !state.smallTalk && !state.opts.cardContinuation && !state.opts.commsDepth && !state.userMessage.peerAsk) {

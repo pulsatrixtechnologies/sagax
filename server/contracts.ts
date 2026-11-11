@@ -212,6 +212,10 @@ export interface SendTurnInput {
    * message inside `text`. It informs this turn only, so a driver that
    * replays the turn as sent later can leave it out. */
   recalled?: string;
+  /** The clock note inside `text` (server/turns/turn-clock.ts): its zone and
+   * exact words. A driver that calls the model itself several times in one
+   * turn reads it again before each call. */
+  turnClock?: { timeZone: string; note: string };
   /** Per-bot approval policy, reasserted by providers on every turn so a
    * resumed native session cannot retain a stale, more permissive mode. */
   approvalMode?: ApprovalMode;

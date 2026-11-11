@@ -63,6 +63,6 @@ describe.skipIf(process.platform === "win32")("turn clock e2e", () => {
     expect(await engineText("NO_ZONE_YET")).not.toContain("[Current time:");
     expect((await api("PUT", "/api/settings/bot", { timeZone: "America/Toronto" })).status).toBe(200);
     const zoned = await engineText("WITH_ZONE");
-    expect(zoned).toMatch(/\[Current time: \w+day, \w+ \d{1,2}, \d{4} at \d{1,2}:\d{2} [AP]M, America\/Toronto \(UTC-0[45]:00\)\. This clock is exact: [^\]]*Give dates and times in America\/Toronto[^\]]*\]\n\nWITH_ZONE$/);
+    expect(zoned).toMatch(/\[Current time: \w+day, \w+ \d{1,2}, \d{4} at \d{1,2}:\d{2} [AP]M, America\/Toronto \(UTC-0[45]:00\), when this turn started\. [^\]]*Times you show are in America\/Toronto[^\]]*\]\n\nWITH_ZONE$/);
   }, 60_000);
 });

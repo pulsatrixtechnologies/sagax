@@ -40,7 +40,7 @@ describe("routine effort at turn admission and dispatch", () => {
       withDesktopModelPerson: (_person: unknown, work: () => unknown) => work(), runAsBotEngine: (_botId: string, work: () => unknown) => work(),
       guardTurnDispatch: (work: unknown) => work, withRecalled: (_recalled: unknown, text: string) => text,
       savedSteps: { dispatch: { sendTurn: (_engine: unknown, _replay: unknown, input: SendTurnInput, dispatch: (input: SendTurnInput) => unknown) => dispatch(input) } },
-      managedPolicy: { restrictsMcp: () => false },
+      managedPolicy: { restrictsMcp: () => false }, connectorPlanForTurn: () => ({}),
     };
     const host = new Proxy(values, { get: (target, key: string) => target[key] ?? noOp }) as unknown as StartTurnHost;
     async function turn() {

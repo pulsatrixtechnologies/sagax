@@ -18,9 +18,8 @@ import { SANDBOX_WAKE_NOTICE, SANDBOX_WAKE_TIMEOUT_NOTICE, type SandboxWakeLine 
 import { formatElapsed } from "@/lib/working-time";
 import { ONE_PASSWORD_WAITING } from "../../shared/credential-vault";
 import { HOST_CONTROL_NOTICE } from "../../shared/host-control";
-import { isQuietWorkspaceLine, parseWorkspaceLine, type WorkspaceLine } from "../../shared/workspace-line";
+import { isQuietWorkspaceLine, parseWorkspaceLine, workspaceLineWords, type WorkspaceLine } from "../../shared/workspace-line";
 import { isTechnicalNoticeName } from "../../shared/chat-notices";
-import type { SelectedComputer } from "../../shared/execution-target";
 import type { LocaleKey } from "@/locales";
 import type { SoloGoalLine, SoloGoalLineStatus } from "../../shared/solo-goal-line";
 import type { LearnedSkillLine } from "../../shared/learned-skill-line";
@@ -159,22 +158,10 @@ export function finishUntilLineLocalized(line: FinishUntilLine): string {
   return line.detail && (line.status === "met" || line.status === "blocked") ? `${text} (${line.detail})` : text;
 }
 
-const WORKSPACE_ON: Record<SelectedComputer, LocaleKey> = {
-  this_computer: "workspaceLine.computer", browser: "workspaceLine.browser", cloud: "workspaceLine.cloud", local_vm: "workspaceLine.localVm",
-};
-const WORKSPACE_PLACE: Record<SelectedComputer, LocaleKey> = {
-  this_computer: "place.local", browser: "place.browser", cloud: "toolTarget.cloud", local_vm: "place.vm",
-};
-
-/** "Sur votre ordinateur", or "Passé sur Infonuagique : votre ordinateur est
- * hors ligne" when Auto could not work where it wanted. */
+/** "Sur ton ordinateur", or "Passé sur Infonuagique : ton ordinateur est
+ * hors ligne" when Auto could not work where it wanted (shared/workspace-line.ts). */
 export function workspaceLineText(line: WorkspaceLine): string {
-  if (!line.fallback) return t(WORKSPACE_ON[line.target]);
-  const place = t(WORKSPACE_PLACE[line.target]);
-  if (line.fallback.reason === "offline") return t("workspaceLine.fallbackOffline", { place });
-  if (line.fallback.reason === "routine-not-allowed") return t("workspaceLine.fallbackRoutine", { place });
-  if (line.fallback.reason === "routine-default") return t("workspaceLine.fallbackRoutineDefault", { place });
-  return t("workspaceLine.fallbackUnavailable", { place, wanted: t(WORKSPACE_PLACE[line.fallback.wanted]) });
+  return workspaceLineWords(line, (key, vars) => t(key as LocaleKey, vars));
 }
 
 /** A status row the thread keeps but never draws: a technical notice

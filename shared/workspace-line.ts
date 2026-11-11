@@ -79,3 +79,26 @@ export const QUIET_WORKSPACE_LINE = workspaceLineName({ target: "this_computer" 
 export function isQuietWorkspaceLine(name: string | undefined | null): boolean {
   return name === QUIET_WORKSPACE_LINE;
 }
+
+/** #3515: words of one locale catalog key, `{name}` filled from `vars`: the
+ * app's `t`, or the server's personWord in the person's language. */
+export type LineWords = (key: string, vars?: Record<string, string>) => string;
+
+const ON_KEY: Record<SelectedComputer, string> = {
+  this_computer: "workspaceLine.computer", browser: "workspaceLine.browser", cloud: "workspaceLine.cloud", local_vm: "workspaceLine.localVm",
+};
+const PLACE_KEY: Record<SelectedComputer, string> = {
+  this_computer: "place.local", browser: "place.browser", cloud: "toolTarget.cloud", local_vm: "place.vm",
+};
+
+/** One line in a reader's words: "Dans l'infonuagique", or "Passé sur
+ * Infonuagique : ton ordinateur est hors ligne" when Auto could not work
+ * where it wanted. The app and the agent API both say it from here. */
+export function workspaceLineWords(line: WorkspaceLine, say: LineWords): string {
+  if (!line.fallback) return say(ON_KEY[line.target]);
+  const place = say(PLACE_KEY[line.target]);
+  if (line.fallback.reason === "offline") return say("workspaceLine.fallbackOffline", { place });
+  if (line.fallback.reason === "routine-not-allowed") return say("workspaceLine.fallbackRoutine", { place });
+  if (line.fallback.reason === "routine-default") return say("workspaceLine.fallbackRoutineDefault", { place });
+  return say("workspaceLine.fallbackUnavailable", { place, wanted: say(PLACE_KEY[line.fallback.wanted]) });
+}

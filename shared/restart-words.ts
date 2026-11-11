@@ -4,6 +4,9 @@
 // restartSentenceKey and says them in the reader's language. One place, so
 // a reworded server line can never fall back to English on screen.
 
+/** The activity row a resumed cut turn opens with (resumeTurnsCutByRestart). */
+export const RESUMING_STEP = "Resuming after a restart";
+
 /** A turn the restart cut and nothing resumes (a held card, a room round). */
 export const TURN_CUT_BY_RESTART = "turn interrupted — Sagax restarted";
 /** The resume of a cut turn failed to start; the engine's words follow. */

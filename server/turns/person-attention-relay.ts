@@ -23,8 +23,9 @@
 // resumed the bot after the run closed) is read by nobody. The bot's answer
 // there is mirrored into its conversation, linked to the run's task.
 
-import { personAttention, personAttentionText, type PersonAttention, type PersonAttentionCard } from "../../shared/person-attention.ts";
+import { personAttention, personAttentionText, type PersonAttention, type PersonAttentionCard, type RunStatusNote } from "../../shared/person-attention.ts";
 import type { WireMessage, WireTask } from "../../shared/wire.ts";
+import { withoutRoutineMarkers } from "../../shared/routine-result.ts";
 import { openedByOwnBot } from "./bot-to-bot.ts";
 
 export interface AttentionBot {
@@ -89,11 +90,20 @@ export interface AttentionTurn<B extends AttentionBot> {
 }
 
 /** The bot's words of one turn in this thread, and the last message of them. */
-export function turnWords(messages: readonly WireMessage[], turnId: string | undefined): { text: string; last?: WireMessage } {
+export function turnWords(messages: readonly WireMessage[], turnId: string | undefined): TurnWords {
   const own = messages.filter((message) => message.role === "bot" && message.kind === "text" && !message.from && !message.attention && typeof message.text === "string");
   const rows = turnId ? own.filter((message) => message.turnId === turnId) : own.slice(-1);
   const picked = rows.length ? rows : own.slice(-1);
-  return { text: picked.map((message) => message.text ?? "").join("\n\n"), last: picked.at(-1) };
+  return wordsOf(picked);
+}
+
+/** A turn's words, its last row, and the failed or partial status one of
+ * its rows ended on (#3515: kept as data, the line is out of the text). */
+export interface TurnWords { text: string; last?: WireMessage; runStatus?: RunStatusNote }
+
+function wordsOf(rows: readonly WireMessage[]): TurnWords {
+  const runStatus = rows.findLast((message) => message.runStatus)?.runStatus;
+  return { text: rows.map((message) => message.text ?? "").join("\n\n"), last: rows.at(-1), ...(runStatus ? { runStatus } : {}) };
 }
 
 /** #2915: the bot's words of exactly this turn. Never an earlier turn's:
@@ -101,7 +111,7 @@ export function turnWords(messages: readonly WireMessage[], turnId: string | und
  * line, which a mirror would copy a second time). Without a turn id, the
  * words after the last line written to the bot (what it was asked), never
  * an answer that came before that ask. */
-export function ownTurnWords(messages: readonly WireMessage[], turnId: string | undefined): { text: string; last?: WireMessage } {
+export function ownTurnWords(messages: readonly WireMessage[], turnId: string | undefined): TurnWords {
   const own = (message: WireMessage) => message.role === "bot" && message.kind === "text" && !message.from && !message.attention && typeof message.text === "string";
   let rows: WireMessage[];
   if (turnId) rows = messages.filter((message) => own(message) && message.turnId === turnId);
@@ -109,7 +119,7 @@ export function ownTurnWords(messages: readonly WireMessage[], turnId: string | 
     const asked = messages.findLastIndex((message) => message.role === "user" || (message.role === "bot" && Boolean(message.from)));
     rows = asked < 0 ? [] : messages.slice(asked + 1).filter(own);
   }
-  return { text: rows.map((message) => message.text ?? "").join("\n\n"), last: rows.at(-1) };
+  return wordsOf(rows);
 }
 
 /** #2915: a card still waiting in this thread (a question the turn ended
@@ -179,8 +189,9 @@ export function relayPersonAttention<B extends AttentionBot>(
   if (!task) return { posted: false, reason: "no-task" };
   if (task.confidential === true) return { posted: false, reason: "confidential" };
   if (deps.agentConversation(bot.id, threadId)) return { posted: false, reason: "agent" };
-  const { text, last } = turnWords(deps.messages(threadId), input.turnId);
-  const found = last ? personAttention(text) : undefined;
+  const { text, last, runStatus } = turnWords(deps.messages(threadId), input.turnId);
+  // #3515: a failed or partial status line is read from the row's runStatus
+  const found = last ? personAttention(text, runStatus) : undefined;
   if (!found || !last) return { posted: false, reason: "no-signal" };
   // #3503: a question in a thread another bot of the same person opened is
   // for that bot: the runtime parks the work and wakes it with the question
@@ -260,14 +271,17 @@ export function mirrorLateRunReply<B extends AttentionBot>(
   if (!run || ACTIVE_RUN.has(run.status)) return false;
   const task = deps.task(bot.id, threadId);
   if (!task || task.confidential === true) return false;
-  const { text, last } = turnWords(deps.messages(threadId), input.turnId);
-  const words = text.trim();
-  if (!last || !words || /^\s*NOTHING_TO_REPORT\s*$/i.test(words)) return false;
+  const { text, last, runStatus } = turnWords(deps.messages(threadId), input.turnId);
+  // #3515: run markers are read by the one shared strip, as routine output
+  const words = withoutRoutineMarkers(text).trim();
+  if (!last || !words) return false;
   const target = deps.conversation(bot, threadId);
   if (!target || target === threadId) return false;
   if (deps.messages(target).some((message) => message.attention?.sourceMessageId === last.id || message.lateRunReplyOf === last.id)) return false;
   deps.append(target, {
-    role: "bot", kind: "text", text: words.replace(/^\s*NOTHING_TO_REPORT\s*$/gim, "").trim(), lateRunReplyOf: last.id,
+    role: "bot", kind: "text", text: words, lateRunReplyOf: last.id,
+    // #3515: the copy keeps the failed or partial status its source ended on
+    ...(runStatus ? { runStatus } : {}),
     threadRef: { botId: bot.id, threadId, title: task.title || run.routineName },
   });
   deps.markUnread(bot.id, target);
@@ -304,8 +318,8 @@ export function mirrorBackgroundReply<B extends AttentionBot>(
   // their thread: neither the answer nor a trace line reaches the chat
   if (betweenOwnBots(deps, bot.id, threadId, task)) return false;
   const source = deps.messages(threadId);
-  const { text, last } = input.ok && !input.stopped ? ownTurnWords(source, input.turnId) : { text: "", last: undefined };
-  const words = text.replace(/^\s*NOTHING_TO_REPORT\s*$/gim, "").trim();
+  const { text, last, runStatus } = input.ok && !input.stopped ? ownTurnWords(source, input.turnId) : { text: "", last: undefined, runStatus: undefined };
+  const words = withoutRoutineMarkers(text).trim();
   const ask = turnAsk(source, input.turnId, task.openedBy);
   // a turn that ended on a waiting card (a question, an approval) said
   // nothing, but the card itself is relayed into the chat: no trace
@@ -333,10 +347,11 @@ export function mirrorBackgroundReply<B extends AttentionBot>(
   if (tail && tail.role === "bot" && tail.kind === "text" && tail.relayVia === via && !tail.relayTrace && tail.relayOf
     && (tail.relayAsk?.by ?? "") === (ask?.by ?? "")
     && now - tail.at < RELAY_GROUP_MS && (tail.text ?? "").length + chunk.length + 2 <= RELAY_TEXT_MAX) {
-    deps.patch(target, tail.id, { text: `${tail.text ?? ""}\n\n${chunk}`, relayGroup: [...(tail.relayGroup ?? []), key] });
+    deps.patch(target, tail.id, { text: `${tail.text ?? ""}\n\n${chunk}`, relayGroup: [...(tail.relayGroup ?? []), key], ...(runStatus ? { runStatus } : {}) });
     return true;
   }
-  deps.append(target, { role: "bot", kind: "text", text: words, relayVia: via, relayOf: key, ...(ask ? { relayAsk: ask } : {}) });
+  // #3515: the copy keeps the failed or partial status its source ended on
+  deps.append(target, { role: "bot", kind: "text", text: words, relayVia: via, relayOf: key, ...(ask ? { relayAsk: ask } : {}), ...(runStatus ? { runStatus } : {}) });
   return true;
 }
 

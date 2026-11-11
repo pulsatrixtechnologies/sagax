@@ -27,6 +27,21 @@ describe("routineRunCard", () => {
     expect(routineRunCard(run({ status: "waiting", attention: "Approve" }), "main", whole).summary).toBe("Approve");
   });
 
+  // #3515: a cut ends at a sentence or a word, never in the middle of one.
+  it("cuts a long report, a wait's line and an error at a sentence, never inside a word", () => {
+    const long = "Les deux partis sont partisans, et la suite est longue. ".repeat(500);
+    const summary = routineRunCard(run(), "main", long).summary!;
+    expect(summary.length).toBeLessThanOrEqual(ROUTINE_REPORT_POST_MAX);
+    expect(summary.endsWith("longue.…")).toBe(true);
+    const waiting = routineRunCard(run({ status: "waiting", attention: long }), "main").summary!;
+    expect(waiting.endsWith("longue.…")).toBe(true);
+    const failed = routineRunCard(run({ status: "failed", error: long }), "main");
+    expect(failed.error!.length).toBeLessThanOrEqual(500);
+    expect(failed.error!.endsWith("longue.…")).toBe(true);
+    const queued = routineRunCard(run({ status: "queued", attention: long }), "main");
+    expect(queued.attention!.endsWith("longue.…")).toBe(true);
+  });
+
   // 2026-11-06 (#2186): a long report with a widget stays whole; a cut never
   // opens a fence without closing it.
   it("keeps a long widget fence whole in the posted summary", () => {

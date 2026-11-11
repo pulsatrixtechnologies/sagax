@@ -25078,6 +25078,11 @@ function briefCardsPass(): void {
     reportBackgroundError(error);
   }
   offerOwedBriefCards();
+  // #3515: a brief routine the upgrade named in English takes the person's language once it is known
+  for (const bot of store.bots) {
+    if (bot.hidden || bot.temporary) continue;
+    try { briefRoutines.localizeName(bot.id); } catch (error) { reportBackgroundError(error); }
+  }
 }
 if (!process.env.VITEST) {
   // the upgrade, once: saved settings that were on become the routine
@@ -31433,6 +31438,14 @@ const agentCardGuard = createAgentCardGuard({
   }
 });
 let sendReceiptsPurgedAt = 0;
+
+/** #3515: the time zone a server line says its times in for a text-only
+ * reader (the agent API, the organization's connector): the person's own,
+ * else the server's routine zone. */
+function readerTimeZone(person: string | null): string | undefined {
+  return (person && isPrincipalId(person) ? botSettings.person(person).timeZone : null) ?? routineTimeZone() ?? undefined;
+}
+
 const agentApi = createAgentApi({
   guardMode: toolGuardMode(process.env.SAGAX_TOOL_GUARD),
   guard: (caller, policy, target) => guardDecision(policy, { kind: caller.kind === "bot" ? "bot" : "user", id: caller.id },
@@ -31867,6 +31880,8 @@ const agentApi = createAgentApi({
   turnState: agentTurnState,
   // #3217: restart lines read through the agent API in the person's language
   language: (caller) => languageOfPerson(caller.kind === "person" ? caller.id : caller.speakerPrincipalId ?? null),
+  // #3515: the times a routine run's line says, in the person's zone
+  timeZone: (caller) => readerTimeZone(caller.kind === "person" ? caller.id : caller.speakerPrincipalId ?? null),
   // #2922: the cards an awaited turn (since its handle's time) is blocked
   // on, its handed-off threads included, filtered for this caller
   // (server/index-leaves/agentPendingApproval.ts, isolation between persons).
@@ -32141,6 +32156,10 @@ const orgMember = createOrgMemberRoutes({
   expireDueApprovals: expireDueApprovalsInThread,
   pendingApprovalExpireDays: (person) => pendingExpireDaysForPerson(person.principalId),
   approvalWords: (person) => serverApprovalWords(languageOfPerson(person.principalId)).t,
+  // #3515: the server's lines in a conversation, in the person's language
+  language: (person) => languageOfPerson(person.principalId),
+  // #3515: the times a routine run's line says, in the person's zone
+  timeZone: (person) => readerTimeZone(person.principalId),
   // #3512: the one source of what waits on the person
   waitingItems: memberWaitingItems,
   settleRequest: (person, where, how) => asMemberAuth(person, (auth) => {

@@ -3,8 +3,10 @@
 import type { RoutineRunCardData } from "../../shared/routine-run.ts";
 import { readableRoutineProblems } from "../../shared/routine-problems.ts";
 import { clipMarkdownPreservingFences, unclosedFenceOffset } from "../../src/lib/rich-blocks.ts";
+import { clipReadable } from "../../shared/routine-result.ts";
 import { redactSecretsInText } from "../redact.ts";
 import type { RoutineRun } from "./routines.ts";
+import { personWord, readerLanguage } from "../people/person-words.ts";
 
 /** The longest report a run's message carries in the conversation
  * (2026-10-29): the whole report, not the 2 000 characters the run's record
@@ -14,6 +16,14 @@ export const ROUTINE_REPORT_POST_MAX = 20_000;
 /** Soft overflow past ROUTINE_REPORT_POST_MAX so a fence that starts near
  * the cap can finish (a ```widget must never ship half-closed). */
 export const ROUTINE_REPORT_POST_HARD_MAX = 100_000;
+
+/** #3515: a run's text within `max`, never cut inside a fenced block
+ * (#2186) nor in the middle of a word: a cut outside any fence ends at a
+ * line, a sentence or a word (clipReadable). */
+function clipReport(text: string, max: number, hardMax: number): string {
+  if (text.length <= max || unclosedFenceOffset(text.slice(0, max)) >= 0) return clipMarkdownPreservingFences(text, max, hardMax);
+  return clipReadable(text, max);
+}
 
 /** The task's cleaned report when it is the run record's whole message
  * (#2186): the record keeps 2 000 characters and may end inside a fence, so
@@ -55,13 +65,13 @@ export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullRepor
   // 2026-11-06 (#2186): never cut inside a fenced block. A mid-widget slice
   // drew as raw code ("Widget-imperfect · N lines") in the chat card.
   const summary = visibleSummary
-    ? clipMarkdownPreservingFences(
+    ? clipReport(
       redactSecretsInText(visibleSummary),
       run.status === "waiting" ? 2_000 : ROUTINE_REPORT_POST_MAX,
       run.status === "waiting" ? 2_000 : ROUTINE_REPORT_POST_HARD_MAX,
     )
     : undefined;
-  const error = run.error ? redactSecretsInText(run.error).slice(0, 500) : undefined;
+  const error = run.error ? clipReadable(redactSecretsInText(run.error), 500) : undefined;
   const card: RoutineRunCardData = {
     runId: run.id,
     routineId: run.routineId,
@@ -84,7 +94,7 @@ export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullRepor
     card.repeat = { ...run.problemRepeat, lastAt: run.finishedAt ?? run.problemRepeat.since };
   }
   if (run.status === "completed" && !run.problems && run.recovered) card.recovered = { ...run.recovered };
-  if (run.status === "queued" && run.attention) card.attention = redactSecretsInText(run.attention).slice(0, 500);
+  if (run.status === "queued" && run.attention) card.attention = clipReadable(redactSecretsInText(run.attention), 500);
   if (run.startedAt) card.startedAt = run.startedAt;
   const wakeTopic = wakeTopicOf(run);
   if (wakeTopic) card.wakeTopic = wakeTopic;
@@ -116,52 +126,41 @@ function shortAt(at: number, timeZone?: string): string {
 
 /** #3479: how long a lasting problem has been there, for the row's text. */
 export function routineRepeatLine(repeat: { count: number; since: number }, language?: string, timeZone?: string): string {
-  return (language ?? "").toLowerCase().startsWith("fr")
-    ? `Même problème depuis ${shortAt(repeat.since, timeZone)}, ${repeat.count} exécutions de suite.`
-    : `Same problem since ${shortAt(repeat.since, timeZone)}, ${repeat.count} runs in a row.`;
+  return `${personWord(readerLanguage(language), "routineRun.sameProblem", { since: shortAt(repeat.since, timeZone), count: repeat.count })}.`;
 }
 
 /** #3479: the line of the first success after runs with problems. */
 export function routineRecoveredLine(recovered: { afterRuns: number; since: number }, language?: string, timeZone?: string): string {
   const runs = recovered.afterRuns;
-  return (language ?? "").toLowerCase().startsWith("fr")
-    ? `Fonctionne de nouveau, après ${runs} ${runs === 1 ? "exécution" : "exécutions"} avec des problèmes depuis ${shortAt(recovered.since, timeZone)}.`
-    : `Works again, after ${runs} ${runs === 1 ? "run" : "runs"} with problems since ${shortAt(recovered.since, timeZone)}.`;
+  return personWord(readerLanguage(language), runs === 1 ? "routineRun.text.recoveredOne" : "routineRun.text.recoveredMany", { count: runs, since: shortAt(recovered.since, timeZone) });
 }
 
+/** The catalog key of each state a run's line names. */
+const STATE_KEYS: Record<string, string> = {
+  "needs-input": "routineRun.text.state.needsInput",
+  blocked: "routineRun.text.state.blocked",
+  "limit-reached": "routineRun.text.state.limitReached",
+  stopped: "routineRun.text.state.stopped",
+  failed: "routineRun.text.state.failed",
+  waiting: "routineRun.text.state.waiting",
+  completed: "routineRun.text.state.completed",
+  cancelled: "routineRun.text.state.cancelled",
+  missed: "routineRun.text.state.missed",
+  nothing_to_report: "routineRun.text.state.nothingToReport",
+  deferred: "routineRun.text.state.deferred",
+};
+
 /** The text of a run's message: what a client without the card draws, and
- * what the notification, the search and the thread preview read. */
+ * what the notification, the search, the thread preview and an AI client
+ * (the agent API, the organization's connector) read. #3515: in the
+ * language of the conversation, from the locale catalogs. */
 export function routineRunFallbackText(card: RoutineRunCardData, language?: string, timeZone?: string): string {
-  // #3219: a quiet run's line in the language of the conversation.
-  if (card.status === "nothing_to_report" && !card.recovered && (language ?? "").toLowerCase().startsWith("fr")) return `Routine « ${card.routineName} » : rien à signaler`;
-  const goalState = card.goalStatus === "needs-input"
-    ? "needs your input"
-    : card.goalStatus === "blocked"
-      ? "was blocked"
-      : card.goalStatus === "limit-reached"
-        ? "reached its limit"
-        : card.goalStatus === "stopped"
-          ? "was stopped"
-          : card.goalStatus === "failed"
-            ? "failed"
-            : undefined;
-  const state = goalState ?? (
-    card.status === "waiting"
-      ? "needs your attention"
-      : card.status === "completed"
-        ? "completed"
-        : card.status === "failed"
-          ? "failed"
-          : card.status === "cancelled"
-            ? "was cancelled"
-            : card.status === "missed"
-              ? "was missed"
-              : card.status === "nothing_to_report"
-                ? "had nothing to report"
-              : card.status === "queued" && card.deferredAt != null
-                ? "deferred: target busy"
-              : card.status
-  );
+  const lang = readerLanguage(language);
+  const say = (key: string, vars?: Record<string, string | number>) => personWord(lang, key, vars);
+  const routine = say("routineRun.text.name", { name: card.routineName });
+  const goalState = card.goalStatus && card.goalStatus !== "completed" && card.goalStatus in STATE_KEYS ? card.goalStatus : undefined;
+  const stateOf = goalState ?? (card.status === "queued" && card.deferredAt != null ? "deferred" : card.status);
+  const state = STATE_KEYS[stateOf] ? say(STATE_KEYS[stateOf]!) : card.status;
   // Clients without the card (older phones) draw only this line, so it
   // carries what the run said, not just that it finished.
   const detail = card.summary ?? card.error;
@@ -170,14 +169,18 @@ export function routineRunFallbackText(card: RoutineRunCardData, language?: stri
   // 2026-11-03 (the maintainer): the problem lines themselves stay in the run detail
   // (View run), never in the conversation, this text included (an older
   // client, the notification, the search and the thread preview read it).
-  const problems = card.status === "completed" && card.problems ? `\n\nCompleted with problems.${card.repeat ? ` ${routineRepeatLine(card.repeat, language, timeZone)}` : ""}` : "";
+  const problems = card.status === "completed" && card.problems
+    ? `\n\n${say("routines.status.completedWithProblems")}.${card.repeat ? ` ${routineRepeatLine(card.repeat, language, timeZone)}` : ""}`
+    : "";
   // #3479: the first success after runs with problems is said once.
   const recovered = card.recovered && (card.status === "completed" || card.status === "nothing_to_report") ? routineRecoveredLine(card.recovered, language, timeZone) : "";
-  if (recovered && card.summary && card.status === "completed") return `${card.summary}\n\n${recovered}\n\nRoutine “${card.routineName}”`;
-  if (recovered) return `Routine “${card.routineName}” · ${recovered}`;
-  if (card.status === "completed" && (!card.goalStatus || card.goalStatus === "completed") && card.summary) return `${card.summary}${problems}\n\nRoutine “${card.routineName}”`;
-  if (problems) return `Routine “${card.routineName}” completed with problems`;
+  if (recovered && card.summary && card.status === "completed") return `${card.summary}\n\n${recovered}\n\n${routine}`;
+  if (recovered) return `${routine} · ${recovered}`;
+  if (card.status === "completed" && (!card.goalStatus || card.goalStatus === "completed") && card.summary) return `${card.summary}${problems}\n\n${routine}`;
+  if (problems) return say("routineRun.text.lineProblems", { routine });
   // 2026-10-26: older clients without the notice still read the pause.
-  const paused = card.autoPausedAfter ? ` and was paused after ${card.autoPausedAfter} failures in a row` : "";
-  return `Routine “${card.routineName}” ${state}${paused}${detail ? `\n\n${detail}` : ""}`;
+  const line = card.autoPausedAfter
+    ? say("routineRun.text.linePaused", { routine, state, count: card.autoPausedAfter })
+    : say("routineRun.text.line", { routine, state });
+  return `${line}${detail ? `\n\n${detail}` : ""}`;
 }

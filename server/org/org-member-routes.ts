@@ -52,6 +52,12 @@
 // says the person owns it; anyone else's is 404, an admin's included.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { readableRoutineProblems } from "../../shared/routine-problems.ts";
+import { clipReadable } from "../../shared/routine-result.ts";
+import type { RoutineRunCardData } from "../../shared/routine-run.ts";
+import { botTextIn, serverLineIn } from "../people/person-words.ts";
+import { oldCardBody, oldCardOption, oldCardTitle } from "../../shared/old-card-words.ts";
+import type { RunStatusNote } from "../../shared/person-attention.ts";
+import { routineRunFallbackText } from "../routines/routine-run-card.ts";
 
 import { formatQuestionAnswers, MAX_CUSTOM_ANSWER, MAX_OPTIONS, parseAskQuestions, parseChoices, type AskQuestion } from "../../shared/ask-question.ts";
 import { meetingRequestBehavior } from "../../shared/meeting-request.ts";
@@ -201,6 +207,11 @@ export interface OrgMemberRouteDeps {
   /** #2633: the person's words for the text Sagax itself puts on a card (the
    * generic question title), in their language. English without it. */
   approvalWords?(person: MemberPerson): ApprovalTranslate;
+  /** #3515: the person's language, for the lines the server stored in a
+   * conversation (server/people/person-words.ts). English without it. */
+  language?(person: MemberPerson): string | undefined;
+  /** #3515: the person's time zone, for the times a routine run's line says. */
+  timeZone?(person: MemberPerson): string | undefined;
   /** #3512: what waits on the person (shared/waiting-items.ts), the one
    * source Today and the pinned row read, each item with its message as the
    * person's conversation shows it. Null when it cannot be read now. */
@@ -535,7 +546,9 @@ export function describeMemberApproval(
   translate?: ApprovalTranslate,
 ): MemberApproval {
   const kind = approvalKind(card);
-  const labels = parseChoices(card.options, MAX_OPTIONS) ?? [];
+  // #3515: the context says the title as the card does, in the reader's language
+  const title = memberCardTitle(kind, str(card.title), translate);
+  const labels = oldCardAnswers(kind, card, parseChoices(card.options, MAX_OPTIONS) ?? [], translate);
   const questions = kind === "question" ? cardQuestions(card) : null;
   const several = questions && questions.length > 1 ? questions : null;
   const single = questions && questions.length === 1 ? questions[0]! : null;
@@ -550,7 +563,7 @@ export function describeMemberApproval(
   return {
     id: str(card.requestId) ?? "",
     threadId,
-    title: memberCardTitle(kind, str(card.title), translate),
+    title,
     subtitle: str(card.subtitle) ?? "",
     tool: str(card.tool),
     options: labels,
@@ -560,13 +573,32 @@ export function describeMemberApproval(
     ...(several ? { questions: several.map((q) => ({ question: q.question, multiSelect: q.multiSelect === true, options: choicesOf(q.options) })) } : {}),
     freeText: kind === "question" && (questions ? questions.every((q) => q.custom !== false) : true),
     context: buildNotificationContext({
-      question: single?.question || str(card.title) || "",
+      question: single?.question || title,
       detail: [str(card.subtitle), ...(several ?? []).map((q) => q.question)].filter(Boolean).join("\n\n"),
       choices: choices.map((choice) => ({ answer: choice.label, ...(choice.description ? { detail: choice.description } : {}) })),
     }),
     createdAt,
     expiresAt,
   };
+}
+
+/** #3515: an old card's English options (a question card from before
+ * 0.8.78: "Yes" / "No") in the person's language (shared/old-card-words.ts).
+ * The stored labels still answer it (planAnswer). */
+function oldCardAnswers(kind: ApprovalKind, card: Record<string, unknown>, labels: string[], translate?: ApprovalTranslate): string[] {
+  if (kind !== "question" || !translate) return labels;
+  return labels.map((label) => oldCardOption(card.title, label, translate));
+}
+
+/** #3515: an offer card stamped in English before its words came from the
+ * catalogs ("Keep today's brief?"), in the person's language: its title,
+ * its body and its options (shared/old-card-words.ts). Any other item as it is. */
+function oldOfferIn(item: WaitingItem, translate?: ApprovalTranslate): WaitingItem {
+  const title = item.kind === "proposal" && translate ? oldCardTitle(item.title, translate) : undefined;
+  if (!title || !translate) return item;
+  const rest = item.text.startsWith(item.title) ? item.text.slice(item.title.length).trim() : "";
+  const body = rest ? oldCardBody(item.title, rest, translate) ?? rest : "";
+  return { ...item, title, text: body ? `${title}\n\n${body}` : title, options: item.options.map((label) => oldCardOption(item.title, label, translate)) };
 }
 
 /** A question's generic title (Sagax's words, not the bot's) in the reader's
@@ -713,10 +745,24 @@ export function planAnswer(approval: MemberApproval, card: Record<string, unknow
     }
     return { ok: true, decision: "allow", picked: labels.join(" | "), via: "option", body: { behavior: "answer", message: words(labels) } };
   }
+  // #3515: an old card shows its options in the person's words
+  // (oldCardAnswers): the shown label or the stored one answers it, and the
+  // bot always receives the stored one, whichever way the person answers
+  const stored = parseChoices(card.options, MAX_OPTIONS) ?? [];
+  const storedOf = (label: string): string => {
+    const at = approval.options.indexOf(label);
+    return at >= 0 && stored[at] !== undefined ? stored[at]! : label;
+  };
+  const pick = (wanted: string): ApprovalChoice | null => {
+    const found = matchChoice(approval.choices, wanted);
+    if (found) return found;
+    const at = stored.findIndex((label) => normalLabel(label) === normalLabel(wanted));
+    return at >= 0 ? approval.choices.find((choice) => choice.label === approval.options[at]) ?? null : null;
+  };
   if (!options.length) {
     if (input.decision === "deny") {
       const no = declineChoice(approval.choices);
-      if (no) return { ok: true, decision: "deny", picked: no.label, via: "decision", body: { behavior: "answer", message: words([no.label]) } };
+      if (no) return { ok: true, decision: "deny", picked: storedOf(no.label), via: "decision", body: { behavior: "answer", message: words([storedOf(no.label)]) } };
       return { ok: true, decision: "deny", picked: null, via: "decision", body: { behavior: "answer", message: QUESTION_DECLINED_MESSAGE, declined: true } };
     }
     const implied = impliedChoice(approval.choices);
@@ -725,15 +771,15 @@ export function planAnswer(approval: MemberApproval, card: Record<string, unknow
         ? `This approval has options: choose one of ${optionList(approval.choices)} (send option with its id or its label).`
         : "This question has no options: send text with the answer.");
     }
-    return { ok: true, decision: "allow", picked: implied.label, via: "decision", body: { behavior: "answer", message: words([implied.label]) } };
+    return { ok: true, decision: "allow", picked: storedOf(implied.label), via: "decision", body: { behavior: "answer", message: words([storedOf(implied.label)]) } };
   }
   const multi = single?.[0]?.multiSelect === true;
   if (options.length > 1 && !multi) return needOption("option_required", "This question takes one option.");
   const labels: string[] = [];
   for (const wanted of options) {
-    const choice = matchChoice(approval.choices, wanted);
+    const choice = pick(wanted);
     if (!choice) return needOption("option_unknown", `No such option: ${wanted.slice(0, 120)}. Choose one of ${optionList(approval.choices)}.`);
-    labels.push(choice.label);
+    labels.push(storedOf(choice.label));
   }
   return { ok: true, decision: "allow", picked: labels.join(", "), via: "option", body: { behavior: "answer", message: words(labels) } };
 }
@@ -768,13 +814,15 @@ export interface MemberStep { tool: string; ok: boolean | null; error?: string }
 const MEMBER_STEP_ERROR_MAX = 300;
 
 /** A failed step's error, redacted and cut, as the chat row shows it; absent otherwise. */
-function memberStep(tool: Record<string, unknown> | null): MemberStep {
+function memberStep(tool: Record<string, unknown> | null, language?: string): MemberStep {
   const ok = typeof tool?.ok === "boolean" ? tool.ok : null;
-  const step: MemberStep = { tool: str(tool?.name) ?? "tool", ok };
+  // #3515: a line the server stored, in the person's language
+  const name = str(tool?.name);
+  const step: MemberStep = { tool: name ? serverLineIn(language, name) : "tool", ok };
   const output = ok === false ? str(tool?.output)?.trim() : undefined;
   if (output) {
-    const clean = redactSecretsInText(output);
-    step.error = clean.length > MEMBER_STEP_ERROR_MAX ? `${clean.slice(0, MEMBER_STEP_ERROR_MAX)}…` : clean;
+    // #3515: shortened at a sentence, never in the middle of a word
+    step.error = clipReadable(serverLineIn(language, redactSecretsInText(output)), MEMBER_STEP_ERROR_MAX + 1);
   }
   return step;
 }
@@ -784,8 +832,17 @@ function memberStep(tool: Record<string, unknown> | null): MemberStep {
  * shows it there. A turn's reply (replyAfter) stays the bot's own text. */
 const MEMBER_TEXT_KINDS = new Set(["text", "nudge", "access", "routine.run"]);
 
+/** #3515: a row's runStatus as the page sent it, when it is one. */
+function runStatusOf(value: unknown): RunStatusNote | undefined {
+  const note = objectOf(value);
+  const state = note?.state === "failed" || note?.state === "partial" ? note.state : null;
+  if (!state) return undefined;
+  const reason = str(note!.reason);
+  return reason ? { state, reason } : { state };
+}
+
 /** Reads a Sagax message page (as the person saw it) after a cursor. */
-export function readThreadPage(threadId: string, raw: unknown, since: string | null, expireDays?: number, translate?: ApprovalTranslate): ThreadRead {
+export function readThreadPage(threadId: string, raw: unknown, since: string | null, expireDays?: number, translate?: ApprovalTranslate, language?: string, timeZone?: string): ThreadRead {
   const list = Array.isArray(objectOf(raw)?.messages) ? (objectOf(raw)!.messages as unknown[]) : [];
   const all = list.map(objectOf).filter((m): m is Record<string, unknown> => Boolean(m) && typeof m!.id === "string");
   const index = since ? all.findIndex((m) => m.id === since) : -1;
@@ -797,10 +854,16 @@ export function readThreadPage(threadId: string, raw: unknown, since: string | n
     const kind = str(m.kind) ?? "text";
     if (kind === "activity") {
       count += 1;
-      recent.push(memberStep(objectOf(m.tool)));
+      recent.push(memberStep(objectOf(m.tool), language));
       continue;
     }
-    const text = str(m.text);
+    // #3515: a routine run's line in the person's language, from its card
+    const card = kind === "routine.run" && language && m.role === "bot" ? objectOf(m.routineRun) : null;
+    const said = card && str(card.routineName) ? routineRunFallbackText(card as unknown as RoutineRunCardData, language, timeZone) : str(m.text);
+    // #3515: a failed or partial status the row ended on is said, in the
+    // person's language; a run's card already says how it ended: never twice
+    const status = m.role === "bot" && kind !== "routine.run" ? runStatusOf(m.runStatus) : undefined;
+    const text = status ? botTextIn(language, said ?? "", status) : said;
     if (MEMBER_TEXT_KINDS.has(kind) && text !== null && (m.role === "user" || m.role === "bot")) {
       const sender = objectOf(m.sender);
       messages.push({ id: m.id as string, role: m.role, kind, text, at: typeof m.at === "number" ? m.at : null, sender: str(sender?.name) ? { name: sender!.name as string } : null, ...(str(m.queueId) ? { queueId: m.queueId as string } : {}) });
@@ -833,7 +896,8 @@ export function replyAfter(messages: readonly MemberMessage[], userMessageId: st
   const texts = after.filter((m) => m.role === "bot" && m.kind === "text" && m.text.trim()).map((m) => m.text.trim());
   if (!texts.length) return null;
   const joined = texts.join("\n\n");
-  return joined.length > MEMBER_REPLY_MAX ? `${joined.slice(0, MEMBER_REPLY_MAX)}\n[...]` : joined;
+  // #3515: shortened at a sentence, never in the middle of a word
+  return clipReadable(joined, MEMBER_REPLY_MAX + 6, "\n[...]");
 }
 
 /** One approval of a turn, as the summary reports it. */
@@ -1119,7 +1183,7 @@ function memberRouteTools(deps: OrgMemberRouteDeps) {
     deps.expireDueApprovals?.(threadId);
     const reply = await deps.perform(person, { method: "GET", path: `/api/threads/${encodeURIComponent(threadId)}/messages`, query: { limit: String(limit) } });
     if (!okStatus(reply)) return passThrough(reply, "This conversation cannot be read.");
-    return readThreadPage(threadId, reply.body, since, expireDaysFor(person), deps.approvalWords?.(person));
+    return readThreadPage(threadId, reply.body, since, expireDaysFor(person), deps.approvalWords?.(person), deps.language?.(person), deps.timeZone?.(person));
   };
   const isRead = (value: ThreadRead | Answer): value is ThreadRead => "messages" in value;
 
@@ -1230,7 +1294,7 @@ function memberRouteTools(deps: OrgMemberRouteDeps) {
     status = deps.threadStatus(threadId) ?? "idle";
     const page = await rawPage(person, threadId);
     if (!("raw" in page)) return { botId, threadId, messageId: input.anchor, status, pending: true, reply: null, approvals: [], cursor: null, summary: null };
-    const read = readThreadPage(threadId, page.raw, null, expireDaysFor(person), deps.approvalWords?.(person));
+    const read = readThreadPage(threadId, page.raw, null, expireDaysFor(person), deps.approvalWords?.(person), deps.language?.(person), deps.timeZone?.(person));
     const anchor = anchorOf(read);
     const reply = status === "idle" ? replyAfter(read.messages, anchor) : null;
     // Idle after a wait is done even without words (a failed turn says why
@@ -1373,7 +1437,9 @@ function memberRouteTools(deps: OrgMemberRouteDeps) {
           canAnswer: check?.canAnswer ?? true, whoCanApprove: check?.whoCanApprove ?? null });
         continue;
       }
-      approvals.push({ ...memberWaitingApproval(item), ...extra, ...about, canAnswer: true, whoCanApprove: null });
+      // #3515: an old offer card stamped in English reads in the person's language
+      const said = oldOfferIn(item, deps.approvalWords?.(person));
+      approvals.push({ ...memberWaitingApproval(said), ...extra, text: said.text, ...about, canAnswer: true, whoCanApprove: null });
     }
     approvals.sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0) || a.id.localeCompare(b.id));
     return answer({ approvals, count: approvals.length });
@@ -1395,7 +1461,10 @@ function memberRouteTools(deps: OrgMemberRouteDeps) {
     };
     const options = Array.isArray(input.option) ? input.option : input.option !== undefined ? [input.option] : [];
     if (options.length > 1) return fail(400, "bad_request", "This item takes one option.");
-    const picked = options.length ? matchChoice(choices, options[0]!) : null;
+    // #3515: an old offer's option in the person's words answers it as its stored label does
+    const shownOptions = oldOfferIn(item, deps.approvalWords?.(person)).options;
+    const shownAt = options.length ? shownOptions.findIndex((label) => normalLabel(label) === normalLabel(options[0]!)) : -1;
+    const picked = options.length ? matchChoice(choices, options[0]!) ?? (shownAt >= 0 ? choices[shownAt] ?? null : null) : null;
     if (options.length && !picked) return fail(409, "option_unknown", `No such option. Its options: ${optionList(choices) || "none"}.`, { options: choices, freeText: item.freeText });
     if (item.kind === "proposal" && item.proactiveId) {
       if (input.text !== undefined) return fail(400, "bad_request", "An offer takes one of its options, or decision allow or deny.");

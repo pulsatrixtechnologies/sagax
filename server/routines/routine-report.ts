@@ -18,25 +18,24 @@
  * does not ring the person for nothing. */
 
 import type { RoutineGoalStatus, RoutineRunStatus } from "../../shared/routines.ts";
-import { findStructure, meaningfulLine } from "../../shared/routine-result.ts";
-import { personAttention } from "../../shared/person-attention.ts";
+import {
+  findStructure, meaningfulLine, withoutRoutineMarkers,
+  QUIET_MARKER_LINE, ROUTINE_QUIET_MARKER, ROUTINE_SAME_PROBLEM_MARKER, ROUTINE_STATUS_MARKER, SAME_PROBLEM_LINE,
+} from "../../shared/routine-result.ts";
+import { personAttention, RUN_STATUS_PROBLEM_LINE } from "../../shared/person-attention.ts";
 import { stripChatSpecialTokens } from "../../shared/chat-special-tokens.ts";
 
-export const ROUTINE_QUIET_MARKER = "NOTHING_TO_REPORT";
-/** 2026-11-01: the bot's own word that the run failed or did only part of
- * its work ("RUN_STATUS: partial: the CRM refused the login"). */
-export const ROUTINE_STATUS_MARKER = "RUN_STATUS:";
-/** #3479: the bot's own word that this run ended with the same problem as the
- * routine's previous run (given in its prompt, routineSameProblemNote). The
- * bot judges the meaning; the server only reads the line. */
-export const ROUTINE_SAME_PROBLEM_MARKER = "SAME_PROBLEM";
+/** #3515: the run contract's tokens and the patterns that read them are
+ * defined once, in shared/routine-result.ts and shared/person-attention.ts
+ * (the store strips the same lines). ROUTINE_STATUS_MARKER: the bot's own
+ * word that the run failed or did only part of its work (2026-11-01).
+ * ROUTINE_SAME_PROBLEM_MARKER: the bot's own word that this run ended with
+ * the same problem as the routine's previous run (#3479). */
+export { ROUTINE_QUIET_MARKER, ROUTINE_SAME_PROBLEM_MARKER, ROUTINE_STATUS_MARKER };
 
 /** What the bot reads in its system prompt on every routine run. */
 export const ROUTINE_REPORT_CONTRACT =
   ` This run works in the background: the person does not see this conversation, only your final message, and only when it needs them. Do the routine's work, then end with a short report of what you found or did that the person should know. Never restate or quote the routine's instructions. If nothing needs the person (nothing found, nothing changed, nothing to decide, or the instructions say to stay silent in this case), end your final message with the line ${ROUTINE_QUIET_MARKER} on its own: nothing is posted to their chat and the run stays in the routine logs. If a step failed or part of the work could not be done, never report it as done: begin your final message with the line ${ROUTINE_STATUS_MARKER} failed: <why> when the work could not be done, or ${ROUTINE_STATUS_MARKER} partial: <what did not work> when only part of it was. Write the report as plain prose or a short list, never a markdown table. Whatever the outcome, end with one plain-language summary line a person can read alone: what was done, what is blocked and why, and what they must do. Never end with JSON, a code block or a raw tool result as your last words; put any structured data before that line. If you handed work to a teammate, name the teammate and what they are doing.`;
-
-/** The marker on a line of its own, in the shapes models write it in. */
-const MARKER_LINE = /^[\s`*_[(<"']*nothing[\s_-]to[\s_-]report[\s`*_\])>"'.!]*$/i;
 
 /** The no-op phrases: a message that says only that nothing happened. */
 const NO_OP_PHRASES = [
@@ -106,15 +105,13 @@ export function flowRunBlockedReason(output: string | undefined): string | undef
   return FLOW_RUN_BLOCKED.test(line) ? plainFlowRefusal(line) : undefined;
 }
 
-/** The status line on a line of its own, in the shapes models write it in. */
-const STATUS_LINE = /^[\s`*_>]*RUN[_ ]STATUS\s*:?[\s`*_]*(failed|failure|partial|partially)\b[\s`*_]*[:—–-]?\s*(.*)$/i;
 
 /** The bot's own status line (a line of its own, usually first or last),
  * and the message without it. */
 function declaredStatus(text: string): { declared?: RoutineReportOutcome["declared"]; rest: string } {
   const lines = text.split(/\r?\n/);
   for (let index = 0; index < lines.length; index += 1) {
-    const match = STATUS_LINE.exec(lines[index]!.trim());
+    const match = RUN_STATUS_PROBLEM_LINE.exec(lines[index]!.trim());
     if (!match) continue;
     const status = /^fail/i.test(match[1]!) ? "failed" as const : "partial" as const;
     const reason = match[2]!.replace(/[`*_]+$/g, "").trim();
@@ -151,20 +148,14 @@ export function routineReportProse(text: string): string {
   return out.join("\n");
 }
 
-/** The same-problem line on a line of its own, in the shapes models write it in. */
-const SAME_PROBLEM_LINE = /^[\s`*_[(<"']*same[\s_-]problem[\s`*_\])>"'.!]*$/i;
-
-/** Whether `line` is the same-problem marker, in any shape the server reads. */
-export function isSameProblemLine(line: string): boolean {
-  return SAME_PROBLEM_LINE.test(line.trim());
-}
-
 export function routineReportOutcome(output: string | undefined): RoutineReportOutcome {
   // #3479: the same-problem line is a status the server consumes, never part of the report.
   const lines = (output ?? "").split(/\r?\n/);
   const sameProblem = lines.some((line) => SAME_PROBLEM_LINE.test(line.trim()));
   const outcome = rawReportOutcome(sameProblem ? lines.filter((line) => !SAME_PROBLEM_LINE.test(line.trim())).join("\n") : output);
-  const shaped = outcome.report ? { ...outcome, report: routineReportProse(outcome.report) } : outcome;
+  // #3515: a status line the contract does not consume ("RUN_STATUS: complete.",
+  // "RUN_STATUS: skipped") is still a marker, never part of the report.
+  const shaped = outcome.report ? { ...outcome, report: withoutRoutineMarkers(routineReportProse(outcome.report)) } : outcome;
   return sameProblem ? { ...shaped, sameProblem: true } : shaped;
 }
 
@@ -189,16 +180,16 @@ function rawReportOutcome(output: string | undefined): RoutineReportOutcome {
   if (!raw) return { quiet: true, report: "" };
   // A run that says it failed or did part of its work is never quiet.
   const { declared, rest: text } = declaredStatus(raw);
-  if (declared) return { quiet: false, report: text.replace(new RegExp(`^\\s*${ROUTINE_QUIET_MARKER}\\s*$`, "gim"), "").trim(), declared };
+  if (declared) return { quiet: false, report: text.split(/\r?\n/).filter((line) => !QUIET_MARKER_LINE.test(line.trim())).join("\n").trim(), declared };
   const lines = text.split(/\r?\n/);
   // 2026-11-05: items only the person can do ([HUMAIN], needs_human, a
   // question) are never quiet, whatever marker the bot added after them.
-  if (personAttention(text)) return { quiet: false, report: lines.filter((line) => !MARKER_LINE.test(line.trim())).join("\n").trim() };
+  if (personAttention(text)) return { quiet: false, report: lines.filter((line) => !QUIET_MARKER_LINE.test(line.trim())).join("\n").trim() };
   const last = lines.findLastIndex((line) => line.trim() !== "");
-  if (last >= 0 && MARKER_LINE.test(lines[last]!.trim())) {
+  if (last >= 0 && QUIET_MARKER_LINE.test(lines[last]!.trim())) {
     return { quiet: true, report: lines.slice(0, last).join("\n").trim() };
   }
-  if (MARKER_LINE.test(lines[0]!.trim())) {
+  if (QUIET_MARKER_LINE.test(lines[0]!.trim())) {
     return { quiet: true, report: lines.slice(1).join("\n").trim() };
   }
   // A question is always for the person; otherwise only a whole-message no-op

@@ -23,6 +23,7 @@ import { setAsideStoresSealedBeforeReset } from "../vault/vault-key-reset.ts";
 import { blindSnippet, indexColumns, indexSourcesOf, recallHolds, recallMatch, recallTermsFor, skeletonOf, SKELETON_VERSION, type RecallTerm } from "../encryption/message-sealing.ts";
 import { peerProvenanceAuthor, WEBHOOK_AUTHOR, type WorkOrigin } from "../peers/peer-provenance.ts";
 import type { ResolvedSender, SteerQueueReason, WireMessage as Message } from "../../shared/wire.ts";
+import { withoutRunMarkersIn } from "../../shared/routine-result.ts";
 import type { UsageTrigger } from "../usage/usage-ledger.ts";
 import { MessageSearchWorker } from "../message-search-worker.ts";
 import { searchMessagesInDatabase, type SealedKeyMaterial, type SearchHit } from "./message-search-query.ts";
@@ -652,11 +653,14 @@ function decodeRow(row: StoredRow, threadId?: string): Message | null {
   }
 }
 
+/** A conversation's rows as its readers get them. #3515: a bot row stored
+ * before run markers were stripped on write reads without them, so an old
+ * conversation is clean without a rewrite of the store. */
 const decodeAll = (rows: StoredRow[], threadId?: string): Message[] => {
   const out: Message[] = [];
   for (const row of rows) {
     const message = decodeRow(row, threadId);
-    if (message) out.push(message);
+    if (message) out.push(withoutRunMarkersIn(message));
   }
   return out;
 };

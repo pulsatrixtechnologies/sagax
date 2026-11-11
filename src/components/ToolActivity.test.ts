@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { ToolActivity } from "./ToolActivity";
 import { BotEditorStore } from "@/state/store";
+import { MCP_CREDENTIALS_REFUSED } from "../../shared/connector-refusal";
 
 const store = { dispatch: () => {} } as unknown as Parameters<typeof BotEditorStore>[0]["value"];
 const inStore = (el: ReturnType<typeof createElement>) => renderToStaticMarkup(createElement(BotEditorStore, { value: store, children: el }));
@@ -169,3 +170,25 @@ describe("ToolActivity", () => {
     expect(refused).toContain('data-custom-rule-notice="denied"');
   });
 });
+
+describe("a connector's refused sign-in in the step detail (#3515)", () => {
+  const output = `MCP error -32603: ${MCP_CREDENTIALS_REFUSED}`;
+  const render = () => renderToStaticMarkup(createElement(ToolActivity, { tool: { name: "remote_tool", ok: false, output }, defaultOpen: true }));
+
+  it("reads in French, whole, with its step to take", () => {
+    setLocale("fr");
+    const html = render();
+    setLocale("en");
+    expect(html).toContain("Ce connecteur a refusé sa connexion (HTTP 401).");
+    expect(html).toContain("ouvre Capacités &gt; Installés et reconnecte-toi");
+    expect(html).not.toContain("refused its credentials");
+  });
+
+  it("reads in English from the same key", () => {
+    setLocale("en");
+    const html = render();
+    expect(html).toContain("This connector refused its sign-in (HTTP 401).");
+    expect(html).toContain("open Capabilities &gt; Installed and sign in to it again");
+  });
+});
+

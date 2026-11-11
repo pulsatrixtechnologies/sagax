@@ -204,8 +204,11 @@ export function createAgentPendingForCaller(getHost: () => Host): any {
     } catch {
       engineBusy = false;
     }
+    // #3515: a card stamped with the old English question title reads in the caller's language
+    const person = caller?.kind === "person" ? caller.id : (caller as { speakerPrincipalId?: string })?.speakerPrincipalId;
+    const translate = host.serverApprovalWords?.(host.languageOfPerson?.(person ?? null))?.t;
     return {
-      approvals: own.map((row) => describeMemberApproval(row.threadId, row.message, row.card)),
+      approvals: own.map((row) => describeMemberApproval(row.threadId, row.message, row.card, undefined, translate)),
       reviewing: reviewing.some(mine),
       blockedElsewhere: own.length < open.length,
       engineBusy,

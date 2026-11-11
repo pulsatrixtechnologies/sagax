@@ -10,13 +10,14 @@ import XCTest
 private final class WaitingListStub: URLProtocol {
     static var asked: [URL] = []
     static var body = Data()
+    static var status = 200
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
         if let url = request.url { Self.asked.append(url) }
-        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
+        let response = HTTPURLResponse(url: request.url!, statusCode: Self.status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Self.body)
         client?.urlProtocolDidFinishLoading(self)
@@ -145,6 +146,51 @@ final class PinnedWaitingTests: XCTestCase {
         XCTAssertEqual(url.path, "/api/approvals")
         let query = Set(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? [])
         XCTAssertEqual(query, [URLQueryItem(name: "waiting", value: "1"), URLQueryItem(name: "botId", value: "b1")])
+    }
+
+    /// An older server or desktop relay: the route answers with no
+    /// `waiting` key, or refuses the read. The pinned card keeps the
+    /// approvals the phone already has, so one can still be answered.
+    func testWithNoListTheTranscriptsPendingApprovalStaysPinned() async throws {
+        let ask = try JSONDecoder().decode(Message.self, from: Data(#"{"id":"a1","role":"bot","kind":"options","at":7,"card":{"title":"t","subtitle":"ls","options":["Allow","Deny"],"requestId":"ra","tool":"Bash"}}"#.utf8))
+        let fallback = ApprovalDockRules.pendingApprovals([ask])
+        func pinned(_ payload: WaitingPayload?) -> [PinnedWaitingEntry] {
+            PinnedWaiting.pinned(payload, fallback: fallback, botId: "b1", botName: "Ara", conversation: "main") { _ in nil }
+        }
+
+        // an answer with no `waiting` key (its Today rows only)
+        let old = try JSONDecoder().decode(WaitingPayload.self, from: Data(#"{"pending":[],"history":[]}"#.utf8))
+        XCTAssertFalse(old.served)
+        XCTAssertEqual(pinned(old).compactMap(\.approval).map(\.requestId), ["ra"])
+        XCTAssertEqual(pinned(old).first?.threadId, "main")
+
+        // a refused read: nothing kept for the chat
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [WaitingListStub.self]
+        WaitingListStub.status = 403
+        WaitingListStub.body = Data(#"{"error":"not allowed"}"#.utf8)
+        defer { WaitingListStub.status = 200 }
+        let client = CompanionClient(connection: Connection(name: "Test", host: "127.0.0.1", port: 8810), token: "t", session: URLSession(configuration: config))
+        do {
+            _ = try await client.waitingItems(botId: "b1")
+            XCTFail("a refused read must throw")
+        } catch let APIError.status(code, _) {
+            XCTAssertEqual(code, 403)
+        }
+        XCTAssertEqual(pinned(nil).compactMap(\.approval).map(\.requestId), ["ra"])
+
+        // the server's list wins whenever it answers, even empty
+        let served = try JSONDecoder().decode(WaitingPayload.self, from: Data(#"{"pending":[],"waiting":[]}"#.utf8))
+        XCTAssertTrue(served.served)
+        XCTAssertTrue(pinned(served).isEmpty)
+        XCTAssertEqual(pinned(try payload()).count, 5)
+    }
+
+    /// Each served item carries its own message: it is the one drawn.
+    func testAServedItemsOwnMessageIsRead() throws {
+        let json = #"{"pending":[],"waiting":[{"id":"q9","kind":"question","botId":"b1","botName":"Ara","threadId":"main","messageId":"m9","at":1,"title":"Pick","text":"Pick","options":["A"],"message":{"id":"m9","role":"bot","kind":"options","at":1,"card":{"title":"Pick","subtitle":"","options":["A"],"requestId":"q9"}}}]}"#
+        let list = try JSONDecoder().decode(WaitingPayload.self, from: Data(json.utf8))
+        XCTAssertEqual(PinnedWaiting.entries(list) { _ in nil }.map(\.message.id), ["m9"])
     }
 
     func testAToolNamedAfterAProductReadsAsASentence() {

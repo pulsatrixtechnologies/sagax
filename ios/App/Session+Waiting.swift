@@ -19,20 +19,43 @@ extension Session {
         }
     }
 
-    /// The pinned card's items for this chat, oldest first.
+    /// The pinned card's items for this chat, oldest first: the server's
+    /// list, or, when the phone has none (an older server or desktop relay,
+    /// a refused read), the approvals of the transcript and of the parallel
+    /// tasks, as before the list existed.
     func pinnedEntries(for chat: Chat) -> [PinnedWaitingEntry] {
-        guard let payload = waitingLists[waitingKey(chat)] else { return [] }
-        let scoped: WaitingPayload = if case .room = chat { PinnedWaiting.inThread(payload, threadId: chat.threadId) } else { payload }
-        return PinnedWaiting.entries(scoped) { [state] threadId in state.messages[threadId] }
+        let payload = waitingLists[waitingKey(chat)]
+        let scoped: WaitingPayload? = if case .room = chat, let payload { PinnedWaiting.inThread(payload, threadId: chat.threadId) } else { payload }
+        let botId: String = if case let .bot(bot) = chat { bot.id } else { "" }
+        return PinnedWaiting.pinned(
+            scoped,
+            fallback: ApprovalDockRules.pendingApprovals(visibleTranscript(forThread: chat.threadId)) + parallelApprovals(for: chat),
+            botId: botId, botName: chat.name, conversation: chat.threadId
+        ) { [state] threadId in state.messages[threadId] }
     }
 
     /// Reads the list for this chat (one bot's, or the person's for a room).
+    /// A refused read (403, 404: a server or a desktop relay without the
+    /// list) drops the list kept for it, so the pinned card falls back to
+    /// the transcript's approvals; any other failure keeps the last list.
     func loadWaiting(for chat: Chat) async {
         let key = waitingKey(chat)
         let botId: String? = if case let .bot(bot) = chat { bot.id } else { nil }
         var payload: WaitingPayload?
-        let read = await perform(quietly: true) { payload = try await $0.waitingItems(botId: botId) }
-        if read, let payload, waitingLists[key] != payload { waitingLists[key] = payload }
+        var refused = false
+        let read = await perform(quietly: true) { client in
+            do {
+                payload = try await client.waitingItems(botId: botId)
+            } catch APIError.status(let code, _) where code == 403 || code == 404 {
+                refused = true
+            }
+        }
+        if refused {
+            waitingLists[key] = nil
+        } else if read, let payload, waitingLists[key] != payload {
+            waitingLists[key] = payload
+        }
+        if waitingLists[key]?.served != true { await loadParallelApprovalThreads(for: chat) }
     }
 
     /// A live frame: the lists it may change are read again, soon.

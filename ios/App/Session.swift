@@ -635,7 +635,10 @@ final class Session: ObservableObject {
                 state.activeLeafIds[thread] = parent
                 if arguments.contains("-waiting-cards-top") { focusedMessageId = "w-skipped-approval" }
                 // the pinned card reads the server's list: its preview copy
-                if let url = Bundle.main.url(forResource: "WaitingListPreview", withExtension: "json"),
+                // (`-waiting-list-unserved`: an older server with no list,
+                // the pinned card falls back to the transcript's approvals)
+                if !arguments.contains("-waiting-list-unserved"),
+                   let url = Bundle.main.url(forResource: "WaitingListPreview", withExtension: "json"),
                    let data = try? Data(contentsOf: url),
                    let payload = try? JSONDecoder().decode(WaitingPayload.self, from: data) {
                     waitingLists["preview-scout"] = payload

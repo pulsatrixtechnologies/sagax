@@ -73,10 +73,16 @@ public struct WaitingPayload: Decodable, Sendable, Equatable {
     public var waiting: [WaitingItem]
     /// The rows' messages by Today key.
     public var messages: [String: Message]
+    /// The answer carried the `waiting` key: a server that serves the list.
+    /// An older server answers the same route with no such key (its Today
+    /// rows only), and an empty list decoded from it must not empty the
+    /// pinned card.
+    public var served: Bool
 
-    public init(waiting: [WaitingItem], messages: [String: Message]) {
+    public init(waiting: [WaitingItem], messages: [String: Message], served: Bool = true) {
         self.waiting = waiting
         self.messages = messages
+        self.served = served
     }
 
     private struct Row: Decodable {
@@ -96,14 +102,32 @@ public struct WaitingPayload: Decodable, Sendable, Equatable {
         init(from decoder: Decoder) throws { value = try? T(from: decoder) }
     }
 
+    /// A served item's own `message` (since the list carries it).
+    private struct ServedMessage: Decodable {
+        var key: String
+        var message: Message?
+        enum CodingKeys: String, CodingKey { case id, threadId, message }
+        init(from decoder: Decoder) throws {
+            let box = try decoder.container(keyedBy: CodingKeys.self)
+            key = "\(try box.decode(String.self, forKey: .threadId)):\(try box.decode(String.self, forKey: .id))"
+            message = try? box.decode(Message.self, forKey: .message)
+        }
+    }
+
     enum CodingKeys: String, CodingKey { case waiting, pending }
 
     public init(from decoder: Decoder) throws {
         let box = try decoder.container(keyedBy: CodingKeys.self)
+        served = box.contains(.waiting)
         waiting = ((try? box.decode([Lossy<WaitingItem>].self, forKey: .waiting)) ?? []).compactMap(\.value)
         var messages: [String: Message] = [:]
         for row in (try? box.decode([Lossy<Row>].self, forKey: .pending)) ?? [] {
             if let key = row.value?.key, let message = row.value?.message { messages[key] = message }
+        }
+        // each served item also carries its message (the desktop reads it
+        // first); the row's copy covers a server that sends rows only
+        for item in (try? box.decode([Lossy<ServedMessage>].self, forKey: .waiting)) ?? [] {
+            if let served = item.value, let message = served.message { messages[served.key] = message }
         }
         self.messages = messages
     }
@@ -149,10 +173,32 @@ public enum PinnedWaiting {
             }
     }
 
+    /// What the pinned card holds. The server's list whenever it answers
+    /// with one. With no list (a server or a desktop relay that does not
+    /// serve `waiting=1`, a refused read, an answer with no `waiting` key)
+    /// the approvals the phone already has: the conversation's pending asks
+    /// in the transcript, then its parallel tasks' (`fallback`), so an
+    /// approval can always be answered from the phone.
+    public static func pinned(
+        _ payload: WaitingPayload?, fallback: @autoclosure () -> [PendingApproval], botId: String, botName: String, conversation: String,
+        transcript: (String) -> [Message]?
+    ) -> [PinnedWaitingEntry] {
+        if let payload, payload.served { return entries(payload, transcript: transcript) }
+        return fallback().map { pending in
+            let threadId = pending.answerThread(conversation: conversation)
+            let item = WaitingItem(
+                id: pending.requestId, kind: "approval", botId: botId, botName: botName, threadId: threadId,
+                messageId: pending.message.id, at: pending.message.at, title: pending.card.subtitle,
+                options: pending.card.options, threadTitle: pending.parallelTitle
+            )
+            return PinnedWaitingEntry(item: item, message: pending.message)
+        }
+    }
+
     /// The items of one room's conversation (a room has no bot id to ask
     /// the list for: its thread picks its items out of the person's list).
     public static func inThread(_ payload: WaitingPayload, threadId: String) -> WaitingPayload {
-        WaitingPayload(waiting: payload.waiting.filter { $0.threadId == threadId }, messages: payload.messages)
+        WaitingPayload(waiting: payload.waiting.filter { $0.threadId == threadId }, messages: payload.messages, served: payload.served)
     }
 
     /// Which item is on screen: the one the person was on (by key), else,

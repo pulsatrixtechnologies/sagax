@@ -79,6 +79,22 @@ extension Session {
         }
     }
 
+    /// The pending approvals of the parallel tasks this conversation runs:
+    /// the pinned card's fallback when the phone has no waiting list.
+    func parallelApprovals(for chat: Chat) -> [PendingApproval] {
+        guard case let .bot(bot) = chat, let tasks = state.bot(bot.id)?.tasks else { return [] }
+        return ApprovalDockRules.waitingParallelTasks(tasks, of: chat.threadId).flatMap { task in
+            ApprovalDockRules.parallelPendings(state.visibleTranscript(forThread: task.threadId), task: task)
+        }
+    }
+
+    func loadParallelApprovalThreads(for chat: Chat) async {
+        guard case let .bot(bot) = chat, let tasks = state.bot(bot.id)?.tasks else { return }
+        for task in ApprovalDockRules.waitingParallelTasks(tasks, of: chat.threadId) {
+            await loadThreadIfNeeded(task.threadId)
+        }
+    }
+
     // MARK: Option card
 
     /// The X of an option card: a quiz is put away, a live ask answered.

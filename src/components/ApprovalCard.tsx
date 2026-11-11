@@ -110,8 +110,10 @@ export function approvalCardOutcome(card: OptionCardData): string | undefined {
   return t("approval.status.allowed");
 }
 
-/** A permission ask stays in the chat while it waits, and once a person
- *  answered it (or it expired) as a compact receipt with its status pill:
+/** A permission ask stays in the chat while it waits, unless the pinned card
+ *  over the box holds it (#3681: then the conversation leaves it out until it
+ *  is settled, by the one rule of src/lib/pinned-waiting.ts, pinnedHeldIds),
+ *  and once a person answered it (or it expired) as a compact receipt with its status pill:
  *  Allowed once, Declined, Expired. An ask the engine closed on its own (the
  *  turn ended, nothing could answer it) leaves the transcript. A question or
  *  a quiz is not this card. A change that applied without a person is not an

@@ -1,4 +1,5 @@
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useEffect, useMemo } from "react";
+import { pinnedJumpTarget, usePinnedHeld } from "@/lib/pinned-waiting";
 import { t } from "@/lib/i18n";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { openThread, useStore, type Bot, type Group, type Message } from "@/state/store";
@@ -106,6 +107,8 @@ export const Transcript = memo(function Transcript({
   // answer.
   const folds = useMemo(() => roomTurnFolds(messages), [messages]);
   const showDigests = showToolCallsEnabled(state.config);
+  // #3681: an ask the room's pinned card holds is drawn there only while it waits
+  const held = usePinnedHeld();
   const items = useMemo(() => {
     const plan = voiceCallPlan(transcript);
     const seen = new Set<string>();
@@ -117,6 +120,7 @@ export const Transcript = memo(function Transcript({
     const repeats = repeatedFailureIds(messages);
     const visible = withoutDeadThreadChips(messages, owners).filter((message) =>
       !repeats.has(message.id) &&
+      !held.has(message.id) &&
       !isTransientChatNotice(message) &&
       !folds.hiddenIds.has(message.id) &&
       (message.kind !== "digest" || showDigests) &&
@@ -155,7 +159,7 @@ export const Transcript = memo(function Transcript({
     return collapseGotoLines(listed, (item) =>
       item.kind === "run" && !showToolCalls && !item.messages.some((step) => shownCwWidget(step.tool)),
       showThreads ? gotoTargetOf : unifiedGotoTargetOf) as RoomItem[];
-  }, [messages, showToolCalls, showDigests, folds, pairChannel, members, transcript, owners, showThreads]);
+  }, [messages, showToolCalls, showDigests, folds, pairChannel, members, transcript, owners, showThreads, held]);
   const windowIds = useMemo(() => new Set(messages.map((message) => message.id)), [messages]);
   // Seen by: each participant once, under the last line they have read.
   const seen = useMemo(() => {
@@ -242,6 +246,12 @@ export const Transcript = memo(function Transcript({
   }, [dispatch, group.id, group.threadId, roomBusy]);
   const focus = state.focusMessage;
   const focusedId = focus && !focus.consumed && focus.threadId === group.threadId ? focus.messageId : null;
+  // #3681: "See in the conversation" on a held ask lands where it was asked
+  useEffect(() => {
+    if (!focusedId || !held.has(focusedId)) return;
+    const target = pinnedJumpTarget(transcript, focusedId, held);
+    if (target !== focusedId) dispatch({ type: "focusMessage", threadId: group.threadId, messageId: target });
+  }, [focusedId, held, transcript, group.threadId, dispatch]);
   // Who wrote each item, and whether it continues the run above it: one
   // name and avatar per run, tighter spacing inside it.
   const runs = useMemo(() => {

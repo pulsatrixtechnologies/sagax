@@ -652,3 +652,14 @@ and a quiz are unchanged. The phone and iPad drop the same rows
 (`settledPermissionLeavesChat` in `transcriptRows`). Covered on the phone
 and iPad by `ios/Tests/CompanionCoreTests/ChatPreferencesTests.swift`; no
 web test covers `approvalCardStaysInChat` yet.
+
+Since #3681 (2026-11-11) the web chat and the rooms draw a waiting ask once:
+while the pinned card over the composer holds it (a permission ask, a
+question, a question in words, an offer), the conversation leaves its card
+out, and its record comes back at its place once it is settled. The one rule
+is `pinnedHeldIds` in `src/lib/pinned-waiting.ts`: the composer publishes
+what its pinned card holds (`usePublishPinnedHold`) and the transcript of the
+same view reads it (`usePinnedHeld`, `MessagesList`, the room `Transcript`,
+`ParallelTaskCard`). A view without a pinned card provides no hold and draws
+every card. Covered by `src/components/ChatView.pinned-once.dom.test.ts`
+(a guard test) and `src/components/GroupView.pinned-once.test.ts`.

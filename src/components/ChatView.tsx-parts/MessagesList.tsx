@@ -1,5 +1,5 @@
 import { StepBoundary, stepFallbackText, stepIdOf } from "../MessageBoundary";
-import { Fragment, memo, useMemo, type ReactNode } from "react";
+import { Fragment, memo, useEffect, useMemo, type ReactNode } from "react";
 import { CloudAgentsCard, cloudAgentAnchors, useThreadCloudAgents } from "../code/CloudAgentsCard";
 import { type Bot, type InstanceInfo, type Message } from "@/state/store";
 import { useStoreGetter, useStoreSelector } from "@/state/store-selector";
@@ -9,6 +9,7 @@ import { isAppleMobileWebClient } from "@/lib/tool-activity-rows";
 import { repeatedFailureIds } from "../../../shared/failure-dedup";
 import { groupTranscript, isHiddenStatusActivity, isTurnStoppedNotice } from "@/lib/activity-runs";
 import { inputRequestsDrawnElsewhere } from "@/lib/pending-question";
+import { pinnedJumpTarget, usePinnedHeld } from "@/lib/pinned-waiting";
 import { collapseBotExchanges } from "@/lib/bot-exchange";
 import { foldCollapsedEntry, voiceCallPlan } from "@/lib/voice-call-transcript";
 import { withoutDeadThreadChips } from "@/lib/dead-thread-chips";
@@ -88,6 +89,8 @@ export const MessagesList = memo(function MessagesList({
   const { botId, threadId, botName, hasMore, bots, focus, showToolCalls, locale, dispatch, botDmIds } = useChatRows();
   const showThreads = useShowThreads();
   const appleMobileWeb = isAppleMobileWebClient();
+  // #3681: an ask the pinned card over the box holds is drawn there only
+  const held = usePinnedHeld();
   const selfColor = bots.find((candidate) => candidate.id === botId)?.color;
   const owners = useMemo(() => ({ bots: storeBots, groups: storeGroups }), [storeBots, storeGroups]);
   // Newest page version named in this transcript: mounted v1 cards refresh when v2 arrives.
@@ -126,7 +129,7 @@ export const MessagesList = memo(function MessagesList({
     // work's input request ask the same thing; the card is the one drawn
     const drawnElsewhere = inputRequestsDrawnElsewhere(transcript);
     const shown = withoutDeadThreadChips(messages, owners).filter((message) =>
-      !repeats.has(message.id) && !drawnElsewhere.has(message.id) && !isTurnStoppedNotice(message) && !isHiddenStatusActivity(message)
+      !repeats.has(message.id) && !drawnElsewhere.has(message.id) && !held.has(message.id) && !isTurnStoppedNotice(message) && !isHiddenStatusActivity(message)
       // a failed routine run and a routine's access card pass as a banner
       // (TransientNotice), never a row (shared/transient-notices.ts)
       && !isTransientChatNotice(message));
@@ -179,7 +182,7 @@ export const MessagesList = memo(function MessagesList({
     // Two or more "Go to conversation" lines in a row become one chip.
     return collapseGotoLines(incoming, (item) => silentChatItem(item, showToolCalls),
       showThreads ? gotoTargetOf : unifiedGotoTargetOf) as ListedItem[];
-  }, [messages, transcript, botId, botName, selfColor, locale, owners, showToolCalls, showThreads, botDmIds, storeBots]);
+  }, [messages, transcript, botId, botName, selfColor, locale, owners, showToolCalls, showThreads, botDmIds, storeBots, held]);
   const windowIds = useMemo(() => new Set(messages.map((message) => message.id)), [messages]);
   const newestMessageId = messages.at(-1)?.id;
   let newestUserMessageId: string | undefined;
@@ -189,6 +192,13 @@ export const MessagesList = memo(function MessagesList({
   // A search hit inside a folded run has to open it: the fold keeps the
   // row out of the DOM, and there is nothing for the scroll to land on.
   const focusedId = focus && !focus.consumed ? focus.messageId : null;
+  // #3681: "See in the conversation" on an ask the pinned card holds lands
+  // where the bot asked, since the ask has no row while it waits
+  useEffect(() => {
+    if (!focusedId || !held.has(focusedId)) return;
+    const target = pinnedJumpTarget(transcript, focusedId, held);
+    if (target !== focusedId) dispatch({ type: "focusMessage", threadId, messageId: target });
+  }, [focusedId, held, transcript, threadId, dispatch]);
   const unreadIds = useMemo(() => unreadMessageIds(messages, unreadDividerId), [messages, unreadDividerId]);
   // The New divider goes above the first item holding an unread message.
   const dividerIndex = useMemo(() => unreadIds

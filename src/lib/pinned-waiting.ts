@@ -15,7 +15,7 @@
 // The list is read again when a card, a question in words or an offer opens
 // or closes in one of the conversations (their live frames), after missed
 // frames, and on a slow safety timer (#3542).
-import { useEffect, useRef, useState } from "react";
+import { createContext, use, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { api, type Message } from "@/state/store";
 import { listenLiveFrames } from "@/lib/live-events";
 import { pendingApprovals, type Pending } from "@/components/PendingApproval";
@@ -130,7 +130,108 @@ export function pinnedItemsFrom(items: readonly ServedWaitingItem[], threadId: s
     // a parallel task's approval carries its own thread, where the decision goes
     out.push({ key, at: item.at, item, kind: "approval", pending });
   }
+  // #3681: a question of this conversation the list does not carry yet is
+  // pinned the same way: the conversation leaves it to the pinned card from
+  // its first frame, never drawn there for a moment and then taken away.
+  for (const message of pendingQuestions(fresh)) {
+    if (items.some((item) => item.messageId === message.id || (item.threadId === threadId && item.id === message.card?.requestId))) continue;
+    const key = `${threadId}:${message.card?.requestId ?? message.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const first = message.card?.questionRequest?.questions[0];
+    const title = first?.question || message.card?.title || "";
+    const options = (first?.options ?? []).map((option) => option.label);
+    const item: ServedWaitingItem = {
+      id: message.card?.requestId ?? message.id, kind: "question", botId: message.from?.botId ?? "", botName: message.from?.name ?? "",
+      threadId, messageId: message.id, at: message.at, ageMs: 0, title, text: title,
+      options, answerWith: options.length ? "option" : "text", freeText: first?.custom !== false, skippable: true,
+    };
+    out.push({ key, at: item.at, item, kind: "question", message });
+  }
   return out;
+}
+
+/** #3681, the owner's rule (2026-11-11): while an ask waits and the pinned
+ * card of the view holds it, the conversation draws no card for it; once it
+ * is answered, skipped or expired its record is back at its place. These
+ * are the messages the pinned card holds: every item it draws with the
+ * conversation's own card. An item of a kind this app does not know
+ * (`other`) is only its text up there, so its card stays in the
+ * conversation. The conversation reads this set, never a second rule. */
+export function pinnedHeldIds(items: readonly PinnedItem[]): ReadonlySet<string> {
+  const out = new Set<string>();
+  for (const item of items) {
+    if (item.kind === "other") continue;
+    out.add(item.kind === "approval" ? item.pending.message.id : item.message.id);
+  }
+  return out;
+}
+
+/** Where "See in the conversation" lands for an ask the conversation does
+ * not draw while it waits (#3681): the nearest message before it that the
+ * conversation draws as words (the bot's own words that led to the ask, or
+ * the person's message before them). The ask itself when nothing is. */
+export function pinnedJumpTarget(messages: readonly Message[], askId: string, held: ReadonlySet<string>): string {
+  const at = messages.findIndex((message) => message.id === askId);
+  for (let index = at - 1; index >= 0; index--) {
+    const message = messages[index]!;
+    if (held.has(message.id)) continue;
+    if (message.kind === "text" && (message.text ?? "").trim()) return message.id;
+  }
+  return askId;
+}
+
+/** The pinned card's hold, shared by one view's composer (which writes it)
+ * and its conversation (which reads it). A view with no pinned card (no
+ * composer, a read-only conversation, a side panel, the Approvals page)
+ * provides none, and its conversation draws every card as before. */
+export interface PinnedHold {
+  get: () => ReadonlySet<string>;
+  set: (ids: ReadonlySet<string>) => void;
+  subscribe: (listener: () => void) => () => void;
+}
+
+const NOTHING_HELD: ReadonlySet<string> = new Set();
+
+export function createPinnedHold(): PinnedHold {
+  let held = NOTHING_HELD;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => held,
+    set: (ids) => {
+      if (ids.size === held.size && [...ids].every((id) => held.has(id))) return;
+      held = ids.size ? ids : NOTHING_HELD;
+      for (const listener of listeners) listener();
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
+export const PinnedHoldContext = createContext<PinnedHold | null>(null);
+
+const noSubscribe = () => () => undefined;
+const nothingHeld = () => NOTHING_HELD;
+
+/** The messages this view's pinned card holds right now (empty without one). */
+export function usePinnedHeld(): ReadonlySet<string> {
+  const hold = use(PinnedHoldContext);
+  return useSyncExternalStore(hold?.subscribe ?? noSubscribe, hold?.get ?? nothingHeld, hold?.get ?? nothingHeld);
+}
+
+/** The composer tells its view what its pinned card holds; nothing once it
+ * is gone (the view then draws its cards again). Before paint, so the card
+ * never shows twice for a frame. */
+export function usePublishPinnedHold(items: readonly PinnedItem[]): void {
+  const hold = use(PinnedHoldContext);
+  const ids = pinnedHeldIds(items);
+  const key = [...ids].join("\u0000");
+  useLayoutEffect(() => {
+    hold?.set(key ? new Set(key.split("\u0000")) : NOTHING_HELD);
+  }, [hold, key]);
+  useLayoutEffect(() => () => hold?.set(NOTHING_HELD), [hold]);
 }
 
 /** The server's items that wait on the person in one bot's conversations

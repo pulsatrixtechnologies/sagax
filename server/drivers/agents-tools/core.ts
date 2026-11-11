@@ -402,26 +402,26 @@ export const DEF_ANSWER_APPROVAL = {
 export const DEF_ACT = {
     name: "act",
     description:
-      "Act as the signed-in person. Send either ui and input (a screen or button in their open Sagax app) or method, path, and optional query and body (an /api route, which also works when they have no desktop window). You are that person: a route they cannot call is refused. Reads and screen changes run now. A write waits for their Allow on a card unless this bot's approval mode is auto or full. /api/internal and /api/testing are refused. Plugins: send plugins instead of a route. action is list, addMarketplace (source, optional ref), install (marketplace and plugin; also updates), setEnabled (key and enabled), uninstall (key) or removeMarketplace (marketplace).",
+      "Act as the signed-in person. Send ui and input (a screen or button in their open Sagax app) or method, path, optional query and body (an /api route; works without a desktop window). You are that person: a route they cannot call is refused. Reads and screen changes run now. A write waits for their Allow on a card unless this bot's approval mode is auto or full. /api/internal and /api/testing are refused. Plugins: send plugins, not a route. action: list (marketplace lines, then installed plugins; marketplace: its catalog, optional filter; offset from more pages), addMarketplace (source, ref?), install (marketplace, plugin; updates), setEnabled (key, enabled), uninstall (key), removeMarketplace (marketplace).",
     inputSchema: {
       type: "object",
       additionalProperties: false,
       properties: {
         ui: { type: "string", maxLength: 64, description: "A screen or button the desktop app already dispatches, such as showTeamMap or send." },
         input: { type: "object", additionalProperties: true, description: "Fields for that screen or button. Omit when ui needs none." },
-        method: { type: "string", enum: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"], description: "HTTP method for an /api route." },
-        path: { type: "string", maxLength: 512, description: "An /api path. It must not include a query string." },
+        method: { type: "string", enum: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] },
+        path: { type: "string", maxLength: 512, description: "An /api path, no query string." },
         query: {
           type: "object",
           additionalProperties: { type: "string", maxLength: 200 },
           description: "Query values as strings, at most 20 keys.",
         },
-        body: { type: "object", additionalProperties: true, description: "JSON object sent with POST, PUT, PATCH, or DELETE." },
+        body: { type: "object", additionalProperties: true, description: "JSON body of a write." },
         plugins: {
           type: "object",
           additionalProperties: false,
           required: ["action"],
-          description: "Install or change a plugin through Sagax. Omit botId for this bot.",
+          description: "Omit botId for this bot.",
           properties: {
             action: { type: "string", enum: ["list", "addMarketplace", "install", "setEnabled", "uninstall", "removeMarketplace"] },
             botId: { type: "string", maxLength: 80 },
@@ -431,6 +431,8 @@ export const DEF_ACT = {
             plugin: { type: "string", maxLength: 64 },
             key: { type: "string", maxLength: 129 },
             enabled: { type: "boolean" },
+            filter: { type: "string", maxLength: 200 },
+            offset: { type: "integer", minimum: 0 },
           },
         },
       },

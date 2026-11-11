@@ -441,6 +441,14 @@ export class PluginMarketplaces {
     try { return Math.floor(statSync(this.repoDir(name)).mtimeMs); } catch { return undefined; }
   }
 
+  /** #3637: every marketplace's recorded last pull, from one read of the
+   * state (a bot's plugin listing). A record from before `pulledAt` is absent. */
+  pulledDates(): Map<string, number> {
+    const dates = new Map<string, number>();
+    for (const [name, market] of Object.entries(this.read().marketplaces)) if (market.pulledAt !== undefined) dates.set(name, market.pulledAt);
+    return dates;
+  }
+
   /** Every marketplace's name, in the order of a listing. */
   names(): string[] {
     return Object.keys(this.read().marketplaces).sort((a, b) => a.localeCompare(b));

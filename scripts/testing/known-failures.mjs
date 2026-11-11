@@ -2,18 +2,24 @@
 // today. A CI run is green when every failure it sees is in that list, and the
 // list can only shrink. A failure that is not listed and is seen in two runs
 // opens one `regression` issue per test, named after the pull request that
-// scripts/stability/bisect.mjs finds. Nothing here blocks a merge: it runs
-// after the merge, in ci.yml. docs/ci.md, "Known failures".
+// scripts/stability/bisect.mjs finds. Red Swift package tests on main (the
+// swift-package job after a merge, the nightly's ios job) open one
+// `regression` issue at the first sighting, or comment on the open one: a
+// package that does not compile is not a flaky test (#3678). Nothing here
+// blocks a merge: it runs after the merge, in ci.yml. docs/ci.md, "Known
+// failures".
 //
 //   extract       one test job: vitest's JSON report to this job's results
 //   report        all test jobs: the verdict, the summary, the shrunk list
 //   check-shrink  the list at a git revision against the working copy
-//   open-issues   the failures seen twice: bisect, then one issue each
+//   open-issues   the failures seen twice: bisect, then one issue each; and
+//                 the red Swift package tests: one issue, or a comment
 import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { neverStarted } from "../release-ci.mjs";
+import { stripVTControlCharacters } from "node:util";
+import { neverStarted, SWIFT_AFTER_MERGE } from "../release-ci.mjs";
 import { GUARD_TESTS } from "../verify/release/guard-tests.mjs";
 
 /** The test name of a failure that belongs to the whole file (it did not load, or a hook failed). */
@@ -196,6 +202,48 @@ export function updateSightings(previous, { newFailures, results, sha, platforms
 /** The hidden line that ties an issue to its test, so a test never gets two. */
 export const regressionMarker = (identity) => `<!-- known-failures: ${identityKey(identity).replace(/--/g, "- -")} -->`;
 
+/** The jobs of ci.yml that run `swift test --package-path ios`, and their step that does. */
+export const SWIFT_JOBS = [SWIFT_AFTER_MERGE, "Swift tests + iOS build"];
+export const SWIFT_STEP = "Swift package tests";
+
+/** What a run's jobs (the Actions API's { name, conclusion, steps: [{ name,
+ * status, conclusion }] }) say of its Swift package tests: null when no Swift
+ * job ran, "no-runner" when its job never started a step (`neverStarted`, the
+ * release gate's rule: GitHub's capacity, not a failure, #3672), "not-run"
+ * when the job stopped before the test step, else "pass" or "fail". A step
+ * that timed out or was cancelled is a failure.
+ * @returns {{ state: "no-runner" | "not-run" | "pass" | "fail", job: string } | null} */
+export function swiftOutcome(jobs) {
+  const job = (jobs ?? []).find((item) => SWIFT_JOBS.includes(String(item?.name)) && item.conclusion !== "skipped");
+  if (!job) return null;
+  if (neverStarted(job)) return { state: "no-runner", job: job.name };
+  const step = (job.steps ?? []).find((item) => item?.name === SWIFT_STEP);
+  if (!step || step.conclusion == null || step.conclusion === "skipped") return { state: "not-run", job: job.name };
+  return { state: step.conclusion === "success" ? "pass" : "fail", job: job.name };
+}
+
+/** The failing test cases of a `swift test` log (XCTest's "Test Case
+ * '-[Module.Class test]' failed", swift-testing's "✘ Test name failed"), and
+ * the first error lines, which name a build failure when no test case ran.
+ * Paths are cut to the repository (from ios/, shared/ or src/ on).
+ * @returns {{ tests: string[], errors: string[] }} */
+export function failingSwiftTests(log) {
+  const lines = stripVTControlCharacters(String(log ?? "")).split(/\r?\n/);
+  const tests = new Set();
+  const errors = [];
+  for (const line of lines) {
+    const xctest = /^Test Case '(?:-\[)?([^'\]]+?)\]?' failed/.exec(line);
+    const testing = /^\s*✘ Test (.+?) (?:failed|recorded an issue)/.exec(line);
+    if (xctest) tests.add(xctest[1].replace(" ", "."));
+    else if (testing) tests.add(testing[1]);
+    if (/(?:^|: )error: /.test(line) && errors.length < 20) {
+      const cut = line.replace(/\/\S*?\/(?=(?:ios|shared|src)\/)/g, "");
+      errors.push(cut.length > 400 ? `${cut.slice(0, 400)}...` : cut);
+    }
+  }
+  return { tests: [...tests], errors };
+}
+
 async function github(fetchImpl, apiUrl, token, method, path, body) {
   const response = await fetchImpl(`${apiUrl}${path}`, {
     method,
@@ -242,7 +290,7 @@ export async function openRegressionIssues(due, { repo, token, fetch: fetchImpl 
     return found;
   };
   const open = listed ?? await listOpenRegressionIssues({ repo, token, fetch: fetchImpl, apiUrl });
-  await github(fetchImpl, apiUrl, token, "POST", `/repos/${repo}/labels`, { name: REGRESSION_LABEL, color: "b60205", description: "A test that passed on main fails after a merge" });
+  await ensureRegressionLabel(fetchImpl, apiUrl, token, repo);
   const opened = [];
   for (const entry of due) {
     const marker = regressionMarker(entry);
@@ -271,6 +319,49 @@ export async function openRegressionIssues(due, { repo, token, fetch: fetchImpl 
     opened.push({ key: identityKey(entry), issue: json.number, created: true });
   }
   return opened;
+}
+
+const ensureRegressionLabel = (fetchImpl, apiUrl, token, repo) =>
+  github(fetchImpl, apiUrl, token, "POST", `/repos/${repo}/labels`, { name: REGRESSION_LABEL, color: "b60205", description: "A test that passed on main fails after a merge" });
+
+/** The one identity of the Swift package tests' issue, for its marker. */
+export const SWIFT_IDENTITY = { file: "ios/Package.swift", test: "swift test" };
+
+/** Red Swift package tests on main: one `regression` issue at the first
+ * sighting, or a comment on the open one, naming the commit, the job, the
+ * failing tests and the run. `failure` is swiftOutcome's job plus
+ * failingSwiftTests' result. */
+export async function openSwiftRegressionIssue(failure, { repo, token, fetch: fetchImpl = fetch, runUrl, sha, apiUrl = "https://api.github.com", open: listed }) {
+  const marker = regressionMarker(SWIFT_IDENTITY);
+  const open = listed ?? await listOpenRegressionIssues({ repo, token, fetch: fetchImpl, apiUrl });
+  const existing = open.find((issue) => String(issue.body ?? "").includes(marker));
+  const shown = failure.tests.slice(0, 50).map((test) => `- \`${test}\``);
+  const text = [
+    `The Swift package tests (\`swift test --package-path ios\`) failed on main at ${sha}, in the job "${failure.job}".`,
+    "",
+    ...(failure.tests.length
+      ? [`${failure.tests.length} failing test(s):`, ...shown, ...(failure.tests.length > shown.length ? [`- and ${failure.tests.length - shown.length} more`] : [])]
+      : ["No test case failed: the package did not build, or the run stopped before its tests."]),
+    ...(failure.errors.length ? ["", "First errors of the log:", "", "~~~text", ...failure.errors, "~~~"] : []),
+    "",
+    `Run: ${runUrl}`,
+  ];
+  if (existing) {
+    const { status } = await github(fetchImpl, apiUrl, token, "POST", `/repos/${repo}/issues/${existing.number}/comments`, { body: text.join("\n") });
+    if (status !== 201) throw new Error(`HTTP ${status} commenting on #${existing.number} for the Swift package tests`);
+    return { issue: existing.number, created: false };
+  }
+  await ensureRegressionLabel(fetchImpl, apiUrl, token, repo);
+  const body = [
+    ...text,
+    "",
+    "A package that does not compile is not a flaky test, so this opens at the first failure on main, not the second. Fix the test or the change that broke it. This issue does not block a merge.",
+    "",
+    marker,
+  ].join("\n");
+  const { status, json } = await github(fetchImpl, apiUrl, token, "POST", `/repos/${repo}/issues`, { title: "Regression: Swift package tests (swift test --package-path ios)", body, labels: [REGRESSION_LABEL] });
+  if (status !== 201 || typeof json?.number !== "number") throw new Error(`HTTP ${status} opening the issue for the Swift package tests`);
+  return { issue: json.number, created: true };
 }
 
 function bisectLine(found, entry) {
@@ -420,6 +511,7 @@ async function openIssues(options) {
   const { sightings, due } = updateSightings(previous, { newFailures, results, sha: String(options.sha), platforms: readPlatforms(options.platforms), openIssues });
   // Written first, so a failed issue call still keeps this run's sightings.
   writeJson(String(options.out), sightings);
+  const swiftFailed = await reportSwift(options, { repo, token, apiUrl, open });
   const { bisect } = await import("../stability/bisect.mjs");
   const opened = await openRegressionIssues(due, {
     repo,
@@ -446,7 +538,30 @@ async function openIssues(options) {
   }
   writeJson(String(options.out), sightings);
   console.log(`${Object.keys(sightings.tests).length} unlisted failure(s) tracked, ${opened.filter((item) => item.created).length} issue(s) opened.`);
-  return 0;
+  return swiftFailed ? 1 : 0;
+}
+
+/** The Swift package tests of this run (`--jobs`, `--swift-log`): an issue
+ * or a comment when they failed. True when writing it failed. */
+async function reportSwift(options, { repo, token, apiUrl, open }) {
+  const swift = swiftOutcome(readJsonLines(options.jobs));
+  if (!swift || swift.state === "pass") return false;
+  if (swift.state !== "fail") {
+    console.log(swift.state === "no-runner"
+      ? `"${swift.job}" got no runner: the Swift package tests did not run, which is not a failure.`
+      : `"${swift.job}" stopped before the Swift package tests ran: no Swift issue.`);
+    return false;
+  }
+  let log = "";
+  try { log = readFileSync(String(options["swift-log"]), "utf8"); } catch { /* no log uploaded: the issue says no test case failed */ }
+  try {
+    const { issue, created } = await openSwiftRegressionIssue({ job: swift.job, ...failingSwiftTests(log) }, { repo, token, apiUrl, open, runUrl: options["run-url"], sha: String(options.sha) });
+    console.log(`${created ? "Opened" : "Commented on"} #${issue} for the red Swift package tests.`);
+    return false;
+  } catch (error) {
+    console.log(`::error title=Swift package tests::${escapeData(`The regression issue could not be written: ${String(error)}`)}`);
+    return true;
+  }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

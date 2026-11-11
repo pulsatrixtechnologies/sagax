@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { githubApi, judgeRun, waitForReleaseCi } from "./release-ci.mjs";
+import { githubApi, judgeRun, SWIFT_AFTER_MERGE, waitForReleaseCi } from "./release-ci.mjs";
 
 const SHA = "a".repeat(40);
 const PARENT = "b".repeat(40);
@@ -110,6 +110,24 @@ describe("what a CI run proves", () => {
     expect(judgeRun([gate("failure")])).toBe("red");
   });
 
+  it("reads the Swift package job of a push run: skipped or green stays green, red is not green (#3678)", () => {
+    // ci.yml's swift-package runs after a merge that touches ios/ or shared/.
+    // The CI gate does not need it, so the gate passes beside a red one.
+    const swift = (conclusion: string, steps: Step[] = started): Job => ({ name: SWIFT_AFTER_MERGE, conclusion, steps });
+    const push = (job: Job) => [gate("success"), vitest("ubuntu-latest", "success"), vitest("${{ matrix.os }}", "skipped", []), job];
+    expect(judgeRun(push(swift("skipped", [])))).toBe("green");
+    expect(judgeRun(push(swift("success")))).toBe("green");
+    expect(judgeRun(push(swift("failure", [{ status: "completed", conclusion: "success" }, { status: "completed", conclusion: "failure" }])))).toBe("red");
+    // a timeout cancels the step: still a test verdict
+    expect(judgeRun(push(swift("cancelled")))).toBe("red");
+    // GitHub never gave it a machine: not a test verdict, the run stays green
+    expect(judgeRun(push(swift("failure", [])))).toBe("green");
+    // the nightly's whole ios job is not this job
+    expect(judgeRun(push({ name: "Swift tests + iOS build", conclusion: "skipped", steps: [] }))).toBe("green");
+    // a run whose vitest was skipped is still no proof, whatever Swift did
+    expect(judgeRun([...scoped(), swift("success")])).toBe("scoped");
+  });
+
   it("reports a cancelled or missing gate as no verdict", () => {
     expect(judgeRun([])).toBe("no gate job");
     expect(judgeRun([gate("cancelled")])).toBe("cancelled");
@@ -143,6 +161,13 @@ describe("release CI gate", () => {
 
   it("stops on a red gate instead of retrying it", async () => {
     const { calls, options } = fakeGitHub([{ runs: [run(1, "push", "completed")], jobs: { 1: red() } }]);
+    expect(await waitForReleaseCi(options)).toMatchObject({ ok: false, reason: expect.stringContaining("failed: run 1") });
+    expect(calls).toEqual([]);
+  });
+
+  it("stops on main's push run whose Swift package tests failed beside a green gate (#3678)", async () => {
+    const swiftRed: Job = { name: SWIFT_AFTER_MERGE, conclusion: "failure", steps: [{ status: "completed", conclusion: "failure" }] };
+    const { calls, options } = fakeGitHub([{ runs: [run(1, "push", "completed")], jobs: { 1: [...green(), swiftRed] } }]);
     expect(await waitForReleaseCi(options)).toMatchObject({ ok: false, reason: expect.stringContaining("failed: run 1") });
     expect(calls).toEqual([]);
   });

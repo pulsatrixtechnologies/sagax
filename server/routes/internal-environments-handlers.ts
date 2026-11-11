@@ -39,6 +39,8 @@ import { conversationTmpPath, inBotFolder } from "../sandbox/sandbox-bot-folder.
 import type { SandboxExecInput } from "../sandbox/sandboxd-core.ts";
 import type { InternalCapabilityView, InternalRouteContext } from "./internal-route.ts";
 import { PASS } from "./table.ts";
+import type { ApprovalMode } from "../../shared/approval-mode.ts";
+import type { FullAccessFacts } from "../approvals/full-access-gate.ts";
 import type { MacAppId, MacAppToolResult } from "../../electron/mac-apps.mjs";
 
 /** One computer select_computer can offer (selectableComputers in index). */
@@ -164,6 +166,11 @@ export interface InternalEnvironmentsDeps {
     allowKey?: string;
   }): Promise<"allow" | "deny" | "timeout">;
   sourceApprovalMode(botId: string, threadId: string): string;
+  /** #3502: the level a held My Chrome action is judged at, and the facts
+   * the one Full access decision reads (server/index.ts myChromeHeldLevel). */
+  myChromeHeldLevel?(input: { botId: string; threadId: string; tool: string; summary: string }): { level: ApprovalMode; facts: FullAccessFacts };
+  /** #3502: the record of a held My Chrome action the level answered. */
+  myChromeLevelAnswered?(input: { botId: string; threadId: string; tool: string; summary: string }): void;
 
   userSandboxAvailable(): boolean;
   smallTalkTurn(threadId: string): { generation: string; messageId: string } | undefined;
@@ -517,6 +524,12 @@ async function handleBrowserMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
           ...(allowKey ? { allowKey } : {}),
         });
       },
+      ...(deps.myChromeHeldLevel ? {
+        heldLevel: ({ summary }: { summary: string }) => deps.myChromeHeldLevel!({ botId: bot.id, threadId: capability.threadId, tool: `my_chrome:${browserToolName(body.params)}`, summary }),
+      } : {}),
+      ...(deps.myChromeLevelAnswered ? {
+        answeredByLevel: ({ summary }: { summary: string }) => deps.myChromeLevelAnswered!({ botId: bot.id, threadId: capability.threadId, tool: `my_chrome:${browserToolName(body.params)}`, summary }),
+      } : {}),
       notes: () => deps.myChromeTakeNotes(browser.session) as never,
       stepsUnasked: ["auto", "full"].includes(deps.sourceApprovalMode(bot.id, capability.threadId)),
     });

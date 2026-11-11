@@ -26,6 +26,9 @@ import { peerContactCardRequired } from "./full-access-gate.ts";
 import { cancelPeerApprovalsFor, requestPeerApproval, resolvePeerComms } from "../peers/peer-approval.ts";
 import { closeMessageDb } from "../messages/message-db.ts";
 import { reviewSafety } from "../../shared/safety-review.ts";
+import type { ApprovalMode } from "../../shared/approval-mode.ts";
+import type { FullAccessFacts } from "./full-access-gate.ts";
+import { MyChromeMemory, myChromeLevelAnswers, runMyChromeTool } from "../browser/my-chrome/pilot.ts";
 
 const SEND_TO_BOT = "agents__send_to_bot";
 // Sagax's own bot-to-bot tools: in-app peer contact between the person's own
@@ -390,5 +393,72 @@ describe("a phone call is held like a text", () => {
     }
     // a Twilio write that places no call (a live call hung up) is not a send
     expect(ask("mcp__perspicax__twilio_api__write", { resource: "Calls", action: "update", id: "CA1", set: { Status: "completed" } }, "t-hangup")).toBeNull();
+  });
+});
+
+// #3502: the held card of the person's own browser (My Chrome) for a payment,
+// a send or a delete came at Full access and with Approve for me alike: its
+// own surface, outside the one decision. It now reads the gate.
+describe("#3502: a payment, a send or a delete in the person's own browser", () => {
+  const call = (name: string, args: Record<string, unknown> = {}) => ({ name, arguments: args });
+  const SNAPSHOT = "- button \"Pay now\" [ref=e1]\n- button \"Send\" [ref=e2]\n- button \"Delete account\" [ref=e3]";
+  const HELD = [["@e1", "payment"], ["@e2", "send"], ["@e3", "delete"]] as const;
+
+  function browser(level: ApprovalMode, facts: FullAccessFacts = {}) {
+    const memory = new MyChromeMemory();
+    memory.remember("s", call("agent_browser_snapshot"), { content: [{ type: "text", text: SNAPSHOT }] });
+    const ran: unknown[] = [];
+    const cards: string[] = [];
+    const record: Array<{ kind: string; summary: string }> = [];
+    const click = (selector: string) => runMyChromeTool({
+      session: "s", params: call("agent_browser_click", { selector }), memory, stepsUnasked: level === "auto" || level === "full",
+      run: async (params) => { ran.push(params); return { content: [{ type: "text", text: "ok" }] }; },
+      pageUrl: async () => "https://shop.example/cart",
+      confirm: async (summary) => { cards.push(summary); return "deny"; },
+      notes: () => [],
+      heldLevel: () => ({ level, facts }),
+      answeredByLevel: (held) => { record.push(held); },
+    }) as Promise<{ isError?: boolean }>;
+    return { click, ran, cards, record };
+  }
+
+  it("at Full access the bot pays, sends and deletes with no card, and the record names each", async () => {
+    const b = browser("full");
+    for (const [ref] of HELD) expect((await b.click(ref)).isError, ref).toBeUndefined();
+    expect(b.cards).toEqual([]);
+    expect(b.ran).toHaveLength(3);
+    expect(b.record.map((row) => row.kind)).toEqual(["payment", "send", "delete"]);
+    expect(b.record[0]?.summary).toBe("My Chrome: click button \"Pay now\" (a payment or purchase) on https://shop.example");
+    for (const [, kind] of HELD) expect(myChromeLevelAnswers("full"), kind).toBe(true);
+  });
+
+  it("an organization rule set to Ask first, or the person's own rule, still brings the card at Full", async () => {
+    for (const facts of [{ orgRule: "ask" as const }, { orgRule: "deny" as const }, { personRule: "ask" as const }]) {
+      const b = browser("full", facts);
+      for (const [ref] of HELD) expect((await b.click(ref)).isError, `${JSON.stringify(facts)} ${ref}`).toBe(true);
+      expect(b.cards).toHaveLength(3);
+      expect(b.ran).toEqual([]);
+      expect(b.record).toEqual([]);
+    }
+  });
+
+  it("a guest's turn still brings the card at Full", async () => {
+    const b = browser("full", { isolation: true });
+    for (const [ref] of HELD) expect((await b.click(ref)).isError, ref).toBe(true);
+    expect(b.cards).toHaveLength(3);
+    expect(b.ran).toEqual([]);
+  });
+
+  it("below Full the card comes as before; Approve for me reads it as a safety hold on any other card", async () => {
+    for (const level of ["ask", "edits", "custom", "auto"] as const) {
+      const b = browser(level);
+      for (const [ref] of HELD) expect((await b.click(ref)).isError, `${level} ${ref}`).toBe(true);
+      expect(b.cards, level).toHaveLength(3);
+      expect(b.record, level).toEqual([]);
+      expect(myChromeLevelAnswers(level), level).toBe(false);
+    }
+    // the same answer Approve for me gives a held permission card
+    expect(autoVerdict("auto", "other", { safetyHold: true, toolName: "my_chrome:agent_browser_click" })).toEqual({ approve: null, source: "safety-hold" });
+    expect(autoVerdict("full", "other", { safetyHold: true, toolName: "my_chrome:agent_browser_click" })).toMatchObject({ source: "full-access" });
   });
 });

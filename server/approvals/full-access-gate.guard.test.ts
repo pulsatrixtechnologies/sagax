@@ -26,6 +26,8 @@ const EMITTERS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
   { name: "safety review", pattern: /\bsafety(?:PermissionEffect|ToolHold)\(/ },
   // the Sagax ask_choice card
   { name: "ask_choice card", pattern: /\bcreateChoiceCard\(/ },
+  // #3502: the held card of the person's own browser (My Chrome)
+  { name: "browser held card", pattern: /\bdeps\.confirm\(/ },
 ];
 
 /** Where each surface's decision lives: that file must import the gate
@@ -41,6 +43,7 @@ const DECIDED_IN: Record<FullAccessSurface, string | null> = {
   // still wired from index.ts via setSafetyFullAccess (central, like send)
   "safety-confirm": "server/index.ts",
   "ask-choice": "server/widgets/chat-widgets.ts",
+  "browser-held": "server/browser/my-chrome/pilot.ts",
   "peer-contact": "server/index.ts",
   "proposal": "server/index.ts",
   "send": "server/index.ts",
@@ -163,6 +166,20 @@ describe("every approval or choice card reads the Full access decision", () => {
     // the level is read before the safety review runs, so the review sees it
     expect(handler.indexOf("const effectiveApprovalMode")).toBeLessThan(handler.indexOf("safetyPermissionEffect("));
     expect(handler.indexOf("const fullTurn")).toBeLessThan(handler.indexOf("safetyPermissionEffect("));
+  });
+
+  it("the browser's held card reads the decision before the card, and the route wires the level and the record (#3502)", () => {
+    const pilot = readFileSync(join(SERVER, "browser", "my-chrome", "pilot.ts"), "utf8");
+    const run = pilot.slice(pilot.indexOf("export async function runMyChromeTool"));
+    expect(run.indexOf("myChromeLevelAnswers(read.level, read.facts)")).toBeGreaterThan(0);
+    expect(run.indexOf("myChromeLevelAnswers(read.level, read.facts)")).toBeLessThan(run.indexOf("// full-access: browser-held"));
+    expect(pilot).toMatch(/function myChromeLevelAnswers[\s\S]{0,200}fullAccessDecision\(level, facts\)\.acts/);
+    const route = readFileSync(join(SERVER, "routes", "internal-environments-handlers.ts"), "utf8");
+    expect(route).toMatch(/heldLevel: [\s\S]{0,200}deps\.myChromeHeldLevel!\(/);
+    expect(route).toMatch(/answeredByLevel: [\s\S]{0,200}deps\.myChromeLevelAnswered!\(/);
+    const index = readFileSync(join(SERVER, "index.ts"), "utf8");
+    expect(index).toMatch(/function myChromeHeldLevel[\s\S]{0,600}approvalModeForTurn\(/);
+    expect(index).toMatch(/\n    myChromeHeldLevel,\n    myChromeLevelAnswered,\n/);
   });
 
   it("every peer card sits behind peerReviewRequired, which reads the gate, as do fullAccessForSource and the safety resolver", () => {

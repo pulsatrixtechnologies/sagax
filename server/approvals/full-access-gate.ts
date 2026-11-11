@@ -114,6 +114,10 @@ export const FULL_ACCESS_SURFACES = {
   "safety-review": "server/safety/safety-review.ts safetyPermissionEffect and safetyToolHold",
   /** The card a server-side safety hold waits on (index.ts confirmHeldCard). */
   "safety-confirm": "server/index.ts confirmHeldCard",
+  /** #3502: a payment, a send or a delete in the person's own browser (My
+   * Chrome, server/browser/my-chrome/pilot.ts runMyChromeTool): its held
+   * card comes only when this decision does not act. */
+  "browser-held": "server/browser/my-chrome/pilot.ts runMyChromeTool held card",
   /** The Sagax ask_choice tool (server/widgets/chat-widgets.ts createChoiceCard). */
   "ask-choice": "server/widgets/chat-widgets.ts createChoiceCard",
   /** Ask before contacting bots (index.ts peerReviewRequired, peer-approval.ts). */

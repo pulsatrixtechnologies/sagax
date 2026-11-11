@@ -866,8 +866,17 @@ An organization server never offers it unless that file says
   state, profiles, `read` with a URL, screenshot to a file), elements only by
   `@eN` refs. A payment or purchase, a send (form, email, message, post,
   save, confirm) or a delete waits on the same Allow / Deny card as a safety
-  hold (`confirmHeldCard` in server/index.ts; Full access and Approve for me
-  do not answer it, its own Always allow below does). It is named from the role and name of the ref in the
+  hold (`confirmHeldCard` in server/index.ts), and the person's level
+  answers it (#3502): the card reads the one Full access decision
+  (`server/approvals/full-access-gate.ts`, marker `browser-held`). At Full
+  access the bot acts unless one of the gate's holds applies (an
+  organization rule set to Refuse or Ask first, the person's own rule or a
+  security key they set on the action, isolation between people: a guest's
+  turn, a mail-woken run, another person speaking), and the conversation and
+  the decision journal name what was paid, sent or deleted
+  (`myChromeHeldLevel`, `myChromeLevelAnswered`). Approve for me reads it the
+  way it reads a safety hold on any other permission card: the card comes,
+  as at Ask; its own Always allow below answers it at every level. It is named from the role and name of the ref in the
   bot's last snapshot, the key (Enter or Space, except after typing in a
   search box), text with a line break, or an address (`/delete`,
   `/checkout`...). An unknown ref or a button with no name is a card too.

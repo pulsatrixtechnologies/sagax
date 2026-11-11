@@ -719,7 +719,7 @@ import { soloGoalLineText, type SoloGoalLine } from "../shared/solo-goal-line.ts
 import { relayAccountLabel } from "./run-with-engine.ts";
 import { approvalLevelPrompt, peerContactPrompt } from "./approvals/approval-level-prompt.ts";
 // #1905: Full access, one decision for every approval and choice card
-import { fullAccessActs, fullAccessChoiceAnswer, fullAccessChoiceLine, fullAccessDecision, peerContactCardRequired } from "./approvals/full-access-gate.ts";
+import { fullAccessActs, fullAccessChoiceAnswer, fullAccessChoiceLine, fullAccessDecision, peerContactCardRequired, type FullAccessFacts } from "./approvals/full-access-gate.ts";
 import { expandLearnTurnText, learnSource } from "./skills/skill-learn.ts";
 import { expandSetupTurnText, setupModeActive, setupSystemPrompt } from "./setup-mode.ts";
 import { onDemandPromptParts, promptReferencesAvailable } from "./context/prompt-references.ts";
@@ -18815,6 +18815,47 @@ setSafetyFullAccess(({ botId, threadId }) => {
  * never reaches it (#1905: safety-review.ts reads the one Full access
  * decision before it holds anything). */
 
+/** #3502: a payment, a send or a delete in the person's own browser (My
+ * Chrome) reads the one Full access decision before its card: the level the
+ * turn runs at (a guest's or a mail-woken turn runs at Ask), and the holds
+ * that stand at Full: an organization rule or the person's own rule (their
+ * words, or a security key they set on this kind of action) set to Refuse or
+ * Ask first, and isolation between people (a guest's turn, another person
+ * speaking in this turn). */
+function myChromeHeldLevel(input: { botId: string; threadId: string; tool: string; summary: string }): { level: ApprovalMode; facts: FullAccessFacts } {
+  const found = store.bot(input.botId);
+  if (!found) return { level: "ask", facts: {} };
+  const level = approvalModeForTurn(store.projectBotForTask(input.botId, input.threadId) ?? found, isInternalTurn(input.threadId), input.threadId);
+  const answerer = approvalOwnerId(found, input.threadId);
+  const call = { tool: input.tool, summary: input.summary, input: input.summary };
+  const { decision } = reviewCustomRules(answerer ? customRules.rulesOf(answerer, found.id) : [], call, found.id, serverHome(), { ...ruleProductsOf(found.id), startedBy: turnStartFor(input.threadId) });
+  const held = decision.kind === "ask" || decision.kind === "deny" ? decision : null;
+  const keyed = autoAnswerStepUp(found, input.threadId, { tool: input.tool, summary: input.summary }).length > 0;
+  const speaker = turnSpeakers.get(input.threadId);
+  const speakerId = speaker && "principalId" in speaker ? speaker.principalId?.trim().toLowerCase() : undefined;
+  const otherPerson = Boolean(speakerId && answerer && speakerId !== answerer.trim().toLowerCase());
+  return {
+    level,
+    facts: {
+      orgRule: held?.rule.org ? held.kind : null,
+      personRule: held && !held.rule.org ? held.kind : keyed ? "ask" : null,
+      isolation: cloudGuestDriven(input.threadId) || botmailConfined(input.threadId) || otherPerson,
+    },
+  };
+}
+
+/** #3502: what the level answered stays on the record: a line in the
+ * conversation and the decision journal name what was paid, sent or deleted. */
+function myChromeLevelAnswered(input: { botId: string; threadId: string; tool: string; summary: string }): void {
+  const bot = store.bot(input.botId);
+  const line = `Full access: ${input.summary.replace(/\s+/g, " ").trim().slice(0, 300)}`;
+  store.appendMessage(input.threadId, { role: "bot", kind: "activity", tool: { name: line, ok: true, autoApproval: { source: "full-access" } } });
+  appendDecision(DATA_DIR, {
+    threadId: input.threadId, requestId: `my-chrome-${randomUUID()}`, botId: input.botId, ...(bot ? { botName: bot.name } : {}),
+    tool: input.tool, summary: input.summary, decision: "auto-approved", source: "full-access",
+  });
+}
+
 /** The one path a person's direct message takes into a bot turn: spend cap,
  * idempotency, steer into a running turn, queue, or start. Used by
  * POST /api/bots/:id/messages and by Live calls (via "call").
@@ -23068,6 +23109,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     runMyChromeTool,
     confirmHeldCard,
     sourceApprovalMode,
+    myChromeHeldLevel,
+    myChromeLevelAnswered,
     userSandboxAvailable: () => Boolean(userSandbox),
     smallTalkTurn: (threadId) => smallTalkTurns.get(threadId),
     activePathLastUserId: (threadId) => store.activePath(threadId).findLast((message) => message.role === "user")?.id,

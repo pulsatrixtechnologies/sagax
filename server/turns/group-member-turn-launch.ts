@@ -76,10 +76,11 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
         if (teamGate !== undefined) return teamGate;
       }
       mount.beginDesktop(ctx);
-      await host.mountPersonalMcp(ctx.integrations, {
+      const personalMcp = await host.mountPersonalMcp(ctx.integrations, {
         botId: ctx.readyBot.id, threadId: ctx.threadId, generation: ctx.internalGeneration,
         customMcp: ctx.instance.adapter.capabilities.customMcp === true, principal: ctx.roomPlace.principal,
       });
+      if (personalMcp?.githubWithheld?.length) ctx.roomGithubWithheld = [...(ctx.roomGithubWithheld ?? []), ...personalMcp.githubWithheld];
       const plugins = await host.mountPluginMcp(ctx.integrations, {
         botId: ctx.readyBot.id, threadId: ctx.threadId, generation: ctx.internalGeneration,
         customMcp: ctx.instance.adapter.capabilities.customMcp === true, principal: ctx.roomPlace.principal,

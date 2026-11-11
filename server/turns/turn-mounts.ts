@@ -85,6 +85,16 @@ export function personalMcpPrecheck(name: string, server: PersonalMcpServer, ctx
   if (reservedMcpName(name)) return { skip: "reserved" };
   if (server.kind === "stdio" && !mcpServerRunsHere(name, server, { organization: true })) return { skip: "not_here" };
   if (server.kind === "stdio") return ctx.hasEnvironment ? { mount: "stdio" } : { skip: "no_environment" };
+  // #3392: an address on GitHub saved with no sign-in goes as the person,
+  // the rule of a plugin's GitHub server (#3385): their own GitHub
+  // connection, or left out when they have none (githubWithheldPrompt).
+  if (server.auth === "none") {
+    const spec: McpServerSpec = { type: server.type, url: server.url, headers: {} };
+    if (isGithubMcpServer(spec)) {
+      const asPerson = pluginMcpAsPerson(name, spec, { organization: true, githubToken: () => ctx.github?.token });
+      return asPerson && "url" in asPerson ? { mount: "remote", headers: asPerson.headers ?? {} } : { skip: "needs_github" };
+    }
+  }
   const headers = personalAuthHeaders(server, ctx.github);
   if (headers === null) return { skip: server.auth === "github" ? "needs_github" : "needs_token" };
   return { mount: "remote", headers };

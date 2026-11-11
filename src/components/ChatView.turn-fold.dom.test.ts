@@ -45,6 +45,7 @@ vi.mock("./ModelPicker", () => ({ ModelPicker: (_props: ComponentProps<typeof Mo
 vi.mock("./ApprovalModeSelector", () => ({ ApprovalModeSelector: (_props: ComponentProps<typeof ApprovalModeSelector>) => createElement("span") }));
 
 const { ChatView } = await import("./ChatView");
+const { StreamingPreview } = await import("@/state/store");
 
 const bot: Bot = {
   id: "bot", threadId: "selected", name: "Server", title: "", description: "", color: "green",
@@ -129,5 +130,70 @@ describe("a turn's notes in the person's chat (#3581)", () => {
     expect(runs()[0]!.getAttribute("data-live")).toBe("true");
     expect(host.textContent).not.toContain(NOTES[0]!);
     expect(host.textContent).toContain(NOTES[1]!);
+  });
+});
+
+// #3696: a live turn's text is drawn where it stays. Each frame of a turn is
+// rendered in order through the real list, working line and live bubble; a
+// text drawn in a bubble in one frame is still in a bubble in every later
+// frame of the turn, and a short note is never a bubble while the turn runs.
+describe("a live turn's text in the person's chat (#3696)", () => {
+  const SHORT = "Yes, I will check the request.";
+  const LONG = "Ticket 1042: the printer on the second floor failed three times since Monday, and two of its notes repeat ticket 1040, which is still open.";
+  const task = bot.tasks![0]!;
+  const liveBot = (messages: Message[]): Bot => ({
+    ...bot, busy: true, tasks: [{ ...task, busy: true, activity: "working", turnStartedAt: 1_500 }], messages,
+  });
+  const endedBot = (messages: Message[]): Bot => ({ ...bot, messages });
+  const frame = (shown: Bot, streaming = "") => flushSync(() => root.render(
+    createElement(StreamingPreview, { streaming: streaming ? { selected: streaming } : {} }, createElement(ChatView, { bot: shown })),
+  ));
+  const inBubble = (text: string) => [...host.querySelectorAll("[data-chat-bubble]")].some((el) => el.textContent?.includes(text));
+  const inLine = (text: string) => [...host.querySelectorAll("[data-presence-phrase]")].some((el) => el.textContent?.includes(text));
+  const running = (id: string, at: number, name: string): Message => ({ id, role: "bot", kind: "activity", at, turnId: "a", tool: { name } });
+
+  it("a short note then a step: written in the working line, never a bubble, then in the turn's row", () => {
+    frame(liveBot([ask]), "Yes, I will");
+    expect(inLine("Yes, I will")).toBe(true);
+    expect(inBubble("Yes, I will")).toBe(false);
+    frame(liveBot([ask]), SHORT);
+    expect(inLine(SHORT)).toBe(true);
+    expect(inBubble(SHORT)).toBe(false);
+    // the note settles: still in the line, still no bubble
+    frame(liveBot([ask, note("n0", 2_000, SHORT)]));
+    expect(inLine(SHORT)).toBe(true);
+    expect(inBubble(SHORT)).toBe(false);
+    // a step starts: its words replace the note's, the note is in the row
+    frame(liveBot([ask, note("n0", 2_000, SHORT), running("s0", 3_000, "Read")]));
+    expect(inBubble(SHORT)).toBe(false);
+    expect(inLine(SHORT)).toBe(false);
+    expect(runs()).toHaveLength(1);
+    flushSync(() => runs()[0]!.querySelector("button")!.click());
+    expect(host.textContent).toContain(SHORT);
+  });
+
+  it("a growing answer opens into its bubble once and stays, also when a step follows", () => {
+    frame(liveBot([ask]), LONG.slice(0, 40));
+    expect(inLine(LONG.slice(0, 40))).toBe(true);
+    frame(liveBot([ask]), LONG);
+    expect(inBubble(LONG)).toBe(true);
+    expect(inLine(LONG)).toBe(false);
+    frame(liveBot([ask, note("n0", 2_000, LONG)]));
+    expect(inBubble(LONG)).toBe(true);
+    frame(liveBot([ask, note("n0", 2_000, LONG), running("s0", 3_000, "Read")]));
+    expect(inBubble(LONG)).toBe(true);
+    frame(liveBot([ask, note("n0", 2_000, LONG), step("s0", 3_000, "Read"), note("n1", 4_000, "Checking 1040.")]));
+    expect(inBubble(LONG)).toBe(true);
+  });
+
+  it("a one-line answer is written in the working line and becomes its bubble when the turn ends", () => {
+    frame(liveBot([ask]), "Yes.");
+    expect(inLine("Yes.")).toBe(true);
+    expect(inBubble("Yes.")).toBe(false);
+    frame(liveBot([ask, note("n0", 2_000, "Yes.")]));
+    expect(inLine("Yes.")).toBe(true);
+    expect(inBubble("Yes.")).toBe(false);
+    frame(endedBot([ask, { ...note("n0", 2_000, "Yes."), turnTerminal: true }]));
+    expect(inBubble("Yes.")).toBe(true);
   });
 });

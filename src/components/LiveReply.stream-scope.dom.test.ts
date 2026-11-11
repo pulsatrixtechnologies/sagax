@@ -41,14 +41,17 @@ afterEach(() => {
   host.remove();
 });
 
+// #3696: past the working line's short form, so the bubble draws it
+const PLAN = "Voici le plan.\n\n- un";
+
 describe("the open conversation's live parts and other bots' streams (#3624)", () => {
   it("renders nothing of the open chat for another conversation's deltas", () => {
-    draw({ [OPEN]: "Voici le plan." });
+    draw({ [OPEN]: PLAN });
     const after = { ...renders };
     let elsewhere = "";
     for (let delta = 0; delta < 30; delta++) {
       elsewhere += "more words ";
-      draw({ [OPEN]: "Voici le plan.", [ELSEWHERE]: elsewhere });
+      draw({ [OPEN]: PLAN, [ELSEWHERE]: elsewhere });
     }
     expect(renders.reply - after.reply).toBe(0);
     expect(renders.presence - after.presence).toBe(0);
@@ -56,9 +59,9 @@ describe("the open conversation's live parts and other bots' streams (#3624)", (
   });
 
   it("draws each delta of its own conversation once, and the working line not at all", () => {
-    draw({ [OPEN]: "Voici" });
+    draw({ [OPEN]: PLAN });
     const after = { ...renders };
-    let text = "Voici";
+    let text = PLAN;
     for (let delta = 0; delta < 10; delta++) {
       text += " le plan";
       draw({ [OPEN]: text });
@@ -66,6 +69,6 @@ describe("the open conversation's live parts and other bots' streams (#3624)", (
     expect(renders.reply - after.reply).toBe(10);
     // the line under the bubble only needs to know words are there
     expect(renders.presence - after.presence).toBe(0);
-    expect(host.querySelector("[data-live-reply]")?.textContent).toContain(text);
+    expect(host.querySelector("[data-live-reply]")?.textContent).toContain("un le plan le plan");
   });
 });

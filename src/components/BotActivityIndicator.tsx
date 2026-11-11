@@ -93,8 +93,8 @@ export function ThinkingSheen({
   );
 }
 
-function Sheen({ text, ultracode, still }: { text: string; ultracode: boolean; still: boolean }) {
-  return <ThinkingSheen text={text} ultracode={ultracode} still={still} />;
+function Sheen({ text, ultracode, still, wrap }: { text: string; ultracode: boolean; still: boolean; wrap: boolean }) {
+  return <ThinkingSheen text={text} ultracode={ultracode} still={still} className={wrap ? "whitespace-normal leading-[1.3]" : undefined} />;
 }
 
 export type BotActivityMode = "thinking" | "typing";
@@ -107,6 +107,7 @@ export function BotActivityIndicator({
   seed = "",
   ultracode = false,
   active = true,
+  wrap = false,
 }: {
   bot: BotAvatarProps["bot"];
   mode: BotActivityMode;
@@ -120,6 +121,8 @@ export function BotActivityIndicator({
   ultracode?: boolean;
   /** false while the line leaves: stops the rotation */
   active?: boolean;
+  /** the bot's own words (#3696): they wrap on a narrow column, never cut */
+  wrap?: boolean;
 }) {
   const osReduced = useReducedMotion();
   const reduced = osReduced || prefersReducedMotion();
@@ -153,8 +156,8 @@ export function BotActivityIndicator({
           <span />
         </span>
       )}
-      <span aria-hidden="true" className="flex items-baseline">
-        <Sheen key={mode} text={phrase} ultracode={ultracode} still={reduced} />
+      <span aria-hidden="true" className={cn("flex items-baseline", wrap && "min-w-0")}>
+        <Sheen key={mode} text={phrase} ultracode={ultracode} still={reduced} wrap={wrap} />
       </span>
     </span>
   );

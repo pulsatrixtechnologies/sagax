@@ -316,6 +316,7 @@ export function ChatViewShell(m: Record<string, any>) {
             seed={`${bot.id}:${bot.threadId ?? ""}:${busySince ?? ""}`}
             since={busySince}
             answering={popping !== null}
+            onCall={onCall}
           />
         </div>
       </div>

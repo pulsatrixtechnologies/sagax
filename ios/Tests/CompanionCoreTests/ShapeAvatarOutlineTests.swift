@@ -26,6 +26,25 @@ final class ShapeAvatarOutlineTests: XCTestCase {
         XCTAssertGreaterThan(mid[0].x, 0)
     }
 
+    // #3702: blendOutlines was rewritten with typed sub-expressions so older
+    // toolchains type-check it; the blend itself must be unchanged.
+    func testBlendOutlinesInterpolatesEachPointAndStopsAtShorterRing() {
+        let from = [CGPoint(x: 0, y: 10), CGPoint(x: 40, y: -20), CGPoint(x: 5.5, y: 7)]
+        let to = [CGPoint(x: 100, y: 30), CGPoint(x: 0, y: 20)]
+        XCTAssertEqual(ShapeAvatarOutline.blendOutlines(from, to, 0), Array(from.prefix(2)))
+        XCTAssertEqual(ShapeAvatarOutline.blendOutlines(from, to, 1), to)
+        let quarter = ShapeAvatarOutline.blendOutlines(from, to, 0.25)
+        XCTAssertEqual(quarter.count, 2)
+        XCTAssertEqual(Double(quarter[0].x), 25, accuracy: 1e-12)
+        XCTAssertEqual(Double(quarter[0].y), 15, accuracy: 1e-12)
+        XCTAssertEqual(Double(quarter[1].x), 30, accuracy: 1e-12)
+        XCTAssertEqual(Double(quarter[1].y), -10, accuracy: 1e-12)
+        let beyond = ShapeAvatarOutline.blendOutlines(from, to, 1.5)
+        XCTAssertEqual(Double(beyond[0].x), 150, accuracy: 1e-12)
+        XCTAssertEqual(Double(beyond[1].y), 40, accuracy: 1e-12)
+        XCTAssertTrue(ShapeAvatarOutline.blendOutlines([], to, 0.5).isEmpty)
+    }
+
     func testEveryObjectPresetValidPathBodiedEyesInside() {
         for preset in ShapeAvatarPresets.all {
             switch ShapeAvatarValidator.check(preset) {

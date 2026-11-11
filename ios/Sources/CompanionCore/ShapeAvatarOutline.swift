@@ -234,11 +234,14 @@ public enum ShapeAvatarOutline {
 
     public static func blendOutlines(_ from: [CGPoint], _ to: [CGPoint], _ t: Double) -> [CGPoint] {
         let n = min(from.count, to.count)
-        return (0..<n).map { i in
-            CGPoint(
-                x: Double(from[i].x) + (Double(to[i].x) - Double(from[i].x)) * t,
-                y: Double(from[i].y) + (Double(to[i].y) - Double(from[i].y)) * t
-            )
+        // Typed closure and sub-expressions: the single-expression form timed
+        // out the type checker of older toolchains (#3702).
+        return (0..<n).map { (i: Int) -> CGPoint in
+            let fx: Double = Double(from[i].x)
+            let fy: Double = Double(from[i].y)
+            let x: Double = fx + (Double(to[i].x) - fx) * t
+            let y: Double = fy + (Double(to[i].y) - fy) * t
+            return CGPoint(x: x, y: y)
         }
     }
 

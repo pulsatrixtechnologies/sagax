@@ -53,7 +53,7 @@ afterEach(() => {
 
 function OpenChat() {
   const cards = useParallelCards(bot);
-  const pinned = usePinnedWaiting([], []);
+  const pinned = usePinnedWaiting([]);
   return createElement(Fragment, null,
     createElement("output", { "data-questions": String((cards as { questions?: unknown[] }).questions?.length ?? 0), "data-pendings": String(cards.pendings.length) }),
     createElement(ComposerPendingStrip, { bot, pinned, storeBots: [bot], threadId: "main", approvalBotFor: () => bot, onCancelTurn: () => {} }));

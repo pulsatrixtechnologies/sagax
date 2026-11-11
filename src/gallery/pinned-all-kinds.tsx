@@ -9,6 +9,10 @@
  * previous topic, decided from the pinned card in that topic.
  * offer (#3512): only the offer card « Garder le brief du jour ? » the bot
  * posted on its own, two days earlier, in the previous topic.
+ * unknown (#3543): the same as one, plus an item of a kind this app does
+ * not know, in a conversation it has not loaded: its text, and its
+ * conversation opens. The pinned row draws the server's items
+ * (GET /api/approvals?waiting=1), built here as the server serves them.
  * Every action is recorded in window.__decisions. */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -16,7 +20,6 @@ import { ComposerPendingStrip } from "../components/Composer.tsx-parts/ComposerP
 import { usePinnedWaiting } from "../components/Composer.tsx-parts/PinnedWaitingCard";
 import { AttentionCard } from "../components/AttentionCard";
 import { ApprovalCard } from "../components/ApprovalCard";
-import { pendingApprovals } from "../components/PendingApproval";
 import { InputRequestCard } from "../components/InputRequestCard";
 import { QuestionCard } from "../components/QuestionCard";
 import { TopicDivider } from "../components/ChatView.tsx-parts/stream";
@@ -25,6 +28,7 @@ import { loadLocale, t } from "../lib/i18n";
 import * as pending from "../lib/pending-question";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { BotEditorStore, type Bot, type Message, type useStore } from "../state/store";
+import type { ServedWaitingItem } from "../../shared/waiting-items";
 import { OptionCard } from "../components/OptionCard";
 import "../styles.css";
 
@@ -97,28 +101,39 @@ const briefOffer = {
 
 const current = which === "offer" ? [] : [handoff, inputRequest];
 const earlier = which === "two" ? [oldChoice] : which === "approval" ? [oldApproval] : which === "offer" ? [briefOffer] : [];
-// On a build without #3438 these helpers are absent: nothing of the kind is
-// pinned and the input request is drawn as its own box (the "before").
-// Without #3512, pendingOffers is absent: an offer is pinned nowhere.
-const lib = pending as unknown as Partial<{
-  pendingRequests: (messages: readonly Message[]) => unknown[];
-  inputRequestsDrawnElsewhere: (messages: readonly Message[]) => Set<string>;
-  pendingOffers: (messages: readonly Message[]) => Message[];
-}>;
-const requests = lib.pendingRequests ? lib.pendingRequests(current) : [];
-const topics = lib.pendingRequests && earlier.length ? [{
-  threadId: "topic-1", questions: pending.pendingQuestions(earlier), requests: lib.pendingRequests(earlier),
-  approvals: pendingApprovals(earlier).map((each) => ({ ...each, threadId: each.threadId ?? "topic-1" })),
-  offers: lib.pendingOffers ? lib.pendingOffers(earlier) : [],
-}] : [];
-const hidden = lib.inputRequestsDrawnElsewhere ? lib.inputRequestsDrawnElsewhere(current) : new Set<string>();
+const hidden = pending.inputRequestsDrawnElsewhere(current);
+
+/** One item as the server serves it, with its message. */
+function served(message: Message, threadId: string): ServedWaitingItem {
+  const words = message.attention?.items[0]?.text ?? message.card?.questionRequest?.questions[0]?.question ?? message.card?.title ?? "";
+  const kind: ServedWaitingItem["kind"] = message.attention ? "request" : message.card?.proactiveProposal ? "proposal" : message.card?.questionRequest ? "question" : "approval";
+  const id = message.attention ? `attention:${message.id}` : message.card?.proactiveProposal ? `proactive:${message.card.proactiveProposal.id}` : message.card?.requestId ?? message.id;
+  return {
+    id, kind, botId: bot.id, botName: bot.name, threadId, messageId: message.id, at: message.at, ageMs: now - message.at, title: words, text: words, options: [],
+    answerWith: "text", freeText: true, skippable: true, message, ...(message.card?.proactiveProposal ? { proactiveId: message.card.proactiveProposal.id } : {}),
+  };
+}
+
+const unknownItem: ServedWaitingItem = {
+  id: "later-kind:1", kind: "checklist" as unknown as ServedWaitingItem["kind"], botId: bot.id, botName: bot.name, threadId: "thread-elsewhere", messageId: "m-later",
+  at: now - 3 * DAY, ageMs: 3 * DAY, options: [], answerWith: "text", freeText: true, skippable: true,
+  title: fr ? "Signer la liste de vérification de la mise en production" : "Sign the release checklist",
+  text: fr ? "Signer la liste de vérification de la mise en production\n\nIl reste trois points : les sauvegardes, le DNS et l'avis aux clients." : "Sign the release checklist\n\nThree points are left: the backups, the DNS and the customer notice.",
+};
+
+// the hand-off's card and its input request are one ask: one item
+const servedItems: ServedWaitingItem[] = [
+  ...earlier.map((message) => served(message, "topic-1")),
+  ...current.filter((message) => !hidden.has(message.id)).map((message) => served(message, "thread-main")),
+  ...(which === "unknown" ? [unknownItem] : []),
+].sort((x, y) => x.at - y.at);
 
 function Bubble({ children }: { children: string }) {
   return <div className={`rounded-[18px] bg-card px-3 py-[7px] text-[13px] leading-5 text-ink ${CHAT_BUBBLE_WIDTH_CLASS.fit}`}>{children}</div>;
 }
 
 function Gallery() {
-  const pinned = (usePinnedWaiting as unknown as (...args: unknown[]) => ReturnType<typeof usePinnedWaiting>)([], pending.pendingQuestions(current), requests, topics);
+  const pinned = usePinnedWaiting(servedItems, "thread-main", current);
   const narrow = width < 600;
   return (
     <div data-shot="chat" className="flex flex-col bg-canvas text-ink" style={{ width, minHeight: narrow ? 760 : 640 }}>

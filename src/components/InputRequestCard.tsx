@@ -33,7 +33,7 @@ export interface CardPlace {
 export async function answerPersonRequest(card: PersonAttentionCard, text: string, where?: CardPlace): Promise<void> {
   await api(`/api/bots/${card.botId}/messages`, { method: "POST", body: JSON.stringify({ text, threadId: card.threadId, sendId: crypto.randomUUID() }) });
   if (where) {
-    void api("/api/approvals/handled", { method: "POST", body: JSON.stringify({ botId: where.botId, threadId: where.threadId, messageId: where.messageId }) }).catch(() => undefined);
+    void api("/api/approvals/handled", { method: "POST", body: JSON.stringify({ botId: where.botId, threadId: where.threadId, messageId: where.messageId, answered: true }) }).catch(() => undefined);
   }
 }
 

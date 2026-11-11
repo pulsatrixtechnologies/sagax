@@ -106,7 +106,7 @@ function Shell() {
   const cards = useParallelCards(live) as { pendings: never[]; questions?: unknown[] };
   // before #2082 the strip also took the task's questions
   const strip = { parallelQuestions: cards.questions ?? [] } as Record<string, unknown>;
-  const pinned = usePinnedWaiting([], []);
+  const pinned = usePinnedWaiting([]);
   return (
     <div data-gallery-sample="parallel-question" className="flex overflow-hidden bg-app text-ink" style={{ width, height }}>
       <Pane sample="source" title="Orla" composer={live && (

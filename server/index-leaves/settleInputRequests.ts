@@ -3,7 +3,7 @@
 export type Host = Record<string, any>;
 
 export function createSettleInputRequests(getHost: () => Host): any {
-function settleInputRequests(threadId: string, how: "answered" | "expired" | "defaulted" | "skipped" = "answered") {
+function settleInputRequests(threadId: string, how: "answered" | "handled" | "expired" | "defaulted" | "skipped" = "answered") {
   const host = getHost();
 
   const rows = host.openInputRequests.get(threadId);
@@ -26,7 +26,8 @@ function settleInputRequests(threadId: string, how: "answered" | "expired" | "de
     }
     const message = path.find((candidate) => candidate.id === row.messageId);
     if (!message?.inputRequest || message.inputRequest.answered || message.inputRequest.expired) continue;
-    const settled = how === "answered" ? { answered: true } : { expired: true, ...(how === "defaulted" ? { defaulted: true } : how === "skipped" ? { skipped: true } : {}) };
+    // #3543: one the person marked handled reads settled, as answered
+    const settled = how === "answered" || how === "handled" ? { answered: true } : { expired: true, ...(how === "defaulted" ? { defaulted: true } : how === "skipped" ? { skipped: true } : {}) };
     host.store.patchMessage(row.threadId, row.messageId, { inputRequest: { ...message.inputRequest, ...settled } });
   }
 

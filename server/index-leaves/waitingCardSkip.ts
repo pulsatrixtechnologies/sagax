@@ -46,9 +46,11 @@ export function createWaitingCardSkip(getHost: () => Host): any {
     };
   }
 
-  /** Close one person request (an input request row or an attention card). */
-  function closeRequest(threadId: string, message, how) {
-    return closePersonRequest(personDeps(), threadId, message, how);
+  /** Close one person request (an input request row or an attention card):
+   * skipped, handled, answered or expired, the one way. `quiet` closes the
+   * other half of an ask already told, without a second line. */
+  function closeRequest(threadId: string, message, how, quiet = false) {
+    return closePersonRequest(quiet ? { ...personDeps(), answerWork: () => true, noteWork: () => {} } : personDeps(), threadId, message, how);
   }
 
   /** The open person requests and proposal cards of every bot's

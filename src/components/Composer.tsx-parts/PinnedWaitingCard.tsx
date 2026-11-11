@@ -16,13 +16,21 @@
 // named once. A question keeps one quiet line naming who waits, since the
 // question card's title is the question itself; so does an approval whose
 // title does not name the bot (a proposal, a room's member bot).
+//
+// #3543: the items are the server's own (src/lib/pinned-waiting.ts), the
+// same list Today and the connector read: the app builds none from the
+// conversation. An item of a kind this app does not know is drawn with its
+// text, and "See in the conversation" opens its conversation.
 import { ChevronDown, ChevronUp, CornerLeftUp } from "lucide-react";
 import { useState } from "react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { pinnedItems, type PersonRequest, type PinnedItem, type TopicPending } from "@/lib/pending-question";
-import { useStore, type Bot, type Message } from "@/state/store";
+import type { PinnedItem } from "@/lib/pending-question";
+import { pinnedItemsFrom } from "@/lib/pinned-waiting";
+import { useShowThreads } from "@/lib/thread-preferences";
+import { openThread, useStore, type Bot, type Message } from "@/state/store";
+import type { ServedWaitingItem } from "../../../shared/waiting-items";
 import { approvalCardStaysInChat } from "../ApprovalCard";
 import { PendingApprovalActions, PendingApprovalPanel, readOnlyApprovals, Stepper, type Pending } from "../PendingApproval";
 import { QuestionCard } from "../QuestionCard";
@@ -34,9 +42,12 @@ import { OptionCard } from "../OptionCard";
 const FOLDED_TEXT_MAX = 72;
 
 /** The pinned card's own state, kept by the composer session so the box
- * knows which item the person is on (typing answers that one). */
-export function usePinnedWaiting(approvals: readonly Pending[], questions: readonly Message[], requests: readonly PersonRequest[] = [], topics: readonly TopicPending[] = [], offers: readonly Message[] = []) {
-  const items = pinnedItems(approvals, questions, requests, topics, offers);
+ * knows which item the person is on (typing answers that one). `served` is
+ * the server's list for this conversation, `threadId` the conversation on
+ * screen, `fresh` its transcript in the store and `approvals` its live
+ * approvals, which add who asked (src/lib/pinned-waiting.ts). */
+export function usePinnedWaiting(served: readonly ServedWaitingItem[], threadId = "", fresh: readonly Message[] = [], approvals: readonly Pending[] = []) {
+  const items = pinnedItemsFrom(served, threadId, fresh, approvals);
   // the item is remembered by key, not by position: one answered ahead of
   // it must not move the person to another request
   const [place, setPlace] = useState<{ key: string; at: number } | undefined>(undefined);
@@ -68,6 +79,8 @@ export function pinnedItemText(item: PinnedItem): string {
       ? item.message.card?.title || item.message.card?.subtitle || ""
     : item.kind === "request"
       ? item.card.items[0]?.text ?? ""
+    : item.kind === "other"
+      ? item.item.title || item.item.text
       : item.pending.message.card?.title || item.pending.detail || item.pending.tool;
   const text = raw.replace(/\s+/g, " ").trim();
   return text.length > FOLDED_TEXT_MAX ? `${text.slice(0, FOLDED_TEXT_MAX - 1).trimEnd()}…` : text;
@@ -78,6 +91,7 @@ export function pinnedItemText(item: PinnedItem): string {
  * approval, or one whose card never stays in the chat, has nothing to
  * scroll to. An approval of an earlier topic sits in that topic. */
 export function pinnedItemMessageId(item: PinnedItem, threadId: string): string | undefined {
+  if (item.kind === "other") return item.item.messageId;
   if (item.kind === "question" || item.kind === "request" || item.kind === "offer") return item.message.id;
   if (!item.threadId && item.pending.threadId && item.pending.threadId !== threadId) return undefined;
   return approvalCardStaysInChat(item.pending.message.card) ? item.pending.message.id : undefined;
@@ -103,7 +117,8 @@ export function PinnedWaitingCard({
   onCancelTurn: () => void;
   locale?: string;
 }) {
-  const { dispatch } = useStore();
+  const { dispatch, state } = useStore();
+  const showThreads = useShowThreads();
   const { items, index, current, go, collapsed, setCollapsed } = pinned;
   if (!current) return null;
   const name = nameFor(current);
@@ -128,10 +143,16 @@ export function PinnedWaitingCard({
       {collapsed ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
     </button>
   );
-  const jumpButton = messageId ? (
+  // #3543: an item this app cannot draw opens its conversation first (when
+  // it sits in another one), then lands on its message
+  const jump = () => {
+    if (current.kind === "other" && current.threadId && current.threadId !== threadId) openThread(dispatch, { botId: current.item.botId, threadId: current.threadId }, state, showThreads);
+    if (messageId) dispatch({ type: "focusMessage", threadId: askedIn, messageId });
+  };
+  const jumpButton = messageId || current.kind === "other" ? (
     <button
       type="button"
-      onClick={() => dispatch({ type: "focusMessage", threadId: askedIn, messageId })}
+      onClick={jump}
       className="flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-1 text-[12px] text-ink-secondary underline-offset-2 hover:text-ink hover:underline"
       aria-label={t("pinned.seeInConversation")}
       title={t("pinned.seeInConversation")}
@@ -143,7 +164,7 @@ export function PinnedWaitingCard({
     </button>
   ) : null;
   // #3471: one quiet skip at the end of the top row, for every kind
-  const skip = pinnedItemSkip(current, askedIn, bot?.id, dispatch);
+  const skip = pinnedItemSkip(current, askedIn, current.item.botId, dispatch);
   const skipButton = skip ? <CardCloseButton label={t("waitingCard.skipAria")} onClick={skip} className="ms-0" /> : null;
   const controls = <>{jumpButton}{stepper}{foldButton}{skipButton}</>;
   // the chat's ask surface (AskCard): no outline, no shadow at rest
@@ -179,14 +200,25 @@ export function PinnedWaitingCard({
       data-pinned-waiting="open"
       className={frame}
     >
-      {current.kind === "request" ? (
+      {current.kind === "other" ? (
+        // #3543: a kind this app does not know: its text, and its
+        // conversation opens from the top row
+        <div className="px-4 pb-3 pt-2.5" data-pinned-body="other">
+          <div className="mb-2 flex min-w-0 items-center gap-2">
+            {mark}
+            <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink-secondary" data-pinned-title="">{t("pinned.waiting", { name })}</span>
+            {controls}
+          </div>
+          <p className="whitespace-pre-wrap break-words text-[14px] leading-5 text-ink" data-pinned-text="">{current.item.text || current.item.title}</p>
+        </div>
+      ) : current.kind === "request" ? (
         <div className="px-4 pb-3 pt-2.5" data-pinned-body="request">
           <div className="mb-2 flex min-w-0 items-center gap-2">
             {mark}
             <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink-secondary" data-pinned-title="">{t("pinned.waiting", { name })}</span>
             {controls}
           </div>
-          <PersonRequestCard key={current.key} message={current.message} card={current.card} threadId={askedIn} conversationBotId={bot?.id} embedded />
+          <PersonRequestCard key={current.key} message={current.message} card={current.card} threadId={askedIn} conversationBotId={current.item.botId} embedded />
         </div>
       ) : current.kind === "offer" ? (
         // #3512: an offer the bot posted on its own (the daily brief's, a
@@ -197,7 +229,7 @@ export function PinnedWaitingCard({
             <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink-secondary" data-pinned-title="">{t("pinned.waiting", { name })}</span>
             {controls}
           </div>
-          <OptionCard key={current.key} botId={current.message.from?.botId ?? bot?.id ?? ""} threadId={askedIn} message={current.message} embedded />
+          <OptionCard key={current.key} botId={current.message.from?.botId ?? current.item.botId} threadId={askedIn} message={current.message} embedded />
         </div>
       ) : current.kind === "question" ? (
         <div className="px-4 pb-3 pt-2.5" data-pinned-body="question">
@@ -250,6 +282,8 @@ export function PinnedWaitingCard({
 /** How the pinned item is skipped (#3471): an approval or a question by its
  * request, a question in words by its card. Closed as skipped, never denied. */
 export function pinnedItemSkip(item: PinnedItem, askedIn: string, conversationBotId: string | undefined, dispatch: ReturnType<typeof useStore>["dispatch"]): (() => void) | undefined {
+  // a kind this app does not know is answered in its conversation
+  if (item.kind === "other") return undefined;
   if (item.kind === "approval") {
     const card = item.pending.message.card;
     const requestId = card?.approvalOrigin?.requestId ?? item.pending.requestId;

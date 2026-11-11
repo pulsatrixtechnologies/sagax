@@ -1511,7 +1511,8 @@ import { createBindTurnComputer } from "./index-leaves/bindTurnComputer.ts";
 import { createStartDuplexCallTurn } from "./index-leaves/startDuplexCallTurn.ts";
 import { createSseFrameFor } from "./index-leaves/sseFrameFor.ts";
 import { createInboxPending, todayDepsFor } from "./index-leaves/inboxPending.ts";
-import { markAttentionHandled, skipPersonRequestCard } from "./approvals/today-rows.ts";
+import { settlePersonRequestCard } from "./approvals/today-rows.ts";
+import type { PersonRequestSettle } from "./approvals/waiting-card-skip.ts";
 import { waitingEntriesFrom, type WaitingItem } from "../shared/waiting-items.ts";
 import { createProvideSecretFromPhone } from "./index-leaves/provideSecretFromPhone.ts";
 import { createReportIncident } from "./index-leaves/reportIncident.ts";
@@ -25701,24 +25702,17 @@ ROUTES.push(createApprovalsInboxRoutes({
     team: managedTeamIds(viewer.principalId).size > 0
   }),
   answer: (auth, item, decision, rule) => answerInboxCard(auth, item.threadId, item.requestId, decision, rule),
-  handled: inboxRequestHandled,
-  // #3471: a question in words skipped, in a conversation of this person's
-  skip: inboxRequestSkipped
+  // #3471, #3543: a question in words skipped, marked handled or answered,
+  // in a conversation of this person's: one settle path
+  settle: inboxRequestSettled
 }));
-/** #2689, #3512: one of the viewer's questions in words (a "needs you" card
- * or an input request row) marked handled. */
-function inboxRequestHandled(auth: RequestAuth, viewer: InboxViewer, item: { botId: string; threadId: string; messageId: string }): boolean {
-  return markAttentionHandled({
+/** #2689, #3471, #3512, #3543: one of the viewer's questions in words (a
+ * "needs you" card or an input request row) skipped, marked handled or
+ * answered: closed the one way, the waiting work told how. */
+function inboxRequestSettled(auth: RequestAuth, viewer: InboxViewer, item: { botId: string; threadId: string; messageId: string }, how: PersonRequestSettle): boolean {
+  return settlePersonRequestCard({
     ...todayDepsFor(getLeafHost(), auth, viewer),
-    patch: (threadId, messageId, attention) => { store.patchMessage(threadId, messageId, { attention }); },
-    patchRequest: (threadId, messageId, inputRequest) => { store.patchMessage(threadId, messageId, { inputRequest }); }
-  }, item.botId, item.threadId, item.messageId);
-}
-/** #3471: one of the viewer's questions in words skipped. */
-function inboxRequestSkipped(auth: RequestAuth, viewer: InboxViewer, item: { botId: string; threadId: string; messageId: string }): boolean {
-  return skipPersonRequestCard({
-    ...todayDepsFor(getLeafHost(), auth, viewer),
-    close: (threadId, message) => waitingCardSkip.closeRequest(threadId, message as Message, { kind: "skipped" })
+    close: (threadId, message, quiet) => waitingCardSkip.closeRequest(threadId, message as Message, { kind: how }, quiet)
   }, item.botId, item.threadId, item.messageId);
 }
 /** #3512: `work` with the person's own request auth, for a short session of
@@ -32151,7 +32145,7 @@ const orgMember = createOrgMemberRoutes({
   waitingItems: memberWaitingItems,
   settleRequest: (person, where, how) => asMemberAuth(person, (auth) => {
     const viewer = { principalId: person.principalId };
-    return how === "skipped" ? inboxRequestSkipped(auth, viewer, where) : inboxRequestHandled(auth, viewer, where);
+    return inboxRequestSettled(auth, viewer, where, how);
   }) ?? false,
   approvalAnswerer: (threadId, requestId) => {
     const message = store.messagesFor(threadId).find((row) => row.card?.requestId === requestId);

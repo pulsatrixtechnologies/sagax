@@ -104,3 +104,46 @@ describe("the waiting rows' sweep (#3471)", () => {
     expect(sweepWaitingRowExpiry(deps)).toBe(0);
   });
 });
+
+describe("\"handled\" tells the work that waits, as a skip does (#3543)", () => {
+  it("wakes the run parked on an input request with the handled line, in the person's language", () => {
+    const rows: Record<string, Row[]> = { main: [{ id: "m-input", at: 1, inputRequest: { botId: "b1", threadId: "work-1", botName: "Ada", question: "Which host?" } }] };
+    const { host, appended } = fakeHost(rows);
+    host.coordinator.answer = vi.fn(() => true);
+    expect(host.waitingCardSkip.closeRequest("main", rows.main[0], { kind: "handled" })).toBe(true);
+    expect(host.coordinator.answer).toHaveBeenCalledTimes(1);
+    const [workThread, line] = host.coordinator.answer.mock.calls[0]!;
+    expect(workThread).toBe("work-1");
+    expect(line).toMatch(/marked this handled without giving an answer/);
+    expect(appended).toEqual([]);
+    expect(host.settleInputRequests).toHaveBeenCalledWith("work-1", "handled");
+    // it reads settled everywhere, not skipped nor expired
+    expect(rows.main[0]!.inputRequest).toMatchObject({ answered: true });
+    expect(rows.main[0]!.inputRequest).not.toHaveProperty("skipped");
+    // once closed, a second "handled" tells nothing more
+    expect(host.waitingCardSkip.closeRequest("main", rows.main[0], { kind: "handled" })).toBe(false);
+    expect(host.coordinator.answer).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the line in the thread of a bot's question nothing is parked on any more, in French for a French person", () => {
+    const rows: Record<string, Row[]> = { main: [{ id: "m-card", at: 1, attention: { kind: "question", botId: "b2", threadId: "ask-1", items: [{ text: "Lequel ?" }] } }] };
+    const { host, appended } = fakeHost(rows);
+    host.languageOfPerson = () => "fr";
+    host.recordedBotOwner = () => "pr_1";
+    expect(host.waitingCardSkip.closeRequest("main", rows.main[0], { kind: "handled" })).toBe(true);
+    expect(appended).toHaveLength(1);
+    expect(appended[0]![0]).toBe("ask-1");
+    expect(String(appended[0]![1].text)).toMatch(/marqué ceci comme réglé/);
+    expect(rows.main[0]!.attention).toHaveProperty("handledAt");
+    expect(rows.main[0]!.attention).not.toHaveProperty("closed");
+  });
+
+  it("says nothing more to the work once the person's own words reached it", () => {
+    const rows: Record<string, Row[]> = { main: [{ id: "m-input", at: 1, inputRequest: { botId: "b1", threadId: "work-1", question: "Which?" } }] };
+    const { host, appended } = fakeHost(rows);
+    expect(host.waitingCardSkip.closeRequest("main", rows.main[0], { kind: "answered" })).toBe(true);
+    expect(host.coordinator.answer).not.toHaveBeenCalled();
+    expect(appended).toEqual([]);
+    expect(rows.main[0]!.inputRequest).toMatchObject({ answered: true });
+  });
+});

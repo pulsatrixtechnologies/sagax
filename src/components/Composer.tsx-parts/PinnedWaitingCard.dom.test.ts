@@ -11,8 +11,7 @@ import { loadLocale } from "@/lib/i18n";
 import type { Bot, Message } from "@/state/store";
 import type { Pending } from "../PendingApproval";
 import { PinnedWaitingCard, pinnedItemText, usePinnedWaiting } from "./PinnedWaitingCard";
-import { pendingRequests, type PersonRequest, type TopicPending } from "@/lib/pending-question";
-import { topicPending } from "@/lib/use-topic-pending";
+import type { ServedWaitingItem } from "../../../shared/waiting-items";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const { BotEditorStore, initialState } = await import("@/state/store");
@@ -32,6 +31,31 @@ function approval(id: string, at: number): Pending {
   return { message, requestId: `req-${id}`, tool: "Bash", detail: "ls ~" };
 }
 
+/** #3543: the server's item (GET /api/approvals?waiting=1) for a message,
+ * with the message as the conversation shows it. */
+function served(message: Message, threadId = "main", botId = "orla"): ServedWaitingItem {
+  const kind: ServedWaitingItem["kind"] = message.attention || message.inputRequest ? "request"
+    : message.card?.proactiveProposal ? "proposal"
+    : message.card?.questionRequest ? "question" : "approval";
+  const id = kind === "request" ? `attention:${message.id}` : message.card?.proactiveProposal ? `proactive:${message.card.proactiveProposal.id}` : message.card?.requestId ?? message.id;
+  return {
+    id, kind, botId, botName: botId === "orla" ? "Orla" : botId, threadId, messageId: message.id, at: message.at, ageMs: 0, title: "", text: "", options: [],
+    answerWith: "text", freeText: true, skippable: true, message, ...(message.card?.proactiveProposal ? { proactiveId: message.card.proactiveProposal.id } : {}),
+  };
+}
+
+/** What the server lists for this conversation: the approvals (in the thread
+ * each waits in), the questions and questions in words of this topic, and
+ * those of earlier topics, oldest first as the server sorts them. */
+function waitingList(approvals: Pending[], questions: Message[], requests: Message[] = [], topics: Array<{ threadId: string; messages: Message[] }> = [], botId = "orla"): ServedWaitingItem[] {
+  return [
+    ...approvals.map((pending) => served(pending.message, pending.threadId ?? "main", botId)),
+    ...questions.map((message) => served(message, "main", botId)),
+    ...requests.map((message) => served(message, "main", botId)),
+    ...topics.flatMap((topic) => topic.messages.map((message) => served(message, topic.threadId, botId))),
+  ].sort((a, b) => a.at - b.at);
+}
+
 let root: Root | null = null;
 let host: HTMLDivElement;
 let snapshot: { current?: ReturnType<typeof usePinnedWaiting> } = {};
@@ -39,8 +63,8 @@ let snapshot: { current?: ReturnType<typeof usePinnedWaiting> } = {};
 /** a room: the composer passes no conversation bot, each item names its own */
 interface Room { member: Bot }
 
-function Harness({ approvals, questions, requests = [], topics = [], room }: { approvals: Pending[]; questions: Message[]; requests?: PersonRequest[]; topics?: TopicPending[]; room?: Room }) {
-  const pinned = usePinnedWaiting(approvals, questions, requests, topics);
+function Harness({ items, approvals, room }: { items: ServedWaitingItem[]; approvals: Pending[]; room?: Room }) {
+  const pinned = usePinnedWaiting(items, "main", [], approvals);
   snapshot.current = pinned;
   const asker = room?.member ?? bot;
   return createElement(PinnedWaitingCard, {
@@ -48,11 +72,15 @@ function Harness({ approvals, questions, requests = [], topics = [], room }: { a
   });
 }
 
-async function render(approvals: Pending[], questions: Message[], requests: PersonRequest[] = [], topics: TopicPending[] = [], room?: Room) {
+async function renderItems(items: ServedWaitingItem[], approvals: Pending[] = [], room?: Room) {
   const value = { state: { ...initialState, bots: room ? [bot, room.member] : [bot], instances: [] }, dispatch: (action: unknown) => dispatched.push(action), flushBotPatches: async () => null, refreshInstances: async () => {}, refreshModels: async () => {} };
-  const tree: ReactNode = createElement(BotEditorStore, { value: value as never, children: createElement(Harness, { approvals, questions, requests, topics, room }) });
+  const tree: ReactNode = createElement(BotEditorStore, { value: value as never, children: createElement(Harness, { items, approvals, room }) });
   await act(async () => { root!.render(tree); });
   await act(async () => { await new Promise((done) => setTimeout(done, 0)); });
+}
+
+async function render(approvals: Pending[], questions: Message[], requests: Message[] = [], topics: Array<{ threadId: string; messages: Message[] }> = [], room?: Room) {
+  await renderItems(waitingList(approvals, questions, requests, topics, room?.member.id), approvals, room);
 }
 
 const flush = () => act(async () => { await new Promise((done) => setTimeout(done, 0)); });
@@ -242,12 +270,12 @@ describe("the pinned waiting card (#3214)", () => {
   });
 
   it("shortens the folded text and prefers the question's words", () => {
-    const short = pinnedItemText({ kind: "question", key: "k", at: 1, message: ask("q", 1, "Short?") });
+    const short = pinnedItemText({ kind: "question", key: "k", at: 1, item: served(ask("q", 1, "Short?")), message: ask("q", 1, "Short?") });
     expect(short).toBe("Short?");
-    const long = pinnedItemText({ kind: "question", key: "k", at: 1, message: ask("q", 1, "x".repeat(200)) });
+    const long = pinnedItemText({ kind: "question", key: "k", at: 1, item: served(ask("q", 1, "x".repeat(200))), message: ask("q", 1, "x".repeat(200)) });
     expect(long.length).toBeLessThanOrEqual(72);
     expect(long.endsWith("…")).toBe(true);
-    expect(pinnedItemText({ kind: "approval", key: "k", at: 1, pending: approval("a", 1) })).toBe("Run a command");
+    expect(pinnedItemText({ kind: "approval", key: "k", at: 1, item: served(approval("a", 1).message), pending: approval("a", 1) })).toBe("Run a command");
   });
 });
 
@@ -259,7 +287,7 @@ describe("the pinned card holds every kind and every topic (#3438)", () => {
       inputRequest: { botId: "orla", threadId: "work-1", botName: "Orla", title: "Teammate work", question: "Which site first?", ...more } }) as unknown as Message;
 
   it("pins an input request from handed-over work as the standard card, and sends the answer to the waiting work", async () => {
-    await render([], [], pendingRequests([inputRequest("ir", 5)]));
+    await render([], [], ([inputRequest("ir", 5)]));
     expect(card()?.getAttribute("data-pinned-waiting")).toBe("open");
     const body = host.querySelector("[data-pinned-body=request]")!;
     expect(body.textContent).toContain("Which site first?");
@@ -279,19 +307,19 @@ describe("the pinned card holds every kind and every topic (#3438)", () => {
     expect(sent).toBeDefined();
     expect(JSON.parse(String(sent![1].body))).toMatchObject({ text: "North first", threadId: "work-1" });
     // the server marks it answered: it leaves
-    await render([], [], pendingRequests([inputRequest("ir", 5, { answered: true })]));
+    await render([], [], ([inputRequest("ir", 5, { answered: true })]));
     expect(card()).toBeNull();
   });
 
   it("pins a choice question asked two days ago in an earlier topic, oldest first, and jumps to it there", async () => {
     const old = ask("old-q", 1, "Keep both copies?");
-    await render([], [], pendingRequests([inputRequest("ir", 2 * 86_400_000)]), [{ threadId: "topic-1", questions: [old], requests: [] }]);
+    await render([], [], ([inputRequest("ir", 2 * 86_400_000)]), [{ threadId: "topic-1", messages: [old] }]);
     expect(host.textContent).toContain("1 of 2");
     expect(host.querySelector("[data-pinned-body=question]")?.textContent).toContain("Keep both copies?");
     await act(async () => { host.querySelector<HTMLButtonElement>("[data-pinned-jump]")!.click(); });
     expect(dispatched).toContainEqual({ type: "focusMessage", threadId: "topic-1", messageId: "old-q" });
     // answered there: the topic no longer holds it, the input request moves up
-    await render([], [], pendingRequests([inputRequest("ir", 2 * 86_400_000)]), [{ threadId: "topic-1", questions: [], requests: [] }]);
+    await render([], [], ([inputRequest("ir", 2 * 86_400_000)]), []);
     expect(host.textContent).not.toContain("1 of 2");
     expect(host.querySelector("[data-pinned-body=request]")).not.toBeNull();
   });
@@ -302,9 +330,7 @@ describe("the pinned card holds every kind and every topic (#3438)", () => {
   it("pins an approval asked in an earlier topic, decides it there, and drops it once decided", async () => {
     const DAY = 86_400_000;
     const old = approval("old-ap", 1 * DAY).message;
-    const topic = (card: Record<string, unknown> = {}) =>
-      topicPending("topic-1", { messages: [{ ...old, card: { ...old.card!, ...card } } as Message], activeLeafId: null, loaded: true });
-    expect(topic().approvals?.map((pending) => pending.threadId)).toEqual(["topic-1"]);
+    const topic = (card: Record<string, unknown> = {}) => ({ threadId: "topic-1", messages: [{ ...old, card: { ...old.card!, ...card } } as Message] });
     await render([], [ask("now-q", 2 * DAY, "And now?")], [], [topic()]);
     expect(host.querySelector("[data-approval-stepper]")?.textContent).toContain("1 of 2");
     expect(host.querySelector('[data-pinned-body="approval"]')).not.toBeNull();
@@ -323,7 +349,7 @@ describe("the pinned card holds every kind and every topic (#3438)", () => {
   it("marks a hand-off's card handled against the bot that owns the conversation, not the bot whose work asks", async () => {
     const handoff = { id: "handoff", at: 5, role: "bot", kind: "text", text: "Kiro has a question for you", from: { botId: "kiro", name: "Kiro" },
       attention: { kind: "question", botId: "kiro", botName: "Kiro", threadId: "work-kiro", sourceMessageId: "src", items: [{ text: "Which site first?" }] } } as unknown as Message;
-    await render([], [], pendingRequests([handoff]));
+    await render([], [], ([handoff]));
     const field = host.querySelector<HTMLTextAreaElement>("[data-pinned-body=request] textarea")!;
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
@@ -336,7 +362,8 @@ describe("the pinned card holds every kind and every topic (#3438)", () => {
     const sent = calls.find(([url]) => String(url).includes("/api/bots/kiro/messages"));
     expect(JSON.parse(String(sent![1].body))).toMatchObject({ text: "North first", threadId: "work-kiro" });
     const handled = calls.find(([url]) => String(url).includes("/api/approvals/handled"));
-    expect(JSON.parse(String(handled![1].body))).toEqual({ botId: "orla", threadId: "main", messageId: "handoff" });
+    // #3543: settled as answered, so the work that got the words hears nothing more
+    expect(JSON.parse(String(handled![1].body))).toEqual({ botId: "orla", threadId: "main", messageId: "handoff", answered: true });
   });
 });
 
@@ -364,7 +391,7 @@ describe("the pinned card skips every kind (#3471)", () => {
   it("skips a question in words a routine run left, through the card's skip", async () => {
     const routine = { id: "rq", at: 5, role: "bot", kind: "text", text: "Orla has a question for you", from: { botId: "orla", name: "Orla" },
       attention: { kind: "question", botId: "orla", botName: "Orla", threadId: "run-1", sourceMessageId: "src", routineName: "Morning check", items: [{ text: "Close the ticket?" }] } } as unknown as Message;
-    await render([], [], pendingRequests([routine]));
+    await render([], [], ([routine]));
     expect(skipButton()).not.toBeNull();
     await act(async () => { skipButton()!.click(); });
     await flush();
@@ -387,5 +414,34 @@ describe("the pinned card skips every kind (#3471)", () => {
     await render([], [q1, q3]);
     expect(host.textContent).toContain("Third question?");
     expect(host.querySelector("[data-approval-stepper]")?.textContent).toContain("2 of 2");
+  });
+});
+
+// #3543: the pinned row draws the server's own items, even of a kind this
+// app version does not know: its text, and its conversation opens.
+describe("the pinned card draws the server's items (#3543)", () => {
+  it("draws an item of a kind this app does not know with its text, and opens its conversation", async () => {
+    const unknown: ServedWaitingItem = {
+      ...served(ask("q-later", 1, "unused")), id: "later-kind:1", kind: "checklist" as unknown as ServedWaitingItem["kind"], threadId: "elsewhere", messageId: "m-later",
+      title: "Sign the release checklist", text: "Sign the release checklist\n\nThree items left.", message: { id: "m-later", role: "bot", kind: "checklist", at: 1 } as unknown as Message,
+    };
+    await renderItems([unknown]);
+    expect(card()?.getAttribute("data-pinned-waiting")).toBe("open");
+    const body = host.querySelector('[data-pinned-body="other"]')!;
+    expect(body.textContent).toContain("Orla is waiting for your answer");
+    expect(body.querySelector("[data-pinned-text]")?.textContent).toBe("Sign the release checklist\n\nThree items left.");
+    // nothing to skip here: it is answered in its conversation
+    expect(host.querySelector("[data-pinned-waiting] [data-card-skip]")).toBeNull();
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-pinned-jump]")!.click(); });
+    // the conversation is not one this app holds: it falls back to the bot, then lands on the message
+    expect(dispatched).toContainEqual({ type: "focusMessage", threadId: "elsewhere", messageId: "m-later" });
+    expect(dispatched.some((action) => (action as { type?: string }).type === "notice" || (action as { type?: string }).type === "revealThread")).toBe(true);
+  });
+
+  it("draws an item of a conversation the app has not loaded with that conversation's card", async () => {
+    await renderItems([served(ask("q-far", 1, "Ship it tonight?"), "task-far")]);
+    expect(host.querySelector('[data-pinned-body="question"]')?.textContent).toContain("Ship it tonight?");
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-pinned-jump]")!.click(); });
+    expect(dispatched).toContainEqual({ type: "focusMessage", threadId: "task-far", messageId: "q-far" });
   });
 });

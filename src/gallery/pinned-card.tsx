@@ -8,6 +8,7 @@ import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { ComposerPendingStrip } from "../components/Composer.tsx-parts/ComposerPendingStrip";
 import { usePinnedWaiting } from "../components/Composer.tsx-parts/PinnedWaitingCard";
+import type { ServedWaitingItem } from "../../shared/waiting-items";
 import type { Pending } from "../components/PendingApproval";
 import { QuestionCard } from "../components/QuestionCard";
 import { CHAT_BUBBLE_WIDTH_CLASS } from "../lib/chat-bubble-width";
@@ -111,7 +112,13 @@ function Bubble({ children }: { children: string }) {
 }
 
 function Gallery() {
-  const pinned = usePinnedWaiting(chosen.approvals, chosen.questions);
+  // the server's items (#3543), as GET /api/approvals?waiting=1 serves them
+  const items: ServedWaitingItem[] = [...chosen.approvals.map((pending) => pending.message), ...chosen.questions].map((message) => ({
+    id: message.card?.requestId ?? message.id, kind: (message.card?.questionRequest ? "question" : "approval") as ServedWaitingItem["kind"],
+    botId: message.from?.botId ?? "bot-orla", botName: message.from?.name ?? "", threadId: "thread-main", messageId: message.id, at: message.at, ageMs: 0,
+    title: "", text: "", options: [], answerWith: "text" as const, freeText: true, skippable: true as const, message,
+  })).sort((a, b) => a.at - b.at);
+  const pinned = usePinnedWaiting(items, "thread-main", [], chosen.approvals);
   const { setCollapsed } = pinned;
   useEffect(() => { if (chosen.collapsed) setCollapsed(true); }, [setCollapsed]);
   const narrow = width < 600;

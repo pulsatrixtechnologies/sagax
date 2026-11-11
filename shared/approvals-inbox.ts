@@ -9,7 +9,7 @@
 // Never an id on screen: `key`, `threadId` and `requestId` route answers
 // and selection, nothing more.
 import type { ApprovalRisk } from "./approval-describe.ts";
-import type { WaitingItem } from "./waiting-items.ts";
+import type { ServedWaitingItem } from "./waiting-items.ts";
 
 /** Whose card it is, from the viewer's side. */
 export type InboxScope = "mine" | "org" | "team";
@@ -100,9 +100,9 @@ export interface InboxPayload {
   history: InboxHistoryEntry[];
   /** which scope chips make sense here (solo servers have neither) */
   scopes: { org: boolean; team: boolean };
-  /** #3512: with ?waiting=1, what waits on the person, read from `pending`
+  /** #3512: with ?waiting=1, what waits on the person, read from `pending`, each with its message (#3543)
    * (shared/waiting-items.ts). */
-  waiting?: WaitingItem[];
+  waiting?: ServedWaitingItem[];
 }
 
 export const INBOX_BULK_MAX = 50;

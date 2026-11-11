@@ -19,7 +19,6 @@ import { defaultResponderName, jevRoomRoutingOn } from "@/lib/group-routing";
 import { openSettings } from "@/lib/settings-link";
 import { useReportRead, useThreadReads } from "@/lib/read-receipts-feed";
 import { ChatErrorBanner, ChatNotice, ChatReconnectBanner, ChatStaleBanner } from "./ChatErrorBanner";
-import { GroupCostNotice } from "./ChatUsageNotices";
 import { ChatFindBar } from "./ChatFindBar";
 import { ConversationTurnLimit } from "./ConversationTurnLimit";
 import { GroupTaskPicker, PersonThreadPicker, ThreadReturnLink } from "./TaskPicker";
@@ -262,7 +261,6 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
         return <RoutineRunCard message={m} bot={state.bots.find((candidate) => candidate.id === m.from?.botId)} botOf={(id) => state.bots.find((candidate) => candidate.id === id)} onResume={onResume} onOpen={runRef ? () => { close(); openRoutineRun(dispatch, { runId: runRef.runId, routineId: runRef.routineId, report: { text: runRef.summary ?? "", at: m.at } }); } : undefined} />;
       }} />
       {!pane && <ChatStaleBanner />}
-      {!remoteClient && <GroupCostNotice group={group} />}
 
       {/* An Auto room answers like lead mode while the decision model is off: say so, once. */}
       {!group.dm && !remoteClient && state.config && group.defaultResponder.kind === "auto" && !jevRoomRoutingOn(state.config) && (

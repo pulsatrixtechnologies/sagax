@@ -236,6 +236,9 @@ describe("EngineLimitIndicator (no banner above the chat, the owner 2026-11-08)"
       if (/\.test\./.test(file)) continue;
       const source = readFileSync(join(here, file), "utf8");
       expect(source, file).not.toMatch(/EngineLimitNotice|WeeklyLimitNotice|engine_limit|useLimitResetContinue|LimitResetContinue|sendBlockLocks|limit-resets\/continue/);
+      // #3690: nor the group cost notice ("Group conversations use more"):
+      // the room panel's Members tab says it.
+      expect(source, file).not.toMatch(/GroupCostNotice|chat\.notice\.groupCost|data-notice/);
     }
     // the send block's words hold no limit line either
     const words = readFileSync(join(here, "..", "lib", "send-state.ts"), "utf8");

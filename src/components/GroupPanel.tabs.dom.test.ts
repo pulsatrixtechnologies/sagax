@@ -157,6 +157,16 @@ describe("group panel Members", () => {
     expect(host.querySelector("[data-leave-group]")?.textContent).toBe("Leave group");
   });
 
+  // #3690: what a room costs is no banner above its chat: Members says it,
+  // in the words of the notice it replaces, for a room of several bots only.
+  it("says what a room of several bots costs under its roster", () => {
+    render();
+    openTab("members");
+    expect(host.querySelector("[data-group-cost-hint]")?.textContent).toBe("Group conversations use more: every bot in the group reads the whole thread. For a simple question, chat with a single bot instead.");
+    flushSync(() => root.render(createElement(GroupPanel, { group: { ...group, memberIds: ["osprey"] } as Group, members: [osprey], canEdit: true, roster: null, advanced: null })));
+    expect(host.querySelector("[data-group-cost-hint]")).toBeNull();
+  });
+
   it("folds Advanced by default and opens it in place", () => {
     render();
     openTab("members");

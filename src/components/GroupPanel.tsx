@@ -28,6 +28,7 @@ import { normalizeState } from "@/lib/mascot";
 import { HelpTip } from "./SettingsPrimitives";
 import { GroupBotPayers } from "./GroupBotPayers";
 import { useAdvancedMode } from "@/lib/interface-mode";
+import { showsGroupCostNotice } from "@/lib/usage-notices";
 import { GROUP_PANEL_TABS, groupLeadBotId, visibleGroupPanelTabs, type GroupPanelTab } from "@/lib/group-panel";
 import { lazyScreen } from "./lazy-screen";
 
@@ -295,6 +296,11 @@ export function GroupPanel({
         {tab === "members" && (
           <div data-group-members="" className="flex flex-col gap-6 px-4 pb-6 pt-2">
             {roster}
+            {/* #3690: what a group costs, said where its bots are listed,
+                never as a banner above the chat (JC 2026-11-08). */}
+            {showsGroupCostNotice(group) && (
+              <p data-group-cost-hint="" className="-mt-3 px-1 text-[12px] leading-[17px] text-ink-secondary">{t("chat.notice.groupCost")}</p>
+            )}
             {onLeave && (
               <button
                 type="button"

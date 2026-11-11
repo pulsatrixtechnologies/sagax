@@ -1,9 +1,8 @@
-/** Isolated gallery for headless screenshots of the conversation cost notices,
- * the engine limit banner, and the JSON tree viewer. Not shipped in the app.
- * ?lang=<code>&skin=<id>&view=notices|json|engine-limit|bot-pill|other-provider-limit|folded-instance-limit&used=<weekly percent> */
+/** Isolated gallery for headless screenshots of the engine limit indicator
+ * and the JSON tree viewer. Not shipped in the app.
+ * ?lang=<code>&skin=<id>&view=json|engine-limit|bot-pill|other-provider-limit|folded-instance-limit&used=<weekly percent> */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { GroupCostNotice } from "../components/ChatUsageNotices";
 import { EngineLimitIndicator } from "../components/LimitResetContinue";
 import { BotChatHeader, BotHeaderPill } from "../components/BotHeaderPill";
 import { JsonViewer } from "../components/JsonViewer";
@@ -88,7 +87,7 @@ const store = {
 (window as unknown as { __actions: unknown[] }).__actions = [];
 
 function Gallery() {
-  const view = params.get("view") ?? "notices";
+  const view = params.get("view") ?? "engine-limit";
   if (view === "json") {
     return <JsonViewer path="/w/sample.json" name="sample.json" message={{ threadId: "t", messageId: "m" }} onClose={() => {}} returnFocus={null} />;
   }
@@ -157,13 +156,8 @@ function Gallery() {
       </div>
     );
   }
-  return (
-    <div data-gallery className="min-h-screen bg-canvas p-6 text-ink">
-      <div className="mx-auto max-w-[760px]">
-        <GroupCostNotice group={{ memberIds: ["a", "b"] }} />
-      </div>
-    </div>
-  );
+  // #3690: no group cost banner either: the room panel's Members tab says it.
+  return null;
 }
 
 createRoot(document.getElementById("root")!).render(

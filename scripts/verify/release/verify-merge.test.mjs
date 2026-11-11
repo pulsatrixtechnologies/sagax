@@ -1,3 +1,4 @@
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { areaTests, sanitizeGitEnv, stampPathFor } from "./verify-merge.mjs";
 
@@ -20,24 +21,28 @@ describe("sanitizeGitEnv", () => {
 });
 
 describe("stampPathFor", () => {
+  // the stamp is a path of this platform: "/" on Linux and macOS, "\\" and a
+  // drive letter on Windows, where git also hands an absolute common dir
+  const SHA = "abc123def456abc123def456abc123def456ab";
   it("puts the OK stamp under the common git dir for a full sha", () => {
-    expect(stampPathFor("/repo/.git", "abc123def456abc123def456abc123def456ab", "/repo")).toBe(
-      "/repo/.git/sagax-verify-merge/ok-abc123def456abc123def456abc123def456ab",
-    );
+    expect(stampPathFor("/repo/.git", SHA, "/repo")).toBe(join("/repo/.git", "sagax-verify-merge", `ok-${SHA}`));
+  });
+
+  it("keeps an absolute common dir of this platform as it is", () => {
+    const common = resolve("repo", ".git");
+    expect(stampPathFor(common, SHA, resolve("elsewhere"))).toBe(join(common, "sagax-verify-merge", `ok-${SHA}`));
   });
 
   it("resolves a relative common dir against the repo root", () => {
     expect(stampPathFor(".git", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "/work")).toBe(
-      "/work/.git/sagax-verify-merge/ok-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      join("/work", ".git", "sagax-verify-merge", "ok-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
     );
   });
 
   it("refuses an empty or non-hex sha", () => {
     expect(stampPathFor("/repo/.git", "", "/repo")).toBeNull();
     expect(stampPathFor("/repo/.git", "HEAD", "/repo")).toBeNull();
-    expect(stampPathFor("/repo/.git", "abc123", "/repo")).toBe(
-      "/repo/.git/sagax-verify-merge/ok-abc123",
-    );
+    expect(stampPathFor("/repo/.git", "abc123", "/repo")).toBe(join("/repo/.git", "sagax-verify-merge", "ok-abc123"));
   });
 });
 

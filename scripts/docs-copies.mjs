@@ -24,6 +24,10 @@ export const DOC_COPIES = [
 
 const SITE_ROOT = "apps/docs/content/docs";
 
+/** A file as git holds it (LF): a Windows checkout hands it CRLF, and the
+ * copy is written and compared with LF lines. */
+const readText = (path) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
+
 /** The Markdown a copy holds for one .mdx source. */
 export function renderCopy({ source, copy, title }, mdx) {
   const front = /^---\n([\s\S]*?)\n---\n/.exec(mdx);
@@ -54,9 +58,9 @@ export function renderCopy({ source, copy, title }, mdx) {
 /** Copies whose content differs from what their source renders to. */
 export function staleCopies(root = ROOT) {
   return DOC_COPIES.filter((entry) => {
-    const want = renderCopy(entry, readFileSync(join(root, entry.source), "utf8"));
+    const want = renderCopy(entry, readText(join(root, entry.source)));
     let have = "";
-    try { have = readFileSync(join(root, entry.copy), "utf8"); } catch { /* missing counts as stale */ }
+    try { have = readText(join(root, entry.copy)); } catch { /* missing counts as stale */ }
     return have !== want;
   });
 }
@@ -68,7 +72,7 @@ function main(argv) {
     return stale.length ? 1 : 0;
   }
   for (const entry of DOC_COPIES) {
-    writeFileSync(join(ROOT, entry.copy), renderCopy(entry, readFileSync(join(ROOT, entry.source), "utf8")));
+    writeFileSync(join(ROOT, entry.copy), renderCopy(entry, readText(join(ROOT, entry.source))));
     console.log(`docs-copies: ${relative(ROOT, join(ROOT, entry.copy))} <- ${entry.source}`);
   }
   return 0;

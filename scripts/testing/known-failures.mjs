@@ -13,6 +13,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { GUARD_TESTS } from "../verify/release/guard-tests.mjs";
 
 /** The test name of a failure that belongs to the whole file (it did not load, or a hook failed). */
 export const WHOLE_FILE = "(whole file)";
@@ -113,6 +114,15 @@ export function onlyShrinks(base, head) {
   if (!base.seeded && head.seeded) return [];
   const known = new Set(base.tests.map(identityKey));
   return head.tests.filter((entry) => !known.has(identityKey(entry))).map((entry) => `${identityKey(entry)} was added to ${LIST_PATH}; the list can only shrink`);
+}
+
+/** Errors for each entry naming a file of the guard tests list
+ * (scripts/verify/release/guard-tests.mjs, #3558): a guard test keeps a rule
+ * on every platform, so it is fixed, never listed.
+ * @param {List} list @param {readonly string[]} guards */
+export function listedGuardTests(list, guards = GUARD_TESTS) {
+  const guard = new Set(guards);
+  return list.tests.filter((entry) => guard.has(entry.file)).map((entry) => `${identityKey(entry)} is a guard test: fix it, never list it in ${LIST_PATH}`);
 }
 
 /** Sightings of unlisted failures across main's runs. A failure is due for an

@@ -184,6 +184,19 @@ export class PersonSignalGate {
     return held;
   }
 
+  /** #3551: drop what waits for the brief and should never have been sent
+   * (a notice taken back). How many were dropped. */
+  withdraw(person: string, match: (held: HeldSignal) => boolean): number {
+    const row = this.state.get(person);
+    if (!row || row.held.length === 0) return 0;
+    const kept = row.held.filter((item) => !match(item));
+    const dropped = row.held.length - kept.length;
+    if (!dropped) return 0;
+    row.held = kept;
+    this.persist();
+    return dropped;
+  }
+
   /** The cards pushed today, for a test or a status line. */
   sentToday(person: string): number {
     const at = this.now();

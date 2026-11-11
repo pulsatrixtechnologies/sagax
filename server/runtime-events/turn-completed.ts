@@ -27,6 +27,8 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
         const instance = host.registry.get(event.providerInstanceId ?? bot.modelSelection.instanceId);
         const access = host.turnAccessByThread.get(event.threadId);
         if (instance) host.clearEngineRefusal(instance.instanceId, host.refusalAccount(access?.via ?? "server", access?.payerPrincipalId, host.turnSlotFor(bot, instance)));
+        // #3551: the account signs in again: its open sign-in cards close on every bot
+        if (instance && access?.payerPrincipalId) host.signInCards?.signedIn(access.payerPrincipalId, { instanceId: instance.instanceId });
       }
 
       host.safePoints.clear(event.threadId);

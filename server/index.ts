@@ -7,7 +7,7 @@ import { browserProfilePartitionTarget } from "./config.ts";
 import { masteryDelegationFacts } from "./achievements/achievements-mastery.ts";
 import { checkRoutineReadiness, routineEngineRefusal, routineFlowSkills, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer, type ReadinessEngine } from "./routines/routine-readiness.ts";
 import { routineFlowInput } from "./routines/routine-flow-input.ts";
-import { noteEngineRefusal, clearEngineRefusal, activeEngineRefusal, clearSignedOut, persistSignedOutHolds } from "./engines/engine-refusals.ts";
+import { noteEngineRefusal, clearEngineRefusal, activeEngineRefusal, clearSignedOut, persistSignedOutHolds, signedOutHeld } from "./engines/engine-refusals.ts";
 import { PreSendRefusals } from "./engines/presend-refusals.ts";
 import { PerspicaxReachability, gatewayProbe, observedFetch } from "./perspicax/perspicax-reachability.ts";
 import { createConnectorStatusRoutes } from "./routes/connector-status.ts";
@@ -531,7 +531,7 @@ import { BUILT_IN_DRIVERS } from "./drivers/builtIn.ts";
 import { orgWithholdHostTools } from "./org/org-engine-admission.ts";
 import { openCodeProviderKeysAllowed, setOpenCodeProviderKeyPolicy } from "./drivers/acp/opencode-go.ts";
 import { getOrCreateChannel, mirrorActivity, mirrorReply, type CommsBus } from "./comms-visibility.ts";
-import { openApprovalCardMessages, openPendingInboxCards, openWaitingRowCandidates, openRequestCardRows, askRowsBetween, personWroteAfter, readOneMessage, hasUnprojectedSealedRows, reprojectSealedRows, readCommandReceipt, putCommandReceipt, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, threadsReferencingAsync, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./messages/message-db.ts";
+import { accessCardMessages, openApprovalCardMessages, openPendingInboxCards, openWaitingRowCandidates, openRequestCardRows, askRowsBetween, personWroteAfter, readOneMessage, hasUnprojectedSealedRows, reprojectSealedRows, readCommandReceipt, putCommandReceipt, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, threadsReferencingAsync, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./messages/message-db.ts";
 import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
 import { contentEncryptionFromEnv } from "./encryption/content-encryption-env.ts";
 import { briefCrossingLabel, claimRecallCrossings } from "./recall/recall-disclosure.ts";
@@ -1628,6 +1628,7 @@ import { createDispatchDelegationWake } from "./index-leaves/dispatchDelegationW
 import { createPerformAsMember } from "./index-leaves/performAsMember.ts";
 import { createBotOneShotAccess, createOrgTurnAccess } from "./index-leaves/orgTurnAccess.ts";
 import { createOneShotSignIn } from "./engines/one-shot-sign-in.ts";
+import { createSignInCards } from "./engines/sign-in-cards.ts";
 import { createMountBotVps } from "./index-leaves/mountBotVps.ts";
 import { createApplyOrgEngineAllowList } from "./index-leaves/applyOrgEngineAllowList.ts";
 import { createScheduleApprovalExpiry } from "./index-leaves/scheduleApprovalExpiry.ts";
@@ -16925,24 +16926,50 @@ bus.subscribe((event: RuntimeEvent) => {
 // session_search summary): its spend is booked to the bot, and a workspace
 // at its spend limit makes none. Null when the engine cannot run it.
 // #3519: every one-shot model call of a bot signs in as that bot's turn does
-// (server/engines/one-shot-sign-in.ts), and a call that cannot sign in tells
-// the bot's owner once, on the card a refused turn shows.
-const oneShotSignIn = createOneShotSignIn<BotRecord, ProviderInstance, any>({
+// (server/engines/one-shot-sign-in.ts). #3551: it tells nobody: a limit or
+// any passing failure is one log line, a refused sign-in gets the turn's one
+// renew and, failed, the expired mark on the person's engine card.
+// #3551: an open sign-in card closes on every bot as soon as a call on its
+// account signs in again (server/engines/sign-in-cards.ts).
+const signInCards = createSignInCards({
+  accessCards: () => accessCardMessages(),
+  messagesFor: (threadId) => store.messagesFor(threadId),
+  mainThreadOf: (botId) => store.bot(botId)?.threadId ?? null,
+  accountOf: (botId) => {
+    const bot = store.bot(botId);
+    const instance = bot ? registry.get(bot.modelSelection.instanceId) : null;
+    return instance ? { instanceId: instance.instanceId, driverKind: instance.driverKind } : null;
+  },
+  remove: (threadId, messageId) => store.removeMessage(threadId, messageId),
+  withdrawNotice: ({ threadId, botId, at, personIds }) => {
+    for (const person of personIds) {
+      signalGate.withdraw(person, (held) => held.threadId === threadId && (!held.botId || held.botId === botId) && held.at >= at - 1_000 && held.at <= at + 60_000);
+    }
+  },
+  signInWorks: (payer, botId, account) => {
+    if (!engineLogins) return true;
+    const bot = store.bot(botId);
+    const slot = bot ? turnSlotFor(bot, account) : "primary";
+    if (engineLogins.expired(payer, account.driverKind, slot, account.instanceId)) return false;
+    return !signedOutHeld(account.instanceId, refusalAccount("subscription", payer, slot), Date.now());
+  },
+  log: (line) => console.info(line),
+});
+store.onChange((change) => {
+  if (change.type === "message") signInCards.noted(change.threadId, change.message);
+});
+const oneShotSignIn = createOneShotSignIn<BotRecord, ProviderInstance>({
   account: (bot, instance) => botOneShotAccess(bot, instance),
-  refusalCard: (bot, instance, error) => error instanceof EngineAccessLost && error.detail !== "perspicax_unreachable"
-    ? accessCardFor(bot, error.refusal, engineDisplayName(instance), error.detail)
-    : null,
-  signInCard: (bot, instance, ranOn, message) => subscriptionExpiredCard(bot, instance, ranOn, message),
+  verdict: (message) => readinessFailureClass(message),
+  signInRefusal: (bot, instance, ranOn, message) => subscriptionExpiredCard(bot, instance, ranOn, message),
   renew: (bot, instance, payerPrincipalId) => signInRecheck
     ? signInRecheck.refused(payerPrincipalId, instance.driverKind, turnSlotFor(bot, instance), instance.instanceId)
     : Promise.resolve(false),
-  tell: (bot, card) => {
-    const threadId = bot.threadId;
-    if (repeatsShownFailure(store.messagesFor(threadId), { role: "bot", kind: "access", access: card }, bot.id)) return;
-    store.appendMessage(threadId, { role: "bot", kind: "access", access: card });
-    notifyAccess(deliverableNotification("turn-failed", bot, threadId, engineAccessNotice(card.reason, card.engine, card), { avatarUrl: bot.avatarUrl }), card);
-    console.info(`[one-shot] ${bot.id}: a one-shot call could not sign in (${card.cause ?? card.reason}), its owner is told once`);
+  signedIn: (_bot, instance, ranOn) => {
+    if (ranOn?.payerPrincipalId) signInCards.signedIn(ranOn.payerPrincipalId, { instanceId: instance.instanceId });
   },
+  log: (line) => console.info(line),
+  redact: (text) => redactSecretsInText(text),
 });
 /** A bot's one-shot text call on `instance` (its own engine), signed in as
  * its turn is. `call` is the driver's generateText, generateMemoryText or
@@ -17769,6 +17796,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get cfg() { return cfg; },
   get citeAppFigures() { return citeAppFigures; },
   get clearEngineRefusal() { return clearEngineRefusal; },
+  get signInCards() { return signInCards; },
   get clearInternalTurn() { return clearInternalTurn; },
   get clearRelayedStream() { return clearRelayedStream; },
   get clearThreadStopping() { return clearThreadStopping; },
@@ -25603,14 +25631,20 @@ const signInRecheck = engineLogins
     clearExpired: (principalId, driver, slot, instanceId) => engineLogins.clearExpired(principalId, driver, slot, instanceId),
     expired: (principalId, driver, slot, instanceId) => engineLogins.expired(principalId, driver, slot, instanceId),
     accounts: (principalId, driver) => engineLogins.accountInstances(principalId, driver),
-    onRestored: (principalId, driver) => resumeEngineReconnectForPerson(principalId, driver === "codex" ? "Codex" : "Claude")
+    onRestored: (principalId, driver, instanceId) => {
+      resumeEngineReconnectForPerson(principalId, driver === "codex" ? "Codex" : "Claude");
+      // #3551: the sign-in works again: its open cards close on every bot
+      signInCards.signedIn(principalId, instanceId ? { instanceId } : { driverKind: driver });
+    }
   })
   : null;
 if (signInRecheck && !codeFixture) {
   setTimeout(() => {
     void signInRecheck.heal(principals.list().filter((person) => person.disabledAt === undefined).map((person) => person.id))
       .then((restored) => { if (restored) console.log(`[sign-in] ${restored} expired sign-in(s) restored at start (#2040)`); })
-      .catch(reportBackgroundError);
+      .catch(reportBackgroundError)
+      // #3551: once healed, the background sign-in cards whose account signs in go
+      .finally(() => { try { signInCards.cleanupAtStart(); } catch (error) { reportBackgroundError(error); } });
   }, 30_000).unref?.();
 }
 const cloudAgentProviders = createProviderRegistry({ perspicaxBaseUrl: perspicaxBase, personalSubscriptions: () => subscriptionDepositor, perspicaxLink: perspicaxLinkBearer });

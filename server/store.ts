@@ -2234,6 +2234,26 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     return full;
   }
 
+  /** #3551: take one message out of the conversation for good (a notice
+   * that should never have been written). Its replies chain onto its parent
+   * and a branch that ended on it ends on its parent, so every client walks
+   * past it at once and a reload no longer has it. False when it is gone. */
+  removeMessage(threadId: string, messageId: string): boolean {
+    const t = this.thread(threadId);
+    const gone = t.messages.find((m) => m.id === messageId);
+    if (!gone) return false;
+    for (const child of t.messages.filter((m) => m.parentId === messageId)) this.patchMessage(threadId, child.id, { parentId: gone.parentId });
+    mdb.deleteMessage(threadId, messageId);
+    const index = t.messages.findIndex((m) => m.id === messageId);
+    if (index !== -1) t.messages.splice(index, 1);
+    if (t.activeLeafId === messageId) {
+      t.activeLeafId = gone.parentId ?? null;
+      mdb.setActiveLeaf(threadId, t.activeLeafId);
+      if (t.activeLeafId) this.emit({ type: "thread", threadId, activeLeafId: t.activeLeafId });
+    }
+    return true;
+  }
+
   /** Hide the first-run quiz on this thread, if it is still open. */
   dismissOnboardingCard(threadId: string): Message | null {
     const t = this.thread(threadId);

@@ -54,6 +54,16 @@ describe("signal levels (#2695)", () => {
     expect(gate.takeHeld("p1")).toEqual([]);
   });
 
+  it("#3551: a notice taken back no longer waits for the brief", () => {
+    const now = Date.UTC(2026, 10, 8, 12, 0);
+    const gate = new PersonSignalGate(() => ({ budget: 0, timeZone: "UTC" }), () => now);
+    expect(gate.decide({ personId: "p1", kind: "turn-failed", title: "Bot", body: "Sign-in expired", botId: "b1", threadId: "t1" })).toBe("hold");
+    expect(gate.decide({ personId: "p1", kind: "message", title: "Bot", body: "Report", botId: "b2", threadId: "t2" })).toBe("hold");
+    expect(gate.withdraw("p1", (held) => held.threadId === "t1")).toBe(1);
+    expect(gate.withdraw("p1", (held) => held.threadId === "t1")).toBe(0);
+    expect(gate.takeHeld("p1").map((item) => item.threadId)).toEqual(["t2"]);
+  });
+
   it("keeps the day's count and the held content across a restart", () => {
     let saved: Record<string, PersonSignalState> | null = null;
     const storage: SignalGateStorage = { load: () => saved, save: (state) => { saved = JSON.parse(JSON.stringify(state)); } };

@@ -10812,7 +10812,6 @@
   "customRules.notice.modelOrgHeld": "Automatic review left this to you under your organization's rule",
   "approval.status.byAutoReview": "by automatic review",
   "chat.notice.groupCost": "Group conversations use more: every bot in the group reads the whole thread. For a simple question, chat with a single bot instead.",
-  "chat.notice.groupCost.dismiss": "Dismiss the group conversation usage notice",
   "chat.notice.weekly": "You have used {percent}% of your weekly {name} limit.",
   "chat.notice.weekly.reached": "You have reached your weekly {name} limit.",
   "chat.notice.weekly.more": "See usage",

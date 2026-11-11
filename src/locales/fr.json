@@ -10811,7 +10811,6 @@
   "customRules.notice.modelOrgHeld": "L'examen automatique te laisse décider selon la règle de ton organisation",
   "approval.status.byAutoReview": "par l'examen automatique",
   "chat.notice.groupCost": "Les conversations de groupe consomment davantage : chaque Bot du groupe relit tout le fil. Pour une question simple, discute plutôt avec un seul Bot.",
-  "chat.notice.groupCost.dismiss": "Ignorer l'avis sur l'utilisation des conversations de groupe",
   "chat.notice.weekly": "Tu as atteint {percent} % de ta limite hebdomadaire {name}.",
   "chat.notice.weekly.reached": "Tu as atteint ta limite hebdomadaire {name}.",
   "chat.notice.weekly.more": "Voir l'utilisation",

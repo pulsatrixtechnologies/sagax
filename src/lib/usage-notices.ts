@@ -1,7 +1,8 @@
-// The two dismissible cost notices of a conversation: a group answers with
-// several bots (each member reads the whole thread), and a subscription's
-// weekly limit that is nearly or fully used. Pure rules plus a guarded
-// dismissal store, so the states are tested without a DOM.
+// The cost rules of a conversation: a group answers with several bots (each
+// member reads the whole thread; said in the room panel's Members tab), and a
+// subscription's weekly limit that is nearly or fully used (said by the model
+// picker's limit indicator). Neither is a banner above the chat. Pure rules
+// plus a guarded dismissal store, so the states are tested without a DOM.
 import type { PlanRow } from "@/lib/plan-usage";
 
 /** The weekly notice appears from this share used. */
@@ -45,7 +46,8 @@ export function rowsForEngine(rows: PlanRow[], engine?: string, driver?: string)
   });
 }
 
-/** Group threads: more than one bot answering. A direct bot-to-bot channel
+/** Group threads: more than one bot answering, so the room panel says what
+ * it costs. A direct bot-to-bot channel
  * and a person-to-person conversation are not billed that way. */
 export function showsGroupCostNotice(group: { dm?: boolean; peopleDm?: boolean; memberIds: string[] }): boolean {
   return !group.dm && !group.peopleDm && group.memberIds.length > 1;

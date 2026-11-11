@@ -8,7 +8,9 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { readFileSync } from "node:fs";
-import { createHostComputerRouter, HOST_COMMAND_TIME_MAX_MS, HOST_CONNECT_WAIT_MS, HOST_SESSION_FRESH_MS, HOST_SESSION_IDLE_MS, HOST_SESSION_LIFE_MS, hostExecWorstCaseMs, NO_HYPERVISOR } from "./host-computer-router.ts";
+import { createHostComputerRouter, HOST_COMMAND_TIME_MAX_MS, HOST_CONNECT_WAIT_MS, HOST_SESSION_FRESH_MS, HOST_SESSION_IDLE_MS, HOST_SESSION_LIFE_MS, hostCallWorstCaseMs, hostExecWorstCaseMs, NO_HYPERVISOR } from "./host-computer-router.ts";
+import { HOST_GATEWAY_CLOSE_MS, HOST_GATEWAY_LIST_MS, HOST_GATEWAY_OPEN_MS, HOST_OS_READ_WAIT_MAX_MS } from "./host-gateway-bound.ts";
+import { PERSPICAX_RELAY_TIMEOUT_MS } from "../perspicax/perspicax-mcp-rules.ts";
 import { createHostComputerStore } from "./host-computer-store.ts";
 import { KILL_GRACE_MS, KILL_RELEASE_MS } from "./remote-session-probe.ts";
 import { EXEC_TIMEOUT_MAX_MS } from "./remote-sessions.ts";
@@ -925,6 +927,95 @@ describe("the person's session on a host (#3393)", () => {
 
     it("a probe costs far less than a command's turn in the queue", () => {
       expect(probe).toBeLessThanOrEqual(30_000);
+    });
+  });
+
+  // #3518: the whole call, gateway calls and the first OS read included.
+  describe("the longest one whole exec call can take (#3518)", () => {
+    const toolTimeoutMs = () => {
+      const source = readFileSync(new URL("../drivers/pi-mcp-extension.ts", import.meta.url), "utf8");
+      return Number(/const MCP_TOOL_TIMEOUT_MS = (\d+) \* 60_000;/.exec(source)![1]) * 60_000;
+    };
+
+    // Excluded, by name: the VM actions (vm_provision, vm_rebuild, vm_delete)
+    // and an exec made while the VM is still provisioning (it checks the VM
+    // first: one more whole command and list). Several commands per call.
+    it("is the tunnel part, plus three lists, three closes and one open, plus two first OS reads (an exec in isolated mode; VM actions and an exec while the VM provisions are excluded)", () => {
+      // 3 host lists (isolated mode lists again in the route), the open of
+      // the new session, and one gateway close in each of the 3 session closes
+      expect(hostCallWorstCaseMs()).toBe(hostExecWorstCaseMs() + 3 * HOST_GATEWAY_LIST_MS + 3 * HOST_GATEWAY_CLOSE_MS + HOST_GATEWAY_OPEN_MS + 2 * HOST_OS_READ_WAIT_MAX_MS);
+    });
+
+    it("leaves at least 10 s under the bot's tool timeout, so a raised constant fails here", () => {
+      expect(hostCallWorstCaseMs()).toBeLessThanOrEqual(toolTimeoutMs() - 10_000);
+    });
+
+    it("a gateway call has a timeout of its own, far under the global relay timeout", () => {
+      expect(HOST_GATEWAY_LIST_MS).toBeLessThan(PERSPICAX_RELAY_TIMEOUT_MS);
+      expect(HOST_GATEWAY_CLOSE_MS).toBeLessThan(HOST_GATEWAY_LIST_MS);
+      expect(HOST_GATEWAY_OPEN_MS).toBeLessThan(PERSPICAX_RELAY_TIMEOUT_MS);
+      expect(HOST_GATEWAY_OPEN_MS).toBeGreaterThan(HOST_GATEWAY_LIST_MS);
+    });
+  });
+
+  describe("a gateway that does not answer (#3518)", () => {
+    function hung(which: "list" | "open" | "late") {
+      const dir = mkdtempSync(path.join(tmpdir(), "host-computer-"));
+      dirs.push(dir);
+      const store = createHostComputerStore({ dataDir: dir, now: () => NOW });
+      store.update(ALICE, FS01, { botComputer: true });
+      store.setMode(ALICE, FS01, "wren", "as_is");
+      const never = () => new Promise<never>(() => undefined);
+      const exec = vi.fn(async () => ({ host: "FS-01", os: "linux" as const, exitCode: 0, stdout: "ok\n", stderr: "", timedOut: false }));
+      const list = vi.fn(async () => (which === "list" ? never() : { available: true as const, hosts: [row(FS01, "FS-01")] }));
+      const open = vi.fn(async () => (which === "open" ? never() : which === "late" ? new Promise<{ ok: true; code: string; botId: string; threadId: string; session: string }>((resolve) => setTimeout(() => resolve({ ok: true, code: "K7QMNP", botId: "wren", threadId: "t-wren", session: "s-late" }), 120)) : { ok: true as const, code: "K7QMNP", botId: "wren", threadId: "t-wren", session: "s1" }));
+      const closeUnconnected = vi.fn(async () => true);
+      const close = vi.fn(async () => undefined);
+      const router = createHostComputerRouter({
+        store,
+        hosts: { list, open, closeUnconnected, installCode: async () => { throw new Error("unused"); } },
+        sessions: { target: () => null, exec, screen: async () => null, close, markQuiet: () => undefined },
+        botThread: (botId) => `t-${botId}`,
+        botName: () => "Wren",
+        consumeApproval: () => false,
+        raiseQuestion: () => "req-1",
+        sleep: () => Promise.resolve(),
+        now: () => NOW,
+        gatewayCallMaxMs: 40,
+        gatewayOpenMaxMs: 40,
+      });
+      return { router, exec, close, closeUnconnected, open };
+    }
+    const run = (router: ReturnType<typeof hung>["router"]) => router.call({ principalId: ALICE, botId: "wren", threadId: "t-wren", action: "exec", command: "ls" });
+    const within = async (work: Promise<unknown>, ms: number) => Promise.race([work, new Promise((resolve) => setTimeout(() => resolve("stuck"), ms))]);
+
+    it("a host list that never answers ends the call with an error, nothing sent", async () => {
+      const { router, exec } = hung("list");
+      const out = await within(run(router), 1_000);
+      expect(out).toMatchObject({ isError: true });
+      expect(exec).not.toHaveBeenCalled();
+    });
+
+    it("an open that answers after the cap: the late session is closed and the next call opens a single new one", async () => {
+      const { router, exec, close, closeUnconnected, open } = hung("late");
+      const first = await within(run(router), 1_000);
+      expect(first).toMatchObject({ isError: true });
+      expect(exec).not.toHaveBeenCalled();
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      expect(closeUnconnected).toHaveBeenCalledTimes(1);
+      expect(closeUnconnected).toHaveBeenCalledWith({ principalId: ALICE }, "s-late");
+      expect(close).toHaveBeenCalledWith(ALICE, "wren", "s-late");
+      // nothing was recorded as the person's session: the next call opens once more
+      expect(open).toHaveBeenCalledTimes(1);
+      await within(run(router), 1_000);
+      expect(open).toHaveBeenCalledTimes(2);
+    });
+
+    it("an open that never answers ends the call with an error, nothing sent", async () => {
+      const { router, exec } = hung("open");
+      const out = await within(run(router), 1_000);
+      expect(out).toMatchObject({ isError: true });
+      expect(exec).not.toHaveBeenCalled();
     });
   });
 

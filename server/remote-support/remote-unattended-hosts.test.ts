@@ -136,6 +136,17 @@ describe("enrolled hosts at Perspicax", () => {
     }));
   });
 
+  it("tells the caller when the host already listed a session before this one (#3564)", async () => {
+    const { hosts } = make({
+      answers: {
+        [HOSTS_LIST_TOOL]: () => ok({ hosts: [hostRow({ active_session: true })] }),
+        remote_support_open: () => ok({ code: "K7QMNP", state: "created", client: "app" }),
+        remote_support_status: () => ok({ state: "connected", client: "app" }),
+      },
+    });
+    expect(await hosts.open(viewer, HOST)).toMatchObject({ ok: true, otherSession: true });
+  });
+
   // #3505: a session the host never took stayed open at the gateway and
   // counted in its limit of waiting sessions.
   it("closes at the gateway a session the host never took, once, through the seat that opened it", async () => {

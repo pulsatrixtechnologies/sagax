@@ -81,7 +81,9 @@ export interface UnattendedSeatTarget {
 
 export type HostsListOutcome = { available: true; hosts: UnattendedHostRow[] } | { available: false; hosts: []; reason: string };
 export type HostOpenOutcome =
-  | { ok: true; code: string; botId: string; threadId: string; session: string }
+  | { ok: true; code: string; botId: string; threadId: string; session: string;
+      /** The host already listed a session of its own when this one was asked for (#3564). */
+      otherSession?: true }
   | { ok: false; error: "invalid" | "unavailable" | "refused" | "not_found"; message: string };
 export type HostCodeOutcome =
   | { ok: true; code: string; enrollUrl: string | null; org: string; scope: UnattendedHostScope; expiresAt: string | null; installCommand: string; installCommands: { macos: string; linux: string; windows: string } }
@@ -339,7 +341,7 @@ export function createUnattendedHosts(deps: {
       openedFor.set(hostId, ids);
       auditOpen(true, seat.botId);
       void follow(seat, local, hostId, out.code).catch(reportBackgroundError);
-      return { ok: true, code: out.code, botId: seat.botId, threadId: seat.threadId, session: out.session };
+      return { ok: true, code: out.code, botId: seat.botId, threadId: seat.threadId, session: out.session, ...(row.activeSession ? { otherSession: true as const } : {}) };
     },
 
     /** Close at Perspicax (cancelled) a session this person opened here

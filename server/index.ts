@@ -35218,11 +35218,14 @@ const SHUTDOWN_DRAIN_MS = shutdownDrainMs(process.env, Boolean(process.versions.
  * resume already answered. */
 
 
+let hostSessionsEnding: Promise<unknown> = Promise.resolve();
 const gracefulShutdown = createGracefulShutdown({
   drain: drainTurnsBeforeShutdown,
   drainTimeoutMs: SHUTDOWN_DRAIN_MS + 1_000,
   cleanup: [
     () => {
+      // #3564: started first, before any link is torn down below; awaited by its own job
+      hostSessionsEnding = hostComputers.closeAll().catch(reportBackgroundError);
       followupsReady = false;
       companyShutdown = true;
       // Before any provider is torn down: what the teardown fails stays cut
@@ -35265,6 +35268,8 @@ const gracefulShutdown = createGracefulShutdown({
     async () => { await videoGenerations.close(); await managedDesktop.close(); await registry.disposeAll(); },
     // #3357: the warm connector hosts end with the server
     async () => { await connectorHub.close(); },
+    // #3564: the sessions the bots hold on their computers end with the server, so the next run does not meet them
+    async () => { await hostSessionsEnding; },
     // Every open DuckDB database flushes and closes; the next start reopens them.
     async () => { await dataEngine.closeAll().catch((error) => console.warn("data: close failed", error)); },
     async () => {

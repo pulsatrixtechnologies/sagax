@@ -59,7 +59,7 @@ import { remoteJoin, safeRemoteDir, scpSafePath, sensitiveRemoteDir } from "../.
 import type { AdminSessionInput } from "../../shared/remote-session-admin.ts";
 import type { RemoteSessionActionEvent } from "./remote-session-actions-audit.ts";
 import { remoteCommandReadOnly } from "./remote-session-exec.ts";
-import { HOST_GATEWAY_CLOSE_MS, HOST_OS_READ_WAIT_MAX_MS, withinLimit } from "./host-gateway-bound.ts";
+import { HOST_SESSION_LIFE_MS, HOST_GATEWAY_CLOSE_MS, HOST_OS_READ_WAIT_MAX_MS, withinLimit } from "./host-gateway-bound.ts";
 import { createTunnelQueue, isTunnelRefusal, SESSION_STOP_TIME_MS, TUNNEL_PROBE_TIME_MS, TUNNEL_PROBE_WAIT_MAX_MS, type TunnelRefusal } from "./tunnel-queue.ts";
 
 /** A call the tunnel queue never sent. `closed` starts with the words the
@@ -281,6 +281,9 @@ type RemoteSessionEnv = {
   refresh: (session: StoredSession) => void;
   writeCard: (session: StoredSession) => void;
   quietIds: Set<string>;
+  inheritedQuiet: Set<string>;
+  /** Leftover id: gateway close tries that failed so far (#3564). */
+  leftoverTries: Map<string, number>;
 };
 
 function buildRemoteSessionEnv(deps: RemoteSessionDeps): RemoteSessionEnv {
@@ -314,6 +317,10 @@ function buildRemoteSessionEnv(deps: RemoteSessionDeps): RemoteSessionEnv {
   } catch {
     rows = [];
   }
+  // The bot-computer sessions an earlier run of this server left connected:
+  // nothing in this process holds them (#3564).
+  const leftoverTries = new Map<string, number>();
+  const inheritedQuiet = new Set(rows.filter((row) => row.quiet && row.state === "connected").map((row) => row.id));
   // An ended row older than 48 hours, and a support folder untouched that long,
   // are dropped so neither grows without bound.
   const PRUNE_MS = 48 * 60 * 60 * 1000;
@@ -542,6 +549,8 @@ function buildRemoteSessionEnv(deps: RemoteSessionDeps): RemoteSessionEnv {
     refresh,
     writeCard,
     quietIds,
+    inheritedQuiet,
+    leftoverTries,
   };
 }
 
@@ -559,6 +568,13 @@ function createRemoteSessionLifecycle(env: RemoteSessionEnv) {
      * panel: no card, no row (server/remote-support/host-computer-router.ts). */
     markQuiet(id: string): void {
       env.quietIds.add(id.trim().toLowerCase());
+    },
+    /** The person's bot-computer sessions an earlier run of this server left
+     * connected (#3564), to be closed by `close` before a new one opens. */
+    inherited(principalId: string): { botId: string; id: string; stale: boolean }[] {
+      return rows
+        .filter((row) => row.principalId === principalId && env.inheritedQuiet.has(row.id) && (row.state === "connected" || env.leftoverTries.get(row.id) === 1))
+        .map((row) => ({ botId: row.botId, id: row.id, stale: now() - row.createdAt >= HOST_SESSION_LIFE_MS }));
     },
     list(principalId: string, botId: string): RemoteSessionView[] {
       const mine = rows.filter((row) => row.principalId === principalId && row.botId === botId && row.state === "connected" && !row.quiet && !env.quietIds.has(row.id));
@@ -639,7 +655,13 @@ function createRemoteSessionLifecycle(env: RemoteSessionEnv) {
       await inspect(session);
       return { view: viewOf(session), reachable };
     },
-    async close(principalId: string, botId: string, id: string): Promise<RemoteSessionView | null> {
+    /** End a session. `gatewayFirst` (a server stop, #3564) sends the gateway
+     * close at once, beside the tunnel stop, so a stop that comes mid-command
+     * does not exit before it. `stale` (a session of an earlier run past its
+     * life, #3564) needs neither the stop command nor the gateway: it only
+     * clears the row. A leftover whose gateway close failed once stays
+     * eligible for one more gateway close (`close` again), then is let go. */
+    async close(principalId: string, botId: string, id: string, options: { gatewayFirst?: boolean; stale?: boolean; onGatewayFailed?: () => void } = {}): Promise<RemoteSessionView | null> {
       const closing = await exclusive(() => {
         prune();
         const session = owned(principalId, botId, id);
@@ -654,23 +676,56 @@ function createRemoteSessionLifecycle(env: RemoteSessionEnv) {
       if (!closing) return null;
       const { session, wasConnected } = closing;
       controls.closeSession(session.id);
-      if (wasConnected) {
-        const ours = sagaxOpened(session);
+      const retry = !wasConnected && (env.leftoverTries.get(session.id) ?? 0) === 1;
+      if (!wasConnected && !retry) return viewOf(session);
+      if (options.stale) {
+        env.leftoverTries.delete(session.id);
+        await endTunnel(session);
+        const dir = supportDir?.();
+        if (dir) await markSessionClosed(dir, session.code).catch(() => {});
+        return viewOf(session);
+      }
+      const ours = sagaxOpened(session);
+      const gateway = async (): Promise<void> => {
+        if (!ours || !deps.closeRemote) return;
+        const gaveUp = Symbol("gave up");
+        let failed = false;
+        try {
+          // its own short limit (#3518): a gateway that does not answer never holds a close
+          const done = await withinLimit<unknown>(Promise.resolve(deps.closeRemote({ principalId: session.principalId, botId: session.botId, threadId: session.threadId, code: session.code })), deps.gatewayCallMaxMs ?? HOST_GATEWAY_CLOSE_MS, gaveUp);
+          failed = done === gaveUp;
+        } catch { /* Perspicax ends it at its end time; the address is already gone */ failed = true; }
+        if (failed && env.inheritedQuiet.has(session.id)) {
+          // one later try, then let go (no loop)
+          const tries = (env.leftoverTries.get(session.id) ?? 0) + 1;
+          if (tries === 1) env.leftoverTries.set(session.id, 1); else env.leftoverTries.delete(session.id);
+          options.onGatewayFailed?.();
+        } else {
+          env.leftoverTries.delete(session.id);
+        }
+      };
+      if (retry) { await gateway(); return viewOf(session); }
+      // Delete the address and leave a `closed` marker first, so even if
+      // Perspicax cannot be reached the tunnel no longer resolves here and
+      // a late "connected" status cannot write the address back.
+      const marking = async () => {
+        if (!ours) return;
+        const dir = supportDir?.();
+        if (dir) await markSessionClosed(dir, session.code).catch(() => {});
+      };
+      const stopping = async () => {
         // the waiting calls are refused and the running one stopped first,
         // so the stop command never waits behind them (#3430)
         await endTunnel(session);
         try { if (!session.osGuessed) await ssh(session, stopCommand(session.id, session.os), SESSION_STOP_TIME_MS, true); } catch { /* the screen still closes */ }
-        if (ours) {
-          // Delete the address and leave a `closed` marker first, so even if
-          // Perspicax cannot be reached the tunnel no longer resolves here and
-          // a late "connected" status cannot write the address back.
-          const dir = supportDir?.();
-          if (dir) await markSessionClosed(dir, session.code).catch(() => {});
-          try {
-            // its own short limit (#3518): a gateway that does not answer never holds a close
-            await withinLimit(Promise.resolve(deps.closeRemote?.({ principalId: session.principalId, botId: session.botId, threadId: session.threadId, code: session.code })), deps.gatewayCallMaxMs ?? HOST_GATEWAY_CLOSE_MS, undefined);
-          } catch { /* Perspicax ends it at its end time; the address is already gone */ }
-        }
+      };
+      if (options.gatewayFirst) {
+        await marking();
+        await Promise.all([gateway(), stopping()]);
+      } else {
+        await stopping();
+        await marking();
+        await gateway();
       }
       return viewOf(session);
     },

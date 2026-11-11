@@ -8,7 +8,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { readFileSync } from "node:fs";
-import { createHostComputerRouter, HOST_COMMAND_TIME_MAX_MS, HOST_CONNECT_WAIT_MS, HOST_SESSION_FRESH_MS, HOST_SESSION_IDLE_MS, HOST_SESSION_LIFE_MS, hostCallWorstCaseMs, hostExecWorstCaseMs, NO_HYPERVISOR } from "./host-computer-router.ts";
+import { createHostComputerRouter, HOST_COMMAND_TIME_MAX_MS, HOST_CONNECT_WAIT_MS, HOST_SESSION_FRESH_MS, HOST_SESSION_IDLE_MS, HOST_SESSION_LIFE_MS, hostCallWorstCaseMs, HOST_LEFTOVER_CLOSE_MS, hostExecWorstCaseMs, hostFirstCallWorstCaseMs, NO_HYPERVISOR } from "./host-computer-router.ts";
 import { HOST_GATEWAY_CLOSE_MS, HOST_GATEWAY_LIST_MS, HOST_GATEWAY_OPEN_MS, HOST_OS_READ_WAIT_MAX_MS } from "./host-gateway-bound.ts";
 import { PERSPICAX_RELAY_TIMEOUT_MS } from "../perspicax/perspicax-mcp-rules.ts";
 import { createHostComputerStore } from "./host-computer-store.ts";
@@ -408,7 +408,12 @@ describe("the person's session on a host (#3393)", () => {
     neverConnects?: boolean;
     /** The screenshot of a session; absent = none (shell only). */
     screen?: (id: string) => Promise<Buffer | null>;
+    /** Sessions an earlier run left connected, by person (#3564). */
+    inherited?: Record<string, { botId: string; id: string }[]>;
+    /** The open answers that the host already listed a session (#3564). */
+    otherSession?: boolean;
   } = {}) {
+    const lines: string[] = [];
     const dir = mkdtempSync(path.join(tmpdir(), "host-computer-"));
     dirs.push(dir);
     const store = createHostComputerStore({ dataDir: dir, now: () => NOW });
@@ -420,7 +425,7 @@ describe("the person's session on a host (#3393)", () => {
       opened += 1;
       const session = `s${opened}`;
       rows.set(session, { botId: options.seatFor?.botId ?? "primary", principalId: viewer.principalId, endAt: opts.endAt ?? new Date(NOW + 30 * 60_000).toISOString(), connected: !opts.neverConnects, openedAt: clock });
-      return { ok: true as const, code: `K7QMN${opened}`, botId: options.seatFor?.botId ?? "primary", threadId: "t", session };
+      return { ok: true as const, code: `K7QMN${opened}`, botId: options.seatFor?.botId ?? "primary", threadId: "t", session, ...(opts.otherSession ? { otherSession: true as const } : {}) };
     });
     const target = ({ principalId, botId, id }: { principalId: string; botId: string; id?: string }) => {
       const found = id ? rows.get(id) : undefined;
@@ -440,7 +445,8 @@ describe("the person's session on a host (#3393)", () => {
       }
       return { host: "FS-01", os: "linux" as const, exitCode: 0, stdout: `${input.botId}\n`, stderr: "", timedOut: false };
     });
-    const close = vi.fn(async (_principalId: string, _botId: string, id: string) => { const found = rows.get(id); if (found) found.connected = false; });
+    const closedIds = new Set<string>();
+    const close = vi.fn(async (_principalId: string, _botId: string, id: string) => { closedIds.add(id); const found = rows.get(id); if (found) found.connected = false; });
     const closeUnconnected = vi.fn(async (_viewer: { principalId: string }, _session: string) => true);
     const router = createHostComputerRouter({
       store,
@@ -453,6 +459,7 @@ describe("the person's session on a host (#3393)", () => {
       },
       sessions: {
         target, exec, screen: async (_principalId: string, _botId: string, id: string) => (opts.screen ? opts.screen(id) : null), close, markQuiet: vi.fn(),
+        inherited: (principalId: string) => (opts.inherited?.[principalId] ?? []).filter((one) => !closedIds.has(one.id)),
         ...(opts.reachable ? { reachable: async ({ id }: { id: string }) => opts.reachable!(id) } : {}),
       },
       botThread: (botId) => `t-${botId}`,
@@ -461,12 +468,13 @@ describe("the person's session on a host (#3393)", () => {
       consumeApproval: () => false,
       raiseQuestion: () => "req-1",
       now: () => clock,
+      log: (line) => lines.push(line),
       // the wait for the host to take the session moves the clock
       sleep: (ms) => { clock += ms; return Promise.resolve(); },
     });
     for (const person of [ALICE, BOB_PERSON]) store.update(person, FS01, { botComputer: true });
     const run = (principalId: string, botId: string, command = "whoami", timeoutMs?: number) => router.call({ principalId, botId, threadId: `t-${botId}`, action: "exec", command, host: "FS-01", ...(timeoutMs ? { timeoutMs } : {}) });
-    return { router, open, exec, close, closeUnconnected, rows, run, tick: (ms: number) => { clock += ms; }, clock: () => clock };
+    return { router, lines, open, exec, close, closeUnconnected, rows, run, tick: (ms: number) => { clock += ms; }, clock: () => clock };
   }
 
   // #3492: Sagax records the end time it asked for (2 hours), but the host
@@ -892,6 +900,103 @@ describe("the person's session on a host (#3393)", () => {
       expect(close).toHaveBeenCalledWith(ALICE, "ember", "s1");
       expect(exec).not.toHaveBeenCalled();
       expect(open).toHaveBeenCalledTimes(1);
+    });
+
+    // #3564: a restart left the previous run's session on the host, which
+    // stays in it and never joins a new one.
+    describe("a session left by an earlier run of the server (#3564)", () => {
+      it("is closed, and only this person's, before the person's first session opens", async () => {
+        const { open, close, run } = shared({ endAt: TWO_HOURS, inherited: { [ALICE]: [{ botId: "old-bot", id: "left1" }], [BOB_PERSON]: [{ botId: "other", id: "left2" }] } });
+        const out = await run(ALICE, "ember");
+        expect(out).not.toHaveProperty("isError");
+        expect(close).toHaveBeenCalledWith(ALICE, "old-bot", "left1", expect.anything());
+        expect(close).not.toHaveBeenCalledWith(BOB_PERSON, "other", "left2");
+        expect(close.mock.invocationCallOrder[0]!).toBeLessThan(open.mock.invocationCallOrder[0]!);
+      });
+
+      it("a close that never answers does not hold the call past its cap", async () => {
+        const { close, run, clock } = shared({ endAt: TWO_HOURS, inherited: { [ALICE]: [{ botId: "old-bot", id: "left1" }] } });
+        close.mockImplementationOnce(() => new Promise<void>(() => undefined));
+        vi.useFakeTimers();
+        try {
+          const pending = run(ALICE, "ember");
+          await vi.advanceTimersByTimeAsync(HOST_LEFTOVER_CLOSE_MS + 1);
+          expect(await pending).not.toHaveProperty("isError");
+          expect(clock()).toBeGreaterThanOrEqual(NOW);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("a leftover whose gateway close failed is logged and tried again at the next first call, once", async () => {
+        const left = [{ botId: "old-bot", id: "left1" }];
+        const { open, close, run, lines } = shared({ endAt: TWO_HOURS, inherited: { [ALICE]: left } });
+        let tries = 0;
+        close.mockImplementation(async (_p: string, _b: string, id: string, options?: { onGatewayFailed?: () => void }) => {
+          if (id !== "left1") return;
+          tries += 1;
+          if (tries === 1) { options?.onGatewayFailed?.(); return; }
+          left.length = 0;
+        });
+        await run(ALICE, "ember");
+        expect(lines.filter((line) => /gave up closing a session left/.test(line))).toHaveLength(1);
+        expect(lines.join("\n")).not.toMatch(/left1|old-bot|K7QMN/);
+        expect(open).toHaveBeenCalledTimes(1);
+        await run(ALICE, "ember", "uptime", undefined);
+        // the session of this run is still known: no new first call yet
+        expect(tries).toBe(1);
+      });
+
+      it("a stale leftover is cleared with the stale option", async () => {
+        const { close, run } = shared({ endAt: TWO_HOURS, inherited: { [ALICE]: [{ botId: "old-bot", id: "left1", stale: true } as never] } });
+        await run(ALICE, "ember");
+        expect(close).toHaveBeenCalledWith(ALICE, "old-bot", "left1", expect.objectContaining({ stale: true }));
+      });
+
+      it("a stop sends the gateway first", async () => {
+        const { router, close, run } = shared({ endAt: TWO_HOURS });
+        await run(ALICE, "ember");
+        await router.closeAll();
+        expect(close).toHaveBeenCalledWith(ALICE, "ember", "s1", { gatewayFirst: true });
+      });
+
+      it("the wait that ends while the host already listed a session says so", async () => {
+        const { run, lines } = shared({ endAt: TWO_HOURS, neverConnects: true, otherSession: true });
+        const out = await run(ALICE, "ember");
+        expect(out).toMatchObject({ isError: true });
+        expect(out.text).toMatch(/already open on that computer/);
+        expect(out.text).not.toMatch(/did not answer in time/);
+        expect(lines.some((line) => /another session was already open/.test(line))).toBe(true);
+      });
+
+      it("without a listed session the wait keeps its plain answer", async () => {
+        const { run } = shared({ endAt: TWO_HOURS, neverConnects: true });
+        expect((await run(ALICE, "ember")).text).toMatch(/The host did not answer in time/);
+      });
+
+      it("one line per open, give up and close, none with a code or an id", async () => {
+        const { run, lines } = shared({ endAt: TWO_HOURS, neverConnects: true });
+        await run(ALICE, "ember");
+        expect(lines.filter((line) => /session opened/.test(line))).toHaveLength(1);
+        expect(lines.filter((line) => /gave up/.test(line))).toHaveLength(1);
+        expect(lines.filter((line) => /session closed/.test(line))).toHaveLength(1);
+        for (const line of lines) expect(line).not.toMatch(/K7QMN|\bs1\b|h_[0-9a-f]{32}|alice/);
+      });
+
+      it("a server stop closes every session this run holds", async () => {
+        const { router, close, run } = shared({ endAt: TWO_HOURS });
+        await run(ALICE, "ember");
+        expect(await router.closeAll()).toBe(1);
+        expect(close).toHaveBeenCalledWith(ALICE, "ember", "s1", { gatewayFirst: true });
+        expect(await router.closeAll()).toBe(0);
+      });
+
+      it("the first call of a person, with its cleanup, stays under the tool timeout", () => {
+        const source = readFileSync(new URL("../drivers/pi-mcp-extension.ts", import.meta.url), "utf8");
+        const toolTimeoutMs = Number(/const MCP_TOOL_TIMEOUT_MS = (\d+) \* 60_000;/.exec(source)![1]) * 60_000;
+        expect(hostFirstCallWorstCaseMs()).toBeLessThanOrEqual(toolTimeoutMs - 10_000);
+        expect(hostCallWorstCaseMs()).toBeLessThanOrEqual(toolTimeoutMs - 10_000);
+      });
     });
 
     it("a session that connects is not closed at the gateway", async () => {

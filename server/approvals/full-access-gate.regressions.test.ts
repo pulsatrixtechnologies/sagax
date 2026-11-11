@@ -357,6 +357,40 @@ describe("#1819: an invented may-I card under Full access", () => {
     expect(choiceQuestionMismatch(question, options)).toMatch(/give the alternatives themselves as options, not Yes \/ No/);
   });
 
+  // #3547: a pair of numbers after a label word ("step 1 or 2", "version
+  // one or two") names two things, and "plus tard" is a time, not "more".
+  // Full access answers neither path, and the bot's own ask_choice refuses
+  // Yes / No on them so it asks again with its two paths.
+  const numberedChoice: Array<[string, string[]]> = [
+    ["Should I run step 1 or 2 now?", ["Yes", "No"]],
+    ["Should I keep version one or two?", ["Yes", "No"]],
+    ["Should I apply option #1 or #2 first?", ["Yes", "No"]],
+    ["J'en supprime un ou plus tard ?", ["Oui", "Non"]],
+    ["Je lance l'étape 1 ou 2 maintenant ?", ["Oui", "Non"]],
+    ["Je garde la version un ou deux ?", ["Oui", "Non"]],
+    ["Je prends le numéro 3 ou 4 en premier ?", ["Oui", "Non"]],
+  ];
+  it.each(numberedChoice)("a choice between two numbered things or a later time is not answered at Full (#3547): %s", (question, options) => {
+    expect(fullAccessChoiceAnswer("full", { question, options })).toBeNull();
+    expect(choiceQuestionMismatch(question, options)).toMatch(/give the alternatives themselves as options, not Yes \/ No/);
+    const { store, rows } = fakeStore();
+    const result = createAgentCard({ store, bot: BOT, threadId: "t-3547", input: { tool: ASK_CHOICE_TOOL, question, options }, approvalLevel: "full" });
+    expect(result).toMatchObject({ ok: false, status: 400 });
+    expect("answered" in result).toBe(false);
+    expect(rows).toHaveLength(0);
+  });
+
+  it.each([
+    ["Should I delete one or more duplicates?", ["Yes", "No"]],
+    ["Should I merge two or three files?", ["Yes", "No"]],
+    ["Veux-tu que je supprime un ou plusieurs doublons ?", ["Oui", "Non"]],
+    ["J'en supprime un ou plus ?", ["Oui", "Non"]],
+    ["Le brouillon est plus ou moins prêt, je l'envoie ?", ["Oui", "Non"]],
+  ])("a quantity with no label word before it is still answered at Full (#3547): %s", (question, options) => {
+    expect(choiceQuestionMismatch(question, options)).toBeUndefined();
+    expect(fullAccessChoiceAnswer("full", { question, options })).toEqual({ choice: options[0] });
+  });
+
   it("the prompt says so, so the model does not expect a click", () => {
     expect(approvalLevelPrompt("full")).toMatch(/may-I .*answered for the person/i);
     expect(fullAccessChoiceAnswer("full", { question: "Should I continue?", options: ["Yes", "No"] })).toEqual({ choice: "Yes" });

@@ -1374,6 +1374,35 @@ export function importThread(threadId: string, messages: Message[], activeLeafId
   });
 }
 
+/** #3551: drop one row (a notice that should never have been written). Its
+ * search rows go with it (the delete triggers). False when it is not there. */
+export function deleteMessage(threadId: string, messageId: string): boolean {
+  const row = cached("DELETE FROM messages WHERE thread_id = ? AND id = ? RETURNING rowid").get(threadId, messageId) as { rowid: number } | undefined;
+  if (!row) return false;
+  pendingIndex.delete(Number(row.rowid));
+  tellMessageListeners(threadId, messageId);
+  return true;
+}
+
+/** #3551: every stored access card, through the messages_kind index: a
+ * handful of rows. A row whose key is locked is left out. */
+export function accessCardMessages(): Array<{ threadId: string; message: Message }> {
+  const rows = cached("SELECT thread_id, id, json, sealed, key_id FROM messages WHERE kind = 'access'")
+    .all() as unknown as Array<StoredRow & { thread_id: string }>;
+  const out: Array<{ threadId: string; message: Message }> = [];
+  for (const row of rows) {
+    let message: Message | null;
+    try {
+      message = decodeRow(row, row.thread_id);
+    } catch (error) {
+      if (error instanceof ContentKeyUnavailable) continue;
+      throw error;
+    }
+    if (message) out.push({ threadId: row.thread_id, message });
+  }
+  return out;
+}
+
 /** Persist a new message and the branch head as one crash-safe mutation. */
 export function appendMessage(threadId: string, message: Message): void {
   transaction(() => {

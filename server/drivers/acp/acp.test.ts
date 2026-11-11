@@ -601,7 +601,7 @@ describe("ACP turns (fake CLI)", () => {
       usage(120000, 40000);
       expect(await send("turn 2")).toBe("turn 2");
       usage();
-      expect(await send("turn 3")).toBe(FULL + "\n\nturn 3");
+      expect(await send("turn 3")).toBe(OPENING + "\n\nturn 3");
     } finally {
       delete process.env.FAKE_ACP_ROUND_USAGE;
     }

@@ -31,8 +31,9 @@ Every ACP turn logs one line when it settles (server/drivers/acp/turn-latency.ts
   of the servers Sagax mounts for the turn by its product name (`agents`, `browser`,
   `perspicax`...; a mount under any other name, which may carry a person's or a bot's
   identifier, prints as `connector`) with the ms from the wait's start to the first poll of
-  `_x.ai/mcp/list` after the last poll where it was seen waiting (pending, connecting or
-  starting), slowest first, at most eight. A server never seen waiting prints nothing for
+  `_x.ai/mcp/list` after the last poll where it was seen waiting (pending, connecting,
+  starting or initializing, the status Grok 1.0.77 gives a server it is still starting),
+  slowest first, at most eight. A server never seen waiting prints nothing for
   itself: at the first poll the engine has often not begun to connect anything (a server has
   no state yet), and the first reading of this field (it printed every server at the first
   poll's 40 to 175 ms while the wait lasted 2.6 to 3.1 s) counted that as settled. Then the
@@ -69,6 +70,22 @@ Every ACP turn logs one line when it settles (server/drivers/acp/turn-latency.ts
   `toolsSlow=connector:env:12,open:410,hello:230,list:980,kb:85`. What the parts leave out is
   the engine's own proxy start and the hops between the proxy and Sagax. Names and numbers
   only.
+- toolsGap (#3623): right after toolsSlow, the time of the tools part spent outside the
+  mounts' answers, each part only when it is over 250 ms: `first:<ms>` (the wait's start to
+  the first request any of Sagax's endpoints got, the engine starting its tool server
+  processes) and `after:<ms>` (the last tool list answered, by an endpoint or as the engine
+  saw a mount ready in toolsBy, to `resolved`). Example of a turn whose first list was asked
+  late: `toolsGap=first:2510`.
+
+  One process per mount (#3623): every mount is a gate process (server/mcp-gate.ts) the
+  engine starts, and each gate used to start its upstream as a second Node process, so a turn
+  with eight mounts started sixteen Node processes before the engine could ask any of them
+  for its tool list. A gate now runs Sagax's own relay (a script beside the gate, started
+  with the same executable) as a worker thread of its own process
+  (server/mcp/gate-upstream.ts); any other upstream stays its own process. On a fixture turn
+  with the installed engine and eight gated mounts, the engine said its servers were resolved
+  1,332 ms after the session opened before (mean of eight) and 788 ms after, on a busy
+  machine. The gate also no longer loads the agents catalog to start (1.5 MB to 0.5 MB).
 
   What is kept between turns (#3623): a turn that starts an engine process starts the
   person's server again (a new initialize is a new client), and the engine waits for its tool

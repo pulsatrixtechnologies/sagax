@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { newTurnLatency, noteTurnActivity, turnLatencyLine, turnLatencyParts, turnToolsSlow } from "./turn-latency.ts";
+import { newTurnLatency, type TurnToolWait, noteTurnActivity, turnLatencyLine, turnLatencyParts, turnToolsGap, turnToolsSlow } from "./turn-latency.ts";
 
 describe("turn latency line", () => {
   it("logs every stage of a pooled one-tool turn, ids and numbers only", () => {
@@ -128,10 +128,35 @@ describe("turn latency line", () => {
     };
     expect(turnToolsSlow(trace.toolWait)).toBe("connector:env:12,open:410,hello:230,list:980,kb:85");
     const line = turnLatencyLine("grok", "800b207c-0000", trace, 9_000, "ok");
-    expect(line).toContain("toolsServed=perspicax:361-445,connector:570-2511,messages:676-682 toolsSlow=connector:env:12,open:410,hello:230,list:980,kb:85 ok");
+    expect(line).toContain("toolsServed=perspicax:361-445,connector:570-2511,messages:676-682 toolsSlow=connector:env:12,open:410,hello:230,list:980,kb:85 toolsGap=first:361,after:387 ok");
     // a fast list (served from the kept copy) prints no parts
     trace.toolWait.served = [["connector", 570, 600, [["env", 3]]]];
     expect(turnToolsSlow(trace.toolWait)).toBeUndefined();
     expect(turnLatencyLine("grok", "800b207c-0000", trace, 9_000, "ok")).not.toContain("toolsSlow");
+  });
+
+  it("names the time before the first request and after the last answer, each only over 250 ms (#3623)", () => {
+    // a production turn of 2026-11-11: no list asked before 2510 ms
+    const late: TurnToolWait = {
+      waitedMs: 3_956, mounts: [], resolvedMs: 3_950,
+      served: [["sagax-computer", 2_510, 2_511], ["connector", 3_050, 3_360], ["perspicax", 3_187, 3_357]],
+    };
+    expect(turnToolsGap(late)).toBe("first:2510,after:590");
+    // another: every list answered by 735 ms, resolved at 3542
+    const after: TurnToolWait = {
+      waitedMs: 3_542, mounts: [], resolvedMs: 3_542,
+      served: [["connector", 230, 621], ["perspicax", 662, 735]],
+    };
+    expect(turnToolsGap(after)).toBe("after:2807");
+    // a mount the engine saw ready later (agents answers its own list) closes the gap
+    expect(turnToolsGap({ ...after, mounts: [["agents", 3_400]] })).toBeUndefined();
+    const trace = newTurnLatency(1_000);
+    trace.path = "spawn";
+    trace.promptAt = 5_000;
+    trace.toolWait = late;
+    expect(turnLatencyLine("grok", "800b207c-0000", trace, 9_000, "ok")).toContain(" toolsGap=first:2510,after:590 ok");
+    // a quick wait prints nothing
+    trace.toolWait = { waitedMs: 400, mounts: [], resolvedMs: 390, served: [["data", 120, 300]] };
+    expect(turnLatencyLine("grok", "800b207c-0000", trace, 9_000, "ok")).not.toContain("toolsGap");
   });
 });

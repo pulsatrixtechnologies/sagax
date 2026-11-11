@@ -906,6 +906,8 @@ struct ChatView: View {
                                         forceOpen: card.messages.contains { $0.id == revealedMessageId },
                                         live: session.streamingStore
                                     )
+                                case let .incoming(line):
+                                    IncomingLineView(line: line)
                                 }
                             }
                             .id(row.id)
@@ -1592,6 +1594,8 @@ struct EarlierTopicSection: View {
                         StepRunRow(run: run, chat: chat, openLink: openLink, openThread: openThread, revealedMessageId: revealedMessageId, scrollToMessage: scrollToMessage, rowContext: rowContext)
                     case let .voiceCall(card):
                         VoiceCallCard(chat: chat, card: card, forceOpen: card.messages.contains { $0.id == revealedMessageId }, live: session.streamingStore)
+                    case let .incoming(line):
+                        IncomingLineView(line: line)
                     }
                 }
                 .id(row.id)

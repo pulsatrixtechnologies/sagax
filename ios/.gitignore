@@ -14,3 +14,4 @@ NotificationService/Info.plist
 NotificationService/SagaxNotificationService.entitlements
 # xcodebuild -derivedDataPath build/dd (CI and local checks)
 build/
+__pycache__/

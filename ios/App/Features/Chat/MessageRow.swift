@@ -28,6 +28,8 @@ struct MessageRow: View {
     @State private var addingReaction = false
     /// A digest chip's parts, and its sheet's presentation.
     @State private var digest: DigestSummary?
+    /// #3581: a routine card's Details: its whole report, in a sheet.
+    @State private var routineReport: RoutineReportTarget?
     /// View Source: this bot reply drawn as its markdown source.
     @State private var showingSource = false
     /// Report: the report sheet for this bot reply.
@@ -163,6 +165,12 @@ struct MessageRow: View {
         .sheet(item: $digest) {
             DigestSheet(summary: $0)
         }
+        .sheet(item: $routineReport) {
+            RoutineReportSheet(target: $0, openThread: openThread)
+        }
+        #if DEBUG
+        .onAppear { openReportForCapture() }
+        #endif
         .sheet(isPresented: $reporting) {
             ReportMessageSheet(
                 message: message,
@@ -305,6 +313,7 @@ struct MessageRow: View {
             afterResume: afterResume,
             askCw: askCw,
             openRun: routineRunOpener,
+            folded: rowContext.foldedResults.contains(message.id),
             select: { selecting = SelectableText(text: $0) },
             openDigest: { digest = $0 }
         )
@@ -335,24 +344,27 @@ struct MessageRow: View {
         return nil
     }
 
-    /// View run (#2098): the run's message in the bot's chat, from wherever
-    /// the card sits (a room's card too). A run the computer no longer lists
-    /// falls back to its execution thread when threads are shown and this
-    /// phone has a route to it.
+    /// #3581: Details on a routine card opens the run's whole report where
+    /// the chat is (the phone has no run window; opening the run in the
+    /// chat would land on this same card). With threads shown, the sheet
+    /// also opens the run's own thread when this phone has a route to it.
     private func routineRunOpener(_ card: RoutineRunCard) -> (() -> Void)? {
-        let fallback = session.state.routineExecutionRef(for: card)
-        let openThread = threadsShown ? openThread : nil
-        return {
-            Task {
-                let listing = await session.loadRoutines()
-                if let run = listing.runs.first(where: { $0.id == card.runId }) {
-                    await session.openRoutineRunInChat(run)
-                } else if let openThread, let fallback {
-                    openThread(fallback)
-                }
-            }
-        }
+        let thread = threadsShown && openThread != nil ? session.state.routineExecutionRef(for: card) : nil
+        let at = message.date
+        return { routineReport = RoutineReportTarget(card: card, at: at, thread: thread) }
     }
+
+    #if DEBUG
+    /// #3581 captures: `-chat-relevant-report <runId>` opens that card's
+    /// Details at launch, as a tap on it does.
+    private func openReportForCapture() {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard routineReport == nil, let index = arguments.firstIndex(of: "-chat-relevant-report"),
+              arguments.indices.contains(index + 1), let card = message.routineRun,
+              card.runId == arguments[index + 1], let open = routineRunOpener(card) else { return }
+        open()
+    }
+    #endif
 }
 
 /// A row is the same row while its message, its chat record and its place in
@@ -407,6 +419,12 @@ struct RowContext: Equatable {
     var viewerId: String?
     var demo: Bool
     var botNames: [String]
+    /// #3581: the routine results a newer result folds to their one row
+    /// (RoutineResultStack): a card redraws as a row when one arrives.
+    var foldedResults: Set<String> = []
+    /// #3581: the turns of this thread still running (TurnLiveness): a step
+    /// row says "Working" only for one of them.
+    var liveTurns: Set<String> = []
 
     static let none = RowContext(pendingPlaceholderId: nil, lastVisibleId: nil, blockedIds: [], viewerId: nil, demo: false, botNames: [])
 
@@ -419,6 +437,7 @@ struct RowContext: Equatable {
             && viewerId == other.viewerId
             && demo == other.demo
             && botNames == other.botNames
+            && (message.kind != .routineRun || foldedResults.contains(message.id) == other.foldedResults.contains(message.id))
     }
 }
 
@@ -446,6 +465,8 @@ private struct MessageKindContent: View {
     let afterResume: (() -> Void)?
     let askCw: (CwActionBody) -> Void
     let openRun: (RoutineRunCard) -> (() -> Void)?
+    /// #3581: a newer routine result folds this one to its row.
+    let folded: Bool
     /// The text-selection sheet with this text.
     let select: (String) -> Void
     /// The digest sheet with this summary.
@@ -489,7 +510,7 @@ private struct MessageKindContent: View {
         case .routineRun:
             RoutineRunKindRow(
                 message: message, chat: chat, endsRun: endsRun, openLink: openLink, askCw: askCw,
-                threadOpener: threadOpener, afterResume: afterResume, openRun: openRun
+                threadOpener: threadOpener, afterResume: afterResume, openRun: openRun, folded: folded
             )
         case .connector:
             // The connect-an-app card is gone; a message of this kind still
@@ -544,9 +565,6 @@ private struct TextKindRow: View {
     let askCw: (CwActionBody) -> Void
 
     var body: some View {
-        if let ref = message.parallelTask, ref.part == .result {
-            ParallelResultLabel(ref: ref)
-        }
         if message.role != .user, let via = message.relayVia {
             RelayViaLabel(via: via)
         }
@@ -699,6 +717,7 @@ private struct RoutineRunKindRow: View {
     let threadOpener: ((ThreadRef) -> Void)?
     let afterResume: (() -> Void)?
     let openRun: (RoutineRunCard) -> (() -> Void)?
+    var folded = false
     private var session: Session { SessionHub.session }
 
     /// 2026-11-05 (#2008): the bot that ran it leads the card; a room card
@@ -715,6 +734,8 @@ private struct RoutineRunKindRow: View {
                 card: card,
                 at: message.date,
                 tint: MausPalette.color(chat.color),
+                attention: message.attention,
+                folded: folded,
                 bot: runBot,
                 openRun: openRun(card),
                 // #2096: Stop on the muted line while the run is live (queued, running, waiting)
@@ -727,10 +748,6 @@ private struct RoutineRunKindRow: View {
                 },
                 openThread: threadOpener
             )
-            // 2026-11-05: items only the person can do, each with its ticket
-            if let attention = message.attention, !attention.items.isEmpty, card.knownStatus == .completed {
-                AttentionItemsView(items: attention.items)
-            }
             // #3465: a watch alert's two exits, for the bot's owner
             if let watches = WatchAlertRules.alert(of: card), let bot = runBot, session.surfaceGate.ownsBot(bot) {
                 WatchAlertExitsView(watches: watches)

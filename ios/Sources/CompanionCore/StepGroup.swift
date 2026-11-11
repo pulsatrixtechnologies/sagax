@@ -12,13 +12,16 @@ public struct StepRun: Hashable, Sendable {
     public let messages: [Message]
     /// How long the bot worked, in milliseconds, when it is known.
     public let elapsed: Double?
-    /// The settled turn whose narration the run folds, if any.
+    /// The turn whose narration the run folds, if any.
     public let turnId: String?
+    /// #3581: false while the turn has no final message (it may still run).
+    public let settled: Bool
 
-    public init(messages: [Message], elapsed: Double? = nil, turnId: String? = nil) {
+    public init(messages: [Message], elapsed: Double? = nil, turnId: String? = nil, settled: Bool = true) {
         self.messages = messages
         self.elapsed = elapsed
         self.turnId = turnId
+        self.settled = settled
     }
 
     public var id: String { turnId.map { "turn.\($0)" } ?? "run.\(messages[0].id)" }
@@ -121,7 +124,11 @@ public enum StepGroup {
         return summary
     }
 
-    public static func words(_ summary: StepGroupSummary, elapsed: Double?, words: StepWords, nameOf: StepNameOf? = nil) -> StepGroupWords {
+    /// #3581 (one state told once): while the turn runs the row says
+    /// "Working" and nothing more; the working line under the transcript is
+    /// the one place that names the step in progress. `live`: the turn still
+    /// runs, even between two steps (a turn writing a note has no running step).
+    public static func words(_ summary: StepGroupSummary, elapsed: Double?, words: StepWords, nameOf: StepNameOf? = nil, live: Bool = false) -> StepGroupWords {
         let tools = summary.tools > 0
             ? words.t(summary.tools == 1 ? "step.turn.tools.one" : "step.turn.tools.many", ["count": String(summary.tools)])
             : nil
@@ -134,11 +141,11 @@ public enum StepGroup {
             // a catalog without the key (an older one) reads the parts alone
             return sentence == "step.turn.a11y" ? summary : sentence
         }
-        if let running = summary.running?.tool {
-            let reading = StepLabel.read(running, words: words, nameOf: nameOf)
+        if live || summary.running != nil {
+            let label = words.t("chat.activity.working")
             return StepGroupWords(
-                label: reading.label, target: reading.target, tools: tools, failed: failed,
-                accessibility: spoken(reading.label, reading.target, tools, failed), phase: .running
+                label: label, target: nil, tools: tools, failed: failed,
+                accessibility: spoken(label, tools, failed), phase: .running
             )
         }
         let duration = elapsed.flatMap { $0 >= 1_000 ? StepLabel.duration($0, words: words) : nil }

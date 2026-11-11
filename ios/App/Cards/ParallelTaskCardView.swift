@@ -1,9 +1,11 @@
-// The parallel task card (feature parity TH8, ParallelTaskCard.tsx): a task
-// the bot runs on its own beside this conversation. A coding job (#2148)
-// stays here as CodingJobCardView (never a thread). Otherwise: its name,
-// where it stands, how long it has run, Stop while it can still be stopped
-// and Open when threads are shown. Its approvals join this conversation's
-// approval dock.
+// A parallel task the bot runs on its own beside this conversation
+// (ParallelTaskCard.tsx). A coding job (#2148) stays here as
+// CodingJobCardView (never a thread). Otherwise, #3581: while it runs, the
+// chat's step row ("Working in the background", its title, the elapsed time,
+// Stop). Done, nothing (its answer under it tells the same state); failed or
+// stopped, the same row in the danger ink with what happened, and the way
+// into the task, so a problem stays in sight (shared/chat-relevance.ts,
+// signal `problem`). Its approvals join this conversation's approval dock.
 import SwiftUI
 import CompanionCore
 
@@ -39,18 +41,15 @@ struct ParallelTaskCardView: View {
                     Task { await session.stopParallelTask(botId: ownerId, threadId: ref.threadId) }
                 }
             ) {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    row(status: status, ownerId: ownerId, now: context.date)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(status == .waiting ? Theme.warning.opacity(0.06) : Theme.card)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(status == .waiting ? Theme.warning.opacity(0.5) : Theme.hairline, lineWidth: 1)
+                // #3581: a live task is the chat's step row; one that failed
+                // or was stopped keeps that row as its trace; a done one
+                // draws nothing (its answer under it tells the same state)
+                if status.isLive {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        row(status: status, ownerId: ownerId, now: context.date)
+                    }
+                } else if status.leavesTrace {
+                    row(status: status, ownerId: ownerId, now: Date())
                 }
             }
             .accessibilityElement(children: .contain)
@@ -63,84 +62,101 @@ struct ParallelTaskCardView: View {
         }
     }
 
+    /// The step row (StepRow): what it does in words, the task's title as
+    /// its target, the elapsed time, and the round Stop control. Where the
+    /// whole line does not fit (a phone, a long title or the French words),
+    /// the title goes on its own line under the step words, whole, rather
+    /// than cut to a few letters.
     private func row(status: ParallelCardState, ownerId: String, now: Date) -> some View {
-        HStack(spacing: 10) {
-            Group {
-                if status.isLive && status != .waiting {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: "arrow.triangle.branch")
-                        .foregroundStyle(status == .failed ? Theme.danger : Theme.textSecondary)
-                }
-            }
-            .frame(width: 18)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Parallel task · \(ref.title)")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(1)
-                Text(stateLine(status, now: now))
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(Theme.textSecondary)
+        let duration = elapsed(status, now: now)
+        let phase: StepPhase = status.isLive ? .running : .failed
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) {
+                StepLineLabel(label: label(status), target: ref.title, phase: phase, duration: duration)
                     .accessibilityIdentifier("parallel-state-\(ref.threadId)")
+                controls(status: status, ownerId: ownerId)
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 4)
-            if status.isLive, session.surfaceGate.allows(.parallelTaskStop) {
-                Button {
-                    Haptics.selection()
-                    stopping = true
-                    Task {
-                        await session.stopParallelTask(botId: ownerId, threadId: ref.threadId)
-                        stopping = false
-                    }
-                } label: {
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.textSecondary)
-                        .frame(width: 30, height: 30)
-                        .background(Theme.cardRaised, in: Circle())
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 6) {
+                    StepLineLabel(label: label(status), phase: phase, duration: duration)
+                        .accessibilityIdentifier("parallel-state-\(ref.threadId)")
+                    controls(status: status, ownerId: ownerId)
+                    Spacer(minLength: 0)
                 }
-                .buttonStyle(.plain)
-                .disabled(stopping)
-                .accessibilityLabel(Text("Stop this task"))
-                .accessibilityIdentifier("parallel-stop-\(ref.threadId)")
+                Text(verbatim: ref.title)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.textTertiary)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("parallel-title-\(ref.threadId)")
             }
-            if let openThread {
-                Button {
-                    Haptics.selection()
-                    openThread(ThreadRef(botId: ownerId, threadId: ref.threadId, title: ref.title))
-                } label: {
-                    HStack(spacing: 3) {
-                        Text(status == .waiting ? String(localized: "Review") : String(localized: "Open"))
-                        Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold))
-                    }
-                    .font(.system(size: 12.5, weight: .medium))
+        }
+        .padding(.leading, 2)
+    }
+
+    /// Stop and the way into the task's own conversation.
+    @ViewBuilder
+    private func controls(status: ParallelCardState, ownerId: String) -> some View {
+        if status.isLive, session.surfaceGate.allows(.parallelTaskStop) {
+            Button {
+                Haptics.selection()
+                stopping = true
+                Task {
+                    await session.stopParallelTask(botId: ownerId, threadId: ref.threadId)
+                    stopping = false
+                }
+            } label: {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 8))
                     .foregroundStyle(Theme.textSecondary)
-                    .padding(.horizontal, 9)
-                    .frame(height: 30)
-                    .background(Theme.cardRaised, in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("parallel-open-\(ref.threadId)")
+                    .frame(width: 20, height: 20)
+                    .background(Theme.cardRaised, in: Circle())
             }
+            .buttonStyle(.plain)
+            .disabled(stopping)
+            .accessibilityLabel(Text("Stop this task"))
+            .accessibilityIdentifier("parallel-stop-\(ref.threadId)")
+        }
+        if let openThread {
+            Button {
+                Haptics.selection()
+                openThread(ThreadRef(botId: ownerId, threadId: ref.threadId, title: ref.title))
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Theme.textTertiary)
+                    .frame(width: 20, height: 20)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(status == .waiting ? String(localized: "Review") : String(localized: "Open")))
+            .accessibilityIdentifier("parallel-open-\(ref.threadId)")
         }
     }
 
-    private func stateLine(_ status: ParallelCardState, now: Date) -> String {
-        let label: String = switch status {
+    private func label(_ status: ParallelCardState) -> String {
+        switch status {
         case .queued: String(localized: "Waiting for a free slot")
-        case .running: String(localized: "Running")
-        case .waiting: String(localized: "Waiting for your approval")
-        case .done: String(localized: "Done · answer below")
-        case .failed: String(localized: "Did not finish")
-        case .stopped: String(localized: "Stopped")
+        // the desktop's words: an open question in the task's thread waits
+        // on an answer, anything else on an approval
+        case .waiting:
+            status.waitsOn(taskThread: session.state.messages[ref.threadId]) == .answer
+                ? String(localized: "chat.parallel.state.waitingAnswer", defaultValue: "Waiting for your answer")
+                : String(localized: "chat.parallel.state.waiting", defaultValue: "Waiting for your approval")
+        // the desktop's words (chat.parallel.state.*)
+        case .failed: String(localized: "chat.parallel.state.failed", defaultValue: "Did not finish")
+        case .stopped: String(localized: "chat.parallel.state.stopped", defaultValue: "Stopped")
+        default: String(localized: "chat.parallel.background", defaultValue: "Working in the background")
         }
-        guard status != .queued else { return label }
-        let started = task?.turnStartedAt ?? ref.startedAt ?? message.at
-        let end = status.isLive ? now.timeIntervalSince1970 * 1000 : (ref.endedAt ?? now.timeIntervalSince1970 * 1000)
-        let elapsed = max(0, (end - started) / 1000)
-        guard elapsed > 0 else { return label }
-        return "\(label) · \(Self.elapsed(elapsed))"
+    }
+
+    private func elapsed(_ status: ParallelCardState, now: Date) -> String? {
+        guard status != .queued else { return nil }
+        let started = status.isLive ? (task?.turnStartedAt ?? ref.startedAt ?? message.at) : (ref.startedAt ?? message.at)
+        let end = status.isLive ? now.timeIntervalSince1970 * 1000 : (ref.endedAt ?? started)
+        let seconds = max(0, (end - started) / 1000)
+        return seconds > 0 ? Self.elapsed(seconds) : nil
     }
 
     /// `formatElapsed`: 42s, 3m 05s, 1h 02m.
@@ -149,18 +165,6 @@ struct ParallelTaskCardView: View {
         if total < 60 { return "\(total)s" }
         if total < 3600 { return String(format: "%dm %02ds", total / 60, total % 60) }
         return String(format: "%dh %02dm", total / 3600, (total % 3600) / 60)
-    }
-}
-
-/// The line above a parallel task's answer: which task it comes from.
-struct ParallelResultLabel: View {
-    let ref: ParallelTaskRef
-
-    var body: some View {
-        Label("Answer from the parallel task · \(ref.title)", systemImage: "arrow.triangle.branch")
-            .font(.system(size: 11))
-            .foregroundStyle(Theme.textSecondary)
-            .padding(.leading, 2)
     }
 }
 

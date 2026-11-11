@@ -79,6 +79,12 @@ final class Session: ObservableObject {
         /// User text lines grouped by parent, oldest first: the branch
         /// switcher's versions, built once per transcript (#3017, L03).
         var versions: [String: [Message]]?
+        /// #3581: the routine results a newer one folded, read once per
+        /// transcript.
+        var foldedResults: Set<String>?
+        /// #3581: the turns still running (TurnLiveness), for the thread's
+        /// run they were read with.
+        var liveTurns: (run: TurnLiveness.Run?, ids: Set<String>)?
     }
     private var transcriptMemo: [String: TranscriptMemo] = [:]
 
@@ -137,6 +143,29 @@ final class Session: ObservableObject {
         return entry.versions?[message.parentId ?? ""] ?? []
     }
 
+    /// `RoutineResultStack.foldedIds` of the visible transcript, walked once
+    /// per change of the thread instead of once per row context.
+    func foldedResults(forThread threadId: String) -> Set<String> {
+        var entry = transcriptEntry(forThread: threadId)
+        if let folded = entry.foldedResults { return folded }
+        let folded = RoutineResultStack.foldedIds(entry.visible)
+        entry.foldedResults = folded
+        transcriptMemo[threadId] = entry
+        return folded
+    }
+
+    /// `TurnLiveness.liveTurnIds` of the transcript for this thread's own
+    /// run, walked once per change of the thread or of its run.
+    func liveTurns(forThread threadId: String) -> Set<String> {
+        let run = TurnLiveness.run(of: state.bot(forThread: threadId), threadId: threadId)
+        var entry = transcriptEntry(forThread: threadId)
+        if let hit = entry.liveTurns, hit.run == run { return hit.ids }
+        let ids = TurnLiveness.liveTurnIds(entry.visible, run: run)
+        entry.liveTurns = (run, ids)
+        transcriptMemo[threadId] = entry
+        return ids
+    }
+
     /// What every transcript row reads from the session besides its own
     /// message, as one value. Rows no longer observe the session (#3017,
     /// L02): the chat passes this in, and a row redraws when it changes.
@@ -147,7 +176,9 @@ final class Session: ObservableObject {
             blockedIds: blockedIds,
             viewerId: account?.principalId,
             demo: isDemo,
-            botNames: state.bots.map { "\($0.id)\u{1}\($0.name)" }
+            botNames: state.bots.map { "\($0.id)\u{1}\($0.name)" },
+            foldedResults: foldedResults(forThread: threadId),
+            liveTurns: liveTurns(forThread: threadId)
         )
     }
 
@@ -493,7 +524,7 @@ final class Session: ObservableObject {
         }
         if (arguments.contains("-store-preview") || arguments.contains("-computer-switcher-preview")),
            let url = Bundle.main.url(
-               forResource: arguments.contains("-outbound-preview") ? "OutboundPreview" : arguments.contains("-cards-preview") ? "CardsPreview" : arguments.contains("-images-preview") ? "ImagePreview" : arguments.contains("-chat-update-preview") ? "ChatUpdatePreview" : arguments.contains("-chat-presentation-preview") ? "ChatPresentationPreview" : arguments.contains("-roster-preview") ? "RosterPreview" : arguments.contains("-threads-preview") ? "ThreadPreview" : arguments.contains("-open-thread-preview") ? "OpenThreadPreview" : arguments.contains("-bot-conversation-preview") ? "BotConversationPreview" : "StorePreview",
+               forResource: arguments.contains("-chat-relevant-preview") ? "ChatRelevantPreview" : arguments.contains("-outbound-preview") ? "OutboundPreview" : arguments.contains("-cards-preview") ? "CardsPreview" : arguments.contains("-images-preview") ? "ImagePreview" : arguments.contains("-chat-update-preview") ? "ChatUpdatePreview" : arguments.contains("-chat-presentation-preview") ? "ChatPresentationPreview" : arguments.contains("-roster-preview") ? "RosterPreview" : arguments.contains("-threads-preview") ? "ThreadPreview" : arguments.contains("-open-thread-preview") ? "OpenThreadPreview" : arguments.contains("-bot-conversation-preview") ? "BotConversationPreview" : "StorePreview",
                withExtension: "json"
            ),
            let data = try? Data(contentsOf: url),
@@ -656,6 +687,24 @@ final class Session: ObservableObject {
             if arguments.contains("-cards-top") {
                 // The cards chat from its first cards (the theme captures).
                 focusedMessageId = "c-tool"
+            }
+            // #3581 captures: the heavy user's chat up to one of its rows
+            if let at = arguments.firstIndex(of: "-chat-relevant-until"), arguments.indices.contains(at + 1),
+               let index = state.bots.firstIndex(where: { $0.id == "preview-server" }),
+               let rows = state.messages[state.bots[index].threadId],
+               let end = rows.firstIndex(where: { $0.id == arguments[at + 1] }) {
+                state.messages[state.bots[index].threadId] = Array(rows[...end])
+                state.bots[index].activeLeafId = rows[end].id
+            }
+            // #3581 captures: the running background task started three
+            // minutes ago, whatever day the capture runs
+            if arguments.contains("-chat-relevant-preview"),
+               let index = state.bots.firstIndex(where: { $0.id == "preview-server" }),
+               var tasks = state.bots[index].tasks {
+                for task in tasks.indices where tasks[task].busy == true {
+                    tasks[task].turnStartedAt = Date().timeIntervalSince1970 * 1000 - 185_000
+                }
+                state.bots[index].tasks = tasks
             }
             if arguments.contains("-chat-compaction-preview"),
                var receipt = state.messages["preview-gmail"]?.last {
@@ -4046,6 +4095,14 @@ final class Session: ObservableObject {
         let listing = await loadRoutines()
         guard let run = listing.runs.first(where: { $0.id == runId }) else { return }
         await openRoutineRunInChat(run)
+    }
+
+    /// #3581: the run read by its id, for "Details" when the card may hold
+    /// only a clip of its report. Nil offline or when the run is gone: the
+    /// card's own report stays.
+    func routineRunRead(id runId: String) async -> RoutineRun? {
+        guard let client else { return nil }
+        return try? await client.routineRun(id: runId)
     }
 
     /// #2096: Stop on the running card in the chat cancels the run.

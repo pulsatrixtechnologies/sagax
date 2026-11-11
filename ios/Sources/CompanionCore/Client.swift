@@ -1279,6 +1279,16 @@ public struct CompanionClient: Sendable {
         return (response.routines, response.runs)
     }
 
+    /// #3581: one run read by its id, with its whole report as `report`
+    /// when the computer has one (desktop RoutineRunWindow `useWholeReport`).
+    public func routineRun(id: String) async throws -> RoutineRun? {
+        let response = try await send(
+            try makeRequest("GET", "/api/routines", query: [URLQueryItem(name: "run", value: id)]),
+            as: RoutinesResponse.self
+        )
+        return response.runs.first { $0.id == id }
+    }
+
     /// The listing with each bot's folder order (2026-10-28).
     public func routineListing() async throws -> RoutineListing {
         let response = try await send(try makeRequest("GET", "/api/routines"), as: RoutinesResponse.self)

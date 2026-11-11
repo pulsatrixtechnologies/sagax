@@ -88,7 +88,8 @@ final class TranscriptPresentationTests: XCTestCase {
         ]
         """)
         for message in replies { state.apply(.message(threadId: "thread", message: message)) }
-        XCTAssertEqual(transcriptRows(state.transcript(forThread: "thread"), detail: .hidden).map(\.id), ["a", "b"])
+        // #3581: while the turn runs, a note a later row follows folds already
+        XCTAssertEqual(transcriptRows(state.transcript(forThread: "thread"), detail: .hidden).map(\.id), ["turn.turn", "b"])
         let patch = try JSONDecoder().decode(Frame.self, from: Data("""
         {"kind":"message.patch","threadId":"thread","message":{"id":"b","role":"bot","kind":"text","at":2000,"turnId":"turn","turnTerminal":true}}
         """.utf8))

@@ -161,10 +161,17 @@ final class StepLabelTests: XCTestCase {
         XCTAssertEqual(StepGroup.words(summary, elapsed: 15_000, words: spoken).accessibility, "A travaillé 15 s, 2 outils, 1 échec, appuyez pour voir le détail")
         XCTAssertEqual(StepGroup.words(StepGroup.summarize([]), elapsed: nil, words: en).label, "Worked")
         done.append(step("c", tool("Bash", ok: nil, input: ["command": "pnpm i"])))
+        // #3581: while the turn runs the row says "Working" and never names
+        // the step (the working line under the transcript does, once)
         let live = StepGroup.words(StepGroup.summarize(done), elapsed: nil, words: en)
         XCTAssertEqual(live.phase, .running)
-        XCTAssertEqual(live.label, "Running a command")
-        XCTAssertEqual(live.target, "pnpm i")
+        XCTAssertEqual(live.label, "Working")
+        XCTAssertNil(live.target)
+        XCTAssertEqual(StepGroup.words(StepGroup.summarize(done), elapsed: nil, words: fr).label, "Au travail")
+        // between two steps (a note being written) the turn still runs
+        let between = StepGroup.words(StepGroup.summarize([step("a", tool("Read"))]), elapsed: 4_000, words: en, live: true)
+        XCTAssertEqual(between.label, "Working")
+        XCTAssertEqual(between.phase, .running)
     }
 
     func testSpanFromTheFirstStartToTheLastEnd() {

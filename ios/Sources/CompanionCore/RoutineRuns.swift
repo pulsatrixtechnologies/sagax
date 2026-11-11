@@ -199,6 +199,41 @@ public extension Routine {
 // MARK: - Results thread (AU14, AU15)
 
 public enum RoutineResults {
+    /// #3581: the record of a run keeps this many characters of its report.
+    static let recordOutputMax = 2_000
+
+    /// #3581 (desktop RoutineRunWindow `recordMayBeClipped`): the record's
+    /// text may be a clip of a longer report.
+    public static func recordMayBeClipped(_ output: String?) -> Bool {
+        let length = output?.count ?? 0
+        return length >= recordOutputMax
+            || (length > recordOutputMax / 2 && output!.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("…"))
+    }
+
+    /// #3581: whether "Details" should read the run by its id for the rest
+    /// of its report: a finished run whose card holds no more than a clip.
+    public static func wantsWholeReport(_ card: RoutineRunCard) -> Bool {
+        card.status == "completed" && recordMayBeClipped(card.summary)
+    }
+
+    /// #3581: the whole report "Details" shows: the longest of the card's own
+    /// report (its message's summary, the whole text the chat holds) and the
+    /// run's record (`report` from the single-run read, else `output`), as
+    /// the desktop's run window does. Someone else's run keeps the card's
+    /// text. Nothing to report: what the card says instead (its error, what
+    /// it waits on, its state).
+    public static func wholeReport(card: RoutineRunCard, run: RoutineRun? = nil) -> String {
+        var candidates = [card.summary]
+        if let run, run.redacted != true { candidates += [run.report, run.output] }
+        let longest = candidates.compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .reduce("") { $1.count > $0.count ? $1 : $0 }
+        if !longest.isEmpty { return longest }
+        let fallback = [card.problems, card.error, card.attention]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+        return fallback ?? card.stateLabel
+    }
+
     /// The routine run a thread is the execution of, if any (desktop
     /// `routineRunOfThread`).
     public static func runId(ofThread threadId: String?, bots: [Bot], rooms: [Room] = []) -> String? {

@@ -1,0 +1,1419 @@
+{
+  "bots": [
+    {
+      "id": "preview-server",
+      "threadId": "preview-thread-server",
+      "name": "Server",
+      "title": "Operations",
+      "description": "Keeps the board moving.",
+      "notifications": true,
+      "color": "cyan",
+      "section": "Launch",
+      "chiefOfStaff": true,
+      "unread": false,
+      "modelSelection": {
+        "instanceId": "preview",
+        "model": "preview"
+      },
+      "createdAt": 1787027000000,
+      "activeLeafId": "rr16",
+      "pinned": true,
+      "tasks": [
+        {
+          "threadId": "preview-thread-server",
+          "title": "Operations",
+          "createdAt": 1787027000000
+        },
+        {
+          "threadId": "preview-parallel",
+          "title": "Draft the renewal email",
+          "createdAt": 1787028660000,
+          "busy": true,
+          "parallelOf": {
+            "threadId": "preview-thread-server",
+            "messageId": "u2",
+            "at": 1787028660000
+          }
+        }
+      ],
+      "messages": [
+        {
+          "id": "u1",
+          "kind": "text",
+          "at": 1787028000000,
+          "text": "Check the board and tell me what is left for today.",
+          "role": "user"
+        },
+        {
+          "id": "n1",
+          "kind": "text",
+          "at": 1787028005000,
+          "text": "Reading the board first.",
+          "role": "bot",
+          "turnId": "t1",
+          "parentId": "u1"
+        },
+        {
+          "id": "s1",
+          "kind": "activity",
+          "at": 1787028008000,
+          "turnId": "t1",
+          "tool": {
+            "name": "Read",
+            "ok": true,
+            "input": "{\"file_path\":\"board.md\"}",
+            "durationMs": 900
+          },
+          "role": "bot",
+          "parentId": "n1"
+        },
+        {
+          "id": "n2",
+          "kind": "text",
+          "at": 1787028030000,
+          "text": "Now the open tickets.",
+          "role": "bot",
+          "turnId": "t1",
+          "parentId": "s1"
+        },
+        {
+          "id": "s2",
+          "kind": "activity",
+          "at": 1787028040000,
+          "turnId": "t1",
+          "tool": {
+            "name": "Grep",
+            "ok": true,
+            "input": "{\"pattern\":\"open\"}",
+            "durationMs": 400
+          },
+          "role": "bot",
+          "parentId": "n2"
+        },
+        {
+          "id": "a1",
+          "kind": "text",
+          "at": 1787028173000,
+          "text": "Three tickets are left for today: two wait on a part and one needs your signature on the quote.",
+          "role": "bot",
+          "turnId": "t1",
+          "turnTerminal": true,
+          "parentId": "s2"
+        },
+        {
+          "id": "r0",
+          "kind": "activity",
+          "at": 1787028240000,
+          "from": {
+            "botId": "preview-bot-0",
+            "name": "Reviewer",
+            "color": "blue"
+          },
+          "tool": {
+            "name": "Asked by Reviewer",
+            "ok": true,
+            "input": "Please check pull request 3550 and tell me if the tests pass.",
+            "handoffId": "h-r0"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-r0",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "a1"
+        },
+        {
+          "id": "r0-reply",
+          "kind": "activity",
+          "at": 1787028260000,
+          "roomRequest": {
+            "id": "h-r0",
+            "phase": "result"
+          },
+          "from": {
+            "botId": "preview-server",
+            "name": "Server",
+            "color": "cyan"
+          },
+          "tool": {
+            "name": "Server replied",
+            "ok": true,
+            "output": "PASS. The tests of pull request 3550 pass and the build is green."
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-r0",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "r0"
+        },
+        {
+          "id": "r1",
+          "kind": "activity",
+          "at": 1787028245000,
+          "from": {
+            "botId": "preview-bot-1",
+            "name": "Tester",
+            "color": "green"
+          },
+          "tool": {
+            "name": "Asked by Tester",
+            "ok": true,
+            "input": "Please check pull request 3551 and tell me if the tests pass.",
+            "handoffId": "h-r1"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-r1",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "r0-reply"
+        },
+        {
+          "id": "r1-reply",
+          "kind": "activity",
+          "at": 1787028265000,
+          "roomRequest": {
+            "id": "h-r1",
+            "phase": "result"
+          },
+          "from": {
+            "botId": "preview-server",
+            "name": "Server",
+            "color": "cyan"
+          },
+          "tool": {
+            "name": "Server replied",
+            "ok": true,
+            "output": "PASS. The tests of pull request 3551 pass and the build is green."
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-r1",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "r1"
+        },
+        {
+          "id": "r2",
+          "kind": "activity",
+          "at": 1787028250000,
+          "from": {
+            "botId": "preview-bot-0",
+            "name": "Reviewer",
+            "color": "blue"
+          },
+          "tool": {
+            "name": "Asked by Reviewer",
+            "ok": true,
+            "input": "Please check pull request 3552 and tell me if the tests pass.",
+            "handoffId": "h-r2"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-r2",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "r1-reply"
+        },
+        {
+          "id": "r2-reply",
+          "kind": "activity",
+          "at": 1787028270000,
+          "roomRequest": {
+            "id": "h-r2",
+            "phase": "result"
+          },
+          "from": {
+            "botId": "preview-server",
+            "name": "Server",
+            "color": "cyan"
+          },
+          "tool": {
+            "name": "Server replied",
+            "ok": true,
+            "output": "PASS. The tests of pull request 3552 pass and the build is green."
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-r2",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "r2"
+        },
+        {
+          "id": "r3",
+          "kind": "activity",
+          "at": 1787028255000,
+          "from": {
+            "botId": "preview-bot-2",
+            "name": "Bot B",
+            "color": "orange"
+          },
+          "tool": {
+            "name": "Asked by Bot B",
+            "ok": true,
+            "input": "Please check pull request 3553 and tell me if the tests pass.",
+            "handoffId": "h-r3"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-r3",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "r2-reply"
+        },
+        {
+          "id": "r3-reply",
+          "kind": "activity",
+          "at": 1787028275000,
+          "roomRequest": {
+            "id": "h-r3",
+            "phase": "result"
+          },
+          "from": {
+            "botId": "preview-server",
+            "name": "Server",
+            "color": "cyan"
+          },
+          "tool": {
+            "name": "Server replied",
+            "ok": true,
+            "output": "PASS. The tests of pull request 3553 pass and the build is green."
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-r3",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "r3"
+        },
+        {
+          "id": "r4",
+          "kind": "activity",
+          "at": 1787028260000,
+          "from": {
+            "botId": "preview-bot-1",
+            "name": "Tester",
+            "color": "green"
+          },
+          "tool": {
+            "name": "Asked by Tester",
+            "ok": true,
+            "input": "Please check pull request 3554 and tell me if the tests pass.",
+            "handoffId": "h-r4"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-r4",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "r3-reply"
+        },
+        {
+          "id": "r4-reply",
+          "kind": "activity",
+          "at": 1787028280000,
+          "roomRequest": {
+            "id": "h-r4",
+            "phase": "result"
+          },
+          "from": {
+            "botId": "preview-server",
+            "name": "Server",
+            "color": "cyan"
+          },
+          "tool": {
+            "name": "Server replied",
+            "ok": true,
+            "output": "PASS. The tests of pull request 3554 pass and the build is green."
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-r4",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "r4"
+        },
+        {
+          "id": "a2",
+          "kind": "text",
+          "at": 1787028360000,
+          "text": "I answered the five reviews; all of them pass.",
+          "role": "bot",
+          "parentId": "r4-reply"
+        },
+        {
+          "id": "q0",
+          "kind": "activity",
+          "at": 1787028420000,
+          "from": {
+            "botId": "preview-bot-0",
+            "name": "Reviewer",
+            "color": "blue"
+          },
+          "tool": {
+            "name": "Asked by Reviewer",
+            "ok": true,
+            "input": "Can you share the status of task 1?",
+            "handoffId": "h-q0"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-q0",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "a2"
+        },
+        {
+          "id": "q1",
+          "kind": "activity",
+          "at": 1787028422000,
+          "from": {
+            "botId": "preview-bot-1",
+            "name": "Tester",
+            "color": "green"
+          },
+          "tool": {
+            "name": "Asked by Tester",
+            "ok": true,
+            "input": "Can you share the status of task 2?",
+            "handoffId": "h-q1"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-q1",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "q0"
+        },
+        {
+          "id": "q2",
+          "kind": "activity",
+          "at": 1787028424000,
+          "from": {
+            "botId": "preview-bot-2",
+            "name": "Bot B",
+            "color": "orange"
+          },
+          "tool": {
+            "name": "Asked by Bot B",
+            "ok": true,
+            "input": "Can you share the status of task 3?",
+            "handoffId": "h-q2"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-q2",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "q1"
+        },
+        {
+          "id": "q3",
+          "kind": "activity",
+          "at": 1787028426000,
+          "from": {
+            "botId": "preview-bot-3",
+            "name": "Bot C",
+            "color": "pink"
+          },
+          "tool": {
+            "name": "Asked by Bot C",
+            "ok": true,
+            "input": "Can you share the status of task 4?",
+            "handoffId": "h-q3"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-q3",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "q2"
+        },
+        {
+          "id": "q4",
+          "kind": "activity",
+          "at": 1787028428000,
+          "from": {
+            "botId": "preview-bot-4",
+            "name": "Bot D",
+            "color": "purple"
+          },
+          "tool": {
+            "name": "Asked by Bot D",
+            "ok": true,
+            "input": "Can you share the status of task 5?",
+            "handoffId": "h-q4"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-q4",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "q3"
+        },
+        {
+          "id": "q5",
+          "kind": "activity",
+          "at": 1787028430000,
+          "from": {
+            "botId": "preview-bot-5",
+            "name": "Bot E",
+            "color": "cyan"
+          },
+          "tool": {
+            "name": "Asked by Bot E",
+            "ok": true,
+            "input": "Can you share the status of task 6?",
+            "handoffId": "h-q5"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-q5",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "q4"
+        },
+        {
+          "id": "q6",
+          "kind": "activity",
+          "at": 1787028432000,
+          "from": {
+            "botId": "preview-bot-6",
+            "name": "Bot F",
+            "color": "yellow"
+          },
+          "tool": {
+            "name": "Asked by Bot F",
+            "ok": true,
+            "input": "Can you share the status of task 7?",
+            "handoffId": "h-q6"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-q6",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "q5"
+        },
+        {
+          "id": "q7",
+          "kind": "activity",
+          "at": 1787028434000,
+          "from": {
+            "botId": "preview-bot-7",
+            "name": "Bot G",
+            "color": "red"
+          },
+          "tool": {
+            "name": "Asked by Bot G",
+            "ok": true,
+            "input": "Can you share the status of task 8?",
+            "handoffId": "h-q7"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-q7",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "q6"
+        },
+        {
+          "id": "q8",
+          "kind": "activity",
+          "at": 1787028436000,
+          "from": {
+            "botId": "preview-bot-8",
+            "name": "Bot H",
+            "color": "blue"
+          },
+          "tool": {
+            "name": "Asked by Bot H",
+            "ok": true,
+            "input": "Can you share the status of task 9?",
+            "handoffId": "h-q8"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-q8",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "q7"
+        },
+        {
+          "id": "q9",
+          "kind": "activity",
+          "at": 1787028438000,
+          "from": {
+            "botId": "preview-bot-9",
+            "name": "Bot I",
+            "color": "green"
+          },
+          "tool": {
+            "name": "Asked by Bot I",
+            "ok": true,
+            "input": "Can you share the status of task 10?",
+            "handoffId": "h-q9"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-q9",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "q8"
+        },
+        {
+          "id": "q10",
+          "kind": "activity",
+          "at": 1787028440000,
+          "from": {
+            "botId": "preview-bot-10",
+            "name": "Bot J",
+            "color": "orange"
+          },
+          "tool": {
+            "name": "Asked by Bot J",
+            "ok": true,
+            "input": "Can you share the status of task 11?",
+            "handoffId": "h-q10"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-q10",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "q9"
+        },
+        {
+          "id": "q11",
+          "kind": "activity",
+          "at": 1787028442000,
+          "from": {
+            "botId": "preview-bot-11",
+            "name": "Bot K",
+            "color": "pink"
+          },
+          "tool": {
+            "name": "Asked by Bot K",
+            "ok": true,
+            "input": "Can you share the status of task 12?",
+            "handoffId": "h-q11"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-q11",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "q10"
+        },
+        {
+          "id": "q12",
+          "kind": "activity",
+          "at": 1787028444000,
+          "from": {
+            "botId": "preview-bot-12",
+            "name": "Bot L",
+            "color": "purple"
+          },
+          "tool": {
+            "name": "Asked by Bot L",
+            "ok": true,
+            "input": "Can you share the status of task 13?",
+            "handoffId": "h-q12"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-q12",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "q11"
+        },
+        {
+          "id": "q13",
+          "kind": "activity",
+          "at": 1787028446000,
+          "from": {
+            "botId": "preview-bot-13",
+            "name": "Bot M",
+            "color": "cyan"
+          },
+          "tool": {
+            "name": "Asked by Bot M",
+            "ok": true,
+            "input": "Can you share the status of task 14?",
+            "handoffId": "h-q13"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-q13",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "q12"
+        },
+        {
+          "id": "q14",
+          "kind": "activity",
+          "at": 1787028448000,
+          "from": {
+            "botId": "preview-bot-14",
+            "name": "Bot N",
+            "color": "yellow"
+          },
+          "tool": {
+            "name": "Asked by Bot N",
+            "ok": true,
+            "input": "Can you share the status of task 15?",
+            "handoffId": "h-q14"
+          },
+          "threadRef": {
+            "botId": "preview-server",
+            "threadId": "w-q14",
+            "title": "Teammate work"
+          },
+          "role": "bot",
+          "parentId": "q13"
+        },
+        {
+          "id": "a3",
+          "kind": "text",
+          "at": 1787028540000,
+          "text": "Shared the status with the whole team.",
+          "role": "bot",
+          "parentId": "q14"
+        },
+        {
+          "id": "m0",
+          "kind": "text",
+          "at": 1787028600000,
+          "relayVia": "mcp",
+          "relayOf": "x0",
+          "relayAsk": {
+            "text": "Summarize ticket 4790",
+            "by": "AI client"
+          },
+          "text": "Ticket 4790 waits on the client; the follow-up note went out this morning.",
+          "role": "bot",
+          "parentId": "a3"
+        },
+        {
+          "id": "m1",
+          "kind": "text",
+          "at": 1787028604000,
+          "relayVia": "mcp",
+          "relayOf": "x1",
+          "relayAsk": {
+            "text": "Summarize ticket 4791",
+            "by": "AI client"
+          },
+          "text": "Ticket 4791 waits on the client; the follow-up note went out this morning.",
+          "role": "bot",
+          "parentId": "m0"
+        },
+        {
+          "id": "m2",
+          "kind": "text",
+          "at": 1787028608000,
+          "relayVia": "mcp",
+          "relayOf": "x2",
+          "relayAsk": {
+            "text": "Summarize ticket 4792",
+            "by": "AI client"
+          },
+          "text": "Ticket 4792 waits on the client; the follow-up note went out this morning.",
+          "role": "bot",
+          "parentId": "m1"
+        },
+        {
+          "id": "p1",
+          "kind": "activity",
+          "at": 1787028660000,
+          "parallelTask": {
+            "threadId": "preview-parallel",
+            "title": "Draft the renewal email",
+            "requestMessageId": "u2",
+            "role": "card",
+            "state": "running",
+            "startedAt": 1787028660000
+          },
+          "role": "bot",
+          "parentId": "m2"
+        },
+        {
+          "id": "p2",
+          "kind": "activity",
+          "at": 1787028670000,
+          "parallelTask": {
+            "threadId": "preview-parallel-failed",
+            "title": "Check the supplier price list",
+            "requestMessageId": "u2",
+            "role": "card",
+            "state": "failed",
+            "startedAt": 1787028660000,
+            "endedAt": 1787028755000
+          },
+          "role": "bot",
+          "parentId": "p1"
+        },
+        {
+          "id": "p3",
+          "kind": "activity",
+          "at": 1787028680000,
+          "parallelTask": {
+            "threadId": "preview-parallel-stopped",
+            "title": "Sort last week's tickets",
+            "requestMessageId": "u2",
+            "role": "card",
+            "state": "stopped",
+            "startedAt": 1787028660000,
+            "endedAt": 1787028702000
+          },
+          "role": "bot",
+          "parentId": "p2"
+        },
+        {
+          "id": "u2",
+          "kind": "text",
+          "at": 1787028720000,
+          "text": "And the routines?",
+          "role": "user",
+          "parentId": "p3"
+        },
+        {
+          "id": "rr0",
+          "kind": "routine.run",
+          "at": 1787028780000,
+          "text": "Routine “Morning dispatch” completed",
+          "routineRun": {
+            "runId": "run0",
+            "routineId": "routine0",
+            "routineName": "Morning dispatch",
+            "status": "completed",
+            "summary": "Here is this pass.\n\n| Item | State |\n|---|---|\n| one | done |\n\n3 tickets assigned, 1 waits for a part. Nothing else needs you today."
+          },
+          "role": "bot",
+          "parentId": "u2"
+        },
+        {
+          "id": "rr1",
+          "kind": "routine.run",
+          "at": 1787028900000,
+          "text": "Routine “Backup check” completed",
+          "routineRun": {
+            "runId": "run1",
+            "routineId": "routine1",
+            "routineName": "Backup check",
+            "status": "completed",
+            "summary": "Here is this pass.\n\n| Item | State |\n|---|---|\n| one | done |\n\nAll 12 backups completed; the largest took 41 minutes."
+          },
+          "role": "bot",
+          "parentId": "rr0"
+        },
+        {
+          "id": "rr2",
+          "kind": "routine.run",
+          "at": 1787029020000,
+          "text": "Routine “New mail triage” completed",
+          "routineRun": {
+            "runId": "run2",
+            "routineId": "routine2",
+            "routineName": "New mail triage",
+            "status": "completed",
+            "summary": "Here is this pass.\n\n| Item | State |\n|---|---|\n| one | done |\n\nThe mailbox refused the sign-in, so 4 messages were not sorted. Sign in again from Connect apps.",
+            "problems": "the mailbox refused the sign-in",
+            "repeat": {
+              "firstRunId": "run0",
+              "count": 4,
+              "since": 1786963200000,
+              "lastAt": 1787029020000
+            }
+          },
+          "role": "bot",
+          "parentId": "rr1"
+        },
+        {
+          "id": "rr3",
+          "kind": "routine.run",
+          "at": 1787029140000,
+          "text": "Routine “Invoice watch” completed",
+          "routineRun": {
+            "runId": "run3",
+            "routineId": "routine3",
+            "routineName": "Invoice watch",
+            "status": "completed",
+            "summary": "Here is this pass.\n\n| Item | State |\n|---|---|\n| one | done |\n\nTwo invoices are still unpaid after 30 days; I sent the reminder on both."
+          },
+          "role": "bot",
+          "parentId": "rr2"
+        },
+        {
+          "id": "rr4",
+          "kind": "routine.run",
+          "at": 1787029260000,
+          "text": "Routine “Certificate watch” completed",
+          "routineRun": {
+            "runId": "run4",
+            "routineId": "routine4",
+            "routineName": "Certificate watch",
+            "status": "completed",
+            "summary": "Here is this pass.\n\n| Item | State |\n|---|---|\n| one | done |\n\nThe 4 certificates are renewed until 2027."
+          },
+          "role": "bot",
+          "parentId": "rr3"
+        },
+        {
+          "id": "rr5",
+          "kind": "routine.run",
+          "at": 1787029380000,
+          "text": "Routine “Calendar sweep” completed",
+          "routineRun": {
+            "runId": "run5",
+            "routineId": "routine5",
+            "routineName": "Calendar sweep",
+            "status": "completed",
+            "summary": "Here is this pass.\n\n| Item | State |\n|---|---|\n| one | done |\n\nNothing moved on tomorrow's calendar."
+          },
+          "role": "bot",
+          "parentId": "rr4"
+        },
+        {
+          "id": "rr6",
+          "kind": "routine.run",
+          "at": 1787029500000,
+          "text": "Routine “Ticket follow-up” completed",
+          "routineRun": {
+            "runId": "run6",
+            "routineId": "routine6",
+            "routineName": "Ticket follow-up",
+            "status": "completed",
+            "summary": "Here is this pass.\n\n| Item | State |\n|---|---|\n| one | done |\n\nI followed up on 5 tickets that waited on a client answer."
+          },
+          "role": "bot",
+          "parentId": "rr5"
+        },
+        {
+          "id": "rr7",
+          "kind": "routine.run",
+          "at": 1787029620000,
+          "text": "Routine “Agreement banks” completed",
+          "routineRun": {
+            "runId": "run7",
+            "routineId": "routine7",
+            "routineName": "Agreement banks",
+            "status": "completed",
+            "summary": "Here is this pass.\n\n| Item | State |\n|---|---|\n| one | done |\n\nOne agreement is over its bank by 2.5 hours."
+          },
+          "role": "bot",
+          "parentId": "rr6"
+        },
+        {
+          "id": "rr8",
+          "kind": "routine.run",
+          "at": 1787029740000,
+          "text": "Routine “Quote reminders” completed",
+          "routineRun": {
+            "runId": "run8",
+            "routineId": "routine8",
+            "routineName": "Quote reminders",
+            "status": "completed",
+            "summary": "Here is this pass.\n\n| Item | State |\n|---|---|\n| one | done |\n\nTwo quotes wait for a signature since Monday."
+          },
+          "role": "bot",
+          "parentId": "rr7"
+        },
+        {
+          "id": "rr9",
+          "kind": "routine.run",
+          "at": 1787029860000,
+          "text": "Routine “Disk space watch” completed",
+          "routineRun": {
+            "runId": "run9",
+            "routineId": "routine9",
+            "routineName": "Disk space watch",
+            "status": "completed",
+            "summary": "Here is this pass.\n\n| Item | State |\n|---|---|\n| one | done |\n\nEvery disk has more than 20 percent free."
+          },
+          "role": "bot",
+          "parentId": "rr8"
+        },
+        {
+          "id": "rr10",
+          "kind": "routine.run",
+          "at": 1787029980000,
+          "text": "Routine “License renewals” completed",
+          "routineRun": {
+            "runId": "run10",
+            "routineId": "routine10",
+            "routineName": "License renewals",
+            "status": "completed",
+            "summary": "Here is this pass.\n\n| Item | State |\n|---|---|\n| one | done |\n\nThree licenses renew next month; the list is in the report."
+          },
+          "role": "bot",
+          "parentId": "rr9"
+        },
+        {
+          "id": "rr11",
+          "kind": "routine.run",
+          "at": 1787030100000,
+          "text": "Routine “Antivirus alerts” completed",
+          "routineRun": {
+            "runId": "run11",
+            "routineId": "routine11",
+            "routineName": "Antivirus alerts",
+            "status": "completed",
+            "summary": "Here is this pass.\n\n| Item | State |\n|---|---|\n| one | done |\n\nNo new alert since yesterday."
+          },
+          "role": "bot",
+          "parentId": "rr10"
+        },
+        {
+          "id": "rr12",
+          "kind": "routine.run",
+          "at": 1787030220000,
+          "text": "Routine “Patch report” completed",
+          "routineRun": {
+            "runId": "run12",
+            "routineId": "routine12",
+            "routineName": "Patch report",
+            "status": "completed",
+            "summary": "Here is this pass.\n\n| Item | State |\n|---|---|\n| one | done |\n\n41 machines are patched, 2 wait for a restart."
+          },
+          "role": "bot",
+          "parentId": "rr11"
+        },
+        {
+          "id": "rr13",
+          "kind": "routine.run",
+          "at": 1787030340000,
+          "text": "Routine “Supplier orders” completed",
+          "routineRun": {
+            "runId": "run13",
+            "routineId": "routine13",
+            "routineName": "Supplier orders",
+            "status": "completed",
+            "summary": "Here is this pass.\n\n| Item | State |\n|---|---|\n| one | done |\n\nThe parts order shipped and arrives Friday."
+          },
+          "role": "bot",
+          "parentId": "rr12"
+        },
+        {
+          "id": "rr14",
+          "kind": "routine.run",
+          "at": 1787030460000,
+          "text": "Routine “Time entries” completed",
+          "routineRun": {
+            "runId": "run14",
+            "routineId": "routine14",
+            "routineName": "Time entries",
+            "status": "completed",
+            "summary": "Here is this pass.\n\n| Item | State |\n|---|---|\n| one | done |\n\n12 time entries were added for yesterday."
+          },
+          "role": "bot",
+          "parentId": "rr13"
+        },
+        {
+          "id": "rr15",
+          "kind": "routine.run",
+          "at": 1787030580000,
+          "text": "Routine “Contract renewals” completed",
+          "routineRun": {
+            "runId": "run15",
+            "routineId": "routine15",
+            "routineName": "Contract renewals",
+            "status": "completed",
+            "summary": "Here is this pass.\n\n| Item | State |\n|---|---|\n| one | done |\n\nOne contract renews in 30 days.",
+            "brief": "One contract renews in 30 days."
+          },
+          "role": "bot",
+          "parentId": "rr14"
+        },
+        {
+          "id": "rr16",
+          "kind": "routine.run",
+          "at": 1787030700000,
+          "text": "Routine “Month-end export” completed",
+          "routineRun": {
+            "runId": "run16",
+            "routineId": "routine16",
+            "routineName": "Month-end export",
+            "status": "running",
+            "startedAt": 1787030700000,
+            "startedBy": "person"
+          },
+          "role": "bot",
+          "parentId": "rr15"
+        }
+      ]
+    },
+    {
+      "id": "preview-bot-0",
+      "threadId": "preview-bot-0-thread",
+      "name": "Reviewer",
+      "title": "Teammate",
+      "description": "",
+      "notifications": true,
+      "color": "blue",
+      "unread": false,
+      "modelSelection": {
+        "instanceId": "preview",
+        "model": "preview"
+      },
+      "createdAt": 1787027000000,
+      "tasks": [
+        {
+          "threadId": "preview-bot-0-thread",
+          "title": "Work",
+          "createdAt": 1787027000000
+        }
+      ],
+      "messages": []
+    },
+    {
+      "id": "preview-bot-1",
+      "threadId": "preview-bot-1-thread",
+      "name": "Tester",
+      "title": "Teammate",
+      "description": "",
+      "notifications": true,
+      "color": "green",
+      "unread": false,
+      "modelSelection": {
+        "instanceId": "preview",
+        "model": "preview"
+      },
+      "createdAt": 1787027000000,
+      "tasks": [
+        {
+          "threadId": "preview-bot-1-thread",
+          "title": "Work",
+          "createdAt": 1787027000000
+        }
+      ],
+      "messages": []
+    },
+    {
+      "id": "preview-bot-2",
+      "threadId": "preview-bot-2-thread",
+      "name": "Bot B",
+      "title": "Teammate",
+      "description": "",
+      "notifications": true,
+      "color": "orange",
+      "unread": false,
+      "modelSelection": {
+        "instanceId": "preview",
+        "model": "preview"
+      },
+      "createdAt": 1787027000000,
+      "tasks": [
+        {
+          "threadId": "preview-bot-2-thread",
+          "title": "Work",
+          "createdAt": 1787027000000
+        }
+      ],
+      "messages": []
+    },
+    {
+      "id": "preview-bot-3",
+      "threadId": "preview-bot-3-thread",
+      "name": "Bot C",
+      "title": "Teammate",
+      "description": "",
+      "notifications": true,
+      "color": "pink",
+      "unread": false,
+      "modelSelection": {
+        "instanceId": "preview",
+        "model": "preview"
+      },
+      "createdAt": 1787027000000,
+      "tasks": [
+        {
+          "threadId": "preview-bot-3-thread",
+          "title": "Work",
+          "createdAt": 1787027000000
+        }
+      ],
+      "messages": []
+    },
+    {
+      "id": "preview-bot-4",
+      "threadId": "preview-bot-4-thread",
+      "name": "Bot D",
+      "title": "Teammate",
+      "description": "",
+      "notifications": true,
+      "color": "purple",
+      "unread": false,
+      "modelSelection": {
+        "instanceId": "preview",
+        "model": "preview"
+      },
+      "createdAt": 1787027000000,
+      "tasks": [
+        {
+          "threadId": "preview-bot-4-thread",
+          "title": "Work",
+          "createdAt": 1787027000000
+        }
+      ],
+      "messages": []
+    },
+    {
+      "id": "preview-bot-5",
+      "threadId": "preview-bot-5-thread",
+      "name": "Bot E",
+      "title": "Teammate",
+      "description": "",
+      "notifications": true,
+      "color": "cyan",
+      "unread": false,
+      "modelSelection": {
+        "instanceId": "preview",
+        "model": "preview"
+      },
+      "createdAt": 1787027000000,
+      "tasks": [
+        {
+          "threadId": "preview-bot-5-thread",
+          "title": "Work",
+          "createdAt": 1787027000000
+        }
+      ],
+      "messages": []
+    },
+    {
+      "id": "preview-bot-6",
+      "threadId": "preview-bot-6-thread",
+      "name": "Bot F",
+      "title": "Teammate",
+      "description": "",
+      "notifications": true,
+      "color": "yellow",
+      "unread": false,
+      "modelSelection": {
+        "instanceId": "preview",
+        "model": "preview"
+      },
+      "createdAt": 1787027000000,
+      "tasks": [
+        {
+          "threadId": "preview-bot-6-thread",
+          "title": "Work",
+          "createdAt": 1787027000000
+        }
+      ],
+      "messages": []
+    },
+    {
+      "id": "preview-bot-7",
+      "threadId": "preview-bot-7-thread",
+      "name": "Bot G",
+      "title": "Teammate",
+      "description": "",
+      "notifications": true,
+      "color": "red",
+      "unread": false,
+      "modelSelection": {
+        "instanceId": "preview",
+        "model": "preview"
+      },
+      "createdAt": 1787027000000,
+      "tasks": [
+        {
+          "threadId": "preview-bot-7-thread",
+          "title": "Work",
+          "createdAt": 1787027000000
+        }
+      ],
+      "messages": []
+    },
+    {
+      "id": "preview-bot-8",
+      "threadId": "preview-bot-8-thread",
+      "name": "Bot H",
+      "title": "Teammate",
+      "description": "",
+      "notifications": true,
+      "color": "blue",
+      "unread": false,
+      "modelSelection": {
+        "instanceId": "preview",
+        "model": "preview"
+      },
+      "createdAt": 1787027000000,
+      "tasks": [
+        {
+          "threadId": "preview-bot-8-thread",
+          "title": "Work",
+          "createdAt": 1787027000000
+        }
+      ],
+      "messages": []
+    },
+    {
+      "id": "preview-bot-9",
+      "threadId": "preview-bot-9-thread",
+      "name": "Bot I",
+      "title": "Teammate",
+      "description": "",
+      "notifications": true,
+      "color": "green",
+      "unread": false,
+      "modelSelection": {
+        "instanceId": "preview",
+        "model": "preview"
+      },
+      "createdAt": 1787027000000,
+      "tasks": [
+        {
+          "threadId": "preview-bot-9-thread",
+          "title": "Work",
+          "createdAt": 1787027000000
+        }
+      ],
+      "messages": []
+    },
+    {
+      "id": "preview-bot-10",
+      "threadId": "preview-bot-10-thread",
+      "name": "Bot J",
+      "title": "Teammate",
+      "description": "",
+      "notifications": true,
+      "color": "orange",
+      "unread": false,
+      "modelSelection": {
+        "instanceId": "preview",
+        "model": "preview"
+      },
+      "createdAt": 1787027000000,
+      "tasks": [
+        {
+          "threadId": "preview-bot-10-thread",
+          "title": "Work",
+          "createdAt": 1787027000000
+        }
+      ],
+      "messages": []
+    },
+    {
+      "id": "preview-bot-11",
+      "threadId": "preview-bot-11-thread",
+      "name": "Bot K",
+      "title": "Teammate",
+      "description": "",
+      "notifications": true,
+      "color": "pink",
+      "unread": false,
+      "modelSelection": {
+        "instanceId": "preview",
+        "model": "preview"
+      },
+      "createdAt": 1787027000000,
+      "tasks": [
+        {
+          "threadId": "preview-bot-11-thread",
+          "title": "Work",
+          "createdAt": 1787027000000
+        }
+      ],
+      "messages": []
+    },
+    {
+      "id": "preview-bot-12",
+      "threadId": "preview-bot-12-thread",
+      "name": "Bot L",
+      "title": "Teammate",
+      "description": "",
+      "notifications": true,
+      "color": "purple",
+      "unread": false,
+      "modelSelection": {
+        "instanceId": "preview",
+        "model": "preview"
+      },
+      "createdAt": 1787027000000,
+      "tasks": [
+        {
+          "threadId": "preview-bot-12-thread",
+          "title": "Work",
+          "createdAt": 1787027000000
+        }
+      ],
+      "messages": []
+    },
+    {
+      "id": "preview-bot-13",
+      "threadId": "preview-bot-13-thread",
+      "name": "Bot M",
+      "title": "Teammate",
+      "description": "",
+      "notifications": true,
+      "color": "cyan",
+      "unread": false,
+      "modelSelection": {
+        "instanceId": "preview",
+        "model": "preview"
+      },
+      "createdAt": 1787027000000,
+      "tasks": [
+        {
+          "threadId": "preview-bot-13-thread",
+          "title": "Work",
+          "createdAt": 1787027000000
+        }
+      ],
+      "messages": []
+    },
+    {
+      "id": "preview-bot-14",
+      "threadId": "preview-bot-14-thread",
+      "name": "Bot N",
+      "title": "Teammate",
+      "description": "",
+      "notifications": true,
+      "color": "yellow",
+      "unread": false,
+      "modelSelection": {
+        "instanceId": "preview",
+        "model": "preview"
+      },
+      "createdAt": 1787027000000,
+      "tasks": [
+        {
+          "threadId": "preview-bot-14-thread",
+          "title": "Work",
+          "createdAt": 1787027000000
+        }
+      ],
+      "messages": []
+    }
+  ],
+  "groups": []
+}

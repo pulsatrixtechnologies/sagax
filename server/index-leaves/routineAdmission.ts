@@ -22,6 +22,8 @@ async function routineAdmission(run: RoutineRun, _routine: Routine | undefined) 
   if (prepared.ok) return { ok: true };
   // Fix 2: a rate limit keeps the run queued (server/routines/routines.ts retries it).
   if (prepared.error === "rate_limited") return { ok: false, error: "Perspicax is rate limiting this server; this run is retried", retryAfterMs: prepared.retryAfterMs };
+  // #3661, said once: the provider ended it after a refresh that was cut off.
+  if (prepared.interrupted) return { ok: false, error: `${name}'s routine access ended because a sign-in refresh was interrupted; signing in to Sagax again gives it back. This run is skipped and the next one tries again` };
   if (prepared.error === "missing" || prepared.error === "ended") return { ok: false, error: `Perspicax did not issue ${name}'s routine access yet; this run is skipped and the next one tries again` };
   // 2026-11-02: unreachable is most often a short roll of the connector:
   // the run waits and tries again in its window instead of skipping now.

@@ -32,6 +32,7 @@ import { TokenCallPacer } from "./idp-token-pacer.ts";
 import type { RefreshOutcome, RevokeAttempt } from "./oidc-rp.ts";
 import { PrincipalRegistry } from "./principals.ts";
 import { SessionRegistry, type Scope } from "./sessions.ts";
+import { rotatingRefreshProvider } from "../testing/rotating-refresh-provider.ts";
 
 const ISS = "https://px.example.test";
 const REJ: RefreshOutcome = { ok: false, kind: "rejected", error: "invalid_grant" };
@@ -905,5 +906,75 @@ describe("rate limits (slice 6, fix 2)", () => {
     expect(Math.max(...sent) - start).toBeLessThanOrEqual(4 * 60_000);
     for (const at of sent) expect(sent.filter((other) => other >= at && other < at + 60_000).length).toBeLessThanOrEqual(35);
     expect(queue.size()).toBe(0);
+  });
+});
+
+describe("a sign-in refresh whose answer was lost (#3661)", () => {
+  function lostSetup(graceMs: number) {
+    const first = "pxlr1.first-L1";
+    const provider = rotatingRefreshProvider({ first, graceMs, now: () => clock });
+    const sessions = new SessionRegistry({ file: join(dir, "sessions.json"), now: () => clock });
+    let id = 0;
+    const principals = new PrincipalRegistry({ path: join(dir, "principals.json"), now: () => clock, newId: () => `pr_00000000-0000-4000-8000-${String(++id).padStart(12, "0")}` });
+    const vault = new IdpGrantVault(dir, () => ({ kind: "key", key: Buffer.from(KEY, "hex") }));
+    const logs: string[] = [];
+    const build = () => new IdpSessionManager({
+      vault, rp: provider, sessions, principals, now: () => clock, refreshAfterMs: 1000, log: (l) => logs.push(l),
+      schedule: () => {},
+      // the waits between the retries pass on the provider's clock
+      sleep: async (ms) => { clock += ms; },
+    });
+    const manager = build();
+    const principal = principals.forSubject({ iss: ISS, sub: "L1", orgRole: "member" });
+    const grantRef = manager.createGrant({ iss: ISS, sub: "L1", refreshToken: first, bindBy: clock + 60_000 });
+    const issued = sessions.issue({ label: "web", scopes: ["client"], principalId: principal.id, idp: { iss: ISS, sub: "L1", role: "employee", grantRef } });
+    manager.bindSession(grantRef, issued.session.id);
+    clock += 1000;
+    return { provider, vault, sessions, manager, grantRef, sessionId: issued.session.id, logs, build, first };
+  }
+
+  it("asks again at once with the same token: the rotated answer comes back inside the grace and the session stays", async () => {
+    const { provider, vault, sessions, manager, grantRef, sessionId, first } = lostSetup(30_000);
+    provider.loseNextAnswers(1);
+    await manager.touch(sessions.byId(sessionId)!);
+    expect(provider.calls).toEqual([first, first]);
+    expect(provider.revoked()).toBe(false);
+    expect(vault.get(grantRef)).toMatchObject({ refreshToken: provider.current() });
+    expect(vault.get(grantRef)?.answerLostAt).toBeUndefined();
+    expect(sessions.byId(sessionId)).not.toBeNull();
+  });
+
+  it("a refused connection is one deferred line and no retry in the flight, as before", async () => {
+    const { provider, vault, sessions, manager, grantRef, sessionId, logs, first } = lostSetup(30_000);
+    provider.refuseNextConnection();
+    await manager.touch(sessions.byId(sessionId)!);
+    expect(provider.calls).toEqual([first]);
+    expect(logs.filter((line) => line.includes("refresh deferred"))).toHaveLength(1);
+    expect(vault.get(grantRef)?.answerLostAt).toBeUndefined();
+  });
+
+  it("a restart between the lost answer and the retry asks again first", async () => {
+    const { provider, vault, sessions, manager, grantRef, sessionId, build, first } = lostSetup(30_000);
+    provider.loseNextAnswers(4);
+    await manager.touch(sessions.byId(sessionId)!);
+    expect(vault.get(grantRef)?.answerLostAt).toBeDefined();
+    const calls = provider.calls.length;
+    const after = build();
+    expect(after.resumeInterrupted()).toBe(1);
+    await after.settled();
+    expect(provider.calls.length).toBe(calls + 1);
+    expect(provider.calls.at(-1)).toBe(first);
+    expect(vault.get(grantRef)).toMatchObject({ refreshToken: provider.current() });
+    expect(provider.revoked()).toBe(false);
+    expect(sessions.byId(sessionId)).not.toBeNull();
+  });
+
+  it("a refusal after a lost answer ends the sign-in and says why in its line", async () => {
+    const { provider, sessions, manager, sessionId, logs } = lostSetup(0);
+    provider.loseNextAnswers(1);
+    await manager.touch(sessions.byId(sessionId)!);
+    await manager.settled();
+    expect(sessions.byId(sessionId)).toBeNull();
+    expect(logs.some((line) => line.includes("after a refresh was interrupted"))).toBe(true);
   });
 });

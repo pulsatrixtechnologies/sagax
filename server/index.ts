@@ -29883,6 +29883,9 @@ if (idpSessions) {
   // may be lost) is sent again now, inside Perspicax's reuse grace.
   idpSessions.resumeInterrupted();
 }
+// #3661: a routine delegation whose last renewal got no answer is asked
+// again now, while the provider still answers a retry.
+routineConsents?.resumeInterrupted();
 // The Perspicax directory (slice 3): read with the link token Perspicax
 // writes to SAGAX_PERSPICAX_LINK_FILE. Keeps the principals current and logs
 // out people Perspicax disabled or deleted, even when no back-channel push

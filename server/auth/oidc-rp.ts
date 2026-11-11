@@ -23,6 +23,7 @@ export type { RevokeAttempt };
 import { TokenCallPacer, tokenBudget } from "./idp-token-pacer.ts";
 import { authorizationServerMetadataUrls, pkcePair, readBounded, safeEndpoint } from "../mcp/mcp-oauth.ts";
 import { reportBackgroundError } from "../background-error.ts";
+import { perspicaxUnsent } from "../perspicax/perspicax-mcp-rules.ts";
 
 export const OIDC_PENDING_FLOW_TTL_MS = 10 * 60_000;
 export const OIDC_MAX_PENDING_FLOWS = 20;
@@ -30,6 +31,11 @@ export const OIDC_MAX_PENDING_FLOWS = 20;
 export const OIDC_CLOCK_SKEW_SECONDS = 60;
 const DISCOVERY_TTL_MS = 60 * 60_000;
 const FETCH_TIMEOUT_MS = 15_000;
+/** #3661: a token request (a refresh, a code exchange) waits this long. The
+ * provider was seen answering after 5, 10, 15 and 20 seconds while its
+ * database was busy; cutting a token request off after it rotated loses the
+ * new refresh token. A refresh runs in the background, so it can wait. */
+export const TOKEN_FETCH_TIMEOUT_MS = 30_000;
 const MAX_SUB_LENGTH = 255;
 
 /** The claims Sagax reads from a verified id_token. Everything else in the
@@ -238,7 +244,17 @@ export type RefreshOutcome =
   | { ok: true; refreshToken: string; identity?: OidcIdentity; accessToken?: string; expiresIn?: number; note?: string }
   /** `rejected`: the provider ended the grant (or answered something that
    * cannot be trusted); `transient`: try again later. */
-  | { ok: false; kind: "rejected" | "transient"; error: string; rateLimited?: true; retryAfterMs?: number; clientRefused?: true };
+  | { ok: false; kind: "rejected" | "transient"; error: string; rateLimited?: true; retryAfterMs?: number; clientRefused?: true; answerLost?: true };
+
+/** #3661, the one rule both refresh paths read: a token request whose answer
+ * may have been lost. The request was sent and no answer came (a timeout, a
+ * connection reset after the body was written, a gateway timeout, an answer
+ * cut off while it was read): the provider may have rotated the refresh
+ * token. A request that never left (a name not resolved, a refused
+ * connection) is not one: the grant is as it was. */
+export function tokenAnswerLost(error: unknown): boolean {
+  return !perspicaxUnsent(error);
+}
 
 /** A Retry-After Perspicax did not send, or sent unreadable, counts as this. */
 export const RETRY_AFTER_DEFAULT_MS = 60_000;
@@ -703,16 +719,25 @@ export class OidcRelyingParty {
     for (const [state, flow] of this.pending) if (now - flow.createdAt >= OIDC_PENDING_FLOW_TTL_MS) this.pending.delete(state);
   }
 
-  private async getJson(url: string, init?: RequestInit): Promise<{ status: number; body: Record<string, unknown> | null; retryAfterMs: number }> {
+  /** A JSON answer. A request that got none throws an OidcError whose code
+   * is `unreachable` (nothing was sent) or `answer_lost` (tokenAnswerLost);
+   * `bodyLost`: the answer was cut off while it was read. */
+  private async getJson(url: string, init?: RequestInit, timeoutMs = FETCH_TIMEOUT_MS): Promise<{ status: number; body: Record<string, unknown> | null; retryAfterMs: number; bodyLost?: true }> {
     let response: Response;
     try {
-      response = await this.fetcher(url, { ...init, redirect: "error", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), headers: { accept: "application/json", ...init?.headers } });
+      response = await this.fetcher(url, { ...init, redirect: "error", signal: AbortSignal.timeout(timeoutMs), headers: { accept: "application/json", ...init?.headers } });
     } catch (error) {
-      throw new OidcError("unreachable", `The identity provider could not be reached: ${error instanceof Error ? error.message : String(error)}`);
+      throw new OidcError(tokenAnswerLost(error) ? "answer_lost" : "unreachable", `The identity provider could not be reached: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    let text: string;
+    try {
+      text = await readBounded(response);
+    } catch {
+      return { status: response.status, body: null, retryAfterMs: parseRetryAfter(response.headers.get("retry-after"), this.now()), bodyLost: true };
     }
     let body: Record<string, unknown> | null = null;
     try {
-      const parsed: unknown = JSON.parse(await readBounded(response));
+      const parsed: unknown = JSON.parse(text);
       body = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
     } catch {
       body = null;
@@ -963,7 +988,7 @@ export class OidcRelyingParty {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: form.toString(),
-    });
+    }, TOKEN_FETCH_TIMEOUT_MS);
     if (isRateLimitAnswer(got)) {
       this.pacer.noteRateLimited(got.retryAfterMs);
       throw new OidcError("rate_limited", RATE_LIMITED_SIGN_IN);
@@ -1025,15 +1050,21 @@ export class OidcRelyingParty {
     if (this.resource) form.set("resource", this.resource);
     const slot = await this.pacer.acquire("refresh");
     if (!slot.ok) return { ok: false, kind: "transient", rateLimited: true, retryAfterMs: slot.retryAfterMs, error: rateLimitedText(slot.retryAfterMs) };
-    let got: { status: number; body: Record<string, unknown> | null; retryAfterMs: number };
+    let got: { status: number; body: Record<string, unknown> | null; retryAfterMs: number; bodyLost?: true };
     try {
       got = await this.getJson(discovery.tokenEndpoint, {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: form.toString(),
-      });
+      }, TOKEN_FETCH_TIMEOUT_MS);
     } catch (error) {
-      return { ok: false, kind: "transient", error: error instanceof Error ? error.message : String(error) };
+      const lost = error instanceof OidcError && error.code === "answer_lost";
+      return { ok: false, kind: "transient", error: error instanceof Error ? error.message : String(error), ...(lost ? { answerLost: true as const } : {}) };
+    }
+    // The provider took the request and its answer did not arrive whole: a
+    // gateway that timed out waiting for it, or a body cut off on the way.
+    if (got.status === 504 || got.bodyLost) {
+      return { ok: false, kind: "transient", answerLost: true, error: got.bodyLost ? "the identity provider's answer was cut off" : "the identity provider answered HTTP 504" };
     }
     if (isRateLimitAnswer(got)) {
       this.pacer.noteRateLimited(got.retryAfterMs);

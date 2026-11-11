@@ -30,6 +30,7 @@ import {
   IDP_SUBJECT_MIN_LIFE_MS,
   isSessionGrant,
   perspicaxRoleOf,
+  refreshAskingAgain,
   settledWithin,
   type IdpGrant,
   type IdpGrantVault,
@@ -83,7 +84,9 @@ export type RoutineConsentStatus =
 
 export type RoutineConsentPrepare =
   | { ok: true }
-  | { ok: false; error: "missing" | "ended" | "unreachable" }
+  /** `interrupted` (#3661, said once): the provider ended the delegation
+   * after a refresh whose answer was lost, and it could not be issued again. */
+  | { ok: false; error: "missing" | "ended" | "unreachable"; interrupted?: true }
   /** Perspicax is rate limiting this server: the run is retried later. */
   | { ok: false; error: "rate_limited"; retryAfterMs: number };
 
@@ -111,6 +114,9 @@ export interface RoutineConsentsOptions {
   subjectOf?: (principalId: string) => { iss: string; sub: string } | null;
   /** Where provider revocations go (the durable queue, idp-revocations.ts). */
   revocations?: RevocationSink;
+  /** Waits `delayMs` inside a refresh (a lost answer asked again). Tests
+   * pass an immediate one. */
+  sleep?: (delayMs: number) => Promise<void>;
 }
 
 /** `out`: the person no longer signs in (their role); `ended`: Perspicax
@@ -143,6 +149,10 @@ export class RoutineConsents {
   private readonly issuing = new Map<string, Promise<RoutineDelegationEnsure>>();
   /** principalId -> no new issue before this time. */
   private readonly issueRetryAt = new Map<string, number>();
+  private readonly sleep: (delayMs: number) => Promise<void>;
+  /** #3661: principals whose delegation the provider ended after a refresh
+   * whose answer was lost, not told yet (prepare says it once). */
+  private readonly interrupted = new Set<string>();
 
   constructor(options: RoutineConsentsOptions) {
     this.vault = options.vault;
@@ -157,6 +167,7 @@ export class RoutineConsents {
     this.issue = options.issue;
     this.sessionSubject = options.sessionSubject;
     this.subjectOf = options.subjectOf;
+    this.sleep = options.sleep ?? ((delayMs) => new Promise((resolve) => { setTimeout(resolve, delayMs).unref(); }));
   }
 
   /** Make sure the person holds a delegation: issue one from `given` (a
@@ -287,6 +298,7 @@ export class RoutineConsents {
     }
     this.stale.delete(input.principalId);
     this.issueRetryAt.delete(input.principalId);
+    this.interrupted.delete(input.principalId);
     if (input.accessToken && input.accessExpiresAt !== undefined) this.access.set(input.principalId, { token: input.accessToken, expiresAt: input.accessExpiresAt });
     else this.access.delete(input.principalId);
     this.onActive(input.principalId);
@@ -297,8 +309,8 @@ export class RoutineConsents {
   async prepare(principalId: string): Promise<RoutineConsentPrepare> {
     const grant = this.safeGrantOf(principalId);
     if (grant === null) return { ok: false, error: "unreachable" };
-    if (!grant) return await this.ensure(principalId) === "unavailable" ? { ok: false, error: "missing" } : { ok: true };
-    if (!this.stale.has(principalId) && this.now() - grant.refreshedAt < this.renewMs && this.usable(principalId)) return { ok: true };
+    if (!grant) return await this.ensure(principalId) === "unavailable" ? this.endedOnce(principalId, "missing") : { ok: true };
+    if (!this.stale.has(principalId) && grant.answerLostAt === undefined && this.now() - grant.refreshedAt < this.renewMs && this.usable(principalId)) return { ok: true };
     const waiting = this.rateLimitedFor(principalId);
     if (waiting) return { ok: false, error: "rate_limited", retryAfterMs: waiting };
     const result = await this.refreshWithin(principalId, grant);
@@ -308,10 +320,31 @@ export class RoutineConsents {
       // Perspicax ended that family: a new one is issued at once while the
       // person is still in (a person put out never reaches this point).
       if (this.safeGrantOf(principalId) === undefined && await this.ensure(principalId) !== "unavailable") return { ok: true };
-      return { ok: false, error: "ended" };
+      return this.endedOnce(principalId, "ended");
     }
     if (result === "out") return { ok: false, error: "ended" };
     return { ok: false, error: "unreachable" };
+  }
+
+  /** A delegation that could not be issued again; `interrupted` the first
+   * time after the provider ended it following a lost answer (#3661). */
+  private endedOnce(principalId: string, error: "missing" | "ended"): RoutineConsentPrepare {
+    return this.interrupted.delete(principalId) ? { ok: false, error, interrupted: true } : { ok: false, error };
+  }
+
+  /** Boot (#3661): a delegation whose last refresh got no answer is
+   * refreshed again now, before a run or anything else presents its old
+   * token, while the provider still answers a retry. Returns how many. */
+  resumeInterrupted(): number {
+    let grants: IdpGrant[];
+    try {
+      grants = this.vault.list().filter((grant) => !isSessionGrant(grant) && grant.principalId && grant.answerLostAt !== undefined);
+    } catch {
+      return 0;
+    }
+    for (const grant of grants) void this.flightFor(grant.principalId!, grant.grantRef);
+    if (grants.length) this.log(`routine delegation: asking again for ${grants.length} renewal(s) whose answer a stop lost`);
+    return grants.length;
   }
 
   /** The delegation's access token, the subject of a token exchange for the
@@ -401,16 +434,22 @@ export class RoutineConsents {
     this.retryAt.delete(principalId);
   }
 
-  /** Join or start the single flight, waiting at most IDP_REFRESH_WAIT_MS. */
-  private async refreshWithin(principalId: string, grant: IdpGrant): Promise<RefreshResult> {
+  /** The one refresh in flight for a principal: a second caller joins it. */
+  private flightFor(principalId: string, ref: string): Promise<RefreshResult> {
     let flight = this.inflight.get(principalId);
     if (!flight) {
-      flight = this.refresh(principalId, grant.grantRef).catch((error: unknown) => {
+      flight = this.refresh(principalId, ref).catch((error: unknown) => {
         this.log(`routine delegation: refresh failed unexpectedly: ${error instanceof Error ? error.message : String(error)}`);
         return "unreachable" as const;
       }).finally(() => this.inflight.delete(principalId));
       this.inflight.set(principalId, flight);
     }
+    return flight;
+  }
+
+  /** Join or start the single flight, waiting at most IDP_REFRESH_WAIT_MS. */
+  private async refreshWithin(principalId: string, grant: IdpGrant): Promise<RefreshResult> {
+    const flight = this.flightFor(principalId, grant.grantRef);
     let result: RefreshResult = "unreachable";
     await settledWithin(flight.then((value) => { result = value; }), IDP_REFRESH_WAIT_MS);
     return result;
@@ -419,7 +458,17 @@ export class RoutineConsents {
   private async refresh(principalId: string, ref: string): Promise<RefreshResult> {
     const grant = this.vault.get(ref);
     if (!grant) return "ended";
-    const outcome = await this.rp.refresh(grant.refreshToken, { sub: grant.sub });
+    // #3661: an answer lost on the way is asked again at once, inside this
+    // flight; the grant keeps the mark so a restart asks again first.
+    const { outcome, answerLost: lostNow } = await refreshAskingAgain(this.rp, grant.refreshToken, { sub: grant.sub }, this.sleep, () => {
+      try {
+        const latest = this.vault.get(ref);
+        if (latest) this.vault.set({ ...latest, answerLostAt: this.now() });
+      } catch {
+        /* asked again in this flight all the same */
+      }
+    });
+    const answerLost = lostNow || grant.answerLostAt !== undefined;
     let current: IdpGrant | undefined;
     try {
       current = this.vault.get(ref);
@@ -437,6 +486,7 @@ export class RoutineConsents {
       const next: IdpGrant = { ...current, refreshToken: outcome.refreshToken, refreshedAt: now, lastOkAt: now };
       delete next.failedAt;
       delete next.failingSince;
+      delete next.answerLostAt;
       // The rotated token is persisted first: the old one is dead.
       try {
         this.vault.set(next);
@@ -458,6 +508,13 @@ export class RoutineConsents {
     }
     if (!current) return "ended";
     if (outcome.kind === "rejected") {
+      if (answerLost) {
+        // The provider took the retry of a lost answer for a reuse: it is
+        // the authority, the delegation ends, and the person is told why once.
+        this.end(principalId, ref, `${outcome.error} after a refresh was interrupted`);
+        this.interrupted.add(principalId);
+        return "ended";
+      }
       this.end(principalId, ref, outcome.error);
       return "ended";
     }

@@ -40,6 +40,18 @@ export function grokMountLabel(name: string): string {
   return PRODUCT_NAMES.has(name) ? name : "connector";
 }
 
+/** How long the wait goes on while no tool server of the session has left
+ * starting. A stalled engine start (#3623) never sends its first request to
+ * any mount: every gate is up within 150 ms and gets no byte for 20 s. Time
+ * alone cannot tell that from a slow start: on a loaded server the engine
+ * starts every mount late at once (production: first mount served at 2.5 to
+ * 3.3 s, the whole wait up to 4.4 s). So the limit is near three times the
+ * slowest wait seen in production; a start that has served none of its
+ * servers by then is read as stalled and the turn starts without those
+ * servers' tools, as it would at GROK_MCP_SETTLE_MS. A start slower than
+ * this with none served loses those tools for that turn only. */
+export const GROK_MCP_STALL_MS = 12_000;
+
 const normalized = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 /** Times each server of the catalog from `start` (epoch ms). `mounted` is the
@@ -55,6 +67,8 @@ export function grokMcpWaitClock(mounted: readonly string[], start: number, thre
   /** servers seen waiting (pending, connecting, starting) at some poll */
   const waited = new Set<string>();
   let waiting = new Set<string>();
+  /** some enabled server was seen out of its start at some poll */
+  let anyStarted = false;
   let resolvedMs: number | undefined;
   return {
     /** One poll's answer (`result` of `_x.ai/mcp/list`), read at `at`. */
@@ -71,11 +85,20 @@ export function grokMcpWaitClock(mounted: readonly string[], start: number, thre
           still.add(name);
           waited.add(name);
           answered.delete(name);
-        } else if (waited.has(name) && !answered.has(name)) {
-          answered.set(name, since(at));
+        } else {
+          // a server with no state yet has not begun to start
+          if (typeof server?.session?.status === "string" && server.session.status) anyStarted = true;
+          if (waited.has(name) && !answered.has(name)) answered.set(name, since(at));
         }
       }
       waiting = still;
+    },
+    /** Whether the engine's start of its tool servers stalled: by `at`,
+     * GROK_MCP_STALL_MS into the wait, every server it listed is still
+     * starting and none ever left that state. Waiting time is the only
+     * signal, so a start slower than that limit reads as stalled too. */
+    stalled(at = Date.now()): boolean {
+      return !anyStarted && waiting.size > 0 && at - start >= GROK_MCP_STALL_MS;
     },
     /** What the turn's latency line prints. `limitHit`: the wait ended on its
      * time limit (or without the engine's word) with servers still waiting. */

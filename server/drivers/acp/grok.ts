@@ -1072,7 +1072,7 @@ const support: AcpSupport = {
           clock.note(catalog);
           rememberGrokCatalog(sessionId, catalog);
           noteGrokAccountReach(reachHome, catalog);
-        });
+        }, () => clock.stalled());
         if (settled) rememberGrokMcpSettled(sessionId);
         noteToolWait?.(clock.result(Date.now(), !settled));
       }
@@ -1221,6 +1221,8 @@ export async function waitForGrokMcpSettled(
   budgetMs: number,
   /** the last catalog read, settled or not (grok-tool-catalog.ts) */
   onCatalog?: (catalog: unknown) => void,
+  /** true when waiting longer cannot help (grokMcpWaitClock's stalled) */
+  stalled?: () => boolean,
 ): Promise<boolean> {
   const deadline = Date.now() + budgetMs;
   for (;;) {
@@ -1235,6 +1237,7 @@ export async function waitForGrokMcpSettled(
     } catch {
       return false;
     }
+    if (stalled?.()) return false;
     await delay(100);
   }
 }

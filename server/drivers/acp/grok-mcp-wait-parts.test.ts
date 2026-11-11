@@ -125,6 +125,48 @@ describe("toolsBy on the latency line (#3623)", () => {
     expect(lineWith(wait)).toContain(" toolsBy=resolved:5000,pending:2 ok");
   });
 
+  it("stops waiting when the engine never started any of its servers, instead of at the 20 s limit", async () => {
+    // a stalled engine start (#3623): every mount stays initializing, none
+    // ever gets a request, and the session says it resolved them
+    const { request, calls } = scripted([catalog({ agents: "initializing", browser: "initializing", "Own Thing": "initializing" })], 1_000);
+    const wait = await configure(request, { mounted: ["agents", "browser"] });
+    expect(calls()).toBe(12);
+    expect(wait).toMatchObject({ waitedMs: 12_000, pending: 3 });
+    expect(lineWith(wait)).toContain("pending:3 ok");
+  });
+
+  it("keeps waiting for a loaded start that serves its first server late (9 s), and gets its tools", async () => {
+    // production on a loaded server: every mount starts late at once
+    const late = catalog({ agents: "initializing", browser: "initializing" }, false);
+    const { request, calls } = scripted([...Array(9).fill(late), catalog({ agents: "ready", browser: "ready" })], 1_000);
+    const wait = await configure(request, { mounted: ["agents", "browser"] });
+    expect(calls()).toBe(10);
+    expect(wait).toMatchObject({ waitedMs: 10_000 });
+    expect(wait?.pending ?? 0).toBe(0);
+  });
+
+  it("keeps waiting for a slow server while another one of the turn already started", async () => {
+    const { request, calls } = scripted([
+      catalog({ agents: "initializing", browser: "initializing" }, false),
+      catalog({ agents: "ready", browser: "initializing" }, false),
+    ], 1_000);
+    const wait = await configure(request, { mounted: ["agents", "browser"] });
+    // the 20 s limit, as before
+    expect(calls()).toBe(20);
+    expect(wait).toMatchObject({ waitedMs: 20_000, pending: 1 });
+  });
+
+  it("reads a stalled start only from servers still starting at every poll", () => {
+    const clock = grokMcpWaitClock(["agents"], 0);
+    clock.note(catalog({ agents: undefined }, false), 100);
+    expect(clock.stalled(13_000)).toBe(false);
+    clock.note(catalog({ agents: "initializing" }, false), 200);
+    expect(clock.stalled(11_999)).toBe(false);
+    expect(clock.stalled(12_000)).toBe(true);
+    clock.note(catalog({ agents: "failed" }, true), 12_100);
+    expect(clock.stalled(15_000)).toBe(false);
+  });
+
   it("times the servers on the tool-selection branch too", async () => {
     const { request } = scripted([
       catalog({ agents: "pending" }, false),

@@ -371,8 +371,9 @@ const childEnv: NodeJS.ProcessEnv = { ...process.env, ...spec.env };
 for (const key of Object.keys(childEnv)) if (key.startsWith("SAGAX_GATE_")) delete childEnv[key];
 
 // #3623: Sagax's own relays run as a thread of this process, anything else
-// as its own process, spawned exactly as the CLI used to (gate-upstream.ts).
-const child = startGateUpstream({ command: spec.command, args: spec.args ?? [], env: childEnv, ownDir: GATE_DIR });
+// as its own process, spawned exactly as the CLI used to (gate-upstream.ts);
+// a thread that does not answer its first request in time becomes a process.
+const child = startGateUpstream({ command: spec.command, args: spec.args ?? [], env: childEnv, ownDir: GATE_DIR, name: NAME });
 
 // The gate owns its upstream. If the gate is killed rather than closed (the
 // CLI reaping its MCP servers at the end of a turn), the real server must not
@@ -385,8 +386,10 @@ process.on("SIGTERM", endWithUpstream);
 process.on("SIGINT", endWithUpstream);
 process.on("exit", () => child.kill());
 
-child.onError((error) => {
-  process.stderr.write(`mcp-gate(${NAME}): could not start ${spec.command}: ${String(error)}\n`);
+child.onError((error, when) => {
+  process.stderr.write(when === "start"
+    ? `mcp-gate(${NAME}): could not start ${spec.command}: ${String(error)}\n`
+    : `mcp-gate(${NAME}): ${spec.command} stopped on an error while it ran: ${String(error)}\n`);
   process.exit(1);
 });
 child.stderr.pipe(process.stderr);

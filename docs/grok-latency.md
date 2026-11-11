@@ -88,6 +88,28 @@ Every ACP turn logs one line when it settles (server/drivers/acp/turn-latency.ts
   with the installed engine and eight gated mounts, the engine said its servers were resolved
   1,332 ms after the session opened before (mean of eight) and 788 ms after, on a busy
   machine. The gate also no longer loads the agents catalog to start (1.5 MB to 0.5 MB).
+  A relay thread that has not answered the first request written to it within 2 s, or that
+  fails or ends before answering, gets the same relay started beside it as its own process,
+  given every line written so far; whichever answers first serves the mount and the other is
+  stopped. The gate's log says `mcp-gate(<mount>): the relay thread did not answer its first
+  request in <ms> ms; starting it as its own process`. A relay thread that fails after it
+  answered logs `<command> stopped on an error while it ran`, never `could not start`.
+
+  A server that stays `initializing` (#3623): since Grok 1.0.77 reports a server it is still
+  starting as `initializing`, the wait counts it as waiting, so a turn waits for it up to
+  GROK_MCP_SETTLE_MS (20 s), then sends its prompt without that server's tools; the turn
+  itself is not failed (toolsBy prints `pending:<count>`). The one bad start of the thread
+  change's fixture (no tool list in 22.7 s) is not the gate: under stress, 1,760 gate starts
+  alone (eight at once, a busy machine) answered every time, and in the three engine sessions
+  out of 298 that stalled the same way, all eight gates were up within 150 ms and the engine
+  never wrote its first request (`initialize`) to any of them for 20 s. Waiting time alone
+  cannot tell that from a slow start: on a loaded server the engine starts every mount late at
+  once (production reads of #3623: first mount served at 2.5 to 3.3 s, the whole wait up to
+  4.4 s). So when, 12 s into the wait (GROK_MCP_STALL_MS, near three times that 4.4 s), every
+  server the engine lists is still starting and none ever left that state, the turn stops
+  waiting and sends its prompt then, as it would at the limit (`pending:<count>` with
+  `waitedMs` near 12 s). A start slower than that with no server served loses those tools for
+  that turn only.
 
   What is kept between turns (#3623): a turn that starts an engine process starts the
   person's server again (a new initialize is a new client), and the engine waits for its tool

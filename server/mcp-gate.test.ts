@@ -687,12 +687,15 @@ createInterface({ input: process.stdin }).on("line", (line) => {
           }),
         },
       }) as ChildProcessWithoutNullStreams;
+      relayLog = "";
+      gate.stderr.on("data", (chunk: Buffer) => { relayLog += chunk.toString("utf8"); });
       createInterface({ input: gate.stdout }).on("line", (line) => {
         const next = waiting.shift();
         if (next) next(line);
         else lines.push(line);
       });
     };
+    let relayLog = "";
 
     it("runs inside the gate's own process instead of a second one, with only its own environment", async () => {
       startRelay();
@@ -712,6 +715,59 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       gate!.kill("SIGTERM");
       await closed;
       expect(readFileSync(join(scratch, "closed"), "utf8")).toBe("closed");
+    });
+
+    it("starts a relay thread that does not answer its first request as its own process, given every line already written", async () => {
+      startRelay({ FIXTURE_THREAD: "hang" });
+      const started = Date.now();
+      send({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      send({ jsonrpc: "2.0", method: "notifications/initialized" });
+      send({ jsonrpc: "2.0", id: 2, method: "peek" });
+      const first = JSON.parse(await nextLine());
+      const second = JSON.parse(await nextLine());
+      const elapsed = Date.now() - started;
+      expect([first.id, second.id]).toEqual([1, 2]);
+      // the relay now runs as a process of its own, with its own environment
+      expect(first.result).toMatchObject({ mainThread: true, own: "mine", gateKeys: [], argv: ["data"] });
+      expect(first.result.pid).not.toBe(gate!.pid);
+      expect(elapsed).toBeGreaterThanOrEqual(1_900);
+      expect(elapsed).toBeLessThan(6_000);
+      expect(relayLog).toMatch(/mcp-gate\(data\): the relay thread did not answer its first request in \d+ ms; starting it as its own process/);
+      // later requests reach the process too
+      send({ jsonrpc: "2.0", id: 3, method: "peek" });
+      expect(JSON.parse(await nextLine())).toMatchObject({ id: 3, result: { mainThread: true } });
+    }, 15_000);
+
+    it("keeps a relay thread that is only slow when it answers before the process started for it", async () => {
+      startRelay({ FIXTURE_DELAY_THREAD_MS: "2600", FIXTURE_DELAY_PROCESS_MS: "4000" });
+      send({ jsonrpc: "2.0", id: 1, method: "peek" });
+      const first = JSON.parse(await nextLine());
+      expect(first.result).toMatchObject({ mainThread: false, pid: gate!.pid });
+      expect(relayLog).toContain("starting it as its own process");
+      // the process lost: nothing of it reaches the engine
+      send({ jsonrpc: "2.0", id: 2, method: "peek" });
+      expect(JSON.parse(await nextLine())).toMatchObject({ id: 2, result: { mainThread: false } });
+      await new Promise((settle) => setTimeout(settle, 1_800));
+      expect(lines).toEqual([]);
+    }, 15_000);
+
+    it("starts a relay thread that fails before answering as its own process", async () => {
+      startRelay({ FIXTURE_THREAD: "throw" });
+      send({ jsonrpc: "2.0", id: 1, method: "peek" });
+      const answer = JSON.parse(await nextLine());
+      expect(answer).toMatchObject({ id: 1, result: { mainThread: true } });
+      expect(relayLog).toContain("mcp-gate(data): the relay thread failed before its first answer");
+      expect(relayLog).not.toContain("could not start");
+    });
+
+    it("says a relay thread that fails while it runs stopped, not that it could not start", async () => {
+      startRelay({ FIXTURE_THROW_AFTER: "1" });
+      send({ jsonrpc: "2.0", id: 1, method: "peek" });
+      expect(JSON.parse(await nextLine()).result.mainThread).toBe(false);
+      const [code] = await once(gate!, "exit");
+      expect(code).toBe(1);
+      expect(relayLog).toContain("stopped on an error while it ran: Error: fixture failed while it ran");
+      expect(relayLog).not.toContain("could not start");
     });
 
     it("keeps an upstream outside the gate's own directory as its own process", async () => {

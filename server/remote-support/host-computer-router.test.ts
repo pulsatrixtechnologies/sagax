@@ -586,7 +586,7 @@ describe("the person's session on a host (#3393)", () => {
       // 60 s left: the first command fits and its tunnel answers
       tick(HOST_SESSION_LIFE_MS - 60_000);
       let release: () => void = () => undefined;
-      exec.mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve({ exitCode: 0, stdout: "", stderr: "", timedOut: false }); }));
+      exec.mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve({ host: "FS-01", os: "linux" as const, exitCode: 0, stdout: "", stderr: "", timedOut: false }); }));
       const running = run(ALICE, "ember", "make test");
       await vi.waitFor(() => expect(exec).toHaveBeenCalledTimes(2));
       const queued = run(ALICE, "architect", "make build", 120_000);

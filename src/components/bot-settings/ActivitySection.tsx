@@ -34,10 +34,10 @@
 //
 // #3462 (lot 2 of #3451): for an orchestrator bot, one whose team holds a
 // step of its code work (GET /api/bots/:id/team-work), the Coding section
-// draws its work first (TeamWorkSection: the team row, one row per piece of
-// work, its steps, "Done today"), then the same agent rows. A bot without a
-// team, a read not back yet and a failed first read keep this section as it
-// was, the same DOM.
+// draws its work first (TeamWorkSection: one row per piece of work, its
+// steps, "Done today"), in the same card and the same rows as its agent rows
+// (#3575). A bot without a team, a read not back yet and a failed first read
+// keep this section as it was, the same DOM.
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ChevronRight, GitCommitHorizontal, GitMerge, GitPullRequest, GitPullRequestClosed } from "lucide-react";
 
@@ -284,18 +284,18 @@ export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunch
   /** #2599: false where the pull requests, branches and commits live in
    * the panel's Coding tab (the bot panel): only the agent rows show here. */
   codeWork?: boolean;
-  /** #3462: an orchestrator's work; it draws the Coding section, with the
-   * agent rows (and the code work) under it. */
-  team?: (rows: ReactNode) => ReactNode;
+  /** #3462: an orchestrator's work; it draws the Coding section, its work
+   * rows leading the agent rows' card (#3575), the code work under it. */
+  team?: (rows: (lead: ReactNode) => ReactNode) => ReactNode;
 }) {
   const sections = panelSections(list, live, advanced, archived, actions.now);
   const { coding, work, launched } = sections;
   const showCoding = codeWork ? sections.showCoding : coding.length > 0 || launched.length > 0;
   if (team) {
-    const rows = list === null ? null : (
+    const rows = (lead: ReactNode) => (
       <>
-        <AgentRows items={coding} launched={onOpenLaunched ? launched : []} onOpen={actions.onOpen} onOpenLaunched={onOpenLaunched} onStop={actions.onStop} stopping={actions.stopping} onIgnore={onIgnore ? (id) => onIgnore(ignoredJobKey(id)) : undefined} />
-        {codeWork && <CodeWorkList work={work} now={actions.now ?? Date.now()} branchActions={branchActions} />}
+        <AgentRows lead={lead} items={list === null ? [] : coding} launched={list !== null && onOpenLaunched ? launched : []} onOpen={actions.onOpen} onOpenLaunched={onOpenLaunched} onStop={actions.onStop} stopping={actions.stopping} onIgnore={onIgnore ? (id) => onIgnore(ignoredJobKey(id)) : undefined} />
+        {list !== null && codeWork && <CodeWorkList work={work} now={actions.now ?? Date.now()} branchActions={branchActions} />}
       </>
     );
     return <>{team(rows)}</>;
@@ -406,7 +406,7 @@ export function stepActivityStatus(status: TeamWorkStep["status"] | undefined): 
   }
 }
 
-/** A step's (or a team bot's) coding chat: the team bot's thread, opened
+/** A step's coding chat: the team bot's thread, opened
  * where the chat is; the selected bot stays the orchestrator (#3462). */
 export function openTeamStep(dispatch: (action: Action) => void, orchestratorId: string, step: TeamOpenStep, now = Date.now()): void {
   const itemId = `thread:${step.threadId}`;
@@ -465,7 +465,7 @@ export function ActivitySectionBody({ bot, panel, codeWork = true, streaming, op
   // #3462: an orchestrator's work, read once and kept current by frames.
   const teamView = useTeamWork(bot.id, loadTeamWork ? { load: loadTeamWork } : {});
   const teamWork = teamView.work && teamView.work.team.length > 0 ? teamView.work : null;
-  const team = teamWork ? (rows: ReactNode) => {
+  const team = teamWork ? (rows: (lead: ReactNode) => ReactNode) => {
     const state = getState();
     return (
       <TeamWorkSection
@@ -473,7 +473,7 @@ export function ActivitySectionBody({ bot, panel, codeWork = true, streaming, op
         now={teamView.now}
         streaming={streaming ?? state.connected !== false}
         bots={state.bots ?? []}
-        orchestrator={{ name: bot.name, ...(bot.title ? { title: bot.title } : {}) }}
+        orchestrator={{ botId: bot.id, name: bot.name, ...(bot.title ? { title: bot.title } : {}) }}
         openThreadId={openStepThreadId}
         onOpenStep={(step) => openTeamStep(dispatch, bot.id, step)}
         onOpenHistory={setAll}

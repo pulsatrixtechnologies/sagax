@@ -15,15 +15,14 @@ import {
   teamDoneLabel,
   teamNoteCount,
   teamNoteFolded,
+  teamLineText,
+  teamStepLine,
   teamStepMetaLine,
-  teamStepNote,
   teamStepOf,
-  teamTileAria,
-  teamTileLabel,
-  teamTileTitle,
+  teamToComeLine,
   teamWorkAt,
-  teamWorkMeta,
-  teamWorkStateLine,
+  teamWorkLine,
+  teamWorkSpend,
   type TeamNote,
 } from "./team-work";
 
@@ -81,40 +80,49 @@ describe("team work words", () => {
     expect(liveAt({ ...live, toolSince: NOW }, NOW + 60 * TEAM_SILENT_MS).state).toBe("working");
   });
 
-  it("the header count, the tile, the work row and its steps", () => {
+  it("the header count, the work row's grey line, its spend and its steps (#3575)", () => {
     const work = release();
     setLocale("en");
     expect(teamCount(work.team)).toBe("1 working now");
     const item = work.live[0]!;
-    expect(teamWorkMeta(item)).toBe("1/3 · 15 min · 12k tokens");
-    expect(teamWorkStateLine(item, nameOf, NOW)).toBe("Tester · last action 1 min ago");
-    const qa = work.team.find((bot) => bot.botId === "qa")!;
-    expect(teamTileLabel({ name: "Tester", title: "Test engineer" })).toBe("Tester");
-    expect(teamTileTitle({ name: "Tester", title: "Test engineer" })).toBe("Test engineer");
-    expect(teamTileLabel({ name: "Server", title: "Full Stack, Dev Ops & ITSec" })).toBe("Server");
-    expect(teamTileTitle({ name: "Tester" })).toBeUndefined();
-    expect(teamTileTitle({ name: "Tester", title: "Tester" })).toBeUndefined();
-    expect(teamTileAria({ name: "Tester" }, qa.live, NOW)).toBe("Tester, working now");
-    const notes = item.steps.map((step) => teamStepNote(step, nameOf, NOW));
-    expect(notes[2]).toBe("Checker · waiting to start");
-    const lines = [teamCount(work.team), teamWorkMeta(item), teamWorkStateLine(item, nameOf, NOW), ...notes, ...work.team.map((bot) => teamTileAria(nameOf(bot.botId), bot.live, NOW))];
+    const line = teamWorkLine(item, nameOf, NOW);
+    expect(line).toEqual({ botId: "qa", who: "Tester", parts: ["1/3", "1 min ago"] });
+    expect(teamLineText(line)).toBe("Tester · 1/3 · 1 min ago");
+    // duration and tokens: the unfolded detail only, never the row
+    expect(teamWorkSpend(item)).toBe("15 min · 12k tokens");
+    expect(teamLineText(line)).not.toContain("tokens");
+    const steps = item.steps.map((step) => teamStepLine(step, nameOf, NOW));
+    expect(steps.map((step) => step.botId)).toEqual(["dev", "qa", "rev"]);
+    expect(teamLineText(steps[2]!)).toBe("Checker · waiting to start");
+    expect(teamLineText(teamToComeLine({ botId: "dev" }, nameOf))).toBe("Builder · to come");
+    expect(teamLineText(teamToComeLine({}, nameOf))).toBe("to come");
+    const lines = [teamCount(work.team), teamWorkSpend(item), teamLineText(line), ...steps.map(teamLineText)];
     setLocale("fr");
-    const fr = [teamCount(work.team), teamWorkMeta(item), teamWorkStateLine(item, nameOf, NOW), ...item.steps.map((step) => teamStepNote(step, nameOf, NOW)), ...work.team.map((bot) => teamTileAria(nameOf(bot.botId), bot.live, NOW))];
+    const fr = [teamCount(work.team), teamWorkSpend(item), teamLineText(teamWorkLine(item, nameOf, NOW)), ...item.steps.map((step) => teamLineText(teamStepLine(step, nameOf, NOW)))];
     expect(fr[0]).toBe("1 au travail");
-    expect(fr.at(-1)).toBe("Checker, attend de démarrer");
-    for (const line of [...lines, ...fr]) {
-      expect(line).not.toMatch(IDS);
-      expect(line).not.toMatch(/[–—]/);
+    expect(fr[2]).toBe("Tester · 1/3 · il y a 1 min");
+    expect(fr.at(-1)).toBe("Checker · attend de démarrer");
+    for (const text of [...lines, ...fr]) {
+      expect(text).not.toMatch(IDS);
+      expect(text).not.toMatch(/[–—]/);
     }
+  });
+
+  it("a silent bot reads in the grey line", () => {
+    const item = release().live[0]!;
+    const silent = { ...item, live: { state: "silent" as const, lastActionAt: NOW - 6 * 60_000, silentMs: 6 * 60_000 } };
+    setLocale("en");
+    expect(teamLineText(teamWorkLine(silent, nameOf, NOW))).toBe("Tester · 1/3 · silent for 6 min");
+    setLocale("fr");
+    expect(teamLineText(teamWorkLine(silent, nameOf, NOW))).toBe("Tester · 1/3 · silencieux depuis 6 min");
   });
 
   it("an unnamed bot reads as a neutral word, never its id", () => {
     const work = buildTeamWork(caseNamed("sums of time").input as unknown as TeamWorkInput);
     setLocale("en");
-    const line = teamWorkStateLine(work.live[0]!, () => undefined, NOW);
-    expect(line).toBe("A team bot · last action 1 min ago");
+    expect(teamLineText(teamWorkLine(work.live[0]!, () => undefined, NOW))).toBe("A team bot · 1/3 · 1 min ago");
     setLocale("fr");
-    expect(teamWorkStateLine(work.live[0]!, () => undefined, NOW)).toBe("Un bot de l'équipe · dernière action il y a 1 min");
+    expect(teamLineText(teamWorkLine(work.live[0]!, () => undefined, NOW))).toBe("Un bot de l'équipe · 1/3 · il y a 1 min");
   });
 
   it("done today: merged, mixed, none merged", () => {
@@ -131,10 +139,10 @@ describe("team work words", () => {
     const work = buildTeamWork({ ...(caseNamed("done today").input as unknown as TeamWorkInput), names: NAMES });
     setLocale("en");
     const [failed, merged] = work.doneToday;
-    expect(teamWorkStateLine(merged!, nameOf, NOW)).toBe("Builder · merged 8 min ago");
-    expect(teamWorkStateLine(failed!, nameOf, NOW)).toBe("Tester · failed 5 min ago");
-    expect(teamStepNote(merged!.steps[0]!, nameOf, NOW)).toBe("Builder · Merged the fix.");
-    expect(teamStepNote(failed!.steps[0]!, nameOf, NOW)).toBe("Tester · The tests failed.");
+    expect(teamLineText(teamWorkLine(merged!, nameOf, NOW))).toBe("Builder · 1/1 · merged 8 min ago");
+    expect(teamLineText(teamWorkLine(failed!, nameOf, NOW))).toBe("Tester · 0/1 · failed 5 min ago");
+    expect(teamLineText(teamStepLine(merged!.steps[0]!, nameOf, NOW))).toBe("Builder · Merged the fix. · 1 min");
+    expect(teamLineText(teamStepLine(failed!.steps[0]!, nameOf, NOW))).toBe("Tester · The tests failed. · 1 min");
   });
 
   it("the step chat's meta line", () => {

@@ -1,7 +1,8 @@
 /** Isolated gallery for headless screenshots of an orchestrator bot's work
- * (#3451 lot 2, #3462): the Coding section of its panel (team row, the work
- * in progress, the steps of one piece of work, Done today) beside today's
- * panel of a bot without a team, and a step's coding chat beside the panel
+ * (#3451 lot 2, #3462, #3575): the Coding section of its panel (the work in
+ * progress, the steps of one piece of work, Done today, then its own coding
+ * rows in the same card) beside today's panel of a bot without a team, and
+ * a step's coding chat beside the panel
  * that opened it. Synthetic data only, built with the shared read model
  * (shared/team-work.ts) as the server would answer. Not shipped in the app.
  * ?skin=<id>&lang=<code>&view=panel|chat|today-chat */
@@ -59,7 +60,7 @@ const bots = [
   bot("interface", "Interface", fr ? "Interface" : "Interface builder", "blue"),
   bot("core", "Core", fr ? "Noyau" : "Core builder", "teal"),
 ];
-const names = new Map(bots.slice(1).map((entry) => [entry.id, { name: entry.name, title: entry.title }]));
+const names = new Map(bots.slice(1).map((entry) => [entry.id, { name: entry.name }]));
 
 let seq = 0;
 const step = (botId: string, title: string, work: string, status: TeamStepFacts["status"], start: number, end?: number, extra: Partial<TeamStepFacts> = {}): TeamStepFacts => ({
@@ -118,8 +119,8 @@ function Panel({ kind, openThreadId }: { kind: "today" | "team"; openThreadId?: 
           <AgentRows items={today} onOpen={() => {}} onStop={() => {}} onIgnore={() => {}} />
         </section>
       ) : (
-        <TeamWorkSection work={work} now={NOW} streaming bots={bots} orchestrator={{ name: lead.name, title: lead.title }} openThreadId={openThreadId} onOpenStep={() => {}} onOpenHistory={() => {}}>
-          <AgentRows items={today} onOpen={() => {}} onStop={() => {}} onIgnore={() => {}} />
+        <TeamWorkSection work={work} now={NOW} streaming bots={bots} orchestrator={{ botId: lead.id, name: lead.name, title: lead.title }} openThreadId={openThreadId} onOpenStep={() => {}} onOpenHistory={() => {}}>
+          {(rows) => <AgentRows lead={rows} items={today} onOpen={() => {}} onStop={() => {}} onIgnore={() => {}} />}
         </TeamWorkSection>
       )}
       <Upcoming />

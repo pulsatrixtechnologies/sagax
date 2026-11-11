@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-// #3462: the Coding section of an orchestrator bot lists its work (the team
-// row, one row per piece of work, its steps, "Done today"); a bot without a
+// #3462, #3575: the Coding section of an orchestrator bot lists its work (one
+// row per piece of work, its steps, "Done today") in the card of its own
+// coding rows, drawn by the same row; a bot without a
 // team, a read not back yet and a failed first read draw today's section,
 // the same DOM (ActivitySection.coding.dom.test.ts holds today's behaviour).
 import { act, createElement } from "react";
@@ -91,7 +92,7 @@ describe("the Coding section of an orchestrator", () => {
     expect(failed).toBe(pending);
   });
 
-  it("a bot with a team draws the team row, the rows, the steps and Done today, then its own rows", async () => {
+  it("a bot with a team draws its work rows, the steps and Done today, then its own rows, in one card", async () => {
     const load = vi.fn(async (_botId: string, _since: number) => teamWork());
     await draw(load);
     expect(load).toHaveBeenCalledTimes(1);
@@ -100,45 +101,45 @@ describe("the Coding section of an orchestrator", () => {
     expect(section).not.toBeNull();
     expect(section.querySelector("[data-activity-history='coding']")?.textContent).toBe("Coding");
     expect(section.querySelector("[data-team-count]")?.textContent).toBe("1 working now");
-    expect([...section.querySelectorAll("[data-team-bot]")].map((tile) => tile.getAttribute("data-team-bot"))).toEqual(["dev", "qa", "rev"]);
-    // #3462 review: the tile names the bot as its rows do, the title under it
-    const dev = section.querySelector<HTMLElement>('[data-team-bot="dev"]')!;
-    expect(dev.querySelector("[data-team-tile-label]")?.textContent).toBe("Builder");
-    expect(dev.querySelector("[data-team-tile-title]")?.textContent).toBe("Server builder");
-    expect(dev.querySelector("[title]")?.getAttribute("title")).toContain("Server builder");
-    expect(section.querySelector('[data-team-bot="qa"] [data-team-tile-label]')?.textContent).toBe("Tester");
-    expect(section.querySelector('[data-team-bot="qa"] [data-team-tile-title]')).toBeNull();
+    // #3575: no team grid
+    expect(section.querySelector("[data-team-row]")).toBeNull();
+    expect(section.querySelector("[data-team-bot]")).toBeNull();
     const row = section.querySelector<HTMLElement>('[data-team-work-item="work:release"]')!;
-    expect(row.querySelector("[data-team-work-name]")?.textContent).toBe("Release");
-    expect(row.querySelector("[data-team-work-meta]")?.textContent).toBe("1/3 · 15 min · 12k tokens");
-    expect(row.querySelector("[data-team-state-line]")?.textContent).toBe("Tester · last action 1 min ago");
-    const toggle = row.querySelector<HTMLButtonElement>("[data-team-work-toggle]")!;
+    const own = section.querySelector<HTMLElement>('[data-activity-card="thread:th-9"]')!;
+    // the work row and the bot's own row: the same row, in the same card
+    expect(row.parentElement).toBe(own.parentElement);
+    expect(row.getAttribute("class")).toBe(own.getAttribute("class"));
+    expect(row.querySelector("[data-agent-title]")?.textContent).toBe("Release");
+    expect(row.querySelector("[data-team-line]")?.textContent).toBe("Tester · 1/3 · 1 min ago");
+    const toggle = row.querySelector<HTMLButtonElement>("[data-coding-open]")!;
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     act(() => toggle.click());
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    expect([...row.querySelectorAll("[data-team-step-name]")].map((step) => step.textContent)).toEqual(["Build", "Test", "Review"]);
-    expect(row.querySelector('[data-team-step="h1"] [data-team-done]')).not.toBeNull();
+    expect(section.querySelector('[data-team-work-spend="work:release"]')?.textContent).toBe("15 min · 12k tokens");
+    expect([...section.querySelectorAll('[data-team-step-of="work:release"] [data-agent-title]')].map((step) => step.textContent)).toEqual(["Build", "Test", "Review"]);
+    expect(section.querySelector('[data-team-step="h1"]')?.getAttribute("data-coding-state")).toBe("finished");
     const done = section.querySelector<HTMLElement>("[data-team-done-today]")!;
     expect(done.textContent).toContain("Done today · 1 merged");
-    act(() => done.querySelector<HTMLButtonElement>("[data-team-done-toggle]")!.click());
-    expect(done.querySelector('[data-team-work-item="step:m1"]')).not.toBeNull();
-    // the bot's own coding rows stay, under the work view
-    expect(section.querySelector('[data-activity-card="thread:th-9"]')).not.toBeNull();
+    act(() => done.querySelector<HTMLButtonElement>("[data-coding-open]")!.click());
+    expect(section.querySelector('[data-team-work-item="step:m1"]')?.getAttribute("data-coding-state")).toBe("merged");
+    // the bot's own coding rows stay, under the work rows
+    expect(own).not.toBeNull();
     // no identifier on screen
     expect(section.textContent).not.toMatch(/\b(h[123]|m1|t[129]|orc|dev|qa|rev)\b/);
   });
 
   it("a click on a step opens that team bot's coding chat; the orchestrator stays selected", async () => {
     await draw(async () => teamWork());
-    act(() => host.querySelector<HTMLButtonElement>('[data-team-work-item="work:release"] [data-team-work-toggle]')!.click());
-    act(() => host.querySelector<HTMLButtonElement>('[data-team-step-open="t2"]')!.click());
+    act(() => host.querySelector<HTMLButtonElement>('[data-team-work-item="work:release"] [data-coding-open]')!.click());
+    act(() => host.querySelector<HTMLButtonElement>('[data-team-step-open="t2"] [data-coding-open]')!.click());
     expect(dispatchMock).toHaveBeenCalledTimes(1);
     const action = dispatchMock.mock.calls[0]![0];
     expect(action).toMatchObject({ type: "openCodingChat", target: { botId: "qa", itemId: "thread:t2", threadId: "t2", step: { orchestratorId: "orc", name: "Test", work: "Release", index: 2, total: 3 } } });
     expect(action.target.seed).toMatchObject({ title: "Test", status: "running", botId: "qa" });
-    // a tile opens its step too
-    // (its newest step: the merged fix of today)
-    act(() => host.querySelector<HTMLButtonElement>('[data-team-bot-open="t9"]')!.click());
+    // a step of what finished today opens its chat the same way
+    act(() => host.querySelector<HTMLButtonElement>("[data-team-done-today] [data-coding-open]")!.click());
+    act(() => host.querySelector<HTMLButtonElement>('[data-team-work-item="step:m1"] [data-coding-open]')!.click());
+    act(() => host.querySelector<HTMLButtonElement>('[data-team-step-open="t9"] [data-coding-open]')!.click());
     expect(dispatchMock.mock.calls[1]![0]).toMatchObject({ target: { botId: "dev", threadId: "t9", step: { name: "Today", index: 1, total: 1 } } });
   });
 });

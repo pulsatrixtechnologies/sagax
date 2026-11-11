@@ -8,8 +8,8 @@ import { waitForExit } from "../../server/testing/cleanup.ts";
 import { runControlOmb } from "../control-omb.ts";
 import { request } from "../mcp-server.ts";
 import { UI_TOOLS_DIR } from "./control-omb-ui.ts";
-import { chooseStartFromJs, openNewBotDialog, openTemplatesCatalog, START_FROM, startFromGroupsJs } from "./compose-flow.ts";
-import { clickAccessible } from "./ui-click.ts";
+import { chooseStartFromJs, NEW_BOT_ROOT_JS, openNewBotDialog, openTemplatesCatalog, START_FROM, startFromGroupsJs } from "./compose-flow.ts";
+import { clickAccessible, openSettingsPageJs } from "./ui-click.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const binary = resolveAgentBrowserBinary({ dataDir: UI_TOOLS_DIR, env: process.env });
@@ -62,13 +62,21 @@ describe("Preset bots in the real renderer", () => {
       return true;
     })()`);
 
-    // Settings → Share as preset…: counts from the server, then Save file.
+    // Settings > Developer > Defaults for new bots > Share as preset…: counts
+    // from the server, then Save file. The card left the Models page for
+    // Developer on 2026-11-08 (ModelsDeveloperCards, EnginesSettings.tsx).
     await expect.poll(snapshot, { timeout: 10_000 }).toContain('button "You"');
     await click("You");
     await click("Settings");
+    await expect.poll(() => evaluate(openSettingsPageJs("Developer")), { timeout: 10_000 }).toBe(true);
     await expect.poll(snapshot, { timeout: 10_000 }).toContain("Share as preset…");
-    await click("Share as preset…");
-    await expect.poll(snapshot, { timeout: 20_000 }).toContain("What's in the file");
+    // The Developer page paints in steps: a click that lands while it still
+    // lays out opens nothing, so click again until the share dialog shows.
+    const shareShown = async () => (await snapshot()).includes("What's in the file");
+    await expect.poll(async () => {
+      if (!(await shareShown())) await click("Share as preset…");
+      return shareShown();
+    }, { timeout: 20_000, interval: 1_000 }).toBe(true);
     let dialog = await snapshot();
     for (const line of ["Share New bot defaults as a preset", "follow-up", "Never included: model choices, folders, computers, approval levels"]) expect(dialog).toContain(line);
     await ui("screenshot", "--out", evidence("share"));
@@ -116,8 +124,9 @@ describe("Preset bots in the real renderer", () => {
     await expect.poll(snapshot, { timeout: 20_000 }).toContain('term "Preset bots"');
     expect(await snapshot()).toContain('StaticText "1 · Sky"');
     // The hint sits behind the switch's help button (a closed <details>), so it
-    // is in the dialog's text but not in the accessibility snapshot.
-    expect(await evaluate(`[...document.querySelectorAll('[role=dialog]')].some((dialog) => dialog.textContent.includes("Never their model, folder, computer, approval level or connected apps."))`)).toBe(true);
+    // is in the dialog's text but not in the accessibility snapshot. "Connected
+    // apps" reads "connectors" since #1778 (one name for that page).
+    expect(await evaluate(`[...document.querySelectorAll('[role=dialog]')].some((dialog) => dialog.textContent.includes("Never their model, folder, computer, approval level or connectors."))`)).toBe(true);
     await ui("screenshot", "--out", evidence("share-team"));
     await click("Cancel");
     await ui("press", "--keys", "Escape");
@@ -128,7 +137,7 @@ describe("Preset bots in the real renderer", () => {
     const create = async (label: string, expected: string, shot: string) => {
       const before = await bots();
       await openNewBotDialog(newBot);
-      await expect.poll(async () => (await ui("eval", "--js", "[...document.querySelectorAll('[role=dialog] button')].find(button => button.textContent.trim() === 'Create bot')?.disabled")).result, { timeout: 20_000 }).toBe(false);
+      await expect.poll(async () => (await ui("eval", "--js", `[...(${NEW_BOT_ROOT_JS}?.querySelectorAll('button') ?? [])].find(button => button.textContent.trim() === 'Create bot')?.disabled`)).result, { timeout: 20_000 }).toBe(false);
       // Start from is a pill menu (#596): presets by source, then the roles.
       await expect.poll(async () => String(await evaluate(startFromGroupsJs())).split(" | ").slice(0, 3).join(" | "), { timeout: 10_000 })
         .toBe("From Acme Partners | Imported presets | Built-in roles");

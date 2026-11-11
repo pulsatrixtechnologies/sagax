@@ -8,6 +8,17 @@ function plainObject(value) {
   return value && typeof value === "object" && !Array.isArray(value);
 }
 
+/** The level a thread of this wire bot runs at. A thread carries its own
+ * level only while it keeps an exception (WireTask.approvalOwn, #1169);
+ * every other thread follows its bot, live, and has no level of its own on
+ * the wire. Reading only `task.approvalMode` made a committed all-thread or
+ * refreshed grant look uncommitted, and the coordinator revoked it to Ask. */
+function threadApprovalMode(bot, threadId) {
+  const task = Array.isArray(bot?.tasks) ? bot.tasks.find(candidate => candidate?.threadId === threadId) : undefined;
+  if (!task) return undefined;
+  return task.approvalMode ?? bot.approvalMode;
+}
+
 function trustedApprovalModeRequest(requestId, botId, mode, acknowledgeLocalAuto = false, threadId, modelSelection, updateBotDefault, threadOnly = false, allThreads = false, refreshPermissions = false) {
   if (typeof requestId !== "string" || !REQUEST_ID.test(requestId)) {
     throw new Error("invalid trusted approval-mode request id");
@@ -243,11 +254,10 @@ function createTrustedApprovalModeCoordinator({ randomId, timeoutMs = 10_000 } =
     if (message.type === "approval-trusted-mode-commit-result") {
       const waiting = pending.get(message.requestId);
       if (!waiting || waiting.proc !== proc || waiting.phase !== "committing") return true;
-      const taskMode = message.bot?.tasks?.find(task => task.threadId === waiting.threadId)?.approvalMode;
       const matches = waiting.allThreads
         ? message.bot?.approvalMode === waiting.mode && Array.isArray(message.bot?.tasks) &&
-          message.bot.tasks.every(task => task.approvalMode === waiting.mode)
-        : taskMode === waiting.mode;
+          message.bot.tasks.every(task => threadApprovalMode(message.bot, task?.threadId) === waiting.mode)
+        : threadApprovalMode(message.bot, waiting.threadId) === waiting.mode;
       if (message.ok !== true || message.bot?.id !== waiting.botId || !matches) {
         failAmbiguously(message.requestId, new Error("The thread approval change was not committed"));
       } else settle(message.requestId, ({ resolve }) => resolve(message.bot));
@@ -343,9 +353,9 @@ function createTrustedApprovalModeCoordinator({ randomId, timeoutMs = 10_000 } =
     }
     const resultMode = waiting.threadOnly && (waiting.mode === "full" || waiting.mode === "custom")
       ? waiting.mode // Inert prepare reply; validate the actual thread at commit.
-      : waiting.threadOnly ? result.bot.tasks?.find(task => task.threadId === waiting.threadId)?.approvalMode
+      : waiting.threadOnly ? threadApprovalMode(result.bot, waiting.threadId)
       : waiting.modelThreadId
-      ? result.bot.tasks?.find((task) => task.threadId === waiting.modelThreadId)?.approvalMode
+      ? threadApprovalMode(result.bot, waiting.modelThreadId)
       : result.bot.approvalMode;
     if (result.bot.id !== waiting.botId || resultMode !== waiting.mode) {
       failAmbiguously(result.requestId, new Error("Approval-mode result did not match the request"));

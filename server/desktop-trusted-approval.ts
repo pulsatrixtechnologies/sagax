@@ -296,7 +296,7 @@ function handleDesktopTrustedApprovalMessage(raw: unknown): boolean {
   if (message.allThreads !== undefined && (typeof message.allThreads !== "boolean" ||
     (message.allThreads && (threadId !== undefined || message.threadOnly === true ||
       message.modelSelection !== undefined || message.updateBotDefault !== undefined ||
-      (mode !== "full" && mode !== "ask"))))) {
+      mode === "custom")))) {
     respond({ ok: false, error: "Invalid all-threads approval scope" });
     return true;
   }
@@ -311,7 +311,20 @@ function handleDesktopTrustedApprovalMessage(raw: unknown): boolean {
   if (message.allThreads === true && (existing.approvalGrant || host.store.tasks(botId).some(task =>
       host.threadBusy(botId, task.threadId) || !host.supportsApprovalMode(
         task.modelSelection ?? existing.modelSelection, mode)))) {
-    respond({ ok: false, error: "Finish this bot's active turns and approval changes first. Every thread's provider must support Full access." });
+    respond({ ok: false, error: "Finish this bot's active turns and approval changes first. Every thread's provider must support this level." });
+    return true;
+  }
+  // #3568: Auto and Edits reach every thread in one write with no grant
+  // phases, how a team-wide level leaves Custom in the desktop app (the
+  // coordinator and the renderer send it; this branch refused it).
+  if (message.allThreads === true && (mode === "auto" || mode === "edits")) {
+    if (mode === "auto" && existing.computer === "local" && message.acknowledgeLocalAuto !== true &&
+      host.everyThreadMode(existing).some((level: string) => level !== "auto")) {
+      respond({ ok: false, error: "Auto mode on this computer requires confirming the warning" });
+      return true;
+    }
+    host.store.setAllThreadApprovalMode(botId, mode);
+    respond({ ok: true, bot: host.wireTrustedApprovalBot(host.store.bot(botId)!) });
     return true;
   }
   if (message.threadOnly !== undefined && typeof message.threadOnly !== "boolean") {

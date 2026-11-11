@@ -9,8 +9,8 @@ import { waitForExit } from "../../server/testing/cleanup.ts";
 import { BOT_ROLES } from "../../src/lib/bot-roles.ts";
 import { runControlOmb } from "../control-omb.ts";
 import { UI_TOOLS_DIR } from "./control-omb-ui.ts";
-import { chooseStartFromJs, openNewBotDialog, START_FROM } from "./compose-flow.ts";
-import { clickAccessible } from "./ui-click.ts";
+import { chooseStartFromJs, NEW_BOT_ROOT_JS, openNewBotDialog, START_FROM } from "./compose-flow.ts";
+import { clickAccessible, openBotMenuJs } from "./ui-click.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const binary = resolveAgentBrowserBinary({ dataDir: UI_TOOLS_DIR, env: process.env });
@@ -60,19 +60,43 @@ describe("bot setup and tools in the real renderer", () => {
       await press("Escape");
       // The chat header's bot pill toggles the panel. Escape does not always
       // close it, so a later visit reads "Close <name>'s panel". Click only
-      // while it is closed; Edit bot sits in the panel's Bot menu.
+      // while it is closed. Edit bot sits in the bot's menu, a right click on
+      // the panel's mascot or name (UX reference 2.3).
       await expect.poll(() => evaluate(`(() => {
         const pill = document.querySelector("main [data-bot-header-pill]");
         if (!pill) return false;
         if (pill.getAttribute("aria-expanded") !== "true") pill.click();
         return true;
       })()`), { timeout: 10_000 }).toBe(true);
-      await expect.poll(snapshot, { timeout: 10_000 }).toContain('button "Bot menu"');
-      await click("Bot menu");
+      await expect.poll(() => evaluate(openBotMenuJs()), { timeout: 10_000 }).toBe(true);
       await expect.poll(snapshot, { timeout: 10_000 }).toContain('menuitem "Edit bot"');
       await click("Edit bot");
       await expect.poll(snapshot, { timeout: 10_000 }).toContain(section);
       await click(section);
+    };
+    // Bot accounts > Add > MCP servers (BotProfilePage.tsx-parts/cards.tsx).
+    const addMcpServers = async () => {
+      await expect.poll(() => evaluate(`(() => {
+        const card = document.querySelector('[data-settings-group="bot-profile-accounts"]');
+        const item = [...document.querySelectorAll('[role=menuitem]')].find((el) => (el.textContent || "").trim().startsWith("MCP servers"));
+        if (item) { item.click(); return true; }
+        card?.querySelector('button[aria-haspopup="menu"]')?.click();
+        return false;
+      })()`), { timeout: 10_000 }).toBe(true);
+    };
+    // Plugins' header: "Manage", or "N connected" once something is. Opened
+    // from a bot, Manage starts on "This bot", where only plugins install;
+    // servers are added for the organization, as the workspace registry the
+    // smoke reads (/api/mcp/servers) holds them.
+    const openManage = async () => {
+      await expect.poll(() => evaluate(`(() => {
+        if (document.querySelector('[data-plugins-add]')) return true;
+        const scope = [...document.querySelectorAll('[role=radiogroup][aria-label="Install scope"] [role=radio]')].find((el) => (el.textContent || "").trim() === "Organization");
+        if (scope) { if (scope.getAttribute("aria-checked") !== "true") scope.click(); return false; }
+        const header = [...document.querySelectorAll("button")].find((el) => /^(Manage|\\d+ connected)$/.test((el.textContent || "").trim()));
+        header?.click();
+        return false;
+      })()`), { timeout: 10_000 }).toBe(true);
     };
     const chooseRole = async (title: string) => {
       await expect.poll(() => evaluate(chooseStartFromJs(title)), { timeout: 10_000 }).toBe(true);
@@ -120,15 +144,21 @@ describe("bot setup and tools in the real renderer", () => {
     await evaluate(`document.querySelector(${JSON.stringify(`[data-sidebar-bot-row="${created[0].id}"]`)})?.click(); true`);
 
     await openPersona("Access");
-    await expect.poll(snapshot, { timeout: 10_000 }).toContain("No MCP servers added yet.");
-    await click("Manage in Capabilities");
-    await expect.poll(() => evaluate("Boolean(document.querySelector('[data-plugins-tab=\"installed\"]'))"), { timeout: 10_000 }).toBe(true);
-    await evaluate("document.querySelector('[data-plugins-tab=\"installed\"]')?.click(); true");
-    await expect.poll(() => evaluate("Boolean(document.querySelector('[data-plugins-advanced]'))"), { timeout: 10_000 }).toBe(true);
-    await evaluate("(() => { const details = document.querySelector('[data-plugins-advanced]'); if (details instanceof HTMLDetailsElement) details.open = true; return true; })()");
-    await expect.poll(() => evaluate("[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Paste config')?.disabled"), { timeout: 10_000 }).toBe(false);
-    await click("Paste config");
-    await expect.poll(() => evaluate("Boolean(document.querySelector('textarea[aria-label=\"Paste config\"]'))"), { timeout: 10_000 }).toBe(true);
+    // #3399: the MCP servers card left the profile; each server is one row of
+    // Bot accounts, with its switch. With none, the card's empty row carries
+    // Add, whose "MCP servers" opens Plugins on that surface for this bot.
+    await expect.poll(snapshot, { timeout: 10_000 }).toContain("This bot has no accounts yet");
+    await addMcpServers();
+    // Plugins > Manage > + Add > Paste config (#2104: one "+ Add" menu in
+    // Manage's title row, PluginsPanelView.tsx).
+    await openManage();
+    await expect.poll(() => evaluate(`(() => {
+      if (document.querySelector('textarea[aria-label="Paste config"]')) return true;
+      const paste = document.querySelector('[data-plugins-add-action="paste"]');
+      if (paste && !paste.disabled) paste.click();
+      else if (!paste) document.querySelector('[data-plugins-add]')?.click();
+      return false;
+    })()`), { timeout: 10_000 }).toBe(true);
     const pasted = await ui("snapshot", "--interactive");
     const textarea = Object.entries(pasted.refs as Record<string, { role: string; name: string }>)
       .find(([, entry]) => entry.role === "textbox" && entry.name === "Paste config");
@@ -139,24 +169,23 @@ describe("bot setup and tools in the real renderer", () => {
     await click("Add servers");
     const registry = async () => (await fetch(`${info.url}/api/mcp/servers`).then((response) => response.json())).servers;
     await expect.poll(registry, { timeout: 10_000 }).toMatchObject([{ name: "fixture", enabled: false }]);
-    // Adding a server can close the plugins overlay. Re-open it and open
-    // the fixture row so the workspace toggle is in the snapshot.
+    // The new server is a row of Manage's Installed list ("Open Fixture");
+    // its detail page holds the workspace switch. Adding a server can close
+    // the plugins overlay: re-open it the same way first.
     if (!(await snapshot()).includes("Turn fixture on")) {
-      await openPersona("Access");
-      await click("Manage in Capabilities");
-      await expect.poll(() => evaluate("Boolean(document.querySelector('[data-plugins-tab=\"installed\"]'))"), { timeout: 10_000 }).toBe(true);
-      await evaluate("document.querySelector('[data-plugins-tab=\"installed\"]')?.click(); true");
-      await expect.poll(snapshot, { timeout: 10_000 }).toContain("fixture");
-      await evaluate(`(() => {
-        const row = [...document.querySelectorAll("button, [role=button]")].find((el) => (el.textContent || "").includes("fixture"));
-        row?.click();
-        return Boolean(row);
-      })()`);
+      if (!(await snapshot()).includes('button "Open Fixture"')) {
+        await openPersona("Access");
+        await addMcpServers();
+        await openManage();
+      }
+      await expect.poll(snapshot, { timeout: 10_000 }).toContain('button "Open Fixture"');
+      await click("Open Fixture");
     }
     await expect.poll(snapshot, { timeout: 10_000 }).toContain("Turn fixture on");
     await click("Turn fixture on");
     await expect.poll(registry, { timeout: 10_000 }).toMatchObject([{ name: "fixture", enabled: true }]);
-    await click("Close plugins");
+    // Plugins' close button is "Close" in its header (PluginsPanelFrame).
+    await click("Close");
     await press("Escape");
     await openPersona("Access");
     await expect.poll(() => evaluate("document.querySelector('[aria-label=\"Let this bot use Fixture\"]')?.getAttribute('aria-checked')"), { timeout: 10_000 }).toBe("true");
@@ -167,10 +196,11 @@ describe("bot setup and tools in the real renderer", () => {
     await expect.poll(() => evaluate("document.querySelector('[aria-label=\"Let this bot use Fixture\"]')?.getAttribute('aria-checked')"), { timeout: 10_000 }).toBe("false");
 
     await press("Escape");
-    await openPersona("Usage");
-    await expect.poll(snapshot, { timeout: 10_000 }).toContain("All bots");
-    await expect.poll(() => evaluate("(() => { const row = document.querySelector('[data-persona-current=usage]'); const rect = row?.getBoundingClientRect(); return rect ? Math.max(-rect.top, rect.bottom - innerHeight) : 9999; })()"), { timeout: 10_000 }).toBeLessThanOrEqual(1);
-    // The editor lost its category search in #518: the left nav is the way in.
+    // The bot's usage is the profile's Analytics tab since 0.8.52 (#2168;
+    // #3401: the usage block first, then the cost breakdown).
+    await openPersona("Analytics");
+    await expect.poll(snapshot, { timeout: 10_000 }).toContain('tab "Analytics" [selected');
+    await expect.poll(() => evaluate("(() => { const panel = document.querySelector('[data-bot-profile-panel=stats]'); const rect = panel?.getBoundingClientRect(); return rect ? Math.max(-rect.top, rect.top - innerHeight) : 9999; })()"), { timeout: 10_000 }).toBeLessThanOrEqual(1);
     await ui("screenshot", "--out", `${info.logPath}.settings.png`);
 
     // A failed profile step must roll back the incomplete bot and leave the
@@ -196,7 +226,9 @@ describe("bot setup and tools in the real renderer", () => {
     await click("Create bot");
     await expect.poll(snapshot, { timeout: 10_000 }).toContain("Fixture preset rejected");
     expect((await bots()).map(bot => bot.id)).toEqual(beforeFailure.map(bot => bot.id));
-    expect(await dialogCount()).toBe(1);
+    // The draft stays open for the retry: from a team, New Bot is a view in
+    // the team's detail panel (TeamDialog, 0.8.27), not a dialog.
+    expect(await evaluate(`Boolean(${NEW_BOT_ROOT_JS}?.querySelector('button[aria-label="${START_FROM}"]'))`)).toBe(true);
     await click("Create bot");
     await expect.poll(async () => (await bots()).length, { timeout: 10_000 }).toBe(beforeFailure.length + 1);
     await expect.poll(async () => !(await snapshot()).includes(START_FROM), { timeout: 10_000 }).toBe(true);

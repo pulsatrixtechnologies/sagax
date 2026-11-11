@@ -388,6 +388,49 @@ describe("groupTranscript", () => {
     expect(groupTranscript([first]).map((item) => item.kind)).toEqual(["message"]);
   });
 
+  describe("#3696: a live turn's text is drawn where it stays", () => {
+    const LONG = "Ticket 1042: the printer on the second floor failed three times since Monday, and two of its notes repeat ticket 1040.";
+    const ids = (items: ReturnType<typeof groupTranscript>) => items.map((item) => item.kind === "message" ? item.message.id : item.kind);
+    const live = new Set(["turn-l"]);
+
+    it("a short note then a step: never a row of its own while the turn runs, and in the turn's row once a step follows", () => {
+      const user: Message = { id: "u-l1", at: 1_000, role: "user", kind: "text", text: "check the request" };
+      const note = assistant("Yes, I will check the request.", "turn-l", false, 2_000);
+      // the newest row: the working line draws it, the list does not
+      expect(ids(groupTranscript([user, note], { liveTurns: live, lineNoteId: note.id }))).toEqual([user.id]);
+      const read = running("Read");
+      read.turnId = "turn-l";
+      const working = groupTranscript([user, note, read], { liveTurns: live });
+      expect(ids(working)).toEqual([user.id, "run"]);
+      expect(working[1]).toMatchObject({ id: `run:${note.id}`, messages: [note, read] });
+    });
+
+    it("a growing answer opens once and stays a bubble for the rest of the turn, even with steps after it", () => {
+      const user: Message = { id: "u-l2", at: 1_000, role: "user", kind: "text", text: "summarize 1042" };
+      const long = assistant(LONG, "turn-l", false, 2_000);
+      const read = step("Read", "turn-l", 3_000);
+      const short = assistant("Checking 1040 now.", "turn-l", false, 4_000);
+      const grep = running("Grep");
+      grep.turnId = "turn-l";
+      const items = groupTranscript([user, long, read, short, grep], { liveTurns: live });
+      expect(ids(items)).toEqual([user.id, long.id, "run"]);
+      expect(items[2]).toMatchObject({ messages: [read, short, grep] });
+      // the turn ends: what came before the answer is put away once
+      const final = assistant("Merge 1042 into 1040.", "turn-l", true, 9_000);
+      const settled = groupTranscript([user, long, read, short, { ...grep, tool: { name: "Grep", ok: true } }, final]);
+      expect(ids(settled)).toEqual([user.id, "run", final.id]);
+    });
+
+    it("a short answer stays in the working line while the turn runs and is its bubble once the turn ends", () => {
+      const user: Message = { id: "u-l3", at: 1_000, role: "user", kind: "text", text: "is it open?" };
+      const yes = assistant("Yes.", "turn-l", false, 2_000);
+      expect(ids(groupTranscript([user, yes], { liveTurns: live, lineNoteId: yes.id }))).toEqual([user.id]);
+      expect(ids(groupTranscript([user, { ...yes, turnTerminal: true }]))).toEqual([user.id, yes.id]);
+      // the turn ended before its final mark arrived: the newest line stays
+      expect(ids(groupTranscript([user, yes]))).toEqual([user.id, yes.id]);
+    });
+  });
+
   it("keeps a lone terminal message as the answer", () => {
     const only = assistant("I could not finish, but here is what I found.", "turn-short", true);
     expect(groupTranscript([only])).toEqual([{ kind: "message", message: only }]);

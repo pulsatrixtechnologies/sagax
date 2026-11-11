@@ -7,6 +7,7 @@
 // names the work; text the bot left visible breaks the group, so the bot's
 // words always separate one group from the next.
 import { isBusyElsewhereWait } from "@/lib/turn-tail";
+import { liveTextPlace } from "@/lib/live-text-place";
 import type { Message } from "@/state/store";
 import { activeLocale, t } from "@/lib/i18n";
 import { autoWorkerLine } from "@/lib/auto-model";
@@ -260,14 +261,27 @@ function assistantTurnFolds(messages: Message[]) {
   return settledTurnFolds(messages, isNarration);
 }
 
+/** What a person's chat knows of the turns that run now (#3696). */
+export type LiveTranscript = {
+  /** the turns still running (tool-liveness.ts liveTurnIds) */
+  liveTurns?: ReadonlySet<string>;
+  /** the note the working line draws now (live-text-place.ts liveLineNote):
+   * no row of the list while it is there */
+  lineNoteId?: string;
+};
+
 /** A person's chat folds a turn's notes and finished steps behind the turn's
  * one row, so only the answer stays a bubble (#3581). Once the turn has its
- * final message, every note and finished step before it folds. While it has
- * none (it runs, or ended without one), a note folds as soon as a later row
- * of the same turn exists, and every step that has not failed folds: the chat
- * shows the row, the newest line being written and the working line. A
- * failed step stays where it was (a failed hand-off is why no answer came). */
-function chatTurnFolds(messages: Message[]) {
+ * final message, every note and finished step before it folds. While the
+ * turn runs, where its text goes is read from the text (#3696,
+ * live-text-place.ts): a short note folds (the working line draws the newest
+ * one, the row the others) and a text that opened into a bubble stays one, so
+ * nothing on screen goes from a bubble to hidden while the turn runs. A turn
+ * that ended without its final message folds a note as soon as a later row of
+ * the same turn exists. Every step that has not failed folds: the chat shows
+ * the row, the bubbles and the working line. A failed step stays where it was
+ * (a failed hand-off is why no answer came). */
+function chatTurnFolds(messages: Message[], live: LiveTranscript) {
   const settled = settledTurnFolds(messages, (message, turnId) =>
     message.turnId === turnId && (isNarration(message, turnId) || foldable(message)));
   const ends = new Set<string>();
@@ -281,7 +295,14 @@ function chatTurnFolds(messages: Message[]) {
   messages.forEach((message, index) => {
     const turnId = message.turnId;
     if (!turnId || ends.has(turnId)) return;
-    const note = isNarration(message, turnId) && index < (last.get(turnId) ?? index);
+    // in the working line: no row until a later row of its turn exists
+    if (message.id === live.lineNoteId) {
+      settled.hiddenIds.add(message.id);
+      return;
+    }
+    const note = isNarration(message, turnId) && (live.liveTurns?.has(turnId)
+      ? liveTextPlace(message.text) === "line"
+      : index < (last.get(turnId) ?? index));
     const step = isToolStep(message) && message.tool.ok !== false;
     if (!note && !step) return;
     open.set(turnId, [...(open.get(turnId) ?? []), message]);
@@ -343,10 +364,10 @@ function stepSpan(messages: Message[]): number | undefined {
   return total;
 }
 
-function group(messages: Message[], foldAssistantTurns: boolean): TranscriptItem[] {
+function group(messages: Message[], foldAssistantTurns: boolean, live: LiveTranscript = {}): TranscriptItem[] {
   const items: TranscriptItem[] = [];
   const folds = foldAssistantTurns
-    ? chatTurnFolds(messages)
+    ? chatTurnFolds(messages, live)
     : { byAnchorId: new Map<string, TurnFold>(), hiddenIds: new Set<string>() };
   let run: Message[] = [];
   const flush = () => {
@@ -395,8 +416,8 @@ export function groupActivityRuns(messages: Message[]): ActivityTranscriptItem[]
   return group(messages, false);
 }
 
-export function groupTranscript(messages: Message[]): TranscriptItem[] {
-  return group(messages, true);
+export function groupTranscript(messages: Message[], live: LiveTranscript = {}): TranscriptItem[] {
+  return group(messages, true, live);
 }
 
 const MAX_NAMES = 3;

@@ -238,6 +238,7 @@ export function GroupRoomTranscriptPane({
               seed={`${group.id}:${group.turnStartedAt ?? ""}:${speaker?.id ?? ""}`}
               since={speaker ? group.turnStartedAt ?? null : null}
               answering={popping !== null}
+              onCall={onCall}
             />
           )}
         </div>

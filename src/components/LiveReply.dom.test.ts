@@ -66,16 +66,25 @@ afterEach(() => {
 describe("LiveReply", () => {
   it("is on by default and grows with every delta, partial Markdown included", () => {
     const lengths: number[] = [];
-    for (const _text of stream()) {
+    let opened = false;
+    for (const text of stream()) {
       draw();
-      expect(bubble()).not.toBeNull();
+      // #3696: the first short words are written in the working line; the
+      // bubble opens once the text grows past it, and then stays
+      if (!bubble()) {
+        expect(opened).toBe(false);
+        expect(host.querySelector("[data-presence-phrase]")?.textContent).toContain(text.trim());
+        continue;
+      }
+      opened = true;
       lengths.push(bubble()!.textContent!.length);
       // the words are on screen: no "Typing…" line under them
       expect(host.querySelector(".turn-presence")).toBeNull();
     }
+    expect(opened).toBe(true);
     // it grew, frame after frame
     expect(lengths.at(-1)).toBeGreaterThan(lengths[0]!);
-    expect(new Set(lengths).size).toBeGreaterThan(DELTAS.length / 2);
+    expect(new Set(lengths).size).toBeGreaterThan(DELTAS.length / 3);
     const html = bubble()!.innerHTML;
     expect(html).toContain("<table");
     expect(html).toContain("<li");
@@ -101,7 +110,7 @@ describe("LiveReply", () => {
   });
 
   it("follows a change made elsewhere (another window, a bot) live", () => {
-    streaming = { [THREAD]: "Bonjour" };
+    streaming = { [THREAD]: "Bonjour.\n\nVoici le plan de la semaine." };
     draw();
     expect(bubble()).not.toBeNull();
     act(() => {
@@ -115,7 +124,12 @@ describe("LiveReply", () => {
     const shownRef = { current: false };
     draw({ shownRef });
     expect(shownRef.current).toBe(false);
+    // #3696: a short text is in the working line, not a bubble
     streaming = { [THREAD]: "Oui." };
+    draw({ shownRef });
+    expect(shownRef.current).toBe(false);
+    expect(bubble()).toBeNull();
+    streaming = { [THREAD]: "Oui.\n\n- le billet 1042\n- le billet 1040" };
     draw({ shownRef });
     expect(shownRef.current).toBe(true);
     draw({ hidden: true });

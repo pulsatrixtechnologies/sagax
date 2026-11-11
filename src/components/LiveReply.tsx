@@ -10,12 +10,15 @@
 // same commit (the store clears the stream with the message frame), and the
 // final text is what stays: notifications and the transcript read that one.
 // Off, or an engine that does not stream: nothing here, the reply appears
-// whole as before.
+// whole as before. A short text is not drawn here but in the working line
+// (#3696, src/lib/live-text-place.ts): this bubble opens only once the text
+// grows past it, so a note never shows as a bubble that a step then hides.
 import { useLayoutEffect, useMemo, type MutableRefObject } from "react";
 import { cn } from "@/lib/cn";
 import { useChatBubbleWidthClasses, useChatRoomFitClass } from "@/lib/chat-bubble-width";
 import { splitLiveMarkdown } from "@/lib/live-markdown-blocks";
 import { prefersWideBubble } from "@/lib/rich-blocks";
+import { liveTextPlace } from "@/lib/live-text-place";
 import { useStreamReplies } from "@/lib/stream-replies-preference";
 import type { MentionPeer } from "@/lib/mentions";
 import { useStreamSelector } from "@/state/store-selector";
@@ -54,7 +57,9 @@ export function LiveReply({
   // this thread's text only: another bot's stream does not render it (#3624)
   const raw = useStreamSelector((stream) => (threadId ? stream.streaming[threadId] ?? "" : ""));
   const text = enabled && !hidden ? liveReplyText(raw) : "";
-  const visible = Boolean(text.trim());
+  // #3696: a short text is written in the working line (TurnPresence); it
+  // opens here once it grows past it, and stays (live-text-place.ts)
+  const visible = Boolean(text.trim()) && liveTextPlace(text) === "bubble";
   useLayoutEffect(() => {
     if (visible && shownRef) shownRef.current = true;
   }, [visible, shownRef]);

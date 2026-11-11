@@ -11,6 +11,7 @@ import { peerLine } from "@/lib/peer-message";
 import { showWorkingDots } from "@/lib/turn-tail";
 import { lastNonReceipt } from "@/lib/receipts";
 import { liveActivityPhrases } from "@/lib/live-activity";
+import { LIVE_NOTE_PHASE, lineWords, liveLineNote } from "@/lib/live-text-place";
 import { useOnCall } from "@/lib/call";
 import { pendingApprovals } from "../PendingApproval";
 import { latestFailure, latestReply, type TranscriptSnapshot } from "@/lib/transcript-announcer";
@@ -34,7 +35,10 @@ export function useChatViewPresence({
   openPage,
   pageStage,
   composerDockHeight,
+  liveTurns,
 }: {
+  /** the turns still running (useLiveTurnIds), for the note the line draws */
+  liveTurns: ReadonlySet<string>;
   bot: Bot;
   profile: Bot;
   messages: Message[];
@@ -85,11 +89,16 @@ export function useChatViewPresence({
   // The working line reads the last real message: a finished call's record
   // (and a turn's receipts) can trail a turn that is still working.
   const lastMessage = lastNonReceipt(messages);
-  const activity = liveActivityPhrases(lastMessage);
+  // #3696: the bot's short note of the live turn stays in the line, in its
+  // look, until the next step's words replace it (src/lib/live-text-place.ts)
+  const lineNote = liveLineNote(lastMessage, liveTurns);
+  const activity = lineNote
+    ? { phase: LIVE_NOTE_PHASE, phrases: [lineWords(lineNote.text ?? "")] }
+    : liveActivityPhrases(lastMessage);
   const waiting = Boolean(
     bot.busy &&
       bot.activity !== "waiting-on-you" &&
-      showWorkingDots(bot.busy, lastMessage),
+      (lineNote || showWorkingDots(bot.busy, lastMessage)),
   );
   const wasWaiting = useRef(false);
   // the reply was drawn as it was written (LiveReply): it settles in place
@@ -111,8 +120,11 @@ export function useChatViewPresence({
   useEffect(() => {
     if (waiting) wasWaiting.current = true;
   }, [waiting]);
+  // A note in the line is not a reply yet: when its turn ends with it as the
+  // answer, it settles in as one, from the line, like any reply.
+  const inLine = lineNote !== undefined;
   useLayoutEffect(() => {
-    if (lastMessage?.role !== "bot" || lastMessage.kind !== "text" || !wasWaiting.current) return;
+    if (inLine || lastMessage?.role !== "bot" || lastMessage.kind !== "text" || !wasWaiting.current) return;
     wasWaiting.current = false;
     if (liveShown.current) {
       liveShown.current = false;
@@ -125,7 +137,7 @@ export function useChatViewPresence({
       poppingTimer.current = null;
       setPopping((current) => current === messageId ? null : current);
     }, 520);
-  }, [lastMessage?.id, lastMessage?.role, lastMessage?.kind]);
+  }, [lastMessage?.id, lastMessage?.role, lastMessage?.kind, inLine]);
   const presenceVisible = waiting || popping !== null;
   const announcement = useMemo((): TranscriptSnapshot => {
     const approval = pendingApprovals(messages)[0];

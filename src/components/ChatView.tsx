@@ -80,6 +80,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
     openPage: session.openPage,
     pageStage: session.pageStage,
     composerDockHeight: session.composerDock.height,
+    liveTurns: transcript.liveTurns,
   });
 
   return (

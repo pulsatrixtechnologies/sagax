@@ -1669,8 +1669,6 @@
   "pdf.openDefaultAria": "{name} को डिफ़ॉल्ट ऐप में खोलें",
   "pdf.openDefaultHint": "इस PDF को इस कंप्यूटर के डिफ़ॉल्ट PDF ऐप में खोलें",
   "pdf.openDefaultFailed": "इस PDF को किसी दूसरे ऐप में नहीं खोला जा सका। इसके बजाय एक कॉपी सेव करें।",
-  "chat.inputRequest.title": "{bot} को आपका जवाब चाहिए",
-  "chat.inputRequest.reminder": "{bot} अभी भी आपके जवाब का इंतज़ार कर रहा है",
   "chat.inputRequest.placeholder": "आपका जवाब",
   "chat.inputRequest.send": "जवाब भेजें",
   "chat.inputRequest.answered": "जवाब भेजा गया: काम जारी है।",

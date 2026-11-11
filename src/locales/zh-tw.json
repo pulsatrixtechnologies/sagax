@@ -3441,8 +3441,6 @@
   "pdf.openDefaultAria": "以預設 App 開啟 {name}",
   "pdf.openDefaultHint": "以這台電腦的預設 PDF App 開啟此 PDF",
   "pdf.openDefaultFailed": "無法在其他 App 中開啟此 PDF。請改為儲存副本。",
-  "chat.inputRequest.title": "{bot} 需要你的回答",
-  "chat.inputRequest.reminder": "{bot} 仍在等待你的回答",
   "chat.inputRequest.placeholder": "你的回答",
   "chat.inputRequest.send": "傳送回答",
   "chat.inputRequest.answered": "回答已傳送：工作繼續進行。",

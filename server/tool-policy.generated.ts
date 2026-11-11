@@ -595,6 +595,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"PATCH","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/tasks\\/([\\w-]+)$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/tasks\\/([\\w-]+)$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/tasks$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
+  {"method":"GET","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/team-work$","tier":"read","readOnly":true,"scope":"bots:read","defaultEnabled":true},
   {"method":"PUT","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/temporary-pin$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"PATCH","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/terminal-embeds\\/([\\w-]+)$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/threads\\/follow-model$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},

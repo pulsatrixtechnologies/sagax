@@ -3548,8 +3548,6 @@
   "pdf.openDefaultAria": "{name} を既定のアプリで開く",
   "pdf.openDefaultHint": "この PDF をこのコンピュータの既定の PDF アプリで開きます",
   "pdf.openDefaultFailed": "この PDF を他のアプリで開けませんでした。代わりにコピーを保存してください。",
-  "chat.inputRequest.title": "{bot} があなたの回答を必要としています",
-  "chat.inputRequest.reminder": "{bot} はまだあなたの回答を待っています",
   "chat.inputRequest.placeholder": "あなたの回答",
   "chat.inputRequest.send": "回答を送信",
   "chat.inputRequest.answered": "回答を送信しました。作業を続けます。",

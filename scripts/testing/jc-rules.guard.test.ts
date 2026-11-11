@@ -259,7 +259,9 @@ describe("unified chat mode: zero threads, following the threads setting", () =>
     // #1383: AttentionRow / RoutineRunRow gates live in chips.tsx
     const chips = readSrc("components/ChatView.tsx-parts/chips.tsx");
     expect(chips.match(/onOpenThread=\{showThreads \? /g)?.length ?? 0).toBeGreaterThanOrEqual(2);
-    expect(chips).toContain("onReply={showThreads ? undefined : async (text) =>");
+    // the inline answer exists only while threads are hidden, whatever handler
+    // answers it (#3455 moved the body to answerPersonRequest)
+    expect(chips).toMatch(/onReply=\{showThreads \? undefined : (?:async )?\(text\) =>/);
     expect(readSrc("App.tsx-parts/ShellLayout.tsx")).toContain("{showThreads && <SideThreadPanel />}");
   });
 

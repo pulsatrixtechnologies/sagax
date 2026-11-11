@@ -39,6 +39,7 @@ import { spawnSync, execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { existingGuardTests } from "./guard-tests.mjs";
 
 const ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const VITEST = join(ROOT, "node_modules", "vitest", "vitest.mjs");
@@ -59,39 +60,6 @@ export function stampPathFor(commonDir, sha, root = ROOT) {
   const common = commonDir.startsWith("/") ? commonDir : join(root, commonDir);
   return join(common, STAMP_FOLDER, `ok-${sha}`);
 }
-
-/** Tests that hold main to a line: a key nothing reads, a route without a
- * policy row, a golden or a budget. They fail for the PR that merged last,
- * so every PR runs them. */
-const GUARD_TESTS = [
-  "scripts/testing/index-route-ratchet.test.ts",
-  // #2086: JC product rules (unified chat, Always allow, no unrequested caution, fr dashes/UUIDs)
-  // also #2081 / #2096 / #2098 / #2106 chat rules; #2091 Always allow / settings-driven guards
-  "scripts/testing/jc-rules.guard.test.ts",
-  "scripts/tool-policy/tool-policy-coverage.test.ts",
-  "scripts/self-knowledge/knowledge.test.ts",
-  // a docs site page and its generated repository copy (scripts/docs-copies.mjs)
-  "scripts/docs-copies.test.mjs",
-  "src/locales/unused-keys.test.ts",
-  "src/locales/data-keys.test.ts",
-  "src/lib/copy-text.guard.test.ts",
-  "src/lib/view-transitions.test.ts",
-  "src/lib/bundled-release-notes.test.ts",
-  "src/components/dialogs-close.test.ts",
-  "server/admission-golden.test.ts",
-  "server/drain-coalescing-golden.test.ts",
-  "server/drivers/agents-catalog-wire.test.ts",
-  "server/drivers/agents-proxy.test.ts",
-  "server/drivers/tool-scope-coverage.test.ts",
-  // #1905: every approval or choice card reads the one Full access decision
-  "server/approvals/full-access-gate.guard.test.ts",
-  // #1386: docs/ media must be cited; no large GIF; PR proofs on pr-assets
-  "scripts/testing/docs-media.guard.test.ts",
-  // #2085 / #2125 (Refs #2086): the bot panel has only Activity and Library (no Roles tab)
-  "src/components/bot-settings/panel-tabs.guard.test.ts",
-  // #3292: AGENTS.md stays rules only (size ceiling, no dated journal section)
-  "scripts/testing/agents-md.guard.test.ts",
-];
 
 /** Tests that hold a whole area: they run when the diff touches any of its
  * paths (a folder ending with "/", or a file). #3354: the connector matrix
@@ -247,7 +215,7 @@ function main() {
   sanitizeGitEnv(process.env);
   const options = parseArgs(process.argv.slice(2));
   const { changed, tests, electronTests, ios } = plan(options);
-  const guards = GUARD_TESTS.filter((file) => existsSync(join(ROOT, file)));
+  const guards = existingGuardTests(ROOT);
   const diffTests = tests.filter((file) => !guards.includes(file));
   console.log(`verify:merge against ${options.base}: ${changed.length} changed file(s)`);
   console.log(`  light checks: ${LIGHT_CHECKS.map(([label]) => label).join(", ")}`);

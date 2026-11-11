@@ -187,12 +187,20 @@ export function teamCount(team: readonly TeamWorkBot[]): string {
 }
 
 /** The grey line of a row (#3575): the bot (its small mascot and its name),
- * then what it says, joined by " · ". */
+ * then what it says, joined by " · ". Too long for the row (#3613), the name
+ * gives way first, then the part at `action` (the last action, free words);
+ * every other part (the progress, a state and its time) stays whole, and
+ * the one at `spare` (the progress, a step's duration) steps aside whole
+ * only when even the rest is too wide. */
 export interface TeamLine {
   /** The bot whose mascot leads the line, when there is one. */
   botId?: string;
   who?: string;
   parts: string[];
+  /** The index in `parts` of the last action, the one part that may be cut. */
+  action?: number;
+  /** The index in `parts` of the part that may step aside, whole, last. */
+  spare?: number;
 }
 
 /** The line as one string (tooltips, accessible names, tests). */
@@ -213,11 +221,12 @@ function currentStep(item: TeamWorkItem): TeamWorkStep | undefined {
 }
 
 /** A working bot's last action: "20 s ago", or what its tool call does and
- * for how long; any other state in its own words. */
-function lastAction(live: TeamLive, now: number, doing?: string): string {
-  if (live.state !== "working") return livePhrase(live, now);
-  if (live.toolSince !== undefined && doing) return `${doing} · ${teamAge(now - live.toolSince)}`;
-  return live.lastActionAt !== undefined ? t("teamWork.phrase.ago", { age: teamAge(now - live.lastActionAt) }) : t("teamWork.phrase.working");
+ * for how long (two parts, the first one the action); any other state in its
+ * own words. */
+function lastAction(live: TeamLive, now: number, doing?: string): string[] {
+  if (live.state !== "working") return [livePhrase(live, now)];
+  if (live.toolSince !== undefined && doing) return [doing, teamAge(now - live.toolSince)];
+  return [live.lastActionAt !== undefined ? t("teamWork.phrase.ago", { age: teamAge(now - live.lastActionAt) }) : t("teamWork.phrase.working")];
 }
 
 /** A work row's grey line: "<bot> · 2/5 · 20 s ago", "<bot> · 3/3 · merged 8 min ago". */
@@ -226,30 +235,36 @@ export function teamWorkLine(item: TeamWorkItem, nameOf: (botId: string) => Team
   if (item.finished) {
     const last = [...item.steps].sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt))[0];
     const phrase = endPhrase(last?.status ?? "completed", item.merged, item.endedAt, now);
-    return last ? { botId: last.botId, who: teamBotName(nameOf(last.botId)), parts: [progress, phrase] } : { parts: [progress, phrase] };
+    return last ? { botId: last.botId, who: teamBotName(nameOf(last.botId)), parts: [progress, phrase], spare: 0 } : { parts: [progress, phrase], spare: 0 };
   }
   const step = currentStep(item);
   if (!step && item.toCome.length > 0 && orchestrator) {
-    return { ...(orchestrator.botId ? { botId: orchestrator.botId } : {}), who: teamBotName(orchestrator), parts: [progress, t("teamWork.phrase.nextStep")] };
+    return { ...(orchestrator.botId ? { botId: orchestrator.botId } : {}), who: teamBotName(orchestrator), parts: [progress, t("teamWork.phrase.nextStep")], spare: 0 };
   }
-  return { ...(step ? { botId: step.botId } : {}), who: teamBotName(step ? nameOf(step.botId) : undefined), parts: [progress, lastAction(item.live, now, step?.doing)] };
+  const said = lastAction(item.live, now, step?.doing);
+  return { ...(step ? { botId: step.botId } : {}), who: teamBotName(step ? nameOf(step.botId) : undefined), parts: [progress, ...said], ...(said.length > 1 ? { action: 1 } : {}), spare: 0 };
 }
 
 /** A step's grey line: "<bot> · 14 tests, red before · 9 min". */
 export function teamStepLine(step: TeamWorkStep, nameOf: (botId: string) => TeamName | undefined, now: number): TeamLine {
   const who = teamBotName(nameOf(step.botId));
-  let note: string;
+  // what the step said or does is its last action, in its own words: it may
+  // be cut; a state phrase and the times stay whole
+  let note: string[];
+  let action = false;
   if (teamStepEnded(step.status)) {
-    const said = step.status === "completed" ? step.did : step.status === "failed" ? step.failure : undefined;
-    note = said?.trim() || endPhrase(step.status, step.merged, step.finishedAt, now);
+    const said = (step.status === "completed" ? step.did : step.status === "failed" ? step.failure : undefined)?.trim();
+    note = [said || endPhrase(step.status, step.merged, step.finishedAt, now)];
+    action = Boolean(said);
   } else if (step.live.state === "working" && step.doing) {
     const since = step.live.lastActionAt;
-    note = since !== undefined && step.live.toolSince === undefined ? `${step.doing} · ${t("teamWork.phrase.ago", { age: teamAge(now - since) })}` : step.doing;
+    note = since !== undefined && step.live.toolSince === undefined ? [step.doing, t("teamWork.phrase.ago", { age: teamAge(now - since) })] : [step.doing];
+    action = true;
   } else {
-    note = livePhrase(step.live, now);
+    note = [livePhrase(step.live, now)];
   }
   const time = step.startedAt !== undefined ? teamAge(step.durationMs) : "";
-  return { botId: step.botId, who, parts: time ? [note, time] : [note] };
+  return { botId: step.botId, who, parts: time ? [...note, time] : note, ...(action ? { action: 0 } : {}), ...(time ? { spare: note.length } : {}) };
 }
 
 /** A step of the plan that was not handed out yet: "<bot> · to come". */

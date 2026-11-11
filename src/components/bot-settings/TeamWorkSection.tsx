@@ -13,7 +13,7 @@
 // The states come from the live state (shared/team-work.ts teamLive), never
 // from a plan. While the app's live stream is down no silent warning is
 // drawn: the rows stay, the app does not claim what it cannot know.
-import { useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import type { Bot } from "@/state/store";
 import type { BotActivityFilter, BotActivityStatus } from "@/lib/bot-activity";
@@ -94,9 +94,119 @@ function stepStatus(step: TeamWorkStep, streaming: boolean): BotActivityStatus {
 
 const MERGED = { state: "merged" } as const;
 
-/** The grey line: the bot's small mascot and its name, then what it says. */
+const SEPARATOR_TEXT = " · ";
+const separator = (key: string) => <span key={key} data-team-separator="" className="shrink-0 whitespace-pre">{SEPARATOR_TEXT}</span>;
+/** The fewest characters a cut name or action keeps before its ellipsis;
+ * under that it steps aside whole with its separator. */
+const CUT_KEEPS = 3;
+
+/** What a line draws once fitted to its row: the name (null: stepped
+ * aside), the last action's words, and whether the spare part shows. */
+interface Fit { who: string | null; action: string | null; spare: boolean }
+const WHOLE: Fit = { who: null, action: null, spare: true };
+
+/** The longest start of `text` that, ended by an ellipsis, fits `room`. */
+function cutTo(text: string, room: number, width: (text: string) => number): string | null {
+  const chars = [...text];
+  const at = (count: number) => `${chars.slice(0, count).join("").trimEnd()}…`;
+  if (chars.length <= CUT_KEEPS || width(at(CUT_KEEPS)) > room) return null;
+  let low = CUT_KEEPS;
+  let high = chars.length - 1;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (width(at(middle)) <= room) low = middle;
+    else high = middle - 1;
+  }
+  return at(low);
+}
+
+/** Fits a line to `room` (#3613): the name gives way first, then the last
+ * action, both cut on a character and ended by an ellipsis right against
+ * the next separator; under a few characters a cut part steps aside whole
+ * with its separator, so a line never starts with a bare separator or a
+ * clipped letter. The spare part (the progress, a step's duration) steps
+ * aside last, whole. A state and its time never lose a character. */
+function fitTeamLine(line: TeamLine, room: number, width: (text: string) => number): Fit {
+  const sep = width(SEPARATOR_TEXT);
+  const sizes = line.parts.map((part) => width(part));
+  const total = (spare: boolean, whoWidth: number | null) => {
+    const shown = sizes.filter((_, index) => spare || index !== line.spare);
+    const parts = shown.reduce((sum, size) => sum + size, 0) + Math.max(0, shown.length - 1) * sep;
+    return whoWidth === null ? parts : whoWidth + (shown.length > 0 ? sep : 0) + parts;
+  };
+  const whoWidth = line.who ? width(line.who) : null;
+  if (total(true, whoWidth) <= room) return { who: line.who ?? null, action: null, spare: true };
+  // the name first, while it keeps a few characters
+  if (line.who && whoWidth !== null) {
+    const over = total(true, whoWidth) - room;
+    const who = cutTo(line.who, whoWidth - over, width);
+    if (who) return { who, action: null, spare: true };
+  }
+  // then the last action, then the spare part steps aside whole
+  for (const spare of line.spare === undefined || line.spare === line.action ? [true] : [true, false]) {
+    const over = total(spare, null) - room;
+    if (over <= 0) return { who: null, action: null, spare };
+    const words = line.action !== undefined ? line.parts[line.action] : undefined;
+    if (words !== undefined) {
+      const action = cutTo(words, sizes[line.action!]! - over, width);
+      if (action) return { who: null, action, spare };
+    }
+  }
+  return { who: null, action: null, spare: line.spare === undefined };
+}
+
+/** The grey line: the bot's small mascot and its name, then what it says,
+ * drawn part by part from the same line as its text (#3613), fitted to the
+ * row by fitTeamLine; the whole line stays in the row's tooltip. */
 function Line({ line, bots }: { line: TeamLine; bots: readonly Bot[] }) {
   const bot = line.botId ? avatarBot({ id: line.botId, name: line.who ?? "" }, bots) : undefined;
+  const ref = useRef<HTMLSpanElement>(null);
+  const probe = useRef<HTMLSpanElement>(null);
+  const [fit, setFit] = useState<Fit | null>(null);
+  const text = teamLineText(line);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    const measure = probe.current;
+    if (!element || !measure) return;
+    const check = () => {
+      const room = element.getBoundingClientRect().width;
+      // not laid out (hidden, or no layout at all): draw the line whole
+      if (room <= 0) return setFit(null);
+      const width = (value: string) => {
+        measure.textContent = value;
+        return measure.getBoundingClientRect().width;
+      };
+      // one pixel short of the room, so a fitted part is never cut again
+      const next = fitTeamLine(line, room - 1, width);
+      measure.textContent = "";
+      setFit((current) => (current && current.who === next.who && current.action === next.action && current.spare === next.spare ? current : next));
+    };
+    check();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(check);
+    observer.observe(element);
+    return () => observer.disconnect();
+    // the line's words are its text: refit when they change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
+  const shown = fit ?? { ...WHOLE, who: line.who ?? null };
+  const drawn: ReactNode[] = [];
+  if (shown.who !== null) drawn.push(<span key="who" data-team-part="who" className="min-w-0 truncate">{shown.who}</span>);
+  line.parts.forEach((part, index) => {
+    const action = index === line.action;
+    if (index === line.spare && !shown.spare) return;
+    if (drawn.length > 0) drawn.push(separator(`sep:${index}`));
+    drawn.push(
+      <span
+        key={index}
+        data-team-part={action ? "action" : "whole"}
+        {...(index === line.spare ? { "data-team-spare": "" } : {})}
+        className={action ? "min-w-0 truncate" : "shrink-0"}
+      >
+        {action && shown.action !== null ? shown.action : part}
+      </span>,
+    );
+  });
   return (
     <>
       {bot && (
@@ -104,7 +214,10 @@ function Line({ line, bots }: { line: TeamLine; bots: readonly Bot[] }) {
           <BotAvatar bot={bot as Bot} state="happy" size={16} animated={false} />
         </span>
       )}
-      <span data-team-line className="min-w-0 truncate">{teamLineText(line)}</span>
+      <span ref={ref} data-team-line className="relative flex min-w-0 flex-1 overflow-hidden whitespace-nowrap">
+        {drawn}
+        <span ref={probe} aria-hidden="true" data-team-probe="" className="invisible absolute left-0 top-0 whitespace-pre" />
+      </span>
     </>
   );
 }

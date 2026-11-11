@@ -256,12 +256,15 @@ try{P.postMessage({type:"${STATE_ASK_MESSAGE}",v:1},"*")}catch(x){}
  * again. No network. Defines `caps` for the code that follows. Pure. */
 function capabilityParts(caps: PageCapabilities): string {
   const granted = JSON.stringify({ data: caps.data, viewer: caps.viewer, open: caps.open, files: caps.files ?? [] }).replace(/</g, "\\u003c");
+  // capPost forwards the frame's transient activation. Chrome leaves the parent's
+  // MessageEvent.userActivation inactive unless postMessage opts in. A load has
+  // no activation, so a download on load still is not a click.
   // Handshake (#3413 lot 1b): the frame says hello once; the wrapper's broker
   // answers ready (and says ready once when it starts). Calls made before
   // that wait in a queue, each with its own bounded wait, then fail with
   // code "unavailable". No periodic timer.
   return String.raw`var C=${granted},cpend={},cseq=0,dsubs={},CP=window.parent,cready=false,cqueue=[];
-function capPost(m){try{CP.postMessage(m,"*")}catch(x){var p=cpend[m.id];if(p){delete cpend[m.id];clearTimeout(p.t);p.no(x)}}}
+function capPost(m){try{CP.postMessage(m,{targetOrigin:"*",includeUserActivation:true})}catch(x){var p=cpend[m.id];if(p){delete cpend[m.id];clearTimeout(p.t);p.no(x)}}}
 function capCall(c,a,g){return new Promise(function(ok,no){var id=++cseq,m={type:"${CAP_MESSAGE}",v:1,id:id,cap:c,args:a||{}};if(typeof g==="boolean")m.gesture=g;cpend[id]={ok:ok,no:no,t:0};
 if(cready){capPost(m);return}cqueue.push(m);cpend[id].t=setTimeout(function(){if(!cpend[id])return;delete cpend[id];cqueue=cqueue.filter(function(q){return q.id!==id});var er=new Error("The page's wrapper did not answer.");er.code="unavailable";no(er)},${CAP_READY_TIMEOUT_MS})})}
 window.addEventListener("message",function(e){if(e.source!==CP||!e.data||e.data.v!==1)return;var d=e.data;
@@ -280,11 +283,13 @@ open:function(r){return capCall("open",{ref:String(r)})},files:Object.freeze({do
  * frame): it relays the capability messages between its own frame and its
  * parent, the app, where the broker runs, and nothing else. Calls and
  * hello go up only from its frame's window; results, events and ready go
- * down only from its parent. The frame keeps listening to its parent only. */
+ * down only from its parent. Upward hops forward transient activation
+ * (includeUserActivation); downward answers do not. The frame keeps
+ * listening to its parent only. */
 export const PREVIEW_CAP_RELAY_SOURCE = String.raw`(function(){"use strict";
 var UP={"${CAP_MESSAGE}":1,"${CAP_HELLO_MESSAGE}":1},DOWN={"${CAP_RESULT_MESSAGE}":1,"${CAP_EVENT_MESSAGE}":1,"${CAP_READY_MESSAGE}":1};
 addEventListener("message",function(e){var f=document.querySelector("iframe");if(!f||!e.data||e.data.v!==1||typeof e.data.type!=="string")return;var d=e.data;
-if(e.source===f.contentWindow&&UP[d.type]===1){if(parent!==window)try{parent.postMessage(d,"*")}catch(x){}return}
+if(e.source===f.contentWindow&&UP[d.type]===1){if(parent!==window)try{parent.postMessage(d,{targetOrigin:"*",includeUserActivation:true})}catch(x){}return}
 if(e.source===parent&&parent!==window&&DOWN[d.type]===1){try{f.contentWindow.postMessage(d,"*")}catch(x){}}});
 })();`;
 

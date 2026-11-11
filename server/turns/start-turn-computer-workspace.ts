@@ -23,6 +23,7 @@ export function createComputerWorkspaceStartTurn(host: StartTurnHost) {
     store,
     supportsWorkspaceFiles,
     syncPluginsForTurn,
+    turnTrace,
   } = host;
 
   return async function(state: TurnState): Promise<void> {
@@ -112,6 +113,9 @@ export function createComputerWorkspaceStartTurn(host: StartTurnHost) {
       customMcp: state.instance.adapter.capabilities.customMcp === true,
       decision: state.turnPlace, staging: state.placedText.staging, auto: state.turnAuto
     });
+    // #3619: the parts of the turn's `place` wait ([turn-latency] queueBy)
+    const mark = (step: string) => { if (!state.warmOnly) turnTrace(state.threadId, step); };
+    mark("place-workspace");
     const personalMcp = await mountPersonalMcp(state.integrations, {
       botId: state.bot.id, threadId: state.threadId, generation: state.dispatchClaimId,
       customMcp: state.instance.adapter.capabilities.customMcp === true, principal: state.turnPlace.principal
@@ -122,8 +126,10 @@ export function createComputerWorkspaceStartTurn(host: StartTurnHost) {
       customMcp: state.instance.adapter.capabilities.customMcp === true, principal: state.turnPlace.principal
     });
     if (plugins?.githubWithheld?.length) state.githubWithheld = [...(state.githubWithheld ?? []), ...plugins.githubWithheld];
+    mark("mounts-ready");
     if (IDENTITY.kind === "perspicax" && state.turnPlace.principal) {
       await syncPluginsForTurn(state.turnPlace.principal, state.dispatchClaimId, state.bot.id);
+      mark("plugins-synced");
     }
   };
 }

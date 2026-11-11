@@ -80,6 +80,33 @@ describe("turn latency line", () => {
     expect(sum(parts.setupBy)).toBe(5_000);
   });
 
+  it("splits place into the tool mounts, the plugin check, the checkpoint, the browser and the rest (#3619)", () => {
+    const trace = newTurnLatency(10_000, 4_000);
+    const marks: Array<[string, number]> = [
+      ["integrations", 4_000],
+      ["place-workspace", 4_020],
+      ["mounts-ready", 4_320],
+      ["plugins-synced", 7_320],
+      ["place-computer", 7_340],
+      ["checkpoint-taken", 7_540],
+      ["place-browser", 7_550],
+      ["browser-ready", 7_950],
+      ["prompt-start", 8_000],
+      ["send", 10_000],
+    ];
+    expect(turnLatencyParts(trace, marks).queueBy).toBe("place:100,mounts:300,plugins:3000,checkpoint:200,browser:400,send:2000");
+    // a part that took 0 ms is not printed: no plugin copy, no checkpoint
+    const quiet: Array<[string, number]> = [
+      ["integrations", 4_000],
+      ["place-workspace", 4_020],
+      ["mounts-ready", 4_320],
+      ["plugins-synced", 4_320],
+      ["prompt-start", 4_400],
+      ["send", 10_000],
+    ];
+    expect(turnLatencyParts(trace, quiet).queueBy).toBe("place:100,mounts:300,send:5600");
+  });
+
   it("leaves queueBy out when the message time is unknown and ignores another turn's marks", () => {
     const trace = newTurnLatency(10_000);
     trace.promptAt = 10_400;

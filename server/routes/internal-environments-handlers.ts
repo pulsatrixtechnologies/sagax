@@ -34,7 +34,7 @@ import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tools
 import { USER_SANDBOX_MCP_NAME } from "../sandbox/user-sandbox-routing.ts";
 import { UserSandboxUnavailable } from "../sandbox/user-sandbox-manager.ts";
 import { handleUserSandboxMcp } from "../sandbox/user-sandbox-tools.ts";
-import { pluginCopyFailures } from "../sandbox/sandbox-plugins.ts";
+import { pluginCopyFailures, sandboxPluginPresence } from "../sandbox/sandbox-plugins.ts";
 import { conversationTmpPath, inBotFolder } from "../sandbox/sandbox-bot-folder.ts";
 import type { SandboxExecInput } from "../sandbox/sandboxd-core.ts";
 import type { InternalCapabilityView, InternalRouteContext } from "./internal-route.ts";
@@ -579,9 +579,15 @@ async function handleSandboxMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
     const folder = deps.sandboxBotFolder?.(capability.botId) ?? null;
     if (rpcMethod === "tools/call") await deps.sandboxTidy?.(ownerId, capability.botId);
     const result = await deps.handleUserSandboxMcp(rpcMethod, frame?.params, {
-      exec: (input) => {
+      exec: async (input) => {
         const placed = deps.withCommandVariables(input as never, deps.commandVariablesFor(capability.botId, capability.threadId, ownerId)) as SandboxExecInput;
-        return deps.userSandboxExec(ownerId, folder ? inBotFolder(placed, folder, capability.threadId) : placed, capability.botId) as never;
+        try {
+          return await deps.userSandboxExec(ownerId, folder ? inBotFolder(placed, folder, capability.threadId) : placed, capability.botId) as never;
+        } finally {
+          // #3619: a command that names a plugin folder may have changed it:
+          // the next turn reads the markers again
+          sandboxPluginPresence.noteCommand(ownerId, [...placed.argv, ...Object.values(placed.env ?? {})].join("\n"));
+        }
       },
       overQuota: async () => await deps.userSandboxOverQuota(ownerId, capability.botId),
       // #2775: tmp/ of a file tool is this conversation's own folder.

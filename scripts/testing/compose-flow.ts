@@ -1,7 +1,9 @@
 // Compose "Create new Bot" dispatches `{ type: "newBot" }` and closes: instant
 // create, no NewBotDialog, no Start from, no Browse templates.
-// Templates live in Connect apps → Bot templates (the catalogue titled
-// Browse Bots). The sidebar has no Browse Bots button.
+// Templates live in Plugins → Bot templates (the catalogue titled Browse
+// Bots). Plugins is the sidebar foot's round apps-grid button, named
+// "Connect apps" until 0.8.52 (UX reference 8.0 bis). The sidebar has no
+// Browse Bots button.
 // NewBotDialog stays on Team map → manage a named team → New Bot.
 // Unassigned (`data-team-key=""`) has no New Bot: TeamDialog.managing is
 // Boolean(section) && !rename, and an empty key is falsy.
@@ -36,15 +38,18 @@ export function catalogTemplateTools(snap: string): boolean {
   return snap.includes("Import") && snap.includes("Share a team");
 }
 
+/** The sidebar foot's round apps-grid button (FootConnectApps). */
+export const PLUGINS_BUTTON = "Plugins";
+
 /** View all or a bot detail. The hosted home is heading "Browse Bots", and
- * its Back returns to Connect apps, so that Back is not a step to click. */
+ * its Back returns to Plugins, so that Back is not a step to click. */
 export function nestedTemplatesCatalog(snap: string): boolean {
   return snap.includes('button "Back"')
     && !snap.includes('heading "Browse Bots"')
     && (snap.includes("Browse Bots") || snap.includes('heading "Templates"'));
 }
 
-/** Open Connect apps, then Bot templates. Import / Share a team are on that
+/** Open Plugins, then Bot templates. Import / Share a team are on that
  * catalogue's Templates section. A catalogue already open on a detail walks
  * Back until those tools show; the home's own Back is left alone. */
 export async function openTemplatesCatalog(flow: CatalogFlow): Promise<void> {
@@ -54,7 +59,7 @@ export async function openTemplatesCatalog(flow: CatalogFlow): Promise<void> {
   const inWindow = snap.includes('button "Bot templates"')
     || snap.includes('heading "Browse Bots"')
     || nestedTemplatesCatalog(snap);
-  if (!inWindow) await flow.click("Connect apps");
+  if (!inWindow) await flow.click(PLUGINS_BUTTON);
   await until(async () => {
     const next = await flow.snapshot();
     if (catalogTemplateTools(next)) return true;
@@ -71,11 +76,19 @@ export async function openTemplatesCatalog(flow: CatalogFlow): Promise<void> {
  * native select. */
 export const START_FROM = "Start from";
 
+/** The open New Bot form. From a team it is a view in the team's detail
+ * panel (`data-new-bot-form`, TeamDialog since 0.8.27), elsewhere a dialog. */
+export const NEW_BOT_ROOT_JS = `(document.querySelector("[data-new-bot-form]") || [...document.querySelectorAll("[role=dialog]")].at(-1))`;
+
+/** The team editor's root: the detail panel (`data-team-dialog`, 0.8.27), or
+ * a dialog. */
+const TEAM_EDITOR_ROOT_JS = `(document.querySelector("[data-team-dialog]") || [...document.querySelectorAll("[role=dialog]")].at(-1))`;
+
 /** Open Start from if it is closed, then pick the option with this label.
  * True once picked; poll it, the first call only opens the menu. */
 export function chooseStartFromJs(label: string): string {
   return `(() => {
-    const dialog = [...document.querySelectorAll("[role=dialog]")].at(-1);
+    const dialog = ${NEW_BOT_ROOT_JS};
     const pill = dialog?.querySelector('button[aria-label="${START_FROM}"]');
     if (!pill || pill.disabled) return false;
     const list = document.querySelector('[role=listbox][aria-label="${START_FROM}"]');
@@ -89,7 +102,7 @@ export function chooseStartFromJs(label: string): string {
 /** The group headings of the open Start from menu, opening it if needed. */
 export function startFromGroupsJs(): string {
   return `(() => {
-    const dialog = [...document.querySelectorAll("[role=dialog]")].at(-1);
+    const dialog = ${NEW_BOT_ROOT_JS};
     const list = document.querySelector('[role=listbox][aria-label="${START_FROM}"]');
     if (!list) { dialog?.querySelector('button[aria-label="${START_FROM}"]')?.click(); return null; }
     return [...list.querySelectorAll("[data-pill-group]")].map((heading) => heading.textContent.trim()).join(" | ");
@@ -99,7 +112,7 @@ export function startFromGroupsJs(): string {
 /** NewBotDialog with Start from: Team map, a named team, New Bot. */
 export async function openNewBotDialog(flow: NewBotFlow): Promise<void> {
   const hasStartingRole = async () => (await flow.snapshot()).includes(START_FROM);
-  const createBotReady = async () => Boolean(await flow.evaluate(`Boolean([...document.querySelectorAll("[role=dialog] button")].find((button) => (button.textContent || "").trim() === "Create bot"))`));
+  const createBotReady = async () => Boolean(await flow.evaluate(`Boolean([...(${NEW_BOT_ROOT_JS}?.querySelectorAll("button") ?? [])].find((button) => (button.textContent || "").trim() === "Create bot"))`));
   if (await hasStartingRole() && await createBotReady()) return;
   await dismissOverlays(flow, (snap) => snap.includes(START_FROM) && snap.includes("Create bot"));
   const click = (name: string) => clickAccessible(flow, name);
@@ -116,9 +129,10 @@ export async function openNewBotDialog(flow: NewBotFlow): Promise<void> {
 
   const onTeamMap = async () => Boolean(await flow.evaluate(`Boolean(document.querySelector("[data-team-key]"))`));
   if (!(await onTeamMap())) {
-    // Team map opens from the Automations header (left the avatar menu 2026-10-18)
+    // Team map sits in the account menu's Tools submenu (#1064), as the
+    // other team smokes reach it (team-computers-ui, team-canvas-ui).
     await click("You");
-    await click("Automations");
+    await click("Tools");
     await click("Team map");
     await until(onTeamMap, 12_000, "Team map");
   }
@@ -135,9 +149,9 @@ export async function openNewBotDialog(flow: NewBotFlow): Promise<void> {
     })()`);
     await until(async () => (await flow.snapshot()).includes("Create team"), 10_000, "Create team");
     await click("Create team");
-    await until(async () => Boolean(await flow.evaluate(`Boolean(document.querySelector("[role=dialog] input"))`)), 10_000, "Team name");
+    await until(async () => Boolean(await flow.evaluate(`Boolean(${TEAM_EDITOR_ROOT_JS}?.querySelector("input"))`)), 10_000, "Team name");
     await flow.evaluate(`(() => {
-      const input = document.querySelector("[role=dialog] input");
+      const input = ${TEAM_EDITOR_ROOT_JS}?.querySelector("input");
       if (!(input instanceof HTMLInputElement)) throw new Error("Team name is missing");
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, "Desk");
       input.dispatchEvent(new Event("input", { bubbles: true }));

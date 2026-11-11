@@ -27,7 +27,7 @@ function flow(pages: string[]): { flow: CatalogFlow; clicks: string[] } {
 }
 
 describe("openTemplatesCatalog", () => {
-  it("treats the hosted home as ready even though its Back returns to Connect apps", () => {
+  it("treats the hosted home as ready even though its Back returns to Plugins", () => {
     expect(catalogTemplateTools(HOME)).toBe(true);
     expect(nestedTemplatesCatalog(HOME)).toBe(false);
   });
@@ -36,17 +36,19 @@ describe("openTemplatesCatalog", () => {
     const viewAll = ['button "Back"', 'heading "Templates"', "Browse Bots"].join("\n");
     expect(nestedTemplatesCatalog(viewAll)).toBe(true);
     expect(nestedTemplatesCatalog(HOME)).toBe(false);
-    expect(nestedTemplatesCatalog('heading "Connect Apps"\nbutton "Bot templates"')).toBe(false);
+    expect(nestedTemplatesCatalog('heading "Plugins"\nbutton "Bot templates"')).toBe(false);
   });
 
-  it("opens Connect apps, then Bot templates, and stops once Import and Share a team show", async () => {
+  it("opens Plugins, then Bot templates, and stops once Import and Share a team show", async () => {
     const { flow: catalog, clicks } = flow([
-      'button "Connect apps"',
-      'heading "Connect Apps"\nbutton "Bot templates"',
+      'button "Plugins"',
+      'heading "Plugins"\nbutton "Bot templates"',
       HOME,
     ]);
     await openTemplatesCatalog(catalog);
-    expect(clicks).toEqual(["Connect apps", "Bot templates"]);
+    // The sidebar foot's apps-grid button is named Plugins since 0.8.52
+    // (#2168); "Connect apps" names nothing in the app any more (#3568).
+    expect(clicks).toEqual(["Plugins", "Bot templates"]);
   });
 
   it("leaves the hosted home's Back alone", async () => {

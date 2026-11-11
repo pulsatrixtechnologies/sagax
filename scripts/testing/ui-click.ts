@@ -51,6 +51,21 @@ export function openSettingsPageJs(page: string): string {
   })()`;
 }
 
+/** The bot panel's bot menu (Edit bot, Rename, Archive...). The reference
+ * look keeps no "..." in the panel's header (UX reference 2.3, 0.8.52): the
+ * menu is a right click on the mascot or the name, so this sends that right
+ * click to the open panel's name. False until the panel paints. */
+export function openBotMenuJs(): string {
+  return `(() => {
+    const target = document.querySelector("aside[data-panel-bot] [data-bot-name-title]");
+    if (!target) return false;
+    if (document.querySelector("[data-bot-actions-menu]")) return true;
+    const rect = target.getBoundingClientRect();
+    target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 }));
+    return Boolean(document.querySelector("[data-bot-actions-menu]"));
+  })()`;
+}
+
 export function overlaysOpenJs(): string {
   return `Boolean(document.querySelector("[data-bot-catalog-modal], [role=dialog]"))`;
 }

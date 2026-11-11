@@ -11,7 +11,7 @@ import { runControlOmb } from "../control-omb.ts";
 import { request } from "../mcp-server.ts";
 import { UI_TOOLS_DIR } from "./control-omb-ui.ts";
 import { openTemplatesCatalog } from "./compose-flow.ts";
-import { clickAccessible, openPanelAria } from "./ui-click.ts";
+import { clickAccessible, openBotMenuJs, openPanelAria } from "./ui-click.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const FIXTURES = join(ROOT, "shared", "package-fixtures");
@@ -156,12 +156,14 @@ describe("the organization library in the real renderer", () => {
     await expect.poll(snapshot, { timeout: 10_000 }).toContain(openPanelAria(deskBot.name));
     await click(openPanelAria(deskBot.name));
     await expect.poll(snapshot, { timeout: 10_000 }).toContain("From Sales desk 1.3.0 · Acme Partners");
-    // Edit bot sits in the panel's Bot menu.
-    await click("Bot menu");
+    // Edit bot sits in the bot's menu, a right click on the panel's mascot
+    // or name (UX reference 2.3).
+    await expect.poll(() => evaluate(openBotMenuJs()), { timeout: 10_000 }).toBe(true);
     await expect.poll(snapshot, { timeout: 10_000 }).toContain('menuitem "Edit bot"');
     await click("Edit bot");
-    await expect.poll(snapshot, { timeout: 10_000 }).toContain("Skills");
-    await click("Skills");
+    // A bot's skills are on its profile's Knowledge tab since 0.8.52 (#2168).
+    await expect.poll(snapshot, { timeout: 10_000 }).toContain('tab "Knowledge"');
+    await click("Knowledge");
     // The shared skills card: its hint now sits behind the heading's help tip.
     await expect.poll(snapshot, { timeout: 10_000 }).toContain('heading "From Customer Co"');
     await evidence("org-library-bot-skills.png");

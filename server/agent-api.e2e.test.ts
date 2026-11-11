@@ -2,8 +2,14 @@
 // sends a prompt to bot B with send_prompt (async), waits with await_turn,
 // reads B's latest page, and the guarantees around it hold (hidden thread,
 // isolation, one hop, audit without text).
+//
+// Reach (owner decision of 2026-11-09, #3264): a bot reaches every visible
+// bot of its own person, whatever the section, and never a bot of another
+// person. The first block runs on a solo server (one person: a bot in another
+// section is reached); the second on an organization server with two
+// people, whose bots never reach each other (#3538).
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
+import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "./testing/fake-oidc-provider.ts";
 import { freePortBlock } from "./testing/ports.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
@@ -99,6 +106,7 @@ describe("agent-to-agent API (real server)", () => {
     await api("PATCH", `/api/bots/${seeded.id}`, { hidden: true });
     const alpha = await createBot("Alpha", "Coordinates the team");
     const beta = await createBot("Beta Dispatch", "Schedules technicians");
+    // a bot of the same person in another section: reached like any other
     const outsider = await createBot("Outsider", "Another team");
     expect((await api("PATCH", `/api/bots/${outsider.id}`, { section: "Elsewhere" })).status).toBe(200);
     expect((await api("POST", `/api/bots/${alpha.id}/messages`, { text: "Warm up" })).status).toBe(202);
@@ -114,7 +122,7 @@ describe("agent-to-agent API (real server)", () => {
     const ids = listed.body.agents.map((agent: { id: string }) => agent.id);
     expect(ids).toContain(beta.id);
     expect(ids).not.toContain(alpha.id);
-    expect(ids).not.toContain(outsider.id);
+    expect(ids).toContain(outsider.id);
     expect(listed.body.agents.find((agent: { id: string }) => agent.id === beta.id)).toMatchObject({ name: "Beta Dispatch", status: "idle" });
 
     const found = await tool(token, "find_agents", { query: "dispatch", status: "idle" });
@@ -156,14 +164,14 @@ describe("agent-to-agent API (real server)", () => {
     expect(JSON.stringify(betaNow.messages ?? [])).toContain("Monday schedule");
     expect(betaNow.threadId).toBe(threadId);
 
-    // isolation: another team's bot is unknown
-    const refused = await tool(fresh, "send_prompt", { agent_id: outsider.id, prompt: "hi" });
-    expect(refused.status).toBe(404);
-    expect(refused.body.code).toBe("unknown_agent");
-
     // a non-Primary bot holds no create scope
     const create = await tool(fresh, "create_agent", { name: "Gamma" });
     expect(create.status).toBe(403);
+
+    // the same person's bot in another section can be sent a prompt
+    const crossSection = await tool(fresh, "send_prompt", { agent_id: outsider.id, prompt: "Please read the other queue", mode: "async" });
+    expect(crossSection.status).toBe(200);
+    expect(crossSection.body).toMatchObject({ accepted: true, mode: "async", agent_id: outsider.id });
 
     // one hop: a turn another agent started cannot prompt further (minting
     // a new capability for the thread retires the previous one)
@@ -184,10 +192,153 @@ describe("agent-to-agent API (real server)", () => {
     const expected = ["agents.list_agents", "agents.find_agents", "agents.send_prompt", "agents.await_turn", "agents.read_latest_page", "agents.read_transcript_cold", "agents.create_agent"];
     await expect.poll(async () => (await readRows()).map((row) => row.action), { timeout: 15_000 }).toEqual(expect.arrayContaining(expected));
     const agentRows = await readRows();
-    expect(agentRows.find((row) => row.action === "agents.send_prompt" && row.after.outcome === "ok").after).toMatchObject({ mode: "async", callerBotId: alpha.id, threadId });
+    // (newest first: the send to the bot in another section is listed too)
+    expect(agentRows.filter((row) => row.action === "agents.send_prompt" && row.after.outcome === "ok").map((row) => row.after))
+      .toEqual(expect.arrayContaining([expect.objectContaining({ mode: "async", callerBotId: alpha.id, threadId })]));
     expect(JSON.stringify(agentRows)).not.toContain("Monday schedule");
     // nor on disk, sealed or not
     const dir = join(data, "admin-activity");
     for (const file of readdirSync(dir)) expect(readFileSync(join(dir, file), "utf8")).not.toContain("Monday schedule");
   }, 90_000);
+});
+
+// An organization server with two people (fake sign-in provider): each
+// person's bots reach each other across sections, and never the other
+// person's bot, whatever the call.
+const ORG_CAPABILITY_KEY = "agent-api-org-fixture-capability-0001";
+const ALEX: FakeOidcUser = { sub: "01J9AGAPIALEX0000000000AX", name: "Alex", preferred_username: "alex", role: "employee", teams: [] };
+const BLAIR: FakeOidcUser = { sub: "01J9AGAPIBLAIR000000000BL", name: "Blair", preferred_username: "blair", role: "employee", teams: [] };
+
+describe.skipIf(process.platform === "win32")("agent-to-agent API between people (organization server)", () => {
+  let org: ChildProcess;
+  let orgHome = "";
+  let orgBase = "";
+  let orgLog = "";
+  let idp: FakeOidcProvider;
+
+  const orgApi = async (method: string, path: string, cookie?: string, body?: unknown, headers: Record<string, string> = {}): Promise<{ status: number; body: any }> => {
+    const response = await fetch(`${orgBase}${path}`, {
+      method,
+      headers: { ...(body !== undefined ? { "content-type": "application/json" } : {}), ...(cookie ? { cookie } : {}), ...headers },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const text = await response.text();
+    let parsed: any = {};
+    try { parsed = JSON.parse(text); } catch { /* not JSON */ }
+    return { status: response.status, body: parsed };
+  };
+  const signIn = async (user: FakeOidcUser): Promise<string> => {
+    idp.user = { ...user };
+    const pair = (setCookie: string) => setCookie.split(";")[0]!;
+    const start = await fetch(`${orgBase}/auth/oidc/start`, { redirect: "manual" });
+    const binding = pair(start.headers.getSetCookie().find((c) => c.includes("_oidc="))!);
+    const authorize = await fetch(start.headers.get("location")!, { redirect: "manual" });
+    const callback = await fetch(authorize.headers.get("location")!, { redirect: "manual", headers: { cookie: binding } });
+    const session = callback.headers.getSetCookie().find((c) => c.startsWith("omb_session_") && !c.includes("_oidc="));
+    expect(callback.headers.get("location"), orgLog.slice(-2000)).toBe("/");
+    return pair(session!);
+  };
+  const createAs = async (cookie: string, name: string, description: string) => {
+    let created = await orgApi("POST", "/api/bots", cookie, { name, description });
+    // the directory read that grants the engine may land just after boot
+    for (let tries = 0; created.status !== 201 && tries < 100; tries += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      created = await orgApi("POST", "/api/bots", cookie, { name, description });
+    }
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    return created.body.bot as { id: string; threadId: string };
+  };
+  const orgTool = (token: string, name: string, args: unknown) =>
+    orgApi("POST", `/api/internal/agent-api/${name}`, undefined, args, { authorization: `Bearer ${token}` });
+
+  beforeAll(async () => {
+    chmodSync(FAKE_CLAUDE, 0o755);
+    idp = await startFakeOidcProvider({ user: ALEX });
+    idp.directoryPeople = [ALEX, BLAIR].map((user) => ({ ...idp.personOf(user), sagax_server_engines: ["claude"] }));
+    const port = await freePortBlock([0, 1]);
+    orgBase = `http://127.0.0.1:${port}`;
+    orgHome = mkdtempSync(join(tmpdir(), "omb-agent-api-org-"));
+    const orgData = join(orgHome, ".sagax");
+    mkdirSync(orgData, { recursive: true });
+    mkdirSync(join(orgHome, "link"), { recursive: true, mode: 0o750 });
+    writeFileSync(join(orgHome, "link", "pulsabot.json"), JSON.stringify({
+      version: 1, issuer: idp.issuer, client_id: "pulsa-bot", server_id: idp.serverId, origin: orgBase, link_token: idp.linkToken,
+    }), { mode: 0o640 });
+    writeFileSync(join(orgData, "config.json"), JSON.stringify({
+      instances: { claude: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "happy" }, config: { cli: FAKE_CLAUDE, fullAuto: true } } },
+    }));
+    org = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {
+      cwd: ROOT,
+      env: {
+        PATH: process.env.PATH ?? "",
+        HOME: orgHome, USERPROFILE: orgHome, SAGAX_PORT: String(port), SAGAX_WEBHOOK_PORT: String(port + 1),
+        SAGAX_IDENTITY: "perspicax",
+        SAGAX_PERSPICAX_ISSUER: idp.issuer,
+        SAGAX_PUBLIC_URL: orgBase,
+        SAGAX_PERSPICAX_LINK_FILE: join(orgHome, "link", "pulsabot.json"),
+        SAGAX_PERSPICAX_DIRECTORY_SECONDS: "3600",
+        SAGAX_ANTHROPIC_API_KEY: "sk-ant-test-org-key-000000",
+        SAGAX_ORG_NAME: "Acme",
+        SAGAX_TEST_INTERNAL_CAPABILITY_KEY: ORG_CAPABILITY_KEY,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    org.stdout!.on("data", (chunk) => (orgLog += chunk));
+    org.stderr!.on("data", (chunk) => (orgLog += chunk));
+    const deadline = Date.now() + 30_000;
+    for (;;) {
+      if (org.exitCode !== null) throw new Error(`server exited ${org.exitCode}: ${orgLog}`);
+      try {
+        if ((await fetch(`${orgBase}/api/health`)).ok) break;
+      } catch {
+        // still starting
+      }
+      if (Date.now() >= deadline) throw new Error(`server never became healthy: ${orgLog}`);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }, 60_000);
+
+  afterAll(async () => {
+    if (org) await waitForExit(org, { signal: "SIGTERM" });
+    await idp?.close();
+    if (orgHome) await removeTempDir(orgHome);
+  });
+
+  it("lists, finds and reaches the person's own bots in every section, never another person's", async () => {
+    const alex = await signIn(ALEX);
+    const caller = await createAs(alex, "Alex Lead", "Coordinates the work");
+    const own = await createAs(alex, "Alex Dispatch", "Schedules technicians");
+    expect((await orgApi("PATCH", `/api/bots/${own.id}`, alex, { section: "Elsewhere" })).status).toBe(200);
+    const blair = await signIn(BLAIR);
+    const foreign = await createAs(blair, "Blair Dispatch", "Schedules technicians");
+
+    const minted = await orgApi("POST", "/api/testing/internal-capability", undefined, { botId: caller.id, threadId: caller.threadId, kind: "agents", depth: 0 },
+      { "x-openmausbot-test-capability": ORG_CAPABILITY_KEY });
+    expect(minted.status, JSON.stringify(minted.body)).toBe(201);
+    const token = String(minted.body.token);
+
+    const listed = await orgTool(token, "list_agents", {});
+    expect(listed.status, JSON.stringify(listed.body)).toBe(200);
+    const ids = listed.body.agents.map((agent: { id: string }) => agent.id);
+    expect(ids).toContain(own.id);
+    expect(ids).not.toContain(foreign.id);
+
+    const found = await orgTool(token, "find_agents", { query: "dispatch" });
+    expect(found.status).toBe(200);
+    expect(found.body.agents.map((agent: { id: string }) => agent.id)).toEqual([own.id]);
+
+    for (const [name, args] of [
+      ["send_prompt", { agent_id: foreign.id, prompt: "Please share the schedule", mode: "async" }],
+      ["await_turn", { agent_id: foreign.id, timeout_ms: 1_000 }],
+      ["read_latest_page", { agent_id: foreign.id, limit: 10 }],
+    ] as const) {
+      const refused = await orgTool(token, name, args);
+      expect(refused.status, `${name}: ${JSON.stringify(refused.body)}`).toBe(404);
+      expect(refused.body.code).toBe("unknown_agent");
+    }
+
+    const sent = await orgTool(token, "send_prompt", { agent_id: own.id, prompt: "Please read the queue", mode: "async" });
+    expect(sent.status, JSON.stringify(sent.body)).toBe(200);
+    expect(sent.body).toMatchObject({ accepted: true, agent_id: own.id });
+  }, 60_000);
 });

@@ -30,5 +30,5 @@ full-access-guard: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/(appr
 # run on every lot, whatever it touches. They catch what the last merge broke
 # for everyone (a route with no policy row, a locale key nothing reads, a card
 # that skips the settings decision); left to the files beside a change, main
-# stayed red unseen. About 80 s together.
+# stayed red unseen. About 95 s together (#3538 added two files, about 15 s).
 guard-tests: G="$(node scripts/verify/release/guard-tests.mjs)"; if [ -n "$G" ]; then ./node_modules/.bin/vitest run --reporter=dot --testTimeout=60000 $G; fi

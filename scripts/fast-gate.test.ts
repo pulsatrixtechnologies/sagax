@@ -190,6 +190,13 @@ describe("fast-gate.sh", () => {
     expect(calls).toContain("vitest run --reporter=dot --testTimeout=60000 scripts/tool-policy/tool-policy-coverage.test.ts src/locales/unused-keys.test.ts");
   });
 
+  // #3538: routine effort at admission and the agent API end to end went red
+  // on main unseen; every lot runs them now.
+  it("lists the admission and agent API files among the tests every lot runs", async () => {
+    const { GUARD_TESTS } = await import("./verify/release/guard-tests.mjs");
+    expect(GUARD_TESTS).toEqual(expect.arrayContaining(["server/turns/start-turn-prepare-admit.test.ts", "server/agent-api.e2e.test.ts"]));
+  });
+
   it("has nothing to check on a clean branch", () => {
     const { code, out } = gate("--base", "main");
     expect(code).toBe(0);

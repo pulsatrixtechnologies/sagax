@@ -79,22 +79,6 @@ extension Session {
         }
     }
 
-    /// The pending approvals of the parallel tasks this conversation runs:
-    /// their threads are loaded so the dock can show their asks.
-    func parallelApprovals(for chat: Chat) -> [PendingApproval] {
-        guard case let .bot(bot) = chat, let tasks = state.bot(bot.id)?.tasks else { return [] }
-        return ApprovalDockRules.waitingParallelTasks(tasks, of: chat.threadId).flatMap { task in
-            ApprovalDockRules.parallelPendings(state.visibleTranscript(forThread: task.threadId), task: task)
-        }
-    }
-
-    func loadParallelApprovalThreads(for chat: Chat) async {
-        guard case let .bot(bot) = chat, let tasks = state.bot(bot.id)?.tasks else { return }
-        for task in ApprovalDockRules.waitingParallelTasks(tasks, of: chat.threadId) {
-            await loadThreadIfNeeded(task.threadId)
-        }
-    }
-
     // MARK: Option card
 
     /// The X of an option card: a quiz is put away, a live ask answered.
@@ -150,11 +134,10 @@ extension Session {
         await skipOptionCard(pending.message, in: chat, threadId: pending.answerThread(conversation: chat.threadId))
     }
 
-    /// Skip a question in words (an attention card) of this conversation.
+    /// Skip a question in words of this conversation: an attention card or
+    /// a parked teammate's input request (the desktop's `skipPlace`).
     func skipAttention(_ message: Message, in chat: Chat) async {
-        guard let card = message.attention,
-              let route = WaitingCardSkip.route(for: card, messageId: message.id, threadId: chat.threadId, botId: cardBotId(message, in: chat))
-        else { return }
+        guard let route = WaitingCardSkip.route(forWords: message, threadId: chat.threadId, botId: cardBotId(message, in: chat)) else { return }
         await skipWaitingCard(message, route: route, threadId: chat.threadId)
     }
 

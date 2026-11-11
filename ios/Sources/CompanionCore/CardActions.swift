@@ -787,6 +787,10 @@ public enum ApprovalToolAction: Hashable, Sendable {
     case deleteFile, think, takeAction, useTool
     /// A tool the catalog has no phrase for: its own name, in words.
     case named(String)
+    /// A tool named after a product or a service ("App Store Connect"),
+    /// not after an action: "use App Store Connect", never "wants to App
+    /// Store Connect".
+    case useNamed(String)
 
     public static func of(tool: String?) -> ApprovalToolAction {
         guard let tool else { return .takeAction }
@@ -808,6 +812,8 @@ public enum ApprovalToolAction: Hashable, Sendable {
         case "tool": return .useTool
         default: break
         }
+        // a name, not an id: words with spaces, or a capital first letter
+        if tool.contains(" ") || tool.first?.isUppercase == true { return .useNamed(tool) }
         let name = ApprovalRiskClassifier.parseToolId(tool).name
         let words = name.split(whereSeparator: { $0 == "_" }).joined(separator: " ")
         return .named(words.isEmpty ? tool : words)

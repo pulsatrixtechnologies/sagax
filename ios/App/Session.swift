@@ -323,6 +323,14 @@ final class Session: ObservableObject {
     }
 
     private var client: CompanionClient?
+    /// #3415, #3471: what waits on the person, per bot id (a room's under
+    /// its thread id), as the server's one list says (Session+Waiting.swift).
+    @Published var waitingLists: [String: WaitingPayload] = [:]
+    /// The pending reads of that list, one per bot (frames that come
+    /// together read it once).
+    var waitingReloads: [String: Task<Void, Never>] = [:]
+    /// The captures: the pinned card opens on this item (`-waiting-cards-item`).
+    var previewPinnedAt: Int?
     /// `GET /voice/status` per bot, kept a minute (voiceModeStatus).
     private var voiceStatusCache: [String: (status: VoiceModeStatus, at: Date)] = [:]
     /// Why the last voice status could not be read (voiceModeStatus).
@@ -626,6 +634,21 @@ final class Session: ObservableObject {
                 state.bots[index].activeLeafId = parent
                 state.activeLeafIds[thread] = parent
                 if arguments.contains("-waiting-cards-top") { focusedMessageId = "w-skipped-approval" }
+                // the pinned card reads the server's list: its preview copy
+                if let url = Bundle.main.url(forResource: "WaitingListPreview", withExtension: "json"),
+                   let data = try? Data(contentsOf: url),
+                   let payload = try? JSONDecoder().decode(WaitingPayload.self, from: data) {
+                    waitingLists["preview-scout"] = payload
+                    if let flag = arguments.firstIndex(of: "-waiting-cards-item"), arguments.indices.contains(flag + 1) {
+                        previewPinnedAt = Int(arguments[flag + 1])
+                    }
+                    // the captures after one skip: the oldest item skipped,
+                    // folded where the phone holds it, as a tap on its × does
+                    if arguments.contains("-waiting-cards-skip-one"),
+                       let first = PinnedWaiting.entries(payload, transcript: { state.messages[$0] }).first {
+                        applyLocalCard(WaitingCardSkip.skipped(first.message), threadId: first.threadId)
+                    }
+                }
             }
             if arguments.contains("-cards-top") {
                 // The cards chat from its first cards (the theme captures).
@@ -1753,6 +1776,8 @@ final class Session: ObservableObject {
                     if streamed { foldQuietly { state.apply(frame) } }
                     else if frame.frame.foldsIntoState { state.apply(frame) }
                     else { foldSilently { state.apply(frame) } }
+                    // #3415, #3471: a card opened or settled: the pinned card reads its list again
+                    noteWaitingFrame(frame.frame)
                     if case let .screen(botId, png, mime) = frame.frame {
                         ScreenStore.shared.update(botId, ScreenFrame(png: png, mime: mime))
                     }
@@ -4035,7 +4060,7 @@ final class Session: ObservableObject {
         _ = try await client.send(text: text, toBot: card.botId, threadId: card.threadId)
         // then the card marked handled, so every place that draws it
         // settles (desktop answerPersonRequest); best effort
-        if let message, let chat {
+        if let message, message.attention != nil, let chat {
             let botId = cardBotId(message, in: chat) ?? card.botId
             try? await client.markAttentionHandled(botId: botId, threadId: chat.threadId, messageId: message.id)
         }

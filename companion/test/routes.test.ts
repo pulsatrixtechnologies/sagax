@@ -140,6 +140,8 @@ describe("what the app may do", () => {
     ["POST", "/api/bots/bot_123/sign-in-cards/msg_3/cancel"],
     // #3471: a waiting question in words skipped from the phone
     ["POST", "/api/approvals/handled"],
+    // #3415, #3471: the pinned card's list of what waits on the person
+    ["GET", "/api/approvals"],
   ];
 
   for (const [method, path] of calls) {

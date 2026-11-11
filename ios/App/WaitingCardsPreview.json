@@ -179,5 +179,61 @@
    "handledAt": 1787028990000,
    "closed": "skipped"
   }
+ },
+ {
+  "id": "w-input-request",
+  "role": "bot",
+  "kind": "activity",
+  "at": 1787028990000,
+  "from": {
+   "botId": "preview-pixel",
+   "name": "Pixel",
+   "color": "orange"
+  },
+  "tool": {
+   "name": "Pixel needs your input: Which test group gets the beta first?",
+   "ok": true
+  },
+  "inputRequest": {
+   "botId": "preview-pixel",
+   "threadId": "preview-thread-pixel-beta",
+   "botName": "Pixel",
+   "title": "Beta rollout",
+   "question": "Which test group gets the beta first?"
+  },
+  "threadRef": {
+   "botId": "preview-pixel",
+   "threadId": "preview-thread-pixel-beta",
+   "title": "Beta rollout"
+  }
+ },
+ {
+  "id": "w-input-request-skipped",
+  "role": "bot",
+  "kind": "activity",
+  "at": 1787029000000,
+  "from": {
+   "botId": "preview-pixel",
+   "name": "Pixel",
+   "color": "orange"
+  },
+  "tool": {
+   "name": "Pixel needs your input: Should the beta notes mention the new sign-in?",
+   "ok": true
+  },
+  "inputRequest": {
+   "botId": "preview-pixel",
+   "threadId": "preview-thread-pixel-notes",
+   "botName": "Pixel",
+   "title": "Beta notes",
+   "question": "Should the beta notes mention the new sign-in?",
+   "expired": true,
+   "skipped": true
+  },
+  "threadRef": {
+   "botId": "preview-pixel",
+   "threadId": "preview-thread-pixel-notes",
+   "title": "Beta notes"
+  }
  }
 ]

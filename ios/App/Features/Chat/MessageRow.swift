@@ -556,7 +556,8 @@ private struct TextKindRow: View {
 
 /// A structured ask draws its own card: its answers are the model's
 /// questions, not an allow/deny a tap could stand for.
-private struct OptionsKindRow: View {
+/// An option card by kind; the pinned card draws its items with it too.
+struct OptionsKindRow: View {
     let message: Message
     let chat: Chat
 
@@ -621,6 +622,18 @@ private struct ActivityKindRow: View {
         if message.tool?.roleNotice != nil {
             // 2026-11-05 (the owner): no role notice in the chat
             EmptyView()
+        } else if message.inputRequest != nil, let card = InputRequestRules.card(message) {
+            // #3471: a teammate's parked question from handed-over work, the
+            // standard question in words: answered in place, skipped with the
+            // same quiet control, folded once closed (InputRequestCard.tsx)
+            AttentionCardView(
+                card: card,
+                tint: MausPalette.color(chat.color),
+                openThread: openThread,
+                reply: { text in try await session.answerAttention(card, text: text, message: message, in: chat) },
+                skip: { await session.skipAttention(message, in: chat) },
+                messageId: message.id
+            )
         } else if let widget = message.tool?.widget, widget.isKnown, CwWidgets.isViewTool(message.tool?.name) {
             CwWidgetCard(widget: widget, threadId: chat.threadId, botId: message.from?.botId, brand: message.tool?.product) { action in
                 Task { await session.requestCwAction(action, threadId: chat.threadId, botId: message.from?.botId) }

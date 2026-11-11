@@ -191,6 +191,10 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   // #3471: a question in words answered or skipped from the phone (the
   // server keeps it to the person's own cards)
   { method: "POST", path: /^\/api\/approvals\/handled$/ },
+  // #3415, #3471: the card pinned over the phone's composer reads the
+  // server's one list of what waits on the person (?waiting=1&botId=),
+  // limited to the person's own cards
+  { method: "GET", path: /^\/api\/approvals$/ },
   // A credential value crosses this one route only as an HPKE envelope. The
   // server binds it to the authenticated device and exact pending card before
   // Electron opens it into the OS-encrypted credential store.

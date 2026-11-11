@@ -15,8 +15,14 @@ import CompanionCore
 struct ApprovalDock: View {
     @Environment(\.themePalette) var themePalette
     let chat: Chat
-    /// This conversation's open asks, then its parallel tasks' (oldest first).
+    /// The asks this dock steps through. On the pinned card (#3415,
+    /// #3471) it is the one item on screen, and `pager` steps through every
+    /// kind of item waiting.
     let approvals: [PendingApproval]
+    /// The pinned card's "1 of N" over every item waiting, of every kind.
+    var pager: PinnedPager? = nil
+    /// The asks "Allow all read-only" may cover: every approval waiting.
+    var readOnlyPool: [PendingApproval]? = nil
     @EnvironmentObject private var session: Session
     @State private var requestId: String?
     @State private var answering = false
@@ -30,13 +36,21 @@ struct ApprovalDock: View {
 
     private var tint: Color { MausPalette.color(chat.color) }
 
+    /// The ask on screen: the pinned card's one item, or the one picked.
+    private var currentIndex: Int {
+        pager == nil ? ApprovalDockRules.stepperIndex(approvals, requestId: requestId) : 0
+    }
+
+    /// How many items the stepper counts.
+    private var stepCount: Int { pager?.count ?? approvals.count }
+
     var body: some View {
         if let desktop, !approvals.isEmpty {
             desktopBody(desktop)
         } else if !approvals.isEmpty {
-            let index = ApprovalDockRules.stepperIndex(approvals, requestId: requestId)
+            let index = currentIndex
             let pending = approvals[index]
-            let readOnly = ApprovalDockRules.readOnly(approvals)
+            let readOnly = ApprovalDockRules.readOnly(readOnlyPool ?? approvals)
             let proposal = ApprovalDockRules.isProposal(pending.card)
             let accent = Theme.readable(tint)
             // #3415 (PR #3441 on the desktop): one compact card. An icon,
@@ -77,7 +91,7 @@ struct ApprovalDock: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     HStack(spacing: 0) {
-                        if approvals.count > 1 { stepper(index: index) }
+                        if stepCount > 1 { stepper(index: index) }
                         // #3471: the one quiet skip at the end of the top row
                         CardSkipButton(ink: Theme.attentionSecondary, disabled: answering, id: "approval-dock") {
                             run { await session.skipApproval(pending, in: chat) }
@@ -87,7 +101,7 @@ struct ApprovalDock: View {
                     .padding(.trailing, -6)
                 }
 
-                if approvals.count > 1, readOnly.count > 1 {
+                if stepCount > 1, readOnly.count > 1 {
                     Button {
                         Haptics.selection()
                         run { await session.allowAll(readOnly, in: chat) }
@@ -217,7 +231,7 @@ struct ApprovalDock: View {
     /// then Cancel turn as a quiet link on the left and the pills on the
     /// right: Deny, the remembering choice, Allow once.
     private func desktopBody(_ theme: DesktopTheme) -> some View {
-        let index = ApprovalDockRules.stepperIndex(approvals, requestId: requestId)
+        let index = currentIndex
         let pending = approvals[index]
         let card = pending.card
         let proposal = ApprovalDockRules.isProposal(card)
@@ -226,7 +240,7 @@ struct ApprovalDock: View {
             ownerOrAdmin: session.answersServerCards,
             hasBot: session.askingBotId(pending, in: chat) != nil
         )
-        let readOnly = ApprovalDockRules.readOnly(approvals)
+        let readOnly = ApprovalDockRules.readOnly(readOnlyPool ?? approvals)
         let bot = session.askingBotId(pending, in: chat).flatMap { session.state.bot($0) }
         return VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
@@ -244,14 +258,14 @@ struct ApprovalDock: View {
                     theme: theme,
                     aside: AnyView(VStack(alignment: .trailing, spacing: 2) {
                         HStack(spacing: 0) {
-                            if approvals.count > 1 { stepper(index: index) }
+                            if stepCount > 1 { stepper(index: index) }
                             // #3471: the one quiet skip at the end of the top row
                             CardSkipButton(ink: theme.inkTertiary, disabled: answering, id: "approval-dock") {
                                 run { await session.skipApproval(pending, in: chat) }
                             }
                         }
                         .padding(.top, -4)
-                        if approvals.count > 1, readOnly.count > 1 {
+                        if stepCount > 1, readOnly.count > 1 {
                             Button {
                                 Haptics.selection()
                                 run { await session.allowAll(readOnly, in: chat) }
@@ -446,36 +460,19 @@ struct ApprovalDock: View {
         case .takeAction: String(localized: "take an action")
         case .useTool: String(localized: "use a tool")
         case let .named(words): words
+        case let .useNamed(name): String(localized: "use \(name)")
         }
     }
 
+    @ViewBuilder
     private func stepper(index: Int) -> some View {
-        HStack(spacing: 2) {
-            Button {
-                Haptics.selection()
-                requestId = approvals[max(0, index - 1)].requestId
-            } label: {
-                Image(systemName: "chevron.left").frame(width: 28, height: 28)
-            }
-            .disabled(index == 0)
-            .accessibilityLabel(Text("Previous request"))
-            .accessibilityIdentifier("approval-previous")
-            Text("\(index + 1) of \(approvals.count)")
-                .font(.system(size: 12.5).monospacedDigit())
-                .accessibilityIdentifier("approval-position")
-            Button {
-                Haptics.selection()
-                requestId = approvals[min(approvals.count - 1, index + 1)].requestId
-            } label: {
-                Image(systemName: "chevron.right").frame(width: 28, height: 28)
-            }
-            .disabled(index >= approvals.count - 1)
-            .accessibilityLabel(Text("Next request"))
-            .accessibilityIdentifier("approval-next")
+        if let pager {
+            PinnedStepper(pager: pager, ink: Theme.attentionSecondary)
+        } else {
+            PinnedStepper(pager: PinnedPager(index: index, count: approvals.count) { to in
+                requestId = approvals[to].requestId
+            }, ink: Theme.attentionSecondary)
         }
-        .buttonStyle(.plain)
-        .font(.system(size: 13, weight: .semibold))
-        .foregroundStyle(Theme.attentionSecondary)
     }
 
     @ViewBuilder

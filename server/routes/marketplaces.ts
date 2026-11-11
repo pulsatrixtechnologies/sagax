@@ -84,16 +84,16 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps): RouteHandle
       throw error;
     };
     const viewer = deps.viewer?.(auth) ?? { seesAll: true };
-    const views = () => {
+    const views = async () => {
       const sources = deps.workspace?.workspaceTokenSources() ?? new Set<string>();
       const who = deps.actor(auth);
-      return deps.store.list(viewer).map((market) => {
+      return (await deps.store.list(viewer)).map((market) => {
         if (!deps.workspace) return market;
         const credential = deps.workspace.workspaceCredential?.(market.source, who);
         return { ...market, hasToken: sources.has(market.source), ...(credential ? { credential } : {}) };
       });
     };
-    const list = () => json(res, 200, { marketplaces: views() });
+    const list = async () => json(res, 200, { marketplaces: await views() });
     /** A private marketplace that is not this viewer's does not exist to them. */
     const unreachable = (name: string) => method !== "GET" && typeof deps.store.canAccess === "function" && !deps.store.canAccess(name, viewer);
     if (method !== "GET" && !deps.mayManage(auth)) {
@@ -104,7 +104,7 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps): RouteHandle
     }
     try {
       if (path === "/api/marketplaces") {
-        if (method === "GET") return list();
+        if (method === "GET") return await list();
         if (method !== "POST") return json(res, 405, { error: "GET or POST" });
         const body = await readBody(req) as Record<string, unknown> | null;
         const source = typeof body?.source === "string" ? body.source.trim() : "";
@@ -123,7 +123,7 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps): RouteHandle
         const added: MarketplaceView = deps.workspace
           ? await deps.workspace.addWorkspaceMarketplace({ source, ...(ref ? { ref } : {}), ...(credential ? { credential } : {}), ...(visibility ? { visibility } : {}) }, actor)
           : await deps.store.add({ source, ...(ref ? { ref } : {}) }, actor, { viewer, ...(visibility ? { visibility } : {}) });
-        const marketplaces = views();
+        const marketplaces = await views();
         return json(res, 201, { marketplace: marketplaces.find((market) => market.name === added.name) ?? added, marketplaces });
       }
       const update = UPDATE.exec(path);
@@ -147,7 +147,7 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps): RouteHandle
             after: { ...revisionOf(after), servers: after?.servers ?? [], skills: after?.skills ?? [] },
           });
         }
-        return json(res, done.status, { ...done.body, marketplaces: views() });
+        return json(res, done.status, { ...done.body, marketplaces: await views() });
       }
       const plugin = PLUGIN.exec(path);
       if (plugin) {
@@ -155,11 +155,11 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps): RouteHandle
         if (unreachable(marketplace!)) return json(res, 404, { error: "No marketplace with that name.", code: "not_found" });
         if (method === "POST") {
           const done = await deps.install(marketplace!, name!, { req, auth });
-          return json(res, done.status, { ...done.body, marketplaces: views() });
+          return json(res, done.status, { ...done.body, marketplaces: await views() });
         }
         if (method === "DELETE") {
           const done = await deps.uninstall(marketplace!, name!);
-          return json(res, done.status, { ...done.body, marketplaces: views() });
+          return json(res, done.status, { ...done.body, marketplaces: await views() });
         }
         return json(res, 405, { error: "POST or DELETE" });
       }
@@ -170,7 +170,7 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps): RouteHandle
         if (action === "refresh" && method === "POST") {
           if (deps.workspace) await deps.workspace.refreshWorkspaceMarketplace(name!, deps.actor(auth));
           else await deps.store.refresh(name!, deps.actor(auth), { viewer });
-          return list();
+          return await list();
         }
         if (action === "visibility") {
           if (method !== "PUT") return json(res, 405, { error: "PUT" });
@@ -188,7 +188,7 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps): RouteHandle
             ...(before ? { before: { visibility: before.visibility ?? "private" } } : {}),
             after: { visibility: changed.visibility },
           });
-          return list();
+          return await list();
         }
         if (action === "credential") {
           if (!deps.workspace?.chooseWorkspaceMarketplaceCredential) return json(res, 404, { error: "not found" });
@@ -200,12 +200,12 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps): RouteHandle
           }
           deps.workspace.chooseWorkspaceMarketplaceCredential(name!, sent, deps.actor(auth));
           deps.audit(auth, { action: "marketplace.credential", target: { kind: "marketplace", id: name!, name: name! }, after: { scope: "workspace", credential: sent ?? "automatic" } });
-          return list();
+          return await list();
         }
         if (!action && method === "DELETE") {
           if (deps.workspace) await deps.workspace.removeWorkspaceMarketplace(name!);
           else await deps.store.remove(name!, viewer);
-          return list();
+          return await list();
         }
         return json(res, 405, { error: "method not allowed" });
       }

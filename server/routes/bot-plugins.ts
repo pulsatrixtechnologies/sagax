@@ -76,8 +76,8 @@ export function createBotPluginRoutes<B extends { id: string }>(deps: BotPluginR
     /** A private marketplace that is not this viewer's does not exist to them. */
     const marketplaceUnreachable = (marketName: string) =>
       typeof deps.plugins.canAccessMarketplace === "function" && !deps.plugins.canAccessMarketplace(marketName, marketViewer);
-    const listing = () => ({
-      marketplaces: deps.plugins.listMarketplaces(bot.id, marketViewer),
+    const listing = async () => ({
+      marketplaces: await deps.plugins.listMarketplaces(bot.id, marketViewer),
       plugins: deps.plugins.listPlugins(bot.id),
       policy: deps.policy() ?? { mode: "any" },
       engine: { loadsPlugins: deps.engineLoadsPlugins(bot) },
@@ -85,7 +85,7 @@ export function createBotPluginRoutes<B extends { id: string }>(deps: BotPluginR
     });
     if (!section && !key) {
       if (method !== "GET") return json(res, 405, { error: "GET only" });
-      return json(res, 200, listing());
+      return json(res, 200, await listing());
     }
     if (!deps.mayChange(auth, bot)) return json(res, 403, { error: "Only the bot's owner, or someone who manages it, can change its plugins.", code: "plugins_owner_only" });
     const body = method === "DELETE" || update === "update" ? null : await (async () => {
@@ -108,7 +108,7 @@ export function createBotPluginRoutes<B extends { id: string }>(deps: BotPluginR
         if (credential === null) return json(res, 400, { error: "credential must be the id of one of your credentials.", code: "invalid_credential" });
         const added = await deps.plugins.addMarketplace(bot.id, { source, ...(ref ? { ref } : {}), ...(credential ? { credential } : {}), ...(visibility ? { visibility } : {}) }, actor);
         deps.changed?.(bot, "plugin.marketplace_add", { marketplace: added.name, source: added.source }, auth);
-        return json(res, 201, { marketplace: added, ...listing() });
+        return json(res, 201, { marketplace: added, ...(await listing()) });
       }
       if (section === "marketplaces" && name && marketplaceUnreachable(name)) {
         return json(res, 404, { error: "No marketplace with that name.", code: "not_found" });
@@ -120,20 +120,20 @@ export function createBotPluginRoutes<B extends { id: string }>(deps: BotPluginR
         if (credential === undefined || (credential === null && sent !== null)) {
           return json(res, 400, { error: "send { credential: id } or { credential: null } for Automatic", code: "invalid_credential" });
         }
-        const market = deps.plugins.chooseMarketplaceCredential(bot.id, name, credential, actor);
+        const market = await deps.plugins.chooseMarketplaceCredential(bot.id, name, credential, actor);
         deps.changed?.(bot, "plugin.marketplace_credential", { marketplace: name, credential: credential ?? "automatic" }, auth);
-        return json(res, 200, { marketplace: market, ...listing() });
+        return json(res, 200, { marketplace: market, ...(await listing()) });
       }
       if (section === "marketplaces" && name) {
         if (update) {
           if (method !== "POST") return json(res, 405, { error: "POST only" });
           const refreshed = await deps.plugins.updateMarketplace(bot.id, name, actor);
-          return json(res, 200, { marketplace: refreshed, ...listing() });
+          return json(res, 200, { marketplace: refreshed, ...(await listing()) });
         }
         if (method !== "DELETE") return json(res, 405, { error: "DELETE only" });
         const removed = await deps.plugins.removeMarketplace(bot.id, name, { ...(actor ? { actor } : {}), mayManage: deps.mayManageMarketplaces?.(auth) === true });
         deps.changed?.(bot, "plugin.marketplace_remove", { marketplace: name, sharedRemoved: removed.sharedRemoved }, auth);
-        return json(res, 200, { ...listing(), sharedRemoved: removed.sharedRemoved });
+        return json(res, 200, { ...(await listing()), sharedRemoved: removed.sharedRemoved });
       }
       if (section === "install") {
         if (method !== "POST") return json(res, 405, { error: "POST only" });
@@ -143,25 +143,25 @@ export function createBotPluginRoutes<B extends { id: string }>(deps: BotPluginR
         if (marketplaceUnreachable(marketplace)) return json(res, 404, { error: "No marketplace with that name.", code: "not_found" });
         const installed = await deps.plugins.install(bot.id, { marketplace, plugin }, actor);
         deps.changed?.(bot, "plugin.install", { plugin: installed.key, removed: installed.removed }, auth);
-        return json(res, 201, { plugin: installed, ...listing() });
+        return json(res, 201, { plugin: installed, ...(await listing()) });
       }
       if (key && config) {
         if (method !== "PUT") return json(res, 405, { error: "PUT only" });
         const plugin = await deps.plugins.setPluginConfig(bot.id, key, body?.values);
         deps.changed?.(bot, "plugin.config", { plugin: key, fields: Object.keys(plugin.config?.values ?? {}) }, auth);
-        return json(res, 200, { plugin, ...listing() });
+        return json(res, 200, { plugin, ...(await listing()) });
       }
       if (key) {
         if (method === "PATCH") {
           if (!body || typeof body.enabled !== "boolean" || Object.keys(body).length !== 1) return json(res, 400, { error: "Only { enabled } can be changed here." });
           const plugin = deps.plugins.setEnabled(bot.id, key, body.enabled);
           deps.changed?.(bot, "plugin.toggle", { plugin: key, enabled: body.enabled }, auth);
-          return json(res, 200, { plugin, ...listing() });
+          return json(res, 200, { plugin, ...(await listing()) });
         }
         if (method === "DELETE") {
           await deps.plugins.uninstall(bot.id, key);
           deps.changed?.(bot, "plugin.uninstall", { plugin: key }, auth);
-          return json(res, 200, listing());
+          return json(res, 200, await listing());
         }
         return json(res, 405, { error: "PATCH or DELETE" });
       }

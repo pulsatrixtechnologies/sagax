@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { readMarketplaceManifest } from "../bots/bot-plugins.ts";
+import { notePluginFolderChanged } from "../sandbox/sandbox-plugin-digests.ts";
 import {
-  folderDigest,
   isManifestUrl,
   marketplaceServerName,
   marketplaceVisibility,
@@ -135,16 +135,16 @@ describe("the installation's marketplaces", () => {
     expect(read.manifest).toMatchObject({ name: "notes", version: "1.2.0" });
     // I1: reading a plugin leaves nothing behind and installs nothing
     expect(readdirSync(join(dir, "data", "marketplaces", "plugins")).filter((name) => name.startsWith(".read-"))).toEqual([]);
-    expect(markets.list()[0]!.plugins[0]).toMatchObject({ installed: false });
+    expect((await markets.list())[0]!.plugins[0]).toMatchObject({ installed: false });
     const prepared = await markets.prepare("devjc", "notes", undefined);
     expect(prepared.dir).toBe(join(dir, "data", "marketplaces", "plugins", "devjc", "notes"));
     expect(prepared.plan.servers.map((server) => server.name)).toEqual(["notes", "search"]);
     markets.recordInstall("devjc", "notes", { version: prepared.version, servers: ["notes", "search"], skills: ["release-notes"] });
-    expect(markets.list()[0]!.plugins[0]).toMatchObject({ installed: true, servers: ["notes", "search"], skills: ["release-notes"] });
+    expect((await markets.list())[0]!.plugins[0]).toMatchObject({ installed: true, servers: ["notes", "search"], skills: ["release-notes"] });
     await expect(markets.remove("devjc")).rejects.toMatchObject({ code: "has_plugins" });
     expect(markets.recordUninstall("devjc", "notes").servers).toEqual(["notes", "search"]);
     await markets.remove("devjc");
-    expect(markets.list()).toEqual([]);
+    expect(await markets.list()).toEqual([]);
   });
 
   it("adds a marketplace by the address of its manifest and reads plugin files over https", async () => {
@@ -205,22 +205,22 @@ describe("updating an installed plugin in place", () => {
     const prepared = await markets.prepare("devjc", "notes", undefined);
     expect(prepared.revision).toMatch(/^sha256:[0-9a-f]{64}$/);
     markets.recordInstall("devjc", "notes", { version: prepared.version, revision: prepared.revision, servers: ["notes", "search"], serverNames: { notes: "notes", search: "search" }, skills: ["release-notes"] });
-    expect(markets.list()[0]!.plugins[0]).not.toHaveProperty("updateAvailable");
+    expect((await markets.list())[0]!.plugins[0]).not.toHaveProperty("updateAvailable");
 
     write(source, { "plugins/notes/skills/release-notes/SKILL.md": `${SKILL}\nNow with dates.\n` });
     await markets.refresh("devjc", undefined);
-    expect(markets.list()[0]!.plugins[0]).toMatchObject({ version: "1.2.0", updateAvailable: true });
+    expect((await markets.list())[0]!.plugins[0]).toMatchObject({ version: "1.2.0", updateAvailable: true });
 
     const manifest = JSON.parse(readFileSync(join(source, ".claude-plugin/marketplace.json"), "utf8")) as { plugins: Array<{ version?: string }> };
     manifest.plugins[0]!.version = "1.3.0";
     write(source, { ".claude-plugin/marketplace.json": manifest });
     await markets.refresh("devjc", undefined);
-    expect(markets.list()[0]!.plugins[0]).toMatchObject({ version: "1.3.0", installedVersion: "1.2.0", updateAvailable: true });
+    expect((await markets.list())[0]!.plugins[0]).toMatchObject({ version: "1.3.0", installedVersion: "1.2.0", updateAvailable: true });
 
     const next = await markets.prepare("devjc", "notes", undefined);
     const updated = markets.recordUpdate("devjc", "notes", { version: next.version, revision: next.revision, servers: ["notes"], serverNames: { notes: "notes" }, skills: [] });
     expect(updated).toMatchObject({ version: "1.3.0", servers: ["notes"], skills: [], installedAt: 1_000, updatedAt: 1_000 });
-    expect(markets.list()[0]!.plugins[0]).not.toHaveProperty("updateAvailable");
+    expect((await markets.list())[0]!.plugins[0]).not.toHaveProperty("updateAvailable");
     expect(() => markets.recordUpdate("devjc", "remote-one", { servers: [], serverNames: {}, skills: [] })).toThrow();
   });
 
@@ -232,18 +232,20 @@ describe("updating an installed plugin in place", () => {
     expect(pluginUpdateAvailable({ revision: "a" }, {})).toBe(false);
   });
 
-  it("names a plugin kept elsewhere by its repository, and digests files only", () => {
+  it("names a plugin kept elsewhere by its repository, and digests files only", async () => {
     const root = join(dir, "repo");
     marketplaceRepo(root);
     const [notes, remote] = readMarketplaceManifest(root).plugins;
-    expect(pluginRevision(root, remote!)).toBe("git:acme/remote-plugin#:");
-    expect(pluginRevision(root, notes!, "https://example.com/marketplace.json")).toBeUndefined();
-    const before = folderDigest(join(root, "plugins/notes"));
+    expect(await pluginRevision(root, remote!)).toBe("git:acme/remote-plugin#:");
+    expect(await pluginRevision(root, notes!, "https://example.com/marketplace.json")).toBeUndefined();
+    const before = await pluginRevision(root, notes!);
     mkdirSync(join(root, "plugins/notes/.git"));
     writeFileSync(join(root, "plugins/notes/.git/HEAD"), "ref");
-    expect(folderDigest(join(root, "plugins/notes"))).toBe(before);
+    notePluginFolderChanged(join(root, "plugins/notes"));
+    expect(await pluginRevision(root, notes!)).toBe(before);
     write(root, { "plugins/notes/agents/helper.md": "changed" });
-    expect(folderDigest(join(root, "plugins/notes"))).not.toBe(before);
+    notePluginFolderChanged(join(root, "plugins/notes"));
+    expect(await pluginRevision(root, notes!)).not.toBe(before);
   });
 
   it("keeps each server under the name it was added as, adds new ones and drops the rest", () => {
@@ -313,8 +315,8 @@ describe("per-marketplace visibility (private to a person vs org-wide)", () => {
     const view = await markets.add({ source: "alice/marketplace" }, "alice");
     expect(view).toMatchObject({ visibility: "private", mine: true });
     // alice sees it; bob does not; it is not reachable by bob
-    expect(markets.list(alice).map((market) => market.name)).toEqual(["devjc"]);
-    expect(markets.list(bob)).toEqual([]);
+    expect((await markets.list(alice)).map((market) => market.name)).toEqual(["devjc"]);
+    expect(await markets.list(bob)).toEqual([]);
     expect(markets.canAccess("devjc", alice)).toBe(true);
     expect(markets.canAccess("devjc", bob)).toBe(false);
   });
@@ -337,13 +339,13 @@ describe("per-marketplace visibility (private to a person vs org-wide)", () => {
     marketplaceRepo(source);
     const markets = makeStore(source);
     await markets.add({ source: "alice/marketplace" }, "alice");
-    expect(markets.list(bob)).toEqual([]);
+    expect(await markets.list(bob)).toEqual([]);
     const shared = await markets.setVisibility("devjc", "org", alice);
     expect(shared).toMatchObject({ visibility: "org" });
-    expect(markets.list(bob).map((market) => market.name)).toEqual(["devjc"]);
+    expect((await markets.list(bob)).map((market) => market.name)).toEqual(["devjc"]);
     expect(markets.canAccess("devjc", bob)).toBe(true);
     // bob sees it but it is not "his" to change the visibility of
-    expect(markets.list(bob)[0]).toMatchObject({ mine: false });
+    expect((await markets.list(bob))[0]).toMatchObject({ mine: false });
   });
 
   it("honours an explicit org visibility on add", async () => {
@@ -352,7 +354,7 @@ describe("per-marketplace visibility (private to a person vs org-wide)", () => {
     const markets = makeStore(source);
     const view = await markets.add({ source: "alice/marketplace" }, "alice", { visibility: "org" });
     expect(view).toMatchObject({ visibility: "org" });
-    expect(markets.list(bob).map((market) => market.name)).toEqual(["devjc"]);
+    expect((await markets.list(bob)).map((market) => market.name)).toEqual(["devjc"]);
   });
 
   it("migrates: a marketplace stored before visibility existed becomes private to its owner", async () => {
@@ -366,8 +368,8 @@ describe("per-marketplace visibility (private to a person vs org-wide)", () => {
     delete state.marketplaces.devjc!.visibility;
     writeFileSync(statePath, JSON.stringify(state));
     const fresh = makeStore(source);
-    expect(fresh.list(alice)[0]).toMatchObject({ visibility: "private", mine: true });
-    expect(fresh.list(bob)).toEqual([]);
+    expect((await fresh.list(alice))[0]).toMatchObject({ visibility: "private", mine: true });
+    expect(await fresh.list(bob)).toEqual([]);
   });
 });
 

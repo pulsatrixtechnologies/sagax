@@ -51,28 +51,55 @@ function hashFile(path: string): { sha256: string; size: number } {
   }
 }
 
+/** One entry of a folder: absolute and relative path ("/" between names)
+ * and kind, read from the directory listing alone (never followed). */
+interface FolderEntry {
+  abs: string;
+  rel: string;
+  kind: "file" | "dir" | "link" | "other";
+  /** a `.git` entry or anything under one */
+  git: boolean;
+}
+
+/** The one walk of a folder: every entry, depth first, each directory's
+ * names in listing order or, `ordered`, sorted with `localeCompare` (the
+ * order of a marketplace plugin's revision, #3643). Links are not followed. */
+function* folderEntries(base: string, ordered: boolean): Generator<FolderEntry> {
+  function* visit(dir: string, prefix: string, git: boolean): Generator<FolderEntry> {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    if (ordered) entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      const abs = join(dir, entry.name);
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const kind = entry.isSymbolicLink() ? "link" : entry.isDirectory() ? "dir" : entry.isFile() ? "file" : "other";
+      const inGit = git || entry.name === ".git";
+      yield { abs, rel, kind, git: inGit };
+      if (kind === "dir") yield* visit(abs, rel, inGit);
+    }
+  }
+  yield* visit(base, "", false);
+}
+
+/** Why a workspace manifest refuses this entry, if it does: a path that
+ * leaves the folder, a symlink, or a file that is not a regular file. */
+function refusal(base: string, entry: FolderEntry): string | undefined {
+  const rel = relative(base, entry.abs);
+  const resolved = resolve(entry.abs);
+  if (rel.startsWith("..") || (resolved !== base && !resolved.startsWith(base + sep))) return `path escapes the workspace: ${rel}`;
+  if (entry.kind === "link") return `refusing a symlink: ${rel}`;
+  if (entry.kind === "other") return `refusing a non-regular file: ${rel}`;
+  return undefined;
+}
+
 /** Every regular file under `root` (absolute and relative path), in walk
  * order. A symlink or a non-regular file is refused and not followed. */
 function* workspaceFiles(root: string): Generator<{ abs: string; rel: string }> {
   const base = resolve(root);
-  function* visit(dir: string): Generator<{ abs: string; rel: string }> {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const path = join(dir, entry.name);
-      const rel = relative(base, path);
-      const resolved = resolve(path);
-      if (rel.startsWith("..") || (resolved !== base && !resolved.startsWith(base + sep))) {
-        throw new Error(`path escapes the workspace: ${rel}`);
-      }
-      if (entry.isSymbolicLink()) throw new Error(`refusing a symlink: ${rel}`);
-      if (entry.isDirectory()) {
-        yield* visit(path);
-        continue;
-      }
-      if (!entry.isFile()) throw new Error(`refusing a non-regular file: ${rel}`);
-      yield { abs: path, rel: rel.split(sep).join("/") };
-    }
+  for (const entry of folderEntries(base, false)) {
+    const refused = refusal(base, entry);
+    if (refused) throw new Error(refused);
+    if (entry.kind === "file") yield { abs: entry.abs, rel: entry.rel };
   }
-  yield* visit(base);
 }
 
 const byPath = (a: WorkspaceFile, b: WorkspaceFile) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
@@ -85,21 +112,97 @@ export function workspaceManifest(root: string): WorkspaceManifest {
   return { files };
 }
 
-/** {@link workspaceManifest} read in slices of at most `sliceMs` of the
- * main thread, giving the event loop back between files (#3619: a plugin's
- * digest is computed on a turn's path when its folder changed). */
-export async function workspaceManifestSliced(root: string, sliceMs = 8): Promise<WorkspaceManifest> {
+/** At most this many files are opened between two returns to the event
+ * loop (#3643), and at most `SLICE_BYTES` read, whatever the clock says. */
+export const SLICE_FILES = 64;
+export const SLICE_BYTES = 4 * CHUNK;
+/** A marketplace plugin's revision hashes its first 5,000 files. */
+const MAX_REVISION_FILES = 5000;
+
+/** What one read of a folder gives: its workspace manifest (null when the
+ * folder holds an entry a manifest refuses, and why), and the digest of a
+ * marketplace plugin's revision (#3643): every regular file's relative
+ * path, a zero byte, its bytes and a zero byte, outside `.git` and links,
+ * each directory sorted with `localeCompare`, the first 5,000 files. */
+export interface FolderRead {
+  manifest: WorkspaceManifest | null;
+  refused?: string;
+  revision: string;
+}
+
+/** The slice every sliced read shares: several folders read at once (a
+ * listing of 40 plugins) still read at most `SLICE_FILES` files between two
+ * turns of the event loop, not that many each. */
+const slice = { start: 0, files: 0, bytes: 0, next: null as Promise<void> | null };
+
+const sliceLeft = (): boolean => slice.files < SLICE_FILES && slice.bytes < SLICE_BYTES;
+
+async function pace(sliceMs: number): Promise<void> {
+  if (sliceLeft() && performance.now() - slice.start < sliceMs) return;
+  do {
+    slice.next ??= yieldToEventLoop().then(() => {
+      slice.next = null;
+      slice.start = performance.now();
+      slice.files = 0;
+      slice.bytes = 0;
+    });
+    await slice.next;
+    // another read woken by the same turn may have spent this slice already
+  } while (!sliceLeft());
+}
+
+/** The one sliced read of a folder: each file is read once, in chunks, and
+ * feeds both digests; the event loop is given back after `SLICE_FILES`
+ * files, `SLICE_BYTES` bytes (a single large file too) or `sliceMs` of the
+ * main thread, whichever comes first, counted over every read running
+ * (#3619, #3643). */
+export async function readFolderSliced(root: string, sliceMs = 8): Promise<FolderRead> {
+  const base = resolve(root);
   const files: WorkspaceFile[] = [];
-  let sliceStart = performance.now();
-  for (const file of workspaceFiles(root)) {
-    if (performance.now() - sliceStart >= sliceMs) {
-      await yieldToEventLoop();
-      sliceStart = performance.now();
+  const revision = createHash("sha256");
+  // its own buffer: this read gives the loop back in the middle of a file
+  const buffer = Buffer.allocUnsafe(CHUNK);
+  let refused: string | undefined;
+  let revisionFiles = 0;
+  for (const entry of folderEntries(base, true)) {
+    refused ??= refusal(base, entry);
+    if (entry.kind !== "file") continue;
+    const inRevision = !entry.git && ++revisionFiles <= MAX_REVISION_FILES;
+    if (!inRevision && refused) continue;
+    await pace(sliceMs);
+    slice.files += 1;
+    const fd = openSync(entry.abs, constants.O_RDONLY);
+    try {
+      const hash = refused ? null : createHash("sha256");
+      if (inRevision) revision.update(`${entry.rel}\0`);
+      let size = 0;
+      for (;;) {
+        const n = readSync(fd, buffer, 0, buffer.length, null);
+        if (n === 0) break;
+        size += n;
+        slice.bytes += n;
+        const chunk = buffer.subarray(0, n);
+        hash?.update(chunk);
+        if (inRevision) revision.update(chunk);
+        await pace(sliceMs);
+      }
+      if (inRevision) revision.update("\0");
+      if (hash && !refused) files.push({ path: entry.rel, sha256: hash.digest("hex"), size });
+    } finally {
+      closeSync(fd);
     }
-    files.push({ path: file.rel, ...hashFile(file.abs) });
   }
   files.sort(byPath);
-  return { files };
+  return { manifest: refused ? null : { files }, ...(refused ? { refused } : {}), revision: revision.digest("hex") };
+}
+
+/** {@link workspaceManifest} read in slices that give the event loop back
+ * (#3619: a plugin's digest is computed on a turn's path when its folder
+ * changed). */
+export async function workspaceManifestSliced(root: string, sliceMs = 8): Promise<WorkspaceManifest> {
+  const read = await readFolderSliced(root, sliceMs);
+  if (!read.manifest) throw new Error(read.refused);
+  return read.manifest;
 }
 
 function sameManifest(left: WorkspaceManifest, right: WorkspaceManifest): boolean {

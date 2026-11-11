@@ -17,7 +17,9 @@ export interface ConsoleCapabilitiesViewer {
   computedFor?: { principalId: string; name: string };
 }
 
-export interface ConsoleCapabilitiesDeps<Bot> {
+/** `Out`: the resolved list, or a promise of it (#3643: the marketplaces
+ * work out their offered revisions without holding the event loop). */
+export interface ConsoleCapabilitiesDeps<Bot, Out = BotCapabilities | null> {
   bot(id: string): Bot | undefined;
   /** effectiveBotOwner */
   owner(bot: Bot): string;
@@ -25,14 +27,14 @@ export interface ConsoleCapabilitiesDeps<Bot> {
   level(looking: string, orgAdmin: boolean, bot: Bot): ConsoleBotLevel;
   /** a person's readable name ("" when unknown), never an id */
   name(principalId: string): string;
-  resolve(bot: Bot, viewer: ConsoleCapabilitiesViewer): BotCapabilities | null;
+  resolve(bot: Bot, viewer: ConsoleCapabilitiesViewer): Out;
 }
 
-export function consoleBotCapabilities<Bot>(
-  deps: ConsoleCapabilitiesDeps<Bot>,
+export function consoleBotCapabilities<Bot, Out = BotCapabilities | null>(
+  deps: ConsoleCapabilitiesDeps<Bot, Out>,
   botId: string,
   viewer: { principalId: string; orgAdmin: boolean },
-): BotCapabilities | null {
+): Out | null {
   const bot = deps.bot(botId);
   if (!bot) return null;
   const looking = viewer.principalId.trim().toLowerCase();

@@ -209,7 +209,7 @@ describe("bot zip round trip", () => {
     expect(listSkills(copy.id).map((skill) => [skill.name, skill.enabled])).toEqual([["digest", true], ["off", false]]);
     // plugins and marketplaces
     expect(fx.plugins.listPlugins(copy.id)).toEqual(fx.plugins.listPlugins(source.id));
-    expect(fx.plugins.listMarketplaces(copy.id).map((market) => [market.name, market.source, market.plugins.map((plugin) => plugin.name)]))
+    expect((await fx.plugins.listMarketplaces(copy.id)).map((market) => [market.name, market.source, market.plugins.map((plugin) => plugin.name)]))
       .toEqual([["acme", "acme/private-tools", ["reviewer"]]]);
     expect(fx.plugins.pluginDirs(copy.id)).toHaveLength(1);
     // routines and webhooks: on the copy, off, secrets scrubbed

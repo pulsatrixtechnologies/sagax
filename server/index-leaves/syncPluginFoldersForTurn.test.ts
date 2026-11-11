@@ -8,9 +8,9 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { removeTempDir } from "../testing/cleanup.ts";
-import { manifestDigest, PluginFolderDigests } from "../sandbox/sandbox-plugin-digests.ts";
+import { PluginFolderDigests } from "../sandbox/sandbox-plugin-digests.ts";
 import { PLUGIN_PRESENCE_RECONFIRM_MS, SANDBOX_PLUGINS_DIR, SandboxPluginPresence, sandboxPluginPresence, syncPluginsToSandbox } from "../sandbox/sandbox-plugins.ts";
-import { workspaceManifestSliced } from "../sandbox/sandbox-workspace-copy.ts";
+import { readFolderSliced } from "../sandbox/sandbox-workspace-copy.ts";
 import { UserSandboxManager } from "../sandbox/user-sandbox-manager.ts";
 import type { SandboxdClient } from "../sandbox/user-sandbox-client.ts";
 import { createSyncPluginFoldersForTurn } from "./syncPluginFoldersForTurn.ts";
@@ -58,7 +58,7 @@ function environment(delayMs = 0) {
 
 function countingDigests() {
   const counter = { reads: 0 };
-  const digests = new PluginFolderDigests({ compute: async (dir) => { counter.reads += 1; return manifestDigest(await workspaceManifestSliced(dir)); } });
+  const digests = new PluginFolderDigests({ compute: async (dir) => { counter.reads += 1; return readFolderSliced(dir); } });
   return { counter, digests };
 }
 

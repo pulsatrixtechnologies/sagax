@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { removeTempDir } from "../testing/cleanup.ts";
-import { manifestDigest, notePluginFolderChanged, PluginFolderDigests, pluginFolderDigests } from "./sandbox-plugin-digests.ts";
+import { notePluginFolderChanged, PluginFolderDigests, pluginFolderDigests } from "./sandbox-plugin-digests.ts";
 import { pluginDigest } from "./sandbox-plugins.ts";
-import { workspaceManifestSliced } from "./sandbox-workspace-copy.ts";
+import { readFolderSliced, workspaceManifestSliced } from "./sandbox-workspace-copy.ts";
 
 const root = mkdtempSync(join(tmpdir(), "sagax-plugin-digest-"));
 afterAll(() => removeTempDir(root));
@@ -26,7 +26,7 @@ function folder(files: number): string {
 
 function counting() {
   const counter = { reads: 0 };
-  const digests = new PluginFolderDigests({ compute: async (dir) => { counter.reads += 1; return manifestDigest(await workspaceManifestSliced(dir)); } });
+  const digests = new PluginFolderDigests({ compute: async (dir) => { counter.reads += 1; return readFolderSliced(dir); } });
   return { counter, digests };
 }
 
@@ -62,7 +62,7 @@ describe("plugin folder digests (#3619)", () => {
   it("a writer's note drops the remembered digest of the folder, inside it and around it", async () => {
     const dir = folder(4);
     const reads = { count: 0 };
-    const digests = new PluginFolderDigests({ compute: async (path) => { reads.count += 1; return manifestDigest(await workspaceManifestSliced(path)); } });
+    const digests = new PluginFolderDigests({ compute: async (path) => { reads.count += 1; return readFolderSliced(path); } });
     await digests.digest(dir);
     digests.forget(join(dir, "d0"));
     await digests.digest(dir);
@@ -84,7 +84,7 @@ describe("plugin folder digests (#3619)", () => {
     const gate = new Promise<void>((resolve) => { hold = resolve; });
     let reads = 0;
     const digests = new PluginFolderDigests({
-      compute: async (path) => { reads += 1; const digest = manifestDigest(await workspaceManifestSliced(path)); if (reads === 1) await gate; return digest; },
+      compute: async (path) => { reads += 1; const read = await readFolderSliced(path); if (reads === 1) await gate; return read; },
     });
     const running = digests.digest(dir);
     await new Promise((resolve) => setTimeout(resolve, 20));

@@ -14,11 +14,11 @@ import { supportsWorkspaceFiles } from "../workspace/workspace.ts";
 export type Host = Record<string, any>;
 
 export function createBotCapabilitiesAs(getHost: () => Host): any {
-function botCapabilitiesAs(
+async function botCapabilitiesAs(
   bot: NonNullable<ReturnType<typeof store.bot>>,
   engineId: string | undefined,
   viewer: { principal?: string; mayChange: boolean; marketplace: MarketplaceViewer; computedFor?: { principalId: string; name: string } },
-): BotCapabilitiesAnswer {
+): Promise<BotCapabilitiesAnswer> {
   const host = getHost();
   const instance = host.registry.get(engineId ?? bot.modelSelection.instanceId);
   if (!instance) return { ok: false, status: engineId ? 400 : 404, error: "Unknown engine.", code: "unknown_engine" };
@@ -32,13 +32,13 @@ function botCapabilitiesAs(
   // what the marketplaces offer, for "update available" (names only)
   const offered = new Map<string, boolean>();
   try {
-    for (const market of host.botPlugins.listMarketplaces(bot.id, viewer.marketplace)) {
+    for (const market of await host.botPlugins.listMarketplaces(bot.id, viewer.marketplace)) {
       for (const plugin of market.plugins) if (plugin.updateAvailable) offered.set(`${plugin.name}@${market.name}`, true);
     }
   } catch { /* listed without updates */ }
   const workspaceOffered = new Map<string, boolean>();
   try {
-    for (const market of host.pluginMarketplaces.list({ seesAll: true })) {
+    for (const market of await host.pluginMarketplaces.list({ seesAll: true })) {
       for (const plugin of market.plugins) if (plugin.updateAvailable) workspaceOffered.set(`${plugin.name}@${market.name}`, true);
     }
   } catch { /* listed without updates */ }

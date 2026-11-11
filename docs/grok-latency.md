@@ -53,7 +53,10 @@ Every ACP turn logs one line when it settles (server/drivers/acp/turn-latency.ts
   kind into the turn's trace (server/turns/turn-trace.ts) while the wait is open; mount names
   and milliseconds only, never a request's content. A mount that got no request during the
   wait is not printed: `agents` answers its tool list inside its own process, so it never
-  shows here. It says whether the engine connects its servers one after the other, which of
+  shows here. `browser`, `data` and `computer` on their streamable HTTP route note their
+  first request there (`initialize`, which that route answers itself); a mount whose stdio
+  proxy answers `initialize` itself (`messages`, `sagax-computer`, `sagax-desktop`,
+  `sagax-environment`) can only show its `tools/list` as its first request. It says whether the engine connects its servers one after the other, which of
   Sagax's endpoints is slow, and how long the engine takes before its first request. A
   reused session prints no toolsServed.
 

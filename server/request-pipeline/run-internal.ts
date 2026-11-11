@@ -161,6 +161,11 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
     // route below with its bearer, through every check that follows.
     const harnessHttpKind = host.harnessMcpHttpKind(path);
     if (harnessHttpKind) {
+      // #3623: this route answers `initialize` itself, so the mount's first
+      // request is noted here; its tool list reaches the route below.
+      const httpCapability = host.authorizedInternalCapability(req.headers.authorization);
+      const httpMount = httpCapability?.kind === harnessHttpKind ? turnServedMount(harnessHttpKind) : undefined;
+      if (httpMount) noteTurnServed(httpCapability.threadId, httpMount, "in");
       await host.serveHarnessMcpHttp(req, res, harnessHttpKind, `http://127.0.0.1:${host.PORT}`);
       return true;
     }

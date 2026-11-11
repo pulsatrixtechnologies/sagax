@@ -1,5 +1,6 @@
-// Stats tab, the desktop's BotUsageBreakdownSection (#2612, #3030): who uses
-// what on this bot, over 7 days, 30 days or this month, in $ or in tokens.
+// Analytics tab, the desktop's BotUsageBreakdownSection (#2612, #3030,
+// #3401): who uses what on this bot, over 7 days, 30 days or this month, in
+// $ or in tokens, under a grey group label, money in the reader's language.
 // One bar per row in a single hue (the rows are their own legend); the top
 // six rows, then the rest folded into "Others (N)" that opens them.
 import CompanionCore
@@ -20,6 +21,8 @@ struct BotUsageBreakdownView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            BotProfileGroupLabel(title: "Usage statistics")
+                .accessibilityHint(Text("Who uses what: each account, model, source and person, in $ and in tokens. Open a row for the detail."))
             controls
             if let error {
                 ProfileCard {
@@ -74,7 +77,7 @@ struct BotUsageBreakdownView: View {
     }
 
     private func value(_ group: BotUsageGroup) -> String {
-        inTokens ? BotUsageTotal.formatTokens(group.tokens) : (group.costUsd.map(BotUsageTotal.formatUsd) ?? "-")
+        inTokens ? BotUsageTotal.formatTokens(group.tokens) : (group.costUsd.map { ProfileMoney.format($0, currency: breakdown?.currency) } ?? "-")
     }
 
     private func amount(_ group: BotUsageGroup) -> Double {
@@ -86,7 +89,7 @@ struct BotUsageBreakdownView: View {
             HStack(alignment: .top, spacing: 0) {
                 figure("Turns", "\(data.totals.turns)", id: "turns")
                 figure("Tokens", BotUsageTotal.formatTokens(data.totals.tokens), id: "tokens")
-                figure("Cost", data.totals.costUsd.map(BotUsageTotal.formatUsd) ?? "-", id: "cost")
+                figure("Cost", data.totals.costUsd.map { ProfileMoney.format($0, currency: data.currency) } ?? "-", id: "cost")
             }
             .padding(.vertical, 12)
         }

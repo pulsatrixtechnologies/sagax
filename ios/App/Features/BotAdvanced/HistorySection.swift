@@ -33,7 +33,7 @@ struct BotHistorySection: View {
                         .foregroundStyle(Theme.textSecondary)
                 }
                 if history.rows.isEmpty {
-                    Text(String(localized: "No changes recorded yet."))
+                    Text(String(localized: "Each change to this bot's settings will show here, and you can restore it."))
                         .foregroundStyle(Theme.textSecondary)
                         .accessibilityIdentifier("history-empty")
                 }

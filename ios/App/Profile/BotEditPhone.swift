@@ -24,6 +24,10 @@ struct BotEditActions {
     var openFolder: (() -> Void)? = nil
     /// A Permissions sub-page (When it acts alone, Advanced settings).
     var openPermissions: ((BotPermissionsPart) -> Void)? = nil
+    /// Bot accounts > "+ Add" (#3403): the host's own apps page and MCP
+    /// servers page (the iPad's Plugins window); nil: the profile opens its own.
+    var openApps: (() -> Void)? = nil
+    var openMcpServers: (() -> Void)? = nil
 }
 
 extension LocalizedStringKey {

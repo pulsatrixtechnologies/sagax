@@ -924,6 +924,8 @@ private struct DesktopShellRouting: ViewModifier {
                 if let tab = screen.panelTab { model.panelTab = tab }
                 if screen == .panelAvatarEditor { model.showAppearance() }
                 else if screen.opensPersonaEditor { model.showPersona(screen.panelSection) }
+                // `-parityBotEditRoute root` (the profile captures, #3403): Ara's profile page
+                else if UserDefaults.standard.string(forKey: "parityBotEditRoute") == "root" { model.showPersona() }
                 model.applyParityModals(screen)
                 model.page = screen.parityPage
                 if screen == .keyboardShortcuts { model.modal = .shortcuts }

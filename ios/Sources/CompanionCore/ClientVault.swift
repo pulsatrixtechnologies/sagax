@@ -296,6 +296,30 @@ public extension CompanionClient {
         try await send(makeRequest("POST", "/api/bots/\(botId)/credentials/list", body: [:]), as: TeamBotVaultList.self)
     }
 
+    /// A login added to a team bot's shared vault (managers only). The
+    /// password goes to the server once and is never read back.
+    func addTeamBotVaultLogin(botId: String, name: String, username: String, password: String, domains: String) async throws {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body: [String: Any] = [
+            "kind": "login",
+            "name": trimmed.isEmpty ? "Shared login" : trimmed,
+            "username": username.trimmingCharacters(in: .whitespacesAndNewlines),
+            "password": password,
+            "domains": Self.vaultDomains(domains),
+        ]
+        try await send(makeRequest("POST", "/api/bots/\(botId)/credentials", body: body))
+    }
+
+    /// Removes one login of a team bot's shared vault.
+    func deleteTeamBotVaultItem(botId: String, id: String) async throws {
+        try await send(makeRequest("DELETE", "/api/bots/\(botId)/credentials/\(id)"))
+    }
+
+    /// The sites typed for a login: split on spaces and commas (the desktop's form).
+    static func vaultDomains(_ text: String) -> [String] {
+        text.split(whereSeparator: { $0 == "," || $0.isWhitespace }).map(String.init).filter { !$0.isEmpty }
+    }
+
     func revealVaultItem(id: String, field: String) async throws -> VaultReveal {
         try await send(makeRequest("POST", "/api/me/credentials/\(id)/reveal", body: ["field": field]), as: VaultReveal.self)
     }

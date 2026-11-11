@@ -375,6 +375,79 @@ final class ProfileUITests: XCTestCase {
         }
     }
 
+    // MARK: Bot profile cards (#3403)
+
+    /// The gear's bot profile, on General.
+    @MainActor
+    private func openBotProfile(in app: XCUIApplication) {
+        element("panel-gear", in: app).tap()
+        let general = element("bot-profile-tab.general", in: app)
+        XCTAssertTrue(general.waitForExistence(timeout: 15))
+        general.tap()
+    }
+
+    private func scrollProfile(to target: XCUIElement, in app: XCUIApplication) {
+        let page = element("bot-profile-page", in: app)
+        for _ in 0..<8 where !(target.exists && target.isHittable) {
+            page.swipeUp()
+        }
+    }
+
+    /// The phone follows the desktop's General (#3398, #3399): Channels and
+    /// Bot accounts in place, no app still to connect in the accounts card,
+    /// and "+ Add" offers two choices that each say what they do.
+    @MainActor
+    func testBotAccountsCardListsWhatTheBotHasAndAddDescribesEachChoice() throws {
+        let app = launchProfile()
+        openBotProfile(in: app)
+        XCTAssertTrue(element("bot-profile-group.channels", in: app).waitForExistence(timeout: 10), "Channels is drawn in place")
+        XCTAssertFalse(element("bot-profile-channels.toggle", in: app).exists, "no row unfolds the channels")
+        XCTAssertFalse(element("bot-profile-channel.sharing", in: app).exists, "sharing left the channels for More")
+        let accounts = element("bot-profile-group.accounts", in: app)
+        guard accounts.waitForExistence(timeout: 10) else { throw XCTSkip("this pairing has no Bot accounts section: start the fixture with PARITY_OWNER=1") }
+        XCTAssertFalse(element("bot-profile-accounts.toggle", in: app).exists, "no row unfolds the accounts")
+        let engine = element("bot-profile-accounts.engine", in: app)
+        XCTAssertTrue(engine.waitForExistence(timeout: 20), "the engine row comes first")
+        XCTAssertFalse(accounts.staticTexts["To connect"].exists, "an app still to connect stays in the apps page")
+
+        let add = element("bot-profile-accounts.add", in: app)
+        scrollProfile(to: add, in: app)
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        add.tap()
+        // each choice carries a grey line under its title (the menu reads it into the item's label)
+        let apps = app.buttons["bot-profile-accounts.add.apps"]
+        XCTAssertTrue(apps.waitForExistence(timeout: 5), "Add offers Apps")
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "accounts-add-menu"
+        shot.lifetime = .keepAlways
+        self.add(shot)
+        XCTAssertTrue(apps.label.contains("Connect an app as this bot"), "Apps says what it does: \(apps.label)")
+        let servers = app.buttons["bot-profile-accounts.add.mcp"]
+        XCTAssertTrue(servers.exists, "Add offers MCP servers")
+        XCTAssertTrue(servers.label.contains("Add a server by its address"), "MCP servers says what it does: \(servers.label)")
+    }
+
+    /// Knowledge shows To review and Skills in place, and the tab is Analytics.
+    @MainActor
+    func testKnowledgeShowsToReviewAndSkillsAndTheTabIsAnalytics() throws {
+        let app = launchProfile()
+        openBotProfile(in: app)
+        let analytics = element("bot-profile-tab.stats", in: app)
+        if analytics.waitForExistence(timeout: 5) {
+            XCTAssertEqual(analytics.label, "Analytics")
+            analytics.tap()
+            XCTAssertTrue(element("bot-analytics", in: app).waitForExistence(timeout: 10), "the block of the reference opens the tab")
+            XCTAssertTrue(app.staticTexts["Top users"].waitForExistence(timeout: 10))
+        }
+        element("bot-profile-tab.knowledge", in: app).tap()
+        guard element("bot-profile-group.review", in: app).waitForExistence(timeout: 15) else {
+            throw XCTSkip("this pairing has no Skills section: start the fixture with PARITY_OWNER=1")
+        }
+        XCTAssertTrue(element("bot-profile-group.skills", in: app).waitForExistence(timeout: 10), "the Skills card sits in the tab")
+        XCTAssertFalse(element("bot-profile-knowledge.skills", in: app).exists, "Skills is no longer a row that opens a page")
+        XCTAssertTrue(element("bot-profile-knowledge.routines", in: app).exists, "Routines stays a row")
+    }
+
     // MARK: Routines
 
     @MainActor

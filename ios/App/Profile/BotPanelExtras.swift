@@ -64,7 +64,7 @@ struct BotUsageSection: View {
 
     private func figure(_ label: LocalizedStringKey, _ value: String, id: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(Theme.Font.label).textCase(.uppercase).foregroundStyle(Theme.textSecondary)
+            Text(label).font(Theme.Font.label).foregroundStyle(Theme.textSecondary)
             Text(verbatim: value).font(Theme.Font.body).monospacedDigit().foregroundStyle(Theme.textPrimary)
                 .accessibilityIdentifier(id)
         }

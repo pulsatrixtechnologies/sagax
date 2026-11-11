@@ -5552,6 +5552,22 @@
         }
       }
     },
+    "90 days": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "90 days"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "90 jours"
+          }
+        }
+      }
+    },
     "<goal>": {
       "localizations": {
         "fr": {
@@ -5644,6 +5660,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "@menção ao app"
+          }
+        }
+      }
+    },
+    "A GitHub repository, a SKILL.md link or a skills.sh page": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A GitHub repository, a SKILL.md link or a skills.sh page"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un dépôt GitHub, un lien vers un SKILL.md ou une page skills.sh"
           }
         }
       }
@@ -6716,12 +6748,60 @@
         }
       }
     },
+    "A skill folder on the computer this bot runs on": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A skill folder on the computer this bot runs on"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un dossier de compétence sur l'ordinateur où roule ce bot"
+          }
+        }
+      }
+    },
     "A skill is enabled once you have read it, after the drive. You can say no now to deny it.": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Une compétence s'active une fois lue, après le trajet. Tu peux dire non maintenant pour la refuser."
+          }
+        }
+      }
+    },
+    "A skill shows the bot how to do one task your way; it uses it when the task comes up.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A skill shows the bot how to do one task your way; it uses it when the task comes up."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une compétence montre au bot comment faire une tâche à ta façon; il s'en sert quand la tâche se présente."
+          }
+        }
+      }
+    },
+    "A skill your library already holds": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A skill your library already holds"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une compétence que ta bibliothèque contient déjà"
           }
         }
       }
@@ -6796,6 +6876,22 @@
         }
       }
     },
+    "A username and password this bot fills on its sites": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A username and password this bot fills on its sites"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un nom d'utilisateur et un mot de passe que ce bot remplit sur ses sites"
+          }
+        }
+      }
+    },
     "A value its namespace lacks": {
       "localizations": {
         "fr": {
@@ -6844,12 +6940,44 @@
         }
       }
     },
+    "Add a server by its address": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a server by its address"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajoute un serveur par son adresse"
+          }
+        }
+      }
+    },
     "AI": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "IA"
+          }
+        }
+      }
+    },
+    "An app or a server you add here becomes usable by this bot.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An app or a server you add here becomes usable by this bot."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une application ou un serveur que tu ajoutes ici devient utilisable par ce bot."
           }
         }
       }
@@ -6866,6 +6994,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Uma aprovação está esperando um admin na conversa deste bot. O modelo poderá mudar depois que ela for respondida."
+          }
+        }
+      }
+    },
+    "Analytics": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analytics"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analytique"
           }
         }
       }
@@ -14784,6 +14928,38 @@
         }
       }
     },
+    "Bot accounts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bot accounts"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comptes du bot"
+          }
+        }
+      }
+    },
+    "Bot accounts and connectors. One place for both.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bot accounts and connectors. One place for both."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comptes du bot et connecteurs. Un seul endroit pour les deux."
+          }
+        }
+      }
+    },
     "Bot Computer": {
       "localizations": {
         "en": {
@@ -16128,6 +16304,22 @@
         }
       }
     },
+    "Connect an app as this bot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect an app as this bot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecte une application au nom de ce bot"
+          }
+        }
+      }
+    },
     "Context pods": {
       "localizations": {
         "fr": {
@@ -16140,6 +16332,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pods de contexto"
+          }
+        }
+      }
+    },
+    "Copy the source": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy the source"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copier la source"
+          }
+        }
+      }
+    },
+    "Could not record this decision.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not record this decision."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d'enregistrer cette décision."
+          }
+        }
+      }
+    },
+    "Couldn't load the analytics: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't load the analytics: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de charger les statistiques : %@"
           }
         }
       }
@@ -28764,6 +29004,22 @@
         }
       }
     },
+    "Each change to this bot's settings will show here, and you can restore it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Each change to this bot's settings will show here, and you can restore it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chaque changement aux réglages de ce bot s'affichera ici, et tu pourras le restaurer."
+          }
+        }
+      }
+    },
     "Each computer is paired separately. Only the selected computer is active at a time.": {
       "localizations": {
         "fr": {
@@ -34072,6 +34328,22 @@
         }
       }
     },
+    "From the library": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From the library"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Depuis la bibliothèque"
+          }
+        }
+      }
+    },
     "From the routine %@": {
       "localizations": {
         "fr": {
@@ -36090,6 +36362,22 @@
         }
       }
     },
+    "Hours saved": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hours saved"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heures économisées"
+          }
+        }
+      }
+    },
     "HTTPS connection": {
       "localizations": {
         "pt-BR": {
@@ -37706,6 +37994,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Estou executando agora."
+          }
+        }
+      }
+    },
+    "Import from a link": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import from a link"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importer depuis un lien"
           }
         }
       }
@@ -43578,6 +43882,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Identifiants"
+          }
+        }
+      }
+    },
+    "Logins %@ can fill on its sites. Managers only. The bot never sees a password.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Logins %@ can fill on its sites. Managers only. The bot never sees a password."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connexions que %@ peut remplir sur ses sites. Réservé aux gestionnaires. Le bot ne voit jamais un mot de passe."
           }
         }
       }
@@ -50598,6 +50918,22 @@
         }
       }
     },
+    "No one has written to this bot yet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No one has written to this bot yet."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personne n'a encore écrit à ce bot."
+          }
+        }
+      }
+    },
     "No one matches": {
       "localizations": {
         "fr": {
@@ -51546,6 +51882,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sem sinal"
+          }
+        }
+      }
+    },
+    "No site": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No site"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun site"
+          }
+        }
+      }
+    },
+    "No skills yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No skills yet"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune compétence pour l'instant"
           }
         }
       }
@@ -53996,6 +54364,22 @@
         }
       }
     },
+    "One engine, one fallback, one place to run. Applies to the bot and all its conversations.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One engine, one fallback, one place to run. Applies to the bot and all its conversations."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un moteur, une relève, un endroit où rouler. S'applique au bot et à toutes ses conversations."
+          }
+        }
+      }
+    },
     "Open %@'s chat": {
       "localizations": {
         "fr": {
@@ -54008,6 +54392,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abrir o chat de %@"
+          }
+        }
+      }
+    },
+    "Open in chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in chat"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir dans le chat"
           }
         }
       }
@@ -54028,6 +54428,22 @@
         }
       }
     },
+    "password saved": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "password saved"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "mot de passe enregistré"
+          }
+        }
+      }
+    },
     "Proactive, recipients, drafts": {
       "localizations": {
         "en": {
@@ -54040,6 +54456,86 @@
           "stringUnit": {
             "state": "translated",
             "value": "Proactif, destinataires, brouillons"
+          }
+        }
+      }
+    },
+    "Save a bot's verification run as a skill from the Verify card. Every change waits for your review.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save a bot's verification run as a skill from the Verify card. Every change waits for your review."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistre la vérification d'un bot comme compétence depuis la carte Vérifier. Chaque changement attend ta révision."
+          }
+        }
+      }
+    },
+    "Show a path": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show a path"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher un chemin"
+          }
+        }
+      }
+    },
+    "Sites (example.com)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sites (example.com)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sites (exemple.com)"
+          }
+        }
+      }
+    },
+    "Sort by": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sort by"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trier par"
+          }
+        }
+      }
+    },
+    "Still being estimated…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Still being estimated…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estimation en cours…"
           }
         }
       }
@@ -54082,6 +54578,86 @@
         }
       }
     },
+    "This bot has no accounts yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This bot has no accounts yet"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce bot n'a aucun compte pour l'instant"
+          }
+        }
+      }
+    },
+    "Top users": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Top users"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Principaux utilisateurs"
+          }
+        }
+      }
+    },
+    "Usage statistics": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usage statistics"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Statistiques d'usage"
+          }
+        }
+      }
+    },
+    "Username or email": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Username or email"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom d'utilisateur ou courriel"
+          }
+        }
+      }
+    },
+    "Vault login": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault login"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connexion du coffre"
+          }
+        }
+      }
+    },
     "Via MCP": {
       "localizations": {
         "en": {
@@ -54116,6 +54692,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ce qu'il a le droit de faire de lui-même."
+          }
+        }
+      }
+    },
+    "What the bot learns from use shows up here before it applies it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What the bot learns from use shows up here before it applies it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce que le bot apprend à l'usage s'affiche ici avant qu'il l'applique."
           }
         }
       }
@@ -88911,7 +89503,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "À examiner"
+            "value": "À réviser"
           }
         },
         "pt-BR": {
@@ -96009,6 +96601,22 @@
         }
       }
     },
+    "Who can talk to it, who sets it up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Who can talk to it, who sets it up"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qui peut lui parler, qui le règle"
+          }
+        }
+      }
+    },
     "Who drives the computer": {
       "localizations": {
         "fr": {
@@ -96137,6 +96745,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qui transforme ce que vous dites en texte pendant un appel et en dictée."
+          }
+        }
+      }
+    },
+    "Who uses what: each account, model, source and person, in $ and in tokens. Open a row for the detail.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Who uses what: each account, model, source and person, in $ and in tokens. Open a row for the detail."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qui utilise quoi : chaque compte, modèle, source et personne, en $ et en jetons. Ouvre une ligne pour le détail."
           }
         }
       }
@@ -97889,6 +98513,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tu entendras chaque réponse à tour de rôle."
+          }
+        }
+      }
+    },
+    "You're all caught up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're all caught up"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu es à jour"
           }
         }
       }
@@ -114071,7 +114711,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "ce robot"
+            "value": "ce bot"
           }
         }
       }

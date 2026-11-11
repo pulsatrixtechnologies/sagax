@@ -423,7 +423,7 @@ under `bots/<botId>/` (principal `bot:<botId>`, AAD-bound so a copy under
 another bot does not open). Managers of that bot (owner, manage grant, org
 admin) CRUD via `POST/PATCH/DELETE /api/bots/:id/credentials*`
 (`server/routes/team-bot-vault.ts`, Edit bot > Details > Shared vault;
-iOS bot panel > Permissions > Shared vault). A file that does not open is
+iOS bot profile > General > Bot accounts, "+ Add" > Vault login). A file that does not open is
 never overwritten. Never a plaintext store. Filled values are remembered only
 in process memory for redaction (`server/vault/filled-secret-guard.ts`) and never
 enter transcripts, memory, logs or tool results. Fills happen in the bot's

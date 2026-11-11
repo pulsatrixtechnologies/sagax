@@ -79,7 +79,11 @@ struct DesktopBotProfileHost: View {
                     model.panelSection = .permissions
                     model.personaPage = DesktopPersonaPage(section: .permissions)
                 }
-            }
+            },
+            // Bot accounts > "+ Add" > Apps: the Plugins window, the
+            // desktop's togglePlugins (#3399); closing it comes back here.
+            // MCP servers opens the profile's own page of servers.
+            openApps: { model.modal = .plugins }
         )
     }
 
@@ -379,7 +383,7 @@ struct DesktopPersonaPageHost: View {
                 }
             case .voice:
                 ScrollView {
-                    PersonaVoicePage(bot: current, slackURL: slackURL)
+                    PersonaVoicePage(bot: current, slackURL: slackURL, notifyElsewhere: true)
                         .padding(.horizontal, 32)
                         .padding(.vertical, 16)
                 }

@@ -135,12 +135,44 @@ public struct StagedSkillSummary: Decodable, Hashable, Sendable, Identifiable {
     public var id: String
     public var name: String
     public var gist: String?
+    /// "create" or "update": the word of the allow button (Enable, Update).
+    public var action: String?
+    /// The reviewed text's hash, sent back with an allow.
+    public var sha256: String?
+    /// The open card in the chat this learning is decided on (#3400).
+    public var card: StagedSkillCard?
+
+    public init(id: String, name: String, gist: String? = nil, action: String? = nil, sha256: String? = nil, card: StagedSkillCard? = nil) {
+        self.id = id
+        self.name = name
+        self.gist = gist
+        self.action = action
+        self.sha256 = sha256
+        self.card = card
+    }
+
+    /// Enable and Decline answer the chat's card in place: only a learning
+    /// with its card and its reviewed hash can be decided from the tab.
+    public var decidable: Bool { card != nil && !(sha256 ?? "").isEmpty }
+}
+
+/// Where a staged learning waits in the chat.
+public struct StagedSkillCard: Decodable, Hashable, Sendable {
+    public var threadId: String
+    public var requestId: String
+    public var messageId: String?
+
+    public init(threadId: String, requestId: String, messageId: String? = nil) {
+        self.threadId = threadId
+        self.requestId = requestId
+        self.messageId = messageId
+    }
 }
 
 /// `GET /api/bots/:id/skills`.
 public struct BotSkills: Decodable, Hashable, Sendable {
     public var skills: [ManagedSkill]
-    /// Proposals waiting for a decision in chat.
+    /// Proposals waiting for a decision (the Knowledge tab's To review card).
     public var staged: [StagedSkillSummary]
 
     public init(skills: [ManagedSkill], staged: [StagedSkillSummary] = []) {

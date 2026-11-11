@@ -88,6 +88,11 @@
 //                      private temp dir and deletes it when that turn
 //                      settles, so a test cannot open them after the fact.
 //                      A process kept warm for later turns still has them.
+//   FAKE_CLAUDE_DUMP_LOG path of a JSON-lines file every turn's dump record
+//                      (the same record as FAKE_CLAUDE_DUMP) is appended to,
+//                      one line per turn, for a test that asserts on one
+//                      turn's prompt while other turns can still run and
+//                      overwrite the dump (testing/turn-dump-log.ts reads it).
 //   FAKE_CLAUDE_TRANSCRIPTS 1: keep the session on disk as the real CLI
 //                      does: each prompt is a line of
 //                      <CLAUDE_CONFIG_DIR or ~/.claude>/projects/<cwd with
@@ -984,17 +989,18 @@ const playTurn = (prompt: JsonValue, late = false) => {
   // FAKE_CLAUDE_DUMP keeps only the latest turn's.
   if (process.env.FAKE_CLAUDE_PROMPTS) appendFileSync(process.env.FAKE_CLAUDE_PROMPTS, `${JSON.stringify(prompt)}\n`);
   volatileNote = volatileNoteIn(prompt) ?? volatileNote;
-  if (!late && process.env.FAKE_CLAUDE_DUMP) {
+  if (!late && (process.env.FAKE_CLAUDE_DUMP || process.env.FAKE_CLAUDE_DUMP_LOG)) {
     launchFiles ??= readLaunchFiles();
     // systemPrompt: what the model is instructed with, the prompt file plus
     // the volatile half a user message carried (claude.ts keeps the file
     // stable for the cache); systemPromptFile: the file alone.
     const file = launchFiles.systemPrompt;
     const systemPrompt = volatileNote && typeof file === "string" ? `${file}\n\n${volatileNote}` : volatileNote && !file ? volatileNote : file;
-    writeDumpAtomic(
-      process.env.FAKE_CLAUDE_DUMP,
-      JSON.stringify({ pid: process.pid, argv, env: process.env, cwd: process.cwd(), prompt, ...launchFiles, systemPrompt, systemPromptFile: file }, null, 2),
-    );
+    const record = { pid: process.pid, argv, env: process.env, cwd: process.cwd(), prompt, ...launchFiles, systemPrompt, systemPromptFile: file };
+    if (process.env.FAKE_CLAUDE_DUMP) writeDumpAtomic(process.env.FAKE_CLAUDE_DUMP, JSON.stringify(record, null, 2));
+    // One write per line, opened for append: concurrent processes add whole
+    // lines, never a fragment of another's.
+    if (process.env.FAKE_CLAUDE_DUMP_LOG) appendFileSync(process.env.FAKE_CLAUDE_DUMP_LOG, `${JSON.stringify(record)}\n`);
   }
 
   if (process.env.FAKE_CLAUDE_ROUTER_PING === "1" && process.env.ANTHROPIC_BASE_URL) {

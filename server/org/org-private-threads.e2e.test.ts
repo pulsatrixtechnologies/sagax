@@ -21,7 +21,7 @@
 //         own roots: never another member's, a system folder or a symlink
 //         out of a folder opened to him; an admin keeps any folder
 import { spawn, type ChildProcess } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -31,6 +31,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
+import { turnWithPrompt } from "../testing/turn-dump-log.ts";
 
 const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
@@ -162,7 +163,7 @@ posixOnly("Perspicax organization: private threads with a shared bot, group chat
     // PT-6: a folder an admin opened to every member
     mkdirSync(join(home, "opened"), { recursive: true });
     writeFileSync(join(data, "config.json"), JSON.stringify({
-      instances: { claude: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_DUMP: join(home, "claude-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } } },
+      instances: { claude: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_DUMP_LOG: join(home, "claude-turns.jsonl") }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } } },
       organization: { memberFolders: { "*": [join(home, "opened")] } },
     }));
     await start();
@@ -426,7 +427,9 @@ posixOnly("Perspicax organization: private threads with a shared bot, group chat
     expect(JSON.stringify(topic.body)).not.toContain("streamSegment");
     expect((await api("POST", `/api/bots/${botId}/messages`, bob, { text: "BOB-SECOND what came before?", threadId: topicThread, singleStream: true })).status).toBe(202);
     await settled(bob, topicThread, "BOB-SECOND what came before?");
-    const sent = JSON.parse(readFileSync(join(home, "claude-dump.json"), "utf8")) as { systemPrompt?: string };
+    // the prompt of this turn, not of whichever turn ran last (#3634): the
+    // follow-up of Bob's first topic can run after it
+    const sent = await turnWithPrompt(join(home, "claude-turns.jsonl"), "BOB-SECOND what came before?");
     const prompt = sent.systemPrompt ?? "";
     expect(prompt).toContain("Earlier topics in this same conversation");
     expect(prompt).toContain(`id ${bobThread}`);

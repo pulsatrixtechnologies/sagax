@@ -26,6 +26,7 @@
 import { personAttention, personAttentionText, type PersonAttention, type PersonAttentionCard, type RunStatusNote } from "../../shared/person-attention.ts";
 import type { WireMessage, WireTask } from "../../shared/wire.ts";
 import { withoutRoutineMarkers } from "../../shared/routine-result.ts";
+import { chatPlace } from "../../shared/chat-relevance.ts";
 import { openedByOwnBot } from "./bot-to-bot.ts";
 
 export interface AttentionBot {
@@ -55,9 +56,15 @@ export interface AttentionRelayDeps<B extends AttentionBot> {
    * run card's wake kind): "muted" posts nothing, "quiet" posts the card
    * without ringing or marking unread. Absent: "normal". */
   feedback?(botId: string, topic: string): "muted" | "quiet" | "normal";
-  /** #3480: the bot is in quiet mode: its background work posts nothing in
-   * the main conversation (its attention cards show through `feedback`). */
-  quiet?(botId: string): boolean;
+  /** #3581: the card of the routine run whose task is `runThreadId`, as the
+   * routine's card write builds it (routineRunCard and its fallback text)
+   * for the conversation `target`, with `report` as its report: a run's
+   * late answer goes onto its own card. */
+  runCard?(runThreadId: string, target: string, report: string): Pick<WireMessage, "text" | "routineRun"> | undefined;
+  /** #3581: whether that run's routine posts its results in the
+   * conversation (a run with no card in the chat posts its late answer only
+   * then, as any result). */
+  runPostsResults?(runThreadId: string): boolean;
   /** #2901: why this thread is out of the person's sight (MCP send_prompt,
    * routine, proactive wake, teammate work); undefined for their own,
    * confidential or parallel threads. */
@@ -258,9 +265,14 @@ export function attentionCard<B extends AttentionBot>(
 }
 
 /** A routine run's task the run no longer reports from: the bot's answer
- * there (a teammate's result resumed it after the run closed) is mirrored
- * into its conversation once, linked to the task. False when not such a
- * thread or nothing to say. */
+ * there (a teammate's result resumed it after the run closed) is the run's
+ * last word. #3581: one result, one card. It goes onto the run's own card
+ * in the conversation (the card's report becomes this answer, patched in
+ * place, no new row). A run with no card there posts it as the rule says for
+ * any routine result (shared/chat-relevance.ts): a card when the routine
+ * posts its results, or when the answer is a problem; otherwise it stays in
+ * the run's task, listed in the routine's runs. False when nothing was
+ * written. */
 export function mirrorLateRunReply<B extends AttentionBot>(
   input: AttentionTurn<B>,
   deps: AttentionRelayDeps<B>,
@@ -277,24 +289,37 @@ export function mirrorLateRunReply<B extends AttentionBot>(
   if (!last || !words) return false;
   const target = deps.conversation(bot, threadId);
   if (!target || target === threadId) return false;
-  if (deps.messages(target).some((message) => message.attention?.sourceMessageId === last.id || message.lateRunReplyOf === last.id)) return false;
-  deps.append(target, {
-    role: "bot", kind: "text", text: words, lateRunReplyOf: last.id,
-    // #3515: the copy keeps the failed or partial status its source ended on
-    ...(runStatus ? { runStatus } : {}),
-    threadRef: { botId: bot.id, threadId, title: task.title || run.routineName },
-  });
+  const rows = deps.messages(target);
+  if (rows.some((message) => message.attention?.sourceMessageId === last.id || message.lateRunReplyOf === last.id)) return false;
+  const card = deps.runCard?.(threadId, target, words);
+  if (!card?.routineRun) return false;
+  const existing = rows.findLast((message) => message.kind === "routine.run" && message.routineRun?.runId === run.id);
+  const late = { ...card, lateRunReplyOf: last.id, ...(runStatus ? { runStatus } : {}) };
+  if (existing) deps.patch(target, existing.id, late);
+  else {
+    const signal = runStatus ? "problem" : "result";
+    if (chatPlace("routine", signal, { postsResults: deps.runPostsResults?.(threadId) === true }) !== "card") return false;
+    deps.append(target, { role: "bot", kind: "routine.run", ...late });
+  }
   deps.markUnread(bot.id, target);
   deps.notify(bot, target, `${bot.name}: ${run.routineName}`, words.slice(0, 300));
   return true;
 }
 
-/** #2901 (2026-11-08, « rien d'invisible »): what a bot says in a background
- * conversation outside routines (an AI client's send_prompt over MCP, a
- * teammate's work, a thread a bot opened) is copied once into the bot's chat
- * with a discreet provenance label. Quiet: no ring, no unread; the person
- * reads it there, nothing stays hidden. Routine runs report through their
- * own card. Confidential and parallel threads never leave their thread.
+/** #2901 (2026-11-08, « rien d'invisible »): what a bot says in an AI
+ * client's conversation (send_prompt over MCP) leaves one row in the bot's
+ * chat with a discreet provenance label. Quiet: no ring, no unread; nothing
+ * a bot does for the person is invisible in its chat. Routine runs report
+ * through their own card. Confidential and parallel threads never leave
+ * their thread.
+ *
+ * #3581: the rule (shared/chat-relevance.ts) says a trace for an AI client's
+ * turn and for a bot's thread. An AI client's trace is this row, in the
+ * shape the released apps draw (the newer apps draw it as one names line,
+ * its content behind the name). A bot's trace is the receipt that already
+ * exists (the "Asked by" line of a hand-off, the "Messaged" row of a thread
+ * a bot opened), so a thread a bot opened, on itself or on another bot,
+ * leaves no copy here: its content stays in its thread.
  *
  * #2915: an archived thread an AI client continues is mirrored too (its
  * label comes from relayVia). The label carries what was asked. A turn that
@@ -308,15 +333,11 @@ export function mirrorBackgroundReply<B extends AttentionBot>(
 ): boolean {
   const { bot, threadId } = input;
   if (bot.hidden || input.runTurn || deps.routineRun(threadId)) return false;
-  // #3480: quiet mode: background work stays in its own thread
-  if (deps.quiet?.(bot.id)) return false;
   const via = deps.relayVia?.(bot.id, threadId);
-  if (!via || via === "routine" || via === "proactive") return false;
+  // #3581: only an AI client's turn writes its own trace (a bot's is its receipt)
+  if (via !== "mcp") return false;
   const task = deps.task(bot.id, threadId);
   if (!task || task.confidential === true) return false;
-  // #3503: what two bots of the same person say to each other stays in
-  // their thread: neither the answer nor a trace line reaches the chat
-  if (betweenOwnBots(deps, bot.id, threadId, task)) return false;
   const source = deps.messages(threadId);
   const { text, last, runStatus } = input.ok && !input.stopped ? ownTurnWords(source, input.turnId) : { text: "", last: undefined, runStatus: undefined };
   const words = withoutRoutineMarkers(text).trim();
@@ -332,11 +353,7 @@ export function mirrorBackgroundReply<B extends AttentionBot>(
   const recent = deps.recent?.(target, RELAY_RECENT_ROWS) ?? deps.messages(target).slice(-RELAY_RECENT_ROWS);
   if (recent.some((message) => message.relayOf === key || message.relayGroup?.includes(key) || message.attention?.sourceMessageId === key)) return false;
   if (trace) {
-    // #3289: a teammate's turn that ended before its ask could be read still
-    // names who asked (the thread's opener): its line is never a bare "Teammate"
-    const opener = via === "teammate" ? task.openedBy : undefined;
-    const traced = ask ?? (opener?.name?.trim() ? { text: "", by: opener.name.trim(), botId: opener.botId } : undefined);
-    deps.append(target, { role: "bot", kind: "text", text: RELAY_TRACE_TEXT[trace], relayVia: via, relayOf: key, relayTrace: trace, ...(traced ? { relayAsk: traced } : {}) });
+    deps.append(target, { role: "bot", kind: "text", text: RELAY_TRACE_TEXT[trace], relayVia: via, relayOf: key, relayTrace: trace, ...(ask ? { relayAsk: ask } : {}) });
     return true;
   }
   const now = deps.now?.() ?? Date.now();

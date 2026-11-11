@@ -50,37 +50,19 @@ function harness(over: Partial<SettingsActionDeps> & { mode?: "ask" | "auto" | "
 }
 
 describe("sagax_settings", () => {
-  it("#3480: the person's words set the bot's own quiet mode at once, at Ask too, and the bot says the one line", async () => {
-    const planned: Array<{ effect: string; method: string; path: string; body?: unknown }> = [];
-    const said = "Done: I am staying quiet and will reach you only when I need your answer.";
-    const acts = {
-      async handlePlanned(input: Parameters<BotActService["handlePlanned"]>[0]) {
-        const target = input.target as { method: string; path: string; body?: unknown };
-        planned.push({ effect: input.plan.effect, method: target.method, path: target.path, body: target.body });
-        return { status: 200, body: { text: JSON.stringify({ botId: "b1", quiet: true, said }) } };
-      },
-    } as unknown as BotActService;
-    const h = harness({ mode: "ask", acts: () => acts, ownWords: () => null });
-    const done = await h.call({ action: "set", key: "bot.quietMode", value: true });
-    expect(planned).toEqual([{ effect: "run", method: "PUT", path: "/api/bots/b1/quiet", body: { on: true, via: "words" } }]);
-    expect(String(done.body.text)).toBe(`Done: Quiet mode for this bot changed. Tell the person this one line, then end your turn: ${said}`);
-    await h.call({ action: "set", key: "notifications.quietMode", value: false });
-    expect(planned[1]).toEqual({ effect: "run", method: "PUT", path: "/api/me/quiet", body: { on: false, via: "words" } });
-  });
-
-  it("#3480: on a routine, wake or peer turn quiet mode is refused in one line and nothing is shown", async () => {
+  it("#3581: the retired quiet mode keys answer the one line in the person's language and change nothing", async () => {
     for (const key of ["bot.quietMode", "notifications.quietMode"]) {
-      const h = harness({ mode: "full", ownWords: () => "This turn is not the person's own message (a routine, a webhook, another bot or someone else): it answers no card." });
-      const refused = await h.call({ action: "set", key, value: true });
-      expect(refused.status).toBe(403);
-      expect(String(refused.body.error ?? refused.body.text)).toMatch(/^Quiet mode changes only when your person tells you so in their own message.*not changed\..*Do not retry; say nothing about it\.$/);
-      expect(h.planned).toEqual([]);
-      expect(h.audits).toEqual([]);
-      // without a way to tell, never
-      const none = harness({ mode: "full" });
-      expect((await none.call({ action: "set", key, value: false })).status).toBe(403);
-      expect(none.planned).toEqual([]);
+      for (const [language, line] of [["en", "My work already stays out of our chat"], ["fr", "Mon travail reste déjà hors de notre chat"]] as const) {
+        const h = harness({ mode: "full", language: () => language });
+        const answer = await h.call({ action: "set", key, value: true, target: "b1" });
+        expect(answer.status).toBe(200);
+        expect(String(answer.body.text)).toContain("Tell the person this one line, then end your turn: ");
+        expect(String(answer.body.text)).toContain(line);
+        expect(h.planned).toEqual([]);
+        expect(h.audits).toEqual([]);
+      }
     }
+    expect(SETTINGS.some((spec) => spec.key === "bot.quietMode" || spec.key === "notifications.quietMode")).toBe(false);
   });
 
   it("Full on the person's own request runs at once and says so to the route(2026-10-20), even for the speaking bot", async () => {

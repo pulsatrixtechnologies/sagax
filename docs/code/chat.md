@@ -46,8 +46,10 @@ whose card is already in the chat takes the items on that card (a late
 resume included, `onRunCard`), never a second card; the standalone card is
 only for a result that reached no card there (a hand-off, another bot's
 thread). A routine run's task resumed
-after the run ended mirrors the bot's answer into the conversation
-(`mirrorLateRunReply`, `Message.lateRunReplyOf`). Desktop
+after the run ended puts the bot's answer onto the run's own card
+(`mirrorLateRunReply` patches the routine.run row, `Message.lateRunReplyOf`
+keeps it once), or posts it as any routine result when the run has no card
+in the chat (#3581). Desktop
 `src/components/AttentionCard.tsx`, iOS `AttentionCardView.swift`.
 A failed tool call always carries words: the Claude driver reads
 `tool_use_result` when the content block is empty, else `emptyFailureNote`;

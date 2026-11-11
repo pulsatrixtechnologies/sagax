@@ -209,12 +209,11 @@ export interface RoutineRunProactive {
   accepted?: true;
   /** Write plans recorded before ordinary approval ran them. */
   dryRuns?: ProactiveDryRunEntry[];
-  /** 2026-11-02 (peer inbox, second pass): a wake on teammates' messages
-   * (source peer) is never quiet; this is its report when the bot gave
-   * none (who wrote, about what: server/proactive/proactive-wake.ts peerWakeDigest). */
+  /** The report of an always-reporting wake when the bot gave none (who
+   * wrote, about what: server/proactive/proactive-wake.ts peerWakeDigest). */
   peerDigest?: string;
-  /** 2026-11-02: never quiet (a teammate's message or a post in a two-bot
-   * DM: server/proactive/proactive-wake.ts wakeAlwaysReports). */
+  /** Never quiet: a wake on what the person chose (an accepted suggestion,
+   * a watch: server/proactive/proactive-wake.ts wakeAlwaysReports). */
   alwaysReport?: true;
   /** #3423: the Pulsatrix watches this wake reports, with their domain. */
   watches?: Array<{ id: string; domain: string; reads?: string[] }>;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { routineRunReportable } from "../routines/routine-report.ts";
-import { createSyncRoutineRunToSource } from "./syncRoutineRunToSource.ts";
+import { createRoutineRunLateCard, createSyncRoutineRunToSource } from "./syncRoutineRunToSource.ts";
 
 type Row = { id: string; kind: string; text?: string; routineRun?: { runId: string; wakeTopic?: string }; attention?: unknown };
 
@@ -110,12 +110,11 @@ describe("syncRoutineRunToSource and the person's feedback (#2694)", () => {
   });
 });
 
-/** #3480: a bot in quiet mode, with the real report rule. */
-function quietWorld(run: Record<string, unknown>, quiet = true, needsPerson = false) {
+/** #3581: every bot, with the real report rule and no switch. */
+function ruleWorld(run: Record<string, unknown>, postResults = true, needsPerson = false) {
   const rows: Row[] = [];
   const unread: string[] = [];
   const rang: string[] = [];
-  const kept: Array<{ runId: string; problem: boolean }> = [];
   const bot = { id: "bot-atlas", name: "Atlas" };
   const host = {
     routineSourceOwner: () => ({ bot, group: undefined, threadId: "main" }),
@@ -123,11 +122,9 @@ function quietWorld(run: Record<string, unknown>, quiet = true, needsPerson = fa
     routineFullReport: (r: { output: string }) => r.output,
     routineRunReportable,
     routineRunNeedsPerson: () => needsPerson,
-    // the routine posts its results; quiet mode turns that off (index.ts)
-    routineEffectivePostResults: () => !quiet,
-    routinePostResultsOwn: () => true,
-    botQuietMode: () => quiet,
-    keepQuietRun: (_botId: string, runId: string, problem: boolean) => { kept.push({ runId, problem }); },
+    routineEffectivePostResults: () => postResults,
+    // a host that still answered the retired switch is never read (#3480)
+    botQuietMode: () => true,
     backgroundBriefs: { wakeLevel: () => "normal" },
     store: {
       taskByThread: () => null,
@@ -147,83 +144,72 @@ function quietWorld(run: Record<string, unknown>, quiet = true, needsPerson = fa
   };
   const sync = createSyncRoutineRunToSource(() => host);
   const theRun = { id: "run-1", botId: bot.id, routineName: "Hourly pass", status: "completed", target: "bot", threadId: "run", output: "Two new invoices.", ...run };
-  return { rows, unread, rang, kept, sync: () => sync(theRun) };
+  return { rows, unread, sync: () => sync(theRun), rang };
 }
 
-describe("syncRoutineRunToSource in quiet mode (#3480)", () => {
-  it("a completed run posts nothing, rings nothing, and is counted for the summary", () => {
-    const w = quietWorld({});
-    w.sync();
-    expect(w.rows).toEqual([]);
-    expect(w.unread).toEqual([]);
-    expect(w.rang).toEqual([]);
-    expect(w.kept).toEqual([{ runId: "run-1", problem: false }]);
+describe("syncRoutineRunToSource reads one rule for every bot (#3581: quiet mode retired)", () => {
+  it("a completed result posts by the routine's own choice and marks the chat unread", () => {
+    const posted = ruleWorld({});
+    posted.sync();
+    expect(posted.rows).toHaveLength(1);
+    expect(posted.unread).toEqual(["main"]);
+    const kept = ruleWorld({}, false);
+    kept.sync();
+    expect(kept.rows).toEqual([]);
+    expect(kept.unread).toEqual([]);
   });
 
-  it("a run with problems and a failed run post nothing and count as problems", () => {
+  it("a run with problems, a failed run and a blocked run post whatever the routine's choice", () => {
     for (const run of [{ problems: "one step failed" }, { status: "failed", error: "timeout" }, { status: "blocked" }]) {
-      const w = quietWorld(run);
+      const w = ruleWorld(run, false);
       w.sync();
-      expect(w.rows, JSON.stringify(run)).toEqual([]);
-      expect(w.unread).toEqual([]);
-      expect(w.kept).toEqual([{ runId: "run-1", problem: true }]);
+      expect(w.rows, JSON.stringify(run)).toHaveLength(1);
+      expect(w.unread).toEqual(["main"]);
     }
   });
 
-  it("a wake posts nothing", () => {
-    const w = quietWorld({ proactive: { hops: 0, sources: ["mail"] } });
-    w.sync();
-    expect(w.rows).toEqual([]);
-    expect(w.rang).toEqual([]);
+  it("a question the run waits on and items only the person can do post and ring", () => {
+    const waiting = ruleWorld({ status: "waiting" }, false, true);
+    waiting.sync();
+    expect(waiting.rows).toHaveLength(1);
+    const items = ruleWorld({ output: "- [HUMAIN] **100201** : decide." }, false);
+    items.sync();
+    expect(items.rows[0]?.attention).toBeTruthy();
+    expect(items.rang).toEqual(["needs-you"]);
+  });
+});
+
+describe("a run's late answer goes through the run's own card write (#3581)", () => {
+  function lateWorld(timeZone: string) {
+    const rows = [{
+      id: "card", kind: "routine.run", text: "Hourly pass",
+      routineRun: { runId: "run-1", wakeTopic: "mail", feedback: "down", repeat: { firstRunId: "run-1", count: 4, since: 1, lastAt: 2 } },
+    }];
+    const zones: unknown[] = [];
+    const languages: unknown[] = [];
+    const host = {
+      routines: { runForThread: (threadId: string) => threadId === "run" ? { id: "run-1", botId: "bot-atlas", routineName: "Hourly pass", status: "completed", quiet: true, runAs: "person-1" } : undefined },
+      store: { messagesFor: () => rows },
+      isPrincipalId: () => true,
+      botSettings: { person: () => ({ timeZone }) },
+      routineTimeZone: () => "UTC",
+      languageOfPerson: () => "fr",
+      routineRunCard: (r: { id: string; quiet?: boolean }, _target: string, report: string) => ({ runId: r.id, summary: report, quiet: r.quiet }),
+      routineRunFallbackText: (_card: unknown, language: unknown, zone: unknown) => { languages.push(language); zones.push(zone); return "Hourly pass"; },
+    };
+    return { late: createRoutineRunLateCard(() => host), zones, languages };
+  }
+
+  it("keeps the person's feedback and the lasting-problem count, and gives times in the person's zone", () => {
+    const w = lateWorld("America/Toronto");
+    const card = w.late("run", "main", "The teammate answered: done.");
+    expect(card?.routineRun).toMatchObject({ runId: "run-1", summary: "The teammate answered: done.", feedback: "down", repeat: { count: 4, firstRunId: "run-1" } });
+    expect(card?.routineRun.quiet).toBeUndefined();
+    expect(w.zones).toEqual(["America/Toronto"]);
+    expect(w.languages).toEqual(["en"]);
   });
 
-  it("a question the run waits on still shows its card, silently", () => {
-    const w = quietWorld({ status: "waiting" }, true, true);
-    w.sync();
-    expect(w.rows).toHaveLength(1);
-    expect(w.unread).toEqual([]);
-    expect(w.rang).toEqual([]);
-  });
-
-  it("items only the person can do show their card without ringing", () => {
-    const w = quietWorld({ output: "- [HUMAIN] **100201** : decide." });
-    w.sync();
-    expect(w.rows[0]?.attention).toBeTruthy();
-    expect(w.rang).toEqual([]);
-    expect(w.unread).toEqual([]);
-  });
-
-  it("a run that works again after problems (#3479) posts nothing, rings nothing", () => {
-    const w = quietWorld({ recovered: { afterRuns: 2, since: 1 } });
-    w.sync();
-    expect(w.rows).toEqual([]);
-    expect(w.unread).toEqual([]);
-    expect(w.rang).toEqual([]);
-    expect(w.kept).toEqual([{ runId: "run-1", problem: false }]);
-  });
-
-  it("the same problem again (#3479) leaves the row of the run kept quiet alone", () => {
-    const w = quietWorld({ id: "run-2", problems: "one step failed", problemRepeat: { firstRunId: "run-1", since: 1, count: 2 }, finishedAt: 2 });
-    // a row for the first run with this problem, posted before quiet mode
-    w.rows.push({ id: "m0", kind: "routine.run", text: "Hourly pass: one step failed", routineRun: { runId: "run-1" } });
-    w.sync();
-    expect(w.rows).toEqual([{ id: "m0", kind: "routine.run", text: "Hourly pass: one step failed", routineRun: { runId: "run-1" } }]);
-    expect(w.unread).toEqual([]);
-    expect(w.rang).toEqual([]);
-    expect(w.kept).toEqual([{ runId: "run-2", problem: true }]);
-  });
-
-  it("quiet mode off, a repeat of a problem first kept quiet posts its own card", () => {
-    const w = quietWorld({ id: "run-2", problems: "one step failed", problemRepeat: { firstRunId: "run-1", since: 1, count: 2 }, finishedAt: 2 }, false);
-    w.sync();
-    expect(w.rows.map((row) => row.routineRun?.runId)).toEqual(["run-2"]);
-  });
-
-  it("off, the routine's own setting posts and marks unread again", () => {
-    const w = quietWorld({}, false);
-    w.sync();
-    expect(w.rows).toHaveLength(1);
-    expect(w.unread).toEqual(["main"]);
-    expect(w.kept).toEqual([]);
+  it("a thread with no run gives no card", () => {
+    expect(lateWorld("UTC").late("other", "main", "words")).toBeUndefined();
   });
 });

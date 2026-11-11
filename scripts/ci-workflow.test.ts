@@ -209,6 +209,16 @@ describe("CI concurrency", () => {
     expect(runGate({ ...gateNeeds("false"), static: { result: "success", outputs: {} } }).status).toBe(1);
   });
 
+  it("runs the vitest shards after a red static check and keeps the CI gate red (#3493)", () => {
+    // One red quick check must not hide every test result: the shards run
+    // whenever the selection step set its outputs, and only a cancel stops them.
+    expect(workflow.jobs.vitest.needs).toBe("static");
+    expect(workflow.jobs.vitest.if).toBe("${{ !cancelled() && needs.static.outputs.runtime == 'true' }}");
+    expect(workflow.jobs["known-failures"].if).toBe("${{ !cancelled() && needs.static.outputs.runtime == 'true' }}");
+    const staticRed = { ...gateNeeds("true"), static: { result: "failure", outputs: { runtime: "true" } } };
+    expect(runGate(staticRed).status).toBe(1);
+  });
+
   it("always starts the workflow and validates selection and docs before fanout", () => {
     expect(workflow.on.pull_request).toBeUndefined();
     expect(workflow.jobs.static.if).toBeUndefined();
@@ -222,7 +232,7 @@ describe("CI concurrency", () => {
       step.run === "pnpm exec vitest run scripts/ci-scope.test.ts scripts/ci-workflow.test.ts scripts/testing/verification-docs.test.ts",
     )).toBe(true);
     for (const [name, job] of Object.entries(workflow.jobs) as [string, { needs?: string | string[]; if?: string }][]) {
-      if (["static", "gate", "known-failures"].includes(name)) continue;
+      if (["static", "gate", "known-failures", "vitest"].includes(name)) continue;
       expect(job.needs).toBe("static");
       const selector = `needs.static.outputs.${["ios", "android"].includes(name) ? "mobile" : "runtime"} == 'true'`;
       // Windows, macOS and iOS jobs run on main pushes and merge groups only.

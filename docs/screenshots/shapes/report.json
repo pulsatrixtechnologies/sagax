@@ -1,5 +1,5 @@
 {
- "at": "2026-11-09T11:28:17.866Z",
+ "at": "2026-11-11T05:07:56.789Z",
  "results": [
   {
    "scene": "rest-96",
@@ -201,6 +201,126 @@
   },
   {
    "scene": "move-comet-44",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "skin-pastel-96",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "skin-glossy-96",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "skin-night-96",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "skin-outline-96",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "skin-gold-96",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "skin-neon-96",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "skin-chrome-96",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "skin-crystal-96",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "skin-circuit-96",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "skin-holo-96",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "skin-molten-96",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "skin-galaxy-96",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "mood-thinking-96",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "mood-working-96",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "mood-streaming-96",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "mood-happy-96",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "mood-blocked-96",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "mood-sleeping-96",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "move-alert-96-white",
+   "shapes": 40,
+   "bad": 0,
+   "diff": null
+  },
+  {
+   "scene": "move-thinking-96-white",
    "shapes": 40,
    "bad": 0,
    "diff": null

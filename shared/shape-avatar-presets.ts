@@ -5,9 +5,11 @@
  *
  * The bodies and eye anchors live in shared/mascot-geometry.json (`path`,
  * `eyes`), the single geometry source: the iOS port reads the same values
- * through the generated ShapeGeometryData.swift. Every body must stay
- * star-shaped about the centre (50,50) with room to spare, or the volume
- * slices leave the face (shape-set.regression.test.ts holds that).
+ * through the generated ShapeGeometryData.swift. A body need not be seen
+ * whole from the centre (the sprout's leaves, the say's tail): its volume
+ * slices must still touch the face, which shape-set.regression.test.ts
+ * measures on the drawn body, and its look is pinned by
+ * shape-object-look.regression.test.ts.
  */
 import geometry from "./mascot-geometry.json" with { type: "json" };
 import {
@@ -41,9 +43,9 @@ const pad = objectDef("pad", "Pad");
 const cup = objectDef("cup", "Cup");
 /** Bulb: round glass plus a stepped screw base. */
 const bulb = objectDef("bulb", "Bulb");
-/** Say: rounded speech bubble with a wide tail. */
+/** Say: rounded speech bubble with a long pointed tail. */
 const say = objectDef("say", "Say");
-/** Sprout: pot with two leaf lobes joined by a wide stem. */
+/** Sprout: round pot with two leaves above its rim. */
 const sprout = objectDef("sprout", "Sprout");
 /** Tin: tall can with a pull-tab on the top-right. */
 const tin = objectDef("tin", "Tin");

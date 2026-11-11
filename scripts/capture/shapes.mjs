@@ -112,12 +112,31 @@ const CHECK = `(() => {
     // the pieces touch: a slice's middle sits in the face and so does its outline drawn
     // at half size about the body's middle (a slice a little offset is fine; one standing
     // beside the face, as a dot smeared into a pill, is not)
+    // The half-size outline is a proxy for a body seen whole from the box's middle; an
+    // object's path body is not (the sprout's leaves, the say's tail), so a slice whose
+    // half-size outline leaves the face is measured directly: it touches the face when
+    // SLICE_OVERLAP of its own area lies in the face (src/components/shape-set.regression.test.ts).
+    const SLICE_OVERLAP = 0.75;
+    const overlap = (slice, node) => {
+      const box = node.getBBox();
+      let own = 0, shared = 0;
+      for (let x = box.x; x <= box.x + box.width; x += 1.5) {
+        for (let y = box.y; y <= box.y + box.height; y += 1.5) {
+          pt.x = x; pt.y = y;
+          if (!node.isPointInFill(pt)) continue;
+          own += 1;
+          if (inFace(slice, { x, y })) shared += 1;
+        }
+      }
+      return own ? shared / own : 0;
+    };
     const gaps = [];
     for (const slice of slices) {
       const node = slice.tagName === "use" ? probe : slice;
       const points = sample(node, 48).map((p) => ({ x: 50 + (p.x - 50) * 0.5, y: 50 + (p.y - 50) * 0.5 }));
-      const inside = points.filter((p) => inFace(slice, p)).length + (inFace(slice, { x: 50, y: 50 }) ? 1 : 0);
-      if (inside < points.length + 1) gaps.push(inside / (points.length + 1));
+      const middle = inFace(slice, { x: 50, y: 50 });
+      const inside = points.filter((p) => inFace(slice, p)).length + (middle ? 1 : 0);
+      if (inside < points.length + 1 && (!middle || overlap(slice, node) < SLICE_OVERLAP)) gaps.push(inside / (points.length + 1));
     }
     let stemOut = null;
     if (stem && stem.getAttribute("d")) {

@@ -24,6 +24,9 @@
 //   start and handshake), session (session/new or load), model (model and
 //   mode), tools (the engine's tool servers answering), prompt (the rest
 //   until the prompt is sent).
+// #3623: toolsBy names the servers the tools part waited for: Sagax's own
+// mounts by product name, the person's own connections as one count
+// (own:<count>:<longest ms>), pending:<count> when the wait hit its limit.
 
 export type TurnLatencyPath = "pooled" | "load" | "spawn";
 
@@ -45,6 +48,34 @@ export interface TurnLatency {
   /** the stall guard cancelled a silent prompt and asked again */
   stallRetried?: boolean;
   stallMs?: number;
+  /** #3623: the engine's tool servers the setup waited for (toolsBy) */
+  toolWait?: TurnToolWait;
+}
+
+/** #3623: the wait for the engine's tool servers, server by server. */
+export interface TurnToolWait {
+  /** the whole wait, ms */
+  waitedMs: number;
+  /** Sagax's own mounts by product name (or kind) and ms, slowest first */
+  mounts: Array<[label: string, ms: number]>;
+  /** the other servers of the engine's catalog (the person's own
+   * connections): how many and the longest, never their names */
+  own?: { count: number; longestMs: number };
+  /** servers still connecting when the wait ended on its limit */
+  pending?: number;
+}
+
+/** Sagax's mounts printed at most, slowest first. */
+const TOOLS_BY_MOUNTS_MAX = 8;
+
+/** The toolsBy field: `agents:120,browser:340,own:3:2500,pending:1`; nothing
+ * for a wait under 50 ms. */
+export function turnToolsBy(wait: TurnToolWait | undefined): string | undefined {
+  if (!wait || wait.waitedMs < 50) return undefined;
+  const out = wait.mounts.slice(0, TOOLS_BY_MOUNTS_MAX).map(([label, ms]) => `${label}:${Math.round(ms)}`);
+  if (wait.own) out.push(`own:${wait.own.count}:${Math.round(wait.own.longestMs)}`);
+  if (wait.pending) out.push(`pending:${wait.pending}`);
+  return out.length ? out.join(",") : undefined;
 }
 
 export function newTurnLatency(start: number, receivedAt?: number): TurnLatency {
@@ -142,6 +173,8 @@ export function turnLatencyLine(driver: string, threadId: string, trace: TurnLat
     if (queueBy) parts.push(`queueBy=${queueBy}`);
     if (setupBy) parts.push(`setupBy=${setupBy}`);
   }
+  const toolsBy = turnToolsBy(trace.toolWait);
+  if (toolsBy) parts.push(`toolsBy=${toolsBy}`);
   if (trace.stallMs !== undefined) parts.push(`stallGuard=${trace.stallMs}ms${trace.stallRetried ? " retried" : ""}`);
   parts.push(outcome);
   return parts.join(" ");

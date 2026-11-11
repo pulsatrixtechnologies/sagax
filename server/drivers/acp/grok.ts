@@ -32,6 +32,7 @@ import { grokGatewayOnTurn } from "../../connectors/turn-plan.ts";
 import { narrowsNativeTools } from "../../../shared/tool-scope.ts";
 import { grokToolScopeProfile, grokInheritedProfile } from "./grok-tool-scope.ts";
 import { turnTrace } from "../../turns/turn-trace.ts";
+import { grokMcpServerWaiting, grokMcpWaitClock } from "./grok-mcp-wait-parts.ts";
 export { grokToolScopeProfile, grokInheritedProfile, allowsRegisteredTool } from "./grok-tool-scope.ts";
 import {
   MAX_QUESTIONS, parseProtocolAskQuestions, pickedOptionLabels, questionAnswersById, repeatsQuestionText,
@@ -1026,13 +1027,17 @@ const support: AcpSupport = {
 
   // -m on argv is necessary but not sufficient: session/new still starts on
   // [models].default. Pin the slug over the wire, same as Hermes/Droid.
-  async configureSession({ request, sessionId, turn, currentModelId, sessionModels, notice, reused }) {
+  async configureSession({ request, sessionId, turn, currentModelId, sessionModels, notice, reused, mcpServerNames, noteToolWait }) {
     if (turn.toolScope !== undefined) {
+      // #3623: each poll also times the servers for the latency line (toolsBy)
+      const clock = grokMcpWaitClock(mcpServerNames ?? [], Date.now());
       const deadline = Date.now() + 10_000;
+      let limitHit = false;
       for (;;) {
         const reply = await request("_x.ai/mcp/list", { sessionId, cache: true }, 10_000);
         const catalog = reply?.result;
         if (!Array.isArray(catalog?.servers)) break;
+        clock.note(catalog);
         // The person's own native Grok MCP connections outside the bot's
         // selection never block a turn (2026-11-06: a dispatch run was
         // refused on this). Wait for the catalog, bounded, then send.
@@ -1040,9 +1045,10 @@ const support: AcpSupport = {
           rememberGrokCatalog(sessionId, catalog);
           break;
         }
-        if (Date.now() >= deadline) break;
+        if (Date.now() >= deadline) { limitHit = true; break; }
         await delay(50);
       }
+      noteToolWait?.(clock.result(Date.now(), limitHit));
     } else {
       // 2026-10-16 (hotfix 0.5.10): without a tool selection the prompt
       // left while Grok still handshook its MCP servers; Grok then told the
@@ -1061,11 +1067,14 @@ const support: AcpSupport = {
       if (reused === true && grokMcpAlreadySettled(sessionId)) {
         /* MCP mounts of this live session already settled on an earlier turn */
       } else {
+        const clock = grokMcpWaitClock(mcpServerNames ?? [], Date.now());
         const settled = await waitForGrokMcpSettled(request, sessionId, GROK_MCP_SETTLE_MS, (catalog) => {
+          clock.note(catalog);
           rememberGrokCatalog(sessionId, catalog);
           noteGrokAccountReach(reachHome, catalog);
         });
         if (settled) rememberGrokMcpSettled(sessionId);
+        noteToolWait?.(clock.result(Date.now(), !settled));
       }
     }
     // the latency line's setupBy tools part ends here (turn-latency.ts)
@@ -1201,10 +1210,7 @@ export const GROK_MCP_SETTLE_MS = 20_000;
 export function grokMcpSettled(catalog: unknown): boolean {
   const value = catalog as { sessionMcpResolved?: unknown; servers?: unknown } | null | undefined;
   if (!value || value.sessionMcpResolved !== true || !Array.isArray(value.servers)) return false;
-  return !value.servers.some((server: { session?: { enabled?: unknown; status?: unknown } } | null) => {
-    const status = typeof server?.session?.status === "string" ? server.session.status.toLowerCase() : "";
-    return server?.session?.enabled !== false && (status === "pending" || status === "connecting" || status === "starting");
-  });
+  return !value.servers.some(grokMcpServerWaiting);
 }
 
 /** Best effort: polls `_x.ai/mcp/list` until grokMcpSettled or `budgetMs`
@@ -1236,3 +1242,5 @@ export async function waitForGrokMcpSettled(
 export const GrokAgentDriver = createAcpDriver(support);
 /** The size Grok's requests are kept under (prompt-fit.ts). */
 export const grokPromptByteLimit = (): number | undefined => support.promptByteLimit;
+/** Tests only: the driver's configureSession. */
+export const grokConfigureSessionForTest = (...args: Parameters<NonNullable<AcpSupport["configureSession"]>>) => support.configureSession!(...args);

@@ -91,6 +91,37 @@ describe("fast-gate.sh", () => {
     expect(out).toContain("[terms] npm run -s check:terms");
   });
 
+  // #3587 to #3596: a prompt change in server/drivers/acp/ left ten cases of
+  // acp.test.ts red, as the gate ran only the tests of the same stem.
+  it("runs every test of a touched source's folder, and only its folder", () => {
+    write("server/drivers/acp/acp.test.ts", "// driver test\n");
+    write("server/drivers/acp/prompt-fit.test.ts", "// fit test\n");
+    write("server/drivers/other.test.ts", "// another folder\n");
+    git("add", "-A");
+    git("commit", "-q", "-m", "tests");
+    write("server/drivers/acp/turn-prompt-build.ts", "export const x = 1;\n");
+    const { out } = gate("--base", "HEAD", "--only", "tests", "--dry-run");
+    expect(out).toMatch(/\[tests\] .*vitest' run --reporter=dot 'server\/drivers\/acp\/acp\.test\.ts' 'server\/drivers\/acp\/prompt-fit\.test\.ts'$/m);
+    expect(out).not.toContain("other.test.ts");
+  });
+
+  it("runs every test that imports a touched source, wherever it lives", () => {
+    write("tests/imports-b.test.ts", 'import { b } from "../src/b.ts";\n');
+    write("tests/mocks-b.test.ts", 'vi.mock("../src/b", () => ({}));\nconst m = await import("../src/b.js");\n');
+    write("tests/deep/requires-b.test.ts", 'const { b } = require("../../src/b");\n');
+    write("tests/near-name.test.ts", 'import { bb } from "../src/bb.ts";\nimport x from "./b.ts";\n');
+    git("add", "-A");
+    git("commit", "-q", "-m", "tests");
+    write("src/b.ts", "export const b = 2;\n");
+    const { out } = gate("--base", "HEAD", "--only", "tests", "--dry-run");
+    const line = out.split("\n").find((l) => l.startsWith("[tests]")) ?? "";
+    expect(line).toContain("'tests/imports-b.test.ts'");
+    expect(line).toContain("'tests/mocks-b.test.ts'");
+    expect(line).toContain("'tests/deep/requires-b.test.ts'");
+    expect(line).toContain("'src/a.test.ts'");
+    expect(line).not.toContain("near-name");
+  });
+
   it("runs the checks in parallel, never more than the cap, and is green", () => {
     write("src/a.ts", "export const a = 2;\n");
     const { code, out } = gate("--base", "main", "--jobs", "2");

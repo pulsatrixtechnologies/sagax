@@ -23,8 +23,8 @@
 #   package.json   typecheck (script "typecheck", else tsc --noEmit when a
 #                  tsconfig.json exists), lint (oxlint, else eslint, on the
 #                  touched files), terms (script "check:terms"), tests
-#                  (vitest on the touched tests and the tests beside a
-#                  touched source: same folder, same stem)
+#                  (vitest on the touched tests and, for a touched source,
+#                  every test of its folder and every test importing it)
 #   Cargo.toml     rust-fmt (cargo fmt --check on the touched crates), rust
 #                  (cargo clippy -D warnings then cargo test, on the touched
 #                  crates, one job so they do not wait on the build lock)
@@ -134,18 +134,45 @@ if [ -f package.json ]; then
       elif [ -x "$BIN/eslint" ]; then add_check lint "$(q "$BIN/eslint") --max-warnings 0$(printf '%s\n' "$LINTABLE" | qlist)"
       fi
     fi
-    # The touched tests and the tests beside a touched source.
+    # The touched tests, and for a touched source the tests of its folder and
+    # every test that imports it (a relative import, a dynamic import or a
+    # mock of it). The same stem alone missed a test that reaches the source
+    # through its folder's other files: a prompt change left ten cases of a
+    # driver's test red on the branch that made it.
     TESTS="$LOG_DIR/tests.txt"
     : > "$TESTS"
-    printf '%s\n' "$JS" | while IFS= read -r f; do
-      case "$f" in
-        *.test.*|*.spec.*) printf '%s\n' "$f" ;;
-        *)
-          stem="${f%.*}"
-          for t in "$stem".test.* "$stem".*.test.* "$stem".spec.*; do [ -f "$t" ] && printf '%s\n' "$t"; done
-          ;;
-      esac
-    done | sort -u > "$TESTS"
+    FAST_GATE_TOUCHED_JS="$JS" node -e '
+      const fs = require("fs"), path = require("path").posix;
+      const { execFileSync } = require("child_process");
+      const isTest = (f) => /\.(test|spec)\.[^/]+$/.test(f);
+      const noExt = (f) => f.replace(/\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|vue|svelte)$/, "");
+      const touched = process.env.FAST_GATE_TOUCHED_JS.split("\n").filter(Boolean);
+      const all = execFileSync("git", ["ls-files", "-co", "--exclude-standard"], { encoding: "utf8", maxBuffer: 1 << 28 })
+        .split("\n").filter((f) => isTest(f) && !/(^|\/)node_modules\//.test(f) && fs.existsSync(f));
+      const out = new Set();
+      const sources = new Map();
+      for (const f of touched) {
+        if (isTest(f)) { out.add(f); continue; }
+        const dir = path.dirname(f);
+        for (const t of all) if (path.dirname(t) === dir) out.add(t);
+        sources.set(noExt(f), f);
+      }
+      if (sources.size) {
+        const names = [...new Set([...sources.keys()].map((s) => path.basename(s)))];
+        const spec = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|\bvi\.(?:mock|doMock|importActual)\s*(?:<[^>]*>)?\s*\(\s*)["\x27](\.{1,2}\/[^"\x27]+)["\x27]/g;
+        for (const t of all) {
+          if (out.has(t)) continue;
+          let text;
+          try { text = fs.readFileSync(t, "utf8"); } catch { continue; }
+          if (!names.some((n) => text.includes(n))) continue;
+          for (const m of text.matchAll(spec)) {
+            const target = path.normalize(path.join(path.dirname(t), m[1]));
+            if (sources.has(noExt(target)) || sources.has(path.join(target, "index"))) { out.add(t); break; }
+          }
+        }
+      }
+      process.stdout.write([...out].sort().map((f) => f + "\n").join(""));
+    ' > "$TESTS"
     if [ -s "$TESTS" ] && [ -x "$BIN/vitest" ]; then
       add_check tests "$(q "$BIN/vitest") run --reporter=dot$(qlist < "$TESTS")"
     fi

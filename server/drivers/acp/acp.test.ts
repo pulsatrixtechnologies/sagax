@@ -489,9 +489,11 @@ describe("ACP turns (fake CLI)", () => {
       return promptOf();
     };
 
-    // The establishing turn carries the full prompt, exactly as before.
+    // The establishing turn carries the full prompt. Since #3534 it opens
+    // with the stable half and its standing line, then the volatile half, so
+    // two conversations of one bot share the same opening bytes.
     expect(await send("first", "Memory: likes quiet hours."))
-      .toBe("Standing rules.\n\nMemory: likes quiet hours." + HINT + "\n\nfirst");
+      .toBe("Standing rules." + HINT + "\n\nMemory: likes quiet hours.\n\nfirst");
     // The pooled session already carries it: later turns go through bare.
     expect(await send("second", "Memory: likes quiet hours.")).toBe("second");
     // A changed volatile half rides the next prompt as a labelled note.
@@ -523,8 +525,9 @@ describe("ACP turns (fake CLI)", () => {
       messages.push(promptOf()!);
     }
     // Agents can compact their own history away between turns; the re-anchor
-    // backstop returns the standing instructions within a bounded window.
-    const full = "Standing rules.\n\nMemory: likes quiet hours." + HINT;
+    // backstop returns the standing instructions within a bounded window,
+    // in the opening order of #3534 (stable half first).
+    const full = "Standing rules." + HINT + "\n\nMemory: likes quiet hours.";
     expect(messages[0]).toBe(full + "\n\nturn 0");
     for (let i = 1; i <= 8; i++) expect(messages[i]).toBe("turn " + i);
     expect(messages[9]).toBe(full + "\n\nturn 9");
@@ -533,8 +536,9 @@ describe("ACP turns (fake CLI)", () => {
   // One split-prompt thread: usage() sets the context sizes the fake reports
   // on the next turn, and send() returns the prompt text the agent received.
   const SYSTEM = "Standing rules.\n\nMemory: likes quiet hours.";
-  // Grok appends its standing tool line (stableSystemHint) to what it delivers
-  const FULL = SYSTEM + HINT;
+  // What a new or re-anchored session gets since #3534: the stable half and
+  // Grok's standing tool line (stableSystemHint) first, then the volatile half
+  const OPENING = "Standing rules." + HINT + "\n\nMemory: likes quiet hours.";
   const usageThread = async (name: string) => {
     const dump = join(scratch, `acp-${name}.json`);
     const usageFile = join(scratch, `acp-${name}-usage.json`);
@@ -561,14 +565,14 @@ describe("ACP turns (fake CLI)", () => {
 
   it("re-anchors the full prompt on the turn after the reported context collapses", async () => {
     const { usage, send } = await usageThread("compaction");
-    expect(await send("turn 1")).toBe(FULL + "\n\nturn 1");
+    expect(await send("turn 1")).toBe(OPENING + "\n\nturn 1");
     usage(100000);
     expect(await send("turn 2")).toBe("turn 2");
     // the context collapses mid-turn (120000 -> 45000), so the next turn is full
     usage(120000, 45000);
     expect(await send("turn 3")).toBe("turn 3");
     usage();
-    expect(await send("turn 4")).toBe(FULL + "\n\nturn 4");
+    expect(await send("turn 4")).toBe(OPENING + "\n\nturn 4");
     expect(await send("turn 5")).toBe("turn 5");
   });
 
@@ -595,7 +599,7 @@ describe("ACP turns (fake CLI)", () => {
       usage(120000, 40000);
       expect(await send("turn 2")).toBe("turn 2");
       usage();
-      expect(await send("turn 3")).toBe(FULL + "\n\nturn 3");
+      expect(await send("turn 3")).toBe(OPENING + "\n\nturn 3");
     } finally {
       delete process.env.FAKE_ACP_ROUND_USAGE;
     }
@@ -604,7 +608,7 @@ describe("ACP turns (fake CLI)", () => {
   it("keeps the split through an ordinary context dip", async () => {
     const { usage, send } = await usageThread("ordinary-dip");
     usage(108641);
-    expect(await send("turn 1")).toBe(FULL + "\n\nturn 1");
+    expect(await send("turn 1")).toBe(OPENING + "\n\nturn 1");
     // a 17% dip is an ordinary step, not a compaction
     usage(90258);
     expect(await send("turn 2")).toBe("turn 2");
@@ -613,25 +617,25 @@ describe("ACP turns (fake CLI)", () => {
 
   it("detects a collapse against the previous turn's context", async () => {
     const { usage, send } = await usageThread("cross-turn");
-    expect(await send("turn 1")).toBe(FULL + "\n\nturn 1");
+    expect(await send("turn 1")).toBe(OPENING + "\n\nturn 1");
     usage(150000);
     expect(await send("turn 2")).toBe("turn 2");
     // compaction before the first report: a collapse against last turn's peak
     usage(50000);
     expect(await send("turn 3")).toBe("turn 3");
     usage();
-    expect(await send("turn 4")).toBe(FULL + "\n\nturn 4");
+    expect(await send("turn 4")).toBe(OPENING + "\n\nturn 4");
   });
 
   it("detects a cumulative collapse against an earlier turn's high-water mark", async () => {
     const { usage, send } = await usageThread("cumulative-collapse");
     usage(100000, 75000);
-    expect(await send("turn 1")).toBe(FULL + "\n\nturn 1");
+    expect(await send("turn 1")).toBe(OPENING + "\n\nturn 1");
     // Neither adjacent dip exceeds 40%, but the total fall from the peak does.
     usage(50000);
     expect(await send("turn 2")).toBe("turn 2");
     usage();
-    expect(await send("turn 3")).toBe(FULL + "\n\nturn 3");
+    expect(await send("turn 3")).toBe(OPENING + "\n\nturn 3");
     expect(await send("turn 4")).toBe("turn 4");
   });
 
@@ -641,20 +645,20 @@ describe("ACP turns (fake CLI)", () => {
     process.env.FAKE_ACP_RPC_FAILURE_AFTER_USAGE = "1";
     const { usage, send } = await usageThread("rejected-compaction");
     usage(100000);
-    expect(await send("turn 1")).toBe(FULL + "\n\nturn 1");
+    expect(await send("turn 1")).toBe(OPENING + "\n\nturn 1");
     usage(used);
     writeFileSync(failureFile, JSON.stringify({ code: -32603, message: "Internal error after compaction" }));
     expect(await send("turn 2", false)).toBe("turn 2");
     unlinkSync(failureFile);
     usage();
-    expect(await send("turn 3")).toBe(used < 60000 ? FULL + "\n\nturn 3" : "turn 3");
+    expect(await send("turn 3")).toBe(used < 60000 ? OPENING + "\n\nturn 3" : "turn 3");
     expect(await send("turn 4")).toBe("turn 4");
   });
 
   it("ignores a zero usage report", async () => {
     const { usage, send } = await usageThread("zero-usage");
     usage(150000);
-    expect(await send("turn 1")).toBe(FULL + "\n\nturn 1");
+    expect(await send("turn 1")).toBe(OPENING + "\n\nturn 1");
     // zero is not a measurement: no trigger, and the peak stays
     usage(0);
     expect(await send("turn 2")).toBe("turn 2");

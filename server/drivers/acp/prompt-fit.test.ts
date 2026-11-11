@@ -149,6 +149,17 @@ describe("an opening prompt over the target (#3510)", () => {
     expect(opening.compose(new Set())).toBe(`${stable}HINT${volatile}\n\n${extra.text}`);
     expect(opening.present.has("recent")).toBe(true);
   });
+
+  it("starts a volatile half that carries no break of its own on a paragraph of its own", () => {
+    // the driver's own section alone, with nothing else in the volatile half
+    const extra = { id: "grok-tools", text: "Ready tools: a, b." };
+    const alone = openingSystem({ stable: stable + "HINT", volatile: extra.text, hint: "HINT", stableSections, volatileSections: [extra], extra });
+    expect(alone.compose(new Set())).toBe(`${stable}HINT\n\n${extra.text}`);
+    // plain halves with no sections
+    const plain = openingSystem({ stable: "Standing rules.", volatile: "Memory: a.", hint: "", extra: null });
+    expect(plain.compose(new Set())).toBe("Standing rules.\n\nMemory: a.");
+    expect(openingSystem({ stable: "Standing rules.", volatile: "", hint: "", extra: null }).compose(new Set())).toBe("Standing rules.");
+  });
 });
 
 // #3510: the production opening prompt was about 104,000 characters. Its big

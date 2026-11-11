@@ -78,6 +78,9 @@ const marketplaceRecord = z.object({
   addedAt: z.number(),
   addedBy: z.string().optional(),
   updatedAt: z.number(),
+  /** when its clone was last pulled; `updatedAt` also moves on a visibility
+   * change. Absent on a record written before (#3636): the clone folder's date. */
+  pulledAt: z.number().optional(),
   /** who may see and use it: "private" to the person who added it (the safe
    * default, so a private repo reached through this computer's git
    * credentials never leaks), or "org" (shared with everyone). Absent on a
@@ -429,6 +432,15 @@ export class PluginMarketplaces {
     return this.read().marketplaces[name];
   }
 
+  /** When this marketplace's clone in hand was last pulled: the record's
+   * `pulledAt`, else the clone folder's date on disk (a record from before
+   * that field). Undefined: no clone. */
+  clonedAt(name: string): number | undefined {
+    const pulled = this.read().marketplaces[name]?.pulledAt;
+    if (pulled !== undefined) return pulled;
+    try { return Math.floor(statSync(this.repoDir(name)).mtimeMs); } catch { return undefined; }
+  }
+
   /** Every marketplace's name, in the order of a listing. */
   names(): string[] {
     return Object.keys(this.read().marketplaces).sort((a, b) => a.localeCompare(b));
@@ -589,8 +601,18 @@ export class PluginMarketplaces {
     actor: string | undefined,
     options: { name?: string; visibility?: MarketplaceVisibility; viewer?: MarketplaceViewer; environment?: (source: GitSource) => Promise<Record<string, string>> } = {},
   ): Promise<MarketplaceView> {
+    return this.fetchInto(input, actor, options).then(async (name) => (await this.list()).find((view) => view.name === name)!);
+  }
+
+  /** The clone and the record of `add`, without the listing it answers
+   * with (that listing reads the installed plugins' digests): the name the
+   * marketplace is stored under. */
+  private fetchInto(
+    input: { source: string; ref?: string },
+    actor: string | undefined,
+    options: { name?: string; visibility?: MarketplaceVisibility; viewer?: MarketplaceViewer; environment?: (source: GitSource) => Promise<Record<string, string>> },
+  ): Promise<string> {
     return this.serial(async () => {
-      const state = this.read();
       const staging = join(this.root, "repos", `.incoming-${this.now()}`);
       const manifestUrl = isManifestUrl(input.source) ? input.source.trim() : undefined;
       // #1098: only a marketplace shared with everyone is held to the
@@ -628,6 +650,9 @@ export class PluginMarketplaces {
           });
         }
         const manifest = readMarketplaceManifest(staging);
+        // #3636: the state is read after the clone, just before the write,
+        // with no await between: a record written while the clone ran stays
+        const state = this.read();
         const sourceId = manifestUrl ?? source.id;
         const sameSource = Object.entries(state.marketplaces)
           .find(([, market]) => (market.manifestUrl ?? market.source) === sourceId && (market.ref ?? "") === (source.ref ?? ""))?.[0];
@@ -662,13 +687,15 @@ export class PluginMarketplaces {
           addedAt: taken?.addedAt ?? now,
           ...((taken?.addedBy ?? actor) ? { addedBy: taken?.addedBy ?? actor } : {}),
           updatedAt: now,
+          // #3636: when the clone was last pulled (only a pull sets it)
+          pulledAt: now,
           // A refresh keeps the visibility it had; a new add defaults to
           // private unless org-wide was explicitly chosen.
           visibility: taken ? marketplaceVisibility(taken) : (options.visibility === "org" ? "org" : "private"),
         };
         this.write(state);
         void this.warmRevisions(name);
-        return (await this.list()).find((view) => view.name === name)!;
+        return name;
       } finally {
         rmSync(staging, { recursive: true, force: true });
       }
@@ -676,9 +703,16 @@ export class PluginMarketplaces {
   }
 
   refresh(name: string, actor: string | undefined, options: { viewer?: MarketplaceViewer; environment?: (source: GitSource) => Promise<Record<string, string>> } = {}): Promise<MarketplaceView> {
+    return this.pull(name, actor, options).then(async () => (await this.list()).find((view) => view.name === name)!);
+  }
+
+  /** `refresh` without the listing it answers with: the one pull of a
+   * marketplace, for a bot's install and the background pull (#3612), which
+   * read no digest of the installed plugins. */
+  pull(name: string, actor: string | undefined, options: { viewer?: MarketplaceViewer; environment?: (source: GitSource) => Promise<Record<string, string>> } = {}): Promise<void> {
     const market = this.read().marketplaces[name];
     if (!market || !marketplaceVisibleTo(market, options.viewer)) return Promise.reject(new BotPluginError("No marketplace with that name.", "not_found", 404));
-    return this.add({ source: market.manifestUrl ?? (market.source.includes("://") ? market.url : market.source), ...(market.ref ? { ref: market.ref } : {}) }, actor, { name, ...options });
+    return this.fetchInto({ source: market.manifestUrl ?? (market.source.includes("://") ? market.url : market.source), ...(market.ref ? { ref: market.ref } : {}) }, actor, { name, ...options }).then(() => undefined);
   }
 
   /** Whether this viewer may see and use the marketplace (a private one is
@@ -816,60 +850,215 @@ export class PluginMarketplaces {
     }
   }
 
-  recordInstall(marketplace: string, plugin: string, result: { version?: string; revision?: string; servers: string[]; serverNames?: Record<string, string>; skills: string[] }): InstalledMarketplacePlugin {
-    const state = this.read();
-    const key = `${plugin}@${marketplace}`;
-    const previous = state.installed[key];
-    const serverNames = { ...previous?.serverNames, ...result.serverNames };
-    state.installed[key] = {
-      name: plugin,
-      marketplace,
-      ...(result.version ? { version: result.version } : {}),
-      ...(result.revision ? { revision: result.revision } : {}),
-      installedAt: previous?.installedAt ?? this.now(),
-      servers: [...new Set([...(previous?.servers ?? []), ...result.servers])],
-      ...(Object.keys(serverNames).length ? { serverNames } : {}),
-      skills: [...new Set([...(previous?.skills ?? []), ...result.skills])],
-    };
-    this.write(state);
-    return { key, ...state.installed[key]! };
+  recordInstall(marketplace: string, plugin: string, result: { version?: string; revision?: string; servers: string[]; serverNames?: Record<string, string>; skills: string[] }): Promise<InstalledMarketplacePlugin> {
+    // #3636: in the one queue with a pull, so no two writers interleave
+    return this.serial(async () => {
+      const state = this.read();
+      const key = `${plugin}@${marketplace}`;
+      const previous = state.installed[key];
+      const serverNames = { ...previous?.serverNames, ...result.serverNames };
+      state.installed[key] = {
+        name: plugin,
+        marketplace,
+        ...(result.version ? { version: result.version } : {}),
+        ...(result.revision ? { revision: result.revision } : {}),
+        installedAt: previous?.installedAt ?? this.now(),
+        servers: [...new Set([...(previous?.servers ?? []), ...result.servers])],
+        ...(Object.keys(serverNames).length ? { serverNames } : {}),
+        skills: [...new Set([...(previous?.skills ?? []), ...result.skills])],
+      };
+      this.write(state);
+      return { key, ...state.installed[key]! };
+    });
   }
 
   /** Record an update in place: what the plugin brings now replaces what
    * it brought, and the install date stays. */
-  recordUpdate(marketplace: string, plugin: string, result: { version?: string; revision?: string; servers: string[]; serverNames: Record<string, string>; skills: string[] }): InstalledMarketplacePlugin {
-    const state = this.read();
-    const key = `${plugin}@${marketplace}`;
-    const previous = state.installed[key];
-    if (!previous) throw new BotPluginError("That plugin is not installed.", "not_found", 404);
-    state.installed[key] = {
-      name: plugin,
-      marketplace,
-      ...(result.version ? { version: result.version } : {}),
-      ...(result.revision ? { revision: result.revision } : {}),
-      installedAt: previous.installedAt,
-      updatedAt: this.now(),
-      servers: [...new Set(result.servers)],
-      ...(Object.keys(result.serverNames).length ? { serverNames: result.serverNames } : {}),
-      skills: [...new Set(result.skills)],
-    };
-    this.write(state);
-    return { key, ...state.installed[key]! };
+  recordUpdate(marketplace: string, plugin: string, result: { version?: string; revision?: string; servers: string[]; serverNames: Record<string, string>; skills: string[] }): Promise<InstalledMarketplacePlugin> {
+    return this.serial(async () => {
+      const state = this.read();
+      const key = `${plugin}@${marketplace}`;
+      const previous = state.installed[key];
+      if (!previous) throw new BotPluginError("That plugin is not installed.", "not_found", 404);
+      state.installed[key] = {
+        name: plugin,
+        marketplace,
+        ...(result.version ? { version: result.version } : {}),
+        ...(result.revision ? { revision: result.revision } : {}),
+        installedAt: previous.installedAt,
+        updatedAt: this.now(),
+        servers: [...new Set(result.servers)],
+        ...(Object.keys(result.serverNames).length ? { serverNames: result.serverNames } : {}),
+        skills: [...new Set(result.skills)],
+      };
+      this.write(state);
+      return { key, ...state.installed[key]! };
+    });
   }
 
   /** Forget an installed plugin and remove its files; the caller removes
    * the servers and skills it returns. */
-  recordUninstall(marketplace: string, plugin: string): InstalledMarketplacePlugin {
-    const state = this.read();
-    const key = `${plugin}@${marketplace}`;
-    const installed = state.installed[key];
-    if (!installed) throw new BotPluginError("That plugin is not installed.", "not_found", 404);
-    delete state.installed[key];
-    this.write(state);
-    rmSync(this.pluginDir(marketplace, plugin), { recursive: true, force: true });
-    notePluginFolderChanged(this.pluginDir(marketplace, plugin));
-    return { key, ...installed };
+  recordUninstall(marketplace: string, plugin: string): Promise<InstalledMarketplacePlugin> {
+    return this.serial(async () => {
+      const state = this.read();
+      const key = `${plugin}@${marketplace}`;
+      const installed = state.installed[key];
+      if (!installed) throw new BotPluginError("That plugin is not installed.", "not_found", 404);
+      delete state.installed[key];
+      this.write(state);
+      rmSync(this.pluginDir(marketplace, plugin), { recursive: true, force: true });
+      notePluginFolderChanged(this.pluginDir(marketplace, plugin));
+      return { key, ...installed };
+    });
   }
+}
+
+// ── background pull (#3612) ──────────────────────────────────────────────
+// A marketplace was pulled only when a person pressed Update, so a copy
+// stayed versions behind with nothing saying so. The marketplaces with at
+// least one installed plugin are now pulled in the background with the same
+// `refresh` (through the same scope's path the Update button takes), so the
+// existing `updateAvailable` is true without a click. It never updates an
+// installed copy: that stays the act of the person or of the bot.
+
+/** The first run, never sooner after start (start-up stalls the event loop
+ * and the first minutes resume cut turns). */
+export const MARKETPLACE_REFRESH_FIRST_DELAY_MS = 5 * 60_000;
+/** Once a day after that. */
+export const MARKETPLACE_REFRESH_INTERVAL_MS = 24 * 60 * 60_000;
+/** A random share of this is added to every wait, so servers started
+ * together do not all pull at the same instant. */
+export const MARKETPLACE_REFRESH_SPREAD_MS = 30 * 60_000;
+/** One pull given up past this (the clone itself has its own git timeout). */
+export const MARKETPLACE_REFRESH_PULL_TIMEOUT_MS = 3 * 60_000;
+/** The pause between two marketplaces, so a run yields to the server. */
+export const MARKETPLACE_REFRESH_GAP_MS = 5_000;
+
+/** Who holds an installed plugin from a marketplace, and so whose Update
+ * path (and credentials) a background pull takes. */
+export interface MarketplacePullScope {
+  kind: "installation" | "bot" | "person";
+  /** the bot id, the person id, or "installation" */
+  id: string;
+  /** the person this scope belongs to: the actor of the pull */
+  owner?: string;
+}
+
+/** The scope a background pull goes through, or none. A private marketplace
+ * is pulled only through a scope of its author (never with another person's
+ * credentials); an org-wide one through the installation's scope first,
+ * then any holder. On a server of one person, any holder. */
+export function pickMarketplacePullScope(
+  record: { visibility?: MarketplaceVisibility; addedBy?: string },
+  scopes: readonly MarketplacePullScope[],
+  singlePerson: boolean,
+): MarketplacePullScope | undefined {
+  if (!scopes.length) return undefined;
+  if (singlePerson) return scopes.find((scope) => scope.kind === "installation") ?? scopes[0];
+  if (marketplaceVisibility(record) === "private") {
+    const author = record.addedBy?.trim().toLowerCase();
+    if (!author) return undefined;
+    return scopes.find((scope) => scope.owner?.trim().toLowerCase() === author);
+  }
+  return scopes.find((scope) => scope.kind === "installation") ?? scopes[0];
+}
+
+export interface MarketplaceBackgroundRefreshOptions {
+  /** the names of the installation's one list */
+  marketplaces: () => string[];
+  record: (name: string) => { visibility?: MarketplaceVisibility; addedBy?: string } | undefined;
+  /** who has at least one plugin installed from it (empty: not pulled) */
+  scopes: (name: string) => MarketplacePullScope[];
+  /** the existing Update path of that scope (it calls `refresh`) */
+  pull: (name: string, scope: MarketplacePullScope) => Promise<unknown>;
+  singlePerson?: boolean;
+  log?: (line: string) => void;
+  random?: () => number;
+}
+
+export interface MarketplaceBackgroundRefresh {
+  stop(): void;
+}
+
+/** Pull, in the background, the marketplaces with an installed plugin:
+ * first past `MARKETPLACE_REFRESH_FIRST_DELAY_MS`, then daily, each wait
+ * spread at random; one marketplace at a time with a pause between two; a
+ * pull past its timeout or failing is logged in one line and the run goes
+ * on. `stop` (shutdown) clears the timer and ends a run between two pulls. */
+export function startMarketplaceBackgroundRefresh(options: MarketplaceBackgroundRefreshOptions): MarketplaceBackgroundRefresh {
+  const random = options.random ?? Math.random;
+  const log = options.log ?? ((line: string) => console.warn(line));
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let wake: (() => void) | null = null;
+
+  const wait = (ms: number) => new Promise<void>((resolve) => {
+    wake = resolve;
+    timer = setTimeout(() => { timer = null; wake = null; resolve(); }, ms);
+    timer.unref?.();
+  });
+  const spread = () => Math.floor(random() * MARKETPLACE_REFRESH_SPREAD_MS);
+  const reason = (error: unknown) => (error instanceof Error ? error.message : String(error)).replace(/\s+/g, " ").slice(0, 300);
+
+  const pullOne = async (name: string): Promise<void> => {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const record = options.record(name);
+      if (!record) return;
+      const scope = pickMarketplacePullScope(record, options.scopes(name), options.singlePerson === true);
+      if (!scope) return;
+      await Promise.race([
+        options.pull(name, scope),
+        new Promise((_, reject) => {
+          timeout = setTimeout(() => reject(new Error(`no answer within ${MARKETPLACE_REFRESH_PULL_TIMEOUT_MS / 1000} s`)), MARKETPLACE_REFRESH_PULL_TIMEOUT_MS);
+          timeout.unref?.();
+        }),
+      ]);
+    } catch (error) {
+      log(`[plugins] background pull of marketplace ${name} failed, installed copies untouched: ${reason(error)}`);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  };
+
+  const run = async (): Promise<void> => {
+    let names: string[] = [];
+    try { names = options.marketplaces(); } catch (error) { log(`[plugins] background pull could not list the marketplaces: ${reason(error)}`); }
+    let pulledOne = false;
+    for (const name of names) {
+      if (stopped) return;
+      let held = false;
+      try { held = options.scopes(name).length > 0; } catch { held = false; }
+      if (!held) continue;
+      // one clone at a time, with a pause that yields between two
+      if (pulledOne) {
+        await wait(MARKETPLACE_REFRESH_GAP_MS);
+        if (stopped) return;
+      }
+      pulledOne = true;
+      await pullOne(name);
+    }
+  };
+
+  const loop = async (delay: number): Promise<void> => {
+    await wait(delay);
+    if (stopped) return;
+    try { await run(); } catch (error) { log(`[plugins] background pull stopped: ${reason(error)}`); }
+    if (stopped) return;
+    void loop(MARKETPLACE_REFRESH_INTERVAL_MS + spread());
+  };
+  void loop(MARKETPLACE_REFRESH_FIRST_DELAY_MS + spread());
+
+  return {
+    stop() {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      const resume = wake;
+      wake = null;
+      resume?.();
+    },
+  };
 }
 
 /** Copy a plugin folder without links or git metadata. */

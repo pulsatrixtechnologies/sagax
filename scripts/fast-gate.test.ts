@@ -91,17 +91,27 @@ describe("fast-gate.sh", () => {
     expect(out).toContain("[terms] npm run -s check:terms");
   });
 
-  // #3587 to #3596: a prompt change in server/drivers/acp/ left ten cases of
-  // acp.test.ts red, as the gate ran only the tests of the same stem.
-  it("runs every test of a touched source's folder, and only its folder", () => {
-    write("server/drivers/acp/acp.test.ts", "// driver test\n");
-    write("server/drivers/acp/prompt-fit.test.ts", "// fit test\n");
+  // A touched source brings the tests of its stem and the tests that import
+  // it, never its whole folder: the two largest folders hold over 400 and 500
+  // test files, and one touched file there ran nearly the whole suite on the
+  // author's machine. A test that reaches the source through other files
+  // (#3587 to #3596: a prompt change left ten cases of a driver's test red)
+  // is caught by the run of every test after the merge, which names the
+  // pull request.
+  it("runs the tests of a touched source's stem and its importers, not its whole folder", () => {
+    write("server/drivers/acp/turn-prompt-build.test.ts", "// same stem\n");
+    write("server/drivers/acp/turn-prompt-build.fit.test.ts", "// same stem, a second file\n");
+    write("server/drivers/acp/turn-prompt-builder.test.ts", "// a longer name, not this source\n");
+    write("server/drivers/acp/acp.test.ts", 'import { x } from "./turn-prompt-build.ts";\n');
+    write("server/drivers/acp/prompt-fit.test.ts", "// same folder, another source\n");
     write("server/drivers/other.test.ts", "// another folder\n");
     git("add", "-A");
     git("commit", "-q", "-m", "tests");
     write("server/drivers/acp/turn-prompt-build.ts", "export const x = 1;\n");
     const { out } = gate("--base", "HEAD", "--only", "tests", "--dry-run");
-    expect(out).toMatch(/\[tests\] .*vitest' run --reporter=dot 'server\/drivers\/acp\/acp\.test\.ts' 'server\/drivers\/acp\/prompt-fit\.test\.ts'$/m);
+    expect(out).toMatch(/\[tests\] .*vitest' run --reporter=dot 'server\/drivers\/acp\/acp\.test\.ts' 'server\/drivers\/acp\/turn-prompt-build\.fit\.test\.ts' 'server\/drivers\/acp\/turn-prompt-build\.test\.ts'$/m);
+    expect(out).not.toContain("prompt-fit.test.ts");
+    expect(out).not.toContain("turn-prompt-builder.test.ts");
     expect(out).not.toContain("other.test.ts");
   });
 
@@ -118,8 +128,54 @@ describe("fast-gate.sh", () => {
     expect(line).toContain("'tests/imports-b.test.ts'");
     expect(line).toContain("'tests/mocks-b.test.ts'");
     expect(line).toContain("'tests/deep/requires-b.test.ts'");
-    expect(line).toContain("'src/a.test.ts'");
+    // the test of another source of the same folder is not this change's
+    expect(line).not.toContain("'src/a.test.ts'");
     expect(line).not.toContain("near-name");
+  });
+
+  // Most interface tests import through the "@/" alias, and a folder's index
+  // is imported by the folder's name: both import the touched source.
+  it("counts an import through a tsconfig path alias or a folder's index", () => {
+    write("tsconfig.json", JSON.stringify({ compilerOptions: { paths: { "@/*": ["./src/*"] } } }));
+    write("src/lib/x.ts", "export const x = 1;\n");
+    write("src/idx/index.ts", "export const y = 1;\n");
+    write("tests/alias.test.ts", 'import { x } from "@/lib/x";\n');
+    write("tests/alias-mock.test.ts", 'vi.mock("@/lib/x", () => ({}));\n');
+    write("tests/via-index.test.ts", 'import { y } from "../src/idx";\n');
+    write("tests/package.test.ts", 'import x from "x";\nimport idx from "idx";\n');
+    write("tests/other-alias.test.ts", 'import { z } from "@/lib/xx";\n');
+    git("add", "-A");
+    git("commit", "-q", "-m", "tests");
+    write("src/lib/x.ts", "export const x = 2;\n");
+    write("src/idx/index.ts", "export const y = 2;\n");
+    const { out } = gate("--base", "HEAD", "--only", "tests", "--dry-run");
+    const line = out.split("\n").find((l) => l.startsWith("[tests]")) ?? "";
+    expect(line).toContain("'tests/alias.test.ts'");
+    expect(line).toContain("'tests/alias-mock.test.ts'");
+    expect(line).toContain("'tests/via-index.test.ts'");
+    expect(line).not.toContain("package.test.ts");
+    expect(line).not.toContain("other-alias.test.ts");
+  });
+
+  // A store or a test helper is imported by hundreds of tests: its importers
+  // wait for the run after the merge, and the gate says how many they are.
+  it("leaves the importers of a source that more than 25 tests import to the run after the merge, and says so", () => {
+    for (let i = 1; i <= 26; i++) write(`tests/many/i${i}.test.ts`, 'import { b } from "../../src/b.ts";\n');
+    for (let i = 1; i <= 25; i++) write(`tests/few/i${i}.test.ts`, 'import { a } from "../../src/a.ts";\n');
+    write("src/b.test.ts", "// its own test\n");
+    git("add", "-A");
+    git("commit", "-q", "-m", "tests");
+    write("src/a.ts", "export const a = 2;\n");
+    write("src/b.ts", "export const b = 2;\n");
+    const { out } = gate("--base", "HEAD", "--only", "tests", "--dry-run");
+    const line = out.split("\n").find((l) => l.startsWith("[tests]")) ?? "";
+    expect(line).toContain("'src/a.test.ts'");
+    expect(line).toContain("'src/b.test.ts'");
+    expect(line).toContain("'tests/few/i1.test.ts'");
+    expect(line).toContain("'tests/few/i25.test.ts'");
+    expect(line).not.toContain("tests/many/");
+    expect(out).toContain("fast-gate: src/b.ts is imported by 26 test files: only the tests of its own name run here, the others run after the merge");
+    expect(out).not.toContain("src/a.ts is imported by");
   });
 
   it("runs the checks in parallel, never more than the cap, and is green", () => {

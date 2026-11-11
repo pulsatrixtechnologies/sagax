@@ -24,7 +24,7 @@
 #                  tsconfig.json exists), lint (oxlint, else eslint, on the
 #                  touched files), terms (script "check:terms"), tests
 #                  (vitest on the touched tests and, for a touched source,
-#                  every test of its folder and every test importing it)
+#                  the tests of its stem and every test importing it)
 #   Cargo.toml     rust-fmt (cargo fmt --check on the touched crates), rust
 #                  (cargo clippy -D warnings then cargo test, on the touched
 #                  crates, one job so they do not wait on the build lock)
@@ -134,11 +134,17 @@ if [ -f package.json ]; then
       elif [ -x "$BIN/eslint" ]; then add_check lint "$(q "$BIN/eslint") --max-warnings 0$(printf '%s\n' "$LINTABLE" | qlist)"
       fi
     fi
-    # The touched tests, and for a touched source the tests of its folder and
+    # The touched tests, and for a touched source the tests of its stem and
     # every test that imports it (a relative import, a dynamic import or a
-    # mock of it). The same stem alone missed a test that reaches the source
-    # through its folder's other files: a prompt change left ten cases of a
-    # driver's test red on the branch that made it.
+    # mock of it). Never the whole folder: src/lib and src/components hold
+    # over 400 and 500 test files, so one touched file there ran nearly the
+    # whole suite on the author's machine, which the rule of this gate
+    # forbids (the tests of the touched files only; every test runs by
+    # itself after the merge, names the pull request and opens an issue).
+    # For the same reason a source imported by more than 25 test files
+    # brings only the tests of its own name, and the gate prints its count.
+    # An import through a path alias of tsconfig.json or of a folder's index
+    # counts like a relative one.
     TESTS="$LOG_DIR/tests.txt"
     : > "$TESTS"
     FAST_GATE_TOUCHED_JS="$JS" node -e '
@@ -153,22 +159,50 @@ if [ -f package.json ]; then
       const sources = new Map();
       for (const f of touched) {
         if (isTest(f)) { out.add(f); continue; }
-        const dir = path.dirname(f);
-        for (const t of all) if (path.dirname(t) === dir) out.add(t);
+        const stem = noExt(f) + ".";
+        for (const t of all) if (t.startsWith(stem)) out.add(t);
         sources.set(noExt(f), f);
       }
       if (sources.size) {
-        const names = [...new Set([...sources.keys()].map((s) => path.basename(s)))];
-        const spec = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|\bvi\.(?:mock|doMock|importActual)\s*(?:<[^>]*>)?\s*\(\s*)["\x27](\.{1,2}\/[^"\x27]+)["\x27]/g;
+        // an index file is imported by its folder name
+        const names = [...new Set([...sources.keys()].map((s) => path.basename(s) === "index" ? path.basename(path.dirname(s)) : path.basename(s)))];
+        const spec = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|\bvi\.(?:mock|doMock|importActual)\s*(?:<[^>]*>)?\s*\(\s*)["\x27]([^"\x27]+)["\x27]/g;
+        // The path aliases of tsconfig.json ("@/*" to "./src/*"): a test that
+        // imports a touched source through one imports it all the same.
+        const aliases = [];
+        try {
+          const paths = JSON.parse(fs.readFileSync("tsconfig.json", "utf8")).compilerOptions.paths;
+          for (const [from, to] of Object.entries(paths)) {
+            if (from.endsWith("/*") && Array.isArray(to) && typeof to[0] === "string" && to[0].endsWith("/*")) aliases.push([from.slice(0, -1), path.normalize(to[0].slice(0, -1))]);
+          }
+        } catch { /* no tsconfig, or no aliases in it */ }
+        const resolve = (from, to) => {
+          if (to.startsWith("./") || to.startsWith("../")) return path.normalize(path.join(path.dirname(from), to));
+          for (const [prefix, base] of aliases) if (to.startsWith(prefix)) return path.normalize(path.join(base, to.slice(prefix.length)));
+          return null;
+        };
+        const importers = new Map();
         for (const t of all) {
           if (out.has(t)) continue;
           let text;
           try { text = fs.readFileSync(t, "utf8"); } catch { continue; }
           if (!names.some((n) => text.includes(n))) continue;
           for (const m of text.matchAll(spec)) {
-            const target = path.normalize(path.join(path.dirname(t), m[1]));
-            if (sources.has(noExt(target)) || sources.has(path.join(target, "index"))) { out.add(t); break; }
+            const target = resolve(t, m[1]);
+            if (!target) continue;
+            const key = sources.has(noExt(target)) ? noExt(target) : sources.has(path.join(target, "index")) ? path.join(target, "index") : null;
+            if (!key) continue;
+            if (!importers.has(key)) importers.set(key, new Set());
+            importers.get(key).add(t);
           }
+        }
+        // A source that a large part of the suite imports (a store, a test
+        // helper) would bring hundreds of files: past the bound its importers
+        // wait for the run after the merge, and the gate says so.
+        const most = 25;
+        for (const [key, tests] of importers) {
+          if (tests.size <= most) { for (const t of tests) out.add(t); continue; }
+          console.error(`fast-gate: ${sources.get(key)} is imported by ${tests.size} test files: only the tests of its own name run here, the others run after the merge`);
         }
       }
       process.stdout.write([...out].sort().map((f) => f + "\n").join(""));

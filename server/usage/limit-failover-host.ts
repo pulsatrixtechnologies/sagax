@@ -465,7 +465,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
 
   /** #3552: the conversation's one line for an engine out of credit. */
   const creditLine = (dispatch: LimitDispatch): LimitFailoverLine => ({
-    kind: "credits", engine: deps.engineName(dispatch.engine.instanceId), ...(dispatch.owner ? { owner: true as const } : {}),
+    kind: "exhausted", tried: [deps.engineName(dispatch.engine.instanceId)], cause: "credits", ...(dispatch.owner ? { owner: true as const } : {}),
   });
 
   /** `modelOnly`: the refusal held nothing on the engine, it bound only the

@@ -1,7 +1,7 @@
 // The usage-limit line of a conversation (shared/limit-failover.ts) in the
 // reader's language, the reset in the reader's clock ("vers 14 h 05").
 import { activeLocale, t } from "@/lib/i18n";
-import { resetClockText, type LimitFailoverLine } from "../../shared/limit-failover";
+import { limitLinePlainWords, resetClockText, type LimitFailoverLine } from "../../shared/limit-failover";
 
 /** The locale a clock is written in: Quebec French for the French UI. */
 function clockLocale(): string {
@@ -15,7 +15,9 @@ export function limitClockText(at: number, now = Date.now()): string {
   return resetClockText(at, clockLocale(), undefined, now);
 }
 
-export function limitFailoverLineText(line: LimitFailoverLine, now = Date.now()): string {
+/** `plain`: the row's plain words (limitLinePlainWords of its name), drawn
+ * for a kind this app does not know, written by a newer server (#3577). */
+export function limitFailoverLineText(line: LimitFailoverLine, now = Date.now(), plain = ""): string {
   const resetsAt = "resetsAt" in line && typeof line.resetsAt === "number" ? line.resetsAt : undefined;
   const time = resetsAt !== undefined ? limitClockText(resetsAt, now) : "";
   switch (line.kind) {
@@ -58,6 +60,10 @@ export function limitFailoverLineText(line: LimitFailoverLine, now = Date.now())
       }
       return t(line.estimated ? "limitFailover.waitingRoutineNoReset" : "limitFailover.waitingRoutine", { from: line.from, time });
     case "exhausted": {
+      // #3552: out of credit, nothing held and no reset promised.
+      if (line.cause === "credits") {
+        return t(line.owner ? "limitFailover.ownerCredits" : "limitFailover.credits", { engine: line.tried.filter(Boolean).join(", ") });
+      }
       const tried = line.tried.filter(Boolean).join(", ") || "the engines tried";
       if (line.resetsAt !== undefined) {
         return t(line.owner ? "limitFailover.ownerExhausted" : "limitFailover.exhausted", {
@@ -66,11 +72,16 @@ export function limitFailoverLineText(line: LimitFailoverLine, now = Date.now())
       }
       return t(line.owner ? "limitFailover.ownerExhaustedNoTime" : "limitFailover.exhaustedNoTime", { tried });
     }
-    case "credits":
-      return t(line.owner ? "limitFailover.ownerCredits" : "limitFailover.credits", { engine: line.engine });
     case "signedOut":
       return t("limitFailover.signedOut", { from: line.from, to: line.to });
     case "signedOutNotice":
       return t("limitFailover.signedOutNotice", { from: line.from, to: line.to });
+    default:
+      return plain;
   }
+}
+
+/** A limit row's line in the reader's language, else its plain words. */
+export function limitFailoverRowText(tool: { name: string; limitFailover: LimitFailoverLine }, now = Date.now()): string {
+  return limitFailoverLineText(tool.limitFailover, now, limitLinePlainWords(tool.name));
 }

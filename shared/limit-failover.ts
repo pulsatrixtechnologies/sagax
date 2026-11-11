@@ -36,13 +36,12 @@ export type LimitFailoverLine =
   /** #1942: primary and at least one backup hit their limits with nothing
    * left to try. The turn is failed (not silent done); `tried` names the
    * engines that refused. `resetsAt` is the soonest known reset when one
-   * was said. */
-  | { kind: "exhausted"; tried: string[]; resetsAt?: number; owner?: true }
-  /** #3552: `engine`'s account is out of credit (a refusal whose cause is
-   * credit, server/routines/routine-recovery.ts) and no other engine could
-   * take the message: credit never resets by itself, so nothing is held and
-   * no time is promised. The turn is failed (#1942). */
-  | { kind: "credits"; engine: string; owner?: true }
+   * was said. `cause: "credits"` (#3552): the engine in `tried` is out of credit (a
+   * refusal whose cause is credit, server/routines/routine-recovery.ts) and
+   * no other engine could take the message: credit never resets by itself,
+   * so nothing is held and no time is promised. It stays an `exhausted` line
+   * so apps released before it draw their own true sentence (#3577). */
+  | { kind: "exhausted"; tried: string[]; resetsAt?: number; owner?: true; cause?: "credits" }
   /** #3315: `from` is known to be signed out for this turn's payer, so the
    * turn runs on `to`, a backup the person chose, for this turn only: the
    * conversation keeps its own model and is back on `from` once it is signed
@@ -124,14 +123,16 @@ export function limitFailoverText(line: LimitFailoverLine, clock: (at: number) =
       if (line.estimated) return `Limit reached on ${line.from}, which gave no reset time, and no other engine is available: this routine runs again around ${clock(line.resetsAt)}.`;
       return `Limit reached on ${line.from} and no other engine is available: this routine runs again when it resets (around ${clock(line.resetsAt)}).`;
     case "exhausted": {
+      if (line.cause === "credits") {
+        const engine = line.tried.filter(Boolean).join(", ");
+        if (line.owner) return `This bot's owner is out of credit on ${engine}, so this message got no answer. Add credit with the provider, or switch engine from the model picker.`;
+        return `${engine} is out of credit, so this message got no answer. Add credit with the provider, or switch engine from the model picker.`;
+      }
       const tried = line.tried.filter(Boolean).join(", ") || "the engines tried";
       const when = line.resetsAt !== undefined ? ` Try again around ${clock(line.resetsAt)}, or pick another model / add credit.` : " Pick another model, add credit, or try again later.";
       if (line.owner) return `This bot's owner hit usage limits on ${tried}: no other engine could answer.${when}`;
       return `Limits were reached on ${tried}: no other engine could answer.${when}`;
     }
-    case "credits":
-      if (line.owner) return `This bot's owner is out of credit on ${line.engine}, so this message got no answer. Add credit with the provider, or switch engine from the model picker.`;
-      return `${line.engine} is out of credit, so this message got no answer. Add credit with the provider, or switch engine from the model picker.`;
     case "signedOut":
       return `${line.from} is signed out, so ${line.to} took over this turn.`;
     case "signedOutNotice":
@@ -141,7 +142,7 @@ export function limitFailoverText(line: LimitFailoverLine, clock: (at: number) =
 
 /** The usage-limit lines a chat draws: a switch and a return are quiet rows
  * (2026-10-29), and a sign-out's lines are another state (#3315). */
-const SHOWN_LIMIT_LINES = new Set<LimitFailoverLine["kind"]>(["waiting", "waitingRoutine", "exhausted", "credits"]);
+const SHOWN_LIMIT_LINES = new Set<LimitFailoverLine["kind"]>(["waiting", "waitingRoutine", "exhausted"]);
 
 /** The fields of a conversation row the limit line reads. */
 export interface LimitLineRow {
@@ -175,8 +176,15 @@ export function limitMessageHeld(messages: readonly LimitLineRow[]): boolean {
   return standingLimitLines(messages).at(-1)?.tool?.limitFailover?.kind === "waiting";
 }
 
+/** #3577: a limit row's plain words: its name (limitFailoverText, written by
+ * the server with every line) without the status prefix. An app draws them
+ * for a line of a kind it does not know. */
+export function limitLinePlainWords(name: string): string {
+  return name.replace(/^(?:error|recovery|notice):\s*/, "");
+}
+
 /** A retired limit line: a quiet notice (shared/chat-notices.ts), kept for
  * the Events lens, never drawn. */
 export function limitLineRetiredName(name: string): string {
-  return `notice: ${name.replace(/^(?:error|recovery|notice):\s*/, "")}`;
+  return `notice: ${limitLinePlainWords(name)}`;
 }

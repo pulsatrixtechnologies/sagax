@@ -1,0 +1,6 @@
+{
+  "note": "The usage-limit line kinds each released app draws (limitFailoverLineText in src/lib/limit-failover.ts at the release commit). A server is rolled before people update their apps: a kind missing here draws an empty row in that release. Add a release only once it ships; never remove the oldest supported one.",
+  "releases": {
+    "0.8.87": ["switched", "back", "waiting", "waitingRoutine", "exhausted", "signedOut", "signedOutNotice"]
+  }
+}

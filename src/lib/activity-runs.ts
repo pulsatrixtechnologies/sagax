@@ -10,7 +10,7 @@ import { isBusyElsewhereWait } from "@/lib/turn-tail";
 import type { Message } from "@/state/store";
 import { activeLocale, t } from "@/lib/i18n";
 import { autoWorkerLine } from "@/lib/auto-model";
-import { limitFailoverLineText } from "@/lib/limit-failover";
+import { limitFailoverRowText } from "@/lib/limit-failover";
 import { failedTurnCause } from "../../shared/failed-turn";
 import { isStoppedTurnName } from "../../shared/client-cancel";
 import { localDay } from "@/lib/transcript-derivations";
@@ -47,7 +47,7 @@ export function statusActivity(message: Message): { kind: "recovery" | "notice" 
   // 2026-10-19: a usage limit sent the turn to another engine, or it came
   // back (shared/limit-failover.ts), in the reader's language.
   const limit = message.kind === "activity" ? message.tool?.limitFailover : undefined;
-  if (limit) return { kind: "recovery", text: limitFailoverLineText(limit) };
+  if (limit && message.tool) return { kind: "recovery", text: limitFailoverRowText({ name: message.tool.name, limitFailover: limit }) };
   // 2026-10-21: a request ran on the engine that had its connector, in the
   // reader's language. The switch is retired (#3356); stored lines still render.
   const switched = message.kind === "activity" ? message.tool?.connectorSwitch : undefined;

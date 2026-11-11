@@ -326,8 +326,9 @@ describe("control-omb ui drives the real renderer", () => {
       await ui("type", info.ui, "--name", "Message Pepper", "--text", "Say hello");
       await ui("press", info.ui, "--keys", "Enter");
       await ui("wait-settle", info.ui, "--timeout", "30");
-      // Known (#3718): on a busy host this provider's turn can wait while the
-      // bot's MCP servers mount; the wait is long, never skipped.
+      // #3718: the composer's warm finishing its own mount while this turn
+      // mounts never stops the turn. A server that does not start in its
+      // budget is skipped; the wait covers that budget on a busy host.
       await expect.poll(answered, { timeout: 90_000, interval: 1_000 }).toBe(true);
       expect(requests).toContainEqual({ path: "/v1/chat/completions", key: "Bearer fixture-personal-provider-key", model: "azure-chat" });
       await ui("screenshot", info.ui, "--out", join(evidenceDir, "azure-reply.png"));

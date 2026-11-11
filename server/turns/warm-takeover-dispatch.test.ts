@@ -9,12 +9,12 @@ import { guardTurnDispatch } from "./turn-dispatch-guard.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { SendTurnInput } from "../contracts.ts";
 
-function warmDispatch(claims: Map<string, unknown>) {
+function warmDispatch(claims: Map<string, unknown>, driverKind = "claudeAgent") {
   const bot = { id: "bot", name: "Runner", modelSelection: { instanceId: "engine", model: "chat-model" } };
   const interruptTurn = vi.fn(async () => {});
   const releaseWarmSession = vi.fn();
   const sendTurn = vi.fn(async (_input: SendTurnInput) => ({ turnId: "warm-turn", reused: true }));
-  const instance = { instanceId: "engine", driverKind: "claudeAgent", models: { options: [{ id: "chat-model" }] },
+  const instance = { instanceId: "engine", driverKind, models: { options: [{ id: "chat-model" }] },
     adapter: { capabilities: { effortLevels: [] }, sendTurn, interruptTurn, releaseWarmSession } };
   const noOp = vi.fn();
   const values: Record<string, unknown> = {
@@ -44,6 +44,15 @@ describe("a warm whose claim a message took over (#3703)", () => {
     await run();
     expect(interruptTurn).not.toHaveBeenCalled();
     expect(releaseWarmSession).not.toHaveBeenCalled();
+  });
+
+  // #3718: on a chat-completions engine the warm's setup is its MCP mount;
+  // the message's turn is then still mounting its own tools, and stopping
+  // it there ended it with no reply and no error.
+  it("leaves a chat-completions turn that is still mounting its tools running", async () => {
+    const { run, interruptTurn } = warmDispatch(new Map([["thread", { id: "message-claim", botId: "bot", threadId: "thread", phase: "dispatching" }]]), "openai-compatible");
+    await run();
+    expect(interruptTurn).not.toHaveBeenCalled();
   });
 
   // A duplex voice interrupt or a Stop removes a warm's claim with no other

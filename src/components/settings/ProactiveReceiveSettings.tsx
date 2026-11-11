@@ -26,6 +26,8 @@ import {
 } from "../../../shared/proactive-choices";
 import { DescribedRow, PillSelect, SettingsGroup, Switch } from "../SettingsPrimitives";
 import { DirectTriggersRows } from "../bot-settings/DirectTriggersRows";
+import { QuietModeAllRow } from "../bot-settings/QuietModeRow";
+import { useQuietMode } from "@/lib/quiet-mode";
 
 export interface ReceiveState {
   choices: Record<string, DomainChoice>;
@@ -269,14 +271,22 @@ export function ProactiveReceiveSettings() {
   const { state: store } = useStore();
   const dispatch = useStoreDispatch();
   const { state, setDomain, setWatch, setBot } = useProactiveReceive();
-  if (!state) return null;
+  // #3480: quiet mode for all the person's bots, drawn when they have a bot
+  const quiet = useQuietMode();
+  const quietShown = Boolean(quiet && quiet.bots.length > 0);
+  if (!state && !quietShown) return null;
   const bots = store.bots ?? [];
-  const mine = state.receive.bots.filter((row) => bots.some((bot) => bot.id === row.id));
-  const rows = domainRows(state);
+  const mine = state ? state.receive.bots.filter((row) => bots.some((bot) => bot.id === row.id)) : [];
+  const rows = state ? domainRows(state) : [];
   const title = t("settings.receive.title");
   const has = (field: "brief" | "screen" | "checklist") => mine.some((row) => row[field] !== undefined);
   return (
     <div data-settings-card="notifications.receive" className="flex flex-col gap-3">
+      {quietShown && quiet && (
+        <SettingsGroup title={title} groupId="receiveQuietMode" accessory={<Heading part={t("quietMode.label")} />}>
+          <QuietModeAllRow all={quiet.all} />
+        </SettingsGroup>
+      )}
       {rows.length > 0 && (
         <SettingsGroup title={title} groupId="receiveDomains" accessory={<Heading part={t("settings.receive.group.domains")} />}>
           {rows.map((row) => (

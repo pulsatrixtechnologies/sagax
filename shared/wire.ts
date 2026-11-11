@@ -970,6 +970,10 @@ export interface WireMessage extends WaitLineField {
    * bot; the bot reads it at its next turn. On a text row; `text` is the
    * fallback. */
   teamNote?: TeamNote;
+  /** #3480: the line written when a bot's quiet mode went off: how many
+   * runs it kept out of the chat and how many had problems
+   * (shared/quiet-mode.ts). On a text row; `text` is the fallback. */
+  quietSummary?: { runs: number; problems: number };
   /** #2109 (2026-11-05): GitHub sign-in by link and pairing code, posted by
    * connect_github in the bot's chat and patched to connected in place
    * (shared/github-connect-card.ts). On a text row; `text` is the fallback. */

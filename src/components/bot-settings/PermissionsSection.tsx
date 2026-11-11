@@ -216,7 +216,11 @@ export function PermissionsSection({
   const showProactive = showApproval && advanced && inPart("proactive");
   const showPageTarget = showApproval && advanced && inPart("pageTarget") && !draft && canEditBotField(state.config, bot, "pageTargetDefault");
   const showFold = !draft && advanced && inPart("fold") && (showApproval || showOutboundUi);
-  if (!showPrimaryUi && !showApprovalRow && !showProactive && !showPageTarget && !showFold && !showCustomRules && !showContactUi && !showRecipientsUi && !showDrafts && !showMemeReplies && !showLoopGuard && !showGrokConnectors && !showHooks && !showOutboundUi && !showOwnerPermissions && !showToolAccess && !showParallel) return null;
+  // #3480: what this bot sends the person, its quiet mode first: the
+  // person's own bot, whatever the approval rows show (BotFollowsRows draws
+  // nothing for a bot that is not theirs)
+  const showReceive = inPart("proactive") && !draft && !bulk;
+  if (!showReceive && !showPrimaryUi && !showApprovalRow && !showProactive && !showPageTarget && !showFold && !showCustomRules && !showContactUi && !showRecipientsUi && !showDrafts && !showMemeReplies && !showLoopGuard && !showGrokConnectors && !showHooks && !showOutboundUi && !showOwnerPermissions && !showToolAccess && !showParallel) return null;
 
   const approvalSelector = showApproval && (
     <ApprovalModeSelector
@@ -434,7 +438,7 @@ export function PermissionsSection({
         : approvalRows && <SettingsGroup title={t(part === "actsAlone" ? "botProfile.v6.group.actsAlone" : part === "advanced" ? "botProfile.v6.group.behaviour" : "botPanel.permissions.approvals")} groupId="approvals">{approvalRows}</SettingsGroup>}
       {/* #3432: « Ce que ce bot suit pour toi », the person's watch domains
           this bot can carry, beside the Proactive rows (one bot's own) */}
-      {showProactive && !draft && !bulk && <BotFollowsRows key={`follows:${bot.id}`} bot={bot} />}
+      {showReceive && <BotFollowsRows key={`follows:${bot.id}`} bot={bot} domains={showProactive} />}
 
       {/* 2026-10-16: the person's custom rules, in their own words */}
       {showCustomRules && <CustomRulesCard key={`custom-rules:${bot.id}`} bot={bot} />}

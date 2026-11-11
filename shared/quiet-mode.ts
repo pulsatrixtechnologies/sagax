@@ -180,18 +180,28 @@ export function quietModeSaid(on: boolean, scope: "bot" | "all", language: Langu
   return scope === "all" ? "Done: your bots keep you posted again." : "Done: I will keep you posted again.";
 }
 
-/** The one line written in the bot's chat when quiet mode goes off. */
-export function quietModeSummary(kept: QuietKept, language: Language): string {
+/** What quiet mode kept, as the start of its line: how many runs, how many
+ * with problems (the chat's quiet line shows this beside its link). */
+export function quietModeCounts(kept: Pick<QuietKept, "runs" | "problems">, language: Language): string {
   const runs = Math.max(0, Math.floor(kept.runs));
   const problems = Math.min(runs, Math.max(0, Math.floor(kept.problems)));
   if (language === "fr") {
-    if (runs === 0) return "Mode silencieux terminé : aucune exécution n'a été gardée en silence.";
+    if (runs === 0) return "Mode silencieux terminé : aucune exécution n'a été gardée en silence";
     const counted = runs === 1 ? "1 exécution gardée en silence" : `${runs} exécutions gardées en silence`;
     const withProblems = problems === 0 ? ", aucune avec des problèmes" : problems === 1 ? (runs === 1 ? ", avec des problèmes" : ", dont 1 avec des problèmes") : `, dont ${problems} avec des problèmes`;
-    return `Mode silencieux terminé : ${counted}${withProblems}. Tu les retrouves dans Automatisations, sous Exécutions de chaque routine.`;
+    return `Mode silencieux terminé : ${counted}${withProblems}`;
   }
-  if (runs === 0) return "Quiet mode is off: no run was kept quiet.";
+  if (runs === 0) return "Quiet mode is off: no run was kept quiet";
   const counted = runs === 1 ? "1 run kept quiet" : `${runs} runs kept quiet`;
   const withProblems = problems === 0 ? ", none with problems" : problems === 1 ? (runs === 1 ? ", with problems" : ", 1 with problems") : `, ${problems} with problems`;
-  return `Quiet mode is off: ${counted}${withProblems}. See them in Automations, under each routine's Runs.`;
+  return `Quiet mode is off: ${counted}${withProblems}`;
+}
+
+/** The one line written in the bot's chat when quiet mode goes off. */
+export function quietModeSummary(kept: QuietKept, language: Language): string {
+  const counts = quietModeCounts(kept, language);
+  if (Math.max(0, Math.floor(kept.runs)) === 0) return `${counts}.`;
+  return language === "fr"
+    ? `${counts}. Tu les retrouves dans Automatisations, sous Exécutions de chaque routine.`
+    : `${counts}. See them in Automations, under each routine's Runs.`;
 }

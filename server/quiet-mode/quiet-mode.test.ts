@@ -9,6 +9,7 @@ function world() {
     { id: "other", owner: "grace" },
   ];
   const lines: Array<{ botId: string; text: string }> = [];
+  const counts: Array<{ runs: number; problems: number }> = [];
   let saved: unknown = null;
   const storage = { load: () => saved, save: (state: unknown) => { saved = JSON.parse(JSON.stringify(state)); } };
   const make = () => new QuietMode({
@@ -17,10 +18,10 @@ function world() {
     bots: () => bots,
     owner: (bot) => bot.owner,
     language: (person) => person === "ada" ? "fr-CA" : "en",
-    line: (bot, text) => { lines.push({ botId: bot.id, text }); },
+    line: (bot, text, kept) => { lines.push({ botId: bot.id, text }); counts.push(kept); },
     now: () => 1_000,
   });
-  return { make, lines, bots };
+  return { make, lines, counts, bots };
 }
 
 describe("quiet mode per bot and for all the person's bots (#3480)", () => {
@@ -44,7 +45,7 @@ describe("quiet mode per bot and for all the person's bots (#3480)", () => {
   });
 
   it("counts each kept run once, and writes the line with the counts when it goes off", () => {
-    const { make, lines } = world();
+    const { make, lines, counts } = world();
     const quiet = make();
     quiet.setBot("nova", true);
     expect(quiet.keep("nova", "r1", false)).toBe(true);
@@ -56,6 +57,8 @@ describe("quiet mode per bot and for all the person's bots (#3480)", () => {
     const off = quiet.setBot("nova", false);
     expect(off.summary).toBe("Mode silencieux terminé : 3 exécutions gardées en silence, dont 1 avec des problèmes. Tu les retrouves dans Automatisations, sous Exécutions de chaque routine.");
     expect(lines).toEqual([{ botId: "nova", text: off.summary }]);
+    // the chat draws the line from its counts (src/components/QuietModeLine.tsx)
+    expect(counts).toEqual([{ runs: 3, problems: 1 }]);
     expect(quiet.view("nova").kept).toEqual({ runs: 0, problems: 0 });
   });
 

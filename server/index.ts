@@ -30138,6 +30138,9 @@ const oidcLogin = IDENTITY.kind === "perspicax" && oidcRp && idpSessions
         perspicaxMcp?.forgetSubject(input.iss, input.sub);
         // Slice 6: the delegation goes too; the person's routines pause.
         routineConsents?.endForSubject(input.iss, input.sub);
+        // #3623: the tool lists kept for the person's servers go too.
+        const signedOut = principals.bySubject(input.iss, input.sub);
+        if (signedOut) stdioRelay.forgetKept(signedOut.id);
         return idpSessions.backchannelLogout(input);
       },
       createRoutineDelegation: (input) => {

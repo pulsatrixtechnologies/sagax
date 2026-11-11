@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { newTurnLatency, noteTurnActivity, turnLatencyLine, turnLatencyParts } from "./turn-latency.ts";
+import { newTurnLatency, noteTurnActivity, turnLatencyLine, turnLatencyParts, turnToolsSlow } from "./turn-latency.ts";
 
 describe("turn latency line", () => {
   it("logs every stage of a pooled one-tool turn, ids and numbers only", () => {
@@ -112,5 +112,26 @@ describe("turn latency line", () => {
     trace.promptAt = 10_400;
     const parts = turnLatencyParts(trace, [["send", 2_000], ["acp-session-loaded", 10_100]]);
     expect(parts).toEqual({ setupBy: "session:100,prompt:300" });
+  });
+
+  it("names the parts of a tool list that took more than 250 ms, and only those (#3623)", () => {
+    const trace = newTurnLatency(1_000);
+    trace.path = "spawn";
+    trace.promptAt = 4_500;
+    trace.toolWait = {
+      waitedMs: 2_900, mounts: [], resolvedMs: 2_898,
+      served: [
+        ["perspicax", 361, 445, [["list", 80]]],
+        ["connector", 570, 2_511, [["env", 12], ["open", 410], ["hello", 230], ["list", 980], ["kb", 85]]],
+        ["messages", 676, 682],
+      ],
+    };
+    expect(turnToolsSlow(trace.toolWait)).toBe("connector:env:12,open:410,hello:230,list:980,kb:85");
+    const line = turnLatencyLine("grok", "800b207c-0000", trace, 9_000, "ok");
+    expect(line).toContain("toolsServed=perspicax:361-445,connector:570-2511,messages:676-682 toolsSlow=connector:env:12,open:410,hello:230,list:980,kb:85 ok");
+    // a fast list (served from the kept copy) prints no parts
+    trace.toolWait.served = [["connector", 570, 600, [["env", 3]]]];
+    expect(turnToolsSlow(trace.toolWait)).toBeUndefined();
+    expect(turnLatencyLine("grok", "800b207c-0000", trace, 9_000, "ok")).not.toContain("toolsSlow");
   });
 });

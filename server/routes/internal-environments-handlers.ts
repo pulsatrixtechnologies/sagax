@@ -24,7 +24,8 @@ import { enginePluginCommandRefusal } from "../people/person-integrations.ts";
 import type { PersonalMcpServer } from "../people/person-connections.ts";
 import { readPersonalCopy } from "../personal-copy.ts";
 import { SANDBOX_CONTROL_REFUSAL } from "../sandbox/sandbox-control.ts";
-import { StdioRelayError } from "../sandbox/sandbox-stdio-mcp.ts";
+import { StdioRelayError, type StdioRelayPart } from "../sandbox/sandbox-stdio-mcp.ts";
+import { noteTurnServedPart, turnServedMount } from "../turns/turn-trace.ts";
 import { sharedComputerOperation } from "../computer/shared-computers.ts";
 import { SMALL_TALK_CLOUD_REFUSAL } from "../small-talk.ts";
 import { DESKTOP_BRIDGE_MCP_NAME } from "../../shared/bot-workplace.ts";
@@ -245,6 +246,8 @@ export interface InternalEnvironmentsDeps {
     server: string;
     spec: { argv: string[]; env?: Record<string, string> };
     frame: unknown;
+    /** #3623: the parts of a tool list's path (toolsSlow) */
+    onPart?: StdioRelayPart;
   }): Promise<unknown>;
 
   desktopConnected(person: string): boolean;
@@ -718,8 +721,18 @@ async function handlePersonalMcp(deps: InternalEnvironmentsDeps, ctx: InternalRo
   if (!server || server.kind !== "stdio" || !server.enabled) {
     return json(res, 200, answerError("This MCP server was removed or turned off in Settings > Mes connexions."));
   }
+  // #3623: the parts of this mount's tool list, on the turn's latency line
+  // while the engine's setup waits for it (names and numbers only)
+  const mount = turnServedMount("personal-mcp");
+  const onPart: StdioRelayPart | undefined = mount
+    ? (part, value) => noteTurnServedPart(capability.threadId, mount, part, value)
+    : undefined;
   try {
-    if (capability.pluginMcp) await deps.syncPluginsForTurn(person, capability.generation, capability.botId);
+    if (capability.pluginMcp) {
+      const at = Date.now();
+      await deps.syncPluginsForTurn(person, capability.generation, capability.botId);
+      onPart?.("env", Date.now() - at);
+    }
     if (frame?.method === "tools/call") await deps.syncGithubForTurn(person, capability.generation, capability.botId);
     const answer = await deps.stdioRelay({
       principalId: person,
@@ -728,6 +741,7 @@ async function handlePersonalMcp(deps: InternalEnvironmentsDeps, ctx: InternalRo
       server: name,
       spec: { argv: [server.command, ...server.args], env: server.env },
       frame,
+      ...(onPart ? { onPart } : {}),
     });
     deps.requireActive(capability);
     return json(res, 200, { message: answer });

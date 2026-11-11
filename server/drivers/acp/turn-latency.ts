@@ -34,6 +34,12 @@
 // resolved:<ms> is the first poll where the engine said its servers were
 // resolved. toolsServed is Sagax's own side of the same wait: when each of
 // its endpoints got its first request and answered its tool list.
+// toolsSlow names the parts of one of those endpoints whose tool list took
+// more than 250 ms from its first request (connector:env:12,open:410,
+// hello:230,list:980,kb:85): env (the person's plugin copy), open (the
+// stream to the server in the person's environment), hello (the server's
+// answer to initialize), list (its answer to tools/list) and kb (that
+// answer's size). Mounts are separated by `;`. Names and numbers only.
 
 export type TurnLatencyPath = "pooled" | "load" | "spawn";
 
@@ -74,8 +80,12 @@ export interface TurnToolWait {
   resolvedMs?: number;
   /** Sagax's own endpoints during the wait, in order of arrival: the mount,
    * its first request (ms from the wait's start) and its tool list answer */
-  served?: Array<[label: string, inMs: number, outMs?: number]>;
+  served?: Array<[label: string, inMs: number, outMs?: number, parts?: Array<[part: string, ms: number]>]>;
 }
+
+/** A tool list that took longer than this from its first request names its
+ * parts (toolsSlow). */
+export const TOOLS_SLOW_MS = 250;
 
 /** Sagax's mounts printed at most, slowest first. */
 const TOOLS_BY_MOUNTS_MAX = 8;
@@ -99,6 +109,17 @@ export function turnToolsServed(wait: TurnToolWait | undefined): string | undefi
   return wait.served.slice(0, TOOLS_BY_MOUNTS_MAX)
     .map(([label, inMs, outMs]) => `${label}:${Math.round(inMs)}${outMs === undefined ? "" : `-${Math.round(outMs)}`}`)
     .join(",");
+}
+
+/** The toolsSlow field: the parts of each of Sagax's endpoints whose tool
+ * list took more than TOOLS_SLOW_MS, `connector:open:410,hello:230,list:980`. */
+export function turnToolsSlow(wait: TurnToolWait | undefined): string | undefined {
+  const slow = (wait?.served ?? []).filter(([, inMs, outMs, parts]) =>
+    outMs !== undefined && outMs - inMs > TOOLS_SLOW_MS && parts?.length);
+  if (!slow.length) return undefined;
+  return slow.slice(0, TOOLS_BY_MOUNTS_MAX)
+    .map(([label, , , parts]) => `${label}:${parts!.map(([part, ms]) => `${part}:${Math.round(ms)}`).join(",")}`)
+    .join(";");
 }
 
 export function newTurnLatency(start: number, receivedAt?: number): TurnLatency {
@@ -208,6 +229,8 @@ export function turnLatencyLine(driver: string, threadId: string, trace: TurnLat
   if (toolsBy) parts.push(`toolsBy=${toolsBy}`);
   const toolsServed = turnToolsServed(trace.toolWait);
   if (toolsServed) parts.push(`toolsServed=${toolsServed}`);
+  const toolsSlow = turnToolsSlow(trace.toolWait);
+  if (toolsSlow) parts.push(`toolsSlow=${toolsSlow}`);
   if (trace.stallMs !== undefined) parts.push(`stallGuard=${trace.stallMs}ms${trace.stallRetried ? " retried" : ""}`);
   parts.push(outcome);
   return parts.join(" ");

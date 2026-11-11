@@ -16,11 +16,19 @@
 // - #1098 (2026-10-27): a step of the person's own work on a site they
 //   allowed (save, next, continue, create, add, ok...) is a card only at Ask;
 //   at Auto and above it runs. A payment, a send and a delete keep their card.
+// - #3502 (2026-11-10): that card reads the one Full access decision
+//   (server/approvals/full-access-gate.ts). At Full access the bot acts unless
+//   one of the gate's holds applies (an organization rule set to Refuse or Ask
+//   first, the person's own rule, isolation between people); the turn's
+//   record names what was paid, sent or deleted. Below Full the card comes.
+
+import type { ApprovalMode } from "../../../shared/approval-mode.ts";
+import { fullAccessDecision, type FullAccessFacts } from "../../approvals/full-access-gate.ts";
 
 export const MY_CHROME_PROFILE = "my-chrome";
 
 /** Added to the browser prompt for a bot set to My Chrome. */
-export const MY_CHROME_SYSTEM_PROMPT = " Your browser is the person's own Chrome (My Chrome), where they are signed in: it works only on the sites they allowed, in tabs you open (a banner shows them you drive it), and stops the moment they press Stop. There are no scripts, cookies or saved state there; address elements by their @eN refs. A payment or purchase, a send (a form, an email, a message, a post) or a delete waits on the person's approval card: say what you are about to do, and never try to get around a refusal.";
+export const MY_CHROME_SYSTEM_PROMPT = " Your browser is the person's own Chrome (My Chrome), where they are signed in: it works only on the sites they allowed, in tabs you open (a banner shows them you drive it), and stops the moment they press Stop. There are no scripts, cookies or saved state there; address elements by their @eN refs. A payment or purchase, a send (a form, an email, a message, a post) or a delete waits on the person's approval card unless their approval level already answers it: say what you are about to do, and never try to get around a refusal.";
 
 export type SensitiveKind = "payment" | "send" | "delete" | "step" | "unclear";
 
@@ -277,6 +285,21 @@ export interface MyChromeToolDeps {
   /** The bot's level runs work unasked (Auto, Full): a step of the person's
    * own work (save, next...) runs with no card (#1098). */
   stepsUnasked?: boolean;
+  /** #3502: the level this turn runs at and the facts the one Full access
+   * decision reads for this held action (an organization rule, the person's
+   * own rule, isolation between people). Absent: the card comes. */
+  heldLevel?(held: { kind: SensitiveKind; summary: string }): { level: ApprovalMode; facts: FullAccessFacts } | Promise<{ level: ApprovalMode; facts: FullAccessFacts }>;
+  /** #3502: the level answered the held action; the turn's record says what
+   * was paid, sent or deleted. */
+  answeredByLevel?(held: { kind: SensitiveKind; summary: string }): void;
+}
+
+/** #3502: whether the person's approval level answers a held My Chrome
+ * action, through the one Full access decision. Approve for me reads it the
+ * way it reads a safety hold on any other permission card
+ * (auto-approve.ts autoVerdict): the card stays. */
+export function myChromeLevelAnswers(level: ApprovalMode | undefined, facts: FullAccessFacts = {}): boolean {
+  return level !== undefined && fullAccessDecision(level, facts).acts;
 }
 
 /** The "Always allow" grant of a sensitive action: one kind (payment, send,
@@ -308,9 +331,16 @@ export async function runMyChromeTool(deps: MyChromeToolDeps): Promise<unknown> 
     try { page = await deps.pageUrl(); } catch { /* the card still names the action */ }
     let origin = page;
     try { origin = new URL(page).origin; } catch { /* keep */ }
-    const answer = await deps.confirm(`My Chrome: ${sensitive.action}${origin ? ` on ${origin}` : ""}`, myChromeAllowKey(sensitive.kind, page));
-    if (answer !== "allow") {
-      return toolText(`Not approved: the person did not approve this in My Chrome (${KIND_WORDS[sensitive.kind]}), so it did not happen. Do not retry it on your own; ask them, or continue without it.`, true);
+    const summary = `My Chrome: ${sensitive.action}${origin ? ` on ${origin}` : ""}`;
+    const read = deps.heldLevel ? await deps.heldLevel({ kind: sensitive.kind, summary }) : undefined;
+    if (read && myChromeLevelAnswers(read.level, read.facts)) {
+      deps.answeredByLevel?.({ kind: sensitive.kind, summary });
+    } else {
+      // full-access: browser-held
+      const answer = await deps.confirm(summary, myChromeAllowKey(sensitive.kind, page));
+      if (answer !== "allow") {
+        return toolText(`Not approved: the person did not approve this in My Chrome (${KIND_WORDS[sensitive.kind]}), so it did not happen. Do not retry it on your own; ask them, or continue without it.`, true);
+      }
     }
   }
   const result = await deps.run(deps.params);

@@ -160,7 +160,10 @@ person for a GO during a `tools/call` with MCP elicitation
 Perspicax session (`withElicitation`), reads the call's stream as it comes
 (`readBounded` with `onRequest`) and shows the GO as an approval card on the
 turn's thread (`askGo`, `confirmHeldCard` in `server/index.ts`: Full access and
-Approve for me never answer it). Keep these rules, covered by
+Approve for me never answer it). That GO is a guard the owner kept: a write,
+a contact or a send through the organization's connector. The browser's held
+card shares `confirmHeldCard` but reads the person's level (#3502,
+docs/code/computers.md); `askGo` does not. Keep these rules, covered by
 `server/perspicax/perspicax-mcp.test.ts` ("the Flow guard's GO"):
 
 - Only the person's Allow is a GO (`accept` with `decision: allow`); Deny is

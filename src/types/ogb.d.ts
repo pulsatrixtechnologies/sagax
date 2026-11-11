@@ -325,7 +325,9 @@ const __BASE_VERSION__: string;
       };
       /** Arms one user-initiated display capture request from this frame. */
       beginScreenPreviewIntent(): boolean;
-      screenFrame(): Promise<string | null>;
+      /** One full frame of this computer: the local page only, never the
+       * page served by the organization server (#3565). */
+      screenFrame?(): Promise<string | null>;
       /** A 320x200 JPEG of this computer once Screen Recording is granted (never prompts). */
       screenThumbnail?(): Promise<{ image: string; at: number; host: string } | null>;
       androidDevice?: {

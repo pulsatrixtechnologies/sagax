@@ -2,7 +2,9 @@
  * Computer tab's screens at the bot panel's width. A Local VM that is off
  * (Démarrer alone, no control bar over it), the server environment off (the
  * bar under the words), the bot's browser live, closed, and its take-control
- * window. The browser's stream is a stand-in EventSource. */
+ * window. The browser's stream is a stand-in EventSource. This computer's
+ * live window on the local page and on the page served by the organization
+ * server (modal=local, modal=bundled). */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserComputerScreen } from "../components/BrowserPanel";
@@ -70,6 +72,20 @@ if (params.get("modal") === "needs") {
   };
 }
 
+// modal=local: the local page's live window, fed by the full frame
+// (screenFrame). modal=bundled: the app's page served by the organization
+// server, which only gets the bot panel's small thumbnail (#3565).
+if (params.get("modal") === "local" || params.get("modal") === "bundled") {
+  const picture = () => `data:image/png;base64,${fakeDesktop(params.get("modal") === "bundled" ? 320 : 1280)}`;
+  (window as unknown as { ogb: unknown }).ogb = {
+    ...(params.get("modal") === "local" ? { screenFrame: async () => picture() } : { screenThumbnail: async () => ({ image: picture(), at: Date.now(), host: "gallery" }) }),
+    permStatus: async () => ({ screen: "granted" }),
+    permAll: async () => ({ platform: "darwin", permissions: [{ id: "screen", status: "granted" }] }),
+    permAct: async () => null,
+    permOpenSettings: async () => {},
+  };
+}
+
 const live = { id: "live", name: "Assistant", browserProfile: "own" } as unknown as Bot;
 const closed = { id: "closed", name: "Assistant", browserProfile: "own" } as unknown as Bot;
 const machine = "Alexs-MacBook-Pro.local";
@@ -78,10 +94,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return <section data-gallery={title}><h1 className="mb-3 text-[13px] font-semibold text-ink-secondary">{title}</h1>{children}</section>;
 }
 
-function fakeDesktop(): string {
+function fakeDesktop(width = 1280): string {
   const canvas = document.createElement("canvas");
-  canvas.width = 1280; canvas.height = 800;
+  canvas.width = width; canvas.height = width * 5 / 8;
   const g = canvas.getContext("2d")!;
+  g.scale(width / 1280, width / 1280);
   g.fillStyle = "#1a1b1e"; g.fillRect(0, 0, 1280, 800);
   g.fillStyle = "#2a2d33"; g.fillRect(40, 40, 400, 280);
   g.fillStyle = "#3a3f48"; g.fillRect(480, 40, 360, 180);
@@ -120,6 +137,8 @@ function Gallery() {
         onClose={() => {}}
         screen={() => <img alt="" className="h-full w-full rounded-xl object-contain" src={`data:image/png;base64,${picture}`} />} />}
       {modal === "starting" && <SandboxDesktopModal title={t("computer.screenOf", { name: "Assistant" })} state="running" onClose={() => {}} />}
+      {(modal === "local" || modal === "bundled") && <SandboxDesktopModal title={t("computer.screenOf", { name: "Assistant" })} state="running" onClose={() => {}}
+        screen={(control) => <LocalLiveScreen control={control} />} />}
       {modal === "needs" && <SandboxDesktopModal title={t("computer.screenOf", { name: "Assistant" })} state="running" onClose={() => {}}
         screen={(control) => <LocalLiveScreen control={control} />} />}
     </div>

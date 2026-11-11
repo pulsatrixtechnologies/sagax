@@ -61,6 +61,17 @@ describe("LocalLiveScreen", () => {
     expect(screenFrame).toHaveBeenCalledTimes(2);
   });
 
+  // #3565: the app's page served by the organization server never gets the
+  // full frame; its live window shows the bot panel's thumbnail instead.
+  it("on the page served by the organization server, shows this computer through the thumbnail", async () => {
+    const screenThumbnail = vi.fn().mockResolvedValue({ image: "data:image/jpeg;base64,/9j/", at: 1, host: "mac-1" });
+    (window as { ogb?: unknown }).ogb = { screenThumbnail, permOpenSettings: vi.fn() };
+    await mount();
+    expect(screenThumbnail).toHaveBeenCalled();
+    expect(host.querySelector<HTMLImageElement>("[data-local-live-frame]")?.getAttribute("src")).toBe("data:image/jpeg;base64,/9j/");
+    expect(host.querySelector("[data-local-live-error]")).toBeNull();
+  });
+
   it("says Screen Recording is not allowed with the buttons that fix it (System Settings, Relaunch Sagax), instead of spinning", async () => {
     const permAct = vi.fn().mockResolvedValue(null);
     (window as { ogb?: unknown }).ogb = {

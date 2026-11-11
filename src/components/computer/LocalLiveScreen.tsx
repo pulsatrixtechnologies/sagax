@@ -1,10 +1,11 @@
 // This computer's live picture inside SandboxDesktopModal (Watching / You
 // have control), opened from the bot panel's Computer card (#2342).
 //
-// The frames come from the desktop app's main process (window.ogb.screenFrame
-// -> IPC "screen:frame" -> desktopCapturer), on the local page and on this
-// app's page served by the organization server alike. Without the desktop app
-// (a web browser) nothing can see this screen, so the window says so at once.
+// The frames come from the desktop app's main process (ownScreenCapture:
+// the full frame on the local page, the bot panel's small thumbnail on this
+// app's page served by the organization server, which never gets the full
+// frame, #3565). Without the desktop app (a web browser) nothing can see
+// this screen, so the window says so at once.
 // When frames stay empty the window says the real reason (the
 // vague "temporarily unavailable" hid a missing bridge): Screen Recording not
 // allowed (with the button to the right System Settings pane, never a
@@ -14,7 +15,7 @@ import { MonitorOff } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import { isMacPlatform } from "@/lib/is-mac-platform";
-import { SCREEN_PROBLEM_LINE, localScreenProblem, useScreenPermission } from "@/lib/computer-screen-state";
+import { SCREEN_PROBLEM_LINE, localScreenProblem, ownScreenCapture, useScreenPermission } from "@/lib/computer-screen-state";
 import { useOsPermissions } from "@/lib/os-permissions";
 import { OsPermissionButtons, permissionActionLabel } from "@/components/settings/OsPermissions";
 import { DesktopStarting } from "./DesktopStarting";
@@ -28,11 +29,12 @@ export function LocalLiveScreen({ control }: { desktopId?: string; control: bool
   const [frame, setFrame] = useState<string | null>(null);
   const [misses, setMisses] = useState(0);
   const [failure, setFailure] = useState<string | null>(null);
-  const inApp = typeof window !== "undefined" && typeof window.ogb?.screenFrame === "function";
+  const inApp = ownScreenCapture() !== null;
   const { screen: screenPermission } = useScreenPermission();
 
   useEffect(() => {
-    if (!inApp) return;
+    const grabFrame = ownScreenCapture();
+    if (!grabFrame) return;
     let cancelled = false;
     let inFlight = false;
     setMisses(0);
@@ -40,7 +42,7 @@ export function LocalLiveScreen({ control }: { desktopId?: string; control: bool
       if (inFlight) return;
       inFlight = true;
       try {
-        const image = await window.ogb!.screenFrame();
+        const image = await grabFrame();
         if (cancelled) return;
         if (image) {
           setFrame(image);

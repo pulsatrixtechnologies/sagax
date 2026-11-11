@@ -25,6 +25,7 @@ import {
   SCREEN_PROBLEM_SHORT,
   computerCardView,
   localScreenProblem,
+  ownScreenCapture,
   useCloudAsleep,
   useScreenPermission,
 } from "@/lib/computer-screen-state";
@@ -257,7 +258,7 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
     : place === "local" ? "local"
     : "cloud";
   const permission = useScreenPermission();
-  const appCapture = typeof window !== "undefined" && typeof window.ogb?.screenFrame === "function";
+  const appCapture = ownScreenCapture() !== null;
   // The app's own reason (Screen Recording) applies to the row only when the
   // row stands for this computer.
   const thisComputer = !organization || sameHost(permission.host, ownDesktop?.desktop.name);

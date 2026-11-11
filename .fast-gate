@@ -32,3 +32,12 @@ full-access-guard: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/(appr
 # that skips the settings decision); left to the files beside a change, main
 # stayed red unseen. About 95 s together (#3538 added two files, about 15 s).
 guard-tests: G="$(node scripts/verify/release/guard-tests.mjs)"; if [ -n "$G" ]; then ./node_modules/.bin/vitest run --reporter=dot --testTimeout=60000 $G; fi
+
+# electron-unit (#3565): the Electron unit tests (electron/*.node-test.mjs,
+# node --test, not vitest) ran nowhere but the full CI run, so two of the
+# desktop bridge's guard tests stayed red on main unseen (a bot's command
+# reaching another bot's temporary folder, the bundled page getting the full
+# screen frame). They break from changes outside electron/ too (shared/,
+# server/testing/), so they run on every lot, whatever it touches: about
+# 15 s together (45 s on a busy machine).
+electron-unit: node --test "electron/*.node-test.mjs"

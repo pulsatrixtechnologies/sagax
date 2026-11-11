@@ -104,12 +104,17 @@ const failure = message => ({ ...text(message), isError: true });
  * - its name is an HMAC of the scope under a key that lives only in this
  *   app's memory, so no bot can work out another bot's folder name;
  * - the folder of them all cannot be listed (0300 on macOS and Linux, an ACL
- *   with traverse and create but no list on Windows; root-owned 0311 in the
- *   Local VM, where the bot's command also runs with no_new_privs so sudo
- *   cannot lift it);
+ *   with traverse and create but no list on Windows, where an OWNER RIGHTS
+ *   entry also takes away the owner's implicit right to rewrite that ACL;
+ *   root-owned 0311 in the Local VM, where the bot's command also runs with
+ *   no_new_privs so sudo cannot lift it);
  * - on macOS each bot command runs under sandbox-exec, which denies every
  *   path of the folder of them all except the bot's own, whatever the
- *   command spells (a chmod back, a glob, a link). */
+ *   command spells (a chmod back, a glob, a link, a climb to the parent).
+ *   The same profile denies the app's own data folders (the local server's
+ *   bots, their memory, the provider keys), which the text check below
+ *   refuses only when the command names them (#3565). Linux has no such
+ *   confinement of a bot's command yet: that guard is in issue #3582. */
 const TMP_SCOPE = /^[a-f0-9]{16}$/;
 const TMP_SCOPED_ACTIONS = new Set(["run_command", "read_file", "write_file", "list_files", "search_files", "vm_run_command"]);
 const BOT_TMP_FOLDER = "sagax-bots";
@@ -176,8 +181,20 @@ export async function sweepBotTmpRoot({ root = path.join(os.tmpdir(), BOT_TMP_FO
   await lockBotTmpRoot(root, platform);
 }
 
+/** OWNER RIGHTS: an entry for it replaces the rights Windows gives a file's
+ * owner implicitly (read and rewrite the ACL), so the account that made the
+ * folder of them all cannot grant itself list on it again (#3565). */
+const OWNER_RIGHTS_SID = "S-1-3-4";
+const WINDOWS_ROOT_RIGHTS = "(X,AD,WD,RA,REA,RC)";
+
+/** The icacls arguments that lock the folder of them all on Windows. */
+export function windowsRootAclArgs(root, sid) {
+  return [root, "/inheritance:r", "/grant:r", `*${sid}:${WINDOWS_ROOT_RIGHTS}`, "/grant", `*${sid}:(OI)(CI)(IO)(F)`, "/grant", `*${OWNER_RIGHTS_SID}:${WINDOWS_ROOT_RIGHTS}`];
+}
+
 /** Windows: the person's account keeps traverse and create on the folder of
- * them all, never list; full control is inherited by each bot's folder. */
+ * them all, never list, and cannot rewrite its ACL; full control is
+ * inherited by each bot's folder. */
 async function lockWindowsRoot(root) {
   const sid = await new Promise(resolve => {
     const child = spawn("whoami", ["/user", "/fo", "csv", "/nh"], { windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
@@ -187,7 +204,7 @@ async function lockWindowsRoot(root) {
   });
   if (!sid) return;
   await new Promise(resolve => {
-    const child = spawn("icacls", [root, "/inheritance:r", "/grant:r", `*${sid}:(X,AD,WD,RA,REA,RC)`, "/grant", `*${sid}:(OI)(CI)(IO)(F)`], { windowsHide: true, stdio: "ignore" });
+    const child = spawn("icacls", windowsRootAclArgs(root, sid), { windowsHide: true, stdio: "ignore" });
     child.once("error", resolve); child.once("close", resolve);
   });
 }
@@ -251,16 +268,45 @@ export function commandNamesOtherBotTmp(command, ownName) {
 const sbplString = value => `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 
 /** macOS: the command under sandbox-exec, every path of the folder of them
- * all denied but this bot's own (the later rule wins). */
-export function sandboxedCommandArgv(command, { root, own, shell, sandboxExec = SANDBOX_EXEC }) {
+ * all denied but this bot's own (the later rule wins), and every path of
+ * the app's own data folders (`hidden`) denied. */
+export function sandboxedCommandArgv(command, { root, own, hidden = [], shell, sandboxExec = SANDBOX_EXEC }) {
   const profile = [
     "(version 1)",
     "(allow default)",
+    ...hidden.map(dir => `(deny file-read* file-write* (subpath ${sbplString(dir)}))`),
     `(deny file-read* file-write* (subpath ${sbplString(root)}))`,
     `(allow file-read-metadata (literal ${sbplString(root)}))`,
     `(allow file-read* file-write* (subpath ${sbplString(own)}))`,
   ].join("");
   return [sandboxExec, "-p", profile, shell, "-lc", command];
+}
+
+/** The app's own data folders, the legacy name of the home one included
+ * (~/.openmausbot was ~/.sagax, legacy-names.mjs). */
+function appDataRoots(appDataPaths) {
+  return (appDataPaths ?? []).flatMap(root => typeof root === "string" && path.basename(root) === ".sagax" ? [root, path.join(path.dirname(root), ".openmausbot")] : [root]);
+}
+
+/** The app's own data folders as real paths, those that exist (a fresh
+ * install has not made them yet), for the confinement to hide. */
+async function hiddenAppData(appDataPaths) {
+  const out = [];
+  for (const dir of appDataRoots(appDataPaths)) {
+    if (typeof dir !== "string" || !dir) continue;
+    const real = await fs.realpath(dir).catch(() => null);
+    if (!real || out.includes(real)) continue;
+    if (await fs.stat(real).then(info => info.isDirectory(), () => false)) out.push(real);
+  }
+  return out;
+}
+
+/** macOS: the confined argv of a bot's command, or undefined when this
+ * computer has no way to confine it. */
+async function confinedCommandArgv(command, { platform, root, own, appDataPaths, sandboxExec }) {
+  if (platform !== "darwin" || !sandboxExec || !await fs.access(sandboxExec).then(() => true, () => false)) return undefined;
+  const shell = process.env.SHELL && path.isAbsolute(process.env.SHELL) ? process.env.SHELL : "/bin/sh";
+  return sandboxedCommandArgv(command, { root: await fs.realpath(root), own: await fs.realpath(own), hidden: await hiddenAppData(appDataPaths), shell, sandboxExec });
 }
 
 const shQuote = value => `'${String(value).replace(/'/g, "'\\''")}'`;
@@ -448,9 +494,7 @@ const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 export function commandNamesAppData(command, appDataPaths, home) {
   if (typeof command !== "string" || !command) return null;
   const fold = process.platform === "darwin" || process.platform === "win32";
-  // ~/.openmausbot, the legacy name, is a link to ~/.sagax (legacy-names.mjs).
-  const roots = (appDataPaths ?? []).flatMap(root => typeof root === "string" && path.basename(root) === ".sagax" ? [root, path.join(path.dirname(root), ".openmausbot")] : [root]);
-  for (const root of roots) {
+  for (const root of appDataRoots(appDataPaths)) {
     if (typeof root !== "string" || !root) continue;
     const clean = path.resolve(root);
     const forms = [clean];
@@ -494,10 +538,10 @@ export async function executeBridgeOperation(operation, deps, signal) {
       if (named) throw new Error(`This command names ${named}, the Sagax app's own data on this computer: run_command does not reach it.`);
       if (operation.cwd) { await outsideOtherBotTmp(cwd); await assertOutsideProtected(protectedRoots, cwd); }
       const env = { ...commandEnvironment(), ...operation.env, ...(ownTmp ? { TMPDIR: ownTmp, TMP: ownTmp, TEMP: ownTmp } : {}) };
-      // macOS: the operating system itself keeps the bot out of the others' folders.
-      const sandboxExec = deps.sandboxExec === undefined ? SANDBOX_EXEC : deps.sandboxExec;
-      const argv = ownTmp && platform === "darwin" && sandboxExec && await fs.access(sandboxExec).then(() => true, () => false)
-        ? sandboxedCommandArgv(operation.command, { root: await fs.realpath(tmpRoot), own: await fs.realpath(ownTmp), shell: process.env.SHELL && path.isAbsolute(process.env.SHELL) ? process.env.SHELL : "/bin/sh", sandboxExec })
+      // macOS: the operating system itself keeps the bot out of the others'
+      // folders and the app's own data (#3565).
+      const argv = ownTmp
+        ? await confinedCommandArgv(operation.command, { platform, root: tmpRoot, own: ownTmp, appDataPaths: deps.appDataPaths, sandboxExec: deps.sandboxExec === undefined ? SANDBOX_EXEC : deps.sandboxExec })
         : undefined;
       if (argv && !operation.command.trim()) throw new Error("Give a command");
       return runCommand(operation.command, { cwd, timeoutSeconds: operation.timeout_seconds ?? 120, signal, env, ...(argv ? { argv } : {}) });

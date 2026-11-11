@@ -30,6 +30,7 @@
 // without one, and a marker without a registered id).
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import { permissionQuestion, recommendedPermissionAnswer, type ChoiceQuestion } from "../../shared/permission-question.ts";
+import { isYesNoChoices, offersTwoPaths } from "../../shared/notification-context.ts";
 import { alternativeChoices, choiceOptionsFor, yesNoOptions } from "./final-confirmation.ts";
 
 export const FULL_ACCESS_HOLDS = ["org-rule", "person-rule", "isolation", "sensitive-path", "question"] as const;
@@ -77,6 +78,12 @@ export function fullAccessChoiceAnswer(level: ApprovalMode | undefined, card: Ch
   // a real decision on every surface (ask_choice, the engine's own question
   // tool), never a may-I: the card stays.
   if (choiceOptionsFor(card.question, card.options) !== card.options) return null;
+  // #3525: the same with any "or" / "ou" form the engine's own question tool
+  // sends ("Je publie (ou j'attends) ?", "to the team or the vendor?"):
+  // nothing is answered for the person. request-opened-present.ts then sends
+  // it back with ask_choice's words (choiceQuestionMismatch) and the engine
+  // asks again with its two paths, which keep their card (#3508 below).
+  if (isYesNoChoices(card.options) && offersTwoPaths(card.question)) return null;
   // #3508: since #2909 ask_choice refuses Yes/No on such a question, so the
   // model gives the two paths themselves as options. Those options must not
   // turn the question back into a may-I answered with its first path. A

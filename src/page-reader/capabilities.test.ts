@@ -589,10 +589,15 @@ describe("files.download", () => {
         reads: [{ name: "team-board", label: "The work of your coding teams" }],
       },
     });
-    const ask = (args: Record<string, unknown>, options: { gesture?: boolean; id?: number; omitGesture?: boolean } = {}) => {
+    const ask = (args: Record<string, unknown>, options: { gesture?: boolean; id?: number; omitGesture?: boolean; active?: boolean } = {}) => {
       const data: Record<string, unknown> = { type: CAP_MESSAGE, v: 1, id: options.id ?? 1, cap: "files.download", args };
       if (!options.omitGesture) data.gesture = options.gesture ?? true;
-      return ctx.broker.onMessage({ source: ctx.frame, origin: "null", data });
+      return ctx.broker.onMessage({
+        source: ctx.frame,
+        origin: "null",
+        data,
+        userActivation: { isActive: options.active !== false },
+      });
     };
     return { ...ctx, saveFile, ask };
   }
@@ -631,13 +636,45 @@ describe("files.download", () => {
     noSave(saveFile);
   });
 
-  it("refuses a download when gesture is not true, and saves nothing", async () => {
-    for (const options of [{ gesture: false }, { omitGesture: true }]) {
+  it("refuses a download when the message has no live click, and saves nothing", async () => {
+    for (const options of [{ active: false }, { active: false, gesture: true }, { active: false, omitGesture: true }]) {
       const { ask, result, saveFile } = withFiles();
       await ask({ name: "note.txt", mime: "text/plain", data: TEXT }, options);
       expect(result()).toMatchObject({ ok: false, error: "bad_request" });
       noSave(saveFile);
     }
+  });
+
+  it("saves from a live click even when the page omits gesture or sets it false", async () => {
+    for (const options of [{ gesture: false }, { omitGesture: true }]) {
+      const { ask, result, saveFile } = withFiles();
+      await ask({ name: "note.txt", mime: "text/plain", data: TEXT }, options);
+      expect(result()).toMatchObject({ ok: true });
+      expect(saved(saveFile)?.name).toBe("note.txt");
+    }
+  });
+
+  it("keeps a click that was active on arrival and ends while capabilities load", async () => {
+    let live = true;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const saveFile = vi.fn();
+    const ctx = setup({ saveFile } as Partial<BrokerDeps>, {});
+    ctx.api.mockImplementation(async () => {
+      await gate;
+      return { capabilities: { data: [], viewer: false, open: false, files: ["download"] }, reads: [] };
+    });
+    const pending = ctx.broker.onMessage({
+      source: ctx.frame,
+      origin: "null",
+      data: { type: CAP_MESSAGE, v: 1, id: 1, cap: "files.download", gesture: true, args: { name: "note.txt", mime: "text/plain", data: TEXT } },
+      userActivation: { get isActive() { return live; } },
+    });
+    live = false;
+    release();
+    await pending;
+    expect(ctx.result()).toMatchObject({ ok: true });
+    expect(saved(saveFile)?.name).toBe("note.txt");
   });
 
   it("saves a file of each allowed mime", async () => {

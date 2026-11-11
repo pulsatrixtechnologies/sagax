@@ -174,7 +174,7 @@ export type ApprovalChoice = "once" | "always" | "decline";
 export interface CapabilityBroker {
   start(): Promise<void>;
   /** A message from any window: answers it when it is the page's call. */
-  onMessage(event: { source: unknown; origin: string; data: unknown }): Promise<boolean>;
+  onMessage(event: { source: unknown; origin: string; data: unknown; userActivation?: { isActive?: boolean } | null }): Promise<boolean>;
   /** A link the page asked to open through the wrapper's own bridge: true
    * when this took it (the reader is asked first), so the caller stops it. */
   guardOpen(event: { source: unknown; data: unknown }): boolean;
@@ -386,9 +386,10 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
     return false;
   };
 
-  const downloadFile = (request: PageCapRequest): { ok: true; value: true } | { ok: false; error: PageCapError; message?: string } => {
-    // gesture is a boolean on the message, not a page argument. Only a live click saves.
-    if (request.gesture !== true) return { ok: false, error: "bad_request", message: "A download starts from a click." };
+  const downloadFile = (request: PageCapRequest, fromClick: boolean): { ok: true; value: true } | { ok: false; error: PageCapError; message?: string } => {
+    // fromClick was read off this message before the capabilities load.
+    // The gesture flag is the page's own boolean, so it is not a click.
+    if (!fromClick) return { ok: false, error: "bad_request", message: "A download starts from a click." };
     const mime = request.args?.mime;
     if (typeof mime !== "string" || !(PAGE_CAP_FILE_MIMES as readonly string[]).includes(mime)) {
       return { ok: false, error: "bad_request", message: "This file type is not allowed." };
@@ -428,6 +429,9 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
         answer(id, { ok: false, error: deps.signedIn ? "not_found" : "sign_in", message: deps.signedIn ? "This page is not available." : "Sign in to use this page's data." });
         return true;
       }
+      // Transient activation ends across the wait below. Read it now.
+      // A page can set gesture true on a load, so that flag is not the click.
+      const fromClick = event.userActivation?.isActive === true;
       await (started ??= load());
       const source = request.cap === "data.read" ? request.args?.name : undefined;
       if (request.cap === "data.read" && (typeof source !== "string" || !SOURCE_NAME.test(source))) {
@@ -458,7 +462,7 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
           receivedData = true;
           answer(id, { ok: true, value: info });
         } else if (request.cap === "files.download" && state.caps) {
-          answer(id, downloadFile(request));
+          answer(id, downloadFile(request, fromClick));
         } else if (!state.caps) {
           answer(id, { ok: false, error: "unavailable", message: "This page's capabilities could not be read." });
         } else {

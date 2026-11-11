@@ -228,6 +228,17 @@ describe("#2694: feedback on a run's card, relayed", () => {
 });
 
 describe("mirrorBackgroundReply (#2901: nothing invisible)", () => {
+  it("#3480: a bot in quiet mode posts its background work nowhere in the main chat", () => {
+    const w = world();
+    w.deps.relayVia = (_botId, threadId) => threadId === "work" ? "mcp" : undefined;
+    w.deps.quiet = (botId) => botId === ATLAS.id;
+    w.say("work", "Le lot est prêt.");
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toBe(false);
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-2", ok: false }, w.deps)).toBe(false);
+    expect((w.threads.get("main") ?? []).filter((row) => row.relayOf)).toEqual([]);
+    expect(w.notified).toEqual([]);
+  });
+
   it("copies an MCP send_prompt answer into the bot's chat once, labelled, without ringing", () => {
     const w = world();
     w.deps.relayVia = (_botId, threadId) => threadId === "work" ? "mcp" : undefined;

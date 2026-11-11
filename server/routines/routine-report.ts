@@ -229,13 +229,24 @@ export interface RoutineRunReportFacts {
   /** #3479: the first run without problems after runs with problems: the
    * person hears once that it works again. */
   recovered?: unknown;
+  /** #3480: the bot is in quiet mode (shared/quiet-mode.ts): only what
+   * needs the person's answer posts (a question or approval it waits on, a
+   * team that needs input, items only the person can do); a result or a
+   * problem does not. */
+  quietMode?: boolean;
 }
 
 /** Whether a run has something for the person's conversation now. A plain
  * completed result posts only when the routine opts in (postResults); an
- * approval, a question, a team that needs input, or an error always does. */
+ * approval, a question, a team that needs input, or an error always does.
+ * In quiet mode only what needs the person's answer does. */
 export function routineRunReportable(run: RoutineRunReportFacts): boolean {
   if (run.goalStatus === "needs-input") return true;
+  if (run.quietMode) {
+    if (run.startedBy === "person" && ["queued", "running", "waiting"].includes(run.status)) return true;
+    if (run.status === "waiting") return run.needsPerson === true;
+    return run.status === "completed" && run.attention === true;
+  }
   // A run a person started shows what started, while it is queued and runs
   // too; once it ends the usual rules decide (a quiet one says so in place).
   if (run.startedBy === "person" && ["queued", "running", "waiting"].includes(run.status)) return true;

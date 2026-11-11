@@ -129,6 +129,32 @@ describe("routineRunReportable", () => {
   });
 });
 
+describe("routineRunReportable in quiet mode (#3480)", () => {
+  it("a completed run, a run with problems and a failure post nothing", () => {
+    expect(routineRunReportable({ status: "completed", postResults: true, quietMode: true })).toBe(false);
+    expect(routineRunReportable({ status: "completed", problems: "two steps failed", postResults: true, quietMode: true })).toBe(false);
+    expect(routineRunReportable({ status: "failed", postResults: true, quietMode: true })).toBe(false);
+    expect(routineRunReportable({ status: "blocked", postResults: true, quietMode: true })).toBe(false);
+  });
+
+  it("what needs the person's answer still shows its card", () => {
+    expect(routineRunReportable({ status: "waiting", needsPerson: true, quietMode: true })).toBe(true);
+    expect(routineRunReportable({ status: "waiting", goalStatus: "needs-input", quietMode: true })).toBe(true);
+    expect(routineRunReportable({ status: "completed", attention: true, quietMode: true })).toBe(true);
+    expect(routineRunReportable({ status: "waiting", quietMode: true })).toBe(false);
+  });
+
+  it("a run that works again after problems (#3479) posts nothing either", () => {
+    expect(routineRunReportable({ status: "completed", recovered: { afterRuns: 3, since: 1 }, postResults: true, quietMode: true })).toBe(false);
+    expect(routineRunReportable({ status: "completed", recovered: { afterRuns: 3, since: 1 }, quietMode: false })).toBe(true);
+  });
+
+  it("off, each routine's own setting decides again", () => {
+    expect(routineRunReportable({ status: "completed", postResults: true, quietMode: false })).toBe(true);
+    expect(routineRunReportable({ status: "completed", postResults: false, quietMode: false })).toBe(false);
+  });
+});
+
 describe("the bot's own run status (2026-11-01)", () => {
   it("reads RUN_STATUS failed or partial on a line of its own, never quiet", () => {
     expect(routineReportOutcome("RUN_STATUS: failed: the CRM refused the login\nNothing was read."))

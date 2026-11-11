@@ -134,12 +134,22 @@ describe("group panel Details", () => {
   });
 
   it("lays Details out in the bot panel's order: Upcoming, Suggested, Computer", async () => {
+    // Add to Slack shows only where the server offers the lead's Admin link
+    // (#3398): serve that link here.
+    fixture.api.mockImplementation((path: string) => Promise.resolve(path.endsWith("/slack-management")
+      ? { available: true, managementUrl: "https://admin.example.test/slack" } : { tasks: [] }));
     render();
     await vi.waitFor(() => expect(host.querySelector('[data-group-details] [data-bot-settings-section="computer"]')).not.toBeNull(), { timeout: 15_000 });
     const order = [...host.querySelectorAll("[data-group-details] [data-bot-settings-section]")].map((el) => el.getAttribute("data-bot-settings-section"));
     expect(order.slice(0, 3)).toEqual(["routines", "suggestions", "computer"]);
-    const rows = [...host.querySelectorAll('[data-bot-settings-section="suggestions"] [data-suggestion]')].map((el) => el.getAttribute("data-suggestion"));
-    expect(rows).toEqual(expect.arrayContaining(["slack", "meeting"]));
+    const rows = () => [...host.querySelectorAll('[data-bot-settings-section="suggestions"] [data-suggestion]')].map((el) => el.getAttribute("data-suggestion"));
+    await vi.waitFor(() => expect(rows()).toEqual(expect.arrayContaining(["slack", "meeting"])));
+  });
+
+  it("offers no Add to Slack where the server has no Admin link", async () => {
+    render();
+    await vi.waitFor(() => expect(host.querySelector('[data-suggestion="meeting"]')).not.toBeNull(), { timeout: 15_000 });
+    expect(host.querySelector('[data-suggestion="slack"]')).toBeNull();
   });
 
   it("does not show the roster or Leave group on Details", () => {

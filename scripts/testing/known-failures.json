@@ -814,13 +814,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "src/components/GroupPanel.tabs.dom.test.ts",
-      "test": "group panel Details > lays Details out in the bot panel's order: Upcoming, Suggested, Computer",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/drivers/acp/tool-scope.test.ts",
       "test": "runs an offered Grok model on an organization turn despite a launch campaign, with no notice",
       "owner": "unassigned",

@@ -610,7 +610,7 @@ describe("ACP turns (fake CLI)", () => {
   it("keeps the split through an ordinary context dip", async () => {
     const { usage, send } = await usageThread("ordinary-dip");
     usage(108641);
-    expect(await send("turn 1")).toBe(FULL + "\n\nturn 1");
+    expect(await send("turn 1")).toBe(OPENING + "\n\nturn 1");
     // a 17% dip is an ordinary step, not a compaction
     usage(90258);
     expect(await send("turn 2")).toBe("turn 2");

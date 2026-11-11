@@ -7384,6 +7384,7 @@
   "chat.askLine.asking": "Demande à",
   "chat.askLine.asked": "A demandé à",
   "chat.askLine.incoming": "a demandé",
+  "chat.quietRetired": "Mon travail reste déjà hors de notre chat : je te joins avec des réponses, des questions, les résultats que tu as demandés et les problèmes qui ont besoin de toi. Le reste est dans mon panneau et dans les exécutions de chaque routine.",
   "chat.connectorCredentialsRefused": "Ce connecteur a refusé sa connexion (HTTP 401). Renvoie le message ; si ça échoue encore, ouvre Capacités > Installés et reconnecte-toi, ou vérifie les valeurs de ses en-têtes.",
   "chat.askLine.answered": "a répondu",
   "chat.askLine.words": "« {words} »",

@@ -70,7 +70,9 @@ export function agentsMdProblems(text: string): string[] {
 }
 
 describe("AGENTS.md is rules only (#3292)", () => {
-  const agents = readFileSync(join(root, "AGENTS.md"), "utf8");
+  // the file as git holds it (LF): a Windows checkout hands it CRLF, which
+  // reads every line as a paragraph and adds a byte per line to the ceiling
+  const agents = readFileSync(join(root, "AGENTS.md"), "utf8").replace(/\r\n/g, "\n");
 
   it("stays under its size ceiling and keeps the rules-only shape", () => {
     expect(agentsMdProblems(agents)).toEqual([]);

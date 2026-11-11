@@ -47,22 +47,11 @@ function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: s
     ...(failedCause === null && input.kind === "failed" ? { reason: problemReason("failed", `${input.detail} ${host.incidentContext(threadId).lastReply ?? ""}`) } : {}),
     detail: redactSecretsInText(failedCause ?? input.detail)
   }).catch(reportBackgroundError);
-  // #3480: a failed routine of a bot in quiet mode posts nothing and rings
-  // nothing: no Primary Bot report (its reply would land unread in the main
-  // conversation with a sound). The run keeps its outcome in its routine's
-  // runs, the problem log above keeps the incident, and the line written
-  // when quiet mode goes off counts it.
-  if (input.kind === "routine-failed" && host.botQuietMode?.(bot.id) === true) return;
-  // #3480: a failed or stalled background turn of a quiet bot (a wake, a
-  // teammate's or an AI client's work: relayViaOf) is the same: no report,
-  // no sound. The problem log keeps it and the line written when quiet mode
-  // goes off counts it as a run with problems. The person's own
-  // conversation still reports as before.
-  if ((input.kind === "failed" || input.kind === "stalled") && host.botQuietMode?.(bot.id) === true && host.relayViaOf?.(bot.id, threadId)) {
-    const runId = host.routines?.runForThread?.(threadId)?.id ?? `${input.kind}:${threadId}:${Date.now()}`;
-    host.keepQuietRun?.(bot.id, runId, true);
-    return;
-  }
+  // #3581: a failed or stalled turn of an AI client's conversation starts
+  // no Primary Bot report: the client reads the failure in its own answer.
+  // The problem log above keeps it. A routine's, a wake's and a job a bot
+  // opened on itself keep their report below.
+  if ((input.kind === "failed" || input.kind === "stalled") && host.relayViaOf?.(bot.id, threadId) === "mcp") return;
   // A thread another bot opened and is watching is that bot's to handle:
   // the delegator is woken with the failure already (wakeDelegationSource).
   // A thread running coordinated work is its requester's to handle: the

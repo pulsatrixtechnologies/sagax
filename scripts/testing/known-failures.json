@@ -135,29 +135,8 @@
       "since": "2026-11-11"
     },
     {
-      "file": "scripts/tool-policy/tool-policy-coverage.test.ts",
-      "test": "tool policy coverage > has a policy row for every route",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "scripts/tool-policy/tool-policy-coverage.test.ts",
-      "test": "regenerates the reviewed table as it is, with imports that resolve",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "src/lib/no-visible-ids.test.ts",
       "test": "no UUID on screen > the bot email address row and the trigger's address line show the address, never the bot's id (B21)",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "src/locales/unused-keys.test.ts",
-      "test": "does not grow the set of unread locale keys",
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
       "since": "2026-11-11"
@@ -401,41 +380,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/turns/start-turn-prepare-admit.test.ts",
-      "test": "routine effort at turn admission and dispatch > sends low routine effort to codex and its sub-agents; chat keeps the bot's settings",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/turns/start-turn-prepare-admit.test.ts",
-      "test": "routine effort at turn admission and dispatch > sends low routine effort to claudeAgent and its sub-agents; chat keeps the bot's settings",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/turns/start-turn-prepare-admit.test.ts",
-      "test": "routine effort at turn admission and dispatch > leaves the takeover's settings in place",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/turns/start-turn-prepare-admit.test.ts",
-      "test": "routine effort at turn admission and dispatch > derives Claude subagentModel from the bot's fast model when no routine model is set (#2038)",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/turns/start-turn-prepare-admit.test.ts",
-      "test": "routine effort at turn admission and dispatch > lets a per-routine subagentModel override the fast model without changing the main model (#2038)",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/parallel-tasks.e2e.test.ts",
       "test": "parallel tasks e2e > the per-person limit queues the next task until one of theirs finishes",
       "owner": "unassigned",
@@ -632,13 +576,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/agent-api.e2e.test.ts",
-      "test": "agent-to-agent API (real server) > A sends async to B, awaits the turn, reads B's latest page; B's thread is hidden",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "scripts/testing/function-size-server.guard.test.ts",
       "test": "function size server/shared (#1383) > no production function exceeds 400 lines",
       "owner": "unassigned",
@@ -725,13 +662,6 @@
     {
       "file": "src/components/bot-catalog/bot-catalog.test.ts",
       "test": "the detail pane > formats routine schedules in the person's language, never raw cron or UTC",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "scripts/testing/jc-rules.guard.test.ts",
-      "test": "unified chat mode: zero threads, following the threads setting > the chat gates every thread link and the side panel on the threads setting",
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
       "since": "2026-11-11"
@@ -2571,41 +2501,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/approvals/full-access-gate.guard.test.ts",
-      "test": "every approval or choice card reads the Full access decision > finds the surfaces at all (the scan is not empty)",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/approvals/full-access-gate.guard.test.ts",
-      "test": "every approval or choice card reads the Full access decision > the file that decides each surface imports the gate and reads its decision",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/approvals/full-access-gate.guard.test.ts",
-      "test": "every approval or choice card reads the Full access decision > the browser's held card reads the decision before the card, and the route wires the level and the record (#3502)",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/approvals/full-access-gate.guard.test.ts",
-      "test": "every approval or choice card reads the Full access decision > the server's own connector request is marked and reaches the one request.opened decision (#3508)",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/approvals/full-access-gate.guard.test.ts",
-      "test": "every approval or choice card reads the Full access decision > no driver answers or holds a permission request where it emits it, except the chat engines through the decision",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/rooms/section-link.test.ts",
       "test": "Store membership by section id (#2045) > two people with the same team name keep their bots after a rename",
       "owner": "unassigned",
@@ -2816,20 +2711,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "scripts/verify/release/verify-linux-package.test.ts",
-      "test": "verify-linux-package cloudflared pin > compares the packaged cloudflared license to the repo LICENSE, which is the Apache 2.0 text",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "scripts/self-knowledge/knowledge.test.ts",
-      "test": "self-knowledge base > is up to date with the tools, permissions, Settings, menus, engines and guides",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/drivers/agents-merged.test.ts",
       "test": "agents tools listed by family > pins and measures the direct listing",
       "owner": "unassigned",
@@ -2846,27 +2727,6 @@
     {
       "file": "server/threads/thread-file-pins.test.ts",
       "test": "thread file pins > pins and unpins per conversation and survives a restart",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "scripts/verify/release/verify-merge.test.mjs",
-      "test": "stampPathFor > puts the OK stamp under the common git dir for a full sha",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "scripts/verify/release/verify-merge.test.mjs",
-      "test": "stampPathFor > resolves a relative common dir against the repo root",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "scripts/verify/release/verify-merge.test.mjs",
-      "test": "stampPathFor > refuses an empty or non-hex sha",
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
       "since": "2026-11-11"
@@ -3033,13 +2893,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "scripts/docs-copies.test.mjs",
-      "test": "docs-copies > keeps every generated copy in step with its docs site source",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "scripts/stability/bisect.test.ts",
       "test": "bisect over a fixture history > runs only the failing file and names the pull request that broke it",
       "owner": "unassigned",
@@ -3133,27 +2986,6 @@
     {
       "file": "server/plugins/plugin-config.test.ts",
       "test": "a bot's plugin configuration > lists the fields, saves values into the skill, keeps them across an update, and forgets them with the plugin",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "scripts/testing/agents-md.guard.test.ts",
-      "test": "AGENTS.md is rules only (#3292) > stays under its size ceiling and keeps the rules-only shape",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "scripts/testing/jc-rules.guard.test.ts",
-      "test": "every approval card offers Always allow, which keeps a rule (#2091) > the client offers Always allow on every card but the organization's Refuse / Ask first, which says so",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "scripts/testing/jc-rules.guard.test.ts",
-      "test": "no list keeps a card from Always allow > the owner rule candidate is never undefined for a tool call",
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
       "since": "2026-11-11"

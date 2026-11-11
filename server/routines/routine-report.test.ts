@@ -129,32 +129,6 @@ describe("routineRunReportable", () => {
   });
 });
 
-describe("routineRunReportable in quiet mode (#3480)", () => {
-  it("a completed run, a run with problems and a failure post nothing", () => {
-    expect(routineRunReportable({ status: "completed", postResults: true, quietMode: true })).toBe(false);
-    expect(routineRunReportable({ status: "completed", problems: "two steps failed", postResults: true, quietMode: true })).toBe(false);
-    expect(routineRunReportable({ status: "failed", postResults: true, quietMode: true })).toBe(false);
-    expect(routineRunReportable({ status: "blocked", postResults: true, quietMode: true })).toBe(false);
-  });
-
-  it("what needs the person's answer still shows its card", () => {
-    expect(routineRunReportable({ status: "waiting", needsPerson: true, quietMode: true })).toBe(true);
-    expect(routineRunReportable({ status: "waiting", goalStatus: "needs-input", quietMode: true })).toBe(true);
-    expect(routineRunReportable({ status: "completed", attention: true, quietMode: true })).toBe(true);
-    expect(routineRunReportable({ status: "waiting", quietMode: true })).toBe(false);
-  });
-
-  it("a run that works again after problems (#3479) posts nothing either", () => {
-    expect(routineRunReportable({ status: "completed", recovered: { afterRuns: 3, since: 1 }, postResults: true, quietMode: true })).toBe(false);
-    expect(routineRunReportable({ status: "completed", recovered: { afterRuns: 3, since: 1 }, quietMode: false })).toBe(true);
-  });
-
-  it("off, each routine's own setting decides again", () => {
-    expect(routineRunReportable({ status: "completed", postResults: true, quietMode: false })).toBe(true);
-    expect(routineRunReportable({ status: "completed", postResults: false, quietMode: false })).toBe(false);
-  });
-});
-
 describe("the bot's own run status (2026-11-01)", () => {
   it("reads RUN_STATUS failed or partial on a line of its own, never quiet", () => {
     expect(routineReportOutcome("RUN_STATUS: failed: the CRM refused the login\nNothing was read."))
@@ -174,31 +148,30 @@ describe("the bot's own run status (2026-11-01)", () => {
     }
     expect(routineRunReportable({ status: "nothing_to_report", startedBy: "person" })).toBe(false);
   });
+
+  it("#3581: there is no quiet switch: a result, a problem and a failure post by the routine's own rule for every bot", () => {
+    expect(routineRunReportable({ status: "completed", postResults: true, quietMode: true } as never)).toBe(true);
+    expect(routineRunReportable({ status: "completed", problems: "two steps failed", quietMode: true } as never)).toBe(true);
+    expect(routineRunReportable({ status: "failed", quietMode: true } as never)).toBe(true);
+    expect(routineRunReportable({ status: "completed", recovered: { afterRuns: 3, since: 1 }, quietMode: true } as never)).toBe(true);
+  });
 });
 
-describe("a wake on teammates' messages is never quiet (production, 2026-11-02)", async () => {
+describe("a wake on teammates' messages (#3581: exchanges between bots stay out of the chat)", async () => {
   const { peerWakeOutcome } = await import("./routines.ts");
   const { routineReportOutcome } = await import("./routine-report.ts");
-  const peer = { proactive: { mode: "proactive" as const, hops: 1, sources: ["peer"], peerDigest: "Messages from teammates:\n- Osprey: Urgent 100200" } };
 
-  it("keeps the bot's words without the marker", () => {
-    const outcome = peerWakeOutcome(peer, routineReportOutcome("Already told you at 1:32 p.m. ET. Nothing new.\n\nNOTHING_TO_REPORT"));
-    expect(outcome).toMatchObject({ quiet: false, report: "Already told you at 1:32 p.m. ET. Nothing new." });
+  it("ends quiet with NOTHING_TO_REPORT: nothing posts", () => {
+    const peer = { proactive: { mode: "proactive" as const, hops: 1, sources: ["peer"], peerDigest: "Messages from teammates:\n- Bot B: Urgent 100200" } };
+    expect(peerWakeOutcome(peer, routineReportOutcome("Handled Bot B's request.\n\nNOTHING_TO_REPORT"))).toMatchObject({ quiet: true });
+    expect(peerWakeOutcome(peer, routineReportOutcome("NOTHING_TO_REPORT")).quiet).toBe(true);
+    const dm = { proactive: { mode: "proactive" as const, hops: 1, sources: ["bot"], peerDigest: "Messages from teammates:\n- Post by Bot B" } };
+    expect(peerWakeOutcome(dm, routineReportOutcome("NOTHING_TO_REPORT")).quiet).toBe(true);
   });
 
-  it("falls back to the digest when the bot said nothing else", () => {
-    expect(peerWakeOutcome(peer, routineReportOutcome("NOTHING_TO_REPORT")).report).toBe(peer.proactive.peerDigest);
-    expect(peerWakeOutcome(peer, routineReportOutcome("")).quiet).toBe(false);
-  });
-
-  it("a wake on a post in a two-bot DM (alwaysReport) is never quiet either", () => {
-    const dm = { proactive: { mode: "proactive" as const, hops: 1, sources: ["bot"], alwaysReport: true as const, peerDigest: "Messages from teammates:\n- Post by Osprey in K and M" } };
-    expect(peerWakeOutcome(dm, routineReportOutcome("NOTHING_TO_REPORT"))).toMatchObject({ quiet: false, report: dm.proactive.peerDigest });
-    const room = { proactive: { mode: "proactive" as const, hops: 1, sources: ["bot"] } };
-    expect(peerWakeOutcome(room, routineReportOutcome("NOTHING_TO_REPORT")).quiet).toBe(true);
-  });
-
-  it("leaves other wakes and routines as they were", () => {
+  it("what the person chose (a watch, an accepted suggestion) still always reports", () => {
+    const watch = { proactive: { mode: "proactive" as const, hops: 0, sources: ["watch"], alwaysReport: true as const } };
+    expect(peerWakeOutcome(watch, routineReportOutcome("The queue is back under 10.\nNOTHING_TO_REPORT"))).toMatchObject({ quiet: false, report: "The queue is back under 10." });
     const mail = { proactive: { mode: "proactive" as const, hops: 0, sources: ["mail"] } };
     expect(peerWakeOutcome(mail, routineReportOutcome("NOTHING_TO_REPORT")).quiet).toBe(true);
     expect(peerWakeOutcome({}, routineReportOutcome("NOTHING_TO_REPORT")).quiet).toBe(true);

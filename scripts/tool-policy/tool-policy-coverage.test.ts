@@ -123,7 +123,8 @@ it("regenerates the reviewed table as it is, with imports that resolve", () => {
       env: { ...process.env, TOOL_POLICY_OUT: out }, encoding: "utf8",
     });
     expect(run.status, run.stderr).toBe(0);
-    expect(readFileSync(out, "utf8")).toBe(readFileSync(join(root, "server", "tool-policy.generated.ts"), "utf8"));
+    // the reviewed table as git holds it (LF): a Windows checkout hands it CRLF
+    expect(readFileSync(out, "utf8")).toBe(readFileSync(join(root, "server", "tool-policy.generated.ts"), "utf8").replace(/\r\n/g, "\n"));
     for (const [, spec] of readFileSync(out, "utf8").matchAll(/from "(\.[^"]+)"/g)) {
       expect(existsSync(join(root, "server", spec!)), spec).toBe(true);
     }

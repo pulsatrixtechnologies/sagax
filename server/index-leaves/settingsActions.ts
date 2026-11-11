@@ -39,10 +39,10 @@ function settingsActions() {
       const check = host.checkPersonQuote({ quote, message: gate.message.text, intent: "setting" });
       return check.ok ? { message: gate.message.text, primary: { botId: gate.botId, botName: gate.botName, messageId: gate.message.id } } : check.reason;
     },
-    // #3480: quiet mode on the person's own words only (the proactive ask's check)
-    ownWords: (input) => {
-      const gate = host.primaryTurnGate(input.botId, input.threadId, input.generation, "cards");
-      return "error" in gate ? gate.error : null;
+    // #3581: the person's language, for the server's own lines
+    language: (input) => {
+      const bot = host.store.bot(input.botId);
+      return bot ? host.languageOfPerson(host.effectiveBotOwner(bot)) : undefined;
     },
     ruleText: (person, kind, id) => {
       if (!person) return undefined;

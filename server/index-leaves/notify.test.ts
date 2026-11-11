@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { createNotify } from "./notify.ts";
 
-/** #3480: what a bot in quiet mode rings. */
-function world(quiet: boolean) {
+/** #3581: quiet mode is retired: what rings is the same for every bot. */
+function world() {
   const sent: Array<Record<string, unknown>> = [];
   const host = {
     store: { isConfidentialThread: () => false },
@@ -15,7 +15,8 @@ function world(quiet: boolean) {
     voiceCalls: { active: () => false },
     QUIET_TURN_NEWS: new Set<string>(),
     quietTurnThreads: new Set<string>(),
-    botQuietMode: (botId: string) => quiet && botId === "nova",
+    // a host that still answered the retired switch is never read (#3480)
+    botQuietMode: () => true,
     broadcast: (frame: { notification: Record<string, unknown> }) => { sent.push(frame.notification); },
   };
   const notify = createNotify(() => host);
@@ -23,31 +24,19 @@ function world(quiet: boolean) {
   return { notify, sent, frame };
 }
 
-describe("notify and quiet mode (#3480)", () => {
-  it("a run's result, a problem and a wake ring nothing", () => {
-    const { notify, sent, frame } = world(true);
+describe("notify with quiet mode retired (#3581)", () => {
+  it("a run's result, a problem and a wake ring as for any bot", () => {
+    const { notify, sent, frame } = world();
     notify(frame("done", { routineRunId: "r1" }));
     notify(frame("routine-failed"));
-    notify(frame("routine-deferred"));
     notify(frame("incident"));
-    notify(frame("proposal"));
-    notify(frame("delegation-settled"));
-    expect(sent).toEqual([]);
+    expect(sent.map((note) => [note.kind, note.notify])).toEqual([["done", undefined], ["routine-failed", undefined], ["incident", undefined]]);
   });
 
-  it("a question or an approval keeps its frame, without a sound", () => {
-    const { notify, sent, frame } = world(true);
+  it("a question or an approval keeps its sound", () => {
+    const { notify, sent, frame } = world();
     notify(frame("question"));
     notify(frame("approval"));
-    expect(sent.map((note) => [note.kind, note.notify])).toEqual([["question", false], ["approval", false]]);
-  });
-
-  it("another bot, or quiet mode off, rings as before", () => {
-    const off = world(false);
-    off.notify(off.frame("routine-failed"));
-    expect(off.sent.map((note) => [note.kind, note.notify])).toEqual([["routine-failed", undefined]]);
-    const other = world(true);
-    other.notify({ ...other.frame("routine-failed"), botId: "atlas" });
-    expect(other.sent).toHaveLength(1);
+    expect(sent.map((note) => [note.kind, note.notify])).toEqual([["question", undefined], ["approval", undefined]]);
   });
 });

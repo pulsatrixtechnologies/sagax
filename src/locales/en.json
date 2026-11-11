@@ -2035,6 +2035,7 @@
   "chat.askLine.asking": "Asking",
   "chat.askLine.asked": "Asked",
   "chat.askLine.incoming": "asked",
+  "chat.quietRetired": "My work already stays out of our chat: I reach you with answers, questions, the results you asked for and the problems that need you. Everything else stays in my panel and in each routine's runs.",
   "chat.connectorCredentialsRefused": "This connector refused its sign-in (HTTP 401). Send the message again; if it still fails, open Capabilities > Installed and sign in to it again, or check its header values.",
   "chat.askLine.answered": "answered",
   "chat.askLine.words": "“{words}”",

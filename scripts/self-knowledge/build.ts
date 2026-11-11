@@ -13,7 +13,7 @@
 // and the same hash. No git, no network: the Docker build runs it too.
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { availableTools, PERSPICAX_TOOLS, type CatalogProfile } from "../../server/drivers/agents-catalog.ts";
 import { MCP_PERMISSIONS } from "../../server/mcp/mcp-permissions.ts";
 import { HOST_LEVEL_AGENT_TOOLS, MEMBER_OWN_SCOPE_AGENT_TOOLS } from "../../server/people/member-tool-scope.ts";
@@ -28,7 +28,9 @@ import { GUIDES, SETTING_NOTES } from "./guides.ts";
 export const KNOWLEDGE_FILE = join("server", "self-knowledge", "knowledge.generated.json");
 export const PERSPICAX_SNAPSHOT_FILE = join("server", "self-knowledge", "perspicax.snapshot.json");
 
-const read = (root: string, path: string) => readFileSync(join(root, path), "utf8");
+/** A file as git holds it (LF): a Windows checkout hands it CRLF, and every
+ * pattern here reads LF lines, so the base is the same on every platform. */
+const read = (root: string, path: string) => readFileSync(join(root, path), "utf8").replace(/\r\n/g, "\n");
 
 // ---------------------------------------------------------------- tools
 
@@ -365,7 +367,8 @@ function walk(root: string, dir: string, keep: (path: string) => boolean): strin
       if (statSync(full).isDirectory()) {
         if (entry !== "node_modules") visit(full);
       } else {
-        const rel = relative(root, full);
+        // "/" on every platform: sources are named and matched that way
+        const rel = relative(root, full).split(sep).join("/");
         if (keep(rel)) out.push(rel);
       }
     }

@@ -31,7 +31,7 @@
 // fallback. French catalog values carry no em-dash or en-dash; UI locale
 // strings embed no raw UUID.
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -47,6 +47,11 @@ import { parseGoMessage } from "../../server/perspicax/go-message.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SRC = join(ROOT, "src");
+/** A source file as the rules read it on every platform: a Windows checkout
+ * hands the guards CRLF lines, which no pattern below expects. */
+const readText = (path: string): string => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
+/** A path with "/" on every platform, as the SKIP pattern and the names below spell it. */
+const slashed = (path: string): string => path.split(sep).join("/");
 const SKIP = /\.(?:test|e2e|dom\.test)\.tsx?$|\.d\.ts$|\/testing\/|\/self-knowledge\/|\/locales\//;
 
 function sourceFiles(dir: string): string[] {
@@ -59,21 +64,21 @@ function sourceFiles(dir: string): string[] {
     return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : [];
   });
 }
-const files = sourceFiles(SRC).map((path) => ({ name: relative(SRC, path).split("\\").join("/"), text: readFileSync(path, "utf8") }));
-const readSrc = (name: string) => readFileSync(join(SRC, name), "utf8");
+const files = sourceFiles(SRC).map((path) => ({ name: slashed(relative(SRC, path)), text: readText(path) }));
+const readSrc = (name: string) => readText(join(SRC, name));
 
 function* walkSources(dir: string, ext: RegExp): Generator<string> {
   for (const entry of readdirSync(dir)) {
     const path = join(dir, entry);
     if (entry === "node_modules" || entry === "testing" || entry === "self-knowledge" || entry === "locales") continue;
     if (statSync(path).isDirectory()) { yield* walkSources(path, ext); continue; }
-    if (!ext.test(path) || SKIP.test(path)) continue;
+    if (!ext.test(path) || SKIP.test(slashed(path))) continue;
     yield path;
   }
 }
 
-const rel = (file: string) => relative(ROOT, file).split("\\").join("/");
-const readRoot = (file: string) => readFileSync(join(ROOT, file), "utf8");
+const rel = (file: string) => slashed(relative(ROOT, file));
+const readRoot = (file: string) => readText(join(ROOT, file));
 
 function runMessage(status: "running" | "completed", patch: Record<string, unknown> = {}): Message {
   return {
@@ -154,8 +159,8 @@ describe("#2098 on iOS: a run opens in the bot's chat", () => {
       if (entry.isDirectory()) return entry.name === ".build" ? [] : swiftFiles(path);
       return entry.name.endsWith(".swift") ? [path] : [];
     });
-  const swift = swiftFiles(IOS).map((path) => ({ name: relative(IOS, path), text: readFileSync(path, "utf8") }));
-  const readSwift = (name: string) => readFileSync(join(IOS, name), "utf8");
+  const swift = swiftFiles(IOS).map((path) => ({ name: slashed(relative(IOS, path)), text: readText(path) }));
+  const readSwift = (name: string) => readText(join(IOS, name));
   const ENTRY_POINTS = [
     "App/Features/Chat/MessageRow.swift", // the run card, the attention card
     "App/ChatListView.swift", // a push on the phone
@@ -312,7 +317,7 @@ interface CardHit { file: string; line: number; text: string; window: string }
 function cardEmitters(): CardHit[] {
   const hits: CardHit[] = [];
   for (const file of walkSources(join(ROOT, "server"), /\.ts$/)) {
-    const lines = readFileSync(file, "utf8").split("\n");
+    const lines = readText(file).split("\n");
     lines.forEach((text, index) => {
       if (/^\s*(?:\/\/|\*)/.test(text) || !CARD_OPTIONS.test(text)) return;
       // the card's object literal: the lines around the options line
@@ -435,7 +440,7 @@ describe("every approval reads the one settings-linked decision (Full access, ru
     const unmarked: string[] = [];
     let count = 0;
     for (const file of walkSources(join(ROOT, "server"), /\.ts$/)) {
-      const lines = readFileSync(file, "utf8").split("\n");
+      const lines = readText(file).split("\n");
       lines.forEach((text, index) => {
         if (/^\s*(?:export\s+)?(?:async\s+)?function\b/.test(text)) return;
         if (/^\s*(?:readonly\s+)?\w+\??: .*;\s*$/.test(text) && !/\(/.test(text)) return;
@@ -484,7 +489,7 @@ describe("no list keeps a card from Always allow", () => {
     const back: string[] = [];
     for (const dir of ["server", "src", "shared"]) {
       for (const file of walkSources(join(ROOT, dir), /\.tsx?$/)) {
-        const text = readFileSync(file, "utf8");
+        const text = readText(file);
         for (const row of NEVER_ALWAYS_TOKENS) {
           if (row.token.test(text)) back.push(`${rel(file)}: ${row.token} (${row.was})`);
         }
@@ -521,7 +526,7 @@ describe("no admin gate on what stays in the person's own space (decided 2026-10
   it("`{admin &&` and `memberHidesSection` only where the thing is the whole organization's", () => {
     const gated: string[] = [];
     for (const file of walkSources(join(ROOT, "src"), /\.tsx?$/)) {
-      const text = readFileSync(file, "utf8");
+      const text = readText(file);
       if (!/\{admin &&|\bmemberHidesSection\b/.test(text)) continue;
       const path = rel(file);
       if (!ADMIN_GATES_BY_DECISION.some((row) => row.file === path)) gated.push(path);
@@ -592,9 +597,9 @@ describe("the owner unified chat guards (#2106)", () => {
   it("owned model-picker / composer surfaces keep no side-thread or run-continue copy", () => {
     const offenders: string[] = [];
     for (const file of owned) {
-      const text = readFileSync(file, "utf8");
+      const text = readText(file);
       for (const pattern of MODEL_PICKER_FORBIDDEN) {
-        if (pattern.test(text)) offenders.push(`${relative(ROOT, file)} :: ${pattern}`);
+        if (pattern.test(text)) offenders.push(`${rel(file)} :: ${pattern}`);
       }
     }
     expect(offenders).toEqual([]);
@@ -665,7 +670,7 @@ describe("#2086 unified chat: no thread entry points when threads are off", () =
     const offenders: string[] = [];
     for (const dir of ["src", "server", "shared"]) {
       for (const file of walkSources(join(ROOT, dir), /\.tsx?$/)) {
-        const text = readFileSync(file, "utf8");
+        const text = readText(file);
         if (!/<SideThreadPanel\b/.test(text)) continue;
         const path = rel(file);
         if (SIDE_PANEL_FILES.includes(path)) continue;
@@ -681,7 +686,7 @@ describe("#2086 unified chat: no thread entry points when threads are off", () =
     const keyPattern = new RegExp(`t\\(\\s*["'](${UNIFIED_THREAD_KEYS.join("|")})["']`);
     const offenders: string[] = [];
     for (const file of walkSources(join(ROOT, "src"), /\.tsx?$/)) {
-      const text = readFileSync(file, "utf8");
+      const text = readText(file);
       if (!keyPattern.test(text)) continue;
       const path = rel(file);
       if (UNIFIED_THREAD_KEY_ALLOWLIST.some((row) => row.file === path)) continue;
@@ -701,7 +706,7 @@ describe("#2086 unified chat: no thread entry points when threads are off", () =
         const path = rel(file);
         if (allow.has(path) || path.startsWith("src/gallery/")) continue;
         // comments may name the rule; only code and string literals count
-        const text = readFileSync(file, "utf8")
+        const text = readText(file)
           .replace(/\/\*[\s\S]*?\*\//g, "")
           .split("\n")
           .filter((line) => !/^\s*\/\//.test(line))
@@ -720,7 +725,7 @@ describe("#2086 unified chat: no thread entry points when threads are off", () =
     // conversation. A second createTask with " · Results" fails here.
     const offenders: string[] = [];
     for (const file of walkSources(join(ROOT, "server"), /\.ts$/)) {
-      const text = readFileSync(file, "utf8");
+      const text = readText(file);
       const matches = text.matchAll(/createTask\([^)]*· Results/g);
       for (const match of matches) {
         const path = rel(file);

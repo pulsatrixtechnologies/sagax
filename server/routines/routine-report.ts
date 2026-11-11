@@ -24,6 +24,7 @@ import {
 } from "../../shared/routine-result.ts";
 import { personAttention, RUN_STATUS_PROBLEM_LINE } from "../../shared/person-attention.ts";
 import { stripChatSpecialTokens } from "../../shared/chat-special-tokens.ts";
+import { chatPlace, routineRunSignal } from "../../shared/chat-relevance.ts";
 
 /** #3515: the run contract's tokens and the patterns that read them are
  * defined once, in shared/routine-result.ts and shared/person-attention.ts
@@ -35,7 +36,7 @@ export { ROUTINE_QUIET_MARKER, ROUTINE_SAME_PROBLEM_MARKER, ROUTINE_STATUS_MARKE
 
 /** What the bot reads in its system prompt on every routine run. */
 export const ROUTINE_REPORT_CONTRACT =
-  ` This run works in the background: the person does not see this conversation, only your final message, and only when it needs them. Do the routine's work, then end with a short report of what you found or did that the person should know. Never restate or quote the routine's instructions. If nothing needs the person (nothing found, nothing changed, nothing to decide, or the instructions say to stay silent in this case), end your final message with the line ${ROUTINE_QUIET_MARKER} on its own: nothing is posted to their chat and the run stays in the routine logs. If a step failed or part of the work could not be done, never report it as done: begin your final message with the line ${ROUTINE_STATUS_MARKER} failed: <why> when the work could not be done, or ${ROUTINE_STATUS_MARKER} partial: <what did not work> when only part of it was. Write the report as plain prose or a short list, never a markdown table. Whatever the outcome, end with one plain-language summary line a person can read alone: what was done, what is blocked and why, and what they must do. Never end with JSON, a code block or a raw tool result as your last words; put any structured data before that line. If you handed work to a teammate, name the teammate and what they are doing.`;
+  ` This run works in the background: the person does not see this conversation, only your final message, and only when it needs them. Do the routine's work, then end with a short report of what you found or did that the person should know. Never restate or quote the routine's instructions. If nothing needs the person (nothing found, nothing changed, nothing to decide, or the instructions say to stay silent in this case), end your final message with the line ${ROUTINE_QUIET_MARKER} on its own: nothing is posted to their chat and the run stays in the routine logs. If a step failed or part of the work could not be done, never report it as done: begin your final message with the line ${ROUTINE_STATUS_MARKER} failed: <why> when the work could not be done, or ${ROUTINE_STATUS_MARKER} partial: <what did not work> when only part of it was. Write the report as plain prose or a short list, never a markdown table. Whatever the outcome, end with one plain-language summary line a person can read alone: what was done, what is blocked and why, and what they must do. The person first sees only that last line, on a card; the rest opens behind Details. Never end with JSON, a code block or a raw tool result as your last words; put any structured data before that line. If you handed work to a teammate, name the teammate and what they are doing.`;
 
 /** The no-op phrases: a message that says only that nothing happened. */
 const NO_OP_PHRASES = [
@@ -220,34 +221,14 @@ export interface RoutineRunReportFacts {
   /** #3479: the first run without problems after runs with problems: the
    * person hears once that it works again. */
   recovered?: unknown;
-  /** #3480: the bot is in quiet mode (shared/quiet-mode.ts): only what
-   * needs the person's answer posts (a question or approval it waits on, a
-   * team that needs input, items only the person can do); a result or a
-   * problem does not. */
-  quietMode?: boolean;
 }
 
-/** Whether a run has something for the person's conversation now. A plain
+/** Whether a run has something for the person's conversation now: the
+ * shared rule (shared/chat-relevance.ts, #3581) for a routine's row. A plain
  * completed result posts only when the routine opts in (postResults); an
- * approval, a question, a team that needs input, or an error always does.
- * In quiet mode only what needs the person's answer does. */
+ * approval, a question, a team that needs input, an error or a problem
+ * always does; a run a person started shows from its start. */
 export function routineRunReportable(run: RoutineRunReportFacts): boolean {
-  if (run.goalStatus === "needs-input") return true;
-  if (run.quietMode) {
-    if (run.startedBy === "person" && ["queued", "running", "waiting"].includes(run.status)) return true;
-    if (run.status === "waiting") return run.needsPerson === true;
-    return run.status === "completed" && run.attention === true;
-  }
-  // A run a person started shows what started, while it is queued and runs
-  // too; once it ends the usual rules decide (a quiet one says so in place).
-  if (run.startedBy === "person" && ["queued", "running", "waiting"].includes(run.status)) return true;
-  switch (run.status) {
-    case "waiting": return run.needsPerson === true;
-    case "failed":
-    case "blocked": return true;
-    // A run that completed with problems tells the person, like a failure.
-    // #3479: the first success after a problem is said once, even quiet.
-    case "completed": return run.problems || run.attention || run.recovered ? true : run.quiet !== true && run.postResults === true;
-    default: return false;
-  }
+  const facts = { postsResults: run.postResults === true, startedByPerson: run.startedBy === "person" };
+  return chatPlace("routine", routineRunSignal(run), facts) === "card";
 }

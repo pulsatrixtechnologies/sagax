@@ -85,8 +85,9 @@ function drawnAs(item: ServedWaitingItem, message: Message | undefined, threadId
  * conversation on screen: an item whose message it holds is drawn from that
  * newer copy, and one it shows settled (just answered here) leaves at once,
  * before the list is read again. `approvals` are the composer's own live
- * approvals (this turn's, its parallel tasks'): they only add who asked to
- * the server's item of the same request, never an item of their own. */
+ * approvals (this turn's, its parallel tasks'): they add who asked to the
+ * server's item of the same request, and one the list does not carry yet
+ * is pinned after the server's items (#3615). */
 export function pinnedItemsFrom(items: readonly ServedWaitingItem[], threadId: string, fresh: readonly Message[] = [], approvals: readonly Pending[] = []): PinnedItem[] {
   const byId = new Map(fresh.map((message) => [message.id, message]));
   const out: PinnedItem[] = [];
@@ -107,6 +108,27 @@ export function pinnedItemsFrom(items: readonly ServedWaitingItem[], threadId: s
     else if (drawn.kind === "approval") out.push({ ...base, kind: "approval", pending: drawn.pending });
     else if (drawn.kind === "request") out.push({ ...base, kind: "request", message: drawn.message, card: drawn.card });
     else out.push({ ...base, kind: drawn.kind, message: drawn.message });
+  }
+  // #3615: a live approval of this conversation the server's list does not
+  // carry yet (the list is read again a moment after the card opens, or could
+  // not be read) is pinned as it is: the card that waits on the person right
+  // now never waits for the list to show over the box. Once the list carries
+  // it, the server's item is the one drawn (matched above).
+  const listed = (pending: Pending) => items.some((item) => (item.messageId ? item.messageId === pending.message.id : item.id === pending.requestId));
+  for (const pending of approvals) {
+    if (listed(pending)) continue;
+    const where = pending.threadId ?? threadId;
+    const key = `${where}:${pending.requestId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const title = pending.message.card?.title || pending.detail || pending.tool;
+    const item: ServedWaitingItem = {
+      id: pending.requestId, kind: "approval", botId: pending.message.from?.botId ?? "", botName: pending.askedBy ?? "",
+      threadId: where, messageId: pending.message.id, at: pending.message.at, ageMs: 0, title, text: pending.detail || title,
+      options: pending.message.card?.options ?? [], answerWith: "decision", freeText: false, skippable: true,
+    };
+    // a parallel task's approval carries its own thread, where the decision goes
+    out.push({ key, at: item.at, item, kind: "approval", pending });
   }
   return out;
 }

@@ -64,6 +64,20 @@ describe("the pinned row draws the server's items (#3543)", () => {
     expect(pinned.map((item) => [item.kind, item.item.id, item.threadId])).toEqual([["other", "later-kind:1", "elsewhere"], ["other", "req_bare", undefined]]);
   });
 
+  // #3615: the list is read a moment after a card opens (or could not be
+  // read): the approval waiting right now is pinned meanwhile, and once the
+  // list carries it the server's item is the one drawn, never twice.
+  it("pins a live approval the server's list does not carry yet, and only once when it does", () => {
+    const live = { id: "m-live", role: "bot", kind: "options", at: 700, card: { title: "Run a command", subtitle: "ls -la", options: ["Allow", "Deny"], requestId: "req_live", tool: "bash" } } as unknown as Message;
+    const pending = { message: live, requestId: "req_live", tool: "bash", detail: "ls -la" };
+    const before = pinnedItemsFrom([], "conv", [live], [pending]);
+    expect(before.map((item) => [item.kind, item.key, item.threadId])).toEqual([["approval", "conv:req_live", undefined]]);
+    const [first] = servedList();
+    const listed: ServedWaitingItem = { ...first!, id: "req_live", messageId: "m-live", threadId: "conv", message: live };
+    const after = pinnedItemsFrom([listed], "conv", [live], [pending]);
+    expect(after.map((item) => [item.kind, item.item])).toEqual([["approval", listed]]);
+  });
+
   it("drops an item the conversation on screen already shows settled, before the list is read again", () => {
     const served = servedList();
     const answered = { id: "m-perm", role: "bot", kind: "options", at: 100, card: { requestId: "req_perm", tool: "Bash", title: "Run Bash?", options: [], answered: "allow" } } as unknown as Message;

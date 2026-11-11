@@ -21,7 +21,6 @@ import type { SettingClass } from "./settings-actions-policy.ts";
 import { PROVIDER_KEY_FIELDS, PROVIDER_KEYS, savedKeys } from "./settings-provider-keys.ts";
 import { engineRow, type EngineRow } from "./settings-engine-row.ts";
 import { USER_PREFERENCE_KEYS } from "./user-preferences.ts";
-import { QUIET_MODE_PERSON_PATH, quietModeBotPath } from "./quiet-mode.ts";
 import { pageProactiveChoices } from "./proactive-choices-page.ts";
 
 /** `self`: the change targets the bot that is speaking. `shared` (#1545,
@@ -208,24 +207,6 @@ botField("bot.grokAccountConnectors", "grokAccountConnectors", "boolean", "Grok 
 botField("bot.memeReplies", "memeReplies", "any", "Meme replies", "Bot editor > Permissions > Meme replies");
 botField("bot.collaboratorsCreateRoutines", "collaboratorsCreateRoutines", "boolean", "Collaborators can create routines", "Bot page > Routines > Collaborators can create routines");
 botField("bot.notifications", "notifications", "any", "Notifications", "Bot editor > Voice > Notifications");
-// #3480: quiet mode (shared/quiet-mode.ts). The person tells the bot in
-// words ("be quiet", "tais-toi", "ne me dérange pas"; "you can talk again",
-// "tu peux reparler"): the bot sets its own mode, says the answer's `said`
-// line, and stops.
-add({
-  key: "bot.quietMode", family: "notifications", target: "bot", value: "boolean",
-  label: "Quiet mode for this bot (true when the person says be quiet, tais-toi or ne me dérange pas: its routines, wakes and background work post nothing and ring nothing, a question or approval still shows its card without a sound; false when they say to speak again). Say the answer's said line, then stop",
-  where: "Bot page > Quiet mode",
-  read: (ids) => ({ path: quietModeBotPath(ids.target!) }),
-  write: (ids, v) => typeof v === "boolean" ? { method: "PUT", path: quietModeBotPath(ids.target!), body: { on: v, via: "words" } } : "value is true (quiet) or false (speak again).",
-});
-add({
-  key: "notifications.quietMode", family: "notifications", target: "none", value: "boolean",
-  label: "Quiet mode for all the person's bots (true when they say all of you be quiet; false when they say you can all speak again). Say the answer's said line, then stop",
-  where: "Settings > What I receive > Quiet mode",
-  read: () => ({ path: QUIET_MODE_PERSON_PATH }),
-  write: (_ids, v) => typeof v === "boolean" ? { method: "PUT", path: QUIET_MODE_PERSON_PATH, body: { on: v, via: "words" } } : "value is true (quiet) or false (speak again).",
-});
 botField("bot.model", "modelSelection", "object", "Model and effort ({instanceId, model, effort})", "Bot editor > Model");
 add({
   key: "bot.effort", family: "bot", target: "bot", value: "string", label: "Reasoning effort (low, medium, high, ...; keeps the model)", where: "Bot editor > Model > Effort",

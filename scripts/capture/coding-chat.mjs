@@ -2,8 +2,10 @@
 /**
  * Headless screenshots of the coding chat (src/gallery/coding-chat.html),
  * running and finished, light and dark, wide (960), 700 and 390 px, with the
- * Changes list open and the follow-up composer open. Headless Chromium only:
- * no window opens.
+ * Changes list open, a step row opened, a heavy session, and the main
+ * chat's step rows beside it (src/gallery/step-rows.html, Tool calls on):
+ * the rows must be the same rows (#3581). Headless Chromium only: no window
+ * opens.
  * Usage: node scripts/capture/coding-chat.mjs [--out DIR] [--port N]
  *   (SAGAX_VERIFY_BROWSER_CHROME=<chromium> to use an installed browser)
  */
@@ -52,8 +54,8 @@ try {
   const shot = async (name) => { await page.screenshot({ path: join(outDir, name) }); console.log(name); };
   const settle = async () => {
     await page.waitForSelector("[data-testid=coding-chat]");
-    // the tool lines (#2099): diffs stay folded behind +N -M; wait for the rows
-    await page.waitForSelector("[data-coding-row]");
+    // the step rows (#2099, #3581): diffs stay folded behind the row
+    await page.waitForSelector("[data-coding-row] [data-step-row]");
     await page.waitForTimeout(300);
   };
   for (const { id, label } of skins) {
@@ -77,6 +79,20 @@ try {
     await page.click('[data-coding-changed-file="src/board/card.ts"]');
     await page.waitForTimeout(700);
     await shot(`coding-finished-jump-${label}.png`);
+    // a failed test run opened: the command and its output in a code block
+    await page.goto(`${base}/coding-chat.html?skin=${id}&lang=en&status=finished`, { waitUntil: "load" });
+    await settle();
+    await page.click("[data-coding-step=command] [data-phase=failed] > button");
+    await page.waitForTimeout(300);
+    await shot(`coding-finished-open-${label}.png`);
+    // a heavy session, and the main chat's step rows it must match
+    await page.goto(`${base}/coding-chat.html?skin=${id}&lang=en&status=finished&heavy=1`, { waitUntil: "load" });
+    await settle();
+    await shot(`coding-finished-heavy-${label}.png`);
+    await page.goto(`${base}/step-rows.html?skin=${id}&lang=en&view=after-open`, { waitUntil: "load" });
+    await page.waitForSelector("[data-testid=tool-activity]");
+    await page.waitForTimeout(300);
+    await shot(`main-chat-step-rows-${label}.png`);
     // the bot panel's Coding section: agent rows (#2099)
     await page.goto(`${base}/bot-panel-coding.html?skin=${id}&lang=en`, { waitUntil: "load" });
     await page.waitForSelector("[data-agent-rows]");

@@ -3,7 +3,8 @@
  * A coding window (#2149): the X, the bot's own composer, the </> panel.
  * ?skin=<id>&lang=<code>&status=running|finished&pods=1 (Experimental on)
  * &panel=1 draws the bot panel on the right, where the session card and the
- * dev pods go (#2285). */
+ * dev pods go (#2285). &heavy=1 (#3581): a long session, 15 rounds of reads,
+ * edits and test runs (about 60 step rows), the way a heavy task reads. */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { ExchangeColumnProvider, useExchangeColumn } from "../components/BotExchangeChip";
@@ -79,9 +80,33 @@ const COLUMN_AFTER = `export function sortColumn(cards: Card[]): Card[] {
   return [...cards].sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity) || a.createdAt - b.createdAt);
 }`;
 
+// A heavy session (#3581): 15 rounds of three reads, one edit and one test
+// run, a note of the bot every third round, the fifth run failing.
+const heavyRounds: Message[] = params.get("heavy") === "1"
+  ? Array.from({ length: 15 }, (_, index) => {
+    const minutes = 8.75 - index * 0.005;
+    const lane = `lane-${index + 1}`;
+    const failing = index === 4;
+    return [
+      call("Read", { file_path: `${ROOT}/src/board/${lane}.ts` }, minutes),
+      call("Read", { file_path: `${ROOT}/src/board/${lane}.test.ts` }, minutes),
+      call("Read", { file_path: `${ROOT}/src/board/column.ts` }, minutes),
+      call("Edit", { file_path: `${ROOT}/src/board/${lane}.ts`, old_string: "  return cards;", new_string: "  // Keep the hand-set order.\n  return sortColumn(cards);" }, minutes),
+      call("Bash", { command: `cd ${ROOT} && pnpm vitest run src/board/${lane}.test.ts` }, minutes, {
+        durationMs: 2_000 + index * 150,
+        ...(failing
+          ? { ok: false, output: pretty({ output: ` ❯ src/board/${lane}.test.ts (4 tests | 1 failed)\n   × keeps the order\n\n      Tests  1 failed | 3 passed (4)`, exitCode: 1 }) }
+          : { output: ` ✓ src/board/${lane}.test.ts (4 tests)\n\n      Tests  4 passed (4)` }),
+      }),
+      ...(index % 3 === 2 ? [say("bot", `Lane ${index + 1} garde maintenant l'ordre posé à la main.`, minutes)] : []),
+    ];
+  }).flat()
+  : [];
+
 const messages: Message[] = [
   say("user", "Pour la colonne du board, garde l'ordre que les gens placent à la main au lieu de trier par date.", 9),
   say("bot", "Je regarde comment la colonne trie ses cartes, puis je corrige et je lance les tests.", 8.8),
+  ...heavyRounds,
   call("Read", { file_path: `${ROOT}/src/board/column.ts` }, 8.6),
   call("Read", { file_path: `${ROOT}/src/board/card.ts` }, 8.5),
   call("Read", { file_path: `${ROOT}/src/board/column.test.ts` }, 8.4),

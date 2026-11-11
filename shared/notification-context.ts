@@ -277,19 +277,26 @@ function finalQuestionSentence(question: string): string | null {
 // A number word or a digit, "or", then a number, "more" or "several" ("one
 // or more", "deux ou trois", "un ou plusieurs"); a pair of digits counts only
 // before the word it counts ("1 or 2 files"), since "version 1 or 2?" picks.
-const NUMBER_WORD = "one|two|three|four|five|six|seven|eight|nine|ten|un|une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix";
-const MORE_WORD = "more|several|many|plusieurs|plus|davantage";
+// #3547: "plus" is "more" only when "tard" does not follow ("un ou plus tard"
+// picks a time).
+const NUMBER_WORD = "one|two|three|four|five|six|seven|eight|nine|ten|un|une|deux|trois|quatre|cinq|sept|huit|neuf|dix";
+const MORE_WORD = "more|several|many|plusieurs|plus(?!\\s+tard)|davantage";
 const QUANTITY_OR = new RegExp(
   `(?<![\\p{L}\\p{N}])(?:(?:${NUMBER_WORD})\\s+(?:or|ou)\\s+(?:${NUMBER_WORD}|${MORE_WORD}|\\d+)|\\d+\\s+(?:or|ou)\\s+(?:${MORE_WORD})|\\d+\\s+(?:or|ou)\\s+\\d+(?=\\s+\\p{L}))(?![\\p{L}\\p{N}])`,
   "gu",
 );
 const FIXED_OR = /(?<![\p{L}\p{N}])(?:more or less|sooner or later|whether or not|plus ou moins|t[oô]t ou tard)(?![\p{L}\p{N}])/gu;
+// #3547: a label word (or a "#") right before the first number makes the pair
+// name two things ("step 1 or 2", "version one or two", "l'étape 1 ou 2").
+const NUMBER_LABEL = /(?:(?<![\p{L}\p{N}])(?:step|version|option|item|plan|number|étape|élément|numéro)s?\s*#?|#)\s*$/u;
 
 /** The sentence with every quantity or fixed-phrase "or" / "ou" joined into
- * one word ("one_or_more"), so only an "or" between two paths remains. */
+ * one word ("one_or_more"), so only an "or" between two paths remains. A
+ * number pair after a label word stays two paths. */
 function withoutQuantityOr(sentence: string): string {
   const join = (phrase: string) => phrase.replace(/\s+/g, "_");
-  return sentence.replace(FIXED_OR, join).replace(QUANTITY_OR, join);
+  return sentence.replace(FIXED_OR, join).replace(QUANTITY_OR, (phrase: string, offset: number, whole: string) =>
+    NUMBER_LABEL.test(whole.slice(0, offset)) ? phrase : join(phrase));
 }
 
 /** "A or B?", "A ou B ?", "Je publie (ou j'attends) ?" on a final question

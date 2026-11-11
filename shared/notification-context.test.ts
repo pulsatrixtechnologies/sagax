@@ -116,4 +116,36 @@ describe("notification context (#2909)", () => {
     expect(offersTwoPaths("Should I delete one or more duplicates now or tonight?")).toBe(true);
     expect(offersTwoPaths("Je supprime un ou plusieurs doublons maintenant ou ce soir ?")).toBe(true);
   });
+
+  it("a pair of numbers after a label word, or \"plus tard\", is two paths (#3547)", () => {
+    for (const question of [
+      "Should I run step 1 or 2 now?",
+      "Should I keep version one or two?",
+      "Should I take item 2 or 3?",
+      "Should I go with plan one or two?",
+      "Should I use number 4 or 5?",
+      "Should I apply #1 or #2 first?",
+      "Should I run steps 1 or 2 now?",
+      "J'en supprime un ou plus tard ?",
+      "Je lance l'étape 1 ou 2 maintenant ?",
+      "Je garde la version un ou deux ?",
+      "Je prends l'option deux ou trois ?",
+      "Je retire l'élément 1 ou 2 d'abord ?",
+      "Je prends le numéro 3 ou 4 en premier ?",
+    ]) {
+      expect(offersTwoPaths(question), question).toBe(true);
+      expect(asksForAlternative(question), question).toBe(true);
+    }
+    for (const question of [
+      "Should I delete one or more duplicates?",
+      "Should I merge two or three files?",
+      "Should I delete 1 or 2 files?",
+      "Je supprime un ou plusieurs doublons ?",
+      "J'en supprime un ou plus ?",
+      "Je le laisse plus ou moins tel quel ?",
+    ]) {
+      expect(offersTwoPaths(question), question).toBe(false);
+      expect(asksForAlternative(question), question).toBe(false);
+    }
+  });
 });

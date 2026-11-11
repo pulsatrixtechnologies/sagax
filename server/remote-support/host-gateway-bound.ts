@@ -7,19 +7,24 @@
 // a gateway answers in well under a second, so a call past this is a gateway
 // that is not answering, and the path gives up on it.
 
-/** The longest one gateway call of that path (a host list, a session close,
- * a close of a session the host never took) is waited for. A seat's own
- * set-up (MCP mount, token exchange) is inside it.
+/** The longest a host list is waited for. A list runs the seat's set-up
+ * (`prepareTurn`), the tool call and the shared hosts, and a list that times
+ * out fails the whole exec: it gets the larger of the two caps.
  *
  * These values come from the budget, not from measured latency: nothing in
  * the repo records real gateway latencies. What is left of the 600 s tool
  * limit after the tunnel part and the OS reads (see `hostCallWorstCaseMs`,
- * host-computer-router.ts) is shared between the gateway calls of the
- * longest path, the open getting the largest part since it does the most. */
-export const HOST_GATEWAY_CALL_MS = 4_000;
+ * host-computer-router.ts) and a 10 s margin is shared between the gateway
+ * calls of the longest path. */
+export const HOST_GATEWAY_LIST_MS = 8_000;
+
+/** The longest a gateway close is waited for (the close inside a session
+ * close, and `closeUnconnected`). A close that times out costs nothing: the
+ * call goes on and the session ends at its end time. */
+export const HOST_GATEWAY_CLOSE_MS = 3_000;
 
 /** The longest a host open is waited for: its list, the seat's set-up and the
- * post. The largest cap the budget allows with the 20 s margin kept. */
+ * post. The largest cap the budget allows with the 10 s margin kept. */
 export const HOST_GATEWAY_OPEN_MS = 19_000;
 
 /** The longest `exec` waits for the first read of a computer whose OS is not

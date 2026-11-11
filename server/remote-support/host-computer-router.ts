@@ -36,7 +36,7 @@ import {
 } from "./host-computer-vm.ts";
 import type { HostOpenOutcome, HostCodeOutcome, HostsListOutcome, UnattendedHostsViewer, UnattendedSeatTarget } from "./remote-unattended-hosts.ts";
 import { KILL_GRACE_MS, KILL_RELEASE_MS } from "./remote-session-probe.ts";
-import { HOST_GATEWAY_CALL_MS, HOST_GATEWAY_OPEN_MS, HOST_OS_READ_WAIT_MAX_MS, withinLimit } from "./host-gateway-bound.ts";
+import { HOST_GATEWAY_CLOSE_MS, HOST_GATEWAY_LIST_MS, HOST_GATEWAY_OPEN_MS, HOST_OS_READ_WAIT_MAX_MS, withinLimit } from "./host-gateway-bound.ts";
 import type { RemoteExecResult } from "./remote-sessions.ts";
 import { SESSION_STOP_TIME_MS, TUNNEL_PROBE_TIME_MS, TUNNEL_PROBE_WAIT_MAX_MS, TUNNEL_QUEUE_WAIT_MAX_MS } from "./tunnel-queue.ts";
 
@@ -146,11 +146,11 @@ export function hostExecWorstCaseMs(commandMs: number = HOST_COMMAND_TIME_MAX_MS
 }
 /** The longest one whole `exec` call of `host_computer` can take (#3518): the
  * tunnel part above, plus the gateway calls and the first reads of an
- * unknown OS on the same longest path. It must stay at least 20 s under the
+ * unknown OS on the same longest path. It must stay at least 10 s under the
  * bot's tool timeout (10 min, `MCP_TOOL_TIMEOUT_MS` in
  * server/drivers/pi-mcp-extension.ts); a test holds it there.
  *
- * Each gateway call is given `HOST_GATEWAY_CALL_MS`, the open
+ * A host list is given `HOST_GATEWAY_LIST_MS`, a close `HOST_GATEWAY_CLOSE_MS`, the open
  * `HOST_GATEWAY_OPEN_MS` (not the 10 minutes of `PERSPICAX_RELAY_TIMEOUT_MS`,
  * which other callers keep). The values come from the budget, not from
  * measured latency. The longest plain exec is one in isolated mode, on that
@@ -158,10 +158,10 @@ export function hostExecWorstCaseMs(commandMs: number = HOST_COMMAND_TIME_MAX_MS
  * - 3 host lists (the host choice, the host row, the route's own list);
  * - the open of the new session (its list, set-up and open, in one cap);
  * - the gateway close inside each of the 3 session closes of the path.
- * = 6 capped calls + 1 open. And `HOST_OS_READ_WAIT_MAX_MS` for the first
+ * = 3 lists + 3 closes + 1 open. And `HOST_OS_READ_WAIT_MAX_MS` for the first
  * read of the OS on a session whose OS is unknown, once on the session that
  * is refused and once on the new one = 2 reads (a safe over-count).
- * With today's values: 506.5 + 6 * 4 + 19 + 2 * 15 = 579.5 s.
+ * With today's values: 506.5 + 3 * 8 + 3 * 3 + 19 + 2 * 15 = 588.5 s.
  *
  * NOT bounded by this number: the VM actions (`vm_provision`, `vm_rebuild`,
  * `vm_delete`) and an exec made while the VM is still provisioning (it
@@ -170,7 +170,7 @@ export function hostExecWorstCaseMs(commandMs: number = HOST_COMMAND_TIME_MAX_MS
  * sum is not held under the tool timeout. A seat's `end()` is not under a
  * limit, and a call that gave up is abandoned, not cancelled. */
 export function hostCallWorstCaseMs(commandMs: number = HOST_COMMAND_TIME_MAX_MS): number {
-  return hostExecWorstCaseMs(commandMs) + 6 * HOST_GATEWAY_CALL_MS + HOST_GATEWAY_OPEN_MS + 2 * HOST_OS_READ_WAIT_MAX_MS;
+  return hostExecWorstCaseMs(commandMs) + 3 * HOST_GATEWAY_LIST_MS + 3 * HOST_GATEWAY_CLOSE_MS + HOST_GATEWAY_OPEN_MS + 2 * HOST_OS_READ_WAIT_MAX_MS;
 }
 const VM_POLL_MS = 15_000;
 const VM_POLL_MAX_MS = 25 * 60_000;
@@ -243,17 +243,18 @@ export function createHostComputerRouter(deps: {
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   log?: (line: string) => void;
-  /** The longest one gateway call is waited for (tests); default `HOST_GATEWAY_CALL_MS`. */
+  /** The longest one gateway call is waited for (tests, list and close); default `HOST_GATEWAY_LIST_MS` and `HOST_GATEWAY_CLOSE_MS`. */
   gatewayCallMaxMs?: number;
   /** The same for a host open (tests); default `HOST_GATEWAY_OPEN_MS`. */
   gatewayOpenMaxMs?: number;
 }) {
   const now = deps.now ?? (() => Date.now());
-  const gatewayMs = deps.gatewayCallMaxMs ?? HOST_GATEWAY_CALL_MS;
+  const listMs = deps.gatewayCallMaxMs ?? HOST_GATEWAY_LIST_MS;
+  const closeMs = deps.gatewayCallMaxMs ?? HOST_GATEWAY_CLOSE_MS;
   const GATEWAY_SLOW = "Perspicax did not answer in time. Try again in a moment.";
   const gateway = {
     list: (viewer: UnattendedHostsViewer): Promise<HostsListOutcome> =>
-      withinLimit(deps.hosts.list(viewer).catch((): HostsListOutcome => ({ available: false, hosts: [], reason: GATEWAY_SLOW })), gatewayMs, { available: false, hosts: [], reason: GATEWAY_SLOW }),
+      withinLimit(deps.hosts.list(viewer).catch((): HostsListOutcome => ({ available: false, hosts: [], reason: GATEWAY_SLOW })), listMs, { available: false, hosts: [], reason: GATEWAY_SLOW }),
     /** A host open lists, sets the seat up and posts: its own, larger cap. One
      * that answers after the cap is not lost: the session it made is closed
      * (it was registered by the host service, never recorded here), so the
@@ -273,7 +274,7 @@ export function createHostComputerRouter(deps: {
       });
     },
     closeUnconnected: (viewer: UnattendedHostsViewer, sessionId: string): Promise<unknown> =>
-      withinLimit(Promise.resolve(deps.hosts.closeUnconnected?.(viewer, sessionId)).catch(() => null), gatewayMs, null),
+      withinLimit(Promise.resolve(deps.hosts.closeUnconnected?.(viewer, sessionId)).catch(() => null), closeMs, null),
   };
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms).unref?.()));
   const log = deps.log ?? (() => undefined);

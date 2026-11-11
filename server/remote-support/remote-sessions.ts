@@ -59,7 +59,7 @@ import { remoteJoin, safeRemoteDir, scpSafePath, sensitiveRemoteDir } from "../.
 import type { AdminSessionInput } from "../../shared/remote-session-admin.ts";
 import type { RemoteSessionActionEvent } from "./remote-session-actions-audit.ts";
 import { remoteCommandReadOnly } from "./remote-session-exec.ts";
-import { HOST_GATEWAY_CALL_MS, HOST_OS_READ_WAIT_MAX_MS, withinLimit } from "./host-gateway-bound.ts";
+import { HOST_GATEWAY_CLOSE_MS, HOST_OS_READ_WAIT_MAX_MS, withinLimit } from "./host-gateway-bound.ts";
 import { createTunnelQueue, isTunnelRefusal, SESSION_STOP_TIME_MS, TUNNEL_PROBE_TIME_MS, TUNNEL_PROBE_WAIT_MAX_MS, type TunnelRefusal } from "./tunnel-queue.ts";
 
 /** A call the tunnel queue never sent. `closed` starts with the words the
@@ -241,7 +241,7 @@ export type RemoteSessionDeps = {
   /** How long a tunnel probe waits for its turn (tests). */
   tunnelProbeWaitMaxMs?: number;
   /** The longest the gateway close inside a session close is waited for
-   * (#3518; default `HOST_GATEWAY_CALL_MS`). */
+   * (#3518; default `HOST_GATEWAY_CLOSE_MS`). */
   gatewayCallMaxMs?: number;
   /** The longest an exec waits for the first read of an unknown OS (#3518;
    * default `HOST_OS_READ_WAIT_MAX_MS`). */
@@ -668,7 +668,7 @@ function createRemoteSessionLifecycle(env: RemoteSessionEnv) {
           if (dir) await markSessionClosed(dir, session.code).catch(() => {});
           try {
             // its own short limit (#3518): a gateway that does not answer never holds a close
-            await withinLimit(Promise.resolve(deps.closeRemote?.({ principalId: session.principalId, botId: session.botId, threadId: session.threadId, code: session.code })), deps.gatewayCallMaxMs ?? HOST_GATEWAY_CALL_MS, undefined);
+            await withinLimit(Promise.resolve(deps.closeRemote?.({ principalId: session.principalId, botId: session.botId, threadId: session.threadId, code: session.code })), deps.gatewayCallMaxMs ?? HOST_GATEWAY_CLOSE_MS, undefined);
           } catch { /* Perspicax ends it at its end time; the address is already gone */ }
         }
       }

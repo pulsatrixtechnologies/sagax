@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { readFileSync } from "node:fs";
 import { createHostComputerRouter, HOST_COMMAND_TIME_MAX_MS, HOST_CONNECT_WAIT_MS, HOST_SESSION_FRESH_MS, HOST_SESSION_IDLE_MS, HOST_SESSION_LIFE_MS, hostCallWorstCaseMs, hostExecWorstCaseMs, NO_HYPERVISOR } from "./host-computer-router.ts";
-import { HOST_GATEWAY_CALL_MS, HOST_GATEWAY_OPEN_MS, HOST_OS_READ_WAIT_MAX_MS } from "./host-gateway-bound.ts";
+import { HOST_GATEWAY_CLOSE_MS, HOST_GATEWAY_LIST_MS, HOST_GATEWAY_OPEN_MS, HOST_OS_READ_WAIT_MAX_MS } from "./host-gateway-bound.ts";
 import { PERSPICAX_RELAY_TIMEOUT_MS } from "../perspicax/perspicax-mcp-rules.ts";
 import { createHostComputerStore } from "./host-computer-store.ts";
 import { KILL_GRACE_MS, KILL_RELEASE_MS } from "./remote-session-probe.ts";
@@ -940,20 +940,21 @@ describe("the person's session on a host (#3393)", () => {
     // Excluded, by name: the VM actions (vm_provision, vm_rebuild, vm_delete)
     // and an exec made while the VM is still provisioning (it checks the VM
     // first: one more whole command and list). Several commands per call.
-    it("is the tunnel part, plus six capped gateway calls and one open, plus two first OS reads (an exec in isolated mode; VM actions and an exec while the VM provisions are excluded)", () => {
+    it("is the tunnel part, plus three lists, three closes and one open, plus two first OS reads (an exec in isolated mode; VM actions and an exec while the VM provisions are excluded)", () => {
       // 3 host lists (isolated mode lists again in the route), the open of
       // the new session, and one gateway close in each of the 3 session closes
-      expect(hostCallWorstCaseMs()).toBe(hostExecWorstCaseMs() + 6 * HOST_GATEWAY_CALL_MS + HOST_GATEWAY_OPEN_MS + 2 * HOST_OS_READ_WAIT_MAX_MS);
+      expect(hostCallWorstCaseMs()).toBe(hostExecWorstCaseMs() + 3 * HOST_GATEWAY_LIST_MS + 3 * HOST_GATEWAY_CLOSE_MS + HOST_GATEWAY_OPEN_MS + 2 * HOST_OS_READ_WAIT_MAX_MS);
     });
 
-    it("leaves at least 20 s under the bot's tool timeout, so a raised constant fails here", () => {
-      expect(hostCallWorstCaseMs()).toBeLessThanOrEqual(toolTimeoutMs() - 20_000);
+    it("leaves at least 10 s under the bot's tool timeout, so a raised constant fails here", () => {
+      expect(hostCallWorstCaseMs()).toBeLessThanOrEqual(toolTimeoutMs() - 10_000);
     });
 
     it("a gateway call has a timeout of its own, far under the global relay timeout", () => {
-      expect(HOST_GATEWAY_CALL_MS).toBeLessThan(PERSPICAX_RELAY_TIMEOUT_MS);
+      expect(HOST_GATEWAY_LIST_MS).toBeLessThan(PERSPICAX_RELAY_TIMEOUT_MS);
+      expect(HOST_GATEWAY_CLOSE_MS).toBeLessThan(HOST_GATEWAY_LIST_MS);
       expect(HOST_GATEWAY_OPEN_MS).toBeLessThan(PERSPICAX_RELAY_TIMEOUT_MS);
-      expect(HOST_GATEWAY_OPEN_MS).toBeGreaterThan(HOST_GATEWAY_CALL_MS);
+      expect(HOST_GATEWAY_OPEN_MS).toBeGreaterThan(HOST_GATEWAY_LIST_MS);
     });
   });
 

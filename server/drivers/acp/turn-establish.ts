@@ -294,6 +294,8 @@ try {
         ? session.sessionConfigResult.configOptions
         : [],
       reused: reused === true,
+      mcpServerNames: mcpServers.map((server: { name: string }) => server.name),
+      noteToolWait: (wait) => { if (latency) latency.toolWait = wait; },
       notice: (message) => {
         // once per conversation: a model switch opens a new
         // process (a new session record), so the live session

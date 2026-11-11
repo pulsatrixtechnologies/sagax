@@ -32668,6 +32668,7 @@ ROUTES.push(createRoutinesHttpRoutes({
   // Serialize immediately; skip the cloneRun pass listRuns() does for mutable callers.
   listRuns: (from, to) => [...routines!.listRunsRaw(from, to)] as ReturnType<NonNullable<typeof routines>["listRuns"]>,
   listFolders: () => routines!.listFolders(),
+  fullReport: (run) => routineFullReport(run),
   create: (body, request, opts) => routines!.create(body as never, request, opts as never),
   wakeHold: () => routines!.wakeHold(),
   runNow: (id, request, startedBy) => routines!.runNow(id, request, startedBy),

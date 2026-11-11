@@ -158,6 +158,22 @@ describe("routine readiness HTTP", () => {
     const detail = call(route, { path: "/api/routines/r1" }); await detail.run();
     expect(detail.sent[0]?.body).toMatchObject({ readiness: answer.checks, lastRun: { readiness: answer.checks } });
   });
+  // #3581: "Details" opens the run window with the whole report, never the
+  // 2,000 characters the run's record keeps; another person's run stays redacted.
+  it("gives the whole report on the single-run read, and only there", async () => {
+    const whole = `${"Line of the report. ".repeat(200)}Closing line.`;
+    const listed = [{ id: "run9", routineId: "r1", botId: "b1", createdAt: 1, status: "completed", output: whole.slice(0, 2_000) }] as never;
+    const fullReport = vi.fn(() => whole);
+    const route = createRoutinesHttpRoutes(deps({ listRuns: () => listed, fullReport }));
+    const one = call(route, { search: "?run=run9" }); await one.run();
+    expect((one.sent[0]?.body as { runs: Array<{ report?: string }> } | undefined)?.runs[0]?.report).toBe(whole);
+    const window = call(route, { search: "?since=0" }); await window.run();
+    expect((window.sent[0]?.body as { runs: Array<{ report?: string }> } | undefined)?.runs[0]?.report).toBeUndefined();
+    const base = deps();
+    const foreign = createRoutinesHttpRoutes(deps({ listRuns: () => listed, fullReport, scopeDeps: (...args) => ({ ...base.scopeDeps(...args), mine: () => false }) }));
+    const hidden = call(foreign, { search: "?run=run9" }); await hidden.run();
+    expect(JSON.stringify(hidden.sent[0]?.body)).not.toContain("Closing line.");
+  });
   it("withholds another person's latest readiness and output on detail", async () => {
     const base = deps();
     const route = createRoutinesHttpRoutes(deps({ listRuns: () => [{ routineId: "r1", createdAt: 1, output: "private report", readiness: [{ code: "mcp_missing" }] }] as never,

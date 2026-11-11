@@ -73,8 +73,8 @@ try {
     await runs.nth(0).screenshot({ path: join(outDir, `${tag}-card-finished-${skin.label}.png`) });
     await runs.nth(1).screenshot({ path: join(outDir, `${tag}-card-running-${skin.label}.png`) });
     if (click) {
-      await page.locator('[data-delegation-reveal="orla-work"]').click();
-      await page.waitForSelector('[data-delegation-work="orla-work"] [data-activity-conversation]');
+      await page.locator('[data-delegation-reveal="tester-work"]').click();
+      await page.waitForSelector('[data-delegation-work="tester-work"] [data-activity-conversation]');
       await page.waitForTimeout(1_200);
       await sample.screenshot({ path: join(outDir, `${tag}-clicked-${skin.label}.png`) });
     }

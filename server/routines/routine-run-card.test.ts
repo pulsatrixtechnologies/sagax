@@ -27,6 +27,34 @@ describe("routineRunCard", () => {
     expect(routineRunCard(run({ status: "waiting", attention: "Approve" }), "main", whole).summary).toBe("Approve");
   });
 
+  // #3581: the card's one or two lines are the report's closing line, and
+  // `summary` keeps the whole report, so the released apps lose nothing.
+  it("carries the brief from the closing line and the whole report in summary", () => {
+    const whole = `Here is the pass.\n\n| Board | Open |\n|---|---|\n| Desk | 41 |\n\n${"More detail. ".repeat(300)}\n\n3 tickets assigned, 1 waits for a part.\n\nRUN_STATUS: partial: one board did not load`;
+    const card = routineRunCard(run({ output: whole.slice(0, 2_000) }), "main", whole);
+    expect(card.brief).toBe("3 tickets assigned, 1 waits for a part.");
+    expect(card.summary).toBe(whole);
+    // a wait's line and a run that wrote nothing carry no brief
+    expect(routineRunCard(run({ status: "waiting", attention: "Approve the sheet" }), "main").brief).toBeUndefined();
+    expect(routineRunCard(run({ output: undefined }), "main").brief).toBeUndefined();
+    // a run that joined the conversation already wrote its report there
+    expect(routineRunCard(run({ threadId: "main" }), "main", whole).brief).toBeUndefined();
+  });
+
+  // #3581: the server rolls before the apps. The 0.8.87 desktop and phone
+  // decode a run's card by its known fields (the phone's keyed decoder
+  // ignores the rest) and draw `summary` as the report: the card stays the
+  // release's fields plus `brief`, and `summary` stays the whole report.
+  it("writes only the released apps' fields plus brief, the report whole in summary", () => {
+    const RELEASED = ["readiness", "runId", "routineId", "routineName", "scheduledFor", "status", "deferredAt", "goalStatus", "executionThreadId", "summary", "error",
+      "autoPausedAfter", "problems", "repeat", "recovered", "attention", "handedTo", "startedAt", "wakeTopic", "watches", "feedback"];
+    const whole = `${"Detail line. ".repeat(400)}\n\nAll done, nothing needs you.`;
+    const card = routineRunCard(run({ output: whole.slice(0, 2_000), problems: "one page", problemRepeat: { firstRunId: "r0", count: 2, since: 1 }, startedAt: 1,
+      handedTo: [{ botId: "b", threadId: "t", status: "completed" }] } as Partial<RoutineRun>), "main", whole);
+    expect(Object.keys(card).filter((key) => !RELEASED.includes(key))).toEqual(["brief"]);
+    expect(card.summary).toBe(whole);
+  });
+
   // #3515: a cut ends at a sentence or a word, never in the middle of one.
   it("cuts a long report, a wait's line and an error at a sentence, never inside a word", () => {
     const long = "Les deux partis sont partisans, et la suite est longue. ".repeat(500);

@@ -27,8 +27,8 @@ import type { FinishUntilLine, FinishUntilLineStatus } from "../../shared/finish
 
 export type ActivityTranscriptItem =
   | { kind: "message"; message: Message }
-  /** one stretch of work: tool steps and a settled turn's narration, in
-   * order. `elapsedMs` is how long the bot worked, when it is known. */
+  /** one stretch of work: tool steps and a turn's notes, in order (#3581:
+   * in a person's chat only the answer stays a bubble). `elapsedMs` is how long the bot worked, when it is known. */
   | { kind: "run"; id: string; messages: Message[]; elapsedMs?: number };
 
 export type TranscriptItem = ActivityTranscriptItem;
@@ -260,9 +260,46 @@ function assistantTurnFolds(messages: Message[]) {
   return settledTurnFolds(messages, isNarration);
 }
 
-/** A conversation keeps the bot's own progress lines and folds only its finished tool steps. */
-function toolStepFolds(messages: Message[]) {
-  return settledTurnFolds(messages, (message, turnId) => message.turnId === turnId && foldable(message));
+/** A person's chat folds a turn's notes and finished steps behind the turn's
+ * one row, so only the answer stays a bubble (#3581). Once the turn has its
+ * final message, every note and finished step before it folds. While it has
+ * none (it runs, or ended without one), a note folds as soon as a later row
+ * of the same turn exists, and every step that has not failed folds: the chat
+ * shows the row, the newest line being written and the working line. A
+ * failed step stays where it was (a failed hand-off is why no answer came). */
+function chatTurnFolds(messages: Message[]) {
+  const settled = settledTurnFolds(messages, (message, turnId) =>
+    message.turnId === turnId && (isNarration(message, turnId) || foldable(message)));
+  const ends = new Set<string>();
+  const last = new Map<string, number>();
+  messages.forEach((message, index) => {
+    if (!message.turnId || message.role !== "bot") return;
+    last.set(message.turnId, index);
+    if (message.kind === "text" && message.turnTerminal) ends.add(message.turnId);
+  });
+  const open = new Map<string, Message[]>();
+  messages.forEach((message, index) => {
+    const turnId = message.turnId;
+    if (!turnId || ends.has(turnId)) return;
+    const note = isNarration(message, turnId) && index < (last.get(turnId) ?? index);
+    const step = isToolStep(message) && message.tool.ok !== false;
+    if (!note && !step) return;
+    open.set(turnId, [...(open.get(turnId) ?? []), message]);
+  });
+  for (const [turnId, rows] of open) {
+    const firstIndex = messages.findIndex((message) => message.turnId === turnId);
+    let startedAt = messages[firstIndex]!.at;
+    for (let i = firstIndex - 1; i >= 0; i -= 1) {
+      if (messages[i]!.role === "user") {
+        startedAt = messages[i]!.at;
+        break;
+      }
+    }
+    const lastAt = messages[last.get(turnId) ?? firstIndex]!.at;
+    settled.byAnchorId.set(rows[0]!.id, { turnId, elapsedMs: Math.max(0, lastAt - startedAt), messages: rows });
+    for (const message of rows) settled.hiddenIds.add(message.id);
+  }
+  return settled;
 }
 
 /** A room's settled turns, folded above their final message: in a room every
@@ -309,7 +346,7 @@ function stepSpan(messages: Message[]): number | undefined {
 function group(messages: Message[], foldAssistantTurns: boolean): TranscriptItem[] {
   const items: TranscriptItem[] = [];
   const folds = foldAssistantTurns
-    ? toolStepFolds(messages)
+    ? chatTurnFolds(messages)
     : { byAnchorId: new Map<string, TurnFold>(), hiddenIds: new Set<string>() };
   let run: Message[] = [];
   const flush = () => {

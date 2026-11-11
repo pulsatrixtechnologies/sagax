@@ -25,6 +25,7 @@ vi.mock("@/state/store", async (importOriginal) => {
 vi.mock("@/lib/live-events", () => ({ listenLiveFrames: () => () => {} }));
 
 const { initialState, openRoutineRun, reducer } = await import("@/state/store");
+const { t } = await import("@/lib/i18n");
 const { RoutineRunCard } = await import("@/components/RoutineRunCard");
 const { ChatViewSheets } = await import("@/components/ChatView.tsx-parts/ChatViewSheets");
 
@@ -82,6 +83,55 @@ describe("#2272 clicking a routine run opens its window", () => {
     host.querySelector<HTMLButtonElement>('[data-testid="bot-exchange-close"]')!.click();
     expect(store.state.routineRunWindow).toBeNull();
     expect(host.querySelector('[data-testid="routine-run-window"]')).toBeNull();
+  });
+
+  // #3581: the chat's card shows two lines; its Details opens the whole
+  // report, read by id, never the record's 2,000 characters.
+  it("Details opens the whole report, read by id", async () => {
+    const whole = `${"Line of the report. ".repeat(200)}Closing line of the whole report.`;
+    store.state = { ...initialState, bots: [bot], routines: [routine], routineRuns: [{ ...(run as object), output: whole.slice(0, 2_000) }], selectedId: "scout" } as unknown as AppState;
+    apiMock.mockImplementation((path: string) => path.startsWith("/api/routines?run=") ? Promise.resolve({ runs: [{ ...(run as object), output: whole.slice(0, 2_000), report: whole }] }) : new Promise(() => {}));
+    render();
+    host.querySelector<HTMLButtonElement>('button[aria-label="View run for Project health watch"]')!.click();
+    expect(apiMock).toHaveBeenCalledWith("/api/routines?run=run-1");
+    await vi.waitFor(() => expect(host.querySelector('[data-testid="routine-run-window"]')?.textContent).toContain("Closing line of the whole report."));
+  });
+
+  // #3581 (review): the card shows two lines, so its Details must open the
+  // whole report even when the run's record is gone (the run log trimmed) or
+  // its task thread deleted: the window falls back to the card's own report.
+  const cardReport = `${"Paragraph of the whole report. ".repeat(120)}Closing line kept only by the card.`;
+  function openFromCard() {
+    flushSync(() => root.render(createElement("div", null,
+      createElement(RoutineRunCard, { message: { ...report(), routineRun: { ...report().routineRun!, summary: cardReport } }, onOpen: () => openRoutineRun(store.dispatch as (action: Action) => void, { runId: "run-1", routineId: "routine-1", report: { text: cardReport, at: 1 } }) }),
+      createElement(ChatViewSheets, { state: { codingChat: null, routineRunWindow: store.state.routineRunWindow }, storeBots: [bot], dispatch: store.dispatch as (action: Action) => void }),
+    )));
+    store.dispatch = (action) => { store.state = reducer(store.state, action as Action); openFromCard(); };
+  }
+
+  it("a card whose run is not found by id still shows its whole report after Details", async () => {
+    store.state = { ...initialState, bots: [bot], routines: [routine], routineRuns: [], selectedId: "scout" } as AppState;
+    apiMock.mockImplementation((path: string) => path.startsWith("/api/routines?run=") ? Promise.resolve({ runs: [] }) : new Promise(() => {}));
+    openFromCard();
+    host.querySelector<HTMLButtonElement>('button[aria-label="View run for Project health watch"]')!.click();
+    await vi.waitFor(() => expect(host.querySelector('[data-testid="routine-run-window"]')?.textContent).toContain("Closing line kept only by the card."));
+    expect(host.querySelector('[data-testid="routine-run-window"]')?.textContent).not.toContain(t("chat.exchange.loadError"));
+  });
+
+  it("a run whose record holds less than its card shows the card's report, without asking the server", async () => {
+    store.state = { ...initialState, bots: [bot], routines: [routine], routineRuns: [{ ...(run as object), output: cardReport.slice(0, 1_990) + "…" }], selectedId: "scout" } as unknown as AppState;
+    openFromCard();
+    host.querySelector<HTMLButtonElement>('button[aria-label="View run for Project health watch"]')!.click();
+    await vi.waitFor(() => expect(host.querySelector('[data-testid="routine-run-window"]')?.textContent).toContain("Closing line kept only by the card."));
+    expect(apiMock.mock.calls.some(([path]) => String(path).startsWith("/api/routines?run="))).toBe(false);
+  });
+
+  it("a whole short report is never asked for again", () => {
+    store.state = { ...initialState, bots: [bot], routines: [routine], routineRuns: [run], selectedId: "scout" } as AppState;
+    render();
+    host.querySelector<HTMLButtonElement>('button[aria-label="View run for Project health watch"]')!.click();
+    expect(host.querySelector('[data-testid="routine-run-window"]')?.textContent).toContain("All green.");
+    expect(apiMock.mock.calls.some(([path]) => String(path).startsWith("/api/routines?run="))).toBe(false);
   });
 
   it("a run the app has not loaded opens its window and is fetched by id", async () => {

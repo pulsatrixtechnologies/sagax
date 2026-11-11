@@ -291,6 +291,9 @@ export interface RoutineRun {
   startedAt?: number;
   finishedAt?: number;
   output?: string;
+  /** #3581: the whole report, on the single-run read only (GET
+   * /api/routines?run=): `output` keeps the record's 2,000 characters. */
+  report?: string;
   /** 2026-10-22: a completed run that had nothing for the person; nothing
    * was posted to their conversation (server/routines/routine-report.ts). */
   quiet?: true;

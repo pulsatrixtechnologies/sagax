@@ -19,7 +19,13 @@ export interface RoutineRunCardData {
   /** Exact terminal team-goal outcome when this run targeted a room. */
   goalStatus?: "completed" | "needs-input" | "blocked" | "limit-reached" | "paused" | "stopped" | "failed";
   executionThreadId?: string;
+  /** The whole report (up to ROUTINE_REPORT_POST_MAX): what "Details" opens
+   * and what the released apps still draw as a bubble. */
   summary?: string;
+  /** #3581: the one or two lines the card shows, from the report's closing
+   * line (reportBrief in shared/routine-result.ts). Absent on cards stored
+   * before it: the apps read the same function from `summary`. */
+  brief?: string;
   error?: string;
   /** 2026-10-26: this failure paused the routine after this many failed
    * runs in a row (shared/routine-auto-pause.ts); the notice offers Resume. */

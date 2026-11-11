@@ -117090,6 +117090,50 @@
           }
         }
       }
+    },
+    "Color 1:1 messages with the bot color": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Color 1:1 messages with the bot color"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colorer les messages 1:1 avec la couleur du bot"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colorir as mensagens 1:1 com a cor do bot"
+          }
+        }
+      }
+    },
+    "Assistant bubbles and cards in a one-to-one chat use the bot's color. Off leaves them in the skin's color.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Assistant bubbles and cards in a one-to-one chat use the bot's color. Off leaves them in the skin's color."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dans un chat en tête-à-tête, les bulles et les cartes du bot prennent sa couleur. Désactivé, elles gardent la couleur du thème."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Em uma conversa individual, os balões e cartões do bot usam a cor dele. Desativado, ficam na cor do tema."
+          }
+        }
+      }
     }
   }
 }

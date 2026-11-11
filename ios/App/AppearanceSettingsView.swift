@@ -118,6 +118,12 @@ struct AppearanceSettingsView: View {
                     identifier: "settings.hdMascots"
                 )
             }
+#if DEBUG
+            // Parity captures: -paritySettingsRoute appearance -parityScrollEnd YES
+            if ParityLaunch.current != nil, UserDefaults.standard.bool(forKey: "parityScrollEnd") {
+                ScrollOffsetSetter(offset: 100_000)
+            }
+#endif
         }
         .task(id: selection.mode) {
             if selection.mode == .computer { await themes.refreshFromComputer(client: client) }

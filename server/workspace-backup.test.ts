@@ -360,6 +360,17 @@ describe("encrypted full workspace backups", () => {
     }
   });
 
+  it("leaves a log folder's line counts out and keeps its logs (#3666)", async () => {
+    const source = directory();
+    mkdirSync(join(source, "events"));
+    writeFileSync(join(source, "events", "t1.ndjson"), '{"type":"turn.started"}\n');
+    writeFileSync(join(source, "events", ".line-counts.json"), "{}");
+    const exported = await createWorkspaceBackup(source, { password: PASSWORD });
+    const staged = await stageWorkspaceBackup(source, exported.path, { password: PASSWORD });
+    const paths: string[] = readJson(join(source, ".backups", staged.id, "staged", "manifest.json")).entries.map((entry: { path: string }) => entry.path);
+    expect(paths.filter((path) => path.startsWith("events"))).toEqual(["events", "events/t1.ndjson"]);
+  });
+
   it("leaves the Organization library's downloaded catalog and release files out, and keeps what the runtime added", async () => {
     const source = directory(), library = join(source, "org-library"), sha = "b".repeat(64);
     mkdirSync(join(library, "blobs"), { recursive: true, mode: 0o700 });

@@ -78,6 +78,7 @@ import {
 } from "./content-file-crypto.ts";
 import { contentAutoMigrate, contentEncryptionOn, contentKeyById, contentKeyForBot, contentKeyForOwner, contentKeyForThread, contentOwnerOfThread, onContentAtRest } from "../messages/message-db.ts";
 import { reportBackgroundError } from "../background-error.ts";
+import { lineCountAppended } from "../threads/log-line-count.ts";
 
 export type ContentScope = { thread: string } | { bot: string } | { owner: string };
 
@@ -998,7 +999,10 @@ function appendedToTail(file: string, lines: readonly string[], bytes: number): 
 /** A writer's append of a sealed log is done: what it wrote goes to the
  * view's memory too (the writer holds the text already). */
 export function logAppended(file: string, originals: readonly string[], data: string): void {
-  appendedToTail(file, originals, Buffer.byteLength(data, "utf8"));
+  const bytes = Buffer.byteLength(data, "utf8");
+  appendedToTail(file, originals, bytes);
+  // and the log's line total moves forward with it (server/threads/log-line-count.ts)
+  lineCountAppended(file, data, bytes);
 }
 
 /** A log removed (its thread deleted): what memory kept of it goes too. */

@@ -11,11 +11,12 @@
 // Merged by timestamp so a tool call and the raw message behind it sit
 // next to each other. Newest-`limit` only: a long-lived thread has
 // thousands of native lines and the panel wants the recent ones first.
-import { closeSync, fstatSync, openSync, readSync, type Stats } from "node:fs";
+import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { join } from "node:path";
 import { isProjectedRecord, LogReader, logTail, rememberTail } from "../encryption/content-at-rest.ts";
 import type { RuntimeEvent } from "../contracts.ts";
 import type { InspectorEntry, InspectorPage, NativeRecord } from "../../shared/inspector.ts";
+import { logLineTotal } from "./log-line-count.ts";
 
 // The inspector wire shapes live in shared/inspector.ts now (part of the
 // wire model); re-exported here so existing importers keep working.
@@ -24,63 +25,13 @@ export type { InspectorEntry, InspectorPage, NativeRecord } from "../../shared/i
 const DEFAULT_LIMIT = 300;
 const MAX_LIMIT = 2000;
 const READ_CHUNK = 64 * 1024;
-const MAX_TAIL_BYTES = 8 * 1024 * 1024;
-
-interface LineCount {
-  dev: number;
-  ino: number;
-  size: number;
-  mtimeMs: number;
-  complete: number;
-  trailing: boolean;
-}
-type FileStat = Pick<Stats, "dev" | "ino" | "size" | "mtimeMs">;
-
-// Counts are incremental per append-only log. The first request scans bytes
-// once (without decoding or parsing every JSON record); later requests inspect
-// only bytes appended since the cached size. Keep this bounded across threads.
-const lineCounts = new Map<string, LineCount>();
-const LINE_COUNT_CACHE_MAX = 256;
+/** The most a read of the newest lines walks back from the end of a log. */
+export const MAX_TAIL_BYTES = 8 * 1024 * 1024;
 
 /** Thread ids are uuids the harness minted; anything else is not a file we
  * should be reading. */
 function assertThreadId(threadId: string) {
   if (!/^[\w-]+$/.test(threadId)) throw new Error("invalid thread id");
-}
-
-function countLines(fd: number, file: string, stat: FileStat): number {
-  const previous = lineCounts.get(file);
-  const appended =
-    previous &&
-    previous.dev === stat.dev &&
-    previous.ino === stat.ino &&
-    stat.size >= previous.size &&
-    (stat.size > previous.size || stat.mtimeMs === previous.mtimeMs);
-  if (appended && stat.size === previous.size) return previous.complete + Number(previous.trailing);
-
-  let offset = appended ? previous.size : 0;
-  let complete = appended ? previous.complete : 0;
-  let trailing = appended ? previous.trailing : false;
-  while (offset < stat.size) {
-    const length = Math.min(READ_CHUNK, stat.size - offset);
-    const chunk = Buffer.allocUnsafe(length);
-    const read = readSync(fd, chunk, 0, length, offset);
-    if (read <= 0) break;
-    for (let i = 0; i < read; i++) {
-      if (chunk[i] === 0x0a) {
-        if (trailing) complete++;
-        trailing = false;
-      } else if (chunk[i] !== 0x0d) {
-        trailing = true;
-      }
-    }
-    offset += read;
-  }
-  const next = { dev: stat.dev, ino: stat.ino, size: stat.size, mtimeMs: stat.mtimeMs, complete, trailing };
-  lineCounts.delete(file);
-  lineCounts.set(file, next);
-  while (lineCounts.size > LINE_COUNT_CACHE_MAX) lineCounts.delete(lineCounts.keys().next().value!);
-  return complete + Number(trailing);
 }
 
 type RecordGuard<T> = (value: unknown) => value is T;
@@ -107,18 +58,20 @@ function parseRecent<T>(reader: LogReader, text: string, includeFirst: boolean, 
  * comes back as its projection (still counted toward `limit`). */
 export type ProjectionOnly = (projection: Record<string, unknown>) => boolean;
 
-export function readRecentLines<T>(file: string, limit: number, valid: RecordGuard<T>, projectionOnly?: ProjectionOnly): { lines: T[]; total: number } {
+/** The newest `limit` valid lines of a log, read backwards from its end:
+ * never more than the tail window, however long the log. How many lines the
+ * whole log holds is logLineTotal's (server/threads/log-line-count.ts). */
+export function readRecentLines<T>(file: string, limit: number, valid: RecordGuard<T>, projectionOnly?: ProjectionOnly): { lines: T[] } {
   // one reader for the whole read: a block opened once, however the window grows
   const reader = new LogReader(file, projectionOnly);
   let fd: number;
   try {
     fd = openSync(file, "r");
   } catch {
-    return { lines: [], total: 0 };
+    return { lines: [] };
   }
   try {
     const stat = fstatSync(fd);
-    const total = countLines(fd, file, stat);
     // A sealed log a view read a moment ago, unchanged but for this
     // process's own appends: its newest lines are in memory, opened
     // (server/encryption/content-at-rest.ts), and need no disk read nor opening.
@@ -131,7 +84,7 @@ export function readRecentLines<T>(file: string, limit: number, valid: RecordGua
         try { value = JSON.parse(tail.lines[index]!); } catch { continue; }
         if (valid(value)) kept.push(value);
       }
-      if (kept.length >= limit || tail.fromStart) return { lines: kept.reverse(), total };
+      if (kept.length >= limit || tail.fromStart) return { lines: kept.reverse() };
     }
     let position = stat.size;
     // the window as chunks, newest last; joined and decoded only when it
@@ -182,7 +135,7 @@ export function readRecentLines<T>(file: string, limit: number, valid: RecordGua
       }
       if (complete && originals.length) rememberTail(file, stat, originals, fromStart && originals.length === window.length);
     }
-    return { lines, total };
+    return { lines };
   } finally {
     closeSync(fd);
   }
@@ -324,8 +277,13 @@ export function readThreadEvents(input: {
   const requested = input.limit ?? DEFAULT_LIMIT;
   const limit = Number.isFinite(requested) ? Math.max(1, Math.min(Math.trunc(requested), MAX_LIMIT)) : DEFAULT_LIMIT;
 
-  const runtime = readRecentLines(join(eventsDir, `${threadId}.ndjson`), limit, isRuntimeEvent);
-  const native = readRecentLines(join(nativeDir, `${threadId}.ndjson`), limit, isNativeRecord);
+  const runtimeFile = join(eventsDir, `${threadId}.ndjson`);
+  const nativeFile = join(nativeDir, `${threadId}.ndjson`);
+  const runtime = readRecentLines(runtimeFile, limit, isRuntimeEvent);
+  const native = readRecentLines(nativeFile, limit, isNativeRecord);
+  // the totals the writers keep; a log still being counted says "at least"
+  const runtimeTotal = logLineTotal(runtimeFile);
+  const nativeTotal = logLineTotal(nativeFile);
 
   // cap each log on its own, then merge: the native tee is several times
   // chattier than the runtime stream, and one shared cap would leave the
@@ -339,6 +297,11 @@ export function readThreadEvents(input: {
 
   return {
     entries: merged,
-    total: { runtime: runtime.total, native: native.total },
+    // a total still being counted is at least the lines this page holds
+    total: {
+      runtime: runtimeTotal.complete ? runtimeTotal.total : Math.max(runtimeTotal.total, runtime.lines.length),
+      native: nativeTotal.complete ? nativeTotal.total : Math.max(nativeTotal.total, native.lines.length),
+    },
+    ...(runtimeTotal.complete && nativeTotal.complete ? {} : { totalPartial: { runtime: !runtimeTotal.complete, native: !nativeTotal.complete } }),
   };
 }

@@ -19,5 +19,8 @@ export interface InspectorPage {
   entries: InspectorEntry[];
   /** line counts before the cap, so the UI can say "showing 200 of 1,687" */
   total: { runtime: number; native: number };
+  /** Present while a log's total is still being counted: its total is then
+   * only how many lines it holds at least ("last 300 of at least 4,200"). */
+  totalPartial?: { runtime: boolean; native: boolean };
 }
 

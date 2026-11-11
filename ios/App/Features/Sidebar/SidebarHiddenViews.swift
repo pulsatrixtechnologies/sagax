@@ -1,57 +1,11 @@
 // What the person hid from their sidebar (matrix row SB25), and the thread
-// switch (SB10): the home's "Hidden (N)" row at the foot of the list
-// (Sidebar.tsx HiddenEntriesRow) and Settings > Appearance
-// (SidebarHiddenSettings.tsx, SettingsModal ShowThreadsRow).
+// switch (SB10): Settings > Appearance (SidebarHiddenSettings.tsx,
+// SettingsModal ShowThreadsRow). Settings is the one place that lists the
+// hidden entries with Show; the sidebar and the home list draw nothing for
+// them (#3576), and search still finds them.
 import CompanionCore
 import SwiftUI
 import UIKit
-
-/// The foot of the home list: closed by default; each entry comes back
-/// with Show. Drawn only when something is hidden.
-struct HomeHiddenEntries: View {
-    @Environment(\.themePalette) var themePalette
-    let rows: [SidebarHiddenRow]
-    @ObservedObject var prefs: SidebarPrefsModel
-    @EnvironmentObject private var session: Session
-    @State private var open = false
-
-    var body: some View {
-        if !rows.isEmpty {
-            VStack(alignment: .leading, spacing: 0) {
-                HomeSectionHeader(title: String(localized: "Hidden (\(rows.count))"), collapsed: !open) { open.toggle() }
-                    .accessibilityIdentifier("section.__hidden")
-                if open {
-                    ForEach(rows) { row in
-                        HStack(spacing: 8) {
-                            Text(verbatim: row.name)
-                                .font(HomeMetrics.name)
-                                .foregroundStyle(Theme.textSecondary)
-                                .lineLimit(1)
-                            Spacer(minLength: 8)
-                            Button {
-                                Haptics.selection()
-                                prefs.show(session, [row.key])
-                            } label: {
-                                Label("Show", systemImage: "eye")
-                                    .font(Theme.Font.label)
-                                    .foregroundStyle(Theme.accentText)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(Text("Show \(row.name) in the sidebar"))
-                            .accessibilityIdentifier("hidden-show.\(row.key)")
-                        }
-                        .padding(.leading, HomeMetrics.textColumn)
-                        .padding(.trailing, HomeMetrics.rowTrailing)
-                        .frame(minHeight: 44)
-                    }
-                }
-            }
-            .padding(.top, 8)
-            // closed again the next time something is hidden
-            .onDisappear { open = false }
-        }
-    }
-}
 
 /// Settings > Appearance: on iPad the sidebar density, the thread switch, then the hidden entries with
 /// Show and whether a new message brings one back.
@@ -71,7 +25,7 @@ struct SidebarAppearanceSettings: View {
     @AppStorage(FreshTopic.afterKey) private var freshTopicAfter = String(FreshTopic.defaultHours)
 
     var body: some View {
-        let rows = prefs.layout(session).hiddenRows
+        let rows = session.state.sidebarHiddenRows(prefs.prefs.hidden)
         if UIDevice.current.userInterfaceIdiom == .pad {
             SettingsSectionLabel(text: "Sidebar")
             SettingsCard {
@@ -215,11 +169,15 @@ struct SidebarAppearanceSettings: View {
         .accessibilityAddTraits(chosen ? .isSelected : [])
     }
 
-    private func kindLabel(_ kind: HiddenKind) -> LocalizedStringKey {
-        switch kind {
-        case .bot: "Bot"
-        case .group: "Group"
-        case .person: "Person"
-        }
+    private func kindLabel(_ kind: HiddenKind) -> LocalizedStringKey { hiddenKindLabel(kind) }
+}
+
+/// What a hidden entry is, as Settings > Appearance names it (the phone's
+/// list and the iPad's, one wording).
+func hiddenKindLabel(_ kind: HiddenKind) -> LocalizedStringKey {
+    switch kind {
+    case .bot: "Bot"
+    case .group: "Group"
+    case .person: "Person"
     }
 }

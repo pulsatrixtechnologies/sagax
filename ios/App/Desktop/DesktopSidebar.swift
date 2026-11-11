@@ -261,9 +261,6 @@ struct DesktopSidebarList: View {
                                 reorderable: sections.count > 1
                             )
                         }
-                        if !icons, !layout.hiddenRows.isEmpty {
-                            DesktopHiddenEntries(rows: layout.hiddenRows)
-                        }
                     }
                 }
                 .padding(.top, 4)
@@ -579,63 +576,6 @@ enum DesktopSidebarDrop {
 private extension String {
     func stripping(_ prefix: String) -> String? {
         hasPrefix(prefix) ? String(dropFirst(prefix.count)) : nil
-    }
-}
-
-// MARK: - Hidden entries
-
-/// `HiddenEntriesRow`: "Hidden (N)", opening the list with Show.
-struct DesktopHiddenEntries: View {
-    @Environment(\.desktopTheme) private var theme
-    @EnvironmentObject private var session: Session
-    @ObservedObject private var prefs = SidebarPrefsModel.shared
-    let rows: [SidebarHiddenRow]
-    @State private var open = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Button { withAnimation(.snappy(duration: 0.2)) { open.toggle() } } label: {
-                HStack(spacing: 8) {
-                    DesktopIconView(icon: .eyeOff, size: 14)
-                    Text("Hidden (\(rows.count))")
-                        .font(theme.font(12))
-                    Spacer(minLength: 0)
-                    DesktopIconView(icon: .chevronRight, size: 14)
-                        .rotationEffect(.degrees(open ? 90 : 0))
-                }
-                .foregroundStyle(theme.sidebarInkSecondary)
-                .padding(.horizontal, 12)
-                .frame(height: 30)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("desktop-sidebar-hidden")
-            if open {
-                ForEach(rows) { row in
-                    HStack(spacing: 8) {
-                        Text(verbatim: row.name)
-                            .font(theme.font(13))
-                            .foregroundStyle(theme.sidebarInkSecondary)
-                            .lineLimit(1)
-                        Spacer(minLength: 8)
-                        Button {
-                            prefs.show(session, [row.key])
-                        } label: {
-                            DesktopIconView(icon: .eye, size: 14)
-                                .foregroundStyle(theme.sidebarInkSecondary)
-                                .frame(width: 24, height: 24)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(Text("Show \(row.name) in the sidebar"))
-                        .accessibilityIdentifier("desktop-hidden-show.\(row.key)")
-                    }
-                    .padding(.leading, 34)
-                    .padding(.trailing, 8)
-                    .frame(height: 28)
-                }
-            }
-        }
-        .padding(.top, 10)
     }
 }
 

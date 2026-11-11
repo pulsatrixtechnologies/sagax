@@ -355,6 +355,7 @@ struct DesktopAppearanceSettings: View {
                     prefs.setShowSuggestions(session, !prefs.showSuggestions)
                 }
             }
+            DesktopSidebarHiddenFold()
         }
         DesktopSettingsGroup(Text("Mascots"), identifier: "mascots") {
             DesktopDescribedRow(Text("HD mascots"), description: Text("Detailed art for the characters that have it. Colors and skins apply to the classic look."), identifier: "hdMascots") {
@@ -369,6 +370,56 @@ struct DesktopAppearanceSettings: View {
                 await toolCalls.load(session)
                 await prefs.readComputerHdMascots(session)
             }
+    }
+}
+
+/// Settings > Appearance > Sidebar > Hidden from the sidebar
+/// (AppearanceSettings.tsx SidebarHiddenFold, SidebarHiddenSettings.tsx):
+/// the one place that lists what this person hid, each entry with its kind
+/// and Show, then whether a new message brings one back. The sidebar itself
+/// draws nothing for a hidden entry (#3576); search still finds one.
+struct DesktopSidebarHiddenFold: View {
+    @EnvironmentObject private var session: Session
+    @ObservedObject private var prefs = SidebarPrefsModel.shared
+    @State private var open = false
+
+    var body: some View {
+        let rows = session.state.sidebarHiddenRows(prefs.prefs.hidden)
+        DesktopDescribedRow(Text("Hidden from the sidebar"), identifier: "sidebarHiddenFold") {
+            DesktopCountPill(count: rows.count, open: open, label: Text("Hidden from the sidebar"), identifier: "desktop-settings.sidebar-hidden") {
+                withAnimation(.easeOut(duration: 0.15)) { open.toggle() }
+            }
+        } below: {
+            if open {
+                VStack(spacing: 0) {
+                    if rows.isEmpty {
+                        DesktopSettingsTextRow(Text("Nothing hidden. Long-press a bot, a group or a person to hide it; it stays in search."))
+                    }
+                    ForEach(rows) { row in
+                        DesktopCompactRow(Text(verbatim: row.name), identifier: "hidden.\(row.key)") {
+                            DesktopText(Text(hiddenKindLabel(row.kind)), size: 13, color: \.inkSecondary)
+                            Button("Show") { prefs.show(session, [row.key]) }
+                                .buttonStyle(DesktopPillButtonStyle())
+                                .accessibilityLabel(Text("Show \(row.name) in the sidebar"))
+                                .accessibilityIdentifier("desktop-settings-hidden-show.\(row.key)")
+                        }
+                    }
+                    DesktopCompactRow(Text("Show people again when they write"), identifier: "unhidePeople") {
+                        DesktopSwitch(isOn: prefs.prefs.hidden.unhidePeople, label: Text("Show people again when they write"), identifier: "desktop-settings.unhide-people") {
+                            prefs.setUnhide(session, people: !prefs.prefs.hidden.unhidePeople)
+                        }
+                    }
+                    DesktopCompactRow(Text("Show bots again when they post"), identifier: "unhideBots") {
+                        DesktopSwitch(isOn: prefs.prefs.hidden.unhideBots, label: Text("Show bots again when they post"), identifier: "desktop-settings.unhide-bots") {
+                            prefs.setUnhide(session, bots: !prefs.prefs.hidden.unhideBots)
+                        }
+                    }
+                }
+                .padding(.horizontal, -14)
+                .padding(.top, 8)
+            }
+        }
+        .task(id: session.connection?.id) { await prefs.load(session) }
     }
 }
 

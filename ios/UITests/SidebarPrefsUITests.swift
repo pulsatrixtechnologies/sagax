@@ -253,22 +253,24 @@ final class SidebarPrefsUITests: XCTestCase {
         for group in seeded where group["dm"] as? Bool != true && group["pinned"] as? Bool == true {
             if let id = group["id"] as? String { _ = try api("PATCH", "/api/groups/\(id)", ["pinned": false]) }
         }
-        let app = launch()
+        var app = launch()
         let lux = row("Lux", in: app)
         reveal(lux, in: app, "Lux")
         lux.press(forDuration: 1.2)
         tapMenuItem("Hide from sidebar", in: app)
         try eventually("Lux hidden") { !row("Lux", in: app).exists }
+        // #3576: gone from the home list completely, no "Hidden (N)" row
+        assertNoHiddenRow(in: app)
 
-        let hidden = app.buttons["section.__hidden"]
-        reveal(hidden, in: app, "the Hidden row")
-        XCTAssertTrue(hidden.label.contains("Hidden (1)"))
-        hidden.tap()
-        let show = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'hidden-show.bot:'")).firstMatch
-        XCTAssertTrue(show.waitForExistence(timeout: 5))
+        // Settings > Appearance > Hidden from the sidebar brings it back
+        var settings = launch(fresh: false, screen: "22-appearance")
+        let show = settings.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'settings-hidden-show.bot:'")).firstMatch
+        for _ in 0..<10 where !show.exists || !show.isHittable { settings.swipeUp() }
+        XCTAssertTrue(show.waitForExistence(timeout: 5), "Show in Settings > Appearance")
         show.tap()
-        try eventually("Lux back") { row("Lux", in: app).exists }
-        XCTAssertFalse(app.buttons["section.__hidden"].exists)
+        try eventually("Lux off the settings list") { !show.exists }
+        app = launch(fresh: false)
+        reveal(row("Lux", in: app), in: app, "Lux back")
 
         // a group chat hides from its own row menu (RM13), the same way
         let groups = (try api("GET", "/api/groups") as? [String: Any])?["groups"] as? [[String: Any]] ?? []
@@ -280,13 +282,26 @@ final class SidebarPrefsUITests: XCTestCase {
         groupRow.press(forDuration: 1.2)
         tapMenuItem("Hide from sidebar", in: app)
         try eventually("group hidden") { !app.buttons["chat-row.\(groupId)"].exists }
-        let hiddenGroup = app.buttons["section.__hidden"]
-        reveal(hiddenGroup, in: app, "the Hidden row")
-        hiddenGroup.tap()
-        let showGroup = app.buttons["hidden-show.group:\(groupId)"]
+        assertNoHiddenRow(in: app)
+        settings = launch(fresh: false, screen: "22-appearance")
+        let showGroup = settings.buttons["settings-hidden-show.group:\(groupId)"]
+        for _ in 0..<10 where !showGroup.exists || !showGroup.isHittable { settings.swipeUp() }
         XCTAssertTrue(showGroup.waitForExistence(timeout: 5))
         showGroup.tap()
-        try eventually("group back") { app.buttons["chat-row.\(groupId)"].exists }
+        app = launch(fresh: false)
+        reveal(app.buttons["chat-row.\(groupId)"], in: app, "group back")
+    }
+
+    /// The home list draws no "Hidden (N)" row, from its top to its foot.
+    @MainActor
+    private func assertNoHiddenRow(in app: XCUIApplication) {
+        let roster = app.scrollViews["roster-list"].firstMatch
+        let list: XCUIElement = roster.exists ? roster : app
+        for _ in 0..<6 {
+            XCTAssertFalse(app.buttons["section.__hidden"].exists, "no Hidden row in the home list")
+            list.swipeUp()
+        }
+        XCTAssertFalse(app.buttons["section.__hidden"].exists, "no Hidden row at the foot of the home list")
     }
 
     @MainActor

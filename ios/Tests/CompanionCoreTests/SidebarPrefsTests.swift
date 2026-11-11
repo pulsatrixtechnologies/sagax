@@ -162,7 +162,7 @@ final class SidebarPrefsTests: XCTestCase {
         prefs.setHidden(hidden)
         let layout = state.sidebarLayout(prefs: prefs, personal: nil, viewerId: "me")
         XCTAssertFalse(layout.unsectionedChannels.contains { $0.id == "dm" }, "closed: off the home")
-        XCTAssertTrue(layout.hiddenRows.isEmpty, "never listed under Hidden")
+        XCTAssertTrue(state.sidebarHiddenRows(hidden).isEmpty, "never listed under Hidden")
 
         XCTAssertEqual(hidden.reopening(dm, viewerId: "me")?.items, [])
         XCTAssertNil(SidebarHidden.default.reopening(dm, viewerId: "me"), "not closed: nothing to reopen")
@@ -270,7 +270,38 @@ final class SidebarPrefsTests: XCTestCase {
         layout = state.sidebarLayout(prefs: prefs, personal: nil, viewerId: "me")
         XCTAssertTrue(layout.sections.first { $0.name == "Research" }?.bots.isEmpty == true)
         XCTAssertTrue(layout.unsectionedChannels.isEmpty)
-        XCTAssertEqual(layout.hiddenRows.map(\.key).sorted(), ["bot:a", "group:r"])
+        XCTAssertEqual(state.sidebarHiddenRows(prefs.hidden).map(\.key).sorted(), ["bot:a", "group:r"])
+    }
+
+    func testAHiddenEntryIsGoneFromTheSidebarAndComesBackFromSettings() throws {
+        // #3576: hidden means gone from the sidebar and the home list
+        // completely, no "Hidden (N)" row; Settings > Appearance > Hidden
+        // from the sidebar is the one place that lists it, with Show
+        let state = try layoutState()
+        var prefs = SidebarPrefs()
+        prefs.setHidden(SidebarHidden.default.hiding(.bot, "a", at: 1).hiding(.group, "r", at: 1))
+        let layout = state.sidebarLayout(prefs: prefs, personal: nil, viewerId: "me")
+        let drawnBots = (layout.pinnedBots + layout.unsectionedBots + [layout.unsectionedChief].compactMap { $0 }
+            + layout.sections.flatMap { $0.bots + $0.chiefs }).map(\.id)
+        let drawnRooms = (layout.unsectionedChannels + layout.botChats + layout.sections.flatMap(\.channels)).map(\.id)
+        XCTAssertFalse(drawnBots.contains("a"), "a hidden bot is drawn nowhere in the sidebar")
+        XCTAssertFalse(drawnRooms.contains("r"), "a hidden group is drawn nowhere in the sidebar")
+        let labels = Mirror(reflecting: layout).children.compactMap(\.label)
+        XCTAssertFalse(labels.contains { $0.lowercased().contains("hidden") }, "the layout the sidebar draws carries no hidden list: \(labels)")
+
+        let rows = state.sidebarHiddenRows(prefs.hidden)
+        XCTAssertEqual(Set(rows.map(\.key)), ["bot:a", "group:r"])
+        XCTAssertEqual(Set(rows.map(\.kind)), [.bot, .group])
+        XCTAssertTrue(rows.allSatisfy { !$0.name.isEmpty }, "each listed by its name")
+
+        // Show (Settings) brings the entry back to the sidebar
+        let bot = try XCTUnwrap(rows.first { $0.key == "bot:a" })
+        prefs.setHidden(prefs.hidden.showing([bot.key]))
+        let back = state.sidebarLayout(prefs: prefs, personal: nil, viewerId: "me")
+        let backBots = (back.pinnedBots + back.unsectionedBots + [back.unsectionedChief].compactMap { $0 }
+            + back.sections.flatMap { $0.bots + $0.chiefs }).map(\.id)
+        XCTAssertTrue(backBots.contains("a"), "Show puts the bot back in the sidebar")
+        XCTAssertEqual(state.sidebarHiddenRows(prefs.hidden).map(\.key), ["group:r"])
     }
 
     func testPersonalSectionsReplaceTheServersAndPutGeneralOnTop() throws {

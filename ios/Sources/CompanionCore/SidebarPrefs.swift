@@ -399,7 +399,8 @@ public struct SidebarHidden: Hashable, Sendable {
     }
 }
 
-/// One line of the "Hidden" list: the entries that still exist, named.
+/// One line of Settings > Appearance > Hidden from the sidebar: an entry
+/// that still exists, named. The sidebar itself draws nothing for it (#3576).
 public struct SidebarHiddenRow: Hashable, Sendable, Identifiable {
     public var key: String
     public var kind: HiddenKind
@@ -607,7 +608,6 @@ public struct SidebarLayout: Sendable {
     /// Every section id in the desktop's order (General on top on an
     /// organization server).
     public var sectionIds: [String]
-    public var hiddenRows: [SidebarHiddenRow]
     /// Sections are the person's own (organization server).
     public var personal: Bool
 
@@ -644,8 +644,7 @@ extension CompanionState {
             layoutBots = bots.map { var bot = $0; bot.section = placement[PersonalSections.itemKey(bot: bot.id)]; return bot }
             layoutRooms = rooms.map { var room = $0; room.section = placement[PersonalSections.itemKey(group: room.id)]; return room }
         }
-        let hidden = prefs.hidden
-        let hiddenKeys = hidden.keys
+        let hiddenKeys = prefs.hidden.keys
         let shownBots = layoutBots.filter { !hiddenKeys.contains(SidebarHidden.key(.bot, $0.id)) }
         let shownRooms = layoutRooms.filter { !hiddenKeys.contains(SidebarHidden.groupKey($0, viewerId: viewerId)) }
 
@@ -683,6 +682,26 @@ extension CompanionState {
             )
         }
 
+        return SidebarLayout(
+            unsectionedChief: visible.first { $0.chiefOfStaff == true && !pinned($0) && name($0.section) == nil },
+            pinnedBots: visible.filter(pinned),
+            sections: sections,
+            unsectionedBots: visible.filter { $0.chiefOfStaff != true && !pinned($0) && name($0.section) == nil },
+            unsectionedChannels: unsectionedRooms,
+            botChats: botChats,
+            sectionIds: ids,
+            personal: personal != nil
+        )
+    }
+}
+
+extension CompanionState {
+    /// What Settings > Appearance > Hidden from the sidebar lists, by name:
+    /// the hidden bots and groups that still exist, each with Show there.
+    /// The sidebar and the home list draw nothing for them (#3576, hidden
+    /// means gone from the sidebar); search still finds them. A closed
+    /// conversation with a person is not listed (#219).
+    public func sidebarHiddenRows(_ hidden: SidebarHidden) -> [SidebarHiddenRow] {
         var rows: [SidebarHiddenRow] = []
         for item in hidden.items {
             switch item.kind {
@@ -695,24 +714,10 @@ extension CompanionState {
                     rows.append(SidebarHiddenRow(key: item.key, kind: .group, id: item.id, name: room.name))
                 }
             case .person:
-                // a closed conversation with a person is not hidden: it is
-                // never listed under Hidden (#219)
                 continue
             }
         }
-        rows.sort { $0.name.localizedCompare($1.name) == .orderedAscending }
-
-        return SidebarLayout(
-            unsectionedChief: visible.first { $0.chiefOfStaff == true && !pinned($0) && name($0.section) == nil },
-            pinnedBots: visible.filter(pinned),
-            sections: sections,
-            unsectionedBots: visible.filter { $0.chiefOfStaff != true && !pinned($0) && name($0.section) == nil },
-            unsectionedChannels: unsectionedRooms,
-            botChats: botChats,
-            sectionIds: ids,
-            hiddenRows: rows,
-            personal: personal != nil
-        )
+        return rows.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
     }
 }
 

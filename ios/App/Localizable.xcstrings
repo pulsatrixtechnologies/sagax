@@ -36818,28 +36818,6 @@
         }
       }
     },
-    "Hidden (%lld)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hidden (%lld)"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Masqués (%lld)"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ocultos (%lld)"
-          }
-        }
-      }
-    },
     "Hidden file": {
       "localizations": {
         "fr": {

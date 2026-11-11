@@ -1718,7 +1718,6 @@ extension ChatListView {
             }
         }
 
-        HomeHiddenEntries(rows: layout.hiddenRows, prefs: sidebarPrefs)
     }
 
     /// One collapsible home section. `named` is a section of the person's or

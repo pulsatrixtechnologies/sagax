@@ -1,4 +1,4 @@
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +8,20 @@ import { PluginMarketplaces } from "../plugins/plugin-marketplaces.ts";
 import { botPluginsWithMarketplaces } from "../testing/plugin-stores.ts";
 import { PersonCapabilities, principalDir } from "../people/person-connections.ts";
 import { personalPluginStorage } from "../plugins/person-plugins.ts";
+
+// #3635: a seam to make the copy of a new plugin folder fail midway on any
+// platform (mode bits and read-only folders do not stop a write on Windows)
+const copyFault = vi.hoisted(() => ({ armed: false }));
+vi.mock("node:fs", async (importOriginal) => {
+  const real = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...real,
+    cpSync: ((from: string, to: string, options?: Parameters<typeof real.cpSync>[2]) => {
+      real.cpSync(from, to, options);
+      if (copyFault.armed) throw Object.assign(new Error("EIO: the copy failed midway"), { code: "EIO" });
+    }) as typeof real.cpSync,
+  };
+});
 
 const dirs: string[] = [];
 const temp = () => {
@@ -419,21 +433,19 @@ describe("BotPlugins", () => {
     await plugins.addMarketplace("bot-1", { source: "acme/tools" }, "pr_alice");
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const unreadable = join(plugins.marketplaceFolder("acme-tools"), "plugins", "reviewer", "zz-unreadable.md");
     try {
       await plugins.install("bot-1", { marketplace: "acme-tools", plugin: "reviewer" }, "pr_alice");
       const installedDir = join(dataDir, "bot-plugins", "bot-1", "plugins", "acme-tools", "reviewer");
       const before = readFileSync(join(installedDir, "commands", "review.md"), "utf8");
-      // the clone in hand holds a file the copy cannot read: the copy fails midway
+      // the copy fails midway, after the new folder is written beside the installed one
       reachable = false;
-      writeFileSync(unreadable, "x");
-      chmodSync(unreadable, 0o000);
+      copyFault.armed = true;
       await expect(plugins.install("bot-1", { marketplace: "acme-tools", plugin: "reviewer" }, "pr_alice")).rejects.toThrow();
       expect(readFileSync(join(installedDir, "commands", "review.md"), "utf8")).toBe(before);
       expect(existsSync(join(installedDir, "skills", "review", "SKILL.md"))).toBe(true);
       expect(readdirSync(join(installedDir, "..")).filter((name) => name.includes(".staging-"))).toEqual([]);
     } finally {
-      try { chmodSync(unreadable, 0o600); } catch { /* not written */ }
+      copyFault.armed = false;
       log.mockRestore();
       warn.mockRestore();
     }

@@ -11,13 +11,13 @@ final class ShapeObjectEyeAnchorTests: XCTestCase {
 
     /// `stillFrame` on the desktop for each object preset, neutral face
     /// (x, y, w, h of each eye, box units), after 081cef893; say and sprout back
-    /// on their pre-#2986 look in mascot-geometry.json (2026-11-09).
+    /// on the art shipped until 2026-11-08 in mascot-geometry.json (2026-11-10).
     private static let desktop: [MascotShape: [[Double]]] = [
         .pad: [[38.033, 45.423, 9.2, 18.768], [61.967, 45.423, 9.2, 18.768]],
         .cup: [[33.4, 48.109, 9.2, 18.768], [54.861, 48.109, 9.2, 18.768]],
         .bulb: [[38.474, 35.423, 9.2, 18.768], [61.526, 35.423, 9.2, 18.768]],
         .say: [[36.817, 39.423, 9.2, 18.768], [63.183, 39.423, 9.2, 18.768]],
-        .sprout: [[40.065, 73.423, 9.2, 18.768], [59.935, 73.423, 9.2, 18.768]],
+        .sprout: [[40.391, 73.423, 9.2, 18.768], [59.609, 73.423, 9.2, 18.768]],
         .tin: [[44.008, 51.423, 7.452, 15.202], [55.992, 51.423, 7.452, 15.202]],
         .tome: [[47.116, 47.423, 9.2, 18.768], [72.884, 47.423, 9.2, 18.768]],
         .ship: [[44.008, 37.423, 7.452, 15.202], [55.992, 37.423, 7.452, 15.202]],

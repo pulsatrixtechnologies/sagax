@@ -114,6 +114,54 @@ function allPoints(d: string): Point[][] {
   return out;
 }
 const matrix = (t: string): Affine => nums(t) as Affine;
+
+/**
+ * How big the body stays (box units): the least distance from the box's middle to its
+ * outline, and, for a body the middle does not see whole (an object's path body: the
+ * sprout's leaves meet at a point near the middle), the radius of the widest disc it
+ * holds. Under 14 the body has turned into a dot or a bar.
+ */
+function bodyReach(d: string): number {
+  const fromMiddle = Math.min(...nums(d).map((_, i, n) => (i % 2 ? Math.hypot(n[i - 1] - 50, n[i] - 50) : Infinity)));
+  if (fromMiddle > 14) return fromMiddle;
+  const poly = outerOutline(d);
+  const edge = (x: number, y: number) => Math.min(...poly.map(([ax, ay], i) => {
+    const [bx, by] = poly[(i + 1) % poly.length];
+    const dx = bx - ax;
+    const dy = by - ay;
+    const k = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1)));
+    return Math.hypot(x - ax - k * dx, y - ay - k * dy);
+  }));
+  let widest = 0;
+  for (let x = 0; x <= 100; x += 2) for (let y = 0; y <= 100; y += 2) if (inside(poly, x, y)) widest = Math.max(widest, edge(x, y));
+  return widest;
+}
+
+/** The least share of a slice's area that lies in the face for the slice to touch it (shapes.mjs uses the same). */
+const SLICE_OVERLAP = 0.75;
+/** Points of the area inside an outline, on a grid 2 box units apart (kept per outline: every slice reuses them). */
+const areaGrid = new Map<string, Point[]>();
+function areaOf(outline: Point[]): Point[] {
+  const key = outline.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
+  let grid = areaGrid.get(key);
+  if (!grid) {
+    grid = [];
+    const xs = outline.map(([x]) => x);
+    const ys = outline.map(([, y]) => y);
+    for (let x = Math.min(...xs); x <= Math.max(...xs); x += 2) for (let y = Math.min(...ys); y <= Math.max(...ys); y += 2) if (inside(outline, x, y)) grid.push([x, y]);
+    areaGrid.set(key, grid);
+  }
+  return grid;
+}
+/** The share of a slice's area (the outline under the slice's matrix S) that lies in the face. */
+function overlapShare(outline: Point[], S: Affine, face: Point[]): number {
+  const area = areaOf(outline);
+  const shared = area.filter(([x, y]) => {
+    const [fx, fy] = applyAffine(S, x, y);
+    return inside(face, fx, fy);
+  }).length;
+  return area.length ? shared / area.length : 0;
+}
 /** Where the <g> that opens at `start` closes (balanced). */
 function groupEnd(html: string, start: number): number {
   let depth = 0;
@@ -157,7 +205,11 @@ function expectHolds(frame: ShapeFrame, pose: Pose, label: string, detail: Volum
     const [dx, dy] = applyAffine(T, x, y);
     if (!inside(poly, dx, dy)) faults.push(`eye point ${x},${y} outside the face`);
   }
-  // the slices touch the face: each one's middle and its half-size outline sit in the face
+  // the slices touch the face: each one's middle and its half-size outline sit in the face.
+  // The half-size outline is a proxy that holds for a body seen whole from the box's middle;
+  // an object's path body is not (the sprout's leaves, the say's tail), so a slice whose
+  // half-size outline leaves the face is measured directly: it touches the face when most
+  // of its own area lies in the face (SLICE_OVERLAP).
   const outline = outerOutline(drawing.outline);
   for (const [i, t] of drawing.slices.entries()) {
     const S = composeAffine(motionNumbers(frame.motion), matrix(t));
@@ -166,7 +218,8 @@ function expectHolds(frame: ShapeFrame, pose: Pose, label: string, detail: Volum
     for (const [x, y] of outline) {
       const [sx, sy] = applyAffine(S, 50 + (x - 50) * 0.5, 50 + (y - 50) * 0.5);
       if (!inside(poly, sx, sy)) {
-        faults.push(`slice ${i} outside the face at ${x},${y}`);
+        const share = overlapShare(outline, S, poly);
+        if (share < SLICE_OVERLAP) faults.push(`slice ${i} outside the face at ${x},${y} (${(share * 100).toFixed(0)} % of it in the face)`);
         break;
       }
     }
@@ -250,7 +303,7 @@ describe("every shape holds together and keeps its face", () => {
             calm.frame(at);
           }
           const frame = run.frame(t);
-          expect(Math.min(...nums(frame.body).map((_, i, n) => (i % 2 ? Math.hypot(n[i - 1] - 50, n[i] - 50) : Infinity))), `${shape} ${move} ${t} body never a dot`).toBeGreaterThan(14);
+          expect(bodyReach(frame.body), `${shape} ${move} ${t} body never a dot`).toBeGreaterThan(14);
           for (const pose of [grounded(REST_POSE, shape), ROLLED(shape)]) {
             expectHolds(frame, pose, `${shape} ${move} ${t}`, "full", true, eyeStyleFor("idle"));
             expectHolds(frame, pose, `${shape} ${move} ${t} ovals`, "full", true, "oval");

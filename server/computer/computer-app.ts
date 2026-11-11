@@ -22,7 +22,7 @@
 // - A `window_id` must belong to the pid (CoreGraphics' window list), and
 //   typing goes only into a focused element that is not a password field
 //   (Accessibility); when either cannot be checked, no app is read.
-import { execFile } from "node:child_process";
+import { execChild } from "../process/spawn-helper.ts";
 import { homedir } from "node:os";
 
 import { appBundleDenied, appBundleOf, appLabelFromPath, appRuleOffered, screenAppTarget, type ScreenAppIdentity, type ScreenAppTarget } from "../../shared/computer-app.ts";
@@ -30,7 +30,7 @@ import { appBundleDenied, appBundleOf, appLabelFromPath, appRuleOffered, screenA
 export type RunFile = (command: string, args: string[], timeoutMs: number) => Promise<{ stdout: string; stderr: string } | null>;
 
 const runFile: RunFile = (command, args, timeoutMs) => new Promise((resolve) => {
-  execFile(command, args, { timeout: timeoutMs, encoding: "utf8", maxBuffer: 1024 * 1024, windowsHide: true }, (error, stdout, stderr) => {
+  execChild(command, args, { timeout: timeoutMs, encoding: "utf8", maxBuffer: 1024 * 1024, windowsHide: true }, (error, stdout, stderr) => {
     resolve(error ? null : { stdout: String(stdout), stderr: String(stderr) });
   });
 });

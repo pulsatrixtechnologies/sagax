@@ -4,7 +4,8 @@
 // The generic protocol runtime lives in acp/core.ts; this file is only the
 // per-harness quirks. Verified against grok 1.0.0.
 import { GROK_PROMPT_BYTE_LIMIT } from "./prompt-fit.ts";
-import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { spawnChild } from "../../process/spawn-helper.ts";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -399,7 +400,7 @@ export async function probeGrokModels(
   // A Grok agent process: one engine start slot during boot.
   const models = await engineStartGate.run("probe", `${cli} agent (models)`, () => new Promise<GrokCloudModel[] | null>((done) => {
     let settled = false;
-    let child: ReturnType<typeof spawn>;
+    let child: ChildProcess;
     const finish = (value: GrokCloudModel[] | null) => {
       if (settled) return;
       settled = true;
@@ -412,7 +413,7 @@ export async function probeGrokModels(
       // SAGAX_GROK_MODEL_PROBE marks this child for the test fake; Grok ignores it.
       // resolved as the driver does: on Windows a .cmd shim or a node script cannot be spawned bare
       const resolved = resolveCli(cli, ["agent", "--no-leader", "stdio"], env as NodeJS.ProcessEnv);
-      child = spawn(resolved.command, resolved.args, {
+      child = spawnChild(resolved.command, resolved.args, {
         env: { ...env, SAGAX_GROK_MODEL_PROBE: "1" }, stdio: ["pipe", "pipe", "ignore"], windowsHide: true,
       });
     } catch {
@@ -462,7 +463,7 @@ export async function probeGrokReach(cli: string, env: Record<string, string | u
   if (!existsSync(join(home, "auth.json"))) return null;
   return engineStartGate.run("probe", `${cli} agent (reach)`, () => new Promise<unknown>((done) => {
     let settled = false;
-    let child: ReturnType<typeof spawn>;
+    let child: ChildProcess;
     const finish = (value: unknown) => {
       if (settled) return;
       settled = true;
@@ -473,7 +474,7 @@ export async function probeGrokReach(cli: string, env: Record<string, string | u
     const timer = setTimeout(() => finish(null), REACH_PROBE_TIMEOUT_MS);
     try {
       const resolved = resolveCli(cli, ["agent", "--no-leader", "stdio"], probeEnv as NodeJS.ProcessEnv);
-      child = spawn(resolved.command, resolved.args, { env: probeEnv as NodeJS.ProcessEnv, cwd: dirname(home), stdio: ["pipe", "pipe", "ignore"], windowsHide: true });
+      child = spawnChild(resolved.command, resolved.args, { env: probeEnv as NodeJS.ProcessEnv, cwd: dirname(home), stdio: ["pipe", "pipe", "ignore"], windowsHide: true });
     } catch {
       finish(null);
       return;

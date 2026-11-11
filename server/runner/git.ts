@@ -12,9 +12,10 @@
 //   Perspicax answers git-receive-pack with 403 and pushes only a checked
 //   bundle.
 // - The run's branch is `px/...` and never the base branch.
-import { spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+
+import { spawnChild } from "../process/spawn-helper.ts";
 
 export const AGENT_NAME = "Pulsatrix Agent";
 export const AGENT_EMAIL_DEFAULT = "agent@pulsatrix.invalid";
@@ -102,17 +103,17 @@ export function runGit(
   options: { cwd: string; env: Record<string, string>; git?: string; input?: string; allowFail?: boolean; maxBytes?: number },
 ): Promise<GitRunResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(options.git ?? "git", args, { cwd: options.cwd, env: options.env, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawnChild(options.git ?? "git", args, { cwd: options.cwd, env: options.env, stdio: ["pipe", "pipe", "pipe"] });
     const out: Buffer[] = [];
     let outBytes = 0;
     let err = "";
     let tooBig = false;
-    child.stdout.on("data", (chunk: Buffer) => {
+    child.stdout!.on("data", (chunk: Buffer) => {
       outBytes += chunk.length;
       if (options.maxBytes && outBytes > options.maxBytes) { tooBig = true; child.kill("SIGTERM"); return; }
       out.push(chunk);
     });
-    child.stderr.on("data", (chunk: Buffer) => { if (err.length < 64 * 1024) err += chunk.toString("utf8"); });
+    child.stderr!.on("data", (chunk: Buffer) => { if (err.length < 64 * 1024) err += chunk.toString("utf8"); });
     child.on("error", reject);
     child.on("close", (code) => {
       if (tooBig) return reject(new GitError(args, code, `output over ${options.maxBytes} bytes`));
@@ -120,7 +121,7 @@ export function runGit(
       if (code !== 0 && !options.allowFail) return reject(new GitError(args, code, err));
       resolve(result);
     });
-    child.stdin.end(options.input ?? "");
+    child.stdin!.end(options.input ?? "");
   });
 }
 

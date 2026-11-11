@@ -2,7 +2,7 @@
 // MagicDNS name, and ask Tailscale to terminate HTTPS for the server.
 // Nothing here logs Tailscale's raw stderr: it can contain auth keys and
 // node names, so failures are classified into a closed set of reasons.
-import { execFile } from "node:child_process";
+import { execChild } from "./process/spawn-helper.ts";
 
 import { ownMagicDnsName, tailscaleCandidates, tailscaleEnvironment } from "../companion/src/listener.ts";
 
@@ -57,7 +57,7 @@ export function explainTailscaleFailure(reason: TailscaleFailure): string {
 
 function run(cli: string, args: string[], timeoutMs: number): Promise<{ ok: boolean; stdout: string; stderr: string; code: number | null }> {
   return new Promise((resolve) => {
-    execFile(
+    execChild(
       cli,
       args,
       { timeout: timeoutMs, killSignal: "SIGKILL", maxBuffer: 16 * 1024 * 1024, env: tailscaleEnvironment() },

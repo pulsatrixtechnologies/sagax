@@ -2,7 +2,7 @@
 // transport reaches the user's daemon and the official Cua MCP server stays
 // inside one managed container per bot.
 import { createHash, randomBytes } from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawnChild } from "../process/spawn-helper.ts";
 import { createConnection, createServer, type AddressInfo } from "node:net";
 
 import {
@@ -113,7 +113,7 @@ const REMOTE_VIEWER_GRACE_MS = 30_000;
 const NATIVE_VIEWER_LIFETIME_MS = 8 * 60 * 60_000;
 const desktopTunnels = new Map<
   string,
-  { child: ReturnType<typeof spawn>; joinUrl: string; expiry: ReturnType<typeof setTimeout>; viewers: number; localViewer: boolean }
+  { child: ReturnType<typeof spawnChild>; joinUrl: string; expiry: ReturnType<typeof setTimeout>; viewers: number; localViewer: boolean }
 >();
 
 function invalidateVpsStatus(key: string): void {
@@ -1347,7 +1347,7 @@ export async function vpsComputerJoin(
 
   const localPort = await unusedLoopbackPort();
   const ssh = prepareVpsSsh(DATA_DIR, augmentedPath());
-  const child = spawn("ssh", vpsSshTunnelArgs(alias, localPort, connection.privateIp, ssh.configPath), {
+  const child = spawnChild("ssh", vpsSshTunnelArgs(alias, localPort, connection.privateIp, ssh.configPath), {
     shell: false,
     env: { ...process.env, PATH: ssh.path },
     stdio: ["ignore", "ignore", "pipe"],

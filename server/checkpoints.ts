@@ -23,7 +23,6 @@
 // override follows Gemini CLI's gitService, the sanitized GIT_* env list and
 // the exclude categories follow Roo-Code's checkpoint service, and the
 // snapshot-before-every-turn cadence follows Cline.
-import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
@@ -32,6 +31,7 @@ import { isAbsolute, join, parse, resolve } from "node:path";
 
 import { DATA_DIR } from "./config.ts";
 import { reportBackgroundError } from "./background-error.ts";
+import { execChild } from "./process/spawn-helper.ts";
 
 export const CHECKPOINTS_DIR = join(DATA_DIR, "checkpoints");
 
@@ -183,7 +183,7 @@ function folderShadow(botId: string, cwd: string): { worktree: string; shadow: s
 let gitProbe: Promise<boolean> | null = null;
 function gitAvailable(): Promise<boolean> {
   gitProbe ??= new Promise((resolveProbe) => {
-    execFile("git", ["--version"], { windowsHide: true, timeout: 5_000 }, (err) => resolveProbe(!err));
+    execChild("git", ["--version"], { windowsHide: true, timeout: 5_000 }, (err) => resolveProbe(!err));
   });
   return gitProbe;
 }
@@ -248,7 +248,7 @@ function gitEnv(shadow: string, cwd: string): NodeJS.ProcessEnv {
   return env;
 }
 
-/** execFile reports its own timeout as a killed child; a cancellation via
+/** execChild (as execFile) reports its own timeout as a killed child; a cancellation via
  * `signal` arrives as an AbortError instead and is not a timeout. */
 function gitFailure(command: string, err: Error & { killed?: boolean }, stderr: string, signal?: AbortSignal): Error {
   if (err.killed && err.name !== "AbortError" && !signal?.aborted) {
@@ -266,7 +266,9 @@ function gitFailure(command: string, err: Error & { killed?: boolean }, stderr: 
 function runGit(args: string[], cwd: string, env: NodeJS.ProcessEnv, signal?: AbortSignal, input?: string): Promise<string> {
   return new Promise((resolvePromise, rejectPromise) => {
     signal?.throwIfAborted();
-    const child = execFile(
+    // #3680: started by the spawn helper, never by a fork of the grown server:
+    // a snapshot runs at every turn start and the turn waits for it.
+    const child = execChild(
       "git",
       args,
       { cwd, env, signal, windowsHide: true, encoding: "utf8", timeout: GIT_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 },

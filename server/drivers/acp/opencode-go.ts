@@ -1,7 +1,7 @@
 // The maintained OpenCode CLI through its ACP stdio interface. OpenCode is
 // the harness; Zen, Go, OpenRouter, and user-configured/local providers are
 // models discovered from that harness rather than separate Sagax drivers.
-import { execFile } from "node:child_process";
+import { execChild } from "../../process/spawn-helper.ts";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from "node:path";
@@ -257,7 +257,7 @@ function runGit(directory: string, args: string[]): Promise<void> {
   // repository named by a GIT_* variable.
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
   return new Promise((resolveRun, rejectRun) => {
-    execFile("git", [
+    execChild("git", [
       "-c", "user.name=Sagax", "-c", "user.email=model-discovery@openmaus.invalid",
       "-c", "commit.gpgsign=false", "-c", `core.hooksPath=${join(directory, ".git", "no-hooks")}`,
       ...args,

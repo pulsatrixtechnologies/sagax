@@ -16,15 +16,14 @@
 // - The capture ends, and its records are dropped, when the person stops it,
 //   closes the dialog, when the browser closes or restarts, and after a
 //   minute without a refresh (a window that went away).
-import { execFile } from "node:child_process";
+import { execChildAsync } from "../process/spawn-helper.ts";
 import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { browserRuntimeEnv } from "./browser-runtime.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
-const execute = promisify(execFile);
+const execute = execChildAsync;
 export const REDACTED = "[redacted]";
 /** Records kept per capture, newest last. */
 export const NETWORK_DEBUG_MAX_ENTRIES = 500;

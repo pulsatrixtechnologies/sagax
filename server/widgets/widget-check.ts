@@ -10,7 +10,7 @@
 // a few idle minutes, never started while the server's memory is high (#804),
 // and marked as the OOM killer's first choice. It speaks CDP over a pipe (no
 // port, no window). Checks run one at a time.
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -21,6 +21,7 @@ import { buildWidgetDocument, WIDGET_MAX_HEIGHT, WIDGET_MESSAGE, WIDGET_MIN_HEIG
 import { geistFace } from "../geist-face.ts";
 import { auditWidgetPage, type AuditDefect } from "./widget-check-audit.ts";
 import { reportBackgroundError } from "../background-error.ts";
+import { spawnChild, whenStarted } from "../process/spawn-helper.ts";
 
 export const WIDGET_CHECK_MAX_ATTEMPTS = 3;
 /** The fence a widget that still fails after the last attempt is shown in:
@@ -379,7 +380,8 @@ export class WidgetRenderer {
       ...(widgetChromeNoSandbox() ? ["--no-sandbox"] : []),
       "about:blank",
     ];
-    const child = spawn(chrome, args, { stdio: ["ignore", "ignore", "ignore", "pipe", "pipe"], windowsHide: true, detached: false });
+    // #3680: the spawn helper starts it and hands back the DevTools pipes on 3 and 4.
+    const child = spawnChild(chrome, args, { stdio: ["ignore", "ignore", "ignore", "pipe", "pipe"], windowsHide: true, detached: false });
     const cdp = new CdpPipe(child.stdio[3] as Writable, child.stdio[4] as Readable);
     child.once("exit", () => {
       cdp.close(new Error("Chrome exited."));
@@ -389,7 +391,7 @@ export class WidgetRenderer {
       cdp.close(new Error("Chrome could not start."));
       try { rmSync(profile, { recursive: true, force: true }); } catch { /* best effort */ }
     });
-    if (child.pid) this.options.onSpawn?.(child.pid);
+    whenStarted(child, (pid) => this.options.onSpawn?.(pid));
     try {
       const { targetId } = await cdp.send("Target.createTarget", { url: "about:blank" }, undefined, 15_000) as { targetId: string };
       const { sessionId } = await cdp.send("Target.attachToTarget", { targetId, flatten: true }) as { sessionId: string };

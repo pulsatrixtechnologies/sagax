@@ -11,12 +11,12 @@
 // host's 1Password account is not any one person's to share. Items are
 // listed for the picker (title, vault, sites); a picked item is saved in the
 // vault as a reference, and its fields are read only at fill time, never
-// cached, never listed, never logged. `op` runs with execFile and an argument array, never
+// cached, never listed, never logged. `op` runs with execChild and an argument array, never
 // a shell, and only from a fixed install path (never from PATH): the file and
 // its folder must not be writable by others, and on macOS it must carry
 // AgileBits' code signature (team 2BUA8C4S2C). Its environment is a short
 // allowlist: no Sagax key, no provider key ever reaches it.
-import { execFile } from "node:child_process";
+import { execChild } from "./process/spawn-helper.ts";
 import { realpathSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -98,7 +98,7 @@ export async function locateOp(platform: NodeJS.Platform = process.platform): Pr
     if (!real) continue;
     if (platform !== "darwin") return real;
     const signed = await new Promise<boolean>((resolve) => {
-      execFile("/usr/bin/codesign", ["--verify", "--strict", "-R", OP_REQUIREMENT, real], { timeout: 10_000 }, (error) => resolve(!error));
+      execChild("/usr/bin/codesign", ["--verify", "--strict", "-R", OP_REQUIREMENT, real], { timeout: 10_000 }, (error) => resolve(!error));
     });
     if (signed) return real;
   }
@@ -106,7 +106,7 @@ export async function locateOp(platform: NodeJS.Platform = process.platform): Pr
 }
 
 const defaultExec: ExecFileFn = (command, args, options) => new Promise((resolve, reject) => {
-  execFile(command, args, { ...options, windowsHide: true, shell: false }, (error, stdout) => {
+  execChild(command, args, { ...options, windowsHide: true, shell: false }, (error, stdout) => {
     if (error) reject(new Error("1Password command failed"));
     else resolve(String(stdout));
   });

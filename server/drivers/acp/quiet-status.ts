@@ -9,9 +9,9 @@
 // result becomes a plain-words notice in the chat, so the person is never
 // left watching a spinner without knowing why.
 
-import { execFile } from "node:child_process";
 import { closeSync, fstatSync, openSync, readdirSync, readFileSync, readlinkSync, readSync } from "node:fs";
 
+import { execChild } from "../../process/spawn-helper.ts";
 import { redactSecretsInText } from "../../redact.ts";
 import { formatQuietLimit } from "./constants.ts";
 
@@ -129,7 +129,8 @@ export class LogTail {
 
 const run = (file: string, args: string[], timeoutMs = 4_000): Promise<string | null> =>
   new Promise((resolve) => {
-    execFile(file, args, { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, stdout) => {
+    // #3680: through the spawn helper, so a tick of a quiet turn never forks the server.
+    execChild(file, args, { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, stdout) => {
       // lsof exits 1 when it finds nothing to list; its stdout is still the answer
       if (err && !(typeof stdout === "string" && (err as { code?: unknown }).code === 1)) resolve(null);
       else resolve(String(stdout));

@@ -11,7 +11,6 @@
 //      bodies on stdin or in private files and fail clearly if a future
 //      driver accidentally puts one back in argv.
 import {
-  spawn,
   execFile,
   type ChildProcess,
   type ChildProcessByStdio,
@@ -28,6 +27,7 @@ import { markOomVictim, memoryGuardSettings } from "./memory/engine-memory-guard
 import { resolveCliSpawn, splitCliString, type ResolvedSpawn } from "./env-path.ts";
 import { noteEngineGroupEnded, noteEngineGroupStarted } from "./engines/engine-groups.ts";
 import { reportBackgroundError } from "./background-error.ts";
+import { execChild, pendingStart, spawnChild, whenStarted } from "./process/spawn-helper.ts";
 
 export function resolveCli(cli: string, args: string[] = [], env?: NodeJS.ProcessEnv): ResolvedSpawn {
   return resolveCliSpawn(cli, args, env);
@@ -221,11 +221,12 @@ export function botEngineSessions(): { live: ReadonlySet<number>; ended: Readonl
   return engineSessions;
 }
 
-function rememberEngineSession(child: ChildProcess): void {
-  const pid = child.pid;
-  if (!pid) return;
+function rememberEngineSession(child: ChildProcess, botId: string | undefined): void {
+  whenStarted(child, (pid) => rememberEngineSessionPid(child, pid, botId));
+}
+
+function rememberEngineSessionPid(child: ChildProcess, pid: number, botId: string | undefined): void {
   engineSessions.live.add(pid);
-  const botId = engineBot.getStore();
   if (botId) engineSessions.bots.set(pid, botId);
   else engineSessions.bots.delete(pid);
   child.once("exit", () => {
@@ -252,7 +253,11 @@ export function spawnCli(
 ): ChildProcessByStdio<Writable, Readable, Readable> {
   const resolved = resolveCli(cli, args);
   assertSafeCliArgv(resolved);
-  const child = spawn(resolved.command, resolved.args, {
+  // #3680: on the hosted server the process is created by the spawn helper
+  // (server/process/spawn-helper.ts), so the fork is of a small process and
+  // not of this one: the pid then comes a moment later, and what needs it
+  // runs once it is there.
+  const child = spawnChild(resolved.command, resolved.args, {
     ...opts,
     // posix: own process group so kill(-pid) reaps child MCP servers;
     // win32: taskkill /T does the reaping instead (see killCliTree)
@@ -260,21 +265,23 @@ export function spawnCli(
   }) as ChildProcessByStdio<Writable, Readable, Readable>; // callers always pipe all three
   if (process.platform !== "win32") {
     cliGroups.add(child);
-    noteEngineGroupStarted(child.pid);
+    whenStarted(child, (pid) => noteEngineGroupStarted(pid));
     reapGroupAfterExit(child);
   }
-  if (process.platform === "linux" && child.pid) {
+  if (process.platform === "linux") {
     const tree = new Map<number, string>();
-    try {
-      const root = linuxProcess(child.pid);
-      if (root) tree.set(root.pid, root.start);
-    } catch { /* identity unread; kill will refuse the group */ }
     linuxTrees.set(child, tree);
+    whenStarted(child, (pid) => {
+      try {
+        const root = linuxProcess(pid);
+        if (root) tree.set(root.pid, root.start);
+      } catch { /* identity unread; kill will refuse the group */ }
+    });
   }
-  if (process.platform !== "win32" && owner === "bot") rememberEngineSession(child);
+  if (process.platform !== "win32" && owner === "bot") rememberEngineSession(child, engineBot.getStore());
   // An engine dies before the server when the container runs out of memory
   // (server/memory/engine-memory-guard.ts); its MCP proxies inherit the score.
-  markOomVictim(child.pid, CHILD_OOM_SCORE_ADJ);
+  whenStarted(child, (pid) => markOomVictim(pid, CHILD_OOM_SCORE_ADJ));
 
   // A write to a dying child's stdin fails differently per platform, and one
   // of the ways is fatal. On POSIX the kill is synchronous, the stream is
@@ -303,14 +310,12 @@ const REAP_GRACE_MS = 3_000;
  * own end triggers this, so work that runs as long as its session does is
  * never cut short. */
 function reapGroupAfterExit(child: ChildProcess): void {
-  const pid = child.pid;
-  if (!pid) return;
-  child.once("exit", () => {
+  whenStarted(child, (pid) => child.once("exit", () => {
     const timer = setTimeout(() => {
       void killCliTree(child, REAP_GRACE_MS).then((gone) => { if (gone) noteEngineGroupEnded(pid); }, () => {}).catch(reportBackgroundError);
     }, REAP_AFTER_EXIT_MS);
     timer.unref?.();
-  });
+  }));
 }
 
 const EXEC_KILL_GRACE_MS = 2_000;
@@ -330,13 +335,14 @@ export function execCli(
   }
   const run = (done: () => void = () => {}) => {
     let escalate: NodeJS.Timeout | undefined;
-    const child = execFile(resolved.command, resolved.args, { ...opts, windowsHide: true, encoding: "utf8" }, (err, stdout, stderr) => {
+    // #3680: created by the spawn helper like every other child, never by a fork of this process.
+    const child = execChild(resolved.command, resolved.args, { ...opts, windowsHide: true, encoding: "utf8" }, (err, stdout, stderr) => {
       clearTimeout(escalate);
       done();
       cb(err, stdout, stderr);
     });
     // Node calls back only once the child exits, and a CLI wrapper that traps SIGTERM outlives the timeout's signal.
-    // Only the child is stopped: execFile starts no process group, so a grandchild that ignores SIGTERM can outlive it.
+    // Only the child is stopped: execChild starts no process group, so a grandchild that ignores SIGTERM can outlive it.
     if (opts.timeout) {
       escalate = setTimeout(() => void killCliTree(child, 0).catch(reportBackgroundError), opts.timeout + EXEC_KILL_GRACE_MS);
       escalate.unref?.();
@@ -416,6 +422,9 @@ export function describeSpawnFailure(err: NodeJS.ErrnoException, cli: string, cw
 export function killCliTree(child: ChildProcess, timeoutMs = 5_000): Promise<boolean> {
   const existing = stopping.get(child);
   if (existing) return existing;
+  // A child the spawn helper is still starting is stopped once it has a pid.
+  const starting = pendingStart(child);
+  if (starting) return starting.then(() => killCliTree(child, timeoutMs));
   const pid = child.pid;
   if (!pid) return Promise.resolve(true);
   if (!Number.isInteger(pid) || pid <= 1 || pid === process.pid) return Promise.resolve(false);

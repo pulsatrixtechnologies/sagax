@@ -19,7 +19,7 @@
 // `skip` (default) checks only while it is awake; `wake` starts it in the
 // background and the next check reads it. A tool watch never touches the
 // computer at all.
-import { spawn } from "node:child_process";
+import { spawnChild } from "../process/spawn-helper.ts";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { lstat, readdir, realpath } from "node:fs/promises";
@@ -214,7 +214,7 @@ export function spawnLocalWatch(command: string, cwd: string, options: { timeout
   return new Promise((resolvePromise) => {
     let child;
     try {
-      child = spawn(shell.file, shell.args, { cwd, env: scrubHookEnv(process.env, cwd), stdio: ["ignore", "pipe", "ignore"], detached: process.platform !== "win32" });
+      child = spawnChild(shell.file, shell.args, { cwd, env: scrubHookEnv(process.env, cwd), stdio: ["ignore", "pipe", "ignore"], detached: process.platform !== "win32" });
     } catch {
       resolvePromise({ exitCode: null, stdout: "", truncated: false, timedOut: false });
       return;

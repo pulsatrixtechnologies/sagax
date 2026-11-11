@@ -1,7 +1,6 @@
 // A hook process on the solo machine (the bot's computer). Scrubbed
 // environment, our child PID only. Not used on an organization server.
-import { spawn } from "node:child_process";
-
+import { spawnChild } from "../process/spawn-helper.ts";
 import { pcShell, scrubHookEnv, type HookOutput, type HookRun } from "./lifecycle-hooks.ts";
 
 export function spawnPcHook(run: HookRun, cwd: string, hookRoot?: string, platform = process.platform): Promise<HookOutput> {
@@ -10,7 +9,7 @@ export function spawnPcHook(run: HookRun, cwd: string, hookRoot?: string, platfo
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn(shell.file, shell.args, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
+      child = spawnChild(shell.file, shell.args, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
     } catch {
       resolve({ stdout: "", code: 1 });
       return;

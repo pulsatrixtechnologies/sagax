@@ -10,7 +10,7 @@
 //
 // The runner never listens on a port, never holds a write token, and masks
 // every known secret (and the run token) in what it sends.
-import { spawn } from "node:child_process";
+import { spawnChild } from "../process/spawn-helper.ts";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -584,7 +584,7 @@ class Runner {
       for (const [key, value] of Object.entries(this.deps.env ?? process.env)) if (value !== undefined) env[key] = value;
       Object.assign(env, authorEnv(this.author), { GIT_TERMINAL_PROMPT: "0" }, options.env);
       this.emit({ kind: "terminal", data: { text: truncateUtf8(`$ ${this.masker.mask(command)}\n`, 16 * 1024) } });
-      const child = spawn(this.deps.shell ?? "bash", ["-c", command], { cwd: this.git.dir, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
+      const child = spawnChild(this.deps.shell ?? "bash", ["-c", command], { cwd: this.git.dir, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
       const stream = this.masker.stream();
       let tail = "";
       let buffered = "";

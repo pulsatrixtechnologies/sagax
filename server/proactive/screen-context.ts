@@ -13,7 +13,7 @@
 //   right time. The key per moment and per two-hour window keeps one wake
 //   per moment.
 
-import { execFile } from "node:child_process";
+import { execChild } from "../process/spawn-helper.ts";
 import { createHash, randomUUID } from "node:crypto";
 
 export const SCREEN_SAMPLE_MS = 60_000;
@@ -87,7 +87,7 @@ const WINDOWS_SCRIPT = [
 type Exec = (file: string, args: readonly string[], timeoutMs: number) => Promise<string>;
 
 const defaultExec: Exec = (file, args, timeoutMs) => new Promise((resolve) => {
-  execFile(file, [...args], { timeout: timeoutMs, windowsHide: true, maxBuffer: 64 * 1024 }, (error, stdout) => {
+  execChild(file, [...args], { timeout: timeoutMs, windowsHide: true, maxBuffer: 64 * 1024 }, (error, stdout) => {
     resolve(error ? "" : String(stdout));
   });
 });

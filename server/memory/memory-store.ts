@@ -15,7 +15,7 @@
 // bot wrote in between — today's whole-file PUT races memory_update.
 //
 // No knowledge of turns or HTTP here; the journal and the routes sit on top.
-import { spawn } from "node:child_process";
+import { spawnChild } from "../process/spawn-helper.ts";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, unlinkSync } from "node:fs";
 import { dirname, join, sep } from "node:path";
@@ -392,9 +392,9 @@ export type OpenerRunner = (command: string, args: string[]) => Promise<number |
  * cli.ts openDashboard: no shell, fixed argv, nothing from the request. */
 const spawnOpener: OpenerRunner = (command, args) =>
   new Promise((done) => {
-    let child: ReturnType<typeof spawn>;
+    let child: ReturnType<typeof spawnChild>;
     try {
-      child = spawn(command, args, { stdio: "ignore", windowsHide: true, detached: true });
+      child = spawnChild(command, args, { stdio: "ignore", windowsHide: true, detached: true });
     } catch {
       return done(null);
     }

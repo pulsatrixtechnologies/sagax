@@ -18,7 +18,8 @@
 // own session in it, so the exactness check is per call, and the model
 // round each call spends (the cancelled prompt's own usage) is handed back
 // for the calling thread's usage.
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess } from "node:child_process";
+import { spawnChild } from "../../process/spawn-helper.ts";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 
@@ -136,7 +137,7 @@ function startGrokProcess(launch: GrokConnectorLaunch, name: string, timeoutMs: 
   let child: ChildProcess;
   try {
     const resolved = resolveCli(launch.cli, args, env as NodeJS.ProcessEnv);
-    child = spawn(resolved.command, resolved.args, { env: env as NodeJS.ProcessEnv, cwd, stdio: ["pipe", "pipe", "ignore"], windowsHide: true });
+    child = spawnChild(resolved.command, resolved.args, { env: env as NodeJS.ProcessEnv, cwd, stdio: ["pipe", "pipe", "ignore"], windowsHide: true });
   } catch (error) {
     return Promise.reject(new GrokStartRefused({ text: `Grok could not start for ${name}: ${error instanceof Error ? error.message : String(error)}`, isError: true }));
   }

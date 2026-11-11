@@ -5,20 +5,19 @@
 // harness. Desktop automation itself is Cua Driver. Agents connect directly to
 // `cua-driver mcp` inside the container; this module never reimplements clicks,
 // typing, screenshots, accessibility, or window discovery.
-import { execFile } from "node:child_process";
+import { execChildAsync } from "../process/spawn-helper.ts";
 import { createHash, randomBytes } from "node:crypto";
 import { lstatSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { promisify } from "node:util";
 
 import { augmentedPath, resolveCliSpawn } from "../env-path.ts";
 import { DATA_DIR } from "../config.ts";
 import { commandVariablesScript, withStdinCommandVariables } from "../vault/credential-command-env.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
 
-const run = promisify(execFile);
+const run = execChildAsync;
 const SCREENSHOT_STATUS_TTL_MS = 10_000;
 
 export type CommandRunner = (

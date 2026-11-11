@@ -6,7 +6,7 @@
 // the short session grant it signs for the helper. The model is not asked for
 // either.
 import { randomBytes } from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawnChild } from "../process/spawn-helper.ts";
 import { readFileSync } from "node:fs";
 import { chmod, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -93,7 +93,7 @@ export function newSessionId(): string {
 export function spawnTailcat(bin?: string): TailcatRun {
   return (args, { timeoutMs }) => new Promise((resolve) => {
     const command = bin ?? resolveTailcatBinary() ?? "tailcat";
-    const child = spawn(command, [...args], { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawnChild(command, [...args], { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     let settled = false;

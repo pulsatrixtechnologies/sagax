@@ -1,12 +1,11 @@
-import { execFile } from "node:child_process";
 import { stat } from "node:fs/promises";
 import { request as httpRequest, type IncomingHttpHeaders, type IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { isIP, type LookupFunction } from "node:net";
 import { join } from "node:path";
-import { promisify } from "node:util";
 
 import { resolveTarget } from "../browser/egress/gate.ts";
+import { execChild } from "../process/spawn-helper.ts";
 import { addressClass, ownAddresses } from "../browser/egress/policy.ts";
 
 export interface FileStamp {
@@ -18,8 +17,6 @@ export interface ProcessEntry {
   pid: number;
   name: string;
 }
-
-const execFileAsync = promisify(execFile);
 
 export function expandHome(path: string, home: string): string {
   if (path === "~") return home;
@@ -62,13 +59,14 @@ export function parseTasklist(stdout: string): ProcessEntry[] {
   return entries;
 }
 
-async function runFile(file: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync(file, args, {
-    timeout: 10_000,
-    maxBuffer: 8 * 1024 * 1024,
-    windowsHide: true,
+// #3680: through the spawn helper, so a wait's process list never forks the server.
+function runFile(file: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execChild(file, args, { timeout: 10_000, maxBuffer: 8 * 1024 * 1024, windowsHide: true }, (error, stdout) => {
+      if (error) reject(error);
+      else resolve(stdout);
+    });
   });
-  return stdout;
 }
 
 export async function listProcesses(

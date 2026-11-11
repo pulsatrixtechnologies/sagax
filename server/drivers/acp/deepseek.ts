@@ -23,7 +23,8 @@
 // Picker ids are `<provider>/<model>` so bot settings, badges and config.json
 // stay readable; resolveTurnModel turns them into dsh's wire pair just before
 // the core selects the model.
-import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { spawnChild } from "../../process/spawn-helper.ts";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -190,10 +191,10 @@ export function fetchDeepSeekCatalog(
   cwd: string,
 ): Promise<ModelCatalog> {
   return new Promise((resolve, reject) => {
-    let child: ReturnType<typeof spawn>;
+    let child: ChildProcess;
     try {
       const resolved = resolveCli(cli, ["--profile", "acp"], env);
-      child = spawn(resolved.command, resolved.args, { stdio: ["pipe", "pipe", "ignore"], env: env as NodeJS.ProcessEnv, windowsHide: true });
+      child = spawnChild(resolved.command, resolved.args, { stdio: ["pipe", "pipe", "ignore"], env: env as NodeJS.ProcessEnv, windowsHide: true });
     } catch (error) {
       return reject(error instanceof Error ? error : new Error(String(error)));
     }

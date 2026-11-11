@@ -4,7 +4,8 @@
 // without an OpenRouter key — that is the "HTTP 401: Missing Authentication
 // header" failure. Inject writes providers.<host> and session/set_model
 // `custom:<host>:<model>` instead.
-import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { spawnChild } from "../../process/spawn-helper.ts";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -285,10 +286,10 @@ export async function fetchHermesAcpModels(
 ): Promise<{ id: string; label: string; custom: true }[]> {
   // A Hermes ACP process: one engine start slot during boot.
   return await engineStartGate.run("probe", `${cli} acp (models)`, () => new Promise<{ id: string; label: string; custom: true }[]>((resolve) => {
-    let child: ReturnType<typeof spawn>;
+    let child: ChildProcess;
     try {
       const resolved = resolveCli(cli, ["acp"], env);
-      child = spawn(resolved.command, resolved.args, { stdio: ["pipe", "pipe", "ignore"], env: env as NodeJS.ProcessEnv, windowsHide: true });
+      child = spawnChild(resolved.command, resolved.args, { stdio: ["pipe", "pipe", "ignore"], env: env as NodeJS.ProcessEnv, windowsHide: true });
     } catch {
       return resolve([]);
     }

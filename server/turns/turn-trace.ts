@@ -19,6 +19,10 @@ interface TurnClock {
   /** every step of this turn so far with its time (epoch ms), oldest first:
    * the per-turn latency line names its parts from them (#3561) */
   marks?: Array<[step: string, at: number]>;
+  /** #3623: while the engine's setup waits for its tool servers, Sagax's own
+   * endpoints of this thread: the mount, its first request and its tool list
+   * answer (epoch ms). Mount names and times only, never a request's content. */
+  serving?: { since: number; mounts: Array<[label: string, inAt: number, outAt?: number]> };
 }
 
 /** Steps kept per thread: a routine's turns never restart the clock. */
@@ -91,6 +95,62 @@ export function turnCounters(threadId: string): { queueMs: number | null; firstR
  * inclusive), oldest first. Step names and times only. */
 export function turnTraceMarks(threadId: string, from: number, to: number): Array<[step: string, at: number]> {
   return (clocks.get(threadId)?.marks ?? []).filter(([, at]) => at >= from && at <= to);
+}
+
+/** #3623: the engine's setup starts waiting for its tool servers: from now
+ * until closeTurnServing, Sagax's own endpoints of this thread note their
+ * first request and their tool list answer (noteTurnServed). */
+export function openTurnServing(threadId: string, at = Date.now()): void {
+  if (!threadId || !Number.isFinite(at)) return;
+  take(threadId).serving = { since: at, mounts: [] };
+}
+
+/** #3623: one request on one of Sagax's own endpoints of this thread: its
+ * arrival ("in"), or its tool list answer leaving ("out"). Only the first of
+ * each per mount counts, and only while the setup waits (an answer to a
+ * request that arrived before the wait is not one). */
+export function noteTurnServed(threadId: string, label: string, phase: "in" | "out", at = Date.now()): void {
+  const serving = clocks.get(threadId)?.serving;
+  if (!serving || !label) return;
+  const entry = serving.mounts.find(([name]) => name === label);
+  if (phase === "in") {
+    if (!entry) serving.mounts.push([label, at]);
+  } else if (entry && entry[2] === undefined) {
+    entry[2] = at;
+  }
+}
+
+/** #3623: the wait ended: what Sagax's own endpoints saw, in order of
+ * arrival, in ms from the wait's start. Stops the noting. */
+export function closeTurnServing(threadId: string): Array<[label: string, inMs: number, outMs?: number]> {
+  const row = clocks.get(threadId);
+  const serving = row?.serving;
+  if (!row || !serving) return [];
+  delete row.serving;
+  const ms = (at: number) => Math.max(0, Math.round(at - serving.since));
+  return serving.mounts.map(([label, inAt, outAt]) =>
+    outAt === undefined ? [label, ms(inAt)] as [string, number] : [label, ms(inAt), ms(outAt)] as [string, number, number]);
+}
+
+/** #3623: the mount a turn capability's requests serve, by its kind (the
+ * name the engine's catalog shows, or `connector` for a mount whose name may
+ * carry a person's or a bot's identifier). Undefined for a kind that is not
+ * a tool server. */
+const SERVED_MOUNTS: Readonly<Record<string, string>> = {
+  agents: "agents", browser: "browser", data: "data", messages: "messages", perspicax: "perspicax",
+  computer: "computer", workplace: "sagax-computer", desktop: "sagax-desktop", sandbox: "sagax-environment",
+  connectors: "connector", "personal-mcp": "connector",
+};
+export function turnServedMount(kind: string): string | undefined {
+  return Object.hasOwn(SERVED_MOUNTS, kind) ? SERVED_MOUNTS[kind] : undefined;
+}
+
+/** #3623: whether a request body to one of Sagax's endpoints asks for the
+ * tool list: the frame itself, or a frame wrapped as `{ message }`. */
+export function isToolListRequest(body: unknown): boolean {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+  const frame = body as { method?: unknown; message?: { method?: unknown } | null };
+  return frame.method === "tools/list" || (typeof frame.message === "object" && frame.message?.method === "tools/list");
 }
 
 /** Test helper. Production turns just age out of the map. */

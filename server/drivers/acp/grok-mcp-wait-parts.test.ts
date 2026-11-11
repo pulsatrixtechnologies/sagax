@@ -5,21 +5,23 @@ import { grokConfigureSessionForTest, grokMcpSettled } from "./grok.ts";
 import { grokMcpWaitClock, grokMountLabel } from "./grok-mcp-wait-parts.ts";
 import { rememberGrokMcpSettled, resetGrokCatalogs } from "./grok-tool-catalog.ts";
 import { newTurnLatency, turnLatencyLine, type TurnToolWait } from "./turn-latency.ts";
+import { clearTurnCounters, isToolListRequest, noteTurnServed, turnServedMount } from "../../turns/turn-trace.ts";
 
-type Status = "pending" | "connecting" | "starting" | "ready" | "failed";
+type Status = "pending" | "connecting" | "starting" | "ready" | "failed" | undefined;
 const catalog = (servers: Record<string, Status>, resolved = true) => ({
   sessionMcpResolved: resolved,
-  servers: Object.entries(servers).map(([name, status]) => ({ name, session: { enabled: true, status } })),
+  servers: Object.entries(servers).map(([name, status]) => ({ name, session: { enabled: true, ...(status ? { status } : {}) } })),
 });
 
 /** A fake `request` answering `_x.ai/mcp/list` from a script, one entry per poll
  * (the last one repeats), and moving a fake clock by `stepMs` per poll. */
-function scripted(polls: Array<ReturnType<typeof catalog>>, stepMs: number) {
+function scripted(polls: Array<ReturnType<typeof catalog>>, stepMs: number, beforePoll?: (poll: number, now: number) => void) {
   let now = 1_000_000;
   vi.spyOn(Date, "now").mockImplementation(() => now);
   let calls = 0;
   const request = async (method: string) => {
     if (method !== "_x.ai/mcp/list") return {};
+    beforePoll?.(calls, now);
     now += stepMs;
     const reply = polls[Math.min(calls, polls.length - 1)];
     calls += 1;
@@ -57,6 +59,7 @@ const lineWith = (wait: TurnToolWait | undefined) => {
 afterEach(() => {
   vi.restoreAllMocks();
   resetGrokCatalogs();
+  clearTurnCounters();
 });
 
 describe("toolsBy on the latency line (#3623)", () => {
@@ -72,9 +75,10 @@ describe("toolsBy on the latency line (#3623)", () => {
       waitedMs: 2_000,
       mounts: [["perspicax", 2_000], ["browser", 1_500], ["agents", 1_000], ["connector", 1_000]],
       own: { count: 1, longestMs: 1_500 },
+      resolvedMs: 1_000,
     });
     const line = lineWith(wait);
-    expect(line).toContain(" toolsBy=perspicax:2000,browser:1500,agents:1000,connector:1000,own:1:1500 ok");
+    expect(line).toContain(" toolsBy=perspicax:2000,browser:1500,agents:1000,connector:1000,own:1:1500,resolved:1000 ok");
     // a person's own connection and a mount under a person's name are never written
     expect(line).not.toContain("Team Wiki");
     expect(line).not.toContain("my-private-notes");
@@ -87,7 +91,9 @@ describe("toolsBy on the latency line (#3623)", () => {
       catalog({ agents: "ready", "managed_gateway:outlook": "ready", "Private CRM": "ready" }),
     ], 400);
     const line = lineWith(await configure(request, { mounted: ["agents"] }));
-    expect(line).toContain(" toolsBy=agents:400,own:2:1200 ok");
+    // agents was never seen waiting: it prints nothing for itself (it printed
+    // the first poll's time, 400, before the correction)
+    expect(line).toContain(" toolsBy=own:2:1200,resolved:400 ok");
     expect(line).not.toMatch(/outlook|CRM/);
   });
 
@@ -96,8 +102,9 @@ describe("toolsBy on the latency line (#3623)", () => {
     const wait = await configure(request, { mounted: ["agents", "browser"] });
     // the 20 s limit, as before: 4 polls of 5 s, then the prompt goes
     expect(calls()).toBe(4);
-    expect(wait).toEqual({ waitedMs: 20_000, mounts: [["agents", 5_000]], pending: 2 });
-    expect(lineWith(wait)).toContain(" toolsBy=agents:5000,pending:2 ok");
+    // agents never waited: no time of its own (the first poll's 5000 before)
+    expect(wait).toEqual({ waitedMs: 20_000, mounts: [], pending: 2, resolvedMs: 5_000 });
+    expect(lineWith(wait)).toContain(" toolsBy=resolved:5000,pending:2 ok");
   });
 
   it("times the servers on the tool-selection branch too", async () => {
@@ -106,7 +113,7 @@ describe("toolsBy on the latency line (#3623)", () => {
       catalog({ agents: "ready" }, true),
     ], 300);
     const wait = await configure(request, { toolScope: { tools: ["agents"] }, mounted: ["agents"] });
-    expect(lineWith(wait)).toContain(" toolsBy=agents:600 ok");
+    expect(lineWith(wait)).toContain(" toolsBy=agents:600,resolved:600 ok");
   });
 
   it("prints nothing for a reused session that skips the wait", async () => {
@@ -128,8 +135,9 @@ describe("toolsBy on the latency line (#3623)", () => {
   it("prints at most eight of Sagax's mounts", () => {
     const names = ["agents", "browser", "data", "messages", "computer", "perspicax", "sagax-environment", "sagax-desktop", "sagax-computer"];
     const clock = grokMcpWaitClock(names, 0);
+    clock.note(catalog(Object.fromEntries(names.map((name) => [name, "connecting"])), false), 50);
     clock.note(catalog(Object.fromEntries(names.map((name) => [name, "ready"]))), 100);
-    expect(lineWith(clock.result(100, false)).match(/toolsBy=(\S+)/)?.[1].split(",")).toHaveLength(8);
+    expect(lineWith(clock.result(100, false)).match(/toolsBy=(\S+)/)?.[1].split(",").filter((entry) => !entry.startsWith("resolved:"))).toHaveLength(8);
   });
 
   it("names a mount by its product name, and by its kind otherwise", () => {
@@ -143,6 +151,83 @@ describe("toolsBy on the latency line (#3623)", () => {
     expect(grokMcpSettled(catalog({ a: "starting" }))).toBe(false);
     const clock = grokMcpWaitClock([], 0);
     clock.note(catalog({ a: "starting" }), 100);
-    expect(clock.result(100, true)).toEqual({ waitedMs: 100, mounts: [], pending: 1 });
+    expect(clock.result(100, true)).toEqual({ waitedMs: 100, mounts: [], pending: 1, resolvedMs: 100 });
+  });
+
+  it("times each server to the poll after its last wait when the engine connects them one after the other", async () => {
+    // no state at the first poll, then one server connecting at a time, then
+    // the engine says resolved two polls after the last server is ready
+    const { request } = scripted([
+      catalog({ agents: undefined, data: undefined, perspicax: undefined }, false),
+      catalog({ agents: "connecting", data: undefined, perspicax: undefined }, false),
+      catalog({ agents: "ready", data: "connecting", perspicax: undefined }, false),
+      catalog({ agents: "ready", data: "ready", perspicax: "starting" }, false),
+      catalog({ agents: "ready", data: "ready", perspicax: "ready" }, false),
+      catalog({ agents: "ready", data: "ready", perspicax: "ready" }, false),
+      catalog({ agents: "ready", data: "ready", perspicax: "ready" }, true),
+    ], 300);
+    const wait = await configure(request, { mounted: ["agents", "data", "perspicax"] });
+    expect(wait).toEqual({
+      waitedMs: 2_100,
+      mounts: [["perspicax", 1_500], ["data", 1_200], ["agents", 900]],
+      resolvedMs: 2_100,
+    });
+    const line = lineWith(wait);
+    expect(line).toContain(" toolsBy=perspicax:1500,data:1200,agents:900,resolved:2100 ok");
+    // never the first poll's time
+    expect(line).not.toMatch(/(agents|data|perspicax):300\b/);
+  });
+
+  it("prints nothing for a server never seen waiting, only resolved", async () => {
+    const { request } = scripted([
+      catalog({ agents: undefined, browser: undefined }, false),
+      catalog({ agents: "ready", browser: "ready" }, false),
+      catalog({ agents: "ready", browser: "ready" }, true),
+    ], 400);
+    const wait = await configure(request, { mounted: ["agents", "browser"] });
+    expect(wait).toEqual({ waitedMs: 1_200, mounts: [], resolvedMs: 1_200 });
+    expect(lineWith(wait)).toContain(" toolsBy=resolved:1200 ok");
+  });
+
+  it("prints what Sagax's own endpoints served during the wait, in order of arrival", async () => {
+    const { request } = scripted([
+      catalog({ data: undefined, browser: undefined }, false),
+      catalog({ data: "connecting", browser: undefined }, false),
+      catalog({ data: "ready", browser: "connecting" }, false),
+      catalog({ data: "ready", browser: "ready" }, true),
+    ], 250, (poll, now) => {
+      // the engine reaches the data endpoint, then the browser one
+      if (poll === 1) noteTurnServed("t1", "data", "in", now + 20);
+      if (poll === 2) { noteTurnServed("t1", "data", "out", now + 10); noteTurnServed("t1", "browser", "in", now + 30); }
+      if (poll === 3) { noteTurnServed("t1", "browser", "out", now + 40); noteTurnServed("t1", "browser", "in", now + 60); }
+    });
+    // a request before the wait (another turn's) is not noted
+    noteTurnServed("t1", "agents", "in");
+    const wait = await configure(request, { mounted: ["data", "browser"] });
+    expect(wait?.served).toEqual([["data", 270, 510], ["browser", 530, 790]]);
+    expect(lineWith(wait)).toContain(" toolsBy=browser:1000,data:750,resolved:1000 toolsServed=data:270-510,browser:530-790 ok");
+    // the wait is over: a later request is not noted
+    noteTurnServed("t1", "agents", "in");
+    expect(wait?.served).toHaveLength(2);
+  });
+
+  it("prints neither toolsBy nor toolsServed for a reused session", async () => {
+    rememberGrokMcpSettled("s1");
+    const { request } = scripted([catalog({ agents: "ready" })], 300);
+    noteTurnServed("t1", "agents", "in");
+    const line = lineWith(await configure(request, { reused: true }));
+    expect(line).not.toContain("toolsBy=");
+    expect(line).not.toContain("toolsServed=");
+  });
+
+  it("names an endpoint's mount by its capability, and reads a tool list request", () => {
+    expect(turnServedMount("workplace")).toBe("sagax-computer");
+    expect(turnServedMount("desktop")).toBe("sagax-desktop");
+    expect(turnServedMount("personal-mcp")).toBe("connector");
+    expect(turnServedMount("hooks")).toBeUndefined();
+    expect(isToolListRequest({ method: "tools/list" })).toBe(true);
+    expect(isToolListRequest({ message: { method: "tools/list" } })).toBe(true);
+    expect(isToolListRequest({ method: "tools/call" })).toBe(false);
+    expect(isToolListRequest(null)).toBe(false);
   });
 });

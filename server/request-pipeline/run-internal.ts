@@ -10,6 +10,7 @@ import { createInternalSignInRoutes } from "../routes/sign-in.ts";
 import { COMPUTER_JOURNAL_PATH } from "../saved-steps/journal-tap.ts";
 import { fillPluginBot } from "../../shared/bot-act.ts";
 import { CONFIDENTIAL_PEER_REFUSED, confidentialInternalRefusal, mcpConfidentialVerdict } from "../threads/confidential-threads.ts";
+import { isToolListRequest, noteTurnServed, turnServedMount } from "../turns/turn-trace.ts";
 export type Host = Record<string, any>;
 
 /** POST /api/testing/org-library: a test relay of the organization library,
@@ -225,6 +226,11 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
       json(res, 403, { error: "this internal capability cannot access that service" });
       return true;
     }
+    // #3623: while the engine's setup waits for its tool servers, the turn's
+    // trace notes this mount's first request and its tool list answer
+    // (toolsServed on the latency line). Mount and times only.
+    const servedMount = turnServedMount(internalCapability.kind);
+    if (servedMount) noteTurnServed(internalCapability.threadId, servedMount, "in");
     // A coordinated direct turn's ask_bot and delegate_bot are aliases of
     // coordinate_bots on the runtime (their routes' adapter); a routine or
     // webhook run thread's own direct call keeps the legacy ledger. A room
@@ -254,6 +260,9 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
     const readInternalBody = () => (internalBody ??= readInternalBodyOnce());
     const readInternalBodyOnce = async () => {
       const body = await readBody(req);
+      if (servedMount && isToolListRequest(body)) {
+        res.once("finish", () => noteTurnServed(internalCapability.threadId, servedMount, "out"));
+      }
       // The body may arrive slowly. Authorization at header time is not a
       // lease: if the owning turn settled while bytes were in flight, this
       // request must die before it reaches any side effect.

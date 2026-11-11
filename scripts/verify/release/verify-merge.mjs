@@ -20,7 +20,13 @@
 //      and the hosts' launch contract for the connector paths)
 //   4. iOS, only when ios/ or shared/ changed: `swift test` and the Debug
 //      build of the Sagax scheme for the generic simulator (no device boots,
-//      no window)
+//      no window). One rule, no switch: the stage runs wherever it can. On a
+//      host without Swift (a Linux build host: the package imports Apple-only
+//      frameworks) the whole stage is skipped with one explicit line, the
+//      gate goes on and can end OK, and the summary, the OK stamp and the
+//      pull request report all say the Swift tests were not run on that host
+//      (#3639); they run after the merge, off the Mac (#3678). With Swift
+//      present, `swift test` runs and a red result fails the gate.
 //
 // Exit 1 on the first stage that fails; the summary names it. SAGAX_SKIP_HOOKS=1
 // skips the pre-push hook that runs this, never the gate itself.
@@ -31,8 +37,8 @@
 // around the gate (`--no-verify`), and that shows. Nothing on GitHub blocks
 // a merge: no CI runs on a private PR. `--no-report` keeps it local.
 //
-// On OK, writes a stamp under the common git dir (`sagax-verify-merge/ok-<sha>`)
-// so the pre-push hook can skip a re-run for the same HEAD. Strips every GIT_*
+// On OK, writes a stamp under the common git dir (`sagax-verify-merge/ok-<sha>`;
+// its content names any stage skipped on the host) so the pre-push hook can skip a re-run for the same HEAD. Strips every GIT_*
 // from the process env before any stage so a leaked hook GIT_DIR cannot make a
 // test commit into the branch being pushed (issue #1705).
 import { spawnSync, execFileSync } from "node:child_process";
@@ -109,7 +115,7 @@ function git(args) {
   return execFileSync("git", args, { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 }
 
-function writeOkStamp() {
+function writeOkStamp(notes = []) {
   let common;
   let sha;
   try {
@@ -121,7 +127,7 @@ function writeOkStamp() {
   const path = stampPathFor(common, sha);
   if (!path) return;
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `ok ${new Date().toISOString()}\n`);
+  writeFileSync(path, `ok ${new Date().toISOString()}\n${notes.map((note) => `${note}\n`).join("")}`);
   console.log(`verify:merge: stamped OK for ${sha.slice(0, 7)} (${path})`);
 }
 
@@ -180,6 +186,45 @@ function run(label, command, { cwd = ROOT } = {}) {
 
 const REPORT_MARK = "<!-- verify:merge -->";
 
+/** What the gate says, in its summary and in the report, when the iOS stage
+ * did not run because the host has no Swift (#3639). */
+export const IOS_NOT_RUN_NOTE = "iOS stage not run on this host: swift is not installed, so the Swift tests (CompanionCore) were not run here; they run after the merge";
+export const IOS_SKIPPED_LINE = `\n== iOS stage: skipped, swift is not installed on this host (the Swift tests were not run here; they run after the merge)`;
+
+/** True when `swift --version` answers on this host. Bounded, no shell. */
+export function swiftAvailable(spawn = spawnSync) {
+  const result = spawn("swift", ["--version"], { stdio: "ignore", timeout: 15000 });
+  return !result.error && result.status === 0;
+}
+
+/** The iOS stage. Without Swift: one explicit line, a note for the summary,
+ * the stamp and the report, and nothing else. With Swift: `swift test`, then
+ * the simulator build when xcodegen and xcodebuild exist. Returns the notes. */
+export function runIosStage({ iosDir, stop, run: runStage = run, spawn = spawnSync, log = console.log }) {
+  if (!swiftAvailable(spawn)) {
+    log(IOS_SKIPPED_LINE);
+    return [IOS_NOT_RUN_NOTE];
+  }
+  stop(runStage("swift test (CompanionCore)", ["swift", "test"], { cwd: iosDir }));
+  if (spawn("xcodegen", ["--version"], { stdio: "ignore" }).status === 0 && spawn("xcodebuild", ["-version"], { stdio: "ignore" }).status === 0) {
+    stop(runStage("xcodegen generate", ["xcodegen", "generate"], { cwd: iosDir }));
+    stop(runStage("iOS build (Sagax scheme, generic simulator)", ["xcodebuild", "-project", "Sagax.xcodeproj", "-scheme", "Sagax", "-sdk", "iphonesimulator",
+      "-destination", "generic/platform=iOS Simulator", "-quiet", "CODE_SIGNING_ALLOWED=NO", "build"], { cwd: iosDir }));
+  } else {
+    log("\n== iOS build: skipped, xcodegen or xcodebuild is not installed (swift test ran)");
+  }
+  return [];
+}
+
+/** The text of the pull request comment. */
+export function reportBody(outcome, head, when) {
+  const notes = outcome.notes ?? [];
+  return `${REPORT_MARK}\n**verify:merge ${outcome.ok ? "OK" : "FAILED"}** on ${head} (${when}, ${outcome.seconds}s)`
+    + (outcome.ok ? `\n\n${outcome.stages.map((r) => `${r.label} ${r.seconds}s`).join(" · ")}` : `\n\nFailed at **${outcome.failed}**; the stages before it passed.`)
+    + (notes.length ? `\n\n${notes.map((note) => `**Not run: ${note}.**`).join("\n")}` : "")
+    + "\n\nA head commit with no OK here was pushed around the local gate (`pnpm verify:merge`).";
+}
+
 /** The open pull request of the current branch, through `gh`, or null. */
 function pullRequest() {
   const result = spawnSync("gh", ["pr", "view", "--json", "number,headRefOid,url"], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
@@ -194,9 +239,7 @@ function report(outcome) {
   if (!pr) { console.log("verify:merge: no open pull request for this branch, nothing to report"); return; }
   const head = git(["rev-parse", "--short", "HEAD"]);
   const when = new Date().toISOString().replace(/\.\d+Z$/, "Z");
-  const body = `${REPORT_MARK}\n**verify:merge ${outcome.ok ? "OK" : "FAILED"}** on ${head} (${when}, ${outcome.seconds}s)`
-    + (outcome.ok ? `\n\n${outcome.stages.map((r) => `${r.label} ${r.seconds}s`).join(" · ")}` : `\n\nFailed at **${outcome.failed}**; the stages before it passed.`)
-    + "\n\nA head commit with no OK here was pushed around the local gate (`pnpm verify:merge`).";
+  const body = reportBody(outcome, head, when);
   const api = (method, path, data) => spawnSync("gh", ["api", "-X", method, path, ...(data ? ["-f", `body=${data}`] : [])], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   const repo = spawnSync("gh", ["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).stdout?.trim();
   if (!repo) { console.log("verify:merge: gh cannot name the repository, nothing reported"); return; }
@@ -222,7 +265,7 @@ function main() {
   console.log(`  guard tests: ${guards.length}`);
   console.log(`  tests of the diff: ${diffTests.length ? diffTests.join(", ") : "none"}`);
   if (electronTests.length) console.log(`  electron tests: ${electronTests.join(", ")}`);
-  console.log(`  iOS: ${ios ? "swift test + simulator build" : "skipped (no ios/ or shared/ change)"}`);
+  console.log(`  iOS: ${ios ? "swift test + simulator build (skipped on a host without swift)" : "skipped (no ios/ or shared/ change)"}`);
   if (options.list) return;
 
   const started = Date.now();
@@ -243,21 +286,12 @@ function main() {
   stop(run(`guard tests (${guards.length} files)`, [...vitest, ...guards]));
   if (diffTests.length) stop(run(`tests of the diff (${diffTests.length} files)`, [...vitest, ...diffTests]));
   for (const test of electronTests) stop(run(`electron ${test}`, [process.execPath, "--test", test]));
-  if (ios) {
-    const iosDir = join(ROOT, "ios");
-    stop(run("swift test (CompanionCore)", ["swift", "test"], { cwd: iosDir }));
-    if (spawnSync("xcodegen", ["--version"], { stdio: "ignore" }).status === 0 && spawnSync("xcodebuild", ["-version"], { stdio: "ignore" }).status === 0) {
-      stop(run("xcodegen generate", ["xcodegen", "generate"], { cwd: iosDir }));
-      stop(run("iOS build (Sagax scheme, generic simulator)", ["xcodebuild", "-project", "Sagax.xcodeproj", "-scheme", "Sagax", "-sdk", "iphonesimulator",
-        "-destination", "generic/platform=iOS Simulator", "-quiet", "CODE_SIGNING_ALLOWED=NO", "build"], { cwd: iosDir }));
-    } else {
-      console.log("\n== iOS build: skipped, xcodegen or xcodebuild is not installed (swift test ran)");
-    }
-  }
+  const notes = ios ? runIosStage({ iosDir: join(ROOT, "ios"), stop }) : [];
   const seconds = ((Date.now() - started) / 1000).toFixed(0);
   console.log(`\nverify:merge OK in ${seconds}s: ${results.map((r) => `${r.label} ${r.seconds}s`).join("; ")}`);
-  writeOkStamp();
-  if (options.report) report({ ok: true, seconds, stages: results });
+  for (const note of notes) console.log(`verify:merge NOTE: ${note}`);
+  writeOkStamp(notes);
+  if (options.report) report({ ok: true, seconds, stages: results, notes });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

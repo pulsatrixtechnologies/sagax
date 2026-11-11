@@ -15,7 +15,10 @@ no role chip, "Agit comme" card or role notice (web and iOS). The role lives
 only on a Pulsatrix Flow routine's "Au nom de" field (`RoutineActAsField`,
 hidden when the routine has no Flow recipe); other routines save no role. A
 read 403 under a role is read once more as "Moi" by the relay and the role is
-put back; a write 403 stops the turn's role switches; a lapsed role stops the
+put back; a write 403 looks for one held role that may write it, by a saved
+rule or a card (rule d7-403-switch-role), and a refusal blocks that write only,
+never the turn's role switches (#3694); a guard or policy refusal of the
+connector and a dry run are passed as they are (`roleRefusalOf`); a lapsed role stops the
 call; a routine writing as "Moi" asks the person. `server/perspicax/role-journal.ts`
 keeps transitions, refusals and owner rules per principal for the bot panel's
 Details > Permissions row (graph behind its disclosure; no Roles tab since 2026-11-05)

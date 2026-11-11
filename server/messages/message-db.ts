@@ -630,11 +630,19 @@ interface StoredRow {
   key_id?: string | null;
 }
 
+/** Test seam (#3662): how many stored rows were decoded since the process
+ * started, so a test bounds a read by rows decoded rather than wall time. */
+let decodedRows = 0;
+export function decodedRowCount(): number {
+  return decodedRows;
+}
+
 /** A stored row as the message it holds. Null: its key was destroyed
  * (erased), or the blob does not open here (copied from another row).
  * Throws ContentKeyUnavailable when the key exists but is locked, so a
  * caller never mistakes a locked transcript for an empty one. */
 function decodeRow(row: StoredRow, threadId?: string): Message | null {
+  decodedRows += 1;
   if (!row.sealed) return JSON.parse(row.json) as Message;
   const key = keyring().key(row.key_id ?? "");
   if (key === "destroyed") return null;
@@ -1500,7 +1508,10 @@ export function openRequestCardRows(): Array<{ threadId: string; message: Messag
     "WHERE json_extract(json, '$.card.requestId') IS NOT NULL " +
     "AND COALESCE(json_extract(json, '$.card.answered'), 0) IN (0, '') " +
     "AND COALESCE(json_extract(json, '$.card.dismissed'), 0) IN (0, '') " +
-    "AND COALESCE(json_extract(json, '$.card.expired'), 0) IN (0, '')",
+    "AND COALESCE(json_extract(json, '$.card.expired'), 0) IN (0, '') " +
+    // #3662: each thread's rows in the order its transcript holds them, and
+    // still a walk of the partial index (its keys are thread_id, rowid).
+    "ORDER BY thread_id, rowid",
   ).all() as unknown as Array<StoredRow & { thread_id: string }>;
   return openableWithThread(rows);
 }

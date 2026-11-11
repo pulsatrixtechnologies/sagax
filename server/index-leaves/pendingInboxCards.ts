@@ -7,11 +7,13 @@ function pendingInboxCards(): Array<{ bot: BotRecord; threadId: string; message:
   const host = getHost();
 
   const out: Array<{ bot: BotRecord; threadId: string; message: Message; card: NonNullable<Message["card"]>; question: boolean }> = [];
-  const threads = new Set<string>();
-  for (const bot of host.store.bots) for (const task of host.store.tasks(bot.id)) threads.add(task.threadId);
+  // Each listed thread's place: bots' tasks, then each room and its tasks.
+  const threads = new Map<string, number>();
+  const add = (threadId: string) => { if (!threads.has(threadId)) threads.set(threadId, threads.size); };
+  for (const bot of host.store.bots) for (const task of host.store.tasks(bot.id)) add(task.threadId);
   for (const group of host.store.groups) {
-    threads.add(group.threadId);
-    for (const task of host.store.groupTasks(group.id)) threads.add(task.threadId);
+    add(group.threadId);
+    for (const task of host.store.groupTasks(group.id)) add(task.threadId);
   }
   // #3542: the open option cards, found by the store's index of open
   // request cards: never every transcript of every bot and room (each
@@ -25,7 +27,9 @@ function pendingInboxCards(): Array<{ bot: BotRecord; threadId: string; message:
     const bot = host.botForApproval(threadId, message);
     if (bot) out.push({ bot, threadId, message, card, question });
   }
-  return out;
+  // #3662: in the order of the threads, then of each transcript (the rows
+  // come by thread and rowid), as reading each transcript gave them.
+  return out.sort((a, b) => threads.get(a.threadId)! - threads.get(b.threadId)!);
 
 }
   return pendingInboxCards;

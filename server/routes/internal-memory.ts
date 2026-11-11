@@ -11,14 +11,13 @@ import type { MausColor } from "../../shared/wire.ts";
 import { sameAudience } from "../bots/bot-visibility.ts";
 import { deliverableNotification } from "../notify.ts";
 import { PAGE_LIMITS } from "../../shared/published-pages.ts";
-import { PAGE_SOURCE_READ_BYTES, pageOwnerFor, pageSourceDigest, pageSourceRange, type PageSourceRead } from "../pages/published-pages.ts";
+import { PAGE_SOURCE_READ_BYTES, pageOwnerFor, pageSourceDigest, pageSourceRange, type PageSourceChange, type PageSourceDigest, type PageSourceRead } from "../pages/published-pages.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { sectionContextKey } from "../rooms/section-context.ts";
 import { TEAM_MEMORY_KINDS, type TeamMemoryKind } from "../memory/team-memory.ts";
 import { TOOL_RESULT_MAX_CHARS } from "../tools/tool-results.ts";
 import { workspaceDir } from "../workspace/workspace.ts";
 import { WorkspacePathError, readWorkspaceSourceFile } from "../workspace/workspace-files.ts";
-import { writeWorkspaceBytes } from "../workspace/workspace-manage.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 
@@ -76,8 +75,8 @@ export interface InternalMemoryDeps {
     body: unknown;
     authored: (messageId: string) => void;
     proposePage: (proposal: { pageId?: string; title: string; kind: string; content: string; path?: string; designSystem?: string; designTokens?: unknown }) =>
-      { ok: true; pageId: string; version: number; bytes: number; sha256: string; masked?: boolean } | { ok: false; status: 400 | 404 | 409; error: string };
-  }): { ok: true; messageId: string; masked?: boolean; pageId?: string; version?: number; bytes?: number; sha256?: string; answered?: { choice: string; question: string }; waitsForPerson?: true } | { ok: false; status: number; error: string };
+      { ok: true; pageId: string; version: number; bytes: number; sha256: string; masked?: boolean; given?: PageSourceDigest; changedBy?: PageSourceChange[] } | { ok: false; status: 400 | 404 | 409; error: string };
+  }): { ok: true; messageId: string; masked?: boolean; pageId?: string; version?: number; bytes?: number; sha256?: string; given?: PageSourceDigest; changedBy?: PageSourceChange[]; answered?: { choice: string; question: string }; waitsForPerson?: true } | { ok: false; status: number; error: string };
   authored(threadId: string, generation: string, messageId: string): void;
   proposePublishedPage(input: {
     pageId?: string;
@@ -233,8 +232,18 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
             ...(deps.isPerspicax() ? { ownerId: pageOwnerFor(deps.taskByThread(owning.id, capability.threadId), deps.botOwner(owning)) } : {}),
           });
           if (!proposed.ok) return proposed;
+          // #3488: what was stored against what the bot gave (its file or
+          // its text); every step that changed it on the way is named
+          const given = pageSourceDigest(raw);
           const stored = proposed.version.sha256 && proposed.version.bytes !== undefined ? { bytes: proposed.version.bytes, sha256: proposed.version.sha256 } : pageSourceDigest(content);
-          return { ok: true, pageId: proposed.page.id, version: proposed.version.n, ...stored, ...(content !== raw ? { masked: true } : {}) };
+          const changedBy = [
+            ...(content !== raw ? ["secret_masked" as const] : []),
+            ...(stored.sha256 !== pageSourceDigest(content).sha256 && rest.kind === "design" ? ["design_system_applied" as const] : []),
+          ];
+          return {
+            ok: true, pageId: proposed.page.id, version: proposed.version.n, ...stored,
+            ...(stored.sha256 !== given.sha256 ? { given, changedBy } : {}),
+          };
         },
       });
       return result.ok
@@ -244,6 +253,7 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
           ...(result.pageId ? { pageId: result.pageId, version: result.version } : {}),
           // #3488: the stored source's size and hash, to compare with a file
           ...(result.pageId && result.sha256 ? { bytes: result.bytes, sha256: result.sha256 } : {}),
+          ...(result.pageId && result.given ? { given: result.given, changedBy: result.changedBy ?? [] } : {}),
           // #1905: a may-I ask_choice Full access answered, for the tool result
           ...(result.answered ? { answered: result.answered } : {}),
           // 2026-11-03: raised as a real question card the run waits on
@@ -278,18 +288,9 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
       if (action === "list") return json(res, 200, list());
       if (action === "source") {
         // #3488: a version's stored source (default the latest) with its
-        // size and SHA-256: one slice by offset and limit (UTF-8 bytes), or
-        // the whole source saved to save_to in this bot's own workspace
+        // size and SHA-256, one slice by offset and limit (UTF-8 bytes)
         const n = body?.version === undefined || body?.version === null ? page.versions.at(-1)?.n : body.version;
         if (typeof n !== "number" || !Number.isSafeInteger(n)) return json(res, 400, { error: "version: a version number of this page." });
-        const saveTo = body?.save_to;
-        if (saveTo !== undefined && saveTo !== null) {
-          const read = deps.pageSource(page.id, n);
-          if (!read) return json(res, 404, { error: "version: this page has no such version." });
-          const written = writeWorkspaceBytes(sender.id, saveTo, Buffer.from(read.content, "utf8"), { overwrite: true });
-          if (!written.ok) return json(res, written.code === "missing" ? 404 : 400, { error: `save_to: ${written.error}` });
-          return json(res, 200, { pageId: page.id, version: read.version, savedTo: written.path });
-        }
         const range = pageSourceRange(body?.offset, body?.limit);
         if (!range) return json(res, 400, { error: `offset: a byte offset of 0 or more; limit: 1 to ${PAGE_SOURCE_READ_BYTES.max} bytes.` });
         const read = deps.pageSource(page.id, n, range === "whole" ? { offset: 0, limit: PAGE_SOURCE_READ_BYTES.default } : range);

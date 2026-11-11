@@ -35,6 +35,7 @@ import { writeFileAtomic } from "../atomic.ts";
 import { sanitizePageLook, type PageLook } from "../../src/lib/page-look.ts";
 import { applyDesignSystem, BUILTIN_DESIGN_SYSTEMS, DEFAULT_DESIGN_SYSTEM, DESIGN_SYSTEM_LIMITS, findDesignSystem, ownDesignSystemId, parseDesignTokens, type DesignSystem } from "../../src/lib/design-systems.ts";
 import { threadOwner } from "../threads/thread-privacy.ts";
+import { utf8Slice } from "../../shared/utf8-slice.ts";
 import { pageAudienceOf, samePageAudience, type PageAudience } from "../../shared/page-audience.ts";
 import { pageCapabilitiesOf, pageCapabilitiesPersonal, type PageCapabilities } from "../../shared/page-capabilities.ts";
 import { ANON_STATE_LIMITS, anonymousBy, STATE_LIMITS, stateRulesOf, stateValueJson, type PageStateEntry, type StateRules } from "../../shared/page-state.ts";
@@ -66,7 +67,13 @@ const CONTENT_CACHE_BYTES = 16 * 1024 * 1024;
 /** #3488: the size in bytes and the SHA-256 (hex) of a stored source, the
  * one place both are computed (a proposal's answer, the version listing,
  * a read of the source). Pure. */
-export function pageSourceDigest(content: string): { bytes: number; sha256: string } {
+export interface PageSourceDigest { bytes: number; sha256: string }
+
+/** #3488: why a stored source differs from what the bot gave (its file or
+ * its text): secret-shaped text masked, a design system applied. */
+export type PageSourceChange = "secret_masked" | "design_system_applied";
+
+export function pageSourceDigest(content: string): PageSourceDigest {
   const buffer = Buffer.from(content, "utf8");
   return { bytes: buffer.length, sha256: createHash("sha256").update(buffer).digest("hex") };
 }
@@ -74,22 +81,13 @@ export function pageSourceDigest(content: string): { bytes: number; sha256: stri
 /** Default and ceiling of one paged read of a source, in bytes. */
 export const PAGE_SOURCE_READ_BYTES = { default: 32_000, max: 64_000 } as const;
 
-/** #3488: one slice of a source by UTF-8 byte offset, never cutting a
- * character: the start moves forward and the end backs up to a character
- * boundary (a slice holds at least one character). Following nextOffset
- * gives slices that concatenate to the source exactly. Pure. */
+/** #3488: one slice of a source by UTF-8 byte offset (utf8Slice: never
+ * cuts a character). Following nextOffset gives slices that concatenate to
+ * the source exactly. Pure. */
 export function pageSourceSlice(content: string, offset: number, limit: number): { text: string; offset: number; nextOffset: number | null } {
   const buffer = Buffer.from(content, "utf8");
-  let start = Math.max(0, Math.min(Math.trunc(offset) || 0, buffer.length));
-  while (start < buffer.length && (buffer[start]! & 0xc0) === 0x80) start += 1;
-  const size = Math.max(1, Math.trunc(limit) || 1);
-  let end = Math.min(buffer.length, start + size);
-  while (end < buffer.length && end > start && (buffer[end]! & 0xc0) === 0x80) end -= 1;
-  if (end === start && start < buffer.length) {
-    end = start + 1;
-    while (end < buffer.length && (buffer[end]! & 0xc0) === 0x80) end += 1;
-  }
-  return { text: buffer.subarray(start, end).toString("utf8"), offset: start, nextOffset: end < buffer.length ? end : null };
+  const slice = utf8Slice(buffer, offset, limit);
+  return { text: buffer.subarray(slice.start, slice.end).toString("utf8"), offset: slice.start, nextOffset: slice.end < buffer.length ? slice.end : null };
 }
 
 /** #3488: the offset and limit of a paged source read (query text or
@@ -129,7 +127,7 @@ export interface PageVersionRecord {
   /** "person": the page's person wrote this version (their edit). */
   author?: "person";
   /** #3488: SHA-256 (hex) of the stored source. Absent on a version stored
-   * before it was recorded: computed from the source when read. */
+   * before it was recorded until its first source read (recordDigest). */
   sha256?: string;
 }
 
@@ -220,8 +218,6 @@ export class PublishedPages {
   private readonly clock: () => number;
   private cached: { mtimeMs: number; size: number; pages: PageRecord[]; policy: PagesPolicy } | null = null;
   private readonly contents = new Map<string, string>();
-  /** #3488: SHA-256 of versions stored before it was recorded, by `id:n`. */
-  private readonly digests = new Map<string, string>();
   private contentBytes = 0;
   /** Shared-state writes per page and person, for the rate limit. */
   private readonly stateWrites = new Map<string, number[]>();
@@ -490,11 +486,9 @@ export class PublishedPages {
     if (n === undefined) {
       rmSync(join(this.contentDir, pageId), { recursive: true, force: true });
       for (const key of this.contents.keys()) if (key.startsWith(`${pageId}:`)) this.forget(key);
-      for (const key of this.digests.keys()) if (key.startsWith(`${pageId}:`)) this.digests.delete(key);
     } else {
       rmSync(this.contentFile(pageId, n), { force: true });
       this.forget(`${pageId}:${n}`);
-      this.digests.delete(`${pageId}:${n}`);
     }
   }
 
@@ -505,32 +499,39 @@ export class PublishedPages {
     this.contents.delete(key);
   }
 
-  /** #3488: a version's SHA-256, stored at proposal, else computed from its
-   * source (a version stored before it was recorded) and kept. */
-  private digestOf(pageId: string, version: PageVersionRecord): string | undefined {
-    if (version.sha256) return version.sha256;
-    const key = `${pageId}:${version.n}`;
-    const known = this.digests.get(key);
-    if (known) return known;
-    const content = this.content(pageId, version.n);
-    if (content === null) return undefined;
-    const { sha256 } = pageSourceDigest(content);
-    this.digests.set(key, sha256);
-    return sha256;
-  }
-
   /** #3488: one version's stored source with its size and hash: whole, or
    * one slice by byte offset and limit (pageSourceSlice). Null: no such
    * version. Who may read it is the caller's check. */
   source(pageId: string, n: number, range?: { offset?: number; limit?: number }): PageSourceRead | null {
+    if (!PAGE_ID.test(pageId) || !Number.isSafeInteger(n)) return null;
     const version = this.get(pageId)?.versions.find((entry) => entry.n === n);
-    const content = version ? this.content(pageId, n) : null;
-    if (!version || content === null) return null;
+    if (!version) return null;
+    // the person's editor and the bot read a version rarely: straight from
+    // its file, never through the cache that serves published pages
+    let content: string;
+    try {
+      content = readFileSync(this.contentFile(pageId, n), "utf8");
+    } catch {
+      return null;
+    }
     const digest = pageSourceDigest(content);
+    // a version stored before its hash was recorded: kept on it from now on
+    if (!version.sha256) this.recordDigest(pageId, n, digest);
     const head = { n: version.n, kind: version.kind, title: version.title, bytes: digest.bytes, sha256: digest.sha256 };
     if (!range || (range.offset === undefined && range.limit === undefined)) return { version: head, content, offset: 0, nextOffset: null };
     const slice = pageSourceSlice(content, range.offset ?? 0, range.limit ?? PAGE_SOURCE_READ_BYTES.default);
     return { version: head, content: slice.text, offset: slice.offset, nextOffset: slice.nextOffset };
+  }
+
+  /** #3488: keep the size and SHA-256 of a version stored before they were
+   * recorded, once, on its first source read (never in a listing). */
+  private recordDigest(pageId: string, n: number, digest: PageSourceDigest): void {
+    const pages = this.snapshot();
+    const version = pages.find((entry) => entry.id === pageId)?.versions.find((entry) => entry.n === n);
+    if (!version || version.sha256) return;
+    version.bytes = digest.bytes;
+    version.sha256 = digest.sha256;
+    this.save(pages);
   }
 
   /** A version's content: from memory once read (a version never changes). */
@@ -1262,7 +1263,7 @@ export class PublishedPages {
       bytes: entry.bytes,
       botId: entry.botId,
       ...(entry.author ? { author: entry.author } : {}),
-      ...((() => { const sha256 = this.digestOf(page.id, entry); return sha256 ? { sha256 } : {}; })()),
+      ...(entry.sha256 ? { sha256: entry.sha256 } : {}),
     }));
     const current = page.versions.find((entry) => entry.n === page.currentVersion) ?? page.versions.at(-1);
     const live = page.status === "published" && page.linkId;

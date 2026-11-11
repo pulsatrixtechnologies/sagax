@@ -18,6 +18,7 @@ import { dirname, join, sep } from "node:path";
 import { readAtRestSync } from "../encryption/content-at-rest.ts";
 import { formatFileBytes } from "../../shared/format-bytes.ts";
 import { READABLE_HIDDEN_SEGMENTS } from "../../shared/readable-hidden.ts";
+import { utf8Slice } from "../../shared/utf8-slice.ts";
 
 import { RULE_SETS_DIR, RULES_FILE, RULES_MAX_BYTES, RULES_MAX_LINES, effectiveRulesText, listRuleSets } from "../rules/rule-sets.ts";
 import { dirFingerprint, mtimeCached } from "./mtime-prompt-cache.ts";
@@ -228,10 +229,8 @@ export function readWorkspaceText(botId: string, input: unknown, offset = 0, plu
   const file = resolveOwnReadable(botId, input, plugins, personalSkillsRoot, librarySkills);
   const buffer = readAtRestSync(file.absolute);
   if (buffer.subarray(0, 8192).includes(0)) throw new WorkspacePathError(`${file.path} is not a text file`);
-  const start = Math.max(0, Math.min(Math.trunc(offset) || 0, buffer.length));
-  let end = Math.min(buffer.length, start + WORKSPACE_READ_MAX_BYTES);
-  // never cut a UTF-8 character in half: back up to a lead byte
-  while (end < buffer.length && end > start && (buffer[end]! & 0xc0) === 0x80) end -= 1;
+  // never cut a UTF-8 character in half (shared/utf8-slice.ts)
+  const { start, end } = utf8Slice(buffer, offset, WORKSPACE_READ_MAX_BYTES);
   return { path: file.path, text: buffer.subarray(start, end).toString("utf8"), bytes: buffer.length, offset: start, nextOffset: end < buffer.length ? end : null };
 }
 

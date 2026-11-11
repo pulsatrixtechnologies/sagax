@@ -25,6 +25,11 @@ export const CARD_TOOL_NAMES: ReadonlySet<string> = new Set([
 ]);
 
 const CARD_ROUTE = "/api/internal/options-card";
+/** #3488: why a stored page source differs from what the bot gave. */
+const PAGE_SOURCE_CHANGES: Record<string, string> = {
+  secret_masked: "secret-shaped text was masked (never put a password, token or key in a page)",
+  design_system_applied: "the design system was applied (kind design)",
+};
 
 export async function callCardTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult> {
   const { api, apiResponse } = context.client;
@@ -151,9 +156,13 @@ export async function callCardTool(name: string, args: Json, context: ToolCallCo
     const pageId = String(body.pageId ?? "");
     // #3488: what was stored, to compare with a file without reading it back
     const stored = typeof body.sha256 === "string" ? ` Stored source: ${Number(body.bytes ?? 0)} bytes, sha256 ${body.sha256}.` : "";
-    const masked = body.masked === true ? " Something in it read as a secret and was masked before it was stored, so it differs from what you gave." : "";
+    const given = body.given as { bytes?: unknown; sha256?: unknown } | undefined;
+    const why = Array.isArray(body.changedBy) ? body.changedBy.map((cause) => PAGE_SOURCE_CHANGES[String(cause)] ?? String(cause)).join("; ") : "";
+    const differs = given && typeof given.sha256 === "string"
+      ? ` It differs from what you gave (${Number(given.bytes ?? 0)} bytes, sha256 ${given.sha256}) because ${why || "Sagax changed it before storing"}.`
+      : "";
     return {
-      text: `Proposed page ${pageId}, version ${Number(body.version ?? 1)}.${stored}${masked} It is NOT published: the person reviews it on its card and decides whether to publish it and who can see it. Do not say it is online. To revise it, call propose_page again with page_id "${pageId}".`,
+      text: `Proposed page ${pageId}, version ${Number(body.version ?? 1)}.${stored}${differs} It is NOT published: the person reviews it on its card and decides whether to publish it and who can see it. Do not say it is online. To revise it, call propose_page again with page_id "${pageId}".`,
     };
   }
 

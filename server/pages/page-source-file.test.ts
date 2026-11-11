@@ -3,7 +3,7 @@
 // proposal's answer and the version listing, and a paged read of a source
 // (or the whole source saved to the bot's workspace).
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { IncomingMessage, ServerResponse } from "node:http";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -100,10 +100,28 @@ describe("size and SHA-256 of a stored source", () => {
     expect(proposed.version).toMatchObject(digest);
     const summary = pages.summary(pages.get(proposed.page.id)!, "https://x", true);
     expect(summary.versions[0]).toMatchObject(digest);
-    // a version stored before the hash was recorded: computed from its source
-    const legacy = pages.get(proposed.page.id)!;
-    for (const version of legacy.versions) delete version.sha256;
-    expect(pages.summary(legacy, "https://x", true).versions[0]).toMatchObject(digest);
+  });
+
+  it("a version stored before the hash: absent from the listing, recorded once on its first source read", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-pages-3488-legacy-"));
+    dirs.push(dir);
+    const first = new PublishedPages(dir, () => 1_800_000_000_000);
+    const proposed = first.propose({ botId: "bot1", threadId: "t1", title: "R", kind: "html", content: SOURCE });
+    if (!proposed.ok) throw new Error(proposed.error);
+    // the index as an older server wrote it: no sha256 on the version
+    const index = join(dir, "published-pages.json");
+    const raw = JSON.parse(readFileSync(index, "utf8"));
+    for (const page of raw.pages) for (const version of page.versions) delete version.sha256;
+    writeFileSync(index, JSON.stringify(raw));
+    const pages = new PublishedPages(dir, () => 1_800_000_000_000);
+    const listed = pages.summary(pages.get(proposed.page.id)!, "https://x", true).versions[0]!;
+    expect(listed.sha256).toBeUndefined();
+    expect(listed.bytes).toBe(Buffer.byteLength(SOURCE));
+    expect(pages.source(proposed.page.id, 1)!.version.sha256).toBe(sha(SOURCE));
+    // kept on the record (and on disk), so the listing has it from now on
+    expect(pages.summary(pages.get(proposed.page.id)!, "https://x", true).versions[0]!.sha256).toBe(sha(SOURCE));
+    const reread = new PublishedPages(dir, () => 1_800_000_000_000);
+    expect(reread.get(proposed.page.id)!.versions[0]!.sha256).toBe(sha(SOURCE));
   });
 });
 
@@ -240,7 +258,7 @@ describe("the bot's internal routes", () => {
     expect(pages.list(undefined)).toHaveLength(0);
   });
 
-  it("page_comments source reads exact slices and saves the whole source to the bot's workspace", async () => {
+  it("page_comments source reads exact slices; save_to writes nothing", async () => {
     const pages = store();
     const proposed = pages.propose({ botId: BOT, threadId: "t-1", title: "R", kind: "html", content: SOURCE });
     if (!proposed.ok) throw new Error(proposed.error);
@@ -255,11 +273,33 @@ describe("the bot's internal routes", () => {
       offset = answer.body.nextOffset;
     }
     expect(text).toBe(SOURCE);
+    // no write path: a page source never lands on a rules, memory or
+    // heartbeat file of the workspace
+    for (const target of ["rules/house.md", "memory/notes.md", "HEARTBEAT.md", "docs/copy.html"]) {
+      await call("/api/internal/page-comments", { page_id: proposed.page.id, action: "source", save_to: target });
+      expect(existsSync(join(workspaceDir(BOT), target)), target).toBe(false);
+    }
+  });
 
-    const saved = await call("/api/internal/page-comments", { page_id: proposed.page.id, action: "source", save_to: "docs/copy.html" });
-    expect(saved).toMatchObject({ status: 200, body: { savedTo: "docs/copy.html", version: { sha256: sha(SOURCE) } } });
-    expect(readFileSync(join(workspaceDir(BOT), "docs", "copy.html")).equals(Buffer.from(SOURCE, "utf8"))).toBe(true);
-    expect((await call("/api/internal/page-comments", { page_id: proposed.page.id, action: "source", save_to: "../escape.html" })).status).toBe(400);
+  it("names why the stored source differs from the file: secret masked, design system applied", async () => {
+    const secret = `sk-ant-api03-${"a1B2c3D4e5".repeat(8)}`;
+    writeFileSync(join(workspaceDir(BOT), "docs", "secret.html"), `<p>${secret}</p>\n`);
+    writeFileSync(join(workspaceDir(BOT), "docs", "design.html"), "<section data-screen=\"Home\" data-device=\"phone\"><h1>Hi</h1></section>\n");
+    const pages = store();
+    const { propose } = harness(pages);
+    const masked = await propose({ title: "R", kind: "html", content: "", path: "docs/secret.html" }) as Record<string, any>;
+    const file = readFileSync(join(workspaceDir(BOT), "docs", "secret.html"));
+    expect(masked).toMatchObject({ ok: true, given: { bytes: file.length, sha256: sha(file) }, changedBy: ["secret_masked"] });
+    expect(masked.sha256).toBe(sha(pages.content(masked.pageId, 1)!));
+    const design = await propose({ title: "D", kind: "design", content: "", path: "docs/design.html" }) as Record<string, any>;
+    const designFile = readFileSync(join(workspaceDir(BOT), "docs", "design.html"));
+    expect(design).toMatchObject({ ok: true, given: { sha256: sha(designFile) }, changedBy: ["design_system_applied"] });
+    expect(design.sha256).toBe(sha(pages.content(design.pageId, 1)!));
+    // nothing changed: no given, no changedBy
+    writeFileSync(join(workspaceDir(BOT), "docs", "plain.html"), SOURCE);
+    const plain = await propose({ title: "P", kind: "html", content: "", path: "docs/plain.html" }) as Record<string, any>;
+    expect(plain.given).toBeUndefined();
+    expect(plain.changedBy).toBeUndefined();
   });
 
   it("another bot never reads the page's source", async () => {

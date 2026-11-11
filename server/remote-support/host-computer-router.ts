@@ -102,8 +102,9 @@ export const HOST_COMMAND_TIME_MAX_MS = 120_000;
 export const HOST_CONNECT_WAIT_MS = 60_000;
 const CONNECT_POLL_MS = 1_500;
 
-/** The longest one exec call (`execOn`) can take, from the constants
- * (#3505). It must stay well under the bot's tool timeout (10 min,
+/** The longest the tunnel part of one exec call (`execOn`) can take, from
+ * the constants (#3505): its waits, pings, closes and command on the
+ * tunnel. It must stay well under the bot's tool timeout (10 min,
  * `MCP_TOOL_TIMEOUT_MS` in server/drivers/pi-mcp-extension.ts); a test
  * holds it at least 90 s under.
  *
@@ -125,12 +126,18 @@ const CONNECT_POLL_MS = 1_500;
  *    does not answer, is closed (22), and a new one connects (61.5): 107.5 s;
  * 3. the command waits and runs (217), ends on a 255, the tunnel is probed
  *    (24) and the session closed (22): 263 s.
- * Total 506.5 s, 93.5 s under the 600 s. Before #3505 a probe waited up to
- * 90 s for its turn, like a command.
+ * Total 506.5 s. Before #3505 a probe waited up to 90 s for its turn, like
+ * a command. A caller that waits for another caller's ping waits at most
+ * that ping (24 s), in place of its own: the count is the same.
  *
- * Not in this count: the gateway calls (host list, open, close), which the
- * 93.5 s are for; the first read of a computer whose OS is not known yet;
- * the VM actions, which run more than one command per call. */
+ * This bounds the tunnel part only. The gateway calls are NOT bounded by
+ * the 93.5 s left under the 600 s: one exec call makes two host lists, then
+ * up to a list and an open, and a gateway close inside each session close,
+ * and a single gateway call may last 10 minutes
+ * (`PERSPICAX_RELAY_TIMEOUT_MS`, server/perspicax/perspicax-mcp-rules.ts).
+ * So a call can still pass the tool timeout when the gateway is slow. Also
+ * outside the count: the first read of a computer whose OS is not known
+ * yet, and the VM actions, which run more than one command per call. */
 export function hostExecWorstCaseMs(commandMs: number = HOST_COMMAND_TIME_MAX_MS): number {
   const stop = KILL_GRACE_MS + KILL_RELEASE_MS;
   const probe = TUNNEL_PROBE_WAIT_MAX_MS + TUNNEL_PROBE_TIME_MS + stop;
@@ -235,10 +242,37 @@ export function createHostComputerRouter(deps: {
     const life = known.askedAt + HOST_SESSION_LIFE_MS;
     return (Number.isFinite(end) ? Math.min(end, life) : life) - now();
   };
+  /** principal|host: the one ping in flight on the person's session there,
+   * shared by every caller like `opening` (review of #3507). A caller that
+   * comes during it waits for its answer: it neither pings in its turn (it
+   * would only get "could not ask" behind the first) nor sends. */
+  const probing = new Map<string, { sessionId: string; answer: Promise<boolean | null> }>();
   /** Whether the session's tunnel answers: false when it was asked and did
    * not. Could not ask (no probe, the queue refused) is null, not a no. */
-  const tunnelAnswers = async (principalId: string, botId: string, sessionId: string): Promise<boolean | null> =>
-    (await deps.sessions.reachable?.({ principalId, botId, id: sessionId }).catch(() => null)) ?? null;
+  const tunnelAnswers = (k: string, principalId: string, botId: string, sessionId: string): Promise<boolean | null> => {
+    const flying = probing.get(k);
+    if (flying?.sessionId === sessionId) return flying.answer;
+    const answer: Promise<boolean | null> = (async () => (await deps.sessions.reachable?.({ principalId, botId, id: sessionId }).catch(() => null)) ?? null)()
+      .finally(() => { if (probing.get(k)?.answer === answer) probing.delete(k); });
+    probing.set(k, { sessionId, answer });
+    return answer;
+  };
+  /** A call on the person's session (a command, a screenshot), in flight
+   * or waiting its turn on the tunnel (#3430): the idle sweep and a ping
+   * that says no never close the session under it, and its end counts as
+   * a use. A caller waiting for a ping's answer is not one: nothing of its
+   * own was sent. */
+  const onSession = async <T>(k: string, sessionId: string, work: () => Promise<T>): Promise<T> => {
+    busy.set(k, (busy.get(k) ?? 0) + 1);
+    try {
+      return await work();
+    } finally {
+      const left = (busy.get(k) ?? 1) - 1;
+      if (left > 0) busy.set(k, left); else busy.delete(k);
+      const known = open.get(k);
+      if (known && known.sessionId === sessionId) known.lastUsed = now();
+    }
+  };
 
   const ownedRows = async (principalId: string): Promise<{ rows: UnattendedHostRow[]; error?: string }> => {
     const listed = await deps.hosts.list({ principalId });
@@ -372,9 +406,13 @@ export function createHostComputerRouter(deps: {
    * before anything is sent (#3492): a session with less time left than the
    * command may take (`needMs`), or whose tunnel no longer answers, is
    * replaced too. Neither is asked of a session running another command:
-   * closing it would stop that command, and the tunnel is in use. A command
-   * that came while the tunnel was asked counts too (#3505): the session is
-   * kept after a no, and that command's own answer decides. */
+   * closing it would stop that command, and the tunnel is in use.
+   * One ping at a time per session: a caller that comes during it waits
+   * for its answer. On a no nobody has sent, so the session is replaced and
+   * every waiting caller runs once on the new one. Only a command really
+   * sent meanwhile (it took the session an instant before the ping started)
+   * keeps the session after a no (#3505): its own answer decides. "Could
+   * not ask" keeps the session and never counts as an answer. */
   async function sessionOn(principalId: string, botId: string, hostId: string, needMs = 0): Promise<HostSession | { error: string }> {
     const k = key(principalId, hostId);
     const known = open.get(k);
@@ -383,18 +421,22 @@ export function createHostComputerRouter(deps: {
       const left = live ? timeLeft(known, live.endAt) : 0;
       const inUse = busy.has(k);
       let usable = left > 0 && (inUse || left > needMs);
-      if (usable && !inUse && now() - known.answeredAt >= HOST_SESSION_FRESH_MS) {
-        const answers = await tunnelAnswers(principalId, known.botId, known.sessionId);
-        // a no on a slow host must not stop the command another bot sent
-        // during the ping: `busy` is read again, after the answer
-        if (answers === false) usable = busy.has(k);
-        else known.answeredAt = now();
+      if (usable && !inUse && (probing.get(k)?.sessionId === known.sessionId || now() - known.answeredAt >= HOST_SESSION_FRESH_MS)) {
+        const answers = await tunnelAnswers(k, principalId, known.botId, known.sessionId);
+        // another caller of the same ping already replaced the session
+        if (open.get(k) !== known) return sessionOn(principalId, botId, hostId, needMs);
+        if (answers) known.answeredAt = now();
+        // a no on a slow host must not stop a command really sent
+        // meanwhile: `busy` is read again, after the answer
+        else if (answers === false) usable = busy.has(k);
       }
       if (usable) {
         known.lastUsed = now();
         return { sessionId: known.sessionId, botId: known.botId, reused: true };
       }
       await drop(principalId, hostId, known.sessionId);
+      // another caller opened the new session while this one was closing
+      if (open.has(k)) return sessionOn(principalId, botId, hostId, needMs);
     }
     const pending = opening.get(k);
     if (pending) return pending;
@@ -441,22 +483,14 @@ export function createHostComputerRouter(deps: {
     const run = async (): Promise<{ out: RemoteExecResult | { error: string }; session: HostSession | null }> => {
       const session = await sessionOn(principalId, botId, hostId, needMs);
       if ("error" in session) return { out: session, session: null };
-      // in flight (or waiting its turn on the tunnel, #3430): the idle sweep
-      // never closes the session under it, and its end counts as a use
       const k = key(principalId, hostId);
-      busy.set(k, (busy.get(k) ?? 0) + 1);
-      try {
+      return onSession(k, session.sessionId, async () => {
         const out = await deps.sessions.exec({ principalId, botId: session.botId, threadId: "", id: session.sessionId, command, actor: botId, ...(timeoutMs ? { timeoutMs } : {}) });
         // an exit code came back through the tunnel: it answers
         const known = open.get(k);
         if (!("error" in out) && known && known.sessionId === session.sessionId) known.answeredAt = now();
         return { out, session };
-      } finally {
-        const left = (busy.get(k) ?? 1) - 1;
-        if (left > 0) busy.set(k, left); else busy.delete(k);
-        const known = open.get(k);
-        if (known && known.sessionId === session.sessionId) known.lastUsed = now();
-      }
+      });
     };
     const first = await run();
     if (!("error" in first.out) || !first.session) return first.out;
@@ -472,9 +506,10 @@ export function createHostComputerRouter(deps: {
       const known = open.get(k);
       const ended = !live || (known?.sessionId === session.sessionId && timeLeft(known, live.endAt) <= 0);
       // Another command on the session (#3505): the tunnel is in use, so it
-      // is not asked, and a no that came while a command arrived does not
-      // close the session under it. That command's own answer decides.
-      const gone = ended || (!busy.has(k) && (await tunnelAnswers(principalId, session.botId, session.sessionId)) === false && !busy.has(k));
+      // is not asked, and a no that came while a command was sent does not
+      // close the session under it. That command's own answer decides. A
+      // caller that comes during the ping waits for its answer (`sessionOn`).
+      const gone = ended || (!busy.has(k) && (await tunnelAnswers(k, principalId, session.botId, session.sessionId)) === false && !busy.has(k));
       if (gone) await drop(principalId, hostId, session.sessionId);
       return { error: first.out.error, mayHaveRun: true };
     }
@@ -701,7 +736,8 @@ export function createHostComputerRouter(deps: {
       if (view.shellOnly && route.hostId === hostId) return { text: `${view.name} is shell only (no desktop), so there is no screenshot. Use action exec.`, isError: true };
       const session = await sessionOn(principalId, botId, route.hostId);
       if ("error" in session) return { text: session.error, isError: true };
-      const image = await deps.sessions.screen(principalId, session.botId, session.sessionId);
+      // on the session like a command: a ping that says no never closes it under the capture
+      const image = await onSession(key(principalId, route.hostId), session.sessionId, () => deps.sessions.screen(principalId, session.botId, session.sessionId));
       if (!image) {
         if (route.hostId === hostId) deps.store.update(principalId, hostId, { shellOnly: true });
         return { text: `${view.name} has no screen to capture (shell only). Use action exec.`, isError: true };

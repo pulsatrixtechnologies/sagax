@@ -404,6 +404,8 @@ describe("the person's session on a host (#3393)", () => {
     reachable?: (id: string) => boolean | null | Promise<boolean | null>;
     /** The host never takes the session: its row never connects (#3505). */
     neverConnects?: boolean;
+    /** The screenshot of a session; absent = none (shell only). */
+    screen?: (id: string) => Promise<Buffer | null>;
   } = {}) {
     const dir = mkdtempSync(path.join(tmpdir(), "host-computer-"));
     dirs.push(dir);
@@ -448,7 +450,7 @@ describe("the person's session on a host (#3393)", () => {
         installCode: async () => ({ ok: false as const, error: "unavailable" as const, message: "no" }),
       },
       sessions: {
-        target, exec, screen: async () => null, close, markQuiet: vi.fn(),
+        target, exec, screen: async (_principalId: string, _botId: string, id: string) => (opts.screen ? opts.screen(id) : null), close, markQuiet: vi.fn(),
         ...(opts.reachable ? { reachable: async ({ id }: { id: string }) => opts.reachable!(id) } : {}),
       },
       botThread: (botId) => `t-${botId}`,
@@ -641,33 +643,143 @@ describe("the person's session on a host (#3393)", () => {
     const DROPPED = { error: "The remote computer did not answer (the tunnel is down or the session ended)." };
     const done = { host: "FS-01", os: "linux" as const, exitCode: 0, stdout: "", stderr: "", timedOut: false };
 
-    it("a command that arrives during the probe before a send keeps the session when the probe then fails, and both commands run once", async () => {
-      // the first ping (bot B's) hangs; the second (bot A's, behind it in the
-      // tunnel's queue) gives up at once: "could not ask"
+    // Review of #3507: one ping in flight per session, shared by every
+    // caller. A second bot that came during the ping pinged too, got "could
+    // not ask" after 5 s, sent, and so made the first bot keep a dead session.
+    it("dead tunnel, a second bot during the probe: one ping, the session is replaced, both commands run once on the new one and none on the dead one", async () => {
       let answerFirst: (value: boolean) => void = () => undefined;
       let asked = 0;
       const { open, exec, close, run, tick } = shared({
         endAt: TWO_HOURS,
-        reachable: () => { asked += 1; return asked === 1 ? new Promise<boolean>((resolve) => { answerFirst = resolve; }) : null; },
+        // the host is gone: anything sent on s1 after the first command ends on a 255
+        failReused: "live",
+        reachable: (id) => {
+          if (id !== "s1") return true;
+          asked += 1;
+          return asked === 1 ? new Promise<boolean>((resolve) => { answerFirst = resolve; }) : null;
+        },
       });
       await run(ALICE, "sagax-test");
       tick(2 * 60_000);
       const fromB = run(ALICE, "ember", "uptime");
       await vi.waitFor(() => expect(asked).toBe(1));
-      let finishA: () => void = () => undefined;
-      exec.mockImplementationOnce(() => new Promise((resolve) => { finishA = () => resolve(done); }));
       const fromA = run(ALICE, "architect", "make build");
-      await vi.waitFor(() => expect(exec).toHaveBeenCalledTimes(2));
-      // B's ping fails while A's command is on the session
+      // A waits for B's ping: it neither pings nor sends
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(asked).toBe(1);
+      expect(exec).toHaveBeenCalledTimes(1);
       answerFirst(false);
-      await vi.waitFor(() => expect(exec).toHaveBeenCalledTimes(3));
-      expect(close).not.toHaveBeenCalled();
-      finishA();
-      expect(JSON.parse((await fromA).text)).toMatchObject({ exitCode: 0 });
-      expect(JSON.parse((await fromB).text)).toMatchObject({ exitCode: 0 });
+      const [outA, outB] = await Promise.all([fromA, fromB]);
+      expect(outA).not.toHaveProperty("isError");
+      expect(outB).not.toHaveProperty("isError");
+      expect(JSON.parse(outA.text)).toMatchObject({ exitCode: 0 });
+      expect(JSON.parse(outB.text)).toMatchObject({ exitCode: 0 });
+      expect(asked).toBe(1);
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(close).toHaveBeenCalledWith(ALICE, "sagax-test", "s1");
+      expect(open).toHaveBeenCalledTimes(2);
+      expect(exec.mock.calls.map(([input]) => [input.id, input.command]).sort()).toEqual([["s1", "whoami"], ["s2", "make build"], ["s2", "uptime"]]);
+    });
+
+    it("three callers during one probe share its answer: a no replaces the session once and each command runs once on the new one", async () => {
+      let answer: (value: boolean) => void = () => undefined;
+      let asked = 0;
+      const { open, exec, close, run, tick } = shared({
+        endAt: TWO_HOURS,
+        failReused: "live",
+        reachable: (id) => { if (id !== "s1") return true; asked += 1; return new Promise<boolean>((resolve) => { answer = resolve; }); },
+      });
+      await run(ALICE, "sagax-test");
+      tick(2 * 60_000);
+      const first = run(ALICE, "ember", "uptime");
+      await vi.waitFor(() => expect(asked).toBe(1));
+      const second = run(ALICE, "architect", "make build");
+      const third = run(ALICE, "sagax-test", "df -h");
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(asked).toBe(1);
+      expect(exec).toHaveBeenCalledTimes(1);
+      answer(false);
+      for (const out of await Promise.all([first, second, third])) expect(JSON.parse(out.text)).toMatchObject({ exitCode: 0 });
+      expect(asked).toBe(1);
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(open).toHaveBeenCalledTimes(2);
+      expect(exec.mock.calls.map(([input]) => [input.id, input.command]).sort()).toEqual([["s1", "whoami"], ["s2", "df -h"], ["s2", "make build"], ["s2", "uptime"]]);
+    });
+
+    it("three callers during one probe that answers yes all run on the session, after one ping", async () => {
+      let answer: (value: boolean) => void = () => undefined;
+      let asked = 0;
+      const { open, exec, close, run, tick } = shared({ endAt: TWO_HOURS, reachable: () => { asked += 1; return new Promise<boolean>((resolve) => { answer = resolve; }); } });
+      await run(ALICE, "sagax-test");
+      tick(2 * 60_000);
+      const first = run(ALICE, "ember", "uptime");
+      await vi.waitFor(() => expect(asked).toBe(1));
+      const second = run(ALICE, "architect", "make build");
+      const third = run(ALICE, "sagax-test", "df -h");
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(exec).toHaveBeenCalledTimes(1);
+      answer(true);
+      for (const out of await Promise.all([first, second, third])) expect(JSON.parse(out.text)).toMatchObject({ exitCode: 0 });
+      expect(asked).toBe(1);
       expect(close).not.toHaveBeenCalled();
       expect(open).toHaveBeenCalledTimes(1);
-      expect(exec.mock.calls.map(([input]) => [input.id, input.command])).toEqual([["s1", "whoami"], ["s1", "make build"], ["s1", "uptime"]]);
+      expect(exec.mock.calls.every(([input]) => input.id === "s1")).toBe(true);
+    });
+
+    it("a probe that could not ask never marks the session fresh: the next caller asks again", async () => {
+      let asked = 0;
+      const { open, exec, close, run, tick } = shared({ endAt: TWO_HOURS, reachable: () => { asked += 1; return null; } });
+      await run(ALICE, "sagax-test");
+      tick(2 * 60_000);
+      // the command is refused by the tunnel's queue (never sent): nothing answered
+      exec.mockImplementationOnce(async () => ({ error: "The host is busy with other bots' commands, so this command was not sent. Try again in a moment." }));
+      expect(await run(ALICE, "ember", "uptime")).toMatchObject({ isError: true });
+      expect(asked).toBe(1);
+      expect(JSON.parse((await run(ALICE, "architect", "make build")).text)).toMatchObject({ exitCode: 0 });
+      expect(asked).toBe(2);
+      expect(close).not.toHaveBeenCalled();
+      expect(open).toHaveBeenCalledTimes(1);
+    });
+
+    // The one way a command is on the session during a ping: it took the
+    // session an instant before the ping started and was sent an instant
+    // after. Every interleaving of the two bots is tried; in each, a command
+    // really sent on a healthy session is never cut by a ping that says no.
+    it("healthy session, a probe that wrongly says no, a command in flight: the command is never cut, whatever the interleaving", async () => {
+      const seen = new Set<string>();
+      for (let delay = 0; delay < 40; delay += 1) {
+        let answer: (value: boolean) => void = () => undefined;
+        let asked = 0;
+        const { exec, close, run } = shared({ endAt: TWO_HOURS, reachable: () => { asked += 1; return new Promise<boolean>((resolve) => { answer = resolve; }); } });
+        await run(ALICE, "sagax-test");
+        // B's command is on the session and will end on a 255
+        let dropB: () => void = () => undefined;
+        exec.mockImplementationOnce(() => new Promise((resolve) => { dropB = () => resolve(DROPPED); }));
+        const fromB = run(ALICE, "ember", "uptime");
+        await vi.waitFor(() => expect(exec).toHaveBeenCalledTimes(2));
+        // A's command: held once sent, on whichever session it is sent
+        let sentOn: string | undefined;
+        let finishA: () => void = () => undefined;
+        exec.mockImplementationOnce((input) => new Promise((resolve) => { sentOn = input.id; finishA = () => resolve(done); }));
+        const fromA = run(ALICE, "architect", "make build");
+        for (let i = 0; i < delay; i += 1) await Promise.resolve();
+        dropB();
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        const pingedWhileSent = asked === 1 && sentOn === "s1";
+        seen.add(asked === 0 ? "not asked" : pingedWhileSent ? "asked with the command in flight" : "asked before the command came");
+        answer(false);
+        expect((await fromB).text).toMatch(/^The connection to FS-01 dropped during the command, so it may have run: /);
+        // A's command is on s1 and its ping said no: the session is not closed under it
+        if (sentOn === "s1") expect(close).not.toHaveBeenCalled();
+        await vi.waitFor(() => expect(sentOn).toBeDefined());
+        finishA();
+        expect(JSON.parse((await fromA).text)).toMatchObject({ exitCode: 0 });
+        expect(asked).toBeLessThanOrEqual(1);
+        expect(exec.mock.calls.filter(([input]) => input.command === "make build")).toHaveLength(1);
+        expect(exec.mock.calls.filter(([input]) => input.command === "uptime")).toHaveLength(1);
+      }
+      // the window itself was hit, not only its two sides
+      expect([...seen]).toContain("asked with the command in flight");
     });
 
     it("a failed probe with no command on the session still replaces it", async () => {
@@ -699,7 +811,33 @@ describe("the person's session on a host (#3393)", () => {
       expect(exec.mock.calls.filter(([input]) => input.command === "uptime")).toHaveLength(1);
     });
 
-    it("a command that arrives during the probe after a 255 keeps the session when the probe then fails", async () => {
+    it("a command that arrives during the probe after a 255 waits for its answer: on a no it runs once on a new session, never on the dead one", async () => {
+      let answer: (value: boolean) => void = () => undefined;
+      let asked = 0;
+      const { open, exec, close, run } = shared({
+        endAt: TWO_HOURS,
+        failReused: "live",
+        reachable: (id) => { if (id !== "s1") return true; asked += 1; return new Promise<boolean>((resolve) => { answer = resolve; }); },
+      });
+      await run(ALICE, "sagax-test");
+      const fromB = run(ALICE, "ember", "uptime");
+      await vi.waitFor(() => expect(asked).toBe(1));
+      // the session answered seconds ago, but its ping is in flight: A waits
+      const fromA = run(ALICE, "architect", "make build");
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(exec).toHaveBeenCalledTimes(2);
+      answer(false);
+      expect((await fromB).text).toMatch(/^The connection to FS-01 dropped during the command, so it may have run: /);
+      const outA = await fromA;
+      expect(outA).not.toHaveProperty("isError");
+      expect(JSON.parse(outA.text)).toMatchObject({ exitCode: 0 });
+      expect(asked).toBe(1);
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(open).toHaveBeenCalledTimes(2);
+      expect(exec.mock.calls.map(([input]) => [input.id, input.command])).toEqual([["s1", "whoami"], ["s1", "uptime"], ["s2", "make build"]]);
+    });
+
+    it("a command that arrives during the probe after a 255 runs on the session when the answer is yes", async () => {
       let answer: (value: boolean) => void = () => undefined;
       let asked = 0;
       const { open, exec, close, run } = shared({ endAt: TWO_HOURS, reachable: () => { asked += 1; return new Promise<boolean>((resolve) => { answer = resolve; }); } });
@@ -707,19 +845,38 @@ describe("the person's session on a host (#3393)", () => {
       exec.mockImplementationOnce(async () => DROPPED);
       const fromB = run(ALICE, "ember", "uptime");
       await vi.waitFor(() => expect(asked).toBe(1));
-      // the session answered seconds ago: A's command goes out without a ping
-      let finishA: () => void = () => undefined;
-      exec.mockImplementationOnce(() => new Promise((resolve) => { finishA = () => resolve(done); }));
       const fromA = run(ALICE, "architect", "make build");
-      await vi.waitFor(() => expect(exec).toHaveBeenCalledTimes(3));
-      answer(false);
-      expect((await fromB).text).toMatch(/^The connection to FS-01 dropped during the command, so it may have run: /);
-      expect(close).not.toHaveBeenCalled();
-      finishA();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(exec).toHaveBeenCalledTimes(2);
+      answer(true);
+      await fromB;
       expect(JSON.parse((await fromA).text)).toMatchObject({ exitCode: 0 });
+      expect(close).not.toHaveBeenCalled();
       expect(open).toHaveBeenCalledTimes(1);
-      expect(asked).toBe(1);
-      expect(exec.mock.calls.filter(([input]) => input.command === "uptime")).toHaveLength(1);
+      expect(exec.mock.calls.at(-1)![0]).toMatchObject({ id: "s1", command: "make build" });
+    });
+
+    // older than #3505: a screenshot was not counted as a call on the session
+    it("a screenshot in flight counts like a command: after a 255 the tunnel is not asked and the session stays", async () => {
+      let asked = 0;
+      let shot: (image: Buffer) => void = () => undefined;
+      let shooting = false;
+      const { open, exec, close, router, run } = shared({
+        endAt: TWO_HOURS,
+        reachable: () => { asked += 1; return false; },
+        screen: () => new Promise<Buffer | null>((resolve) => { shooting = true; shot = resolve; }),
+      });
+      await run(ALICE, "sagax-test");
+      const picture = router.call({ principalId: ALICE, botId: "architect", threadId: "t-architect", action: "screenshot", host: "FS-01" });
+      await vi.waitFor(() => expect(shooting).toBe(true));
+      exec.mockImplementationOnce(async () => DROPPED);
+      const fromB = await run(ALICE, "ember", "uptime");
+      expect(fromB.text).toMatch(/^The connection to FS-01 dropped during the command, so it may have run: /);
+      expect(asked).toBe(0);
+      expect(close).not.toHaveBeenCalled();
+      shot(Buffer.from("png"));
+      expect(await picture).toMatchObject({ text: "Screenshot of FS-01." });
+      expect(open).toHaveBeenCalledTimes(1);
     });
 
     it("a session the host never takes is closed here and at the gateway", async () => {
@@ -742,9 +899,10 @@ describe("the person's session on a host (#3393)", () => {
     });
   });
 
-  // #3505: the worst case of one exec call, from the constants themselves,
-  // stays well under the bot's tool timeout.
-  describe("the longest one exec call can take (#3505)", () => {
+  // #3505: the worst case of the tunnel part of one exec call, from the
+  // constants themselves, stays well under the bot's tool timeout. The
+  // gateway calls are not in it (one may last 10 minutes).
+  describe("the longest the tunnel part of one exec call can take (#3505)", () => {
     const stop = KILL_GRACE_MS + KILL_RELEASE_MS;
     const probe = TUNNEL_PROBE_WAIT_MAX_MS + TUNNEL_PROBE_TIME_MS + stop;
     const close = stop + SESSION_STOP_TIME_MS + stop;

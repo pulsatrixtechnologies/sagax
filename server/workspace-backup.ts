@@ -34,6 +34,7 @@ import {
 } from "../shared/capability-stores.ts";
 import { WORKSPACE_BACKUP_RECONNECT, type WorkspaceBackupClientState, type WorkspaceBackupPrivateMetadata, type WorkspaceBackupReconnectCategory, type WorkspaceBackupSummary } from "../shared/workspace-backup.ts";
 import { engineMacMetadataPath } from "./mac-metadata.ts";
+import { LINE_COUNTS_FILE } from "./threads/log-line-count.ts";
 
 export type { WorkspaceBackupSummary, WorkspaceBackupPrivateMetadata } from "../shared/workspace-backup.ts";
 export const MAX_WORKSPACE_BACKUP_BYTES = 10 * 1024 ** 3;
@@ -697,6 +698,8 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
         // an at-rest replacement in progress, or the sealed originals kept while
         // a turn reads files plain (server/encryption/content-at-rest.ts): never content
         if (isAtRestTemp(name) || (!prefix && name === ".at-rest-originals")) continue;
+        // a log folder's line counts are tied to this disk's files: counted again after a restore
+        if (name === LINE_COUNTS_FILE) continue;
         if (excludedWorkspaceAuthPath(path)) { reconnect.path(path); continue; }
         if (ephemeralWorkspaceTokenPath(path) || redownloadedOrgLibraryPath(path) || restoredLibraryIndexPath(path) || liveDataEnginePath(path) || confidentialDataScopePath(path)) continue;
         // #3063: macOS metadata in an engine's extensions or skills (an

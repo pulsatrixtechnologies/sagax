@@ -95,7 +95,7 @@ export function InspectorPanel({ bot }: { bot: Bot }) {
         }
         const entry: InspectorEntry = { kind: "runtime", at: runtime.createdAt, data: runtime };
         if (!prev) return { entries: [entry], total: { runtime: 1, native: 0 } };
-        return { entries: [...prev.entries, entry], total: { ...prev.total, runtime: prev.total.runtime + 1 } };
+        return { ...prev, entries: [...prev.entries, entry], total: { ...prev.total, runtime: prev.total.runtime + 1 } };
       });
     };
 
@@ -169,6 +169,8 @@ export function InspectorPanel({ bot }: { bot: Bot }) {
 
   const shown = entries.length;
   const total = lens === "raw" ? (page?.total.native ?? 0) : (page?.total.runtime ?? 0);
+  // a long log still being counted: its total is only a lower bound
+  const counting = lens === "raw" ? page?.totalPartial?.native : page?.totalPartial?.runtime;
 
   return (
     <aside aria-label={t("chat.inspector")} className="app-docked-panel animate-panel-in absolute inset-0 z-40 flex h-full min-w-0 flex-col border-l-[0.5px] border-hairline-weak bg-app lg:static lg:z-auto lg:w-[min(460px,45vw)] lg:shrink-0">
@@ -224,7 +226,7 @@ export function InspectorPanel({ bot }: { bot: Bot }) {
           </TabIndicatorGroup>
         </div>
         {lens !== "run" && <span className="ml-auto text-[11px] text-ink-secondary">
-          {page ? (shown < total ? `last ${shown} of ${total}` : `${shown} entries`) : "loading…"}
+          {page ? (counting ? `last ${shown} of at least ${Math.max(total, shown)}` : shown < total ? `last ${shown} of ${total}` : `${shown} entries`) : "loading…"}
         </span>}
         {lens !== "run" && <button type="button" onClick={() => managedRefresh.current()} className="ui-icon-button" title={t("inspector.reload")} aria-label={t("inspector.reload")}>
           <RefreshCw size={14} />

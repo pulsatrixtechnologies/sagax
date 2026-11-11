@@ -13,7 +13,7 @@
 // row sealed under it is unreadable from then on (cryptographic erasure).
 // Unwrapped keys stay in memory only, for the life of the process.
 import { createSecretKey, randomBytes, type KeyObject } from "node:crypto";
-import type { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync, StatementSync } from "node:sqlite";
 
 import { BlindTokenizer, deriveSubkey, keyAad, newContentKey, open, seal } from "./content-crypto.ts";
 import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
@@ -169,12 +169,17 @@ function live(row: { key_id: string; owner: string; thread_id: string | null }, 
   };
 }
 
+/** Keys unwrapped between two turns of the event loop in unlock(). */
+export const UNLOCK_BATCH = 32;
+const yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
+
 export class ContentKeyring {
   private readonly database: () => DatabaseSync;
   private readonly active: KekProvider;
   private readonly providers: Map<string, KekProvider>;
   private readonly cache = new Map<string, LiveKey>();
   private readonly creating = new Map<string, Promise<void>>();
+  private readonly statements = new WeakMap<DatabaseSync, Map<string, StatementSync>>();
   private readonly onReady: () => void;
 
   constructor(database: () => DatabaseSync, active: KekProvider, others: readonly KekProvider[] = [], onReady: () => void = () => {}) {
@@ -193,13 +198,24 @@ export class ContentKeyring {
     this.cache.clear();
   }
 
+  /** A statement prepared once per database handle: a key lookup runs per
+   * key at start and per sealed row read. */
+  private statement(sql: string): StatementSync {
+    const database = this.database();
+    let byDatabase = this.statements.get(database);
+    if (!byDatabase) this.statements.set(database, (byDatabase = new Map()));
+    let statement = byDatabase.get(sql);
+    if (!statement) byDatabase.set(sql, (statement = database.prepare(sql)));
+    return statement;
+  }
+
   private row(where: string, value: string): KeyRow | undefined {
-    return this.database().prepare(`SELECT key_id, owner, thread_id, parent_id, provider, ref, wrapped FROM content_keys WHERE ${where}`).get(value) as KeyRow | undefined;
+    return this.statement(`SELECT key_id, owner, thread_id, parent_id, provider, ref, wrapped FROM content_keys WHERE ${where}`).get(value) as KeyRow | undefined;
   }
 
   /** A key a reset retired: it still exists (locked, not erased). */
   private retiredRow(keyId: string): KeyRow | undefined {
-    return this.database().prepare("SELECT key_id, owner, thread_id, parent_id, provider, ref, wrapped FROM content_keys_retired WHERE key_id = ?").get(keyId) as KeyRow | undefined;
+    return this.statement("SELECT key_id, owner, thread_id, parent_id, provider, ref, wrapped FROM content_keys_retired WHERE key_id = ?").get(keyId) as KeyRow | undefined;
   }
 
   /** "destroyed": no such key any more (its rows are erased); null: it
@@ -299,11 +315,16 @@ export class ContentKeyring {
 
   /** Unwrap every stored key ahead of the first read (an asynchronous
    * provider), and re-wrap the keys a previous provider wrapped under the
-   * active one (switching local to Key Vault, or back). */
+   * active one (switching local to Key Vault, or back). A local provider
+   * unwraps synchronously, so its promises never give the loop back: the
+   * pass yields every UNLOCK_BATCH keys, or a server with many owners and
+   * confidential threads stops its loop for seconds at start (#3524). */
   async unlock(): Promise<{ unlocked: number; failed: number; rewrapped: number }> {
     const rows = this.database().prepare("SELECT key_id, owner, thread_id, parent_id, provider, ref, wrapped FROM content_keys WHERE parent_id IS NULL").all() as unknown as KeyRow[];
     let unlocked = 0, failed = 0, rewrapped = 0;
+    let done = 0;
     for (const row of rows) {
+      if (done++ % UNLOCK_BATCH === UNLOCK_BATCH - 1) await yieldToLoop();
       const aad = keyAad(row.key_id, row.owner, row.thread_id);
       let raw = this.cache.get(row.key_id)?.raw;
       if (!raw) {
@@ -323,7 +344,10 @@ export class ContentKeyring {
       }
     }
     // thread keys open from their parents synchronously
-    for (const row of this.database().prepare("SELECT key_id FROM content_keys WHERE parent_id IS NOT NULL").all() as Array<{ key_id: string }>) this.key(row.key_id);
+    for (const row of this.database().prepare("SELECT key_id FROM content_keys WHERE parent_id IS NOT NULL").all() as Array<{ key_id: string }>) {
+      if (done++ % UNLOCK_BATCH === UNLOCK_BATCH - 1) await yieldToLoop();
+      this.key(row.key_id);
+    }
     if (unlocked) this.onReady();
     return { unlocked, failed, rewrapped };
   }

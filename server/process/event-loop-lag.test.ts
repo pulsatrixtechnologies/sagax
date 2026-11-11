@@ -3,7 +3,7 @@
 // when the inspector can read it, and the periodic summary carries p99/max.
 import { describe, expect, it } from "vitest";
 
-import { startEventLoopLagMonitor } from "./event-loop-lag.ts";
+import { gcWithin, LONG_STALL_MS, STALL_MS, startEventLoopLagMonitor } from "./event-loop-lag.ts";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -108,4 +108,41 @@ describe("event loop lag monitor", () => {
       stop();
     }
   }, 15_000);
+});
+
+describe("event loop lag monitor from one second (#3524)", () => {
+  it("reads a stack for every block of one second or more, with the default thresholds", async () => {
+    expect(STALL_MS).toBe(1_000);
+    expect(LONG_STALL_MS).toBe(STALL_MS);
+    const lines: { level: string; message: string }[] = [];
+    // default stallMs and longStallMs; a cooldown that would hide the second stack
+    const stop = startEventLoopLagMonitor(
+      { info: (message) => lines.push({ level: "info", message }), warn: (message) => lines.push({ level: "warn", message }) },
+      { reportMs: 60_000, stackCooldownMs: 60_000 },
+    );
+    try {
+      await wait(500);
+      firstLongBlock(1_500);
+      await wait(1_200);
+      secondLongBlock(1_500);
+      await wait(1_200);
+      const stalls = lines.filter((line) => line.level === "warn" && line.message.startsWith("[loop-lag] event loop blocked"));
+      expect(stalls).toHaveLength(2);
+      expect(stalls[0].message).toContain("firstLongBlock");
+      expect(stalls[1].message, "a block under two seconds inside the cooldown had no stack").toContain("secondLongBlock");
+    } finally {
+      stop();
+    }
+  }, 20_000);
+
+  it("counts the garbage collection time inside a block, the major share apart", () => {
+    const spans = [
+      { start: 100, duration: 50, kind: "minor" },
+      { start: 1_000, duration: 1_200, kind: "major" },
+      { start: 5_000, duration: 10, kind: "major" },
+    ];
+    expect(gcWithin(spans, 900, 2_500)).toEqual({ total: 1_200, major: 1_200 });
+    expect(gcWithin(spans, 0, 1_100)).toEqual({ total: 150, major: 100 });
+    expect(gcWithin(spans, 3_000, 4_000)).toEqual({ total: 0, major: 0 });
+  });
 });

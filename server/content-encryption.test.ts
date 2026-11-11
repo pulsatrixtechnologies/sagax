@@ -169,6 +169,25 @@ describe("cryptographic erasure", () => {
     expect(readThread("a", legacy("a")).messages.map((message) => message.text)).toEqual(["moved to bob"]);
   });
 
+  // #3599: a pass that only moved sealed rows to another key (a thread that
+  // changed hands) left no plain text, so the next start owes no compaction
+  // (the whole database rewritten before the server answers).
+  it("asks no compaction of the next start for rows sealed again under another key", () => {
+    owners = { a: { owner: "alice", confidential: false } };
+    for (let i = 0; i < 20; i++) insertMessage("a", msg(`m${i}`, `sealed orchid ${i}`, { at: i }));
+    migrateAll();
+    expect(vacuumAfterSealing()).toBeNull();
+    owners = { a: { owner: "bob", confidential: false } };
+    contentKeyChanged("a");
+    migrateAll();
+    const db = raw();
+    const keys = db.prepare("SELECT DISTINCT m.key_id FROM messages m JOIN thread_keys k USING (thread_id) WHERE m.key_id = k.key_id").all();
+    db.close();
+    expect(keys).toHaveLength(1);
+    expect(vacuumAfterSealing()).toBeNull();
+    expect(readThread("a", legacy("a")).messages).toHaveLength(20);
+  });
+
   it("gives a confidential thread its own key, destroyed with the thread", () => {
     owners = { c: { owner: "alice", confidential: false } };
     insertMessage("c", msg("m1", "before it turned confidential"));

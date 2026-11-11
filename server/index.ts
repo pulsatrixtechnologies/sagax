@@ -35089,12 +35089,12 @@ setTimeout(() => {
   setInterval(sweepBackgroundThreads, BACKGROUND_SWEEP_EVERY_MS).unref();
 }, 60_000).unref();
 
-try {
-  const closedRows = closeRowsLeftByRestart(store, Date.now() - SUBAGENT_SWEEP_WINDOW_MS, Date.now());
+// #3599: in slices after the start, never as one stop of the loop
+void closeRowsLeftByRestart(store, Date.now() - SUBAGENT_SWEEP_WINDOW_MS, Date.now()).then((closedRows) => {
   if (closedRows) console.log(`[startup] closed ${closedRows} call(s) and sub-agent(s) an earlier run left open`);
-} catch (error) {
+}).catch((error: unknown) => {
   console.warn(`[startup] calls left open were not closed: ${error instanceof Error ? error.message : String(error)}`);
-}
+});
 
 const onListening = async () => {
   companyRuntimeReady();

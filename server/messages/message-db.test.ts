@@ -93,6 +93,34 @@ describe("message-db", () => {
     expect(openPendingInboxCards().map((h) => `${h.threadId}/${h.message.id}`).sort()).toEqual(["ap1/open", "ap1/question"]);
   });
 
+  // #3599: a start reads the open inbox cards twice; on a busy server's tens
+  // of thousands of rows, a scan of every row each time.
+  it("reads the open inbox cards through messages_open_request_cards, not every row", () => {
+    insertMessage("ap1", msg("open", "", { role: "bot", kind: "options", card: { title: "t", subtitle: "s", options: ["Allow"], requestType: "permission", requestId: "r" } as Message["card"] }));
+    const prepared: string[] = [];
+    const prepare = DatabaseSync.prototype.prepare;
+    const spy = vi.spyOn(DatabaseSync.prototype, "prepare").mockImplementation(function (this: DatabaseSync, sql: string) {
+      prepared.push(sql);
+      return prepare.call(this, sql);
+    });
+    try {
+      closeMessageDb();
+      expect(openPendingInboxCards().map((h) => h.message.id)).toEqual(["open"]);
+    } finally {
+      spy.mockRestore();
+    }
+    const statement = prepared.find((sql) => sql.includes("$.card.requestId") && sql.includes("$.card.expired"));
+    expect(statement).toBeDefined();
+    closeMessageDb();
+    const raw = new DatabaseSync(join(DATA_DIR, "messages.db"), { readOnly: true });
+    try {
+      const plan = raw.prepare(`EXPLAIN QUERY PLAN ${statement}`).all().map((row) => String((row as { detail: string }).detail)).join("\n");
+      expect(plan).toContain("messages_open_request_cards");
+    } finally {
+      raw.close();
+    }
+  });
+
   it("persists inserts, updates, and the active leaf across a reopen", () => {
     insertMessage("t1", msg("m1", "hello"));
     insertMessage("t1", msg("m2", "world"));

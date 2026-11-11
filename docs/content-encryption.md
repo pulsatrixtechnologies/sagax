@@ -168,7 +168,8 @@ serves anything) rebuilds the plain full-text index (`messages_fts`, whose
 segments could still hold words of the rows just sealed) and runs one
 `VACUUM` (free pages written before the pass can still hold old text), then
 checkpoints the write-ahead log (`vacuumAfterSealing`; skipped above 1 GB,
-retried at the next start).
+retried at the next start). A pass that only sealed rows again under another
+key (a thread that changed hands) asks for none: it left no plain text.
 
 ## Erasure
 

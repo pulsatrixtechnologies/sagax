@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { BUSY_ORG, busyOrgRoutinesDocument, storedRoutinesDocument } from "../testing/busy-org-fixture.ts";
+
 // Every stored run goes through loadRoutineReadiness exactly once when it is
 // loaded: counting its calls counts the per-run loads.
 const loads = vi.hoisted(() => ({ count: 0 }));
@@ -16,6 +18,20 @@ vi.mock("./routine-readiness.ts", async (importOriginal) => {
     loadRoutineReadiness: (value: unknown) => {
       loads.count += 1;
       return actual.loadRoutineReadiness(value);
+    },
+  };
+});
+
+// #3599: every run a routine's health reads goes through weekRuns: summing
+// the lists it is given counts the runs one listing visits.
+const visits = vi.hoisted(() => ({ runs: 0 }));
+vi.mock("./routine-recovery.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./routine-recovery.ts")>();
+  return {
+    ...actual,
+    weekRuns: (runs: Parameters<typeof actual.weekRuns>[0], ...rest: [string, number]) => {
+      visits.runs += runs.length;
+      return actual.weekRuns(runs, ...rest);
     },
   };
 });
@@ -36,34 +52,8 @@ function storedFile(extraRuns: unknown[] = [], routineRequestReceipts: unknown[]
   const dir = mkdtempSync(join(tmpdir(), "omb-stored-runs-"));
   dirs.push(dir);
   const file = join(dir, "routines.json");
-  const routines = Array.from({ length: 20 }, (_, index) => ({
-    id: `routine-${index}`, name: `Routine ${index}`, prompt: "Report", botId: `bot-${index % 4}`,
-    enabled: true, schedule: { type: "daily", time: "10:00" }, nextRunAt: NOW + 60 * 60_000,
-    createdAt: NOW - 90 * 86_400_000, updatedAt: NOW - 90 * 86_400_000, timeoutMinutes: 30, postResults: true,
-  }));
-  const settled = Array.from({ length: SETTLED }, (_, index) => {
-    const at = NOW - (SETTLED - index) * 30 * 60_000;
-    return {
-      id: `old-${index}`, routineId: `routine-${index % 20}`, routineName: `Routine ${index % 20}`, botId: `bot-${index % 4}`,
-      status: index % 7 === 0 ? "failed" : "completed", error: index % 7 === 0 ? "It did not answer" : undefined,
-      scheduledFor: at, createdAt: at, startedAt: at, finishedAt: at + 60_000, threadId: `thread-old-${index}`,
-      prompt: "Report", output: "Done.", timeoutMinutes: 30, attachments: [],
-      readiness: [{ kind: "engine", ok: true, code: "ready", line: "Ready" }],
-    };
-  });
-  const live = [
-    { id: "live-running", routineId: "routine-1", routineName: "Routine 1", botId: "bot-1", status: "running",
-      scheduledFor: NOW - 60_000, createdAt: NOW - 60_000, startedAt: NOW - 60_000, threadId: "thread-live-running", prompt: "Report" },
-    { id: "live-queued", routineId: "routine-2", routineName: "Routine 2", botId: "bot-2", status: "queued", manual: true,
-      scheduledFor: NOW - 30_000, createdAt: NOW - 30_000, prompt: "Report" },
-    { id: "live-waiting", routineId: "routine-3", routineName: "Routine 3", botId: "bot-3", status: "waiting",
-      scheduledFor: NOW - 90_000, createdAt: NOW - 90_000, startedAt: NOW - 90_000, threadId: "thread-live-waiting", prompt: "Report",
-      waitingSince: NOW - 80_000 },
-  ];
-  writeFileSync(file, JSON.stringify({
-    version: 1, frozenResultsCleared: true, postResultsMigrated: true, routines,
-    runs: [...settled, ...live, ...extraRuns], routineRequestReceipts, webhookRunReceipts: [],
-  }));
+  const botIds = Array.from({ length: 4 }, (_, index) => `bot-${index}`);
+  writeFileSync(file, JSON.stringify(storedRoutinesDocument({ now: NOW, botIds, routines: 20, settled: SETTLED, extraRuns, routineRequestReceipts })));
   return file;
 }
 
@@ -166,5 +156,39 @@ describe("stored runs at a start (#3563)", () => {
     const bad = manager.listRuns().find((run) => run.id === "old-bad");
     expect(bad).toMatchObject({ status: "completed", attachments: [] });
     expect(bad).not.toHaveProperty("timeoutMinutes");
+  });
+});
+
+describe("routines with their health on a busy server (#3599)", () => {
+  function busyFile() {
+    const dir = mkdtempSync(join(tmpdir(), "omb-busy-routines-"));
+    dirs.push(dir);
+    const file = join(dir, "routines.json");
+    const text = JSON.stringify(busyOrgRoutinesDocument(NOW, Array.from({ length: BUSY_ORG.bots }, (_, index) => `bot-${index}`)));
+    // the size of the routines file of a busy organization server
+    expect(text.length).toBeGreaterThan(6_400_000);
+    expect(text.length).toBeLessThan(6_900_000);
+    writeFileSync(file, text);
+    return file;
+  }
+
+  it("lists the routines with their health in one pass over the runs, loading no stored run", () => {
+    const file = busyFile();
+    loads.count = 0;
+    const manager = new RoutineManager(options(file));
+    expect(loads.count).toBe(3);
+    visits.runs = 0;
+    const listed = manager.listRoutines();
+    expect(listed).toHaveLength(BUSY_ORG.routines);
+    // the settled history stays for the slices after the start
+    expect(loads.count).toBe(3);
+    // each run is looked at once for the whole listing, not once per routine
+    expect(visits.runs).toBeLessThanOrEqual(BUSY_ORG.runs + 3);
+    // the health is the one the whole loaded history gives
+    expect(manager.listRuns()).toHaveLength(BUSY_ORG.runs + 3);
+    const loaded = manager.listRoutines();
+    expect(listed).toEqual(loaded);
+    expect(listed.some((routine) => routine.failureStreak === 1)).toBe(true);
+    expect(listed.every((routine) => routine.weekRuns && routine.weekRuns.total > 0)).toBe(true);
   });
 });

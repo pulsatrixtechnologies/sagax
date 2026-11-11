@@ -140,27 +140,45 @@ function listAnswer(target: ActTarget, listing: Json, pulledAt?: (name: string) 
     const { page: shown, next } = page(entries, offset, (items) => ({ ...head, plugins: items, ...more(offset + items.length) }));
     return { ...head, plugins: shown, ...more(next) };
   }
-  const installed = installedOf(listing);
+  // #3637 review: the marketplace lines first (few, short, and their token
+  // state is what a bot acts on), then the installed plugins, in one budget.
+  // One sequence, one offset: a page never repeats a part already read.
   const lines = markets.map((market) => marketLine(market, pulledAt));
+  const installed = installedOf(listing);
+  type Item = { line: string } | { plugin: Json };
+  const items: Item[] = [...lines.map((line) => ({ line })), ...installed.map((plugin) => ({ plugin }))];
   const head = {
-    installed,
     ...(object(listing.engine) && typeof listing.engine.loadsPlugins === "boolean" ? { engineLoadsPlugins: listing.engine.loadsPlugins } : {}),
     ...(typeof listing.canChange === "boolean" ? { canChange: listing.canChange } : {}),
     catalog: "One marketplace's plugins: act plugins list with marketplace (and optional filter).",
   };
-  const more = (next: number) => next < lines.length
-    ? { more: { offset: next, left: lines.length - next, how: `The other marketplaces: call act plugins list again with offset ${next}.` } }
+  const more = (next: number) => next < items.length
+    ? { more: {
+      offset: next,
+      left: { marketplaces: Math.max(0, lines.length - next), installed: Math.min(installed.length, items.length - next) },
+      how: `The rest: call act plugins list again with offset ${next} (marketplace lines come first, then installed plugins; nothing already shown is repeated).`,
+    } }
     : {};
-  const { page: shown, next } = page(lines, offset, (items) => ({ ...head, marketplaces: items, ...more(offset + items.length) }));
-  return { ...head, marketplaces: shown, ...more(next) };
+  const shape = (taken: Item[], next: number): Json => ({
+    marketplaces: taken.flatMap((item) => ("line" in item ? [item.line] : [])),
+    installed: taken.flatMap((item) => ("plugin" in item ? [item.plugin] : [])),
+    ...head,
+    ...(offset ? { offset } : {}),
+    ...more(next),
+  });
+  const { page: shown, next } = page(items, offset, (taken) => shape(taken, offset + taken.length));
+  return shape(shown, next);
 }
 
 function writeAnswer(answer: Json, pulledAt?: (name: string) => number | undefined): Json {
   const { marketplaces: _markets, plugins: listed, policy: _policy, engine: _engine, canChange: _canChange, ...own } = answer;
   const shaped: Json = { ...own };
   if (object(own.marketplace)) shaped.marketplace = marketLine(own.marketplace as Market, pulledAt);
-  // an answer with no object of its own (uninstall, removeMarketplace): what is installed now
-  if (!("plugin" in own) && !("marketplace" in own) && Array.isArray(listed)) shaped.installed = installedOf(answer);
+  // an answer with no object of its own (uninstall, removeMarketplace): the
+  // first page of the listing a plain list gives, paged the same way
+  if (!("plugin" in own) && !("marketplace" in own) && Array.isArray(listed)) {
+    return { ...listAnswer({ kind: "route", method: "GET", path: "/api/bots/me/plugins" }, answer, pulledAt), ...shaped };
+  }
   return shaped;
 }
 

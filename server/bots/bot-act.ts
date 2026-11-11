@@ -132,8 +132,8 @@ export type BotActDeps = {
   journalRule?: (input: { threadId: string; botId: string; botName: string; summary: string; rule: string }) => void;
   patchCard: (threadId: string, messageId: string, patch: { answered?: "allow" | "deny"; expired?: true }) => void;
   findCard: (threadId: string, requestId: string) => CardState | null;
-  /** #3637: when a marketplace's clone was last pulled, for a bot's plugin listing. */
-  marketplacePulledAt?: (name: string) => number | undefined;
+  /** #3637: when each marketplace's clone was last pulled (one read), for a bot's plugin listing. */
+  marketplacesPulledAt?: () => ReadonlyMap<string, number>;
 };
 
 const NONE_REASON: Record<string, string> = {
@@ -420,7 +420,12 @@ export function createBotActService(deps: BotActDeps): BotActService {
   }
 
   function pluginText(target: ActTarget, performed: { status: number; text: string }, maxChars: number): string {
-    const text = shapePluginAnswer(target, performed.text, deps.marketplacePulledAt ? { pulledAt: deps.marketplacePulledAt } : {});
+    let dates: ReadonlyMap<string, number> | undefined;
+    const pulledAt = (name: string) => {
+      try { dates ??= deps.marketplacesPulledAt?.() ?? new Map(); } catch { dates = new Map(); }
+      return dates.get(name);
+    };
+    const text = shapePluginAnswer(target, performed.text, { pulledAt });
     if (text.length <= maxChars) return text;
     // not a JSON object the shape reads: never a silent cut
     const note = `\n[Cut by Sagax at ${maxChars - 300} of ${text.length} characters: the rest of this answer was left out. Ask for one marketplace (act plugins list with marketplace, filter and offset) to read it in parts.]`;

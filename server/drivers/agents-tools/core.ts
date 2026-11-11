@@ -402,7 +402,7 @@ export const DEF_ANSWER_APPROVAL = {
 export const DEF_ACT = {
     name: "act",
     description:
-      "Act as the signed-in person. Send ui and input (a screen or button in their open Sagax app) or method, path, optional query and body (an /api route; works without a desktop window). You are that person: a route they cannot call is refused. Reads and screen changes run now. A write waits for their Allow on a card unless this bot's approval mode is auto or full. /api/internal and /api/testing are refused. Plugins: send plugins, not a route. action: list (installed plugins, one line per marketplace; with marketplace: its catalog, optional filter, offset pages), addMarketplace (source, ref?), install (marketplace, plugin; also updates), setEnabled (key, enabled), uninstall (key), removeMarketplace (marketplace).",
+      "Act as the signed-in person. Send ui and input (a screen or button in their open Sagax app) or method, path, optional query and body (an /api route; works without a desktop window). You are that person: a route they cannot call is refused. Reads and screen changes run now. A write waits for their Allow on a card unless this bot's approval mode is auto or full. /api/internal and /api/testing are refused. Plugins: send plugins, not a route. action: list (marketplace lines, then installed plugins; marketplace: its catalog, optional filter; offset from more pages), addMarketplace (source, ref?), install (marketplace, plugin; updates), setEnabled (key, enabled), uninstall (key), removeMarketplace (marketplace).",
     inputSchema: {
       type: "object",
       additionalProperties: false,

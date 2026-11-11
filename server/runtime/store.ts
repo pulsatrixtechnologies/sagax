@@ -128,6 +128,14 @@ export interface RuntimeStore {
   root(id: string): Assignment | undefined;
   /** `assigneeThreadId`: only rows whose turn happens in that thread (any bot). */
   all(filter?: { rootId?: string; nonTerminal?: boolean; ownerThreadId?: string; assigneeThreadId?: string }): Assignment[];
+  /** Settled rows whose report is still owed (no reportedAt), createdAt
+   * order. Read through a partial index: a start never reads the settled
+   * rows that already reported (#3535). */
+  unreported(): Assignment[];
+  /** Settled rows with a child that still has an undelivered inbox entry:
+   * the only rows a start may reopen after their report (DEL-03), createdAt
+   * order. Read from the undelivered inbox entries, never from every row. */
+  settledWithUndelivered(): Assignment[];
   /** Insert a new row and its event in one transaction. */
   insert(a: Assignment, event: { kind: EventKind; detail?: string; at?: number }): void;
   /** Write the whole row and (optionally) an event in one transaction. */
@@ -163,6 +171,12 @@ const terminalList = TERMINAL.map(s => `'${s}'`).join(", ");
  * share this one term, since SQLite reads a partial index only for a WHERE
  * that repeats its own. */
 const LIVE = `status NOT IN (${terminalList})`;
+/** A settled row whose report is still owed: the assignments_unreported
+ * index and unreported() share this one term, as LIVE does. A row whose json
+ * no longer parses counts as owed, so it is read (and refused) as before,
+ * and never stops the index from being built. */
+const UNREPORTED = `status IN (${terminalList}) AND (CASE WHEN json_valid(json) THEN json_extract(json, '$.reportedAt') END) IS NULL`;
+const UNREPORTED_INDEX = `CREATE INDEX assignments_unreported ON assignments(created_at) WHERE ${UNREPORTED}`;
 
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS assignments (
@@ -205,6 +219,7 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS inbox_thread ON inbox(owner_thread_id, delivered_at);
   CREATE INDEX IF NOT EXISTS inbox_run ON inbox(owner_run_id, delivered_at);
   CREATE INDEX IF NOT EXISTS inbox_assignment ON inbox(assignment_id);
+  CREATE INDEX IF NOT EXISTS inbox_undelivered ON inbox(assignment_id) WHERE delivered_at IS NULL;
   CREATE TABLE IF NOT EXISTS attempts (
     id TEXT PRIMARY KEY,
     assignment_id TEXT NOT NULL,
@@ -316,6 +331,13 @@ export function openRuntimeStore(path: string): RuntimeStore {
   // (e.g. expired) updates the WHERE. IF NOT EXISTS would keep a stale one.
   db.exec("DROP INDEX IF EXISTS assignments_live");
   db.exec(`CREATE INDEX assignments_live ON assignments(created_at) WHERE ${LIVE}`);
+  // The unreported index reads each row's json once to build: built when
+  // missing or when its WHERE changed (a TERMINAL change), not on every open.
+  const unreportedIndex = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'assignments_unreported'").get() as Row | undefined;
+  if (unreportedIndex?.sql !== UNREPORTED_INDEX) {
+    db.exec("DROP INDEX IF EXISTS assignments_unreported");
+    db.exec(UNREPORTED_INDEX);
+  }
 
   // Zod once per distinct json payload. Each read still JSON.parse's so
   // callers that mutate the returned object (then update, or fail mid-write)
@@ -374,6 +396,16 @@ export function openRuntimeStore(path: string): RuntimeStore {
     prunable: db.prepare(`SELECT id FROM assignments r WHERE r.parent_id IS NULL AND r.status IN (${terminalList})
       AND r.finished_at IS NOT NULL AND r.finished_at < ?
       AND NOT EXISTS (SELECT 1 FROM assignments c WHERE c.root_id = r.id AND c.status NOT IN (${terminalList}))`),
+    // INDEXED BY: without statistics the planner would walk every settled
+    // row through assignments_status and parse each json in SQL.
+    unreported: db.prepare(`SELECT id, json FROM assignments INDEXED BY assignments_unreported WHERE ${UNREPORTED} ORDER BY created_at, rowid`),
+    // Undelivered entries are few (inbox_undelivered); their children's
+    // parents are read by primary key.
+    // The unary + keeps the planner off assignments_status (every settled row).
+    settledWithUndelivered: db.prepare(`SELECT p.id, p.json FROM assignments p WHERE +p.status IN (${terminalList})
+      AND p.id IN (SELECT c.parent_id FROM inbox i INNER JOIN assignments c ON c.id = i.assignment_id
+        WHERE i.delivered_at IS NULL AND c.parent_id IS NOT NULL)
+      ORDER BY p.created_at, p.rowid`),
     pruneEvents: db.prepare("DELETE FROM assignment_events WHERE assignment_id IN (SELECT id FROM assignments WHERE root_id = ?)"),
     pruneInbox: db.prepare("DELETE FROM inbox WHERE assignment_id IN (SELECT id FROM assignments WHERE root_id = ?)"),
     pruneAttempts: db.prepare("DELETE FROM attempts WHERE assignment_id IN (SELECT id FROM assignments WHERE root_id = ?)"),
@@ -469,6 +501,12 @@ export function openRuntimeStore(path: string): RuntimeStore {
       let statement = allStatements.get(sql);
       if (!statement) { statement = db.prepare(sql); allStatements.set(sql, statement); }
       return (statement.all(...params) as Row[]).map(readAssignment);
+    },
+    unreported() {
+      return (statements.unreported.all() as Row[]).map(readAssignment);
+    },
+    settledWithUndelivered() {
+      return (statements.settledWithUndelivered.all() as Row[]).map(readAssignment);
     },
     insert(a, event) {
       transaction(() => {

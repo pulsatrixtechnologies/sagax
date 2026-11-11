@@ -203,10 +203,12 @@ export class Runtime {
         }
       }
       // A crash between a settlement and its report leaves the report owed.
-      for (const n of this.store.all()) if (isTerminal(n) && n.reportedAt === undefined) this.reportDue.add(n.id);
+      // Both reads below go through indexes: a start never reads the settled
+      // rows that reported and have nothing left on their lane (#3535).
+      for (const n of this.store.unreported()) if (isTerminal(n) && n.reportedAt === undefined) this.reportDue.add(n.id);
       // A job that already reported stays finished unless an undelivered
       // entry arrived on its lane after that report (DEL-03). Oldest first.
-      for (const snapshot of this.store.all().slice().sort(byOldestFirst)) {
+      for (const snapshot of this.store.settledWithUndelivered().sort(byOldestFirst)) {
         const n = this.store.get(snapshot.id);
         if (!n || !isTerminal(n) || n.reportedAt === undefined || n.reply === "none") continue;
         if (n.outcome === "stopped") continue;

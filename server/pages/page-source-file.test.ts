@@ -17,7 +17,7 @@ import { createInternalMemoryRoutes, type InternalMemoryBot, type InternalMemory
 import type { InternalRouteContext } from "../routes/internal-route.ts";
 import { createPublishedPageRoutes } from "../routes/published-pages.ts";
 import { workspaceDir } from "../workspace/workspace.ts";
-import { readWorkspaceSourceFile } from "../workspace/workspace-files.ts";
+import { readWorkspaceSourceFile, readWorkspaceText } from "../workspace/workspace-files.ts";
 import { PublishedPages, pageSourceDigest, pageSourceSlice } from "./published-pages.ts";
 
 // multi-byte characters (2, 3 and 4 bytes), CRLF line ends and a trailing newline
@@ -80,6 +80,37 @@ describe("readWorkspaceSourceFile", () => {
     ]) {
       expect(() => readWorkspaceSourceFile(BOT, path, PAGE_LIMITS.contentBytes), path).toThrow();
     }
+  });
+
+  it("#3612: reads a file of an installed plugin by the path workspace_read takes, read only and byte for byte", () => {
+    const plugin = mkdtempSync(join(tmpdir(), "sagax-pages-3612-plugin-"));
+    dirs.push(plugin);
+    mkdirSync(join(plugin, "pages"), { recursive: true });
+    writeFileSync(join(plugin, "pages", "report.html"), SOURCE);
+    writeFileSync(join(plugin, ".hidden.html"), "<p>x</p>");
+    mkdirSync(join(plugin, ".claude-plugin"), { recursive: true });
+    writeFileSync(join(plugin, ".claude-plugin", "plugin.json"), "{}");
+    symlinkSync(join(workspaceDir(OTHER), "docs"), join(plugin, "out"));
+    writeFileSync(join(workspaceDir(OTHER), "docs", "theirs.html"), "<p>theirs</p>");
+    const plugins = [{ name: "acme", dir: plugin }];
+    const read = readWorkspaceSourceFile(BOT, "plugins/acme/pages/report.html", PAGE_LIMITS.contentBytes, plugins);
+    expect(read.path).toBe("plugins/acme/pages/report.html");
+    expect(Buffer.from(read.content, "utf8").equals(readFileSync(join(plugin, "pages", "report.html")))).toBe(true);
+    expect(readWorkspaceText(BOT, "plugins/acme/pages/report.html", 0, plugins).path).toBe(read.path);
+    for (const path of [
+      "plugins/acme/.hidden.html",
+      "plugins/acme/.claude-plugin/plugin.json",
+      "/workspace/sagax-plugins/acme/pages/report.html",
+      plugin + "/pages/report.html",
+      "plugins/acme/../acme/pages/report.html",
+      "plugins/acme/out/theirs.html",
+      // a plugin this bot does not have (another bot's or another person's)
+      "plugins/other/pages/report.html",
+    ]) {
+      expect(() => readWorkspaceSourceFile(BOT, path, PAGE_LIMITS.contentBytes, plugins), path).toThrow();
+    }
+    // without the plugin list, plugins/ is not this bot's
+    expect(() => readWorkspaceSourceFile(BOT, "plugins/acme/pages/report.html", PAGE_LIMITS.contentBytes)).toThrow(/no such file/);
   });
 
   it("refuses a file over the limit and one that is not UTF-8", () => {
@@ -192,7 +223,7 @@ describe("paged read of a source", () => {
 describe("the bot's internal routes", () => {
   const bot: InternalMemoryBot = { id: "", name: "Ada", color: "blue", threadId: "t-main", memoryEnabled: true };
 
-  function harness(pages: PublishedPages) {
+  function harness(pages: PublishedPages, plugins: Array<{ name: string; dir: string; scope: string }> = [], asked: Array<[string, string]> = []) {
     bot.id = BOT;
     let proposal: ((input: { title: string; kind: string; content: string; path?: string; pageId?: string }) => unknown) | undefined;
     const deps = {
@@ -215,6 +246,11 @@ describe("the bot's internal routes", () => {
       botOwner: () => "owner",
       markBotRead: () => undefined,
       pageThreadName: () => "Ada",
+      localPrincipalId: () => "pr_owner",
+      scopedPluginFolders: (sender: InternalMemoryBot, person: string) => {
+        asked.push([sender.id, person]);
+        return sender.id === BOT ? plugins : [];
+      },
     } as unknown as InternalMemoryDeps;
     const route = createInternalMemoryRoutes(deps);
     const call = async (path: string, body: Record<string, unknown>, botId = BOT) => {
@@ -256,6 +292,26 @@ describe("the bot's internal routes", () => {
       expect(await propose({ title: "R", kind: "html", content: "", path }), path).toMatchObject({ ok: false });
     }
     expect(pages.list(undefined)).toHaveLength(0);
+  });
+
+  it("#3612: propose_page with path takes a file of the bot's installed plugin, as workspace_read does", async () => {
+    const plugin = mkdtempSync(join(tmpdir(), "sagax-pages-3612-route-"));
+    dirs.push(plugin);
+    mkdirSync(join(plugin, "pages"), { recursive: true });
+    writeFileSync(join(plugin, "pages", "report.html"), SOURCE);
+    writeFileSync(join(plugin, ".hidden.html"), "<p>x</p>");
+    const pages = store();
+    const asked: Array<[string, string]> = [];
+    const { propose } = harness(pages, [{ name: "acme", dir: plugin, scope: "bot" }], asked);
+    const result = await propose({ title: "R", kind: "html", content: "", path: "plugins/acme/pages/report.html" });
+    expect(result).toMatchObject({ ok: true, bytes: Buffer.byteLength(SOURCE), sha256: sha(SOURCE) });
+    expect(Buffer.from(pages.content(result.pageId!, 1)!, "utf8").equals(readFileSync(join(plugin, "pages", "report.html")))).toBe(true);
+    // the calling bot's plugins, for the person of the turn, never another's
+    expect(asked).toEqual([[BOT, "pr_owner"]]);
+    for (const path of ["plugins/acme/.hidden.html", "plugins/acme/../../x", "/workspace/sagax-plugins/acme/pages/report.html", "plugins/other/pages/report.html"]) {
+      expect(await propose({ title: "R", kind: "html", content: "", path }), path).toMatchObject({ ok: false });
+    }
+    expect(await propose({ title: "R", kind: "html", content: "", path: "plugins/acme/pages/missing.html" })).toMatchObject({ ok: false, status: 404 });
   });
 
   it("page_comments source reads exact slices; save_to writes nothing", async () => {

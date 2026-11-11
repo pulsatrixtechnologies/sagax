@@ -638,8 +638,14 @@ export class BotPlugins {
       const key = `${input.plugin}@${input.marketplace}`;
       if (!state.plugins[key] && Object.keys(state.plugins).length >= MAX_PLUGINS) throw new BotPluginError(`A bot can have at most ${MAX_PLUGINS} plugins.`, "too_many", 400);
       const marketRoot = this.options.marketplaces.repoPath(input.marketplace);
-      const manifest = readMarketplaceManifest(marketRoot);
-      const entry = manifest.plugins.find((candidate) => candidate.name === input.plugin);
+      // #3612: an update (the plugin is on this bot already) pulls the
+      // marketplace first, as its Update button does (updateMarketplace):
+      // without it Install copied the old pull again and a copy stayed
+      // versions behind with nothing saying so
+      if (state.plugins[key]) {
+        await this.options.marketplaces.refresh(input.marketplace, actor, { environment: (source) => this.cloneEnvironment(botId, source, actor, {}) });
+      }
+      const entry = readMarketplaceManifest(marketRoot).plugins.find((candidate) => candidate.name === input.plugin);
       if (!entry) throw new BotPluginError("That plugin is not in this marketplace.", "not_found", 404);
       if (entry.source.kind === "path" && market.manifestUrl) {
         throw new BotPluginError("This marketplace was added by the address of its marketplace.json: its plugins' folders cannot be read. Add its repository instead to install a plugin for one bot.", "manifest_only", 422);

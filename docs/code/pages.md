@@ -224,8 +224,13 @@ Keep these rules, covered by `server/pages/published-pages.test.ts`,
   rooms. Choosing "Toute personne ayant le lien" asks a second press.
 - Source from a file (#3488): `propose_page` takes `content` or `path`,
   exactly one. `path` names a UTF-8 file of the calling bot's own workspace,
-  resolved by `readWorkspaceSourceFile` (`resolveWorkspaceFile`: no
-  traversal, no link, no hidden file, never another bot's workspace) and
+  or `plugins/<name>/<file>` of one of its installed plugins (#3612),
+  resolved by `readWorkspaceSourceFile` through `resolveOwnReadable`, the
+  resolver `workspace_read` uses, with the plugin folders of the turn's
+  person (`scopedPluginFolders`): no traversal, no link, no hidden file, no
+  absolute path (the sandbox mount alias included), never another bot's
+  workspace or plugins. A file that is not there is refused; the tool tells
+  the bot that retyping cannot replace it. It is
   read byte for byte under the same 512 KB limit and secret masking as
   inline content. The answer and a source read carry `bytes` and `sha256`
   of the stored source, computed in one place (`pageSourceDigest`) and

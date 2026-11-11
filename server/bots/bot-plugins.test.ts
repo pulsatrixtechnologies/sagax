@@ -297,6 +297,25 @@ describe("BotPlugins", () => {
     expect(reviewer("bot-1")).toMatchObject({ version: "1.3.0", installedVersion: "1.2.0", updateAvailable: true });
   });
 
+  it("#3612: Install of an installed plugin pulls its marketplace first, so a copy many versions behind comes up to date", async () => {
+    const dataDir = temp();
+    const repo = marketplaceRepo();
+    const plugins = botPluginsWithMarketplaces({ dataDir, git: fakeGit({ "https://github.com/acme/tools.git": repo }, []), gitEnvironment: () => ({}), policy: () => undefined });
+    await plugins.addMarketplace("bot-1", { source: "acme/tools" }, "pr_alice");
+    await plugins.install("bot-1", { marketplace: "acme-tools", plugin: "reviewer" }, "pr_alice");
+    // the marketplace moves on; nobody pressed Update on it
+    const manifest = JSON.parse(readFileSync(join(repo, ".claude-plugin/marketplace.json"), "utf8")) as { plugins: Array<Record<string, unknown>> };
+    manifest.plugins[0]!.version = "1.8.0";
+    write(repo, ".claude-plugin/marketplace.json", JSON.stringify(manifest));
+    write(repo, "plugins/reviewer/pages/report.html", "<p>new</p>");
+    // the bot's own update (act plugins install, "also updates")
+    await plugins.install("bot-1", { marketplace: "acme-tools", plugin: "reviewer" }, "pr_alice");
+    expect(plugins.listPlugins("bot-1")[0]).toMatchObject({ version: "1.8.0" });
+    expect(readFileSync(join(dataDir, "bot-plugins", "bot-1", "plugins", "acme-tools", "reviewer", "pages", "report.html"), "utf8")).toBe("<p>new</p>");
+    // another bot's copy changes only on its own update
+    expect(plugins.listPlugins("bot-2")).toEqual([]);
+  });
+
   it("restores a bot package's marketplaces into the one list, without one the organization does not allow", () => {
     const dataDir = temp();
     const plugins = botPluginsWithMarketplaces({ dataDir, gitEnvironment: () => ({}), policy: () => ({ mode: "list", allow: ["acme/*"] }) });

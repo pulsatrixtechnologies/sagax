@@ -48,3 +48,16 @@ export async function withinLimit<T>(work: Promise<T>, limitMs: number, onTimeou
     if (timer) clearTimeout(timer);
   }
 }
+
+/** How long a quiet session lives on the host, counted from the moment
+ * Sagax asked for it (#3492). The end time kept here is the one Sagax asked
+ * Perspicax for (2 hours), but the host ends the session at its first grant
+ * renewal: the grant lives 1 hour (Perspicax `GRANT_TTL_SECONDS`), the host
+ * asks to renew it 30 minutes before its end (sagax-remote-access
+ * `DefaultRenewBefore`), and Perspicax refuses that renewal (the status
+ * call carries no host assertion), so the host stops serving 30 minutes
+ * after it took the session ("closed by the server"), while the row here
+ * still says connected. The session therefore counts as ended at the
+ * earlier of its end time and this. Fixed at the open: a use never pushes
+ * it back. */
+export const HOST_SESSION_LIFE_MS = 30 * 60_000;

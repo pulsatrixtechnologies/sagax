@@ -909,7 +909,7 @@ describe("the person's session on a host (#3393)", () => {
         const { open, close, run } = shared({ endAt: TWO_HOURS, inherited: { [ALICE]: [{ botId: "old-bot", id: "left1" }], [BOB_PERSON]: [{ botId: "other", id: "left2" }] } });
         const out = await run(ALICE, "ember");
         expect(out).not.toHaveProperty("isError");
-        expect(close).toHaveBeenCalledWith(ALICE, "old-bot", "left1");
+        expect(close).toHaveBeenCalledWith(ALICE, "old-bot", "left1", expect.anything());
         expect(close).not.toHaveBeenCalledWith(BOB_PERSON, "other", "left2");
         expect(close.mock.invocationCallOrder[0]!).toBeLessThan(open.mock.invocationCallOrder[0]!);
       });
@@ -926,6 +926,38 @@ describe("the person's session on a host (#3393)", () => {
         } finally {
           vi.useRealTimers();
         }
+      });
+
+      it("a leftover whose gateway close failed is logged and tried again at the next first call, once", async () => {
+        const left = [{ botId: "old-bot", id: "left1" }];
+        const { open, close, run, lines } = shared({ endAt: TWO_HOURS, inherited: { [ALICE]: left } });
+        let tries = 0;
+        close.mockImplementation(async (_p: string, _b: string, id: string, options?: { onGatewayFailed?: () => void }) => {
+          if (id !== "left1") return;
+          tries += 1;
+          if (tries === 1) { options?.onGatewayFailed?.(); return; }
+          left.length = 0;
+        });
+        await run(ALICE, "ember");
+        expect(lines.filter((line) => /gave up closing a session left/.test(line))).toHaveLength(1);
+        expect(lines.join("\n")).not.toMatch(/left1|old-bot|K7QMN/);
+        expect(open).toHaveBeenCalledTimes(1);
+        await run(ALICE, "ember", "uptime", undefined);
+        // the session of this run is still known: no new first call yet
+        expect(tries).toBe(1);
+      });
+
+      it("a stale leftover is cleared with the stale option", async () => {
+        const { close, run } = shared({ endAt: TWO_HOURS, inherited: { [ALICE]: [{ botId: "old-bot", id: "left1", stale: true } as never] } });
+        await run(ALICE, "ember");
+        expect(close).toHaveBeenCalledWith(ALICE, "old-bot", "left1", expect.objectContaining({ stale: true }));
+      });
+
+      it("a stop sends the gateway first", async () => {
+        const { router, close, run } = shared({ endAt: TWO_HOURS });
+        await run(ALICE, "ember");
+        await router.closeAll();
+        expect(close).toHaveBeenCalledWith(ALICE, "ember", "s1", { gatewayFirst: true });
       });
 
       it("the wait that ends while the host already listed a session says so", async () => {
@@ -955,7 +987,7 @@ describe("the person's session on a host (#3393)", () => {
         const { router, close, run } = shared({ endAt: TWO_HOURS });
         await run(ALICE, "ember");
         expect(await router.closeAll()).toBe(1);
-        expect(close).toHaveBeenCalledWith(ALICE, "ember", "s1");
+        expect(close).toHaveBeenCalledWith(ALICE, "ember", "s1", { gatewayFirst: true });
         expect(await router.closeAll()).toBe(0);
       });
 

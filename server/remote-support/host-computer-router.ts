@@ -36,7 +36,7 @@ import {
 } from "./host-computer-vm.ts";
 import type { HostOpenOutcome, HostCodeOutcome, HostsListOutcome, UnattendedHostsViewer, UnattendedSeatTarget } from "./remote-unattended-hosts.ts";
 import { KILL_GRACE_MS, KILL_RELEASE_MS } from "./remote-session-probe.ts";
-import { HOST_GATEWAY_CLOSE_MS, HOST_GATEWAY_LIST_MS, HOST_GATEWAY_OPEN_MS, HOST_OS_READ_WAIT_MAX_MS, withinLimit } from "./host-gateway-bound.ts";
+import { HOST_SESSION_LIFE_MS, HOST_GATEWAY_CLOSE_MS, HOST_GATEWAY_LIST_MS, HOST_GATEWAY_OPEN_MS, HOST_OS_READ_WAIT_MAX_MS, withinLimit } from "./host-gateway-bound.ts";
 import type { RemoteExecResult } from "./remote-sessions.ts";
 import { SESSION_STOP_TIME_MS, TUNNEL_PROBE_TIME_MS, TUNNEL_PROBE_WAIT_MAX_MS, TUNNEL_QUEUE_WAIT_MAX_MS } from "./tunnel-queue.ts";
 
@@ -79,18 +79,7 @@ const TRANSPORT_FAILED = /did not answer \(the tunnel is down or the session end
 
 /** Idle sessions close after this long without a call. */
 export const HOST_SESSION_IDLE_MS = 10 * 60_000;
-/** How long a quiet session lives on the host, counted from the moment
- * Sagax asked for it (#3492). The end time kept here is the one Sagax asked
- * Perspicax for (2 hours), but the host ends the session at its first grant
- * renewal: the grant lives 1 hour (Perspicax `GRANT_TTL_SECONDS`), the host
- * asks to renew it 30 minutes before its end (sagax-remote-access
- * `DefaultRenewBefore`), and Perspicax refuses that renewal (the status
- * call carries no host assertion), so the host stops serving 30 minutes
- * after it took the session ("closed by the server"), while the row here
- * still says connected. The session therefore counts as ended at the
- * earlier of its end time and this. Fixed at the open: a use never pushes
- * it back. */
-export const HOST_SESSION_LIFE_MS = 30 * 60_000;
+export { HOST_SESSION_LIFE_MS };
 /** A session that answered a command (or connected) this recently is sent
  * the next command without asking its tunnel first (#3492). */
 export const HOST_SESSION_FRESH_MS = 60_000;
@@ -224,7 +213,7 @@ interface SessionDeps {
    * command (the audit names it). */
   exec(input: { principalId: string; botId: string; threadId: string; id?: string; command: string; timeoutMs?: number; actor?: string }): Promise<RemoteExecResult | { error: string }>;
   screen(principalId: string, botId: string, id: string): Promise<Buffer | null>;
-  close(principalId: string, botId: string, id: string): Promise<unknown>;
+  close(principalId: string, botId: string, id: string, options?: { gatewayFirst?: boolean; stale?: boolean; onGatewayFailed?: () => void }): Promise<unknown>;
   markQuiet(id: string): void;
   /** Whether the session's tunnel still answers (one ping in the tunnel's
    * queue, #3492): null when it could not be asked. */
@@ -232,7 +221,7 @@ interface SessionDeps {
   /** The person's bot-computer sessions an earlier run of this server left
    * connected (#3564): their support code is in the session store, so
    * `close` ends them at the gateway like any other. */
-  inherited?(principalId: string): { botId: string; id: string }[];
+  inherited?(principalId: string): { botId: string; id: string; stale?: boolean }[];
 }
 
 interface HostsDeps {
@@ -487,7 +476,11 @@ export function createHostComputerRouter(deps: {
     const left = deps.sessions.inherited?.(principalId) ?? [];
     if (!left.length) return;
     log(`host-computer: closing ${left.length} session(s) left by an earlier run of this server`);
-    await withinLimit(Promise.all(left.map((one) => Promise.resolve(deps.sessions.close(principalId, one.botId, one.id)).catch(() => null))), HOST_LEFTOVER_CLOSE_MS, null);
+    // a session past its life needs no gateway close and no stop command: it is cleared at once
+    await withinLimit(Promise.all(left.map((one) => Promise.resolve(deps.sessions.close(principalId, one.botId, one.id, {
+      ...(one.stale ? { stale: true } : {}),
+      onGatewayFailed: () => log("host-computer: gave up closing a session left by an earlier run at the gateway; one more try at the next first call"),
+    })).catch(() => null))), HOST_LEFTOVER_CLOSE_MS, null);
   }
 
   /** At a server stop: close every session this run holds (#3564), bounded. */
@@ -495,7 +488,7 @@ export function createHostComputerRouter(deps: {
     const all = [...open.values()];
     open.clear();
     if (all.length) log(`host-computer: server stopping, closing ${all.length} session(s)`);
-    await withinLimit(Promise.all(all.map((row) => Promise.resolve(deps.sessions.close(row.principalId, row.botId, row.sessionId)).catch(() => null))), HOST_LEFTOVER_CLOSE_MS, null);
+    await withinLimit(Promise.all(all.map((row) => Promise.resolve(deps.sessions.close(row.principalId, row.botId, row.sessionId, { gatewayFirst: true })).catch(() => null))), HOST_LEFTOVER_CLOSE_MS, null);
     return all.length;
   }
 

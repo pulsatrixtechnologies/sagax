@@ -107,6 +107,18 @@ export function createSetupStartTurn(host: StartTurnHost) {
     const perspicaxPrepared = IDENTITY.kind === "perspicax" && state.instance.adapter.capabilities.customMcp === true
       ? perspicaxTurnPrepare({ bot: state.bot, threadId: state.threadId, generation: state.dispatchClaimId, speaker: state.speaker, ...(state.warmOnly ? { quiet: true } : {}) })
       : null;
+    // #3510: the MCP sign-in refresh and the remote servers' probe wait on
+    // the network and need only the bot: start them beside compaction and
+    // context selection too, and await them where the mounts are read.
+    const customMcpPrepared = state.instance.adapter.capabilities.customMcp === true && !state.opts?.compactOnly
+      ? (async () => {
+        await refreshMcpOAuth(state.bot);
+        if (!state.warmOnly) turnTrace(state.threadId, "oauth-refreshed");
+        await prepareMcpServers(state.bot);
+      })()
+      : null;
+    // a turn cancelled before the mounts still settles it, never unhandled
+    customMcpPrepared?.catch(() => {});
     // Let an in-flight early prepare finish so revoke/endGeneration can see
     // what it opened (a cancelled turn must still release those entries).
     const settlePerspicaxPrepare = async () => {
@@ -415,9 +427,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     // driver that can mount them. Their tools are
     // never pre-allowed, so every call rides the normal permission flow.
     if (state.instance.adapter.capabilities.customMcp === true) {
-      await refreshMcpOAuth(state.bot);
-      if (!state.warmOnly) turnTrace(state.threadId, "oauth-refreshed");
-      await prepareMcpServers(state.bot);
+      await customMcpPrepared;
       const mounted = mcpServersAsPerson(state.bot, orgSpeakerPrincipal(state.bot, state.speaker), state.threadId);
       attachCustomMcp(state.integrations, mounted.servers, cfg);
       state.githubWithheld = mounted.githubWithheld;

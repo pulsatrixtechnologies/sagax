@@ -11,6 +11,7 @@ import { dispatchedConnectorPlan } from "../connectors/turn-plan.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 import { warmCachePrime } from "./warm-cache-prime.ts";
+import { stablePromptSections } from "../system-prompt.ts";
 import { soloPiTurnAccess } from "../pi-own-model-servers-access.ts";
 
 export function createDispatchStartTurn(host: StartTurnHost) {
@@ -199,6 +200,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       systemStable: state.prompt.stable,
       systemVolatile: state.prompt.volatile,
       systemVolatileSections: state.prompt.volatileSections,
+      ...(() => { const sections = stablePromptSections(state.prompt); return sections ? { systemStableSections: sections } : {}; })(),
       // the mentions half describes this turn: identical consecutive tags
       // must still deliver their note (SendTurnInput.mentionTurn)
       // and so does an interrupted call turn's marker

@@ -8,6 +8,7 @@ import type { GroupMemberTurnCtx } from "./group-member-turn-ctx.ts";
 import { roomSubagentModel } from "./group-member-turn-room-model.ts";
 import { dispatchedConnectorPlan } from "../connectors/turn-plan.ts";
 import { soloPiTurnAccess } from "../pi-own-model-servers-access.ts";
+import { stablePromptSections } from "../system-prompt.ts";
 
 export function createGuardRoomMemberDispatch(host: GroupMemberTurnHost) {
   const {
@@ -292,6 +293,7 @@ const sendRoomTurn = async (roomTurnAccess: TurnAccess | undefined) => {
         systemStable: roomSystem.stable,
         systemVolatile: roomSystem.volatile,
         systemVolatileSections: roomSystem.volatileSections,
+        ...(() => { const sections = stablePromptSections(roomSystem); return sections ? { systemStableSections: sections } : {}; })(),
         cwd,
         ...(toolResultFolder ? { toolResultFolder } : {}),
         integrations,

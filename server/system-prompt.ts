@@ -201,6 +201,14 @@ export function buildSystemPrompt(
   };
 }
 
+/** The stable half by section (id and text, in prompt order): every section
+ * the volatile half does not carry. */
+export function stablePromptSections(prompt: { sections?: ReadonlyArray<{ id: string; text: string }>; volatileSections?: ReadonlyArray<{ id: string }> }): Array<{ id: string; text: string }> | undefined {
+  if (!prompt.sections) return undefined;
+  const volatile = new Set((prompt.volatileSections ?? []).map((section) => section.id));
+  return prompt.sections.filter((section) => !volatile.has(section.id)).map(({ id, text }) => ({ id, text }));
+}
+
 // The "box*" prompt kinds are Boat's historical kind literals; events and
 // persisted surfaces carry them, so only prose was renamed.
 export type ComputerPromptKind = "vm-private" | "vm-shared" | "box" | "vps" | "local";

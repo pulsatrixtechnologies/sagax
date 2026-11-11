@@ -33,6 +33,14 @@ describe("waitForGrokMcpSettled", () => {
     expect(await waitForGrokMcpSettled(async () => { throw new Error("no such method"); }, "s", 5_000)).toBe(false);
     expect(await waitForGrokMcpSettled(async () => ({ result: { sessionMcpResolved: false, servers: [] } }), "s", 250)).toBe(false);
   });
+  it("stops before the budget when the caller reads the start as stalled", async () => {
+    let calls = 0;
+    const request = async () => { calls += 1; return { result: { sessionMcpResolved: true, servers: [{ name: "p", session: { enabled: true, status: "initializing" } }] } }; };
+    const started = Date.now();
+    expect(await waitForGrokMcpSettled(request, "s", 20_000, undefined, () => calls >= 2)).toBe(false);
+    expect(calls).toBe(2);
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
 });
 
 describe("grok MCP settle cache across reused turns", () => {

@@ -1,11 +1,8 @@
 import type { SidebarState } from "./types";
-import { ChevronRight, Eye, EyeOff } from "lucide-react";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, type ReactNode } from "react";
 import type { Bot, Group } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { showInSidebar } from "@/lib/sidebar-hidden";
-import type { hiddenSidebarRows } from "@/lib/sidebar-hidden-entries";
 import {
   BOT_CHATS_SECTION_ID,
   BUILT_IN_SECTION_ID,
@@ -22,41 +19,6 @@ import { MIN_QUERY } from "../SearchResults";
 import type { SidebarDensity } from "@/lib/sidebar-preferences";
 import { GENERAL_SECTION_ID, isAutomaticSidebarSection, sectionLabel } from "./helpers";
 import type { MenuState, SectionListDrag, SelectionFor, TeamMapEntry } from "./types";
-
-/** The "Hidden (N)" row at the foot of the list: closed by default; each
- * entry comes back with Show. */
-export function HiddenEntriesRow({ rows }: { rows: ReturnType<typeof hiddenSidebarRows> }) {
-  const [open, setOpen] = useState(false);
-  if (!rows.length) return null;
-  return (
-    <div data-sidebar-hidden className="mt-3 flex flex-col gap-0.5">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        className="flex items-center gap-1.5 rounded-md px-2 py-1 text-left text-[12px] font-medium text-sidebar-ink-secondary hover:text-sidebar-ink"
-      >
-        <ChevronRight aria-hidden="true" size={12} className={cn("transition-transform", open && "rotate-90")} />
-        <EyeOff aria-hidden="true" size={12} />
-        {t("sidebar.hidden.title", { count: rows.length })}
-      </button>
-      {open && rows.map((row) => (
-        <div key={row.key} data-sidebar-hidden-row={row.key} className="flex items-center gap-2 rounded-md py-1 pl-7 pr-1 text-[13px] text-sidebar-ink-secondary hover:bg-sidebar-hover">
-          <span className="min-w-0 flex-1 truncate">{row.name}</span>
-          <button
-            type="button"
-            onClick={() => showInSidebar(row.key)}
-            aria-label={t("sidebar.hidden.showNamed", { name: row.name })}
-            className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[12px] text-sidebar-ink hover:bg-sidebar-selected"
-          >
-            <Eye aria-hidden="true" size={12} />
-            {t("sidebar.hidden.show")}
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 type BotRowProps = {
   bot: Bot;
@@ -108,7 +70,6 @@ export function SidebarSectionList({
   teamMenuReturn,
   setTeamMenu,
   drag,
-  hiddenRows,
   renderBot,
   renderGroup,
 }: {
@@ -142,7 +103,6 @@ export function SidebarSectionList({
   teamMenuReturn: React.MutableRefObject<HTMLElement | null>;
   setTeamMenu: (value: { name: string; x: number; y: number }) => void;
   drag: SectionListDrag;
-  hiddenRows: ReturnType<typeof hiddenSidebarRows>;
   renderBot: (props: BotRowProps) => ReactNode;
   renderGroup: (props: GroupRowProps) => ReactNode;
 }) {
@@ -339,7 +299,6 @@ export function SidebarSectionList({
         );
       })()}
 
-      {density !== "icons" && <HiddenEntriesRow rows={hiddenRows} />}
     </div>
   );
 }

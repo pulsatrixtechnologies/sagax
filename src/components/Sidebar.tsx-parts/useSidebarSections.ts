@@ -3,7 +3,7 @@ import type { SidebarState } from "./types";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { api, type Bot, type Group } from "@/state/store";
 import { useHeldMenuMotion } from "../MenuMotion";
-import { useOrgPeople, usePerspicaxOrg } from "@/lib/perspicax-org";
+import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import {
   entriesToUnhide,
   hiddenKey,
@@ -93,7 +93,6 @@ export function useSidebarSections({
   const perspicaxOrg = usePerspicaxOrg();
   const orgMode = perspicaxOrg !== null;
   const sidebarHidden = useSidebarHidden();
-  const sidebarPeople = useOrgPeople();
   // A new message brings a hidden entry back, per the person's setting
   // (people on, bots off by default; Settings > Appearance).
   useEffect(() => {
@@ -215,7 +214,6 @@ export function useSidebarSections({
     shareTeamAnchor,
     orgMode,
     sidebarHidden,
-    sidebarPeople,
     orgMenu,
     setOrgMenu,
     sectionEdit,

@@ -1,5 +1,5 @@
 // The sidebar's lists once a person's hidden entries (src/lib/sidebar-hidden.ts)
-// are applied, and the names the "Hidden" row and Settings show for them.
+// are applied, and the names Settings > Appearance lists them under.
 import type { Bot, Group } from "@/state/store";
 import { peopleDmPeer } from "@/lib/people-dm";
 import { hiddenKey, type HiddenEntry } from "@/lib/sidebar-hidden";
@@ -30,8 +30,9 @@ export function withoutHiddenEntries<B extends Bot, G extends Group>(bots: reado
   };
 }
 
-/** The hidden entries as the "Hidden" row lists them: the bots and groups that
- * still exist, with their names. A closed person conversation is not listed. */
+/** The hidden entries as Settings > Appearance > Hidden from the sidebar
+ * lists them: the bots and groups that still exist, with their names. A
+ * closed person conversation is not listed. */
 export function hiddenSidebarRows(
   items: readonly HiddenEntry[],
   input: { bots: readonly Bot[]; groups: readonly Group[]; viewerId: string; people: ReadonlyMap<string, { name: string; login: string }> },

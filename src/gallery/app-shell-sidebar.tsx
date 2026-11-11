@@ -8,7 +8,9 @@
  * the conversation's one line, the model picker's dot at its limit, and an
  * older server's send-state still answering the limit as a block, which the
  * message box ignores. ?blocked=connect is the neighbouring state, an engine
- * not connected, which keeps its bar. */
+ * not connected, which keeps its bar.
+ * #3576: ?hidden=N adds N bots the person hid from the sidebar; the sidebar
+ * draws nothing for them (Settings > Appearance lists them). */
 import { StrictMode, useCallback, useMemo, useReducer, useState } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -103,13 +105,23 @@ const team: Bot[] = [
   bot("lina", "Lina", { title: fr ? "Juridique" : "Legal", color: "purple", mascotBody: "circle", section: "My team" }, fr ? "Aucune routine restante." : "No routine left.", 130),
   bot("veille", fr ? "Veille" : "Watch", { color: "blue", mascotBody: "capsule" }, fr ? "Trois avis à lire." : "Three advisories to read.", 320),
 ];
+// ?hidden=N (#3576): N more bots, each hidden from the sidebar.
+const hiddenTeam: Bot[] = Array.from({ length: Math.min(Number(params.get("hidden")) || 0, 30) }, (_, i) =>
+  bot(`hidden-${i + 1}`, `Tester ${i + 1}`, { color: "blue", mascotBody: "circle" }, fr ? "Rien de neuf." : "Nothing new.", 400 + i));
+if (hiddenTeam.length) {
+  try {
+    localStorage.setItem("sagax.sidebarHidden.v1", JSON.stringify({ items: hiddenTeam.map((entry, i) => ({ kind: "bot", id: entry.id, at: i + 1 })), unhideOnMessage: { people: true, bots: false } }));
+  } catch {
+    // a private window: nothing hidden
+  }
+}
 const start: AppState = {
   ...initialState,
   connected: true,
   hydrated: true,
   selectedId: "atlas",
   config: { profile: { name: "Alex Gagnon" } } as AppState["config"],
-  bots: team,
+  bots: [...team, ...hiddenTeam],
   sections: ["My team"],
   // ?panel=1 opens the bot panel beside the chat, as App.tsx docks it (#2141).
   settingsOpen: params.get("panel") === "1",

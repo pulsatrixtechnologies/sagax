@@ -3,7 +3,6 @@ import type { AppState, Bot, Group } from "@/state/store";
 import type { SectionItemKind } from "@/lib/personal-sections";
 import type { SectionDropPlace } from "@/lib/sidebar-layout";
 import type { SidebarDensity } from "@/lib/sidebar-preferences";
-import type { hiddenSidebarRows } from "@/lib/sidebar-hidden-entries";
 
 /** State read by the sidebar's prop-only layout helpers. */
 export type SidebarState = Pick<AppState, "activeView" | "bots" | "groups" | "config" | "instances" | "pendingQueued" | "sections" | "selectedId">;
@@ -91,5 +90,4 @@ export type SidebarSectionListProps = {
   teamMenuReturn: RefObject<HTMLElement | null>;
   setTeamMenu: (value: { name: string; x: number; y: number }) => void;
   drag: SectionListDrag;
-  hiddenRows: ReturnType<typeof hiddenSidebarRows>;
 };

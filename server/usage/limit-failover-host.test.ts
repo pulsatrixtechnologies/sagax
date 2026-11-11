@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ENGINE_REFUSAL_TTL_MS, type EngineRefusal } from "../engines/engine-refusals.ts";
 
@@ -15,8 +18,8 @@ const NAMES: Record<string, string> = { claude: "Claude", codex: "Codex", grok: 
 const LIMIT = "You've hit your usage limit. Try again in 2 hours.";
 
 /** A small world: one bot, one thread, the engines this speaker may use. */
-function world(options: { allowed?: string[]; preferred?: Array<{ instanceId: string; model?: string }>; busy?: boolean } = {}) {
-  const clock = { now: Date.UTC(2026, 9, 19, 16, 0) };
+function world(options: { allowed?: string[]; preferred?: Array<{ instanceId: string; model?: string }>; busy?: boolean; file?: string; now?: number } = {}) {
+  const clock = { now: options.now ?? Date.UTC(2026, 9, 19, 16, 0) };
   const state = {
     selection: { ...A } as ModelSelection,
     lines: [] as Array<{ threadId: string; line: LimitFailoverLine; replaced?: string }>,
@@ -29,7 +32,7 @@ function world(options: { allowed?: string[]; preferred?: Array<{ instanceId: st
     switches: [] as ModelSelection[],
   };
   const allowed = options.allowed ?? ["claude", "codex", "grok"];
-  const store = new LimitFailoverStore({ file: null, now: () => clock.now });
+  const store = new LimitFailoverStore({ file: options.file ?? null, now: () => clock.now });
   const timers: Array<{ at: number; run: () => void; cancelled: boolean }> = [];
   const refusals = new Map<string, EngineRefusal>();
   const deps: LimitFailoverHostDeps = {
@@ -272,9 +275,12 @@ describe("a turn its engine's limit refused", () => {
     expect(w.store.blockedUntil("server", "codex")).not.toBeNull();
   });
 
-  // #1942: primary + backup both limited, nothing left → exhausted (failed), not silent done.
-  it("marks the turn exhausted when a second spent engine has no further backup (#1942)", async () => {
+  // #1942: primary + backup both limited, nothing left: never a silent done.
+  // #3530: the message is kept and goes again at the soonest reset, once, as
+  // with one engine; only a second refusal after that resend is exhausted.
+  it("keeps the message for the soonest reset when the backup refuses too, then sends it again once (#1942, #3530)", async () => {
     const w = world({ allowed: ["claude", "codex"] });
+    w.host.start();
     w.dispatch();
     w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT });
     await w.host.idle();
@@ -283,11 +289,74 @@ describe("a turn its engine's limit refused", () => {
     w.state.request = { messageId: "m1", turnId: "turn-2", origin: { kind: "user" } };
     w.host.turnFailed({ threadId: "thread", turnId: "turn-2", cause: "429 Too Many Requests; retry-after: 600" });
     await w.host.idle();
-    expect(w.state.lines.at(-1)!.line).toMatchObject({
-      kind: "exhausted",
-      tried: expect.arrayContaining(["Claude", "Codex"]),
-    });
+    // Codex, standing in, resets first (10 minutes, Claude in 2 hours).
+    const line = w.state.lines.at(-1)!.line;
+    expect(line).toMatchObject({ kind: "waiting", from: "Codex" });
+    const resetsAt = (line as { resetsAt: number }).resetsAt;
+    expect(resetsAt).toBeLessThan(w.clock.now + 2 * 3_600_000);
+    expect(w.store.resumes()).toEqual([expect.objectContaining({ kind: "message", messageId: "m1", engine: "codex", at: resetsAt + w.store.afterResetMs })]);
     expect(w.state.switches).toEqual([B]);
+    expect(w.state.resent).toEqual([{ messageId: "m1", on: B }]);
+    w.clock.now = resetsAt + w.store.afterResetMs;
+    await w.host.tick();
+    await w.host.tick();
+    expect(w.state.resent).toEqual([{ messageId: "m1", on: B }, { messageId: "m1", on: B }]);
+    // Refused again after that resend: nothing is held now, the line says so.
+    w.dispatch(B);
+    w.state.request = { messageId: "m1", turnId: "turn-3", origin: { kind: "user" } };
+    w.host.turnFailed({ threadId: "thread", turnId: "turn-3", cause: "429 Too Many Requests; retry-after: 600" });
+    await w.host.idle();
+    expect(w.store.resumes()).toEqual([]);
+    expect(w.state.lines.at(-1)!.line).toMatchObject({ kind: "exhausted", tried: expect.arrayContaining(["Claude", "Codex"]) });
+    w.host.stop();
+  });
+
+  // #3530: a turn refused while no dispatch was recorded still leaves the
+  // one line, so a waiting client reads it as unanswered.
+  it("leaves the one line for a refused turn Sagax never saw dispatched (#3530)", async () => {
+    const w = world();
+    expect(w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT, engine: "claude" })).toBe(true);
+    expect(w.state.lines).toEqual([{ threadId: "thread", replaced: "turn-1", line: { kind: "exhausted", tried: ["Claude"], resetsAt: w.clock.now + 2 * 3_600_000 } }]);
+    w.host.noteError("thread", "Your credit balance is too low to access the API.", undefined);
+    expect(w.host.turnFailed({ threadId: "thread", turnId: "turn-2", cause: undefined, stopReason: "quota", engine: "codex" })).toBe(true);
+    expect(w.state.lines.at(-1)).toEqual({ threadId: "thread", replaced: "turn-2", line: { kind: "exhausted", tried: ["Codex"], cause: "credits" } });
+    expect(w.host.turnFailed({ threadId: "thread", turnId: "turn-3", cause: "401 Unauthorized", engine: "codex" })).toBe(false);
+    expect(w.state.resent).toEqual([]);
+  });
+
+  it("sends a message both engines refused again once across a restart (#3530)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "limit-held-"));
+    try {
+      const file = join(dir, "limit-failovers.json");
+      const before = world({ allowed: ["claude", "codex"], file });
+      before.dispatch();
+      before.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT });
+      await before.host.idle();
+      before.dispatch(B);
+      before.state.request = { messageId: "m1", turnId: "turn-2", origin: { kind: "user" } };
+      before.host.turnFailed({ threadId: "thread", turnId: "turn-2", cause: "You've hit your usage limit. Try again in 5 hours." });
+      await before.host.idle();
+      // Claude resets first now (2 hours): the message waits for it.
+      expect(before.state.lines.at(-1)!.line).toMatchObject({ kind: "waiting", from: "Codex", home: "Claude", resetsAt: before.clock.now + 2 * 3_600_000 });
+      const due = before.clock.now + 2 * 3_600_000 + before.store.afterResetMs;
+      // The server restarts before the reset.
+      const after = world({ allowed: ["claude", "codex"], file, now: before.clock.now });
+      after.state.selection = { ...B };
+      after.host.start();
+      expect(after.store.resumes()).toEqual([expect.objectContaining({ kind: "message", messageId: "m1", engine: "claude", at: due })]);
+      after.clock.now = due;
+      await after.host.tick();
+      expect(after.state.resent.map((sent) => sent.messageId)).toEqual(["m1"]);
+      after.host.stop();
+      // And again after a second restart: it was sent, never twice.
+      const again = world({ allowed: ["claude", "codex"], file, now: due + 60_000 });
+      again.host.start();
+      await again.host.tick();
+      expect(again.state.resent).toEqual([]);
+      again.host.stop();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("surfaces exhausted when the backup switch records but resend does not start (#1942)", async () => {
@@ -1086,8 +1155,9 @@ describe("a turn whose backup standing in for the conversation's own engine is r
     w.host.turnFailed({ threadId: "thread", turnId: "turn-2", cause: LIMIT_5H });
     await w.host.idle();
     const claudeReset = w.clock.now + 2 * HOUR;
+    // #3530: the line says the message waits and goes again, as it does.
     expect(w.state.lines.at(-1)).toEqual({ threadId: "thread", replaced: "turn-2",
-      line: { kind: "exhausted", tried: ["Claude", "Codex"], resetsAt: claudeReset } });
+      line: { kind: "waiting", from: "Codex", home: "Claude", resetsAt: claudeReset } });
     expect(w.store.resumes()).toEqual([expect.objectContaining({ kind: "message", messageId: "m1", engine: "claude", at: claudeReset + w.store.afterResetMs })]);
     // At Claude's reset the conversation is back on Claude, though Codex is still held, and the message goes there.
     w.clock.now = claudeReset + w.store.afterResetMs;
@@ -1108,7 +1178,7 @@ describe("a turn whose backup standing in for the conversation's own engine is r
     await onStandIn(waiting, { first: "You've hit your usage limit." });
     waiting.host.turnFailed({ threadId: "thread", turnId: "turn-2", cause: LIMIT_5H });
     await waiting.host.idle();
-    expect(waiting.state.lines.at(-1)!.line).toEqual({ kind: "exhausted", tried: ["Claude", "Codex"], resetsAt: waiting.clock.now + HOUR });
+    expect(waiting.state.lines.at(-1)!.line).toEqual({ kind: "waiting", from: "Codex", home: "Claude", resetsAt: waiting.clock.now + HOUR, estimated: true });
   });
 
   it("still says whose limit it is when the bot owner's plan pays for a member's turn (J4)", async () => {
@@ -1121,7 +1191,7 @@ describe("a turn whose backup standing in for the conversation's own engine is r
     await onStandIn(waiting, { owner: true });
     waiting.host.turnFailed({ threadId: "thread", turnId: "turn-2", cause: LIMIT_5H });
     await waiting.host.idle();
-    expect(waiting.state.lines.at(-1)!.line).toEqual({ kind: "exhausted", tried: ["Claude", "Codex"], resetsAt: waiting.clock.now + 2 * HOUR, owner: true });
+    expect(waiting.state.lines.at(-1)!.line).toEqual({ kind: "waiting", from: "Codex", home: "Claude", resetsAt: waiting.clock.now + 2 * HOUR, owner: true });
   });
 
   it("names them too when that backup is known to be held before the next turn, and returns at the own engine's reset", async () => {
@@ -1232,8 +1302,9 @@ describe("a turn whose backup standing in for the conversation's own engine is r
     waiting.host.turnFailed({ threadId: "thread", turnId: "turn-2", cause: LIMIT });
     await waiting.host.idle();
     expect(waiting.state.selection).toEqual(B);
-    expect(waiting.state.lines.at(-1)!.line).toEqual({ kind: "exhausted", tried: ["Claude", "Codex"], resetsAt: waiting.clock.now + 3 * HOUR });
-    expect(waiting.store.resumes()).toEqual([expect.objectContaining({ kind: "message", engine: "claude", at: waiting.clock.now + 3 * HOUR + waiting.store.afterResetMs })]);
+    // #3530: Codex, standing in, resets first (2 h, Claude's model in 3 h): the message goes again there then.
+    expect(waiting.state.lines.at(-1)!.line).toEqual({ kind: "waiting", from: "Codex", resetsAt: waiting.clock.now + 2 * HOUR });
+    expect(waiting.store.resumes()).toEqual([expect.objectContaining({ kind: "message", engine: "codex", at: waiting.clock.now + 2 * HOUR + waiting.store.afterResetMs })]);
     // Within the minute after that model's reset, its limit is over: the stand-in's next refusal sends it back there.
     waiting.clock.now += 3 * HOUR + 30_000;
     waiting.dispatch(waiting.state.selection);

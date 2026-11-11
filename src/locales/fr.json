@@ -13914,6 +13914,8 @@
   "limitFailover.ownerExhaustedNoTime": "Le propriétaire de ce bot a atteint ses limites sur {tried} : aucun autre moteur n'a pu répondre. Choisis un autre modèle, ajoute du crédit, ou réessaie plus tard.",
   "limitFailover.credits": "{engine} n'a plus de crédit, alors ce message n'a pas eu de réponse. Ajoute du crédit chez le fournisseur, ou change de moteur dans le sélecteur de modèle.",
   "limitFailover.ownerCredits": "Le propriétaire de ce bot n'a plus de crédit sur {engine}, alors ce message n'a pas eu de réponse. Ajoute du crédit chez le fournisseur, ou change de moteur dans le sélecteur de modèle.",
+  "limitFailover.autoContinued": "{from} a atteint sa limite d'utilisation pendant ce tour : Auto a continué le même tour sur un autre modèle qui fonctionne, avec les étapes déjà faites ; {from} sera choisi de nouveau à la réinitialisation de sa limite (vers {time}).",
+  "limitFailover.autoContinuedNoReset": "{from} a atteint sa limite d'utilisation pendant ce tour sans donner d'heure de réinitialisation : Auto a continué le même tour sur un autre modèle qui fonctionne, avec les étapes déjà faites ; {from} sera réessayé vers {time}.",
   "routineReadiness.flow_plan": "La vérification Flow en shadow a échoué à {step} : {error}",
   "routineReadiness.ready.flow": "Le plan Flow en shadow n’a aucun blocage connu. Lance la routine quand tu es prêt.",
   "routineReadiness.flow_live": "Un run Flow est actif, le plan n’a pas été vérifié.",

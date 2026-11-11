@@ -2,11 +2,13 @@ import { ENGINE_EXITED_SENTENCE, isEngineExitedBeforeReply } from "../shared/eng
 import { failedTurnCause, failedTurnRepeatsReply, failedTurnTool } from "../shared/failed-turn.ts";
 import { TURN_NOT_RESUMED } from "../shared/restart-words.ts";
 import { restartCauseNotResumed, restartPendingRow } from "./turns/restart-line-words.ts";
-import { botTextIn, serverLineIn } from "./people/person-words.ts";
+import { botTextIn, readerLanguage, serverLineIn } from "./people/person-words.ts";
 import type { RunStatusNote } from "../shared/person-attention.ts";
 import { clipReadable, withoutRoutineMarkers, withoutRunMarkers } from "../shared/routine-result.ts";
 import { routineRunFallbackText } from "./routines/routine-run-card.ts";
 import type { RoutineRunCardData } from "../shared/routine-run.ts";
+import { AFTER_RESET_MS, limitLinePlainWords, limitLineUnanswered, type LimitFailoverLine } from "../shared/limit-failover.ts";
+import { limitLineText } from "./usage/limit-line.ts";
 import { redactSecretsInText } from "../shared/redact.ts";
 import { parseRoutineEffort } from "../shared/routine-effort.ts";
 import { parseRoutineGoal } from "../shared/routine-goal.ts";
@@ -356,7 +358,10 @@ export interface StoredMessage {
   text?: string;
   at: number;
   sender?: string | null;
-  tool?: { name?: string; ok?: boolean; output?: string } | null;
+  /** `limitFailover`: the usage-limit line this row is (#3530). */
+  tool?: { name?: string; ok?: boolean; output?: string; limitFailover?: LimitFailoverLine } | null;
+  /** false: the row ended a failed turn (a limit's words an engine said too). */
+  turnSucceeded?: boolean;
   /** image: an attached image the agent API can hand over
    * (read_transcript_attachment, #3203); inline: carried by a tag in the
    * text, so it is not listed again in files. */
@@ -599,6 +604,12 @@ export interface TurnResult {
    * interrupted, resumed false: the person sends the request again). */
   interrupted?: boolean;
   resumed?: boolean;
+  /** #3530: what interrupted it: a server restart (#3217), a usage limit no
+   * engine could answer under, or an engine out of credit. */
+  reason?: "restart" | "usage_limit" | "credits";
+  /** #3530: reason usage_limit: when the limit resets (ISO 8601, UTC). Held
+   * (finished false), the server sends the message again then by itself. */
+  resets_at?: string;
   /** #3008: status failed: why the turn ended without its answer, in plain words. */
   error?: string;
   /** When finished is false after a wait: progress so far and where to resume. */
@@ -618,6 +629,9 @@ const ANCHOR_SLACK_MS = 1_000;
 
 /** #2922: a card under model review: wait this long before looking again. */
 export const AWAIT_REVIEW_WAIT_MS = 3_000;
+/** #3530: how long after a held message's reset (and the minute after it)
+ * its resend may take to start before await_turn reads it as not answered. */
+export const LIMIT_RESEND_START_MS = 5 * 60_000;
 /** #3217: how long after a restart's note a cut turn may stay unanswered
  * before await_turn reads it as not resumed: the start's resume watch
  * (server/index-leaves/resumeTurnsCutByRestart.ts) ends well before. */
@@ -858,7 +872,10 @@ export function toEntry(threadId: string, message: StoredMessage, language?: str
     const failed = message.tool?.ok === false;
     // #3217, #3515: a server line in the person's language, as the app shows it
     const cause = failed ? failedTurnCause(stored) : null;
-    const name = cause !== null ? failedTurnTool(serverLineIn(language, cause)).name : serverLineIn(language, stored);
+    // #3530: a usage-limit line in the reader's language and clock
+    const limit = message.tool?.limitFailover ? limitLineText(message.tool.limitFailover, { language: readerLanguage(language), timeZone }) : null;
+    const name = limit !== null ? (failed ? failedTurnTool(limit).name : limit)
+      : cause !== null ? failedTurnTool(serverLineIn(language, cause)).name : serverLineIn(language, stored);
     const error = failed && typeof message.tool?.output === "string" ? serverLineIn(language, redactSecretsInText(message.tool.output.trim().replace(/\s+/g, " "))) : "";
     // #3515: shortened at a sentence, never in the middle of a word
     return { ...base, kind: "tool", text: clipReadable(`${name}${failed ? (error ? ` (failed): ${error}` : " (failed)") : ""}`, TOOL_ENTRY_MAX) };
@@ -978,9 +995,9 @@ function turnFailureWords(cause: string): string {
  * text, the words after the turn's last tool call. */
 type TurnRestart = "pending" | "resumed" | "not_resumed" | null;
 
-function turnReply(messages: readonly StoredMessage[], anchor: { id: string | null; at: number }, language?: string): { reply: string; sawAnchor: boolean; failed: string | null; followUp: "answer" | "text" | null; answerNotStartedAt: number | null; restart: TurnRestart; restartAt: number | null } {
+function turnReply(messages: readonly StoredMessage[], anchor: { id: string | null; at: number }, language?: string): { reply: string; sawAnchor: boolean; failed: string | null; followUp: "answer" | "text" | null; answerNotStartedAt: number | null; restart: TurnRestart; restartAt: number | null; limit: LimitFailoverLine | null } {
   const start = turnAnchorIndex(messages, anchor);
-  if (start < 0) return { reply: "", sawAnchor: false, failed: null, followUp: null, answerNotStartedAt: null, restart: null, restartAt: null };
+  if (start < 0) return { reply: "", sawAnchor: false, failed: null, followUp: null, answerNotStartedAt: null, restart: null, restartAt: null, limit: null };
   // #3217: a server restart cut this turn: "pending" from the stop's note
   // (or the resuming step) until the resumed turn's words ("resumed") or a
   // row saying it did not resume ("not_resumed"). The words written before
@@ -999,6 +1016,11 @@ function turnReply(messages: readonly StoredMessage[], anchor: { id: string | nu
   // #3056: the time of an ask_choice answer line with no bot row after it
   // yet: the answer's own turn may not have started.
   let answerNotStartedAt: number | null = null;
+  // #3530: the conversation's usage-limit line that left this turn
+  // unanswered (no engine could answer, or out of credit), until words of an
+  // answer come after it (the held message, sent again at the reset). Its
+  // plain words, when an engine's own failed text repeats them, are no reply.
+  let limit: { line: LimitFailoverLine; words: string } | null = null;
   for (const message of messages.slice(start + 1)) {
     if (message.role === "user" && (message.kind ?? "text") === "text") {
       // #2922: the person's answer to a card is part of this turn: the reply
@@ -1031,6 +1053,16 @@ function turnReply(messages: readonly StoredMessage[], anchor: { id: string | nu
         lastRun = [];
         continue;
       }
+      const limitLine = message.tool?.limitFailover;
+      if (limitLine && limitLineUnanswered(limitLine) && typeof message.tool?.name === "string") {
+        // the words before it are progress, never the reply
+        limit = { line: limitLine, words: limitLinePlainWords(message.tool.name) };
+        run = [];
+        lastRun = [];
+        failed = null;
+        restart = null;
+        continue;
+      }
       if (run.length) lastRun = run;
       run = [];
       const cause = message.tool?.ok === false && typeof message.tool.name === "string" ? failedTurnCause(message.tool.name) : null;
@@ -1045,6 +1077,8 @@ function turnReply(messages: readonly StoredMessage[], anchor: { id: string | nu
     }
     // #3515: a failed or partial status the row ended on is said, never lost
     const said = kind === "text" && typeof message.text === "string" ? botTextIn(language, withoutRunMarkers(message.text), message.runStatus).trim() : "";
+    if (said && limit && message.turnSucceeded === false && said === limit.words.trim()) continue;
+    if (said) limit = null;
     if (said) {
       run.push(said);
       failed = null;
@@ -1063,6 +1097,7 @@ function turnReply(messages: readonly StoredMessage[], anchor: { id: string | nu
     answerNotStartedAt: followUp === "text" ? answerNotStartedAt : null,
     restart,
     restartAt,
+    limit: limit?.line ?? null,
   };
 }
 
@@ -1965,6 +2000,26 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
     };
   };
 
+  /** #3530: a turn no engine answered under their usage limits, or out of
+   * credit: never "finished" with the line's words as its reply. Interrupted,
+   * as a restart's cut is (#3217), with the reason and the reset as data.
+   * `held`: the server sends the message again at the reset (once), so the
+   * turn is not finished until the resend answers, or until it should have
+   * started. */
+  const limitUnanswered = (line: LimitFailoverLine, language: string | undefined, timeZone: string | undefined) => {
+    const unanswered = limitLineUnanswered(line);
+    if (!unanswered) return null;
+    return {
+      held: unanswered.held && unanswered.resetsAt !== undefined && now() < unanswered.resetsAt + AFTER_RESET_MS + LIMIT_RESEND_START_MS,
+      why: {
+        interrupted: true,
+        reason: unanswered.reason,
+        ...(unanswered.resetsAt !== undefined ? { resets_at: new Date(unanswered.resetsAt).toISOString() } : {}),
+        error: limitLineText(line, { language: readerLanguage(language), timeZone }, now()),
+      },
+    };
+  };
+
   const waitTurn = async (
     body: HandleBody,
     handle: string,
@@ -1979,6 +2034,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
     // #3056: the answer line (by time) whose own turn this call saw running
     let answerTurnSeen: number | null = null;
     const language = caller ? deps.language?.(caller) : undefined;
+    const timeZone = caller ? deps.timeZone?.(caller) : undefined;
     for (;;) {
       const raw = deps.turnState(body.a, body.t);
       const messages = deps.messages(body.t);
@@ -2004,12 +2060,21 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         return { ...result, approval: pending.approvals[0]!, approvals: pending.approvals };
       }
       const reviewing = pending?.reviewing === true;
+      // #3530: no engine answered this turn under their usage limits
+      const limited = state === "idle" && read.sawAnchor && read.limit && !reviewing ? limitUnanswered(read.limit, language, timeZone) : null;
+      if (limited && !limited.held) {
+        deps.collected?.(body.a, body.t);
+        return { handle, agent_id: body.a, thread_id: body.t, finished: true, status: "interrupted", resumed: false, reply: "", ...limited.why };
+      }
       if (read.answerNotStartedAt !== null && state !== "idle") answerTurnSeen = read.answerNotStartedAt;
       const answerTurnAhead = read.answerNotStartedAt !== null
         && answerTurnSeen !== read.answerNotStartedAt
         && now() - read.answerNotStartedAt < ANSWER_TURN_START_MS;
       if (state === "idle" && read.sawAnchor && reviewing) {
         // a reviewer still decides a card of this turn: not finished
+        idleLooks = 0;
+      } else if (limited) {
+        // #3530: the message is held for the reset: not finished
         idleLooks = 0;
       } else if (state === "idle" && read.sawAnchor && restartPending) {
         // #3217: the restart's resume has not answered yet: not finished
@@ -2040,7 +2105,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
           // #3217: a turn a restart cut and nothing resumed says so: the
           // person sends the request again.
           if (read.restart === "not_resumed" || restartLost) {
-            return { handle, agent_id: body.a, thread_id: body.t, finished: true, status: "interrupted", interrupted: true, resumed: false, reply: "",
+            return { handle, agent_id: body.a, thread_id: body.t, finished: true, status: "interrupted", interrupted: true, resumed: false, reason: "restart", reply: "",
               error: read.failed ?? turnFailureWords(serverLineIn(language, TURN_NOT_RESUMED)) };
           }
           // #3008: a turn that ended on a failed-turn row says so, never
@@ -2069,7 +2134,8 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       if (signal?.aborted || now() >= deadline) {
         const result = unfinished(body, handle, state === "idle" ? (reviewing ? "running" : "queued") : state, read.reply, after,
           state === "idle" && restartPending ? "interrupted" : "still_working", language);
-        if (read.restart === "pending") return { ...result, interrupted: true };
+        if (limited) return { ...unfinished(body, handle, "idle", "", after, "interrupted", language), ...limited.why };
+        if (read.restart === "pending") return { ...result, interrupted: true, reason: "restart" };
         if (reviewing && result.progress) {
           return { ...result, progress: { ...result.progress, phase: "approval_under_review" }, recommended_wait_ms: AWAIT_REVIEW_WAIT_MS };
         }
@@ -2086,10 +2152,16 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
     ...result,
     ...(result.finished
       ? (result.status === "interrupted"
-        ? { note: "A server restart cut this turn and it did not resume (see error). Tell the person; send the prompt again only if they still want it." }
+        ? { note: result.reason === "credits"
+            ? "No engine answered this turn: out of credit (see error). Nothing sends it again: tell the person (add credit or pick another engine)."
+            : result.reason === "usage_limit"
+            ? `No engine answered this turn under its usage limits (see error) and nothing sends it again. Tell the person; send the prompt again${result.resets_at ? " after resets_at" : " later"} only if they still want it.`
+            : "A server restart cut this turn and it did not resume (see error). Tell the person; send the prompt again only if they still want it." }
         : result.reply ? {} : { note: "The turn finished without text." })
       : {
-          next: result.status === "interrupted"
+          next: result.status === "interrupted" && result.reason === "usage_limit"
+            ? "No engine answered this turn under its usage limits (see error); the server sends this message again by itself after resets_at. Call await_turn again with this handle after that time (wait_cursor as cursor). Never send the prompt again."
+            : result.status === "interrupted"
             ? "A server restart cut this turn; it is being resumed. Call await_turn again with this handle (wait_cursor as cursor). Never send the prompt again."
             : result.status === "waiting_for_approval" && result.approval
             ? (result.approval.answerWith === "option"

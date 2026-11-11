@@ -67,6 +67,74 @@ export function resetClockText(at: number, locale: string, timeZone?: string, no
   }
 }
 
+/** #3530: which `limitFailover.*` locale key says `line`, its words, and the
+ * reset its `{time}` names (absent when it names none); null for a kind this
+ * build does not know. The app
+ * (src/lib/limit-failover.ts) and the server's plain line
+ * (server/usage/limit-line.ts) both word a line through this one choice, each
+ * in its reader's language and clock. */
+export function limitFailoverWords(line: LimitFailoverLine): { key: string; vars: Record<string, string>; at?: number } | null {
+  const at = "resetsAt" in line && typeof line.resetsAt === "number" ? line.resetsAt : undefined;
+  const timed = (key: string, vars: Record<string, string>) => ({ key, vars, ...(at !== undefined ? { at } : {}) });
+  switch (line.kind) {
+    case "switched":
+      if (line.reason === "model") return { key: line.to === "Auto" ? "limitFailover.modelSwitchedAuto" : "limitFailover.modelSwitched", vars: { from: line.from, to: line.to } };
+      // A quick model Sagax picked for this turn: the conversation never goes
+      // back to it, Sagax only skips it for quick turns until it resets.
+      if (line.detour) return timed(line.estimated ? "limitFailover.detourNoReset" : "limitFailover.detour", { from: line.from });
+      // A backup standing in for the conversation's own engine refused in
+      // turn: the conversation goes back to its own engine, never to it.
+      if (line.home) {
+        const vars = { from: line.from, home: line.home, to: line.to };
+        if (line.owner) return timed(line.estimated ? "limitFailover.ownerSwitchedStandInNoReset" : "limitFailover.ownerSwitchedStandIn", vars);
+        return timed(line.estimated ? "limitFailover.switchedStandInNoReset" : "limitFailover.switchedStandIn", vars);
+      }
+      // The engine named no reset: the time is only when Sagax tries it again.
+      if (line.estimated) return timed(line.owner ? "limitFailover.ownerSwitchedNoReset" : "limitFailover.switchedNoReset", { from: line.from, to: line.to });
+      return timed(line.owner ? "limitFailover.ownerSwitched" : "limitFailover.switched", { from: line.from, to: line.to });
+    case "back":
+      if (line.refused) return { key: "limitFailover.backAfterLimit", vars: { refused: line.refused, engine: line.engine } };
+      return { key: "limitFailover.back", vars: { engine: line.engine } };
+    case "waiting":
+      // A backup standing in for the conversation's own engine refused: the message waits for that engine.
+      if (line.home) {
+        const vars = { from: line.from, home: line.home };
+        if (line.owner) return timed(line.estimated ? "limitFailover.ownerWaitingStandInNoReset" : "limitFailover.ownerWaitingStandIn", vars);
+        return timed(line.estimated ? "limitFailover.waitingStandInNoReset" : "limitFailover.waitingStandIn", vars);
+      }
+      if (line.estimated) return timed(line.owner ? "limitFailover.ownerWaitingNoReset" : "limitFailover.waitingNoReset", { from: line.from });
+      return timed(line.owner ? "limitFailover.ownerWaiting" : "limitFailover.waiting", { from: line.from });
+    case "waitingRoutine":
+      if (line.home) return timed(line.estimated ? "limitFailover.waitingRoutineStandInNoReset" : "limitFailover.waitingRoutineStandIn", { from: line.from, home: line.home });
+      return timed(line.estimated ? "limitFailover.waitingRoutineNoReset" : "limitFailover.waitingRoutine", { from: line.from });
+    case "exhausted": {
+      // #3552: out of credit, nothing held and no reset promised.
+      if (line.cause === "credits") return { key: line.owner ? "limitFailover.ownerCredits" : "limitFailover.credits", vars: { engine: line.tried.filter(Boolean).join(", ") } };
+      const tried = line.tried.filter(Boolean).join(", ") || "the engines tried";
+      if (at !== undefined) return timed(line.owner ? "limitFailover.ownerExhausted" : "limitFailover.exhausted", { tried });
+      return { key: line.owner ? "limitFailover.ownerExhaustedNoTime" : "limitFailover.exhaustedNoTime", vars: { tried } };
+    }
+    case "signedOut":
+      return { key: "limitFailover.signedOut", vars: { from: line.from, to: line.to } };
+    case "signedOutNotice":
+      return { key: "limitFailover.signedOutNotice", vars: { from: line.from, to: line.to } };
+    default:
+      // A kind a newer server wrote that this build does not know (#3577).
+      return null;
+  }
+}
+
+/** #3530: the line kinds that leave a turn unanswered for a usage limit or
+ * credit: `held` when the server keeps the message and sends it again at the
+ * reset, else nothing waits. Null for any other line. */
+export function limitLineUnanswered(line: LimitFailoverLine | undefined): { held: boolean; reason: "usage_limit" | "credits"; resetsAt?: number } | null {
+  if (!line) return null;
+  if (line.kind === "waiting" || line.kind === "waitingRoutine") return { held: true, reason: "usage_limit", resetsAt: line.resetsAt };
+  if (line.kind === "exhausted" && line.cause === "credits") return { held: false, reason: "credits" };
+  if (line.kind === "exhausted") return { held: false, reason: "usage_limit", ...(line.resetsAt !== undefined ? { resetsAt: line.resetsAt } : {}) };
+  return null;
+}
+
 /** `owner`: the limit is the bot owner's (a member talks to a bot the
  * owner's plan pays for), so the line says whose limit it is (J4). */
 

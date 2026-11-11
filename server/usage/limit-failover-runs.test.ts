@@ -176,13 +176,23 @@ function world(options: {
     onRunFailed: (run, alert) => { failed.push({ run, alert }); },
     onRunDeferred: (run, alert) => { deferred.push({ run, alert }); },
   });
+  /** The error of each thread's turn running now (server/index.ts turnStops). */
+  const turnErrors = new Map<string, string>();
   const event = (threadId: string, body: EventBody) => {
     const full = { eventId: `event-${Math.random()}`, provider: "fake", threadId, createdAt: new Date(clock.now).toISOString(), ...body } as RuntimeEvent;
-    if (full.type === "runtime.error") host.noteError(threadId, full.message, full.limitResetsAt, full.limitScope);
+    if (full.type === "runtime.error") {
+      host.noteError(threadId, full.message, full.limitResetsAt, full.limitScope);
+      turnErrors.set(threadId, full.message);
+    }
     const run = manager.handleRuntimeEvent(full);
-    // server/index.ts hands the same failure to turnFailed after the routine manager saw it.
+    // server/index.ts hands the same failure to turnFailed after the routine manager saw it, with the engine the turn
+    // ran on (turn-completed.ts: the event's provider instance, else the bot's model).
     if (full.type === "turn.completed" && !full.ok) {
-      return { run, taken: host.turnFailed({ threadId, cause: run?.error, stopReason: full.stopReason, routineRun: run?.status === "failed" ? run : null }) };
+      const engine = lastRan.get(threadId)?.instanceId ?? threads.get(threadId)?.instanceId;
+      // turnFailureCause: the turn's own error (turnStops), else its stop reason.
+      const cause = turnErrors.get(threadId) ?? (full.stopReason?.trim() || undefined);
+      turnErrors.delete(threadId);
+      return { run, taken: host.turnFailed({ threadId, cause, stopReason: full.stopReason, routineRun: run?.status === "failed" ? run : null, engine }) };
     }
     return { run, taken: false };
   };
@@ -300,6 +310,30 @@ describe("a proactive wake whose fast model a limit refused", () => {
 // family's weekly window). Such a refusal of a quick model Sagax picked holds nothing engine-wide, but Sagax's quick
 // picks skip that model until it resets, as the words say. Before, nothing was held: the next wake picked the same
 // model again, and a call's message went up to MAX_RESENDS times onto it.
+// #3530: the run's own words say the limit and who takes it over; the turn.completed that follows (no dispatch left)
+// adds no line saying no engine could answer, and never reads as a turn nothing sends again.
+describe("a routine run whose limit the run already settled", () => {
+  it("leaves no exhausted line when its turn completes, and turnFailed returns as before", async () => {
+    const w = world({ own: GROK });
+    const routine = w.manager.enqueueProactive({
+      botId: "nova", name: "Daily report", prompt: "Write the daily report.", proactive: { mode: "proactive", hops: 0, sources: ["run"] },
+    });
+    await w.tick();
+    const threadId = w.started[0]!.threadId;
+    const { taken } = w.fail(threadId, LIMIT_2H);
+    expect(taken).toBe(false);
+    await w.host.idle();
+    expect(w.lines.filter((entry) => entry.line.kind === "exhausted")).toEqual([]);
+    expect(w.run(routine.id)).toMatchObject({ retried: "usage_limit", limitTakeovers: 1 });
+    expect(w.failed).toEqual([]);
+    // The run goes on, on its backup, and ends as a run does.
+    await w.tick();
+    w.complete(w.started.at(-1)!.threadId);
+    expect(w.run(routine.id).status).toBe("completed");
+    expect(w.lines.filter((entry) => entry.line.kind === "exhausted")).toEqual([]);
+  });
+});
+
 describe("a quick model Sagax picked that a refusal bound to that model refused", () => {
   const CLAUDE_FAST: ModelSelection = { instanceId: "claude", model: "claude-haiku-5" };
   const CREDITS = "Claude refused this turn because this model runs on extra usage for your account, and those credits are used up.";
@@ -619,7 +653,8 @@ describe("a person's message its engine's limit refused (chat)", () => {
     expect(await w.say()).toEqual({ instanceId: "codex", model: "gpt-6.1-sol" });
     expect(w.fail("chat", "You've hit your usage limit. Try again in 3 hours.").taken).toBe(true);
     await w.host.idle();
-    expect(w.lines.at(-1)).toEqual({ threadId: "chat", line: { kind: "exhausted", tried: ["Claude", "Codex"], resetsAt: NOW + 2 * HOUR } });
+    // #3530: the line says the message waits for Claude's reset, as it does.
+    expect(w.lines.at(-1)).toEqual({ threadId: "chat", line: { kind: "waiting", from: "Codex", home: "Claude", resetsAt: NOW + 2 * HOUR } });
     w.clock.now = NOW + 2 * HOUR + 61_000;
     expect(await w.say()).toEqual(CLAUDE);
     expect(w.lines.at(-1)).toEqual({ threadId: "chat", line: { kind: "back", engine: "Claude" } });

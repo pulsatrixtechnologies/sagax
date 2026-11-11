@@ -13941,6 +13941,8 @@
   "limitFailover.ownerExhaustedNoTime": "This bot's owner hit usage limits on {tried}: no other engine could answer. Pick another model, add credit, or try again later.",
   "limitFailover.credits": "{engine} is out of credit, so this message got no answer. Add credit with the provider, or switch engine from the model picker.",
   "limitFailover.ownerCredits": "This bot's owner is out of credit on {engine}, so this message got no answer. Add credit with the provider, or switch engine from the model picker.",
+  "limitFailover.autoContinued": "{from} reached its usage limit during this turn: Auto continued the same turn on another model that works, with the steps already taken; {from} is picked again once its limit resets (around {time}).",
+  "limitFailover.autoContinuedNoReset": "{from} reached its usage limit during this turn and gave no reset time: Auto continued the same turn on another model that works, with the steps already taken; {from} is tried again around {time}.",
   "routineReadiness.flow_plan": "The Flow shadow check failed at {step}: {error}",
   "routineReadiness.ready.flow": "The Flow shadow plan has no known blocker. Run the routine when ready.",
   "routineReadiness.flow_live": "A Flow run is live, plan not checked.",

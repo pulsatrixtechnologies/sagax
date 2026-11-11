@@ -5,8 +5,31 @@
 // The line is that row alone: it carries the state, in the reader's language,
 // and a failed turn's cause for the readers of the conversation (#1942).
 import { failedTurnCause } from "../../shared/failed-turn.ts";
-import { limitLinePlainWords, limitLineRetiredName, standingLimitLines, type LimitFailoverLine } from "../../shared/limit-failover.ts";
+import { limitFailoverText, limitFailoverWords, limitLinePlainWords, limitLineRetiredName, resetClockText, standingLimitLines, type LimitFailoverLine } from "../../shared/limit-failover.ts";
 import type { WireMessage } from "../../shared/wire.ts";
+import { personWord, type PersonLanguage } from "../people/person-words.ts";
+
+/** Who reads a conversation's plain limit line: the person who owns it, in
+ * their language and their time zone (#3530). */
+export interface LimitLineReader {
+  language: PersonLanguage;
+  /** IANA zone; absent: the server process's own. */
+  timeZone?: string;
+}
+
+/** #3530: the plain words of a limit line (what a connector, the thread API
+ * and a notification read) in the reader's language, the reset in the
+ * reader's clock, from the locale keys the app draws the same line with
+ * (limitFailoverWords). Auto's own switch keeps its fuller words. */
+export function limitLineText(line: LimitFailoverLine, reader: LimitLineReader, now = Date.now()): string {
+  const clock = (at: number) => resetClockText(at, reader.language === "fr" ? "fr-CA" : "en-US", reader.timeZone, now);
+  if (line.kind === "switched" && line.to === "Auto" && line.reason !== "model") {
+    return personWord(reader.language, line.estimated ? "limitFailover.autoContinuedNoReset" : "limitFailover.autoContinued", { from: line.from, time: clock(line.resetsAt) });
+  }
+  const words = limitFailoverWords(line);
+  if (!words) return limitFailoverText(line, clock);
+  return personWord(reader.language, words.key, words.at !== undefined ? { ...words.vars, time: clock(words.at) } : words.vars);
+}
 
 type Tool = NonNullable<WireMessage["tool"]>;
 

@@ -13,6 +13,7 @@ import {
 } from "./agent-api.ts";
 import { PRIORITY_DOWNGRADED_NOTE, resetPriorityWakeForTests, type PriorityDelivery } from "./proactive/priority-wake.ts";
 import { failedTurnTool } from "../shared/failed-turn.ts";
+import { limitFailoverText, resetClockText, type LimitFailoverLine } from "../shared/limit-failover.ts";
 import { CUT_TWICE, RESTART_TURN_NOTE, TURN_NOT_RESUMED } from "../shared/restart-words.ts";
 import { outwardDetail } from "./runtime/tree.ts";
 import { ENGINE_EXITED_SENTENCE } from "../shared/engine-exit-words.ts";
@@ -1795,6 +1796,73 @@ describe("await_turn and a turn a restart cut (#3217)", () => {
     const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
     expect(r.body).toMatchObject({ finished: true, status: "interrupted", resumed: false });
     expect(String(r.body.error)).toContain("Interrompu par un autre redémarrage de Sagax");
+  });
+});
+
+describe("await_turn and a turn no engine could answer (#3530)", () => {
+  const BASE = 1_791_500_000_000;
+  const resetsAt = BASE + 2 * 3_600_000;
+  const limitRow = (line: LimitFailoverLine, failed: boolean) => ({
+    role: "bot", kind: "activity", text: "",
+    tool: { name: `${failed ? "error:" : "recovery:"} ${limitFailoverText(line, (at) => new Date(at).toISOString())}`, ok: !failed, limitFailover: line },
+    ...(failed ? { turnSucceeded: false } : {}),
+  }) as const;
+  const exhausted: LimitFailoverLine = { kind: "exhausted", tried: ["Claude", "Codex"], resetsAt };
+
+  it("refused by two engines and nothing held: interrupted for usage limits with the reset timestamp, never finished with the line as its reply", async () => {
+    const row = limitRow(exhausted, true);
+    // the engine's own failed text repeats the line after it
+    const w = world({ replyAfterPolls: 1, replyRows: () => [row, { role: "bot", kind: "text", text: row.tool.name.replace(/^error: /, ""), turnSucceeded: false }] });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "Fais le rapport", mode: "async" });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
+    expect(r.body).toMatchObject({ finished: true, status: "interrupted", interrupted: true, resumed: false, reason: "usage_limit", reply: "",
+      resets_at: new Date(resetsAt).toISOString() });
+    expect(String(r.body.error)).toContain("Claude, Codex");
+    expect(String(r.body.note)).toContain("usage limits");
+  });
+
+  it("held for the reset: not finished, the server sends it again after resets_at", async () => {
+    const w = world({ replyAfterPolls: 1, replyRows: () => [limitRow({ kind: "waiting", from: "Codex", home: "Claude", resetsAt }, false)] });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "Fais le rapport", mode: "async" });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 1_000 });
+    expect(r.body).toMatchObject({ finished: false, status: "interrupted", interrupted: true, reason: "usage_limit", reply: "", resets_at: new Date(resetsAt).toISOString() });
+    expect(String(r.body.next)).toContain("sends this message again");
+  });
+
+  it("held, then answered by the resend: finished with the answer", async () => {
+    const w = world({ replyAfterPolls: 1, replyRows: () => [limitRow({ kind: "waiting", from: "Claude", resetsAt }, false), { role: "bot", kind: "text", text: "Voici le rapport." }] });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "Fais le rapport", mode: "async" });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
+    expect(r.body).toMatchObject({ finished: true, status: "finished", reply: "Voici le rapport." });
+    expect(r.body.reason).toBeUndefined();
+  });
+
+  it("out of credit: interrupted for credits, no reset and no resend promised", async () => {
+    const w = world({ replyAfterPolls: 1, replyRows: () => [limitRow({ kind: "exhausted", tried: ["Codex"], cause: "credits" }, true)] });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "Fais le rapport", mode: "async" });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
+    expect(r.body).toMatchObject({ finished: true, status: "interrupted", interrupted: true, resumed: false, reason: "credits", reply: "" });
+    expect(r.body.resets_at).toBeUndefined();
+    expect(String(r.body.error)).toContain("Codex");
+  });
+
+  it("a French-speaking person in another zone than the server's reads the line in French with their clock", async () => {
+    const w = world({ replyAfterPolls: 1, replyRows: () => [limitRow(exhausted, true)] });
+    w.deps.language = () => "fr-CA";
+    w.deps.timeZone = () => "Asia/Tokyo";
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "Fais le rapport", mode: "async" });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
+    const clock = resetClockText(resetsAt, "fr-CA", "Asia/Tokyo", BASE);
+    expect(clock).not.toBe(resetClockText(resetsAt, "fr-CA", "America/Toronto", BASE));
+    expect(String(r.body.error)).toBe(`Limites atteintes sur Claude, Codex : aucun autre moteur n'a pu répondre. Choisis un autre modèle, ajoute du crédit, ou réessaie à la réinitialisation (vers ${clock}).`);
+    const page = await w.api.call(c, "read_latest_page", { agent_id: "bot-a", thread_id: sent.body.thread_id, limit: 10 });
+    const lines = (page.body.entries as Array<{ text: string }>).map((entry) => entry.text);
+    expect(lines.some((line) => line.includes(`Limites atteintes sur Claude, Codex`) && line.includes(clock))).toBe(true);
   });
 });
 

@@ -14,6 +14,7 @@ import {
   ROUTINE_DELEGATION_UNSUPPORTED_RETRY_MS, RoutineConsents, routineRenewMs, type RoutineConsentEnd, type RoutineDelegationIssue,
 } from "./org-routine-consent.ts";
 import { PrincipalRegistry } from "../auth/principals.ts";
+import { rotatingRefreshProvider } from "../testing/rotating-refresh-provider.ts";
 
 const ISS = "https://px.example.test";
 const KEY = "c".repeat(64);
@@ -369,5 +370,77 @@ describe("routines always act in their owner's name (2026-10-08)", () => {
     await consents.keepAlive(alice.id);
     expect(calls).toEqual(["pxlr1.first"]);
     expect(consents.status(alice.id)).toMatchObject({ state: "active", renewedAt: clock });
+  });
+});
+
+describe("a refresh whose answer was lost (#3661)", () => {
+  function lostSetup(graceMs: number) {
+    const provider = rotatingRefreshProvider({ first: "pxlr1.first", graceMs, now: () => clock });
+    let id = 0;
+    const principals = new PrincipalRegistry({ path: join(dir, "principals.json"), now: () => clock, newId: () => `pr_00000000-0000-4000-8000-${String(++id).padStart(12, "0")}` });
+    const vault = new IdpGrantVault(dir, () => ({ kind: "key", key: Buffer.from(KEY, "hex") }));
+    const ended: Array<[string, RoutineConsentEnd]> = [];
+    const logs: string[] = [];
+    const build = () => new RoutineConsents({
+      vault, rp: provider, principals, now: () => clock, log: (line) => logs.push(line),
+      onEnded: (pid, reason) => ended.push([pid, reason]),
+      // the waits between the retries pass on the provider's clock
+      sleep: async (ms) => { clock += ms; },
+    });
+    const consents = build();
+    const alice = principals.forSubject({ iss: ISS, sub: "A1", claims: { name: "Alice" }, orgRole: "member" });
+    consents.create({ principalId: alice.id, iss: ISS, sub: "A1", refreshToken: "pxlr1.first" });
+    clock += ROUTINE_CONSENT_RENEW_MS;
+    return { provider, vault, consents, alice, ended, logs, build };
+  }
+
+  it("asks again at once with the same token: the rotated answer comes back inside the grace and the permission stays", async () => {
+    const { provider, vault, consents, alice, ended } = lostSetup(30_000);
+    provider.loseNextAnswers(1);
+    expect(await consents.prepare(alice.id)).toEqual({ ok: true });
+    expect(provider.calls).toEqual(["pxlr1.first", "pxlr1.first"]);
+    expect(provider.revoked()).toBe(false);
+    const grant = vault.list()[0]!;
+    expect(grant.refreshToken).toBe(provider.current());
+    expect(grant.answerLostAt).toBeUndefined();
+    expect(ended).toEqual([]);
+  });
+
+  it("ends the permission when the provider refuses the retry, and says why once", async () => {
+    const { provider, consents, alice, ended, logs } = lostSetup(0);
+    provider.loseNextAnswers(1);
+    expect(await consents.prepare(alice.id)).toEqual({ ok: false, error: "ended", interrupted: true });
+    expect(ended).toEqual([[alice.id, "delegation_ended"]]);
+    expect(logs.filter((line) => /ended .*after a refresh was interrupted/.test(line))).toHaveLength(1);
+    // told once: the next run says the usual
+    expect(await consents.prepare(alice.id)).toEqual({ ok: false, error: "missing" });
+  });
+
+  it("a refused connection is one deferred line and no retry, as before", async () => {
+    const { provider, vault, consents, alice, logs } = lostSetup(30_000);
+    provider.refuseNextConnection();
+    expect(await consents.prepare(alice.id)).toEqual({ ok: false, error: "unreachable" });
+    expect(provider.calls).toEqual(["pxlr1.first"]);
+    expect(logs.filter((line) => line.includes("renewal deferred"))).toHaveLength(1);
+    expect(vault.list()[0]!.answerLostAt).toBeUndefined();
+  });
+
+  it("a restart between the lost answer and the retry asks again first, before any run", async () => {
+    const { provider, vault, alice, build } = lostSetup(30_000);
+    // every answer of the first flight is lost (the provider is slow)
+    provider.loseNextAnswers(4);
+    const before = build();
+    expect(await before.prepare(alice.id)).toEqual({ ok: false, error: "unreachable" });
+    expect(vault.list()[0]!.answerLostAt).toBeDefined();
+    const calls = provider.calls.length;
+    // a restart: a new process, the grant read back from the vault
+    const after = build();
+    expect(after.resumeInterrupted()).toBe(1);
+    await after.settled(alice.id);
+    expect(provider.calls.length).toBe(calls + 1);
+    expect(provider.calls.at(-1)).toBe("pxlr1.first");
+    expect(vault.list()[0]).toMatchObject({ refreshToken: provider.current() });
+    expect(vault.list()[0]!.answerLostAt).toBeUndefined();
+    expect(provider.revoked()).toBe(false);
   });
 });

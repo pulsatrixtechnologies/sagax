@@ -95,6 +95,10 @@ const grantSchema = z.object({
   /** 2026-10-20: written before a refresh is sent, removed once its answer
    * is kept. Still there at boot: a crash interrupted it, resume it now. */
   refreshStartedAt: z.number().optional(),
+  /** #3661: when a refresh of this grant last got no answer after it was
+   * sent (the provider may have rotated it). Removed by the next answer;
+   * still there at boot: the refresh is asked again at once. */
+  answerLostAt: z.number().optional(),
   /** Slice 6: "session" (a sign-in, the default) or "routines" (a routine
    * delegation: never bound to a session, never swept, one per principal;
    * RoutineDelegations owns it, IdpSessionManager never touches it). */
@@ -410,6 +414,42 @@ export function settledWithin(promise: Promise<unknown>, ms: number): Promise<vo
   return Promise.race([promise.then(() => {}, () => {}), bound]).finally(() => clearTimeout(timer));
 }
 
+/** #3661: after a refresh whose answer was lost (oidc-rp tokenAnswerLost),
+ * the same refresh token is sent again after each of these waits, inside the
+ * grant's single flight, so the lost rotation is fetched before anything
+ * else presents the old token. The provider answers a retried refresh of a
+ * token it just rotated with the same pair for 30 s (its reuse grace). */
+export const IDP_ANSWER_LOST_RETRY_MS: readonly number[] = [1_000, 3_000, 8_000];
+
+/** One refresh of a grant by the rule both refresh paths share (the sign-in
+ * session here, the routine delegation in org-routine-consent.ts): an
+ * attempt whose answer was lost is asked again promptly with the same token,
+ * a bounded number of times; any other answer (a token, a refusal, a refused
+ * connection) is the outcome at once. `onAnswerLost` runs once, at the first
+ * lost answer (the caller marks the grant so a restart asks again first).
+ * `answerLost`: an answer was lost on the way. */
+export async function refreshAskingAgain(
+  rp: Pick<IdpRelyingParty, "refresh">,
+  refreshToken: string,
+  expect: { sub: string },
+  sleep: (delayMs: number) => Promise<void>,
+  onAnswerLost?: () => void,
+): Promise<{ outcome: RefreshOutcome; answerLost: boolean }> {
+  let outcome = await rp.refresh(refreshToken, expect);
+  let answerLost = false;
+  for (let attempt = 0; !outcome.ok && outcome.answerLost; attempt += 1) {
+    if (!answerLost) {
+      answerLost = true;
+      onAnswerLost?.();
+    }
+    const wait = IDP_ANSWER_LOST_RETRY_MS[attempt];
+    if (wait === undefined) break;
+    await sleep(wait);
+    outcome = await rp.refresh(refreshToken, expect);
+  }
+  return { outcome, answerLost };
+}
+
 /** A cached sign-in access token with less than this left is refreshed
  * before it is used as a token exchange subject (slice 5, D7). */
 export const IDP_SUBJECT_MIN_LIFE_MS = 600_000;
@@ -697,7 +737,7 @@ export class IdpSessionManager {
   resumeInterrupted(): number {
     let resumed = 0;
     for (const grant of this.safeList()) {
-      if (!isSessionGrant(grant) || grant.refreshStartedAt === undefined || !grant.sessionId) continue;
+      if (!isSessionGrant(grant) || (grant.refreshStartedAt === undefined && grant.answerLostAt === undefined) || !grant.sessionId) continue;
       resumed += 1;
       void this.startRefresh(grant.grantRef).catch(reportBackgroundError);
     }
@@ -725,7 +765,17 @@ export class IdpSessionManager {
       /* the refresh still runs; a crash now costs at most this grant */
     }
     let sent = grant.refreshToken;
-    let outcome = await this.rp.refresh(sent, { sub: grant.sub });
+    const markLost = () => {
+      try {
+        this.vault.update(ref, (g) => ({ ...g, answerLostAt: this.now() }));
+      } catch {
+        /* the write-ahead mark still resumes it after a restart */
+      }
+    };
+    const first = await refreshAskingAgain(this.rp, sent, { sub: grant.sub }, this.sleep, markLost);
+    let outcome = first.outcome;
+    // An answer lost now or before (another flight, a run before a restart).
+    let answerLost = first.answerLost || grant.answerLostAt !== undefined;
     if (!outcome.ok && outcome.kind === "rejected") {
       // 2026-10-20: one refusal may be a race (a deploy's two servers, a
       // provider answering mid-deploy). Ask once more, with the newest token
@@ -736,7 +786,9 @@ export class IdpSessionManager {
       if (!latest) return;
       this.log(`idp: a refresh was refused (${outcome.error}); asking again${latest.refreshToken !== sent ? " with the newer token another server kept" : ""}`);
       sent = latest.refreshToken;
-      outcome = await this.rp.refresh(sent, { sub: latest.sub });
+      const again = await refreshAskingAgain(this.rp, sent, { sub: latest.sub }, this.sleep, markLost);
+      outcome = again.outcome;
+      answerLost ||= again.answerLost;
     }
     this.vault.reload();
     const current = this.vault.get(ref);
@@ -752,6 +804,7 @@ export class IdpSessionManager {
       delete next.failedAt;
       delete next.failingSince;
       delete next.refreshStartedAt;
+      delete next.answerLostAt;
       if (outcome.note) {
         // An id_token that did not verify: the grant is alive (the rotation
         // is kept) but its claims are not confirmed, so the 24 h clock keeps
@@ -790,6 +843,9 @@ export class IdpSessionManager {
     if (!current) return;
     if (outcome.kind === "rejected") {
       this.transientRuns.delete(ref);
+      // #3661: refused after a refresh whose answer was lost: the provider
+      // took the retry for a reuse. Said in the line that ends the sign-in.
+      if (answerLost) outcome = { ...outcome, error: `${outcome.error} after a refresh was interrupted` };
       if (this.witnessing.has(ref)) {
         // Asked because another sign-in of this person was refused, and
         // refused too (twice): Perspicax put the person out (T8, a disabled

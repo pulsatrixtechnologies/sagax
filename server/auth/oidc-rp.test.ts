@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { BOT_MAIL_ASSERTION_ACTORS } from "../mail/bot-inbound-mail.ts";
 import { TELEPHONY_ASSERTION_ACTORS } from "../bots/bot-inbound-telephony.ts";
 import { ORG_MEMBER_ASSERTION_ACTORS } from "../org/org-member-routes.ts";
-import { ACCOUNT_PURGED_EVENT, CONSOLE_ASSERTION_ACTORS, accessExpiresIn, avatarVersionFromPicture, OIDC_MAX_PENDING_FLOWS, ROUTINE_DELEGATION_SCOPES, OIDC_PENDING_FLOW_TTL_MS, OidcRelyingParty, parseRetryAfter, parseTeamsClaim, validIssuer } from "./oidc-rp.ts";
+import { ACCOUNT_PURGED_EVENT, CONSOLE_ASSERTION_ACTORS, accessExpiresIn, avatarVersionFromPicture, OIDC_MAX_PENDING_FLOWS, ROUTINE_DELEGATION_SCOPES, OIDC_PENDING_FLOW_TTL_MS, OidcRelyingParty, parseRetryAfter, parseTeamsClaim, TOKEN_FETCH_TIMEOUT_MS, tokenAnswerLost, validIssuer } from "./oidc-rp.ts";
 import { startFakeOidcProvider, type FakeOidcProvider } from "../testing/fake-oidc-provider.ts";
 
 const REDIRECT = "http://127.0.0.1:9/auth/oidc/callback";
@@ -324,6 +324,44 @@ describe("OIDC relying party: refresh (slice 2)", () => {
       } });
       expect(await party2.refresh("pxlr1.x", { sub: "s" })).toMatchObject({ ok: false, kind: "transient" });
     }
+  });
+
+  it("#3661: tells an answer lost after the request was sent from a provider that was never reached", async () => {
+    const party = rp();
+    const token = await signedInGrant(party);
+    idp.reuseGraceMs = 30_000;
+    try {
+      // the provider rotates, then the connection is cut before the answer
+      idp.dropNextRefreshAnswer();
+      expect(await party.refresh(token, { sub: idp.user.sub })).toMatchObject({ ok: false, kind: "transient", answerLost: true });
+      // the same token asked again inside the grace gets the rotated pair
+      const again = await party.refresh(token, { sub: idp.user.sub });
+      expect(again).toMatchObject({ ok: true, refreshToken: expect.stringMatching(/^pxlr1\./) });
+    } finally {
+      idp.reuseGraceMs = 0;
+    }
+    // a gateway that timed out and an answer cut off while it was read: lost too
+    for (const answer of [() => new Response("", { status: 504 }), () => new Response(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode("{")); c.error(new Error("reset")); } }), { status: 200 })]) {
+      const party2 = new OidcRelyingParty({ issuer: idp.issuer, clientId: "pulsa-bot", redirectUri: REDIRECT, fetch: async (input, init) => {
+        const url = String(input instanceof Request ? input.url : input);
+        return url.endsWith("/token") ? answer() : fetch(input, init);
+      } });
+      expect(await party2.refresh("pxlr1.x", { sub: "s" })).toMatchObject({ ok: false, kind: "transient", answerLost: true });
+    }
+    // nothing sent: a refused connection, a name not resolved
+    const refused = Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }) });
+    const offline = new OidcRelyingParty({ issuer: idp.issuer, clientId: "pulsa-bot", redirectUri: REDIRECT, fetch: async (input, init) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.endsWith("/token")) throw refused;
+      return fetch(input, init);
+    } });
+    const outcome = await offline.refresh("pxlr1.x", { sub: "s" });
+    expect(outcome).toMatchObject({ ok: false, kind: "transient" });
+    expect(outcome.ok === false && outcome.answerLost).toBeFalsy();
+    expect(tokenAnswerLost(refused)).toBe(false);
+    expect(tokenAnswerLost(new DOMException("The operation was aborted due to timeout", "TimeoutError"))).toBe(true);
+    // a provider answering after 20 s is not cut off
+    expect(TOKEN_FETCH_TIMEOUT_MS).toBeGreaterThan(20_000);
   });
 
   it("revokes a token at the provider and never throws", async () => {

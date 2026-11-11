@@ -45,6 +45,16 @@ export function turnClockNote(now: Date, timeZone: string): string {
   return `${TURN_CLOCK_MARKER} ${text}, ${timeZone} (${offset}), when this turn started. A turn can run for minutes: when the person asks the time or the answer depends on the minute, read the clock again (a shell \`date\`) instead of repeating this one. Say the time only when asked or needed. Times you show are in ${timeZone} unless the user asks for another zone; convert UTC or other-zone timestamps from tools before showing them.]`;
 }
 
+/** The short line a runtime that calls the model several times in one turn
+ * puts after the last message of a later call, when the minute moved since
+ * the turn started. It is rebuilt at each call and never kept: the turn's
+ * own note keeps the start time, so the bytes already sent (the provider's
+ * cached prefix) never change (#3549). */
+export function turnClockNow(now: Date, timeZone: string): string {
+  const { text, offset } = zonedNow(now, timeZone);
+  return `${TURN_CLOCK_MARKER} ${text}, ${timeZone} (${offset}), now.]`;
+}
+
 export function withTurnClock(text: string, now: Date, timeZone: string): string {
   if (text.startsWith(TURN_CLOCK_MARKER)) return text;
   return `${turnClockNote(now, timeZone)}\n\n${text}`;

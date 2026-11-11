@@ -730,6 +730,47 @@ describe("RuntimeCoordinator: read models", () => {
 });
 
 describe("RuntimeCoordinator: restarts", () => {
+  it("the first activeDirectThreads after a start never reads the settled rows that reported (#3535)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "runtime-coordinator-settled-"));
+    try {
+      const before = world(hold, {}, dir);
+      send(before, chief, "gen-1", undefined, builder, "Build it");
+      before.coordinator.tick();
+      before.coordinator.close();
+      // A long settled history whose rows this build can no longer read:
+      // a start that reads one of them throws, so none may be read.
+      const db = new DatabaseSync(join(dir, "runtime.db"));
+      const insert = db.prepare(`INSERT INTO assignments (id, root_id, parent_id, status, requester_thread_id, requester_run_id,
+        assignee_bot_id, assignee_thread_id, created_at, finished_at, json) VALUES (?, ?, NULL, 'completed', ?, NULL, 'old', ?, ?, ?, ?)`);
+      db.exec("BEGIN");
+      for (let i = 0; i < 3_000; i += 1) {
+        insert.run(`old-${i}`, `old-${i}`, `old-${i}-chat`, `old-${i}-work`, i, i + 1, JSON.stringify({ id: `old-${i}`, reportedAt: i + 2, version: 2 }));
+      }
+      db.exec("COMMIT");
+      db.close();
+      const after = world(hold, {}, dir);
+      expect([...after.coordinator.activeDirectThreads()].sort()).toEqual(["builder-work", "chief-chat"]);
+      // settling leaves the list, new work enters it
+      after.coordinator.cancelDirect("builder-work");
+      await flush();
+      expect(after.coordinator.activeDirectThreads().has("builder-work")).toBe(false);
+      send(after, chief, "gen-2", undefined, tester, "Test it");
+      after.coordinator.tick();
+      expect(after.coordinator.activeDirectThreads().has("tester-work")).toBe(true);
+      const seen = [...after.coordinator.activeDirectThreads()].sort();
+      after.coordinator.close();
+      // and across a restart the same threads are found
+      const again = world(hold, {}, dir);
+      expect([...again.coordinator.activeDirectThreads()].sort()).toEqual(seen);
+      for (const thread of ["builder-work", "chief-chat", "tester-work"]) {
+        expect(again.coordinator.activeDirectThreads().has(thread), thread).toBe(again.coordinator.activeDirect(thread));
+      }
+      again.coordinator.close();
+    } finally {
+      removeTempDir(dir);
+    }
+  });
+
   it("continuesAfterRestart names the turns the next start goes on with, and the next start reruns a cut turn with its note", async () => {
     const dir = mkdtempSync(join(tmpdir(), "runtime-coordinator-"));
     try {

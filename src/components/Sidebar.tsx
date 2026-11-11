@@ -193,7 +193,6 @@ import { SidebarMultiSelectBar } from "./Sidebar.tsx-parts/SidebarMultiSelectBar
 import { SidebarOverlays } from "./Sidebar.tsx-parts/SidebarOverlays";
 import { SidebarResizeHandle } from "./Sidebar.tsx-parts/SidebarResizeHandle";
 import { SidebarUnreadPillAbove, SidebarUnreadPillBelow } from "./Sidebar.tsx-parts/SidebarUnreadPills";
-import { hiddenSidebarRows } from "@/lib/sidebar-hidden-entries";
 import { routineRunsWaiting } from "./parallel-approvals";
 
 export type { MenuState, BotConfirmKind };
@@ -2660,7 +2659,6 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
           teamMenuReturn={sections.teamMenuReturn}
           setTeamMenu={sections.setTeamMenu}
           drag={dnd}
-          hiddenRows={hiddenSidebarRows(sections.sidebarHidden.items, { bots: state.bots, groups: state.groups, viewerId: roster.viewerId, people: sections.sidebarPeople })}
           renderBot={(props) => <VirtualBotListItem {...props} />}
           renderGroup={(props) => <VirtualGroupListItem {...props} />}
         />

@@ -1292,8 +1292,9 @@ confirm dialog. A member does not see that section. Nothing from a private
 thread. Hiding is per person and view-only (`src/lib/sidebar-hidden.ts`,
 key `sagax.sidebarHidden.v1`, synced by `/api/me/preferences` on an
 organization server): bots by id, groups by id, people by principal; still
-reached by search, the palette and the To: picker; a "Hidden (N)" row and
-Settings > Appearance show bots and groups back. A conversation with a
+reached by search, the palette and the To: picker. The sidebar draws nothing
+for a hidden entry, in any width (#3576): Settings > Appearance > Hidden from
+the sidebar is the one list, each bot or group with its kind and Show. A conversation with a
 person is not hidden but closed (menu "Close", panel "Close conversation",
 same `person:` entry): it simply leaves the sidebar and is listed nowhere
 (`hiddenSidebarRows` skips it; the "Hidden" category is for bots and

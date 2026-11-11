@@ -24,6 +24,8 @@ export function createWaitingCardSkip(getHost: () => Host): any {
         return instance?.adapter.respondToRequest(id, request, response);
       },
       release: (id, request) => {
+        // #3514: the turn that posted the card hears it now, not at its end
+        host.cardTurnSettledByRequest?.(id, request);
         host.askMessageByRequest.delete(`${id}:${request}`);
         host.pendingCommandRules.delete(`${id}:${request}`);
         host.withdrawApprovalNotice(id, request);

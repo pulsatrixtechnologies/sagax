@@ -108,7 +108,10 @@
 //                     FAKE_ACP_MCP_CALLS_WHEN='{"<marker>":{"calls":"server:tool,...","args":{...}}}'
 //                     picks the calls and their arguments by the first
 //                     marker the prompt holds, as a model reads its ask,
-//                     and makes no call when none is there)
+//                     and makes no call when none is there; an entry's
+//                     "reply" is said instead of the call lines, "delayMs"
+//                     waits first, and "hold" keeps the prompt open after
+//                     the reply until session/cancel)
 //                   | lend-question (call list_shared_computers through the
 //                     injected agents MCP, ask a question card, call it again
 //                     once the card is answered, and reply
@@ -1758,10 +1761,15 @@ function handle(msg: any) {
       }
       if (mode === "mcp-call") {
         // FAKE_ACP_MCP_CALLS_WHEN: the calls of the first marker the prompt holds
-        let byPrompt: { calls?: string; args?: Record<string, Record<string, unknown>> } | undefined;
+        // (#3514) an entry's `reply` is said in place of the call results, and
+        // `hold` keeps the prompt open after them until session/cancel, the
+        // way grok went on after a card it was told to end its turn on;
+        // `delayMs` waits that long first
+        type WhenEntry = { calls?: string; args?: Record<string, Record<string, unknown>>; reply?: string; hold?: boolean; delayMs?: number };
+        let byPrompt: WhenEntry | undefined;
         if (process.env.FAKE_ACP_MCP_CALLS_WHEN) {
           try {
-            const table = JSON.parse(process.env.FAKE_ACP_MCP_CALLS_WHEN) as Record<string, { calls?: string; args?: Record<string, Record<string, unknown>> }>;
+            const table = JSON.parse(process.env.FAKE_ACP_MCP_CALLS_WHEN) as Record<string, WhenEntry>;
             byPrompt = Object.entries(table).find(([marker]) => promptText.includes(marker))?.[1] ?? { calls: "" };
           } catch { byPrompt = { calls: "" }; }
         }
@@ -1773,6 +1781,7 @@ function handle(msg: any) {
         if (byPrompt?.args) mcpCallArgs = { ...mcpCallArgs, ...byPrompt.args };
         void (async () => {
           const results: string[] = [];
+          if (byPrompt?.delayMs) await new Promise((resolve) => setTimeout(resolve, byPrompt?.delayMs));
           for (const call of calls) {
             const [server, tool] = call.split(":");
             const entry = sessionMcp.find((candidate) => candidate.name === server);
@@ -1807,7 +1816,12 @@ function handle(msg: any) {
             results.push(line);
             if (rows) rowUpdate({ sessionUpdate: "tool_call_update", toolCallId: rowId, status: line.startsWith(`${call} -> error`) ? "failed" : "completed", rawOutput: line.slice(call.length + 4) });
           }
-          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: results.join("\n") } } } });
+          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: byPrompt?.reply ?? results.join("\n") } } } });
+          if (byPrompt?.hold) {
+            hangingPromptId = msg.id;
+            hangKeepAlive = setInterval(() => {}, 1_000);
+            return;
+          }
           complete();
         })();
         return;

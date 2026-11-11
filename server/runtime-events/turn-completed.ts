@@ -356,6 +356,8 @@ function settleTurnTask(event: any, ctx: any, host: any, turn: any): void {
       }) : Promise.resolve();
     if (resourceOwner) host.settlingResourceOwners.set(resourceOwner.threadId, resourceOwner.generation);
     host.liveTurnByThread.delete(event.threadId);
+    // #3514: the cards this turn posted no longer have a running turn
+    host.postedCardTurns?.turnEnded(event.threadId);
     // The bot chose to settle this reply without alerting anyone
     // (set_reply_notify, send_to_bot notify false): its message and
     // unread stay, its notification and push do not ring. Read once.

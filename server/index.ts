@@ -112,6 +112,7 @@ import { CLOUD_COMPUTER_BUSY_ERROR } from "../shared/computer-contention.ts";
 import { failedTurnCause, failedTurnTool } from "../shared/failed-turn.ts";
 import { STOPPED_TURN_NAME, assistantTranscript, errorTranscript } from "../shared/client-cancel.ts";
 import { SafePointPreempts } from "./safe-point-preempt.ts";
+import { cardPosted, cardSettled, postedCardWaits, PostedCardTurns } from "./approvals/card-turn-handoff.ts";
 import { atThreadCapacity, interruptKeepsTeammates } from "./team/teammate-replies.ts";
 import { createSendReceipts } from "./team/send-receipts.ts";
 
@@ -6498,6 +6499,9 @@ bindLeafHost({
   get stopOwnSubagents() { return stopOwnSubagents; },
   get safePoints() { return safePoints; },
   get preemptAtSafePoint() { return preemptAtSafePoint; },
+  get postedCardTurns() { return postedCardTurns; },
+  get cardTurnSettled() { return cardTurnSettled; },
+  get cardTurnSettledByRequest() { return cardTurnSettledByRequest; },
   get stoppedRowSinceLastPerson() { return stoppedRowSinceLastPerson; },
   get autoApprovals() { return autoApprovals; },
   get roleJournal() { return roleJournal; },
@@ -15723,6 +15727,44 @@ function toolsRunning(threadId: string): number {
  * is interrupted at its next safe point (server/safe-point-preempt.ts). */
 const safePoints = new SafePointPreempts();
 
+/** #3514: the turn that posted each waiting card (ask_choice,
+ * choose_page_target), so its answer, skip or expiry ends that turn at its
+ * safe point instead of waiting behind it (server/approvals/card-turn-handoff.ts). */
+const postedCardTurns = new PostedCardTurns();
+
+function cardTurnHandoffDeps(): Parameters<typeof cardPosted>[0] {
+  return {
+    liveTurn: (threadId) => liveTurnByThread.get(threadId),
+    ownFlow: (botId, threadId) => Boolean(store.groupByThread(threadId)) || routineRunThread(threadId)
+      || Boolean(voiceCalls.active(threadId)) || !store.taskByThread(botId, threadId),
+    engineCanSteer: (botId, threadId) => {
+      const instance = runningTurnInstance(store.projectBotForTask(botId, threadId) ?? store.bot(botId), threadId);
+      return Boolean(instance?.adapter.capabilities.queueing && instance.adapter.steer);
+    },
+    toolsRunning,
+    safePoints,
+    cut: (botId, threadId) => {
+      if (!threadBusy(botId, threadId)) return;
+      console.log(`[card-turn] ${botId}/${threadId} turn ended at the safe point of its waiting card`);
+      markThreadStopping(threadId);
+      void interruptDirectThread(botId, threadId, { cause: "safe-point" }).then(() => closeCutToolRows(threadId)).catch(reportBackgroundError);
+    },
+    turns: postedCardTurns,
+  };
+}
+
+/** A waiting card was answered, skipped, closed or expired (#3514). */
+function cardTurnSettled(threadId: string, messageId: string): void {
+  const bot = store.botByThread(threadId);
+  if (bot) cardSettled(cardTurnHandoffDeps(), bot.id, threadId, messageId);
+}
+
+/** The same, for the card that carries `requestId`. */
+function cardTurnSettledByRequest(threadId: string, requestId: string): void {
+  const row = store.messagesFor(threadId).find((message) => message.card?.requestId === requestId);
+  if (row) cardTurnSettled(threadId, row.id);
+}
+
 /** The person wrote to a turn whose engine cannot take words live: stop
  * that turn at the end of its running tool, so the queue starts a turn with
  * the words now instead of when the work is done. Not a person's Stop: what
@@ -22997,7 +23039,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       const claude = person ? claudeAccountForPrincipal(person) : { unavailable: "no_engine" as const };
       const claudeOk = !("unavailable" in claude);
       const defaultId = typeof owning.pageTargetDefault === "string" ? owning.pageTargetDefault : null;
-      return createAgentCard({
+      const posted = createAgentCard({
         store,
         bot,
         threadId,
@@ -23024,6 +23066,10 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
           },
         },
       });
+      // #3514: the turn that posted a waiting card ends at its safe point
+      // when its engine cannot take the answer live
+      if (postedCardWaits(body && typeof body === "object" ? (body as { tool?: unknown }).tool : undefined, posted) && posted.ok) cardPosted(cardTurnHandoffDeps(), owning.id, threadId, posted.messageId);
+      return posted;
     },
     authored: (threadId, generation, messageId) => handoffs.authored(threadId, generation, messageId),
     proposePublishedPage: (input) => publishedPages.propose({
@@ -32740,6 +32786,8 @@ ROUTES.push(createBotsMessagesRoutes({
   // #2633: a question declined from an AI client is told to the bot in the
   // language of the person who declined it.
   questionDeclinedText: (auth: RequestAuth) => serverApprovalWords(languageOfRequest(auth)).t("question.card.declinedByClient"),
+  // #3514: a declined card ends the turn that posted it at its safe point
+  cardTurnSettled,
   // 2026-11-05 (#2032): chat no longer picks a role; Flow routines use actAs
   pickPerspicaxRole: (_bot: BotRecord, _threadId: string, _auth: RequestAuth, _slug: string) => {},
   originApprovals,

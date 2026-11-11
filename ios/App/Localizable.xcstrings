@@ -11645,7 +11645,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Répondez à l'approbation ci-dessus pour continuer"
+            "value": "Réponds à l'approbation ci-dessus pour continuer"
           }
         },
         "pt-BR": {
@@ -11661,7 +11661,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Répondez à l'approbation ci-dessus, ou écrivez autre chose : elle reste en attente"
+            "value": "Réponds à l'approbation ci-dessus, ou écris autre chose : elle reste en attente"
           }
         }
       }
@@ -38194,72 +38194,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Se a execução anterior ainda estiver trabalhando"
-          }
-        }
-      }
-    },
-    "Ignore the question": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignore the question"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignorer la question"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignorar a pergunta"
-          }
-        }
-      }
-    },
-    "Ignore without answering": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignore without answering"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignorer sans répondre"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignorar sem responder"
-          }
-        }
-      }
-    },
-    "Ignore, closes automatically": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignore, closes automatically"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignorer, se ferme automatiquement"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignorar, fecha automaticamente"
           }
         }
       }
@@ -94595,7 +94529,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Attend votre approbation"
+            "value": "Attend ton approbation"
           }
         },
         "pt-BR": {

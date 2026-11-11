@@ -496,47 +496,13 @@ public enum OptionCardRules {
     }
 }
 
-/// "Ignore the question" on a live ask (parity Q2).
+/// The sentence the old "Ignore the question" control answered with.
 ///
-/// The silent X is not this. The server refuses the canned dismiss sentence
-/// until the question is already answered, so a tap here is an explicit
-/// answer: the person chose not to pick an option, and the bot continues.
-/// The sentence is English because the model reads it, and it is not the
-/// canned dismiss sentence the server rejects.
+/// #3471: the quiet × is the only way to skip a waiting question, so
+/// nothing sends this any more. Cards answered with it before still read
+/// as closed without an answer, folded like a skip.
 public enum QuestionIgnore {
     public static let answer = "The user skipped this question without choosing an option. Continue with your best judgment."
-
-    public enum Face: Equatable, Sendable {
-        case ignore
-        /// Seconds left before the server declines the card on its own.
-        case closesAutomatically(remaining: Int)
-    }
-
-    public static func canIgnore(_ card: OptionCard) -> Bool {
-        guard card.isPending, !card.isPermission else { return false }
-        if card.routineRequest != nil || card.skillRequest != nil || card.profileRequest != nil
-            || card.modelRequest != nil || card.ruleRequest != nil || card.teamSetupRequest != nil || card.tighteningRequest != nil
-            || card.adminApproval == true { return false }
-        return true
-    }
-
-    /// `expiresAt` is milliseconds. No deadline, or one already past, is a
-    /// plain Ignore. A countdown only while the card will close by itself.
-    public static func face(expiresAt: Double?, now: Date = Date()) -> Face {
-        guard let expiresAt, expiresAt.isFinite else { return .ignore }
-        let remaining = expiresAt / 1_000 - now.timeIntervalSince1970
-        guard remaining > 0, remaining < 24 * 60 * 60 else { return .ignore }
-        return .closesAutomatically(remaining: Int(remaining.rounded(.down)))
-    }
-
-    /// `m:ss`, or `h:mm:ss` once an hour is left.
-    public static func clock(_ seconds: Int) -> String {
-        let left = max(0, seconds)
-        if left >= 3_600 {
-            return String(format: "%d:%02d:%02d", left / 3_600, (left % 3_600) / 60, left % 60)
-        }
-        return String(format: "%d:%02d", left / 60, left % 60)
-    }
 
     public static func isSkip(_ text: String?) -> Bool {
         text?.trimmingCharacters(in: .whitespacesAndNewlines) == answer

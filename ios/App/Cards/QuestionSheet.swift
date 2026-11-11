@@ -267,49 +267,6 @@ struct QuestionSheetNote: View {
     }
 }
 
-/// "Ignore the question". When the card carries `expiresAt`, the label
-/// says it closes on its own and shows the time left.
-struct QuestionIgnoreControl: View {
-    let colors: QuestionSheetColors
-    let expiresAt: Double?
-    let disabled: Bool
-    let action: () -> Void
-
-    var body: some View {
-        if expiresAt == nil {
-            control(.ignore)
-        } else {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                control(QuestionIgnore.face(expiresAt: expiresAt, now: context.date))
-            }
-        }
-    }
-
-    private func control(_ face: QuestionIgnore.Face) -> some View {
-        Button(action: action) {
-            Text(Self.words(face))
-                .font(colors.font(13, .medium))
-                .foregroundStyle(colors.inkSecondary)
-                .padding(.horizontal, 12)
-                .frame(minHeight: 28)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(disabled)
-        .opacity(disabled ? 0.4 : 1)
-        .accessibilityLabel(Text("Ignore without answering"))
-    }
-
-    private static func words(_ face: QuestionIgnore.Face) -> String {
-        switch face {
-        case .ignore:
-            String(localized: "Ignore the question")
-        case let .closesAutomatically(remaining):
-            String(localized: "Ignore, closes automatically") + " · " + QuestionIgnore.clock(remaining)
-        }
-    }
-}
-
 /// The quiet send of a choose-several question or a set: text, no fill.
 struct QuestionSheetSend: View {
     let colors: QuestionSheetColors

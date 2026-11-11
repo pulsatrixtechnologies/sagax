@@ -118,9 +118,10 @@ public enum WaitingCardSkip {
         return original
     }
 
-    /// How a settled option card closed without an answer, if it did.
+    /// How a settled option card closed without an answer, if it did. A
+    /// question answered by the old Ignore control folds as skipped too.
     public static func fold(_ card: OptionCard) -> Fold? {
-        if card.skipped == true { return .skipped }
+        if card.skipped == true || QuestionIgnore.isSkip(card.answeredText) { return .skipped }
         if card.expired == true { return .expired }
         return nil
     }

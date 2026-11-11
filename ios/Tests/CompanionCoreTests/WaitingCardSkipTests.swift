@@ -113,6 +113,23 @@ final class WaitingCardSkipTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(closed.attention).isWaiting)
     }
 
+    // MARK: One way to skip a question
+
+    func testAWaitingQuestionOffersOnlyTheSkipNoIgnoreNorCountdown() throws {
+        // desktop QuestionCard.r2.test.ts: "offers only the skip X, no Ignore or countdown"
+        let asked = try message(#"{"id":"m","role":"bot","kind":"options","at":1,"card":{"title":"t","subtitle":"","options":["A"],"requestId":"q","requestType":"question","expiresAt":9999999999999}}"#)
+        let card = try XCTUnwrap(asked.card)
+        XCTAssertEqual(WaitingCardSkip.route(for: card, threadId: "t1", botId: "b1"), .respond(threadId: "t1", requestId: "q", behavior: "answer"))
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        for file in ["App/Cards/QuestionCardView.swift", "App/Cards/FlatQuestionCardView.swift", "App/Cards/QuestionSheet.swift"] {
+            let text = try String(contentsOf: root.appendingPathComponent(file), encoding: .utf8)
+            for word in ["QuestionIgnoreControl", "QuestionIgnore.answer", "Ignore the question", "closes automatically", "TimelineView"] {
+                XCTAssertFalse(text.contains(word), "\(file) still offers \(word)")
+            }
+        }
+    }
+
     // MARK: A skip that does not land
 
     func testAFailedSkipOpensTheQuestionAgainWithItsReplyBox() throws {

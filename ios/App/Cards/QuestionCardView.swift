@@ -176,10 +176,6 @@ struct QuestionCardView: View {
             if !oneTap && (current.allowsMultiple || !single) {
                 QuestionSheetSend(colors: colors, label: single ? "Submit answer" : "Submit answers", enabled: complete && !answering, action: send)
             }
-            if QuestionIgnore.canIgnore(card) {
-                QuestionIgnoreControl(colors: colors, expiresAt: card.expiresAt, disabled: answering, action: ignore)
-                    .accessibilityIdentifier("question-ignore-\(message.id)")
-            }
         }
         .accessibilityIdentifier("question-card-\(message.id)")
     }
@@ -215,10 +211,9 @@ struct QuestionCardView: View {
     /// rest dimmed, an answer in words under its rows.
     private func settledCard(_ card: OptionCard) -> some View {
         let answer = card.answeredText ?? sent
-        let skipped = QuestionIgnore.isSkip(answer)
         let fold = WaitingCardSkip.fold(card)
-        let closed = skipped || fold != nil || (answer == nil && card.answered != nil && card.answered != "answer")
-        let readable = skipped ? nil : answer
+        let closed = fold != nil || (answer == nil && card.answered != nil && card.answered != "answer")
+        let readable = fold != nil ? nil : answer
         // Page-target answers are a bare id; match by id ?? label (#2048).
         let byQuestion: [String: String]
         if card.pageTargetChoice != nil, let readable, questions.count == 1 {
@@ -317,22 +312,6 @@ struct QuestionCardView: View {
         otherFocused = false
         Task {
             await session.skipOptionCard(message, in: chat)
-            answering = false
-        }
-    }
-
-    private func ignore() {
-        guard !settled, let card, let requestId = card.requestId, QuestionIgnore.canIgnore(card) else { return }
-        sent = QuestionIgnore.answer
-        answering = true
-        otherFocused = false
-        Task {
-            await session.answer(
-                threadId: chat.threadId,
-                requestId: requestId,
-                choice: QuestionIgnore.answer,
-                isPermission: false
-            )
             answering = false
         }
     }

@@ -525,8 +525,9 @@ describe("ACP turns (fake CLI)", () => {
       messages.push(promptOf()!);
     }
     // Agents can compact their own history away between turns; the re-anchor
-    // backstop returns the standing instructions within a bounded window.
-    const full = "Standing rules.\n\nMemory: likes quiet hours." + HINT;
+    // backstop returns the standing instructions within a bounded window,
+    // in the opening order of #3534 (stable half first).
+    const full = "Standing rules." + HINT + "\n\nMemory: likes quiet hours.";
     expect(messages[0]).toBe(full + "\n\nturn 0");
     for (let i = 1; i <= 8; i++) expect(messages[i]).toBe("turn " + i);
     expect(messages[9]).toBe(full + "\n\nturn 9");

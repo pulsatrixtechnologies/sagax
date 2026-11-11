@@ -2,7 +2,7 @@
 // state; answers drawn in their receipt's line never break the run.
 import { describe, expect, it } from "vitest";
 import type { Message } from "@/state/store";
-import { askAlreadyLined, askLineVerb, collapseAskLines } from "./ask-line";
+import { askLineVerb, collapseAskLines } from "./ask-line";
 
 const bots = [{ id: "a", name: "Ann" }, { id: "b", name: "Ben" }, { id: "c", name: "Cy" }];
 const receipt = (bot: string, ok = true): Message => ({
@@ -33,18 +33,5 @@ describe("collapseAskLines (#3289)", () => {
     expect(askLineVerb((out[0] as { asks: { state: "running" | "done" }[] }).asks)).toBe("asking");
     const received = { ...receipt("me"), from: { botId: "a", name: "Ann", color: "blue" } } as Message;
     expect(collapseAskLines([item(received)], { selfBotId: "me", lookup: [received], bots, silent: () => false })[0]).toMatchObject({ kind: "message" });
-  });
-});
-
-describe("askAlreadyLined (#3289)", () => {
-  const relay = { relayVia: "teammate" as const, relayAsk: { text: "Brief", by: "Ann", botId: "a" } };
-  const incoming = { ...receipt("me"), from: { botId: "a", name: "Ann", color: "blue" } } as Message;
-  it("is true right under the line of the request it answers", () => {
-    expect(askAlreadyLined(relay, [result("me"), incoming], "me")).toBe(true);
-  });
-  it("is false for another asker, a trace, or another row in between", () => {
-    expect(askAlreadyLined({ ...relay, relayAsk: { text: "x", by: "Ben", botId: "b" } }, [incoming], "me")).toBe(false);
-    expect(askAlreadyLined({ ...relay, relayTrace: "stopped" }, [incoming], "me")).toBe(false);
-    expect(askAlreadyLined(relay, [{ id: "t", role: "bot", kind: "text", text: "hi", at: 1 } as Message, incoming], "me")).toBe(false);
   });
 });

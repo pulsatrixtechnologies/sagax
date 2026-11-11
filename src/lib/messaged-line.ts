@@ -3,7 +3,13 @@
 // quiet line, "Messaged [face] Osprey and [face] test" (#3270), shown with
 // Tool calls hidden too: it is the only trace of the send where the person
 // reads. A failed send keeps its own chip, so its failure still shows.
+//
+// #3581: a send_to_bot receipt ("Sent to <bot> · state · summary") joins the
+// same line, one form for every trace between bots: the reply is behind the
+// name, and the state is the line's tail only when the send failed or waits
+// on the person.
 import type { Message } from "@/state/store";
+import type { SendState } from "../../shared/send-receipt";
 
 type Comm = NonNullable<Message["comm"]>;
 
@@ -31,6 +37,20 @@ export const MESSAGED_LINE_SHOWN = 3;
  * pair channel. Received chips, room posts, a teammate's reply and a failed
  * send stay as they are. */
 export function messagedChip(message: Message, botDmIds: ReadonlySet<string>): Comm | null {
+  const receipt = message.sendReceipt;
+  if (receipt && !message.comm) {
+    const brief = message.tool?.input?.trim();
+    return {
+      groupId: "",
+      threadId: receipt.threadId,
+      withBotId: receipt.botId,
+      withName: message.threadRef?.title || receipt.botId,
+      withColor: "blue",
+      direction: "sent",
+      ...(message.threadRef?.gone ? { gone: true } : {}),
+      ...(brief ? { text: brief } : {}),
+    };
+  }
   const comm = message.comm;
   if (!comm || message.kind !== "activity" || !message.tool) return null;
   if (comm.direction === "received" || message.tool.ok === false) return null;
@@ -96,11 +116,30 @@ export function collapseMessagedLines<T extends AnyItem>(
   return out;
 }
 
-/** What the line names: every recipient when there are few, else the
- * first three and how many more. */
-export function messagedLineNames(recipients: readonly MessagedRecipient[], expanded: boolean): { shown: MessagedRecipient[]; others: number } {
-  if (expanded || recipients.length <= MESSAGED_LINE_SHOWN) return { shown: [...recipients], others: 0 };
-  return { shown: recipients.slice(0, MESSAGED_LINE_SHOWN), others: recipients.length - MESSAGED_LINE_SHOWN };
+/** The room a names line has, measured on screen (#3581): the width each
+ * name takes whole (its face, its name and the words that join it), the
+ * width "and N others" takes for a count, and what is left for the names. */
+export interface NamesFit {
+  widths: readonly number[];
+  others: (count: number) => number;
+  available: number;
+}
+
+/** What a names line draws (Messaged, Asked, Asked by, Wrote to): every
+ * name when there are few, else the first three and how many more. A name
+ * is never cut (#3581): when the names do not fit the room, the line draws
+ * fewer of them and a larger count ("A, B and 13 others", then "A and 14
+ * others"), the count always whole, and at least one name. Opened, it is
+ * the whole list. */
+export function messagedLineNames<T>(parties: readonly T[], expanded: boolean, fit?: NamesFit): { shown: T[]; others: number } {
+  if (expanded) return { shown: [...parties], others: 0 };
+  let count = Math.min(parties.length, MESSAGED_LINE_SHOWN);
+  if (fit && fit.available > 0) {
+    const room = (shown: number) => fit.widths.slice(0, shown).reduce((sum, width) => sum + width, 0)
+      + (shown < parties.length ? fit.others(parties.length - shown) : 0);
+    while (count > 1 && room(count) > fit.available) count -= 1;
+  }
+  return { shown: parties.slice(0, count), others: parties.length - count };
 }
 
 /** The locale's list ("A, B and C", "A, B et C") as element and literal
@@ -116,4 +155,12 @@ export function conjunctionParts(count: number, locale: string): Array<{ type: "
   return parts.map((part) => part.type === "element"
     ? { type: "element" as const, index: Number(part.value.replaceAll("\u0000", "")) }
     : { type: "literal" as const, value: part.value });
+}
+
+/** The state the line says after its names: a send that failed, else one
+ * that waits on the person; any other state is behind the name. */
+export function messagedLineState(recipients: readonly MessagedRecipient[]): Extract<SendState, "failed" | "waiting"> | null {
+  const states = recipients.map((recipient) => recipient.message.sendReceipt?.state);
+  if (states.includes("failed")) return "failed";
+  return states.includes("waiting") ? "waiting" : null;
 }

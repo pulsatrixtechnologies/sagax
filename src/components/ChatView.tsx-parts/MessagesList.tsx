@@ -18,6 +18,7 @@ import { GotoGroupChip } from "../GotoGroupChip";
 import { collapseGotoLines, gotoGroupFromConversations, gotoTargetOf, silentChatItem, unifiedGotoTargetOf } from "@/lib/goto-lines";
 import { collapseMessagedLines } from "@/lib/messaged-line";
 import { collapseAskLines } from "@/lib/ask-line";
+import { collapseIncomingLines } from "@/lib/incoming-line";
 import { NewMessagesDivider } from "../NewMessagesDivider";
 import { unreadMessageIds } from "@/lib/unread-divider";
 import type { EffectivePlace } from "@/lib/place";
@@ -165,8 +166,18 @@ export const MessagesList = memo(function MessagesList({
     const asked = showThreads ? messaged : collapseAskLines(messaged, {
       selfBotId: botId, lookup: transcript, bots: storeBots, silent: (item) => silentChatItem(item, showToolCalls),
     }) as ListedItem[];
+    // #3581: what came in from another bot or an AI client is one centered
+    // "Asked by / Message from / Answer from" line too, never a quote. With
+    // threads on, a received hand-off and a notice keep their links; a
+    // stored copy of a request still folds.
+    const incoming = collapseIncomingLines(asked, {
+      selfBotId: botId,
+      lookup: transcript,
+      silent: (item) => silentChatItem(item, showToolCalls),
+      ...(showThreads ? { copiesOnly: true } : {}),
+    }) as ListedItem[];
     // Two or more "Go to conversation" lines in a row become one chip.
-    return collapseGotoLines(asked, (item) => silentChatItem(item, showToolCalls),
+    return collapseGotoLines(incoming, (item) => silentChatItem(item, showToolCalls),
       showThreads ? gotoTargetOf : unifiedGotoTargetOf) as ListedItem[];
   }, [messages, transcript, botId, botName, selfColor, locale, owners, showToolCalls, showThreads, botDmIds, storeBots]);
   const windowIds = useMemo(() => new Set(messages.map((message) => message.id)), [messages]);

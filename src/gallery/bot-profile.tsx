@@ -346,12 +346,6 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
   if (path === "/api/org") return json({ org: { name: "Northwind Studio", identity: { kind: "perspicax", issuer: "https://perspicax.example.test" } }, link: { state: "ok" }, viewerRole: "admin", settings: {} });
   if (path === "/api/org/directory") return json({ people: PEOPLE, teams: [{ id: "tm_studio", name: "Studio team", managers: ["pr_alex"], members: ["pr_alex", "pr_sam", "pr_jordan"] }], viewer: { principalId: "pr_alex" } });
   if (path === "/api/bots") return json({ bots: [bot, ...neighbours], groups: [], sections: [], computerControl: {}, botQueuedMessages: {} });
-  // #3480: ?quiet=on|all draws the bot in quiet mode (its own switch, or the one for all)
-  if (path === "/api/me/quiet" && params.get("quiet")) {
-    const quiet = params.get("quiet");
-    const all = quiet === "all";
-    return json({ all, bots: [{ botId: BOT_ID, bot: quiet === "on", all, quiet: quiet === "on" || all, kept: { runs: 0, problems: 0 } }] });
-  }
   // the bot's shared vault (#3399, under Bot accounts): one login, never its value
   if (path === `${bots}/credentials/list`) return json({ items: [{ id: "v1", kind: "login", name: "Supplier portal", domains: ["portal.northwind.example"], hasPassword: true, hasTotp: false, hasApiKey: false, hasNotes: false }] });
   if (method !== "GET" && (path === bots || path.startsWith(`${bots}/`) || path.startsWith("/api/"))) {

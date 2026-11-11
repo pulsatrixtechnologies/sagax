@@ -3,16 +3,18 @@
 // app's neutral ink, joined with the locale's conjunction; past three names,
 // "and N others" shows the whole list and then folds it back. A name with
 // somewhere to go opens the exchange in this column (the caller's sheet),
-// never another conversation (unified chat). The Messaged line, the Asking /
-// Asked line of a hand-off and of a routine run's teammates draw with
-// NamesLine; a request one bot received from another draws with ActorLine
-// ("[face] A asked “first words”"), the same row, faces and ink.
-import { useState, type ReactNode } from "react";
+// never another conversation (unified chat). Every trace between bots draws
+// with NamesLine, in both directions (#3581): Messaged, Asking / Asked (a
+// hand-off, a routine run's teammates), and Asked by, Message from, Answer
+// from (HandoffRow's IncomingLine). Never a quoted request on the line.
+// A name is never cut: a narrow row draws fewer names and a larger "and N
+// others" (lib/messaged-line messagedLineNames), the count always whole.
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { Bot } from "@/state/store";
 import { activeLocale, t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { mausInk, type MausColor } from "@/lib/mascot";
-import { conjunctionParts, MESSAGED_LINE_SHOWN } from "@/lib/messaged-line";
+import { conjunctionParts, messagedLineNames, type NamesFit } from "@/lib/messaged-line";
 import { QUIET_LINE, QUIET_LINE_ROW, QuietLineParty } from "./ConversationLink";
 
 const MORE_BUTTON = "-mx-1 shrink-0 rounded-full px-1 font-medium text-ink hover:bg-raised";
@@ -87,6 +89,63 @@ function PartyName({ party, bots, testId }: { party: LineParty; bots: readonly B
   );
 }
 
+const FACE = 16;
+const NAME_MAX = 256;
+
+let measuring: CanvasRenderingContext2D | null | undefined;
+
+/** The width of words in the line's font, or null where nothing draws (tests). */
+function textWidth(words: string, style: CSSStyleDeclaration, weight: string): number | null {
+  if (measuring === undefined) {
+    try {
+      measuring = document.createElement("canvas").getContext("2d");
+    } catch {
+      measuring = null;
+    }
+  }
+  if (!measuring) return null;
+  measuring.font = `${weight} ${style.fontSize} ${style.fontFamily}`;
+  return measuring.measureText(words).width;
+}
+
+interface Measured {
+  widths: number[];
+  others: number[];
+  available: number;
+}
+
+/** What the folded line has room for (messagedLineNames decides from it):
+ * each name whole with its face and the words that join it, each count,
+ * and the row's width less the verb and the tail. */
+function measureLine(row: HTMLElement, line: HTMLElement, verb: HTMLElement, names: readonly string[], othersLabel: (count: number) => string, locale: string): Measured | null {
+  const rowStyle = getComputedStyle(row);
+  const style = getComputedStyle(line);
+  const room = row.clientWidth - parseFloat(rowStyle.paddingLeft || "0") - parseFloat(rowStyle.paddingRight || "0");
+  if (!(room > 0)) return null;
+  const gap = parseFloat(style.columnGap) || 6;
+  const word = (words: string, weight = "500") => textWidth(words, style, weight);
+  // the widest of the locale's joins (", ", " and ", ", and "): a comma
+  // hugs the name before it, a word sits after a gap
+  const joiners = [...conjunctionParts(2, locale), ...conjunctionParts(3, locale)].flatMap((part) => (part.type === "literal" ? [part.value.trim()] : []));
+  let join = 0;
+  for (const joiner of joiners) {
+    const width = word(joiner, style.fontWeight);
+    if (width === null) return null;
+    join = Math.max(join, joiner.startsWith(",") ? width : gap + width);
+  }
+  const tail = line.querySelector<HTMLElement>("[data-line-tail]");
+  const tailWidth = tail ? 2 * gap + (word("·", style.fontWeight) ?? 0) + (word(tail.textContent ?? "", style.fontWeight) ?? 0) : 0;
+  // a name: the gap before it, its face, a gap, its words; joined to the one before
+  const widths = names.map((name, index) => (index > 0 ? join : 0) + gap + FACE + gap + Math.min(NAME_MAX, word(name) ?? 0));
+  const others = names.map((_, count) => (count === 0 ? 0 : join + gap + (word(othersLabel(count)) ?? 0)));
+  const padding = parseFloat(style.paddingLeft || "0") + parseFloat(style.paddingRight || "0");
+  // a little room to spare, so rounding never cuts the last letter
+  const available = Math.floor(room - padding - verb.getBoundingClientRect().width - tailWidth - 4);
+  return { widths: widths.map(Math.ceil), others: others.map(Math.ceil), available };
+}
+
+const measuredKey = (measured: Measured | null) => (measured ? `${measured.available}|${measured.widths.join(",")}|${measured.others.join(",")}` : "");
+
 /** What the line still says after the names: a state, a failure. */
 function Tail({ children, tone }: { children: ReactNode; tone?: "danger" | "accent" }) {
   return (
@@ -117,17 +176,44 @@ export function NamesLine({ testId, verb, parties, bots, tail, tailTone, mid, da
   children?: ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const folded = !expanded && parties.length > MESSAGED_LINE_SHOWN;
-  const shown = folded ? parties.slice(0, MESSAGED_LINE_SHOWN) : parties;
-  const others = parties.length - shown.length;
-  const othersLabel = others > 0 ? t(others === 1 ? "chat.messagedOthers.one" : "chat.messagedOthers.other", { count: others }) : null;
-  const parts = conjunctionParts(shown.length + (othersLabel ? 1 : 0), activeLocale());
-  // opened: the whole list, then the control that folds it back
-  const foldable = expanded && parties.length > MESSAGED_LINE_SHOWN;
+  const rowRef = useRef<HTMLDivElement>(null);
+  const lineRef = useRef<HTMLDivElement>(null);
+  const verbRef = useRef<HTMLSpanElement>(null);
+  const [measured, setMeasured] = useState<Measured | null>(null);
+  const [width, setWidth] = useState(0);
+  const locale = activeLocale();
+  const othersText = (count: number) => t(count === 1 ? "chat.messagedOthers.one" : "chat.messagedOthers.other", { count });
+  // #3581: a name is never cut. The row's width is watched; the line folds
+  // to the names it has room for, whole.
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    if (!row || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setWidth(row.clientWidth));
+    observer.observe(row);
+    setWidth(row.clientWidth);
+    return () => observer.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    const line = lineRef.current;
+    const verbBox = verbRef.current;
+    const next = !expanded && width > 0 && row && line && verbBox
+      ? measureLine(row, line, verbBox, parties.map((party) => party.name), othersText, locale)
+      : null;
+    setMeasured((current) => (measuredKey(current) === measuredKey(next) ? current : next));
+  });
+  const fit: NamesFit | undefined = measured
+    ? { widths: measured.widths, available: measured.available, others: (count) => measured.others[count] ?? measured.others.at(-1) ?? 0 }
+    : undefined;
+  const { shown, others } = messagedLineNames(parties, expanded, fit);
+  const othersLabel = others > 0 ? othersText(others) : null;
+  const parts = conjunctionParts(shown.length + (othersLabel ? 1 : 0), locale);
+  // opened (only a folded line opens): the whole list, then the control that folds it back
+  const foldable = expanded;
   return (
-    <div className={cn(QUIET_LINE_ROW, align === "start" && "justify-start", className)} data-testid={testId} data-mid={mid} {...data}>
-      <div className={cn(QUIET_LINE, "min-w-0 max-w-full", align === "start" && "px-0", expanded ? cn("flex-wrap", align === "start" ? "justify-start" : "justify-center") : "overflow-hidden whitespace-nowrap")}>
-        <span className="shrink-0">{verb}</span>
+    <div ref={rowRef} className={cn(QUIET_LINE_ROW, align === "start" && "justify-start", className)} data-testid={testId} data-mid={mid} {...data}>
+      <div ref={lineRef} className={cn(QUIET_LINE, "min-w-0 max-w-full", align === "start" && "px-0", expanded ? cn("flex-wrap", align === "start" ? "justify-start" : "justify-center") : "overflow-hidden whitespace-nowrap")}>
+        <span ref={verbRef} className="shrink-0">{verb}</span>
         {parts.map((part, index) => {
           if (part.type === "literal") {
             // the row's gap stands for the spaces; a comma hugs the name before it
@@ -155,34 +241,6 @@ export function NamesLine({ testId, verb, parties, bots, tail, tailTone, mid, da
             {t("chat.showLess")}
           </button>
         )}
-        {tail ? <Tail tone={tailTone}>{tail}</Tail> : null}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-/** One bot that did something: "[face] Scout asked “first words”". */
-export function ActorLine({ testId, party, verb, words, bots, tail, tailTone, mid, data, children }: {
-  testId: string;
-  party: LineParty;
-  verb: ReactNode;
-  /** The first words of what was asked, the whole text in the tooltip. */
-  words?: string;
-  bots: readonly Bot[];
-  tail?: ReactNode;
-  tailTone?: "danger" | "accent";
-  mid?: string;
-  data?: Record<string, string>;
-  children?: ReactNode;
-}) {
-  const said = words?.replace(/\s+/g, " ").trim();
-  return (
-    <div className={QUIET_LINE_ROW} data-testid={testId} data-mid={mid} {...data}>
-      <div className={cn(QUIET_LINE, "min-w-0 max-w-full overflow-hidden whitespace-nowrap")}>
-        <PartyName party={party} bots={bots} testId={`${testId}-recipient`} />
-        <span className="shrink-0">{verb}</span>
-        {said ? <span data-line-words="" title={words} className="min-w-0 max-w-[28rem] truncate">{t("chat.askLine.words", { words: said })}</span> : null}
         {tail ? <Tail tone={tailTone}>{tail}</Tail> : null}
       </div>
       {children}

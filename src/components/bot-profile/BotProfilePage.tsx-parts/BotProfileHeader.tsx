@@ -28,8 +28,6 @@ import type { MascotHeroSlot } from "../../floating-bots/mascot-hero-slot";
 import { InlineEditableText } from "../../bot-settings/InlineEditableText";
 import type { useBotSectionContent } from "../../bot-settings/useBotSectionContent";
 import { sectionLabel } from "./cards";
-import { useBotQuiet } from "@/lib/quiet-mode";
-import { QuietModeMark } from "../../bot-settings/QuietModeRow";
 
 type Derived = ReturnType<typeof useBotSectionContent>["derived"];
 
@@ -177,15 +175,12 @@ export function useBotProfileHero({ bot, derived }: {
 /** The header: the bare mascot with the bot's name and label, then who
  * sees it and its description, edited in place, all aligned left on the
  * column (Grok Bot, the owner 2026-11-09). */
-export function BotProfileHeader({ bot, derived, hero, onOpenQuiet }: {
+export function BotProfileHeader({ bot, derived, hero }: {
   bot: Bot;
   derived: Derived;
   hero: ReactNode;
-  /** #3480: the quiet mark opens the page that holds its switch. */
-  onOpenQuiet?: () => void;
 }) {
   const { state } = useStore();
-  const quiet = useBotQuiet(bot.id);
   const viewerId = viewerActorId(state.config);
   const people = useOrgPeople();
   // Who sees it, who owns it, what this viewer may change.
@@ -212,8 +207,6 @@ export function BotProfileHeader({ bot, derived, hero, onOpenQuiet }: {
             <UserRound size={13} aria-hidden="true" /> {t("persona.overview.owner")}: {owner}
           </span>
         )}
-        {/* #3480: quiet mode, seen without opening anything */}
-        {quiet && <QuietModeMark state={quiet} onOpen={onOpenQuiet} />}
         {isPrimary && (
           <span className="inline-flex items-center gap-1 rounded-full bg-hover px-2 py-0.5 text-[11px]">
             <Star size={11} aria-hidden="true" className="text-accent" /> {t("primaryBot.badge")}

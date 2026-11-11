@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Message } from "@/state/store";
 import { collapseMessagedLines, conjunctionParts, messagedLineNames, type MessagedLineItem } from "./messaged-line";
+import { setLocale, t } from "./i18n";
+
+setLocale("en");
 
 const chip = (id: string, withBotId: string, extra: Partial<NonNullable<Message["comm"]>> = {}, ok = true): { kind: "message"; message: Message } => ({
   kind: "message",
@@ -41,6 +44,24 @@ describe("collapseMessagedLines (#3270)", () => {
     expect(messagedLineNames(recipients, false)).toMatchObject({ others: 2 });
     expect(messagedLineNames(recipients, false).shown).toHaveLength(3);
     expect(messagedLineNames(recipients, true)).toMatchObject({ others: 0 });
+  });
+
+  it("never cuts a name: a narrow line draws fewer whole names and a larger count (#3581)", () => {
+    const names = Array.from({ length: 15 }, (_, i) => `Bot ${i}`);
+    // each name takes 80 px whole, "and N others" 90 px: 260 px holds two
+    const fit = { widths: names.map(() => 80), others: () => 90, available: 260 };
+    const line = messagedLineNames(names, false, fit);
+    expect(line.shown).toEqual(["Bot 0", "Bot 1"]);
+    expect(line.others).toBe(13);
+    expect(t("chat.messagedOthers.other", { count: line.others })).toBe("13 others");
+    expect(messagedLineNames(names, false, { ...fit, available: 170 })).toMatchObject({ shown: ["Bot 0"], others: 14 });
+    // always one name, however narrow; opened, the whole list
+    expect(messagedLineNames(names, false, { ...fit, available: 10 }).shown).toHaveLength(1);
+    expect(messagedLineNames(names, true, fit)).toMatchObject({ others: 0 });
+    // three short names that do not fit fold too
+    const three = { ...fit, others: () => 60 };
+    expect(messagedLineNames(names.slice(0, 3), false, { ...three, available: 230 })).toMatchObject({ shown: ["Bot 0", "Bot 1"], others: 1 });
+    expect(messagedLineNames(names.slice(0, 3), false, { ...three, available: 240 })).toMatchObject({ others: 0 });
   });
 
   it("joins names with the locale's conjunction", () => {

@@ -142,19 +142,3 @@ export function collapseAskLines<T extends AnyItem>(
   }
   return out;
 }
-
-/** A teammate's reply copied into this bot's chat (relayVia teammate) right
- * under the line of the very request it answers ("[face] Scout asked …"):
- * that line already says who asked, so the reply draws without a second one.
- * `before` is the rows above, nearest first; answers drawn in their
- * receipt's line are passed over. */
-export function askAlreadyLined(message: Pick<Message, "relayVia" | "relayAsk" | "relayTrace">, before: readonly Message[], selfBotId: string): boolean {
-  const ask = message.relayAsk;
-  if (message.relayVia !== "teammate" || message.relayTrace || !ask?.by) return false;
-  for (const row of before) {
-    if (handoffResultId(row)) continue;
-    if (!isHandoff(row) || row.threadRef?.botId !== selfBotId) return false;
-    return ask.botId ? row.from?.botId === ask.botId : row.from?.name === ask.by;
-  }
-  return false;
-}

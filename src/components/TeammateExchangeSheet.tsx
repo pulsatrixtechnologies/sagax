@@ -6,13 +6,14 @@
 // reads a conversation between two bots, they do not take part in it.
 // The thread stays live (useSideTranscript), so a teammate still at work
 // keeps adding lines.
+import type { ReactNode } from "react";
 import type { Bot } from "@/state/store";
 import { useSideTranscript } from "@/lib/use-side-transcript";
 import type { ExchangeRun } from "@/lib/bot-exchange";
 import { ExchangeSheet } from "./BotExchangeChip";
 import { creditedLines } from "./BotConversations";
 
-export default function TeammateExchangeSheet({ owner, teammate, threadId, task, bots, onClose }: {
+export default function TeammateExchangeSheet({ owner, teammate, threadId, task, bots, footer, onClose }: {
   /** The bot that handed the work: it wrote the user-role lines. */
   owner?: Pick<Bot, "id" | "name" | "color">;
   teammate: { id: string; name: string; color?: string };
@@ -20,6 +21,8 @@ export default function TeammateExchangeSheet({ owner, teammate, threadId, task,
   /** The task, quiet under the header pill. */
   task?: string;
   bots?: readonly Bot[];
+  /** A footer row (the older and newer requests of one "Asked by" line). */
+  footer?: ReactNode;
   onClose: () => void;
 }) {
   const transcript = useSideTranscript(threadId);
@@ -40,6 +43,7 @@ export default function TeammateExchangeSheet({ owner, teammate, threadId, task,
       showToolCalls={false}
       loadError={transcript.failed && transcript.messages.length === 0}
       meta={task}
+      footer={footer}
       onClose={onClose}
     />
   );

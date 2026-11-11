@@ -1,10 +1,12 @@
 // A parallel task in the conversation it answers (shared/parallel-tasks.ts).
 //
-// In the one conversation (threads off, #2099, JC 2026-11-05) it is one line
-// like Claude Code's delegation: `● Agent(@Marc · Draft the email)` then
-// `⎿ Backgrounded agent`, the elapsed time and Stop at the right; the work
-// itself is a row of the bot panel's Coding list. Its question, when it has
-// one, stays inline under the line (#2082).
+// In the one conversation (threads off, #2099, JC 2026-11-05) a task that
+// runs is one step row in the chat's own look (#3581, StepRow): "Working in
+// the background", the task's title, the elapsed time and a round Stop; the
+// work itself is a row of the bot panel's Coding list. Its question, when it
+// has one, stays inline under the row (#2082). Once it has ended the row is
+// gone: its answer under it says the same thing (the bubble that quotes the
+// person's request, or the task's own row when the bot opened it).
 //
 // With threads on it is the card: its name, where it stands (from the task's
 // own live state: running, waiting for the person's approval, waiting for a
@@ -17,6 +19,7 @@ import { liveParallelState, type ParallelTaskState } from "../../shared/parallel
 import { api, openThread, useStore, type Message } from "@/state/store";
 import { pendingQuestions } from "@/lib/pending-question";
 import { QuestionCard } from "./QuestionCard";
+import { StepRow } from "./StepRow";
 import { t } from "@/lib/i18n";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { cn } from "@/lib/cn";
@@ -34,6 +37,17 @@ const STATE_LABEL: Record<CardState, () => string> = {
   failed: () => t("chat.parallel.state.failed"),
   stopped: () => t("chat.parallel.state.stopped"),
 };
+
+/** #3581: on a narrow screen the step row of a task keeps the task's title
+ * whole (the title is the only thing that tells two tasks apart): the words
+ * around it ("Working in the background", an answer's first sentence)
+ * shorten first, then drop. `part` is the StepRow piece holding the title.
+ * StepRow keeps its own rule (label, then a paler target) everywhere else. */
+export function wholeStepTitle(part: "label" | "target"): string {
+  return part === "target"
+    ? "@container w-full [&>[data-step-row]>*>[data-step-target]]:max-w-full [&>[data-step-row]>*>[data-step-target]]:shrink-0 @max-[20rem]:[&>[data-step-row]>*>[data-step-label]]:hidden"
+    : "@container w-full [&>[data-step-row]>*>[data-step-label]]:max-w-full [&>[data-step-row]>*>[data-step-label]]:shrink-0 @max-[20rem]:[&>[data-step-row]>*>[data-step-target]]:hidden";
+}
 
 export function parallelCardState(message: Message, task: { busy?: boolean; activity?: string } | undefined): CardState {
   const ref = message.parallelTask;
@@ -90,6 +104,7 @@ export function ParallelTaskCard({ message, botId }: { message: Message; botId: 
           threadId={ref.threadId}
           now={now}
           onStop={() => dispatch({ type: "stopParallelTask", botId: owner.id, threadId: ref.threadId })}
+          onDetails={() => dispatch({ type: "openCodingChat", target: { botId: owner.id, itemId: `thread:${ref.threadId}`, threadId: ref.threadId } })}
         />
         {questions.map((question) => (
           <div key={question.id} className="w-full" data-parallel-inline-question={ref.threadId}>
@@ -102,35 +117,34 @@ export function ParallelTaskCard({ message, botId }: { message: Message; botId: 
   const started = task?.turnStartedAt ?? ref.startedAt ?? message.at;
   const elapsed = live ? now - started : (ref.endedAt ?? now) - started;
   if (!showThreads) {
-    const dot = status === "failed" ? "text-danger" : status === "done" ? "text-success" : status === "stopped" ? "text-ink-tertiary" : status === "waiting" ? "text-accent-text" : "text-accent-text animate-pulse motion-reduce:animate-none";
-    const tail = status === "waiting" ? (asked.length > 0 ? t("chat.parallel.state.waitingAnswer") : STATE_LABEL.waiting()) : status === "running" ? t("chat.parallel.backgrounded") : STATE_LABEL[status]();
+    // ended: the answer under it tells the same state
+    if (!live) return null;
+    const label = status === "queued" ? STATE_LABEL.queued()
+      : status === "waiting" ? (asked.length > 0 ? t("chat.parallel.state.waitingAnswer") : STATE_LABEL.waiting())
+        : t("chat.parallel.background");
     return (
-      <div className="flex w-full max-w-[640px] flex-col items-start gap-2" data-parallel-card={ref.threadId} data-parallel-state={status}>
-        <div data-parallel-line className="w-full font-mono text-[12.5px] leading-5">
-          <div className="flex items-baseline gap-2">
-            <span data-tool-dot={live ? "running" : status} aria-hidden="true" className={cn("shrink-0 select-none text-[10px] leading-5", dot)}>●</span>
-            <span className="min-w-0 flex-1 truncate" title={t("chat.parallel.title", { title: ref.title })}>
-              <span className="font-semibold text-ink">Agent</span>
-              <span className="text-ink-secondary">(@{owner.name} · {ref.title})</span>
-            </span>
-            {status !== "queued" && elapsed > 0 && <span className="shrink-0 text-[11px] tabular-nums text-ink-tertiary">{formatElapsed(elapsed)}</span>}
-            {live && (
+      <div className="flex w-full flex-col items-start gap-2" data-parallel-card={ref.threadId} data-parallel-state={status}>
+        <div className={wholeStepTitle("target")} data-step-whole="target">
+          <StepRow
+            testId="parallel-task-row"
+            label={label}
+            target={ref.title}
+            title={t("chat.parallel.title", { title: ref.title })}
+            phase={status === "running" ? "running" : "done"}
+            duration={status !== "queued" && elapsed > 0 ? formatElapsed(elapsed) : undefined}
+            extra={
               <button
                 type="button"
                 data-parallel-stop={ref.threadId}
                 onClick={() => dispatch({ type: "stopParallelTask", botId: owner.id, threadId: ref.threadId })}
                 title={t("chat.parallel.stop")}
                 aria-label={t("chat.parallel.stop")}
-                className="flex size-5 shrink-0 items-center justify-center self-center rounded-full text-ink-secondary hover:bg-danger/10 hover:text-danger"
+                className="flex size-5 shrink-0 items-center justify-center rounded-full text-ink-tertiary hover:bg-danger/10 hover:text-danger"
               >
-                <Square size={10} className="fill-current" aria-hidden="true" />
+                <Square size={9} className="fill-current" aria-hidden="true" />
               </button>
-            )}
-          </div>
-          <div className="flex gap-2 text-[12px] text-ink-secondary">
-            <span aria-hidden="true" className="w-[1ch] shrink-0 select-none text-ink-tertiary">⎿</span>
-            <span data-parallel-tail className="truncate">{tail}</span>
-          </div>
+            }
+          />
         </div>
         {questions.map((question) => (
           <div key={question.id} className="w-full" data-parallel-inline-question={ref.threadId}>
@@ -184,18 +198,6 @@ export function ParallelTaskCard({ message, botId }: { message: Message; botId: 
           <QuestionCard threadId={ref.threadId} bot={{ id: owner.id, name: owner.name }} message={question} />
         </div>
       ))}
-    </div>
-  );
-}
-
-/** The line above a parallel task's answer: which task it comes from. */
-export function ParallelResultLabel({ message }: { message: Message }) {
-  const ref = message.parallelTask;
-  if (!ref || ref.role !== "result") return null;
-  return (
-    <div className="mb-1 flex items-center gap-1.5 pl-0.5 text-[11px] text-ink-secondary" data-parallel-result={ref.threadId}>
-      <GitFork size={11} aria-hidden="true" />
-      <span>{t("chat.parallel.result", { title: ref.title })}</span>
     </div>
   );
 }

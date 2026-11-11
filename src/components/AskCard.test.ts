@@ -7,15 +7,17 @@ import { AskCard, AskSettledLine, moveChoiceFocus } from "./AskCard";
 afterEach(() => vi.unstubAllGlobals());
 
 describe("AskCard", () => {
-  // #3581: a result card takes the approval card's width (the whole message
-  // column), so the chat holds one card width; an ask keeps its own cap.
-  it("a result spans the message column like the approval card; an ask keeps its cap", () => {
+  // #3581: every card of a chat takes the approval card's width (the whole
+  // message column): a result, a question, a choice, a key to paste.
+  it("an ask and a result both span the message column like the approval card", () => {
     const result = renderToStaticMarkup(createElement(AskCard, { ariaLabel: "Result", title: "Evening dispatch", result: true }));
     expect(result).toContain('data-ask-card="result"');
-    expect(result).toMatch(/class="[^"]*\bw-full\b/);
-    expect(result).not.toContain("max-w-[600px]");
     const ask = renderToStaticMarkup(createElement(AskCard, { ariaLabel: "Plan", title: "Pick a plan" }));
-    expect(ask).toContain("max-w-[600px]");
+    expect(ask).toContain('data-ask-card="pending"');
+    for (const html of [result, ask]) {
+      expect(html).toMatch(/class="[^"]*\bw-full\b/);
+      expect(html).not.toMatch(/class="[^"]*\bmax-w-/);
+    }
   });
 
   it("leads with an accent title and an optional line on why", () => {

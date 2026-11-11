@@ -5,12 +5,16 @@
 // visible with Tool calls hidden: it is the only trace, where the person is
 // reading, that a new thread now exists. When the thread has since been
 // deleted the receipt is not drawn at all (lib/dead-thread-chips).
+//
+// #3581: threads off, a notice another bot's thread surfaced ("Message from
+// <bot>: #title") is the names line of every trace between bots.
 import { openThread, useStore, type Message } from "@/state/store";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { t } from "@/lib/i18n";
 import { navigationTargetGone } from "@/lib/dead-thread-chips";
 import { ConversationLink } from "./ConversationLink";
-import { HandoffRow } from "./HandoffRow";
+import { HandoffRow, IncomingLine } from "./HandoffRow";
+import { incomingEntry } from "@/lib/incoming-line";
 import { isHandoff } from "@/lib/handoff-row";
 import { stepLabel } from "@/lib/step-label";
 import type { MausColor } from "@/lib/mascot";
@@ -52,7 +56,16 @@ export function ThreadChip({ message }: { message: Message }) {
   // under it (HandoffRow, 2026-11-09, #2901). Every other receipt shows as
   // a plain step, "Messaged <session>" (nothing invisible): hiding it made
   // the bot's work in a coding session vanish from the chat.
-  if (!showThreads) return isHandoff(message) ? <HandoffRow message={message} /> : <ThreadReceiptRow message={message} />;
+  if (!showThreads) {
+    if (isHandoff(message)) return <HandoffRow message={message} />;
+    // #3581: a notice another bot's thread surfaced here: "Message from [face] Bot B"
+    const notice = incomingEntry(message, "", []);
+    if (notice?.verb === "messageFrom") {
+      const self = state.bots.find((candidate) => candidate.id === ref.botId);
+      return <IncomingLine line={{ verb: notice.verb, entries: [notice] }} self={self} bots={state.bots} mid={message.id} />;
+    }
+    return <ThreadReceiptRow message={message} />;
+  }
   if (navigationTargetGone(message, state)) return null;
   const bot = state.bots.find((candidate) => candidate.id === ref.botId);
   const group = bot ? undefined : state.groups.find((candidate) => candidate.id === ref.botId);

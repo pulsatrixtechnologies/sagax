@@ -5,7 +5,7 @@ import { openBot, openThread, type Action, type Bot, type ConfigStatus, type Gro
 import { isCancelledTranscriptRow } from "../../../shared/client-cancel";
 import { isPureLeakedSystemHarnessMessage } from "../../../shared/system-message-guard.ts";
 import { failedTurnCause, isEngineLimitFailure, isPreSendRefusal } from "@/lib/failed-turn";
-import { peerLine, peerRequest } from "@/lib/peer-message";
+import { peerLine, peerRelay, peerRequest } from "@/lib/peer-message";
 import { exchangeJumpStays, startsNewStretch, visibleEdge } from "@/lib/bot-exchange";
 import { voiceCallVisibleSpan } from "@/lib/voice-call-transcript";
 import { VoiceCallCard } from "../VoiceCallCard";
@@ -16,8 +16,7 @@ import { AskLine } from "../AskLine";
 import { TeamNoteLine } from "../TeamNoteLine";
 import { QuietModeLine } from "../QuietModeLine";
 import { teamNoteCount, teamNoteFolded } from "@/lib/team-work";
-import { askAlreadyLined } from "@/lib/ask-line";
-import type { GotoTarget } from "@/lib/goto-lines";
+import { silentChatItem, type GotoTarget } from "@/lib/goto-lines";
 import { StatusActivityRow } from "@/components/StatusActivityRow";
 import { CancelledTurnRow } from "../CancelledTurnRow";
 import { ActivityRun } from "../ActivityRun";
@@ -37,8 +36,13 @@ import { AppMessage } from "../AppMessage";
 import { ConversationRoutineToggle } from "../RoutineToggleLine";
 import { CallRecordRow } from "../CallRecordRow";
 import { DataResultChip } from "../DataResultChip";
-import { ParallelResultLabel, ParallelTaskCard } from "../ParallelTaskCard";
-import { RelayProvenance } from "../RelayViaLabel";
+import { ParallelTaskCard, wholeStepTitle } from "../ParallelTaskCard";
+import { RelayProvenance, RelayViaLabel } from "../RelayViaLabel";
+import { IncomingLine } from "../HandoffRow";
+import { StepRow } from "../StepRow";
+import { BotAvatar } from "../Avatar";
+import { reportBrief } from "../../../shared/routine-result";
+import type { MausColor } from "@/lib/mascot";
 import { CompactionChip, DigestChip } from "../DigestChip";
 import { ScreenFrame } from "../ScreenFrame";
 import { VideoPlayerWidget } from "../video/VideoPlayerWidget";
@@ -156,7 +160,7 @@ export function MessagesListItem({
   const edgeOf = (entry: ListedItem) =>
     entry.kind === "voiceCall"
       ? voiceCallVisibleSpan(entry.messages, windowIds)
-      : entry.kind === "gotoGroup" || entry.kind === "messagedLine" || entry.kind === "askLine"
+      : entry.kind === "gotoGroup" || entry.kind === "messagedLine" || entry.kind === "askLine" || entry.kind === "incomingLine"
         ? { first: entry.messages[0]!, last: entry.messages.at(-1)! }
         : visibleEdge(entry);
   const hiddenRun = (entry: ListedItem) => entry.kind === "run" && !showToolCalls && entry.messages.every((step) => step.kind === "activity");
@@ -228,6 +232,16 @@ export function MessagesListItem({
         {newDay && <TranscriptDate at={first.at} />}
         {divider}
         <AskLine asks={item.asks} self={self} bots={bots} mid={item.messages[0]?.id} />
+      </VirtualRow>
+    );
+  }
+  if (item.kind === "incomingLine") {
+    const self = bots.find((candidate) => candidate.id === botId);
+    return (
+      <VirtualRow key={item.id} rowKey={rowKey} eager={eager} estimate={TRANSCRIPT_ROW_ESTIMATE} className={rowClass}>
+        {newDay && <TranscriptDate at={first.at} />}
+        {divider}
+        <IncomingLine line={item} self={self} bots={bots} mid={item.messages[0]?.id} />
       </VirtualRow>
     );
   }
@@ -318,6 +332,30 @@ export function MessagesListItem({
     );
   }
   const m = item.message;
+  /** A reply that folds into one step row, or null for one drawn whole. */
+  const foldedReply = (message: Message): { kind: string; label: string; icon?: ReactNode; failed?: boolean } | null => {
+    const task = message.parallelTask;
+    // a task that failed says it in the danger ink, as a failed step does
+    if (task?.role === "result") return message.replyToId ? null : { kind: "task", label: task.title, ...(task.state === "failed" ? { failed: true } : {}) };
+    const relay = peerRelay(message, botId);
+    if (!relay) return null;
+    // the nearest drawn row on that side, past hidden tool steps
+    const relayedNear = (step: 1 | -1) => {
+      for (let j = index + step; j >= 0 && j < items.length; j += step) {
+        const near = items[j]!;
+        if (hiddenRun(near) || silentChatItem(near, showToolCalls)) continue;
+        return near.kind === "message" && Boolean(peerRelay(near.message, botId));
+      }
+      return false;
+    };
+    if (!relayedNear(-1) && !relayedNear(1)) return null;
+    const author = bots.find((bot) => bot.id === relay.botId) ?? bots.find((bot) => bot.name === relay.name);
+    return {
+      kind: "teammate",
+      label: author?.name ?? relay.name,
+      icon: <BotAvatar bot={author ?? { name: relay.name, color: "blue" as MausColor }} state="happy" size={14} animated={false} />,
+    };
+  };
   const row = (() => {
     // A client abort is a stop, not a failure. Legacy rows still store
     // the provider's sentence or an error row; both read as this line.
@@ -396,7 +434,7 @@ export function MessagesListItem({
       case "options":
         if (m.relayVia) {
           const card = optionsCardRow({ message: m, transcript, botId, botName, threadId });
-          return card && <><RelayProvenance message={m} bots={bots} />{card}</>;
+          return card && <><RelayProvenance message={m} bots={bots} self={bots.find((candidate) => candidate.id === botId)} />{card}</>;
         }
         return optionsCardRow({ message: m, transcript, botId, botName, threadId });
       case "widget":
@@ -482,12 +520,45 @@ export function MessagesListItem({
         if (!user && isPureLeakedSystemHarnessMessage(m.text) && !m.attachments?.length) {
           return null;
         }
-        // #2915: a background turn that left nothing to copy: one trace line
-        if (!user && m.relayVia && m.relayTrace) return <RelayProvenance message={m} bots={bots} trace />;
+        // #2915: a routine's or a wake's turn that left nothing to copy: its
+        // label says why (a teammate's or an AI client's is its names line)
+        if (!user && m.relayVia && m.relayTrace) return <RelayViaLabel message={m} />;
+        // #3581: a reply the bot's own work brought back is a step row that
+        // unfolds to the whole reply: the answer of a task the bot opened
+        // itself, and each of two or more teammates' replies relayed for one
+        // request. An answer to the person's own message stays whole.
+        const folded = foldedReply(m);
+        if (folded) {
+          return (
+            <div className={wholeStepTitle("label")} data-step-whole="label">
+              <StepRow
+                testId="folded-reply"
+                data={{ "data-folded-reply": folded.kind }}
+                label={folded.label}
+                target={reportBrief(m.text, "start") || undefined}
+                icon={folded.icon}
+                phase={folded.failed ? "failed" : "done"}
+                wide
+              >
+                {() => (
+                  <Bubble
+                    message={m}
+                    editing={false}
+                    pinned={m.id === pinnedMessageId}
+                    onStartEdit={onStartEdit}
+                    onCancelEdit={onCancelEdit}
+                    onSubmitEdit={onSubmitEdit}
+                    replyTarget={lookups.replyTarget(m)}
+                    onReply={onReply}
+                  />
+                )}
+              </StepRow>
+            </div>
+          );
+        }
         return (
           <>
-          {m.parallelTask?.role === "result" && <ParallelResultLabel message={m} />}
-          {!user && m.relayVia && !askAlreadyLined(m, rowsAbove(), botId) && <RelayProvenance message={m} bots={bots} />}
+          {!user && m.relayVia && <RelayViaLabel message={m} />}
           <Bubble
             message={m}
             emerging={m.id === emergingId}

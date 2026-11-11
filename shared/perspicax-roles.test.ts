@@ -28,6 +28,26 @@ describe("perspicax roles", () => {
     expect(roleRefusalOf({ result: { content: [{ type: "text", text: "403 rows" }] } })).toBeNull();
   });
 
+  // #3694: only a real permission refusal is a role refusal, told apart by
+  // the connector's own code and fields, never by the words of its message
+  it("tells a guard or policy refusal of the connector from a role refusal", () => {
+    const guard = { code: "policy_denied", message: "Pulsatrix Flow guard: the call cannot be mapped to an operation, so no guard can check it (403)", hint: "nothing was sent", details: { flow_guard: "flow_guard_denied", reason: "flow_guard_denied", status: 403 } };
+    expect(roleRefusalOf({ result: { isError: true, structuredContent: guard } })).toBeNull();
+    expect(roleRefusalOf({ result: { isError: true, content: [{ type: "text", text: JSON.stringify(guard) }] } })).toBeNull();
+    expect(roleRefusalOf({ result: { isError: true, structuredContent: { error: guard } } })).toBeNull();
+    expect(roleRefusalOf({ error: { code: -32000, message: "forbidden", data: guard } })).toBeNull();
+    expect(roleRefusalOf({ result: { isError: true, structuredContent: { code: "policy_denied", details: { status: 403, reason: "data_access_policy" } } } })).toBeNull();
+    expect(roleRefusalOf({ result: { isError: true, structuredContent: { code: "policy_denied", details: { status: 403, reason: "flow_guard_unavailable" } } } })).toBeNull();
+    expect(roleRefusalOf({ result: { isError: true, structuredContent: { code: "params_invalid", message: "unknown resource service_tickets_notes (403)", details: { status: 400 } } } })).toBeNull();
+    expect(roleRefusalOf({ result: { isError: true, structuredContent: { code: "operation_unknown", message: "forbidden", details: { status: 404 } } } })).toBeNull();
+    // the role or profile lacks the right: a role refusal
+    expect(roleRefusalOf({ result: { isError: true, structuredContent: { code: "policy_denied", details: { status: 403, reason: "read_only_profile" } } } })).toMatchObject({ status: 403, reason: "read_only_profile" });
+    expect(roleRefusalOf({ result: { isError: true, structuredContent: { code: "policy_denied", details: { status: 403, reason: "no_connectwise" } } } })).toMatchObject({ status: 403 });
+    // the vendor's own 403
+    expect(roleRefusalOf({ result: { isError: true, structuredContent: { code: "upstream_error", message: "ConnectWise answered 403", details: { status: 403 } } } })).toMatchObject({ status: 403 });
+    expect(roleRefusalOf({ result: { isError: true, structuredContent: { code: "upstream_error", details: { status: 500 } } } })).toBeNull();
+  });
+
   it("maps a refused call to the CW permission an administrator fixes", () => {
     expect(cwPermissionFor("cw_psa_log_time", {}, false)).toEqual({ path: "time/entries", module: "Time & Expense", func: "Time Entry", operation: "Add" });
     expect(cwPermissionFor("cw_psa_query", { resource: "schedule/holidayLists/12/holidays" }, true)).toMatchObject({ path: "schedule/holidayLists", module: "System", func: "Table Setup", operation: "Inquire" });

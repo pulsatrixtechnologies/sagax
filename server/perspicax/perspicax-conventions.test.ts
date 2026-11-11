@@ -26,7 +26,7 @@ describe("Perspicax tool conventions (#1209)", () => {
     // QA 0.8.69 (#3062): a read never raises a card; Sagax tries the roles itself
     expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("Sagax itself tries each other held role that may read it, in turn, before answering: a read never needs an approval card");
     expect(PERSPICAX_CONVENTIONS_PROMPT).not.toMatch(/Sagax asks with a card|declined card/);
-    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/A read refused under every held role or a refused write is a block: report the API member and role that refused it/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/A read refused under every held role is a block: report the API member and role that refused it/);
   });
   // QA c2 D3/S8/D7 (#2670): the Flow entry skill says "catalog --index
   // before any answer or action, including a clarifying question" and "Let
@@ -63,11 +63,17 @@ describe("Perspicax tool conventions (#1209)", () => {
   // Review of #2912: the relay's STOP note (readStop) means no held role is
   // left; the 403 point must not send the bot back to identity_switch then,
   // and a refused write stays a block, as the Roles point says.
-  it("stops at a Sagax STOP note and on a refused write, without a role search", () => {
+  it("stops at a Sagax STOP note for that read, and leaves a refused write's role search to Sagax", () => {
     expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/A Sagax note starting with STOP means no held role is left for that read or the person chose to stay in that role: no `identity_switch` for that read, name the API member and role that refused it and the exact missing permission at once/);
-    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/A refused write follows the Roles point above: no other role, name the exact missing permission/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("A write 403: Sagax tries a held role that writes it (rule or card)");
     expect(PERSPICAX_CONVENTIONS_PROMPT).not.toMatch(/if it names none, `identity_switch`/);
     expect(PERSPICAX_CONVENTIONS_PROMPT).not.toContain("is not the end while a held role is untried");
+  });
+  // #3694: the old lock taught a bot to stop switching roles after any 403
+  it("teaches a refused write as one call's STOP and a guard refusal as a call to fix (#3694)", () => {
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("its STOP blocks that call only, never `identity_switch`");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("A guard or policy refusal (`flow_guard`, unknown resource) is no permission problem: fix the call");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).not.toMatch(/no other role, name the exact missing permission|or a refused write is a block|A refused write follows the Roles point above/);
   });
   it("counts tickets on the board's id and never per board from a page cut by limit", () => {
     expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("owner/id=<member id>, board/id=<board id>, closedFlag=false");

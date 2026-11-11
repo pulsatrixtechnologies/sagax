@@ -11,8 +11,12 @@
 // - routine: its "Au nom de" role, else the first held role covering its
 //   standing mandate; an empty mandate is read-only;
 // - a switch is allowed to any role held now; a role not held is refused;
-// - a read 403 under a role: ONE fallback to "Moi", announced in the thread;
-// - a write 403: stop, show the missing permission;
+// - a read 403 under a role: Sagax tries the other held roles that may read it;
+// - a write 403 (rule d7-403-switch-role): one held role that may write, by a
+//   saved rule or a card, for that one call; refused, that write stops, the
+//   turn's other calls and switches go on (#3694);
+// - a guard or policy refusal of the connector and a dry run are not role
+//   refusals (#3694);
 // - a lapsed role stops the call and shows a banner;
 // - writing as "Moi" in a routine that runs under a role needs the person.
 
@@ -158,17 +162,41 @@ function textOf(result: Record<string, unknown>): string {
   return content.filter(object).map((block) => (typeof block.text === "string" ? block.text : "")).join("\n").slice(0, 4000);
 }
 
-/** Whether a JSON-RPC tools/call body is a 403 refusal (Perspicax's error
- * envelope `{code, message, hint, details: {status, reason}}` in the
- * structured content or in a text block, or the vendor's own 403 named in
+/** #3694: the connector's `policy_denied` reasons that mean the acting role
+ * or profile lacks the right for this operation (the connector's own
+ * missing-right reasons, and its read-only and explicit-only profile
+ * refusals). Another `policy_denied` (a Flow guard, the data access policy,
+ * a state or a limit) is not a role refusal: another role does not change it. */
+const ROLE_RIGHT_REASONS: ReadonlySet<string> = new Set(["twilio_guard", "no_twilio_product", "no_connectwise", "read_only_profile", "explicit_only_profile"]);
+
+/** #3694: whether a connector error envelope is a real permission refusal,
+ * by the connector's own code and fields, never by the words of its message:
+ * the vendor's own 403 (`upstream_error`, `details.status` 403) or the
+ * connector's refusal of the role or profile for that operation. A guard or
+ * policy refusal (`details.flow_guard`, any other `policy_denied` reason), an
+ * unknown operation or resource and a validation error are not. An envelope
+ * without a code keeps its `details.status`. */
+function envelopeRefuses(code: string | undefined, details: Record<string, unknown>, status: unknown): boolean {
+  if (details.reason === "act_as_expired" || details.flow_guard !== undefined) return false;
+  if (code === "policy_denied") return typeof details.reason === "string" && ROLE_RIGHT_REASONS.has(details.reason);
+  if (code === "upstream_error") return Number(details.status ?? status) === 403;
+  if (code !== undefined) return false;
+  return Number(details.status ?? status) === 403;
+}
+
+/** Whether a JSON-RPC tools/call body is a real permission refusal (the
+ * connector's error envelope `{code, message, hint, details: {status,
+ * reason}}` in the structured content or in a text block, judged by
+ * `envelopeRefuses`; with no envelope at all, the vendor's own 403 named in
  * the text). Null when it is not. */
 export function roleRefusalOf(body: unknown): RoleRefusal | null {
   if (!object(body)) return null;
   if (object(body.error)) {
     const data = object(body.error.data) ? body.error.data : {};
     const details = object(data.details) ? data.details : data;
-    if (Number(details.status) === 403 && details.reason !== "act_as_expired") {
-      return { status: 403, ...(typeof details.reason === "string" ? { reason: details.reason } : {}), ...(typeof body.error.message === "string" ? { message: body.error.message.slice(0, 300) } : {}) };
+    const code = typeof data.code === "string" ? data.code : undefined;
+    if (envelopeRefuses(code, details, data.status)) {
+      return { status: 403, ...(typeof details.reason === "string" ? { reason: details.reason } : {}), ...(code ? { code } : {}), ...(typeof body.error.message === "string" ? { message: body.error.message.slice(0, 300) } : {}) };
     }
     return null;
   }
@@ -182,14 +210,14 @@ export function roleRefusalOf(body: unknown): RoleRefusal | null {
   const nested = envelope && object(envelope.error) ? envelope.error : envelope;
   const details = nested && object(nested.details) ? nested.details : {};
   const reason = typeof details.reason === "string" ? details.reason : undefined;
-  if (reason === "act_as_expired") return null;
   const code = nested && typeof nested.code === "string" ? nested.code : undefined;
   const message = nested && typeof nested.message === "string" ? nested.message.slice(0, 300) : text.slice(0, 300);
-  if (Number(details.status) === 403 || Number(nested?.status) === 403) {
-    return { status: 403, ...(reason ? { reason } : {}), ...(code ? { code } : {}), ...(message ? { message } : {}) };
+  if (nested && (code !== undefined || object(nested.details) || nested.status !== undefined)) {
+    return envelopeRefuses(code, details, nested.status) ? { status: 403, ...(reason ? { reason } : {}), ...(code ? { code } : {}), ...(message ? { message } : {}) } : null;
   }
+  // no envelope of the connector: the vendor's own 403 in its words
   if (/\b403\b|\bforbidden\b|not authori[sz]ed to|permission denied|insufficient permission/i.test(text) && !/act_as_expired/.test(text)) {
-    return { status: 403, ...(code ? { code } : {}), ...(message ? { message } : {}) };
+    return { status: 403, ...(message ? { message } : {}) };
   }
   return null;
 }
@@ -260,7 +288,9 @@ const CW_NAMED: Readonly<Record<string, [path: string, op: CwOperation]>> = {
 
 function areaOf(path: string): { module: string; func: string } {
   const lower = path.toLowerCase().replace(/^\/+/, "");
-  for (const [prefix, module, func] of CW_AREAS) if (lower === prefix || lower.startsWith(`${prefix}/`) || lower.startsWith(prefix)) return { module, func };
+  // #3694: a path the table names, or one under it; never a resource that
+  // only starts with the same letters (a mistyped "schedule_entries")
+  for (const [prefix, module, func] of CW_AREAS) if (lower === prefix || lower.startsWith(`${prefix}/`)) return { module, func };
   return { module: "", func: path };
 }
 

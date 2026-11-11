@@ -5,7 +5,9 @@
 // One item at a time with "1 of N"; answering or skipping one moves the
 // card to the next. Each item is drawn by the card the transcript draws it
 // with, answered in its own conversation, so an item settled in one place
-// is settled in the other.
+// is settled in the other. While an item waits here the conversation draws
+// no card for it (#3689, the owner's rule of #3681: one ask, one place);
+// once settled, its record is back at its place (`ChatView.pinnedHeld`).
 import SwiftUI
 import CompanionCore
 

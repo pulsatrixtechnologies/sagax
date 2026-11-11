@@ -3,7 +3,8 @@
 // CodingJobCardView (never a thread). Otherwise, #3581: while it runs, the
 // chat's step row ("Working in the background", its title, the elapsed time,
 // Stop). Done, nothing (its answer under it tells the same state); failed or
-// stopped, the same row in the danger ink with what happened, and the way
+// stopped, the same row with what happened (the danger ink for a failure
+// only, as on the desktop), and the way
 // into the task, so a problem stays in sight (shared/chat-relevance.ts,
 // signal `problem`). Its approvals join this conversation's approval dock.
 import SwiftUI
@@ -69,7 +70,7 @@ struct ParallelTaskCardView: View {
     /// than cut to a few letters.
     private func row(status: ParallelCardState, ownerId: String, now: Date) -> some View {
         let duration = elapsed(status, now: now)
-        let phase: StepPhase = status.isLive ? .running : .failed
+        let phase = status.stepPhase
         return ViewThatFits(in: .horizontal) {
             HStack(spacing: 6) {
                 StepLineLabel(label: label(status), target: ref.title, phase: phase, duration: duration)
@@ -155,16 +156,8 @@ struct ParallelTaskCardView: View {
         guard status != .queued else { return nil }
         let started = status.isLive ? (task?.turnStartedAt ?? ref.startedAt ?? message.at) : (ref.startedAt ?? message.at)
         let end = status.isLive ? now.timeIntervalSince1970 * 1000 : (ref.endedAt ?? started)
-        let seconds = max(0, (end - started) / 1000)
-        return seconds > 0 ? Self.elapsed(seconds) : nil
-    }
-
-    /// `formatElapsed`: 42s, 3m 05s, 1h 02m.
-    static func elapsed(_ seconds: Double) -> String {
-        let total = Int(seconds)
-        if total < 60 { return "\(total)s" }
-        if total < 3600 { return String(format: "%dm %02ds", total / 60, total % 60) }
-        return String(format: "%dh %02dm", total / 3600, (total % 3600) / 60)
+        let ms = end - started
+        return ms > 0 ? ParallelCardState.elapsed(ms: ms) : nil
     }
 }
 

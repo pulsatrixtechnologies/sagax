@@ -183,7 +183,9 @@ public enum PinnedWaiting {
         _ payload: WaitingPayload?, fallback: @autoclosure () -> [PendingApproval], botId: String, botName: String, conversation: String,
         transcript: (String) -> [Message]?
     ) -> [PinnedWaitingEntry] {
-        if let payload, payload.served { return entries(payload, transcript: transcript) }
+        if let payload, payload.served {
+            return entries(payload, transcript: transcript) + unlisted(payload, live: fallback(), conversation: conversation, transcript: transcript)
+        }
         return fallback().map { pending in
             let threadId = pending.answerThread(conversation: conversation)
             let item = WaitingItem(
@@ -193,6 +195,88 @@ public enum PinnedWaiting {
             )
             return PinnedWaitingEntry(item: item, message: pending.message)
         }
+    }
+
+    /// What waits in this conversation right now and the server's list does
+    /// not carry yet (it is read again a moment after a card opens, or could
+    /// not be read): its live approvals (#3615) and its open questions
+    /// (#3681), pinned after the list's items (the desktop's
+    /// `pinnedItemsFrom`). The conversation leaves them to the pinned card
+    /// from their first frame, never drawn there for a moment and then taken
+    /// away. Once the list carries one, the server's item is the one drawn.
+    static func unlisted(
+        _ payload: WaitingPayload, live: [PendingApproval], conversation: String, transcript: (String) -> [Message]?
+    ) -> [PinnedWaitingEntry] {
+        func listed(_ messageId: String, _ requestId: String?) -> Bool {
+            payload.waiting.contains { $0.messageId == messageId || ($0.threadId == conversation && requestId != nil && $0.id == requestId) }
+        }
+        var seen = Set<String>()
+        var out: [PinnedWaitingEntry] = []
+        for pending in live where !listed(pending.message.id, pending.requestId) {
+            let threadId = pending.answerThread(conversation: conversation)
+            let item = WaitingItem(
+                id: pending.requestId, kind: "approval", botId: pending.message.from?.botId ?? "", botName: pending.message.from?.name ?? "",
+                threadId: threadId, messageId: pending.message.id, at: pending.message.at, title: pending.card.subtitle,
+                options: pending.card.options, threadTitle: pending.parallelTitle
+            )
+            guard seen.insert(item.key).inserted else { continue }
+            out.append(PinnedWaitingEntry(item: item, message: pending.message))
+        }
+        for message in ApprovalDockRules.pendingQuestions(transcript(conversation) ?? []) where !listed(message.id, message.card?.requestId) {
+            let first = message.card?.questionRequest?.questions.first
+            let title = first?.question ?? message.card?.title ?? ""
+            let item = WaitingItem(
+                id: message.card?.requestId ?? message.id, kind: "question", botId: message.from?.botId ?? "", botName: message.from?.name ?? "",
+                threadId: conversation, messageId: message.id, at: message.at, title: title, text: title,
+                options: (first?.options ?? []).map(\.label)
+            )
+            guard seen.insert(item.key).inserted else { continue }
+            out.append(PinnedWaitingEntry(item: item, message: message))
+        }
+        return out
+    }
+
+    /// The kinds the pinned card draws with the conversation's own card
+    /// (shared/waiting-items.ts). An item of a kind this app does not know
+    /// is not held: its card stays in the conversation.
+    static let heldKinds: Set<String> = ["approval", "question", "request", "proposal"]
+
+    /// #3689, the owner's rule of #3681 (2026-11-11): while an ask waits and
+    /// the pinned card of the view holds it, the conversation draws no card
+    /// for it; once it is answered, skipped or expired it leaves the pinned
+    /// card and its record is back at its place. These are the messages the
+    /// pinned card holds (the desktop's `pinnedHeldIds`). `dockShown` false
+    /// is a view with no pinned card (a conversation the person cannot write
+    /// in): it holds nothing and the conversation draws every card. The
+    /// conversation reads this set, never a second rule.
+    public static func heldIds(_ entries: [PinnedWaitingEntry], dockShown: Bool = true) -> Set<String> {
+        guard dockShown else { return [] }
+        return Set(entries.filter { heldKinds.contains($0.item.kind) }.map(\.message.id))
+    }
+
+    /// The conversation's messages without the ones the pinned card holds,
+    /// before its rows are grouped: no empty row, no gap where the card was.
+    public static func drawn(_ messages: [Message], held: Set<String>) -> [Message] {
+        held.isEmpty ? messages : messages.filter { !held.contains($0.id) }
+    }
+
+    /// Where a jump to an ask lands while the conversation does not draw it
+    /// (the desktop's `pinnedJumpTarget`): the nearest message before it the
+    /// conversation draws as words (the bot's words that led to the ask, or
+    /// the person's message before them). The ask itself when nothing is.
+    public static func jumpTarget(_ messages: [Message], askId: String, held: Set<String>) -> String {
+        guard let at = messages.firstIndex(where: { $0.id == askId }) else { return askId }
+        for message in messages[..<at].reversed() where !held.contains(message.id) {
+            if message.kind == .text, !(message.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return message.id }
+        }
+        return askId
+    }
+
+    /// The message a jump (a decision's notification, a search hit) lands
+    /// on: the message itself, or for an ask the pinned card holds, the
+    /// words before it.
+    public static func focus(_ messages: [Message], messageId: String, held: Set<String>) -> String {
+        held.contains(messageId) ? jumpTarget(messages, askId: messageId, held: held) : messageId
     }
 
     /// The items of one room's conversation (a room has no bot id to ask

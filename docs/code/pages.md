@@ -222,6 +222,24 @@ Keep these rules, covered by `server/pages/published-pages.test.ts`,
   `pagePublish`; whatever the bot sends (access, publish flags) is ignored.
   `POST /api/pages/:id/publish` needs an explicit `access`. Not available in
   rooms. Choosing "Toute personne ayant le lien" asks a second press.
+- Source from a file (#3488): `propose_page` takes `content` or `path`,
+  exactly one. `path` names a UTF-8 file of the calling bot's own workspace,
+  resolved by `readWorkspaceSourceFile` (`resolveWorkspaceFile`: no
+  traversal, no link, no hidden file, never another bot's workspace) and
+  read byte for byte under the same 512 KB limit and secret masking as
+  inline content. The answer and a source read carry `bytes` and `sha256`
+  of the stored source, computed in one place (`pageSourceDigest`) and
+  written on the version when it is stored; when a step changed the source
+  before storage (secret masking, a design system applied) the answer also
+  gives what the bot sent (`given`) and why (`changedBy`). The version
+  listing (`PageVersionSummary`) shows the recorded hash only: a version
+  stored before it gets it on its first source read (`recordDigest`), read
+  from its file, never through the cache that serves published pages.
+  `GET /api/pages/:id/versions/:n/source?offset=&limit=` and the bot's
+  `page_comments` action `source` read one slice by UTF-8 byte offset
+  (`shared/utf8-slice.ts`, also behind `workspace_read`; follow
+  `nextOffset`). There is no write of a source into the workspace: paging
+  plus the size and hash cover a comparison with a file.
 - Whose page it is: the conversation's person (`pageOwnerFor` =
   `threadOwner` of `server/threads/thread-privacy.ts`: the thread's recorded owner,
   else the bot owner), never simply the bot's owner. A member's private

@@ -305,6 +305,9 @@ export interface PageVersionSummary {
   botId: string;
   /** "person": the page's person edited it; absent: the bot proposed it. */
   author?: "person";
+  /** #3488: SHA-256 (hex) of the stored source, to compare with a file
+   * without reading the content. */
+  sha256?: string;
 }
 
 /** What the owner's list and the card read. Never the content. */
@@ -436,7 +439,7 @@ export interface PagePublishRef {
 }
 
 export type PageProposalInput =
-  | { ok: true; value: { title: string; kind: PageKind; content: string; pageId?: string; designSystem?: string; designTokens?: unknown } }
+  | { ok: true; value: { title: string; kind: PageKind; content: string; path?: string; pageId?: string; designSystem?: string; designTokens?: unknown } }
   | { ok: false; error: string };
 
 function byteLength(text: string): number {
@@ -445,15 +448,26 @@ function byteLength(text: string): number {
 
 /** The bot's arguments, checked. Pure. */
 export function parsePageProposal(input: unknown): PageProposalInput {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return { ok: false, error: "Send { title, kind, content, page_id? }." };
+  if (!input || typeof input !== "object" || Array.isArray(input)) return { ok: false, error: "Send { title, kind, content or path, page_id? }." };
   const record = input as Record<string, unknown>;
   const title = typeof record.title === "string" ? record.title.replace(/\s+/g, " ").trim() : "";
   if (!title) return { ok: false, error: "title: a short title is required." };
   if (title.length > PAGE_LIMITS.title) return { ok: false, error: `title: at most ${PAGE_LIMITS.title} characters.` };
   const kind = record.kind;
   if (!PAGE_KINDS.includes(kind as PageKind)) return { ok: false, error: "kind: must be html, markdown, presentation or design." };
-  const content = record.content;
-  if (typeof content !== "string" || !content.trim()) return { ok: false, error: "content: the page's full text is required." };
+  // #3488: the source is the content inline or a file of the bot's own
+  // workspace (`path`), read byte for byte by the server: exactly one.
+  const hasPath = record.path !== undefined && record.path !== null;
+  const hasContent = record.content !== undefined && record.content !== null;
+  if (hasPath && hasContent) return { ok: false, error: "Give content or path, not both." };
+  if (!hasPath && !hasContent) return { ok: false, error: "content: the page's full text is required, or path: a file of your workspace." };
+  const path = record.path;
+  if (hasPath && (typeof path !== "string" || !path.trim() || path.length > 512)) {
+    return { ok: false, error: "path: a file of your workspace, relative to it (for example docs/report.html)." };
+  }
+  const content = hasPath ? "" : record.content;
+  if (!hasPath && (typeof content !== "string" || !content.trim())) return { ok: false, error: "content: the page's full text is required." };
+  if (typeof content !== "string") return { ok: false, error: "content: the page's full text is required." };
   if (byteLength(content) > PAGE_LIMITS.contentBytes) return { ok: false, error: `content: at most ${PAGE_LIMITS.contentBytes / 1024} KB.` };
   const pageId = record.page_id;
   if (pageId !== undefined && pageId !== null && (typeof pageId !== "string" || !/^[A-Za-z0-9_-]{8,40}$/.test(pageId))) {
@@ -472,6 +486,7 @@ export function parsePageProposal(input: unknown): PageProposalInput {
   }
   return { ok: true, value: {
     title, kind: kind as PageKind, content,
+    ...(hasPath ? { path: (path as string).trim() } : {}),
     ...(typeof pageId === "string" ? { pageId } : {}),
     ...(typeof system === "string" ? { designSystem: system.trim() } : {}),
     ...(tokens !== undefined && tokens !== null ? { designTokens: tokens } : {}),

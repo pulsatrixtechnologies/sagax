@@ -33,6 +33,7 @@ function deps(over: Partial<InternalMemoryDeps> = {}): InternalMemoryDeps {
     authored: () => undefined,
     proposePublishedPage: () => ({ ok: true, page: { id: "p1" }, version: { n: 1 } }),
     getPage: () => null,
+    pageSource: () => null,
     replyPage: () => ({ ok: true }),
     resolvePageThread: () => ({ ok: true }),
     markBotRead: () => undefined,

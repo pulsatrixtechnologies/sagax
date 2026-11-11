@@ -1,3 +1,4 @@
+import type { PageSourceChange, PageSourceDigest } from "../pages/published-pages.ts";
 import type { Message } from "../store.ts";
 
 /** What these calls need of the store (server/store.ts Store satisfies it). */
@@ -22,6 +23,12 @@ export type AgentCardResult =
       masked?: true;
       pageId?: string;
       version?: number;
+      /** #3488: propose_page, the stored source's size in bytes and SHA-256. */
+      bytes?: number;
+      sha256?: string;
+      /** #3488: what the bot gave, when the stored source differs, and why. */
+      given?: PageSourceDigest;
+      changedBy?: PageSourceChange[];
       answered?: { choice: string; question: string };
       waitsForPerson?: true;
       auto?: { id: string; tool: string; name: string; description: string; icon?: string; reason: "single" | "default" };

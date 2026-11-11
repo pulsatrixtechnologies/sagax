@@ -45,8 +45,8 @@ jobs:
   # (vite.config.ts, fileParallelism:false) and takes 17–19 minutes on one
   # runner, so slow runners hit the job cap and read as red PRs, and a broken
   # smoke stayed hidden behind any vitest failure for a day. Each piece is now
-  # its own job: platform-independent checks run once, the suite runs in four
-  # shards per platform, and every smoke reports on its own. One final `CI`
+  # its own job: platform-independent checks run once, the suite runs in
+  # twenty shards per platform, and every smoke reports on its own. One final `CI`
   # check aggregates the required jobs (see docs/ci.md for ruleset migration).
   static:
     name: typecheck + lint
@@ -100,7 +100,7 @@ jobs:
     # vitest splits the file list deterministically across shards, so a
     # failure names the same shard on every run and one shard is reproducible
     # locally with the same --shard flag.
-    name: vitest (${{ matrix.os }}, shard ${{ matrix.shard }}/4)
+    name: vitest (${{ matrix.os }}, shard ${{ matrix.shard }}/20)
     strategy:
       fail-fast: false
       matrix:
@@ -110,15 +110,21 @@ jobs:
         # pushes and merge groups run Linux only. Windows and macOS run
         # only from a manual dispatch.
         os: ${{ fromJSON(needs.static.outputs.vitest_os) }}
-        shard: [1, 2, 3, 4]
+        # The shard count is written three times: this list, the --shard
+        # flag below and the known-failures job's expected job count
+        # (scripts/ci-workflow.test.ts keeps them equal).
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     runs-on: ${{ matrix.os }}
     # scripts/testing/duration-sequencer.ts splits the files by their recorded
     # CI seconds, not by count, so the heavy e2e files no longer share one
-    # shard. The cap catches a hang, not normal suite growth: 0.5.0 brought
-    # a shard to 17 minutes of tests plus setup, so Ubuntu has 30. By 0.5.10
-    # a balanced Windows shard ran about 31 minutes of tests, and shard 1
-    # also runs the Electron step: 35 cancelled it mid-suite, so
-    # Windows and macOS have 45.
+    # shard. The cap catches a hang, not normal suite growth. In November
+    # 2026 the suite had grown to about three hours of tests on one runner
+    # (2,900 files): four Linux shards were cancelled at 30 minutes with most
+    # of their files not run, and Windows shards took 42 to 45 of their 45
+    # (#3521). Twenty shards give each about 10 to 16 minutes, so Ubuntu
+    # keeps 30 and Windows and macOS 45, both with room to grow;
+    # scripts/testing/duration-sequencer.test.ts fails when the recorded
+    # seconds no longer fit, before a run is cancelled. docs/ci.md.
     timeout-minutes: ${{ matrix.os == 'ubuntu-latest' && 30 || 45 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -147,7 +153,7 @@ jobs:
           SAGAX_VITEST_RETRY_LOG: ${{ runner.temp }}/vitest-retries.jsonl
         run: |
           set +e
-          pnpm exec vitest run --shard=${{ matrix.shard }}/4 --reporter=default --reporter=github-actions --reporter=json --outputFile.json="$RUNNER_TEMP/vitest-report.json"
+          pnpm exec vitest run --shard=${{ matrix.shard }}/20 --reporter=default --reporter=github-actions --reporter=json --outputFile.json="$RUNNER_TEMP/vitest-report.json"
           echo "$?" > "$RUNNER_TEMP/vitest-exit"
       - name: Report flaky tests that needed a retry
         # Known flakes (scripts/testing/ci-retry-list.json) get two retries in
@@ -378,7 +384,7 @@ jobs:
           SEED: ${{ inputs.fill_known_failures == true }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          expected="$(node -e 'console.log(JSON.parse(process.env.VITEST_OS).length * 4)')"
+          expected="$(node -e 'console.log(JSON.parse(process.env.VITEST_OS).length * 20)')"
           seed=""
           if [ "$SEED" = "true" ]; then seed="--seed"; fi
           # --platforms: only a run on every platform (schedule, dispatch)

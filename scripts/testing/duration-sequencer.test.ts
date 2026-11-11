@@ -1,15 +1,18 @@
-// CI runs the suite as four shards per platform, one file at a time, so the
-// slowest shard sets how long every PR waits. These pin that the configured
+// CI runs the suite as several shards per platform (.github/workflows/ci.yml),
+// one file at a time, so the slowest shard sets how long a run takes and
+// whether it ends inside the job's cap. These pin that the configured
 // sequencer splits by recorded seconds, still runs every file exactly once,
-// and that its weights stay keyed to files that exist.
-import { globSync } from "node:fs";
+// that the shards fit their cap, and that its weights stay keyed to files
+// that exist.
+import { globSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BaseSequencer, type TestSequencerConstructor, type TestSpecification, type Vitest } from "vitest/node";
+import { parse } from "yaml";
 import viteConfig from "../../vite.config.ts";
 import { DurationSequencer, SHARD_WEIGHTS_FILE, loadShardWeights, planShards, weightKey } from "./duration-sequencer.ts";
-import { buildWeights, parseVitestLog } from "./update-shard-weights.mjs";
+import { VITEST_JOB, buildWeights, parseVitestLog, slowestPerFile } from "./update-shard-weights.mjs";
 
 const ROOT = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const WEIGHTS = loadShardWeights(ROOT);
@@ -20,6 +23,19 @@ const specs = (files: readonly string[]) => files.map((file) => ({ moduleId: pat
 const keyOf = (spec: TestSpecification) => weightKey(ROOT, spec.moduleId);
 // charged exactly as the sequencer charges it, unlisted e2e files included
 const seconds = (file: string) => planShards([file], WEIGHTS, 1).loads[0];
+
+const VITEST_JOB_CONFIG = parse(readFileSync(path.join(ROOT, ".github/workflows/ci.yml"), "utf8")).jobs.vitest;
+const CI_SHARDS: number = VITEST_JOB_CONFIG.strategy.matrix.shard.length;
+// The Linux shards run after every merge and have the shortest cap.
+const LINUX_CAP_MINUTES = Number(/ubuntu-latest' && (\d+)/.exec(VITEST_JOB_CONFIG["timeout-minutes"])?.[1]);
+// Calibrated on a complete run of every platform (#3521): the weights take
+// each file at its slowest platform, a job's wall time is about 1.1x its
+// files' recorded seconds (imports, setup, transform), and checkout, install
+// and the Electron download take up to two minutes before vitest starts.
+// That predicts 15.7 minutes for the slowest of twenty shards; the slowest
+// measured took 15.1 (Windows), and the slowest Linux one 11.8.
+const WALL_PER_RECORDED_SECOND = 1.1;
+const SETUP_SECONDS = 120;
 
 function context(index: number, count: number, log: (line: string) => void = () => {}) {
   return { config: { root: ROOT, shard: { index, count } }, logger: { log } } as unknown as Vitest;
@@ -38,9 +54,18 @@ afterEach(() => {
 });
 
 describe("vitest shard balance", () => {
+  it("sizes the CI shards so the slowest ends well inside the Linux cap (#3521)", () => {
+    // Four shards for three hours of tests: every Linux shard was cancelled
+    // at its 30 minute cap with most of its files never run.
+    expect(LINUX_CAP_MINUTES).toBeGreaterThan(0);
+    const { loads } = planShards(FILES, WEIGHTS, CI_SHARDS);
+    const minutes = (Math.max(...loads) * WALL_PER_RECORDED_SECOND + SETUP_SECONDS) / 60;
+    expect(minutes, `slowest of ${CI_SHARDS} shards, from ${SHARD_WEIGHTS_FILE}`).toBeLessThanOrEqual(LINUX_CAP_MINUTES * 0.6);
+  });
+
   it("gives no CI shard much more recorded time than the others", async () => {
     const Sequencer = viteConfig.test?.sequence?.sequencer ?? BaseSequencer;
-    const loads = (await split(Sequencer, FILES, 4)).map((shard) => shard.reduce((sum, file) => sum + seconds(file), 0));
+    const loads = (await split(Sequencer, FILES, CI_SHARDS)).map((shard) => shard.reduce((sum, file) => sum + seconds(file), 0));
     const mean = loads.reduce((sum, load) => sum + load, 0) / loads.length;
     // equal file counts put three of the four slowest e2e files in one shard: ~1.4x the mean
     expect(Math.max(...loads) / mean, `recorded seconds per shard: ${loads.join(", ")}`).toBeLessThan(1.05);
@@ -128,5 +153,21 @@ describe("update-shard-weights", () => {
       "server/skipped.e2e.test.ts": 1,
       "server/slow.test.ts": 12,
     });
+  });
+
+  it("weighs each file at its slowest platform within one run (#3521)", () => {
+    // Windows alone weighed a POSIX-only file at zero seconds, though it ran
+    // for minutes on the Linux shards.
+    const windows = new Map([["server/posix-only.test.ts", 0], ["server/both.test.ts", 40]]);
+    const linux = new Map([["server/posix-only.test.ts", 197], ["server/both.test.ts", 30], ["server/linux.e2e.test.ts", 9]]);
+    expect(Object.fromEntries(slowestPerFile([windows, linux]))).toEqual({
+      "server/posix-only.test.ts": 197,
+      "server/both.test.ts": 40,
+      "server/linux.e2e.test.ts": 9,
+    });
+    expect(VITEST_JOB.test(`vitest (ubuntu-latest, shard 3/${CI_SHARDS})`)).toBe(true);
+    expect(VITEST_JOB.test("vitest (macos-latest, shard 12/16)")).toBe(true);
+    expect(VITEST_JOB.test("vitest (windows-latest, shard 1/4)")).toBe(true);
+    expect(VITEST_JOB.test("renderer smoke (control-omb ui, Ubuntu 24.04)")).toBe(false);
   });
 });

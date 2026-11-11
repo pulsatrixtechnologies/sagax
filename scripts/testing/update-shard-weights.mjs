@@ -9,11 +9,14 @@ import { fileURLToPath } from "node:url";
 //   node scripts/testing/update-shard-weights.mjs --run <ci.yml run id> [--run <id> ...]
 //   node scripts/testing/update-shard-weights.mjs <vitest log or --reporter=json file> ...
 //
-// --run reads a finished run's Windows vitest logs through `gh`: Windows is
-// the slowest platform, so its seconds decide the split. A file's weight is
-// its median across the inputs in whole seconds, at least one. Every file over
-// five seconds is kept, and every e2e file, so that only a genuinely new e2e
-// file falls back to the sequencer's e2e default. Deleted files are dropped.
+// --run reads a run's vitest logs on every platform through `gh`, finished
+// or cancelled shards alike (a cancelled shard's finished files still count).
+// Within one run a file weighs its slowest platform: a file that skips itself
+// on Windows (a POSIX-only process test) still takes minutes on Linux, and
+// the Linux shards run after every merge. A file's weight is its median
+// across the inputs in whole seconds, at least one. Every file over five
+// seconds is kept, and every e2e file, so that only a genuinely new e2e file
+// falls back to the sequencer's e2e default. Deleted files are dropped.
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const OUTPUT = "scripts/testing/vitest-shard-weights.json";
 const HEAVY_SECONDS = 5;
@@ -56,20 +59,30 @@ export function buildWeights(samples, exists) {
   return weights;
 }
 
-// One sample per run: its shards together cover every file once.
-function windowsRun(id) {
+// Several platforms of one run make one sample: each file at its slowest.
+export function slowestPerFile(samples) {
+  const slowest = new Map();
+  for (const sample of samples) {
+    for (const [file, seconds] of sample) slowest.set(file, Math.max(slowest.get(file) ?? 0, seconds));
+  }
+  return slowest;
+}
+
+export const VITEST_JOB = /^vitest \((?:ubuntu|windows|macos)-latest, shard \d+\/\d+\)$/;
+
+// One sample per run: its shards together cover every file once per platform.
+function runSample(id) {
   const gh = (...args) => execFileSync("gh", args, { cwd: ROOT, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
-  const shards = JSON.parse(gh("run", "view", id, "--json", "jobs")).jobs
-    .filter((job) => /^vitest \(windows-latest, shard \d+\/\d+\)$/.test(job.name));
-  if (shards.length === 0) throw new Error(`run ${id} has no Windows vitest jobs`);
-  return new Map(shards.flatMap((job) => [...parseVitestLog(gh("run", "view", id, "--log", "--job", String(job.databaseId)))]));
+  const shards = JSON.parse(gh("run", "view", id, "--json", "jobs")).jobs.filter((job) => VITEST_JOB.test(job.name));
+  if (shards.length === 0) throw new Error(`run ${id} has no vitest jobs`);
+  return slowestPerFile(shards.map((job) => parseVitestLog(gh("run", "view", id, "--log", "--job", String(job.databaseId)))));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const samples = [];
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--run") samples.push(windowsRun(args[++i]));
+    if (args[i] === "--run") samples.push(runSample(args[++i]));
     else samples.push((args[i].endsWith(".json") ? parseVitestJson : parseVitestLog)(readFileSync(args[i], "utf8")));
   }
   if (samples.length === 0) {

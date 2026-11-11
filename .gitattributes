@@ -28,3 +28,13 @@ third_party/opencode/LICENSE text eol=lf
 # joins and every layering, healthcheck and trust check fails for a reason
 # that has nothing to do with the image. Docker itself reads LF everywhere.
 Dockerfile text eol=lf
+# The Electron catalog copy is compared byte for byte with what
+# scripts/gen-electron-org-library-catalog.mjs writes in
+# electron/org-library-catalog.node-test.mjs, and the generator keeps the line
+# endings of its source. The switch tracks stylesheet is compared byte for
+# byte with what scripts/gen-switch-tokens.mjs writes (LF) in
+# src/lib/switch-colors.test.ts. A CRLF checkout on Windows fails both for a
+# reason that has nothing to do with drift. Pin them to LF on every platform.
+shared/org-library-catalog.ts text eol=lf
+electron/org-library-catalog.mjs text eol=lf
+src/styles/skin-switch.css text eol=lf

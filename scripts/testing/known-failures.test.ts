@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   classify,
@@ -19,7 +20,7 @@ import {
   WHOLE_FILE,
 } from "./known-failures.mjs";
 
-const script = new URL("./known-failures.mjs", import.meta.url).pathname;
+const script = fileURLToPath(new URL("./known-failures.mjs", import.meta.url));
 const listPath = new URL("./known-failures.json", import.meta.url);
 const dirs: string[] = [];
 const tempDir = () => {

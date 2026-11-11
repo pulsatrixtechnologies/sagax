@@ -24,6 +24,11 @@ async function answeringCardAs(auth: RequestAuth, threadId: string, requestId: s
       const how = primary ? { via: "primary-bot" as const, bot: primary.botName.slice(0, 80) } : reach ? { via: "reach-me" as const, channel: reach.channel } : via ? { via } : {};
       host.store.patchMessage(threadId, message.id, { card: { ...card, answeredBy: { ...cardAnswererFor(auth), ...how } } });
     }
+    // #3671: the answer's decision row is queued (server/decision-log.ts);
+    // both answer routes (a card, the Approvals screen's bulk answer) return
+    // once it is on disk, so the history read right after lists this card.
+    // The flush never throws: a full disk still answers the card.
+    await host.flushDecisionLog(host.DATA_DIR);
   }
 
 }

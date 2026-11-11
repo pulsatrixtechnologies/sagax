@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
+import { isBackgroundStepPrompt } from "./testing/background-steps.ts";
 
 // The fixture can only write one fixed file, provided by the test inside the
 // launcher's disposable home. Provider-supplied arguments cannot select a path.
@@ -60,6 +61,7 @@ function expectMemoryInTurn(request: ChatRequest, text: string) {
 
 it.each(["openaiCompat", "groq", "meta"] as const)("%s runs structured MCP calls through real harness approval and continuation, preserving text and cancellation", async instanceId => {
   const requests: ChatRequest[] = [];
+  const background: ChatRequest[] = [];
   let scenario = "allow";
   const upstream = createServer(async (req, res) => {
     if (req.headers.authorization !== "Bearer synthetic-fixture-key") {
@@ -74,7 +76,23 @@ it.each(["openaiCompat", "groq", "meta"] as const)("%s runs structured MCP calls
     }
     let body = "";
     for await (const chunk of req) body += chunk;
-    const request = JSON.parse(body) as ChatRequest;
+    const request = JSON.parse(body) as ChatRequest & { stream?: boolean };
+    // #3671: a bot's background one-shot (memory upkeep's tidy a minute
+    // after start, a capture once a chat goes quiet) is answered with
+    // nothing to change and kept out of `requests`: each read below is the
+    // turn's own request.
+    if (request.messages.some((message) => isBackgroundStepPrompt(message.content ?? ""))) {
+      background.push(request);
+      const reply = "[]";
+      if (request.stream) {
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        res.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: reply }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`);
+      } else {
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ choices: [{ index: 0, message: { role: "assistant", content: reply }, finish_reason: "stop" }] }));
+      }
+      return;
+    }
     requests.push(request);
     if (scenario === "tools-off" && "tools" in request) {
       res.writeHead(400, { "content-type": "application/json" });
@@ -246,7 +264,7 @@ it.each(["openaiCompat", "groq", "meta"] as const)("%s runs structured MCP calls
         // no tool row and no approval card (the intro card of a new bot, #1354, is not one)
         expect(messages.messages.some((message: any) => message.tool || message.card?.requestId)).toBe(false);
       }
-      evidence.push({ scenario: mode, status: settled.status, artifactExists: existsSync(artifact), completionRequests: requests.length - before, mcpStarted: existsSync(startupMarker) });
+      evidence.push({ scenario: mode, status: settled.status, artifactExists: existsSync(artifact), completionRequests: requests.length - before, backgroundRequests: background.length, mcpStarted: existsSync(startupMarker) });
       if (mode === "ordinary" || mode === "tools-off") {
         const preview = await api("GET", `/api/bots/${bot.id}/system-prompt`);
         const previewText = JSON.stringify(preview.sections);

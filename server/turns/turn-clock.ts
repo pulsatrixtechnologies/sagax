@@ -35,17 +35,53 @@ export function turnClockEnabled(env: NodeJS.ProcessEnv = process.env): boolean 
   return env.SAGAX_TURN_CLOCK?.trim().toLowerCase() !== "off";
 }
 
-/** One line put before the turn's text. */
+/** One line put before the turn's text. The time is the moment the turn
+ * starts on its engine (clockAtHandoff), and a turn can run for minutes. */
 export function turnClockNote(now: Date, timeZone: string): string {
   const { text, offset } = zonedNow(now, timeZone);
-  // "exact, no tool": a bot asked the time ran search_tool, sagax_help and a
-  // shell `date` before answering, about 8 s of a 20 s turn (QA 0.8.66).
-  return `${TURN_CLOCK_MARKER} ${text}, ${timeZone} (${offset}). This clock is exact: answer the date, the time or a conversion between zones from it, without a tool. Give dates and times in ${timeZone} unless the user asks for another zone; convert UTC or other-zone timestamps from tools before showing them.]`;
+  // The note once said "answer the date, the time ... from it" and "give
+  // dates and times": bots added the time to answers nobody asked it for,
+  // and a slow turn repeated a minute already past (QA 0.8.86).
+  return `${TURN_CLOCK_MARKER} ${text}, ${timeZone} (${offset}), when this turn started. A turn can run for minutes: when the person asks the time or the answer depends on the minute, read the clock again (a shell \`date\`) instead of repeating this one. Say the time only when asked or needed. Times you show are in ${timeZone} unless the user asks for another zone; convert UTC or other-zone timestamps from tools before showing them.]`;
 }
 
 export function withTurnClock(text: string, now: Date, timeZone: string): string {
   if (text.startsWith(TURN_CLOCK_MARKER)) return text;
   return `${turnClockNote(now, timeZone)}\n\n${text}`;
+}
+
+/** The clock note a turn's text carries: its zone and its exact words. */
+export type TurnClock = { timeZone: string; note: string };
+
+/** The clock note `withTurnClock` put in `text`, or null when it holds none. */
+export function turnClockIn(text: string, timeZone: string): TurnClock | null {
+  const at = text.indexOf(TURN_CLOCK_MARKER);
+  if (at < 0) return null;
+  const end = text.indexOf("]", at);
+  return end < 0 ? null : { timeZone, note: text.slice(at, end + 1) };
+}
+
+/** `text` with the note `clock` names replaced by `note` (unchanged when
+ * it does not hold that note). */
+export function restampTurnClock(text: string, clock: TurnClock, note: string): string {
+  const at = text.indexOf(clock.note);
+  return at < 0 ? text : text.slice(0, at) + note + text.slice(at + clock.note.length);
+}
+
+/** A turn's input as it is handed to its engine: the clock note read now,
+ * after every wait (queue, workspace, the bot being busy, an engine slot),
+ * not when the person's message arrived. */
+export function clockAtHandoff<T extends { text: string; recoveryText?: string; turnClock?: TurnClock }>(input: T, now: Date): T {
+  const clock = input.turnClock;
+  if (!clock) return input;
+  const note = turnClockNote(now, clock.timeZone);
+  if (note === clock.note) return input;
+  return {
+    ...input,
+    text: restampTurnClock(input.text, clock, note),
+    ...(input.recoveryText !== undefined ? { recoveryText: restampTurnClock(input.recoveryText, clock, note) } : {}),
+    turnClock: { timeZone: clock.timeZone, note },
+  };
 }
 
 /** How the clock note opens, for code that strips it from an echoed turn. */

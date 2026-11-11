@@ -19,6 +19,7 @@ import {
 } from "./openai-chat-shared.ts";
 import { createWarmToolSessions } from "./openai-chat-tools-warm.ts";
 import { reportBackgroundError } from "../background-error.ts";
+import { restampTurnClock, turnClockNote, type TurnClock } from "../turns/turn-clock.ts";
 
 export { ModelUnsupportedError } from "./openai-chat-completion.ts";
 
@@ -305,11 +306,33 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     ];
   };
 
+  /** The clock note each running turn's request carries now. */
+  const clocks = new WeakMap<SendTurnInput, TurnClock>();
+  /** Before each model call of a turn, its clock note read again: a turn
+   * that runs tools for minutes tells the model the minute it writes in,
+   * not the one the turn started at. The delivered record follows, so the
+   * next turn replays the request as it was last sent. */
+  const refreshClock = (turn: SendTurnInput, request: OpenAIChatMessage, now = new Date()): void => {
+    const clock = clocks.get(turn) ?? turn.turnClock;
+    if (!clock) return;
+    const note = turnClockNote(now, clock.timeZone);
+    if (note === clock.note) return;
+    const content = request.content;
+    if (typeof content === "string") request.content = restampTurnClock(content, clock, note);
+    else if (Array.isArray(content)) request.content = content.map((part) => part.type === "text" ? { ...part, text: restampTurnClock(part.text, clock, note) } : part);
+    const record = delivered.get(turn.threadId)?.at(-1);
+    if (record) {
+      record.text = restampTurnClock(record.text, clock, note);
+      record.sent = restampTurnClock(record.sent, clock, note);
+    }
+    clocks.set(turn, { timeZone: clock.timeZone, note });
+  };
+
   const sendTurn = createOpenAIChatSendTurn({
     resolveKey, options, pingModels, rememberWarm, releaseWarm, active, warmThreads,
     warmToolSessions,
     messagesFor, unsupportedModels, nextModel, sessionGrants, emit, base, complete,
-    reasoningReplayRejected, refuseModel, seesImages,
+    reasoningReplayRejected, refuseModel, seesImages, refreshClock,
   });
 
   return {

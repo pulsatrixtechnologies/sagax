@@ -2,6 +2,8 @@
 // Fields are declared up front and mutated only through this object.
 // Leaf modules take TurnState plus host deps; they must not close over
 // orchestrator locals or Object.assign partial contexts.
+import type { TurnClock } from "./turn-clock.ts";
+
 export type StartTurnFn = (botId: string, text: string, opts?: any) => Promise<any>;
 
 /**
@@ -54,6 +56,8 @@ export type TurnState = {
   plan: any;
   profile: any;
   providerText: any;
+  /** The clock note providerText carries, read again at dispatch (server/turns/turn-clock.ts). */
+  turnClock: TurnClock | null;
   recoveryUserMessageId: any;
   requestMessageId: any;
   resolvedImages: any;
@@ -227,6 +231,7 @@ export function createTurnState(init: {
     plan: undefined,
     profile: undefined,
     providerText: undefined,
+    turnClock: null,
     recoveryUserMessageId: undefined,
     requestMessageId: undefined,
     resolvedImages: undefined,

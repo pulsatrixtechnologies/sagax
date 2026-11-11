@@ -12,6 +12,7 @@ import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 import { warmCachePrime } from "./warm-cache-prime.ts";
 import { stablePromptSections } from "../system-prompt.ts";
+import { clockAtHandoff } from "./turn-clock.ts";
 import { soloPiTurnAccess } from "../pi-own-model-servers-access.ts";
 
 export function createDispatchStartTurn(host: StartTurnHost) {
@@ -174,6 +175,9 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       startupRecovery: !state.warmOnly &&
         (state.opts?.automaticRecoveryIndex ?? 0) < botRecoveryBackups(state.liveBot ?? state.bot, cfg).length,
       text: state.warmOnly ? "" : (engineCommand ? engineCommand.engineText : withRecalled(state.recalled, state.dispatchContext.turnText)),
+      // read again as the engine takes the turn (below), and by an engine
+      // the server calls itself before each model call
+      ...(state.turnClock && !state.warmOnly && !engineCommand ? { turnClock: state.turnClock } : {}),
       ...(engineCommand ? { harnessCommand: { name: engineCommand.command.name, args: engineCommand.args, ...(engineCommand.command.path ? { path: engineCommand.command.path } : {}) } } : {}),
       ...(state.recalled && !state.warmOnly && !engineCommand ? { recalled: state.recalled } : {}),
       images: modelImages,
@@ -229,7 +233,10 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       ...(() => { const approvalWaitMs = routineApprovalWaitMs?.(state.threadId); return approvalWaitMs ? { approvalWaitMs } : {}; })(),
       cwd: state.cwd,
       ...(toolResultFolder ? { toolResultFolder } : {}),
-    }, (input: any) => state.instance.adapter.sendTurn(input));
+    // The clock note says the time the engine takes the turn, after every
+    // wait above (workspace, engine slot, a replay that fell back), not the
+    // time the person's message arrived (server/turns/turn-clock.ts).
+    }, (input: any) => state.instance.adapter.sendTurn(clockAtHandoff(input, new Date())));
     })), () => !directTurnClaimExists(state.bot.id, state.dispatchClaimId, state.threadId), async () => {
       await state.instance.adapter.interruptTurn(state.threadId).catch(() => {});
     });

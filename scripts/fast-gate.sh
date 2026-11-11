@@ -143,6 +143,8 @@ if [ -f package.json ]; then
     # itself after the merge, names the pull request and opens an issue).
     # For the same reason a source imported by more than 25 test files
     # brings only the tests of its own name, and the gate prints its count.
+    # An import through a path alias of tsconfig.json or of a folder's index
+    # counts like a relative one.
     TESTS="$LOG_DIR/tests.txt"
     : > "$TESTS"
     FAST_GATE_TOUCHED_JS="$JS" node -e '
@@ -162,8 +164,23 @@ if [ -f package.json ]; then
         sources.set(noExt(f), f);
       }
       if (sources.size) {
-        const names = [...new Set([...sources.keys()].map((s) => path.basename(s)))];
-        const spec = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|\bvi\.(?:mock|doMock|importActual)\s*(?:<[^>]*>)?\s*\(\s*)["\x27](\.{1,2}\/[^"\x27]+)["\x27]/g;
+        // an index file is imported by its folder name
+        const names = [...new Set([...sources.keys()].map((s) => path.basename(s) === "index" ? path.basename(path.dirname(s)) : path.basename(s)))];
+        const spec = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|\bvi\.(?:mock|doMock|importActual)\s*(?:<[^>]*>)?\s*\(\s*)["\x27]([^"\x27]+)["\x27]/g;
+        // The path aliases of tsconfig.json ("@/*" to "./src/*"): a test that
+        // imports a touched source through one imports it all the same.
+        const aliases = [];
+        try {
+          const paths = JSON.parse(fs.readFileSync("tsconfig.json", "utf8")).compilerOptions.paths;
+          for (const [from, to] of Object.entries(paths)) {
+            if (from.endsWith("/*") && Array.isArray(to) && typeof to[0] === "string" && to[0].endsWith("/*")) aliases.push([from.slice(0, -1), path.normalize(to[0].slice(0, -1))]);
+          }
+        } catch { /* no tsconfig, or no aliases in it */ }
+        const resolve = (from, to) => {
+          if (to.startsWith("./") || to.startsWith("../")) return path.normalize(path.join(path.dirname(from), to));
+          for (const [prefix, base] of aliases) if (to.startsWith(prefix)) return path.normalize(path.join(base, to.slice(prefix.length)));
+          return null;
+        };
         const importers = new Map();
         for (const t of all) {
           if (out.has(t)) continue;
@@ -171,7 +188,8 @@ if [ -f package.json ]; then
           try { text = fs.readFileSync(t, "utf8"); } catch { continue; }
           if (!names.some((n) => text.includes(n))) continue;
           for (const m of text.matchAll(spec)) {
-            const target = path.normalize(path.join(path.dirname(t), m[1]));
+            const target = resolve(t, m[1]);
+            if (!target) continue;
             const key = sources.has(noExt(target)) ? noExt(target) : sources.has(path.join(target, "index")) ? path.join(target, "index") : null;
             if (!key) continue;
             if (!importers.has(key)) importers.set(key, new Set());

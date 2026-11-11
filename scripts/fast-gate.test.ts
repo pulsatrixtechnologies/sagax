@@ -133,6 +133,30 @@ describe("fast-gate.sh", () => {
     expect(line).not.toContain("near-name");
   });
 
+  // Most interface tests import through the "@/" alias, and a folder's index
+  // is imported by the folder's name: both import the touched source.
+  it("counts an import through a tsconfig path alias or a folder's index", () => {
+    write("tsconfig.json", JSON.stringify({ compilerOptions: { paths: { "@/*": ["./src/*"] } } }));
+    write("src/lib/x.ts", "export const x = 1;\n");
+    write("src/idx/index.ts", "export const y = 1;\n");
+    write("tests/alias.test.ts", 'import { x } from "@/lib/x";\n');
+    write("tests/alias-mock.test.ts", 'vi.mock("@/lib/x", () => ({}));\n');
+    write("tests/via-index.test.ts", 'import { y } from "../src/idx";\n');
+    write("tests/package.test.ts", 'import x from "x";\nimport idx from "idx";\n');
+    write("tests/other-alias.test.ts", 'import { z } from "@/lib/xx";\n');
+    git("add", "-A");
+    git("commit", "-q", "-m", "tests");
+    write("src/lib/x.ts", "export const x = 2;\n");
+    write("src/idx/index.ts", "export const y = 2;\n");
+    const { out } = gate("--base", "HEAD", "--only", "tests", "--dry-run");
+    const line = out.split("\n").find((l) => l.startsWith("[tests]")) ?? "";
+    expect(line).toContain("'tests/alias.test.ts'");
+    expect(line).toContain("'tests/alias-mock.test.ts'");
+    expect(line).toContain("'tests/via-index.test.ts'");
+    expect(line).not.toContain("package.test.ts");
+    expect(line).not.toContain("other-alias.test.ts");
+  });
+
   // A store or a test helper is imported by hundreds of tests: its importers
   // wait for the run after the merge, and the gate says how many they are.
   it("leaves the importers of a source that more than 25 tests import to the run after the merge, and says so", () => {

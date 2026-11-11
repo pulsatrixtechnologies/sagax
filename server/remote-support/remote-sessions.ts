@@ -59,6 +59,7 @@ import { remoteJoin, safeRemoteDir, scpSafePath, sensitiveRemoteDir } from "../.
 import type { AdminSessionInput } from "../../shared/remote-session-admin.ts";
 import type { RemoteSessionActionEvent } from "./remote-session-actions-audit.ts";
 import { remoteCommandReadOnly } from "./remote-session-exec.ts";
+import { HOST_GATEWAY_CALL_MS, HOST_OS_READ_WAIT_MAX_MS, withinLimit } from "./host-gateway-bound.ts";
 import { createTunnelQueue, isTunnelRefusal, SESSION_STOP_TIME_MS, TUNNEL_PROBE_TIME_MS, TUNNEL_PROBE_WAIT_MAX_MS, type TunnelRefusal } from "./tunnel-queue.ts";
 
 /** A call the tunnel queue never sent. `closed` starts with the words the
@@ -239,6 +240,12 @@ export type RemoteSessionDeps = {
   tunnelWaitMaxMs?: number;
   /** How long a tunnel probe waits for its turn (tests). */
   tunnelProbeWaitMaxMs?: number;
+  /** The longest the gateway close inside a session close is waited for
+   * (#3518; default `HOST_GATEWAY_CALL_MS`). */
+  gatewayCallMaxMs?: number;
+  /** The longest an exec waits for the first read of an unknown OS (#3518;
+   * default `HOST_OS_READ_WAIT_MAX_MS`). */
+  osReadWaitMaxMs?: number;
   /** The per-session action audit (exec, file transfers), for the Remote
    * Sessions logs view. The command is redacted again at the sink. */
   actionsAudit?: { write(event: RemoteSessionActionEvent): void };
@@ -660,7 +667,8 @@ function createRemoteSessionLifecycle(env: RemoteSessionEnv) {
           const dir = supportDir?.();
           if (dir) await markSessionClosed(dir, session.code).catch(() => {});
           try {
-            await deps.closeRemote?.({ principalId: session.principalId, botId: session.botId, threadId: session.threadId, code: session.code });
+            // its own short limit (#3518): a gateway that does not answer never holds a close
+            await withinLimit(Promise.resolve(deps.closeRemote?.({ principalId: session.principalId, botId: session.botId, threadId: session.threadId, code: session.code })), deps.gatewayCallMaxMs ?? HOST_GATEWAY_CALL_MS, undefined);
           } catch { /* Perspicax ends it at its end time; the address is already gone */ }
         }
       }
@@ -962,7 +970,9 @@ function createRemoteSessionOps(env: RemoteSessionEnv) {
       if (!session) return { error: "No remote session is connected in this conversation." };
       if (!tunnelOf(session)) return { error: "This server does not have the tunnel of that session (it was opened outside Sagax). Open it with remote_support_open." };
       if (!systemSsh()) return { error: "This Sagax server has no ssh client (openssh-client), so it cannot reach the remote computer. Tell the person; an administrator installs it on the server." };
-      if (session.osGuessed) await inspect(session);
+      // the first read of an unknown OS is waited for a few seconds only (#3518):
+      // it goes on in the background, and the next call finds it done
+      if (session.osGuessed) await withinLimit(inspect(session), deps.osReadWaitMaxMs ?? HOST_OS_READ_WAIT_MAX_MS, undefined);
       // never a command written for a guessed OS (review of #965)
       if (session.osGuessed) return { error: "The OS of that computer is not known yet, so no command runs there. Ask the person which OS it is (the card has Windows, macOS and Linux buttons), or try again in a moment." };
       const command = input.command.trim();

@@ -3,6 +3,7 @@
 // to other bots, and older chats stored it. A person's own screen reads the
 // code, or either historical sentence, and says it in the app's language.
 import { t } from "@/lib/i18n";
+import type { LocaleKey } from "@/locales";
 import {
   ENGINE_REMOVED_MESSAGE,
   ENGINE_REMOVED_PERSON,
@@ -11,7 +12,7 @@ import {
   NO_ENGINE_PERSON,
 } from "../../shared/bot-engine-error";
 import { MODEL_ACCESS_DISABLED_MESSAGE } from "../../shared/model-access-disabled";
-import { restartSentenceKey } from "../../shared/restart-words";
+import { outwardDetailIn, restartSentenceKey } from "../../shared/restart-words";
 
 /** The no-engine, removed-engine or model-turned-off sentence in the app's language, or null
  * when `text` is some other cause. */
@@ -31,6 +32,8 @@ export function restartSentence(text: string): string | null {
   switch (known.key) {
     case "restart.cut": return t("chat.restart.cut");
     case "restart.resumeFailed": return t("chat.restart.resumeFailed", { detail: known.detail });
+    case "restart.outward": return t("chat.restart.outward", { detail: outwardDetailIn(known, (key, vars) => t(key as LocaleKey, vars)) });
+    case "restart.cutTwice": return t("chat.restart.cutTwice");
     case "restart.notResumed": return t("chat.restart.notResumed");
     case "restart.notResumedNewer": return t("chat.restart.notResumedNewer");
     case "restart.turnNote": return t("chat.restart.turnNote");

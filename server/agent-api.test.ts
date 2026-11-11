@@ -13,6 +13,8 @@ import {
 } from "./agent-api.ts";
 import { PRIORITY_DOWNGRADED_NOTE, resetPriorityWakeForTests, type PriorityDelivery } from "./proactive/priority-wake.ts";
 import { failedTurnTool } from "../shared/failed-turn.ts";
+import { CUT_TWICE, RESTART_TURN_NOTE, TURN_NOT_RESUMED } from "../shared/restart-words.ts";
+import { outwardDetail } from "./runtime/tree.ts";
 import { ENGINE_EXITED_SENTENCE } from "../shared/engine-exit-words.ts";
 
 const SECRET = Buffer.alloc(32, 7);
@@ -1721,6 +1723,76 @@ describe("await_turn and a turn that failed (#3008)", () => {
     const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "hi", mode: "async" });
     const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
     expect(r.body).toMatchObject({ finished: true, status: "finished", reply: "Recovered answer." });
+  });
+});
+
+describe("await_turn and a turn a restart cut (#3217)", () => {
+  const cutNote = { role: "bot", kind: "activity", text: "", tool: { name: RESTART_TURN_NOTE, ok: true } } as const;
+  const started = { role: "bot", kind: "text", text: "Je lis le réglage sans rien modifier." } as const;
+
+  it("is not finished while nothing answered: status interrupted, never the words written before the cut", async () => {
+    const w = world({ replyAfterPolls: 1, replyRows: () => [started, cutNote] });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "Lis le réglage", mode: "async" });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 2_000 });
+    expect(r.body).toMatchObject({ finished: false, status: "interrupted", interrupted: true, reply: "" });
+    expect(String(r.body.next)).toContain("restart");
+  });
+
+  it("a turn that did not resume says so in the person's language, status interrupted", async () => {
+    const w = world({ replyAfterPolls: 1, replyRows: () => [started, cutNote, { role: "bot", kind: "activity", text: "", tool: { ...failedTurnTool(TURN_NOT_RESUMED), ok: false } }] });
+    w.deps.language = () => "fr-CA";
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "Lis le réglage", mode: "async" });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
+    expect(r.body).toMatchObject({ finished: true, status: "interrupted", interrupted: true, resumed: false, reply: "" });
+    expect(String(r.body.error)).toContain("Renvoie ta demande");
+    const page = await w.api.call(c, "read_latest_page", { agent_id: "bot-a", thread_id: sent.body.thread_id, limit: 10 });
+    const lines = (page.body.entries as Array<{ text: string }>).map((entry) => entry.text);
+    expect(lines.some((line) => line.includes("Sagax a redémarré pendant ce tour"))).toBe(true);
+    expect(lines.some((line) => line.includes(RESTART_TURN_NOTE))).toBe(false);
+  });
+
+  it("a resume that fails for any other cause ends the wait: interrupted, not resumed, with its error", async () => {
+    const w = world({ replyAfterPolls: 1, replyRows: () => [started, cutNote,
+      { role: "bot", kind: "activity", text: "", tool: { name: "Resuming after a restart", ok: true } },
+      { role: "bot", kind: "activity", text: "", tool: { ...failedTurnTool(ENGINE_EXITED_SENTENCE), ok: false } }] });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "Lis le réglage", mode: "async" });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
+    expect(r.body).toMatchObject({ finished: true, status: "interrupted", interrupted: true, resumed: false, reply: "" });
+    expect(String(r.body.error)).toContain(ENGINE_EXITED_SENTENCE);
+    expect(r.body.next).toBeUndefined();
+  });
+
+  it("a resumed turn finishes with the resumed answer, marked resumed", async () => {
+    const w = world({ replyAfterPolls: 1, replyRows: () => [started, cutNote, { role: "bot", kind: "activity", text: "", tool: { name: "Resuming after a restart", ok: true } }, { role: "bot", kind: "text", text: "Le réglage vaut 5." }] });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "Lis le réglage", mode: "async" });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
+    expect(r.body).toMatchObject({ finished: true, status: "finished", interrupted: true, resumed: true, reply: "Le réglage vaut 5." });
+  });
+
+  it("a cut turn that already sent something says what, not resumed, in the person's language", async () => {
+    const outward = outwardDetail(["GMAIL_SEND_EMAIL"]);
+    const w = world({ replyAfterPolls: 1, replyRows: () => [started, cutNote, { role: "bot", kind: "activity", text: "", tool: { ...failedTurnTool(outward), ok: false } }] });
+    w.deps.language = () => "fr-CA";
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "Envoie le courriel", mode: "async" });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
+    expect(r.body).toMatchObject({ finished: true, status: "interrupted", interrupted: true, resumed: false, reply: "" });
+    expect(String(r.body.error)).toContain("Interrompu par un redémarrage de Sagax après avoir déjà envoyé un courriel (GMAIL_SEND_EMAIL)");
+    expect(String(r.body.error)).not.toContain("Interrupted by");
+  });
+
+  it("a turn cut twice says so in the person's language", async () => {
+    const w = world({ replyAfterPolls: 1, replyRows: () => [started, cutNote, { role: "bot", kind: "activity", text: "", tool: { ...failedTurnTool(CUT_TWICE), ok: false } }] });
+    w.deps.language = () => "fr-CA";
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "Lis le réglage", mode: "async" });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
+    expect(r.body).toMatchObject({ finished: true, status: "interrupted", resumed: false });
+    expect(String(r.body.error)).toContain("Interrompu par un autre redémarrage de Sagax");
   });
 });
 

@@ -871,7 +871,7 @@ import { modelContextWindow } from "./models/model-context-window.ts";
 import { cloudRefusal } from "../shared/place-view.ts";
 import { PendingTurnCancellations, ProviderTurnGenerationRegistry, RetiredTurnRegistry, guardTurnDispatch } from "./turns/turn-dispatch-guard.ts";
 import { createGracefulShutdown } from "./process/graceful-shutdown.ts";
-import { shutdownDrainMs } from "./turns/interrupted-turns.ts";
+import { heldCutTurnSpeakers, shutdownDrainMs } from "./turns/interrupted-turns.ts";
 import { clearHeldSteersForThread,
   recordHeldSteer } from "./turns/held-steers.ts";
 import { continuationSpeaker } from "./turns/continuation-speaker.ts";
@@ -7409,6 +7409,7 @@ bindLeafHost({
   get noteHeldSkip() { return noteHeldSkip; },
   get roomHeld() { return roomHeld; },
   get runtimeHoldsRoot() { return runtimeHoldsRoot; },
+  get runtimeRootWaiting() { return runtimeRootWaiting; },
   get strictRuleOwnerName() { return strictRuleOwnerName; },
 });
 function bindLeafHost(table: object): void {
@@ -8539,6 +8540,10 @@ function roomHeld(group: GroupRecord | null | undefined, botId: string): boolean
 function runtimeHoldsRoot(threadId: string): boolean {
   return coordinator.all().some((n) => !n.parentId && n.threadId === threadId && !ENDED.has(n.status));
 }
+/** #3217: a live root of this thread waits (on teammates it handed work to, on a card). */
+function runtimeRootWaiting(threadId: string): boolean {
+  return coordinator.all().some((n) => !n.parentId && n.threadId === threadId && (n.status === "waiting" || n.status === "needs_input"));
+}
 async function interruptHeldMember(groupId: string, botId: string): Promise<void> {
   const group = store.group(groupId);
   const bot = store.bot(botId);
@@ -9209,6 +9214,13 @@ const turnTriggers = new Map<string, UsageTrigger>();
  * access), and that speaker's principal ("" for an unknown person): what a
  * continuation of that turn, or a bot hop it starts, speaks for too. */
 const turnSpeakers = new Map<string, TurnSpeaker>();
+// #3217: a root the runtime held when the last process stopped is rerun by
+// the runtime itself, and speaks for the person its turn was admitted for:
+// restored from the stop's record before the runtime's first tick, so the
+// rerun does not fail closed on an unknown speaker.
+try {
+  for (const { threadId, speaker } of heldCutTurnSpeakers(DATA_DIR)) if (!turnSpeakers.has(threadId)) turnSpeakers.set(threadId, speaker as TurnSpeaker);
+} catch (error) { console.warn(`startup: the speakers of cut turns could not be read: ${error instanceof Error ? error.message : String(error)}`); }
 /** Settled tool calls by conversation, for "Connect ..." cards (server/routes/connector-setup.ts). */
 const connectorSetupProofs = createConnectorSetupProofs();
 const turnSpeakerPrincipals = new Map<string, string>();
@@ -31844,6 +31856,8 @@ const agentApi = createAgentApi({
     return ["inbox", "attachments", name].join("/");
   },
   turnState: agentTurnState,
+  // #3217: restart lines read through the agent API in the person's language
+  language: (caller) => languageOfPerson(caller.kind === "person" ? caller.id : caller.speakerPrincipalId ?? null),
   // #2922: the cards an awaited turn (since its handle's time) is blocked
   // on, its handed-off threads included, filtered for this caller
   // (server/index-leaves/agentPendingApproval.ts, isolation between persons).
@@ -31978,7 +31992,9 @@ const agentApi = createAgentApi({
     const source = store.bot(caller.id);
     const target = store.bot(agent.id);
     if (!source || !store.taskByThread(source.id, caller.sourceThreadId)) return;
-    const text = result.finished
+    const text = result.status === "interrupted"
+      ? `@${agent.name} did not finish the turn you sent with send_prompt: ${result.error ?? "a server restart cut it and it did not resume"}.`
+      : result.finished
       ? (result.reply ? `@${agent.name} finished the turn you sent with send_prompt:\n\n${result.reply}` : `@${agent.name} finished the turn you sent with send_prompt, without text.`)
       : `@${agent.name} is waiting for a person to answer an approval before it can go on (send_prompt).`;
     store.appendMessage(caller.sourceThreadId, { role: "bot", kind: "text", text, ...(target ? { from: { botId: target.id, name: target.name, color: target.color } } : {}) });

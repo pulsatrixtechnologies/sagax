@@ -99,7 +99,12 @@ Results: `await_turn` and a `blocking` send answer `{finished, reply,
 status}`. An empty `reply` with `finished: true` means the turn ended without
 text. A turn that ended on a failure (its engine stopped before replying, a
 provider refused) answers `status: "failed"` with `finished: true` and a plain
-`error` (#3008), never `finished` with an empty reply. When the wait ends and the turn is still going, `status` is
+`error` (#3008), never `finished` with an empty reply. A turn a server restart
+cut carries `interrupted: true` (#3217): `status: "interrupted"` with
+`finished: false` means it is being resumed, so keep waiting; `status:
+"finished"` with `resumed: true` is the resumed answer; `finished: true` with
+`resumed: false` (`status: "interrupted"`, `error` in the person's language)
+means the turn was not answered, so send the request again. When the wait ends and the turn is still going, `status` is
 `still_working` (HTTP 200, not an error): `progress` holds a short summary,
 `turn_state` and the recent `steps`; `wait_cursor` and `recommended_wait_ms`
 tell the caller how to resume (`cursor` + `timeout_ms` on the next

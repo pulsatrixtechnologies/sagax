@@ -183,8 +183,15 @@ public enum LibraryRules {
     public static func groups(files: [ThreadFile], artifacts: [BotArtifact], pages: [PublishedPageSummary] = [], now: Double, calendar: Calendar = .current) -> LibraryGroups {
         let week = 7.0 * 24 * 3_600_000
         let startOfToday = calendar.startOfDay(for: Date(timeIntervalSince1970: now / 1000)).timeIntervalSince1970 * 1000
-        let entries = (files.map(LibraryEntry.file) + artifacts.map(LibraryEntry.artifact) + pages.map(LibraryEntry.page))
-            .sorted { $0.at != $1.at ? $0.at > $1.at : $0.id < $1.id }
+        // Each list is typed on its own: one chain of three mapped lists
+        // and an untyped sort took the compiler close to a second.
+        let fileEntries: [LibraryEntry] = files.map(LibraryEntry.file)
+        let artifactEntries: [LibraryEntry] = artifacts.map(LibraryEntry.artifact)
+        let pageEntries: [LibraryEntry] = pages.map(LibraryEntry.page)
+        let all: [LibraryEntry] = fileEntries + artifactEntries + pageEntries
+        let entries: [LibraryEntry] = all.sorted { (a: LibraryEntry, b: LibraryEntry) -> Bool in
+            a.at != b.at ? a.at > b.at : a.id < b.id
+        }
         let rest = entries.filter { !$0.pinned }
         return LibraryGroups(
             pinned: entries.filter(\.pinned),

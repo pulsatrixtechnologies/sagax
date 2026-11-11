@@ -314,6 +314,20 @@ final class RoutineWatchTests: XCTestCase {
         XCTAssertEqual(failed, .failed("That tool changes something."))
     }
 
+    func testAReadingWithMissingPiecesKeepsItsDefaults() throws {
+        let decode = { (text: String) throws -> RoutineWatchCheck in
+            try JSONDecoder().decode(RoutineWatchCheck.self, from: Data(text.utf8))
+        }
+        XCTAssertEqual(try decode(#"{"ok":true}"#), .read(summary: "", excerpt: "", items: nil, condition: nil, ms: 0))
+        XCTAssertEqual(
+            try decode(#"{"ok":true,"summary":"1 file","items":"many","condition":{},"ms":7.9}"#),
+            .read(summary: "1 file", excerpt: "", items: nil, condition: .init(holds: false, seen: ""), ms: 7)
+        )
+        XCTAssertEqual(try decode(#"{"ok":true,"condition":{"holds":false,"seen":"0"},"ms":"slow"}"#),
+                       .read(summary: "", excerpt: "", items: nil, condition: .init(holds: false, seen: "0"), ms: 0))
+        XCTAssertEqual(try decode(#"{}"#), .failed("The check failed."))
+    }
+
     func testARefusedCheckCarriesTheServersSentence() async throws {
         WatchStub.statusCode = 400
         WatchStub.responseBody = Data(#"{"error":"Choose a watch to check"}"#.utf8)

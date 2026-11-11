@@ -15,6 +15,40 @@ Every ACP turn logs one line when it settles (server/drivers/acp/turn-latency.ts
 - full: the prompt carried the whole system block (new session, changed stable half, re-anchor).
 - in / cached: the provider's input tokens and the cached share.
 - stallGuard: how long a silent prompt is given before Sagax cancels and asks once more.
+- queueBy / setupBy (#3561): the parts of queue and setup in ms, from the turn's own step marks
+  (server/turns/turn-trace.ts), each step closing the part it names; a part the turn did not
+  reach is left out, and the parts add up to the stage.
+  - queueBy: admit (checks before the turn starts), prewarm (a warm being joined), compact,
+    context (selection, soul, skills), mcp (the tool servers' sign-in refresh and probe),
+    connector (the account's connection), place (workspace, sandbox, mounts), prompt, recall,
+    access (the turn's credentials, a typed command), slot (an engine start slot), send,
+    dispatch (pictures, hand-off to the engine).
+  - setupBy: prepare (sign-in check, command, spawn contract), init (process start and
+    handshake), session (session/new or load), model (model and mode), tools (Grok's tool
+    servers answering, the wait kept since hotfix 0.5.10), prompt (the rest until the prompt
+    is sent).
+
+  Example of a turn that opened a conversation on a new process:
+
+      queueBy=compact:104,context:2,mcp:6,place:67,prompt:35,recall:23,access:1,dispatch:2 setupBy=prepare:19,init:2786,session:902,tools:1,prompt:10
+
+## What the parts do not change (#3561)
+
+queueBy and setupBy only measure. The queue and the setup of a turn take as long as before:
+no step was moved, skipped or shortened. They exist so one production turn names its slow part
+before anything is changed.
+
+What to read after a server roll, on an organization server, on turns that open a
+conversation (path=spawn or path=load):
+
+- queueBy: which part holds the 5 to 6 s of queue seen in production: connector (the
+  account's connection), mcp (the tool servers' sign-in refresh and probe), place (workspace,
+  sandbox, mounts), context (selection, soul, skills) or slot (waiting for an engine start
+  slot). The other parts are expected in tens of ms.
+- setupBy: how the 3 to 7 s of setup splits between init (process start and handshake),
+  session (session/new or load) and tools (Grok's tool servers answering). A large init points
+  at keeping a process warm between a bot's conversations; a large tools part at the wait for
+  the tool servers; a large session part at the engine's own session start.
 
 `grep turn-latency` on the server log gives the distribution; the native wire log
 ($SAGAX_DATA_DIR/native/<thread>.ndjson) has every ACP message with its time.

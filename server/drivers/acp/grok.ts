@@ -31,6 +31,7 @@ import { turnActiveProfileFor } from "../../turns/turn-active-profile.ts";
 import { grokGatewayOnTurn } from "../../connectors/turn-plan.ts";
 import { narrowsNativeTools } from "../../../shared/tool-scope.ts";
 import { grokToolScopeProfile, grokInheritedProfile } from "./grok-tool-scope.ts";
+import { turnTrace } from "../../turns/turn-trace.ts";
 export { grokToolScopeProfile, grokInheritedProfile, allowsRegisteredTool } from "./grok-tool-scope.ts";
 import {
   MAX_QUESTIONS, parseProtocolAskQuestions, pickedOptionLabels, questionAnswersById, repeatsQuestionText,
@@ -1067,6 +1068,8 @@ const support: AcpSupport = {
         if (settled) rememberGrokMcpSettled(sessionId);
       }
     }
+    // the latency line's setupBy tools part ends here (turn-latency.ts)
+    turnTrace(turn.threadId, "acp-mcp-settled");
     if (!turn.model) return;
     if (grokPinsModelInProfile(turn)) {
       // The session profile already names the model (toolScopeSessionParams).

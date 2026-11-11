@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { clearTurnCounters, noteFirstResponse, noteTurnQueued, setTurnTimingWriter, turnCounters, turnTrace, turnTracePayloadHash } from "./turn-trace.ts";
+import { clearTurnCounters, noteFirstResponse, noteTurnQueued, setTurnTimingWriter, turnCounters, turnTrace, turnTraceMarks, turnTracePayloadHash } from "./turn-trace.ts";
 
 describe("turn trace (SAGAX_TURN_TRACE)", () => {
   afterEach(() => {
@@ -129,6 +129,28 @@ describe("turn trace (SAGAX_TURN_TRACE)", () => {
   it("writes nothing for a payload hash unless switched on", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     turnTracePayloadHash("0123456789abcdef", { system: "x" });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  // #3561: the latency line names its parts from these marks, trace off too
+  it("keeps this turn's steps with their times, trace off, and starts over with the next turn", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    let now = 1_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const thread = "feedface01234567";
+    turnTrace(thread, "start", true);
+    now = 1_200;
+    turnTrace(thread, "compacted");
+    now = 1_900;
+    turnTrace(thread, "send");
+    expect(turnTraceMarks(thread, 0, 2_000)).toEqual([["start", 1_000], ["compacted", 1_200], ["send", 1_900]]);
+    expect(turnTraceMarks(thread, 1_100, 1_900)).toEqual([["compacted", 1_200], ["send", 1_900]]);
+    now = 5_000;
+    turnTrace(thread, "start", true);
+    expect(turnTraceMarks(thread, 0, 9_000)).toEqual([["start", 5_000]]);
+    for (let i = 0; i < 100; i += 1) turnTrace(thread, "recall");
+    expect(turnTraceMarks(thread, 0, 9_000).length).toBe(64);
+    expect(turnTraceMarks("unknown-thread", 0, 9_000)).toEqual([]);
     expect(spy).not.toHaveBeenCalled();
   });
 });

@@ -81,6 +81,7 @@ const handshake = async (): Promise<boolean> => {
 };
 runtimeAcceptsImages = await handshake();
 init = session.initResult;
+turnTrace(threadId, "acp-handshake");
 
 promptTurn = turn;
 rebuiltFromReplay = renewedFromChat;
@@ -134,7 +135,10 @@ for (;;) {
        * genuinely new session */
     }
   }
-  if (loaded) break;
+  if (loaded) {
+    turnTrace(threadId, "acp-session-loaded");
+    break;
+  }
   if (cursor && liveSessionId === cursor && !replaceLoaded) {
     // The agent refused (or never answered) re-establishing its
     // own live session on this process. Continuity outranks the
@@ -155,6 +159,7 @@ for (;;) {
     session.current = current;
     runtimeAcceptsImages = await handshake();
     init = session.initResult;
+    turnTrace(threadId, "acp-handshake");
     continue;
   }
   // a genuinely fresh native session forgets what the previous
@@ -261,6 +266,7 @@ try {
     }
   }
 
+  if (support.selectModel) turnTrace(threadId, "acp-model");
   if (support.configureSession) {
     approvalUnconfirmed = support.sessionScopedApproval === true;
     ctx.approvalUnconfirmed = approvalUnconfirmed;

@@ -19,7 +19,7 @@ import {
 } from "./openai-chat-shared.ts";
 import { createWarmToolSessions } from "./openai-chat-tools-warm.ts";
 import { reportBackgroundError } from "../background-error.ts";
-import { restampTurnClock, turnClockNote, type TurnClock } from "../turns/turn-clock.ts";
+import { turnClockNote, turnClockNow } from "../turns/turn-clock.ts";
 
 export { ModelUnsupportedError } from "./openai-chat-completion.ts";
 
@@ -306,33 +306,25 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     ];
   };
 
-  /** The clock note each running turn's request carries now. */
-  const clocks = new WeakMap<SendTurnInput, TurnClock>();
-  /** Before each model call of a turn, its clock note read again: a turn
-   * that runs tools for minutes tells the model the minute it writes in,
-   * not the one the turn started at. The delivered record follows, so the
-   * next turn replays the request as it was last sent. */
-  const refreshClock = (turn: SendTurnInput, request: OpenAIChatMessage, now = new Date()): void => {
-    const clock = clocks.get(turn) ?? turn.turnClock;
-    if (!clock) return;
-    const note = turnClockNote(now, clock.timeZone);
-    if (note === clock.note) return;
-    const content = request.content;
-    if (typeof content === "string") request.content = restampTurnClock(content, clock, note);
-    else if (Array.isArray(content)) request.content = content.map((part) => part.type === "text" ? { ...part, text: restampTurnClock(part.text, clock, note) } : part);
-    const record = delivered.get(turn.threadId)?.at(-1);
-    if (record) {
-      record.text = restampTurnClock(record.text, clock, note);
-      record.sent = restampTurnClock(record.sent, clock, note);
-    }
-    clocks.set(turn, { timeZone: clock.timeZone, note });
+  /** Before each model call of a turn, the clock read again: a turn that
+   * runs tools for minutes tells the model the minute it writes in, not the
+   * one the turn started at (#3511). The fresh time is a short trailing line
+   * after the last message of this call only, never written into the turn's
+   * message, the conversation or its replay: the bytes already sent stay as
+   * they were, so the provider's cached prefix stays valid (#3549). It is a
+   * user message, the role every chat engine here accepts after tool
+   * results (mid-turn asides ride the same role). */
+  const clockLine = (turn: SendTurnInput, now = new Date()): OpenAIChatMessage | null => {
+    const clock = turn.turnClock;
+    if (!clock || turnClockNote(now, clock.timeZone) === clock.note) return null;
+    return { role: "user", content: turnClockNow(now, clock.timeZone) };
   };
 
   const sendTurn = createOpenAIChatSendTurn({
     resolveKey, options, pingModels, rememberWarm, releaseWarm, active, warmThreads,
     warmToolSessions,
     messagesFor, unsupportedModels, nextModel, sessionGrants, emit, base, complete,
-    reasoningReplayRejected, refuseModel, seesImages, refreshClock,
+    reasoningReplayRejected, refuseModel, seesImages, clockLine,
   });
 
   return {

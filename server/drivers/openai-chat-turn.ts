@@ -74,8 +74,8 @@ export type OpenAIChatSendTurnDeps<Config> = {
   reasoningReplayRejected: Set<string>;
   refuseModel: (model: string) => void;
   seesImages: (turn: SendTurnInput) => boolean;
-  /** The request's clock note read again before a model call (openai-chat.ts). */
-  refreshClock?: (turn: SendTurnInput, request: OpenAIChatMessage) => void;
+  /** The fresh time for this model call, a trailing line sent once and never kept (openai-chat.ts). */
+  clockLine?: (turn: SendTurnInput) => OpenAIChatMessage | null;
 };
 
 /** One OpenAI-compatible chat-completions turn (tools, steers, model fallback). */
@@ -355,8 +355,8 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
         };
         try {
           turnTrace(turn.threadId, "request-built");
-          ctx.deps.refreshClock?.(turn, request);
-          completion = await complete(messages, model, true, abort.signal, (text: string, streamKind: "assistant_text" | "reasoning_text") => {
+          const clock = ctx.deps.clockLine?.(turn);
+          completion = await complete(clock ? [...messages, clock] : messages, model, true, abort.signal, (text: string, streamKind: "assistant_text" | "reasoning_text") => {
             streamed = true;
             if (streamKind === "assistant_text") answerStreamed = true;
             const shown = holdback && streamKind === "assistant_text" ? holdback.feed(text) : text;

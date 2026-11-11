@@ -1,6 +1,7 @@
 // Slice 5: Perspicax MCP for the person who speaks (server/perspicax/perspicax-mcp.ts).
 import { describe, expect, it } from "vitest";
 
+import voiceFixture from "../fixtures/perspicax-voice-tools.json" with { type: "json" };
 import type { McpAuditRecord } from "../mcp/mcp-permissions.ts";
 import { WarmResourceBudget, MiB } from "../resources/warm-resources.ts";
 import type { SubjectTokenOutcome } from "../auth/idp-session.ts";
@@ -982,6 +983,24 @@ describe("PerspicaxMcp permissions and callTool", () => {
     expect(JSON.stringify(aliased.body)).toContain("place_phone_call");
     const other = await h.mcp.relay({ ...turn, botId: "x" , frame: toolsCall("cw_psa_write", { resource: "companies", action: "update" }, 42) });
     expect(other.body).toMatchObject({ id: 42, result: { content: [{ text: "done" }] } });
+  });
+
+  it("a bot's own line tools reach the gateway when its tools/list names the vendor; a raw number write does not (#3603)", async () => {
+    const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "s" } });
+    const h = harness({ mcp: ({ body }: { body: any }) => body.method === "tools/list"
+      ? json({ jsonrpc: "2.0", id: body.id, result: { tools: [...voiceFixture.tools, { name: "twilio_api_write", description: "Write to the Twilio REST API" }] } })
+      : json({ jsonrpc: "2.0", id: body.id, result: { content: [{ type: "text", text: "sent" }] } }) });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 50, method: "tools/list" } });
+    const sms = await h.mcp.relay({ ...turn, botId: "x", frame: toolsCall("voice_sms", { to: "+15145550142", body: "On arrive jeudi." }, 51) });
+    expect(sms.body).toMatchObject({ id: 51, result: { content: [{ text: "sent" }] } });
+    const number = await h.mcp.relay({ ...turn, botId: "x", frame: toolsCall("voice_number", { action: "verify", phone_number: "+15145550143" }, 52) });
+    expect(number.body).toMatchObject({ id: 52, result: { content: [{ text: "sent" }] } });
+    const code = await h.mcp.relay({ ...turn, botId: "x", frame: toolsCall("voice_client_code", { action: "send", phone: "+15145550144" }, 53) });
+    expect(code.body).toMatchObject({ id: 53, result: { content: [{ text: "sent" }] } });
+    const raw = await h.mcp.relay({ ...turn, botId: "x", frame: toolsCall("twilio_api_write", { resource: "IncomingPhoneNumbers", action: "create" }, 54) });
+    expect(JSON.stringify(raw.body)).toContain("never buys");
+    expect(h.mcpCalls.filter((c) => c.body?.method === "tools/call").map((c) => c.body.params.name)).toEqual(["voice_sms", "voice_number", "voice_client_code"]);
   });
 
   it("shadow lets a denial through and audits only the denial", async () => {

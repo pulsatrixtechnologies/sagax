@@ -13,6 +13,7 @@ import { StepRow } from "./StepRow";
 import { CustomRuleNoticeLine } from "./CustomRuleNotice";
 import { autoApprovalReason, type AutoApprovalReason } from "../../shared/auto-approval-reason";
 import { toolFailureText } from "../../shared/tool-failure-text";
+import { connectorRefusalIn } from "../../shared/connector-refusal";
 import type { LocaleKey } from "@/locales";
 
 type Tool = NonNullable<Message["tool"]>;
@@ -121,7 +122,11 @@ export function ToolStepDetail({ tool, status, nameOf, place = null, live = fals
   // 2026-11-03: a failure shows its own words, whatever envelope the engine
   // wrapped them in (shared/tool-failure-text.ts); "no error message" only
   // when there are none.
-  const result = stepResult(phase === "failed" ? toolFailureText(tool.output) ?? tool.output : tool.output);
+  const failure = phase === "failed" ? toolFailureText(tool.output) ?? tool.output : tool.output;
+  // #3515: a connector's refused sign-in reads in the app's language, whole,
+  // with its step to take (shared/connector-refusal.ts, as the thread API says it)
+  const said = phase === "failed" && failure ? connectorRefusalIn(failure, (key) => t(key as LocaleKey)) : undefined;
+  const result = stepResult(said ?? failure);
   const duration = stepDuration(tool.durationMs);
   return (
     <div className="space-y-2 py-1 text-[12px] text-ink-secondary" data-testid="tool-step-detail">

@@ -37,6 +37,8 @@ import {
   plainHttpProxyFetch,
   remoteMcpSpec,
 } from "./mcp/mcp-http.ts";
+// #3515: the refusal's words, read back in the reader's language (shared/connector-refusal.ts)
+import { MCP_CREDENTIALS_REFUSED } from "../shared/connector-refusal.ts";
 import { lenientToolValidator, schemaProblems } from "./mcp/mcp-schema-validator.ts";
 import { fitToolListResult } from "./mcp/mcp-tool-schema.ts";
 import { toolSchemaProfileFromEnv } from "./tool-schema-profile.ts";
@@ -58,16 +60,6 @@ function fail(message: string): never {
   process.stderr.write(`mcp-remote-proxy: ${message}\n`);
   process.exit(1);
 }
-
-/** What the engine is told when the server refuses its credentials (HTTP
- * 401). This proxy cannot tell a Sagax sign-in from a header the
- * person typed (both arrive as headers), so the words cover both: a sign-in
- * token that ran out during a long turn is refreshed when the next message
- * starts, while a revoked sign-in or a wrong key needs the person. Our own
- * words, nothing remote. */
-const CREDENTIALS_REFUSED = "This MCP server refused its credentials (HTTP 401). If it uses a sign-in, send the message again: "
-  + "Sagax refreshes sign-ins when a message starts. If it still fails, open Capabilities > Installed and sign in to it again, "
-  + "or check its header values.";
 
 /** A refusal of our own: its words carry nothing remote, so they are relayed. */
 class Refusal extends Error {
@@ -371,7 +363,7 @@ async function handle(message: Json): Promise<void> {
     // id), relayed with its code once nothing configured or secret is left.
     if (failure instanceof Refusal) error(message.id, failure.code, failure.message);
     else if (failure instanceof McpRpcError) error(message.id, failure.code ?? -32603, remoteErrorText(failure.detail));
-    else if (failure instanceof McpHttpError && failure.status === 401) error(message.id, -32603, CREDENTIALS_REFUSED);
+    else if (failure instanceof McpHttpError && failure.status === 401) error(message.id, -32603, MCP_CREDENTIALS_REFUSED);
     else if (failure instanceof McpHttpError && failure.kind === "status" && !signal.aborted) error(message.id, -32603, remoteStatusText(failure.status, failure.retryAfterMs));
     else if (failure instanceof McpHttpError && failure.kind === "network" && failure.message === "request failed" && !signal.aborted) error(message.id, -32603, "Could not reach this MCP server. Check its URL and that it is online.");
     else error(message.id, signal.aborted ? -32800 : -32603, signal.aborted ? "MCP request cancelled" : "Remote MCP request failed");

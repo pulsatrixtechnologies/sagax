@@ -252,3 +252,30 @@ describe("#3456: the schedule", () => {
     expect(briefScheduleTime({ type: "cron", expression: "*/5 * * * *", timeZone: "UTC" })).toBeNull();
   });
 });
+
+describe("#3515: the brief routine the upgrade named in English", () => {
+  const english = (h: ReturnType<typeof harness>, botId: string, name = "Today's brief") => h.manager.create({
+    name, prompt: "Today's brief: read my connected apps.", botId, enabled: true,
+    schedule: briefSchedule("08:00", "America/Toronto"), precheck: { kind: "code", check: "daily_brief" }, overlap: "skip", postResults: false,
+  });
+
+  it("takes the French name once the person's language is French, and only once", () => {
+    const h = harness();
+    english(h, "bot-1");
+    expect(h.briefs.localizeName("bot-1")?.name).toBe("Brief du jour");
+    expect(briefRoutineOf(h.manager.listRoutines(), "bot-1")?.name).toBe("Brief du jour");
+    expect(h.briefs.localizeName("bot-1")).toBeNull();
+    // the person names it "Today's brief" on purpose: the next passes keep it
+    const routine = briefRoutineOf(h.manager.listRoutines(), "bot-1")!;
+    h.manager.update(routine.id, { name: "Today's brief" });
+    expect(h.briefs.localizeName("bot-1")).toBeNull();
+    expect(briefRoutineOf(h.manager.listRoutines(), "bot-1")?.name).toBe("Today's brief");
+  });
+
+  it("a name the person chose is kept", () => {
+    const h = harness();
+    english(h, "bot-2", "Mon matin");
+    expect(h.briefs.localizeName("bot-2")).toBeNull();
+    expect(briefRoutineOf(h.manager.listRoutines(), "bot-2")?.name).toBe("Mon matin");
+  });
+});

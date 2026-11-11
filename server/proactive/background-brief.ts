@@ -240,6 +240,9 @@ const botSchema = z.object({
   /** #3456: a main bot that had the brief only by default before it became
    * a routine: it owes its person one card « Garder le brief du jour ? ». */
   cardOwed: z.boolean().optional(),
+  /** #3515: the brief routine's name was put in the person's language once
+   * (BriefRoutines.localizeName); a name they give it later stays. */
+  nameLocalized: z.boolean().optional(),
 });
 
 const fileSchema = z.object({
@@ -640,6 +643,18 @@ export class BriefStore {
     const row = this.bot(botId);
     if (owed) row.cardOwed = true;
     else delete row.cardOwed;
+    this.data.bots[botId] = row;
+    this.save();
+  }
+
+  /** #3515: the brief routine's name was already put in the person's language. */
+  nameLocalized(botId: string): boolean {
+    return this.data.bots[botId]?.nameLocalized === true;
+  }
+
+  markNameLocalized(botId: string): void {
+    const row = this.bot(botId);
+    row.nameLocalized = true;
     this.data.bots[botId] = row;
     this.save();
   }

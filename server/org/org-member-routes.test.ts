@@ -6,6 +6,8 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ConsoleAssertion } from "../auth/oidc-rp.ts";
+import { MCP_CREDENTIALS_REFUSED } from "../../shared/connector-refusal.ts";
+import { serverApprovalWords } from "../approvals/approval-words.ts";
 import { createOrgMemberRoutes, describeMemberApproval, planAnswer, MEMBER_PROGRESS_MIN_MS, QUESTION_DECLINED_MESSAGE, readThreadPage, replyAfter, summarizeTurn, type MemberPerson, type MemberRequest, type OrgMemberRouteDeps, type ThreadStatus } from "./org-member-routes.ts";
 
 const ISS = "https://perspicax.example";
@@ -1256,3 +1258,81 @@ describe("list_pending_approvals gives each card its context (#2909)", () => {
     expect(approval.context).not.toContain("|");
   });
 });
+
+describe("#3515: the organization's connector reads the server's lines in the person's language", () => {
+  const page = { messages: [
+    { id: "m1", role: "user", kind: "text", text: "salut", at: 1 },
+    { id: "s1", role: "bot", kind: "activity", tool: { name: "notice: Workspace: In the cloud", ok: true } },
+    { id: "s2", role: "bot", kind: "activity", tool: { name: "Asked by Beta", ok: true } },
+    { id: "s3", role: "bot", kind: "activity", tool: { name: "remote_tool", ok: false, output: `MCP error -32603: ${MCP_CREDENTIALS_REFUSED}` } },
+    { id: "r1", role: "bot", kind: "routine.run", text: "Trois points.\n\nCompleted with problems.\n\nRoutine “Veille”", at: 2,
+      routineRun: { runId: "run1", routineId: "rt", routineName: "Veille", status: "completed", summary: "Trois points.", problems: "x" } },
+    { id: "c1", role: "bot", kind: "options", card: { title: "Your bot has a question", subtitle: "On continue ?", options: ["Yes", "No"], requestId: "q1", requestType: "question" } },
+  ] };
+
+  it("in French: the steps, a routine's line and an old question card", () => {
+    const read = readThreadPage("t1", page, "m1", undefined, serverApprovalWords("fr").t, "fr-CA");
+    const all = JSON.stringify(read);
+    for (const english of ["In the cloud", "Asked by", "Completed with problems", "Routine “", "refused its credentials", "Your bot has a question", "\"Yes\""]) expect(all).not.toContain(english);
+    expect(read.steps.recent.map((step) => step.tool)).toEqual(["Dans l'infonuagique", "Beta a demandé", "remote_tool"]);
+    expect(read.steps.recent[2]!.error).toContain("ouvre Capacités > Installés et reconnecte-toi");
+    expect(read.messages[0]!.text).toBe("Trois points.\n\nTerminée avec des problèmes.\n\nRoutine « Veille »");
+    expect(read.approvals[0]).toMatchObject({ title: "Ton bot a une question", options: ["Oui", "Non"] });
+  });
+
+  it("in English: as stored, the refusal shortened at a sentence with its step", () => {
+    const read = readThreadPage("t1", page, "m1", undefined, serverApprovalWords("en").t, "en");
+    expect(read.steps.recent[0]!.tool).toBe("notice: Workspace: In the cloud");
+    expect(read.steps.recent[2]!.error).toContain("open Capabilities > Installed and sign in to it again");
+    expect(read.messages[0]!.text).toContain("Completed with problems.");
+    expect(read.approvals[0]).toMatchObject({ options: ["Yes", "No"] });
+  });
+
+  it("an old card answers with its stored label, whether the person sends the shown one or the stored one", () => {
+    const card = page.messages.at(-1)!.card as Record<string, unknown>;
+    const approval = describeMemberApproval("t1", page.messages.at(-1)!, card, undefined, serverApprovalWords("fr").t);
+    for (const option of ["Oui", "Yes", "oui", "1"]) {
+      const plan = planAnswer(approval, card, { option });
+      expect(plan, option).toMatchObject({ ok: true, picked: "Yes", body: { behavior: "answer", message: "Yes" } });
+    }
+    expect(planAnswer(approval, card, { option: "Non" })).toMatchObject({ ok: true, picked: "No" });
+    expect(planAnswer(approval, card, { option: "No" })).toMatchObject({ ok: true, picked: "No" });
+    expect(planAnswer(approval, card, { decision: "allow" })).toMatchObject({ ok: true, picked: "Yes" });
+    expect(planAnswer(approval, card, { decision: "deny" })).toMatchObject({ ok: true, picked: "No" });
+  });
+
+  it("a run that ended failed says so with its reason; the row's text holds no marker", () => {
+    const failed = { messages: [
+      { id: "m1", role: "user", kind: "text", text: "salut", at: 1 },
+      { id: "b1", role: "bot", kind: "text", text: "Je n'ai pas pu entrer.", at: 2, runStatus: { state: "failed", reason: "the login was refused" } },
+    ] };
+    const fr = readThreadPage("t1", failed, "m1", undefined, serverApprovalWords("fr").t, "fr-CA");
+    expect(fr.messages[0]!.text).toBe("Je n'ai pas pu entrer.\n\nNon terminée : the login was refused");
+    const en = readThreadPage("t1", failed, "m1", undefined, serverApprovalWords("en").t, "en");
+    expect(en.messages[0]!.text).toBe("Je n'ai pas pu entrer.\n\nDid not finish: the login was refused");
+  });
+
+  it("a routine run's line says its times in the person's zone, and its failure once", () => {
+    const since = Date.UTC(2026, 10, 10, 14, 0);
+    const page = { messages: [
+      { id: "m1", role: "user", kind: "text", text: "salut", at: 1 },
+      { id: "r1", role: "bot", kind: "routine.run", text: "Trois points.\n\nCompleted with problems.\n\nRoutine “Veille”", at: 2,
+        routineRun: { runId: "run-1", routineId: "rt-1", routineName: "Veille", status: "completed", summary: "Trois points.", problems: "a tool failed", repeat: { firstRunId: "run-0", count: 3, since, lastAt: since } } },
+    ] };
+    const utc = readThreadPage("t1", page, "m1", undefined, serverApprovalWords("fr").t, "fr-CA", "UTC").messages[0]!.text;
+    const local = readThreadPage("t1", page, "m1", undefined, serverApprovalWords("fr").t, "fr-CA", "America/Toronto").messages[0]!.text;
+    expect(utc).toContain("14");
+    expect(local).toContain("9");
+    expect(local).not.toBe(utc);
+    // the language unknown: the stored line says how the run ended, once
+    const failedRun = { messages: [
+      { id: "m1", role: "user", kind: "text", text: "salut", at: 1 },
+      { id: "r2", role: "bot", kind: "routine.run", text: "Routine “Veille”: failed\n\nthe login was refused", at: 2,
+        runStatus: { state: "failed", reason: "the login was refused" },
+        routineRun: { runId: "run-2", routineId: "rt-1", routineName: "Veille", status: "failed", error: "the login was refused" } },
+    ] };
+    const text = readThreadPage("t1", failedRun, "m1").messages[0]!.text;
+    expect(text.split("the login was refused").length - 1).toBe(1);
+  });
+});
+

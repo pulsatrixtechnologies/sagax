@@ -4120,7 +4120,8 @@ export class RoutineManager {
         if (!list.includes(action) && list.length < 10) list.push(action);
       }
     } else if (event.type === "item.completed" && event.itemType === "assistant_text") {
-      run.output = redactSecretsInText(event.text).trim().slice(0, 2_000);
+      // #3515: the record keeps whole sentences, never a word cut in two
+      run.output = clipReadable(redactSecretsInText(event.text).trim(), 2_000);
       const trouble = this.runTrouble.get(run.id);
       if (trouble && run.output) {
         delete trouble.failedAfterText;
@@ -4212,7 +4213,7 @@ export class RoutineManager {
         continue;
       }
       if (root?.result.trim()) {
-        run.output = redactSecretsInText(root.result).trim().slice(0, 2_000);
+        run.output = clipReadable(redactSecretsInText(root.result).trim(), 2_000);
         // the teammates' result is the run's final message (#3009)
         const trouble = this.runTrouble.get(run.id);
         if (trouble) delete trouble.failedAfterText;

@@ -8,7 +8,7 @@
  * server/store.ts; the wire projection is typed so a new server field
  * fails compilation until it is either declared here or explicitly listed
  * as server-private. */
-import type { PersonAttentionCard } from "./person-attention.ts";
+import type { PersonAttentionCard, RunStatusNote } from "./person-attention.ts";
 import type { GithubConnectCard } from "./github-connect-card.ts";
 import type { LimitFailoverLine } from "./limit-failover.ts";
 import type { OrderTracking } from "./order-tracking.ts";
@@ -981,6 +981,12 @@ export interface WireMessage extends WaitLineField {
   /** 2026-11-05: a bot's answer in a routine run's task after the run had
    * ended (a teammate's result resumed it), mirrored here: the source id. */
   lateRunReplyOf?: string;
+  /** #3515: the run contract's failed or partial status line this bot row
+   * ended on, kept as data when the line left its text (the store never
+   * keeps a run marker): the relay builds its failure card from it, and the
+   * thread API says it in the reader's language. The app draws nothing from
+   * it: the card in the person's conversation tells it. */
+  runStatus?: RunStatusNote;
   /** #2901 (2026-11-08): a line copied into the bot's chat from a background
    * conversation (MCP send_prompt, routine run, proactive wake, teammate
    * work). The chat shows a discreet provenance label; nothing stays hidden. */

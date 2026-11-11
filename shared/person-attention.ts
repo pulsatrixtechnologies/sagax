@@ -53,7 +53,50 @@ export function withoutBareNeedsInput(text: string): string {
   const kept = lines.filter((line) => !BARE_NEEDS_INPUT.test(line));
   return kept.length === lines.length ? text : kept.join("\n").trim();
 }
-const STATUS_LINE = /^[\s`*_>]*RUN[_ ]STATUS\s*:?[\s`*_]*(failed|failure|partial|partially)\b[\s`*_]*[:—–-]?\s*(.*)$/i;
+/** The run contract's failure line (`RUN_STATUS: failed|partial: <why>`):
+ * the one pattern for it. #3515: the store reads it into a row's runStatus
+ * (shared/routine-result.ts) before the line leaves the text. */
+export const RUN_STATUS_PROBLEM_LINE = /^[\s`*_>]*RUN[_ ]STATUS\s*:?[\s`*_]*(failed|failure|partial|partially)\b[\s`*_]*[:—–-]?\s*(.*)$/i;
+const STATUS_LINE = RUN_STATUS_PROBLEM_LINE;
+
+/** #3515: what a failed or partial status line said, kept on the stored
+ * row (WireMessage.runStatus) once the line itself is out of its text. */
+export interface RunStatusNote {
+  state: "failed" | "partial";
+  /** The bot's own words after the state, when it gave any. */
+  reason?: string;
+}
+
+/** A fenced code block's fence line (``` or ~~~). */
+const FENCE = /^\s*(?:```|~~~)/;
+
+/** Whether each line of `lines` sits inside a fenced code block (the fence
+ * lines included): a line there is what the bot quoted, never a marker. */
+export function fencedLines(lines: readonly string[]): boolean[] {
+  let open = false;
+  return lines.map((line) => {
+    if (FENCE.test(line)) {
+      open = !open;
+      return true;
+    }
+    return open;
+  });
+}
+
+/** The first failed or partial status line of `text`, outside code blocks. */
+export function runStatusNote(text: string | undefined): RunStatusNote | undefined {
+  if (!text || !/RUN[_ ]STATUS/i.test(text)) return undefined;
+  const lines = text.split(/\r?\n/);
+  const fenced = fencedLines(lines);
+  for (const [index, line] of lines.entries()) {
+    if (fenced[index]) continue;
+    const match = STATUS_LINE.exec(line.trim());
+    if (!match) continue;
+    const reason = match[2]!.replace(/[`*_]+$/g, "").trim();
+    return { state: /^fail/i.test(match[1]!) ? "failed" : "partial", ...(reason ? { reason } : {}) };
+  }
+  return undefined;
+}
 /** The ticket an item leads with: `**100201**`, `#100201`, `ticket 100201`. */
 const TICKET = /(?:\*\*|#|\b(?:ticket|billet)\s+#?)(\d{4,9})\b|^\s*(\d{5,9})\b/i;
 const JSON_KEYS = ["needs_human", "needsHuman", "humain", "human", "for_person", "forPerson"] as const;
@@ -159,23 +202,30 @@ function unique(items: PersonAttentionItem[]): PersonAttentionItem[] {
 /** The structured signals of a finished turn's words that need the person,
  * or undefined when there are none. Items win over a question, a question
  * over a declared failure. */
-export function personAttention(text: string | undefined): PersonAttention | undefined {
+export function personAttention(text: string | undefined, runStatus?: RunStatusNote): PersonAttention | undefined {
   const raw = (text ?? "").trim();
-  if (!raw) return undefined;
+  if (!raw) return runStatus ? failureOf(runStatus) : undefined;
   const lines = raw.split(/\r?\n/);
   const human = unique([...taggedItems(lines), ...jsonCandidates(raw).flatMap((value) => jsonItems(value))]);
   if (human.length) return { kind: "human", items: human };
   const questions = unique(lines.map((line) => QUESTION_LINE.exec(line)?.[1]).filter((line): line is string => Boolean(line?.trim())).map((line) => item(line)!).filter(Boolean));
   if (questions.length) return { kind: "question", items: questions };
-  for (const line of lines) {
-    const match = STATUS_LINE.exec(line.trim());
-    if (!match) continue;
-    const reason = match[2]!.replace(/[`*_]+$/g, "").trim();
-    const failed = /^fail/i.test(match[1]!);
-    const found = item(reason || (failed ? "The bot reported that the work failed." : "The bot reported that only part of the work was done."));
-    return found ? { kind: "failure", items: [found] } : undefined;
-  }
-  return undefined;
+  // #3515: a stored row carries its status line as data (runStatus); a
+  // text that never went through the store still has the line itself
+  const status = runStatus ?? runStatusNote(raw);
+  return status ? failureOf(status) : undefined;
+}
+
+/** A declared failed or partial run's reason: the bot's own, else the words
+ * the failure card says when it gave none (one wording for both). */
+export function runStatusReason(status: RunStatusNote): string {
+  return status.reason || (status.state === "failed" ? "The bot reported that the work failed." : "The bot reported that only part of the work was done.");
+}
+
+/** The failure card's item for a declared failed or partial run. */
+function failureOf(status: RunStatusNote): PersonAttention | undefined {
+  const found = item(runStatusReason(status));
+  return found ? { kind: "failure", items: [found] } : undefined;
 }
 
 /** The card a person's conversation shows for it (WireMessage.attention). */

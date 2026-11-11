@@ -211,6 +211,22 @@ export class BriefRoutines {
     return this.ensure(botId, settings);
   }
 
+  /** #3515: the upgrade runs at start, before a person's app has said which
+   * language it asks in, so a French-speaking person's routine was created
+   * with the English name. Once their language is known, a routine still
+   * named "Today's brief" (the person never renamed it) takes the French
+   * name. It looks once per routine: a person who later names it "Today's
+   * brief" on purpose keeps that name. Returns it when renamed. */
+  localizeName(botId: string): Routine | null {
+    if (this.deps.language(botId) !== "fr" || this.deps.store.nameLocalized(botId)) return null;
+    const manager = this.deps.routines();
+    const existing = manager ? briefRoutineOf(manager.list(), botId) : undefined;
+    if (!manager || !existing) return null;
+    const renamed = existing.name === briefRoutineName("en") ? manager.update(existing.id, { name: briefRoutineName("fr") }) : null;
+    this.deps.store.markNameLocalized(botId);
+    return renamed;
+  }
+
   /** The upgrade, once: saved settings that were on become the routine;
    * a main bot that had the brief only by default owes one card. A fresh
    * install (no brief file) owes nothing. */

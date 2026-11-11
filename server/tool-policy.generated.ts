@@ -433,6 +433,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"POST","kind":"exact","route":"/api/youtube/transcript","tier":"write","readOnly":false,"scope":"youtube:write","defaultEnabled":true},
   {"method":"PATCH","kind":"pattern","route":"^\\/api\\/(?:bots\\/[\\w-]+\\/(?:respond|requests\\/[A-Za-z0-9_-]{16,80})|threads\\/[\\w-]+\\/respond)$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/(?:bots\\/[\\w-]+\\/(?:respond|requests\\/[A-Za-z0-9_-]{16,80})|threads\\/[\\w-]+\\/respond)$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
+  {"method":"GET","kind":"pattern","route":"^\\/api\\/(?:bots\\/[\\w-]+|me)\\/plugins(\\/.*)?$","tier":"read","readOnly":true,"scope":"bots:read","defaultEnabled":true},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/(?:groups|threads)\\/[\\w-]+\\/read$","tier":"write","readOnly":false,"scope":"groups:write","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/admin\\/pages\\/([\\w-]+)\\/revoke$","tier":"admin","readOnly":false,"scope":"admin:admin","defaultEnabled":false,"destructive":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/admin\\/remote-sessions\\/([a-f0-9]{12})\\/(logs|end)$","tier":"admin","readOnly":true,"scope":"admin:admin","defaultEnabled":false},

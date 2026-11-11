@@ -205,10 +205,10 @@ export interface OrgMemberRouteDeps {
    * source Today and the pinned row read, each item with its message as the
    * person's conversation shows it. Null when it cannot be read now. */
   waitingItems?(person: MemberPerson): Array<{ item: WaitingItem; message?: unknown }> | null;
-  /** #3512: a question in words settled from an AI client: `handled` once
+  /** #3512: a question in words settled from an AI client: `answered` once
    * the person's words went to the waiting work, `skipped` without an
    * answer (the waiting work is told). False when it is not open. */
-  settleRequest?(person: MemberPerson, where: { botId: string; threadId: string; messageId: string }, how: "handled" | "skipped"): boolean;
+  settleRequest?(person: MemberPerson, where: { botId: string; threadId: string; messageId: string }, how: "answered" | "skipped"): boolean;
 }
 
 interface Answer {
@@ -1416,7 +1416,7 @@ function memberRouteTools(deps: OrgMemberRouteDeps) {
     if (!words) return fail(409, "text_required", choices.length ? `Send text with the person's own words, or option, one of ${optionList(choices)}.` : "Send text with the person's own words.", { options: choices, freeText: true });
     const reply = await deps.perform(person, { method: "POST", path: `/api/bots/${encodeURIComponent(item.workBotId ?? item.botId)}/messages`, body: { text: words, threadId: item.workThreadId ?? item.threadId } });
     if (!okStatus(reply)) return passThrough(reply, "The answer could not be sent.");
-    deps.settleRequest?.(person, where, "handled");
+    deps.settleRequest?.(person, where, "answered");
     return done("allow", "answered", picked ? "option" : "text", picked?.label);
   };
 

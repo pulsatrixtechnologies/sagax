@@ -12,7 +12,8 @@
 //
 // This module lists both for one viewer, pure, with the host's checks as
 // deps. An attention card leaves the box when the person replies in that
-// conversation after it, or marks it handled (POST /api/approvals/handled).
+// conversation after it, or marks it handled (POST /api/approvals/handled), which tells
+// the waiting work as a skip does (#3543).
 //
 // #3512: a parked teammate's input request row (WireMessage.inputRequest) is
 // a question in words too, and the pinned row already drew it: Today lists
@@ -279,48 +280,28 @@ function withAttention(projected: unknown, attention: PersonAttentionCard): unkn
   return projected && typeof projected === "object" ? { ...(projected as Record<string, unknown>), attention } : projected;
 }
 
-/** Mark one attention card handled; false when it is not one of this
- * viewer's open cards. */
-export function markAttentionHandled(
+/** #3471, #3543: the person settled a question in words (an attention card
+ * or an input request row) of a conversation of theirs: skipped, marked
+ * handled, or answered with their own words. `close` closes it the one way
+ * (waiting-card-skip.ts, closePersonRequest) and tells the waiting work;
+ * the other half of the same ask (the hand-off's card and its input
+ * request) closes with it, quietly, so every surface drops it at once.
+ * False when it is not one of this viewer's open questions. */
+export function settlePersonRequestCard(
   deps: Pick<TodayDeps, "bot" | "messages" | "isViewers"> & {
-    patch(threadId: string, messageId: string, attention: PersonAttentionCard): void;
-    /** #3512: an input request row, marked answered (the person's words went
-     * to the waiting work, or they handled it). */
-    patchRequest?(threadId: string, messageId: string, inputRequest: NonNullable<TodayMessage["inputRequest"]>): void;
+    close(threadId: string, message: TodayMessage, quiet?: boolean): boolean;
   },
-  botId: string, threadId: string, messageId: string, now = Date.now(),
-): boolean {
-  const bot = deps.bot(botId);
-  if (!bot) return false;
-  const rows = deps.messages(threadId);
-  const message = rows.find((row) => row.id === messageId);
-  if (!message || !deps.isViewers(bot, threadId)) return false;
-  const asks = pairedAsks(rows);
-  if (message.inputRequest) {
-    if (!inputRequestOpen(message) || !deps.patchRequest) return false;
-    deps.patchRequest(threadId, messageId, { ...message.inputRequest, answered: true });
-    const card = asks.cardOf.get(message.id);
-    if (card?.attention && !card.attention.handledAt) deps.patch(threadId, card.id, { ...card.attention, handledAt: now });
-    return true;
-  }
-  if (!message.attention || message.attention.handledAt) return false;
-  deps.patch(threadId, messageId, { ...message.attention, handledAt: now });
-  // the same ask's input request settles with it: every surface drops it at once
-  const row = asks.rowOf.get(message.id);
-  if (row?.inputRequest && inputRequestOpen(row)) deps.patchRequest?.(threadId, row.id, { ...row.inputRequest, answered: true });
-  return true;
-}
-
-/** #3471: the person skipped a question in words (an attention card or an
- * input request row) in a conversation of theirs: `close` closes it as
- * skipped and tells the waiting work (waiting-card-skip.ts). */
-export function skipPersonRequestCard(
-  deps: Pick<TodayDeps, "bot" | "messages" | "isViewers"> & { close(threadId: string, message: TodayMessage): boolean },
   botId: string, threadId: string, messageId: string,
 ): boolean {
   const bot = deps.bot(botId);
   if (!bot || !deps.isViewers(bot, threadId)) return false;
-  const message = deps.messages(threadId).find((row) => row.id === messageId);
-  if (!message) return false;
-  return deps.close(threadId, message);
+  const rows = deps.messages(threadId);
+  const message = rows.find((row) => row.id === messageId);
+  if (!message || !deps.close(threadId, message)) return false;
+  const asks = pairedAsks(rows);
+  const partner = message.inputRequest ? asks.cardOf.get(message.id) : asks.rowOf.get(message.id);
+  // read again: the waiting work's own settle may have closed it already
+  const current = partner ? deps.messages(threadId).find((row) => row.id === partner.id) : undefined;
+  if (current) deps.close(threadId, current, true);
+  return true;
 }

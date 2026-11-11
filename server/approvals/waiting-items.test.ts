@@ -16,7 +16,9 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import { createOrgMemberRoutes, type MemberPerson, type MemberRequest, type OrgMemberRouteDeps } from "../org/org-member-routes.ts";
 import { createApprovalsInboxRoutes } from "../routes/approvals-inbox.ts";
 import { PASS } from "../routes/table.ts";
-import { markAttentionHandled, skipPersonRequestCard, todayRows, type TodayDeps, type TodayMessage } from "./today-rows.ts";
+import { settlePersonRequestCard, todayRows, type TodayDeps, type TodayMessage } from "./today-rows.ts";
+import { closePersonRequest } from "./waiting-card-skip.ts";
+import type { Message } from "../store.ts";
 
 const NOW = 10_000_000;
 const ISS = "https://idp.example";
@@ -112,14 +114,13 @@ const memberDeps: OrgMemberRouteDeps = {
   waitingItems: () => waitingEntriesFrom(today(), NOW).map(({ item, row }) => ({ item, ...(row.message ? { message: row.message } : {}) })),
   settleRequest: (_person, where, how) => {
     settled.push({ messageId: where.messageId, how });
-    const deps = { ...todayDeps(), patch: (threadId: string, messageId: string, attention: PersonAttentionCard) => { patchMessage(threadId, messageId, { attention }); },
-      patchRequest: (threadId: string, messageId: string, inputRequest: NonNullable<TodayMessage["inputRequest"]>) => { patchMessage(threadId, messageId, { inputRequest }); } };
-    if (how === "handled") return markAttentionHandled(deps, where.botId, where.threadId, where.messageId, NOW);
-    return skipPersonRequestCard({ ...deps, close: (threadId, message) => {
-      if (message.inputRequest) patchMessage(threadId, message.id, { inputRequest: { ...message.inputRequest, expired: true, skipped: true } });
-      else if (message.attention) patchMessage(threadId, message.id, { attention: { ...message.attention, handledAt: NOW, closed: "skipped" } as PersonAttentionCard });
-      return true;
-    } }, where.botId, where.threadId, where.messageId);
+    // the one settle path (#3543), with the host's close on these rows
+    return settlePersonRequestCard({ ...todayDeps(), close: (threadId, message) => closePersonRequest({
+      patch: (id, messageId, patch) => { patchMessage(id, messageId, patch as Partial<TodayMessage>); },
+      answerWork: () => true,
+      noteWork: () => {},
+      now: () => NOW,
+    }, threadId, message as unknown as Message, { kind: how }) }, where.botId, where.threadId, where.messageId);
   },
 };
 
@@ -231,7 +232,7 @@ describe("one source for what waits on the person (#3512)", () => {
     expect(words.body).toMatchObject({ closed: true, state: "answered" });
     // the words go to the waiting work's thread, as the app sends them
     expect(performed.at(-1)?.request).toMatchObject({ method: "POST", path: "/api/bots/b2/messages", body: { text: "The second one", threadId: "work-b" } });
-    expect(settled).toEqual([{ messageId: "m-input", how: "handled" }]);
+    expect(settled).toEqual([{ messageId: "m-input", how: "answered" }]);
     expect(await counts()).toEqual({ today: 3, pinned: 3, connector: 3 });
   });
 

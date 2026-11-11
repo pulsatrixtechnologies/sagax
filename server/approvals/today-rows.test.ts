@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { attentionSettled, markAttentionHandled, todayRows, type TodayDeps, type TodayMessage } from "./today-rows.ts";
+import { attentionSettled, settlePersonRequestCard, todayRows, type TodayDeps, type TodayMessage } from "./today-rows.ts";
 import type { PersonAttentionCard } from "../../shared/person-attention.ts";
+import { closePersonRequest } from "./waiting-card-skip.ts";
+import type { Message } from "../store.ts";
 import { filterInbox, DEFAULT_INBOX_FILTERS } from "../../shared/approvals-inbox.ts";
 
 const card = (over: Partial<PersonAttentionCard> = {}): PersonAttentionCard => ({
@@ -61,15 +63,41 @@ describe("todayRows (#2689)", () => {
   });
 });
 
-describe("markAttentionHandled", () => {
-  it("stamps handledAt once, on the viewer's own card only", () => {
-    const patched: PersonAttentionCard[] = [];
-    const rows: TodayMessage[] = [{ id: "m1", at: 100, attention: card() }];
-    const base = { ...deps({ conv: rows }), patch: (_t: string, _m: string, attention: PersonAttentionCard) => { patched.push(attention); } };
-    expect(markAttentionHandled(base, "b1", "conv", "m1", 500)).toBe(true);
-    expect(patched[0]?.handledAt).toBe(500);
-    expect(markAttentionHandled({ ...base, isViewers: () => false }, "b1", "conv", "m1")).toBe(false);
-    expect(markAttentionHandled(base, "b1", "conv", "missing")).toBe(false);
+/** The host's one close (waiting-card-skip.ts) on in-memory rows: what was
+ * patched, and the line the waiting work heard. */
+function settleDeps(messages: Record<string, TodayMessage[]>, over: Partial<TodayDeps> = {}) {
+  const patched: Array<{ id: string; patch: Partial<TodayMessage> }> = [];
+  const told: Array<{ work: string; text: string }> = [];
+  const base = deps(messages, over);
+  return {
+    patched, told,
+    deps: {
+      ...base,
+      close: (threadId: string, message: TodayMessage, quiet?: boolean) => closePersonRequest({
+        patch: (id, messageId, patch) => {
+          patched.push({ id: messageId, patch: patch as Partial<TodayMessage> });
+          messages[id] = (messages[id] ?? []).map((row) => (row.id === messageId ? { ...row, ...(patch as Partial<TodayMessage>) } : row));
+        },
+        answerWork: (work, text) => { if (!quiet) told.push({ work, text }); return true; },
+        noteWork: () => {},
+        now: () => 500,
+      }, threadId, message as unknown as Message, { kind: "handled" }),
+    },
+  };
+}
+
+describe("settlePersonRequestCard: marked handled (#2689, #3543)", () => {
+  it("stamps handledAt once, on the viewer's own card only, and tells the waiting work", () => {
+    const rows: Record<string, TodayMessage[]> = { conv: [{ id: "m1", at: 100, attention: card() }] };
+    const { deps: base, patched, told } = settleDeps(rows);
+    expect(settlePersonRequestCard({ ...base, isViewers: () => false }, "b1", "conv", "m1")).toBe(false);
+    expect(settlePersonRequestCard(base, "b1", "conv", "missing")).toBe(false);
+    expect(settlePersonRequestCard(base, "b1", "conv", "m1")).toBe(true);
+    expect(patched[0]?.patch.attention?.handledAt).toBe(500);
+    expect(told).toEqual([{ work: "work", text: expect.stringMatching(/marked this handled without giving an answer/) }]);
+    // a second "handled" finds it closed: nothing more is said
+    expect(settlePersonRequestCard(base, "b1", "conv", "m1")).toBe(false);
+    expect(told).toHaveLength(1);
   });
 });
 
@@ -97,19 +125,20 @@ describe("#3512: an input request row is a question in words of Today too", () =
     expect(todayRows(deps({ conv: [...both, { id: "r2", at: 100 + 11 * 60_000, inputRequest: request() }] })).map((row) => row.requestId)).toEqual(["attention:c1", "attention:r2"]);
   });
 
-  it("marking an input request handled closes it, and closes the card of the same ask", () => {
-    const rows: TodayMessage[] = [{ id: "c1", at: 100, attention: card({ kind: "question", threadId: "work" }) }, { id: "r1", at: 105, inputRequest: request() }];
-    const cards: string[] = [];
-    const requests: Array<{ id: string; answered?: boolean }> = [];
-    const base = { ...deps({ conv: rows }), patch: (_t: string, id: string) => { cards.push(id); }, patchRequest: (_t: string, id: string, value: { answered?: boolean }) => { requests.push({ id, answered: value.answered }); } };
-    expect(markAttentionHandled(base, "b1", "conv", "r1", 500)).toBe(true);
-    expect(requests).toEqual([{ id: "r1", answered: true }]);
-    expect(cards).toEqual(["c1"]);
-    // and the card handled first settles its input request
-    cards.length = 0;
-    requests.length = 0;
-    expect(markAttentionHandled(base, "b1", "conv", "c1", 500)).toBe(true);
-    expect(cards).toEqual(["c1"]);
-    expect(requests).toEqual([{ id: "r1", answered: true }]);
+  it("marking an input request handled closes it, tells the work once, and closes the card of the same ask", () => {
+    const fresh = (): Record<string, TodayMessage[]> => ({ conv: [{ id: "c1", at: 100, attention: card({ kind: "question", threadId: "work" }) }, { id: "r1", at: 105, inputRequest: request() }] });
+    const first = settleDeps(fresh());
+    expect(settlePersonRequestCard(first.deps, "b1", "conv", "r1")).toBe(true);
+    expect(first.patched.map((row) => row.id)).toEqual(["r1", "c1"]);
+    expect(first.patched[0]!.patch.inputRequest).toMatchObject({ answered: true });
+    expect(first.patched[1]!.patch.attention?.handledAt).toBe(500);
+    expect(first.told).toHaveLength(1);
+    expect(first.told[0]!.work).toBe("work");
+    // and the card handled first settles its input request, the work told once
+    const second = settleDeps(fresh());
+    expect(settlePersonRequestCard(second.deps, "b1", "conv", "c1")).toBe(true);
+    expect(second.patched.map((row) => row.id)).toEqual(["c1", "r1"]);
+    expect(second.patched[1]!.patch.inputRequest).toMatchObject({ answered: true });
+    expect(second.told).toHaveLength(1);
   });
 });

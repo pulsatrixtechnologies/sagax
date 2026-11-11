@@ -26,8 +26,7 @@ let answered: Array<{ requestId: string; decision: string; rule?: string }> = []
 let historyCalls = 0;
 let journalDaysAsked: number[] = [];
 let testedDrafts: unknown[] = [];
-let handledCalls: string[] = [];
-let skippedCalls: string[] = [];
+let settledCalls: Array<{ messageId: string; how: string }> = [];
 
 beforeEach(async () => {
   pending = [entry("r1"), entry("r2"), entry("q1", { kind: "question", bulk: "question" }), entry("k1", { needsKey: true, bulk: "needs-key" })];
@@ -36,11 +35,9 @@ beforeEach(async () => {
   historyCalls = 0;
   journalDaysAsked = [];
   testedDrafts = [];
-  handledCalls = [];
-  skippedCalls = [];
+  settledCalls = [];
   const deps: ApprovalsInboxDeps = {
-    handled: (_auth, _viewer, item) => { handledCalls.push(item.messageId); return item.messageId !== "gone"; },
-    skip: (_auth, _viewer, item) => { skippedCalls.push(item.messageId); return item.messageId !== "gone"; },
+    settle: (_auth, _viewer, item, how) => { settledCalls.push({ messageId: item.messageId, how }); return item.messageId !== "gone"; },
     viewer: () => (person ? { principalId: person } : null),
     pending: () => pending,
     history: () => {
@@ -217,15 +214,17 @@ describe("POST /api/approvals/handled with skip", () => {
   it("skips the card instead of marking it handled", async () => {
     const reply = await handled({ botId: "b1", threadId: "t1", messageId: "m1", skip: true });
     expect(reply).toEqual({ status: 200, body: { ok: true, outcome: "skipped" } });
-    expect(skippedCalls).toEqual(["m1"]);
-    expect(handledCalls).toEqual([]);
+    expect(settledCalls).toEqual([{ messageId: "m1", how: "skipped" }]);
   });
   it("says gone for a card already closed", async () => {
     expect((await handled({ botId: "b1", threadId: "t1", messageId: "gone", skip: true })).status).toBe(404);
   });
-  it("still marks handled without skip", async () => {
-    expect((await handled({ botId: "b1", threadId: "t1", messageId: "m2" })).status).toBe(200);
-    expect(handledCalls).toEqual(["m2"]);
-    expect(skippedCalls).toEqual([]);
+  it("marks handled without skip, through the same settle (#3543)", async () => {
+    expect(await handled({ botId: "b1", threadId: "t1", messageId: "m2" })).toEqual({ status: 200, body: { ok: true, outcome: "handled" } });
+    expect(settledCalls).toEqual([{ messageId: "m2", how: "handled" }]);
+  });
+  it("settles as answered once the person's words went to the work", async () => {
+    expect((await handled({ botId: "b1", threadId: "t1", messageId: "m3", answered: true })).body).toEqual({ ok: true, outcome: "answered" });
+    expect(settledCalls).toEqual([{ messageId: "m3", how: "answered" }]);
   });
 });

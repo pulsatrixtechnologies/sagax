@@ -9,9 +9,11 @@
 //   GET  /api/approvals/journal  ?days=7|30: the Journal, every action of
 //                                this person's own bots with what decided it
 //                                (2026-10-26, shared/action-journal.ts)
-//   POST /api/approvals/handled { botId, threadId, messageId, skip? }: a bot's
-//                                "needs you" card marked handled (#2689);
-//                                with skip, a question in words skipped (#3471)
+//   POST /api/approvals/handled { botId, threadId, messageId, skip?, answered? }:
+//                                a question in words marked handled (#2689),
+//                                the waiting work told so (#3543); with skip,
+//                                skipped (#3471); with answered, settled once
+//                                the person's own words went to the work
 //   POST /api/approvals/journal/test { rule: { id?, when, behavior, botId, riskScope } }:
 //                                that rule replayed on the last 7 days
 //
@@ -38,8 +40,9 @@ import type { JournalChain } from "../action-journal.ts";
 import { isCustomRuleBehavior, isRiskClass, MAX_RULE_TEXT } from "../../shared/custom-rules.ts";
 import { liveDecisionRefusal } from "../../shared/live-approval.ts";
 import { approvalTypeOf } from "../approvals/approval-type.ts";
-import { waitingItemsFrom, waitingItemsOfBot } from "../../shared/waiting-items.ts";
+import { servedWaitingItems, waitingEntriesFrom, waitingItemsOfBot } from "../../shared/waiting-items.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
+import type { PersonRequestSettle } from "../approvals/waiting-card-skip.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface InboxViewer {
@@ -66,12 +69,12 @@ export interface ApprovalsInboxDeps {
   /** A rule (saved or a draft) replayed on the Journal's last 7 days with
    * the real matcher; a string is a refusal (400). */
   testRule?(auth: RequestAuth, viewer: InboxViewer, draft: RuleTestDraft): RuleTestResult | { error: string; status: number };
-  /** #2689: mark one of the viewer's "needs you" cards handled; false when
-   * it is not one of their open cards. */
-  handled?(auth: RequestAuth, viewer: InboxViewer, item: { botId: string; threadId: string; messageId: string }): boolean;
-  /** #3471: the person skipped a question in words (`skip: true`): closed
-   * as skipped, the waiting work told there is no answer. */
-  skip?(auth: RequestAuth, viewer: InboxViewer, item: { botId: string; threadId: string; messageId: string }): boolean;
+  /** #2689, #3471, #3543: settle one of the viewer's questions in words,
+   * the one way: `handled` (the waiting work told it was marked handled
+   * without an answer), `skipped` (told there is no answer) or `answered`
+   * (the person's words already went to it). False when it is not one of
+   * their open cards. */
+  settle?(auth: RequestAuth, viewer: InboxViewer, item: { botId: string; threadId: string; messageId: string }, how: PersonRequestSettle): boolean;
   /** The clock of the waiting items' age (tests). */
   now?: () => number;
 }
@@ -134,9 +137,10 @@ export function createApprovalsInboxRoutes(deps: ApprovalsInboxDeps): RouteHandl
       };
       // #3512: what waits on the person, read from the same rows (the pinned
       // row asks for one bot's): Today, the pinned row and the connector's
-      // list count the same items
+      // list count the same items. #3543: each with its message, so the
+      // pinned row draws these items themselves
       if (url.searchParams.get("waiting") === "1") {
-        const items = waitingItemsFrom(pending, (deps.now ?? Date.now)());
+        const items = servedWaitingItems(waitingEntriesFrom(pending, (deps.now ?? Date.now)()));
         const botId = url.searchParams.get("botId");
         payload.waiting = botId ? waitingItemsOfBot(items, botId) : items;
       }
@@ -153,18 +157,15 @@ export function createApprovalsInboxRoutes(deps: ApprovalsInboxDeps): RouteHandl
     }
     if (method === "POST" && path === "/api/approvals/handled") {
       const viewer = deps.viewer(auth);
-      if (!viewer || !deps.handled) return json(res, 403, { error: "Sign in to mark a card handled.", code: "no_person" });
+      if (!viewer || !deps.settle) return json(res, 403, { error: "Sign in to mark a card handled.", code: "no_person" });
       const body = await readBody(req) as Record<string, unknown> | null;
       const botId = body?.botId, threadId = body?.threadId, messageId = body?.messageId;
       if (typeof botId !== "string" || !ID.test(botId) || typeof threadId !== "string" || !ID.test(threadId) || typeof messageId !== "string" || !ID.test(messageId)) {
         return json(res, 400, { error: "botId, threadId and messageId are required" });
       }
-      if (body?.skip === true) {
-        if (!deps.skip?.(auth, viewer, { botId, threadId, messageId })) return json(res, 404, { error: "no such card", code: "gone" });
-        return json(res, 200, { ok: true, outcome: "skipped" });
-      }
-      if (!deps.handled(auth, viewer, { botId, threadId, messageId })) return json(res, 404, { error: "no such card", code: "gone" });
-      return json(res, 200, { ok: true });
+      const how: PersonRequestSettle = body?.skip === true ? "skipped" : body?.answered === true ? "answered" : "handled";
+      if (!deps.settle(auth, viewer, { botId, threadId, messageId }, how)) return json(res, 404, { error: "no such card", code: "gone" });
+      return json(res, 200, { ok: true, outcome: how });
     }
     if (method === "POST" && path === "/api/approvals/journal/test") {
       const viewer = deps.viewer(auth);

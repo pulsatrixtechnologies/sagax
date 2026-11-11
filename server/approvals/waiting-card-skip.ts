@@ -25,6 +25,16 @@ export function waitingCardSkipNote(locale: WaitingLocale = "en"): string {
   return "The person skipped this without answering: there is no answer and nothing was run. Go on without it, or end here.";
 }
 
+/** #3543: the plain line the waiting bot or run hears when the person marks
+ * its question handled (Today's "Mark as handled"): settled by them, with
+ * no answer given here. */
+export function waitingCardHandledNote(locale: WaitingLocale = "en"): string {
+  if (locale === "fr") {
+    return "La personne a marqué ceci comme réglé, sans donner de réponse ici. Considère que c'est pris en charge : continue sans réponse, ou termine ici.";
+  }
+  return "The person marked this handled without giving an answer here. Treat it as taken care of: go on without an answer, or end here.";
+}
+
 /** The card as it reads once skipped: settled for every reader of
  * `answered`, no option left to press, no answer text. */
 export function skippedCardPatch(card: NonNullable<Message["card"]>): NonNullable<Message["card"]> {
@@ -85,7 +95,13 @@ export function personRequestWorkThread(message: Message): string | undefined {
   return message.inputRequest?.threadId ?? message.attention?.threadId;
 }
 
-export type PersonRequestClose = { kind: "skipped" } | { kind: "expired"; note: string };
+/** How a question in words closes. `skipped`: no answer, the work hears so.
+ * `handled` (#3543): the person marked it handled without an answer, the
+ * work hears so. `answered`: the person's own words already went to the
+ * work, nothing more is said. `expired`: it waited too long, with its line. */
+export type PersonRequestClose = { kind: PersonRequestSettle } | { kind: "expired"; note: string };
+/** How the person settles a question in words. */
+export type PersonRequestSettle = "skipped" | "handled" | "answered";
 
 export interface PersonRequestDeps {
   patch(threadId: string, messageId: string, patch: Partial<Message>): void;
@@ -95,35 +111,45 @@ export interface PersonRequestDeps {
   /** Nothing is parked: the line is kept in the work's thread instead. */
   noteWork(workThreadId: string, text: string): void;
   /** The other rows and cards of the same ask close the same way. */
-  settleWork?(workThreadId: string, how: "skipped" | "expired"): void;
+  settleWork?(workThreadId: string, how: PersonRequestClose["kind"]): void;
   localeFor?(threadId: string): WaitingLocale;
   now?: () => number;
 }
 
-/** Close one person request without an answer. True when it closed. */
+/** Close one person request: skipped, handled, answered or expired. The
+ * one way a question in words settles (#3543): the waiting work hears the
+ * line of how it closed, except once the person's own words reached it.
+ * True when it closed. */
 export function closePersonRequest(deps: PersonRequestDeps, threadId: string, message: Message, how: PersonRequestClose): boolean {
   if (!personRequestOpen(message)) return false;
   const work = personRequestWorkThread(message);
-  const skipped = how.kind === "skipped";
+  const closed = how.kind === "skipped" || how.kind === "expired" ? how.kind : undefined;
   if (message.inputRequest) {
-    deps.patch(threadId, message.id, { inputRequest: { ...message.inputRequest, expired: true, ...(skipped ? { skipped: true } : {}) } });
+    deps.patch(threadId, message.id, {
+      inputRequest: closed
+        ? { ...message.inputRequest, expired: true, ...(closed === "skipped" ? { skipped: true } : {}) }
+        : { ...message.inputRequest, answered: true },
+    });
   }
   if (message.attention) {
-    deps.patch(threadId, message.id, { attention: { ...message.attention, handledAt: deps.now?.() ?? Date.now(), closed: how.kind } });
+    deps.patch(threadId, message.id, { attention: { ...message.attention, handledAt: deps.now?.() ?? Date.now(), ...(closed ? { closed } : {}) } });
   }
   if (!work) return true;
-  const note = skipped ? waitingCardSkipNote(deps.localeFor?.(threadId) ?? "en") : how.note;
-  let taken = false;
-  try {
-    taken = deps.answerWork(work, note);
-  } catch {
-    taken = false;
-  }
-  if (!taken) {
+  if (how.kind !== "answered") {
+    const locale = deps.localeFor?.(threadId) ?? "en";
+    const note = how.kind === "expired" && "note" in how ? how.note : how.kind === "handled" ? waitingCardHandledNote(locale) : waitingCardSkipNote(locale);
+    let taken = false;
     try {
-      deps.noteWork(work, note);
+      taken = deps.answerWork(work, note);
     } catch {
-      /* the card is closed either way */
+      taken = false;
+    }
+    if (!taken) {
+      try {
+        deps.noteWork(work, note);
+      } catch {
+        /* the card is closed either way */
+      }
     }
   }
   try {

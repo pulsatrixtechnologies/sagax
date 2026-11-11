@@ -70,6 +70,18 @@ export interface WaitingItem {
   confidential?: boolean;
 }
 
+/** #3543: an item as the pinned row receives it (GET /api/approvals?waiting=1):
+ * the item with its message exactly as the conversation shows it, so the
+ * pinned row draws the server's own items with the conversation's card
+ * components, even in a conversation the app has not loaded. */
+export type ServedWaitingItem = WaitingItem & { message?: unknown };
+
+/** The served items: each with the message of the Today row it was read
+ * from, when the viewer may decide it. */
+export function servedWaitingItems(entries: ReadonlyArray<{ item: WaitingItem; row: InboxApproval }>): ServedWaitingItem[] {
+  return entries.map(({ item, row }) => (row.message ? { ...item, message: row.message } : item));
+}
+
 /** A Today row that waits on the viewer: theirs to answer. A row shown to a
  * team manager, or one that waits on an admin, waits on someone else. */
 export function waitsOnViewer(row: Pick<InboxApproval, "decidable" | "scope">): boolean {

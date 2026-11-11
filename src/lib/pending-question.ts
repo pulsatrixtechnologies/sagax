@@ -1,8 +1,8 @@
-import type { Message, Task } from "@/state/store";
+import type { Message } from "@/state/store";
 import type { Pending } from "@/components/PendingApproval";
 import { formatQuestionAnswers } from "../../shared/ask-question";
 import type { PersonAttentionCard } from "../../shared/person-attention";
-import { segmentsAbove } from "./single-stream";
+import type { ServedWaitingItem } from "../../shared/waiting-items";
 
 /** Open question cards on a thread (a bot's structured ask), oldest first.
  * Answered, dismissed and expired ones drop out. Permission cards are not
@@ -22,9 +22,7 @@ export function pendingQuestions(messages: readonly Message[]): Message[] {
 
 /** #3512: open offer and proposal cards a bot posted on its own (a
  * proactive proposal: the daily brief's « Garder le brief du jour ? », a
- * watch domain's choice, a daily suggestion), oldest first. They wait on the
- * person like a question, and were pinned nowhere: one sat in an older topic
- * where nothing showed it. */
+ * watch domain's choice, a daily suggestion), oldest first. */
 export function pendingOffers(messages: readonly Message[]): Message[] {
   return messages.filter(
     (m) =>
@@ -35,16 +33,6 @@ export function pendingOffers(messages: readonly Message[]): Message[] {
       !m.card.dismissed &&
       !m.card.expired,
   );
-}
-
-/** A question in words a bot's work left for the person (#3438): the card
- * of a hand-off's question (WireMessage.attention, kind "question") or a
- * parked teammate's input request (WireMessage.inputRequest), drawn as the
- * same card. `card.threadId` is the waiting work's thread, where the
- * answer goes. */
-export interface PersonRequest {
-  message: Message;
-  card: PersonAttentionCard;
 }
 
 /** An input request as the standard answerable card (#3438): one card in
@@ -138,90 +126,21 @@ export function inputRequestsDrawnElsewhere(messages: readonly Message[]): Set<s
   return out;
 }
 
-/** The open questions in words of a transcript, oldest first, one per ask
- * (#3438). The card of an ask settles once handled or once its input
- * request was answered or closed; the person writing about something else
- * in the conversation leaves it open (their answer goes to the waiting
- * work's thread, #3214). An input request settles once answered or closed. */
-export function pendingRequests(messages: readonly Message[]): PersonRequest[] {
-  const out: PersonRequest[] = [];
-  for (const ask of askOf(messages)) {
-    const open = ask.row ? rowOpen(ask.row) : true;
-    if (!open) continue;
-    if (ask.card && cardOpen(ask.card)) {
-      out.push({ message: ask.card, card: ask.card.attention! });
-      continue;
-    }
-    if (!ask.row) continue;
-    const card = inputRequestCard(ask.row);
-    if (card) out.push({ message: ask.row, card });
-  }
-  return out.sort((a, b) => a.message.at - b.message.at);
-}
-
-/** What waits in one earlier topic of the conversation (#3438): its open
- * approvals too, each with `threadId` set to the topic (or to the thread a
- * relayed card came from), where the decision goes. */
-export interface TopicPending {
-  threadId: string;
-  questions: readonly Message[];
-  requests: readonly PersonRequest[];
-  approvals?: readonly Pending[];
-  /** #3512: its open offer cards */
-  offers?: readonly Message[];
-}
-
-/** The earlier topics of a bot's one conversation that may hold something
- * the person has to answer (#3438): those that wait on the person, the one
- * the bot's "Waiting for you" names, and those with news unread (a hand-off's
- * question marks its topic unread). Each one's transcript is read for its
- * open cards. */
-export function topicsToScan(tasks: readonly Task[] | undefined, currentThreadId: string, waitingOnThreadId?: string): string[] {
-  return segmentsAbove(tasks, currentThreadId)
-    .filter((task) => task.activity === "waiting-on-you" || task.unread === true || task.threadId === waitingOnThreadId)
-    .map((task) => task.threadId);
-}
-
-/** What the pinned card over the composer holds (#3214, #3438): every
- * approval, every open question card and every open question in words the
- * bot left for the person, in this topic and in the earlier topics of the
- * same conversation, oldest first, so the person answers in the order the
- * bots asked. `threadId` is set on an item of an earlier topic: the topic
- * its card sits in, where "See in the conversation" goes. */
+/** What the pinned card over the composer holds (#3214, #3543): the
+ * server's own items of what waits on the person (GET
+ * /api/approvals?waiting=1, shared/waiting-items.ts), the same list Today and
+ * the connector read, each drawn with the conversation's card for its kind.
+ * `item` is the server's item; `threadId` is set when it sits in another
+ * thread than the conversation on screen (an earlier topic, a parallel
+ * task), where its answer and "See in the conversation" go. An item of a
+ * kind this app does not know, or whose message it was not given, is
+ * `other`: its text, and its conversation opens. */
 export type PinnedItem =
-  | { kind: "approval"; key: string; at: number; pending: Pending; threadId?: string }
-  | { kind: "question"; key: string; at: number; message: Message; threadId?: string }
-  | { kind: "request"; key: string; at: number; message: Message; card: PersonAttentionCard; threadId?: string }
-  | { kind: "offer"; key: string; at: number; message: Message; threadId?: string };
-
-export function pinnedItems(
-  approvals: readonly Pending[],
-  questions: readonly Message[],
-  requests: readonly PersonRequest[] = [],
-  topics: readonly TopicPending[] = [],
-  offers: readonly Message[] = [],
-): PinnedItem[] {
-  const question = (message: Message, threadId?: string): PinnedItem => ({ kind: "question", key: `question:${message.card?.requestId ?? message.id}`, at: message.at, message, ...(threadId ? { threadId } : {}) });
-  const request = (entry: PersonRequest, threadId?: string): PinnedItem => ({ kind: "request", key: `request:${entry.card.threadId}:${entry.card.items[0]?.text ?? entry.message.id}`, at: entry.message.at, message: entry.message, card: entry.card, ...(threadId ? { threadId } : {}) });
-  const approval = (pending: Pending, threadId?: string): PinnedItem => ({ kind: "approval", key: `approval:${pending.threadId ?? threadId ?? ""}:${pending.requestId}`, at: pending.message.at, pending, ...(threadId ? { threadId } : {}) });
-  const offer = (message: Message, threadId?: string): PinnedItem => ({ kind: "offer", key: `offer:${message.card?.proactiveProposal?.id ?? message.id}`, at: message.at, message, ...(threadId ? { threadId } : {}) });
-  const all: PinnedItem[] = [
-    ...approvals.map((pending) => approval(pending)),
-    ...questions.map((message) => question(message)),
-    ...requests.map((entry) => request(entry)),
-    ...offers.map((message) => offer(message)),
-    ...topics.flatMap((topic) => [
-      ...(topic.approvals ?? []).map((pending) => approval({ ...pending, threadId: pending.threadId ?? topic.threadId }, topic.threadId)),
-      ...topic.questions.map((message) => question(message, topic.threadId)),
-      ...topic.requests.map((entry) => request(entry, topic.threadId)),
-      ...(topic.offers ?? []).map((message) => offer(message, topic.threadId)),
-    ]),
-  ];
-  // one item per request: the same ask seen in two topics is pinned once
-  const seen = new Set<string>();
-  const items = all.filter((item) => !seen.has(item.key) && Boolean(seen.add(item.key)));
-  return items.sort((a, b) => a.at - b.at);
-}
+  | { kind: "approval"; key: string; at: number; item: ServedWaitingItem; pending: Pending; threadId?: string }
+  | { kind: "question"; key: string; at: number; item: ServedWaitingItem; message: Message; threadId?: string }
+  | { kind: "request"; key: string; at: number; item: ServedWaitingItem; message: Message; card: PersonAttentionCard; threadId?: string }
+  | { kind: "offer"; key: string; at: number; item: ServedWaitingItem; message: Message; threadId?: string }
+  | { kind: "other"; key: string; at: number; item: ServedWaitingItem; threadId?: string };
 
 /** The pinned item the composer answers with what the person types: one
  * free-text question (a question with a fixed set of options, or a page

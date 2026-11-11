@@ -14,7 +14,7 @@ import { PendingApprovalBox, pendingApprovals } from "@/components/PendingApprov
 import { ProactiveChoiceCard } from "@/components/ProactiveChoiceCard";
 import { QuestionCard } from "@/components/QuestionCard";
 import { PinnedWaitingCard, usePinnedWaiting } from "@/components/Composer.tsx-parts/PinnedWaitingCard";
-import { pendingRequests } from "@/lib/pending-question";
+import type { ServedWaitingItem } from "../../shared/waiting-items";
 import { loadLocale } from "@/lib/i18n";
 import { applySkin, type SkinId } from "@/lib/skins";
 import { StoreProvider, type Bot, type Message } from "@/state/store";
@@ -106,9 +106,14 @@ function Pair({ id, label, children }: { id: string; label: string; children: Re
 }
 
 function Pinned({ messages }: { messages: Message[] }) {
-  const approvals = pendingApprovals(messages.filter((message) => message.card?.tool));
-  const questions = messages.filter((message) => message.card?.questionRequest);
-  const pinned = usePinnedWaiting(approvals, questions, pendingRequests(messages), []);
+  // the server's items (#3543), one per message, as GET /api/approvals?waiting=1 serves them
+  const items: ServedWaitingItem[] = messages.map((message) => ({
+    id: message.attention || message.inputRequest ? `attention:${message.id}` : message.card?.requestId ?? message.id,
+    kind: message.attention || message.inputRequest ? "request" : message.card?.questionRequest ? "question" : "approval",
+    botId: BOT.id, botName: BOT.name, threadId: "t", messageId: message.id, at: message.at, ageMs: 0, title: "", text: "", options: [],
+    answerWith: "text", freeText: true, skippable: true, message,
+  }));
+  const pinned = usePinnedWaiting(items, "t", messages);
   return <div className="w-full max-w-[600px]"><PinnedWaitingCard pinned={pinned} threadId="t" bot={BOT} botFor={() => BOT} nameFor={() => "Atlas"} onCancelTurn={noop} /></div>;
 }
 

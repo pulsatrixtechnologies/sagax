@@ -1,0 +1,164 @@
+// What the pinned row over the composer draws (#3214, #3512, #3543): the
+// server's own list of what waits on the person (GET /api/approvals?waiting=1,
+// shared/waiting-items.ts), the one list Today and the organization's
+// connector read, so the three surfaces cannot disagree.
+//
+// Before #3543 the app used that list only to choose which conversations to
+// read, then rebuilt the items from their transcripts: an item in a
+// conversation it had not loaded, or of a kind it did not know, was missing
+// from the pinned row while Today and the connector listed it. Now each
+// server item is drawn as it is served, with its message (as the
+// conversation shows it) given to the conversation's own card for its kind.
+// An item of a kind this app version does not know, or without its message,
+// is still drawn: its text, and its conversation opens.
+//
+// The list is read again when a card, a question in words or an offer opens
+// or closes in one of the conversations (their live frames), after missed
+// frames, and on a slow safety timer (#3542).
+import { useEffect, useRef, useState } from "react";
+import { api, type Message } from "@/state/store";
+import { listenLiveFrames } from "@/lib/live-events";
+import { pendingApprovals, type Pending } from "@/components/PendingApproval";
+import { inputRequestCard, pendingOffers, pendingQuestions, type PinnedItem } from "@/lib/pending-question";
+import { waitingChangeFrame, type ServedWaitingItem } from "../../shared/waiting-items";
+
+/** #3542: the safety net only; live frames read the list when it changes. */
+export const WAITING_ITEMS_POLL_MS = 10 * 60_000;
+
+/** Frames that come together (a card and its notice) read the list once. */
+const WAITING_RELOAD_DELAY_MS = 400;
+
+type Drawn =
+  | { kind: "approval"; pending: Pending }
+  | { kind: "question" | "offer"; message: Message }
+  | { kind: "request"; message: Message; card: NonNullable<Message["attention"]> }
+  | "settled"
+  | null;
+
+const cardClosed = (message: Message): boolean => Boolean(message.card && (message.card.answered || message.card.dismissed || message.card.expired));
+
+/** The conversation's card for one server item, read from its message:
+ * null when this app cannot draw it with one (drawn as `other`), "settled"
+ * when the message says it is already answered. */
+function drawnAs(item: ServedWaitingItem, message: Message | undefined, threadId: string, approvals: readonly Pending[]): Drawn {
+  if (!message) return null;
+  const asApproval = (): Drawn => {
+    // the composer's own copy of a live approval (a parallel task's, a
+    // bot-to-bot conversation's) knows who asked; the decision goes to the
+    // thread the server says it waits in
+    const live = approvals.find((pending) => (item.messageId ? pending.message.id === item.messageId : pending.requestId === item.id));
+    if (live) return pendingApprovals([message]).length ? { kind: "approval", pending: { ...live, message } } : null;
+    const pending = pendingApprovals([message])[0];
+    if (!pending) return null;
+    return { kind: "approval", pending: pending.threadId || item.threadId === threadId ? pending : { ...pending, threadId: item.threadId } };
+  };
+  const asQuestion = (): Drawn => (pendingQuestions([message]).length ? { kind: "question", message } : null);
+  switch (item.kind) {
+    case "approval":
+    case "question":
+    case "proposal": {
+      if (item.kind === "proposal" && item.proactiveId) {
+        if (pendingOffers([message]).length) return { kind: "offer", message };
+        return cardClosed(message) ? "settled" : null;
+      }
+      const drawn = item.kind === "question" ? asQuestion() ?? asApproval() : asApproval() ?? asQuestion();
+      if (drawn) return drawn;
+      return cardClosed(message) ? "settled" : null;
+    }
+    case "request": {
+      if (message.inputRequest) {
+        const request = message.inputRequest;
+        if (request.answered || request.expired) return "settled";
+        const card = inputRequestCard(message);
+        return card ? { kind: "request", message, card } : null;
+      }
+      if (message.attention) return message.attention.handledAt ? "settled" : { kind: "request", message, card: message.attention };
+      return null;
+    }
+    default:
+      return null;
+  }
+}
+
+/** The pinned row's items: the server's items, in the server's order, each
+ * drawn with its card. `fresh` is the transcript the store holds for the
+ * conversation on screen: an item whose message it holds is drawn from that
+ * newer copy, and one it shows settled (just answered here) leaves at once,
+ * before the list is read again. `approvals` are the composer's own live
+ * approvals (this turn's, its parallel tasks'): they only add who asked to
+ * the server's item of the same request, never an item of their own. */
+export function pinnedItemsFrom(items: readonly ServedWaitingItem[], threadId: string, fresh: readonly Message[] = [], approvals: readonly Pending[] = []): PinnedItem[] {
+  const byId = new Map(fresh.map((message) => [message.id, message]));
+  const out: PinnedItem[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const key = `${item.threadId}:${item.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const served = item.message && typeof item.message === "object" ? item.message as Message : undefined;
+    const local = item.threadId === threadId && item.messageId ? byId.get(item.messageId) : undefined;
+    // the store's copy lacks what the server adds to an input request row
+    // (its card), so it only says whether the row is settled
+    const message = local && served ? { ...served, ...local, ...(served.attention && !local.attention ? { attention: served.attention } : {}) } : local ?? served;
+    const drawn = drawnAs(item, message, threadId, approvals);
+    if (drawn === "settled") continue;
+    const base = { key, at: item.at, item, ...(item.threadId !== threadId ? { threadId: item.threadId } : {}) };
+    if (!drawn) out.push({ ...base, kind: "other" });
+    else if (drawn.kind === "approval") out.push({ ...base, kind: "approval", pending: drawn.pending });
+    else if (drawn.kind === "request") out.push({ ...base, kind: "request", message: drawn.message, card: drawn.card });
+    else out.push({ ...base, kind: drawn.kind, message: drawn.message });
+  }
+  return out;
+}
+
+/** The server's items that wait on the person in one bot's conversations
+ * (`botId`), or in a room's threads (`threads`, no bot). `stamp` changes
+ * when the bot's waiting state or topics change: the list is read again. */
+export function useServerWaitingItems(botId: string | undefined, threads: readonly string[], stamp: string, room = false): ServedWaitingItem[] {
+  const [items, setItems] = useState<ServedWaitingItem[]>([]);
+  const waitingNow = useRef<Set<string>>(new Set());
+  waitingNow.current = new Set(items.map((item) => item.threadId));
+  const threadsKey = threads.join("\u0000");
+  const active = Boolean(botId) || (room && threads.length > 0);
+  useEffect(() => {
+    if (!active) {
+      setItems([]);
+      return;
+    }
+    let live = true;
+    let soon: number | undefined;
+    const own = new Set(threadsKey ? threadsKey.split("\u0000") : []);
+    const query = botId && !room ? `/api/approvals?waiting=1&botId=${encodeURIComponent(botId)}` : "/api/approvals?waiting=1";
+    const load = () => {
+      api<{ waiting?: ServedWaitingItem[] }>(query)
+        .then((body) => {
+          if (!live) return;
+          const all = Array.isArray(body.waiting) ? body.waiting.filter((item) => item && typeof item.id === "string" && typeof item.threadId === "string") : [];
+          setItems(room ? all.filter((item) => own.has(item.threadId)) : all);
+        })
+        .catch(() => undefined);
+    };
+    const loadSoon = () => {
+      if (soon !== undefined) return;
+      soon = window.setTimeout(() => {
+        soon = undefined;
+        load();
+      }, WAITING_RELOAD_DELAY_MS);
+    };
+    load();
+    const stop = listenLiveFrames({
+      onFrame: (frame) => {
+        if (waitingChangeFrame(frame as Parameters<typeof waitingChangeFrame>[0], own, waitingNow.current)) loadSoon();
+      },
+      onMissedFrames: loadSoon,
+    });
+    const timer = window.setInterval(load, WAITING_ITEMS_POLL_MS);
+    return () => {
+      live = false;
+      stop();
+      if (soon !== undefined) window.clearTimeout(soon);
+      window.clearInterval(timer);
+    };
+  }, [active, botId, room, stamp, threadsKey]);
+  return items;
+}

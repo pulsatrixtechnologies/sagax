@@ -4,8 +4,8 @@ import { visibleMessages, currentTaskBot, type Bot, type Group } from "@/state/s
 import { orgFullAccessFor } from "@/lib/full-access";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { useBoundedLock } from "@/lib/composer-lock";
-import { pendingOffers, pendingQuestions, pendingRequests } from "@/lib/pending-question";
-import { useTopicPending } from "@/lib/use-topic-pending";
+import { pendingQuestions } from "@/lib/pending-question";
+import { useServerWaitingItems } from "@/lib/pinned-waiting";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { sendKeyLabel, useSendKey } from "@/lib/send-key";
@@ -17,6 +17,15 @@ import { useThreadRefs } from "../ThreadRefs";
 import { useParallelCards } from "../parallel-approvals";
 import { useOnCall } from "@/lib/call";
 import { useSendBlock } from "@/lib/send-state";
+
+/** What changes when a card is posted or settled in one of the
+ * conversation's threads: its waiting state, unread marks and the activity
+ * of its topics (#3542). */
+function waitingStamp(owner: { threadId: string; tasks?: ReadonlyArray<{ threadId: string; activity?: string | null; unread?: boolean }>; waitingOn?: { threadId?: string } | null } | undefined): string {
+  if (!owner) return "";
+  const tasks = (owner.tasks ?? []).map((task) => `${task.threadId}:${task.activity ?? ""}:${task.unread ? 1 : 0}`).join(",");
+  return `${owner.threadId}|${owner.waitingOn?.threadId ?? ""}|${tasks}`;
+}
 
 export function useComposerSession({
   profile,
@@ -93,17 +102,15 @@ export function useComposerSession({
   // person, and there is no X on a waiting question, #885).
   const shownMessages = group ? group.messages : bot ? visibleMessages(bot) : [];
   const openQuestions = pendingQuestions(shownMessages);
-  // #3438: the questions in words the bot's work left for the person (a
-  // hand-off's question card, a parked teammate's input request), and what
-  // the earlier topics of the one conversation still wait on: the store
-  // holds the topic on screen only.
-  const openRequests = pendingRequests(shownMessages);
-  // #3512: the offers a bot posted on its own wait on the person too
-  const openOffers = group ? [] : pendingOffers(shownMessages);
-  const topics = useTopicPending(group ? undefined : bot);
-  // #3214: the pinned card over the box, approvals and questions together,
-  // and which one the person is on (typing answers that question).
-  const pinned = usePinnedWaiting(approvals, openQuestions, openRequests, topics, openOffers);
+  // #3214, #3543: the pinned card over the box draws the server's own list
+  // of what waits on the person in this conversation (one bot's, or a
+  // room's threads), the list Today and the connector read, and which one
+  // the person is on (typing answers that question).
+  const waitingThreads = group
+    ? [group.threadId, ...(group.tasks ?? []).map((task) => task.threadId)]
+    : bot ? [bot.threadId, ...(bot.tasks ?? []).map((task) => task.threadId)] : [];
+  const waitingItems = useServerWaitingItems(group ? undefined : bot?.id, waitingThreads, waitingStamp(group ?? bot), Boolean(group));
+  const pinned = usePinnedWaiting(waitingItems, threadId, shownMessages, approvals);
   const approvalBotFor = (pending: Pending) => pending.message.card?.approvalOrigin
     ? storeBots.find(candidate => candidate.id === pending.message.from?.botId)
     : group

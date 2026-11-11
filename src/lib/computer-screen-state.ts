@@ -11,6 +11,20 @@ import { api } from "@/state/store/api";
 import { isReadyBoatState } from "@/lib/local-computer";
 import type { LocaleKey } from "@/locales";
 
+/** This computer's picture from the desktop app, as a data: URL, or null
+ * when the page has no capture at all (a web browser). The local page gets
+ * the full frame (screenFrame); the app's page served by the organization
+ * server never does (#3565): it gets the bot panel's small thumbnail, taken
+ * only once Screen Recording is granted, never a prompt. */
+export function ownScreenCapture(): (() => Promise<string | null>) | null {
+  const ogb = typeof window === "undefined" ? undefined : window.ogb;
+  const frame = ogb?.screenFrame;
+  if (typeof frame === "function") return () => frame();
+  const thumbnail = ogb?.screenThumbnail;
+  if (typeof thumbnail === "function") return async () => (await thumbnail())?.image ?? null;
+  return null;
+}
+
 /** Why there is no picture of a screen. */
 export type ScreenProblem =
   /** macOS has not allowed Sagax to record the screen. */

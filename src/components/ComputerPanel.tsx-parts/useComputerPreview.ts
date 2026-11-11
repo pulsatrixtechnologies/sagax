@@ -4,6 +4,7 @@ import { usePageVisible } from "@/lib/page-visible";
 import { listenLiveFrames } from "@/lib/live-events";
 import { isRemoteScreenshotContention } from "@/lib/remote-desktop";
 import { readableError } from "@/lib/plain-error";
+import { ownScreenCapture } from "@/lib/computer-screen-state";
 import { LocalizedPanelError } from "./errors";
 import type { ComputerPending, Phase } from "./types";
 
@@ -177,12 +178,13 @@ export function useComputerPreview(args: {
   // no reliable pre-grant flow on macOS 15+), so repeated empty frames mean
   // the user denied — surface the Settings repair path instead of spinning.
   useEffect(() => {
-    if (phase !== "local" || !computerStatusCurrent || !window.ogb || isLinux || !pageVisible) return;
+    const capture = ownScreenCapture();
+    if (phase !== "local" || !computerStatusCurrent || !capture || isLinux || !pageVisible) return;
     let alive = true;
     setLocalMisses(0);
     const shoot = async () => {
       try {
-        const url = await window.ogb!.screenFrame();
+        const url = await capture();
         if (alive && url) setLocalFrame(url);
         else if (alive) setLocalMisses((n) => n + 1);
       } catch {

@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 
-import { attachmentName, botTmpDir, botTmpName, bridgeOperationError, commandEnvironment, commandNamesOtherBotTmp, createDesktopBridge, commandNamesAppData, createLocalVm, executeBridgeOperation, localPath, removeClosedTree, sandboxedCommandArgv, sweepBotTmpRoot, validBridgeOperation, vmCommandWithBotTmp } from "./desktop-bridge.mjs";
+import { attachmentName, botTmpDir, botTmpName, bridgeOperationError, commandEnvironment, commandNamesOtherBotTmp, createDesktopBridge, commandNamesAppData, createLocalVm, executeBridgeOperation, localPath, removeClosedTree, sandboxedCommandArgv, sweepBotTmpRoot, validBridgeOperation, vmCommandWithBotTmp, windowsRootAclArgs } from "./desktop-bridge.mjs";
 import net from "node:net";
 import { zipArchive } from "../server/testing/archive-fixtures.mjs";
 
@@ -920,9 +920,14 @@ test("a bot's temporary folder is its own: TMPDIR set, another bot's refused", {
   assert.match(person.content[0].text, /secret/);
 });
 
+// Only macOS confines a bot's command at the operating system (sandbox-exec);
+// on Linux a detour the command text does not show still reaches past the
+// text check, and whether that guard is wanted is issue #3582.
+const noCommandConfinement = !posix ? true : process.platform === "linux" ? "no operating system confinement of a bot's command on Linux; the guard itself is in issue #3582" : false;
+
 // #2828 follow-up: a detour the command text does not show (dirname, a glob,
 // a chmod back) still finds nothing of Ada's.
-test("a bot's command cannot reach another bot's temporary folder by a detour", { skip: !posix }, async (t) => {
+test("a bot's command cannot reach another bot's temporary folder by a detour", { skip: noCommandConfinement }, async (t) => {
   const home = sandboxHome();
   const tmpRoot = botTmpRootFor(t);
   const d = { ...deps(home), botTmpRoot: tmpRoot, botTmpKey: Buffer.alloc(32, 3) };
@@ -941,6 +946,61 @@ test("a bot's command cannot reach another bot's temporary folder by a detour", 
   // Bob's own folder works as usual.
   const mine = await executeBridgeOperation({ action: "run_command", command: "echo bob > \"$TMPDIR/b.txt\" && cat \"$TMPDIR/b.txt\"", tmp_scope: bob }, d, signal());
   assert.match(mine.content[0].text, /bob/);
+});
+
+// #3565: the same detour toward the app's own data. In solo mode the local
+// server keeps every local bot's workspace and memory and the provider keys
+// there: a bot's command finds none of it through the home folder, a glob, a
+// climb or a link, whatever the command spells.
+test("a bot's command cannot reach the app's own data through the home folder", { skip: noCommandConfinement }, async (t) => {
+  const home = sandboxHome();
+  const tmpRoot = botTmpRootFor(t);
+  const dataDir = path.join(home, "data-dir");
+  fs.mkdirSync(path.join(dataDir, "bots", "other", "workspace"), { recursive: true });
+  fs.mkdirSync(path.join(dataDir, "bots", "other", "memory"), { recursive: true });
+  fs.writeFileSync(path.join(dataDir, "bots", "other", "workspace", "plan.md"), "otherworkspace");
+  fs.writeFileSync(path.join(dataDir, "bots", "other", "memory", "notes.md"), "othermemory");
+  fs.writeFileSync(path.join(dataDir, "keys.json"), "providerkeys");
+  fs.symlinkSync(dataDir, path.join(home, "work", "peek-data"));
+  const d = { ...deps(home), appDataPaths: [path.join(home, "app-data"), dataDir], botTmpRoot: tmpRoot, botTmpKey: Buffer.alloc(32, 5) };
+  for (const command of [
+    "cat ./data-di?/keys.json",
+    "cat */bots/*/workspace/plan.md */bots/*/memory/notes.md",
+    "find . -name '*.md' -path '*bots*' -exec cat {} +",
+    "cat work/peek-data/keys.json",
+    "cd \"$(dirname \"$(pwd)\")\" && cat \"$(basename \"$OLDPWD\")\"/data-di?/keys.json",
+    "cat ./app-dat?/Cookies",
+  ]) {
+    const out = await executeBridgeOperation({ action: "run_command", command, tmp_scope: "c".repeat(16) }, d, signal()).catch((error) => ({ content: [{ text: String(error) }] }));
+    assert.doesNotMatch(JSON.stringify(out.content), /otherworkspace|othermemory|providerkeys|cookie jar/, command);
+  }
+  // The person's own files stay within reach of the bot's command.
+  const work = await executeBridgeOperation({ action: "run_command", command: "cat work/notes.md", tmp_scope: "c".repeat(16) }, d, signal());
+  assert.match(work.content[0].text, /ship the bridge/);
+});
+
+// The legacy home data folder (~/.openmausbot, before ~/.sagax) is the
+// app's data too, when it is a folder of its own and not the link to the new
+// one: the confinement hides it like the text check refuses it.
+test("a bot's command cannot reach the app's legacy data folder either", { skip: noCommandConfinement }, async (t) => {
+  const home = sandboxHome();
+  fs.mkdirSync(path.join(home, ".sagax"));
+  fs.mkdirSync(path.join(home, ".openmausbot"));
+  fs.writeFileSync(path.join(home, ".openmausbot", "keys.json"), "legacykeys");
+  const d = { ...deps(home), appDataPaths: [path.join(home, ".sagax")], botTmpRoot: botTmpRootFor(t), botTmpKey: Buffer.alloc(32, 6) };
+  for (const command of ["cat ./.openmausbo?/keys.json", "cat .*/keys.json"]) {
+    const out = await executeBridgeOperation({ action: "run_command", command, tmp_scope: "e".repeat(16) }, d, signal()).catch((error) => ({ content: [{ text: String(error) }] }));
+    assert.doesNotMatch(JSON.stringify(out.content), /legacykeys/, command);
+  }
+});
+
+test("the Windows lock leaves the account no list and no way to rewrite the ACL", () => {
+  const args = windowsRootAclArgs("C:\\T\\sagax-bots", "S-1-5-21-1");
+  const owner = args.find(arg => arg.startsWith("*S-1-3-4:"));
+  assert.ok(owner, "an OWNER RIGHTS entry replaces the owner's implicit rights");
+  for (const grant of args.filter(arg => /^\*S-1-(5-21-1|3-4):\(X/.test(arg))) {
+    assert.doesNotMatch(grant, /\b(RD|WDAC|WO|F|M|GA|GW|GR)\b/, grant);
+  }
 });
 
 // #2828 follow-up: the key lives in memory only, so the bot folders of an

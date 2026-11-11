@@ -4119,11 +4119,10 @@ ipcMain.handle("pulsatrix-sign-in:reopen", async (event) => {
 // Local-control screen preview — served from the main process so the Screen
 // Recording permission prompt attributes to the app, never the server.
 // Windows captures without a permission step; Linux has its own preview.
-// desktopUiOnly: the bot panel's Computer window (LocalLiveScreen) also runs
-// on this app's bundle drawn on the organization server, and this computer's
-// screen is what it shows there too (it used to fall back to the Local VM's
-// screenshot and end on "The screen is temporarily unavailable.").
-ipcMain.handle("screen:frame", desktopUiOnly("screen:frame", async () => {
+// localOnly: the full frame is for the local page only. On this app's bundle
+// drawn on the organization server the bot panel's Computer window shows
+// this computer through screen:thumbnail below (#3565).
+ipcMain.handle("screen:frame", localOnly("screen:frame", async () => {
   if (process.platform !== "darwin" && process.platform !== "win32") return null;
   const sources = await desktopCapturer.getSources({
     types: ["screen"],

@@ -16,7 +16,8 @@ const PLUGIN_BOT = /^[\w-]{1,80}$/;
 const PLUGIN_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const PLUGIN_KEY = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const PLUGIN_FIELDS: Record<string, readonly string[]> = {
-  list: ["action", "botId"],
+  // #3637: marketplace (and filter, offset) reads that marketplace's catalog
+  list: ["action", "botId", "marketplace", "filter", "offset"],
   addMarketplace: ["action", "botId", "source", "ref"],
   install: ["action", "botId", "marketplace", "plugin"],
   setEnabled: ["action", "botId", "key", "enabled"],
@@ -484,7 +485,23 @@ function parsePluginAct(value: unknown): { ok: true; target: ActTarget } | { ok:
   const botId = record.botId;
   if (typeof botId !== "string" || !PLUGIN_BOT.test(botId)) return pluginFail();
   const base = `/api/bots/${botId}/plugins`;
-  if (action === "list") return { ok: true, target: { kind: "route", method: "GET", path: base } };
+  if (action === "list") {
+    // the route answers the whole listing; the server shapes it for the bot (server/bots/bot-plugins-answer.ts)
+    const query: Record<string, string> = {};
+    if (record.marketplace !== undefined) {
+      if (typeof record.marketplace !== "string" || !PLUGIN_NAME.test(record.marketplace)) return pluginFail();
+      query.marketplace = record.marketplace;
+    }
+    if (record.filter !== undefined) {
+      if (typeof record.filter !== "string" || record.filter.length < 1 || record.filter.length > QUERY_VALUE_MAX || !query.marketplace) return pluginFail();
+      query.filter = record.filter;
+    }
+    if (record.offset !== undefined) {
+      if (typeof record.offset !== "number" || !Number.isSafeInteger(record.offset) || record.offset < 0) return pluginFail();
+      query.offset = String(record.offset);
+    }
+    return { ok: true, target: { kind: "route", method: "GET", path: base, ...(Object.keys(query).length ? { query } : {}) } };
+  }
   if (action === "addMarketplace") {
     const source = record.source;
     if (typeof source !== "string" || source.length < 1 || source.length > 500) return pluginFail();

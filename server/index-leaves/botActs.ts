@@ -46,6 +46,8 @@ function botActs() {
       return Boolean(grants?.some((permission) => host.sessionPermits({ principalId: key }, permission)));
     },
     performRoute: host.performBotActRouteOutsideConfidential,
+    // #3637: a bot's plugin listing names when each marketplace was last pulled
+    marketplacePulledAt: (name) => host.pluginMarketplaces?.record(name)?.pulledAt,
     broadcastUi: (audience, command, input) => {
       // a screen command never opens or names a confidential thread
       if (host.namesConfidentialThread(JSON.stringify(input))) return;

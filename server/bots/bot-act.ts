@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import type { ActTarget, TurnFacts } from "../../shared/bot-act.ts";
 import { actMessageTarget, actorForTurn, decideBotAct, summaryOf } from "../../shared/bot-act.ts";
 import { botActClasses } from "../../shared/step-up.ts";
+import { BOT_PLUGIN_READ_MAX, pluginAnswerKind, shapePluginAnswer } from "./bot-plugins-answer.ts";
 
 /** 2026-10-19 ("Toujours permettre" on every card): what "Always allow"
  * on an act card keeps, as the person's own rule for this bot
@@ -131,6 +132,8 @@ export type BotActDeps = {
   journalRule?: (input: { threadId: string; botId: string; botName: string; summary: string; rule: string }) => void;
   patchCard: (threadId: string, messageId: string, patch: { answered?: "allow" | "deny"; expired?: true }) => void;
   findCard: (threadId: string, requestId: string) => CardState | null;
+  /** #3637: when a marketplace's clone was last pulled, for a bot's plugin listing. */
+  marketplacePulledAt?: (name: string) => number | undefined;
 };
 
 const NONE_REASON: Record<string, string> = {
@@ -276,12 +279,12 @@ export function createBotActService(deps: BotActDeps): BotActService {
       const { performActor, scopes, neededScope } = acting;
       const decision = decideBotAct({ raw: input.raw, mode: input.mode, scopes, neededScope });
       if (!decision.ok) return refuse(decision.status, decision.error + (decision.status === 403 ? RETRY_NOTE : ""));
-      if (decision.effect === "run") return run(performActor, decision.target);
+      if (decision.effect === "run") return run(performActor, decision.target, undefined, undefined, undefined, true);
       const classes = actClassesOf(decision.target);
       const candidate = actRuleCandidate(decision.target, classes, describeOf);
       const allowedBy = candidate ? ruleFor(performActor, input.botId, candidate, classes) : null;
       if (allowedBy) {
-        const result = await run(performActor, decision.target);
+        const result = await run(performActor, decision.target, undefined, undefined, undefined, true);
         if (result.status < 400) deps.journalRule?.({ threadId: input.threadId, botId: input.botId, botName: input.botName, summary: decision.summary, rule: allowedBy.id });
         return result;
       }
@@ -326,7 +329,7 @@ export function createBotActService(deps: BotActDeps): BotActService {
         const confirmed = item.planned
           ? { personKey: replay.kind === "person" ? replay.personKey : null, classes: item.planned.stepUpClasses }
           : undefined;
-        const result = await run(replay, item.target, item.audience, confirmed);
+        const result = await run(replay, item.target, item.audience, confirmed, undefined, !item.planned);
         if (result.status >= 400) {
           item.running = false;
           const error = typeof result.body.error === "string" ? result.body.error : "The action was refused.";
@@ -395,20 +398,33 @@ export function createBotActService(deps: BotActDeps): BotActService {
     };
   }
 
-  async function run(actor: PerformActor, target: ActTarget, audience?: string, confirmed?: { personKey: string | null; classes: readonly string[]; primary?: { botId: string; botName: string; messageId: string } }, maxChars = 8000): Promise<BotActResult> {
+  /** A bot's own act (handle, and its card's replay) reads a plugin route
+   * shaped; a planned read (handlePlanned) picks from the route's whole answer. */
+  async function run(actor: PerformActor, target: ActTarget, audience?: string, confirmed?: { personKey: string | null; classes: readonly string[]; primary?: { botId: string; botName: string; messageId: string } }, maxChars = 8000, shaped = false): Promise<BotActResult> {
     target = tagActSend(target);
     if (target.kind === "ui") {
       deps.broadcastUi(audience ?? (actor.kind === "person" ? actor.personKey : deps.operatorAudience()), target.command, target.input);
       return { status: 200, body: { text: "Done.", status: 200 } };
     }
     try {
-      const performed = await deps.performRoute(actor, target, confirmed, maxChars);
-      const text = performed.text.trim() ? performed.text.slice(0, maxChars) : performed.status < 400 ? "Done." : "The action was refused.";
+      // #3637: a plugin route's whole answer, shaped for the bot (bot-plugins-answer.ts)
+      const plugin = shaped ? pluginAnswerKind(target) : null;
+      const performed = await deps.performRoute(actor, target, confirmed, plugin ? BOT_PLUGIN_READ_MAX : maxChars);
+      const answer = plugin ? pluginText(target, performed, maxChars) : performed.text;
+      const text = answer.trim() ? answer.slice(0, maxChars) : performed.status < 400 ? "Done." : "The action was refused.";
       if (performed.status >= 400) return { status: performed.status, body: { error: text, text, status: performed.status } };
       return { status: performed.status, body: { text, status: performed.status } };
     } catch {
       return { status: 502, body: { error: "The action could not be completed." } };
     }
+  }
+
+  function pluginText(target: ActTarget, performed: { status: number; text: string }, maxChars: number): string {
+    const text = shapePluginAnswer(target, performed.text, deps.marketplacePulledAt ? { pulledAt: deps.marketplacePulledAt } : {});
+    if (text.length <= maxChars) return text;
+    // not a JSON object the shape reads: never a silent cut
+    const note = `\n[Cut by Sagax at ${maxChars - 300} of ${text.length} characters: the rest of this answer was left out. Ask for one marketplace (act plugins list with marketplace, filter and offset) to read it in parts.]`;
+    return text.slice(0, maxChars - 300) + note;
   }
 
   /** A line the act writes carries a send id the runtime knows is the bot's,

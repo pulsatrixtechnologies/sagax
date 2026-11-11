@@ -172,6 +172,12 @@ describe("plugin act", () => {
 
   it("runs a list immediately and maps the other plugin actions onto their routes", () => {
     expect(decide({ action: "list", botId: "scout" }, "ask")).toMatchObject({ effect: "run", summary: "GET /api/bots/scout/plugins" });
+    // #3637: one marketplace's catalog, filtered and paged, on the same route
+    expect(decide({ action: "list", botId: "scout", marketplace: "acme-tools", filter: "review", offset: 40 }, "ask")).toMatchObject({
+      effect: "run", target: { method: "GET", path: "/api/bots/scout/plugins", query: { marketplace: "acme-tools", filter: "review", offset: "40" } },
+    });
+    expect(decide({ action: "list", botId: "scout", filter: "review" }, "ask").ok).toBe(false);
+    expect(decide({ action: "list", botId: "scout", marketplace: "acme-tools", offset: -1 }, "ask").ok).toBe(false);
     expect(decide({ action: "addMarketplace", botId: "scout", source: "acme/tools", ref: "main" })).toMatchObject({
       effect: "run", target: { method: "POST", path: "/api/bots/scout/plugins/marketplaces", body: { source: "acme/tools", ref: "main" } },
     });

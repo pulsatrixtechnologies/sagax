@@ -38,6 +38,23 @@ describe("turn latency line", () => {
     expect(turnLatencyLine("grok", "t", trace, 20_000, "ok")).toContain("stallGuard=10000ms retried ok");
   });
 
+  // #3679: compact named everything from the warm join to the fold check;
+  // the admission, the connectors plan and the engines' read close their own
+  it("names the admission, the connectors plan and the engines' read apart from the fold check", () => {
+    const trace = newTurnLatency(10_000, 4_000);
+    trace.promptAt = 5_000;
+    const marks: Array<[string, number]> = [
+      ["start", 4_010],
+      ["prewarm-joined", 4_010],
+      ["admitted", 4_150],
+      ["connectors-planned", 4_160],
+      ["engines-read", 4_200],
+      ["compacted", 4_230],
+      ["context-selected", 4_250],
+    ];
+    expect(turnLatencyParts(trace, marks).queueBy).toBe("admit:150,engines:40,compact:30,context:20,connector:10,dispatch:5750");
+  });
+
   // #3561: one production line tells which part of queue and setup is slow
   it("names the parts of queue and setup on the same line, existing fields unchanged", () => {
     const trace = newTurnLatency(10_000, 4_000);

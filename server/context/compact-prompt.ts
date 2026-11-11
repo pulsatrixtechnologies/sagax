@@ -112,6 +112,8 @@ export function parseLocalPromptMode(value: unknown): LocalPromptMode | undefine
 export interface ToolUse {
   /** `mcp__<server>__<tool>`, a Claude Code built-in, or another engine's name */
   name: string;
+  /** how many calls this stands for (server/activity/tool-use-counts.ts); one when absent */
+  count?: number;
 }
 
 /** How often the bot called each MCP tool, by server then tool. */
@@ -127,7 +129,7 @@ export function toolUsage(uses: Iterable<ToolUse>): Map<string, Map<string, numb
     const tool = rest.slice(split + 2);
     if (!tool || tool === "search_tools" || tool === "describe_tool" || tool === "call_tool") continue;
     const tools = byServer.get(server) ?? new Map<string, number>();
-    tools.set(tool, (tools.get(tool) ?? 0) + 1);
+    tools.set(tool, (tools.get(tool) ?? 0) + (use.count ?? 1));
     byServer.set(server, tools);
   }
   return byServer;

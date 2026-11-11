@@ -18,6 +18,7 @@ import { EVENTS_DIR } from "../config.ts";
 import { flushNativeLog } from "../drivers/native.ts";
 import { appendLog, logAppended, registerSealedLog, sealLogLines } from "../encryption/content-at-rest.ts";
 import { threadLogsForgotten } from "../threads/forgotten-threads.ts";
+import { toolUsesAppended } from "../activity/tool-use-counts.ts";
 import { redactSecrets } from "../redact.ts";
 import { batchSaves } from "../save-batch.ts";
 import { capThreadLog, currentThreadLogCap } from "../threads/thread-log-rotation.ts";
@@ -443,6 +444,8 @@ export class EventBus {
       // Best-effort size cap (#1280): an open thread's canonical log
       // otherwise grows without bound for as long as the thread stays open.
       capThreadLog(file, currentThreadLogCap());
+      // the conversation's tool use moves forward with it (server/activity/tool-use-counts.ts)
+      toolUsesAppended(threadId, records, lines);
     } catch (error) {
       this.noteDiskFailure(events[0], error);
     } finally {

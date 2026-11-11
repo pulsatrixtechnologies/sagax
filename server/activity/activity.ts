@@ -76,8 +76,9 @@ export function describeTool(name: string): { app: string | null; label: string 
  * file is rotation-capped, so this is a ceiling on parse work, not a
  * window that quietly drops history. */
 const DECISION_SCAN = 20_000;
-/** Runtime events read per thread, newest first; the reader tail-walks. */
-const EVENTS_PER_THREAD = 2_000;
+/** Runtime events read per thread, newest first; the reader tail-walks.
+ * The compact prompt's tool use keeps the same window (tool-use-counts.ts). */
+export const EVENTS_PER_THREAD = 2_000;
 /** An approval is folded into the tool run it unblocked when the run
  * started inside this window around the decision. A verdict is written
  * as the request opens; the run follows it, occasionally by a clock skew's
@@ -133,15 +134,20 @@ function foldDecisions(rows: DecisionRow[]): ActivityRow[] {
   return folded;
 }
 
+/** Only a tool's start and end are opened when the log is sealed at rest;
+ * every other line counts by its clear type (server/encryption/content-at-rest.ts). */
+export const toolLinesOnly = (projection: Record<string, unknown>): boolean =>
+  projection.itemType !== "tool" || (projection.type !== "item.started" && projection.type !== "item.completed");
+
+/** One tool run, however many times its start is written. */
+export const toolRunKey = (event: { turnId?: string; itemId?: string; eventId: string }): string => JSON.stringify([event.turnId ?? "", event.itemId ?? event.eventId]);
+
 export function readToolRuns(eventsDir: string, threadId: string): ActivityRow[] {
-  // only a tool's start and end are opened when the log is sealed at rest;
-  // every other line counts by its clear type (server/encryption/content-at-rest.ts)
-  const { lines } = readRecentLines(join(eventsDir, `${threadId}.ndjson`), EVENTS_PER_THREAD, isRuntimeEvent,
-    (projection) => projection.itemType !== "tool" || (projection.type !== "item.started" && projection.type !== "item.completed"));
+  const { lines } = readRecentLines(join(eventsDir, `${threadId}.ndjson`), EVENTS_PER_THREAD, isRuntimeEvent, toolLinesOnly);
   const runs = new Map<string, ActivityRow>();
   for (const event of lines) {
     if (event.type === "item.started" && event.itemType === "tool") {
-      const key = JSON.stringify([event.turnId ?? "", event.itemId ?? event.eventId]);
+      const key = toolRunKey(event);
       runs.set(
         key,
         describeRow({

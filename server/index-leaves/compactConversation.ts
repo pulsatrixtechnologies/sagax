@@ -1,5 +1,8 @@
 // @ts-nocheck
-/** compactConversation (#1388). Pure move from server/index.ts. */
+/** compactConversation (#1388). Pure move from server/index.ts.
+ * #3679: when it folds nothing and writes nothing, it returns the
+ * conversation it read and its context entries, so the turn's context
+ * selection does not read and turn every message into text a second time. */
 import { foldPoint, deterministicSummary, draftSummary } from "../context/compaction-summary.ts";
 import { contextWindowFor, nativeCompactionPoint, shouldCompact, compactBudget, defaultCompactAt } from "../context/context-budget.ts";
 import { selectReplay, MAX_SUMMARY_BYTES, DEFAULT_REBUILD_BYTES } from "../context/context-rebuild.ts";
@@ -15,7 +18,7 @@ async function compactConversation(input: {
   bot: BotRecord; threadId: string; generation: string;
   instance: NonNullable<ReturnType<typeof registry.get>>; model: string;
   excludedIds: ReadonlySet<string>; manual: boolean;
-}): Promise<void> {
+}): Promise<{ messages: Message[]; context: ReturnType<Host["directContext"]> } | undefined> {
   const host = getHost();
   const { bot, threadId, generation, instance, model, excludedIds, manual } = input;
   const task = host.store.taskByThread(bot.id, threadId);
@@ -23,15 +26,16 @@ async function compactConversation(input: {
   const messages = host.store.activePath(threadId);
   const context = host.directContext(bot, threadId, messages);
   const record = host.latestCompaction(messages, task);
+  const unchanged = { messages, context };
   // A retry must apply the existing record before considering another fold.
-  if (!manual && record && record.id !== task.appliedCompactionId) return;
+  if (!manual && record && record.id !== task.appliedCompactionId) return unchanged;
   if (manual && record?.id === messages.at(-1)?.id && !record?.firstKeptId) return;
   const selected = selectReplay(context, {
     budgetBytes: Math.max(1_024, context.reduce((n, entry) => n + Buffer.byteLength(entry.text) + 16, 0) + 4 * MAX_SUMMARY_BYTES + 1_024),
     maxMessages: Number.MAX_SAFE_INTEGER, excludedIds, compaction: record
   });
   const history = selected.transcript.filter(entry => entry.id);
-  if (!history.length) return;
+  if (!history.length) return unchanged;
   // A stale engine session (2026-10-20) is not resumed: fold now so the
   // turn starts a new one from the summary and the latest turns. The
   // summary is the deterministic one: no model call on the person's wait.
@@ -91,7 +95,7 @@ async function compactConversation(input: {
   const replayWouldDrop = Boolean(replayFold && replayFold.folded.some(entry => entry.id !== record?.id) && keptStart >= 0
     && history.slice(keptStart).reduce((n, entry) => n + Buffer.byteLength(entry.text) + 16, 0) <= rebuildBytes / 2 - 128);
   if (!manual && !replayWouldDrop && !shouldCompact({ contextTokens: measurement?.tokens, estimatedBytes: bytes,
-    budget: compactBudget(window, host.cfg.context?.compactAt ?? defaultCompactAt(instance.driverKind), nativeCompactAt), floor, window, nativeCompactAt })) return;
+    budget: compactBudget(window, host.cfg.context?.compactAt ?? defaultCompactAt(instance.driverKind), nativeCompactAt), floor, window, nativeCompactAt })) return unchanged;
   const fold = manual ? { folded: history, firstKeptId: "" } : foldPoint(history);
   if (!fold) return;
   const foldedThroughId = manual

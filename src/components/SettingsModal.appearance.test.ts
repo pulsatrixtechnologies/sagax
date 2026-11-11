@@ -105,7 +105,6 @@ vi.mock("@/lib/notification-preferences", () => {
     notifyPeople: local("omb-notify-people"),
     notifyGroups: local("omb-notify-groups"),
     notifyApprovals: local("omb-notify-approvals"),
-    notifyRoutines: local("omb-notify-routines"),
     useLocalSwitch: (choice: { enabled: () => boolean }) => choice.enabled(),
   };
 });

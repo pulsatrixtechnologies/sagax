@@ -876,7 +876,7 @@ class Session(
                             }
                             else -> {
                                 _state.update { it.apply(frame) }
-                                if (payload is Frame.Notify) {
+                                if (payload is Frame.Notify && payload.notification.alerts) {
                                     notificationSink.deliver(payload.notification, frame.seq)
                                 }
                                 notificationSink.setBadge(_state.value.unreadCount)

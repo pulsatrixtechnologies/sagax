@@ -168,7 +168,6 @@ function typeSettingsFromAttention(): NotificationTypeSettings {
     people: settings.people,
     groups: settings.groups,
     approvals: settings.approvals,
-    routines: settings.routines,
   };
 }
 

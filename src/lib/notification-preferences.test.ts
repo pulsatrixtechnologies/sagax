@@ -171,7 +171,7 @@ describe("Settings > Notifications defaults", () => {
     const preference = await import("./notification-preferences");
     expect(preference.attentionSettings()).toEqual({
       sound: true, persistent: true, badge: true, nudgeSound: true, nudgeShake: true,
-      bots: true, people: true, groups: true, approvals: true, routines: true,
+      bots: true, people: true, groups: true, approvals: true,
     });
     expect(local.setItem).not.toHaveBeenCalled();
     expect(preference.useLocalSwitch(preference.persistentNotifications)).toBe(true);
@@ -186,7 +186,7 @@ describe("Settings > Notifications defaults", () => {
     expect(local.getItem("omb-dock-badge")).toBe("0");
     expect(preference.attentionSettings()).toEqual({
       sound: true, persistent: false, badge: false, nudgeSound: true, nudgeShake: true,
-      bots: true, people: true, groups: true, approvals: true, routines: true,
+      bots: true, people: true, groups: true, approvals: true,
     });
     preference.nudgeShake.set(false);
     expect(preference.attentionSettings().nudgeShake).toBe(false);

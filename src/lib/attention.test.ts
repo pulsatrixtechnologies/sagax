@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import { NUDGE_FRESH_MS, badgeCount, createNotificationTargets, messageAttention, nudgeAttention } from "./attention";
 import type { AttentionSettings } from "./notification-preferences";
 
-const types = { bots: true, people: true, groups: true, approvals: true, routines: true };
+const types = { bots: true, people: true, groups: true, approvals: true };
 const on: AttentionSettings = { sound: true, persistent: true, badge: true, nudgeSound: true, nudgeShake: true, ...types };
-const off: AttentionSettings = { sound: false, persistent: false, badge: false, nudgeSound: false, nudgeShake: false, bots: false, people: false, groups: false, approvals: false, routines: false };
+const off: AttentionSettings = { sound: false, persistent: false, badge: false, nudgeSound: false, nudgeShake: false, bots: false, people: false, groups: false, approvals: false };
 
 describe("a new message", () => {
   const dm = { kind: "message" as const, threadId: "dm-thread" };

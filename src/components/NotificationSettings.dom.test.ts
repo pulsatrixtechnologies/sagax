@@ -33,7 +33,6 @@ vi.mock("@/lib/notification-preferences", () => {
     notifyPeople: local("omb-notify-people"),
     notifyGroups: local("omb-notify-groups"),
     notifyApprovals: local("omb-notify-approvals"),
-    notifyRoutines: local("omb-notify-routines"),
     dockBadge: local("omb-dock-badge"),
     nudgeShake: local("omb-nudge-shake"),
     approvalChime: local("omb-approval-chime"),
@@ -110,6 +109,14 @@ const mount = (privacy = false) => {
 };
 
 describe("NotificationSettings (#2080)", () => {
+  // #3719: a routine that failed or waits never interrupts, so no switch for it
+  it("shows no Routines type switch", () => {
+    mount();
+    expect(host.querySelector('[data-row-id="notifyRoutines"], [data-settings-row="notifyRoutines"], #notifyRoutines')).toBeNull();
+    expect(host.querySelector('[role="switch"][aria-label="Routines"], button[aria-label="Routines"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Approvals"]')).not.toBeNull();
+  });
+
   it("selecting None turns notification sounds off", () => {
     mount();
     const trigger = host.querySelector<HTMLButtonElement>('button[data-pill-select][aria-label="Notification sound"]')!;

@@ -9205,7 +9205,6 @@
   "settings.notifications.types.people": "People",
   "settings.notifications.types.groups": "Groups",
   "settings.notifications.types.approvals": "Approvals",
-  "settings.notifications.types.routines": "Routines",
   "settings.group.nudges": "Nudges",
   "settings.notifications.nudges.summary": "Sound and window",
   "settings.notifications.persistent.mac": "On macOS, also choose Alerts in System Settings > Notifications.",

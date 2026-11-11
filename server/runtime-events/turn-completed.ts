@@ -259,6 +259,9 @@ function settleTurnTask(event: any, ctx: any, host: any, turn: any): void {
     // read now, settleTrackedRequest forgets the request below.
     const personTurn = !internal && !routineRun && !host.routines?.runForThread(event.threadId) &&
       host.directRequestOwners.get(event.threadId)?.origin?.kind === "user";
+    // #3719: the person wrote this request's line here, so its end answers them
+    // (the only "done" that may interrupt: server/notify.ts notificationInterrupts)
+    const answersPersonLine = personTurn && host.directRequestOwners.get(event.threadId)?.personLine === true;
     const isCurrent = () => host.directTurnGenerationByThread.get(event.threadId) === generation &&
       Boolean(host.store.taskByThread(bot.id, event.threadId));
     const settleDirectTurn = (resumeQueued = false) => {
@@ -442,7 +445,8 @@ function settleTurnTask(event: any, ctx: any, host: any, turn: any): void {
       const notificationBot = (routineRun && host.routineSourceOwner(routineRun)?.bot) || bot;
       host.notify(withBotNotify(deliverableNotification("done", notificationBot, routineReportThread ?? event.threadId, completionDetail, {
         avatarUrl: notificationBot.avatarUrl,
-        ...(routineRun && routineRun.status === "completed" ? { routineRunId: routineRun.id, routineName: routineRun.routineName } : {})
+        ...(routineRun && routineRun.status === "completed" ? { routineRunId: routineRun.id, routineName: routineRun.routineName } : {}),
+        ...(answersPersonLine ? { personTurn: true } : {})
       }), replyAlerts));
     }
     if (host.screenPollers.has(event.threadId) && host.askedForView(host.latestPersonText(event.threadId), "screen")) {

@@ -193,12 +193,13 @@ export const approvalChime = localSwitch("omb-approval-chime");
  * the Perspicax connector is unreachable (src/lib/connection-notice.ts). */
 export const connectionNotices = localSwitch("omb-connection-notices");
 
-/** Settings > Notifications: per-type toggles, all on by default (#2120). */
+/** Settings > Notifications: per-type toggles, all on by default (#2120).
+ * #3719: no Routines switch: a routine that failed or waits never interrupts
+ * (server/notify.ts), so the switch did nothing and is gone. */
 export const notifyBots = localSwitch("omb-notify-bots");
 export const notifyPeople = localSwitch("omb-notify-people");
 export const notifyGroups = localSwitch("omb-notify-groups");
 export const notifyApprovals = localSwitch("omb-notify-approvals");
-export const notifyRoutines = localSwitch("omb-notify-routines");
 
 /** Everything the attention rules read, as this computer has it now. */
 export interface AttentionSettings {
@@ -211,7 +212,6 @@ export interface AttentionSettings {
   people: boolean;
   groups: boolean;
   approvals: boolean;
-  routines: boolean;
 }
 
 export function attentionSettings(): AttentionSettings {
@@ -225,6 +225,5 @@ export function attentionSettings(): AttentionSettings {
     people: notifyPeople.enabled(),
     groups: notifyGroups.enabled(),
     approvals: notifyApprovals.enabled(),
-    routines: notifyRoutines.enabled(),
   };
 }

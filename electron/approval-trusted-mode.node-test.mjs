@@ -39,6 +39,45 @@ test("all-thread grants wait for committed thread modes and compensate the same 
   }
 });
 
+// #3568: since #1169 a thread that follows its bot has no level of its own
+// on the wire. The commit carried the bot at Full and its threads following
+// it, and the coordinator read the missing thread level as "not committed",
+// then revoked the person's change to Ask.
+test("an all-thread Full commit counts threads that follow their bot at the bot's level", async () => {
+  const proc = fakeProcess();
+  const coordinator = createTrustedApprovalModeCoordinator({ randomId: idSequence(REQUEST_ID, REQUEST_ID_2) });
+  const pending = coordinator.request(proc, "bot-1", "full", { allThreads: true });
+  const bot = { id: "bot-1", approvalMode: "full", tasks: [{ threadId: "first" }, { threadId: "archived", archivedAt: 1 }] };
+  coordinator.receive(proc, { type: "approval-trusted-mode-result", requestId: REQUEST_ID, ok: true, bot });
+  for (const phase of ["confirm", "activate", "finalize"]) coordinator.receive(proc, { type: `approval-trusted-mode-${phase}-result`, requestId: REQUEST_ID, ok: true });
+  coordinator.receive(proc, { type: "approval-trusted-mode-commit-result", requestId: REQUEST_ID, ok: true, bot });
+  assert.deepEqual(await pending, bot);
+  assert.equal(proc.messages.at(-1).type, "approval-trusted-mode-commit");
+  assert.ok(!proc.messages.some(message => message.mode === "ask"), "a committed change is never revoked");
+});
+
+test("a thread that keeps its own level still blocks an all-thread commit that missed it", async () => {
+  const proc = fakeProcess();
+  const coordinator = createTrustedApprovalModeCoordinator({ randomId: idSequence(REQUEST_ID, REQUEST_ID_2) });
+  const pending = coordinator.request(proc, "bot-1", "full", { allThreads: true });
+  const bot = { id: "bot-1", approvalMode: "full", tasks: [{ threadId: "first" }, { threadId: "own", approvalOwn: "thread", approvalMode: "ask" }] };
+  coordinator.receive(proc, { type: "approval-trusted-mode-result", requestId: REQUEST_ID, ok: true, bot });
+  for (const phase of ["confirm", "activate", "finalize"]) coordinator.receive(proc, { type: `approval-trusted-mode-${phase}-result`, requestId: REQUEST_ID, ok: true });
+  coordinator.receive(proc, { type: "approval-trusted-mode-commit-result", requestId: REQUEST_ID, ok: true, bot });
+  assert.equal(proc.messages.at(-1).mode, "ask");
+  coordinator.receive(proc, { type: "approval-trusted-mode-result", requestId: REQUEST_ID_2, ok: true, bot: { ...bot, approvalMode: "ask" } });
+  await assert.rejects(pending, /not committed/);
+});
+
+test("a thread refreshed to its bot's level follows it and settles", async () => {
+  const proc = fakeProcess();
+  const coordinator = createTrustedApprovalModeCoordinator({ randomId: () => REQUEST_ID });
+  const pending = coordinator.request(proc, "bot-1", "auto", { threadId: "thread-1", threadOnly: true, refreshPermissions: true });
+  const bot = { id: "bot-1", approvalMode: "auto", tasks: [{ threadId: "thread-1" }] };
+  coordinator.receive(proc, { type: "approval-trusted-mode-result", requestId: REQUEST_ID, ok: true, bot });
+  assert.deepEqual(await pending, bot);
+});
+
 test("all-thread grants take every level but Custom, and reject mixed scopes", () => {
   for (const mode of ["ask", "edits", "auto", "full"]) {
     assert.equal(trustedApprovalModeRequest(REQUEST_ID, "bot-1", mode, false, undefined, undefined, undefined, false, true).allThreads, true);

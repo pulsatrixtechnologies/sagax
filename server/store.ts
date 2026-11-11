@@ -3829,7 +3829,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
   setAllThreadApprovalMode(botId: string, mode: Exclude<ApprovalMode, "custom">): BotRecord | null {
     const bot = this.bot(botId);
     if (!bot) return null;
-const patch = { approvalMode: mode, autoApprove: false, alwaysAllow: [] };
+    const patch = { approvalMode: mode, autoApprove: mode === "auto", alwaysAllow: [] };
     // Every thread follows the bot again: no copy, no exception left.
     const tasks = (bot.tasks ?? []).map(task => followingBot({ ...task, alwaysAllow: [] }));
     const next = { ...bot, ...patch, approvalGrant: undefined, tasks };

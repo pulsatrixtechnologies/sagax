@@ -1977,7 +1977,7 @@ function handle(msg: any) {
         // Deliberately independent of the app's policy catalog. These are the
         // two exact calls in the reported regression, repeated in one turn.
         void (async () => {
-          for (const name of ["list_bots", "session_search", "list_bots"]) {
+          for (const [index, name] of ["list_bots", "session_search", "list_bots"].entries()) {
             const nativeAuto = ["--permission-mode", "--approval-mode"].some((flag) => argv.includes(flag) && argv[argv.indexOf(flag) + 1] === "auto");
             if (!nativeAuto) {
               const allowed = await new Promise<boolean>((resolve) => {
@@ -1992,7 +1992,10 @@ function handle(msg: any) {
             }
             const text = await driveMcp(entry, [{ name, args: () => name === "session_search" ? { query: "approval fixture" } : {} }], true);
             out({ jsonrpc: "2.0", method: "session/update", params: { update: {
-              sessionUpdate: "agent_message_chunk", content: { text: `${name}: ${text}\n` },
+              // Each read says which call it is: a turn never writes the
+              // same text twice (server/turns/turn-reply-repeats.ts), and the
+              // two roster reads return the same roster.
+              sessionUpdate: "agent_message_chunk", content: { text: `${name}: [read ${index + 1}] ${text}\n` },
             } } });
           }
           complete();

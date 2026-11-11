@@ -6,11 +6,17 @@ import { isEngineEmptyFailure } from "../peers/incidents.ts";
 import { withBotNotify } from "../../shared/notification.ts";
 import { retireSafetyHolds } from "../safety/safety-review.ts";
 import { firstSignedOut } from "../engines/engine-refusals.ts";
+import { ROUTINE_PROBLEM_STREAK_TOLD } from "../../shared/routine-repeat.ts";
 /** Whether a finished routine run rings "done": a completed result the
  * routine posts, never a quiet one, never one whose items for the person
  * rang "needs you" from its card, and (#3479) never the same problem as the
  * previous run, which its first run said already. */
 export function routineRunRingsDone(routineRun: any, host: any): boolean {
+  // #3695: a routine that repeats more than once a day rings once, with the
+  // card that says its problems lasted ROUTINE_PROBLEM_STREAK_TOLD runs
+  if (host.routines?.reportsByStreak?.(routineRun) && !host.personAttention(routineRun.output)) {
+    return routineRun.status === "completed" && Boolean(routineRun.problems) && (routineRun.problemRepeat?.count ?? 1) === ROUTINE_PROBLEM_STREAK_TOLD;
+  }
   return routineRun.status === "completed" && !routineRun.quiet && !routineRun.problemRepeat
     && host.routineEffectivePostResults(routineRun) && !host.personAttention(routineRun.output);
 }

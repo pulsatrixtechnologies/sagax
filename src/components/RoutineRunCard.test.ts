@@ -118,6 +118,35 @@ describe("RoutineRunCard (#3581): a result is the chat's compact card, its repor
     expect(markup).toContain("text-warning");
   });
 
+  // #3695: the one summary card of a routine that repeats more than once a day
+  it("a repeating routine's summary card counts its runs with problems, a failed or blocked run's in the same card, then says works again", () => {
+    const since = Date.UTC(2026, 10, 11, 17, 22);
+    const repeat = { firstRunId: "run-0", count: 3, since, lastAt: since + 600_000, streak: true as const };
+    const card = draw({ message: message("completed", { brief: "The merge queue is stuck on a failed check. Rerun it.", problems: "queue stuck", repeat }), onOpen: vi.fn() });
+    expect(card).toContain('data-routine-run-form="card"');
+    expect(words(card)).toContain("3 runs with problems since");
+    expect(words(card)).not.toContain("Same problem");
+    expect(card).toContain("Rerun it.");
+    // a failed or blocked third run: the same card, the failure words in its
+    // brief, the count and since when in its state line
+    const failed = draw({ message: message("failed", { error: "The engine stopped answering\nThe service timed out", repeat: { ...repeat, count: 5 } }), onOpen: vi.fn() });
+    expect(failed).toContain('data-routine-run-form="card"');
+    expect(failed).toMatch(/data-routine-run-brief[^>]*>The engine stopped answering\s*The service timed out</);
+    expect(failed).toMatch(/data-routine-run-status[^>]*>Failed<span data-routine-run-repeat/);
+    expect(words(failed)).toContain("5 runs with problems since");
+    expect(failed).toContain("text-warning");
+    const blocked = draw({ message: message("blocked", { error: "Signed out", repeat }), onOpen: vi.fn() });
+    expect(blocked).toContain('data-routine-run-form="card"');
+    expect(blocked).toMatch(/data-routine-run-brief[^>]*>Signed out</);
+    expect(words(blocked)).toContain("3 runs with problems since");
+    // a failure that is not a lasting problem's summary stays the quiet row
+    expect(draw({ message: message("failed", { error: "The engine stopped answering" }), onOpen: vi.fn() })).toContain('data-routine-run-form="row"');
+    const again = draw({ message: message("completed", { brief: "The merge queue is stuck on a failed check. Rerun it.", recovered: { afterRuns: 4, since } }), onOpen: vi.fn() });
+    expect(again).toContain("data-routine-run-recovered");
+    expect(words(again)).toContain("Works again");
+    expect(again).not.toContain("data-routine-run-repeat");
+  });
+
   it("works again: said once, in the card's state line", () => {
     const markup = draw({ message: message("nothing_to_report", { recovered: { afterRuns: 7, since: Date.UTC(2026, 10, 9) } }), onOpen: vi.fn() });
     expect(markup).toContain('data-routine-run-form="card"');

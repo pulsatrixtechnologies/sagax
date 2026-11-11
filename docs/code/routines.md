@@ -44,6 +44,52 @@ keeps it). Tests: `shared/chat-relevance.test.ts`,
 `server/turns/chat-rows-released.test.ts` (every row this writes is a shape
 the released apps draw, `shared/fixtures/chat-rows-released.json`).
 
+## A routine that repeats many times a day reports by its streak (#3695, 2026-11-11)
+
+A routine whose schedule can run it more than once on a day (an interval
+under a day whose window fits two runs, a cron that names two or more times
+on one day, a run at every usage-limit reset: `routineRepeatsWithinDay` in
+`shared/routine-repeat.ts`; a daily time, a single date, the next reset only,
+an interval whose window fits one run a day and every trigger are not) is not
+read run by run.
+A finished run that only says how it went (done, done with a report, done
+with problems, failed, blocked, works again) writes nothing in the person's
+chat: no card, no line, no notification, no failure alert, no pre-flight
+notice. Every run stays in the routine's own run list (Automations, the
+routine's Logs) with its report and its problems.
+
+The streak (`RoutineManager.settleRepeatingStreak`) counts the runs in a row
+that ended with problems, whatever their wording: completed with problems,
+failed (a restart's cut aside) or blocked; a missed or cancelled occurrence
+neither counts nor ends it. The run that makes it
+`ROUTINE_PROBLEM_STREAK_TOLD` (3) writes the one summary card
+(`syncRoutineRunToSource`, `repeat.streak`): the routine's name, how many
+runs, since when, and the bot's summary. That run's prompt told the bot it
+would make three in a row, with the earlier runs' problems, and asked for one
+short summary instead of its usual remarks (`routineProblemStreakNote`); a
+run that failed before its bot wrote uses the streak's own failure texts,
+deduplicated. Later runs with problems update that card's count in place,
+quietly; the first run without problems turns that same card to works again,
+in place (a streak told by a failed run keeps its failure words as the
+card's summary). A run the person starts during the streak counts in it and
+posts its own card; the summary card keeps its streak. A streak that ends
+sooner says nothing. The routine's "Post results" choice changes nothing for
+such a routine: the summary and a run the person starts reach the
+conversation either way; it applies again once the routine runs once a day or
+less. Every run of such a
+routine reads the rule (`ROUTINE_REPEATING_RULE`): say nothing unless the
+person is needed, ask with the question or approval tool, never inside a
+report.
+
+Still told at once, as before: a question or an approval a run raises (the
+pinned row), a run the person started, a wake they chose
+(`alwaysReport`), items only they can do, and a routine that paused itself
+after failures in a row. A routine that runs once a day or less often reports
+each run as before (#3479). Tests: `shared/routine-repeat.test.ts`,
+`server/routines/routine-quiet-contract.test.ts`,
+`server/routines/routine-reliability.test.ts`,
+`src/components/RoutineRunCard.test.ts`.
+
 ## Event subscriptions (#2700, 2026-11-08)
 
 `BotEventSubscriptions` (`server/bot-events/bot-event-subscriptions.ts`,

@@ -782,6 +782,7 @@ import { runAsRefusal } from "./routines/routine-run-as.ts";
 import { recordRoutineChange, recordRoutineToggle, routineToggleForViewer } from "./routines/routine-chat-events.ts";
 import { botReplyQuoteId } from "./turns/reply-to-turn.ts";
 import { isTriggerSchedule } from "../shared/routines.ts";
+import { ROUTINE_PROBLEM_STREAK_TOLD } from "../shared/routine-repeat.ts";
 import { routineTurnEffort } from "../shared/routine-effort.ts";
 import { routineTurnModel } from "../shared/routine-model.ts";
 import { nextOccurrence, PREWARM_ENGINE_LEAD_MS, ROUTINE_RESTARTED, RoutineManager, routineClaimedCardChoice, routineClaimedCardWaiting, routineRerunStartedBy, setRoutineTimeZone, type Routine, type RoutineRun, type RoutineRunOn, type RoutineRunTrigger } from "./routines/routines.ts";
@@ -20059,6 +20060,10 @@ routines = new RoutineManager({
     // off, and only the first failure of a streak reaches the person (one
     // notification, one incident), whatever each error says.
     if (run.proactive && run.status === "failed" && run.error !== ROUTINE_RESTARTED && !proactiveWaker.noteWakeFailed(run.botId)) alert = null;
+    // #3695: a routine that repeats more than once a day says a failure once
+    // it lasts ROUTINE_PROBLEM_STREAK_TOLD runs (its one summary card), and a
+    // pause of its own as always; the runs before stay in its run list.
+    if (routines?.reportsByStreak(run) && !run.autoPaused && (run.problemRepeat?.count ?? 1) !== ROUTINE_PROBLEM_STREAK_TOLD) alert = null;
     if (run.threadId) {
       pendingDelegationWakes.delete(run.threadId);
       // A run a restart failed takes its teammates' work with it, before any

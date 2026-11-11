@@ -42,7 +42,7 @@ export function defaultScheduleModel(patch: Partial<ScheduleModel> = {}): Schedu
 
 const clock = (hour: number, minute: number) => `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 
-function parseClock(value: string): { hour: number; minute: number } | null {
+export function parseClock(value: string): { hour: number; minute: number } | null {
   const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
   if (!match) return null;
   const hour = Number(match[1]);

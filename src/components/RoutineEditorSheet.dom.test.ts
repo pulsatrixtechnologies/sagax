@@ -295,9 +295,11 @@ describe("the routine panel, edit mode", () => {
     expect(more.textContent).toContain("If the previous run is still working");
     expect(more.textContent).toContain("Only when I'm here");
     // A short hint under the label, the long text on its tooltip, no "?" bubble.
+    // #3695: three times a day, so no run is posted: the words say what it does
     const postRow = more.querySelector("[data-routine-post-results]")!;
-    expect(postRow.textContent).toContain("Off keeps each run in the background.");
-    expect(postRow.querySelector("[title]")?.getAttribute("title")).toContain("When on, this routine posts its result");
+    expect(postRow.textContent).toContain("Runs several times a day: only a lasting problem is posted.");
+    expect(postRow.querySelector("[title]")?.getAttribute("title")).toContain("none of them is posted in the conversation. A problem that lasts 3 runs in a row");
+    expect(postRow.textContent).not.toContain("Off keeps each run in the background.");
     expect(more.textContent).toContain("Passed to each local run.");
     expect([...more.querySelectorAll("button")].some((candidate) => candidate.textContent === "?")).toBe(false);
     // The prompt reads as text: no box and no toolbar until the person edits it.
@@ -309,6 +311,29 @@ describe("the routine panel, edit mode", () => {
     expect(editor.querySelector("[data-md-toolbar] [data-md-full]")).not.toBeNull();
     expect(host.textContent).not.toMatch(/cron/i);
     expect(host.querySelector("[data-editor-dirty]")).toBeNull();
+  });
+
+  it("Post results keeps its meaning for a routine that runs once a day; an interval under a day says no run is posted (#3695)", () => {
+    mount(routine({ type: "cron", expression: "30 8 * * 1-5", timeZone: "America/Toronto" }));
+    edit();
+    let postRow = openAdvanced().querySelector("[data-routine-post-results]")!;
+    expect(postRow.textContent).toContain("Off keeps each run in the background.");
+    expect(postRow.querySelector("[title]")?.getAttribute("title")).toContain("When on, this routine posts its result");
+    flushSync(() => root.unmount());
+    root = createRoot(host);
+    mount(routine({ type: "interval", everyMinutes: 5, anchorAt: Date.now() }));
+    edit();
+    postRow = openAdvanced().querySelector("[data-routine-post-results]")!;
+    expect(postRow.textContent).toContain("Runs several times a day: only a lasting problem is posted.");
+    // what the switch still does there
+    expect(postRow.querySelector("[title]")?.getAttribute("title")).toContain("reach the conversation whether this switch is on or off");
+    // an interval whose window fits one run a day keeps the switch's meaning
+    flushSync(() => root.unmount());
+    root = createRoot(host);
+    mount(routine({ type: "interval", everyMinutes: 120, anchorAt: Date.now(), window: { start: "09:00", end: "11:00" } } as never));
+    edit();
+    postRow = openAdvanced().querySelector("[data-routine-post-results]")!;
+    expect(postRow.textContent).toContain("Off keeps each run in the background.");
   });
 
   it("Advanced uses no native select: rows of the app's pill menus, switches at the right, times as pills", () => {

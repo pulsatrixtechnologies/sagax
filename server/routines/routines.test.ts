@@ -5,6 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { GroupGoalRunStatus } from "../../shared/group-goal-run.ts";
 import { isRoutineProblemRun } from "../../shared/routines.ts";
+import { ROUTINE_REPEATING_RULE } from "./routine-report.ts";
+
+/** #3695: a run of a routine that repeats more than once a day reads its rule after the work. */
+const repeating = (prompt: string) => `${prompt}\n\n${ROUTINE_REPEATING_RULE}`;
 import { ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST } from "./routine-execution.ts";
 import {
   nextOccurrence,
@@ -800,8 +804,8 @@ describe("persistent routine results destinations", () => {
     expect(second.resultsThreadId).toBe(first.resultsThreadId);
     expect(h.created()).toBe(1);
     expect(h.started).toEqual([
-      { botId: "maus-1", threadId: "thread-1", prompt: "Write a fresh report" },
-      { botId: "maus-1", threadId: "thread-2", prompt: "Write a fresh report" },
+      { botId: "maus-1", threadId: "thread-1", prompt: repeating("Write a fresh report") },
+      { botId: "maus-1", threadId: "thread-2", prompt: repeating("Write a fresh report") },
     ]);
     complete(h, "thread-2");
     const loaded = new RoutineManager(h.options);
@@ -2035,7 +2039,7 @@ describe("RoutineManager", () => {
     expect(h.started).toEqual([{
       botId: "maus-interval",
       threadId: "thread-1",
-      prompt: "Check the latest queue",
+      prompt: repeating("Check the latest queue"),
     }]);
   });
 
@@ -2072,7 +2076,7 @@ describe("RoutineManager", () => {
     expect(h.started).toEqual([{
       botId: "maus-interval",
       threadId: "thread-1",
-      prompt: "Check at an allowed time",
+      prompt: repeating("Check at an allowed time"),
     }]);
     expect(h.manager.listRuns()[0]).toMatchObject({
       status: "running",
@@ -2120,7 +2124,7 @@ describe("RoutineManager", () => {
     expect(h.started).toEqual([{
       botId: "maus-interval",
       threadId: "thread-1",
-      prompt: "Keep the original cadence",
+      prompt: repeating("Keep the original cadence"),
     }]);
     expect(h.manager.listRuns()[0]).toMatchObject({
       status: "running",
@@ -3866,8 +3870,8 @@ describe("routine continuity", () => {
     const first = await runOnce(h, routine.id, anchorAt, "Nothing shipped yesterday.");
     const second = await runOnce(h, routine.id, anchorAt + 60 * 60_000, "Still nothing.");
 
-    expect(first).toBe("Write the brief");
-    expect(second).toBe("Write the brief");
+    expect(first).toBe(repeating("Write the brief"));
+    expect(second).toBe(repeating("Write the brief"));
     expect(second).not.toContain("previous-run");
   });
 
@@ -3885,7 +3889,7 @@ describe("routine continuity", () => {
     const first = await runOnce(h, routine.id, anchorAt, "Two deploys, one rollback.");
     const second = await runOnce(h, routine.id, anchorAt + 60 * 60_000);
 
-    expect(first).toBe("Write the brief");
+    expect(first).toBe(repeating("Write the brief"));
     expect(second).toContain("Write the brief");
     expect(second).toContain("Two deploys, one rollback.");
     expect(second).toContain("<previous-run finished=");
@@ -3986,7 +3990,7 @@ describe("routine continuity", () => {
     const routine = h.manager.create({ name: "Private brief", prompt: "Write the brief", botId: "maus-1", schedule: everyHour(anchorAt), continuity: true });
     await runOnce(h, routine.id, anchorAt, "Private result from the old assignment.");
     h.manager.update(routine.id, patch);
-    expect(await runOnce(h, routine.id, anchorAt + 60 * 60_000)).toBe("Write the brief");
+    expect(await runOnce(h, routine.id, anchorAt + 60 * 60_000)).toBe(repeating("Write the brief"));
   });
 
   it("survives a reload, because continuity is part of the stored routine", async () => {
@@ -4020,7 +4024,7 @@ describe("routine continuity", () => {
 
     const second = await runOnce(h, routine.id, anchorAt + 60 * 60_000);
 
-    expect(second).toBe("Write the brief");
+    expect(second).toBe(repeating("Write the brief"));
   });
 
   it("refuses continuity on a room goal, which does not run the bot prompt path", () => {
@@ -4337,7 +4341,7 @@ describe("the organization memory before a run (2026-10-11)", () => {
     if (!h.started.length) await h.manager.tick();
     expect(h.asked).toEqual([{ runAs: "pr_alice", prompt: "Triage the new tickets" }]);
     expect(h.started).toHaveLength(1);
-    expect(h.started[0]!.prompt).toBe("Triage the new tickets\n\nNote from the organization memory");
+    expect(h.started[0]!.prompt).toBe(`${repeating("Triage the new tickets")}\n\nNote from the organization memory`);
     expect(h.manager.listRuns()[0]?.memoryHint).toEqual(hint);
     // kept across a restart
     expect(new RoutineManager({ ...h.options, file: h.file }).listRuns()[0]?.memoryHint).toEqual(hint);
@@ -4366,7 +4370,7 @@ describe("the organization memory before a run (2026-10-11)", () => {
     expect(run?.triggerSource).toBe("manual");
     await h.manager.tick();
     expect(h.asked).toEqual([{ runAs: "pr_alice", prompt: "Triage the new tickets" }]);
-    expect(h.started.map((turn) => turn.prompt)).toEqual(["Triage the new tickets\n\nNote from the organization memory"]);
+    expect(h.started.map((turn) => turn.prompt)).toEqual([`${repeating("Triage the new tickets")}\n\nNote from the organization memory`]);
     expect(h.manager.listRuns()[0]?.memoryHint).toEqual(hint);
   });
 
@@ -4400,7 +4404,7 @@ describe("the organization memory before a run (2026-10-11)", () => {
         const ticking = h.manager.tick();
         await vi.advanceTimersByTimeAsync(2_500);
         await ticking;
-        expect(h.started.map((turn) => turn.prompt)).toEqual(["Triage the new tickets"]);
+        expect(h.started.map((turn) => turn.prompt)).toEqual([repeating("Triage the new tickets")]);
         expect(h.manager.listRuns()[0]?.memoryHint).toBeUndefined();
       }
     } finally {
@@ -4413,7 +4417,7 @@ describe("the organization memory before a run (2026-10-11)", () => {
     const routine = h.manager.create(input);
     h.manager.runNow(routine.id);
     await h.manager.tick();
-    expect(h.started.map((turn) => turn.prompt)).toEqual(["Triage the new tickets"]);
+    expect(h.started.map((turn) => turn.prompt)).toEqual([repeating("Triage the new tickets")]);
   });
 });
 

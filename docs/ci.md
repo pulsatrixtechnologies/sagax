@@ -31,7 +31,8 @@ path. There is no changed-files API truncation or new action dependency.
 
 The single `CI` gate keeps the existing required dependencies. It accepts a
 skipped runtime job only when static validation passed and explicitly selected
-the docs-only path. Failures, cancellations, missing selection and unexpected
+the docs-only path. A failed `static` fails the gate even when the vitest jobs,
+which still run after it, pass. Failures, cancellations, missing selection and unexpected
 skips fail the gate. Existing advisory jobs remain advisory.
 
 The separate shared-terminal smoke workflow is manual-only. The Windows
@@ -194,6 +195,16 @@ How a run decides (`scripts/testing/known-failures.mjs`):
    on every platform (`open-issues --platforms`, the same rule as the list):
    a push runs Linux only, so a test that fails only on Windows or macOS
    keeps its count through it. Nothing here blocks a merge.
+
+A red quick check does not hide the tests (#3493). The vitest jobs and the
+`known failures` job need `static` only for its selection: they run whenever
+the selection step set `runtime` to `true`, even when a later step of
+`typecheck + lint` (the documentation references, the locale catalogs, the
+typecheck, the lint) failed. That holds for every event of this workflow (a
+push to main, the nightly run, a manual run); pull requests do not run it.
+The `CI` gate still requires `static` to pass, so such a run stays red, but
+its test results and verdict are there to read. The other runtime jobs
+(smokes, evals, packaging) still wait for a green `static`.
 
 The first fill: the list starts empty. One manual run with
 `fill_known_failures` writes every failure of that run to the

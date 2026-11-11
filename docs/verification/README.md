@@ -324,6 +324,14 @@ managed desktop keeps so Firefox can start, with before/after acceptance evidenc
 The [Hetzner launch record](hetzner-launch-2026-09-07.md) is a dated self-hosting
 run on a disposable VPS: what passed, what was corrected, and what it does not prove.
 
+The [connectors hub measures](connectors-hub-measures.md) record how each
+provider CLI exposes the person's connectors, with the scrubbed captures that
+`server/testing/connector-fixtures.test.ts` replays through the fakes.
+
+The [connector live check](connectors-live.md) runs once per release on real
+sign-ins and real engines; the connector matrix proves the same outcomes on
+fakes at every pull request.
+
 The [voice acceptance recipe](voice-acceptance.md) runs the 32-turn full-duplex
 call on an isolated server. Pull-request CI gates the synthetic profile.
 Release acceptance enforces the same gates against real providers.

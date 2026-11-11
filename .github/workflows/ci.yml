@@ -90,10 +90,13 @@ jobs:
         run: pnpm exec vite build
 
   vitest:
-    # Admit the expensive runner fan-out only after the quick checks pass.
-    # A failing preflight still fails the required gates; nothing is waived.
+    # This workflow runs on a push to main, at night and on a manual run only
+    # (pull requests have their own checks). The suite runs even when a quick
+    # check of `static` is red, once its selection step has set the outputs:
+    # one red check must not hide every test result (#3493). The `CI` gate
+    # still wants `static` green, so that run stays red; nothing is waived.
     needs: static
-    if: needs.static.outputs.runtime == 'true'
+    if: ${{ !cancelled() && needs.static.outputs.runtime == 'true' }}
     # vitest splits the file list deterministically across shards, so a
     # failure names the same shard on every run and one shard is reproducible
     # locally with the same --shard flag.

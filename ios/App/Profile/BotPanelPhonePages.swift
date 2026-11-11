@@ -133,10 +133,10 @@ extension DesktopPanelSection {
     var subpageIntro: LocalizedStringKey? {
         switch self {
         case .soul: "Its standing instructions. Write as you would talk to it."
-        case .model, .worksOn: "One engine, one fallback, one place to run. Applies to the bot and all its threads."
+        case .model, .worksOn: "One engine, one fallback, one place to run. Applies to the bot and all its conversations."
         case .slack: "Where people talk to it and where it reaches you."
         case .sharing, .visibility: "Who can talk to it and who can set it up."
-        case .access: "Accounts and connectors. One place for both."
+        case .access: "Bot accounts and connectors. One place for both."
         case .voice: "How it sounds on the phone and in voice notes."
         case .history: "Every settings change, restorable."
         case .skills: "What else it knows how to do. Each skill turns on or off."
@@ -467,15 +467,8 @@ struct BotPermissionsSection: View {
                 Label("Approval rules", systemImage: "checkmark.shield")
             }
             .accessibilityIdentifier("permissions-approval-grants")
-            // Only a team bot (shared with someone) has a shared vault.
-            if canEdit, !(current.directGrants ?? []).isEmpty {
-                NavigationLink {
-                    TeamBotVaultListView(botId: current.id, botName: current.name)
-                } label: {
-                    Label("Shared vault", systemImage: "key.fill")
-                }
-                .accessibilityIdentifier("permissions-team-vault")
-            }
+            // The shared vault of a team bot sits under the profile's Bot
+            // accounts (owner's decision of 2026-11-10, #3403).
         } footer: {
             VStack(alignment: .leading, spacing: 6) {
                 Text(DesktopApprovalButton.detail(level))

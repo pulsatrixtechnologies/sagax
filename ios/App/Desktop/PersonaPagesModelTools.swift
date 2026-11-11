@@ -581,6 +581,9 @@ struct PersonaVoicePage: View {
     @AppStorage(VoiceModeSettings.storageKey) private var voiceRaw = ""
     let bot: Bot
     let slackURL: URL?
+    /// The bot profile draws "Notify me" in its Settings card (#3398,
+    /// #3403): the switch is drawn once, there.
+    var notifyElsewhere = false
 
     @State private var status: VoiceProvidersStatus?
     @State private var statusFailed: String?
@@ -621,6 +624,7 @@ struct PersonaVoicePage: View {
                     }
                 }
             }
+            if !notifyElsewhere {
             DesktopSettingsGroup(Text("Notifications"), identifier: "botNotifications") {
                 DesktopDescribedRow(Text("Notify me when this bot finishes or needs me"), identifier: "notifications") {
                     PanelSwitch(label: "Notify me when this bot finishes or needs me", isOn: bot.notifications, onColor: tint) { on in
@@ -628,6 +632,7 @@ struct PersonaVoicePage: View {
                     }
                     .accessibilityIdentifier("persona-voice.notify")
                 }
+            }
             }
         }
         .task { await seedInstalledVoice() }

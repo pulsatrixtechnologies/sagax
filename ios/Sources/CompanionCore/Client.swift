@@ -1831,11 +1831,14 @@ public struct CompanionClient: Sendable {
         requestId: String,
         behavior: String,
         message: String? = nil,
-        reviewedSha256: String? = nil
+        reviewedSha256: String? = nil,
+        via: String? = nil
     ) async throws -> String? {
         var body: [String: Any] = ["requestId": requestId, "behavior": behavior]
         if let message { body["message"] = message }
         if let reviewedSha256 { body["reviewedSha256"] = reviewedSha256 }
+        // "profile": answered from the bot profile; the chat gets one quiet line
+        if let via { body["via"] = via }
         let request = try makeRequest("POST", "/api/threads/\(threadId)/respond", body: body)
         let (data, response) = try await perform(request)
         try Self.check(response, data)

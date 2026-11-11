@@ -21,6 +21,11 @@ struct SkillSheet: Identifiable {
 final class BotSkillsModel: ObservableObject {
     @Published var skills: [ManagedSkill] = []
     @Published var staged = 0
+    /// What waits for a decision (the Knowledge tab's To review card, #3403).
+    @Published var stagedItems: [StagedSkillSummary] = []
+    /// The learning being decided from the tab, or "".
+    @Published var deciding = ""
+    @Published var decideError = ""
     @Published var loading = true
     @Published var working = ""
     @Published var error = ""
@@ -46,6 +51,7 @@ final class BotSkillsModel: ObservableObject {
             let list = try await client.botSkills(botId: botId)
             skills = list.skills
             staged = list.staged.count
+            stagedItems = list.staged
             error = ""
         } catch {
             self.error = error.localizedDescription
@@ -88,6 +94,28 @@ final class BotSkillsModel: ObservableObject {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    /// Enable (or Update) and Decline answer the chat's own card, so
+    /// answering in one place settles the other; the server leaves one
+    /// quiet line in the chat (`via: "profile"`, #3400).
+    func decide(_ entry: StagedSkillSummary, allow: Bool) async {
+        guard let client, let card = entry.card, deciding.isEmpty else { return }
+        deciding = entry.id
+        decideError = ""
+        defer { deciding = "" }
+        do {
+            try await client.respond(
+                threadId: card.threadId,
+                requestId: card.requestId,
+                behavior: allow ? "allow" : "deny",
+                reviewedSha256: allow ? entry.sha256 : nil,
+                via: "profile"
+            )
+        } catch {
+            decideError = String(localized: "Could not record this decision.")
+        }
+        await refresh()
     }
 
     func remove(_ skill: ManagedSkill) async {

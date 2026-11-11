@@ -566,9 +566,7 @@ struct PersonaAppearancePane: View {
     private var moveList: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(verbatim: AppStrings.localized("Moves"))
-                .textCase(.uppercase)
-                .font(theme.font(10.5, .medium))
-                .tracking(0.84)
+                .font(theme.font(11, .medium))
                 .foregroundStyle(theme.inkSecondary)
             PanelFlow(spacing: 4, lineSpacing: 4) {
                 ForEach(moves, id: \.self) { move in
@@ -763,12 +761,10 @@ struct PersonaAppearancePane: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(verbatim: title)
-                    .textCase(.uppercase)
-                    .font(theme.font(10.5, .medium))
-                    .tracking(0.84)
+                    .font(theme.font(11, .medium))
                     .foregroundStyle(theme.inkSecondary)
                 Text(verbatim: count)
-                    .font(theme.font(10.5))
+                    .font(theme.font(11))
                     .monospacedDigit()
                     .foregroundStyle(theme.inkTertiary)
             }
@@ -801,12 +797,12 @@ struct PersonaAppearancePane: View {
                     .brightness(isLocked ? -0.2 : 0)
                     .opacity(isLocked ? 0.6 : 1)
                 Text(verbatim: PersonaWardrobe.characterName(character))
-                    .font(theme.font(12.5))
+                    .font(theme.font(12))
                     .foregroundStyle(theme.ink)
                     .lineLimit(1)
                     .frame(height: 16)
                 Text(verbatim: PersonaWardrobe.familyName(PersonaWardrobe.family(character)))
-                    .font(theme.font(10.5))
+                    .font(theme.font(11))
                     .foregroundStyle(theme.inkTertiary)
                     .lineLimit(1)
                     .frame(height: 12)

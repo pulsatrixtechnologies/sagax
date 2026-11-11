@@ -396,7 +396,7 @@ struct PersonaChangesPage: View {
                     DesktopText(Text("Couldn’t refresh history."), size: 12.5, line: 18, color: \.inkSecondary)
                 }
                 if history.rows.isEmpty {
-                    DesktopText(Text("No changes recorded yet."), size: 13, line: 18, color: \.inkSecondary)
+                    DesktopText(Text("Each change to this bot's settings will show here, and you can restore it."), size: 13, line: 18, color: \.inkSecondary)
                         .accessibilityIdentifier("persona-changes.empty")
                 } else {
                     versionsCard(history)

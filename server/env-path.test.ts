@@ -574,4 +574,33 @@ describe.skipIf(process.platform === "win32")("the login shell probe", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  posixIt("takes the shell, and what it started, with it when the server stops before the deadline (#3653)", async () => {
+    // The deadline is a timer in the server: a server stopped sooner left
+    // the detached group running in its home folder, which a test then
+    // could not delete.
+    const dir = mkdtempSync(join(tmpdir(), "sagax-shell-probe-"));
+    try {
+      const pidFile = join(dir, "pid");
+      const script = join(dir, "server.mjs");
+      writeFileSync(script, [
+        `import { existsSync } from "node:fs";`,
+        `import { runLoginShellProbe } from ${JSON.stringify(new URL("./env-path.ts", import.meta.url).href)};`,
+        `runLoginShellProbe("/bin/sh", 60_000, () => {}, ["-c", ${JSON.stringify(`trap '' TERM; sleep 30 & echo $! > ${JSON.stringify(pidFile)}; wait`)}]);`,
+        `const started = setInterval(() => { if (existsSync(${JSON.stringify(pidFile)})) { clearInterval(started); process.exit(0); } }, 20);`,
+      ].join("\n"));
+      await new Promise<void>((resolve, reject) => {
+        execFile(process.execPath, [script], { timeout: 15_000 }, (error) => (error ? reject(error) : resolve()));
+      });
+      const sleeper = Number(readFileSync(pidFile, "utf8").trim());
+      const gone = (pid: number) => { try { process.kill(pid, 0); return false; } catch { return true; } };
+      try {
+        await vi.waitFor(() => expect(gone(sleeper)).toBe(true), { timeout: 5_000, interval: 50 });
+      } finally {
+        try { process.kill(sleeper, "SIGKILL"); } catch { /* gone */ }
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

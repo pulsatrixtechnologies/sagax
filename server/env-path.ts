@@ -174,16 +174,26 @@ export function runLoginShellProbe(shell: string, timeoutMs: number, found: (pat
     return null;
   }
   let stdout = "";
-  const timer = setTimeout(() => {
+  const killGroup = () => {
     try { if (child.pid) process.kill(-child.pid, "SIGKILL"); } catch { /* already gone */ }
     try { child.kill("SIGKILL"); } catch { /* already gone */ }
-  }, timeoutMs);
+  };
+  const timer = setTimeout(killGroup, timeoutMs);
   timer.unref?.();
-  child.on("error", () => clearTimeout(timer));
+  // The deadline lives in this process. A server that stops before it fires
+  // (a quick restart, a test that boots and stops it) would leave the group
+  // running for good, detached, in that server's home folder: the group goes
+  // when this process does.
+  process.once("exit", killGroup);
+  const settle = () => {
+    clearTimeout(timer);
+    process.removeListener("exit", killGroup);
+  };
+  child.on("error", settle);
   child.stdout?.setEncoding("utf8");
   child.stdout?.on("data", (chunk: string) => { if (stdout.length < 1_000_000) stdout += chunk; });
   child.on("close", (code) => {
-    clearTimeout(timer);
+    settle();
     // what the rc files started in the shell's group goes with it
     try { if (child.pid) process.kill(-child.pid, "SIGKILL"); } catch { /* group gone */ }
     if (code !== 0 || !stdout) return;

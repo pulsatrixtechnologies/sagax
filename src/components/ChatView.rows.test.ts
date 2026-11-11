@@ -62,6 +62,7 @@ const { ChatView } = await import("./ChatView");
 const { BotEditorStore, initialState, reducer } = await import("@/state/store");
 const { setRemoteVoiceProvider } = await import("@/lib/local-voice");
 const { t } = await import("@/lib/i18n");
+const { liveActivityPhrases } = await import("@/lib/live-activity");
 
 const message = (id: string, parentId: string | undefined, fields: Partial<Message>): Message =>
   ({ id, parentId, role: "bot", kind: "text", at: new Date(2026, 9, 3, 9, Number(id.slice(1))).getTime(), ...fields });
@@ -216,7 +217,11 @@ describe("chat transcript rows", () => {
     const next = message("m8", running.id, { kind: "activity", tool: { name: "Read file 3" } });
     const grown = await rowRendersAfter(turn(true, [...messages, next]));
     expect(grown).toMatchObject({ botText: 0, userText: 0, speak: 0 });
-    expect(document.body.textContent).toContain("Read file 3");
+    // #3581: the running turn's row says "Working" and nothing more; the
+    // working line under the transcript names the new step
+    const live = document.querySelector('[data-testid="activity-run"][data-live="true"]');
+    expect(live?.textContent).toContain(t("chat.activity.working"));
+    expect(document.querySelector(".turn-presence")?.textContent).toContain(liveActivityPhrases(next).phrases[0]);
     expect(await rowRendersAfter(turn(false))).toMatchObject({ botText: 0, userText: 0, speak: 0 });
   });
 

@@ -54,6 +54,7 @@ export function ReaderCapabilities({ boot, broker }: { boot: ReaderBoot; broker:
             {reads.map((label) => <li key={label} className="sr-row" data-cap-read><span className="sr-row-text"><span>{label}</span></span></li>)}
             {caps.viewer && <li className="sr-row" data-cap-viewer><span className="sr-row-text"><span>{text("capViewer")}</span></span></li>}
             {caps.open && <li className="sr-row" data-cap-open><span className="sr-row-text"><span>{text("capOpen")}</span></span></li>}
+            {caps.files?.includes("download") && <li className="sr-row" data-cap-file><span className="sr-row-text"><span>{text("capFile")}</span></span></li>}
           </ul>
           <p className="sr-muted sr-cap-scope">{text("capScope")}</p>
           {state.approvals.map((entry) => (

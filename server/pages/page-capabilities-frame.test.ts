@@ -26,10 +26,10 @@ describe("page capabilities in the frame", () => {
   it("puts the declared capabilities beside the state, posting to the parent only", () => {
     const html = HTML.replace("<body>", `<body><script type="application/sagax-capabilities+json">{ "data": ["team-board", "other"], "viewer": true }</script>`);
     const caps = pageCapabilitiesOf(html)!;
-    expect(caps).toEqual({ data: ["team-board"], viewer: true, open: false });
+    expect(caps).toEqual({ data: ["team-board"], viewer: true, open: false, files: [] });
     const bridge = stateBridgeSource(caps);
     expect(bridge).not.toBe(STATE_BRIDGE_SOURCE);
-    expect(bridge).toContain(`var C={"data":["team-board"],"viewer":true,"open":false}`);
+    expect(bridge).toContain(`var C={"data":["team-board"],"viewer":true,"open":false,"files":[]}`);
     expect(bridge).toContain("Object.assign({page:Object.freeze(page)},caps)");
     expect(bridge).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|window\.top/);
     const reading = pageDocument({ kind: "html", title: "T", content: html, lang: "en" }, { nonce: "n0nce", reportSize: true, font: "", capabilities: caps });
@@ -39,7 +39,7 @@ describe("page capabilities in the frame", () => {
   });
 
   it("ignores a wildcard or an unknown name", () => {
-    expect(pageCapabilitiesOf(`<script type="application/sagax-capabilities+json">{"data":["*","team-*"]}</script>`)).toEqual({ data: [], viewer: false, open: false });
+    expect(pageCapabilitiesOf(`<script type="application/sagax-capabilities+json">{"data":["*","team-*"]}</script>`)).toEqual({ data: [], viewer: false, open: false, files: [] });
   });
 });
 
@@ -55,7 +55,7 @@ function runBridge(source: string) {
 }
 
 describe("capability handshake (#3413 lot 1b)", () => {
-  const caps = { data: ["team-board" as const], viewer: true, open: false };
+  const caps = { data: ["team-board" as const], viewer: true, open: false, files: [] };
 
   it("says hello, queues calls until the wrapper is ready, then sends them", async () => {
     const bridge = runBridge(capabilityBridgeSource(caps));

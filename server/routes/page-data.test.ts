@@ -39,7 +39,7 @@ function world(options: { caps?: PageCapabilities | null; capsOf?: (n?: number) 
   const deps: PageDataRouteDeps = {
     pages: {
       get: (id) => (id === record.id ? record : undefined),
-      capabilities: (_id, n) => (options.capsOf ? options.capsOf(n) : options.caps === undefined ? { data: ["team-board"], viewer: true, open: true } : options.caps),
+      capabilities: (_id, n) => (options.capsOf ? options.capsOf(n) : options.caps === undefined ? { data: ["team-board"], viewer: true, open: true, files: [] } : options.caps),
       policy: () => ({ linkSharing: true, readerComments: true }) as ReturnType<PageDataRouteDeps["pages"]["policy"]>,
       readerHandle: (_pageId, by) => `h-${by}`,
     },
@@ -96,7 +96,7 @@ describe("page data: the reader's own data, never another's", () => {
   });
 
   it("refuses a source the published version does not declare, and a page with no block", async () => {
-    const other = world({ caps: { data: [], viewer: true, open: false } });
+    const other = world({ caps: { data: [], viewer: true, open: false, files: [] } });
     expect((await call(other.routes, as("person-b"), "/api/pages/page-1/data/team-board")).body.code).toBe("not_declared");
     const none = world({ caps: null });
     const answer = await call(none.routes, as("person-b"), "/api/pages/page-1/data/team-board");
@@ -205,21 +205,21 @@ describe("page viewer and capabilities", () => {
     const { routes } = world();
     const viewer = await call(routes, as("person-b"), "/api/pages/page-1/viewer?lang=fr");
     expect(viewer.body).toEqual({ name: "Name person-b", handle: "h-person-b", role: "signed_in", lang: "fr" });
-    expect((await call(world({ caps: { data: ["team-board"], viewer: false, open: false } }).routes, as("person-b"), "/api/pages/page-1/viewer")).body.code).toBe("not_declared");
+    expect((await call(world({ caps: { data: ["team-board"], viewer: false, open: false, files: [] } }).routes, as("person-b"), "/api/pages/page-1/viewer")).body.code).toBe("not_declared");
   });
 
   it("says what the version reads, for the reader's bar", async () => {
     const { routes } = world();
     expect((await call(routes, as("person-b"), "/api/pages/page-1/capabilities")).body).toEqual({
       version: 1,
-      capabilities: { data: ["team-board"], viewer: true, open: true },
+      capabilities: { data: ["team-board"], viewer: true, open: true, files: [] },
       reads: [{ name: "team-board", label: "The work of your coding teams" }],
     });
   });
 
   it("checks the version its person previews, for them only; a reader gets the published one", async () => {
     // v2 adds the data source; v1 (published) declares nothing
-    const capsOf = (n?: number) => (n === 2 ? { data: ["team-board" as const], viewer: false, open: false } : null);
+    const capsOf = (n?: number) => (n === 2 ? { data: ["team-board" as const], viewer: false, open: false, files: [] } : null);
     const { routes } = world({ capsOf, record: page({ access: "org" }) });
     expect((await call(routes, as("person-a"), "/api/pages/page-1/capabilities?version=2")).body).toMatchObject({ version: 2, capabilities: { data: ["team-board"] } });
     expect((await call(routes, as("person-a"), "/api/pages/page-1/data/team-board?version=2")).status).toBe(200);

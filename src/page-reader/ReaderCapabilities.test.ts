@@ -9,7 +9,7 @@ import type { CapabilityBroker, CapabilityState } from "./capabilities";
 import { ReaderCapabilities } from "./ReaderCapabilities";
 
 const BOOT: ReaderBoot = { v: 1, lang: "en", title: "Board", kind: "html", version: 1, pageId: "page_12345678", me: { id: "pr_a", name: "Ada" }, can: { share: false, annotate: true } };
-const CAPS = { data: ["team-board" as const], viewer: true, open: true };
+const CAPS = { data: ["team-board" as const], viewer: true, open: true, files: [] };
 
 function brokerOf(state: Partial<CapabilityState>): CapabilityBroker {
   const full: CapabilityState = { loaded: true, caps: null, reads: [], approvals: [], links: [], ...state };
@@ -20,7 +20,7 @@ const render = (state: Partial<CapabilityState>, boot: ReaderBoot = BOOT) => ren
 describe("ReaderCapabilities", () => {
   it("draws nothing for a page that declares nothing: the bar is as it was", () => {
     expect(render({ caps: null })).toBe("");
-    expect(render({ caps: { data: [], viewer: false, open: false } })).toBe("");
+    expect(render({ caps: { data: [], viewer: false, open: false, files: [] } })).toBe("");
   });
 
   it("shows a button with an accessible name, closed until it is clicked", () => {

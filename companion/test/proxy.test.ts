@@ -7,7 +7,7 @@
 // through, and the harness's loopback gate rejecting a proxied request.
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer, request, type IncomingMessage, type Server } from "node:http";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,7 @@ import { createProxyHandler } from "../src/proxy.ts";
 import { MAX_SSE_EVENT_BYTES } from "../src/wire.ts";
 import { createConnectedDeviceTracker } from "../src/connected-devices.ts";
 import type { CompanionEndpoint } from "../src/endpoints.ts";
+import { removeTempDir, waitForExit } from "../../server/testing/cleanup.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..", "..");
@@ -194,21 +195,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await new Promise<void>((r) => (sidecar ? sidecar.close(() => r()) : r()));
-  harness?.kill("SIGTERM");
-  await new Promise<void>((resolve) => {
-    if (!harness || harness.exitCode !== null) return resolve();
-    harness.on("close", () => resolve());
-    // SIGKILL, then keep waiting for `close`. Resolving in the same tick as
-    // the signal — which is what this did — starts deleting the home
-    // directory out from under a process that has not died yet, and the
-    // delete is what fails. A loaded CI runner loses that race; a laptop
-    // wins it every time, which is why it reads as a phantom.
-    setTimeout(() => harness.kill("SIGKILL"), 5_000).unref?.();
-    // and a floor, so a process that somehow survives SIGKILL cannot hang
-    // the suite instead
-    setTimeout(resolve, 10_000).unref?.();
-  });
-  rmSync(home, { recursive: true, force: true });
+  // The shared teardown every suite with a real harness uses: wait until the
+  // harness is gone (SIGKILL after a grace, still waiting for `close`), then
+  // remove its home, retrying what a process that just let go of its files
+  // leaves behind on Linux (EACCES on `rm`) instead of failing a green file.
+  await waitForExit(harness, { signal: "SIGTERM" });
+  if (home) await removeTempDir(home);
 });
 
 describe("the sidecar in front of an unmodified harness", () => {

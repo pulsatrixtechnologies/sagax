@@ -6,6 +6,7 @@ import {
 import { ACP_STUCK_AFTER_MS, envOr, promptIdleTimeoutMs } from "./constants.ts";
 import { endTurn } from "./turn-end.ts";
 import { turnLatencyLine } from "./turn-latency.ts";
+import { turnTraceMarks } from "../../turns/turn-trace.ts";
 import type { AcpSession, AcpSupport, AcpTurn } from "./types.ts";
 import { reportBackgroundError } from "../../background-error.ts";
 
@@ -142,7 +143,9 @@ export function createSettle(deps: LifecycleDeps) {
     if (end.error) emit({ ...base(threadId, current.turnId), type: "runtime.error", ...end.error });
     emit({ ...base(threadId, current.turnId), type: "turn.completed", ok: end.ok, stopReason: end.stopReason, cost: null });
     if (current.latency) {
-      console.log(turnLatencyLine(DRIVER_KIND, threadId, current.latency, Date.now(), end.ok ? "ok" : (end.stopReason ?? "failed")));
+      const latency = current.latency;
+      const marks = turnTraceMarks(threadId, latency.receivedAt ?? latency.start, latency.promptAt ?? latency.start);
+      console.log(turnLatencyLine(DRIVER_KIND, threadId, latency, Date.now(), end.ok ? "ok" : (end.stopReason ?? "failed"), marks));
     }
     if (session.child.exitCode === null && !session.closing && !session.dead) {
       armIdle(threadId);

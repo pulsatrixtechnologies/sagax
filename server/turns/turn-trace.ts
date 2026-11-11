@@ -16,7 +16,13 @@ interface TurnClock {
   firstAt?: number;
   queueMs?: number;
   firstResponseMs?: number;
+  /** every step of this turn so far with its time (epoch ms), oldest first:
+   * the per-turn latency line names its parts from them (#3561) */
+  marks?: Array<[step: string, at: number]>;
 }
+
+/** Steps kept per thread: a routine's turns never restart the clock. */
+const MAX_MARKS = 64;
 
 const clocks = new Map<string, TurnClock>();
 
@@ -81,6 +87,12 @@ export function turnCounters(threadId: string): { queueMs: number | null; firstR
   return { queueMs: row?.queueMs ?? null, firstResponseMs: row?.firstResponseMs ?? null };
 }
 
+/** The steps marked on this thread between `from` and `to` (epoch ms,
+ * inclusive), oldest first. Step names and times only. */
+export function turnTraceMarks(threadId: string, from: number, to: number): Array<[step: string, at: number]> {
+  return (clocks.get(threadId)?.marks ?? []).filter(([, at]) => at >= from && at <= to);
+}
+
 /** Test helper. Production turns just age out of the map. */
 export function clearTurnCounters(): void {
   clocks.clear();
@@ -104,6 +116,9 @@ export function turnTrace(threadId: string, step: string, first = false): void {
     row.startedAt ??= now;
   }
   const row = clocks.get(threadId) ?? take(threadId);
+  const marks = row.marks ??= [];
+  marks.push([step, now]);
+  if (marks.length > MAX_MARKS) marks.splice(0, marks.length - MAX_MARKS);
   if (step === "send" && row.sentAt === undefined) {
     row.sentAt = now;
     const from = row.queuedAt ?? row.startedAt;

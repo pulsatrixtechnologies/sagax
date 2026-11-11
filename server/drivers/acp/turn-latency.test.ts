@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { newTurnLatency, noteTurnActivity, turnLatencyLine } from "./turn-latency.ts";
+import { newTurnLatency, noteTurnActivity, turnLatencyLine, turnLatencyParts } from "./turn-latency.ts";
 
 describe("turn latency line", () => {
   it("logs every stage of a pooled one-tool turn, ids and numbers only", () => {
@@ -36,5 +36,54 @@ describe("turn latency line", () => {
     trace.stallMs = 10_000;
     trace.stallRetried = true;
     expect(turnLatencyLine("grok", "t", trace, 20_000, "ok")).toContain("stallGuard=10000ms retried ok");
+  });
+
+  // #3561: one production line tells which part of queue and setup is slow
+  it("names the parts of queue and setup on the same line, existing fields unchanged", () => {
+    const trace = newTurnLatency(10_000, 4_000);
+    trace.path = "spawn";
+    trace.promptAt = 15_000;
+    const marks: Array<[string, number]> = [
+      ["start", 4_010],
+      ["prewarm-joined", 4_010],
+      ["oauth-refreshed", 4_500], // beside the chain: closes no part
+      ["compacted", 4_060],
+      ["context-selected", 4_100],
+      ["soul-drift", 4_110],
+      ["skills-selected", 4_120],
+      ["mcp-mounted", 6_120],
+      ["integrations", 7_120],
+      ["prompt-start", 7_620],
+      ["prompt-sections", 7_700],
+      ["state.prompt-built", 7_720],
+      ["recall", 9_720],
+      ["access", 9_800],
+      ["command", 9_810],
+      ["send", 9_900],
+      ["acp-prepared", 10_050],
+      ["acp-handshake", 11_050],
+      ["acp-session-new", 11_300],
+      ["acp-model", 11_300],
+      ["acp-mcp-settled", 14_800],
+      ["acp-session-configured", 14_900],
+    ];
+    const line = turnLatencyLine("grokAgent", "800b207c-1a77", trace, 20_000, "ok", marks);
+    expect(line).toBe(
+      "[turn-latency] grokAgent thread=800b207c path=spawn queue=6000ms setup=5000ms ttfa=? ttft=? tools=0 total=10000ms prompt=?ch full=? in=? cached=? " +
+      "queueBy=admit:10,compact:50,context:60,mcp:2000,connector:1000,place:500,prompt:100,recall:2000,access:90,send:90,dispatch:100 " +
+      "setupBy=prepare:50,init:1000,session:250,model:100,tools:3500,prompt:100 ok",
+    );
+    // the parts add up to the stage they break down
+    const sum = (field: string | undefined) => (field ?? "").split(",").reduce((total, part) => total + Number(part.split(":")[1]), 0);
+    const parts = turnLatencyParts(trace, marks);
+    expect(sum(parts.queueBy)).toBe(6_000);
+    expect(sum(parts.setupBy)).toBe(5_000);
+  });
+
+  it("leaves queueBy out when the message time is unknown and ignores another turn's marks", () => {
+    const trace = newTurnLatency(10_000);
+    trace.promptAt = 10_400;
+    const parts = turnLatencyParts(trace, [["send", 2_000], ["acp-session-loaded", 10_100]]);
+    expect(parts).toEqual({ setupBy: "session:100,prompt:300" });
   });
 });

@@ -2553,8 +2553,10 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         expect(await recorder.until((e) => e.type === "turn.completed")).toMatchObject({ ok: true });
         expect(lines).toHaveLength(1);
         expect(lines[0]).toMatch(
-          /^\[turn-latency\] \S+ thread=t-latenc path=spawn queue=\d+ms setup=\d+ms ttfa=\d+ms ttft=\d+ms tools=\d+ total=\d+ms prompt=\d+ch full=\S+ in=\S+ cached=\S+ stallGuard=150ms retried ok$/,
+          /^\[turn-latency\] \S+ thread=t-latenc path=spawn queue=\d+ms setup=\d+ms ttfa=\d+ms ttft=\d+ms tools=\d+ total=\d+ms prompt=\d+ch full=\S+ in=\S+ cached=\S+ queueBy=\S+ setupBy=\S+ stallGuard=150ms retried ok$/,
         );
+        // #3561: a spawned turn names its process start and handshake
+        expect(lines[0]).toMatch(/ setupBy=prepare:\d+,init:\d+/);
         expect(Number(/queue=(\d+)ms/.exec(lines[0]!)![1])).toBeGreaterThanOrEqual(40);
         // The stall guard is 150ms. The latency clock and setTimeout are not
         // the same instant: a busy runner reports 149. Still well above an

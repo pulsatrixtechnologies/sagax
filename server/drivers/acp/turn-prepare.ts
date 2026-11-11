@@ -378,5 +378,6 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
       }
       return { kind: "early" as const, result };
     }
+    turnTrace(threadId, "acp-prepared");
         return { kind: "ready" as const, turn, turnId, threadId, turnConfig, cwd, controlsHost, cliTurn, callAgentsEnv, spawnEnv, mcpServers, sessionKey, cursor, renewedFromChat, launchedThisTurn: launchedThisTurn(), reused, latency, session, sessionRef, request, initialize, authenticateOnce, sessionInputs, launchSession, approvalGated, env };
 }

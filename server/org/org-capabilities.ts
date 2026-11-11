@@ -34,6 +34,7 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
 import { copySanitizedPlugin, readPluginContents, type PluginContents } from "../bots/bot-plugins.ts";
+import { notePluginFolderChanged } from "../sandbox/sandbox-plugin-digests.ts";
 import type { McpServerSpec } from "../contracts.ts";
 import { installationCapabilityBridge } from "../capabilities/installation-capability-bridge.ts";
 import { applyPluginConfig, readPluginConfigFields } from "../plugins/plugin-config.ts";
@@ -250,6 +251,7 @@ export class OrgCapabilities {
       const decl = wanted.get(id);
       if (decl && decl.mount_name === loaded.mount && decl.form === loaded.form) continue;
       rmSync(this.loadDir(loaded.mount), { recursive: true, force: true });
+      notePluginFolderChanged(this.loadDir(loaded.mount));
       delete saved.loaded[id];
       this.errors.delete(id);
       this.log(`[org-capabilities] ${loaded.form} ${loaded.mount} taken out (${reason})`);
@@ -288,6 +290,8 @@ export class OrgCapabilities {
     mkdirSync(dirname(target), { recursive: true });
     if (existsSync(target)) renameSync(target, before);
     try { renameSync(prepared, target); } catch (error) { if (existsSync(before)) renameSync(before, target); throw error; }
+    // #3619: the turn's plugin copy computes this folder's digest again
+    finally { notePluginFolderChanged(target); }
   }
 
   private materializeSkill(decl: OrgCapabilityDeclaration): { version?: string; mcpServers: Record<string, McpServerSpec> } {

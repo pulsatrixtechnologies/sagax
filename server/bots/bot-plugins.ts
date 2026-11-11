@@ -47,6 +47,7 @@ import type { McpServerSpec } from "../contracts.ts";
 import { parseStoredMcpServer } from "../mcp/mcp-registry.ts";
 import { readPluginMcpServers } from "../plugins/plugin-mcp.ts";
 import { SANDBOX_PLUGINS_DIR } from "../sandbox/sandbox-plugins.ts";
+import { notePluginFolderChanged } from "../sandbox/sandbox-plugin-digests.ts";
 import { capabilityPluginRecordSchema as pluginRecord, capabilityPluginStateSchema as stateSchema } from "../capabilities/capability-plugin-state.ts";
 import type { CapabilityPluginValues } from "../capabilities/capability-plugin-state.ts";
 import { capturePluginHooks, type LifecycleHook } from "../hooks/lifecycle-hooks.ts";
@@ -161,6 +162,8 @@ export function copySanitizedPlugin(from: string, to: string, marketplaceEntry?:
   if (!existsSync(from) || !statSync(from).isDirectory()) throw new BotPluginError("The plugin's folder is missing from its repository.", "invalid_plugin", 422);
   const captured = capturePluginHooks(from);
   rmSync(to, { recursive: true, force: true });
+  // #3619: the turn's plugin copy computes this folder's digest again
+  notePluginFolderChanged(to);
   mkdirSync(join(to, ".."), { recursive: true });
   cpSync(from, to, {
     recursive: true,
@@ -530,6 +533,7 @@ export class BotPlugins {
       all[key] = checked.values;
       this.writeValues(botId, all);
       applyPluginConfig(dir, fields, checked.values);
+      notePluginFolderChanged(dir);
       // The values are written into the plugin's files: refresh discovery
       // metadata now rather than leaving every turn on the bounded scan.
       try { rebuildPluginMetaCache(pluginMetadataCacheRoot(this.options.dataDir), dir); } catch { /* turn reports partial on miss */ }
@@ -605,6 +609,7 @@ export class BotPlugins {
         const dir = this.pluginDir(botId, plugin.marketplace, plugin.name);
         invalidatePluginMetaCache(pluginMetadataCacheRoot(this.options.dataDir), dir);
         rmSync(dir, { recursive: true, force: true });
+        notePluginFolderChanged(dir);
         delete state.plugins[key];
       }
       if (mine.length) this.write(botId, state);
@@ -676,6 +681,7 @@ export class BotPlugins {
       // the copy is fresh: this bot's values (or the defaults) go in again
       const fields = readPluginConfigFields(target);
       if (fields.length) applyPluginConfig(target, fields, this.values(botId)[key] ?? {});
+      notePluginFolderChanged(target);
       const now = this.now();
       const previous = state.plugins[key];
       const revision = this.options.marketplaces.revisionOf(input.marketplace, entry);
@@ -803,6 +809,7 @@ export class BotPlugins {
       const dir = this.pluginDir(botId, record.marketplace, record.name);
       invalidatePluginMetaCache(pluginMetadataCacheRoot(this.options.dataDir), dir);
       rmSync(dir, { recursive: true, force: true });
+      notePluginFolderChanged(dir);
       rmSync(this.hookDir(botId, key), { recursive: true, force: true });
       delete state.plugins[key];
       this.write(botId, state);
@@ -1031,6 +1038,7 @@ export class BotPlugins {
       this.writeValues(botId, {});
     }
     rmSync(this.root(botId), { recursive: true, force: true });
+    notePluginFolderChanged(this.root(botId));
   }
 }
 

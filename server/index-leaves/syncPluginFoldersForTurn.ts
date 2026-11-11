@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** syncPluginFoldersForTurn (#1388). Pure move from server/index.ts. */
-import { pluginCopyFailures, SANDBOX_CAPABILITY_SKILLS_DIR } from "../sandbox/sandbox-plugins.ts";
+import { pluginCopyFailures, SANDBOX_CAPABILITY_SKILLS_DIR, SANDBOX_PLUGINS_DIR, sandboxPluginPresence, syncPluginRootsToSandbox } from "../sandbox/sandbox-plugins.ts";
 
 export type Host = Record<string, any>;
 
@@ -20,13 +20,23 @@ async function syncPluginFoldersForTurn(principalId: string, botId: string, limi
   // (sandbox-exec-queue.ts): the bot's turn waits for this copy, so it must
   // not wait behind the other bots; `limit` keeps it to two places at once
   const target = { exec: (input) => limit(() => host.userSandbox!.exec(principalId, input, botId)) };
-  const options = { failures: pluginCopyFailures, scope: principalId };
+  // #3619: what this environment holds is remembered (two bots of one
+  // person on one environment share it): plugins that did not change send
+  // no command, and the markers left to check are read in one command
+  const options = {
+    failures: pluginCopyFailures, scope: principalId,
+    presence: host.sandboxPluginPresence ?? sandboxPluginPresence,
+    environment: host.userSandbox.environmentOf?.(principalId, botId) ?? principalId,
+    ...(host.pluginFolderDigests ? { digests: host.pluginFolderDigests } : {}),
+  };
   const report = (result) => {
     if (result.skipped.length) console.warn(`[plugins] not copied to the server environment: ${result.skipped.map((row) => `${row.name} (${row.reason})`).join(", ")}`);
   };
   try {
-    if (skills.length) report(await host.syncPluginsToSandbox(skills, target, SANDBOX_CAPABILITY_SKILLS_DIR, options));
-    report(await host.syncPluginsToSandbox(plugins, target, undefined, options));
+    report(await syncPluginRootsToSandbox([
+      ...(skills.length ? [{ root: SANDBOX_CAPABILITY_SKILLS_DIR, plugins: skills }] : []),
+      { root: SANDBOX_PLUGINS_DIR, plugins },
+    ], target, options));
   } catch (error) {
     console.warn(`[plugins] server environment not updated: ${error instanceof Error ? error.message : String(error)}`);
   }

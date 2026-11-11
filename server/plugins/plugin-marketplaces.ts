@@ -40,6 +40,7 @@ import { writeFileAtomic } from "../atomic.ts";
 import { guardedFetch } from "../public-fetch.ts";
 import { personalMcpHostRefusal } from "../people/person-connections.ts";
 import { readPluginMcpServers } from "./plugin-mcp.ts";
+import { notePluginFolderChanged } from "../sandbox/sandbox-plugin-digests.ts";
 import {
   BotPluginError,
   insideRoot,
@@ -511,6 +512,7 @@ export class PluginMarketplaces {
       rmSync(join(staging, ".git"), { recursive: true, force: true });
       rmSync(into, { recursive: true, force: true });
       renameSync(staging, into);
+      notePluginFolderChanged(into);
     } finally {
       rmSync(staging, { recursive: true, force: true });
     }
@@ -660,6 +662,9 @@ export class PluginMarketplaces {
         rmSync(target, { recursive: true, force: true });
         mkdirSync(join(target, ".."), { recursive: true });
         renameSync(staging, target);
+        // #3619: a marketplace refresh replaced the clone (and any plugin
+        // folder read from it)
+        notePluginFolderChanged(target);
         const now = this.now();
         state.marketplaces[name] = {
           source: source.id,
@@ -723,6 +728,7 @@ export class PluginMarketplaces {
       if (bots.length) throw new BotPluginError(`${bots.length === 1 ? "A bot still uses" : `${bots.length} bots still use`} plugins from this marketplace. Uninstall them for each bot first.`, "in_use", 409);
       delete state.marketplaces[name];
       rmSync(this.repoDir(name), { recursive: true, force: true });
+      notePluginFolderChanged(this.repoDir(name));
       this.write(state);
     });
   }
@@ -809,12 +815,16 @@ export class PluginMarketplaces {
     if (!folder.href.startsWith(base.href)) throw new BotPluginError("The plugin's path leaves its marketplace.", "invalid_plugin", 422);
     rmSync(target, { recursive: true, force: true });
     mkdirSync(join(target, ".claude-plugin"), { recursive: true });
-    for (const file of [".mcp.json", ".claude-plugin/plugin.json"]) {
-      try {
-        writeFileSync(join(target, file), await this.fetchText(new URL(file, folder).href));
-      } catch {
-        // absent is normal: a plugin need not have either file
+    try {
+      for (const file of [".mcp.json", ".claude-plugin/plugin.json"]) {
+        try {
+          writeFileSync(join(target, file), await this.fetchText(new URL(file, folder).href));
+        } catch {
+          // absent is normal: a plugin need not have either file
+        }
       }
+    } finally {
+      notePluginFolderChanged(target);
     }
   }
 
@@ -869,6 +879,7 @@ export class PluginMarketplaces {
     delete state.installed[key];
     this.write(state);
     rmSync(this.pluginDir(marketplace, plugin), { recursive: true, force: true });
+    notePluginFolderChanged(this.pluginDir(marketplace, plugin));
     return { key, ...installed };
   }
 }
@@ -877,6 +888,7 @@ export class PluginMarketplaces {
 function copyPlain(from: string, to: string): void {
   if (!existsSync(from) || !statSync(from).isDirectory()) throw new BotPluginError("The plugin's folder is missing from its repository.", "invalid_plugin", 422);
   rmSync(to, { recursive: true, force: true });
+  notePluginFolderChanged(to);
   mkdirSync(join(to, ".."), { recursive: true });
   cpSync(from, to, {
     recursive: true,

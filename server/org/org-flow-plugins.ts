@@ -9,6 +9,7 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
 import { copySanitizedPlugin } from "../bots/bot-plugins.ts";
+import { notePluginFolderChanged } from "../sandbox/sandbox-plugin-digests.ts";
 import { installationCapabilityBridge } from "../capabilities/installation-capability-bridge.ts";
 import { ZipReader } from "../zip.ts";
 import type { FlowPluginsDeclaration } from "../perspicax/perspicax-link.ts";
@@ -175,6 +176,7 @@ export class OrgFlowPlugins {
   private takeOut(why: string): void {
     if (existsSync(this.root)) {
       rmSync(this.root, { recursive: true, force: true });
+      notePluginFolderChanged(this.root);
       this.log(`[org-flow-plugins] Pulsatrix Flow taken out (${why})`);
     }
   }
@@ -262,6 +264,7 @@ export class OrgFlowPlugins {
       for (const name of Object.keys(next.loaded)) {
         if (!ids.some((p) => p.name === name)) {
           rmSync(this.loadDir(name), { recursive: true, force: true });
+          notePluginFolderChanged(this.loadDir(name));
           delete next.loaded[name];
         }
       }
@@ -324,6 +327,8 @@ export class OrgFlowPlugins {
       if (existsSync(target)) renameSync(target, before);
       try { renameSync(prepared, target); }
       catch (error) { if (existsSync(before)) renameSync(before, target); throw error; }
+      // #3619: the turn's plugin copy computes this folder's digest again
+      finally { notePluginFolderChanged(target); }
     } finally { rmSync(staging, { recursive: true, force: true }); }
   }
 

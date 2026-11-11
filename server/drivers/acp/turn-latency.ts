@@ -17,7 +17,10 @@
 //   queueBy: admit (checks before the turn starts), prewarm (a warm being
 //   joined), compact, context (selection, soul, skills), mcp (the tool
 //   servers' sign-in refresh and probe), connector (the account's connection),
-//   place (where it runs: workspace, sandbox, mounts), prompt, recall,
+//   place (where it runs: workspace, sandbox, the computer, what is left of
+//   the stage), mounts (#3619: the person's and the plugins' tool servers),
+//   plugins (the plugin copy into the person's environment), checkpoint
+//   (the project folder's snapshot), browser (the built-in browser), prompt, recall,
 //   access (the turn's credentials, a typed command), slot (an engine start
 //   slot), send, dispatch (pictures, hand-off to the engine).
 //   setupBy: prepare (sign-in check, command, spawn contract), init (process
@@ -113,7 +116,7 @@ export function noteTurnActivity(trace: TurnLatency | undefined, kind: string, a
 
 type Mark = readonly [step: string, at: number];
 
-const QUEUE_PARTS = ["admit", "prewarm", "compact", "context", "mcp", "connector", "place", "prompt", "recall", "access", "slot", "send", "dispatch"] as const;
+const QUEUE_PARTS = ["admit", "prewarm", "compact", "context", "mcp", "connector", "place", "mounts", "plugins", "checkpoint", "browser", "prompt", "recall", "access", "slot", "send", "dispatch"] as const;
 const QUEUE_STEP: Record<string, (typeof QUEUE_PARTS)[number]> = {
   start: "admit",
   "prewarm-joined": "prewarm",
@@ -123,6 +126,14 @@ const QUEUE_STEP: Record<string, (typeof QUEUE_PARTS)[number]> = {
   "skills-selected": "context",
   "mcp-mounted": "mcp",
   integrations: "connector",
+  // #3619: the parts of place, each closed by its own step
+  "place-workspace": "place",
+  "mounts-ready": "mounts",
+  "plugins-synced": "plugins",
+  "place-computer": "place",
+  "checkpoint-taken": "checkpoint",
+  "place-browser": "place",
+  "browser-ready": "browser",
   "prompt-start": "place",
   "prompt-sections": "prompt",
   "state.prompt-built": "prompt",

@@ -19,6 +19,7 @@ describe("turn plugin preparation", () => {
       mountUserSandbox: vi.fn(), mountPersonalMcp: vi.fn(), mountPluginMcp: vi.fn(),
       store: { pinTaskCwd: () => "/fixture/task", isConfidentialThread: () => false, taskByThread: () => ({}) },
       syncPluginsForTurn,
+      turnTrace: vi.fn(),
       directTurnClaimIsCurrent: () => true, DirectTurnSetupCancelled: class extends Error {},
     } as unknown as StartTurnHost;
     const state = createTurnState({ botId: "bot", text: "Run the pass", opts: {}, startTurn: async () => {} });

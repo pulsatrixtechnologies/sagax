@@ -16,6 +16,7 @@ import { SandboxdRequestError, validSandboxdUrl } from "./user-sandbox-client.ts
 import { sandboxKeyForPrincipal } from "./user-sandbox-spec.ts";
 import { UserSandboxUnavailable } from "./user-sandbox-errors.ts";
 import { SandboxExecQueue } from "./sandbox-exec-queue.ts";
+import { sandboxPluginPresence } from "./sandbox-plugins.ts";
 import { provisionerNotReached, provisionerUnreachable, SANDBOX_CUT_WHILE_STARTING_MESSAGE, SANDBOX_STARTING_CODE, SANDBOX_STILL_STARTING_MESSAGE, sandboxStarting, SANDBOX_STARTING_RETRY_DELAY_MS, SANDBOX_STARTING_RETRY_MS, sandboxWakeSettingsFromEnv, type SandboxClusterWaker, type SandboxWakeSettings, type WakeMode } from "./sandbox-k8s-wake.ts";
 import type { SandboxWakeWaitingFor } from "../../shared/sandbox-wake.ts";
 import { reportBackgroundError } from "../background-error.ts";
@@ -117,6 +118,14 @@ export class UserSandboxManager {
   /** The only way to name a sandbox: by person. There is no per-bot key. */
   keyFor(principalId: string): string {
     return sandboxKeyForPrincipal(this.options.instance, principalId);
+  }
+
+  /** #3619: the environment a bot of this person reaches, as the plugin
+   * copy remembers what it holds: the person's one sandbox on its
+   * provisioner (a bot on the Kubernetes canary reaches another /workspace
+   * than one on Docker). */
+  environmentOf(principalId: string, botId?: string): string {
+    return `${principalId}\n${this.options.backendFor?.(principalId, botId) ?? "docker"}`;
   }
 
   /** Docker, unless this person or this bot is on the Kubernetes canary.
@@ -652,7 +661,12 @@ export class UserSandboxManager {
     this.refuseIfOut(principalId);
     const key = this.keyFor(principalId);
     const client = this.clientFor(principalId, undefined, "wake");
-    await client.remove(key);
+    try {
+      await client.remove(key);
+    } finally {
+      // #3619: /workspace and the plugins copied there are gone
+      sandboxPluginPresence.forgetPerson(principalId);
+    }
     await client.ensure(key);
     return this.status(principalId);
   }
@@ -676,6 +690,7 @@ export class UserSandboxManager {
     for (const client of this.clients()) {
       try { await client.remove(key); } catch (error) { errors.push(error); }
     }
+    sandboxPluginPresence.forgetPerson(principalId);
     if (errors.length) throw errors[0];
     if (this.pending.delete(principalId)) this.persist();
   }
@@ -713,6 +728,7 @@ export class UserSandboxManager {
         for (const client of this.clients()) {
           try { await client.remove(key); } catch (error) { errors.push(error); }
         }
+        sandboxPluginPresence.forgetPerson(principalId);
         if (errors.length) throw errors[0];
         this.pending.delete(principalId);
         removed.push(principalId);

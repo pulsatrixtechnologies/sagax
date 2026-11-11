@@ -5,6 +5,8 @@ import { createHash } from "node:crypto";
 import { closeSync, constants, fsyncSync, mkdirSync, openSync, readdirSync, readSync, renameSync, writeSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
+import { yieldToEventLoop } from "../harness/http.ts";
+
 export interface WorkspaceFile {
   path: string;
   sha256: string;
@@ -26,11 +28,16 @@ export interface WorkspaceCopyResult {
 
 const CHUNK = 1024 * 1024;
 
+/** One read buffer for every hash: hashFile is synchronous, so it is never
+ * shared by two reads at once (#3619: a fresh 1 MiB per file made a large
+ * folder's digest mostly allocation). */
+let hashBuffer: Buffer | null = null;
+
 function hashFile(path: string): { sha256: string; size: number } {
   const fd = openSync(path, constants.O_RDONLY);
   try {
     const hash = createHash("sha256");
-    const buffer = Buffer.alloc(CHUNK);
+    const buffer = (hashBuffer ??= Buffer.allocUnsafe(CHUNK));
     let size = 0;
     for (;;) {
       const n = readSync(fd, buffer, 0, buffer.length, null);
@@ -44,11 +51,11 @@ function hashFile(path: string): { sha256: string; size: number } {
   }
 }
 
-/** Regular files under `root`, relative, sorted. A symlink is refused and not followed. */
-export function workspaceManifest(root: string): WorkspaceManifest {
+/** Every regular file under `root` (absolute and relative path), in walk
+ * order. A symlink or a non-regular file is refused and not followed. */
+function* workspaceFiles(root: string): Generator<{ abs: string; rel: string }> {
   const base = resolve(root);
-  const files: WorkspaceFile[] = [];
-  const visit = (dir: string) => {
+  function* visit(dir: string): Generator<{ abs: string; rel: string }> {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = join(dir, entry.name);
       const rel = relative(base, path);
@@ -58,15 +65,40 @@ export function workspaceManifest(root: string): WorkspaceManifest {
       }
       if (entry.isSymbolicLink()) throw new Error(`refusing a symlink: ${rel}`);
       if (entry.isDirectory()) {
-        visit(path);
+        yield* visit(path);
         continue;
       }
       if (!entry.isFile()) throw new Error(`refusing a non-regular file: ${rel}`);
-      files.push({ path: rel.split(sep).join("/"), ...hashFile(path) });
+      yield { abs: path, rel: rel.split(sep).join("/") };
     }
-  };
-  visit(base);
-  files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  }
+  yield* visit(base);
+}
+
+const byPath = (a: WorkspaceFile, b: WorkspaceFile) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+
+/** Regular files under `root`, relative, sorted. A symlink is refused and not followed. */
+export function workspaceManifest(root: string): WorkspaceManifest {
+  const files: WorkspaceFile[] = [];
+  for (const file of workspaceFiles(root)) files.push({ path: file.rel, ...hashFile(file.abs) });
+  files.sort(byPath);
+  return { files };
+}
+
+/** {@link workspaceManifest} read in slices of at most `sliceMs` of the
+ * main thread, giving the event loop back between files (#3619: a plugin's
+ * digest is computed on a turn's path when its folder changed). */
+export async function workspaceManifestSliced(root: string, sliceMs = 8): Promise<WorkspaceManifest> {
+  const files: WorkspaceFile[] = [];
+  let sliceStart = performance.now();
+  for (const file of workspaceFiles(root)) {
+    if (performance.now() - sliceStart >= sliceMs) {
+      await yieldToEventLoop();
+      sliceStart = performance.now();
+    }
+    files.push({ path: file.rel, ...hashFile(file.abs) });
+  }
+  files.sort(byPath);
   return { files };
 }
 

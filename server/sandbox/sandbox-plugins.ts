@@ -12,16 +12,20 @@
 //     owner reads, so it never lands in another person's environment.
 //   - Only what the install kept (bot-plugins.ts strips hooks, MCP and LSP
 //     servers) and no symlink (workspaceManifest refuses them).
-//   - The folder is replaced whole, a digest marker says what is there, and
-//     an unchanged plugin costs one read of the marker.
+//   - The folder is replaced whole and a digest marker says what is there.
+//     #3619: what an environment holds is remembered (SandboxPluginPresence)
+//     and each folder's digest too (sandbox-plugin-digests.ts): a turn whose
+//     plugins did not change sends no command and reads no plugin file; the
+//     markers left to check are read by one command for the whole turn.
 //   - Copies may run at once into one environment (2026-11-04, an organization server: every
 //     bot of a person resynced a refreshed Flow on its next turn): each copy
 //     stages and unpacks under its own name, and the swap that loses a race
 //     to an identical copy counts as copied.
 import { execFile } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 
 import type { SandboxExecInput } from "./sandboxd-core.ts";
+import { manifestDigest, pluginFolderDigests, type PluginFolderDigests } from "./sandbox-plugin-digests.ts";
 import { workspaceManifest } from "./sandbox-workspace-copy.ts";
 
 /** Where the plugins land in the person's environment (/workspace persists). */
@@ -41,9 +45,7 @@ export interface SandboxPluginExec {
 
 /** The plugin's content digest: every file's path, size and sha256. */
 export function pluginDigest(dir: string): string {
-  const hash = createHash("sha256");
-  for (const file of workspaceManifest(dir).files) hash.update(`${file.path}\0${file.size}\0${file.sha256}\n`);
-  return hash.digest("hex");
+  return manifestDigest(workspaceManifest(dir));
 }
 
 function pluginArchive(dir: string): Promise<Buffer> {
@@ -134,58 +136,193 @@ export function execFailureReason(result: { exitCode: number | null; stderr: str
 
 const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error)).slice(0, 300);
 
+/** #3619: a confirmation older than this is read again (one command for
+ * all the markers of the turn): what changes a person's /workspace outside
+ * this server (another server, the provisioner, a command that does not
+ * name the plugin folders) sends no signal here. */
+export const PLUGIN_PRESENCE_RECONFIRM_MS = 10 * 60_000;
+
+/** #3619: what each person's environment holds, per (environment, root,
+ * plugin name): the digest last confirmed there (its marker read equal, or
+ * a copy that succeeded). A turn whose plugins all match sends no command.
+ * An environment is `<person>` or `<person>\n<backend>`: two bots of one
+ * person share it, two people never do. Forgotten when the environment's
+ * /workspace is thrown away (reset, account deletion, the deletion after a
+ * sign-out; user-sandbox-manager.ts), when a bot's command names a plugin
+ * folder, when a copy fails, and after a server restart (memory only). */
+export class SandboxPluginPresence {
+  private readonly rows = new Map<string, Map<string, { digest: string; at: number }>>();
+  private readonly epochs = new Map<string, number>();
+  private readonly now: () => number;
+  constructor(now: () => number = Date.now) { this.now = now; }
+
+  private static person(environment: string): string { return environment.split("\n")[0]!; }
+  private static key(root: string, name: string): string { return `${root}\n${name}`; }
+
+  /** Taken before a check: a confirmation made after the person's
+   * environment was forgotten in between is not kept. */
+  epoch(environment: string): number { return this.epochs.get(SandboxPluginPresence.person(environment)) ?? 0; }
+
+  /** The digest confirmed lately in this environment for this plugin. */
+  confirmed(environment: string, root: string, name: string): string | undefined {
+    const row = this.rows.get(environment)?.get(SandboxPluginPresence.key(root, name));
+    return row && this.now() - row.at < PLUGIN_PRESENCE_RECONFIRM_MS ? row.digest : undefined;
+  }
+
+  confirm(environment: string, root: string, name: string, digest: string, epoch: number): void {
+    if (this.epoch(environment) !== epoch) return;
+    let held = this.rows.get(environment);
+    if (!held) {
+      held = new Map();
+      this.rows.set(environment, held);
+      if (this.rows.size > 5_000) this.rows.delete(this.rows.keys().next().value!);
+    }
+    held.set(SandboxPluginPresence.key(root, name), { digest, at: this.now() });
+  }
+
+  forget(environment: string, root: string, name: string): void {
+    this.rows.get(environment)?.delete(SandboxPluginPresence.key(root, name));
+  }
+
+  /** The person's /workspace may have lost or changed its plugin folders:
+   * every environment of theirs is checked again at its next turn. */
+  forgetPerson(person: string): void {
+    this.epochs.set(person, (this.epochs.get(person) ?? 0) + 1);
+    for (const environment of this.rows.keys()) {
+      if (SandboxPluginPresence.person(environment) === person) this.rows.delete(environment);
+    }
+  }
+
+  /** A bot's command that names a plugin folder may have changed it. */
+  noteCommand(person: string, command: string): void {
+    if (command.includes(SANDBOX_PLUGINS_DIR) || command.includes(SANDBOX_CAPABILITY_SKILLS_DIR)) this.forgetPerson(person);
+  }
+}
+
+/** The server's one memory of what the environments hold. */
+export const sandboxPluginPresence = new SandboxPluginPresence();
+
 export interface PluginSyncOptions {
   /** Failed copies to wait on (one store per server), with the scope of
    * this environment (the person). Without it every call copies. */
   failures?: PluginCopyFailures;
   scope?: string;
+  /** #3619: what the environment holds, and its name there. With both, a
+   * plugin confirmed there costs no command, and the others' markers are
+   * read in one command for the whole call. */
+  presence?: SandboxPluginPresence;
+  environment?: string;
+  /** The folder digests (one store per server by default). */
+  digests?: PluginFolderDigests;
 }
 
 /** Copy each changed plugin into `root/<name>` in the environment. */
-export async function syncPluginsToSandbox(
+export function syncPluginsToSandbox(
   plugins: ReadonlyArray<{ name: string; dir: string }>,
   target: SandboxPluginExec,
   root = SANDBOX_PLUGINS_DIR,
   options: PluginSyncOptions = {},
 ): Promise<PluginSyncResult> {
+  return syncPluginRootsToSandbox([{ root, plugins }], target, options);
+}
+
+/** {@link syncPluginsToSandbox} for several roots at once: with an
+ * environment memory, the markers of every root are read in one command. */
+export async function syncPluginRootsToSandbox(
+  groups: ReadonlyArray<{ root: string; plugins: ReadonlyArray<{ name: string; dir: string }> }>,
+  target: SandboxPluginExec,
+  options: PluginSyncOptions = {},
+): Promise<PluginSyncResult> {
   const out: PluginSyncResult = { copied: [], unchanged: [], skipped: [] };
-  const scope = `${options.scope ?? ""}\n${root}`;
   const failures = options.failures;
-  for (const plugin of plugins) {
-    if (!NAME.test(plugin.name)) { out.skipped.push({ name: plugin.name, reason: "invalid name" }); continue; }
-    let digest: string;
-    try { digest = pluginDigest(plugin.dir); } catch (error) {
-      out.skipped.push({ name: plugin.name, reason: error instanceof Error ? error.message : String(error) });
-      continue;
+  const digests = options.digests ?? pluginFolderDigests;
+  const presence = options.presence && options.environment !== undefined ? { memory: options.presence, environment: options.environment } : null;
+  const epoch = presence ? presence.memory.epoch(presence.environment) : 0;
+  const pending: Array<{ plugin: { name: string; dir: string }; root: string; digest: string; scope: string; known?: string }> = [];
+  const rows = groups.flatMap(({ root, plugins }) => plugins.map((plugin) => ({ root, plugin })));
+  // the folders' digests at once: each is its signature alone while the
+  // folder did not change (sandbox-plugin-digests.ts)
+  const computed = await Promise.allSettled(rows.map(({ plugin }) => (NAME.test(plugin.name) ? digests.digest(plugin.dir) : Promise.reject(new Error("invalid name")))));
+  rows.forEach(({ root, plugin }, index) => {
+    const scope = `${options.scope ?? ""}\n${root}`;
+    const result = computed[index]!;
+    if (result.status === "rejected") {
+      out.skipped.push({ name: plugin.name, reason: result.reason instanceof Error ? result.reason.message : String(result.reason) });
+      return;
     }
+    const digest = result.value;
     const held = failures?.pending(scope, plugin.name, digest);
-    if (held) { (out.deferred ??= []).push({ name: plugin.name, ...held }); continue; }
+    if (held) { (out.deferred ??= []).push({ name: plugin.name, ...held }); return; }
+    const known = presence?.memory.confirmed(presence.environment, root, plugin.name);
+    if (known === digest) {
+      out.unchanged.push(plugin.name);
+      return;
+    }
+    // a changed plugin whose old content was confirmed there is copied
+    // without reading its marker again
+    pending.push({ plugin, root, digest, scope, ...(known !== undefined ? { known } : {}) });
+  });
+  if (!pending.length) return out;
+  // #3619: the environment's markers, all in one command, when this call
+  // remembers what the environment holds; else each copy reads its own
+  let markers: Map<string, string> | null = null;
+  let unread: string | null = null;
+  const toRead = pending.filter((row) => row.known === undefined);
+  if (presence && toRead.length) {
+    try { markers = await readMarkers(toRead.map((row) => `${row.root}/${row.plugin.name}`), target); } catch (error) {
+      unread = `copy failed: ${errorText(error)}`;
+    }
+  }
+  for (const { plugin, root, digest, scope, known } of pending) {
     const fail = (reason: string) => {
+      presence?.memory.forget(presence.environment, root, plugin.name);
       const next = failures?.failed(scope, plugin.name, digest, reason);
       out.skipped.push({ name: plugin.name, reason: next ? `${reason}; tried again in ${Math.round((next.retryAt - Date.now()) / 60_000) || 1} min or when it changes` : reason });
     };
+    // a command the environment did not run (busy, the transport): the
+    // reason is kept, and the next plugin is still tried
+    if (unread && known === undefined) { fail(unread); continue; }
     try {
-      const outcome = await copyOne(plugin, digest, target, root);
+      const outcome = await copyOne(plugin, digest, target, root, known ?? (markers ? markers.get(`${root}/${plugin.name}`) ?? "" : undefined));
       if (outcome === "unchanged") out.unchanged.push(plugin.name);
       else if (outcome === "copied") out.copied.push(plugin.name);
-      else if (outcome.permanent) out.skipped.push({ name: plugin.name, reason: outcome.reason });
-      else { fail(outcome.reason); continue; }
+      else if (outcome.permanent) {
+        presence?.memory.forget(presence.environment, root, plugin.name);
+        out.skipped.push({ name: plugin.name, reason: outcome.reason });
+      } else { fail(outcome.reason); continue; }
+      if (presence && (outcome === "unchanged" || outcome === "copied")) presence.memory.confirm(presence.environment, root, plugin.name, digest, epoch);
       failures?.succeeded(scope, plugin.name);
     } catch (error) {
-      // a command the environment did not run (busy, the transport): the
-      // reason is kept, and the next plugin is still tried
       fail(`copy failed: ${errorText(error)}`);
     }
   }
   return out;
 }
 
+/** #3619: the markers of these folders, read by one command. A folder with
+ * no marker reads as empty. */
+async function readMarkers(dests: readonly string[], target: SandboxPluginExec): Promise<Map<string, string>> {
+  const result = await target.exec({
+    argv: ["sh", "-c", 'for d in "$@"; do printf "%s\\t" "$d"; cat -- "$d/.sagax-digest" 2>/dev/null; printf "\\n"; done', "sh", ...dests],
+    timeoutSec: 30,
+    maxOutputBytes: dests.reduce((sum, dest) => sum + dest.length + 72, 256),
+  });
+  if (result.exitCode !== 0) throw new Error(`reading the plugin markers: ${execFailureReason(result, 30)}`);
+  const markers = new Map<string, string>();
+  for (const line of result.stdout.split("\n")) {
+    const tab = line.indexOf("\t");
+    if (tab > 0) markers.set(line.slice(0, tab), line.slice(tab + 1).trim());
+  }
+  return markers;
+}
+
 type CopyOutcome = "copied" | "unchanged" | { reason: string; permanent: boolean };
 
-async function copyOne(plugin: { name: string; dir: string }, digest: string, target: SandboxPluginExec, root: string): Promise<CopyOutcome> {
+/** `known`: the marker already read for this call (readMarkers). */
+async function copyOne(plugin: { name: string; dir: string }, digest: string, target: SandboxPluginExec, root: string, known?: string): Promise<CopyOutcome> {
   const dest = `${root}/${plugin.name}`;
-  const marker = await target.exec({ argv: ["sh", "-c", 'cat -- "$SAGAX_DEST/.sagax-digest" 2>/dev/null || true'], env: { SAGAX_DEST: dest }, timeoutSec: 30, maxOutputBytes: 256 });
-  if (marker.stdout.trim() === digest) return "unchanged";
+  const marker = known ?? (await target.exec({ argv: ["sh", "-c", 'cat -- "$SAGAX_DEST/.sagax-digest" 2>/dev/null || true'], env: { SAGAX_DEST: dest }, timeoutSec: 30, maxOutputBytes: 256 })).stdout.trim();
+  if (marker === digest) return "unchanged";
   let archive: Buffer;
   try { archive = await pluginArchive(plugin.dir); } catch (error) {
     return { reason: error instanceof Error ? error.message : String(error), permanent: true };

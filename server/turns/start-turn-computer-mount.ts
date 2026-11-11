@@ -74,6 +74,7 @@ export function createComputerMountStartTurn(host: StartTurnHost) {
     surfaceOfComputerKind,
     turnCheckpoints,
     turnResourceOwners,
+    turnTrace,
     vps,
     vpsThreadEnded,
     vpsThreadStarted,
@@ -312,9 +313,12 @@ export function createComputerMountStartTurn(host: StartTurnHost) {
     // snapshot() absorbs failures, so checkpointing may delay but never fail
     // a turn.
     if (state.checkpointCwd) {
+      // #3619: the parts of the turn's `place` wait ([turn-latency] queueBy)
+      if (!state.warmOnly) turnTrace(state.threadId, "place-computer");
       // Pinned by this dispatch: a sibling thread's snapshot in the same
       // folder must not reclaim this turn's "before" state while it runs.
       const before = await checkpoints.snapshot(state.bot.id, state.checkpointCwd, `turn ${state.threadId.slice(0, 8)}`, undefined, { pin: state.dispatchClaimId });
+      if (!state.warmOnly) turnTrace(state.threadId, "checkpoint-taken");
       if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) {
         if (before) void checkpoints.release(state.bot.id, state.checkpointCwd, state.dispatchClaimId);
         throw new DirectTurnSetupCancelled("turn stopped during checkpoint");
@@ -365,7 +369,9 @@ export function createComputerMountStartTurn(host: StartTurnHost) {
       state.instance.adapter.capabilities.browserMcp === true
     ) {
       const selectedProfile = state.liveBot.browserProfile;
+      if (!state.warmOnly) turnTrace(state.threadId, "place-browser");
       state.browser = await browserIntegration(state.bot.id, selectedProfile, { threadId: state.threadId, generation: state.dispatchClaimId });
+      if (!state.warmOnly) turnTrace(state.threadId, "browser-ready");
       if (state.browser) state.integrations.browser = state.browser.integration;
       // The browser lost its frame source when the Electron surface was
       // removed: previewCapture is set by the computer branches above, and

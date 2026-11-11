@@ -14,6 +14,7 @@ import {
   revertLibrarySkillReview,
 } from "./skill-person-edit.ts";
 import { botsUsingSharedSkill } from "./skill-share.ts";
+import { notePluginFolderChanged } from "../sandbox/sandbox-plugin-digests.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 
@@ -165,6 +166,10 @@ export function createPersonalSkillRoutes(deps: {
     } catch (error) {
       const status = (error as { status?: number }).status ?? 500;
       return json(res, status, { error: status < 500 && error instanceof Error ? error.message : "Your skills could not be read or saved." });
+    } finally {
+      // #3619: a personal skill saved, renamed, switched or removed: the
+      // turn's copy computes this folder's digest again
+      if (method !== "GET") notePluginFolderChanged(root);
     }
   };
 }

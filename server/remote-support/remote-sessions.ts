@@ -59,7 +59,7 @@ import { remoteJoin, safeRemoteDir, scpSafePath, sensitiveRemoteDir } from "../.
 import type { AdminSessionInput } from "../../shared/remote-session-admin.ts";
 import type { RemoteSessionActionEvent } from "./remote-session-actions-audit.ts";
 import { remoteCommandReadOnly } from "./remote-session-exec.ts";
-import { createTunnelQueue, isTunnelRefusal, type TunnelRefusal } from "./tunnel-queue.ts";
+import { createTunnelQueue, isTunnelRefusal, SESSION_STOP_TIME_MS, TUNNEL_PROBE_TIME_MS, TUNNEL_PROBE_WAIT_MAX_MS, type TunnelRefusal } from "./tunnel-queue.ts";
 
 /** A call the tunnel queue never sent. `closed` starts with the words the
  * host router reads as "not sent" (host-computer-router.ts NOT_SENT), so it
@@ -138,8 +138,6 @@ export const INVENTORY_RETRY_MS = 30_000;
 export const EXEC_OUTPUT_MAX = 64 * 1024;
 export const EXEC_TIMEOUT_DEFAULT_MS = 30_000;
 export const EXEC_TIMEOUT_MAX_MS = 120_000;
-/** The tunnel probe after a 255 (`tailcat ping --timeout=8s`), with room to start. */
-const REACHABLE_TIMEOUT_MS = 12_000;
 
 /** `uname -s` answers Darwin or Linux. Anything else is not an answer: the
  * OS stays unknown (null) and is asked again, never Windows by default. */
@@ -239,6 +237,8 @@ export type RemoteSessionDeps = {
   systemSsh?: () => string | null;
   /** How long a tailcat call waits for its turn on a busy tunnel (tests). */
   tunnelWaitMaxMs?: number;
+  /** How long a tunnel probe waits for its turn (tests). */
+  tunnelProbeWaitMaxMs?: number;
   /** The per-session action audit (exec, file transfers), for the Remote
    * Sessions logs view. The command is redacted again at the sink. */
   actionsAudit?: { write(event: RemoteSessionActionEvent): void };
@@ -266,7 +266,7 @@ type RemoteSessionEnv = {
   /** The same, telling a refusal of the queue (never sent) apart. */
   sshQueued: (session: StoredSession, command: string, timeoutMs: number, force?: boolean) => Promise<CommandResult | TunnelRefusal | null>;
   /** One tailcat call for a session, after the ones already on its tunnel. */
-  tunnelRun: (session: StoredSession, argv: (tunnel: { keyPath: string; address: string }) => string[], timeoutMs: number, force?: boolean) => Promise<CommandResult | TunnelRefusal | null>;
+  tunnelRun: (session: StoredSession, argv: (tunnel: { keyPath: string; address: string }) => string[], timeoutMs: number, force?: boolean, ownWaitMs?: number) => Promise<CommandResult | TunnelRefusal | null>;
   /** The session closed: drop its queue and stop its running call. */
   endTunnel: (session: StoredSession) => Promise<void>;
   reading: Map<string, Promise<void>>;
@@ -363,11 +363,12 @@ function buildRemoteSessionEnv(deps: RemoteSessionDeps): RemoteSessionEnv {
     };
   };
   /** One tailcat call for a session, in its tunnel's queue. `force`: the
-   * session's own stop command, sent while it closes. */
-  const tunnelRun = (session: StoredSession, argv: (tunnel: { keyPath: string; address: string }) => string[], timeoutMs: number, force = false): Promise<CommandResult | TunnelRefusal | null> => {
+   * session's own stop command, sent while it closes. `ownWaitMs`: a wait
+   * for its turn shorter than a command's (the tunnel probe, #3505). */
+  const tunnelRun = (session: StoredSession, argv: (tunnel: { keyPath: string; address: string }) => string[], timeoutMs: number, force = false, ownWaitMs?: number): Promise<CommandResult | TunnelRefusal | null> => {
     const tunnel = tunnelOf(session);
     if (!tunnel) return Promise.resolve(null);
-    return queue.submit(tunnel.keyPath, argv(tunnel), timeoutMs, force ? () => true : stillLive(session, tunnel.keyPath));
+    return queue.submit(tunnel.keyPath, argv(tunnel), timeoutMs, force ? () => true : stillLive(session, tunnel.keyPath), ownWaitMs);
   };
   /** The session closed: its waiting calls are refused (never sent) and the
    * running one stopped; resolves once the tunnel is free. */
@@ -651,7 +652,7 @@ function createRemoteSessionLifecycle(env: RemoteSessionEnv) {
         // the waiting calls are refused and the running one stopped first,
         // so the stop command never waits behind them (#3430)
         await endTunnel(session);
-        try { if (!session.osGuessed) await ssh(session, stopCommand(session.id, session.os), 8_000, true); } catch { /* the screen still closes */ }
+        try { if (!session.osGuessed) await ssh(session, stopCommand(session.id, session.os), SESSION_STOP_TIME_MS, true); } catch { /* the screen still closes */ }
         if (ours) {
           // Delete the address and leave a `closed` marker first, so even if
           // Perspicax cannot be reached the tunnel no longer resolves here and
@@ -724,7 +725,7 @@ function createRemoteSessionLifecycle(env: RemoteSessionEnv) {
         // the waiting calls are refused and the running one stopped first,
         // so the stop command never waits behind them (#3430)
         await endTunnel(session);
-        try { if (!session.osGuessed) await ssh(session, stopCommand(session.id, session.os), 8_000, true); } catch { /* the screen still closes */ }
+        try { if (!session.osGuessed) await ssh(session, stopCommand(session.id, session.os), SESSION_STOP_TIME_MS, true); } catch { /* the screen still closes */ }
         if (sagaxOpened(session)) {
           const dir = supportDir?.();
           if (dir) await markSessionClosed(dir, session.code).catch(() => {});
@@ -987,11 +988,12 @@ function createRemoteSessionOps(env: RemoteSessionEnv) {
     /** Whether the session's tunnel still answers (#3492): one tailcat ping,
      * in the tunnel's queue like every call on that key (#3430). Null when
      * it could not be asked: not a connected session of this person and bot,
-     * no tunnel here, or refused by the queue. */
+     * no tunnel here, or refused by the queue. The ping waits only a few
+     * seconds for its turn (#3505): a tunnel busy longer is in use. */
     async reachable(input: { principalId: string; botId: string; id: string }): Promise<boolean | null> {
       const session = owned(normPrincipal(input.principalId), input.botId, input.id);
       if (!session || session.state !== "connected") return null;
-      const out = await tunnelRun(session, (tunnel) => tailcatPingArgv(tailcatBin(), tunnel.keyPath, tunnel.address), REACHABLE_TIMEOUT_MS);
+      const out = await tunnelRun(session, (tunnel) => tailcatPingArgv(tailcatBin(), tunnel.keyPath, tunnel.address), TUNNEL_PROBE_TIME_MS, false, deps.tunnelProbeWaitMaxMs ?? TUNNEL_PROBE_WAIT_MAX_MS);
       if (!out || isTunnelRefusal(out)) return null;
       return out.code === 0;
     },

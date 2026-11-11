@@ -120,6 +120,11 @@ export function cleanReason(raw: unknown): string {
 
 export { hostInstallCommand };
 
+/** How long the way to close a session the host has not taken is kept: far
+ * longer than any caller waits for the host (a minute or two). */
+const UNCONNECTED_KEEP_MS = 10 * 60_000;
+const samePerson = (principalId: string) => principalId.trim().toLowerCase();
+
 /** A status answer that means the session is done (or never coming). */
 function finished(text: string): "connected" | "over" | null {
   const state = answerObject(text.split("\n")[0])?.state;
@@ -164,6 +169,9 @@ export function createUnattendedHosts(deps: {
   const tries = deps.statusTries ?? 30;
   /** Sessions opened from this page, per host: revoke ends them here too. */
   const openedFor = new Map<string, Set<string>>();
+  /** Session id: how to close at Perspicax a session opened here that the
+   * host has not taken yet (#3505). Kept for `UNCONNECTED_KEEP_MS`. */
+  const unconnected = new Map<string, { principalId: string; seatPrincipal: string; seatFor?: UnattendedSeatTarget; code: string; local: RemoteSupportContext; at: number }>();
   const revoked = new Set<string>();
 
   /** One short call in the person's name; the link ends right after. */
@@ -317,12 +325,41 @@ export function createUnattendedHosts(deps: {
         return { ok: false, error: "refused", message: out.error };
       }
       revoked.delete(hostId);
+      for (const [id, entry] of unconnected) if (now() - entry.at >= UNCONNECTED_KEEP_MS) unconnected.delete(id);
+      unconnected.set(out.session, {
+        principalId: samePerson(viewer.principalId),
+        seatPrincipal: owner ?? viewer.principalId,
+        ...(!owner && options.seatFor ? { seatFor: options.seatFor } : {}),
+        code: out.code,
+        local,
+        at: now(),
+      });
       const ids = openedFor.get(hostId) ?? new Set<string>();
       ids.add(out.session);
       openedFor.set(hostId, ids);
       auditOpen(true, seat.botId);
       void follow(seat, local, hostId, out.code).catch(reportBackgroundError);
       return { ok: true, code: out.code, botId: seat.botId, threadId: seat.threadId, session: out.session };
+    },
+
+    /** Close at Perspicax (cancelled) a session this person opened here
+     * that the host never took (#3505): left open, it counts in the
+     * gateway's limit of waiting sessions. Through the same seat as its
+     * open, once; another person's session is never closed. */
+    async closeUnconnected(viewer: UnattendedHostsViewer, sessionId: string): Promise<boolean> {
+      const entry = unconnected.get(sessionId);
+      if (!entry || entry.principalId !== samePerson(viewer.principalId)) return false;
+      unconnected.delete(sessionId);
+      const seat = await deps.seat(entry.seatPrincipal, entry.seatFor).catch(() => ({ error: NO_SEAT }));
+      if ("error" in seat) return false;
+      try {
+        const answer = await handleRemoteSupportCall({ name: "remote_support_close", args: { code: entry.code, outcome: "cancelled" }, local: entry.local, post: seat.call });
+        return !answer.isError;
+      } catch {
+        return false;
+      } finally {
+        await seat.end().catch(reportBackgroundError);
+      }
     },
 
     /** A one-time code to enroll a new computer for unattended access

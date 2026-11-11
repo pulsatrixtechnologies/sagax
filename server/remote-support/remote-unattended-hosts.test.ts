@@ -136,6 +136,35 @@ describe("enrolled hosts at Perspicax", () => {
     }));
   });
 
+  // #3505: a session the host never took stayed open at the gateway and
+  // counted in its limit of waiting sessions.
+  it("closes at the gateway a session the host never took, once, through the seat that opened it", async () => {
+    const { hosts, calls, seats, ended, dir } = make({
+      answers: {
+        remote_support_open: () => ok({ code: "K7QMNP", state: "created", client: "app" }),
+        remote_support_status: () => ok({ state: "created", client: "app" }),
+        remote_support_close: () => ok({ state: "cancelled" }),
+      },
+    });
+    const seatFor = { botId: "bot-1", threadId: "t-1" };
+    const out = await hosts.open(viewer, HOST, { seatFor });
+    expect(out).toMatchObject({ ok: true, session: "0123456789ab" });
+    // another person never closes it
+    expect(await hosts.closeUnconnected({ principalId: "other@example.org" }, "0123456789ab")).toBe(false);
+    expect(calls.filter((c) => c.tool === "remote_support_close")).toEqual([]);
+    expect(await hosts.closeUnconnected(viewer, "0123456789ab")).toBe(true);
+    expect(calls.filter((c) => c.tool === "remote_support_close")).toEqual([{ tool: "remote_support_close", args: { code: "K7QMNP", outcome: "cancelled" }, principal: "tech@example.org" }]);
+    expect(seats.at(-1)).toEqual({ principalId: "tech@example.org", seatFor });
+    // the closed marker is left, so a late status cannot bring the tunnel back
+    expect(existsSync(join(dir, "sessions", "K7QMNP", "closed"))).toBe(true);
+    await vi.waitFor(() => expect(ended).toHaveBeenCalledTimes(3));
+    // once: a second ask posts nothing
+    expect(await hosts.closeUnconnected(viewer, "0123456789ab")).toBe(false);
+    expect(calls.filter((c) => c.tool === "remote_support_close")).toHaveLength(1);
+    // a session this server never opened is not closed
+    expect(await hosts.closeUnconnected(viewer, "ffffffffffff")).toBe(false);
+  });
+
   it("refuses another person's host even when the list still returns the whole org", async () => {
     const { hosts, calls, audit } = make({
       answers: {

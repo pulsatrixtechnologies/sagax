@@ -53,7 +53,7 @@ afterEach(() => {
 
 const ok = (stdout: string): CommandResult => ({ code: 0, stdout, stderr: "" });
 
-function harness(answer: (command: string, argv: string[], signal?: AbortSignal) => CommandResult | Promise<CommandResult>, options: { tunnel?: boolean; ssh?: boolean; audit?: RemoteSessionActionEvent[]; tunnelWaitMaxMs?: number } = {}) {
+function harness(answer: (command: string, argv: string[], signal?: AbortSignal) => CommandResult | Promise<CommandResult>, options: { tunnel?: boolean; ssh?: boolean; audit?: RemoteSessionActionEvent[]; tunnelWaitMaxMs?: number; tunnelProbeWaitMaxMs?: number } = {}) {
   const dataDir = mkdtempSync(path.join(tmpdir(), "sagax-inv-"));
   const home = mkdtempSync(path.join(tmpdir(), "sagax-inv-flow-"));
   roots.push(dataDir, home);
@@ -97,6 +97,7 @@ function harness(answer: (command: string, argv: string[], signal?: AbortSignal)
     now: () => clock,
     systemSsh: () => (options.ssh === false ? null : "/usr/bin/ssh"),
     ...(options.tunnelWaitMaxMs ? { tunnelWaitMaxMs: options.tunnelWaitMaxMs } : {}),
+    ...(options.tunnelProbeWaitMaxMs ? { tunnelProbeWaitMaxMs: options.tunnelProbeWaitMaxMs } : {}),
     ...(options.audit ? { actionsAudit: { write: (event: RemoteSessionActionEvent) => { options.audit!.push(event); } } as never } : {}),
   });
   return { service, commands, messages, placeTunnel, tick: (ms: number) => { clock += ms; } };
@@ -405,6 +406,35 @@ describe("commands for the bot", () => {
     await service.close(PERSON, BOT, ID);
     expect(await service.reachable({ principalId: PERSON, botId: BOT, id: ID })).toBeNull();
     expect(pings).toHaveLength(2);
+  });
+
+  // #3505: the ping waited up to 90 s for its turn like a command. A busy
+  // tunnel already says the session is in use: the ping gives up after a
+  // few seconds, is never sent, and the answer is "could not ask".
+  it("a tunnel probe waits only its own short time behind a running command, and is never sent (#3505)", async () => {
+    let release: () => void = () => undefined;
+    const pings: string[][] = [];
+    const { service } = harness(async (command, argv) => {
+      if (command === OS_PROBE_UNIX) return ok("Darwin");
+      if (command === inventoryCommand("macos")) return ok(MAC_INVENTORY);
+      if (argv.includes("ping")) { pings.push(argv); return ok("pong\n"); }
+      if (command === "make build") return new Promise<CommandResult>((resolve) => { release = () => resolve(ok("built\n")); });
+      return ok("fine\n");
+    }, { tunnelProbeWaitMaxMs: 30 });
+    await service.publish(open);
+    const build = service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "make build" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const asked = await Promise.race([
+      service.reachable({ principalId: PERSON, botId: BOT, id: ID }),
+      new Promise<string>((resolve) => setTimeout(() => resolve("still waiting"), 2_000)),
+    ]);
+    expect(asked).toBeNull();
+    expect(pings).toHaveLength(0);
+    release();
+    expect(await build).toMatchObject({ exitCode: 0, stdout: "built\n" });
+    // the tunnel is free again: the ping goes out
+    expect(await service.reachable({ principalId: PERSON, botId: BOT, id: ID })).toBe(true);
+    expect(pings).toHaveLength(1);
   });
 
   it("keeps the queue moving after a command that failed or threw (#3430)", async () => {

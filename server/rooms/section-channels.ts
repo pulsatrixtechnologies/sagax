@@ -80,7 +80,23 @@ const recordSchema = z.object({
   formerOwnerPrincipalId: z.string().min(1).max(64).optional(),
   createdAt: z.number(),
 });
-const fileSchema = z.object({ version: z.literal(1), sections: z.array(z.unknown()), botSharesMigratedAt: z.number().optional(), ownersVerifiedAt: z.number().optional() });
+const fileSchema = z.object({ version: z.literal(1), sections: z.array(z.unknown()), botSharesMigratedAt: z.number().optional(), ownersVerifiedAt: z.number().optional(), creators: z.unknown().optional() });
+/** #3545: who created each section, kept here so a start never reads the
+ * whole activity log for it. byId: the first creator of a record id; byName:
+ * everyone who created a section under that name (its name at creation). */
+const creatorsSchema = z.object({
+  filledAt: z.number().optional(),
+  byId: z.array(z.tuple([z.string(), z.string().min(1).max(64)])),
+  byName: z.array(z.tuple([z.string(), z.array(z.string().min(1).max(64))])),
+});
+interface Creators { filledAt?: number; byId: Map<string, string>; byName: Map<string, string[]> }
+
+/** One section creation, as the audit row "section.create" records it. */
+export interface SectionCreation {
+  id?: string;
+  name?: string;
+  principalId: string;
+}
 
 /** #2045 isolation: the owner of a record nobody can be shown to own. It
  * matches no principal, so the record stays on disk and nobody lists it. */
@@ -137,6 +153,7 @@ export class SectionChannels {
   private records: SectionRecord[] = [];
   private migratedAt: number | undefined;
   private ownersVerifiedAt: number | undefined;
+  private creators: Creators = { byId: new Map(), byName: new Map() };
 
   constructor(options: { path: string; now?: () => number; newId?: () => string }) {
     this.path = options.path;
@@ -148,6 +165,11 @@ export class SectionChannels {
       if (!parsed.success) throw new Error("not a version 1 file");
       this.migratedAt = parsed.data.botSharesMigratedAt;
       this.ownersVerifiedAt = parsed.data.ownersVerifiedAt;
+      const creators = creatorsSchema.safeParse(parsed.data.creators);
+      if (creators.success) {
+        this.creators = { byId: new Map(creators.data.byId), byName: new Map(creators.data.byName) };
+        if (creators.data.filledAt !== undefined) this.creators.filledAt = creators.data.filledAt;
+      }
       // #2045: the same team name may belong to two people. Uniqueness is
       // (owner, name); skip only a second copy of the exact same pair.
       const ownedNames = new Set<string>();
@@ -412,6 +434,53 @@ export class SectionChannels {
     return changed;
   }
 
+  /** #3545: whether the creators were filled once from the activity log. */
+  creatorsFilled(): boolean {
+    return this.creators.filledAt !== undefined;
+  }
+
+  private addCreator(creation: SectionCreation): boolean {
+    const actor = creation.principalId.trim();
+    if (!actor) return false;
+    let changed = false;
+    if (creation.id && !this.creators.byId.has(creation.id)) {
+      this.creators.byId.set(creation.id, actor);
+      changed = true;
+    }
+    const name = creation.name?.trim();
+    if (name) {
+      const known = this.creators.byName.get(name) ?? [];
+      if (!known.includes(actor)) {
+        this.creators.byName.set(name, [...known, actor]);
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  /** #3545, once: the creations the activity log holds, oldest first. A
+   * creation already noted keeps its first creator. */
+  fillCreators(creations: Iterable<SectionCreation>): void {
+    for (const creation of creations) this.addCreator(creation);
+    this.creators.filledAt = this.now();
+    this.save();
+  }
+
+  /** #3545: a section created now (the same fact its audit row records). */
+  noteCreator(creation: SectionCreation): void {
+    if (this.addCreator(creation)) this.save();
+  }
+
+  /** The person who created this record id, if known. A rename keeps it. */
+  creatorOf(id: string): string | null {
+    return this.creators.byId.get(id) ?? null;
+  }
+
+  /** Everyone who created a section under this name. */
+  creatorsOfName(name: string): string[] {
+    return [...(this.creators.byName.get(name.trim()) ?? [])];
+  }
+
   /** Whether the legacy shared sections already became bot grants. */
   botSharesMigrated(): boolean {
     return this.migratedAt !== undefined;
@@ -432,6 +501,9 @@ export class SectionChannels {
         sections: this.records,
         ...(this.migratedAt !== undefined ? { botSharesMigratedAt: this.migratedAt } : {}),
         ...(this.ownersVerifiedAt !== undefined ? { ownersVerifiedAt: this.ownersVerifiedAt } : {}),
+        ...(this.creators.filledAt !== undefined || this.creators.byId.size || this.creators.byName.size
+          ? { creators: { ...(this.creators.filledAt !== undefined ? { filledAt: this.creators.filledAt } : {}), byId: [...this.creators.byId], byName: [...this.creators.byName] } }
+          : {}),
       };
       writeFileAtomic(this.path, JSON.stringify(file, null, 2), { mode: 0o600 });
     } catch (error) {

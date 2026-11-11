@@ -16,7 +16,7 @@
 // Fire-and-forget, like the decision log: a full disk must not undo a
 // setting that already took effect.
 import { readdirSync, readFileSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 
 import { DATA_DIR } from "../config.ts";
@@ -339,7 +339,23 @@ const isRow = (value: unknown): value is AdminActionRow =>
   typeof value.action === "string" &&
   isPlainObject(value.actor);
 
-function readRows(path: string): AdminActionRow[] {
+/** Which rows a read keeps by their action. A sealed row whose action does
+ * not match is never opened: its cleartext projection (time, category,
+ * action) is enough to pass it by (#3545). */
+export type AdminActionFilter = (action: string) => boolean;
+
+function readerFor(path: string, action?: AdminActionFilter): LogReader {
+  // rows sealed at rest open here (server/encryption/content-at-rest.ts); a torn line is skipped
+  return new LogReader(path, action ? (projection) => typeof projection.action === "string" && !action(projection.action) : undefined);
+}
+
+function keptRow(value: unknown, action: AdminActionFilter | undefined, from: number, to: number): value is AdminActionRow {
+  if (!isRow(value) || (action && !action(value.action))) return false;
+  const at = Date.parse(value.at);
+  return at >= from && at <= to;
+}
+
+function readRows(path: string, action: AdminActionFilter | undefined, from: number, to: number): AdminActionRow[] {
   let text: string;
   try {
     text = readFileSync(path, "utf8");
@@ -348,35 +364,76 @@ function readRows(path: string): AdminActionRow[] {
   }
   const rows: AdminActionRow[] = [];
   const lines = text.split("\n");
-  // rows sealed at rest open here (server/encryption/content-at-rest.ts); a torn line is skipped
-  const reader = new LogReader(path);
+  const reader = readerFor(path, action);
   for (let index = 0; index < lines.length; index++) {
     if (!lines[index]) continue;
     const value = reader.at(lines, index);
-    if (isRow(value)) rows.push(value);
+    if (keptRow(value, action, from, to)) rows.push(value);
   }
   return rows;
 }
 
-/** Every row inside the range, oldest first. */
-export function readAdminActivityRange(dataDir: string, range: { from: Date; to: Date }): AdminActionRow[] {
-  let months: string[] = [];
+/** The month files a range covers, oldest first. */
+function monthsIn(names: readonly string[], range: { from: Date; to: Date }): string[] {
+  const first = monthKey(range.from);
+  const last = monthKey(range.to);
+  return names.filter((name) => MONTH_FILE.test(name)).sort().filter((name) => {
+    const month = basename(name, ".ndjson");
+    return month >= first && month <= last;
+  });
+}
+
+/** Every row inside the range, oldest first; with `action`, only the rows
+ * whose action it keeps (the others are not opened). */
+export function readAdminActivityRange(dataDir: string, range: { from: Date; to: Date }, options: { action?: AdminActionFilter } = {}): AdminActionRow[] {
+  let names: string[] = [];
   try {
-    months = readdirSync(join(dataDir, DIR)).filter((name) => MONTH_FILE.test(name)).sort();
+    names = readdirSync(join(dataDir, DIR));
   } catch {
     return [];
   }
-  const first = monthKey(range.from);
-  const last = monthKey(range.to);
   const from = range.from.getTime();
   const to = range.to.getTime();
   const rows: AdminActionRow[] = [];
-  for (const name of months) {
-    const month = basename(name, ".ndjson");
-    if (month < first || month > last) continue;
-    for (const row of readRows(join(dataDir, DIR, name))) {
-      const at = Date.parse(row.at);
-      if (at >= from && at <= to) rows.push(row);
+  for (const name of monthsIn(names, range)) rows.push(...readRows(join(dataDir, DIR, name), options.action, from, to));
+  return rows;
+}
+
+const yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+/** {@link readAdminActivityRange} in slices of at most `sliceMs` that give
+ * the event loop back between them (#3545): for a long range read once,
+ * off the path of a request. Throws as the synchronous read does. */
+export async function scanAdminActivityRange(dataDir: string, range: { from: Date; to: Date }, options: { action?: AdminActionFilter; sliceMs?: number } = {}): Promise<AdminActionRow[]> {
+  let names: string[] = [];
+  try {
+    names = await readdir(join(dataDir, DIR));
+  } catch {
+    return [];
+  }
+  const sliceMs = options.sliceMs ?? 8;
+  const from = range.from.getTime();
+  const to = range.to.getTime();
+  const rows: AdminActionRow[] = [];
+  for (const name of monthsIn(names, range)) {
+    const path = join(dataDir, DIR, name);
+    let text: string;
+    try {
+      text = await readFile(path, "utf8");
+    } catch {
+      continue;
+    }
+    const lines = text.split("\n");
+    const reader = readerFor(path, options.action);
+    let sliceStart = performance.now();
+    for (let index = 0; index < lines.length; index++) {
+      if (performance.now() - sliceStart >= sliceMs) {
+        await yieldToLoop();
+        sliceStart = performance.now();
+      }
+      if (!lines[index]) continue;
+      const value = reader.at(lines, index);
+      if (keptRow(value, options.action, from, to)) rows.push(value);
     }
   }
   return rows;

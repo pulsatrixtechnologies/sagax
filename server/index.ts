@@ -991,6 +991,7 @@ import {
   validSectionName,
   UNCLAIMED_OWNER,
 } from "./rooms/section-channels.ts";
+import { prepareSectionCreators, sectionCreationOf } from "./rooms/section-creators.ts";
 import { createBotGrantRoutes, visibleGrants, wireGrants } from "./bots/bot-grants.ts";
 import { identityWarning } from "./perspicax/perspicax-identity.ts";
 import { OrgFlowPlugins, flowSkillsNote, guarded as orgFlowGuarded } from "./org/org-flow-plugins.ts";
@@ -998,7 +999,6 @@ import { applyIdentityMigration, principalIdFor, rewritePeopleForAttach } from "
 import { ThreadStarters } from "./threads/thread-starters.ts";
 import {
   appendAdminAction,
-  readAdminActivityRange,
   botAuditSnapshot,
   flushAdminActivity,
   pruneAdminActivity,
@@ -18139,6 +18139,9 @@ function orgAuditActor(auth: RequestAuth): AdminActor {
 function orgAudit(row: Omit<AdminActionRow, "at">): void {
   if (IDENTITY.kind !== "perspicax") return;
   appendAdminAction(DATA_DIR, row);
+  // #3545: the creator stays with the section, read at a start without the log
+  const creation = sectionCreationOf(row);
+  if (creation) sectionChannels?.noteCreator(creation);
 }
 const auditBotTarget = (botId: string) => ({ kind: "bot", id: botId, ...(store.bot(botId)?.name ? { name: store.bot(botId)!.name } : {}) });
 /** Slice 6: a person's routine delegation ended. Only a person Perspicax
@@ -27811,21 +27814,6 @@ function ownsSectionItem(principalId: string, item: unknown): boolean {
   }
   return false;
 }
-/** The people the audit log shows creating a team, by record id and name. */
-function sectionCreators(): { byId: Map<string, string>; byName: Map<string, Set<string>> } {
-  const byId = new Map<string, string>();
-  const byName = new Map<string, Set<string>>();
-  let rows: AdminActionRow[] = [];
-  try { rows = readAdminActivityRange(DATA_DIR, { from: new Date(0), to: new Date() }); } catch { /* no audit: no evidence */ }
-  for (const row of rows) {
-    if (row.action !== "section.create" || row.target?.kind !== "section") continue;
-    const actor = (row.actor as { principalId?: unknown } | undefined)?.principalId;
-    if (typeof actor !== "string" || !actor.trim()) continue;
-    if (row.target.id && !byId.has(row.target.id)) byId.set(row.target.id, actor);
-    if (row.target.name) byName.set(row.target.name.trim(), (byName.get(row.target.name.trim()) ?? new Set()).add(actor));
-  }
-  return { byId, byName };
-}
 const single = (owners: Iterable<string>): string | null => {
   const distinct = [...new Set([...owners].map((owner) => owner.trim()))];
   return distinct.length === 1 ? distinct[0]! : null;
@@ -27838,19 +27826,19 @@ const single = (owners: Iterable<string>): string | null => {
 function sectionMigrationOwner(name: string): string | null {
   const bots = store.bots.filter((bot) => sectionKey(bot.section) === name).map((bot) => ({ ownerPrincipalId: effectiveBotOwner(bot), createdAt: typeof bot.createdAt === "number" ? bot.createdAt : 0 }));
   return migrationOwner(bots)
-    ?? single(sectionCreators().byName.get(name) ?? [])
+    ?? single(sectionChannels?.creatorsOfName(name) ?? [])
     ?? single(sectionPreferenceOwners(name, "sagax.sidebarSections.v1"))
     ?? single(sectionPreferenceOwners(name, "openmausbot.sidebarSectionOrder.v1"));
 }
-/** #2045 isolation: the evidence verifyOwners weighs, once at boot. */
-function sectionOwnerEvidence(): SectionOwnerEvidence {
-  const creators = sectionCreators();
+/** #2045 isolation: the evidence verifyOwners weighs, once at boot. The
+ * creators are kept with the records (#3545), never read from the log here. */
+function sectionOwnerEvidence(channels: SectionChannels): SectionOwnerEvidence {
   const lower = (value: string | null | undefined) => (value ?? "").trim().toLowerCase();
   const holds = (record: SectionRecord, item: { section?: string; sectionId?: string }, owner: string | null | undefined) =>
     item.sectionId ? item.sectionId === record.id : sectionKey(item.section) === record.name && lower(owner) === lower(record.ownerPrincipalId);
   return {
     inUse: (record) => store.bots.some((bot) => holds(record, bot, effectiveBotOwner(bot))) || store.groups.some((group) => holds(record, group, groupOwnerId(group))),
-    creatorOf: (record) => creators.byId.get(record.id) ?? null,
+    creatorOf: (record) => channels.creatorOf(record.id),
     personalOwners: (name) => sectionPreferenceOwners(name, "sagax.sidebarSections.v1"),
     orderOwners: (name) => sectionPreferenceOwners(name, "openmausbot.sidebarSectionOrder.v1"),
   };
@@ -27891,6 +27879,11 @@ function teamDefaultsForAuth(auth: RequestAuth, sectionName: string) {
  * shared, the other person's team stays theirs. Admins included. Two people
  * may share a display name; each still only sees their own. */
 if (sectionChannels) {
+  // #3545: who created each section is kept with the records. Filled once
+  // from the activity log: now when this start weighs it (the owner check
+  // below, a name without a record), else in slices off the main path.
+  const recorded = new Set(sectionChannels.list().map((record) => record.name));
+  void prepareSectionCreators(sectionChannels, DATA_DIR, !sectionChannels.ownersVerified() || store.sections.some((name) => name.trim() && !recorded.has(name.trim())));
   // First organization boot of slice 4: every existing section becomes a
   // private record (no member): nothing is shared without someone's action.
   const created = sectionChannels.migrate(store.sections, sectionMigrationOwner);
@@ -27933,7 +27926,7 @@ if (sectionChannels) {
   // to someone goes back to the person the evidence names, else nobody
   // lists it. Runs after the membership links, so "empty" means no bot and
   // no room carries its id. Nothing is deleted.
-  const reowned = sectionChannels.verifyOwners(sectionOwnerEvidence());
+  const reowned = sectionChannels.verifyOwners(sectionOwnerEvidence(sectionChannels));
   if (reowned.length) console.log(`sections: ${reowned.length} empty team(s) checked against their real owner (${reowned.filter((row) => row.to === UNCLAIMED_OWNER).length} now unclaimed)`);
   if (movedBriefs || movedMemory || movedLinks || movedPublished) {
     console.log(`sections: migrated team data to owner/id (${movedBriefs} brief(s), ${movedMemory} memory section(s), ${movedLinks} membership link(s), ${movedPublished} published team key(s))`);

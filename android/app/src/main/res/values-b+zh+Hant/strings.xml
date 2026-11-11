@@ -771,4 +771,22 @@
     <string name="mobile_density_compact">緊湊</string>
     <string name="mobile_density_comfortable_caption">頭像更大，機器人名稱下會顯示最新訊息。</string>
     <string name="mobile_density_compact_caption">每個機器人佔一行。擁有多個活躍對話的機器人會顯示對話數量；點按數字即可列出對話。</string>
+
+    <string name="mobile_coding_title">程式設計</string>
+    <string name="mobile_coding_loading">正在載入活動…</string>
+    <string name="mobile_coding_empty">最近 7 天沒有程式設計工作。</string>
+    <string name="mobile_coding_continue">繼續</string>
+    <string name="mobile_coding_stop">停止</string>
+    <string name="mobile_coding_close">關閉聊天</string>
+    <string name="mobile_group_panel_done">完成</string>
+    <string name="mobile_group_title">群組</string>
+    <string name="mobile_group_action_subtitle">成員、指示、記憶和電腦</string>
+    <string name="mobile_group_tab_details">詳細資訊</string>
+    <string name="mobile_group_tab_members">成員</string>
+    <string name="mobile_group_tab_instructions">指示</string>
+    <string name="mobile_group_tab_memory">記憶</string>
+    <string name="mobile_group_tab_library">資料庫</string>
+    <string name="mobile_group_tab_computer">電腦</string>
+    <string name="mobile_group_owner_only">只有群組擁有者可以變更這些設定。</string>
+    <string name="mobile_group_leave">退出群組</string>
 </resources>

@@ -943,12 +943,17 @@ it("peer inbox (2026-11-02): a one-way notice's question reaches its receiver's 
     .map((message) => message.inputRequest.question), { timeout: 60_000, interval: 250 }).toEqual(["GO for the seven Northwind writes?"]);
 }), 150_000);
 
-// 2026-11-02 (peer inbox, second pass, production): the wakes ran, but five
-// of six ended NOTHING_TO_REPORT ("Already told you at 1:32 p.m. ET"): the bot
-// took the reply of the notice's own thread, which its person never sees, for
-// one they had read, so nothing of Osprey's or Hollis's messages reached
-// the person. A wake on teammates' messages now always reports.
-it("peer inbox (second pass): a wake on a teammate's notice that ends NOTHING_TO_REPORT still reports to the person, with the bot's words or the digest", () => withFixture(async (f) => {
+// 2026-11-02 (peer inbox, second pass, production): five wakes of six on
+// teammates' messages ended NOTHING_TO_REPORT ("Already told you at 1:32 p.m.
+// ET"): the bot took the reply of the notice's own thread, which its person
+// never sees, for one they had read. That pass forced every such wake to
+// report. 2026-11-10 (#3503, #3581) replaced it: exchanges between bots stay
+// out of the person's main chat and a bot tells its person only what needs
+// them; silence is the normal behaviour. What remains of the first fix: the
+// wake is told the person never sees those threads in their chat, and what
+// needs the person is one card in their conversation (the next case). Nothing
+// is lost: each notice stays in its own thread, reachable from the bot's panel.
+it("peer inbox: a wake on a teammate's notice that ends NOTHING_TO_REPORT is quiet, and the notice stays in its own thread the person reaches from the bot's panel", () => withFixture(async (f) => {
   const sender = (await f.cli("new-bot", "--name", "Osprey")).bot;
   const primary = (await f.cli("new-bot", "--name", "Wren")).bot;
   const solo = (await f.cli("new-bot", "--name", "Hollis")).bot;
@@ -971,19 +976,70 @@ it("peer inbox (second pass): a wake on a teammate's notice that ends NOTHING_TO
     await expect.poll(async () => (await wakes(bot.id)).map((run) => run.status), { timeout: 60_000, interval: 250 }).toEqual(["completed"]);
   }
   const primaryWake = (await wakes(primary.id))[0];
-  expect(primaryWake.quiet).toBeUndefined();
+  expect(primaryWake.quiet).toBe(true);
+  expect(primaryWake.proactive).toMatchObject({ sources: ["peer"] });
+  expect(primaryWake.proactive.alwaysReport).toBeUndefined();
+  // Automations keeps the bot's note, without the marker
   expect(primaryWake.output).toBe("Already told you at 1:32 p.m. ET: Alex has the box.");
   const soloWake = (await wakes(solo.id))[0];
-  expect(soloWake.quiet).toBeUndefined();
-  expect(soloWake.output).toContain("Osprey: Claude Team invite action AB");
-  // the wake was told the person never sees the notice threads
+  expect(soloWake.quiet).toBe(true);
+  expect(soloWake.proactive.alwaysReport).toBeUndefined();
+  // the wake was told the person never sees the notice threads in their chat
   const wakePrompt = JSON.stringify(f.evidence().find((turn) => turn.botId === primary.id && JSON.stringify(turn.prompt).includes("Proactive wake"))!.prompt);
-  expect(wakePrompt).toContain("The person never sees those threads");
+  expect(wakePrompt).toContain("The person never sees those threads in their chat");
+  // every turn has ended (the wakes' own threads included) before the chat is read
+  await settledBots(f, [sender.id, primary.id, solo.id]);
+  for (const wake of [primaryWake, soloWake]) await f.cli("wait", "--bot", wake.botId, "--task", wake.threadId);
   const bots = (await f.api("/api/bots?messages=0", undefined, "GET")).bots as any[];
-  const mainOf = (id: string) => bots.find((bot) => bot.id === id).threadId as string;
-  const runCard = async (botId: string) => (await f.messages(mainOf(botId))).filter((message) => message.kind === "routine.run").map((message) => String(message.text ?? ""));
-  await expect.poll(async () => (await runCard(primary.id)).some((text) => text.includes("Alex has the box")), { timeout: 20_000 }).toBe(true);
-  await expect.poll(async () => (await runCard(solo.id)).some((text) => text.includes("Claude Team invite action AB")), { timeout: 20_000 }).toBe(true);
+  const botOf = (id: string) => bots.find((bot) => bot.id === id);
+  const notices = [
+    { receiver: primary, title: "Urgent Northwind 100200 client reply", words: "Sam answered on 100200; Alex has the box", reply: "Noted in this thread" },
+    { receiver: solo, title: "Claude Team invite action AB", words: "AB must accept the Claude Team invite", reply: "Noted" },
+  ];
+  for (const notice of notices) {
+    const bot = botOf(notice.receiver.id);
+    const main = bot.threadId as string;
+    // quiet: no run card in the person's main conversation
+    expect((await f.messages(main)).filter((message) => message.kind === "routine.run")).toEqual([]);
+    // nothing lost: the notice is a thread of the bot's panel, with the
+    // sender's title and words and the bot's outcome
+    const task = (bot.tasks as any[]).find((entry) => entry.title === notice.title);
+    expect(task).toBeDefined();
+    expect(task.threadId).not.toBe(main);
+    expect(task.routineRunId).toBeUndefined();
+    const thread = await f.messages(task.threadId);
+    expect(thread.some((message) => String(message.text ?? "").includes(notice.words))).toBe(true);
+    expect(thread.some((message) => message.role === "bot" && String(message.text ?? "") === notice.reply)).toBe(true);
+  }
+  expect(runtimeInvariants(f)).toEqual([]);
+}, { env: { SAGAX_PROACTIVE_GATHER_MS: "2000" } }), 150_000);
+
+// The other half of the 2026-11-10 rule: a wake on a teammate's notice that
+// needs the person reports, and the person reads it once, as one card in
+// their main conversation.
+it("peer inbox: a wake on a teammate's notice that needs the person reports once, as one card in the person's main conversation", () => withFixture(async (f) => {
+  const sender = (await f.cli("new-bot", "--name", "Osprey")).bot;
+  const receiver = (await f.cli("new-bot", "--name", "Wren")).bot;
+  const REPORT = "Sam answered on 100200: you must call him back.";
+  f.plan[sender.id] = {
+    steps: [{ tool: "send_to_bot", arguments: { bot_id: receiver.id, title: "Urgent Northwind 100200 client reply", message: "Sam answered on 100200 and asks for a call back" } }],
+    reply: "Sent",
+  };
+  f.plan[receiver.id] = { byPrompt: [{ promptIncludes: "Proactive wake", plan: { reply: REPORT } }], reply: "Noted in the notice thread" };
+  f.save();
+  await f.api(`/api/bots/${sender.id}/messages`, { text: "Tell Wren.", threadId: sender.activeTaskId });
+  const wakes = async () => ((await f.api("/api/routines", undefined, "GET")).runs as any[]).filter((run) => run.botId === receiver.id && run.proactive);
+  await expect.poll(async () => (await wakes()).map((run) => run.status), { timeout: 60_000, interval: 250 }).toEqual(["completed"]);
+  const [wake] = await wakes();
+  expect(wake.quiet).toBeUndefined();
+  expect(wake.output).toBe(REPORT);
+  await settledBots(f, [sender.id, receiver.id]);
+  await f.cli("wait", "--bot", receiver.id, "--task", wake.threadId);
+  const bots = (await f.api("/api/bots?messages=0", undefined, "GET")).bots as any[];
+  const main = bots.find((bot) => bot.id === receiver.id).threadId as string;
+  const cards = async () => (await f.messages(main)).filter((message) => message.kind === "routine.run" && String(message.text ?? "").includes(REPORT));
+  await expect.poll(async () => (await cards()).length, { timeout: 20_000 }).toBe(1);
+  expect((await f.messages(main)).filter((message) => message.kind === "routine.run")).toHaveLength(1);
   expect(runtimeInvariants(f)).toEqual([]);
 }, { env: { SAGAX_PROACTIVE_GATHER_MS: "2000" } }), 150_000);
 
@@ -1033,7 +1089,10 @@ it("peer inbox (second pass): a teammate's notice gathered before a restart (a p
   await f.restart({ SAGAX_PROACTIVE_GATHER_MS: "1000", SAGAX_PROACTIVE_REPLAY_MS: "0" });
   const wakes = async () => ((await f.api("/api/routines", undefined, "GET")).runs as any[]).filter((run) => run.botId === receiver.id && run.proactive);
   await expect.poll(async () => (await wakes()).map((run) => run.status), { timeout: 60_000, interval: 250 }).toEqual(["completed"]);
-  expect((await wakes())[0].proactive).toMatchObject({ sources: ["peer"], alwaysReport: true });
+  // 2026-11-10 (#3581): a teammate's notice no longer forces a report; this
+  // wake reports because its bot wrote one
+  expect((await wakes())[0].proactive).toMatchObject({ sources: ["peer"] });
+  expect((await wakes())[0].proactive.alwaysReport).toBeUndefined();
   const wakePrompt = JSON.stringify(f.evidence().find((turn) => turn.botId === receiver.id && JSON.stringify(turn.prompt).includes("Proactive wake"))!.prompt);
   expect(wakePrompt).toContain("ROLL_SECRET_WORDS Sam answered on 100200");
   const bots = (await f.api("/api/bots?messages=0", undefined, "GET")).bots as any[];

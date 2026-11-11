@@ -1,6 +1,6 @@
 import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { launchVerificationServer, type VerificationServer } from "../scripts/control-omb.ts";
 import { DATA_DIR } from "./config.ts";
@@ -17,6 +17,7 @@ describe("thread link through an isolated HTTP fixture", () => {
     });
     return { status: response.status, body: await response.json() as any };
   };
+  // A thread's flags are bookkeeping: written off the event loop, within a second of the answer (#3663).
   const persistedTask = (botId: string, threadId: string) => JSON.parse(readFileSync(join(fixture.info.dataDir, "bots.json"), "utf8"))
     .find((bot: any) => bot.id === botId).tasks.find((task: any) => task.threadId === threadId);
 
@@ -35,16 +36,16 @@ describe("thread link through an isolated HTTP fixture", () => {
     const assigned = await api("PATCH", path, { link: " https://github.com/o/r/pull/7 " });
     expect(assigned.status).toBe(200);
     expect(assigned.body.task.link).toBe("https://github.com/o/r/pull/7");
-    expect(persistedTask(bot.id, task.threadId).link).toBe("https://github.com/o/r/pull/7");
+    await vi.waitFor(() => expect(persistedTask(bot.id, task.threadId).link).toBe("https://github.com/o/r/pull/7"), { timeout: 5_000 });
     for (const link of ["javascript:alert(1)", "not a url", 7, `https://x.dev/${"a".repeat(2_048)}`]) {
       expect((await api("PATCH", path, { link })).status).toBe(400);
     }
-    expect(persistedTask(bot.id, task.threadId).link).toBe("https://github.com/o/r/pull/7");
+    await vi.waitFor(() => expect(persistedTask(bot.id, task.threadId).link).toBe("https://github.com/o/r/pull/7"), { timeout: 5_000 });
     const removed = await api("PATCH", path, { link: null });
     expect(removed.status).toBe(200);
     expect(removed.body.task.link).toBeUndefined();
-    expect("link" in persistedTask(bot.id, task.threadId)).toBe(false);
-    expect(persistedTask(bot.id, task.threadId).linkAuto).toBe(false);
+    await vi.waitFor(() => expect("link" in persistedTask(bot.id, task.threadId)).toBe(false), { timeout: 5_000 });
+    await vi.waitFor(() => expect(persistedTask(bot.id, task.threadId).linkAuto).toBe(false), { timeout: 5_000 });
   });
 
   it("suggests the pull request a reply links once the turn completes", async () => {

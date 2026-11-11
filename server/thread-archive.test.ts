@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { launchVerificationServer, type VerificationServer } from "../scripts/control-omb.ts";
 
@@ -15,6 +15,7 @@ describe("thread archive through an isolated HTTP fixture", () => {
     return { status: response.status, body: await response.json() as any };
   };
   const getBot = async (botId: string) => (await api("GET", "/api/bots?messages=1")).body.bots.find((bot: any) => bot.id === botId);
+  // A thread's flags are bookkeeping: written off the event loop, within a second of the answer (#3663).
   const persistedTask = (botId: string, threadId: string) => JSON.parse(readFileSync(join(fixture.info.dataDir, "bots.json"), "utf8"))
     .find((bot: any) => bot.id === botId).tasks.find((task: any) => task.threadId === threadId);
 
@@ -34,12 +35,12 @@ describe("thread archive through an isolated HTTP fixture", () => {
     expect(archived.status).toBe(200);
     expect(archived.body.task.archivedAt).toBe(at);
     expect((await getBot(bot.id)).tasks.find((entry: any) => entry.threadId === task.threadId).archivedAt).toBe(at);
-    expect(persistedTask(bot.id, task.threadId).archivedAt).toBe(at);
+    await vi.waitFor(() => expect(persistedTask(bot.id, task.threadId).archivedAt).toBe(at), { timeout: 5_000 });
     const restored = await api("PATCH", `/api/bots/${bot.id}/tasks/${task.threadId}`, { archivedAt: null });
     expect(restored.status).toBe(200);
     expect(restored.body.task.archivedAt).toBeUndefined();
     expect((await getBot(bot.id)).tasks.find((entry: any) => entry.threadId === task.threadId).archivedAt).toBeUndefined();
-    expect("archivedAt" in persistedTask(bot.id, task.threadId)).toBe(false);
+    await vi.waitFor(() => expect("archivedAt" in persistedTask(bot.id, task.threadId)).toBe(false), { timeout: 5_000 });
   });
 
   it("rejects values that are not timestamps so the flag cannot drift into junk", async () => {
@@ -58,11 +59,11 @@ describe("thread archive through an isolated HTTP fixture", () => {
     const pinned = await api("PATCH", `/api/bots/${bot.id}/tasks/${task.threadId}`, { pinned: true });
     expect(pinned.status).toBe(200);
     expect(pinned.body.task.pinned).toBe(true);
-    expect(persistedTask(bot.id, task.threadId).pinned).toBe(true);
+    await vi.waitFor(() => expect(persistedTask(bot.id, task.threadId).pinned).toBe(true), { timeout: 5_000 });
     const cleared = await api("PATCH", `/api/bots/${bot.id}/tasks/${task.threadId}`, { pinned: false });
     expect(cleared.status).toBe(200);
     expect(cleared.body.task.pinned).toBeUndefined();
-    expect("pinned" in persistedTask(bot.id, task.threadId)).toBe(false);
+    await vi.waitFor(() => expect("pinned" in persistedTask(bot.id, task.threadId)).toBe(false), { timeout: 5_000 });
     expect((await api("PATCH", `/api/bots/${bot.id}/tasks/${task.threadId}`, { pinned: "yes" })).status).toBe(400);
     expect((await api("PATCH", `/api/bots/${bot.id}/tasks/${task.threadId}`, { updatedAt: Date.now() })).status).toBe(400);
   });

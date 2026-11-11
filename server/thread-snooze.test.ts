@@ -1,6 +1,6 @@
 import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { launchVerificationServer, type VerificationServer } from "../scripts/control-omb.ts";
 import { DATA_DIR } from "./config.ts";
@@ -19,6 +19,7 @@ describe("thread snooze through an isolated HTTP fixture", () => {
   };
   const taskOf = async (botId: string, threadId: string) => (await api("GET", "/api/bots?messages=1")).body.bots
     .find((bot: any) => bot.id === botId).tasks.find((task: any) => task.threadId === threadId);
+  // A thread's flags are bookkeeping: written off the event loop, within a second of the answer (#3663).
   const persistedTask = (botId: string, threadId: string) => JSON.parse(readFileSync(join(fixture.info.dataDir, "bots.json"), "utf8"))
     .find((bot: any) => bot.id === botId).tasks.find((task: any) => task.threadId === threadId);
 
@@ -37,13 +38,13 @@ describe("thread snooze through an isolated HTTP fixture", () => {
     expect(untilActivity.status).toBe(200);
     expect(untilActivity.body.task.snoozedUntil).toBe(0);
     expect((await taskOf(bot.id, task.threadId)).snoozedUntil).toBe(0);
-    expect(persistedTask(bot.id, task.threadId).snoozedUntil).toBe(0);
+    await vi.waitFor(() => expect(persistedTask(bot.id, task.threadId).snoozedUntil).toBe(0), { timeout: 5_000 });
     const until = Date.now() + 3_600_000;
     expect((await api("PATCH", `/api/bots/${bot.id}/tasks/${task.threadId}`, { snoozedUntil: until })).body.task.snoozedUntil).toBe(until);
     const woken = await api("PATCH", `/api/bots/${bot.id}/tasks/${task.threadId}`, { snoozedUntil: null });
     expect(woken.status).toBe(200);
     expect(woken.body.task.snoozedUntil).toBeUndefined();
-    expect("snoozedUntil" in persistedTask(bot.id, task.threadId)).toBe(false);
+    await vi.waitFor(() => expect("snoozedUntil" in persistedTask(bot.id, task.threadId)).toBe(false), { timeout: 5_000 });
   });
 
   it("rejects values that are not timestamps or the sentinel", async () => {
@@ -65,7 +66,7 @@ describe("thread snooze through an isolated HTTP fixture", () => {
     expect(patched.body.task.snoozedUntil).toBeUndefined();
     expect((await taskOf(bot.id, task.threadId)).snoozedUntil).toBeUndefined();
     // the heal is on read, not a rewrite: the stale value sits until the next save
-    expect(persistedTask(bot.id, task.threadId).snoozedUntil).toBe(past);
+    await vi.waitFor(() => expect(persistedTask(bot.id, task.threadId).snoozedUntil).toBe(past), { timeout: 5_000 });
     await api("PATCH", `/api/bots/${bot.id}/tasks/${task.threadId}`, { snoozedUntil: 0 });
     expect((await taskOf(bot.id, task.threadId)).snoozedUntil).toBe(0);
   });

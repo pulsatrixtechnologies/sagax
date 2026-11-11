@@ -60,7 +60,7 @@ import { auditSampleFromEnv, deniedResourcesFromEnv, mcpAuditRow, mcpIdentityEnv
 import { misusePathRefusal, misuseRefusal, misuseToolFrameText, setMisuseAlert, setMisuseOwnPaths } from "./safety/misuse-guardrails.ts";
 import { unwrapAgentsBridge } from "../shared/searched-tool-call.ts";
 import { safetyArm, safetyHttpRefusal, safetyPermissionEffect, safetyToolHold, setSafetyConfirm, setSafetyFullAccess } from "./safety/safety-review.ts";
-import { writeFileAtomic } from "./atomic.ts";
+import { flushOwnedFiles, flushOwnedFilesSync, writeFileAtomic } from "./atomic.ts";
 import { createSignalSettingsRoutes } from "./routes/signal-settings.ts";
 import { signalGateFileStorage } from "./proactive/signal-gate-store.ts";
 import { hideServerPathsInSections } from "./server-path-prompt.ts";
@@ -35329,6 +35329,8 @@ const gracefulShutdown = createGracefulShutdown({
     () => runtimeDeltaCoalescer.flushAll(),
     () => bus.flush(),
     () => closeMessageSearch(),
+    // The bots and rooms files' deferred saves (#3663).
+    () => flushOwnedFiles(),
   ],
   // Cleanup jobs run concurrently. Release only after they settle (or reach
   // the shutdown deadline), immediately before the process exits, so no new
@@ -35347,6 +35349,8 @@ const gracefulShutdown = createGracefulShutdown({
       }
       semanticIndex.stop();
       closeMessageDb();
+      // What the cleanup changed after its flush reaches disk too.
+      flushOwnedFilesSync();
       releaseDataDirLeaseAtExit();
       process.exit(exitCode);
     };

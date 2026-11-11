@@ -10,7 +10,6 @@ import { OwnedFile, writeFileAtomic } from "./atomic.ts";
 import { PROACTIVE_MODE_DEFAULT, normalizeProactiveMode } from "../shared/proactive-mode.ts";
 import { commitBotChange, keptRevocation, saveBotsFor, touchesPermissions } from "./bots/bots-save.ts";
 import { discardNativeLog } from "./drivers/native.ts";
-import { saveSoon } from "./save-batch.ts";
 import { applyHumanIds } from "./rooms/channel-membership.ts";
 import { parseToolScope, toolScopeWidens } from "../shared/tool-scope.ts";
 import { ensureSections, readSections, changeEmptySection } from "./rooms/section-context.ts";
@@ -495,6 +494,8 @@ export const botWireProjectionIsExact: BotWireProjectionIsExact = true;
 
 const BOTS_FILE = join(DATA_DIR, "bots.json");
 const GROUPS_FILE = join(DATA_DIR, "groups.json");
+/** Room fields a turn changes that can be rebuilt or lose their last second harmlessly: saved on the deferred path. */
+const ROOM_BOOKKEEPING = new Set(["busyBotId", "unread", "unreadFor", "lastReadMessageId", "pinned", "pinnedMessageId"]);
 /** Written once the copies older builds made of a bot's model on its threads
  * are cleared (Store load), so that cleanup runs once per data directory. */
 const THREAD_MODEL_COPIES_CLEARED = join(DATA_DIR, "thread-model-copies-cleared");
@@ -1294,7 +1295,7 @@ export class Store {
       // bot thread (setTaskActivity).
       if (task.snoozedUntil === 0) {
         delete task.snoozedUntil;
-        this.saveGroups();
+        this.saveGroupsSoon();
         this.emit({ type: "group", groupId: group.id });
       }
     }
@@ -1393,33 +1394,70 @@ export class Store {
   // unchanged task field), so both registries skip a byte-identical write.
   // Events are still emitted by the callers either way.
   /** Memory changes only once bots.json holds them: a failed save puts the bot back as it was.
-   * Bookkeeping saves land once at the end of the running batch (server/save-batch.ts). */
+   * Bookkeeping changes take the deferred write instead (saveBotsSoon, #3663). */
   private commitBotChange(bot: BotRecord, action: string, change: () => void, onRollback?: () => void, bookkeeping = false) {
-    commitBotChange(bot, action, bookkeeping ? () => this.saveBotsSoon() : () => this.saveBots(), change, onRollback);
+    if (bookkeeping) {
+      saveBotsFor(action, () => this.botsWritable());
+      change();
+      this.saveBotsSoon();
+      return;
+    }
+    commitBotChange(bot, action, () => this.saveBots(), change, onRollback);
   }
 
-  private saveBotsSoon() { saveSoon(this.botsFile, () => this.saveBots()); }
+  /** Bookkeeping: a value that can be rebuilt, or whose last second lost in a crash harms nobody (activity, unread,
+   * titles, pins, usage, engine sessions). Written later and off the event loop, newest state first (OwnedFile.writeSoon). */
+  private saveBotsSoon() {
+    this.botsWritable();
+    this.botsFile.writeSoon(() => this.botsText());
+  }
 
+  /** A change a person asked for and an answer confirms (a bot created or deleted, a new thread, access, a secret
+   * reference, ownership, a profile edit): written on the event loop before it returns, and it throws when the write
+   * fails, so the caller refuses the change. These are rare; what turns change often is bookkeeping (saveBotsSoon). */
   private saveBots(bots: BotRecord[] = this.bots, registerSections = true) {
+    this.botsFile.write(this.botsText(bots, registerSections));
+  }
+
+  private botsWritable() {
     if (this.botsUnreadable) {
       throw Object.assign(new Error("Saved bots could not be read. Repair bots.json before changing them."), { status: 503 });
     }
-    if (registerSections) this.rememberSections([...this.bots, ...bots].map((bot) => bot.section));
-    this.botsFile.write(JSON.stringify(bots.map(({ busy: _busy, activity: _activity, ...bot }) => ({
-      ...bot,
-      tasks: bot.tasks?.map(({ busy: _taskBusy, activity: _taskActivity, turnStartedAt: _taskTurnStarted, ...task }) => persistedPin(task)),
-    }))));
   }
 
+  private botsText(bots: BotRecord[] = this.bots, registerSections = true): string {
+    this.botsWritable();
+    if (registerSections) this.rememberSections([...this.bots, ...bots].map((bot) => bot.section));
+    return JSON.stringify(bots.map(({ busy: _busy, activity: _activity, ...bot }) => ({
+      ...bot,
+      tasks: bot.tasks?.map(({ busy: _taskBusy, activity: _taskActivity, turnStartedAt: _taskTurnStarted, ...task }) => persistedPin(task)),
+    })));
+  }
+
+  /** The rooms file's bookkeeping path, as saveBotsSoon. */
+  private saveGroupsSoon() {
+    this.groupsWritable();
+    this.groupsFile.writeSoon(() => this.groupsText());
+  }
+
+  /** The rooms file's on-loop path, as saveBots. */
   private saveGroups(groups: GroupRecord[] = this.groups, registerSections = true) {
+    this.groupsFile.write(this.groupsText(groups, registerSections));
+  }
+
+  private groupsWritable() {
     if (this.groupsUnreadable) {
       throw Object.assign(new Error("Saved rooms could not be read. Repair groups.json before changing them."), { status: 503 });
     }
+  }
+
+  private groupsText(groups: GroupRecord[] = this.groups, registerSections = true): string {
+    this.groupsWritable();
     if (registerSections) this.rememberSections(groups.map((group) => group.section));
-    this.groupsFile.write(JSON.stringify(groups.map(({ busyBotId: _busyBotId, turnStartedAt: _turnStartedAt, ...g }) => ({
+    return JSON.stringify(groups.map(({ busyBotId: _busyBotId, turnStartedAt: _turnStartedAt, ...g }) => ({
       ...g,
       ...(g.tasks ? { tasks: g.tasks.map((task) => persistedPin(task)) } : {}),
-    }))));
+    })));
   }
 
   get sections(): string[] { return readSections(); }
@@ -1822,7 +1860,8 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     );
     // A member who left the room takes its hold and held messages with it.
     if (Object.prototype.hasOwnProperty.call(patch, "memberIds")) pruneRoomHolds(group);
-    this.saveGroups();
+    if (Object.keys(patch).every((key) => ROOM_BOOKKEEPING.has(key))) this.saveGroupsSoon();
+    else this.saveGroups();
     this.emit({ type: "group", groupId: group.id });
     return group;
   }
@@ -1854,8 +1893,11 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
   deleteGroup(id: string): boolean {
     const group = this.group(id);
     if (!group) return false;
-    this.groups = this.groups.filter((g) => g.id !== id);
-    this.saveGroups();
+    // On disk before anything is erased (#3663): a failed write throws here
+    // and leaves the room, its threads and their transcripts as they were.
+    const kept = this.groups.filter((g) => g.id !== id);
+    this.saveGroups(kept);
+    this.groups = kept;
     for (const threadId of new Set([group.threadId, ...(group.tasks ?? []).map((task) => task.threadId)])) {
       this.deleteThreadRecord(threadId);
     }
@@ -1958,7 +2000,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     group.threadId = task.threadId;
     group.pinnedCwd = task.pinnedCwd;
     group.pinnedMessageId = task.pinnedMessageId;
-    this.saveGroups();
+    this.saveGroupsSoon();
     this.emit({ type: "group", groupId });
     return group;
   }
@@ -1968,7 +2010,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     if (!task) return null;
     if (pinned) task.pinned = true;
     else delete task.pinned;
-    this.saveGroups();
+    this.saveGroupsSoon();
     this.emit({ type: "group", groupId });
     return task;
   }
@@ -1987,7 +2029,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
       if (value === undefined || (field === "pinned" && value !== true)) delete task[field];
       else Object.assign(task, { [field]: value });
     }
-    this.saveGroups();
+    this.saveGroupsSoon();
     this.emit({ type: "group", groupId });
     return task;
   }
@@ -2008,7 +2050,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     const task = this.groupTaskByThread(groupId, threadId);
     if (!task) return null;
     task.title = title.trim().slice(0, 80) || UNTITLED_TASK;
-    this.saveGroups();
+    this.saveGroupsSoon();
     this.emit({ type: "group", groupId });
     return task;
   }
@@ -2021,7 +2063,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     if (!task || task.titleFromFirstMessage || task.title !== UNTITLED_TASK) return null;
     task.title = titleFromMessage(text);
     task.titleFromFirstMessage = true;
-    this.saveGroups();
+    this.saveGroupsSoon();
     this.emit({ type: "group", groupId });
     return task;
   }
@@ -2932,7 +2974,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     // back to idle after a turn. Persist the wake like any task change.
     if (task.snoozedUntil === 0) {
       task.snoozedUntil = undefined;
-      this.saveBots();
+      this.saveBotsSoon();
     }
     this.refreshBotActivity(bot);
     this.emit({ type: "bot", botId });
@@ -3348,7 +3390,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     const bot = this.botByThread(threadId);
     const task = bot ? this.taskByThread(bot.id, threadId) : undefined;
     if (!bot || !task || task.cwd === undefined) return false;
-    this.commitBotChange(bot, "the thread's folder", () => { delete task.cwd; });
+    this.commitBotChange(bot, "the thread's folder", () => { delete task.cwd; }, undefined, true);
     this.emit({ type: "bot", botId: bot.id });
     return true;
   }
@@ -3363,20 +3405,20 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     // would lose its work and its session.
     if (opts.privateOnly && task.cwd === undefined) {
       const cwd = fallbackCwd ?? null;
-      this.commitBotChange(bot, "the thread's folder", () => { task.cwd = cwd; });
+      this.commitBotChange(bot, "the thread's folder", () => { task.cwd = cwd; }, undefined, true);
       this.emit({ type: "bot", botId });
       return cwd;
     }
     if (opts.none) {
       if (task.cwd !== null) {
-        this.commitBotChange(bot, "the thread's folder", () => { task.cwd = null; });
+        this.commitBotChange(bot, "the thread's folder", () => { task.cwd = null; }, undefined, true);
         this.emit({ type: "bot", botId });
       }
       return null;
     }
     if (task.cwd !== undefined) return task.cwd;
     const cwd = Object.keys(task.resumeCursors).length === 0 ? (bot.cwd ?? fallbackCwd ?? null) : null;
-    this.commitBotChange(bot, "the thread's folder", () => { task.cwd = cwd; });
+    this.commitBotChange(bot, "the thread's folder", () => { task.cwd = cwd; }, undefined, true);
     this.emit({ type: "bot", botId });
     return cwd;
   }
@@ -3398,7 +3440,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
       if (!group.dm) return null;
       if (group.pinnedCwd === undefined) {
         group.pinnedCwd = group.cwd ?? null;
-        this.saveGroups();
+        this.saveGroupsSoon();
         this.emit({ type: "group", groupId: group.id });
       }
       return group.pinnedCwd;
@@ -3406,7 +3448,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     if (task.pinnedCwd === undefined) {
       task.pinnedCwd = group.cwd ?? null;
       if (group.threadId === task.threadId) group.pinnedCwd = task.pinnedCwd;
-      this.saveGroups();
+      this.saveGroupsSoon();
       this.emit({ type: "group", groupId: group.id });
     }
     return task.pinnedCwd;
@@ -3652,7 +3694,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     const next = merge(group.turnTiming);
     if (!next) return;
     group.turnTiming = next;
-    this.saveGroups();
+    this.saveGroupsSoon();
     this.emit({ type: "group", groupId: group.id });
   }
 
@@ -3713,7 +3755,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
         task.surface = undefined;
         task.surfaceSource = undefined;
       }
-    });
+    }, undefined, true);
     this.emit({ type: "bot", botId });
     return stale.length;
   }
@@ -3843,6 +3885,7 @@ const patch = { approvalMode: mode, autoApprove: false, alwaysAllow: [] };
     // conversation rule takes for the person's conversation (the chat
     // followed it and came back, 2026-11-03).
     if (routineRunId) task.routineRunId = routineRunId;
+    // A new thread is a record its messages, links and owner point to: on disk before it is used.
     this.commitBotChange(bot, "the new thread", () => {
       bot.tasks = [task, ...(bot.tasks ?? [])];
       if (activate) this.mirrorActiveTask(bot, task);
@@ -3952,7 +3995,7 @@ const patch = { approvalMode: mode, autoApprove: false, alwaysAllow: [] };
     const bot = this.bot(botId);
     const task = this.taskByThread(botId, threadId);
     if (!bot || !task) return null;
-    this.commitBotChange(bot, "the thread's link to its conversation", () => { task.parallelOf = structuredClone(parallelOf); });
+    this.commitBotChange(bot, "the thread's link to its conversation", () => { task.parallelOf = structuredClone(parallelOf); }, undefined, true);
     this.emit({ type: "bot", botId });
     return task;
   }
@@ -4017,7 +4060,7 @@ const patch = { approvalMode: mode, autoApprove: false, alwaysAllow: [] };
           task.unread = false;
         }
         bot.unread = botHasPersonUnread(bot);
-      });
+      }, undefined, true);
       archived += tasks.length;
       this.emit({ type: "bot", botId });
     }
@@ -4033,7 +4076,7 @@ const patch = { approvalMode: mode, autoApprove: false, alwaysAllow: [] };
     this.commitBotChange(bot, "the thread's archive", () => {
       delete task.archivedAt;
       delete task.autoArchived;
-    });
+    }, undefined, true);
     this.emit({ type: "bot", botId });
   }
 
@@ -4048,7 +4091,7 @@ const patch = { approvalMode: mode, autoApprove: false, alwaysAllow: [] };
     this.commitBotChange(bot, "who closed the thread", () => {
       if (closedBy) task.closedBy = structuredClone(closedBy);
       else delete task.closedBy;
-    });
+    }, undefined, true);
     this.emit({ type: "bot", botId });
     return task;
   }
@@ -4057,7 +4100,7 @@ const patch = { approvalMode: mode, autoApprove: false, alwaysAllow: [] };
     const bot = this.bot(botId);
     const task = bot?.tasks?.find((t) => t.threadId === threadId);
     if (!bot || !task) return null;
-    this.commitBotChange(bot, "the thread switch", () => this.mirrorActiveTask(bot, task));
+    this.commitBotChange(bot, "the thread switch", () => this.mirrorActiveTask(bot, task), undefined, true);
     this.emit({ type: "bot", botId });
     return bot;
   }

@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { DATA_DIR } from "../config.ts";
 import type { ModelSelection } from "../contracts.ts";
 import { Store } from "../store.ts";
+import { flushOwnedFilesSync } from "../atomic.ts";
 import { PROACTIVE_MODE_DEFAULT, proactiveModeFor } from "../../shared/proactive-mode.ts";
 
 const selection = (): ModelSelection => ({ instanceId: "claude", model: "claude-sonnet-5" });
@@ -23,6 +24,7 @@ describe("proactive by default", () => {
     const bot = store.createBot({ name: "Fresh" });
     expect(PROACTIVE_MODE_DEFAULT).toBe("proactive");
     expect(bot.proactiveMode).toBe("proactive");
+    flushOwnedFilesSync();
     const saved = JSON.parse(readFileSync(BOTS(), "utf8")) as Array<{ id: string; proactiveMode?: string }>;
     expect(saved.find((row) => row.id === bot.id)?.proactiveMode).toBe("proactive");
   });
@@ -34,6 +36,7 @@ describe("proactive by default", () => {
     const reader = seed.createBot({ name: "Reader" });
     const follower = seed.createBot({ name: "Follower" });
     const turnedOff = seed.createBot({ name: "Turned off" });
+    flushOwnedFilesSync();
     const rows = JSON.parse(readFileSync(BOTS(), "utf8")) as Array<Record<string, unknown>>;
     for (const row of rows) {
       if (row.id === untouched.id) delete row.proactiveMode;
@@ -51,6 +54,7 @@ describe("proactive by default", () => {
     expect(store.bot(follower.id)?.proactiveMode).toBe("proactive");
     expect(store.bot(turnedOff.id)?.proactiveMode).toBe("off");
 
+    flushOwnedFilesSync();
     const disk = JSON.parse(readFileSync(BOTS(), "utf8")) as Array<{ id: string; proactiveMode?: string }>;
     expect(disk.find((row) => row.id === untouched.id)?.proactiveMode).toBe("proactive");
     expect(disk.find((row) => row.id === proposer.id)?.proactiveMode).toBe("proactive");

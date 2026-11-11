@@ -61,9 +61,13 @@ function relay(body: unknown, overrides: Record<string, unknown> = {}) {
   return { adminOrigin: ADMIN, organizationId: ORG, organizationName: "Customer Co", digest: sha(text), catalog: text, ...overrides };
 }
 
-/** A copy of the whole installation as it is on disk right now: what the
- * next start would find if the app stopped at this instant. */
+/** Writes what the store has queued (its bots and rooms files are written off the event loop, #3663). */
+let flushSaves: () => void = () => {};
+
+/** A copy of the whole installation as it is on disk once the store's queued
+ * writes land: what the next start would find if the app stopped then. */
 function snapshot(): string {
+  flushSaves();
   const copy = mkdtempSync(join(tmpdir(), "omb-org-library-crash-"));
   homes.push(copy);
   cpSync(home, copy, { recursive: true });
@@ -85,6 +89,7 @@ async function installation(from?: string) {
   vi.stubEnv("USERPROFILE", home);
   vi.stubEnv("SAGAX_DATA_DIR", join(home, ".sagax"));
   const { Store } = await import("../store.ts");
+  flushSaves = (await import("../atomic.ts")).flushOwnedFilesSync;
   const { RoutineManager } = await import("../routines/routines.ts");
   const skills = await import("../skills/skills.ts");
   const workspace = await import("../workspace/workspace.ts");

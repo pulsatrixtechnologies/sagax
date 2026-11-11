@@ -7,10 +7,15 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { DATA_DIR } from "./config.ts";
 import type { ModelSelection } from "./contracts.ts";
 import { Store, type BotRecord, type TaskPatch } from "./store.ts";
+import { flushOwnedFilesSync } from "./atomic.ts";
 import { planThreadOwners } from "./threads/thread-privacy.ts";
 
 const selection = (): ModelSelection => ({ instanceId: "claude", model: "default" });
-const savedBots = (): BotRecord[] => JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));
+// What the store saved, its writes still running off the event loop included (server/atomic.ts).
+const savedBots = (): BotRecord[] => {
+  flushOwnedFilesSync();
+  return JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));
+};
 const ALICE = "pr_00000000-0000-4000-8000-000000000001";
 const BOB = "pr_00000000-0000-4000-8000-000000000002";
 

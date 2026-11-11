@@ -55,7 +55,7 @@ it("merges topics into one stream: digest, recall_topic, privacy exclusions, thr
 
     // Topic 1, from a client with threads off: the thread becomes a segment.
     await send(first, "Please audit the September invoices for ACME-42.", true);
-    expect(stored(bot.id, first).streamSegment).toBe(true);
+    await expect.poll(() => stored(bot.id, first).streamSegment, { timeout: 5_000 }).toBe(true);
     // A segment's marks never reach a client.
     const wire = (await api("GET", "/api/bots?messages=0")).bots.find((b: Json) => b.id === bot.id);
     expect(JSON.stringify(wire)).not.toContain("streamSegment");
@@ -71,13 +71,13 @@ it("merges topics into one stream: digest, recall_topic, privacy exclusions, thr
     const hidden = await newThread({ hidden: true });
     await send(hidden, "ASIDE-OTTER side work", true);
     expect(stored(bot.id, hidden).hidden).toBeFalsy();
-    expect(stored(bot.id, hidden).streamSegment).toBe(true);
+    await expect.poll(() => stored(bot.id, hidden).streamSegment, { timeout: 5_000 }).toBe(true);
 
     // New topic: a fresh context, already a segment; the topic it closes gets
     // its digest written in the background.
     const second = await newThread({ stream: true });
     expect(second).not.toBe(first);
-    expect(stored(bot.id, second).streamSegment).toBe(true);
+    await expect.poll(() => stored(bot.id, second).streamSegment, { timeout: 5_000 }).toBe(true);
     await expect.poll(() => typeof stored(bot.id, first).segmentDigest?.text, { timeout: 30_000 }).toBe("string");
 
     // Its first turn knows topic 1 from the digest, never the excluded ones,
@@ -108,7 +108,7 @@ it("merges topics into one stream: digest, recall_topic, privacy exclusions, thr
 
     // Threads on: the next send says so, the mark goes, the turn is as before.
     await send(second, "Plain thread-mode turn", false);
-    expect(stored(bot.id, second).streamSegment).toBeUndefined();
+    await expect.poll(() => stored(bot.id, second).streamSegment, { timeout: 5_000 }).toBeUndefined();
     // The session was launched with the digest, and a live session keeps its
     // launch prompt (that is what the fake CLI dumps). Since the delta
     // context (a47c59ff2) the turn says the section is gone instead.
@@ -120,8 +120,8 @@ it("merges topics into one stream: digest, recall_topic, privacy exclusions, thr
 
     // A topic made confidential later leaves the stream with its digest.
     await api("PATCH", `/api/bots/${bot.id}/tasks/${first}`, { confidential: true, confirmConfidential: true });
-    expect(stored(bot.id, first).streamSegment).toBeUndefined();
-    expect(stored(bot.id, first).segmentDigest).toBeUndefined();
+    await expect.poll(() => stored(bot.id, first).streamSegment, { timeout: 5_000 }).toBeUndefined();
+    await expect.poll(() => stored(bot.id, first).segmentDigest, { timeout: 5_000 }).toBeUndefined();
     await send(second, "Back in the stream", true);
     expect(given()).not.toContain(`id ${first}`);
     expect(given()).not.toContain("ACME-42");

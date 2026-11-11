@@ -114,6 +114,8 @@ describe("Sagax compaction for a transcript-replay engine", () => {
     await send(`GOAL_FIRST use port 9001 for the service. ${filler}`);
     for (let i = 1; i <= 8; i++) await send(`STEP_${i} ${filler}`);
     await send("LATEST what port again?");
+    // The thread's bookkeeping is written off the event loop, within a second (#3663).
+    await expect.poll(() => (task().contextSummaries ?? []).length, { timeout: 5_000 }).toBeGreaterThanOrEqual(1);
     const folds = task().contextSummaries ?? [];
     expect(folds.length).toBeGreaterThanOrEqual(1);
     expect(folds.at(-1).summary).toContain("SUMMARY_MARKER");

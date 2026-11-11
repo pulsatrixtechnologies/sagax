@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { flushOwnedFiles, flushOwnedFilesSync } from "./atomic.ts";
 import { soulFile, soulHash } from "./bots/bot-folder.ts";
 import { flushProfileHistory, readHistory, recordProfileChange } from "./profiles/profile-versions.ts";
 import { DATA_DIR } from "./config.ts";
@@ -141,6 +142,7 @@ describe("Store", () => {
   it("retains corrupt persisted tool selection as denied access instead of inheriting all tools", () => {
     const store = new Store(selection);
     const bot = store.createBot({ name: "Corrupt selection fixture" });
+    flushOwnedFilesSync();
     const bots = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));
     bots[0].toolScope = { allow: "all" };
     writeFileSync(join(DATA_DIR, "bots.json"), JSON.stringify(bots));
@@ -180,6 +182,7 @@ describe("Store", () => {
     expect(store.bot(ben.id)).toBeNull();
     expect(store.messagesFor(ben.threadId)).toEqual([]);
     expect(existsSync(soulFile(ben.id))).toBe(false);
+    flushOwnedFilesSync();
     expect(JSON.parse(readFileSync(join(DATA_DIR, "groups.json"), "utf8"))[0].memberIds).toContain(ben.id);
     expect(new Store(selection).group(room.id)?.memberIds).toEqual([ada.id]);
   });
@@ -189,6 +192,7 @@ describe("Store", () => {
     const [ada, cleo] = [store.createBot({}), store.createBot({})];
     const room = store.createGroup("Launch team", [ada.id, cleo.id], false);
     const groupsFile = join(DATA_DIR, "groups.json");
+    flushOwnedFilesSync();
     const saved = JSON.parse(readFileSync(groupsFile, "utf8"));
     const ghost = "8a2acb50-6276-4ce2-926a-9e112b848acc";
     Object.assign(saved.find((g: { id: string }) => g.id === room.id), {
@@ -199,6 +203,7 @@ describe("Store", () => {
 
     const restarted = new Store(selection);
     expect(restarted.group(room.id)).toMatchObject({ memberIds: [ada.id, cleo.id], defaultResponder: { kind: "member", botId: ada.id } });
+    flushOwnedFilesSync();
     const persisted = JSON.parse(readFileSync(groupsFile, "utf8")).find((g: { id: string }) => g.id === room.id);
     expect(persisted.memberIds).toEqual([ada.id, cleo.id]);
   });
@@ -208,6 +213,7 @@ describe("Store", () => {
     const [ada, cleo] = [store.createBot({}), store.createBot({})];
     const room = store.createGroup("Launch team", [ada.id, cleo.id], false);
     const groupsFile = join(DATA_DIR, "groups.json");
+    flushOwnedFilesSync();
     const before = readFileSync(groupsFile, "utf8");
     writeFileSync(join(DATA_DIR, "bots.json"), "{ not json");
 
@@ -269,6 +275,7 @@ describe("Store", () => {
     const bot = store.createBot({ section: "Delivery" });
     const room = store.createGroup("Room", [bot.id], false, "Delivery");
     store.patchBot(bot.id, { title: "General assistant" });
+    flushOwnedFilesSync();
     const disk = () => ["bots.json", "groups.json", "section-contexts.json"].map(name => readFileSync(join(DATA_DIR, name), "utf8"));
     const before = disk();
     const internals = store as unknown as { saveGroups: (...args: unknown[]) => void };
@@ -413,7 +420,7 @@ describe("Store", () => {
     expect(saved[0].tasks[0]).toMatchObject({ surface: "local", surfaceSource: "user" });
   });
 
-  it("clears only auto surface pins that conflict with a Works on change", () => {
+  it("clears only auto surface pins that conflict with a Works on change", async () => {
     const store = new Store(selection);
     const bot = store.createBot({}, { seedMessages: false });
     const autoMismatch = store.createTask(bot.id, "Auto mismatch", false)!;
@@ -435,6 +442,7 @@ describe("Store", () => {
     expect(store.taskByThread(bot.id, autoMatch.threadId)).toMatchObject({ surface: "vm" });
     expect(changes).toHaveBeenCalledTimes(1);
     // A cleared pin leaves no residue in the durable record…
+    await flushOwnedFiles();
     const saved = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8")) as any[];
     const savedCleared = saved[0].tasks.find((task: any) => task.threadId === autoMismatch.threadId);
     expect(savedCleared).not.toHaveProperty("surface");
@@ -466,12 +474,13 @@ describe("Store", () => {
   // Every turn re-saves the same resume cursor and the same context model;
   // OwnedFile skips a write whose text equals the last one written, without
   // reading the file back (#4151).
-  it("leaves bots.json alone when a save changes nothing, and writes the next real change", () => {
+  it("leaves bots.json alone when a save changes nothing, and writes the next real change", async () => {
     const file = join(DATA_DIR, "bots.json");
     const store = new Store(selection);
     const bot = store.createBot({}, { seedMessages: false });
     store.setResumeCursor(bot.id, "claude", { sessionId: "s-1" }, bot.threadId);
     store.patchTask(bot.id, bot.threadId, { lastContextModel: "claude-sonnet-5" });
+    await flushOwnedFiles();
     const saved = statSync(file).ino;
     const events: unknown[] = [];
     store.onChange((change) => events.push(change));
@@ -480,21 +489,24 @@ describe("Store", () => {
     store.setResumeCursor(bot.id, "claude", { sessionId: "s-1" }, bot.threadId);
     // An unchanged task field still emits, but OwnedFile skips the write.
     store.patchTask(bot.id, bot.threadId, { lastContextModel: "claude-sonnet-5" });
+    await flushOwnedFiles();
     expect(statSync(file).ino).toBe(saved);
     expect(events).toEqual([{ type: "bot", botId: bot.id }]);
 
     store.setResumeCursor(bot.id, "claude", { sessionId: "s-2" }, bot.threadId);
+    await flushOwnedFiles();
     expect(statSync(file).ino).not.toBe(saved);
     expect(new Store(selection).taskByThread(bot.id, bot.threadId)?.resumeCursors).toEqual({ claude: { sessionId: "s-2" } });
   });
 
-  it("skips an unchanged save without reading a bots.json edited on disk, and a real change puts memory back", () => {
+  it("skips an unchanged save without reading a bots.json edited on disk, and a real change puts memory back", async () => {
     // OwnedFile compares against the last write, not the disk: a hand edit
     // under an identical in-memory save stays until the next real change.
     const file = join(DATA_DIR, "bots.json");
     const store = new Store(selection);
     const bot = store.createBot({ name: "Original" }, { seedMessages: false });
     store.setResumeCursor(bot.id, "claude", { sessionId: "s-1" }, bot.threadId);
+    await flushOwnedFiles();
     const edited = JSON.parse(readFileSync(file, "utf8"));
     edited[0].name = "Edited on disk";
     writeFileSync(file, JSON.stringify(edited, null, 2));
@@ -502,6 +514,7 @@ describe("Store", () => {
     store.setResumeCursor(bot.id, "claude", { sessionId: "s-1" }, bot.threadId);
     expect(JSON.parse(readFileSync(file, "utf8"))[0].name).toBe("Edited on disk");
     store.setResumeCursor(bot.id, "claude", { sessionId: "s-2" }, bot.threadId);
+    await flushOwnedFiles();
     expect(JSON.parse(readFileSync(file, "utf8"))[0].name).toBe("Original");
   });
 
@@ -510,6 +523,7 @@ describe("Store", () => {
     const store = new Store(selection);
     const bot = store.createBot({}, { seedMessages: false });
     store.createGroup("Team", [bot.id]);
+    flushOwnedFilesSync();
     expect(mode("bots.json")).toBe(0o600);
     expect(mode("groups.json")).toBe(0o600);
     // A registry left behind by an older release (or loosened by hand) is
@@ -656,6 +670,7 @@ describe("Store", () => {
     original.appendMessage(group.threadId, { role: "user", kind: "text", text: "Keep the group conversation" });
     const botMessages = original.messagesFor(bot.threadId);
     const groupMessages = original.messagesFor(group.threadId);
+    flushOwnedFilesSync();
     const bots = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));
     const groups = JSON.parse(readFileSync(join(DATA_DIR, "groups.json"), "utf8"));
     delete bots[0].tasks; delete bots[0].soulHash;
@@ -672,6 +687,7 @@ describe("Store", () => {
       expect(restored.group(group.id)?.defaultResponder).toEqual({ kind: "member", botId: bot.id });
       expect(restored.messagesFor(bot.threadId)).toEqual(botMessages);
       expect(restored.messagesFor(group.threadId)).toEqual(groupMessages);
+      flushOwnedFilesSync();
       expect(JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"))[0].tasks).toHaveLength(1);
       expect(JSON.parse(readFileSync(join(DATA_DIR, "groups.json"), "utf8"))[0].tasks).toHaveLength(1);
       expect(warning.mock.calls.some(([message]) => String(message).includes("[teams] Startup could not register"))).toBe(true);
@@ -961,6 +977,7 @@ describe("Store", () => {
     const plain = store.createBot();
     // Write the legacy fields straight into bots.json, as an older release
     // would have persisted them, then reload: the Store strips them.
+    flushOwnedFilesSync();
     const disk = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8")) as Record<string, unknown>[];
     for (const record of disk) {
       if (record.id === granted.id) {
@@ -1055,6 +1072,7 @@ describe("Store", () => {
     const room = store.createGroup("Pending", [bot.id]);
     expect(room.setupCompletedAt).toBe(room.createdAt);
     const file = join(DATA_DIR, "groups.json");
+    flushOwnedFilesSync();
     const raw = JSON.parse(readFileSync(file, "utf8")) as Array<{ id: string; setupCompletedAt?: number | null; setupSkippedAt?: number | null }>;
     const saved = raw.find((group) => group.id === room.id)!;
     saved.setupCompletedAt = null;
@@ -1070,6 +1088,7 @@ describe("Store", () => {
     const second = store.createBot();
     const group = store.createGroup("Legacy team", [first.id, second.id]);
     const groupsFile = join(DATA_DIR, "groups.json");
+    flushOwnedFilesSync();
     const saved = JSON.parse(readFileSync(groupsFile, "utf8"));
     delete saved[0].defaultResponder;
     writeFileSync(groupsFile, JSON.stringify(saved));
@@ -1110,6 +1129,8 @@ describe("Store", () => {
       autoApprove: false,
     });
     expect(reloaded.bot(bot.id)).not.toHaveProperty("approvalGrant");
+
+    flushOwnedFilesSync();
 
     const persisted: BotRecord[] = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));
     expect(persisted.find((candidate) => candidate.id === bot.id)).toMatchObject({
@@ -1160,6 +1181,7 @@ describe("Store", () => {
     const machine = store.createBot();
     const fleet = store.createBot();
     expect(missing.host).toEqual({ kind: "fleet" });
+    flushOwnedFilesSync();
     const raw: BotRecord[] = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));
     delete raw.find((bot) => bot.id === missing.id)!.host;
     raw.find((bot) => bot.id === machine.id)!.host = { kind: "machine", userId: "morgan@example.test", deviceId: "laptop" };
@@ -1171,6 +1193,7 @@ describe("Store", () => {
     expect(reloaded.bot(machine.id)?.host).toEqual({ kind: "machine", userId: "morgan@example.test", deviceId: "laptop" });
     expect(reloaded.bot(fleet.id)?.host).toEqual({ kind: "fleet" });
 
+    flushOwnedFilesSync();
     const saved: BotRecord[] = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));
     expect(saved.find((bot) => bot.id === missing.id)?.host).toEqual({ kind: "fleet" });
     expect(saved.find((bot) => bot.id === machine.id)?.host).toEqual({ kind: "machine", userId: "morgan@example.test", deviceId: "laptop" });
@@ -1183,6 +1206,7 @@ describe("Store", () => {
     const vps = store.createBot();
     const invalid = store.createBot();
     const absent = store.createBot();
+    flushOwnedFilesSync();
     const raw: BotRecord[] = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));
     raw.find((bot) => bot.id === boat.id)!.cloudBackend = "box";
     raw.find((bot) => bot.id === vps.id)!.cloudBackend = "vps";
@@ -1196,6 +1220,7 @@ describe("Store", () => {
     expect(reloaded.bot(invalid.id)?.cloudBackend).toBeUndefined();
     expect(reloaded.bot(absent.id)?.cloudBackend).toBeUndefined();
 
+    flushOwnedFilesSync();
     const saved: BotRecord[] = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));
     expect(saved.find((bot) => bot.id === boat.id)?.cloudBackend).toBe("box");
     expect(saved.find((bot) => bot.id === vps.id)?.cloudBackend).toBe("vps");
@@ -1217,6 +1242,7 @@ describe("Store", () => {
         { id: "work", name: "Lowercase variant" },
       ],
     }));
+    flushOwnedFilesSync();
     const bots: BotRecord[] = JSON.parse(readFileSync(botsFile, "utf8"));
     bots.find((bot) => bot.id === first.id)!.browserProfile = "Work";
     bots.find((bot) => bot.id === duplicate.id)!.browserProfile = "Work";
@@ -1228,6 +1254,7 @@ describe("Store", () => {
     expect(reloaded.bot(duplicate.id)?.browserProfile).toBe("work-2");
     expect(reloaded.bot(caseVariant.id)?.browserProfile).toBe("work");
 
+    flushOwnedFilesSync();
     const persisted: BotRecord[] = JSON.parse(readFileSync(botsFile, "utf8"));
     expect(persisted.find((bot) => bot.id === first.id)?.browserProfile).toBe("work-2");
     expect(persisted.find((bot) => bot.id === duplicate.id)?.browserProfile).toBe("work-2");
@@ -1255,6 +1282,7 @@ describe("Store", () => {
         { id: "work-2", name: "Explicit suffix" },
       ],
     }));
+    flushOwnedFilesSync();
     const bots: BotRecord[] = JSON.parse(readFileSync(botsFile, "utf8"));
     bots.find((bot) => bot.id === upper.id)!.browserProfile = "Work";
     bots.find((bot) => bot.id === canonical.id)!.browserProfile = "work";
@@ -1266,6 +1294,7 @@ describe("Store", () => {
     expect(reloaded.bot(canonical.id)?.browserProfile).toBe("work");
     expect(reloaded.bot(suffixed.id)?.browserProfile).toBe("work-2");
 
+    flushOwnedFilesSync();
     const persisted: BotRecord[] = JSON.parse(readFileSync(botsFile, "utf8"));
     expect(persisted.find((bot) => bot.id === upper.id)?.browserProfile).toBe("work-3");
     expect(persisted.find((bot) => bot.id === canonical.id)?.browserProfile).toBe("work");
@@ -1293,6 +1322,8 @@ describe("Store", () => {
       "delegate_bot:@Twin",
       "Bash:git status",
     ]);
+
+    flushOwnedFilesSync();
 
     const persisted: BotRecord[] = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));
     expect(persisted.find((bot) => bot.id === requester.id)?.alwaysAllow).toEqual(
@@ -1324,6 +1355,8 @@ describe("Store", () => {
       "provider-tool:claude:linear:list_comments:config-one",
       "provider-tool:claude:linear:list_issues:config-one",
     ]);
+
+    flushOwnedFilesSync();
 
     const persisted: BotRecord[] = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));
     expect(persisted.find((candidate) => candidate.id === bot.id)?.alwaysAllow).toEqual(
@@ -1756,6 +1789,7 @@ describe("Store", () => {
       const original = new Store(selection);
       const bot = original.createBot({ name: "Keeper" });
       const file = join(DATA_DIR, "bots.json");
+      flushOwnedFilesSync();
       const saved = readFileSync(file, "utf8");
       writeFileSync(file, broken);
       const restored = new Store(selection);
@@ -1779,6 +1813,7 @@ describe("Store", () => {
       const bot = original.createBot({ name: "Host" });
       const room = original.createGroup("Launch", [bot.id], false);
       const file = join(DATA_DIR, "groups.json");
+      flushOwnedFilesSync();
       const saved = readFileSync(file, "utf8");
       writeFileSync(file, broken);
       const restored = new Store(selection);
@@ -1910,6 +1945,7 @@ describe("Store", () => {
   it("busy is wiped even when bots.json says otherwise", () => {
     const store = new Store(selection);
     const bot = store.createBot();
+    flushOwnedFilesSync();
     const raw: BotRecord[] = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));
     raw.find((b) => b.id === bot.id)!.busy = true;
     writeFileSync(join(DATA_DIR, "bots.json"), JSON.stringify(raw));
@@ -2672,6 +2708,7 @@ describe("soul", () => {
   it("backfills old bots' mirrors before the first non-soul history change", async () => {
     const store = new Store(selection);
     const bot = store.createBot();
+    flushOwnedFilesSync();
     const raw = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8")) as Record<string, unknown>[];
     for (const record of raw) {
       delete record.soul;
@@ -2708,6 +2745,7 @@ describe("soul", () => {
     expect(() => store.patchBotProfile(bot.id, { name: "Kiwi", soul: "new", lastProfileRequestId: "card" })).toThrow("disk full");
     expect(bot).toEqual(before);
     expect(readFileSync(soulFile(bot.id), "utf8")).toBe("");
+    flushOwnedFilesSync();
     expect(JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"))[0].name).toBe(before.name);
     save.mockRestore();
     const emit = vi.fn();

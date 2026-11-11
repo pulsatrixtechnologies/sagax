@@ -233,7 +233,7 @@ describe("a cloud computer that can't start, against the real server", () => {
       Object.assign(saved.tasks.find((task: any) => task.threadId === bot.threadId), { surface: "cloud", surfaceSource: "auto" });
     });
     await start();
-    expect(savedTask(bot.id, bot.threadId)?.surface).toBeUndefined();
+    await expect.poll(() => savedTask(bot.id, bot.threadId)?.surface, { timeout: 5_000 }).toBeUndefined();
     // The next message runs on Auto, which never asks Boat.
     createAnswer = DOWN;
     const createsBefore = creates;

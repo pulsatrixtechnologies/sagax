@@ -145,9 +145,11 @@ describe("CI scope CLI", () => {
     expect(run(directory, "merge_group", {}).output).toBe(`runtime=true\nmobile=true\nvitest_os=${PR_OS}\nplatforms=false\n`);
   });
 
-  it("runs every platform only for workflow_dispatch", () => {
+  it("runs every platform only for workflow_dispatch and the nightly schedule", () => {
     const { directory } = fixture();
     expect(run(directory, "workflow_dispatch", {}).output).toBe(`runtime=true\nmobile=true\nvitest_os=${ALL_OS}\nplatforms=true\n`);
+    // The nightly pass on every operating system (#3482).
+    expect(run(fixture().directory, "schedule", {}).output).toBe(`runtime=true\nmobile=true\nvitest_os=${ALL_OS}\nplatforms=true\n`);
   });
 });
 

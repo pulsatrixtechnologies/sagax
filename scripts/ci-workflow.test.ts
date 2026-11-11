@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
 const workflow = parse(readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"));
-const requiredRuntimeJobs = ["vitest", "behavior-evals", "packaged-server", "windows-cua", "electron-smokes", "voice-acceptance"];
+const requiredRuntimeJobs = ["vitest", "known-failures", "behavior-evals", "packaged-server", "windows-cua", "electron-smokes", "voice-acceptance"];
 
 function runGate(needs: Record<string, unknown>) {
   // Execute the actual gate, not a duplicate of its success/failure logic.
@@ -28,9 +28,12 @@ function gateNeeds(runtime: string) {
 }
 
 describe("CI concurrency", () => {
-  it("runs once, on the release candidate: dispatch only, never on a PR, push or merge queue (Owner 2026-10-14)", () => {
-    expect(Object.keys(workflow.on)).toEqual(["workflow_dispatch"]);
-    expect(workflow.on).not.toHaveProperty("push");
+  it("runs every test after each merge to main and nightly, never on a PR or the merge queue (Owner 2026-11-09, #3482)", () => {
+    expect(Object.keys(workflow.on).sort()).toEqual(["push", "schedule", "workflow_dispatch"]);
+    // A push to main only: no tag, so a release tag starts nothing here.
+    expect(workflow.on.push).toEqual({ branches: ["main"] });
+    expect(workflow.on.schedule).toEqual([{ cron: "17 7 * * *" }]);
+    expect(workflow.on.workflow_dispatch.inputs.fill_known_failures).toMatchObject({ type: "boolean", default: false, required: false });
     expect(workflow.on).not.toHaveProperty("pull_request");
     expect(workflow.on).not.toHaveProperty("merge_group");
     expect(workflow.concurrency["cancel-in-progress"]).toBe("${{ github.event_name == 'pull_request' }}");
@@ -153,8 +156,11 @@ describe("CI concurrency", () => {
     expect(workflow.jobs.static.permissions).toEqual({ contents: "read", actions: "read" });
     const scope = workflow.jobs.static.steps.find((step: { id?: string }) => step.id === "scope");
     expect(scope.env).toEqual({ GH_TOKEN: "${{ github.token }}" });
+    // known-failures reads the previous main run's sightings and opens the
+    // regression issues; nothing else gets more than the workflow's read.
+    expect(workflow.jobs["known-failures"].permissions).toEqual({ contents: "read", actions: "read", issues: "write" });
     for (const [name, job] of Object.entries(workflow.jobs) as [string, { permissions?: unknown }][]) {
-      if (name !== "static") expect(job.permissions, name).toBeUndefined();
+      if (name !== "static" && name !== "known-failures") expect(job.permissions, name).toBeUndefined();
     }
   });
 
@@ -216,7 +222,7 @@ describe("CI concurrency", () => {
       step.run === "pnpm exec vitest run scripts/ci-scope.test.ts scripts/ci-workflow.test.ts scripts/testing/verification-docs.test.ts",
     )).toBe(true);
     for (const [name, job] of Object.entries(workflow.jobs) as [string, { needs?: string | string[]; if?: string }][]) {
-      if (["static", "gate"].includes(name)) continue;
+      if (["static", "gate", "known-failures"].includes(name)) continue;
       expect(job.needs).toBe("static");
       const selector = `needs.static.outputs.${["ios", "android"].includes(name) ? "mobile" : "runtime"} == 'true'`;
       // Windows, macOS and iOS jobs run on main pushes and merge groups only.
@@ -236,6 +242,61 @@ describe("CI concurrency", () => {
     const commands = smoke.jobs.windows.steps.map((step: { run?: string }) => step.run);
     expect(commands).toContain("node --test electron/shared-computer-access.node-test.mjs");
     expect(commands).toContain("pnpm exec vitest run server/computer/shared-computers.e2e.test.ts");
+  });
+});
+
+describe("known failures after each merge (#3482)", () => {
+  type Step = { name?: string; run?: string; if?: string; uses?: string; shell?: string; env?: Record<string, string>; with?: Record<string, unknown> };
+  const vitestSteps = workflow.jobs.vitest.steps as Step[];
+  const job = workflow.jobs["known-failures"] as { needs: string[]; if: string; steps: Step[]; "runs-on": string };
+  const onMain = "${{ !cancelled() && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule') }}";
+
+  it("lets each vitest job finish on a test failure and hand its results to the verdict", () => {
+    const tests = vitestSteps.find((step) => step.name === "Run tests")!;
+    expect(tests.shell).toBe("bash");
+    expect(tests.run).toContain("set +e");
+    expect(tests.run).toContain('--reporter=json --outputFile.json="$RUNNER_TEMP/vitest-report.json"');
+    expect(tests.run).toContain('echo "$?" > "$RUNNER_TEMP/vitest-exit"');
+    const extract = vitestSteps.find((step) => step.run?.includes("known-failures.mjs extract"))!;
+    expect(extract.if).toBe("${{ !cancelled() }}");
+    const upload = vitestSteps.find((step) => step.with?.name === "vitest-results-${{ matrix.os }}-${{ matrix.shard }}")!;
+    expect(upload.uses).toMatch(/^actions\/upload-artifact@[a-f\d]{40}$/);
+    expect(vitestSteps.indexOf(upload)).toBe(vitestSteps.indexOf(extract) + 1);
+  });
+
+  it("gives the verdict once, after every vitest job, and the CI gate requires it", () => {
+    expect(job.needs).toEqual(["static", "vitest"]);
+    expect(job.if).toBe("${{ !cancelled() && needs.static.outputs.runtime == 'true' }}");
+    expect(job["runs-on"]).toBe("ubuntu-latest");
+    const verdict = job.steps.find((step) => step.name === "Every failure is a known failure")!;
+    expect(verdict.run).toContain("known-failures.mjs report");
+    expect(verdict.run).toContain('--expect "$expected"');
+    // A failed shrink check must not hide this run's own failures.
+    expect(verdict.if).toBe("${{ !cancelled() }}");
+    const download = job.steps.find((step) => step.with?.pattern === "vitest-results-*")!;
+    expect(download.if).toBe("${{ !cancelled() }}");
+    // Only a run on every platform shrinks the list.
+    expect(verdict.run).toContain('--platforms "$VITEST_OS"');
+    expect(verdict.env?.VITEST_OS).toBe("${{ needs.static.outputs.vitest_os }}");
+    expect(verdict.env?.SEED).toBe("${{ inputs.fill_known_failures == true }}");
+    expect(workflow.jobs.gate.needs).toContain("known-failures");
+    const shrink = job.steps.find((step) => step.run?.includes("check-shrink"))!;
+    expect(shrink.if).toBe("github.event_name == 'push'");
+    expect(shrink.env).toEqual({ BEFORE: "${{ github.event.before }}" });
+  });
+
+  it("opens regression issues and keeps sightings only for main's pushes and nightly runs", () => {
+    const issues = job.steps.find((step) => step.run?.includes("known-failures.mjs open-issues"))!;
+    expect(issues.if).toBe(onMain);
+    expect(issues.env?.GH_TOKEN).toBe("${{ github.token }}");
+    // Only a run on every platform forgets a sighting whose test passed.
+    expect(issues.env?.VITEST_OS).toBe("${{ needs.static.outputs.vitest_os }}");
+    expect(issues.run).toContain('--platforms "$VITEST_OS"');
+    for (const name of ["Read the previous main run's sightings", "Keep this run's sightings for the next run"]) {
+      expect(job.steps.find((step) => step.name === name)?.if).toBe(onMain);
+    }
+    // The job uses the run's own token and no repository secret.
+    expect(JSON.stringify(job)).not.toMatch(/secrets\./);
   });
 });
 

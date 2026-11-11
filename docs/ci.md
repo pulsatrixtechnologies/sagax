@@ -1,6 +1,14 @@
 # CI job selection
 
-Every PR still runs the workflow and its static checks: locale validation,
+`ci.yml` starts on three events: a push to `main` (after each merge, Linux
+jobs only), a nightly schedule at 07:17 UTC (every operating system), and a
+manual dispatch (every operating system, used for a release candidate). It
+does not start on a pull request or the merge queue, and it never blocks a
+merge: pull requests keep their quick checks (typecheck, lint, terms), and
+every test runs after the merge, off the developer's machine (owner's
+decision of 2026-11-09, issue #3482). See "Known failures" below.
+
+When it runs on a pull request's diff, it runs the workflow and its static checks: locale validation,
 typecheck, lint, Electron checks, the UI build, CI-selection tests and the
 verification-documentation checks. Selection never skips the entire workflow.
 
@@ -12,7 +20,7 @@ verification-documentation checks. Selection never skips the entire workflow.
   skips the runtime jobs. It does so only when the commit before the push has
   a green CI run of its own. Main's waiting run is replaced by each push, so
   without that check a replaced run's code would never be tested.
-- A manual dispatch runs every platform. Merge groups run the Linux suite
+- A manual dispatch and the nightly schedule run every platform. Merge groups run the Linux suite
   only, the same as a pull request or a push to main. An empty or unreadable
   diff, or a previous commit whose CI cannot be read, still runs the runtime
   jobs, and still does not add Windows or macOS.
@@ -63,9 +71,10 @@ simulator suite). With 25 open PRs the macOS jobs waited a median of six and a
 half hours. Now:
 
 - Pull requests, pushes to main and merge groups run the Vitest shards on
-  Ubuntu only. Windows, macOS and iOS run only from a manual dispatch.
+  Ubuntu only. Windows, macOS and iOS run only from a manual dispatch or the
+  nightly schedule.
 - The macOS packaged-server and Electron smokes, and the Windows CUA smoke,
-  run only from a manual dispatch.
+  run only from a manual dispatch or the nightly schedule.
 - `ci-stop-closed.yml` cancels a PR's CI run when the PR is merged or closed. PR runs share a group named by the PR number (`ci-pr-<n>`), never by `github.ref`: a merged PR's closed event reports the base branch as `github.ref`, which made every merge cancel main's CI (fixed Oct 3 2026).
 
 ## Main and releases
@@ -141,6 +150,69 @@ and macOS keep the strict numbers, such as the 120 s budget for the
 The packaged-server smoke asks the OS for free ports (listen on port 0)
 instead of picking them at random: a random pick inside a range Windows
 reserves failed with `listen EACCES 127.0.0.1:497xx`.
+
+## Known failures
+
+`scripts/testing/known-failures.json` lists the tests that fail on main
+today, in the shape of `ci-retry-list.json` (file, full test name with
+describe blocks joined by ` > `, owner, reason, date). A run is green when
+every failure it sees is in that list.
+
+How a run decides (`scripts/testing/known-failures.mjs`):
+
+1. Each vitest job writes vitest's JSON report, records the exit code
+   instead of failing, and uploads its results (`extract`): one entry per
+   test, plus `(whole file)` for a file that did not load, plus a failure of
+   its own when vitest exited non-zero with no failing test (an unhandled
+   error). A job that crashed or timed out sends nothing.
+2. The `known failures` job (`report`) reads every job's results. The run is
+   red when a failure is not in the list, or when fewer jobs sent results
+   than were scheduled. Each unlisted failure is an error annotation and a
+   row of the job summary. The `CI` gate requires this job.
+3. Only a run on every platform (the nightly schedule or a manual dispatch;
+   `report --platforms`) shrinks the list: a listed test that passed there
+   leaves it, the job uploads the shrunk file as the `known-failures`
+   artifact and names the entries in its summary. Commit that file. A push
+   runs Linux only, so a listed test that passes on a push stays listed (the
+   summary says so): it may still fail on Windows or macOS. The list can only shrink: on a
+   push, `check-shrink` compares the list at the commit before the push and
+   turns the run red if an entry was added by hand.
+4. On main (pushes and the nightly run), a failure not in the list is
+   remembered from run to run (the `known-failures-sightings` artifact). The
+   second run that sees it opens one issue per test with the label
+   `regression`, unless an open issue already carries that test's marker.
+   Before opening it, `scripts/stability/bisect.mjs` runs only that test
+   file on main's merges between the last run where it passed and the first
+   where it failed, halving the interval, and the issue names the pull
+   request it found. Bisect runs once per file in a run, shared by all of
+   that file's tests, and all bisects of one run share 25 minutes: past
+   that, the issue still opens, without the pull request, with the bisect
+   command to run by hand. A sighting counts once per commit: a second run
+   on the same commit (a nightly run on a day with no merge, a re-run) does
+   not add to the count, so it does not confirm a failure a push saw; the
+   next merge's run does. A test that passes again is forgotten only by a run
+   on every platform (`open-issues --platforms`, the same rule as the list):
+   a push runs Linux only, so a test that fails only on Windows or macOS
+   keeps its count through it. Nothing here blocks a merge.
+
+The first fill: the list starts empty. One manual run with
+`fill_known_failures` writes every failure of that run to the
+`known-failures` artifact with a `seeded` field and stays green; commit that
+file as is. That is the only time the list may grow.
+
+```sh
+gh workflow run ci.yml --repo <owner>/<repo> --ref main -f fill_known_failures=true
+```
+
+Bisect by hand, from any checkout with `node_modules`:
+
+```sh
+node scripts/stability/bisect.mjs --file server/index.test.ts --good <sha where it passed> --bad <sha where it fails>
+```
+
+It works in a scratch worktree it removes at the end, and prints the first
+failing merge and its pull request (`--json` for the full result). `--run`
+replaces the command (`pnpm exec vitest run {file}` by default).
 
 ## Required check
 

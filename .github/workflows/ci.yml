@@ -1,8 +1,24 @@
 name: CI
 
 on:
+  # Every test runs after each merge, off the developer's machine, and never
+  # blocks a merge (Owner 2026-11-09, issue #3482): a push to main runs the
+  # Linux jobs (scripts/ci-scope.mjs), the nightly schedule runs every
+  # platform, and a manual dispatch still runs every platform for a release
+  # candidate. Pull requests keep their own quick checks; nothing here is a
+  # merge gate. docs/ci.md, "Known failures".
+  push:
+    branches: [main]
+  schedule:
+    # 07:17 UTC, off the hour, once a night.
+    - cron: "17 7 * * *"
   workflow_dispatch:
-  # CI runs once, on the release candidate (manual dispatch): Owner 2026-10-14.
+    inputs:
+      fill_known_failures:
+        description: "Write every failing test of this run to the known-failures artifact (the list's first fill)"
+        required: false
+        type: boolean
+        default: false
 
 # least privilege: CI only reads the checkout, it never writes back
 permissions:
@@ -117,12 +133,19 @@ jobs:
       - name: Run tests
         # The github-actions reporter turns each failure into an annotation
         # on the PR, so the failing test and its assertion are readable
-        # without opening the job log.
+        # without opening the job log. The json reporter feeds the
+        # known-failures job, which gives the verdict: a run is green when
+        # every failure is in scripts/testing/known-failures.json, so this
+        # step records vitest's exit code instead of failing on it.
+        shell: bash
         env:
           # scripts/testing/ci-retry-runner.ts records each listed flaky test
           # that needed a retry here (the runner context is step-level only).
           SAGAX_VITEST_RETRY_LOG: ${{ runner.temp }}/vitest-retries.jsonl
-        run: pnpm exec vitest run --shard=${{ matrix.shard }}/4 --reporter=default --reporter=github-actions
+        run: |
+          set +e
+          pnpm exec vitest run --shard=${{ matrix.shard }}/4 --reporter=default --reporter=github-actions --reporter=json --outputFile.json="$RUNNER_TEMP/vitest-report.json"
+          echo "$?" > "$RUNNER_TEMP/vitest-exit"
       - name: Report flaky tests that needed a retry
         # Known flakes (scripts/testing/ci-retry-list.json) get two retries in
         # CI. A pass after a retry is still listed in the job summary, so the
@@ -131,6 +154,20 @@ jobs:
         env:
           SAGAX_VITEST_RETRY_LOG: ${{ runner.temp }}/vitest-retries.jsonl
         run: node scripts/testing/ci-retry-summary.mjs
+      - name: Record this job's test results
+        # No report (vitest crashed or timed out) means no results file; the
+        # known-failures job counts the missing job and the run is red.
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node scripts/testing/known-failures.mjs extract --report "$RUNNER_TEMP/vitest-report.json" --exit "$(cat "$RUNNER_TEMP/vitest-exit")" --out "$RUNNER_TEMP/vitest-results/${{ matrix.os }}-${{ matrix.shard }}.json"
+      - name: Upload this job's test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vitest-results-${{ matrix.os }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/vitest-results/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Electron unit tests
         if: matrix.shard == 1
         run: pnpm test:electron
@@ -284,10 +321,117 @@ jobs:
             ${{ runner.temp }}/voice-acceptance/report.md
           if-no-files-found: warn
 
+  known-failures:
+    # The verdict on the vitest jobs (scripts/testing/known-failures.mjs): a
+    # run is green when every failure is in scripts/testing/known-failures.json,
+    # a listed test that passed is dropped from the file this job uploads, and
+    # on main a failure not in the list that is seen in two runs opens one
+    # `regression` issue per test, named after the pull request that
+    # scripts/stability/bisect.mjs finds. Nothing here blocks a merge: it runs
+    # after the merge. docs/ci.md, "Known failures".
+    needs: [static, vitest]
+    if: ${{ !cancelled() && needs.static.outputs.runtime == 'true' }}
+    name: known failures
+    runs-on: ubuntu-latest
+    # Bisect runs one test file at a handful of merges, once per file, and
+    # all of a run's bisects share 25 minutes (BISECT_BUDGET_MS) so the
+    # sightings are always uploaded before this cap.
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      # Reads the previous main run's sightings artifact.
+      actions: read
+      # Opens one `regression` issue per new failure seen twice.
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The list at the commit before the push, and bisect's merges.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: The known-failures list only shrinks
+        if: github.event_name == 'push'
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: node scripts/testing/known-failures.mjs check-shrink --base "$BEFORE"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        # Still read when the shrink check failed: that run's own failures
+        # are judged and reach the sightings all the same.
+        if: ${{ !cancelled() }}
+        with:
+          pattern: vitest-results-*
+          path: ${{ runner.temp }}/vitest-results
+          merge-multiple: true
+      - name: Every failure is a known failure
+        if: ${{ !cancelled() }}
+        env:
+          VITEST_OS: ${{ needs.static.outputs.vitest_os }}
+          SEED: ${{ inputs.fill_known_failures == true }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          expected="$(node -e 'console.log(JSON.parse(process.env.VITEST_OS).length * 4)')"
+          seed=""
+          if [ "$SEED" = "true" ]; then seed="--seed"; fi
+          # --platforms: only a run on every platform (schedule, dispatch)
+          # drops a listed test that passed; a push runs Linux only.
+          node scripts/testing/known-failures.mjs report --results "$RUNNER_TEMP/vitest-results" --expect "$expected" \
+            --platforms "$VITEST_OS" --out "$RUNNER_TEMP/known-failures" --run-url "$RUN_URL" $seed
+      - name: Upload the list as this run leaves it
+        # The shrunk list (or, with fill_known_failures, the first fill):
+        # commit it as scripts/testing/known-failures.json.
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: known-failures
+          path: ${{ runner.temp }}/known-failures/
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Read the previous main run's sightings
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/sightings-previous"
+          for id in $(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --limit 30 \
+              --json databaseId,status,event --jq '.[] | select(.status == "completed" and (.event == "push" or .event == "schedule")) | .databaseId'); do
+            [ "$id" = "$GITHUB_RUN_ID" ] && continue
+            if gh run download "$id" --repo "$GITHUB_REPOSITORY" --name known-failures-sightings --dir "$RUNNER_TEMP/sightings-previous" 2>/dev/null; then
+              echo "Sightings from run $id."
+              break
+            fi
+          done
+      - name: Open a regression issue for each new failure seen twice
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VITEST_OS: ${{ needs.static.outputs.vitest_os }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # --platforms: only a run on every platform forgets a sighting whose
+          # test passed; a Linux-only push keeps the count.
+          node scripts/testing/known-failures.mjs open-issues \
+            --results "$RUNNER_TEMP/known-failures/results.json" --new-failures "$RUNNER_TEMP/known-failures/new-failures.json" \
+            --sightings "$RUNNER_TEMP/sightings-previous/sightings.json" --sha "$GITHUB_SHA" --run-url "$RUN_URL" \
+            --platforms "$VITEST_OS" --out "$RUNNER_TEMP/sightings/sightings.json"
+      - name: Keep this run's sightings for the next run
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: known-failures-sightings
+          path: ${{ runner.temp }}/sightings/sightings.json
+          if-no-files-found: warn
+          retention-days: 30
+
   gate:
     # One aggregation, not three queued runners doing the same check.
     name: CI
-    needs: [static, vitest, behavior-evals, packaged-server, windows-cua, electron-smokes, voice-acceptance]
+    needs: [static, vitest, known-failures, behavior-evals, packaged-server, windows-cua, electron-smokes, voice-acceptance]
     # Still report failed/skipped dependencies, but don't keep a superseded
     # workflow alive just to schedule its summary jobs.
     if: ${{ !cancelled() }}

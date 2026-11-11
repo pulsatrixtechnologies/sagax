@@ -1697,8 +1697,6 @@
   "pdf.openDefaultAria": "{name} in der Standard-App öffnen",
   "pdf.openDefaultHint": "Dieses PDF in der Standard-PDF-App dieses Computers öffnen",
   "pdf.openDefaultFailed": "Dieses PDF konnte nicht in einer anderen App geöffnet werden. Speichere stattdessen eine Kopie.",
-  "chat.inputRequest.title": "{bot} braucht deine Antwort",
-  "chat.inputRequest.reminder": "{bot} wartet noch auf deine Antwort",
   "chat.inputRequest.placeholder": "Deine Antwort",
   "chat.inputRequest.send": "Antwort senden",
   "chat.inputRequest.answered": "Antwort gesendet: Die Arbeit geht weiter.",

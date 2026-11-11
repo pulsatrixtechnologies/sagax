@@ -176,6 +176,20 @@ describe("fast-gate.sh", () => {
     expect(touches("server/drivers/agents-catalog-goldens/x.json")).toBe(false);
   });
 
+  // #3509: the guard tests ran only in verify:merge, which authors skipped,
+  // so a route without a policy row and three unread locale keys kept main
+  // red. The fast gate runs every guard test on every lot.
+  it("runs every guard test of verify:merge on a lot that touches none of them", () => {
+    write(".fast-gate", readFileSync(resolve(__dirname, "..", ".fast-gate"), "utf8"));
+    write("scripts/verify/release/guard-tests.mjs", readFileSync(resolve(__dirname, "verify/release/guard-tests.mjs"), "utf8"));
+    for (const file of ["scripts/tool-policy/tool-policy-coverage.test.ts", "src/locales/unused-keys.test.ts"]) write(file, "// guard\n");
+    write("src/b.ts", "export const b = 2;\n");
+    const { code, out } = gate("--base", "main", "--only", "extra-guard-tests");
+    expect(code, out).toBe(0);
+    const calls = readFileSync(join(fakeBin, "calls"), "utf8");
+    expect(calls).toContain("vitest run --reporter=dot --testTimeout=60000 scripts/tool-policy/tool-policy-coverage.test.ts src/locales/unused-keys.test.ts");
+  });
+
   it("has nothing to check on a clean branch", () => {
     const { code, out } = gate("--base", "main");
     expect(code).toBe(0);

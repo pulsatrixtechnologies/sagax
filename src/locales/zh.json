@@ -2444,8 +2444,6 @@
   "pdf.openDefaultAria": "用默认应用打开 {name}",
   "pdf.openDefaultHint": "用这台电脑的默认 PDF 应用打开此 PDF",
   "pdf.openDefaultFailed": "无法在其他应用中打开此 PDF。请改为保存副本。",
-  "chat.inputRequest.title": "{bot} 需要你的回答",
-  "chat.inputRequest.reminder": "{bot} 仍在等待你的回答",
   "chat.inputRequest.placeholder": "你的回答",
   "chat.inputRequest.send": "发送回答",
   "chat.inputRequest.answered": "回答已发送：工作继续进行。",

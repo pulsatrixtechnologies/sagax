@@ -2403,8 +2403,6 @@
   "pdf.openDefaultAria": "Abrir {name} no app padrão",
   "pdf.openDefaultHint": "Abrir este PDF no app de PDF padrão deste computador",
   "pdf.openDefaultFailed": "Não foi possível abrir este PDF em outro app. Salve uma cópia.",
-  "chat.inputRequest.title": "{bot} precisa da sua resposta",
-  "chat.inputRequest.reminder": "{bot} ainda está esperando sua resposta",
   "chat.inputRequest.placeholder": "Sua resposta",
   "chat.inputRequest.send": "Enviar resposta",
   "chat.inputRequest.answered": "Resposta enviada: o trabalho continua.",

@@ -112,10 +112,11 @@ export function createComputerWorkspaceStartTurn(host: StartTurnHost) {
       customMcp: state.instance.adapter.capabilities.customMcp === true,
       decision: state.turnPlace, staging: state.placedText.staging, auto: state.turnAuto
     });
-    await mountPersonalMcp(state.integrations, {
+    const personalMcp = await mountPersonalMcp(state.integrations, {
       botId: state.bot.id, threadId: state.threadId, generation: state.dispatchClaimId,
       customMcp: state.instance.adapter.capabilities.customMcp === true, principal: state.turnPlace.principal
     });
+    if (personalMcp?.githubWithheld?.length) state.githubWithheld = [...(state.githubWithheld ?? []), ...personalMcp.githubWithheld];
     const plugins = await mountPluginMcp(state.integrations, {
       botId: state.bot.id, threadId: state.threadId, generation: state.dispatchClaimId,
       customMcp: state.instance.adapter.capabilities.customMcp === true, principal: state.turnPlace.principal

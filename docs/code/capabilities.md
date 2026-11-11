@@ -489,7 +489,10 @@ had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.tes
   pasted token is a fallback only, under Advanced, offered by the bot only
   when the person asks or the device flow fails. The token goes into the person's environment for gh and git
   (`githubSandboxArgv`, through `SAGAX_GH_TOKEN`, never the argv), into their
-  personal servers with auth `github`, and into Sagax's own fetches for them
+  personal servers with auth `github` or with auth `none` on a GitHub address
+  (`#3392`, `personalMcpPrecheck`: the plugin rule of `#3385`; without a
+  connection the server is left out and the turn says so,
+  `githubWithheldPrompt`), and into Sagax's own fetches for them
   (private skills, private marketplaces), and since 2026-10-28 into the
   GitHub plugin's MCP server (its `${GITHUB_PERSONAL_ACCESS_TOKEN}`, see "Providers
   > GitHub" below). One connection per person. `#1775`: `GET /api/me/connections`

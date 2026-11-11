@@ -86,7 +86,7 @@ describe("team work words", () => {
     expect(teamCount(work.team)).toBe("1 working now");
     const item = work.live[0]!;
     const line = teamWorkLine(item, nameOf, NOW);
-    expect(line).toEqual({ botId: "qa", who: "Tester", parts: ["1/3", "1 min ago"] });
+    expect(line).toEqual({ botId: "qa", who: "Tester", parts: ["1/3", "1 min ago"], spare: 0 });
     expect(teamLineText(line)).toBe("Tester · 1/3 · 1 min ago");
     // duration and tokens: the unfolded detail only, never the row
     expect(teamWorkSpend(item)).toBe("15 min · 12k tokens");
@@ -115,6 +115,20 @@ describe("team work words", () => {
     expect(teamLineText(teamWorkLine(silent, nameOf, NOW))).toBe("Tester · 1/3 · silent for 6 min");
     setLocale("fr");
     expect(teamLineText(teamWorkLine(silent, nameOf, NOW))).toBe("Tester · 1/3 · silencieux depuis 6 min");
+  });
+
+  it("a tool call's words are the line's last action, apart from its time (#3613)", () => {
+    const item = release().live[0]!;
+    const busy = { ...item, live: { state: "working" as const, lastActionAt: NOW - 5_000, toolSince: NOW - 2 * 60_000 } };
+    const step = item.current ? item.steps.find((one) => one.id === item.current!.stepId)! : item.steps[0]!;
+    const withTool = { ...busy, current: { stepId: step.id, botId: step.botId }, steps: item.steps.map((one) => one.id === step.id ? { ...one, doing: "Running the tests" } : one) };
+    setLocale("en");
+    const line = teamWorkLine(withTool as typeof item, nameOf, NOW);
+    expect(line.parts.slice(1)).toEqual(["Running the tests", "2 min"]);
+    expect(line.action).toBe(1);
+    // a state with its time is never the part that gives way
+    const silent = teamWorkLine({ ...item, live: { state: "silent" as const, lastActionAt: NOW - 6 * 60_000, silentMs: 6 * 60_000 } }, nameOf, NOW);
+    expect(silent.action).toBeUndefined();
   });
 
   it("an unnamed bot reads as a neutral word, never its id", () => {

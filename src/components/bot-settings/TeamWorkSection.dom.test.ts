@@ -239,6 +239,74 @@ describe("the work view", () => {
     for (const text of [en, fr]) expect(text).not.toMatch(/[–—]/);
   });
 
+  it("never cuts the state and its time: the name gives way first, then the last action, never an orphan separator (#3613)", async () => {
+    const LONG = "Reviewer of every pull request in the whole team";
+    const DOING = "Running the whole test suite of the server package";
+    const work = () => buildTeamWork({
+      orchestratorId: "orc", now: NOW, since: 0, names: new Map([["qa", { name: LONG }], ["dev", { name: "Server" }], ["chk", { name: "Tester" }]]),
+      steps: [
+        { id: "q", botId: "qa", requesterBotId: "orc", threadId: "tq", title: "Quiet", mode: "work", status: "running", createdAt: 0, startedAt: 0, turn: { startedAt: 0, lastActionAt: NOW - 6 * 60_000 }, coding: true },
+        { id: "t", botId: "dev", requesterBotId: "orc", threadId: "tt", title: "Tool", mode: "work", status: "running", createdAt: 1, startedAt: 1, turn: { startedAt: 1, lastActionAt: NOW - 5_000, toolSince: NOW - 2 * 60_000 }, doing: DOING, coding: true },
+        { id: "c", botId: "chk", requesterBotId: "orc", threadId: "tc", title: "Short", mode: "work", status: "running", createdAt: 2, startedAt: 2, turn: { startedAt: 2, lastActionAt: NOW - 2 * 3_600_000 }, coding: true },
+      ],
+    });
+    // a layout: every character 7 px wide, the line `room` px wide
+    let room = 0;
+    const CHAR = 7;
+    const box = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const width = this.hasAttribute("data-team-line") ? room : this.hasAttribute("data-team-probe") ? [...(this.textContent ?? "")].length * CHAR : 0;
+      return { x: 0, y: 0, top: 0, left: 0, bottom: 20, right: width, width, height: 20, toJSON: () => ({}) } as DOMRect;
+    });
+    const cases = [
+      ["en", { q: "silent for 6 min", t: "2 min", c: "silent for 2 h" }],
+      ["fr", { q: "silencieux depuis 6 min", t: "2 min", c: "silencieux depuis 2 h" }],
+    ] as const;
+    try {
+      for (const [locale, last] of cases) for (const width of [200, 240, 320, 600]) {
+        setLocale(locale);
+        room = width;
+        act(() => root.unmount());
+        root = createRoot(host);
+        await draw(async () => work());
+        for (const [key, name] of [["q", LONG], ["t", "Server"], ["c", "Tester"]] as const) {
+          const row = host.querySelector<HTMLElement>(`[data-team-work-item="step:${key}"]`)!;
+          const where = `${locale} ${width}px ${key}`;
+          const drawn = [...row.querySelector("[data-team-line]")!.children].filter((child) => !child.hasAttribute("data-team-probe")) as HTMLElement[];
+          const text = drawn.map((child) => child.textContent).join("");
+          // the line fits its row; it never starts or ends with a separator, never two in a row
+          expect([...text].length * CHAR, where).toBeLessThanOrEqual(width);
+          expect(drawn[0]?.hasAttribute("data-team-separator"), where).toBe(false);
+          expect(drawn.at(-1)?.hasAttribute("data-team-separator"), where).toBe(false);
+          drawn.forEach((child, index) => expect(index % 2 === 1, `${where}: part and separator alternate`).toBe(child.hasAttribute("data-team-separator")));
+          // a drawn name or action is whole, or a start of a few characters ended by an ellipsis right against its separator
+          for (const [part, full] of [["who", name], ["action", DOING]] as const) {
+            const cut = row.querySelector<HTMLElement>(`[data-team-line] [data-team-part="${part}"]`);
+            if (!cut || cut.textContent === full) continue;
+            const kept = cut.textContent!.slice(0, -1);
+            expect(cut.textContent!.endsWith("…"), where).toBe(true);
+            expect([...kept].length, where).toBeGreaterThanOrEqual(3);
+            expect(full.startsWith(kept) && kept === kept.trimEnd(), where).toBe(true);
+            expect(cut.nextElementSibling?.hasAttribute("data-team-separator"), where).toBe(true);
+          }
+          // the state with its time: whole, last
+          expect(drawn.at(-1)?.textContent, where).toBe(last[key]);
+          expect(drawn.at(-1)?.dataset.teamPart, where).toBe("whole");
+          // the whole line stays in the row's tooltip
+          expect(row.querySelector("[data-coding-subtitle]")?.getAttribute("title"), where).toBe(`${name} · 0/1 · ${key === "t" ? `${DOING} · 2 min` : last[key]}`);
+        }
+        // the narrow panel: the long name gives way first (cut or aside), then the last action
+        if (width === 240) {
+          expect(host.querySelector('[data-team-work-item="step:q"] [data-team-part="who"]')?.textContent ?? "aside", `${locale}`).toMatch(/^(Reviewer…|aside)$/);
+          expect(host.querySelector('[data-team-work-item="step:t"] [data-team-part="who"]'), locale).toBeNull();
+          expect(host.querySelector('[data-team-work-item="step:t"] [data-team-part="action"]')?.textContent, locale).toMatch(/…$/);
+        }
+        if (width === 600) expect(host.querySelector('[data-team-work-item="step:q"] [data-team-part="who"]')?.textContent, locale).toBe(LONG);
+      }
+    } finally {
+      box.mockRestore();
+    }
+  });
+
   it("the keyboard path: every control is a native button, in reading order, and opens the step", async () => {
     await draw(async () => oneName());
     act(() => toggle().click());

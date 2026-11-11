@@ -222,6 +222,18 @@ Keep these rules, covered by `server/pages/published-pages.test.ts`,
   `pagePublish`; whatever the bot sends (access, publish flags) is ignored.
   `POST /api/pages/:id/publish` needs an explicit `access`. Not available in
   rooms. Choosing "Toute personne ayant le lien" asks a second press.
+- Source from a file (#3488): `propose_page` takes `content` or `path`,
+  exactly one. `path` names a UTF-8 file of the calling bot's own workspace,
+  resolved by `readWorkspaceSourceFile` (`resolveWorkspaceFile`: no
+  traversal, no link, no hidden file, never another bot's workspace) and
+  read byte for byte under the same 512 KB limit and secret masking as
+  inline content. The answer, the version listing (`PageVersionSummary`)
+  and a source read carry `bytes` and `sha256` of the stored source,
+  computed in one place (`pageSourceDigest`). `GET
+  /api/pages/:id/versions/:n/source?offset=&limit=` and the bot's
+  `page_comments` action `source` read one slice by UTF-8 byte offset
+  (`pageSourceSlice`, follow `nextOffset`); `save_to` writes the whole
+  source to a file of the bot's own workspace.
 - Whose page it is: the conversation's person (`pageOwnerFor` =
   `threadOwner` of `server/threads/thread-privacy.ts`: the thread's recorded owner,
   else the bot owner), never simply the bot's owner. A member's private

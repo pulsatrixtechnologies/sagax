@@ -149,8 +149,11 @@ export async function callCardTool(name: string, args: Json, context: ToolCallCo
     });
     if (!ok) return { text: String(body.error ?? "Could not propose that page."), isError: true };
     const pageId = String(body.pageId ?? "");
+    // #3488: what was stored, to compare with a file without reading it back
+    const stored = typeof body.sha256 === "string" ? ` Stored source: ${Number(body.bytes ?? 0)} bytes, sha256 ${body.sha256}.` : "";
+    const masked = body.masked === true ? " Something in it read as a secret and was masked before it was stored, so it differs from what you gave." : "";
     return {
-      text: `Proposed page ${pageId}, version ${Number(body.version ?? 1)}. It is NOT published: the person reviews it on its card and decides whether to publish it and who can see it. Do not say it is online. To revise it, call propose_page again with page_id "${pageId}".`,
+      text: `Proposed page ${pageId}, version ${Number(body.version ?? 1)}.${stored}${masked} It is NOT published: the person reviews it on its card and decides whether to publish it and who can see it. Do not say it is online. To revise it, call propose_page again with page_id "${pageId}".`,
     };
   }
 

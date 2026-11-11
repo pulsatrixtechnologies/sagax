@@ -39,7 +39,9 @@
 //   POST   /api/pages/:id/revoke            stop serving now; the link is gone
 //   DELETE /api/pages/:id
 // Lot R8 (the reference design parity: edit, comments, annotation, Presentation):
-//   GET    /api/pages/:id/versions/:n/source   { version, content } the person's editor
+//   GET    /api/pages/:id/versions/:n/source?offset=&limit=   { version: { n, kind,
+//          title, bytes, sha256 }, content, offset, nextOffset } the person's
+//          editor; offset and limit (UTF-8 bytes) read one slice (#3488)
 //   GET    /api/pages/:id/versions/:n/export?theme=light|dark   { filename, html }
 //          a self-contained file of that version (Export, #2717)
 //   POST   /api/pages/:id/versions          { kind, content, title? } the person's
@@ -95,7 +97,7 @@ import { readFileSync, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
 
-import type { PageError, PageRecord, PageVersionRecord, PublishedPages } from "../pages/published-pages.ts";
+import { PAGE_SOURCE_READ_BYTES, pageSourceRange, type PageError, type PageRecord, type PageVersionRecord, type PublishedPages } from "../pages/published-pages.ts";
 import { commentAnswerDocument, escapeHtml, pageDocument, parseReaderAssets, splitSlides, wrapperDocument, type ReaderAssets } from "../pages/published-pages-render.ts";
 import type { ReaderBoot } from "../../shared/page-reader.ts";
 import type { PageLive } from "../pages/page-live.ts";
@@ -1189,10 +1191,14 @@ async function pageExtras(deps: PublishedPageRouteDeps, ctx: ExtrasContext, extr
     return json(res, 200, { ok: true, audience });
   }
   if (route === "source") {
-    const version = page.versions.find((entry) => entry.n === Number(match[2]));
-    const content = version ? deps.pages.content(page.id, version.n) : null;
-    if (!version || content === null) return json(res, 404, { error: "This version does not exist.", code: "no_version" });
-    return json(res, 200, { version: { n: version.n, kind: version.kind, title: version.title }, content });
+    // #3488: size and SHA-256 always; ?offset=&limit= (UTF-8 bytes) reads
+    // one slice, nextOffset the next one (null at the end)
+    const query = new URL(req.url ?? "/", "http://local").searchParams;
+    const range = pageSourceRange(query.get("offset"), query.get("limit"));
+    if (!range) return json(res, 400, { error: `offset: a byte offset of 0 or more; limit: 1 to ${PAGE_SOURCE_READ_BYTES.max} bytes.`, code: "bad_range" });
+    const read = deps.pages.source(page.id, Number(match[2]), range === "whole" ? undefined : range);
+    if (!read) return json(res, 404, { error: "This version does not exist.", code: "no_version" });
+    return json(res, 200, read);
   }
   if (route === "export") {
     // a self-contained file of one version (#2717): the same document a

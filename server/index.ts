@@ -23106,6 +23106,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       kind: input.kind as Parameters<typeof publishedPages.propose>[0]["kind"]
     }),
     getPage: (id) => publishedPages.get(id),
+    pageSource: (pageId, n, range) => publishedPages.source(pageId, n, range),
     replyPage: (pageId, threadId, input) => publishedPages.reply(pageId, threadId, input),
     resolvePageThread: (pageId, threadId, input) => publishedPages.resolveThread(pageId, threadId, input),
     markBotRead: (pageId) => publishedPages.markBotRead(pageId),

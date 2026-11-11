@@ -27,7 +27,7 @@
 // content is its own file (published-pages/<pageId>/<n>, 0600 in 0700
 // folders) and is cached in memory once read (a version never changes).
 // Caps: per person, per bot, per server, versions per page, total bytes.
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -63,6 +63,56 @@ const TICKET = /^(\d{10,16})\.([A-Za-z0-9_-]{1,200})\.([A-Za-z0-9_-]{32})$/;
 const PAGE_ID = /^[A-Za-z0-9_-]{8,40}$/;
 const CONTENT_CACHE_BYTES = 16 * 1024 * 1024;
 
+/** #3488: the size in bytes and the SHA-256 (hex) of a stored source, the
+ * one place both are computed (a proposal's answer, the version listing,
+ * a read of the source). Pure. */
+export function pageSourceDigest(content: string): { bytes: number; sha256: string } {
+  const buffer = Buffer.from(content, "utf8");
+  return { bytes: buffer.length, sha256: createHash("sha256").update(buffer).digest("hex") };
+}
+
+/** Default and ceiling of one paged read of a source, in bytes. */
+export const PAGE_SOURCE_READ_BYTES = { default: 32_000, max: 64_000 } as const;
+
+/** #3488: one slice of a source by UTF-8 byte offset, never cutting a
+ * character: the start moves forward and the end backs up to a character
+ * boundary (a slice holds at least one character). Following nextOffset
+ * gives slices that concatenate to the source exactly. Pure. */
+export function pageSourceSlice(content: string, offset: number, limit: number): { text: string; offset: number; nextOffset: number | null } {
+  const buffer = Buffer.from(content, "utf8");
+  let start = Math.max(0, Math.min(Math.trunc(offset) || 0, buffer.length));
+  while (start < buffer.length && (buffer[start]! & 0xc0) === 0x80) start += 1;
+  const size = Math.max(1, Math.trunc(limit) || 1);
+  let end = Math.min(buffer.length, start + size);
+  while (end < buffer.length && end > start && (buffer[end]! & 0xc0) === 0x80) end -= 1;
+  if (end === start && start < buffer.length) {
+    end = start + 1;
+    while (end < buffer.length && (buffer[end]! & 0xc0) === 0x80) end += 1;
+  }
+  return { text: buffer.subarray(start, end).toString("utf8"), offset: start, nextOffset: end < buffer.length ? end : null };
+}
+
+/** #3488: the offset and limit of a paged source read (query text or
+ * numbers), "whole" when neither is given, null when either is invalid. */
+export function pageSourceRange(offset: unknown, limit: unknown): { offset?: number; limit?: number } | "whole" | null {
+  const given = (value: unknown) => value !== undefined && value !== null && value !== "";
+  if (!given(offset) && !given(limit)) return "whole";
+  const number = (value: unknown) => typeof value === "number" ? value : typeof value === "string" && /^\d+$/.test(value.trim()) ? Number(value.trim()) : Number.NaN;
+  const at = given(offset) ? number(offset) : 0;
+  const size = given(limit) ? number(limit) : PAGE_SOURCE_READ_BYTES.default;
+  if (!Number.isSafeInteger(at) || at < 0 || !Number.isSafeInteger(size) || size < 1 || size > PAGE_SOURCE_READ_BYTES.max) return null;
+  return { offset: at, limit: size };
+}
+
+/** What a read of one version's source answers (the person's editor route
+ * and the bot's page_comments action source). */
+export interface PageSourceRead {
+  version: { n: number; kind: PageKind; title: string; bytes: number; sha256: string };
+  content: string;
+  offset: number;
+  nextOffset: number | null;
+}
+
 /** The person a page proposed in this conversation belongs to. Pure. */
 export function pageOwnerFor(task: { ownerPrincipalId?: string } | null | undefined, botOwnerPrincipalId: string): string {
   return threadOwner(task, botOwnerPrincipalId);
@@ -78,6 +128,9 @@ export interface PageVersionRecord {
   botId: string;
   /** "person": the page's person wrote this version (their edit). */
   author?: "person";
+  /** #3488: SHA-256 (hex) of the stored source. Absent on a version stored
+   * before it was recorded: computed from the source when read. */
+  sha256?: string;
 }
 
 export interface PageHistoryEntry {
@@ -167,6 +220,8 @@ export class PublishedPages {
   private readonly clock: () => number;
   private cached: { mtimeMs: number; size: number; pages: PageRecord[]; policy: PagesPolicy } | null = null;
   private readonly contents = new Map<string, string>();
+  /** #3488: SHA-256 of versions stored before it was recorded, by `id:n`. */
+  private readonly digests = new Map<string, string>();
   private contentBytes = 0;
   /** Shared-state writes per page and person, for the rate limit. */
   private readonly stateWrites = new Map<string, number[]>();
@@ -435,9 +490,11 @@ export class PublishedPages {
     if (n === undefined) {
       rmSync(join(this.contentDir, pageId), { recursive: true, force: true });
       for (const key of this.contents.keys()) if (key.startsWith(`${pageId}:`)) this.forget(key);
+      for (const key of this.digests.keys()) if (key.startsWith(`${pageId}:`)) this.digests.delete(key);
     } else {
       rmSync(this.contentFile(pageId, n), { force: true });
       this.forget(`${pageId}:${n}`);
+      this.digests.delete(`${pageId}:${n}`);
     }
   }
 
@@ -446,6 +503,34 @@ export class PublishedPages {
     if (text === undefined) return;
     this.contentBytes -= text.length;
     this.contents.delete(key);
+  }
+
+  /** #3488: a version's SHA-256, stored at proposal, else computed from its
+   * source (a version stored before it was recorded) and kept. */
+  private digestOf(pageId: string, version: PageVersionRecord): string | undefined {
+    if (version.sha256) return version.sha256;
+    const key = `${pageId}:${version.n}`;
+    const known = this.digests.get(key);
+    if (known) return known;
+    const content = this.content(pageId, version.n);
+    if (content === null) return undefined;
+    const { sha256 } = pageSourceDigest(content);
+    this.digests.set(key, sha256);
+    return sha256;
+  }
+
+  /** #3488: one version's stored source with its size and hash: whole, or
+   * one slice by byte offset and limit (pageSourceSlice). Null: no such
+   * version. Who may read it is the caller's check. */
+  source(pageId: string, n: number, range?: { offset?: number; limit?: number }): PageSourceRead | null {
+    const version = this.get(pageId)?.versions.find((entry) => entry.n === n);
+    const content = version ? this.content(pageId, n) : null;
+    if (!version || content === null) return null;
+    const digest = pageSourceDigest(content);
+    const head = { n: version.n, kind: version.kind, title: version.title, bytes: digest.bytes, sha256: digest.sha256 };
+    if (!range || (range.offset === undefined && range.limit === undefined)) return { version: head, content, offset: 0, nextOffset: null };
+    const slice = pageSourceSlice(content, range.offset ?? 0, range.limit ?? PAGE_SOURCE_READ_BYTES.default);
+    return { version: head, content: slice.text, offset: slice.offset, nextOffset: slice.nextOffset };
   }
 
   /** A version's content: from memory once read (a version never changes). */
@@ -520,7 +605,7 @@ export class PublishedPages {
     }
     const pages = this.snapshot();
     const now = this.clock();
-    const bytes = Buffer.byteLength(input.content);
+    const { bytes, sha256 } = pageSourceDigest(input.content);
     if (bytes > PAGE_LIMITS.contentBytes) return refuse(400, "too_large", `content: at most ${PAGE_LIMITS.contentBytes / 1024} KB.`);
     let page = input.pageId ? pages.find((entry) => entry.id === input.pageId) : undefined;
     // A page of this conversation, or (2026-10-28, the page view) one of this
@@ -568,7 +653,7 @@ export class PublishedPages {
       pages.push(page);
     }
     const n = (page.versions.at(-1)?.n ?? 0) + 1;
-    const version: PageVersionRecord = { n, kind: input.kind, title: input.title, bytes, createdAt: now, state: "proposed", botId: input.botId, ...(input.author ? { author: input.author } : {}) };
+    const version: PageVersionRecord = { n, kind: input.kind, title: input.title, bytes, sha256, createdAt: now, state: "proposed", botId: input.botId, ...(input.author ? { author: input.author } : {}) };
     this.writeContent(page.id, n, input.content);
     page.versions.push(version);
     // Old versions that were never published go first; a published one stays.
@@ -1177,6 +1262,7 @@ export class PublishedPages {
       bytes: entry.bytes,
       botId: entry.botId,
       ...(entry.author ? { author: entry.author } : {}),
+      ...((() => { const sha256 = this.digestOf(page.id, entry); return sha256 ? { sha256 } : {}; })()),
     }));
     const current = page.versions.find((entry) => entry.n === page.currentVersion) ?? page.versions.at(-1);
     const live = page.status === "published" && page.linkId;

@@ -22,6 +22,9 @@ export type AgentCardResult =
       masked?: true;
       pageId?: string;
       version?: number;
+      /** #3488: propose_page, the stored source's size in bytes and SHA-256. */
+      bytes?: number;
+      sha256?: string;
       answered?: { choice: string; question: string };
       waitsForPerson?: true;
       auto?: { id: string; tool: string; name: string; description: string; icon?: string; reason: "single" | "default" };

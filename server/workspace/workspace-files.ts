@@ -235,6 +235,25 @@ export function readWorkspaceText(botId: string, input: unknown, offset = 0, plu
   return { path: file.path, text: buffer.subarray(start, end).toString("utf8"), bytes: buffer.length, offset: start, nextOffset: end < buffer.length ? end : null };
 }
 
+/** #3488: a file of the bot's own workspace as a page's source, read byte
+ * for byte (decrypted when sealed at rest) through resolveWorkspaceFile (no
+ * traversal, no link, no hidden file, this bot's workspace only). Refused
+ * over `maxBytes` and when it is not valid UTF-8 text, so the text stored is
+ * exactly the file's bytes. */
+export function readWorkspaceSourceFile(botId: string, input: unknown, maxBytes: number): { path: string; content: string; bytes: number } {
+  const file = resolveWorkspaceFile(botId, input);
+  if (file.stat.size > maxBytes * 2 + 4096) throw new WorkspacePathError(`${file.path} is over ${Math.floor(maxBytes / 1024)} KB.`);
+  const buffer = readAtRestSync(file.absolute);
+  if (buffer.length > maxBytes) throw new WorkspacePathError(`${file.path} is over ${Math.floor(maxBytes / 1024)} KB.`);
+  let content: string;
+  try {
+    content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(buffer);
+  } catch {
+    throw new WorkspacePathError(`${file.path} is not UTF-8 text.`);
+  }
+  return { path: file.path, content, bytes: buffer.length };
+}
+
 // ── the tree ──────────────────────────────────────────────────────────
 
 /** When a file reaches the model: every turn (in the system prompt), on

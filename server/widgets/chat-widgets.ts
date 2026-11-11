@@ -143,8 +143,8 @@ export function createAgentCard(args: {
   authored?(messageId: string): void;
   /** propose_page (server/pages/published-pages.ts): stores a proposed version,
    * never a published one. Absent: the tool is refused. */
-  proposePage?(input: { pageId?: string; title: string; kind: PageKind; content: string; designSystem?: string; designTokens?: unknown }):
-    { ok: true; pageId: string; version: number } | { ok: false; status: 400 | 404 | 409; error: string };
+  proposePage?(input: { pageId?: string; title: string; kind: PageKind; content: string; path?: string; designSystem?: string; designTokens?: unknown }):
+    { ok: true; pageId: string; version: number; bytes?: number; sha256?: string; masked?: boolean } | { ok: false; status: 400 | 404 | 409; error: string };
   /** #1905: the level the calling turn runs at (index.ts sourceApprovalMode),
    * so a may-I ask_choice under Full access is answered, not drawn. */
   approvalLevel?: ApprovalMode;
@@ -379,7 +379,12 @@ function proposePageCard(args: Parameters<typeof createAgentCard>[0], input: Rec
     pagePublish: { pageId: proposed.pageId, version: proposed.version, title },
   });
   args.authored?.(message.id);
-  return { ok: true, messageId: message.id, pageId: proposed.pageId, version: proposed.version };
+  return {
+    ok: true, messageId: message.id, pageId: proposed.pageId, version: proposed.version,
+    // #3488: the stored source's size and SHA-256, to compare with a file
+    ...(proposed.sha256 ? { bytes: proposed.bytes, sha256: proposed.sha256 } : {}),
+    ...(proposed.masked ? { masked: true as const } : {}),
+  };
 }
 
 /** The widget's stored payload, when the row is a widget of this thread. */

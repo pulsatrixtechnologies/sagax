@@ -538,6 +538,9 @@ describe("ACP turns (fake CLI)", () => {
   const SYSTEM = "Standing rules.\n\nMemory: likes quiet hours.";
   // Grok appends its standing tool line (stableSystemHint) to what it delivers
   const FULL = SYSTEM + HINT;
+  // what a new or re-anchored session gets since #3534: the stable half and
+  // its standing line first, then the volatile half
+  const OPENING = "Standing rules." + HINT + "\n\nMemory: likes quiet hours.";
   const usageThread = async (name: string) => {
     const dump = join(scratch, `acp-${name}.json`);
     const usageFile = join(scratch, `acp-${name}-usage.json`);
@@ -564,14 +567,14 @@ describe("ACP turns (fake CLI)", () => {
 
   it("re-anchors the full prompt on the turn after the reported context collapses", async () => {
     const { usage, send } = await usageThread("compaction");
-    expect(await send("turn 1")).toBe(FULL + "\n\nturn 1");
+    expect(await send("turn 1")).toBe(OPENING + "\n\nturn 1");
     usage(100000);
     expect(await send("turn 2")).toBe("turn 2");
     // the context collapses mid-turn (120000 -> 45000), so the next turn is full
     usage(120000, 45000);
     expect(await send("turn 3")).toBe("turn 3");
     usage();
-    expect(await send("turn 4")).toBe(FULL + "\n\nturn 4");
+    expect(await send("turn 4")).toBe(OPENING + "\n\nturn 4");
     expect(await send("turn 5")).toBe("turn 5");
   });
 

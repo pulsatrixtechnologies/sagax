@@ -16,6 +16,7 @@
 // server with the reader's own session; the page never gets a token, an
 // address or the network.
 //   frame -> wrapper  { type: "sagax-cap", v: 1, id, cap, args }
+//   files.download adds gesture (boolean). Other calls omit that field.
 //   wrapper -> frame  { type: "sagax-cap-result", v: 1, id, ok: true, value }
 //                     { type: "sagax-cap-result", v: 1, id, ok: false, error, message? }
 //   wrapper -> frame  { type: "sagax-cap-event", v: 1, cap: "data", name }
@@ -37,7 +38,7 @@
 //
 // In the page (window.sagax, beside `page`): `capabilities` (what this
 // version was granted), `data.read(name, params?)`, `data.subscribe(name,
-// fn, params?)`, `viewer.get()`, `open(ref)`. `params` (#3449): `fresh: true`
+// fn, params?)`, `viewer.get()`, `open(ref)`, `files.download({ name, mime, data })`. `params` (#3449): `fresh: true`
 // skips the source's cache; other keys are the source's filter, string
 // values (PAGE_DATA_PARAMS). A `denied` refusal carries `reason`
 // (PageCapDenyReason) on the Error.
@@ -57,19 +58,23 @@ export const CAP_READY_MESSAGE = "sagax-cap-ready";
 /** How long a call waits for ready before it fails ("unavailable"). */
 export const CAP_READY_TIMEOUT_MS = 10_000;
 
-/** The calls lot 1 knows. */
-export const PAGE_CAP_CALLS = ["data.read", "viewer.get", "open"] as const;
+/** The calls a page may make. */
+export const PAGE_CAP_CALLS = ["data.read", "viewer.get", "open", "files.download"] as const;
 export type PageCapCall = (typeof PAGE_CAP_CALLS)[number];
 
 /** The named data sources a page may declare (server/pages/page-sources.ts). */
 export const PAGE_DATA_SOURCES = ["team-board"] as const;
 export type PageDataSource = (typeof PAGE_DATA_SOURCES)[number];
 
+/** A file call a version may declare. The only name in this lot is download. */
+export type PageCapFile = "download";
+
 /** What a version declares, as the server read it. */
 export interface PageCapabilities {
   data: PageDataSource[];
   viewer: boolean;
   open: boolean;
+  files: PageCapFile[];
 }
 
 export const PAGE_CAP_LIMITS = {
@@ -87,6 +92,22 @@ export const PAGE_CAP_LIMITS = {
   fileBytes: 25 * 1024 * 1024,
   filesPageBytes: 200 * 1024 * 1024,
 } as const;
+
+/** MIME types files.download accepts. Exact tokens, lower case, no parameters.
+ * Any other token is refused, including text/html, image/svg+xml,
+ * application/javascript and archives. */
+export const PAGE_CAP_FILE_MIMES = [
+  "text/plain",
+  "text/csv",
+  "text/markdown",
+  "application/json",
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+] as const;
+export type PageCapFileMime = (typeof PAGE_CAP_FILE_MIMES)[number];
 
 /** Why a call was refused. `sign_in`: the reader is not signed in (a personal
  * capability is never given to them); `not_declared`: the published version
@@ -146,6 +167,8 @@ export interface PageCapRequest {
   id: number;
   cap: PageCapCall;
   args?: Record<string, unknown>;
+  /** files.download only: true while the reader activation is live. Other calls omit it. */
+  gesture?: boolean;
 }
 
 export type PageCapResult =
@@ -215,16 +238,21 @@ export function parsePageOpenRef(ref: unknown): { botId: string; threadId?: stri
 }
 
 const SOURCE_SET = new Set<string>(PAGE_DATA_SOURCES);
+const FILE_SET = new Set<string>(["download"]);
 
 /** A declaration as the page wrote it: known source names only, exact, no
- * wildcard; `viewer` and `open` only when `true`. Pure. */
+ * wildcard; `viewer` and `open` only when `true`. Known file names only
+ * (`download`); a missing `files` key is an empty list. Pure. */
 export function parsePageCapabilities(value: unknown): PageCapabilities | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   const data = Array.isArray(record.data)
     ? [...new Set(record.data.filter((name): name is PageDataSource => typeof name === "string" && SOURCE_SET.has(name)))]
     : [];
-  return { data, viewer: record.viewer === true, open: record.open === true };
+  const files = Array.isArray(record.files)
+    ? [...new Set(record.files.filter((name): name is PageCapFile => typeof name === "string" && FILE_SET.has(name)))]
+    : [];
+  return { data, viewer: record.viewer === true, open: record.open === true, files };
 }
 
 /** The declaration in a page's HTML: its first capabilities block, or null
@@ -241,7 +269,7 @@ export function pageCapabilitiesOf(html: string): PageCapabilities | null {
 
 /** Whether a declaration grants anything at all. Pure. */
 export function pageCapabilitiesAny(caps: PageCapabilities | null | undefined): caps is PageCapabilities {
-  return Boolean(caps && (caps.data.length || caps.viewer || caps.open));
+  return Boolean(caps && (caps.data.length || caps.viewer || caps.open || (caps.files ?? []).length > 0));
 }
 
 /** Whether a declaration hands the page the reader's personal data (`data`
@@ -252,7 +280,8 @@ export function pageCapabilitiesPersonal(caps: PageCapabilities | null | undefin
 }
 
 /** A call the frame posted, checked, or null. Pure: the wrapper trusts no
- * other shape. */
+ * other shape. `gesture` is kept only when it is a boolean; any other value
+ * rejects the whole message. */
 export function parsePageCapRequest(data: unknown): PageCapRequest | null {
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
   const record = data as Record<string, unknown>;
@@ -261,7 +290,9 @@ export function parsePageCapRequest(data: unknown): PageCapRequest | null {
   if (typeof record.cap !== "string" || !(PAGE_CAP_CALLS as readonly string[]).includes(record.cap)) return null;
   const args = record.args;
   if (args !== undefined && (!args || typeof args !== "object" || Array.isArray(args))) return null;
-  return { type: CAP_MESSAGE, v: 1, id: record.id, cap: record.cap as PageCapCall, ...(args ? { args: args as Record<string, unknown> } : {}) };
+  if ("gesture" in record && typeof record.gesture !== "boolean") return null;
+  const gesture = typeof record.gesture === "boolean" ? { gesture: record.gesture } : {};
+  return { type: CAP_MESSAGE, v: 1, id: record.id, cap: record.cap as PageCapCall, ...(args ? { args: args as Record<string, unknown> } : {}), ...gesture };
 }
 
 /** Whether a call is granted by a declaration (`data.read` also needs its
@@ -270,7 +301,64 @@ export function pageCapGranted(caps: PageCapabilities | null | undefined, cap: P
   if (!caps) return false;
   if (cap === "data.read") return typeof source === "string" && (caps.data as string[]).includes(source);
   if (cap === "viewer.get") return caps.viewer;
+  if (cap === "files.download") return (caps.files ?? []).includes("download");
   return caps.open;
+}
+
+
+const PAGE_CAP_B64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const PAGE_CAP_B64_INDEX: Int8Array = (() => {
+  const table = new Int8Array(128);
+  table.fill(-1);
+  for (let i = 0; i < PAGE_CAP_B64_ALPHABET.length; i++) table[PAGE_CAP_B64_ALPHABET.charCodeAt(i)] = i;
+  return table;
+})();
+const PAGE_CAP_B64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+/** The download filename: the last segment after a slash or a backslash.
+ * Null, which the caller answers as bad_request, when that segment is empty,
+ * a single dot, a double dot, longer than 200 characters, or contains a
+ * control character. The limit stays inside this helper. Pure. */
+export function pageCapFileName(name: unknown): string | null {
+  if (typeof name !== "string") return null;
+  const segment = name.split(/[/\\]/).pop() ?? "";
+  if (!segment || segment === "." || segment === ".." || segment.length > 200) return null;
+  for (let i = 0; i < segment.length; i++) {
+    const code = segment.charCodeAt(i);
+    if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) return null;
+  }
+  return segment;
+}
+
+/** The bytes of a files.download payload. `data` is one standard base64
+ * string: no data-URL prefix and no whitespace. A string whose length already
+ * implies more than PAGE_CAP_LIMITS.fileBytes is too_large before decode.
+ * Bad base64 is bad_request. Pure. */
+export function pageCapFileData(data: unknown): { ok: true; bytes: Uint8Array } | { ok: false; error: "bad_request" | "too_large" } {
+  if (typeof data !== "string") return { ok: false, error: "bad_request" };
+  const limit = PAGE_CAP_LIMITS.fileBytes;
+  if (Math.floor(data.length / 4) * 3 - 2 > limit) return { ok: false, error: "too_large" };
+  if (!PAGE_CAP_B64_RE.test(data)) return { ok: false, error: "bad_request" };
+  let decoded = (data.length / 4) * 3;
+  if (data.endsWith("==")) decoded -= 2;
+  else if (data.endsWith("=")) decoded -= 1;
+  if (decoded > limit) return { ok: false, error: "too_large" };
+  const bytes = new Uint8Array(decoded);
+  const table = PAGE_CAP_B64_INDEX;
+  let out = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const c2 = data.charCodeAt(i + 2);
+    const c3 = data.charCodeAt(i + 3);
+    const a = table[data.charCodeAt(i)]!;
+    const b = table[data.charCodeAt(i + 1)]!;
+    const c = c2 === 61 ? 0 : table[c2]!;
+    const d = c3 === 61 ? 0 : table[c3]!;
+    bytes[out++] = (a << 2) | (b >> 4);
+    if (c2 !== 61) bytes[out++] = ((b & 15) << 4) | (c >> 2);
+    if (c3 !== 61) bytes[out++] = ((c & 3) << 6) | d;
+  }
+  if (out !== decoded) return { ok: false, error: "bad_request" };
+  return { ok: true, bytes };
 }
 
 /** An exit a source names, kept only when it is an https://github.com/

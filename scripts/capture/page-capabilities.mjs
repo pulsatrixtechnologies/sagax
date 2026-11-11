@@ -39,7 +39,7 @@ const shared = await import(pathToFileURL(join(root, "shared/published-pages.ts"
 
 const PAGE_ID = "capsPage00001";
 const TOKEN = "tok-capabilities";
-const CAPS = { data: ["team-board"], viewer: true, open: true };
+const CAPS = { data: ["team-board"], viewer: true, open: true, files: ["download"] };
 const BOARD = {
   value: { lanes: [
     { id: "todo", title: "To do", cards: [{ title: "Show the work of the coding teams" }, { title: "Weekly board digest" }] },

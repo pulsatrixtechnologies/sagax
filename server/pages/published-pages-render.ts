@@ -251,29 +251,29 @@ try{P.postMessage({type:"${STATE_ASK_MESSAGE}",v:1},"*")}catch(x){}
  * (what this version was granted, written here by the server), `data.read`,
  * `data.subscribe(name, fn, params?)` (read again, with its own params, on
  * the wrapper's `data` event; #3449), `viewer.get`
- * and `open`. Every call is one message to the parent, the wrapper, which
+ * and `open`, and `files.download` (gesture from userActivation). Every call is one message to the parent, the wrapper, which
  * asks the server with the reader's own session; the server checks it
  * again. No network. Defines `caps` for the code that follows. Pure. */
 function capabilityParts(caps: PageCapabilities): string {
-  const granted = JSON.stringify({ data: caps.data, viewer: caps.viewer, open: caps.open }).replace(/</g, "\\u003c");
+  const granted = JSON.stringify({ data: caps.data, viewer: caps.viewer, open: caps.open, files: caps.files ?? [] }).replace(/</g, "\\u003c");
   // Handshake (#3413 lot 1b): the frame says hello once; the wrapper's broker
   // answers ready (and says ready once when it starts). Calls made before
   // that wait in a queue, each with its own bounded wait, then fail with
   // code "unavailable". No periodic timer.
   return String.raw`var C=${granted},cpend={},cseq=0,dsubs={},CP=window.parent,cready=false,cqueue=[];
 function capPost(m){try{CP.postMessage(m,"*")}catch(x){var p=cpend[m.id];if(p){delete cpend[m.id];clearTimeout(p.t);p.no(x)}}}
-function capCall(c,a){return new Promise(function(ok,no){var id=++cseq,m={type:"${CAP_MESSAGE}",v:1,id:id,cap:c,args:a||{}};cpend[id]={ok:ok,no:no,t:0};
+function capCall(c,a,g){return new Promise(function(ok,no){var id=++cseq,m={type:"${CAP_MESSAGE}",v:1,id:id,cap:c,args:a||{}};if(typeof g==="boolean")m.gesture=g;cpend[id]={ok:ok,no:no,t:0};
 if(cready){capPost(m);return}cqueue.push(m);cpend[id].t=setTimeout(function(){if(!cpend[id])return;delete cpend[id];cqueue=cqueue.filter(function(q){return q.id!==id});var er=new Error("The page's wrapper did not answer.");er.code="unavailable";no(er)},${CAP_READY_TIMEOUT_MS})})}
 window.addEventListener("message",function(e){if(e.source!==CP||!e.data||e.data.v!==1)return;var d=e.data;
 if(d.type==="${CAP_READY_MESSAGE}"){if(cready)return;cready=true;var q=cqueue;cqueue=[];q.forEach(function(m){var p=cpend[m.id];if(p){clearTimeout(p.t);capPost(m)}})}
 else if(d.type==="${CAP_RESULT_MESSAGE}"&&typeof d.id==="number"&&cpend[d.id]){var p=cpend[d.id];delete cpend[d.id];clearTimeout(p.t);if(d.ok===true)p.ok(d.value);else{var er=new Error(String(d.message||d.error||"refused"));er.code=String(d.error||"");if(typeof d.reason==="string")er.reason=d.reason;p.no(er)}}
 else if(d.type==="${CAP_EVENT_MESSAGE}"&&d.cap==="data"&&typeof d.name==="string"&&dsubs[d.name]){var n=d.name,gs={};(dsubs[n]||[]).forEach(function(s){var k=JSON.stringify(s.q);(gs[k]=gs[k]||{q:s.q,l:[]}).l.push(s.f)});Object.keys(gs).forEach(function(k){var g=gs[k];capCall("data.read",{name:n,params:g.q}).then(function(v){g.l.forEach(function(f){try{f(v)}catch(x){}})},function(){})})}});
 try{CP.postMessage({type:"${CAP_HELLO_MESSAGE}",v:1},"*")}catch(x){}
-var caps={capabilities:Object.freeze({data:Object.freeze(C.data.slice()),viewer:C.viewer,open:C.open}),
+var caps={capabilities:Object.freeze({data:Object.freeze(C.data.slice()),viewer:C.viewer,open:C.open,files:Object.freeze(C.files.slice())}),
 data:Object.freeze({read:function(n,q){return capCall("data.read",{name:String(n),params:q&&typeof q==="object"?q:{}})},
 subscribe:function(n,f,q){n=String(n);if(typeof f!=="function")return function(){};var s={f:f,q:q&&typeof q==="object"?q:{}};(dsubs[n]=dsubs[n]||[]).push(s);return function(){dsubs[n]=(dsubs[n]||[]).filter(function(g){return g!==s})}}}),
 viewer:Object.freeze({get:function(){return capCall("viewer.get",{})}}),
-open:function(r){return capCall("open",{ref:String(r)})}};`;
+open:function(r){return capCall("open",{ref:String(r)})},files:Object.freeze({download:function(o){var g=false;try{g=navigator.userActivation.isActive===true}catch(x){}o=o&&typeof o==="object"?o:{};return capCall("files.download",{name:o.name,mime:o.mime,data:o.data},g)}})};`;
 }
 
 /** The app's preview wrapper (a server document between the app and the

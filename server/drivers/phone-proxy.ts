@@ -1,6 +1,6 @@
 // First-party Android phone MCP server. It deliberately accepts physical USB
 // devices only: no emulators, wireless debugging, network ADB, or Tailscale.
-import { spawn } from "node:child_process";
+import { spawnChild } from "../process/spawn-helper.ts";
 import { accessSync, constants, existsSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { delimiter, join } from "node:path";
@@ -68,7 +68,7 @@ async function runAdb(args: string[], options: { binary?: boolean; timeoutMs?: n
   const adb = resolveAdbPath();
   if (!adb) throw new Error("Android platform tools are unavailable. Reopen Sagax or install adb.");
   return new Promise((resolve, reject) => {
-    const child = spawn(adb, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    const child = spawnChild(adb, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     let size = 0;

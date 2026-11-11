@@ -9,7 +9,8 @@
 // the inherited PATH, plus the well-known install locations that exist
 // on this machine, plus (async, best-effort) whatever PATH the user's
 // real login shell reports.
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { spawnChild } from "./process/spawn-helper.ts";
 import { closeSync, existsSync, openSync, readFileSync, readSync, statSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, extname, join } from "node:path";
@@ -169,7 +170,7 @@ function probeLoginShellPath(): void {
 export function runLoginShellProbe(shell: string, timeoutMs: number, found: (path: string) => void, args: readonly string[] = ["-l", "-i", "-c", 'printf "__OMB_PATH__%s" "$PATH"']): ChildProcess | null {
   let child: ChildProcess;
   try {
-    child = spawn(shell, [...args], { stdio: ["ignore", "pipe", "ignore"], detached: true });
+    child = spawnChild(shell, [...args], { stdio: ["ignore", "pipe", "ignore"], detached: true });
   } catch {
     return null;
   }

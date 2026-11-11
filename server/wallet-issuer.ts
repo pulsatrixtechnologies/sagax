@@ -17,7 +17,7 @@
 // only brand and last four), the file is removed at once, and the card stays
 // in this process's memory for that one purchase. Nothing here logs,
 // returns to a bot or journals a number.
-import { execFile } from "node:child_process";
+import { execChild } from "./process/spawn-helper.ts";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
@@ -116,7 +116,7 @@ function cardFrom(raw: unknown): IssuedCard | null {
 }
 
 const defaultRunner: CommandRunner = (bin, args, options) => new Promise((resolve, reject) => {
-  execFile(bin, args, { timeout: options.timeoutMs, env: options.env, maxBuffer: 1024 * 1024, windowsHide: true }, (error, stdout) => {
+  execChild(bin, args, { timeout: options.timeoutMs, env: options.env, maxBuffer: 1024 * 1024, windowsHide: true }, (error, stdout) => {
     if (error) reject(Object.assign(new Error("wallet command failed"), { code: (error as NodeJS.ErrnoException).code, stdout: String(stdout ?? "") }));
     else resolve(String(stdout));
   });

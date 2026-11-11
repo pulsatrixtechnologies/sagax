@@ -8,7 +8,7 @@
 // exited; one that will not exit is stopped by process group. Each process is
 // recorded with its start time, so a pid the system has since given to
 // another program is never signalled.
-import { execFile } from "node:child_process";
+import { execChild } from "../process/spawn-helper.ts";
 import { readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, unlinkSync } from "node:fs";
 import { hostname } from "node:os";
 import { basename, isAbsolute, join, sep } from "node:path";
@@ -51,7 +51,7 @@ const PS = process.platform === "darwin" ? "/bin/ps" : "ps";
  * times in one fixed five-word form. */
 function execText(file: string, args: string[]): Promise<string | null> {
   return new Promise((done) => {
-    execFile(file, args, { encoding: "utf8", timeout: 5_000, windowsHide: true, maxBuffer: 16 * 1024 * 1024, env: { ...process.env, LC_ALL: "C" } }, (error, stdout) => done(error ? null : stdout));
+    execChild(file, args, { encoding: "utf8", timeout: 5_000, windowsHide: true, maxBuffer: 16 * 1024 * 1024, env: { ...process.env, LC_ALL: "C" } }, (error, stdout) => done(error ? null : stdout));
   });
 }
 

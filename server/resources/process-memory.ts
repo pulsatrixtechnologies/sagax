@@ -1,12 +1,12 @@
 /** One process-table read per budget sample, never one subprocess per resource. */
-import { execFile } from "node:child_process";
+import { execChild } from "../process/spawn-helper.ts";
 
 export type ProcessMemory = { pid: number; parent: number; bytes: number };
 
 export function processMemory(): Promise<ProcessMemory[]> {
   if (process.platform === "win32") return Promise.resolve([]);
   return new Promise(resolve => {
-    execFile("ps", ["-axo", "pid=,ppid=,rss="], { timeout: 3_000, killSignal: "SIGKILL", maxBuffer: 16 * 1024 * 1024, windowsHide: true }, (error, stdout) => {
+    execChild("ps", ["-axo", "pid=,ppid=,rss="], { timeout: 3_000, killSignal: "SIGKILL", maxBuffer: 16 * 1024 * 1024, windowsHide: true }, (error, stdout) => {
       if (error) return resolve([]);
       resolve(parseProcessMemory(stdout));
     });

@@ -31,7 +31,7 @@ import type { AccessVia } from "./engines/engine-credentials.ts";
 // own Codex sign-in on ChatGPT brings them through the connector registry
 // (server/connectors/providers/chatgpt-apps.ts), listed and called by the
 // Codex host with no model, so `codex` answers them from the registry below.
-import { execFile } from "node:child_process";
+import { execChild } from "./process/spawn-helper.ts";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -191,7 +191,7 @@ export interface ClaudeCliRun {
  * stderr, which may carry account details). */
 export const runClaudeCli: ClaudeCliRun = ({ cli, args, env, cwd, timeoutMs }) => new Promise((resolve, reject) => {
   const resolved = resolveCli(cli, args, env);
-  execFile(resolved.command, resolved.args, { env, cwd, timeout: timeoutMs, maxBuffer: 512 * 1024, windowsHide: true }, (error, stdout) => {
+  execChild(resolved.command, resolved.args, { env, cwd, timeout: timeoutMs, maxBuffer: 512 * 1024, windowsHide: true }, (error, stdout) => {
     if (error && !stdout) reject(new Error("claude cli failed"));
     else resolve(String(stdout));
   });

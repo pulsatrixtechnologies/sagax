@@ -1,6 +1,6 @@
 // Fixed read-only probes for a Tailcat session. The command text is ours:
 // nothing the person or the model typed is interpolated into it.
-import { spawn } from "node:child_process";
+import { spawnChild } from "../process/spawn-helper.ts";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -553,9 +553,9 @@ export function createRunCommand(options: { killGraceMs?: number; releaseMs?: nu
       signal?.removeEventListener("abort", onAbort);
       resolve({ code: aborted && !timedOut ? 255 : code, stdout, stderr, ...(timedOut ? { timedOut } : {}) });
     };
-    let child: ReturnType<typeof spawn>;
+    let child: ReturnType<typeof spawnChild>;
     try {
-      child = spawn(argv[0]!, argv.slice(1), { detached: group, windowsHide: true, env: tailcatEnv(), stdio: ["ignore", "pipe", "pipe"] });
+      child = spawnChild(argv[0]!, argv.slice(1), { detached: group, windowsHide: true, env: tailcatEnv(), stdio: ["ignore", "pipe", "pipe"] });
     } catch (error) {
       stderr = error instanceof Error ? error.message : "";
       finish(1);

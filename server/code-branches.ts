@@ -8,7 +8,6 @@
 //
 // Every call goes through a `GitExec` (args, never a shell), so the tests
 // drive a temporary repository and a bare local remote.
-import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
@@ -16,6 +15,7 @@ import { dirname, isAbsolute, join } from "node:path";
 import { parseUnifiedDiff } from "../shared/code-runs.ts";
 import type { BotBranchChange, BotBranchPull, BotBranchState } from "../shared/bot-code-branches.ts";
 import { failedActionRuns, parsePullView, type PullView } from "./pull-view.ts";
+import { execChild } from "./process/spawn-helper.ts";
 
 export interface GitResult {
   code: number;
@@ -45,7 +45,7 @@ const PASSTHROUGH = ["PATH", "HOME", "USER", "LOGNAME", "SSH_AUTH_SOCK", "HTTPS_
 
 export const hostGit: GitExec = (program, args, options) => new Promise((done) => {
   const passthrough = Object.fromEntries(PASSTHROUGH.flatMap((key) => (process.env[key] && (!options.isolated || ISOLATED_PASSTHROUGH.has(key)) ? [[key, process.env[key]!]] : [])));
-  execFile(program, args, {
+  execChild(program, args, {
     cwd: options.cwd,
     env: {
       PATH: "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin",

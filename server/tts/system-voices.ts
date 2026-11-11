@@ -12,16 +12,15 @@
 //
 // Platform-gated: `say` is a Darwin binary. Elsewhere the provider simply
 // never appears as an option, and the ElevenLabs path is unchanged.
-import { execFile } from "node:child_process";
+import { execChildAsync } from "../process/spawn-helper.ts";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 
 import type { Audio, Voice } from "./elevenlabs.ts";
 
 const SAY = "/usr/bin/say";
-const execFileAsync = promisify(execFile);
+const execFileAsync = execChildAsync;
 
 export function systemVoicesAvailable(platform: string = process.platform): boolean {
   return platform === "darwin";

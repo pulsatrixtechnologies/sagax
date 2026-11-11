@@ -4,7 +4,10 @@
 // in-chat terminal, without a terminal (no -t) and with nothing installed.
 // The address and key of a tunnel are argv elements only: never logged,
 // never returned.
-import { spawn } from "node:child_process";
+import type { ChildProcessByStdio } from "node:child_process";
+import type { Readable } from "node:stream";
+
+import { spawnChild } from "../process/spawn-helper.ts";
 import { cpus } from "node:os";
 
 import { localArgv, posixLoop, remoteCommand, type ScriptFamily } from "./scripts.ts";
@@ -22,7 +25,7 @@ export function spawnSource(build: (iterations: number) => { argv: string[]; env
         ended = true;
         onExit(error);
       };
-      const child = spawn(argv[0]!, argv.slice(1), { stdio: ["ignore", "pipe", "pipe"], windowsHide: true, ...(env ? { env } : {}) });
+      const child = spawnChild(argv[0]!, argv.slice(1), { stdio: ["ignore", "pipe", "pipe"], windowsHide: true, ...(env ? { env } : {}) }) as ChildProcessByStdio<null, Readable, Readable>;
       child.stdout.setEncoding("utf8");
       child.stdout.on("data", (chunk: string) => onText(chunk));
       child.stderr.on("data", () => {});

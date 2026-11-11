@@ -8,7 +8,7 @@
 //
 // Fail closed, say why: a missing engine reports `unavailable` with a
 // reason a person can act on, never a silently browserless bot.
-import { execFile, spawn } from "node:child_process";
+import { spawnChild, execChild } from "../process/spawn-helper.ts";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { chmodSync, constants, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -102,8 +102,8 @@ function runBrowserCommand(binaryPath: string, env: NodeJS.ProcessEnv, args: str
     let settled = false;
     let output = "";
     const finish = (ok: boolean) => { if (!settled) { settled = true; done({ ok, output }); } };
-    let child: ReturnType<typeof spawn>;
-    try { child = spawn(binaryPath, args, { env, stdio: capture ? ["ignore", "pipe", "ignore"] : "ignore", windowsHide: true }); }
+    let child: ReturnType<typeof spawnChild>;
+    try { child = spawnChild(binaryPath, args, { env, stdio: capture ? ["ignore", "pipe", "ignore"] : "ignore", windowsHide: true }); }
     catch { return finish(false); }
     let exited = false;
     let killTimer: NodeJS.Timeout | undefined;
@@ -344,7 +344,7 @@ export type BrowserEngineStatus =
 export type AgentBrowserVersionRunner = (binaryPath: string) => Promise<string>;
 
 const runVersion: AgentBrowserVersionRunner = (binaryPath) => new Promise((resolve, reject) => {
-  execFile(binaryPath, ["--version"], { encoding: "utf8", timeout: 1_500, windowsHide: true }, (error, stdout) => {
+  execChild(binaryPath, ["--version"], { encoding: "utf8", timeout: 1_500, windowsHide: true }, (error, stdout) => {
     if (error) reject(error);
     else resolve(String(stdout));
   });
@@ -555,7 +555,7 @@ export function ensureChrome(binaryPath: string, options: { withDeps?: boolean; 
   }
   const args = ["install", ...(options.withDeps ? ["--with-deps"] : [])];
   return new Promise((done, fail) => {
-    const child = spawn(binaryPath, args, { env: options.env ?? process.env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    const child = spawnChild(binaryPath, args, { env: options.env ?? process.env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     let output = "";
     // Keep only the tail: the failure path quotes the last lines, so a chatty
     // installer cannot grow the buffer without bound while it hangs.
@@ -742,8 +742,8 @@ export function agentBrowserIntegration(input: {
 export function setBrowserViewport(binaryPath: string, env: NodeJS.ProcessEnv, timeoutMs = 30_000): Promise<boolean> {
   if (!ownsBrowserViewport(env)) return Promise.resolve(true);
   return new Promise((settle) => {
-    let child: ReturnType<typeof spawn>;
-    try { child = spawn(binaryPath, [...BROWSER_VIEWPORT_ARGS, "--json", "--no-webmcp"], { env: browserRuntimeEnv(env), stdio: ["ignore", "pipe", "ignore"], windowsHide: true }); }
+    let child: ReturnType<typeof spawnChild>;
+    try { child = spawnChild(binaryPath, [...BROWSER_VIEWPORT_ARGS, "--json", "--no-webmcp"], { env: browserRuntimeEnv(env), stdio: ["ignore", "pipe", "ignore"], windowsHide: true }); }
     catch { settle(false); return; }
     let output = "";
     let settled = false;
@@ -763,8 +763,8 @@ export function setBrowserViewport(binaryPath: string, env: NodeJS.ProcessEnv, t
  * response's data, or null on any failure. */
 export function browserStreamCommand(binaryPath: string, env: NodeJS.ProcessEnv, action: "status" | "enable" | "disable", timeoutMs = 10_000): Promise<Record<string, unknown> | null> {
   return new Promise((settle) => {
-    let child: ReturnType<typeof spawn>;
-    try { child = spawn(binaryPath, ["stream", action, "--json", "--no-webmcp"], { env: browserRuntimeEnv(env), stdio: ["ignore", "pipe", "ignore"], windowsHide: true }); }
+    let child: ReturnType<typeof spawnChild>;
+    try { child = spawnChild(binaryPath, ["stream", action, "--json", "--no-webmcp"], { env: browserRuntimeEnv(env), stdio: ["ignore", "pipe", "ignore"], windowsHide: true }); }
     catch { settle(null); return; }
     let output = "";
     let settled = false;
@@ -825,7 +825,7 @@ export function agentBrowserFrame(input: {
   const file = join(tmpdir(), `openmausbot-browser-${randomUUID()}.jpg`);
   return new Promise((settle, fail) => {
     // Per-command flags, so the bot's own screenshot tool keeps its format.
-    const child = spawn(input.binaryPath, ["screenshot", file, "--screenshot-format", "jpeg", "--screenshot-quality", String(FRAME_JPEG_QUALITY)], {
+    const child = spawnChild(input.binaryPath, ["screenshot", file, "--screenshot-format", "jpeg", "--screenshot-quality", String(FRAME_JPEG_QUALITY)], {
         env: browserRuntimeEnv(input.env),
       stdio: ["ignore", "ignore", "pipe"],
       windowsHide: true,

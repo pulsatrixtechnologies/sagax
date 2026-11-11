@@ -443,6 +443,7 @@ import {
   type WorkspaceAccess
 } from "./enterprise.ts";
 import { describeSpawnFailure, execCli, runAsBotEngine } from "./procs.ts";
+import { execChildAsync, startSpawnHelper } from "./process/spawn-helper.ts";
 import {
   blockedTarget,
   buildSpendNotification,
@@ -8628,6 +8629,10 @@ if (process.env.SAGAX_LOOP_LAG !== "0") {
   // console, so the line reaches both docker logs and the log tail (captureConsole).
   startEventLoopLagMonitor({ info: (m) => console.log(m), warn: (m) => console.warn(m) });
 }
+// #3680: on Linux the processes of spawnCli are created by a small helper
+// started now, while this process is small: a fork of the grown server
+// stopped every person's loop for one to two seconds (server/process/spawn-helper.ts).
+if (process.platform === "linux") startSpawnHelper();
 // Who signs people in here (SAGAX_IDENTITY): a solo server keeps its email
 // sign-in list, invitations and mailer; an organization server signs people
 // in with Pulsatrix only (Perspicax owns accounts), so the list is empty
@@ -13136,13 +13141,7 @@ ROUTES.push(createLifecycleHookRoutes({
 }));
 const openMacPrivacyPane: ((anchor: string) => Promise<boolean>) | undefined = process.platform === "darwin"
   ? async (anchor) => {
-    const { execFile } = await import("node:child_process");
-    await new Promise<void>((resolve, reject) => {
-      execFile("open", [`x-apple.systempreferences:com.apple.preference.security?${anchor}`], (error) => {
-        if (error) reject(error);
-        else resolve();
-      });
-    });
+    await execChildAsync("open", [`x-apple.systempreferences:com.apple.preference.security?${anchor}`]);
     return true;
   }
   : undefined;

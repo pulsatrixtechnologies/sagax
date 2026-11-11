@@ -1,7 +1,7 @@
 // The Flow plugin's helper for proactive watches: `px_flow.py proactive`.
 // It runs isolated (python3 -I), with a minimal environment (no secret of the
 // server reaches it) and a short timeout.
-import { execFile } from "node:child_process";
+import { execChild } from "../process/spawn-helper.ts";
 import { existsSync } from "node:fs";
 import { delimiter, join } from "node:path";
 
@@ -18,7 +18,7 @@ export function flowHelperIn(dirs: readonly string[], python = "python3"): FlowH
   // the organization's tenant plugins (facts, tenant watches) sit next to it
   const tenants = dirs.filter((dir) => dir !== root && existsSync(join(dir, "pulsatrix-flow.json")));
   const run = (args: string[]) => new Promise<string>((resolve, reject) => {
-      execFile(python, ["-I", script, ...args], {
+      execChild(python, ["-I", script, ...args], {
         cwd: root,
         timeout: FLOW_HELPER_TIMEOUT_MS,
         maxBuffer: 4 * 1024 * 1024,

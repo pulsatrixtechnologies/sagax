@@ -1,6 +1,6 @@
 // Send one iMessage or SMS. The AppleScript talks to Messages and can
 // launch it. Tests inject a sender and never call the script runner.
-import { execFile } from "node:child_process";
+import { execChild } from "../process/spawn-helper.ts";
 
 import type { MessageService } from "../../shared/imessage.ts";
 
@@ -36,7 +36,7 @@ export function imessageSendScript(input: { to: string; text: string; service: "
   return lines.join("\n");
 }
 
-export function createOsascriptSender(run: typeof execFile = execFile): ImessageSender {
+export function createOsascriptSender(run: typeof execChild = execChild): ImessageSender {
   return {
     send(input) {
       const service = input.file || input.service !== "SMS" ? "iMessage" : "SMS";

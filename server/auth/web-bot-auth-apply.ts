@@ -1,17 +1,18 @@
 // Ask the bot's browser to attach the visit signature. The program is the
 // browser engine, with arguments, never a shell. The headers are the
 // signature headers only.
-import { spawn, type SpawnOptions } from "node:child_process";
+import { type SpawnOptions } from "node:child_process";
+import { spawnChild } from "../process/spawn-helper.ts";
 
 const TIMEOUT_MS = 8_000;
 
-export type SpawnHeaders = (command: string, args: readonly string[], options: SpawnOptions) => ReturnType<typeof spawn>;
+export type SpawnHeaders = (command: string, args: readonly string[], options: SpawnOptions) => ReturnType<typeof spawnChild>;
 
 export function applySignedBrowserHeaders(
   command: string,
   env: NodeJS.ProcessEnv,
   headers: Record<string, string>,
-  spawnImpl: SpawnHeaders = spawn,
+  spawnImpl: SpawnHeaders = spawnChild,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     for (const [name, value] of Object.entries(headers)) {
@@ -24,7 +25,7 @@ export function applySignedBrowserHeaders(
         return;
       }
     }
-    let child: ReturnType<typeof spawn>;
+    let child: ReturnType<typeof spawnChild>;
     try {
       child = spawnImpl(command, ["set", "headers", JSON.stringify(headers)], {
         env, shell: false, windowsHide: true, stdio: ["ignore", "ignore", "ignore"],

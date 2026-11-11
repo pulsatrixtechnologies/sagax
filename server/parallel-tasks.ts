@@ -7,10 +7,10 @@
 // into the conversation as a reply to the request. What lives here is the
 // part that needs no server state: the task's brief, its title, its working
 // folder, the per-person limit and the result line.
-import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { restartSentenceIn } from "../shared/restart-words.ts";
+import { execChildAsync } from "./process/spawn-helper.ts";
 
 import { resourcesOverlap, type ParallelTaskState, type TaskParallelOf } from "../shared/parallel-tasks.ts";
 
@@ -88,17 +88,18 @@ function workspaceNote(workspace: ParallelWorkspace): string {
  * git repository gets a separate worktree of it, so two tasks never write
  * the same files; another project folder stays the other task's (this one
  * reads it only); a conversation on its own private workspace leaves the
- * task its own. Never throws: a worktree that cannot be made falls back to
- * reading the folder only. */
-export function prepareParallelWorkspace(input: {
+ * task its own. Never rejects: a worktree that cannot be made falls back to
+ * reading the folder only. Its git runs are asynchronous (#3680): the server
+ * keeps answering while git reads the repository. */
+export async function prepareParallelWorkspace(input: {
   parentCwd: string | null | undefined;
   /** Where private task workspaces live: a folder there is not a project. */
   privateRoot: string;
   root: string;
   botId: string;
   threadId: string;
-  git?: (args: string[], cwd: string) => string;
-}): ParallelWorkspace {
+  git?: (args: string[], cwd: string) => string | Promise<string>;
+}): Promise<ParallelWorkspace> {
   const parentCwd = input.parentCwd;
   if (!parentCwd || !existsSync(parentCwd)) return { kind: "own" };
   // native: on Windows git answers the long path while a temp folder can be
@@ -106,13 +107,11 @@ export function prepareParallelWorkspace(input: {
   const real = (path: string) => { try { return realpathSync.native(path); } catch { return resolve(path); } };
   const fromPrivate = relative(real(input.privateRoot), real(parentCwd));
   if (!fromPrivate.startsWith("..") && !isAbsolute(fromPrivate)) return { kind: "own" };
-  const git = input.git ?? ((args: string[], cwd: string) => execFileSync("git", args, {
-    cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 15_000,
-  }).trim());
+  const git = input.git ?? (async (args: string[], cwd: string) => (await execChildAsync("git", args, { cwd, timeout: 15_000 })).stdout.trim());
   const readOnly: ParallelWorkspace = { kind: "read-only", folder: parentCwd };
   let top: string;
   try {
-    top = git(["rev-parse", "--show-toplevel"], parentCwd);
+    top = await git(["rev-parse", "--show-toplevel"], parentCwd);
   } catch {
     return readOnly;
   }
@@ -121,9 +120,9 @@ export function prepareParallelWorkspace(input: {
   const path = join(input.root, input.botId, input.threadId);
   try {
     // A repository without a commit has no HEAD to branch from.
-    git(["rev-parse", "--verify", "HEAD"], top);
+    await git(["rev-parse", "--verify", "HEAD"], top);
     mkdirSync(join(input.root, input.botId), { recursive: true });
-    git(["worktree", "add", "-b", branch, path, "HEAD"], top);
+    await git(["worktree", "add", "-b", branch, path, "HEAD"], top);
   } catch {
     return readOnly;
   }

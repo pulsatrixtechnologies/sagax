@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execChild } from "../process/spawn-helper.ts";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 import { z } from "zod";
@@ -265,7 +265,7 @@ const GIT_PASSTHROUGH = ["PATH", "HOME", "HTTPS_PROXY", "https_proxy", "HTTP_PRO
 
 export const runGit: GitRunner = (args, options) => new Promise((resolvePromise, reject) => {
   const passthrough = Object.fromEntries(GIT_PASSTHROUGH.flatMap((key) => (process.env[key] ? [[key, process.env[key]!]] : [])));
-  execFile("git", args, {
+  execChild("git", args, {
     cwd: options.cwd,
     env: { PATH: "/usr/bin:/bin", HOME: "/tmp", ...passthrough, ...options.env },
     timeout: options.timeoutMs,

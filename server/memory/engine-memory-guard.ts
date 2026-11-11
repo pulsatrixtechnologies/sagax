@@ -39,6 +39,7 @@
 // SAGAX_CHILD_OOM_SCORE_ADJ (default 500, 0 = off; Linux only).
 
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { spawnHelperPid } from "../process/spawn-helper.ts";
 
 /** One bot's browser (agent-browser's daemon and its Chrome) on a page or
  * two: 270 to 390 MB per bot, measured on an 8 GB server. It runs outside the
@@ -320,6 +321,8 @@ export function sweepOomScores(adj: number, root = process.pid, proc: ProcFs = l
     if (seen.has(pid)) continue;
     seen.add(pid);
     stack.push(...(children.get(pid) ?? []));
+    // The spawn helper is the server's own part, not an engine (#3680).
+    if (pid === spawnHelperPid()) continue;
     const current = proc.oomScoreAdj(pid);
     if (current === null || current >= adj) continue;
     if (markOomVictim(pid, adj, proc.write)) raised += 1;

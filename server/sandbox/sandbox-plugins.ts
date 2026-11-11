@@ -21,7 +21,7 @@
 //     bot of a person resynced a refreshed Flow on its next turn): each copy
 //     stages and unpacks under its own name, and the swap that loses a race
 //     to an identical copy counts as copied.
-import { execFile } from "node:child_process";
+import { execChild } from "../process/spawn-helper.ts";
 import { randomBytes } from "node:crypto";
 
 import type { SandboxExecInput } from "./sandboxd-core.ts";
@@ -50,8 +50,8 @@ export function pluginDigest(dir: string): string {
 
 function pluginArchive(dir: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    execFile("tar", ["-czf", "-", "-C", dir, "."], { encoding: "buffer", maxBuffer: MAX_PLUGIN_ARCHIVE_BYTES + 1, env: { PATH: process.env.PATH ?? "/usr/bin:/bin", COPYFILE_DISABLE: "1" } },
-      (error, stdout) => (error ? reject(error) : resolve(stdout)));
+    execChild("tar", ["-czf", "-", "-C", dir, "."], { encoding: "buffer", maxBuffer: MAX_PLUGIN_ARCHIVE_BYTES + 1, env: { PATH: process.env.PATH ?? "/usr/bin:/bin", COPYFILE_DISABLE: "1" } },
+      (error, stdout) => (error ? reject(error) : resolve(stdout as unknown as Buffer)));
   });
 }
 

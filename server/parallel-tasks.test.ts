@@ -101,20 +101,20 @@ describe("parallel task workspace", () => {
     for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
   });
 
-  it("keeps a private conversation's task on its own folder and reads a plain project folder only", () => {
+  it("keeps a private conversation's task on its own folder and reads a plain project folder only", async () => {
     const root = temp();
     const privateRoot = join(root, "task-workspaces");
     mkdirSync(join(privateRoot, "bot", "main"), { recursive: true });
-    expect(prepareParallelWorkspace({ parentCwd: join(privateRoot, "bot", "main"), privateRoot, root: join(root, "wt"), botId: "bot", threadId: "t" }))
+    expect(await prepareParallelWorkspace({ parentCwd: join(privateRoot, "bot", "main"), privateRoot, root: join(root, "wt"), botId: "bot", threadId: "t" }))
       .toEqual({ kind: "own" });
-    expect(prepareParallelWorkspace({ parentCwd: undefined, privateRoot, root, botId: "bot", threadId: "t" })).toEqual({ kind: "own" });
+    expect(await prepareParallelWorkspace({ parentCwd: undefined, privateRoot, root, botId: "bot", threadId: "t" })).toEqual({ kind: "own" });
     const project = join(root, "project");
     mkdirSync(project);
-    expect(prepareParallelWorkspace({ parentCwd: project, privateRoot, root: join(root, "wt"), botId: "bot", threadId: "t",
+    expect(await prepareParallelWorkspace({ parentCwd: project, privateRoot, root: join(root, "wt"), botId: "bot", threadId: "t",
       git: () => { throw new Error("not a repository"); } })).toEqual({ kind: "read-only", folder: project });
   });
 
-  it("gives a task in a git repository its own worktree on its own branch", () => {
+  it("gives a task in a git repository its own worktree on its own branch", async () => {
     const root = temp();
     const repo = join(root, "repo");
     mkdirSync(join(repo, "sub"), { recursive: true });
@@ -123,7 +123,7 @@ describe("parallel task workspace", () => {
     writeFileSync(join(repo, "sub", "a.txt"), "a");
     git("add", ".");
     git("-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", "init");
-    const workspace = prepareParallelWorkspace({ parentCwd: join(repo, "sub"), privateRoot: join(root, "private"), root: join(root, "wt"), botId: "bot", threadId: "thread-1" });
+    const workspace = await prepareParallelWorkspace({ parentCwd: join(repo, "sub"), privateRoot: join(root, "private"), root: join(root, "wt"), botId: "bot", threadId: "thread-1" });
     expect(workspace).toMatchObject({ kind: "worktree", branch: "sagax/parallel-thread-1" });
     if (workspace.kind !== "worktree") return;
     expect(workspace.cwd.endsWith(join("wt", "bot", "thread-1", "sub"))).toBe(true);

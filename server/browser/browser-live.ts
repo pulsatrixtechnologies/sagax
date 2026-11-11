@@ -1,13 +1,12 @@
-import { execFile } from "node:child_process";
+import { execChildAsync } from "../process/spawn-helper.ts";
 import { randomUUID } from "node:crypto";
 import type { ServerResponse } from "node:http";
-import { promisify } from "node:util";
 import { BROWSER_VIEWPORT_ARGS, browserRuntimeEnv, ownsBrowserViewport, type BrowserRuntime } from "./browser-runtime.ts";
 import { closeBrowserSession } from "./browser-engine.ts";
 import { parseDescribedElement, teachDescribeScript, TeachRecordings, type TeachRecorder } from "./browser-teach.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
-const execute = promisify(execFile);
+const execute = execChildAsync;
 const MAX_FRAME = 3 * 1024 * 1024;
 const MAX_BUFFER = 4 * 1024 * 1024;
 const HEARTBEAT_MS = 10_000;

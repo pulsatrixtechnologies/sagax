@@ -5,7 +5,7 @@
 // deadline. Nothing the person typed reaches the helper: every event is
 // re-validated here and encoded as a fixed line. Input is audited by control
 // action, never keystroke by keystroke (Loi 25 minimisation: no key logging).
-import { spawn } from "node:child_process";
+import { spawnChild } from "../process/spawn-helper.ts";
 
 import {
   coalesceEvents,
@@ -81,7 +81,7 @@ const QUALITY = 60;
 const INPUT_EVENTS_PER_SECOND = 200;
 
 function defaultSpawn(argv: string[]): ControlProcess {
-  const child = spawn(argv[0]!, argv.slice(1), { stdio: ["pipe", "pipe", "ignore"], windowsHide: true, env: tailcatEnv() });
+  const child = spawnChild(argv[0]!, argv.slice(1), { stdio: ["pipe", "pipe", "ignore"], windowsHide: true, env: tailcatEnv() });
   child.stdin.on("error", () => { /* broken pipe after the helper exits; close follows */ });
   return {
     writeLine(line) { try { child.stdin.write(`${line}\n`); } catch { /* the process is gone; close follows */ } },

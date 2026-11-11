@@ -70,7 +70,7 @@ async function startParallelTask(input: {
   // same folder (the brief says it is shared), else its own task folder.
   const parentProjected = host.store.projectBotForTask(bot.id, input.threadId) ?? bot;
   const parentCwd = parentTask.cwd !== undefined ? parentTask.cwd : parentProjected.cwd;
-  const workspace = prepareParallelWorkspace({
+  const workspace = await prepareParallelWorkspace({
     parentCwd, privateRoot: join(DATA_DIR, "task-workspaces"), root: join(DATA_DIR, "parallel-worktrees"), botId: bot.id, threadId: child.threadId
   });
   // A worktree is the task's folder; otherwise it keeps its own private one

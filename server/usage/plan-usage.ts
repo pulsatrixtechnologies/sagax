@@ -20,7 +20,7 @@
 // missing login or a refused sign-in (401) is signed-out; a network failure,
 // a timeout, a 429, a 5xx or an access token waiting for its refresh is an
 // error with its reason.
-import { execFile } from "node:child_process";
+import { execChild } from "../process/spawn-helper.ts";
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -886,7 +886,7 @@ export function readDarwinClaudeKeychain(service: string): Promise<string | null
   if (process.platform !== "darwin") return Promise.resolve(null);
   return new Promise((resolve) => {
     try {
-      execFile(
+      execChild(
         "security",
         ["find-generic-password", "-s", service, "-w"],
         {

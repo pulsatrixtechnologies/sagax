@@ -12,7 +12,8 @@
 // server/mcp/mcp-bridge.ts and server/drivers/agents-proxy.ts. This client matches
 // that exactly.
 import { Type, type TObjectOptions, type TSchema, type TSchemaOptions } from "typebox";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawnChild } from "../process/spawn-helper.ts";
 import { readFileSync, writeFileSync } from "node:fs";
 import { foreignMailboxAccessDenied } from "../../shared/mailbox-user.ts";
 import { allowsTool, canUseMcpServer, parseToolScope, type ToolIdentity } from "../../shared/tool-scope.ts";
@@ -224,7 +225,7 @@ export class StdioMcp {
 
   constructor(def: McpServerDef) {
     this.remote = def.directory === true;
-    this.child = spawn(def.command, def.args ?? [], {
+    this.child = spawnChild(def.command, def.args ?? [], {
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, ...def.env },
     });

@@ -78,7 +78,15 @@ export function createWaitingCardSkip(getHost: () => Host): any {
     return {
       open: openWaitingRows,
       daysFor: (row) => host.pendingExpireDaysForThread(row.threadId),
-      closeRequest: (row, note) => closeRequest(row.threadId, row.message, { kind: "expired", note }),
+      // #3522: a row of a request already closed in this pass closes
+      // without a line; a line the waiting work did not take joins the
+      // pass's one line for its thread
+      closeRequest: (row, note, how = {}) => closePersonRequest({
+        ...personDeps(),
+        ...(how.noteWork ? { noteWork: how.noteWork } : {}),
+        ...(how.quiet ? { answerWork: () => true, noteWork: () => {} } : {}),
+      }, row.threadId, row.message, { kind: "expired", note }),
+      note: (threadId, text) => { host.store.appendMessage(threadId, { role: "bot", kind: "text", text }); },
       expireProposal: (row) => {
         const card = row.message.card;
         if (card) host.store.patchMessage(row.threadId, row.message.id, { card: { ...card, expired: true, options: [] } });

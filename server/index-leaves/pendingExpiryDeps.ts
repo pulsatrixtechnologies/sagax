@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** pendingExpiryDeps (#1388). Pure move from server/index.ts. */
+import { lastPersonText, turnLanguage } from "../turns/turn-language.ts";
 export type Host = Record<string, any>;
 
 export function createPendingExpiryDeps(getHost: () => Host): any {
@@ -35,11 +36,20 @@ function pendingExpiryDeps() {
       const bot = host.store.botByThread(threadId);
       return bot ? { id: bot.id, name: bot.name } : undefined;
     },
+    // #3522: the language of the person who owns the conversation, as a
+    // turn picks it for a server line: the language of their last message
+    // there, else their own choice (the conversation's person, else the
+    // bot's owner, else the server's default). At a start, before any
+    // request, a saved choice may be missing: the conversation still tells.
     localeFor: (threadId) => {
       const bot = host.store.botByThread(threadId);
-      const ownerId = bot ? host.recordedBotOwner(bot) : null;
-      const lang = (ownerId ? host.languageOfPerson(ownerId) : "en").toLowerCase();
-      return lang.startsWith("fr") ? "fr" : "en";
+      const task = bot ? host.store.taskByThread?.(bot.id, threadId) : undefined;
+      const owner = task?.ownerPrincipalId ?? (bot ? host.recordedBotOwner(bot) : undefined) ?? undefined;
+      let said: string | undefined;
+      try {
+        said = lastPersonText(host.store.messagesFor(threadId));
+      } catch { /* the person's own choice */ }
+      return turnLanguage(said, host.languageOfPerson(owner));
     },
   };
 

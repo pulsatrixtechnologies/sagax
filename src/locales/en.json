@@ -13904,6 +13904,8 @@
   "routineReadiness.requiresHelp": "Names separated by commas, up to 20 names of 100 characters each.",
   "routines.failures.grouped": "Failed routine runs ({count})",
   "approval.pending.expiredNote": "This request expired after {days} days without an answer: there is no answer and nothing was run. Ask again if it is still needed.",
+  "approval.pending.expiredNoteMany": "{count} requests expired after {days} days without an answer: there is no answer and nothing was run. Ask again for the ones still needed.",
+  "approval.pending.expiredNoteManyTitled": "{count} requests expired after {days} days without an answer ({titles}): there is no answer and nothing was run. Ask again for the ones still needed.",
   "settings.org.pendingApprovalExpireDays": "Waiting cards expire after (days)",
   "settings.me.pendingApprovalExpireDays": "My waiting cards expire after (days)",
   "limitFailover.exhausted": "Limits were reached on {tried}: no other engine could answer. Pick another model, add credit, or try again when a limit resets (around {time}).",

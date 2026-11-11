@@ -7,6 +7,8 @@
 //
 // Resolution order for N: per-person override, then organization setting,
 // then SAGAX_PENDING_APPROVAL_EXPIRE_DAYS, then 7. 0 means never expire.
+import en from "../../src/locales/en.json" with { type: "json" };
+import fr from "../../src/locales/fr.json" with { type: "json" };
 import type { Message } from "../store.ts";
 
 export const DEFAULT_PENDING_APPROVAL_EXPIRE_DAYS = 7;
@@ -57,21 +59,85 @@ export function isPendingApprovalPastExpiry(createdAt: number, days: number, now
   return now >= createdAt + days * DAY_MS;
 }
 
-/** Plain note the waiting bot / requester reads when a card expires by age
- * (#3471: every waiting card, not approvals only). */
-export function pendingApprovalExpiryNote(days: number, locale: "en" | "fr" = "en"): string {
-  if (locale === "fr") {
-    return `Cette demande a expiré après ${days} jours sans réponse : il n'y a pas de réponse et rien n'a été fait. Redemande-la si elle est encore nécessaire.`;
-  }
-  return `This request expired after ${days} days without an answer: there is no answer and nothing was run. Ask again if it is still needed.`;
-}
-
 /** Locale keys for the note and the setting label (en source; fr in catalogs). */
 export const PENDING_APPROVAL_EXPIRY_I18N = {
   note: "approval.pending.expiredNote",
+  noteMany: "approval.pending.expiredNoteMany",
+  noteManyTitled: "approval.pending.expiredNoteManyTitled",
   setting: "settings.org.pendingApprovalExpireDays",
   settingPerson: "settings.me.pendingApprovalExpireDays",
 } as const;
+
+/** The language of the person who owns a conversation ("fr", "en", ...). */
+export type ExpiryLocale = string;
+
+const CATALOGS: Readonly<Record<string, Readonly<Record<string, string>>>> = { en, fr };
+
+function catalogText(locale: ExpiryLocale | undefined, key: string): string {
+  const tag = (locale ?? "").trim().toLowerCase().split("-")[0] ?? "";
+  return CATALOGS[tag]?.[key] ?? (en as Record<string, string>)[key] ?? key;
+}
+
+/** Plain note the waiting bot / requester reads when a card expires by age
+ * (#3471: every waiting card, not approvals only), from the locale
+ * catalogs in the language of the person who owns the conversation (#3522). */
+export function pendingApprovalExpiryNote(days: number, locale: ExpiryLocale = "en"): string {
+  return catalogText(locale, PENDING_APPROVAL_EXPIRY_I18N.note).replace("{days}", String(days));
+}
+
+/** At most this many titles name the requests of one summary line. */
+export const EXPIRY_NOTE_TITLES_MAX = 3;
+const EXPIRY_TITLE_MAX = 80;
+
+/** #3522: the one line a conversation gets when several of its requests
+ * expire in the same pass: how many, and the titles of the first three. */
+export function pendingApprovalExpirySummary(count: number, days: number, titles: readonly string[], locale: ExpiryLocale = "en"): string {
+  if (count <= 1) return pendingApprovalExpiryNote(days, locale);
+  const named = titles
+    .map((title) => title.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .slice(0, EXPIRY_NOTE_TITLES_MAX)
+    .map((title) => (title.length > EXPIRY_TITLE_MAX ? `${title.slice(0, EXPIRY_TITLE_MAX - 3).trimEnd()}...` : title));
+  const key = named.length ? PENDING_APPROVAL_EXPIRY_I18N.noteManyTitled : PENDING_APPROVAL_EXPIRY_I18N.noteMany;
+  return catalogText(locale, key)
+    .replace("{count}", String(count))
+    .replace("{days}", String(days))
+    .replace("{titles}", named.join(", "));
+}
+
+/** #3522: the expiry lines of one pass, one per conversation. A request
+ * seen twice (two rows, or two sweeps of the same pass) counts once; when
+ * the pass ends, each conversation gets one line: the plain note for one
+ * request, the count and the first titles for several. */
+export class ExpiryNotes {
+  private readonly byThread = new Map<string, { days: number; locale: ExpiryLocale; titles: string[]; keys: Set<string> }>();
+
+  /** False when this request already has its line in this pass. */
+  add(threadId: string, entry: { key: string; days: number; locale: ExpiryLocale; title?: string }): boolean {
+    let slot = this.byThread.get(threadId);
+    if (!slot) {
+      slot = { days: entry.days, locale: entry.locale, titles: [], keys: new Set() };
+      this.byThread.set(threadId, slot);
+    }
+    if (slot.keys.has(entry.key)) return false;
+    slot.keys.add(entry.key);
+    if (entry.title?.trim()) slot.titles.push(entry.title);
+    return true;
+  }
+
+  /** Write each conversation's one line, then forget them. */
+  flush(write: (threadId: string, text: string) => void): void {
+    const slots = [...this.byThread];
+    this.byThread.clear();
+    for (const [threadId, slot] of slots) {
+      try {
+        write(threadId, pendingApprovalExpirySummary(slot.keys.size, slot.days, slot.titles, slot.locale));
+      } catch {
+        // the requests are closed either way
+      }
+    }
+  }
+}
 
 export interface PendingExpiryRow {
   threadId: string;
@@ -106,7 +172,7 @@ export interface PendingExpiryDeps {
   }) => void;
   withdraw?: (threadId: string, requestId: string) => void;
   botOf?: (threadId: string) => { id?: string; name?: string } | undefined;
-  localeFor?: (threadId: string) => "en" | "fr";
+  localeFor?: (threadId: string) => ExpiryLocale;
 }
 
 function cardOpen(card: Message["card"] | undefined): card is NonNullable<Message["card"]> {
@@ -123,8 +189,11 @@ function createdAtOf(message: Message, card: NonNullable<Message["card"]>): numb
   return 0;
 }
 
-/** Expire one open card by age. Returns true when it expired. */
-export function expirePendingApprovalIfDue(deps: PendingExpiryDeps, row: PendingExpiryRow): boolean {
+/** Expire one open card by age. Returns true when it expired. With
+ * `notes`, its line joins the pass's one line for that conversation
+ * (written when the pass flushes them); a second row of a request already
+ * expired in this pass closes without a second line, release or journal. */
+export function expirePendingApprovalIfDue(deps: PendingExpiryDeps, row: PendingExpiryRow, notes?: ExpiryNotes): boolean {
   const card = row.message.card;
   if (!cardOpen(card)) return false;
   const days = deps.daysFor(row);
@@ -133,15 +202,17 @@ export function expirePendingApprovalIfDue(deps: PendingExpiryDeps, row: Pending
   if (!isPendingApprovalPastExpiry(createdAt, days, now)) return false;
 
   const requestId = card.requestId!;
-  const note = pendingApprovalExpiryNote(days, deps.localeFor?.(row.threadId) ?? "en");
+  const locale = deps.localeFor?.(row.threadId) ?? "en";
+  const note = pendingApprovalExpiryNote(days, locale);
   // Status "expired" only: do not set answered to a person's deny.
   deps.patch(row.threadId, row.message.id, { ...card, expired: true, options: [] });
+  if (notes && !notes.add(row.threadId, { key: `request:${requestId}`, days, locale, title: card.title })) return true;
   try {
     void deps.release({ threadId: row.threadId, requestId, messageId: row.message.id, card, note });
   } catch {
     // The live request may already be gone; the card is closed either way.
   }
-  deps.note(row.threadId, note);
+  if (!notes) deps.note(row.threadId, note);
   const bot = deps.botOf?.(row.threadId);
   deps.journal({
     threadId: row.threadId,
@@ -155,12 +226,16 @@ export function expirePendingApprovalIfDue(deps: PendingExpiryDeps, row: Pending
   return true;
 }
 
-/** Sweep every open inbox card past its age. Returns how many expired. */
-export function sweepPendingApprovalExpiry(deps: PendingExpiryDeps): number {
+/** Sweep every open inbox card past its age. Returns how many expired.
+ * #3522: each conversation gets one line for the pass. Given `notes`, the
+ * caller flushes them (one pass over both sweeps); else this sweep does. */
+export function sweepPendingApprovalExpiry(deps: PendingExpiryDeps, notes?: ExpiryNotes): number {
+  const batch = notes ?? new ExpiryNotes();
   let expired = 0;
   for (const row of deps.open()) {
-    if (expirePendingApprovalIfDue(deps, row)) expired += 1;
+    if (expirePendingApprovalIfDue(deps, row, batch)) expired += 1;
   }
+  if (!notes) batch.flush(deps.note);
   return expired;
 }
 
@@ -187,12 +262,17 @@ export interface WaitingRowExpiryDeps {
   open: () => PendingExpiryRow[];
   daysFor: (row: PendingExpiryRow) => number;
   now?: () => number;
-  /** Close a person request as expired with this note (waiting-card-skip.ts). */
-  closeRequest: (row: PendingExpiryRow, note: string) => boolean;
+  /** Close a person request as expired with this note (waiting-card-skip.ts).
+   * `quiet`: the request already had its line in this pass, close the row
+   * only. `noteWork`: where a line kept in the work's thread goes (the
+   * pass's one line per conversation, #3522). */
+  closeRequest: (row: PendingExpiryRow, note: string, how?: { quiet?: boolean; noteWork?: (workThreadId: string, text: string) => void }) => boolean;
+  /** Write a line into a thread (the pass's one line per conversation). */
+  note?: (threadId: string, text: string) => void;
   /** Fold a proposal card as expired (nothing waits on it). */
   expireProposal: (row: PendingExpiryRow) => void;
   proposalMaxMs?: number;
-  localeFor?: (threadId: string) => "en" | "fr";
+  localeFor?: (threadId: string) => ExpiryLocale;
 }
 
 /** When a waiting row is due, given the policy days (0 = never). */
@@ -203,9 +283,25 @@ export function waitingRowDue(row: PendingExpiryRow, days: number, now: number, 
   return isPendingApprovalPastExpiry(at, days, now);
 }
 
-/** Sweep the waiting rows past their age. Returns how many closed. */
-export function sweepWaitingRowExpiry(deps: WaitingRowExpiryDeps): number {
+/** The work thread a question in words waits in: one request per work
+ * thread, whatever the number of rows that show it. */
+function waitingRowWork(message: Message): string | undefined {
+  return message.inputRequest?.threadId ?? message.attention?.threadId;
+}
+
+function waitingRowTitle(message: Message): string | undefined {
+  return message.inputRequest?.question ?? message.attention?.items?.[0]?.text ?? message.attention?.threadTitle;
+}
+
+/** Sweep the waiting rows past their age. Returns how many closed.
+ * #3522: the rows of one request (the same question shown in two
+ * conversations and on a hand-off's card) close together with one line,
+ * and each work thread gets one line for the pass. Given `notes`, the
+ * caller flushes them; else this sweep does. */
+export function sweepWaitingRowExpiry(deps: WaitingRowExpiryDeps, notes?: ExpiryNotes): number {
   const now = deps.now?.() ?? Date.now();
+  const batch = notes ?? new ExpiryNotes();
+  const seen = new Set<string>();
   let closed = 0;
   for (const row of deps.open()) {
     const days = deps.daysFor(row);
@@ -216,11 +312,22 @@ export function sweepWaitingRowExpiry(deps: WaitingRowExpiryDeps): number {
         closed += 1;
         continue;
       }
-      const note = pendingApprovalExpiryNote(days, deps.localeFor?.(row.threadId) ?? "en");
-      if (deps.closeRequest(row, note)) closed += 1;
+      const locale = deps.localeFor?.(row.threadId) ?? "en";
+      const note = pendingApprovalExpiryNote(days, locale);
+      const work = waitingRowWork(row.message);
+      const quiet = work !== undefined && seen.has(work);
+      // the line the waiting work did not take joins the pass's one line
+      const noteWork = (workThreadId: string) => {
+        batch.add(workThreadId, { key: `work:${work ?? row.message.id}`, days, locale, title: waitingRowTitle(row.message) });
+      };
+      if (deps.closeRequest(row, note, { quiet, noteWork })) {
+        closed += 1;
+        if (work !== undefined) seen.add(work);
+      }
     } catch {
       // leave the row; the next sweep retries
     }
   }
+  if (!notes && deps.note) batch.flush(deps.note);
   return closed;
 }

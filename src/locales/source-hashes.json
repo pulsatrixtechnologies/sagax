@@ -18524,7 +18524,9 @@
       "quietMode.all.label": "7e57cd32ce833bb8891cf65e4d388153a4eabb842e7ae355c597582ba48dbd9e",
       "quietMode.all.hint": "3f721ad555d002885ce5452b95bc97db6924f5e7b9b4898649dc0b987343714f",
       "quietMode.markAll": "c1f1deb94a6f0732560c376a987be82d076b94da7c1587918f3a5bbe34b99965",
-      "quietMode.summary.open": "7199fbefa4cdfa4659687cd8c81563176842738865ebfb6dfa37f64e452d4d29"
+      "quietMode.summary.open": "7199fbefa4cdfa4659687cd8c81563176842738865ebfb6dfa37f64e452d4d29",
+      "approval.pending.expiredNoteMany": "fb434155a553bef6d749a384a062f2367bad5bf62a756a80bc9725904b976ecd",
+      "approval.pending.expiredNoteManyTitled": "b413b5384251ef1a1bacaec108008db3f3f7359f200de3d27cb7846dd44ef803"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

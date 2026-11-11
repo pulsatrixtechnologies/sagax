@@ -1,0 +1,16 @@
+Building for debugging...
+[Computing dependencies]
+[1 / 5]
+[2 / 7] CompanionCoreTests-product
+error: SwiftCompile normal arm64 /Users/runner/work/repo/repo/ios/Tests/CompanionCoreTests/AccountAvatarTests.swift failed with a nonzero exit code. Command line:     cd /Users/runner/work/repo/repo
+    builtin-SwiftPerFileCompile AccountAvatarTests.swift
+/Users/runner/work/repo/repo/ios/Tests/CompanionCoreTests/AccountAvatarTests.swift:70:27: [1;31merror: [1;39mcannot convert value of type 'String' to specified type 'Int'[0;0m
+ [0;36m68 |[0;0m         let identity = try JSONDecoder().decode(AccountIdentity.self, from: Data(json.utf8))
+ [0;36m69 |[0;0m         XCTAssertEqual(identity.avatar, auth.avatar)
+ [0;36m70 |[0;0m         let broken: Int = [4;39m"not a number"[0;0m
+    [0;36m|[0;0m                           `- [1;31merror: [1;39mcannot convert value of type 'String' to specified type 'Int'[0;0m
+ [0;36m71 |[0;0m     }
+ [0;36m72 |[0;0m 
+Failed frontend command:
+error: Build failed
+error: fatalError

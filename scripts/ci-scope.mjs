@@ -8,6 +8,29 @@ import { fileURLToPath } from "node:url";
 // mobile result. The workflow and this selector run them too.
 const MOBILE_PATHS = /^(?:ios\/|android\/|\.github\/workflows\/ci\.yml$|scripts\/ci-scope\.mjs$|\.gitattributes$)/;
 
+// The paths a `swift test --package-path ios` result depends on (#3678). A
+// push to main that touches one runs the Swift package tests once, after the
+// merge (ci.yml, job `swift-package`). ios/Package.swift compiles only ios/
+// (Sources/CompanionCore, Tests/CompanionCoreTests and its Fixtures, which
+// scripts/gen-widget-fixtures.ts and scripts/gen-mascot-bodies.ts write from
+// shared/), but the tests also read files of the repository while they run:
+// the shared/ vectors and contracts (BackgroundThreadsTests,
+// BotFieldRulesParityTests), the desktop's locale catalogs (StepLabelTests),
+// src/styles.css (MascotShadowTests), the mascot art (HdMascotTests), the OS
+// permission vectors and the server's client allow list. ci-scope.test.ts
+// fails when a test reads a path this list misses. Markdown never counts (the
+// one note a test reads, docs/releases/0.4.14.md, is fixed). The workflow
+// counts too, so a change to the job runs it once.
+const SWIFT_PACKAGE_PATHS = /^(?:ios\/|shared\/|src\/locales\/|src\/assets\/mascots\/|src\/styles\.css$|electron\/os-permissions\.vectors\.json$|server\/auth\/client-allow\.ts$|\.github\/workflows\/ci\.yml$)/;
+
+/** Whether a push's changed paths can move the Swift package tests' result.
+ * An empty or malformed list counts, as everything does for selectCiScope. */
+export function touchesSwiftPackage(files) {
+  if (!Array.isArray(files) || files.length === 0) return true;
+  return files.some((file) => typeof file !== "string" || file.split("/").some((part) => !part || part === "." || part === "..")
+    || (SWIFT_PACKAGE_PATHS.test(file) && !/\.md$/i.test(file)));
+}
+
 export function selectCiScope(files) {
   let runtime = false;
   let mobile = false;
@@ -94,6 +117,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const manual = everyPlatform(process.env.GITHUB_EVENT_NAME);
   let vitestOs = manual ? ALL_OS : PR_OS;
   let platforms = manual;
+  // Only a push runs the Swift package job on its own: the nightly and a
+  // manual run cover it in the whole `ios` job. A push whose diff cannot be
+  // read, or that runs everything, runs it too.
+  let swift = process.env.GITHUB_EVENT_NAME === "push";
   if (process.env.GITHUB_EVENT_NAME === "pull_request") {
     try {
       const { pull_request: pr } = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
@@ -118,11 +145,28 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         throw new Error("Missing or invalid push commit SHAs");
       }
       const revs = { before, after };
-      const selected = selectPushScope(changedFiles(`${before}..${after}`), (rev, path) => git(["show", `${revs[rev]}:${path}`]));
-      if (!selected.runtime && !(await previousCommitGreen(before))) {
+      const files = changedFiles(`${before}..${after}`);
+      const selected = selectPushScope(files, (rev, path) => git(["show", `${revs[rev]}:${path}`]));
+      let previousGreen;
+      const readPrevious = async () => (previousGreen ??= await previousCommitGreen(before));
+      if (!selected.runtime && !(await readPrevious())) {
         console.warn(`CI scope: using all checks because ${before} has no green CI run of its own`);
       } else {
         scope = selected;
+        swift = touchesSwiftPackage(files);
+        // A replaced run never ran the Swift package tests its own diff asked
+        // for: the push that replaced it runs them instead, whatever it touches.
+        if (!swift) {
+          try {
+            if (!(await readPrevious())) {
+              swift = true;
+              console.warn(`CI scope: running the Swift package tests because ${before} has no green CI run of its own`);
+            }
+          } catch (error) {
+            swift = true;
+            console.warn(`CI scope: running the Swift package tests because the previous commit's CI cannot be read: ${error.message}`);
+          }
+        }
       }
     } catch (error) {
       console.warn(`CI scope: using all checks because the push diff is unavailable: ${error.message}`);
@@ -130,6 +174,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   }
   appendFileSync(
     process.env.GITHUB_OUTPUT,
-    `runtime=${scope.runtime}\nmobile=${scope.mobile}\nvitest_os=${JSON.stringify(vitestOs)}\nplatforms=${platforms}\n`,
+    `runtime=${scope.runtime}\nmobile=${scope.mobile}\nvitest_os=${JSON.stringify(vitestOs)}\nplatforms=${platforms}\nswift=${swift}\n`,
   );
 }

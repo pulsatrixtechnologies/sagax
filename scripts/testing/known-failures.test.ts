@@ -1,5 +1,7 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFile, execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,15 +11,19 @@ import {
   coversEveryPlatform,
   EVERY_PLATFORM,
   extractResults,
+  failingSwiftTests,
   filesRunOn,
   jobsWithoutRunner,
   identityKey,
   listedGuardTests,
   onlyShrinks,
   openRegressionIssues,
+  openSwiftRegressionIssue,
   regressionMarker,
   seedList,
   shrink,
+  SWIFT_IDENTITY,
+  swiftOutcome,
   updateSightings,
   WHOLE_FILE,
 } from "./known-failures.mjs";
@@ -329,6 +335,138 @@ describe("openRegressionIssues", () => {
     const opened = await openRegressionIssues(due, { repo: "owner/repo", token: "t", fetch: github.fetch, runUrl: "u", apiUrl: "https://api.example.test", bisect: () => null });
     expect(opened).toEqual([{ key: identityKey(due[0]!), issue: 5, created: false }]);
     expect(github.calls.filter((call) => call.method === "POST" && call.path.endsWith("/issues"))).toEqual([]);
+  });
+});
+
+describe("the Swift package tests on main (#3678)", () => {
+  const fixture = (name: string) => readFileSync(new URL(`./fixtures/swift-test/${name}.txt`, import.meta.url), "utf8");
+  const step = (name: string, conclusion: string | null) => ({ name, status: "completed", conclusion });
+  const job = (name: string, conclusion: string, steps: unknown[]) => ({ name, conclusion, steps });
+
+  it("reads the Swift step of the job after a merge and of the nightly's ios job", () => {
+    const ranRed = [step("Set up job", "success"), step("Swift package tests", "failure"), step("Upload the Swift test log", "success")];
+    expect(swiftOutcome([job("Swift package tests", "failure", ranRed)])).toEqual({ state: "fail", job: "Swift package tests" });
+    expect(swiftOutcome([job("Swift tests + iOS build", "failure", ranRed)])).toEqual({ state: "fail", job: "Swift tests + iOS build" });
+    // the nightly's simulator build failed after green Swift tests: not a Swift failure
+    const swiftGreen = [step("Set up job", "success"), step("Swift package tests", "success"), step("Build the simulator app", "failure")];
+    expect(swiftOutcome([job("Swift tests + iOS build", "failure", swiftGreen)])).toEqual({ state: "pass", job: "Swift tests + iOS build" });
+    // a timeout cancels the step: a failure
+    expect(swiftOutcome([job("Swift package tests", "failure", [step("Set up job", "success"), step("Swift package tests", "cancelled")])])!.state).toBe("fail");
+  });
+
+  it("tells a runner that never came, a job stopped before the tests and a run without Swift from a failure", () => {
+    expect(swiftOutcome([job("Swift package tests", "failure", [])])).toEqual({ state: "no-runner", job: "Swift package tests" });
+    expect(swiftOutcome([job("Swift package tests", "failure", [step("Set up job", "success"), step("Run actions/checkout", "failure"), step("Swift package tests", "skipped")])])!.state).toBe("not-run");
+    expect(swiftOutcome([job("Swift package tests", "skipped", []), job("Swift tests + iOS build", "skipped", [])])).toBeNull();
+    expect(swiftOutcome([job("vitest (ubuntu-latest, shard 1/20)", "failure", RAN)])).toBeNull();
+    expect(swiftOutcome(undefined)).toBeNull();
+  });
+
+  it("names the failing test cases of a recorded swift test log, with the assertion, paths cut to the repository", () => {
+    expect(failingSwiftTests(fixture("test-failure"))).toEqual({
+      tests: ["CompanionCoreTests.AccountAvatarTests.testAnOrganizationSessionNamesThePersonsVersionedAvatar"],
+      errors: ["ios/Tests/CompanionCoreTests/AccountAvatarTests.swift:70: error: -[CompanionCoreTests.AccountAvatarTests testAnOrganizationSessionNamesThePersonsVersionedAvatar] : XCTAssertEqual failed: (\"Alex Martin\") is not equal to (\"Not The Name\")"],
+    });
+  });
+
+  it("names no test and keeps the compiler's errors when the package did not build", () => {
+    const { tests, errors } = failingSwiftTests(fixture("build-failure"));
+    expect(tests).toEqual([]);
+    expect(errors).toContain("ios/Tests/CompanionCoreTests/AccountAvatarTests.swift:70:27: error: cannot convert value of type 'String' to specified type 'Int'");
+    expect(errors).toContain("error: Build failed");
+    expect(errors.join("\n")).not.toContain(String.fromCharCode(27));
+  });
+
+  it("reads swift-testing's failures too", () => {
+    const log = "✔ Test passes() passed after 0.001 seconds.\n✘ Test decodesTheTurn() recorded an issue at DecodingTests.swift:3:5: Expectation failed\n✘ Test decodesTheTurn() failed after 0.002 seconds with 1 issue.\n";
+    expect(failingSwiftTests(log).tests).toEqual(["decodesTheTurn()"]);
+  });
+
+  function fakeGitHub(openIssues: { number: number; body: string }[]) {
+    const calls: { method: string; path: string; body?: Record<string, unknown> }[] = [];
+    const fetch = async (url: string, init: { method?: string; body?: string } = {}) => {
+      const path = new URL(url).pathname + new URL(url).search;
+      const method = init.method ?? "GET";
+      calls.push({ method, path, body: init.body ? JSON.parse(init.body) : undefined });
+      if (method === "GET") return new Response(JSON.stringify(openIssues), { status: 200 });
+      if (path.endsWith("/labels")) return new Response("{}", { status: 422 });
+      return new Response(JSON.stringify({ number: 88 }), { status: 201 });
+    };
+    return { calls, fetch };
+  }
+  const failure = { job: "Swift package tests", tests: ["CompanionCoreTests.AccountAvatarTests.testX"], errors: ["ios/Tests/A.swift:1: error: boom"] };
+
+  it("opens one regression issue at the first failure, naming the commit, the job, the tests and the run", async () => {
+    const github = fakeGitHub([]);
+    const result = await openSwiftRegressionIssue(failure, { repo: "o/r", token: "t", fetch: github.fetch, runUrl: "https://example.test/run/3", sha: "abc123", apiUrl: "https://api.example.test" });
+    expect(result).toEqual({ issue: 88, created: true });
+    const create = github.calls.find((call) => call.method === "POST" && call.path === "/repos/o/r/issues")!;
+    expect(create.body?.labels).toEqual(["regression"]);
+    expect(create.body?.title).toBe("Regression: Swift package tests (swift test --package-path ios)");
+    const body = String(create.body?.body);
+    for (const text of ["abc123", "\"Swift package tests\"", "`CompanionCoreTests.AccountAvatarTests.testX`", "ios/Tests/A.swift:1: error: boom", "https://example.test/run/3", "first failure on main", regressionMarker(SWIFT_IDENTITY)]) {
+      expect(body).toContain(text);
+    }
+  });
+
+  it("comments on the open issue instead of opening a second one", async () => {
+    const github = fakeGitHub([{ number: 12, body: `old ${regressionMarker(SWIFT_IDENTITY)}` }]);
+    const result = await openSwiftRegressionIssue({ ...failure, tests: [], errors: [] }, { repo: "o/r", token: "t", fetch: github.fetch, runUrl: "u", sha: "def456", apiUrl: "https://api.example.test" });
+    expect(result).toEqual({ issue: 12, created: false });
+    expect(github.calls.filter((call) => call.method === "POST" && call.path === "/repos/o/r/issues")).toEqual([]);
+    const comment = github.calls.find((call) => call.path === "/repos/o/r/issues/12/comments")!;
+    expect(String(comment.body?.body)).toContain("def456");
+    expect(String(comment.body?.body)).toContain("the package did not build");
+  });
+
+  /** open-issues against a local GitHub; the command runs asynchronously so it can answer. */
+  async function openIssuesCli(jobs: unknown[], log: string | null) {
+    const dir = tempDir();
+    writeFileSync(join(dir, "results.json"), "[]");
+    writeFileSync(join(dir, "new.json"), "[]");
+    writeFileSync(join(dir, "jobs.jsonl"), jobs.map((item) => JSON.stringify(item)).join("\n"));
+    if (log !== null) writeFileSync(join(dir, "swift-test.txt"), log);
+    const posts: { path: string; body: Record<string, unknown> }[] = [];
+    const server = createServer((request, response) => {
+      let text = "";
+      request.on("data", (chunk) => { text += chunk; });
+      request.on("end", () => {
+        if (request.method === "GET") { response.end("[]"); return; }
+        posts.push({ path: request.url!, body: JSON.parse(text || "{}") });
+        response.statusCode = 201;
+        response.end(JSON.stringify({ number: 99 }));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const env = { ...process.env, GITHUB_STEP_SUMMARY: "", GITHUB_REPOSITORY: "o/r", GH_TOKEN: "t", GITHUB_API_URL: `http://127.0.0.1:${(server.address() as AddressInfo).port}` };
+      const stdout = await new Promise<string>((resolve, reject) => {
+        execFile(process.execPath, [script, "open-issues", "--results", join(dir, "results.json"), "--new-failures", join(dir, "new.json"), "--sha", "s9",
+          "--run-url", "https://example.test/run/9", "--out", join(dir, "sightings.json"), "--jobs", join(dir, "jobs.jsonl"), "--swift-log", join(dir, "swift-test.txt")],
+        { env, encoding: "utf8", timeout: 20_000 }, (error, out, err) => (error ? reject(new Error(`${error.message}\n${err}`)) : resolve(out)));
+      });
+      return { stdout, posts };
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  }
+
+  it("opens the issue from the command line with the tests of the uploaded log", async () => {
+    const red = [{ name: "Swift package tests", conclusion: "failure", steps: [step("Set up job", "success"), step("Swift package tests", "failure")] }];
+    const { stdout, posts } = await openIssuesCli(red, fixture("test-failure"));
+    expect(stdout).toContain("Opened #99 for the red Swift package tests.");
+    const issue = posts.find((post) => post.path === "/repos/o/r/issues")!;
+    expect(String(issue.body.body)).toContain("CompanionCoreTests.AccountAvatarTests.testAnOrganizationSessionNamesThePersonsVersionedAvatar");
+    expect(String(issue.body.body)).toContain("s9");
+    expect(String(issue.body.body)).toContain("https://example.test/run/9");
+  });
+
+  it("opens nothing for a Swift job that got no runner, or that passed", async () => {
+    for (const jobs of [[{ name: "Swift package tests", conclusion: "failure", steps: [] }], [{ name: "Swift package tests", conclusion: "success", steps: [step("Swift package tests", "success")] }]]) {
+      const { stdout, posts } = await openIssuesCli(jobs, null);
+      expect(posts.filter((post) => post.path.endsWith("/issues") || post.path.endsWith("/comments"))).toEqual([]);
+      if (jobs[0]!.conclusion === "failure") expect(stdout).toContain("got no runner");
+    }
   });
 });
 

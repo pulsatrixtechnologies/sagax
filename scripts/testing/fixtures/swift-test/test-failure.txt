@@ -1,0 +1,25 @@
+Test Suite 'All tests' started at 2026-11-11 13:05:26.216.
+Test Suite 'CompanionCoreTests.xctest' started at 2026-11-11 13:05:26.216.
+Test Suite 'AccountAvatarTests' started at 2026-11-11 13:05:26.216.
+Test Case '-[CompanionCoreTests.AccountAvatarTests testANewVersionIsANewCacheKey]' started.
+Test Case '-[CompanionCoreTests.AccountAvatarTests testANewVersionIsANewCacheKey]' passed (0.002 seconds).
+Test Case '-[CompanionCoreTests.AccountAvatarTests testAnOrganizationSessionNamesThePersonsVersionedAvatar]' started.
+/Users/runner/work/repo/repo/ios/Tests/CompanionCoreTests/AccountAvatarTests.swift:70: error: -[CompanionCoreTests.AccountAvatarTests testAnOrganizationSessionNamesThePersonsVersionedAvatar] : XCTAssertEqual failed: ("Alex Martin") is not equal to ("Not The Name")
+Test Case '-[CompanionCoreTests.AccountAvatarTests testAnOrganizationSessionNamesThePersonsVersionedAvatar]' failed (0.142 seconds).
+Test Case '-[CompanionCoreTests.AccountAvatarTests testAPersonalComputerNamesNoPhoto]' started.
+Test Case '-[CompanionCoreTests.AccountAvatarTests testAPersonalComputerNamesNoPhoto]' passed (0.000 seconds).
+Test Case '-[CompanionCoreTests.AccountAvatarTests testAPictureClaimIsNeverAPhotoToFetch]' started.
+Test Case '-[CompanionCoreTests.AccountAvatarTests testAPictureClaimIsNeverAPhotoToFetch]' passed (0.000 seconds).
+Test Case '-[CompanionCoreTests.YouTubeLinksTests testVideoIdFromWatchAndShortLinks]' passed (0.000 seconds).
+Test Suite 'YouTubeLinksTests' passed at 2026-11-11 13:08:48.616.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'CompanionCoreTests.xctest' failed at 2026-11-11 13:08:48.616.
+	 Executed 2830 tests, with 1 test skipped and 1 failure (0 unexpected) in 201.930 (202.399) seconds
+Test Suite 'All tests' failed at 2026-11-11 13:08:48.617.
+	 Executed 2830 tests, with 1 test skipped and 1 failure (0 unexpected) in 201.930 (202.401) seconds
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
+Note: Some test targets reported failures:
+  - CompanionCoreTests (XCTest)

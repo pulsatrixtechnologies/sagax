@@ -37,6 +37,8 @@ export const MAX_WAIT_MS = 170 * 60_000;
 /** @typedef {{ name: string, status?: string, conclusion: string | null, steps?: Array<{ status?: string, conclusion?: string | null }> }} Job */
 /** @typedef {{ id: number, event: string, status: string, head_branch: string, head_sha?: string, created_at: string, run_attempt?: number, head_commit?: { tree_id?: string } | null }} Run */
 
+/** ci.yml's job that runs the Swift package tests after a merge (#3678). */
+export const SWIFT_AFTER_MERGE = "Swift package tests";
 const isVitestJob = (job) => job.name === "vitest" || job.name.startsWith("vitest (");
 /** A job that never started a step never got a runner: GitHub gave up acquiring one.
  * scripts/testing/known-failures.mjs uses the same rule for the nightly. */
@@ -44,13 +46,15 @@ export const neverStarted = (job) => !(job.steps ?? []).some((step) => step.conc
 
 /**
  * What one finished CI run proves.
- * - "green": the gate passed and every vitest job that ran passed. A skipped
- *   vitest job is a platform the run did not cover (vitest-macos on a
- *   Linux-only run, #3672), not a failure.
+ * - "green": the gate passed, every vitest job that ran passed, and the
+ *   Swift package job after a merge passed, was skipped or never got a
+ *   runner. A skipped vitest job is a platform the run did not cover
+ *   (vitest-macos on a Linux-only run, #3672), not a failure.
  * - "scoped": the gate passed but vitest did not run (docs- or version-only),
  *   or a vitest job that ran did not pass.
  * - "runner-lost": the gate failed, and every other failed job never started.
- * - "red": the gate failed for any other reason.
+ * - "red": the gate failed for any other reason, or the gate passed and the
+ *   Swift package job after a merge started and did not pass.
  * - anything else: the gate's own conclusion, or "no gate job".
  * @param {Job[]} jobs
  */
@@ -59,7 +63,14 @@ export function judgeRun(jobs) {
   if (!gate) return "no gate job";
   if (gate.conclusion === "success") {
     const ran = jobs.filter((job) => isVitestJob(job) && job.conclusion !== "skipped");
-    return ran.length > 0 && ran.every((job) => job.conclusion === "success") ? "green" : "scoped";
+    if (!(ran.length > 0 && ran.every((job) => job.conclusion === "success"))) return "scoped";
+    // The Swift package tests after a merge (ci.yml `swift-package`, #3678)
+    // do not change the gate's result (it waits for them only through
+    // known-failures), so they block no merge; a red one still fails the
+    // run for a release. Skipped (no ios/ or shared/ change) or never given
+    // a runner, it is a platform the run did not cover, like vitest-macos.
+    const swift = jobs.find((job) => job.name === SWIFT_AFTER_MERGE);
+    return swift && !["success", "skipped"].includes(swift.conclusion ?? "") && !neverStarted(swift) ? "red" : "green";
   }
   if (gate.conclusion === "failure") {
     const failed = jobs.filter((job) => job !== gate && !["success", "skipped", "neutral"].includes(job.conclusion ?? ""));

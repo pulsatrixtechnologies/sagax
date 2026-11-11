@@ -103,9 +103,13 @@ describe("CI concurrency", () => {
     expect(mac["timeout-minutes"]).toBe(45);
     expect(mac.needs).toBe("static");
     expect(mac.if).toBe("${{ !cancelled() && needs.static.outputs.runtime == 'true' && contains(needs.static.outputs.vitest_os, 'macos-latest') }}");
-    // The other macOS jobs keep a runner each within the five.
-    const others = Object.values(workflow.jobs as Record<string, { "runs-on"?: string }>).filter((job) => job["runs-on"] === "macos-latest");
+    // The other macOS jobs of a run on every platform keep a runner each
+    // within the five. The Swift package job runs on a push only (#3678),
+    // where no other macOS job runs.
+    const others = Object.entries(workflow.jobs as Record<string, { "runs-on"?: string }>)
+      .filter(([name, job]) => job["runs-on"] === "macos-latest" && name !== "swift-package");
     expect(mac.strategy["max-parallel"] + others.length).toBeLessThanOrEqual(5);
+    expect(workflow.jobs["swift-package"].if).toContain("needs.static.outputs.swift == 'true'");
   });
 
   it("retries the package smoke's tool install and bounds it (#3672)", () => {
@@ -122,7 +126,7 @@ describe("CI concurrency", () => {
       .filter(([, job]) => job["runs-on"] === "macos-latest" || JSON.stringify(job.strategy?.matrix?.os ?? "").includes("macos"))
       .map(([name]) => name);
     // Sagax keeps its native apps: the iOS build runs only when ios/ changed.
-    expect(macosJobs.sort()).toEqual(["electron-smokes", "ios", "vitest-macos"]);
+    expect(macosJobs.sort()).toEqual(["electron-smokes", "ios", "swift-package", "vitest-macos"]);
     const smokes = workflow.jobs["electron-smokes"].steps.map((step: { run?: string }) => step.run);
     expect(smokes).toContain("pnpm test:packaged-server");
   });
@@ -266,12 +270,13 @@ describe("CI concurrency", () => {
     expect(workflow.jobs.static.outputs).toEqual({
       runtime: "${{ steps.scope.outputs.runtime }}", mobile: "${{ steps.scope.outputs.mobile }}",
       vitest_os: "${{ steps.scope.outputs.vitest_os }}", platforms: "${{ steps.scope.outputs.platforms }}",
+      swift: "${{ steps.scope.outputs.swift }}",
     });
     expect(workflow.jobs.static.steps.some((step: { run?: string }) =>
       step.run === "pnpm exec vitest run scripts/ci-scope.test.ts scripts/ci-workflow.test.ts scripts/testing/verification-docs.test.ts",
     )).toBe(true);
     for (const [name, job] of Object.entries(workflow.jobs) as [string, { needs?: string | string[]; if?: string }][]) {
-      if (["static", "gate", "known-failures", "vitest", "vitest-macos"].includes(name)) continue;
+      if (["static", "gate", "known-failures", "vitest", "vitest-macos", "swift-package"].includes(name)) continue;
       expect(job.needs).toBe("static");
       const selector = `needs.static.outputs.${["ios", "android"].includes(name) ? "mobile" : "runtime"} == 'true'`;
       // Windows, macOS and iOS jobs run on main pushes and merge groups only.
@@ -282,6 +287,29 @@ describe("CI concurrency", () => {
         expect(ios["runs-on"]).toBe("macos-latest");
         expect(ios.steps?.some((step) => step.run?.includes("swift test --package-path ios"))).toBe(true);
       }
+    }
+  });
+
+  it("runs the Swift package tests alone after a merge that touches them, blocking nothing (#3678)", () => {
+    type Step = { name?: string; run?: string; uses?: string; if?: string; with?: Record<string, unknown> };
+    const swift = workflow.jobs["swift-package"] as { needs: string; if: string; name: string; "runs-on": string; steps: Step[]; permissions?: unknown };
+    expect(swift.needs).toBe("static");
+    expect(swift.if).toBe("${{ !cancelled() && needs.static.outputs.swift == 'true' }}");
+    expect(swift["runs-on"]).toBe("macos-latest");
+    // The release gate and the issue reader find it by this name.
+    expect(readFileSync(new URL("./release-ci.mjs", import.meta.url), "utf8")).toContain(`export const SWIFT_AFTER_MERGE = "${swift.name}";`);
+    // Only the package tests: the same steps as the nightly's ios job, no simulator, no screenshot.
+    const ios = workflow.jobs.ios.steps as Step[];
+    const test = ios.find((step) => step.name === "Swift package tests")!;
+    const log = ios.find((step) => step.with?.name === "ios-swift-test")!;
+    expect(swift.steps.slice(1)).toEqual([test, log]);
+    expect(test.run).toContain("swift test --package-path ios 2>&1 | tee \"$RUNNER_TEMP/swift-test.txt\"");
+    expect(JSON.stringify(swift.steps)).not.toMatch(/xcodebuild|simctl|xcodegen/);
+    // The gate waits for it only through known-failures (the issue reader),
+    // and its result never changes the gate: no other job needs it.
+    expect(workflow.jobs.gate.needs).not.toContain("swift-package");
+    for (const [name, job] of Object.entries(workflow.jobs) as [string, { needs?: string | string[] }][]) {
+      if (name !== "known-failures") expect([job.needs ?? []].flat(), name).not.toContain("swift-package");
     }
   });
 
@@ -314,7 +342,7 @@ describe("known failures after each merge (#3482)", () => {
   });
 
   it("gives the verdict once, after every vitest job, and the CI gate requires it", () => {
-    expect(job.needs).toEqual(["static", "vitest", "vitest-macos"]);
+    expect(job.needs).toEqual(["static", "vitest", "vitest-macos", "swift-package", "ios"]);
     expect(job.if).toBe("${{ !cancelled() && needs.static.outputs.runtime == 'true' }}");
     expect(job["runs-on"]).toBe("ubuntu-latest");
     const verdict = job.steps.find((step) => step.name === "Every failure is a known failure")!;
@@ -350,6 +378,15 @@ describe("known failures after each merge (#3482)", () => {
     for (const name of ["Read the previous main run's sightings", "Keep this run's sightings for the next run"]) {
       expect(job.steps.find((step) => step.name === name)?.if).toBe(onMain);
     }
+    // Red Swift package tests open their issue from the same command (#3678):
+    // it reads the jobs' step names and the Swift log of this run.
+    expect(issues.run).toContain('--jobs "$RUNNER_TEMP/vitest-jobs.jsonl" --swift-log "$RUNNER_TEMP/swift-test/swift-test.txt"');
+    const jobs = job.steps.find((step) => step.name === "Read this run's test jobs")!;
+    expect(jobs.run).toContain("steps: [.steps[]? | {name, status, conclusion}]");
+    const swiftLog = job.steps.find((step) => step.with?.pattern === "ios-swift-test")!;
+    expect(swiftLog.if).toBe(onMain);
+    expect(swiftLog.with?.path).toBe("${{ runner.temp }}/swift-test");
+    expect(job.steps.indexOf(swiftLog)).toBeLessThan(job.steps.indexOf(issues));
     // The job uses the run's own token and no repository secret.
     expect(JSON.stringify(job)).not.toMatch(/secrets\./);
   });

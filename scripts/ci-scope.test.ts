@@ -1,12 +1,12 @@
 import { execFile, execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { selectCiScope, selectPushScope, versionOnlyPackageJson } from "./ci-scope.mjs";
+import { selectCiScope, selectPushScope, touchesSwiftPackage, versionOnlyPackageJson } from "./ci-scope.mjs";
 
 const script = fileURLToPath(new URL("./ci-scope.mjs", import.meta.url));
 const ALL_OS = JSON.stringify(["macos-latest", "ubuntu-latest", "windows-latest"]);
@@ -78,6 +78,40 @@ describe("CI path scope", () => {
   });
 });
 
+describe("Swift package scope after a merge (#3678)", () => {
+  it.each([
+    ["shared/wire.ts"], ["shared/background-threads.vectors.json"], ["ios/Package.swift"], ["ios/Sources/CompanionCore/Wire.swift"],
+    ["ios/Tests/CompanionCoreTests/Fixtures/turn.json"], ["ios/App/StorePreview.json"], ["src/locales/fr.json"], ["src/styles.css"],
+    ["src/assets/mascots/maus/body.svg"], ["electron/os-permissions.vectors.json"], ["server/auth/client-allow.ts"],
+    [".github/workflows/ci.yml"], ["docs/guide.md", "shared/wire.ts"], [], [""], ["shared/../server/x.ts"],
+  ])("runs the Swift package tests for %j", (...files) => {
+    expect(touchesSwiftPackage(files)).toBe(true);
+  });
+
+  it.each([
+    ["server/index.ts"], ["src/App.tsx"], ["src/lib/page-theme-ios.ts"], ["android/app/build.gradle.kts"], ["package.json"],
+    ["docs/releases/0.9.0.md"], ["ios/README.md"], ["shared/README.md"], ["scripts/ci-scope.mjs"], ["sharedx/file.ts"], ["src/styles.css.map"],
+  ])("leaves them to the nightly for %j", (...files) => {
+    expect(touchesSwiftPackage(files)).toBe(false);
+  });
+
+  it("covers every repository path the Swift tests read while they run", () => {
+    // A test that reads a new file beside ios/ (a vector, a catalog) must
+    // run when that file changes, so its path has to be in the scope.
+    const tests = fileURLToPath(new URL("../ios/Tests/", import.meta.url));
+    const swiftFiles = readdirSync(tests, { recursive: true }).map(String).filter((name) => name.endsWith(".swift"));
+    const read = new Set<string>();
+    for (const name of swiftFiles) {
+      for (const [, literal] of readFileSync(join(tests, name), "utf8").matchAll(/appendingPathComponent\("([^"\\]+)/g)) {
+        const top = literal!.split("/")[0]!;
+        if (["shared", "src", "server", "electron", "scripts", "android", "companion"].includes(top)) read.add(literal!);
+      }
+    }
+    expect(read.size).toBeGreaterThan(5);
+    for (const path of read) expect(touchesSwiftPackage([path.includes(".") ? path : `${path.replace(/\/$/, "")}/file`]), path).toBe(true);
+  });
+});
+
 describe("CI scope CLI", () => {
   it("omits both groups for a docs-only pull request", () => {
     const { directory, git, base } = fixture("docs/guide.md");
@@ -86,7 +120,7 @@ describe("CI scope CLI", () => {
     const { output, stderr } = run(directory, "pull_request", {
       pull_request: { base: { sha: base }, head: { sha: git("rev-parse", "HEAD") } },
     });
-    expect(output).toBe(`runtime=false\nmobile=false\nvitest_os=${PR_OS}\nplatforms=false\n`);
+    expect(output).toBe(`runtime=false\nmobile=false\nvitest_os=${PR_OS}\nplatforms=false\nswift=false\n`);
     expect(stderr).toBe("");
   });
 
@@ -102,7 +136,7 @@ describe("CI scope CLI", () => {
     const { output, stderr } = run(directory, "pull_request", {
       pull_request: { base: { sha: base }, head: { sha: git("rev-parse", "HEAD") } },
     });
-    expect(output).toBe(`runtime=false\nmobile=false\nvitest_os=${PR_OS}\nplatforms=false\n`);
+    expect(output).toBe(`runtime=false\nmobile=false\nvitest_os=${PR_OS}\nplatforms=false\nswift=false\n`);
     expect(stderr).toBe("");
   });
 
@@ -115,7 +149,7 @@ describe("CI scope CLI", () => {
     const { output, stderr } = run(directory, "pull_request", {
       pull_request: { base: { sha: base }, head: { sha: git("rev-parse", "HEAD") } },
     });
-    expect(output).toBe(`runtime=true\nmobile=false\nvitest_os=${PR_OS}\nplatforms=false\n`);
+    expect(output).toBe(`runtime=true\nmobile=false\nvitest_os=${PR_OS}\nplatforms=false\nswift=false\n`);
     expect(stderr).toBe("");
   });
 
@@ -127,7 +161,7 @@ describe("CI scope CLI", () => {
     const { output } = run(directory, "pull_request", {
       pull_request: { base: { sha: base }, head: { sha: git("rev-parse", "HEAD") } },
     });
-    expect(output).toBe(`runtime=true\nmobile=false\nvitest_os=${PR_OS}\nplatforms=false\n`);
+    expect(output).toBe(`runtime=true\nmobile=false\nvitest_os=${PR_OS}\nplatforms=false\nswift=false\n`);
   });
 
   it.each(["missing", "invalid", "unavailable", "empty"])("falls back loudly for a %s diff", (kind) => {
@@ -136,20 +170,20 @@ describe("CI scope CLI", () => {
       pull_request: { base: { sha: base }, head: { sha: kind === "invalid" ? "--help" : kind === "unavailable" ? "f".repeat(40) : base } },
     };
     const { output, stderr } = run(directory, "pull_request", payload);
-    expect(output).toBe(`runtime=true\nmobile=true\nvitest_os=${PR_OS}\nplatforms=false\n`);
+    expect(output).toBe(`runtime=true\nmobile=true\nvitest_os=${PR_OS}\nplatforms=false\nswift=false\n`);
     expect(stderr).toContain("using all checks");
   });
 
   it("runs every check on Linux only for merge_group", () => {
     const { directory } = fixture();
-    expect(run(directory, "merge_group", {}).output).toBe(`runtime=true\nmobile=true\nvitest_os=${PR_OS}\nplatforms=false\n`);
+    expect(run(directory, "merge_group", {}).output).toBe(`runtime=true\nmobile=true\nvitest_os=${PR_OS}\nplatforms=false\nswift=false\n`);
   });
 
   it("runs every platform only for workflow_dispatch and the nightly schedule", () => {
     const { directory } = fixture();
-    expect(run(directory, "workflow_dispatch", {}).output).toBe(`runtime=true\nmobile=true\nvitest_os=${ALL_OS}\nplatforms=true\n`);
+    expect(run(directory, "workflow_dispatch", {}).output).toBe(`runtime=true\nmobile=true\nvitest_os=${ALL_OS}\nplatforms=true\nswift=false\n`);
     // The nightly pass on every operating system (#3482).
-    expect(run(fixture().directory, "schedule", {}).output).toBe(`runtime=true\nmobile=true\nvitest_os=${ALL_OS}\nplatforms=true\n`);
+    expect(run(fixture().directory, "schedule", {}).output).toBe(`runtime=true\nmobile=true\nvitest_os=${ALL_OS}\nplatforms=true\nswift=false\n`);
   });
 });
 
@@ -237,7 +271,7 @@ describe("CI scope CLI on a push to main", () => {
     const api = await fakeRunsApi({ [before]: [{ event: "pull_request", status: "completed", conclusion: "failure" }, ...green] });
     try {
       const { output, stderr } = await runPush(directory, { before, after }, { GITHUB_API_URL: api.url, GH_TOKEN: "t", GITHUB_REPOSITORY: "o/r" });
-      expect(output).toBe(`runtime=false\nmobile=false\nvitest_os=${PR_OS}\nplatforms=false\n`);
+      expect(output).toBe(`runtime=false\nmobile=false\nvitest_os=${PR_OS}\nplatforms=false\nswift=false\n`);
       expect(stderr).toBe("");
       expect(api.requests).toEqual([`GET /repos/o/r/actions/workflows/ci.yml/runs?head_sha=${before}&per_page=100 Bearer t`]);
     } finally {
@@ -255,7 +289,7 @@ describe("CI scope CLI on a push to main", () => {
     const api = await fakeRunsApi({ [before]: runs });
     try {
       const { output, stderr } = await runPush(directory, { before, after }, { GITHUB_API_URL: api.url, GH_TOKEN: "t", GITHUB_REPOSITORY: "o/r" });
-      expect(output).toBe(`runtime=true\nmobile=true\nvitest_os=${PR_OS}\nplatforms=false\n`);
+      expect(output).toBe(`runtime=true\nmobile=true\nvitest_os=${PR_OS}\nplatforms=false\nswift=true\n`);
       expect(stderr).toContain("has no green CI run of its own");
     } finally {
       await api.close();
@@ -265,7 +299,7 @@ describe("CI scope CLI on a push to main", () => {
   it("runs everything when the previous commit's CI cannot be read", async () => {
     const { directory, before, after } = pushFixture(bump);
     const { output, stderr } = await runPush(directory, { before, after }, { GH_TOKEN: undefined, GITHUB_REPOSITORY: undefined });
-    expect(output).toBe(`runtime=true\nmobile=true\nvitest_os=${PR_OS}\nplatforms=false\n`);
+    expect(output).toBe(`runtime=true\nmobile=true\nvitest_os=${PR_OS}\nplatforms=false\nswift=true\n`);
     expect(stderr).toContain("using all checks");
   });
 
@@ -273,17 +307,56 @@ describe("CI scope CLI on a push to main", () => {
     ["a code change", (directory: string) => writeFileSync(join(directory, "server/index.ts"), "changed\n")],
     ["a version bump with a dependency", (directory: string) => writeFileSync(join(directory, "package.json"), pkg("0.1.101", { dependencies: { zod: "4" } }))],
     ["a version bump with code", (directory: string) => { bump(directory); writeFileSync(join(directory, "server/index.ts"), "changed\n"); }],
-  ])("runs everything for %s without asking GitHub", async (_, change) => {
+  ])("runs everything for %s, and no Swift tests after a green commit", async (_, change) => {
     const { directory, before, after } = pushFixture(change);
     const api = await fakeRunsApi({ [before]: green });
     try {
       const { output, stderr } = await runPush(directory, { before, after }, { GITHUB_API_URL: api.url, GH_TOKEN: "t", GITHUB_REPOSITORY: "o/r" });
-      expect(output).toBe(`runtime=true\nmobile=false\nvitest_os=${PR_OS}\nplatforms=false\n`);
+      expect(output).toBe(`runtime=true\nmobile=false\nvitest_os=${PR_OS}\nplatforms=false\nswift=false\n`);
       expect(stderr).toBe("");
-      expect(api.requests).toEqual([]);
+      expect(api.requests).toEqual([`GET /repos/o/r/actions/workflows/ci.yml/runs?head_sha=${before}&per_page=100 Bearer t`]);
     } finally {
       await api.close();
     }
+  });
+
+  it.each([
+    ["was replaced by this push", [{ event: "push", status: "completed", conclusion: "cancelled" }]],
+    ["failed", [{ event: "push", status: "completed", conclusion: "failure" }]],
+    ["never ran", []],
+  ])("runs the Swift package tests for a server-only push when the commit before it %s (#3678)", async (_, runs) => {
+    // Push A touched shared/ and its waiting run was replaced by push B, which
+    // touches only server/: B must still run A's Swift package tests.
+    const { directory, before, after } = pushFixture((dir) => writeFileSync(join(dir, "server/index.ts"), "changed\n"));
+    const api = await fakeRunsApi({ [before]: runs });
+    try {
+      const { output, stderr } = await runPush(directory, { before, after }, { GITHUB_API_URL: api.url, GH_TOKEN: "t", GITHUB_REPOSITORY: "o/r" });
+      expect(output).toBe(`runtime=true\nmobile=false\nvitest_os=${PR_OS}\nplatforms=false\nswift=true\n`);
+      expect(stderr).toContain("running the Swift package tests because");
+      expect(stderr).toContain("has no green CI run of its own");
+    } finally {
+      await api.close();
+    }
+  });
+
+  it("runs the Swift package tests for a server-only push when the previous commit's CI cannot be read (#3678)", async () => {
+    const { directory, before, after } = pushFixture((dir) => writeFileSync(join(dir, "server/index.ts"), "changed\n"));
+    const { output, stderr } = await runPush(directory, { before, after }, { GH_TOKEN: undefined, GITHUB_REPOSITORY: undefined });
+    expect(output).toBe(`runtime=true\nmobile=false\nvitest_os=${PR_OS}\nplatforms=false\nswift=true\n`);
+    expect(stderr).toContain("previous commit's CI cannot be read");
+  });
+
+  it.each([
+    ["shared/", "shared/wire.ts"],
+    ["ios/", "ios/Sources/CompanionCore/Wire.swift"],
+  ])("runs the Swift package tests on Linux's push when the merge touches %s (#3678)", async (_, path) => {
+    const { directory, before, after } = pushFixture((dir) => {
+      mkdirSync(dirname(join(dir, path)), { recursive: true });
+      writeFileSync(join(dir, path), "changed\n");
+    });
+    const { output, stderr } = await runPush(directory, { before, after }, { GH_TOKEN: undefined, GITHUB_REPOSITORY: undefined });
+    expect(output).toBe(`runtime=true\nmobile=${path.startsWith("ios/")}\nvitest_os=${PR_OS}\nplatforms=false\nswift=true\n`);
+    expect(stderr).toBe("");
   });
 
   it.each([
@@ -293,7 +366,7 @@ describe("CI scope CLI on a push to main", () => {
   ])("falls back loudly for %s", async (_, payload) => {
     const { directory } = fixture();
     const { output, stderr } = await runPush(directory, payload, {});
-    expect(output).toBe(`runtime=true\nmobile=true\nvitest_os=${PR_OS}\nplatforms=false\n`);
+    expect(output).toBe(`runtime=true\nmobile=true\nvitest_os=${PR_OS}\nplatforms=false\nswift=true\n`);
     expect(stderr).toContain("using all checks");
   });
 });

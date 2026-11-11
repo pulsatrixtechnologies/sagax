@@ -20,6 +20,14 @@ verification-documentation checks. Selection never skips the entire workflow.
   skips the runtime jobs. It does so only when the commit before the push has
   a green CI run of its own. Main's waiting run is replaced by each push, so
   without that check a replaced run's code would never be tested.
+- A push to main that touches `ios/`, `shared/` or a file the Swift tests
+  read (the list is in `scripts/ci-scope.mjs`) runs `swift test --package-path
+  ios` once, in the `Swift package tests` job on one macOS runner. So does any
+  push whose previous commit has no green CI run of its own (its run was
+  replaced), or whose previous run cannot be read. The CI gate waits for this
+  job through `known-failures`, but its result does not change the gate; a red
+  one opens a `regression` issue. Risk: while no macOS runner comes, the gate
+  is delayed as long as the job waits for one.
 - A manual dispatch and the nightly schedule run every platform. Merge groups run the Linux suite
   only, the same as a pull request or a push to main. An empty or unreadable
   diff, or a previous commit whose CI cannot be read, still runs the runtime
@@ -100,7 +108,8 @@ half hours. Now:
 
 - Pull requests, pushes to main and merge groups run the Vitest shards on
   Ubuntu only. Windows, macOS and iOS run only from a manual dispatch or the
-  nightly schedule.
+  nightly schedule, except the one `Swift package tests` job of a push that
+  touches the package (#3678).
 - The macOS packaged-server and Electron smokes, and the Windows CUA smoke,
   run only from a manual dispatch or the nightly schedule.
 - The macOS Vitest shards run in their own job, `vitest-macos`, with the
@@ -126,7 +135,8 @@ runs instead of one per merge (fifteen queued behind each other in October
 when its `CI` gate passed, at least one vitest job ran, and every vitest job
 that ran passed. A skipped vitest job (`vitest-macos` on a Linux-only run) is
 a platform the run did not cover, and a scoped run (docs- or version-only,
-vitest skipped) is never proof. The script
+vitest skipped) is never proof. A push run whose `Swift package tests` job
+started and did not pass is red; skipped or with no runner, it stays green. The script
 accepts, in order:
 
 1. a finished run on the release commit itself;
@@ -245,6 +255,11 @@ How a run decides (`scripts/testing/known-failures.mjs`):
    a push runs Linux only, so a test that fails only on Windows or macOS
    keeps its count through it, and so does a test whose file did not run on
    one platform of a nightly run. Nothing here blocks a merge.
+5. Red Swift package tests on main (`Swift package tests` after a merge, the
+   Swift step of the nightly's iOS job) open one `regression` issue at the
+   first failure, or comment on the open one, with the commit, the failing
+   test cases from the uploaded log and the run: a package that does not
+   compile is not a flaky test. A Swift job that got no runner opens nothing.
 
 The Linux package smoke installs its tools with apt retries
 (`Acquire::Retries=3`), each attempt bounded by `timeout`, three attempts

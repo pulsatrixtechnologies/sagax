@@ -2,8 +2,10 @@ import { useState } from "react";
 
 import { t } from "@/lib/i18n";
 import { limitLine, nearLimit, resetTime, useEngineLimits } from "@/lib/limit-resets";
+import { openModelWindow } from "@/lib/model-window";
 import type { Routine } from "@/lib/routines";
-import { api, useStore } from "@/state/store";
+import { api, useStore, type Bot } from "@/state/store";
+import { limitMessageHeld, type LimitLineRow } from "../../shared/limit-failover";
 import { useWeeklyLimit } from "./ChatUsageNotices";
 
 /** The stopped turn's "Continue at 3:40 PM when your limit resets": one click sets up a one-time automation in this
@@ -17,7 +19,8 @@ export function useLimitResetContinue(botId: string | undefined, threadId: strin
     onClick: () => {
       if (state === "working") return;
       setState("working");
-      void api<{ routine?: Routine }>("/api/limit-resets/continue", { method: "POST", body: JSON.stringify({ botId, threadId }) })
+      // #3552: a server that already holds the message answers that plan ({ held }) and makes no second run.
+      void api<{ routine?: Routine; held?: { at: number } }>("/api/limit-resets/continue", { method: "POST", body: JSON.stringify({ botId, threadId }) })
         .then((response) => {
           if (response.routine) dispatch({ type: "routinePatched", routine: response.routine });
           setState("set");
@@ -33,23 +36,33 @@ export function useLimitResetContinue(botId: string | undefined, threadId: strin
 /** The quiet limit indicator beside the model picker (JC 2026-11-08: no banner
  * above the chat, ever). A small dot, warning near the limit and danger at it,
  * with the usage line as its tooltip; a click opens a small menu holding the
- * line, the weekly window and "Continue at ...". Nothing renders when the
- * engine is nowhere near its limit. */
+ * line, the weekly window and "Switch engine". #3552: it is the one place
+ * for the detail and the actions (the message box draws no bar for a
+ * limit), and "Continue at ..." is offered only at the limit with nothing
+ * held: while the server holds the conversation's message for the reset,
+ * that is the one way it resumes. Nothing renders when the engine is
+ * nowhere near its limit. */
 export function EngineLimitIndicator({
   engine,
   driver,
   botId,
   threadId,
+  messages,
 }: {
   engine: string | undefined;
   driver?: string;
   botId?: string;
   threadId?: string;
+  /** The transcript of the conversation shown (`threadId`), when the caller
+   * has it: a task, a side chat or a preview is not the bot's main thread. */
+  messages?: readonly LimitLineRow[];
 }) {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
   const limit = useEngineLimits().find((candidate) => candidate.engine === engine);
   const weekly = useWeeklyLimit(engine, driver ?? limit?.driver);
-  const continueAt = useLimitResetContinue(botId, threadId, limit?.resetsAt ?? undefined);
+  // #3552: "held" is read for the conversation shown, whichever thread it is.
+  const held = limitMessageHeld(messages ?? shownMessages(state.bots, botId, threadId));
+  const continueAt = useLimitResetContinue(botId, threadId, limit?.blocked && !held ? limit.resetsAt ?? undefined : undefined);
   const [open, setOpen] = useState(false);
   const near = Boolean(limit && nearLimit(limit));
   if (!near && !weekly) return null;
@@ -85,6 +98,17 @@ export function EngineLimitIndicator({
               {continueAt.label}
             </button>
           )}
+          {botId && (
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="engine-limit-switch"
+              onClick={() => { setOpen(false); openModelWindow(botId); }}
+              className="w-full rounded-lg px-1 py-1 text-left hover:bg-raised"
+            >
+              {t("sendBlock.switchEngine")}
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"
@@ -97,4 +121,14 @@ export function EngineLimitIndicator({
       )}
     </span>
   );
+}
+
+/** The store's transcript of `threadId`: the bot's thread shown, or the
+ * conversation a switch is previewing. */
+function shownMessages(bots: readonly Bot[] | undefined, botId: string | undefined, threadId: string | undefined): readonly LimitLineRow[] {
+  if (!botId || !threadId) return [];
+  const bot = bots?.find((candidate) => candidate.id === botId);
+  if (!bot) return [];
+  if (bot.threadId === threadId) return bot.messages;
+  return bot.switchPreview?.threadId === threadId ? bot.switchPreview.messages : [];
 }

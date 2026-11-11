@@ -1,7 +1,6 @@
 import { t } from "@/lib/i18n";
 import { useChatComposerShellClass } from "@/lib/chat-bubble-width";
-import { fixSendBlock, sendBlockLocks } from "@/lib/send-state";
-import { openModelWindow } from "@/lib/model-window";
+import { fixSendBlock } from "@/lib/send-state";
 import { effectivePlace } from "@/lib/place";
 import { changeDraftAttachmentPending } from "@/lib/drafts";
 import { retryAttachmentUpload } from "@/lib/attachment-uploads";
@@ -198,14 +197,11 @@ export function ComposerShell({
           }}
           onEdit={locked ? undefined : editQueued}
         />
-        {sendBlock && (!locked || sendBlockLocks(sendBlock)) && (
+        {sendBlock && !locked && (
           <ComposerSendBlock
             block={sendBlock}
-            botId={bot?.id}
-            threadId={bot?.threadId}
             onConnect={() => dispatch({ type: "toggleAppSettings", open: true, section: "providers" })}
             onRetry={sendState.recheck}
-            onSwitchEngine={bot ? () => openModelWindow(bot.id) : undefined}
             onResend={onRetryLast ? () => { onRetryLast(); sendState.recheck(); } : sendState.recheck}
             onFix={bot && sendBlock.action.kind === "fix" ? async () => {
               const fix = sendBlock.action.kind === "fix" ? sendBlock.action.fix : "";

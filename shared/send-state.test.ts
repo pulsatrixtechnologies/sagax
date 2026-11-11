@@ -30,19 +30,6 @@ describe("sendBlockFor", () => {
       expect(sendBlockFor(input)!.message).not.toMatch(/limit|resets?|sign in/i);
     }
   });
-
-  // The maintainer, 2026-11-04: an engine at its limit or out of credit takes no message;
-  // the composer says so with the reset, never a red card in the chat.
-  it("blocks an engine account at its limit or out of credit, with the switch action and the reset", () => {
-    expect(sendBlockFor({ ...base, limited: { cause: "usage_limit", resetsAt: 1_800_000 } })).toMatchObject({
-      reason: "engine_limit", name: "Claude", action: { kind: "switch_engine" }, limit: { cause: "usage_limit", resetsAt: 1_800_000 },
-    });
-    const credits = sendBlockFor({ ...base, limited: { cause: "credits" } });
-    expect(credits).toMatchObject({ reason: "engine_limit", limit: { cause: "credits" } });
-    expect(credits!.limit).not.toHaveProperty("resetsAt");
-    expect(sendBlockFor({ ...base, auto: true, limited: { cause: "usage_limit" } })).toBeNull();
-    expect(sendBlockFor({ ...base, limited: null })).toBeNull();
-  });
 });
 
 describe("sendBlockFor: pre-send refusals (#2013)", () => {
@@ -59,6 +46,6 @@ describe("sendBlockFor: pre-send refusals (#2013)", () => {
 
   it("lets a certain block win over a refusal", () => {
     expect(sendBlockFor({ ...base, accessRefused: true, refused: { kind: "engine_not_ready", cause: "x" } })?.reason).toBe("engine_not_connected");
-    expect(sendBlockFor({ ...base, limited: { cause: "credits" }, refused: { kind: "engine_not_ready", cause: "x" } })?.reason).toBe("engine_limit");
+    expect(sendBlockFor({ ...base, local: "computer_offline", refused: { kind: "engine_not_ready", cause: "x" } })?.reason).toBe("computer_offline");
   });
 });

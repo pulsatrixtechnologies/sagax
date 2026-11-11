@@ -9,7 +9,7 @@ function limitFailoverRow(threadId: string, line: LimitFailoverLine) {
   // #3315: a turn that carried on past a signed-out engine is quiet too; the stretch's one notice reads in the chat.
   const quiet = line.kind === "switched" || line.kind === "back" || line.kind === "signedOut";
   // #1942: consecutive limits with nothing left is a failed turn, not a soft recovery.
-  const failed = line.kind === "exhausted";
+  const failed = line.kind === "exhausted" || line.kind === "credits";
   const words = line.kind === "switched" && line.to === "Auto" && line.reason !== "model"
     ? line.estimated
       ? `${line.from} reached its usage limit during this turn and gave no reset time: Auto continued the same turn on another model that works, with the steps already taken; ${line.from} is tried again around ${host.limitClockText(line.resetsAt)}.`

@@ -11,7 +11,8 @@ import { isEngineLimitWords } from "./engine-limit-words.ts";
 export const CODEX_AMBIENT_MCP_REFUSAL = "Codex has an MCP server outside the selected configuration. Disable native MCP entries for this account before using tool selection.";
 
 export type PreSendRefusalKind =
-  /** Usage limit or credit: the composer locks (send-state engine_limit). */
+  /** Usage limit or credit: the conversation's one limit line says it
+   * (#3552, shared/limit-failover.ts), never the composer. */
   | "engine_limit"
   /** The engine's sign-in expired or was refused. */
   | "signed_out"

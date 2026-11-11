@@ -9,9 +9,15 @@ function clockLocale(): string {
   return active === "fr" ? "fr-CA" : active;
 }
 
+/** A reset in the reader's language and clock ("vers 00 h 12" in French):
+ * the conversation's line and the model picker's dot say it the same way. */
+export function limitClockText(at: number, now = Date.now()): string {
+  return resetClockText(at, clockLocale(), undefined, now);
+}
+
 export function limitFailoverLineText(line: LimitFailoverLine, now = Date.now()): string {
   const resetsAt = "resetsAt" in line && typeof line.resetsAt === "number" ? line.resetsAt : undefined;
-  const time = resetsAt !== undefined ? resetClockText(resetsAt, clockLocale(), undefined, now) : "";
+  const time = resetsAt !== undefined ? limitClockText(resetsAt, now) : "";
   switch (line.kind) {
     case "switched":
       if (line.reason === "model") {
@@ -55,11 +61,13 @@ export function limitFailoverLineText(line: LimitFailoverLine, now = Date.now())
       const tried = line.tried.filter(Boolean).join(", ") || "the engines tried";
       if (line.resetsAt !== undefined) {
         return t(line.owner ? "limitFailover.ownerExhausted" : "limitFailover.exhausted", {
-          tried, time: resetClockText(line.resetsAt, clockLocale(), undefined, now),
+          tried, time: limitClockText(line.resetsAt, now),
         });
       }
       return t(line.owner ? "limitFailover.ownerExhaustedNoTime" : "limitFailover.exhaustedNoTime", { tried });
     }
+    case "credits":
+      return t(line.owner ? "limitFailover.ownerCredits" : "limitFailover.credits", { engine: line.engine });
     case "signedOut":
       return t("limitFailover.signedOut", { from: line.from, to: line.to });
     case "signedOutNotice":

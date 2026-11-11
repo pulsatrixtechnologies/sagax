@@ -16809,9 +16809,6 @@
       "task.deleteAll": "0e865cd0a2823c8e5ddf7d685106d4315086b287f967b6491aa98f1aa5e8a1d4",
       "task.deleteAllConfirm": "b7830bc79a374171a3ab177a30494277f75c92e5e5fac0785c8183c27a21799d",
       "task.deleteAllBody": "18c221ae6832fc21e3af532d4f73f5e7d27ca9abb63d2067c640818e130751fe",
-      "sendBlock.engineLimitUntil": "8757e3bd1d2583e21d754c1938794e73689adeb79931f131075bcc06dc41a158",
-      "sendBlock.engineLimit": "82cacd8c72a5467841d23ba1ca6b138d71cf1c260c7aff11da45495e44ffacde",
-      "sendBlock.engineCredits": "3ecd3c27338d189238cb3effe5c12c9d2b71e023568c945cc18244a5d2769696",
       "sendBlock.switchEngine": "920f86b3d430d8780a248547277514dc11384177d05be8edbff7ea4bfd07a7e4",
       "needsYou.title": "7fe5342a0e76b5e58ac99cc8541cd96a3cf0832045bb370760ad6250e1d461c2",
       "needsYou.titleQuestion": "4fea2fbc35b3365e339bdbbe4e53284ab29e3954f0e6b9f637ca80e9b14a186b",
@@ -18533,7 +18530,9 @@
       "chat.restart.outward.posted": "67c8f95e1b6b129e2786bf2df8590adfb4ec405d1e9392f6fbfc13f771a45b76",
       "chat.restart.outward.other": "1e520d184b3cc3d6b3ab2942e64238426c9ef9f5b714b36670cd7e05c7ce7f2c",
       "chat.restart.outward.more": "1a2612705dd797842beda42948a2979b5b6c763ee71acf4f87868f5c2c254420",
-      "chat.restart.cutTwice": "a5b3a839efc1d2b8b1468258ca79df98249cc9bd19471dacae0ed512b5a65332"
+      "chat.restart.cutTwice": "a5b3a839efc1d2b8b1468258ca79df98249cc9bd19471dacae0ed512b5a65332",
+      "limitFailover.credits": "7637fcc0cfcd234fc434ef15ad18f6d09187790f067d33f494a60528c8bcdc95",
+      "limitFailover.ownerCredits": "fd90827725b605e91240f83406f21770ebfd52ad30e12d5be4ed33b570c27164"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

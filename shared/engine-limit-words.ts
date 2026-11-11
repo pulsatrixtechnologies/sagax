@@ -1,7 +1,7 @@
 // An engine account refusing work in its own words: its usage limit, or its
 // credit. One copy for the server (server/drivers/retry.ts,
 // server/routines/routine-recovery.ts) and the chat, which writes no card
-// for either (the maintainer, 2026-11-04: the composer locks instead).
+// for either (the maintainer, 2026-11-04; #3552: the conversation's one limit line says it).
 
 /** A usage limit (a plan window, a weekly or 5-hour limit). */
 export const USAGE_LIMIT = /\busage limits?\b|\breached (?:your|its) (?:(?:weekly|daily|monthly|session|5-hour|plan|subscription) )?limits?\b|\bhit your (?:(?!rate\b)[\w'’-]+ ){0,3}(?:limit|budget)\b|\b(?:weekly|daily|monthly|subscription|usage|session|5-hour) limit reached\b|\bout of (?:usage(?: credits)?|extra usage|credits)\b/i;

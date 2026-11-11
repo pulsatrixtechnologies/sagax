@@ -37,9 +37,9 @@ export function signedOutEngine(tool: ActivityTool, engine: InstanceInfo | undef
 }
 
 /** A failed turn refused by the engine account's usage limit or credit
- * (the maintainer, 2026-11-04): no card in the chat for it, new or already stored; the
- * composer locks instead and says when it comes back (send-state
- * engine_limit). */
+ * (the maintainer, 2026-11-04): no card in the chat for it, new or already
+ * stored. #3552: the conversation's one limit line says it (held for the
+ * reset, or nothing held), never the composer. */
 export function isEngineLimitFailure(tool: ActivityTool): boolean {
   const cause = failedTurnCause(tool.name);
   if (cause === null) return false;

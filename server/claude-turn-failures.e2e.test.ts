@@ -138,9 +138,9 @@ it("reports an account's weekly limit with its reset to the Chief, never as setu
 
     // Sagax decision (#2009, 2026-11-04, server/runtime-events/runtime-lifecycle.ts):
     // an account at its usage limit writes no error card in Pesto's thread;
-    // the composer locks instead (sendStateLimit, engine_limit, unit-tested in
-    // shared/send-state.test.ts). Here the Chief's turn on the same account
-    // completes and releases that lock, so only the thread is checked.
+    // #3552: the limit failover writes the conversation's one line instead
+    // (server/usage/limit-line.ts) and the message box draws no bar, so only
+    // the thread's error rows are checked.
     const thread = await messages(pesto.activeTaskId);
     expect(thread.filter((m) => m.kind === "activity" && m.tool?.ok === false)).toEqual([]);
     expect(thread.some((m) => m.tool?.setup || m.tool?.claudeUpdate)).toBe(false);

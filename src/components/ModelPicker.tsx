@@ -540,7 +540,8 @@ function ModelPickerShell({
       ) : (
         <>
           {trigger}
-          <EngineLimitIndicator engine={limitEngine} botId={bot.id} threadId={threadId ?? bot.threadId} />
+          <EngineLimitIndicator engine={limitEngine} botId={bot.id} threadId={threadId ?? bot.threadId}
+            messages={(threadId ?? bot.threadId) === bot.threadId ? bot.messages : undefined} />
         </>
       )}
 

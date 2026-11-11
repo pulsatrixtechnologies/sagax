@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -9,19 +11,23 @@ import type { EngineLimit } from "../../shared/limit-reset";
 
 const fixture = vi.hoisted(() => ({
   dispatch: vi.fn(),
+  /** The bots the store holds (the open conversation's lines). */
+  bots: [] as unknown[],
   api: vi.fn(async (..._args: unknown[]) => ({}) as unknown),
 }));
 
+const modelWindow = vi.hoisted(() => ({ open: vi.fn() }));
+vi.mock("@/lib/model-window", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/model-window")>(), openModelWindow: modelWindow.open }));
+
 vi.mock("@/state/store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/state/store")>()),
-  useStore: () => ({ state: { routines: [] }, dispatch: fixture.dispatch }),
+  useStore: () => ({ state: { routines: [], bots: fixture.bots }, dispatch: fixture.dispatch }),
   api: (...args: unknown[]) => fixture.api(...args),
 }));
 
 const { setLocale } = await import("@/lib/i18n");
 const limits = await import("@/lib/limit-resets");
 const { EngineLimitIndicator } = await import("./LimitResetContinue");
-const { ComposerSendBlock } = await import("./ComposerSendBlock");
 
 const NOW = Date.parse("2026-10-19T15:00:00Z");
 const RESET = Date.parse("2026-10-19T19:40:00Z");
@@ -53,6 +59,8 @@ beforeEach(() => {
   setLocale("en");
   window.localStorage.clear();
   fixture.dispatch.mockReset();
+  fixture.bots = [];
+  modelWindow.open.mockReset();
   fixture.api.mockReset();
   fixture.api.mockImplementation(async () => ({ checkedAt: NOW, engines: [claude(92)] }));
   limits.rememberLimits({ checkedAt: NOW, engines: [claude(92)] });
@@ -74,12 +82,80 @@ describe("EngineLimitIndicator (no banner above the chat, the owner 2026-11-08)"
     expect(container.querySelector('[data-testid="engine-limit-menu"]')).toBeNull();
   });
 
-  it("opens a menu with the line and Continue at", () => {
+  it("opens a menu with the line, Switch engine and, for a turn the limit stopped with nothing held, Continue at", () => {
+    limits.rememberLimits({ checkedAt: NOW, engines: [claude(100, true)] });
     const container = remount(createElement(EngineLimitIndicator, { engine: "claude", botId: "scout", threadId: "t-1" }));
     flushSync(() => (container.querySelector('[data-testid="engine-limit-indicator"]') as HTMLButtonElement).click());
     const menu = container.querySelector('[data-testid="engine-limit-menu"]')!;
-    expect(menu.textContent).toContain("Claude: 92% used");
+    expect(menu.textContent).toContain("Claude");
     expect(menu.querySelector('[data-testid="engine-limit-continue"]')?.textContent).toMatch(/Continue at/);
+    const change = menu.querySelector('[data-testid="engine-limit-switch"]') as HTMLButtonElement;
+    expect(change.textContent).toBe("Switch engine");
+    flushSync(() => change.click());
+    expect(modelWindow.open).toHaveBeenCalledWith("scout");
+  });
+
+  // #3552: one way to resume. The server holds the message and sends it again
+  // at the reset, so the dot offers no second one.
+  it("offers no Continue at while the server holds the conversation's message for the reset", () => {
+    limits.rememberLimits({ checkedAt: NOW, engines: [claude(100, true)] });
+    fixture.bots = [{ id: "scout", threadId: "t-1", messages: [
+      { id: "u1", role: "user", kind: "text", text: "hello", at: NOW - 1000 },
+      { id: "l1", role: "bot", kind: "activity", at: NOW - 900, tool: { name: "recovery: Limit reached", ok: true,
+        limitFailover: { kind: "waiting", from: "Claude", resetsAt: RESET } } },
+    ] }];
+    const container = remount(createElement(EngineLimitIndicator, { engine: "claude", botId: "scout", threadId: "t-1" }));
+    flushSync(() => (container.querySelector('[data-testid="engine-limit-indicator"]') as HTMLButtonElement).click());
+    const menu = container.querySelector('[data-testid="engine-limit-menu"]')!;
+    expect(menu.querySelector('[data-testid="engine-limit-continue"]')).toBeNull();
+    expect(menu.textContent).not.toMatch(/Continue at/);
+    expect(menu.querySelector('[data-testid="engine-limit-switch"]')).not.toBeNull();
+  });
+
+  // review: the model picker passes the thread shown, which may be a task or a
+  // previewed conversation, not the bot's main thread.
+  it("reads the held state for the thread shown, not only the bot's main thread", () => {
+    limits.rememberLimits({ checkedAt: NOW, engines: [claude(100, true)] });
+    const waiting = [
+      { id: "u1", role: "user", kind: "text", text: "hello", at: NOW - 1000 },
+      { id: "l1", role: "bot", kind: "activity", at: NOW - 900, tool: { name: "recovery: Limit reached", ok: true,
+        limitFailover: { kind: "waiting", from: "Claude", resetsAt: RESET } } },
+    ];
+    const open = (props: Record<string, unknown>) => {
+      const container = remount(createElement(EngineLimitIndicator, { engine: "claude", botId: "scout", ...props }));
+      flushSync(() => (container.querySelector('[data-testid="engine-limit-indicator"]') as HTMLButtonElement).click());
+      return container.querySelector('[data-testid="engine-limit-continue"]');
+    };
+    // the picker hands the transcript of the task it shows
+    fixture.bots = [{ id: "scout", threadId: "t-main", messages: [] }];
+    expect(open({ threadId: "t-task", messages: waiting })).toBeNull();
+    // a conversation a switch is previewing
+    fixture.bots = [{ id: "scout", threadId: "t-main", messages: [], switchPreview: { threadId: "t-task", messages: waiting } }];
+    expect(open({ threadId: "t-task" })).toBeNull();
+    // nothing held in the thread shown: the one way to resume a stopped turn stays
+    expect(open({ threadId: "t-main" })).not.toBeNull();
+  });
+
+  // review: the dot's menu said "Wed 12:11 AM" in French while the chat line
+  // said "mer. 00 h 12": one clock helper for both, in the reader's language.
+  it("writes the reset in the reader's clock, as the conversation's line does", async () => {
+    const { limitFailoverLineText } = await import("@/lib/limit-failover");
+    const later = NOW + 30 * 3_600_000;
+    limits.rememberLimits({ checkedAt: NOW, engines: [{ ...claude(100, true), resetsAt: later }] });
+    setLocale("fr");
+    const container = remount(createElement(EngineLimitIndicator, { engine: "claude", botId: "scout", threadId: "t-1" }));
+    const title = container.querySelector('[data-testid="engine-limit-indicator"]')!.getAttribute("title")!;
+    const line = limitFailoverLineText({ kind: "waiting", from: "Claude", resetsAt: later }, NOW);
+    const clock = /\d{1,2} h \d{2}/;
+    expect(title).toMatch(clock);
+    expect(title).not.toMatch(/AM|PM|Mon|Tue|Wed|Thu|Fri|Sat|Sun/);
+    expect(line.match(clock)?.[0]).toBe(title.match(clock)?.[0]);
+  });
+
+  it("offers no Continue at near the limit, when no turn was stopped", () => {
+    const container = remount(createElement(EngineLimitIndicator, { engine: "claude", botId: "scout", threadId: "t-1" }));
+    flushSync(() => (container.querySelector('[data-testid="engine-limit-indicator"]') as HTMLButtonElement).click());
+    expect(container.querySelector('[data-testid="engine-limit-continue"]')).toBeNull();
   });
 
   it("#2902: bot on Claude, Codex weekly limit reached, no dot, no menu, no bubble", async () => {
@@ -139,44 +215,31 @@ describe("EngineLimitIndicator (no banner above the chat, the owner 2026-11-08)"
     expect(remount(createElement(EngineLimitIndicator, { engine: "codex" })).innerHTML).toBe("");
   });
 
-  it("no usage or limit banner is rendered by the chat banner stack or the group view", () => {
-    for (const file of ["./ChatView.tsx-parts/ChatViewBanners.tsx", "./GroupView.tsx"]) {
-      const source = readFileSync(new URL(file, import.meta.url), "utf8");
-      expect(source).not.toMatch(/EngineLimitNotice|WeeklyLimitNotice/);
-    }
-  });
-
-  it("offers Continue at reset in the composer line when bot and thread are known", async () => {
-    fixture.api.mockImplementation(async (path: unknown) =>
-      String(path) === "/api/limit-resets/continue"
-        ? { routine: { id: "r1" } }
-        : { checkedAt: NOW, engines: [claude(100, true)] });
-    const block = {
-      reason: "engine_limit" as const,
-      message: "",
-      action: { kind: "switch_engine" as const },
-      name: "Claude",
-      limit: { cause: "usage_limit" as const, resetsAt: RESET },
+  // #3552: the same state came back above the message box through the send
+  // block bar. Every component that can draw above the message box is read:
+  // the chat's banner stack, the group view, every part of the composer, the
+  // send block bar and anything that draws in the composer's notice band.
+  it("no usage or limit banner is drawn by any component above the message box", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const files = new Set(["ChatView.tsx-parts/ChatViewBanners.tsx", "GroupView.tsx", "ComposerSendBlock.tsx", "WorkplaceNotice.tsx", "Composer.tsx"]);
+    for (const name of readdirSync(join(here, "Composer.tsx-parts"))) files.add(`Composer.tsx-parts/${name}`);
+    const walk = (dir: string, prefix: string) => {
+      for (const name of readdirSync(dir)) {
+        const entry = join(dir, name);
+        if (statSync(entry).isDirectory()) walk(entry, `${prefix}${name}/`);
+        else if (name.endsWith(".tsx") && !/\.test\./.test(name) && /ComposerNoticeBand/.test(readFileSync(entry, "utf8"))) files.add(`${prefix}${name}`);
+      }
     };
-    const container = remount(createElement(ComposerSendBlock, {
-      block,
-      botId: "scout",
-      threadId: "t-1",
-      onConnect: () => {},
-      onRetry: () => {},
-    } as never));
-    // An opaque row on the composer's ground, never transparent over the thread.
-    const line = container.querySelector("[data-composer-send-block]")!;
-    expect(line.className).toContain("bg-raised");
-    expect(line.closest("[data-composer-notice-band]")).not.toBeNull();
-    const continueBtn = container.querySelector("[data-composer-send-block-continue]") as HTMLButtonElement;
-    expect(continueBtn?.textContent).toMatch(/Continue at/);
-    flushSync(() => continueBtn.click());
-    await settle();
-    expect(fixture.api).toHaveBeenCalledWith("/api/limit-resets/continue", {
-      method: "POST",
-      body: JSON.stringify({ botId: "scout", threadId: "t-1" }),
-    });
+    walk(here, "");
+    expect(files.size).toBeGreaterThan(6);
+    for (const file of files) {
+      if (/\.test\./.test(file)) continue;
+      const source = readFileSync(join(here, file), "utf8");
+      expect(source, file).not.toMatch(/EngineLimitNotice|WeeklyLimitNotice|engine_limit|useLimitResetContinue|LimitResetContinue|sendBlockLocks|limit-resets\/continue/);
+    }
+    // the send block's words hold no limit line either
+    const words = readFileSync(join(here, "..", "lib", "send-state.ts"), "utf8");
+    expect(words).not.toMatch(/engine_limit|sendBlock\.engineLimit|sendBlock\.engineCredits/);
   });
 
 });

@@ -77,9 +77,9 @@ export function handleRuntimeLifecycle(event: any, ctx: any, host: any): void {
     case "runtime.error":
     {
       // The maintainer, 2026-11-04: an engine account at its usage limit or out of
-      // credit writes no error card in the chat; the composer locks instead
-      // (sendStateLimit, shared/send-state.ts engine_limit) until the reset
-      // or a switch to another engine or account.
+      // credit writes no error card in the chat. #3552: the limit failover
+      // writes the conversation's one line instead (the message held for the
+      // reset, or nothing held), server/usage/limit-line.ts.
       let engineLimited = false;
       if (bot) {
         const instance = host.registry.get(event.providerInstanceId ?? bot.modelSelection.instanceId);

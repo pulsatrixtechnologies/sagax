@@ -116,3 +116,59 @@ describe("GET /api/limit-resets (#1918)", () => {
     expect(solo.report()).toEqual(host.clock.report());
   });
 });
+
+// #3552: one way to resume. While the server holds the conversation's message
+// for the reset (the limit failover sends it again then), "Continue at" makes
+// no second run: the route answers what is already planned.
+describe("POST /api/limit-resets/continue (#3552)", () => {
+  async function post(held: number | null, routines: Array<Record<string, unknown>> = []) {
+    const submitted: unknown[] = [];
+    const removed: string[] = [];
+    const routes = [createLimitResetRoutes({
+      limits: () => { throw new Error("unused"); },
+      routines: { listRoutines: () => routines.filter((routine) => !removed.includes(routine.id as string)), deferNextRun: () => null,
+        remove: (id: string) => { removed.push(id); return true; } } as unknown as RoutineManager,
+      requests: { submit: async (input) => { submitted.push(input); return { messageId: "m", result: { resultId: "r1" } } as never; } },
+      threadTitle: () => "Report",
+      threadEngine: () => "grok",
+      engineName: () => "Grok",
+      heldUntil: () => held,
+    })];
+    const server = createServer(async (req, res) => {
+      const url = new URL(req.url ?? "/", "http://localhost");
+      if (!await dispatchRoutes(routes, { req, res, url, path: url.pathname, method: req.method ?? "GET", auth: person(ADA), json, readBody })) json(res, 404, {});
+    });
+    servers.push(server);
+    await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
+    const res = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/limit-resets/continue`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ botId: "bot", threadId: "t-1" }),
+    });
+    return { status: res.status, body: await res.json() as Record<string, unknown>, submitted, removed };
+  }
+
+  it("creates no second run while the message is held, and answers when it goes again", async () => {
+    const at = NOW + 2 * HOUR;
+    const { status, body, submitted } = await post(at);
+    expect(status).toBe(200);
+    expect(body).toEqual({ held: { at } });
+    expect(submitted).toEqual([]);
+  });
+
+  it("still sets up the continuation for a turn the limit stopped with nothing held", async () => {
+    const { status, submitted } = await post(null);
+    expect(status).toBe(201);
+    expect(submitted).toHaveLength(1);
+  });
+
+  // review: a "Continue at" made while nothing was held, then a message held
+  // for the reset: the two must not both run at the reset.
+  it("drops a continuation made before the message was held, one way to resume", async () => {
+    const at = NOW + 2 * HOUR;
+    const earlier = { id: "r0", enabled: true, botId: "bot", sourceThreadId: "t-1", schedule: { type: "limit_reset", engine: "grok", repeat: "once" } };
+    const { status, body, submitted, removed } = await post(at, [earlier]);
+    expect(status).toBe(200);
+    expect(body).toEqual({ held: { at } });
+    expect(removed).toEqual(["r0"]);
+    expect(submitted).toEqual([]);
+  });
+});

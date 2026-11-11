@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import type { ProviderAccountsView, PersonalProviderServer } from "../../shared/provider-accounts.ts";
 import { writeFileAtomic } from "../atomic.ts";
-import { isKeyProvider, type PerspicaxDirectory, type KeyProvider, type ProviderKeyResult } from "../perspicax/perspicax-link.ts";
+import { isKeyProvider, isSubjectRefusal, type PerspicaxDirectory, type KeyProvider, type ProviderKeyResult } from "../perspicax/perspicax-link.ts";
 import { ProviderKeysStore, type ProviderKeyScope } from "./provider-keys.ts";
 
 const INSTANCE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
@@ -22,15 +22,76 @@ const serverSchema = z.object({
   // eslint-disable-next-line no-control-regex
   models: z.array(z.object({ id: z.string().trim().min(1).refine((value) => !/[\x00-\x1f\x7f]/.test(value)), label: z.string().trim() })),
 });
-const viewSchema = z.object({
-  keys: z.array(z.object({ provider: z.string().refine(isKeyProvider), last4: z.string().nullable() })),
-  servers: z.array(serverSchema),
-});
+const keyRowSchema = z.object({ provider: z.string().refine(isKeyProvider), last4: z.string().nullable() });
+const listSchema = z.object({ keys: z.array(z.unknown()), servers: z.array(z.unknown()) });
 export type ProviderAccountOwner = { principalId: string; sub: string };
+/** The step of a provider-accounts call that failed, for the server's log. */
+export type ProviderAccountsStep = "import" | "list" | "save-key" | "save-server" | "read-servers";
 export class ProviderAccountsError extends Error {
   readonly status: number;
   readonly code?: string;
+  /** #3519: what failed, for the log line (never a key, a token or a person). */
+  step?: ProviderAccountsStep;
+  /** The kind of provider the step was about, when it was about one. */
+  provider?: string;
+  /** What the organization server answered: its HTTP status, or why there was none. */
+  upstream?: string;
   constructor(status = 503, message = "Your provider accounts could not be saved. Try again.", code?: string) { super(message); this.status = status; this.code = code; }
+}
+
+/** #3519: one log line for a failed provider-accounts call: the step, the
+ * kind of provider and the organization server's answer. Never a key, a
+ * token or who it was for. */
+export function providerAccountsFailureLine(error: unknown): string {
+  if (!(error instanceof ProviderAccountsError)) return `provider accounts: ${error instanceof Error ? error.name : "unknown"} failure`;
+  const parts = [
+    error.provider ? `provider ${error.provider.startsWith("compat:") ? "compat" : error.provider}` : null,
+    error.upstream ? `organization server: ${error.upstream}` : null,
+    error.code ?? null,
+  ].filter(Boolean);
+  return `provider accounts: the ${error.step ?? "unknown"} step failed${parts.length ? ` (${parts.join(", ")})` : ""}`;
+}
+
+/** #3519: the directory sync runs for every person at each poll. A person
+ * whose sync keeps failing the same way is logged once, again when the
+ * failure changes, and forgotten when it works. */
+export function createProviderAccountsFailureLog(log: (line: string) => void) {
+  const last = new Map<string, string>();
+  return {
+    failed(key: string, error: unknown): void {
+      const line = providerAccountsFailureLine(error);
+      if (last.get(key) === line) return;
+      last.set(key, line);
+      log(line);
+    },
+    worked(key: string): void { last.delete(key); },
+    /** #3519: one background sync of a person (a directory poll, a list of
+     * the instances). No sign-in token at hand for the person (no session
+     * yet, or an expired one) means nothing to sync yet, not a failure. */
+    async run(key: string, work: () => Promise<void>): Promise<void> {
+      try { await work(); }
+      catch (error) {
+        if (nothingToSyncYet(error)) return;
+        this.failed(key, error);
+        return;
+      }
+      last.delete(key);
+    },
+  };
+}
+
+/** #3519: the organization server answered 403 `subject`: it has no sign-in
+ * token of the person to act with (none since this server started, or the
+ * session expired). The next sign-in brings one; there is nothing to sync. */
+export function nothingToSyncYet(error: unknown): boolean {
+  return error instanceof ProviderAccountsError && error.status === 403 && error.code === "subject";
+}
+
+function failure(step: ProviderAccountsStep, error: ProviderAccountsError, details: { provider?: string; upstream?: string } = {}): ProviderAccountsError {
+  error.step ??= step;
+  if (details.provider && error.provider === undefined) error.provider = details.provider;
+  if (details.upstream && error.upstream === undefined) error.upstream = details.upstream;
+  return error;
 }
 
 interface ProviderAccountsOptions {
@@ -44,6 +105,8 @@ interface ProviderAccountsOptions {
 
 export class ProviderAccounts {
   private pending = new Map<string, Promise<unknown>>();
+  /** Person and kind of provider whose import the organization server refused. */
+  private readonly refusedImports = new Set<string>();
   private readonly options: ProviderAccountsOptions;
   constructor(options: ProviderAccountsOptions) { this.options = options; }
 
@@ -59,14 +122,17 @@ export class ProviderAccounts {
     finally { if (this.pending.get(id) === next) this.pending.delete(id); }
   }
 
-  private async post(owner: ProviderAccountOwner, route: string, value: object): Promise<unknown> {
+  private async post(owner: ProviderAccountOwner, step: ProviderAccountsStep, route: string, value: { provider?: string; [field: string]: unknown }): Promise<unknown> {
     const directory = this.options.directory;
-    if (!directory) throw new ProviderAccountsError();
+    const provider = typeof value.provider === "string" ? value.provider : undefined;
+    if (!directory) throw failure(step, new ProviderAccountsError(), { ...(provider ? { provider } : {}), upstream: "not linked" });
     const result = await directory.linkPostJson(`/api/v1/pulsabot/${route}`, { sub: owner.sub, ...value }, { subject: owner.sub, timeoutMs: 10_000, maxBytes: 1024 * 1024 });
     if (!result.ok) {
-      if (result.status === 404 || result.status === 405) throw new ProviderAccountsError(409,
-        "Your organization server needs an update to manage provider accounts.", "provider_accounts_update_required");
-      throw new ProviderAccountsError(result.status === 400 ? 400 : result.status === 403 ? 403 : 503);
+      const upstream = result.status !== undefined ? `HTTP ${result.status}` : result.error;
+      if (result.status === 404 || result.status === 405) throw failure(step, new ProviderAccountsError(409,
+        "Your organization server needs an update to manage provider accounts.", "provider_accounts_update_required"), { ...(provider ? { provider } : {}), upstream });
+      if (isSubjectRefusal(result)) throw failure(step, new ProviderAccountsError(403, undefined, "subject"), { ...(provider ? { provider } : {}), upstream });
+      throw failure(step, new ProviderAccountsError(result.status === 400 ? 400 : result.status === 403 ? 403 : 503), { ...(provider ? { provider } : {}), upstream });
     }
     return result.body;
   }
@@ -75,14 +141,41 @@ export class ProviderAccounts {
     const scope = this.scope(owner);
     // Read all files before the first import. A corrupt file leaves every
     // source intact, and retrying a partial import is harmless.
-    const keys = { ...this.store.legacy(scope), ...this.store.keys(scope) };
+    let keys: Record<string, string>;
+    try { keys = { ...this.store.legacy(scope), ...this.store.keys(scope) }; }
+    catch { throw failure("import", new ProviderAccountsError(), { upstream: "local key file unreadable" }); }
+    // #3519: a key of a kind this server does not know, or one the
+    // organization server refuses as unknown (HTTP 400: it may not know a
+    // kind this server does), stays here instead of failing every later
+    // call; the others are imported and their sources retired.
+    const kept: Record<string, string> = {};
+    const imported: string[] = [];
     for (const [provider, key] of Object.entries(keys)) {
-      if (!isKeyProvider(provider)) throw new ProviderAccountsError();
-      const ack = await this.post(owner, "provider-keys/save", { provider, value: key, import: true });
-      if (!ack || typeof ack !== "object" || (ack as Record<string, unknown>).provider !== provider || (ack as Record<string, unknown>).configured !== true) throw new ProviderAccountsError();
+      if (!isKeyProvider(provider) || this.refusedImports.has(`${owner.principalId}\0${provider}`)) { kept[provider] = key; continue; }
+      let ack: unknown;
+      try { ack = await this.post(owner, "import", "provider-keys/save", { provider, value: key, import: true }); }
+      catch (error) {
+        if (!(error instanceof ProviderAccountsError) || error.status !== 400) throw error;
+        // Asked again after this server restarts, when the organization
+        // server may have learned the kind.
+        this.refusedImports.add(`${owner.principalId}\0${provider}`);
+        kept[provider] = key;
+        continue;
+      }
+      if (!ack || typeof ack !== "object" || (ack as Record<string, unknown>).provider !== provider || (ack as Record<string, unknown>).configured !== true) {
+        throw failure("import", new ProviderAccountsError(), { provider, upstream: "unexpected answer" });
+      }
       this.options.directory?.invalidate(owner.sub, provider);
+      imported.push(provider);
     }
-    this.store.retireImported(scope);
+    if (!Object.keys(kept).length) { this.store.retireImported(scope); return; }
+    // A kept key may only be in a legacy file: it moves to the current file
+    // before the legacy files go.
+    const current = this.store.keys(scope);
+    const patch: Record<string, string | null> = Object.fromEntries(imported.map((provider) => [provider, null]));
+    for (const [provider, key] of Object.entries(kept)) if (current[provider] !== key) patch[provider] = key;
+    if (Object.keys(patch).length) this.store.patch(scope, patch);
+    this.store.retireLegacy(scope);
   }
 
   private localServers(): PersonalProviderServer[] {
@@ -92,7 +185,7 @@ export class ProviderAccounts {
       return z.array(serverSchema).parse(JSON.parse(readFileSync(path, "utf8")));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-      throw new ProviderAccountsError();
+      throw failure("read-servers", new ProviderAccountsError(), { upstream: "local file unreadable" });
     }
   }
 
@@ -101,10 +194,23 @@ export class ProviderAccounts {
       keys: Object.entries({ ...this.store.keys(), ...this.options.soloKeys?.() }).map(([provider, key]) => ({ provider, last4: key.length >= 12 ? key.slice(-4) : null })),
       servers: this.localServers(),
     };
-    const result = viewSchema.safeParse(await this.post(owner, "provider-keys/list", {}));
-    if (!result.success) throw new ProviderAccountsError();
-    this.options.directory?.rememberProviderKeys(owner.sub, result.data.keys.map((key) => key.provider));
-    return result.data;
+    const result = listSchema.safeParse(await this.post(owner, "list", "provider-keys/list", {}));
+    if (!result.success) throw failure("list", new ProviderAccountsError(), { upstream: "unexpected answer" });
+    // #3519: the organization server may know a kind of provider or a server
+    // shape this one does not (the directory already reads past them): those
+    // rows are left out, never the whole list refused at every poll.
+    const view: ProviderAccountsView = {
+      keys: result.data.keys.flatMap((row) => {
+        const key = keyRowSchema.safeParse(row);
+        return key.success ? [key.data] : [];
+      }),
+      servers: result.data.servers.flatMap((row) => {
+        const server = serverSchema.safeParse(row);
+        return server.success ? [server.data] : [];
+      }),
+    };
+    this.options.directory?.rememberProviderKeys(owner.sub, view.keys.map((key) => key.provider));
+    return view;
   }
 
   list(owner?: ProviderAccountOwner): Promise<ProviderAccountsView> {
@@ -119,8 +225,10 @@ export class ProviderAccounts {
     return this.serial(owner, async () => {
       if (owner) {
         await this.migrate(owner);
-        const ack = await this.post(owner, "provider-keys/save", { provider, value });
-        if (!ack || typeof ack !== "object" || (ack as Record<string, unknown>).provider !== provider || (ack as Record<string, unknown>).configured !== (value !== null)) throw new ProviderAccountsError();
+        const ack = await this.post(owner, "save-key", "provider-keys/save", { provider, value });
+        if (!ack || typeof ack !== "object" || (ack as Record<string, unknown>).provider !== provider || (ack as Record<string, unknown>).configured !== (value !== null)) {
+          throw failure("save-key", new ProviderAccountsError(), { provider, upstream: "unexpected answer" });
+        }
         this.options.directory?.invalidate(owner.sub, provider);
       } else {
         const current = this.store.keys();
@@ -139,7 +247,7 @@ export class ProviderAccounts {
     return this.serial(owner, async () => {
       if (owner) {
         await this.migrate(owner);
-        await this.post(owner, "provider-servers/save", { instanceId, server });
+        await this.post(owner, "save-server", "provider-servers/save", { instanceId, server });
         if (server === null) this.options.directory?.invalidate(owner.sub, `compat:${instanceId}`);
       } else {
         const servers = this.localServers().filter((entry) => entry.instanceId !== instanceId);

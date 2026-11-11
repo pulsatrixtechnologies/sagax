@@ -6,11 +6,13 @@ import { join } from "node:path";
 import { execCli, killCliTree, spawnCli } from "../../procs.ts";
 import { runAcpOneShot } from "./background-text.ts";
 import { versionFromProbe } from "./helpers.ts";
+import { applyAcpAccess } from "./apply-access.ts";
 import { newId } from "../../contracts.ts";
 import type {
   ProviderSnapshot,
   SendTurnInput,
   TextGenerationOptions,
+  TurnAccessInput,
 } from "../../contracts.ts";
 import type { AcpConfig, AcpSupport } from "./types.ts";
 
@@ -19,12 +21,16 @@ export type InstanceTextDeps = {
   config: AcpConfig;
   instanceId: string;
   childEnv: (activeConfig?: AcpConfig) => Record<string, string | undefined>;
+  /** The ACP driver's kind, for a person's pasted key (applyAcpAccess). */
+  driverKind: string;
+  /** The instance's own environment (the organization's key, for applyAccess). */
+  instanceEnvironment?: Record<string, string>;
   getModels: () => { default: string; options: Array<{ id: string }> };
   getStartupModelRefresh: () => Promise<void> | null;
 };
 
 export function createInstanceText(deps: InstanceTextDeps) {
-  const { support, config, instanceId, childEnv, getModels, getStartupModelRefresh } = deps;
+  const { support, config, instanceId, childEnv, getModels, getStartupModelRefresh, driverKind, instanceEnvironment } = deps;
 
     const snapshot = async (): Promise<ProviderSnapshot> => {
       const env = childEnv();
@@ -62,6 +68,9 @@ export function createInstanceText(deps: InstanceTextDeps) {
       if (startupModelRefresh) await startupModelRefresh;
       const turnConfig: AcpConfig = { ...config, fullAuto: false };
       const env = childEnv(turnConfig);
+      // #3519: the account the bot's turn signs in with, applied as a turn
+      // applies it, before the sign-in check reads it.
+      applyAcpAccess(env, support, driverKind, options.access, instanceEnvironment);
       if (support.requireAuthenticationBeforeSpawn && !(await support.isAuthenticated(env, turnConfig, instanceId))) {
         throw new Error(support.loginNote);
       }
@@ -113,8 +122,8 @@ export function createInstanceText(deps: InstanceTextDeps) {
     };
     const generateMemoryText = (prompt: string, options: TextGenerationOptions = {}) =>
       isolatedText(prompt, options, "omb-acp-memory-", "openmausbot_memory");
-    const reviewPermission = (prompt: string, signal?: AbortSignal) =>
-      isolatedText(prompt, { signal }, "omb-acp-review-", "openmausbot_review");
+    const reviewPermission = (prompt: string, signal?: AbortSignal, access?: TurnAccessInput) =>
+      isolatedText(prompt, { signal, ...(access ? { access } : {}) }, "omb-acp-review-", "openmausbot_review");
 
 
   return { snapshot, isolatedText, generateMemoryText, reviewPermission };

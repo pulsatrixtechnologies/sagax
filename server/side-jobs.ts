@@ -125,6 +125,9 @@ export interface SideJobsDeps {
   /** Write one call to the usage ledger (bookTurnUsage in server/index.ts). */
   book: (row: Omit<UsageRow, "at" | "costSource">, tokensReported: boolean, notificationThreadId: string) => void;
   log?: (line: string) => void;
+  /** #3519: the bot's own engine signs in as the bot's turn does (its
+   * owner's account on an organization server). Absent: the call as is. */
+  signIn?: (botId: string, instance: SideJobInstance, call: TextCall) => TextCall;
 }
 
 export interface SideJobs {
@@ -238,7 +241,8 @@ export function createSideJobs(deps: SideJobsDeps): SideJobs {
       // whoever read the conversation: an engine that cannot mount them is
       // not reviewed (server/index.ts, the skill review's gates).
       if (job === "skill-review" && own.adapter.capabilities.agentsMcp !== true) return null;
-      const call = ownCall(job, own);
+      const unsigned = ownCall(job, own);
+      const call = unsigned && deps.signIn ? deps.signIn(bot.id, own, unsigned) : unsigned;
       if (call) {
         // The summary is part of a turn that already passed the spend limit,
         // and is not booked on its own (docs/verification/context-compaction.md).

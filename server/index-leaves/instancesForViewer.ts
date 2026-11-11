@@ -10,7 +10,9 @@ async function instancesForViewer(person: string | null) {
   const host = getHost();
 
   const owner = host.providerAccountOwner(person);
-  if (owner !== null) await host.syncPersonalProviders(owner).catch(host.reportBackgroundError);
+  // #3519: logged by step and kind of provider, once per cause (never the
+  // generic background line at every list)
+  if (owner !== null) await host.syncPersonalProvidersInBackground(owner);
   // #1450: a model the paying account turned off is not offered again for a while
   const compatViewer = host.IDENTITY.kind === "perspicax"
     ? { principalId: person, admin: false }

@@ -11,7 +11,8 @@ function shapeAvatarGenerator(botId: string) {
   const instance = host.registry.get(bot.modelSelection.instanceId);
   if (!instance?.generateText || host.policyModelRefusal(instance)) return null;
   try { assertWithinBudget(host.cfg, DATA_DIR); } catch { return null; }
-  return instance.generateText.bind(instance);
+  // #3519: on the account the bot's turn signs in with
+  return host.botOneShotText(bot, instance, instance.generateText.bind(instance));
 
 }
   return shapeAvatarGenerator;

@@ -213,7 +213,7 @@ function startGroupTurn(
     const titleInstance = host.registry.get(titleBot.modelSelection.instanceId);
     // An engine the organisation disallows never receives the text, even for a title.
     if (titled && snippet && titleText.trim() && host.personalFeatureOn("llmThreadTitles", llmThreadTitlesEnabled(host.cfg), host.vaultPrincipalForThread(threadId)) && titleInstance?.generateText && !host.policyModelRefusal(titleInstance)) {
-      void host.generateThreadTitle(titleInstance, titleText)
+      void host.generateThreadTitle(host.botTitleEngine(titleBot, titleInstance), titleText)
         .then((title) => {
           if (title) host.store.retitleGroupTask(group.id, threadId, snippet, title);
         })

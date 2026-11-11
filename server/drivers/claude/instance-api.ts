@@ -11,6 +11,7 @@ import type {
   ProviderSnapshot,
   SteerOutcome,
   TextGenerationOptions,
+  TurnAccessInput,
 } from "../../contracts.ts";
 import { runKeepWarmPing } from "../claude-keepwarm.ts";
 import { DRIVER_KIND, NO_ANTHROPIC_KEY, resolveClaudeConfigDir } from "./config.ts";
@@ -109,15 +110,17 @@ export function buildClaudeInstanceApi(bag: Record<string, any>): ProviderInstan
   /** One-shot Claude call with the prompt on stdin, never argv. Approval
    * summaries can contain paths, commands, or secrets, so the generic
    * `claude -p "prompt"` shape is not safe for review. No tools or MCP
-   * servers are mounted in this isolated process. */
-  const generateReview = (prompt: string, signal?: AbortSignal, onUsage?: TextGenerationOptions["onUsage"], noThinking = false): Promise<string> =>
+   * servers are mounted in this isolated process. `access` is the account
+   * the bot's turn signs in with (#3519): the same environment a turn
+   * builds, so a one-shot never falls back on the server's own sign-in. */
+  const generateReview = (prompt: string, signal?: AbortSignal, onUsage?: TextGenerationOptions["onUsage"], noThinking = false, access?: TurnAccessInput): Promise<string> =>
     new Promise((resolve, reject) => {
       if (config.requireApiKey && !input.environment.ANTHROPIC_API_KEY) {
         reject(new Error(NO_ANTHROPIC_KEY));
         return;
       }
       const model = config.managedModels?.[0] ?? "claude-haiku-4-5";
-      const env = environment(model);
+      const env = environment(model, access);
       if (noThinking) env.MAX_THINKING_TOKENS = "0";
       // Isolated unless this machine's own setup must come along: the
       // inherit escape hatch, or a login kept in settings.json (an
@@ -334,8 +337,8 @@ export function buildClaudeInstanceApi(bag: Record<string, any>): ProviderInstan
         return () => listeners.delete(listener);
       },
     },
-    generateText: (prompt, options) => generateReview(prompt, options?.signal, options?.onUsage, options?.noThinking === true),
-    reviewPermission: generateReview,
+    generateText: (prompt, options) => generateReview(prompt, options?.signal, options?.onUsage, options?.noThinking === true, options?.access),
+    reviewPermission: (prompt, signal, access) => generateReview(prompt, signal, undefined, false, access),
     listCommands,
     dispose: async () => {
       stopRenewWatch();

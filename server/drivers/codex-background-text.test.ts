@@ -148,6 +148,22 @@ describe("Codex generateMemoryText (fake CLI)", () => {
     expect(usage).toEqual([{ model: "gpt-6-luna", input: 120, output: 7, cachedInput: 20 }]);
   });
 
+  it("signs in with the account the bot's turn uses: the person's own Codex home, or their key (#3519)", async () => {
+    const codex = await create({ FAKE_CODEX_TEXT_REPLY: "the answer" });
+    const personHome = join(scratch, "principals", "p1", "codex");
+    mkdirSync(personHome, { recursive: true });
+    await expect(codex.generateMemoryText!("hello", { access: { via: "subscription", identity: "subscription:p1", codexHome: personHome } })).resolves.toBe("the answer");
+    expect(calls().at(-1)!.env.CODEX_HOME).toBe(personHome);
+    const keyHome = join(scratch, "principals", "p1", "codex-key");
+    await expect(codex.generateMemoryText!("hello", { access: { via: "owner-key", identity: "owner-key:p1:fp", codexOwnerKey: true, codexHome: keyHome, environment: { SAGAX_OWNER_OPENAI_API_KEY: "synthetic-owner-key-fixture" } } })).resolves.toBe("the answer");
+    const keyed = calls().at(-1)!;
+    expect(keyed.env.CODEX_HOME).toBe(keyHome);
+    expect(keyed.argv.join(" ")).toContain("pulsa_owner");
+    // no access: the server's own configuration, as before
+    await codex.generateMemoryText!("hello");
+    expect(calls().at(-1)!.env.CODEX_HOME).toBe(join(scratch, ".codex"));
+  });
+
   it("falls back to the account's default model when no small one is listed", async () => {
     const codex = await create();
     await codex.generateMemoryText!("hello");

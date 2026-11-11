@@ -14,7 +14,7 @@ import { decodeCodexSelection } from "../codex-catalog.ts";
 import { codexBackgroundModel, runCodexOneShot } from "../codex-background-text.ts";
 import { codexLocalProviderArgs } from "../local-inject.ts";
 import { DRIVER_KIND } from "./config.ts";
-import { chatgptPlanCodexArgs, codexAccessLaunch, codexReleaseUpdate, managedCodexArgs } from "./launch-args.ts";
+import { chatgptPlanCodexArgs, codexAccessLaunch, codexReleaseUpdate, managedCodexArgs, ownerKeyCodexArgs } from "./launch-args.ts";
 
 export function buildCodexInstanceApi(bag: Record<string, any>): ProviderInstance {
   const {
@@ -30,8 +30,13 @@ export function buildCodexInstanceApi(bag: Record<string, any>): ProviderInstanc
     if (bag.disposed) throw new Error("This provider was removed.");
     if (planUnavailable) throw new Error(planUnavailable);
     const env = childEnv();
+    // #3519: the account the bot's turn signs in with, applied as a turn
+    // applies it (prepare-launch.ts): an owner key wins over a plan sign-in.
+    const launch = codexAccessLaunch(env, options.access);
     let providerArgs: string[] = [];
-    if (planAuth) {
+    if (launch.ownerKey) {
+      providerArgs = ownerKeyCodexArgs();
+    } else if (planAuth) {
       if (bag.planSigningOut) throw new Error("This ChatGPT account is being disconnected.");
       if (!bag.models.options.length) await refreshModels();
       env.SAGAX_CHATGPT_TOKEN = await planAuth.accessToken();
@@ -47,8 +52,8 @@ export function buildCodexInstanceApi(bag: Record<string, any>): ProviderInstanc
     const id = codexBackgroundModel(bag.models);
     if (!id) throw new Error("Codex lists no model for background calls. Refresh models in Settings → Model providers → Codex.");
     const selection = planAuth || config.managed ? { model: id, modelProvider: null as string | null } : decodeCodexSelection(id);
-    if (!planAuth && !config.managed) providerArgs = codexLocalProviderArgs(env, id);
-    const route = planAuth ? "plan" as const : config.managed ? "other" as const : "own" as const;
+    if (!launch.ownerKey && !planAuth && !config.managed) providerArgs = codexLocalProviderArgs(env, id);
+    const route = launch.ownerKey ? "other" as const : planAuth ? "plan" as const : config.managed ? "other" as const : "own" as const;
     return runCodexOneShot({
       spawn: spawnCli,
       kill: killCliTree,
@@ -150,13 +155,18 @@ export function buildCodexInstanceApi(bag: Record<string, any>): ProviderInstanc
   },
   snapshot,
   generateMemoryText,
-  reviewPermission: (prompt, signal) => reviewCodexPermission({
-    cli: config.cli,
-    env: childEnv(),
-    prompt,
-    signal,
-    ...(bag.models.default ? { model: bag.models.default } : {}),
-  }),
+  reviewPermission: (prompt, signal, access) => {
+    const env = childEnv();
+    const launch = codexAccessLaunch(env, access);
+    return reviewCodexPermission({
+      cli: config.cli,
+      env,
+      prompt,
+      signal,
+      ...(launch.ownerKey ? { args: ownerKeyCodexArgs() } : {}),
+      ...(bag.models.default ? { model: bag.models.default } : {}),
+    });
+  },
   adapter: {
     provider: DRIVER_KIND,
     capabilities: {

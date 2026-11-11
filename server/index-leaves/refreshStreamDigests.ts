@@ -19,7 +19,7 @@ function refreshStreamDigests(botId: string, threadId: string): void {
   const { entries, files, lastId } = host.segmentHistory(bot, stale.threadId);
   if (!instance || entries.length < 2 || !lastId) return;
   host.segmentDigestDrafts.add(stale.threadId);
-  void draftSegmentDigest({ title: stale.title, history: entries, files, generateText: instance.generateText!.bind(instance) })
+  void draftSegmentDigest({ title: stale.title, history: entries, files, generateText: host.botOneShotText(bot, instance, instance.generateText!.bind(instance)) })
     .then((drafted) => {
       const current = host.store.taskByThread(botId, stale.threadId);
       // Deleted, made confidential or changed hands meanwhile: nothing kept.

@@ -498,6 +498,7 @@ import {
   type CompactPromptInput,
   newId,
   type ProviderInstance,
+  type TextGenerationOptions,
   type RemoteMcpSpec
 } from "./contracts.ts";
 import { USAGE_LIMIT } from "./drivers/retry.ts";
@@ -1029,7 +1030,7 @@ import { PersonSettingsStore, personSettingsPrincipal, personalProfilePartition 
 import { withPersonalVoiceKeys } from "./voice/person-voice-keys.ts";
 import { PersonalProviderInstances } from "./engines/personal-provider-instances.ts";
 import type { ProviderAccountsView } from "../shared/provider-accounts.ts";
-import { ProviderAccounts, type ProviderAccountOwner } from "./engines/provider-accounts.ts";
+import { createProviderAccountsFailureLog, ProviderAccounts, type ProviderAccountOwner } from "./engines/provider-accounts.ts";
 import { createProviderAccountsRoutes } from "./routes/provider-accounts.ts";
 import { createPersonSettingsRoutes } from "./routes/person-settings.ts";
 import { isPersonalBrowserProfileId, type PersonalFeature } from "../shared/person-settings.ts";
@@ -1622,7 +1623,8 @@ import { createPendingApprovalsFor } from "./index-leaves/pendingApprovalsFor.ts
 import { createInboxHistory } from "./index-leaves/inboxHistory.ts";
 import { createDispatchDelegationWake } from "./index-leaves/dispatchDelegationWake.ts";
 import { createPerformAsMember } from "./index-leaves/performAsMember.ts";
-import { createOrgTurnAccess } from "./index-leaves/orgTurnAccess.ts";
+import { createBotOneShotAccess, createOrgTurnAccess } from "./index-leaves/orgTurnAccess.ts";
+import { createOneShotSignIn } from "./engines/one-shot-sign-in.ts";
 import { createMountBotVps } from "./index-leaves/mountBotVps.ts";
 import { createApplyOrgEngineAllowList } from "./index-leaves/applyOrgEngineAllowList.ts";
 import { createScheduleApprovalExpiry } from "./index-leaves/scheduleApprovalExpiry.ts";
@@ -2903,6 +2905,7 @@ bindLeafHost({
   get teamStorageKeyForAuth() { return teamStorageKeyForAuth; },
   get providerAccountOwner() { return providerAccountOwner; },
   get syncPersonalProviders() { return syncPersonalProviders; },
+  get syncPersonalProvidersInBackground() { return syncPersonalProvidersInBackground; },
   get syncPersonalProviderDirectory() { return syncPersonalProviderDirectory; },
   get presenceHiddenFor() { return presenceHiddenFor; },
   get reachMePerson() { return reachMePerson; },
@@ -6966,6 +6969,8 @@ bindLeafHost({
   get _orgRefusalOfImpl() { return _orgRefusalOfImpl; },
   get orgEngineRefusal() { return orgEngineRefusal; },
   get orgTurnAccess() { return orgTurnAccess; },
+  get botOneShotText() { return botOneShotText; },
+  get botTitleEngine() { return botTitleEngine; },
   get piTurnPerson() { return piTurnPerson; },
   get withPiModelServers() { return withPiModelServers; },
   get piLocalTurnAccess() { return piLocalTurnAccess; },
@@ -8041,6 +8046,7 @@ const autoPickForTurn = createAutoPickForTurn(getLeafHost);
 const voicePickForTurn = createVoicePickForTurn(getLeafHost);
 const orgEngineRefusal = createOrgEngineRefusal(getLeafHost);
 const orgTurnAccess = createOrgTurnAccess(getLeafHost);
+const botOneShotAccess = createBotOneShotAccess(getLeafHost);
 const piTurnPerson = createPiTurnPerson(getLeafHost);
 const withPiModelServers = createWithPiModelServers(getLeafHost);
 const piLocalTurnAccess = createPiLocalTurnAccess(getLeafHost);
@@ -12968,7 +12974,7 @@ ROUTES.push(createTeamBotFromThreadRoutes({
     const bot = store.bot(botId);
     if (!bot) return null;
     const gate = threadTitleGate(bot);
-    return gate.ok && gate.instance.generateText ? gate.instance.generateText.bind(gate.instance) : null;
+    return gate.ok && gate.instance.generateText ? botOneShotText(bot, gate.instance, gate.instance.generateText.bind(gate.instance)) : null;
   },
   memoryNotes: (botId) => {
     try {
@@ -13002,7 +13008,7 @@ ROUTES.push(createBotWizardRoutes({
     const bot = store.bot(botId);
     if (!bot) return null;
     const gate = threadTitleGate(bot);
-    return gate.ok && gate.instance.generateText ? gate.instance.generateText.bind(gate.instance) : null;
+    return gate.ok && gate.instance.generateText ? botOneShotText(bot, gate.instance, gate.instance.generateText.bind(gate.instance)) : null;
   }
 }));
 ROUTES.push(createPersonalSkillRoutes({
@@ -16683,6 +16689,11 @@ const sideJobs = createSideJobs({
   assertWithinBudget: () => assertWithinBudget(cfg, DATA_DIR),
   book: bookTurnUsage,
   log: (line) => console.log(line),
+  signIn: (botId, instance, call) => {
+    const bot = store.bot(botId);
+    const engine = registry.get(instance.instanceId);
+    return bot && engine ? botOneShotText(bot, engine, call) : call;
+  },
 });
 
 // Memory upkeep (server/memory/memory-upkeep.ts): background capture, About me
@@ -16853,12 +16864,44 @@ bus.subscribe((event: RuntimeEvent) => {
 // A bot's own model for a short background text call (skill review, the
 // session_search summary): its spend is booked to the bot, and a workspace
 // at its spend limit makes none. Null when the engine cannot run it.
+// #3519: every one-shot model call of a bot signs in as that bot's turn does
+// (server/engines/one-shot-sign-in.ts), and a call that cannot sign in tells
+// the bot's owner once, on the card a refused turn shows.
+const oneShotSignIn = createOneShotSignIn<BotRecord, ProviderInstance, any>({
+  account: (bot, instance) => botOneShotAccess(bot, instance),
+  refusalCard: (bot, instance, error) => error instanceof EngineAccessLost && error.detail !== "perspicax_unreachable"
+    ? accessCardFor(bot, error.refusal, engineDisplayName(instance), error.detail)
+    : null,
+  signInCard: (bot, instance, ranOn, message) => subscriptionExpiredCard(bot, instance, ranOn, message),
+  renew: (bot, instance, payerPrincipalId) => signInRecheck
+    ? signInRecheck.refused(payerPrincipalId, instance.driverKind, turnSlotFor(bot, instance), instance.instanceId)
+    : Promise.resolve(false),
+  tell: (bot, card) => {
+    const threadId = bot.threadId;
+    if (repeatsShownFailure(store.messagesFor(threadId), { role: "bot", kind: "access", access: card }, bot.id)) return;
+    store.appendMessage(threadId, { role: "bot", kind: "access", access: card });
+    notifyAccess(deliverableNotification("turn-failed", bot, threadId, engineAccessNotice(card.reason, card.engine, card), { avatarUrl: bot.avatarUrl }), card);
+    console.info(`[one-shot] ${bot.id}: a one-shot call could not sign in (${card.cause ?? card.reason}), its owner is told once`);
+  },
+});
+/** A bot's one-shot text call on `instance` (its own engine), signed in as
+ * its turn is. `call` is the driver's generateText, generateMemoryText or
+ * the like, bound to the instance. */
+function botOneShotText<O extends TextGenerationOptions>(bot: BotRecord, instance: ProviderInstance, call: (prompt: string, options?: O) => Promise<string>): (prompt: string, options?: O) => Promise<string> {
+  return (prompt, options) => oneShotSignIn.run(bot, instance, (access) => call(prompt, { ...options, ...(access ? { access } : {}) } as O));
+}
+/** A thread title's one-shot (generateThreadTitle) on the bot's own engine,
+ * signed in as its turn is (#3519). */
+function botTitleEngine(bot: BotRecord, instance: ProviderInstance): Pick<ProviderInstance, "generateText"> {
+  return instance.generateText ? { generateText: botOneShotText(bot, instance, instance.generateText.bind(instance)) } : instance;
+}
 function botTextEngine(botId: string, purpose: string): { generateText: (prompt: string, options?: { noThinking?: boolean }) => Promise<string> } | null {
   const bot = store.bot(botId);
   const instance = bot ? registry.get(bot.modelSelection.instanceId) : undefined;
   if (!bot || !instance || policyModelRefusal(instance) || instance.adapter.capabilities.agentsMcp !== true) return null;
-  const generate = (instance.generateText ?? instance.generateMemoryText)?.bind(instance);
-  if (!generate) return null;
+  const own = (instance.generateText ?? instance.generateMemoryText)?.bind(instance);
+  if (!own) return null;
+  const generate = botOneShotText(bot, instance, own);
   return {
     generateText: async (prompt, options) => {
       // a workspace at its spend limit runs no review
@@ -27803,6 +27846,10 @@ const providerAccounts = new ProviderAccounts({
     return true;
   }
 });
+/** #3519: the directory sync runs for every person at each directory poll;
+ * a failure is logged by its step and kind of provider, once until it
+ * changes or works again (server/engines/provider-accounts.ts). */
+const providerAccountsFailures = createProviderAccountsFailureLog((line) => console.warn(`[background] ${line}`));
 if (IDENTITY.kind !== "perspicax") await syncPersonalProviderDirectory();
 function providerAccountOwner(principalId: string | null | undefined): ProviderAccountOwner | null | undefined {
   if (IDENTITY.kind !== "perspicax") return undefined;
@@ -27817,8 +27864,15 @@ async function syncPersonalProviderDirectory(): Promise<void> {
   if (IDENTITY.kind !== "perspicax") { await syncPersonalProviders(undefined); return; }
   for (const person of principals.list()) {
     const owner = providerAccountOwner(person.id);
-    if (owner) await syncPersonalProviders(owner).catch(reportBackgroundError);
+    if (!owner) continue;
+    await syncPersonalProvidersInBackground(owner);
   }
+}
+/** #3519: a background sync of one person (directory poll, instances list):
+ * logged by its step and kind of provider, once per cause; no sign-in token
+ * for the person yet is nothing to sync, not a failure. */
+function syncPersonalProvidersInBackground(owner: ProviderAccountOwner | undefined): Promise<void> {
+  return providerAccountsFailures.run(owner?.principalId ?? "solo", () => syncPersonalProviders(owner));
 }
 // Slice 8: the window to attach people from before Perspicax opens at the
 // first organization start that finds any (30 days; an admin can change it).
@@ -32118,7 +32172,7 @@ function liveCallTitle(botId: string, threadId: string, excerpt: string): Promis
   const bot = store.projectBotForTask(botId, threadId);
   if (!bot) return null;
   const gate = threadTitleGate(bot, vaultPrincipalForThread(threadId));
-  return gate.ok ? generateThreadTitle(gate.instance, excerpt, "call") : null;
+  return gate.ok ? generateThreadTitle(botTitleEngine(bot, gate.instance), excerpt, "call") : null;
 }
 const liveCalls = new LiveCallController({
   store,
@@ -33030,7 +33084,7 @@ ROUTES.push(createBotsCoreRoutes({
   rejectDeletedThreadSkillStages,
   threadTitleGate,
   titleRegenerations,
-  generateThreadTitle: (instance, excerpt, kind) => generateThreadTitle(instance as never, excerpt, kind as never)
+  generateThreadTitle: (instance, excerpt, kind, bot) => generateThreadTitle((bot ? botTitleEngine(bot as BotRecord, instance as ProviderInstance) : instance) as never, excerpt, kind as never)
 }));
 ROUTES.push(createComputersRoutes({
   listBoxes: () => boat.listManagedBoats(cfg, managedBoatOwners()),
@@ -34245,6 +34299,7 @@ const startTurnRunner = createStartTurn({
   forgetTurnCheckpoint,
   gatedLocalComputer,
   generateThreadTitle,
+  botTitleEngine,
   githubWithheldPrompt,
   isRelayPart,
   guardTurnDispatch,

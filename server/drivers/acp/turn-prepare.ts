@@ -1,7 +1,5 @@
 /** ACP turn prepare + warm phase. */
 import { homedir } from "node:os";
-import { DATA_DIR } from "../../config.ts";
-import { applyStoredEngineEnv } from "../../engines/engine-api-keys.ts";
 import { applyEngineCommandVariables } from "../../vault/credential-command-env.ts";
 import { newId } from "../../contracts.ts";
 import type { SendTurnInput } from "../../contracts.ts";
@@ -21,6 +19,7 @@ import type { SendTurnDeps } from "./turn-deps.ts";
 import { warmResourceTokenThread } from "../../resources/warm-resources.ts";
 import { turnTrace } from "../../turns/turn-trace.ts";
 import { prepareAcpSpawn } from "./turn-prepare-spawn.ts";
+import { applyAcpAccess } from "./apply-access.ts";
 
 export type PrepareEarly = { kind: "early"; result: { turnId: string; reused?: boolean } };
 export type PrepareReady = { kind: "ready" } & Record<
@@ -107,13 +106,7 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
       ? support.withheldWorkspace()
       : turn.cwd ?? turnConfig.workspace ?? homedir();
     const env = childEnv(turnConfig);
-    if (turn.access) support.applyAccess?.(env, turn.access, instanceEnvironment);
-    // After applyAccess: a driver's own hook may clear a variable and
-    // restore only a Perspicax key. A pasted key fills the variable when
-    // it is still empty, and only for this person.
-    if (turn.access?.localKeyPrincipal) {
-      applyStoredEngineEnv(env, DRIVER_KIND, DATA_DIR, { organization: true, principalId: turn.access.localKeyPrincipal });
-    }
+    applyAcpAccess(env, support, DRIVER_KIND, turn.access, instanceEnvironment);
     if (
       support.requireAuthenticationBeforeSpawn
       && !skipSubscriptionAuthForLocalInject(turn.model)

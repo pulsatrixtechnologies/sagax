@@ -684,6 +684,17 @@ final class Session: ObservableObject {
                     }
                 }
             }
+            // #3689 captures: an ask drawn once, on the pinned card
+            if let flag = arguments.firstIndex(of: "-pinned-once-preview"), arguments.indices.contains(flag + 1),
+               let index = state.bots.firstIndex(where: { $0.id == "preview-scout" }) {
+                let preview = Self.pinnedOncePreview(arguments[flag + 1], bot: state.bots[index])
+                let thread = state.bots[index].threadId
+                state.messages[thread] = preview.rows
+                state.bots[index].activeLeafId = preview.rows.last?.id
+                state.activeLeafIds[thread] = preview.rows.last?.id
+                state.bots[index].busy = false
+                waitingLists["preview-scout"] = preview.waiting
+            }
             if arguments.contains("-cards-top") {
                 // The cards chat from its first cards (the theme captures).
                 focusedMessageId = "c-tool"

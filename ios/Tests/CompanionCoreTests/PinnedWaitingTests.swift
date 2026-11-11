@@ -179,11 +179,14 @@ final class PinnedWaitingTests: XCTestCase {
         }
         XCTAssertEqual(pinned(nil).compactMap(\.approval).map(\.requestId), ["ra"])
 
-        // the server's list wins whenever it answers, even empty
+        // the server's list wins whenever it answers, even empty; a live
+        // approval it does not carry yet is pinned after its items (#3615,
+        // #3689: the conversation leaves it to the pinned card at once)
         let served = try JSONDecoder().decode(WaitingPayload.self, from: Data(#"{"pending":[],"waiting":[]}"#.utf8))
         XCTAssertTrue(served.served)
-        XCTAssertTrue(pinned(served).isEmpty)
-        XCTAssertEqual(pinned(try payload()).count, 5)
+        XCTAssertEqual(pinned(served).compactMap(\.approval).map(\.requestId), ["ra"])
+        XCTAssertEqual(pinned(try payload()).map(\.message.id), ["m2", "m1", "m3", "m4", "m5", "a1"])
+        XCTAssertTrue(PinnedWaiting.pinned(served, fallback: [], botId: "b1", botName: "Ara", conversation: "main") { _ in nil }.isEmpty)
     }
 
     /// Each served item carries its own message: it is the one drawn.

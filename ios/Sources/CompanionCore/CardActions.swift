@@ -584,6 +584,22 @@ public enum ParallelCardState: String, Hashable, Sendable {
     /// #3581: the chat draws a row for this task (live, or its trace).
     public var drawsRow: Bool { isLive || leavesTrace }
 
+    /// The row's phase, hence its ink (ParallelTaskCard.tsx): running while
+    /// live, the danger ink only for a task that failed; a stopped one was
+    /// stopped on purpose and reads in the neutral ink, as on the desktop.
+    public var stepPhase: StepPhase {
+        if isLive { return .running }
+        return self == .failed ? .failed : .done
+    }
+
+    /// The row's elapsed time, written as the desktop writes it
+    /// (src/lib/working-time.ts `formatElapsed`): "42s", "3m 14s".
+    public static func elapsed(ms: Double) -> String {
+        let total = ms.isFinite ? Int(min(max(0, ms / 1000), 1e9).rounded(.down)) : 0
+        if total < 60 { return "\(total)s" }
+        return "\(total / 60)m \(String(format: "%02d", total % 60))s"
+    }
+
     /// What a waiting task waits on, for its words (ParallelTaskCard.tsx):
     /// a question open in its thread waits on an answer
     /// (chat.parallel.state.waitingAnswer), anything else on an approval

@@ -276,13 +276,21 @@ struct ChatView: View {
         return found ? id : nil
     }
 
+    /// #3689: the asks the pinned card over the composer holds while they
+    /// wait (`PinnedWaiting.heldIds`); the conversation, its earlier topics
+    /// included, draws no card for them. A conversation the person cannot
+    /// write in has no composer, so no pinned card: it holds nothing.
+    var pinnedHeld: Set<String> {
+        PinnedWaiting.heldIds(pinnedEntries, dockShown: session.account?.canWrite(in: threadId) != false)
+    }
+
     /// The transcript as the reader has asked to see it: every chip, folded
     /// runs, or none at all.
     /// Memoized on its inputs (#3017, L01): the folding pass ran over the
     /// whole visible transcript on every render, streamed tokens included.
     var rows: [TranscriptRow] {
         let key = TranscriptLayoutMemo.RowsKey(
-            messages: messages, detail: toolCalls.detail,
+            messages: PinnedWaiting.drawn(messages, held: pinnedHeld), detail: toolCalls.detail,
             showThreads: threadPrefs.threads.allows(.transcriptReceipts),
             botId: current.isBot ? current.id : "", hides: current.isBot)
         if layoutMemo.rowsKey == key { return layoutMemo.rows }
@@ -794,7 +802,7 @@ struct ChatView: View {
                                 if let projected = session.state.bot(bot.id)?.projected(forThread: topic.threadId) {
                                     EarlierTopicSection(
                                         chat: .bot(projected),
-                                        rows: transcriptRows(session.visibleTranscript(forThread: topic.threadId), detail: toolCalls.detail, showThreads: false, threadBotId: bot.id, hidesPreSendRefusals: true),
+                                        rows: transcriptRows(PinnedWaiting.drawn(session.visibleTranscript(forThread: topic.threadId), held: pinnedHeld), detail: toolCalls.detail, showThreads: false, threadBotId: bot.id, hidesPreSendRefusals: true),
                                         openLink: openLink, openThread: openThread, revealedMessageId: revealedMessageId,
                                         scrollToMessage: { proxy.scrollTo($0, anchor: .center) }
                                     )
@@ -1130,9 +1138,12 @@ struct ChatView: View {
                 // focus (a routine run's card) gets its page after the focus
                 // is set, and the jump must still land then
                 .task(id: focusTarget) {
-                    guard let messageId = session.focusedMessageId,
-                          messages.contains(where: { $0.id == messageId })
+                    guard let focused = session.focusedMessageId,
+                          messages.contains(where: { $0.id == focused })
                     else { return }
+                    // #3689: an ask the pinned card holds is not drawn here
+                    // while it waits: the jump lands on the words before it
+                    let messageId = PinnedWaiting.focus(messages, messageId: focused, held: pinnedHeld)
                     revealedMessageId = messageId
                     // A message picked by hand is read where it is.
                     follow.pause()
@@ -1163,7 +1174,7 @@ struct ChatView: View {
                         DesktopFindProbe.center()
                         follow.pause()
                     }
-                    session.consumeFocus(messageId)
+                    session.consumeFocus(focused)
                 }
             }
             .id(threadId)

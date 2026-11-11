@@ -15,3 +15,12 @@ agents-proxy: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/(drivers/(
 # not the whole file; when server/index.ts or its test is touched the tests
 # check already runs all of it.
 index-reach: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/index(\.test)?\.ts$'; then :; elif printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/(peers/[^/]*|routines/routine-requests[^/]*|routes/internal-(requests|rooms|bot-chat)[^/]*|index-leaves/[^/]*)\.ts$'; then ./node_modules/.bin/vitest run --reporter=dot server/index.test.ts -t 'teammate|targeted|section|peer|another person|Chief|Primary Bot|reach'; fi
+
+# full-access-guard (#3508): server/approvals/full-access-gate.guard.test.ts
+# scans the whole server for the cards a person may have to answer and fails
+# one with no `// full-access: <surface>` marker. The stem rule never runs it
+# for a new emitter elsewhere, so a lot that touches server/approvals/,
+# server/harness/ or any server file that emits a card (an options row, a
+# permission request, a peer card, a safety hold, ask_choice, a browser held
+# card) runs it. It only reads files: a second or two.
+full-access-guard: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^server/(approvals|harness)/[^[:space:]]*\.ts$' || printf '%s\n' "$FAST_GATE_FILES" | grep -E '^server/[^[:space:]]*\.ts$' | grep -vE '\.(test|e2e)\.ts$' | while IFS= read -r f; do [ -f "$f" ] && grep -lqE 'kind: "options",|requestType: "permission"|requestPeerApproval\(|safety(PermissionEffect|ToolHold)\(|createChoiceCard\(|deps\.confirm\(' "$f" && echo hit; done | grep -q hit; then ./node_modules/.bin/vitest run --reporter=dot server/approvals/full-access-gate.guard.test.ts; fi

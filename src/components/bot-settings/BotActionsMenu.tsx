@@ -14,7 +14,8 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, typ
 import { createPortal } from "react-dom";
 import { Archive, Bug, Check, Copy, Database, Download, Link2, MoreHorizontal, Pencil, PictureInPicture2, RotateCcw, Star, UserRoundPen } from "lucide-react";
 
-import { useStore, visibleMessages, type Bot } from "@/state/store";
+import { visibleMessages, type Bot } from "@/state/store";
+import { useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
@@ -59,7 +60,11 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data, trigger 
   /** The bot's Data window entry, or null where Data is off. */
   data?: { label: string; onOpen: () => void } | null;
 }) {
-  const { state, dispatch } = useStore();
+  // only what the menu draws: another bot's frame renders nothing here (#3624)
+  const dispatch = useStoreDispatch();
+  const getState = useStoreGetter();
+  const config = useStoreSelector((current) => current.config);
+  const archiveBlocked = useStoreSelector((current) => archiveBlockReason(current.bots, bot));
   const advanced = useAdvancedMode();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -74,12 +79,11 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data, trigger 
   const [busy, setBusy] = useState(false);
   const close = () => onAnchor(null);
 
-  const viewerId = viewerActorId(state.config);
-  const canRename = showBotRename(state.config, bot);
-  const primary = primaryBotOffer(state.config, bot);
+  const viewerId = viewerActorId(config);
+  const canRename = showBotRename(config, bot);
+  const primary = primaryBotOffer(config, bot);
   const owns = viewerOwnsBot(bot, viewerId);
-  const archiveAllowed = showBotArchive(state.config, bot);
-  const archiveBlocked = archiveBlockReason(state.bots, bot);
+  const archiveAllowed = showBotArchive(config, bot);
   const messages = visibleMessages(bot);
   const fail = (cause: unknown) => dispatch({ type: "error", message: readableError(cause) });
 
@@ -139,6 +143,7 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data, trigger 
   const archive = () => {
     if (busy || archiveBlocked) return;
     setBusy(true);
+    const state = getState();
     const next = state.bots.find((candidate) => !candidate.hidden && candidate.id !== bot.id);
     void requestBotHidden(bot.id, true)
       .then((archived) => {

@@ -7,9 +7,19 @@
 // requestAnimationFrame. A resting pose (a breath, or an unread face that
 // has finished its shake) waits on a short timer instead, so a sidebar of
 // unread owls does not repaint the glass bars at the display rate.
+//
+// Nothing runs for an owl that has nothing to draw (#3624): a sidebar owl
+// that only follows the pointer sleeps once its eyes have settled, until
+// the pointer moves; an owl scrolled out of view (an IntersectionObserver)
+// is not ticked; a hidden window runs nothing. The blink of an owl at rest
+// is one Web Animation on its lids, started after a delay: the browser waits
+// on a timer, so a quiet window asks for no frame and runs no script between
+// two blinks, and only one call per blink arms the next.
 
 import { animationsPaused, resetAnimationPauseForTests, watchAnimationPause } from "../animation-pause";
 import {
+  OWL_BREATH_PERIOD_S,
+  OWL_WORKING_PERIOD_S,
   OWL_GEOM,
   eyesTransform,
   farWingOpacity,
@@ -64,6 +74,15 @@ interface Driven {
   tick(now: number): void;
   /** The last tick needed a display-rate frame (motion that would alias at 12Hz). */
   fullRate: boolean;
+  /** When a resting owl next has something to draw (s, on the frame clock):
+   * 0 at the resting pace, Infinity when only an input wakes it. */
+  wakeAt: number;
+  /** Scrolled out of view: not ticked until it comes back. */
+  offscreen: boolean;
+  /** The element whose visibility decides (the owl's svg). */
+  el: Element | null;
+  /** Came on screen (and the window shows), or left it. */
+  onShown?(shown: boolean): void;
 }
 
 /** Resting poses do not need a display-rate clock. The gap leaves room for
@@ -75,6 +94,32 @@ let rafId = 0;
 let slowTimer: ReturnType<typeof setTimeout> | 0 = 0;
 let reduceMQ: MediaQueryList | null = null;
 let pauseUnsub: (() => void) | null = null;
+let observer: IntersectionObserver | null = null;
+
+const clockNow = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+
+function onScreen(c: Driven): boolean {
+  return !c.offscreen;
+}
+
+function ensureObserver() {
+  if (observer || typeof IntersectionObserver === "undefined") return;
+  observer = new IntersectionObserver((records) => {
+    let shown = false;
+    for (const record of records) {
+      for (const c of running) {
+        if (c.el !== record.target) continue;
+        c.offscreen = !record.isIntersecting;
+        c.onShown?.(record.isIntersecting && !animationsPaused());
+        // a breath in CSS holds still off screen too
+        if (record.isIntersecting) record.target.removeAttribute("data-owl-offscreen");
+        else record.target.setAttribute("data-owl-offscreen", "");
+        if (record.isIntersecting) shown = true;
+      }
+    }
+    if (shown) kick();
+  });
+}
 
 function clearSlow() {
   if (!slowTimer) return;
@@ -94,23 +139,33 @@ function frame(now: number) {
     rafId = 0;
     return;
   }
-  for (const c of running) c.tick(now / 1000);
+  for (const c of running) if (onScreen(c)) c.tick(now / 1000);
   rafId = 0;
   if (!running.size) return;
   let full = false;
-  for (const c of running) if (c.fullRate) full = true;
+  for (const c of running) if (c.fullRate && onScreen(c)) full = true;
   if (full) kick();
   else scheduleSlow();
 }
 
+/** The soonest a resting owl on screen has something to draw (s), or Infinity. */
+function nextWake(): number {
+  let soonest = Infinity;
+  for (const c of running) if (onScreen(c)) soonest = Math.min(soonest, c.wakeAt);
+  return soonest;
+}
+
 function scheduleSlow() {
   if (animationsPaused() || rafId || slowTimer || !running.size) return;
+  const wake = nextWake();
+  if (!Number.isFinite(wake)) return;
   slowTimer = setTimeout(() => {
     slowTimer = 0;
     kick();
-  }, REST_FRAME_GAP_MS);
+  }, Math.max(REST_FRAME_GAP_MS, wake * 1000 - clockNow()));
 }
 
+/** Something changed (a state, the pointer, a blink): draw on the next frame. */
 function kick() {
   if (animationsPaused() || rafId || !running.size) return;
   clearSlow();
@@ -127,20 +182,30 @@ function ensurePauseWatch() {
         rafId = 0;
       }
       clearSlow();
+      // the blinks hold too
+      for (const c of running) c.onShown?.(false);
       return;
     }
+    for (const c of running) if (!c.offscreen) c.onShown?.(true);
     kick();
   });
 }
 
 function start(c: Driven) {
-  running.add(c);
+  if (!running.has(c)) {
+    running.add(c);
+    ensureObserver();
+    if (c.el) observer?.observe(c.el);
+  }
   ensurePauseWatch();
   kick();
 }
 
 function stop(c: Driven) {
-  running.delete(c);
+  if (running.delete(c) && c.el) {
+    observer?.unobserve(c.el);
+    c.el.removeAttribute("data-owl-offscreen");
+  }
   if (running.size) return;
   if (rafId && typeof cancelAnimationFrame === "function") {
     cancelAnimationFrame(rafId);
@@ -153,6 +218,8 @@ function stop(c: Driven) {
 export function resetOwlLoopForTests(): void {
   pauseUnsub?.();
   pauseUnsub = null;
+  observer?.disconnect();
+  observer = null;
   resetAnimationPauseForTests();
   reduceMQ = null;
   clearSlow();
@@ -168,6 +235,24 @@ export function runningOwlCount(): number {
 }
 
 const ONE_SHOTS = new Set<OwlState>(["success", "alert"]);
+/** An awake blink: its length (s), and the lids' close and open sampled
+ * along the same half sine the script draws (lidTransform). */
+const BLINK_S = 0.16;
+const BLINK_STEPS = 16;
+let blinkKeyframes: Keyframe[] | null = null;
+function blinkFrames(): Keyframe[] {
+  blinkKeyframes ??= Array.from({ length: BLINK_STEPS + 1 }, (_, i) => ({
+    offset: i / BLINK_STEPS,
+    transform: lidTransform(i === BLINK_STEPS ? 0 : Math.sin((Math.PI * i) / BLINK_STEPS)),
+  }));
+  return blinkKeyframes;
+}
+/** The ground pivot of the breath, in the svg's box (viewBox 0 0 256 256). */
+const BREATH_ORIGIN = `${(OWL_GEOM.pivots.ground.x / 256) * 100}% ${(OWL_GEOM.pivots.ground.y / 256) * 100}%`;
+/** The steady motions styles.css draws for a pose (`owl-breathe`, and
+ * `owl-working-bounce` with `owl-working-wing`), with the length of a cycle. */
+type CssMotion = "breath" | "working";
+const CSS_MOTION_PERIOD_S: Record<CssMotion, number> = { breath: OWL_BREATH_PERIOD_S, working: OWL_WORKING_PERIOD_S };
 
 export function createOwlController(
   el: OwlRigElements,
@@ -191,9 +276,68 @@ export function createOwlController(
   let wingMove: { move: OwlWingMove; start: number | null } | null = null;
   let farShown = false;
   const gaze: Offset = { ...OWL_GEOM.gazeRest };
+  /** The transform last written on each group (writeTransform). */
+  const written = new Map<CSSStyleDeclaration, string>();
+  // The steady motions run in CSS (#3624), from the same numbers as the
+  // pose: the resting breath (about the same ground point) and the working
+  // bounce on the owl's svg, on the compositor; the working wing flap on its
+  // two groups. A resting or working owl then runs no script per frame, only
+  // its blinks. The delay starts the CSS cycle where the pose's own clock
+  // is, so taking a motion over (or handing it back) never jumps.
+  const svgRoot = (el.rig.ownerSVGElement ?? null) as SVGSVGElement | null;
+  let cssMotion: CssMotion | null = null;
+  const setCssMotion = (motion: CssMotion | null, elapsed: number) => {
+    if (!svgRoot || motion === cssMotion) return;
+    cssMotion = motion;
+    if (motion) {
+      svgRoot.style.transformOrigin = BREATH_ORIGIN;
+      svgRoot.style.setProperty("--owl-motion-delay", `${-(elapsed % CSS_MOTION_PERIOD_S[motion]).toFixed(3)}s`);
+      svgRoot.setAttribute("data-owl-motion", motion);
+    } else svgRoot.removeAttribute("data-owl-motion");
+  };
+
+  // The blink of an owl at rest (#3624): one Web Animation on the lids,
+  // delayed to the blink's time, so the browser waits on a timer and the
+  // loop sleeps; when it ends, the next one is armed 3 to 6 s later, as the
+  // script would draw it. An owl the script draws (a beat, a wing move,
+  // sleepy lids) blinks by script instead.
+  const lidsAnimate = typeof (el.lids as Partial<Element>).animate === "function";
+  let cssBlink: Animation | null = null;
+  const cancelCssBlink = () => {
+    const anim = cssBlink;
+    if (!anim) return;
+    cssBlink = null;
+    anim.onfinish = null;
+    anim.cancel();
+  };
+  const armCssBlink = () => {
+    if (cssBlink) return;
+    const delay = Math.max(0, nextBlink * 1000 - clockNow());
+    const anim = el.lids.animate(blinkFrames(), { duration: BLINK_S * 1000, delay, id: "owl-blink" });
+    cssBlink = anim;
+    // a canceled blink rejects its promise: nothing waits on it
+    anim.finished?.catch(() => {});
+    if (driven.offscreen || animationsPaused()) anim.pause();
+    anim.onfinish = () => {
+      if (cssBlink !== anim) return;
+      cssBlink = null;
+      nextBlink = clockNow() / 1000 + 3 + Math.random() * 3;
+      armCssBlink();
+    };
+  };
 
   const driven: Driven = {
     fullRate: false,
+    wakeAt: 0,
+    offscreen: false,
+    el: el.rig.ownerSVGElement ?? null,
+    onShown(shown) {
+      // a blink waits (or holds) while its owl is scrolled away or the
+      // window is hidden
+      if (!cssBlink) return;
+      if (shown) cssBlink.play();
+      else cssBlink.pause();
+    },
     tick(now) {
       if (t0 === null || beatPending) {
         t0 = now;
@@ -237,8 +381,18 @@ export function createOwlController(
         }
       }
 
+      const reduce = (forcedReduce ?? prefersReducedMotion()) && !gazeOnly;
+      // a steady pose moves in CSS, not here: the breath at rest, the bounce
+      // and the wing flap while working (a beat or a wing move is drawn here)
+      const motion: CssMotion | null = gazeOnly || reduce || wingMove !== null || svgRoot === null ? null
+        : state === "idle" ? "breath" : state === "working" && !beat ? "working" : null;
+      // the lids are the blink's alone: it runs as an animation, not here
+      const blinkInCss = lidsAnimate && (gazeOnly || (motion !== null && pose.lid === 0));
+      if (blinkInCss) armCssBlink();
+      else cancelCssBlink();
+
       // Blink every 3-6 s (slower when sleepy). Kept under reduced motion.
-      if (now >= nextBlink) {
+      if (!blinkInCss && now >= nextBlink) {
         blinkStart = now;
         nextBlink = now + (state === "sleepy" ? 4 + Math.random() * 3 : 3 + Math.random() * 3);
       }
@@ -247,10 +401,23 @@ export function createOwlController(
         blinkStart >= 0 && now - blinkStart < blinkDur ? Math.sin((Math.PI * (now - blinkStart)) / blinkDur) : 0;
       const lid = Math.max(pose.lid, blinkAmt);
 
-      const reduce = (forcedReduce ?? prefersReducedMotion()) && !gazeOnly;
+      let wrote = false;
+      // compared with what this owl last wrote, never read back: the
+      // browser hands a transform back in its own spelling ("0px, 0.5px"),
+      // so a read-back never matched and every tick rewrote every group
       const writeTransform = (style: CSSStyleDeclaration, value: string) => {
-        if (style.transform !== value) style.transform = value;
+        if (written.get(style) === value) return;
+        written.set(style, value);
+        style.transform = value;
+        wrote = true;
       };
+      driven.wakeAt = 0;
+      setCssMotion(motion, elapsed);
+      if (motion === "breath") pose.sy = 1;
+      if (motion === "working") {
+        pose.y = 0;
+        pose.wing = 0;
+      }
       if (gazeOnly) {
         const target = pointer ?? pinned ?? gazeToOffset(owlPose("idle", 0, true, hop).gaze);
         const k = 1 - Math.exp(-dt * (pointer ? 14 : 8));
@@ -266,7 +433,12 @@ export function createOwlController(
         const blinkAmt =
           blinkStart >= 0 && now - blinkStart < blinkDur ? Math.sin((Math.PI * (now - blinkStart)) / blinkDur) : 0;
         writeTransform(el.lids.style, lidTransform(blinkAmt));
-        driven.fullRate = pointer !== null || blinkAmt > 0;
+        const blinkingNow = blinkStart >= 0 && now - blinkStart < blinkDur;
+        // the eyes still travel toward the pointer at the display rate; back
+        // to rest at the resting pace; settled, nothing until the next blink
+        // (or the pointer moves: setPointer)
+        driven.fullRate = blinkingNow || (pointer !== null && wrote);
+        if (!blinkingNow && !wrote) driven.wakeAt = blinkInCss ? Infinity : nextBlink;
         return;
       }
       if (reduce) {
@@ -288,8 +460,9 @@ export function createOwlController(
         gaze.x += (target.x - gaze.x) * k;
         gaze.y += (target.y - gaze.y) * k;
         writeTransform(el.rig.style, rigTransform(pose));
-        writeTransform(el.nearWing.style, wingTransform(pose.wing, pose.open));
-        if (el.nearWingBack) writeTransform(el.nearWingBack.style, el.nearWing.style.transform);
+        const wing = wingTransform(pose.wing, pose.open);
+        writeTransform(el.nearWing.style, wing);
+        if (el.nearWingBack) writeTransform(el.nearWingBack.style, wing);
         if (el.farWing && (pose.open > 0 || farShown)) {
           // only touched while the wings are (or were just) out
           writeTransform(el.farWing.style, farWingTransform(pose.wing, pose.open));
@@ -306,12 +479,14 @@ export function createOwlController(
       // down. Breathing and a held unread face do not.
       driven.fullRate = !reduce && (
         paintAgain
-        || state === "working"
+        || (state === "working" && motion !== "working")
         || state === "success"
         || wingMove !== null
         || blinking
         || (state === "alert" && alertPhase < 0.65)
       );
+      // a steady motion in CSS: nothing to draw until the next blink
+      if (motion && !driven.fullRate && !wrote) driven.wakeAt = blinkInCss ? Infinity : nextBlink;
     },
   };
 
@@ -413,10 +588,13 @@ export function createOwlController(
       kick();
     },
     setPointer(offset) {
+      if (offset === pointer) return;
       pointer = offset;
+      if (!reduced() || gazeOnly) kick();
     },
     setPinnedGaze(offset) {
       pinned = offset;
+      if (!reduced() || gazeOnly) kick();
     },
     setHop(value) {
       hop = value;
@@ -424,6 +602,8 @@ export function createOwlController(
     setReducedMotion(value) {
       forcedReduce = value;
       if (reduced()) {
+        setCssMotion(null, 0);
+        cancelCssBlink();
         stop(driven);
         clearBlinkSchedule();
         scheduleReducedBlink(1000 + Math.random() * 4000);
@@ -435,6 +615,8 @@ export function createOwlController(
     destroy() {
       destroyed = true;
       clearBlinkSchedule();
+      cancelCssBlink();
+      setCssMotion(null, 0);
       stop(driven);
     },
   };

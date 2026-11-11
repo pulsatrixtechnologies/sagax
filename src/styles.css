@@ -3968,6 +3968,118 @@ select optgroup {
   }
 }
 
+/* An owl's steady motions in CSS (src/lib/owl/owl-loop.ts sets data-owl-motion,
+   the ground pivot and --owl-motion-delay, the point of the cycle where the
+   pose's clock is, on its svg), #3624. From the pose's own numbers
+   (src/lib/owl/owl-art.ts owlPose), sampled every fifteen degrees of the
+   cycle; src/lib/owl/owl-motion-css.test.ts holds them equal:
+   - at rest the breath, sy = 1 + 0.016 sin(2 pi t / 3.4 s) about the
+     ground, on the svg: the compositor, no script per frame;
+   - working the bounce, y = -3.5 |sin(2 pi 3 t)| viewBox units (of 256) on
+     the svg, and the wing flap, 7 + 7 sin(2 pi 6 t) degrees about the
+     shoulder (104.8, 131.7) on the near wing and its rim.
+   Still off screen; the hidden window pauses every animation (above). */
+svg[data-owl-motion="breath"] {
+  animation: owl-breathe 3.4s linear var(--owl-motion-delay, 0s) infinite;
+}
+svg[data-owl-motion="working"] {
+  animation: owl-working-bounce calc(1s / 6) linear var(--owl-motion-delay, 0s) infinite;
+}
+svg[data-owl-motion="working"] :is([data-part="nearWing"], [data-part="nearWingRim"]) {
+  animation: owl-working-wing calc(1s / 6) linear var(--owl-motion-delay, 0s) infinite;
+}
+svg[data-owl-motion][data-owl-offscreen],
+svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part="nearWingRim"]) {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  svg[data-owl-motion],
+  svg[data-owl-motion] :is([data-part="nearWing"], [data-part="nearWingRim"]) {
+    animation: none;
+  }
+}
+@keyframes owl-breathe {
+  0% { transform: scale(1, 1.00000); }
+  4.1667% { transform: scale(1, 1.00414); }
+  8.3333% { transform: scale(1, 1.00800); }
+  12.5% { transform: scale(1, 1.01131); }
+  16.6667% { transform: scale(1, 1.01386); }
+  20.8333% { transform: scale(1, 1.01545); }
+  25% { transform: scale(1, 1.01600); }
+  29.1667% { transform: scale(1, 1.01545); }
+  33.3333% { transform: scale(1, 1.01386); }
+  37.5% { transform: scale(1, 1.01131); }
+  41.6667% { transform: scale(1, 1.00800); }
+  45.8333% { transform: scale(1, 1.00414); }
+  50% { transform: scale(1, 1.00000); }
+  54.1667% { transform: scale(1, 0.99586); }
+  58.3333% { transform: scale(1, 0.99200); }
+  62.5% { transform: scale(1, 0.98869); }
+  66.6667% { transform: scale(1, 0.98614); }
+  70.8333% { transform: scale(1, 0.98455); }
+  75% { transform: scale(1, 0.98400); }
+  79.1667% { transform: scale(1, 0.98455); }
+  83.3333% { transform: scale(1, 0.98614); }
+  87.5% { transform: scale(1, 0.98869); }
+  91.6667% { transform: scale(1, 0.99200); }
+  95.8333% { transform: scale(1, 0.99586); }
+  100% { transform: scale(1, 1.00000); }
+}
+@keyframes owl-working-bounce {
+  0% { transform: translateY(0%); }
+  4.1667% { transform: translateY(-0.1785%); }
+  8.3333% { transform: translateY(-0.3539%); }
+  12.5% { transform: translateY(-0.5232%); }
+  16.6667% { transform: translateY(-0.6836%); }
+  20.8333% { transform: translateY(-0.8323%); }
+  25% { transform: translateY(-0.9667%); }
+  29.1667% { transform: translateY(-1.0847%); }
+  33.3333% { transform: translateY(-1.1840%); }
+  37.5% { transform: translateY(-1.2631%); }
+  41.6667% { transform: translateY(-1.3206%); }
+  45.8333% { transform: translateY(-1.3555%); }
+  50% { transform: translateY(-1.3672%); }
+  54.1667% { transform: translateY(-1.3555%); }
+  58.3333% { transform: translateY(-1.3206%); }
+  62.5% { transform: translateY(-1.2631%); }
+  66.6667% { transform: translateY(-1.1840%); }
+  70.8333% { transform: translateY(-1.0847%); }
+  75% { transform: translateY(-0.9667%); }
+  79.1667% { transform: translateY(-0.8323%); }
+  83.3333% { transform: translateY(-0.6836%); }
+  87.5% { transform: translateY(-0.5232%); }
+  91.6667% { transform: translateY(-0.3539%); }
+  95.8333% { transform: translateY(-0.1785%); }
+  100% { transform: translateY(0%); }
+}
+@keyframes owl-working-wing {
+  0% { transform: translate(104.8px, 131.7px) rotate(7.000deg) translate(-104.8px, -131.7px); }
+  4.1667% { transform: translate(104.8px, 131.7px) rotate(8.812deg) translate(-104.8px, -131.7px); }
+  8.3333% { transform: translate(104.8px, 131.7px) rotate(10.500deg) translate(-104.8px, -131.7px); }
+  12.5% { transform: translate(104.8px, 131.7px) rotate(11.950deg) translate(-104.8px, -131.7px); }
+  16.6667% { transform: translate(104.8px, 131.7px) rotate(13.062deg) translate(-104.8px, -131.7px); }
+  20.8333% { transform: translate(104.8px, 131.7px) rotate(13.761deg) translate(-104.8px, -131.7px); }
+  25% { transform: translate(104.8px, 131.7px) rotate(14.000deg) translate(-104.8px, -131.7px); }
+  29.1667% { transform: translate(104.8px, 131.7px) rotate(13.761deg) translate(-104.8px, -131.7px); }
+  33.3333% { transform: translate(104.8px, 131.7px) rotate(13.062deg) translate(-104.8px, -131.7px); }
+  37.5% { transform: translate(104.8px, 131.7px) rotate(11.950deg) translate(-104.8px, -131.7px); }
+  41.6667% { transform: translate(104.8px, 131.7px) rotate(10.500deg) translate(-104.8px, -131.7px); }
+  45.8333% { transform: translate(104.8px, 131.7px) rotate(8.812deg) translate(-104.8px, -131.7px); }
+  50% { transform: translate(104.8px, 131.7px) rotate(7.000deg) translate(-104.8px, -131.7px); }
+  54.1667% { transform: translate(104.8px, 131.7px) rotate(5.188deg) translate(-104.8px, -131.7px); }
+  58.3333% { transform: translate(104.8px, 131.7px) rotate(3.500deg) translate(-104.8px, -131.7px); }
+  62.5% { transform: translate(104.8px, 131.7px) rotate(2.050deg) translate(-104.8px, -131.7px); }
+  66.6667% { transform: translate(104.8px, 131.7px) rotate(0.938deg) translate(-104.8px, -131.7px); }
+  70.8333% { transform: translate(104.8px, 131.7px) rotate(0.239deg) translate(-104.8px, -131.7px); }
+  75% { transform: translate(104.8px, 131.7px) rotate(0.000deg) translate(-104.8px, -131.7px); }
+  79.1667% { transform: translate(104.8px, 131.7px) rotate(0.239deg) translate(-104.8px, -131.7px); }
+  83.3333% { transform: translate(104.8px, 131.7px) rotate(0.938deg) translate(-104.8px, -131.7px); }
+  87.5% { transform: translate(104.8px, 131.7px) rotate(2.050deg) translate(-104.8px, -131.7px); }
+  91.6667% { transform: translate(104.8px, 131.7px) rotate(3.500deg) translate(-104.8px, -131.7px); }
+  95.8333% { transform: translate(104.8px, 131.7px) rotate(5.188deg) translate(-104.8px, -131.7px); }
+  100% { transform: translate(104.8px, 131.7px) rotate(7.000deg) translate(-104.8px, -131.7px); }
+}
+
 /* Owl skins (src/components/OwlSkinFx.tsx). The effects animate only opacity
    and transform, only while the owl says it is live, and never under reduced
    motion; with no animation each layer shows its still look. SVG transforms

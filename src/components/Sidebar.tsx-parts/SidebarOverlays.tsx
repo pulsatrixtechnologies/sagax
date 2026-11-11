@@ -73,8 +73,8 @@ export function SidebarOverlays(props: {
 
   return (
     <>
-      <PrimaryBotPicker
-        open={primaryPicker !== null}
+      {primaryPicker !== null && <PrimaryBotPicker
+        open
         bots={sidebarBots}
         viewerId={viewerActorId(state.config)}
         currentId={primaryPicker?.currentId ?? null}
@@ -82,7 +82,7 @@ export function SidebarOverlays(props: {
         error={primaryPicker?.error}
         onCancel={() => setPrimaryPicker(null)}
         onConfirm={(botId) => void makePrimaryBot(botId, true)}
-      />
+      />}
       {renameTeam && <TeamDialog section={renameTeam} rename onRenamed={renamedTeam} onClose={() => setRenameTeam(null)} />}
       {orgMenu && createPortal(<div className="fixed inset-0 z-40" onMouseDown={closeOrgMenu} onContextMenu={(event) => { event.preventDefault(); closeOrgMenu(); }}>
         <div role="menu" aria-label={orgMenu.name ?? t("teamLibrary.general")} style={{ left: orgMenu.x, top: orgMenu.y }} data-org-section-menu
@@ -132,7 +132,9 @@ export function SidebarOverlays(props: {
           />
         </div>
       </div>, document.body)}
-      <ConfirmDialog open={deletingTeam !== null} title={t("team.deleteTitle", { name: deletingTeam ?? "" })}
+      {/* A closed dialog is not mounted: the sidebar renders on every bot
+          frame (its rows), and a closed dialog draws nothing (#3624). */}
+      {deletingTeam !== null && <ConfirmDialog open title={t("team.deleteTitle", { name: deletingTeam ?? "" })}
         body={t("team.deleteKeepBotsDescription")} confirmLabel={t("team.delete")} returnFocusRef={sidebarRef}
         pending={teamDeletePending}
         onCancel={() => { if (!teamDeleteRunning.current) setDeletingTeam(null); }} onConfirm={() => {
@@ -152,15 +154,15 @@ export function SidebarOverlays(props: {
             .then(({ sections }) => { dispatch({ type: "sectionDeleted", section: name, sections }); editSectionParents((tree) => removeFromSectionTree(tree, name)); setDeletingTeam(null); })
             .catch(cause => setTeamFeedback({ error: true, text: readableError(cause) }))
             .finally(() => { teamDeleteRunning.current = false; setTeamDeletePending(false); });
-        }} />
+        }} />}
       {moveToTeam && <TeamDialog section={moveToTeam} onClose={() => setMoveToTeam(null)} />}
-      <ShareTeamDialog
-        key={shareTeam === null ? "share-team-closed" : `share-team:${shareTeam}`}
-        open={shareTeam !== null}
-        team={shareTeam ?? ""}
+      {shareTeam !== null && <ShareTeamDialog
+        key={`share-team:${shareTeam}`}
+        open
+        team={shareTeam}
         anchorRef={shareTeamAnchor}
         onClose={() => setShareTeam(null)}
-      />
+      />}
       {teamSettings !== null && <TeamSettingsDialog team={teamSettings} onClose={() => setTeamSettings(null)} />}
       {batchEdit && (
         <BulkEditBotsDialog
@@ -186,8 +188,8 @@ export function SidebarOverlays(props: {
             clearSelection();
           }}
         />
-      <ConfirmDialog
-        open={batchArchiveConfirm}
+      {batchArchiveConfirm && <ConfirmDialog
+        open
         title={t("sidebar.select.archiveTitle", { count: selectedBotIds.filter((id: string) => archivableByViewer(id)).length })}
         body={t("sidebar.select.archiveBody")}
         confirmLabel={t("sidebar.bot.archive")}
@@ -202,7 +204,7 @@ export function SidebarOverlays(props: {
           clearSelection();
           void (async () => { for (const id of ids) await archiveBot({ id }); })();
         }}
-      />
+      />}
       <SectionPicker
           current={sectionPicker ? layoutBots.find((b: Bot) => b.id === sectionPicker.botId)?.section : undefined}
           names={personal ? personalSectionNames(personal) : undefined}
@@ -213,9 +215,9 @@ export function SidebarOverlays(props: {
           }}
         />
       {roomMenuSlot}
-      <LeaveGroupDialog groupId={leavingRoomId} onClose={() => setLeavingRoomId(null)} returnFocusRef={sidebarRef} />
-      <ConfirmDialog
-        open={deletingRoom !== undefined}
+      {leavingRoomId && <LeaveGroupDialog groupId={leavingRoomId} onClose={() => setLeavingRoomId(null)} returnFocusRef={sidebarRef} />}
+      {deletingRoom !== undefined && <ConfirmDialog
+        open
         {...roomDeleteCopy(deletingRoom ?? { name: "" })}
         icon={<Trash2 size={18} />}
         returnFocusRef={sidebarRef}
@@ -227,7 +229,7 @@ export function SidebarOverlays(props: {
           setDeletingRoomId(null);
           if (groupId) dispatch({ type: "deleteGroup", groupId });
         }}
-      />
+      />}
       <SectionPicker
           current={roomSectionPicker ? layoutGroups.find((g: Group) => g.id === roomSectionPicker.groupId)?.section : undefined}
           names={personal ? personalSectionNames(personal) : undefined}

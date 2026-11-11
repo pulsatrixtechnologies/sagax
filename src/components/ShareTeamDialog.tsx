@@ -21,7 +21,8 @@ import {
   type ShareView,
 } from "@/lib/team-share";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
-import { api, useStore } from "@/state/store";
+import { api, type Bot } from "@/state/store";
+import { useStoreSelector } from "@/state/store-selector";
 import { FIELD, FieldRow, FoldRow, HelpTip, PILL, PRIMARY_PILL, SettingsGroup, SwitchRow } from "./SettingsPrimitives";
 import { AnchoredPopover, useAnchoredDismissRoot } from "./AnchoredPopover";
 import type { NewBotDefaults } from "../../shared/new-bot-defaults";
@@ -138,6 +139,8 @@ export function ShareSkillChoices({ available, ticked, counted, onToggle }: {
 /** Share team…: choose what goes in, see exactly what that is, save the
  * file. No confirm step; the person's click on Save file is the decision.
  * Anchored popover (lot 6), not a modal window. */
+const NO_BOTS: readonly Bot[] = [];
+
 export function ShareTeamDialog({
   open,
   team,
@@ -150,15 +153,17 @@ export function ShareTeamDialog({
   /** The control that opened Share: the team menu trigger or the Share button. */
   anchorRef: RefObject<HTMLElement | null>;
 }) {
-  const { state } = useStore();
+  // the bots only while open: closed, a bot's frame renders nothing here (#3624)
+  const config = useStoreSelector((current) => current.config);
+  const bots = useStoreSelector((current) => (open ? current.bots : NO_BOTS));
   const popoverRef = useRef<HTMLElement | null>(null);
   // #2045: Share lists only this person's bots in the team (server export
   // packs the same set). A shared bot filed under the same display name
   // stays out of the preview.
-  const viewerId = viewerActorId(state.config);
+  const viewerId = viewerActorId(config);
   const teamBots = useMemo(
-    () => viewerOwnBots(state.bots, viewerId).filter((bot) => (bot.section?.trim() ?? "") === team),
-    [state.bots, team, viewerId],
+    () => viewerOwnBots(bots, viewerId).filter((bot) => (bot.section?.trim() ?? "") === team),
+    [bots, team, viewerId],
   );
   const botNames = useMemo(() => new Map(teamBots.map((bot) => [bot.id, bot.name])), [teamBots]);
   const [name, setName] = useState(team || t("teamLibrary.general"));

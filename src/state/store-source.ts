@@ -46,6 +46,11 @@ export function createStoreSource<S, A>(initial: S, dispatch: Dispatch<A>): Publ
  * `AppState` and `Action` back; naming them here would import the store. */
 export const StoreSourceContext = createContext<StoreSource<unknown, never> | null>(null);
 
+/** The in-flight stream (store.tsx StreamRoot) as a source, so a component
+ * reads one thread's text and renders only when that text changes (#3624):
+ * a bot streaming in another conversation leaves it alone. */
+export const StreamSourceContext = createContext<StoreSource<unknown, never> | null>(null);
+
 /** Imperative services have identities independent of reducer frames. */
 export interface StoreCommands {
   flushBotPatches(botId: string): Promise<BotAnnouncement | null>;

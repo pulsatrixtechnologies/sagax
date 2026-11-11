@@ -4,12 +4,14 @@
 import { otherAuthorName } from "@/lib/viewer";
 import { InitialsAvatar } from "./Avatar";
 import { WithPresence } from "./PresenceDot";
-import { useStore, type Message } from "@/state/store";
+import type { Message } from "@/state/store";
+import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import { t } from "@/lib/i18n";
 
 export function OtherAuthorLabel({ message }: { message: Pick<Message, "role" | "sender"> }) {
-  const { state, dispatch } = useStore();
-  const name = otherAuthorName(message, state.config);
+  // the name only: every bubble holds one, and another bot's frame renders none (#3624)
+  const dispatch = useStoreDispatch();
+  const name = useStoreSelector((current) => otherAuthorName(message, current.config));
   if (!name) return null;
   const personId = message.sender?.id?.trim();
   if (personId) {

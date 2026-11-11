@@ -14,7 +14,11 @@ export function useRemoteSessions(botId: string | undefined): { rows: RemoteSess
     const load = () => {
       api<{ sessions?: RemoteSessionView[] }>(`/api/bots/${encodeURIComponent(botId)}/remote-sessions`)
         .then((body) => {
-          if (!stop) setRows(Array.isArray(body.sessions) ? body.sessions : []);
+          if (stop) return;
+          const next = Array.isArray(body.sessions) ? body.sessions : [];
+          // the same answer keeps the list it had: a poll that brings
+          // nothing new renders nothing (#3624)
+          setRows((current) => (JSON.stringify(current) === JSON.stringify(next) ? current : next));
         })
         .catch(() => { /* keep the last list; the next poll retries */ });
     };

@@ -22,7 +22,7 @@ const body = z.object({
 
 export function createSkillsFindInternalRoutes(deps: {
   /** The marketplaces this bot's person may see, with what the bot has. */
-  listings(botId: string): FindListing[];
+  listings(botId: string): FindListing[] | Promise<FindListing[]>;
   fetcher?: typeof fetch;
 }): InternalRouteHandler {
   return async ({ res, path, method, json, capability, readBody }) => {
@@ -33,7 +33,7 @@ export function createSkillsFindInternalRoutes(deps: {
     const { query } = parsed.data;
     const limit = parsed.data.limit ?? 10;
     let listings: FindListing[] = [];
-    try { listings = deps.listings(capability.botId); } catch { listings = []; }
+    try { listings = await deps.listings(capability.botId); } catch { listings = []; }
     const local = rankLocal(query, listings, limit);
     const missing = missingCatalogs(listings);
     const claw = parsed.data.clawhub === false ? { hits: [] } : await searchClawHub(query, Math.min(limit, 10), deps.fetcher ?? fetch);

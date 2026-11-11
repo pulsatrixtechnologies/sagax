@@ -79,7 +79,7 @@ export interface BotsDeps {
    * capabilities (shared/capabilities.ts, the same as
    * GET /api/bots/:id/capabilities) for the console person; null when the
    * bot or its engine is gone. Read only. */
-  capabilities?(botId: string, viewer: { principalId: string; orgAdmin: boolean }): BotCapabilities | null;
+  capabilities?(botId: string, viewer: { principalId: string; orgAdmin: boolean }): BotCapabilities | null | Promise<BotCapabilities | null>;
 }
 
 type Find = { bot: AdminBot; reach: AdminBotReach } | null;
@@ -195,9 +195,9 @@ function capabilitiesRoute(deps: BotsDeps, resolve: NonNullable<BotsDeps["capabi
     path: "bots/{id}/capabilities",
     min: "manager",
     ownerGrant: "own-bot",
-    handle(ctx) {
+    async handle(ctx) {
       const entry = find(ctx, deps, ctx.params.id!);
-      const list = entry ? resolve(entry.bot.id, { principalId: ctx.viewer.principalId, orgAdmin: ctx.viewer.orgAdmin }) : null;
+      const list = entry ? await resolve(entry.bot.id, { principalId: ctx.viewer.principalId, orgAdmin: ctx.viewer.orgAdmin }) : null;
       return list ? ok(list) : notFound("No such bot.");
     },
   };

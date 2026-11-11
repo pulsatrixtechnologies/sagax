@@ -20,7 +20,7 @@ export type BotCapabilitiesAnswer =
   | { ok: false; status: 400 | 404; error: string; code: string };
 
 export interface BotCapabilitiesRouteDeps {
-  resolve: (auth: RequestAuth, botId: string, engine: string | undefined) => BotCapabilitiesAnswer;
+  resolve: (auth: RequestAuth, botId: string, engine: string | undefined) => BotCapabilitiesAnswer | Promise<BotCapabilitiesAnswer>;
 }
 
 export function createBotCapabilitiesRoutes(deps: BotCapabilitiesRouteDeps): RouteHandler {
@@ -30,7 +30,7 @@ export function createBotCapabilitiesRoutes(deps: BotCapabilitiesRouteDeps): Rou
     if (method !== "GET") return json(res, 405, { error: "method not allowed" });
     const engine = url.searchParams.get("engine")?.trim() || undefined;
     if (engine !== undefined && !ENGINE_ID.test(engine)) return json(res, 400, { error: "Unknown engine.", code: "unknown_engine" });
-    const answer = deps.resolve(auth, match[1]!, engine);
+    const answer = await deps.resolve(auth, match[1]!, engine);
     if (!answer.ok) return json(res, answer.status, { error: answer.error, code: answer.code });
     return json(res, 200, answer.capabilities);
   };

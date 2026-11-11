@@ -31,7 +31,6 @@
 // token for the marketplace first, then the person's GitHub connection,
 // then the organization's tokens); the token itself stays per bot
 // (server/plugins/marketplace-tokens.ts), never here.
-import { createHash } from "node:crypto";
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
@@ -40,7 +39,7 @@ import { writeFileAtomic } from "../atomic.ts";
 import { guardedFetch } from "../public-fetch.ts";
 import { personalMcpHostRefusal } from "../people/person-connections.ts";
 import { readPluginMcpServers } from "./plugin-mcp.ts";
-import { notePluginFolderChanged } from "../sandbox/sandbox-plugin-digests.ts";
+import { notePluginFolderChanged, pluginFolderDigests } from "../sandbox/sandbox-plugin-digests.ts";
 import {
   BotPluginError,
   insideRoot,
@@ -278,35 +277,18 @@ export function marketplaceServerName(server: string, plugin: string, taken: Rea
   return `${base.slice(0, 20)}-${Date.now().toString(36).slice(-6)}`;
 }
 
-const MAX_DIGEST_FILES = 5000;
-
-/** A digest of a plugin folder's files (paths and bytes), without links or
- * git metadata, the files `copyPlain` would copy. */
-export function folderDigest(root: string): string {
-  const hash = createHash("sha256");
-  let files = 0;
-  const walk = (dir: string, prefix: string) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      if (entry.name === ".git" || entry.isSymbolicLink()) continue;
-      const path = join(dir, entry.name);
-      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) walk(path, relative);
-      else if (entry.isFile() && ++files <= MAX_DIGEST_FILES) hash.update(`${relative}\0`).update(readFileSync(path)).update("\0");
-    }
-  };
-  walk(root, "");
-  return hash.digest("hex");
-}
-
 /** What a marketplace offers for one plugin now: its folder's digest in a
  * repository marketplace, the repository and ref it points at for a plugin
- * kept elsewhere; nothing for a manifest address (only the version tells). */
-export function pluginRevision(repo: string, entry: MarketplacePluginEntry, manifestUrl?: string): string | undefined {
+ * kept elsewhere; nothing for a manifest address (only the version tells).
+ * #3643: the folder's digest (its files' paths and bytes, without links or
+ * git metadata, the files `copyPlain` would copy) is read in slices and
+ * remembered until a writer changes the clone (sandbox-plugin-digests.ts). */
+export async function pluginRevision(repo: string, entry: MarketplacePluginEntry, manifestUrl?: string): Promise<string | undefined> {
   if (entry.source.kind === "git") return `git:${entry.source.git.id}#${entry.source.git.ref ?? ""}:${entry.source.path ?? ""}`;
   if (manifestUrl) return undefined;
   try {
     const folder = insideRoot(repo, entry.source.path);
-    return existsSync(folder) && statSync(folder).isDirectory() ? `sha256:${folderDigest(folder)}` : undefined;
+    return existsSync(folder) && statSync(folder).isDirectory() ? `sha256:${await pluginFolderDigests.revision(folder)}` : undefined;
   } catch {
     return undefined;
   }
@@ -447,6 +429,11 @@ export class PluginMarketplaces {
     return this.read().marketplaces[name];
   }
 
+  /** Every marketplace's name, in the order of a listing. */
+  names(): string[] {
+    return Object.keys(this.read().marketplaces).sort((a, b) => a.localeCompare(b));
+  }
+
   /** Where an installed plugin's files live (its stdio servers run there). */
   pluginDir(marketplace: string, plugin: string): string {
     if (!NAME.test(marketplace) || !NAME.test(plugin)) throw new BotPluginError("invalid plugin", "invalid_plugin");
@@ -518,35 +505,34 @@ export class PluginMarketplaces {
     }
   }
 
-  /** Digests of the clone as it is on disk: a fetch again replaces the
-   * folder, so its inode and time name the content. */
-  private readonly revisions = new Map<string, string | undefined>();
   /** What this marketplace offers now for one plugin (`pluginRevision`),
    * for a bot's install of it (server/bots/bot-plugins.ts). */
-  revisionOf(name: string, entry: MarketplacePluginEntry): string | undefined {
-    return this.offeredRevision(name, entry, this.read().marketplaces[name]?.manifestUrl);
+  revisionOf(name: string, entry: MarketplacePluginEntry): Promise<string | undefined> {
+    return pluginRevision(this.repoDir(name), entry, this.read().marketplaces[name]?.manifestUrl);
   }
-  private offeredRevision(name: string, entry: MarketplacePluginEntry, manifestUrl?: string): string | undefined {
-    const repo = this.repoDir(name);
-    let key: string;
-    try {
-      const stat = statSync(repo);
-      key = `${name}\0${entry.name}\0${stat.ino}:${stat.mtimeMs}`;
-    } catch {
-      return undefined;
+
+  /** #3643: every plugin's offered revision worked out ahead of a listing,
+   * one folder at a time and in slices: after the server listens, and after
+   * a clone is replaced (`only`). A listing asked meanwhile waits for the
+   * same reads. */
+  async warmRevisions(only?: string): Promise<void> {
+    for (const [name, market] of Object.entries(this.read().marketplaces)) {
+      if ((only !== undefined && name !== only) || market.manifestUrl) continue;
+      let entries: MarketplacePluginEntry[];
+      try {
+        entries = readMarketplaceManifest(this.repoDir(name)).plugins;
+      } catch {
+        continue;
+      }
+      for (const entry of entries) await pluginRevision(this.repoDir(name), entry);
     }
-    if (!this.revisions.has(key)) {
-      if (this.revisions.size > 500) this.revisions.clear();
-      this.revisions.set(key, pluginRevision(repo, entry, manifestUrl));
-    }
-    return this.revisions.get(key);
   }
 
   /** The marketplaces this `viewer` may see: org-wide ones, and their own
    * private ones. An absent viewer lists every marketplace (internal call). */
-  list(viewer?: MarketplaceViewer): MarketplaceView[] {
+  async list(viewer?: MarketplaceViewer): Promise<MarketplaceView[]> {
     const state = this.read();
-    return Object.entries(state.marketplaces).filter(([, market]) => marketplaceVisibleTo(market, viewer)).map(([name, market]): MarketplaceView => {
+    const views = await Promise.all(Object.entries(state.marketplaces).filter(([, market]) => marketplaceVisibleTo(market, viewer)).map(async ([name, market]): Promise<MarketplaceView> => {
       let entries: MarketplacePluginEntry[] = [];
       try {
         entries = readMarketplaceManifest(this.repoDir(name)).plugins;
@@ -563,10 +549,10 @@ export class PluginMarketplaces {
         visibility: marketplaceVisibility(market),
         mine: marketplaceOwnedBy(market, viewer),
         bots: this.options.inUse?.(name).length ?? 0,
-        plugins: entries.map((entry) => {
+        plugins: await Promise.all(entries.map(async (entry) => {
           const installed = state.installed[`${entry.name}@${name}`];
           const update = installed
-            ? pluginUpdateAvailable(installed, { version: entry.version, revision: this.offeredRevision(name, entry, market.manifestUrl) })
+            ? pluginUpdateAvailable(installed, { version: entry.version, revision: await pluginRevision(this.repoDir(name), entry, market.manifestUrl) })
             : false;
           return {
             name: entry.name,
@@ -583,9 +569,10 @@ export class PluginMarketplaces {
             servers: installed?.servers ?? [],
             skills: installed?.skills ?? [],
           };
-        }),
+        })),
       };
-    }).sort((a, b) => a.name.localeCompare(b.name));
+    }));
+    return views.sort((a, b) => a.name.localeCompare(b.name));
   }
 
   installed(): InstalledMarketplacePlugin[] {
@@ -680,7 +667,8 @@ export class PluginMarketplaces {
           visibility: taken ? marketplaceVisibility(taken) : (options.visibility === "org" ? "org" : "private"),
         };
         this.write(state);
-        return this.list().find((view) => view.name === name)!;
+        void this.warmRevisions(name);
+        return (await this.list()).find((view) => view.name === name)!;
       } finally {
         rmSync(staging, { recursive: true, force: true });
       }
@@ -712,7 +700,7 @@ export class PluginMarketplaces {
       if (visibility === "org") this.checkPolicy(marketSource(market));
       state.marketplaces[name] = { ...market, visibility, updatedAt: this.now() };
       this.write(state);
-      return this.list(viewer).find((view) => view.name === name)!;
+      return (await this.list(viewer)).find((view) => view.name === name)!;
     });
   }
 
@@ -788,7 +776,7 @@ export class PluginMarketplaces {
       const repo = this.repoDir(marketplace);
       const entry = readMarketplaceManifest(repo).plugins.find((candidate) => candidate.name === plugin);
       if (!entry) throw new BotPluginError("That plugin is not in this marketplace.", "not_found", 404);
-      const revision = pluginRevision(repo, entry, market.manifestUrl);
+      const revision = await pluginRevision(repo, entry, market.manifestUrl);
       if (entry.source.kind === "git") {
         this.checkPolicy(entry.source.git);
         const checkout = join(this.root, "plugins", `.checkout-${this.now()}`);

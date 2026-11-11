@@ -231,7 +231,7 @@ describe("one marketplace list, two install scopes", () => {
     // Bob did not add it: his bot's plugins go, the marketplace stays
     const bob = await call("pr_bob", "DELETE", "/api/bots/bob-bot/plugins/marketplaces/acme-tools");
     expect(bob.body).toMatchObject({ sharedRemoved: false, plugins: [] });
-    expect(shared.list().map((market) => market.name)).toEqual(["acme-tools"]);
+    expect((await shared.list()).map((market) => market.name)).toEqual(["acme-tools"]);
     // the admin removes Alice's bot's last use, and the marketplace with it
     const admin = await call(ADMIN, "DELETE", "/api/bots/alice-bot/plugins/marketplaces/acme-tools");
     expect(admin.body).toMatchObject({ sharedRemoved: true, marketplaces: [] });

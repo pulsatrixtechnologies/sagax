@@ -453,23 +453,23 @@ export class BotPlugins {
 
   /** The installation's marketplaces this `viewer` may see, with what this
    * bot has from each. A private marketplace is listed to its author only. */
-  listMarketplaces(botId: string, viewer?: MarketplaceViewer): MarketplaceListing[] {
+  async listMarketplaces(botId: string, viewer?: MarketplaceViewer): Promise<MarketplaceListing[]> {
     const describe = (source: string): MarketplaceCredentialView | undefined => {
       try { return this.options.tokens?.describe?.(botId, source, viewer?.principal); } catch { return undefined; }
     };
     const state = this.read(botId);
     let tokenSources = new Set<string>();
     try { tokenSources = this.options.tokens?.sourcesFor(botId) ?? new Set(); } catch { /* listed without the flag */ }
-    return this.options.marketplaces.list(viewer).map((market) => {
+    return Promise.all((await this.options.marketplaces.list(viewer)).map(async (market) => {
       let plugins: MarketplaceListing["plugins"] = [];
       try {
         const repo = this.options.marketplaces.repoPath(market.name);
         const manifestOnly = Boolean(this.options.marketplaces.record(market.name)?.manifestUrl);
-        plugins = readMarketplaceManifest(repo).plugins.map((entry) => {
+        plugins = await Promise.all(readMarketplaceManifest(repo).plugins.map(async (entry) => {
           const installed = state.plugins[`${entry.name}@${market.name}`];
           // the same rule as the workspace scope (pluginUpdateAvailable):
           // another declared version, or the same version with other files
-          const offered = installed ? this.options.marketplaces.revisionOf(market.name, entry) : undefined;
+          const offered = installed ? await this.options.marketplaces.revisionOf(market.name, entry) : undefined;
           const update = Boolean(installed && pluginUpdateAvailable(installed, { version: entry.version, revision: offered }));
           let contents: PluginContents | undefined;
           if (entry.source.kind === "path" && !manifestOnly) {
@@ -490,7 +490,7 @@ export class BotPlugins {
             external: entry.source.kind === "git",
             ...(contents ? { contents } : {}),
           };
-        });
+        }));
       } catch {
         plugins = [];
       }
@@ -503,7 +503,7 @@ export class BotPlugins {
         visibility: market.visibility, mine: market.mine,
         ...(market.description ? { description: market.description } : {}), addedAt: market.addedAt, updatedAt: market.updatedAt, plugins,
       };
-    });
+    }));
   }
 
   listPlugins(botId: string): InstalledBotPlugin[] {
@@ -561,7 +561,7 @@ export class BotPlugins {
     });
     // A manifest address is read over https without a credential: none is picked.
     if (credential && cloned) this.options.tokens!.choose!(botId, added.source, credential.id);
-    return this.listMarketplaces(botId).find((listing) => listing.name === added.name)!;
+    return (await this.listMarketplaces(botId)).find((listing) => listing.name === added.name)!;
   }
 
   /** A credential of the list `actor` may pick: their own or the organization's. */
@@ -575,7 +575,7 @@ export class BotPlugins {
   /** Pick a credential of the one list for a marketplace on this bot, or
    * (null) Automatic. The owner or a manager of the bot, no admin; the
    * credential is the actor's own or the organization's. */
-  chooseMarketplaceCredential(botId: string, name: string, credential: string | null, actor: string | undefined): MarketplaceListing {
+  async chooseMarketplaceCredential(botId: string, name: string, credential: string | null, actor: string | undefined): Promise<MarketplaceListing> {
     this.root(botId);
     const record = this.options.marketplaces.record(name);
     if (!record) throw new BotPluginError("No marketplace with that name.", "not_found", 404);
@@ -583,7 +583,7 @@ export class BotPlugins {
     if (credential !== null) this.usableCredential(credential, actor);
     if (!this.options.tokens?.choose) throw new BotPluginError("This server cannot keep credentials.", "tokens_unavailable", 503);
     this.options.tokens.choose(botId, record.source, credential);
-    return this.listMarketplaces(botId).find((listing) => listing.name === name)!;
+    return (await this.listMarketplaces(botId)).find((listing) => listing.name === name)!;
   }
 
   /** Pull a marketplace again (its plugins' new versions are offered; the
@@ -593,7 +593,7 @@ export class BotPlugins {
     if (!this.options.marketplaces.record(name)) throw new BotPluginError("No marketplace with that name.", "not_found", 404);
     // read with this bot's token for it first, as Add does
     await this.options.marketplaces.refresh(name, actor, { environment: (source) => this.cloneEnvironment(botId, source, actor, {}) });
-    return this.listMarketplaces(botId).find((listing) => listing.name === name)!;
+    return (await this.listMarketplaces(botId)).find((listing) => listing.name === name)!;
   }
 
   /** Take this bot's plugins of a marketplace off it. The marketplace itself
@@ -684,7 +684,7 @@ export class BotPlugins {
       notePluginFolderChanged(target);
       const now = this.now();
       const previous = state.plugins[key];
-      const revision = this.options.marketplaces.revisionOf(input.marketplace, entry);
+      const revision = await this.options.marketplaces.revisionOf(input.marketplace, entry);
       state.plugins[key] = {
         name: input.plugin, marketplace: input.marketplace,
         ...(entry.description ? { description: entry.description } : {}),
@@ -895,11 +895,10 @@ export class BotPlugins {
     try { tokenSources = this.options.tokens?.sourcesFor(botId) ?? new Set(); } catch { /* without the token-only ones */ }
     const used = new Set(Object.values(state.plugins).map((plugin) => plugin.marketplace));
     const marketplaces: LegacyPluginState["marketplaces"] = {};
-    for (const market of this.options.marketplaces.list()) {
-      if (!used.has(market.name) && !tokenSources.has(market.source)) continue;
-      const record = this.options.marketplaces.record(market.name);
-      if (!record) continue;
-      marketplaces[market.name] = {
+    for (const name of this.options.marketplaces.names()) {
+      const record = this.options.marketplaces.record(name);
+      if (!record || (!used.has(name) && !tokenSources.has(record.manifestUrl ?? record.source))) continue;
+      marketplaces[name] = {
         source: record.source, url: record.manifestUrl ?? record.url, ...(record.ref ? { ref: record.ref } : {}),
         ...(record.description ? { description: record.description } : {}),
         addedAt: record.addedAt, ...(record.addedBy ? { addedBy: record.addedBy } : {}), updatedAt: record.updatedAt,

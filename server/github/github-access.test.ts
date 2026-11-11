@@ -366,7 +366,7 @@ describe("the installation's private marketplace (Capabilities, Everyone)", () =
     const { store, tokens, add, call, MANAGER } = await workspace();
     await call(MANAGER, "POST", "", { source: "acme/private", credential: add("pr_admin", "good-token-123") });
     await store.updateMarketplace("bot-1", "acme-private", "pr_member");
-    expect(store.listMarketplaces("bot-1")[0]).toMatchObject({ name: "acme-private", hasToken: false });
+    expect((await store.listMarketplaces("bot-1"))[0]).toMatchObject({ name: "acme-private", hasToken: false });
     expect(tokens.sourcesFor("bot-1").size).toBe(0);
     store.forgetBot("bot-1");
     expect(tokens.get(WORKSPACE_TOKEN_KEY, "acme/private")).toBe("good-token-123");

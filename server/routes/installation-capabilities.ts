@@ -7,7 +7,7 @@ import { PASS, type RouteHandler } from "./table.ts";
 
 export interface InstallationCapabilityRouteDeps {
   /** Marketplace list the installation already exposes (no secrets). */
-  marketplaces: (auth: RequestAuth) => unknown[];
+  marketplaces: (auth: RequestAuth) => unknown[] | Promise<unknown[]>;
   /** Skills library index summary (names only). */
   skillsLibrary: () => Array<{ name: string; enabled?: boolean }>;
   /** Whether this caller may see installation-wide capability config. */
@@ -25,7 +25,7 @@ export function createInstallationCapabilityRoutes(deps: InstallationCapabilityR
     return json(res, 200, {
       store: "installation",
       migrated,
-      marketplaces: deps.marketplaces(auth),
+      marketplaces: await deps.marketplaces(auth),
       skillsLibrary: deps.skillsLibrary(),
     });
   };

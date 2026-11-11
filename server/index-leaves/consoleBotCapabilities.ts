@@ -14,8 +14,8 @@ function consoleBotCapabilities(botId: string, viewer: { principalId: string; or
       return person ? botLevel({ viewer: { ...person, orgAdmin: person.orgAdmin || orgAdmin }, ...botFacts(bot) }) : null;
     },
     name: (id) => host.pageThreadName(id),
-    resolve: (bot, as) => {
-      const answer = host.botCapabilitiesAs(bot, undefined, { principal: as.principal, mayChange: as.mayChange, marketplace: { principal: as.principal }, ...(as.computedFor ? { computedFor: as.computedFor } : {}) });
+    resolve: async (bot, as) => {
+      const answer = await host.botCapabilitiesAs(bot, undefined, { principal: as.principal, mayChange: as.mayChange, marketplace: { principal: as.principal }, ...(as.computedFor ? { computedFor: as.computedFor } : {}) });
       return answer.ok ? answer.capabilities : null;
     }
   }, botId, viewer);

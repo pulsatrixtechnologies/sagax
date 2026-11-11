@@ -250,7 +250,7 @@ describe("BotPlugins", () => {
     await plugins.install("bot-1", { marketplace: "acme-tools", plugin: "reviewer" }, undefined);
     expect(await plugins.removeMarketplace("bot-1", "acme-tools", { mayManage: true })).toEqual({ sharedRemoved: true });
     expect(plugins.listPlugins("bot-1")).toEqual([]);
-    expect(plugins.listMarketplaces("bot-1")).toEqual([]);
+    expect(await plugins.listMarketplaces("bot-1")).toEqual([]);
     expect(plugins.pluginDirs("bot-1")).toEqual([]);
   });
 
@@ -260,14 +260,14 @@ describe("BotPlugins", () => {
     const shared = new PluginMarketplaces({ dataDir, git, gitEnvironment: () => ({}), policy: () => undefined });
     const plugins = botPluginsWithMarketplaces({ dataDir, git, gitEnvironment: () => ({}), policy: () => undefined });
     await shared.add({ source: "acme/tools" }, "pr_admin");
-    for (const bot of ["bot-1", "bot-2"]) expect(plugins.listMarketplaces(bot).map((market) => market.name)).toEqual(["acme-tools"]);
+    for (const bot of ["bot-1", "bot-2"]) expect((await plugins.listMarketplaces(bot)).map((market) => market.name)).toEqual(["acme-tools"]);
     await plugins.install("bot-1", { marketplace: "acme-tools", plugin: "reviewer" }, undefined);
-    expect(plugins.listMarketplaces("bot-1")[0]!.plugins.find((plugin) => plugin.name === "reviewer")).toMatchObject({
+    expect((await plugins.listMarketplaces("bot-1"))[0]!.plugins.find((plugin) => plugin.name === "reviewer")).toMatchObject({
       installed: true, contents: { agents: [], commands: ["review"], skills: ["review"] },
     });
-    expect(plugins.listMarketplaces("bot-2")[0]!.plugins.find((plugin) => plugin.name === "reviewer")?.installed).toBe(false);
+    expect((await plugins.listMarketplaces("bot-2"))[0]!.plugins.find((plugin) => plugin.name === "reviewer")?.installed).toBe(false);
     // the remote plugin's folder is read at install, not listed
-    expect(plugins.listMarketplaces("bot-1")[0]!.plugins.find((plugin) => plugin.name === "remote")?.contents).toBeUndefined();
+    expect((await plugins.listMarketplaces("bot-1"))[0]!.plugins.find((plugin) => plugin.name === "remote")?.contents).toBeUndefined();
     expect(plugins.botsUsing("acme-tools")).toEqual(["bot-1"]);
   });
 
@@ -278,15 +278,15 @@ describe("BotPlugins", () => {
     await plugins.addMarketplace("bot-1", { source: "acme/tools" }, "pr_alice");
     await plugins.install("bot-1", { marketplace: "acme-tools", plugin: "reviewer" }, "pr_alice");
     plugins.setEnabled("bot-1", "reviewer@acme-tools", false);
-    const reviewer = (bot: string) => plugins.listMarketplaces(bot)[0]!.plugins.find((plugin) => plugin.name === "reviewer")!;
-    expect(reviewer("bot-1").updateAvailable).toBeUndefined();
+    const reviewer = async (bot: string) => (await plugins.listMarketplaces(bot))[0]!.plugins.find((plugin) => plugin.name === "reviewer")!;
+    expect((await reviewer("bot-1")).updateAvailable).toBeUndefined();
     // other files, same version
     write(repo, "plugins/reviewer/commands/explain.md", "Explain the diff");
     await plugins.updateMarketplace("bot-1", "acme-tools", "pr_alice");
-    expect(reviewer("bot-1")).toMatchObject({ installed: true, updateAvailable: true });
-    expect(reviewer("bot-2").updateAvailable).toBeUndefined();
+    expect(await reviewer("bot-1")).toMatchObject({ installed: true, updateAvailable: true });
+    expect((await reviewer("bot-2")).updateAvailable).toBeUndefined();
     await plugins.install("bot-1", { marketplace: "acme-tools", plugin: "reviewer" }, "pr_alice");
-    expect(reviewer("bot-1").updateAvailable).toBeUndefined();
+    expect((await reviewer("bot-1")).updateAvailable).toBeUndefined();
     expect(plugins.listPlugins("bot-1")[0]).toMatchObject({ enabled: false, version: "1.2.0" });
     expect(existsSync(join(dataDir, "bot-plugins", "bot-1", "plugins", "acme-tools", "reviewer", "commands", "explain.md"))).toBe(true);
     // another declared version
@@ -294,7 +294,7 @@ describe("BotPlugins", () => {
     manifest.plugins[0]!.version = "1.3.0";
     write(repo, ".claude-plugin/marketplace.json", JSON.stringify(manifest));
     await plugins.updateMarketplace("bot-1", "acme-tools", "pr_alice");
-    expect(reviewer("bot-1")).toMatchObject({ version: "1.3.0", installedVersion: "1.2.0", updateAvailable: true });
+    expect(await reviewer("bot-1")).toMatchObject({ version: "1.3.0", installedVersion: "1.2.0", updateAvailable: true });
   });
 
   it("#3612: Install of an installed plugin pulls its marketplace first, so a copy many versions behind comes up to date", async () => {
@@ -316,7 +316,7 @@ describe("BotPlugins", () => {
     expect(plugins.listPlugins("bot-2")).toEqual([]);
   });
 
-  it("restores a bot package's marketplaces into the one list, without one the organization does not allow", () => {
+  it("restores a bot package's marketplaces into the one list, without one the organization does not allow", async () => {
     const dataDir = temp();
     const plugins = botPluginsWithMarketplaces({ dataDir, gitEnvironment: () => ({}), policy: () => ({ mode: "list", allow: ["acme/*"] }) });
     const root = plugins.folder("bot-9");
@@ -331,7 +331,7 @@ describe("BotPlugins", () => {
       marketplaces: { acme: record("acme/tools"), evil: record("evil/tools") },
       plugins: { "reviewer@acme": plugin("reviewer", "acme"), "spy@evil": plugin("spy", "evil") },
     })).toEqual({ marketplaces: ["acme"], plugins: ["reviewer@acme"] });
-    expect(plugins.listMarketplaces("bot-9").map((market) => market.name)).toEqual(["acme"]);
+    expect((await plugins.listMarketplaces("bot-9")).map((market) => market.name)).toEqual(["acme"]);
     expect(existsSync(join(root, "marketplaces"))).toBe(false);
     // what a package carries again: the per-bot format, from the one list
     expect(plugins.stateFor("bot-9")).toMatchObject({ version: 1, marketplaces: { acme: { source: "acme/tools" } }, plugins: { "reviewer@acme": { name: "reviewer" } } });
@@ -346,16 +346,16 @@ describe("BotPlugins", () => {
     // Bob did not add it and does not manage marketplaces: only his bot's plugins go
     expect(await plugins.removeMarketplace("bot-2", "acme-tools", { actor: "pr_bob" })).toEqual({ sharedRemoved: false });
     expect(plugins.listPlugins("bot-2")).toEqual([]);
-    expect(plugins.listMarketplaces("bot-2").map((market) => market.name)).toEqual(["acme-tools"]);
+    expect((await plugins.listMarketplaces("bot-2")).map((market) => market.name)).toEqual(["acme-tools"]);
     // Alice added it: it leaves the list once no bot uses it any more
     const shared = new PluginMarketplaces({ dataDir, gitEnvironment: () => ({}), policy: () => undefined, inUse: (name) => plugins.botsUsing(name) });
     await plugins.install("bot-2", { marketplace: "acme-tools", plugin: "reviewer" }, "pr_bob");
     await expect(shared.remove("acme-tools")).rejects.toMatchObject({ code: "in_use", status: 409 });
-    expect(shared.list()[0]!.bots).toBe(2);
+    expect((await shared.list())[0]!.bots).toBe(2);
     expect(await plugins.removeMarketplace("bot-1", "acme-tools", { actor: "pr_alice" })).toEqual({ sharedRemoved: false });
     expect(await plugins.removeMarketplace("bot-2", "acme-tools", { actor: "pr_bob" })).toEqual({ sharedRemoved: false });
     expect(await plugins.removeMarketplace("bot-1", "acme-tools", { actor: "pr_alice" })).toEqual({ sharedRemoved: true });
-    expect(shared.list()).toEqual([]);
+    expect(await shared.list()).toEqual([]);
   });
 
   it("refuses a per-bot install from a marketplace added by its manifest address", async () => {
@@ -427,7 +427,7 @@ describe("migrateBotMarketplaces", () => {
     return root;
   }
 
-  it("moves every bot's marketplaces into the one list and keeps every install, once", () => {
+  it("moves every bot's marketplaces into the one list and keeps every install, once", async () => {
     const dataDir = temp();
     const repo = marketplaceRepo();
     const other = temp();
@@ -441,7 +441,7 @@ describe("migrateBotMarketplaces", () => {
 
     const summary = migrateBotMarketplaces(dataDir, shared);
     expect(summary).toMatchObject({ bots: 3, plugins: 3, failed: [], renamed: ["reviewer@acme-tools -> reviewer@acme-tools-2"] });
-    expect(shared.list().map((market) => [market.name, market.source])).toEqual([["acme-tools", "acme/tools"], ["acme-tools-2", "evil/tools"]]);
+    expect((await shared.list()).map((market) => [market.name, market.source])).toEqual([["acme-tools", "acme/tools"], ["acme-tools-2", "evil/tools"]]);
     expect(shared.record("acme-tools")).toMatchObject({ addedBy: "pr_owner" });
     expect(existsSync(join(shared.repoPath("acme-tools-2"), "r/commands/x.md"))).toBe(true);
 
@@ -455,11 +455,11 @@ describe("migrateBotMarketplaces", () => {
     expect(existsSync(join(third, "marketplaces"))).toBe(false);
     expect(JSON.parse(readFileSync(join(third, "state.json"), "utf8")).version).toBe(2);
     // each bot reads the one list, with its own installs
-    expect(plugins.listMarketplaces("bot-3").map((market) => [market.name, market.plugins.find((plugin) => plugin.name === "reviewer")?.installed])).toEqual([["acme-tools", false], ["acme-tools-2", true]]);
+    expect((await plugins.listMarketplaces("bot-3")).map((market) => [market.name, market.plugins.find((plugin) => plugin.name === "reviewer")?.installed])).toEqual([["acme-tools", false], ["acme-tools-2", true]]);
 
     // a second start changes nothing
     expect(migrateBotMarketplaces(dataDir, shared)).toMatchObject({ bots: 0, plugins: 0 });
-    expect(shared.list()).toHaveLength(2);
+    expect(await shared.list()).toHaveLength(2);
   });
 
   it("reuses a marketplace the workspace already has from the same source", async () => {
@@ -469,7 +469,7 @@ describe("migrateBotMarketplaces", () => {
     await shared.add({ source: "acme/tools" }, "pr_admin");
     legacyBot(dataDir, "bot-1", { "acme-tools": { source: "acme/tools", repo } }, [{ name: "reviewer", marketplace: "acme-tools" }]);
     expect(migrateBotMarketplaces(dataDir, shared)).toMatchObject({ bots: 1, renamed: [] });
-    expect(shared.list().map((market) => market.name)).toEqual(["acme-tools"]);
+    expect((await shared.list()).map((market) => market.name)).toEqual(["acme-tools"]);
     expect(shared.record("acme-tools")?.addedBy).toBe("pr_admin");
   });
 
@@ -521,7 +521,7 @@ describe("a marketplace's credential from the one list (2026-10-28)", () => {
     const { plugins, probes } = await setup();
     await plugins.addMarketplace("bot-1", { source: "acme/tools" }, "pr_owner");
     expect(probes[0]).toEqual([PERSON]);
-    const [listing] = plugins.listMarketplaces("bot-1", { principal: "pr_owner" });
+    const [listing] = await plugins.listMarketplaces("bot-1", { principal: "pr_owner" });
     expect(listing!.credential).toMatchObject({ used: { via: "person", login: "owner-login" } });
     expect(listing!.credential?.chosen).toBeUndefined();
   });
@@ -530,13 +530,13 @@ describe("a marketplace's credential from the one list (2026-10-28)", () => {
     const { plugins, probes, credential } = await setup();
     await plugins.addMarketplace("bot-1", { source: "acme/tools", credential: credential.id }, "pr_owner");
     expect(probes[0]![0]).toBe(PICKED);
-    let [listing] = plugins.listMarketplaces("bot-1", { principal: "pr_owner" });
+    let [listing] = await plugins.listMarketplaces("bot-1", { principal: "pr_owner" });
     expect(listing!.hasToken).toBe(true);
     expect(listing!.credential).toMatchObject({ chosen: { id: credential.id, label: "Acme organization", owner: "mine" }, used: { via: "credential", label: "Acme organization" } });
     expect(JSON.stringify(listing)).not.toContain(PICKED);
     await plugins.updateMarketplace("bot-1", "acme-tools", "pr_owner");
     expect(probes[1]![0]).toBe(PICKED);
-    listing = plugins.chooseMarketplaceCredential("bot-1", "acme-tools", null, "pr_owner");
+    listing = await plugins.chooseMarketplaceCredential("bot-1", "acme-tools", null, "pr_owner");
     expect(listing.credential?.chosen).toBeUndefined();
     await plugins.updateMarketplace("bot-1", "acme-tools", "pr_owner");
     expect(probes[2]).toEqual([PERSON]);
@@ -545,6 +545,6 @@ describe("a marketplace's credential from the one list (2026-10-28)", () => {
   it("refuses a credential the actor may not use", async () => {
     const { plugins, credential } = await setup();
     await plugins.addMarketplace("bot-1", { source: "acme/tools" }, "pr_owner");
-    expect(() => plugins.chooseMarketplaceCredential("bot-1", "acme-tools", credential.id, "someone-else")).toThrow(/No credential/);
+    await expect(plugins.chooseMarketplaceCredential("bot-1", "acme-tools", credential.id, "someone-else")).rejects.toThrow(/No credential/);
   });
 });

@@ -1121,7 +1121,7 @@ import { GithubConnect,
   githubTokenKind } from "./github/github-connect.ts";
 import { GithubConnectCards } from "./github/github-connect-cards.ts";
 import { resolveGithubClientId } from "./github/builtin-client.ts";
-import { SANDBOX_PLUGINS_DIR, syncPluginsToSandbox } from "./sandbox/sandbox-plugins.ts";
+import { SANDBOX_PLUGINS_DIR } from "./sandbox/sandbox-plugins.ts";
 import { OrgCapabilities, type OrgCapabilityMount } from "./org/org-capabilities.ts";
 import { createOrgCapabilityRoutes, ORG_CAPABILITIES_CALL, OrgSettingOwnedElsewhere } from "./routes/org-capabilities.ts";
 import { OrgGithubTokens } from "./org/org-github-tokens.ts";
@@ -5612,7 +5612,6 @@ bindLeafHost({
   get surfaceOfComputerKind() { return surfaceOfComputerKind; },
   get surfacePrompt() { return surfacePrompt; },
   get sweepThreadEventLogsPaced() { return sweepThreadEventLogsPaced; },
-  get syncPluginsToSandbox() { return syncPluginsToSandbox; },
   get systemVoicesAvailable() { return systemVoicesAvailable; },
   get takeImessageSend() { return takeImessageSend; },
   get takeSpendAlert() { return takeSpendAlert; },
@@ -12559,12 +12558,14 @@ function orgMemberActive(principalId: string): boolean {
   // sources are no longer listed to everyone; the installed plugins keep
   // working (their MCP servers and skills are not touched). No URL is logged.
   if (IDENTITY.kind === "perspicax") {
-    const nowPrivate = pluginMarketplaces.list({ seesAll: true })
-      .filter((market) => market.visibility === "private" && (market.bots > 0 || market.plugins.some((plugin) => plugin.installed)))
-      .map((market) => `${market.name} (${market.bots} bot(s)${pluginMarketplaces.record(market.name)?.addedBy ? `, added by ${pluginMarketplaces.record(market.name)!.addedBy}` : ", owner unknown"})`);
-    if (nowPrivate.length) {
-      console.log(`[plugins] marketplaces now private to their author (installs kept working, source no longer listed to others): ${nowPrivate.join("; ")}`);
-    }
+    void pluginMarketplaces.list({ seesAll: true }).then((views) => {
+      const nowPrivate = views
+        .filter((market) => market.visibility === "private" && (market.bots > 0 || market.plugins.some((plugin) => plugin.installed)))
+        .map((market) => `${market.name} (${market.bots} bot(s)${pluginMarketplaces.record(market.name)?.addedBy ? `, added by ${pluginMarketplaces.record(market.name)!.addedBy}` : ", owner unknown"})`);
+      if (nowPrivate.length) {
+        console.log(`[plugins] marketplaces now private to their author (installs kept working, source no longer listed to others): ${nowPrivate.join("; ")}`);
+      }
+    }, () => undefined);
   }
 }
 const stdioRelay = new SandboxStdioRelay({
@@ -30819,7 +30820,7 @@ const orgOpsDeps: OpsDeps = {
         mcpServers: Object.keys(personConnections.servers(person.principalId)).length
       })),
       mcpServers,
-      marketplaces: pluginMarketplaces.list().map((market) => {
+      marketplaces: (await pluginMarketplaces.list()).map((market) => {
         let allowed = true;
         try {
           allowed = marketplaceAllowed(policy, parseGitSource(market.source, market.ref));
@@ -30866,7 +30867,7 @@ const orgOpsDeps: OpsDeps = {
       return testStdioMcpCommand(parsed.server);
     }
     if (kind === "marketplace") {
-      const market = pluginMarketplaces.list().find((candidate) => candidate.name === id);
+      const market = (await pluginMarketplaces.list()).find((candidate) => candidate.name === id);
       if (!market) return { ok: false, reason: "not_found", label: "No marketplace with that name." };
       const source = market.source.trim();
       return reachable(/^[\w.-]+\/[\w.-]+$/.test(source) ? `https://github.com/${source}` : source);
@@ -35100,6 +35101,9 @@ const onListening = async () => {
   companyRuntimeReady();
   console.log(`openmausbot server on http://127.0.0.1:${PORT}`);
   browserSweep.start(); // what an earlier run left closes now, then once a minute
+  // #3643: the marketplaces' offered revisions are read in slices now, ahead
+  // of the first listing, never in one stretch on a request
+  void pluginMarketplaces.warmRevisions().then(() => orgCapabilityMarkets.warmRevisions()).catch(() => undefined);
   // Words queued before the restart start first, ahead of anything sent from
   // now on. Their turns wait for the engines read at start like every turn.
   followupsReady = true;

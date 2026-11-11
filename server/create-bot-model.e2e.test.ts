@@ -42,9 +42,21 @@ it("Chief creation uses the workspace default or a validated explicit model with
     // At Ask every time every creation is one review card: nothing exists
     // until the person applies it, after the Chief's turn has ended.
     const idle = () => expect.poll(async () => !(await api("GET", "/api/bots")).bots.find((bot: any) => bot.id === chief.id).busy, { timeout: 20_000 }).toBe(true);
+    const chiefMessages = async () => (await api("GET", `/api/threads/${chief.threadId}/messages?limit=200`)).messages as any[];
+    const replies = (messages: any[]) => messages.filter((message) => String(message.text ?? "").startsWith("reply to:")).length;
     const apply = async (pending: any) => {
       expect(pending).toMatchObject({ state: "pending", applied: false });
+      const repliesBefore = replies(await chiefMessages());
       const answered = await api("POST", `/api/threads/${chief.threadId}/respond`, { requestId: pending.requestId, behavior: "allow" });
+      // #3713: an answered card the Chief's turn parked on resumes that turn.
+      // The resume is queued when the answer returns, so the Chief reads idle
+      // until it starts; the next card applied while it runs is refused (a
+      // local browser applies setup only while every bot is idle). Wait for
+      // the resumed turn's reply, not for a busy flag it has not set yet.
+      const card = (await chiefMessages()).find((message) => message.card?.requestId === pending.requestId)?.card;
+      if (card?.teamSetupRequest?.resumed) {
+        await expect.poll(async () => replies(await chiefMessages()), { timeout: 20_000 }).toBeGreaterThan(repliesBefore);
+      }
       await idle();
       return answered.result.bots[0];
     };

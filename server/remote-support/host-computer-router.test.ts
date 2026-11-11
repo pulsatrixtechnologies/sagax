@@ -7,8 +7,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createHostComputerRouter, HOST_SESSION_FRESH_MS, HOST_SESSION_IDLE_MS, HOST_SESSION_LIFE_MS, NO_HYPERVISOR } from "./host-computer-router.ts";
+import { readFileSync } from "node:fs";
+import { createHostComputerRouter, HOST_COMMAND_TIME_MAX_MS, HOST_CONNECT_WAIT_MS, HOST_SESSION_FRESH_MS, HOST_SESSION_IDLE_MS, HOST_SESSION_LIFE_MS, hostExecWorstCaseMs, NO_HYPERVISOR } from "./host-computer-router.ts";
 import { createHostComputerStore } from "./host-computer-store.ts";
+import { KILL_GRACE_MS, KILL_RELEASE_MS } from "./remote-session-probe.ts";
+import { EXEC_TIMEOUT_MAX_MS } from "./remote-sessions.ts";
+import { SESSION_STOP_TIME_MS, TUNNEL_PROBE_TIME_MS, TUNNEL_PROBE_WAIT_MAX_MS, TUNNEL_QUEUE_WAIT_MAX_MS } from "./tunnel-queue.ts";
 import type { UnattendedHostRow } from "../../shared/remote-unattended-host.ts";
 
 const ALICE = "alice@example.test";
@@ -397,7 +401,9 @@ describe("the person's session on a host (#3393)", () => {
      * on, while the local row stays connected with its own end time. */
     hostLifeMs?: number;
     /** The tunnel probe after a 255 (#3492); absent = no probe. */
-    reachable?: (id: string) => boolean | null;
+    reachable?: (id: string) => boolean | null | Promise<boolean | null>;
+    /** The host never takes the session: its row never connects (#3505). */
+    neverConnects?: boolean;
   } = {}) {
     const dir = mkdtempSync(path.join(tmpdir(), "host-computer-"));
     dirs.push(dir);
@@ -409,7 +415,7 @@ describe("the person's session on a host (#3393)", () => {
     const open = vi.fn(async (viewer: { principalId: string }, _hostId: string, options: { seatFor?: { botId: string } }) => {
       opened += 1;
       const session = `s${opened}`;
-      rows.set(session, { botId: options.seatFor?.botId ?? "primary", principalId: viewer.principalId, endAt: opts.endAt ?? new Date(NOW + 30 * 60_000).toISOString(), connected: true, openedAt: clock });
+      rows.set(session, { botId: options.seatFor?.botId ?? "primary", principalId: viewer.principalId, endAt: opts.endAt ?? new Date(NOW + 30 * 60_000).toISOString(), connected: !opts.neverConnects, openedAt: clock });
       return { ok: true as const, code: `K7QMN${opened}`, botId: options.seatFor?.botId ?? "primary", threadId: "t", session };
     });
     const target = ({ principalId, botId, id }: { principalId: string; botId: string; id?: string }) => {
@@ -431,12 +437,14 @@ describe("the person's session on a host (#3393)", () => {
       return { host: "FS-01", os: "linux" as const, exitCode: 0, stdout: `${input.botId}\n`, stderr: "", timedOut: false };
     });
     const close = vi.fn(async (_principalId: string, _botId: string, id: string) => { const found = rows.get(id); if (found) found.connected = false; });
+    const closeUnconnected = vi.fn(async (_viewer: { principalId: string }, _session: string) => true);
     const router = createHostComputerRouter({
       store,
       hosts: {
         // the host keeps beating: seen 30 s before the clock, wherever it is
         list: async () => ({ available: true as const, hosts: [row(FS01, "FS-01", new Date(clock - 30_000).toISOString())] }),
         open,
+        closeUnconnected,
         installCode: async () => ({ ok: false as const, error: "unavailable" as const, message: "no" }),
       },
       sessions: {
@@ -449,11 +457,12 @@ describe("the person's session on a host (#3393)", () => {
       consumeApproval: () => false,
       raiseQuestion: () => "req-1",
       now: () => clock,
-      sleep: () => Promise.resolve(),
+      // the wait for the host to take the session moves the clock
+      sleep: (ms) => { clock += ms; return Promise.resolve(); },
     });
     for (const person of [ALICE, BOB_PERSON]) store.update(person, FS01, { botComputer: true });
     const run = (principalId: string, botId: string, command = "whoami", timeoutMs?: number) => router.call({ principalId, botId, threadId: `t-${botId}`, action: "exec", command, host: "FS-01", ...(timeoutMs ? { timeoutMs } : {}) });
-    return { router, open, exec, close, rows, run, tick: (ms: number) => { clock += ms; } };
+    return { router, open, exec, close, closeUnconnected, rows, run, tick: (ms: number) => { clock += ms; }, clock: () => clock };
   }
 
   // #3492: Sagax records the end time it asked for (2 hours), but the host
@@ -622,6 +631,142 @@ describe("the person's session on a host (#3393)", () => {
       tick(60_000);
       expect(await router.sweep()).toBe(1);
       expect(close).toHaveBeenCalledWith(ALICE, "sagax-test", "s1");
+    });
+  });
+
+  // #3505: a probe that says no on a healthy session (slow host, loaded
+  // server) closed the session under the command another bot sent meanwhile.
+  describe("a failed probe never closes the session under another bot's command (#3505)", () => {
+    const TWO_HOURS = new Date(NOW + 2 * 60 * 60_000).toISOString();
+    const DROPPED = { error: "The remote computer did not answer (the tunnel is down or the session ended)." };
+    const done = { host: "FS-01", os: "linux" as const, exitCode: 0, stdout: "", stderr: "", timedOut: false };
+
+    it("a command that arrives during the probe before a send keeps the session when the probe then fails, and both commands run once", async () => {
+      // the first ping (bot B's) hangs; the second (bot A's, behind it in the
+      // tunnel's queue) gives up at once: "could not ask"
+      let answerFirst: (value: boolean) => void = () => undefined;
+      let asked = 0;
+      const { open, exec, close, run, tick } = shared({
+        endAt: TWO_HOURS,
+        reachable: () => { asked += 1; return asked === 1 ? new Promise<boolean>((resolve) => { answerFirst = resolve; }) : null; },
+      });
+      await run(ALICE, "sagax-test");
+      tick(2 * 60_000);
+      const fromB = run(ALICE, "ember", "uptime");
+      await vi.waitFor(() => expect(asked).toBe(1));
+      let finishA: () => void = () => undefined;
+      exec.mockImplementationOnce(() => new Promise((resolve) => { finishA = () => resolve(done); }));
+      const fromA = run(ALICE, "architect", "make build");
+      await vi.waitFor(() => expect(exec).toHaveBeenCalledTimes(2));
+      // B's ping fails while A's command is on the session
+      answerFirst(false);
+      await vi.waitFor(() => expect(exec).toHaveBeenCalledTimes(3));
+      expect(close).not.toHaveBeenCalled();
+      finishA();
+      expect(JSON.parse((await fromA).text)).toMatchObject({ exitCode: 0 });
+      expect(JSON.parse((await fromB).text)).toMatchObject({ exitCode: 0 });
+      expect(close).not.toHaveBeenCalled();
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(exec.mock.calls.map(([input]) => [input.id, input.command])).toEqual([["s1", "whoami"], ["s1", "make build"], ["s1", "uptime"]]);
+    });
+
+    it("a failed probe with no command on the session still replaces it", async () => {
+      const { open, close, run, tick } = shared({ endAt: TWO_HOURS, reachable: (id) => id !== "s1" });
+      await run(ALICE, "sagax-test");
+      tick(2 * 60_000);
+      expect(JSON.parse((await run(ALICE, "ember")).text)).toMatchObject({ exitCode: 0 });
+      expect(close).toHaveBeenCalledWith(ALICE, "sagax-test", "s1");
+      expect(open).toHaveBeenCalledTimes(2);
+    });
+
+    it("after a 255, the tunnel is not asked while another bot's command is on the session, and the session stays", async () => {
+      let asked = 0;
+      const { open, exec, close, run } = shared({ endAt: TWO_HOURS, reachable: () => { asked += 1; return false; } });
+      await run(ALICE, "sagax-test");
+      let finishA: () => void = () => undefined;
+      exec.mockImplementationOnce(() => new Promise((resolve) => { finishA = () => resolve(done); }));
+      exec.mockImplementationOnce(async () => DROPPED);
+      const fromA = run(ALICE, "architect", "make build");
+      await vi.waitFor(() => expect(exec).toHaveBeenCalledTimes(2));
+      const fromB = await run(ALICE, "ember", "uptime");
+      expect(fromB.text).toMatch(/^The connection to FS-01 dropped during the command, so it may have run: /);
+      expect(asked).toBe(0);
+      expect(close).not.toHaveBeenCalled();
+      finishA();
+      expect(JSON.parse((await fromA).text)).toMatchObject({ exitCode: 0 });
+      expect(open).toHaveBeenCalledTimes(1);
+      // B's command went out once, never again
+      expect(exec.mock.calls.filter(([input]) => input.command === "uptime")).toHaveLength(1);
+    });
+
+    it("a command that arrives during the probe after a 255 keeps the session when the probe then fails", async () => {
+      let answer: (value: boolean) => void = () => undefined;
+      let asked = 0;
+      const { open, exec, close, run } = shared({ endAt: TWO_HOURS, reachable: () => { asked += 1; return new Promise<boolean>((resolve) => { answer = resolve; }); } });
+      await run(ALICE, "sagax-test");
+      exec.mockImplementationOnce(async () => DROPPED);
+      const fromB = run(ALICE, "ember", "uptime");
+      await vi.waitFor(() => expect(asked).toBe(1));
+      // the session answered seconds ago: A's command goes out without a ping
+      let finishA: () => void = () => undefined;
+      exec.mockImplementationOnce(() => new Promise((resolve) => { finishA = () => resolve(done); }));
+      const fromA = run(ALICE, "architect", "make build");
+      await vi.waitFor(() => expect(exec).toHaveBeenCalledTimes(3));
+      answer(false);
+      expect((await fromB).text).toMatch(/^The connection to FS-01 dropped during the command, so it may have run: /);
+      expect(close).not.toHaveBeenCalled();
+      finishA();
+      expect(JSON.parse((await fromA).text)).toMatchObject({ exitCode: 0 });
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(asked).toBe(1);
+      expect(exec.mock.calls.filter(([input]) => input.command === "uptime")).toHaveLength(1);
+    });
+
+    it("a session the host never takes is closed here and at the gateway", async () => {
+      const { open, exec, close, closeUnconnected, run, clock } = shared({ endAt: TWO_HOURS, neverConnects: true });
+      const out = await run(ALICE, "ember");
+      expect(out).toMatchObject({ isError: true });
+      expect(out.text).toMatch(/The host did not answer in time/);
+      expect(clock() - NOW).toBeGreaterThanOrEqual(HOST_CONNECT_WAIT_MS);
+      expect(closeUnconnected).toHaveBeenCalledTimes(1);
+      expect(closeUnconnected).toHaveBeenCalledWith({ principalId: ALICE }, "s1");
+      expect(close).toHaveBeenCalledWith(ALICE, "ember", "s1");
+      expect(exec).not.toHaveBeenCalled();
+      expect(open).toHaveBeenCalledTimes(1);
+    });
+
+    it("a session that connects is not closed at the gateway", async () => {
+      const { closeUnconnected, run } = shared({ endAt: TWO_HOURS });
+      await run(ALICE, "ember");
+      expect(closeUnconnected).not.toHaveBeenCalled();
+    });
+  });
+
+  // #3505: the worst case of one exec call, from the constants themselves,
+  // stays well under the bot's tool timeout.
+  describe("the longest one exec call can take (#3505)", () => {
+    const stop = KILL_GRACE_MS + KILL_RELEASE_MS;
+    const probe = TUNNEL_PROBE_WAIT_MAX_MS + TUNNEL_PROBE_TIME_MS + stop;
+    const close = stop + SESSION_STOP_TIME_MS + stop;
+
+    it("is the sum of its steps: probe, wait, close, probe, close, connect, wait, command, probe, close", () => {
+      const connect = HOST_CONNECT_WAIT_MS + 1_500;
+      const command = TUNNEL_QUEUE_WAIT_MAX_MS + EXEC_TIMEOUT_MAX_MS + stop;
+      expect(hostExecWorstCaseMs()).toBe(probe + TUNNEL_QUEUE_WAIT_MAX_MS + close + probe + close + connect + command + probe + close);
+      expect(HOST_COMMAND_TIME_MAX_MS).toBe(EXEC_TIMEOUT_MAX_MS);
+    });
+
+    it("leaves at least 90 s under the bot's tool timeout", () => {
+      const source = readFileSync(new URL("../drivers/pi-mcp-extension.ts", import.meta.url), "utf8");
+      const found = /const MCP_TOOL_TIMEOUT_MS = (\d+) \* 60_000;/.exec(source);
+      expect(found).not.toBeNull();
+      const toolTimeoutMs = Number(found![1]) * 60_000;
+      expect(toolTimeoutMs).toBe(600_000);
+      expect(hostExecWorstCaseMs()).toBeLessThanOrEqual(toolTimeoutMs - 90_000);
+    });
+
+    it("a probe costs far less than a command's turn in the queue", () => {
+      expect(probe).toBeLessThanOrEqual(30_000);
     });
   });
 

@@ -35,7 +35,9 @@ import {
   vmName,
 } from "./host-computer-vm.ts";
 import type { HostOpenOutcome, HostCodeOutcome, HostsListOutcome, UnattendedHostsViewer, UnattendedSeatTarget } from "./remote-unattended-hosts.ts";
+import { KILL_GRACE_MS, KILL_RELEASE_MS } from "./remote-session-probe.ts";
 import type { RemoteExecResult } from "./remote-sessions.ts";
+import { SESSION_STOP_TIME_MS, TUNNEL_PROBE_TIME_MS, TUNNEL_PROBE_WAIT_MAX_MS, TUNNEL_QUEUE_WAIT_MAX_MS } from "./tunnel-queue.ts";
 
 export const HOST_COMPUTER_ACTIONS = ["exec", "screenshot", "vm_status", "vm_provision", "vm_delete", "vm_rebuild", "set_mode", "ask_mode"] as const;
 export type HostComputerAction = typeof HOST_COMPUTER_ACTIONS[number];
@@ -94,9 +96,52 @@ export const HOST_SESSION_FRESH_MS = 60_000;
 /** The time a command is given when the call names none: the default of
  * server/remote-support/remote-sessions.ts exec, and its ceiling. */
 const COMMAND_TIME_DEFAULT_MS = 30_000;
-const COMMAND_TIME_MAX_MS = 120_000;
-const CONNECT_WAIT_MS = 60_000;
+export const HOST_COMMAND_TIME_MAX_MS = 120_000;
+/** How long a new session is given to connect (the host takes it at its
+ * next beat), asked every `CONNECT_POLL_MS`. */
+export const HOST_CONNECT_WAIT_MS = 60_000;
 const CONNECT_POLL_MS = 1_500;
+
+/** The longest one exec call (`execOn`) can take, from the constants
+ * (#3505). It must stay well under the bot's tool timeout (10 min,
+ * `MCP_TOOL_TIMEOUT_MS` in server/drivers/pi-mcp-extension.ts); a test
+ * holds it at least 90 s under.
+ *
+ * The steps, with today's values:
+ * - stop: a tailcat call past its time, or stopped, gives its slot back
+ *   within the kill grace, 5 + 2 = 7 s;
+ * - probe: 5 s for its turn + 12 s of ping + stop = 24 s;
+ * - close: the running call stopped (stop) + the session's stop command
+ *   (8 s + stop) = 22 s;
+ * - connect: 60 s + one last poll of 1.5 s = 61.5 s;
+ * - command: 90 s for its turn + 120 s + stop = 217 s.
+ *
+ * The longest path. A command is sent at most once, and a second try
+ * happens only when the first was never sent:
+ * 1. first try on the session already open: probe (24), then 90 s for its
+ *    turn, refused because the session ended meanwhile (never sent), and
+ *    that session is closed (22): 136 s;
+ * 2. second try: the session another bot opened meanwhile is probed (24),
+ *    does not answer, is closed (22), and a new one connects (61.5): 107.5 s;
+ * 3. the command waits and runs (217), ends on a 255, the tunnel is probed
+ *    (24) and the session closed (22): 263 s.
+ * Total 506.5 s, 93.5 s under the 600 s. Before #3505 a probe waited up to
+ * 90 s for its turn, like a command.
+ *
+ * Not in this count: the gateway calls (host list, open, close), which the
+ * 93.5 s are for; the first read of a computer whose OS is not known yet;
+ * the VM actions, which run more than one command per call. */
+export function hostExecWorstCaseMs(commandMs: number = HOST_COMMAND_TIME_MAX_MS): number {
+  const stop = KILL_GRACE_MS + KILL_RELEASE_MS;
+  const probe = TUNNEL_PROBE_WAIT_MAX_MS + TUNNEL_PROBE_TIME_MS + stop;
+  const close = stop + SESSION_STOP_TIME_MS + stop;
+  const connect = HOST_CONNECT_WAIT_MS + CONNECT_POLL_MS;
+  const command = TUNNEL_QUEUE_WAIT_MAX_MS + commandMs + stop;
+  const firstTry = probe + TUNNEL_QUEUE_WAIT_MAX_MS + close;
+  const secondSession = probe + close + connect;
+  const sent = command + probe + close;
+  return firstTry + secondSession + sent;
+}
 const VM_POLL_MS = 15_000;
 const VM_POLL_MAX_MS = 25 * 60_000;
 
@@ -141,6 +186,8 @@ interface SessionDeps {
 interface HostsDeps {
   list(viewer: UnattendedHostsViewer): Promise<HostsListOutcome>;
   open(viewer: UnattendedHostsViewer, hostId: string, options: { seatFor?: UnattendedSeatTarget; onSession?: (id: string) => void }): Promise<HostOpenOutcome>;
+  /** Close at the gateway a session opened here that the host never took (#3505). */
+  closeUnconnected?(viewer: UnattendedHostsViewer, sessionId: string): Promise<unknown>;
   installCode(viewer: UnattendedHostsViewer, options?: { org?: string; scope?: string }): Promise<HostCodeOutcome>;
 }
 
@@ -188,10 +235,10 @@ export function createHostComputerRouter(deps: {
     const life = known.askedAt + HOST_SESSION_LIFE_MS;
     return (Number.isFinite(end) ? Math.min(end, life) : life) - now();
   };
-  /** The tunnel was asked and did not answer. Could not ask (no probe, the
-   * queue refused) is not a no. */
-  const tunnelGone = async (principalId: string, botId: string, sessionId: string) =>
-    (await deps.sessions.reachable?.({ principalId, botId, id: sessionId }).catch(() => null)) === false;
+  /** Whether the session's tunnel answers: false when it was asked and did
+   * not. Could not ask (no probe, the queue refused) is null, not a no. */
+  const tunnelAnswers = async (principalId: string, botId: string, sessionId: string): Promise<boolean | null> =>
+    (await deps.sessions.reachable?.({ principalId, botId, id: sessionId }).catch(() => null)) ?? null;
 
   const ownedRows = async (principalId: string): Promise<{ rows: UnattendedHostRow[]; error?: string }> => {
     const listed = await deps.hosts.list({ principalId });
@@ -325,7 +372,9 @@ export function createHostComputerRouter(deps: {
    * before anything is sent (#3492): a session with less time left than the
    * command may take (`needMs`), or whose tunnel no longer answers, is
    * replaced too. Neither is asked of a session running another command:
-   * closing it would stop that command, and the tunnel is in use. */
+   * closing it would stop that command, and the tunnel is in use. A command
+   * that came while the tunnel was asked counts too (#3505): the session is
+   * kept after a no, and that command's own answer decides. */
   async function sessionOn(principalId: string, botId: string, hostId: string, needMs = 0): Promise<HostSession | { error: string }> {
     const k = key(principalId, hostId);
     const known = open.get(k);
@@ -335,7 +384,10 @@ export function createHostComputerRouter(deps: {
       const inUse = busy.has(k);
       let usable = left > 0 && (inUse || left > needMs);
       if (usable && !inUse && now() - known.answeredAt >= HOST_SESSION_FRESH_MS) {
-        if (await tunnelGone(principalId, known.botId, known.sessionId)) usable = false;
+        const answers = await tunnelAnswers(principalId, known.botId, known.sessionId);
+        // a no on a slow host must not stop the command another bot sent
+        // during the ping: `busy` is read again, after the answer
+        if (answers === false) usable = busy.has(k);
         else known.answeredAt = now();
       }
       if (usable) {
@@ -357,7 +409,7 @@ export function createHostComputerRouter(deps: {
       });
       if (!outcome.ok) return { error: outcome.message };
       deps.sessions.markQuiet(outcome.session);
-      const deadline = now() + CONNECT_WAIT_MS;
+      const deadline = now() + HOST_CONNECT_WAIT_MS;
       while (now() < deadline) {
         if (deps.sessions.target({ principalId, botId, threadId, id: outcome.session })) {
           open.set(k, { sessionId: outcome.session, lastUsed: now(), principalId, botId, askedAt, answeredAt: now() });
@@ -365,6 +417,11 @@ export function createHostComputerRouter(deps: {
         }
         await sleep(CONNECT_POLL_MS);
       }
+      // The host never took it: closed at the gateway, so it does not count
+      // in the gateway's limit of waiting sessions (#3505), and here in case
+      // its row came just now.
+      await deps.hosts.closeUnconnected?.({ principalId }, outcome.session).catch(() => null);
+      await deps.sessions.close(principalId, botId, outcome.session).catch(() => null);
       return { error: "The host did not answer in time. It may be asleep or offline; try again in a moment." };
     })().finally(() => opening.delete(k));
     opening.set(k, run);
@@ -377,9 +434,10 @@ export function createHostComputerRouter(deps: {
    * session. A transport failure (ssh 255) is never run again: the command
    * may have run. The session is closed then only if it is dead, ended or
    * its tunnel no longer answers (#3492); a live one (maybe running another
-   * bot's command) stays open. */
+   * bot's command) stays open, and its tunnel is not even asked while
+   * another command is on it (#3505). */
   const execOn = async (principalId: string, botId: string, hostId: string, command: string, timeoutMs?: number): Promise<RemoteExecResult | HostExecError> => {
-    const needMs = Math.min(COMMAND_TIME_MAX_MS, Math.max(1000, timeoutMs ?? COMMAND_TIME_DEFAULT_MS));
+    const needMs = Math.min(HOST_COMMAND_TIME_MAX_MS, Math.max(1000, timeoutMs ?? COMMAND_TIME_DEFAULT_MS));
     const run = async (): Promise<{ out: RemoteExecResult | { error: string }; session: HostSession | null }> => {
       const session = await sessionOn(principalId, botId, hostId, needMs);
       if ("error" in session) return { out: session, session: null };
@@ -410,9 +468,14 @@ export function createHostComputerRouter(deps: {
       // The row alone does not say it (#3492: it stays connected after the
       // host ended the session), so the tunnel is asked too.
       const live = deps.sessions.target({ principalId, botId: session.botId, threadId: "", id: session.sessionId });
-      const known = open.get(key(principalId, hostId));
+      const k = key(principalId, hostId);
+      const known = open.get(k);
       const ended = !live || (known?.sessionId === session.sessionId && timeLeft(known, live.endAt) <= 0);
-      if (ended || await tunnelGone(principalId, session.botId, session.sessionId)) await drop(principalId, hostId, session.sessionId);
+      // Another command on the session (#3505): the tunnel is in use, so it
+      // is not asked, and a no that came while a command arrived does not
+      // close the session under it. That command's own answer decides.
+      const gone = ended || (!busy.has(k) && (await tunnelAnswers(principalId, session.botId, session.sessionId)) === false && !busy.has(k));
+      if (gone) await drop(principalId, hostId, session.sessionId);
       return { error: first.out.error, mayHaveRun: true };
     }
     if (!NOT_SENT.test(first.out.error)) return first.out;

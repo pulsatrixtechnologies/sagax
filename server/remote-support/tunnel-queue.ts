@@ -8,7 +8,8 @@
 // - When a call's turn comes, `live()` is asked again: a session that closed,
 //   ended or was replaced while the call waited gets `closed`, never a send.
 // - A call waits at most `waitMaxMs` for its turn, then gets `busy`, never a
-//   send: running it again is safe.
+//   send: running it again is safe. A call may bring a shorter wait of its
+//   own (the tunnel probe, #3505), never a longer one.
 // - `end(key)` (the session closes): every waiting call gets `closed` at
 //   once, the running one is stopped (its runner kills it), and the promise
 //   resolves when the slot is free.
@@ -17,10 +18,20 @@ import type { CommandResult, RunCommand } from "./remote-session-probe.ts";
 
 /** How long a call waits for its turn on a busy tunnel. Well under the
  * bot's tool timeout (10 min, server/drivers/pi-mcp-extension.ts): 90 s of
- * wait, the longest command (2 min) and the kill grace (7 s) make 3.6 min;
- * with the one second try on a new session (#3404: up to 60 s to connect,
- * then the same again) the worst case is 8.2 min. */
+ * wait, the longest command (2 min) and the kill grace (7 s) make 3.6 min.
+ * The worst case of a whole host_computer call, with its probes and its one
+ * second try, is counted from these constants by `hostExecWorstCaseMs`
+ * (server/remote-support/host-computer-router.ts, #3505). */
 export const TUNNEL_QUEUE_WAIT_MAX_MS = 90_000;
+/** How long a tunnel probe (one ping, #3492) waits for its turn (#3505). A
+ * few seconds, never the 90 s of a command: a tunnel that stays busy is in
+ * use, so the session lives and the ping is not needed. */
+export const TUNNEL_PROBE_WAIT_MAX_MS = 5_000;
+/** The time a tunnel probe's ping (`tailcat ping --timeout=8s`) is given
+ * once its turn came, with room to start. */
+export const TUNNEL_PROBE_TIME_MS = 12_000;
+/** The time a closing session's own stop command is given. */
+export const SESSION_STOP_TIME_MS = 8_000;
 
 /** The call was never sent: `closed` (the session closed, ended or was
  * replaced before its turn) or `busy` (other calls held the tunnel longer
@@ -64,7 +75,7 @@ export function createTunnelQueue(deps: { run: RunCommand; waitMaxMs?: number })
     if (lanes.get(key) === lane) lanes.delete(key);
   };
 
-  const turn = (lane: Lane): Promise<"go" | TunnelRefusal["notSent"]> => {
+  const turn = (lane: Lane, waitMs: number): Promise<"go" | TunnelRefusal["notSent"]> => {
     if (!lane.busy) {
       lane.busy = true;
       return Promise.resolve("go");
@@ -79,17 +90,18 @@ export function createTunnelQueue(deps: { run: RunCommand; waitMaxMs?: number })
         const at = lane.waiting.indexOf(waiter);
         if (at >= 0) lane.waiting.splice(at, 1);
         waiter.refuse("busy");
-      }, waitMaxMs);
+      }, waitMs);
       timer.unref?.();
       lane.waiting.push(waiter);
     });
   };
 
   /** Run `argv` on the tunnel `key` once its turn comes and `live()` still
-   * holds. A refusal means the call was never sent. */
-  async function submit(key: string, argv: string[], timeoutMs: number, live: () => boolean = () => true): Promise<CommandResult | TunnelRefusal> {
+   * holds. A refusal means the call was never sent. `ownWaitMs`: a shorter
+   * wait for its turn than the queue's. */
+  async function submit(key: string, argv: string[], timeoutMs: number, live: () => boolean = () => true, ownWaitMs?: number): Promise<CommandResult | TunnelRefusal> {
     const lane = laneOf(key);
-    const got = await turn(lane);
+    const got = await turn(lane, ownWaitMs === undefined ? waitMaxMs : Math.min(waitMaxMs, Math.max(0, ownWaitMs)));
     if (got !== "go") return { notSent: got };
     let freed: () => void = () => undefined;
     lane.running = new Promise<void>((resolve) => { freed = resolve; });

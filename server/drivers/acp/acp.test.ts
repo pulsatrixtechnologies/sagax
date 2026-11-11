@@ -632,12 +632,12 @@ describe("ACP turns (fake CLI)", () => {
   it("detects a cumulative collapse against an earlier turn's high-water mark", async () => {
     const { usage, send } = await usageThread("cumulative-collapse");
     usage(100000, 75000);
-    expect(await send("turn 1")).toBe(FULL + "\n\nturn 1");
+    expect(await send("turn 1")).toBe(OPENING + "\n\nturn 1");
     // Neither adjacent dip exceeds 40%, but the total fall from the peak does.
     usage(50000);
     expect(await send("turn 2")).toBe("turn 2");
     usage();
-    expect(await send("turn 3")).toBe(FULL + "\n\nturn 3");
+    expect(await send("turn 3")).toBe(OPENING + "\n\nturn 3");
     expect(await send("turn 4")).toBe("turn 4");
   });
 

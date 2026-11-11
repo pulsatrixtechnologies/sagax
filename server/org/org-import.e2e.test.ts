@@ -206,7 +206,7 @@ posixOnly("slice 8: copy a solo Sagax's bots into an organization", () => {
     expect(imported.status, imported.text).toBe(201);
     expect(imported.body.subject).toEqual({ iss: idp.issuer, sub: BOB.sub });
     expect(imported.body.routines).toEqual([expect.objectContaining({ name: "Hourly", enabled: false })]);
-    const report = imported.body as { bots: Array<{ id: string; name: string; section: string; memoryFiles: number }>; groups: Array<{ id: string }> };
+    const report = imported.body as { bots: Array<{ id: string; sourceKey: string; name: string; section: string; memoryFiles: number }>; groups: Array<{ id: string }> };
     const orgBots = (await call(ORG, "GET", "/api/org/bots", alice)).body.bots as Array<{ id: string; ownerPrincipalId: string; grants: unknown[] }>;
     const bobsList = (await call(ORG, "GET", "/api/bots", bob)).body.bots as Array<{ id: string; approvalMode?: string; computer?: string; browser?: boolean }>;
     for (const bot of report.bots) {
@@ -219,7 +219,12 @@ posixOnly("slice 8: copy a solo Sagax's bots into an organization", () => {
       // carol never sees it
       expect([403, 404]).toContain((await call(ORG, "GET", `/api/bots/${bot.id}`, carol)).status);
     }
-    expect(report.bots.find((bot) => bot.name === "Atlas")!.memoryFiles).toBe(1);
+    // #3615: the copy keeps its source key; its name may change when the
+    // server already holds a bot of that name (the default bot draws its
+    // name at random from the same pool as "Atlas"), so Atlas's copy is
+    // found by the key, not the name
+    const atlasKey = (document.backup.bots as Array<{ key: string; name: string }>).find((bot) => bot.name === "Atlas")!.key;
+    expect(report.bots.find((bot) => bot.sourceKey === atlasKey)!.memoryFiles).toBe(1);
     const carolList = (await call(ORG, "GET", "/api/bots", carol)).body.bots as Array<{ id: string }>;
     expect(carolList.some((bot) => report.bots.some((mine) => mine.id === bot.id))).toBe(false);
     const routines = (await call(ORG, "GET", "/api/routines", bob)).body.routines as Array<{ name: string; enabled: boolean; runAs?: { principalId: string } }>;

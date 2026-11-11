@@ -61,3 +61,15 @@ describe("ReaderCapabilities", () => {
     expect(html).not.toContain("data-cap-link-always");
   });
 });
+
+describe("a file the page hands the reader", () => {
+  it("shows one row, in the reader language", () => {
+    const caps = { data: [], viewer: false, open: false, files: ["download"] } as NonNullable<CapabilityState["caps"]>;
+    const pending = { approvals: [{ id: 1, name: "file", label: "pending", at: 0 }] };
+    const en = render({ caps, ...pending });
+    expect(en.match(/A file it hands you/g)).toEqual(["A file it hands you"]);
+    const fr = render({ caps, ...pending }, { ...BOOT, lang: "fr" });
+    expect(fr.match(/Un fichier que cette page te remet/g)).toEqual(["Un fichier que cette page te remet"]);
+    expect(fr).not.toContain("A file it hands you");
+  });
+});

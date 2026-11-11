@@ -1,5 +1,7 @@
 // The capability line of a page version (src/lib/page-capabilities-line.ts).
 import { describe, expect, it, vi } from "vitest";
+import { setLocale } from "./i18n";
+import { type PageCapabilities } from "../../shared/page-capabilities";
 
 import { capabilitiesAdded, capabilityLine, capabilityParts, versionCapabilities } from "./page-capabilities-line";
 
@@ -37,5 +39,26 @@ describe("versionCapabilities", () => {
   it("has none when the server says none or cannot be reached", async () => {
     expect(await versionCapabilities("page_b", 1, async () => ({ capabilities: { data: [], viewer: false, open: false } }))).toEqual({ data: [], viewer: false, open: false });
     expect(await versionCapabilities("page_c", 1, async () => { throw new Error("offline"); })).toBeNull();
+  });
+});
+
+describe("a file the page hands you", () => {
+  const filesOnly = { data: [], viewer: false, open: false, files: ["download"] } as PageCapabilities;
+  const none = { data: [], viewer: false, open: false } as PageCapabilities;
+
+  it("names the part, and says when a version adds it", () => {
+    setLocale("en");
+    try {
+      expect(capabilityParts(filesOnly)).toEqual(["a file it hands you"]);
+      expect(capabilityLine(filesOnly)).toBe("Reads: a file it hands you");
+      expect(capabilityParts(capabilitiesAdded(filesOnly, none))).toEqual(["a file it hands you"]);
+      expect(capabilityLine(filesOnly, none)).toBe("New in this version: a file it hands you");
+      setLocale("fr");
+      expect(capabilityParts(filesOnly)).toEqual(["un fichier que cette page te remet"]);
+      expect(capabilityLine(filesOnly)).toBe("Lit : un fichier que cette page te remet");
+      expect(capabilityLine(filesOnly, none)).toBe("Nouveau dans cette version : un fichier que cette page te remet");
+    } finally {
+      setLocale("en");
+    }
   });
 });

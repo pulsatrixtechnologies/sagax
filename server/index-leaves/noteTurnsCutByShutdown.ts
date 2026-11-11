@@ -19,7 +19,9 @@ function noteTurnsCutByShutdown(final = true): void {
       // A teammate's work turn says so when it resumes, not here.
       if (host.runtimeHoldsRoot(threadId)) {
         // #2602: written down too, so the next start checks the promise was kept.
-        cut.push({ botId, threadId, at: Date.now(), runtimeHeld: true });
+        // #3217: with its speaker, so a resume here (the runtime never ran it) speaks for the same person.
+        const heldSpeaker = host.turnSpeakers.get(threadId);
+        cut.push({ botId, threadId, at: Date.now(), runtimeHeld: true, ...(heldSpeaker ? { speaker: { ...heldSpeaker } } : {}) });
         if (final) host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: RESTART_TURN_NOTE, ok: true } });
       }
       continue;

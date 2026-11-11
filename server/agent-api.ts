@@ -1,5 +1,7 @@
 import { ENGINE_EXITED_SENTENCE, isEngineExitedBeforeReply } from "../shared/engine-exit-words.ts";
 import { failedTurnCause, failedTurnRepeatsReply } from "../shared/failed-turn.ts";
+import { TURN_NOT_RESUMED } from "../shared/restart-words.ts";
+import { restartCauseNotResumed, restartLineIn, restartPendingRow } from "./turns/restart-line-words.ts";
 import { redactSecretsInText } from "../shared/redact.ts";
 import { parseRoutineEffort } from "../shared/routine-effort.ts";
 import { parseRoutineGoal } from "../shared/routine-goal.ts";
@@ -454,6 +456,9 @@ export interface AgentApiDeps {
   threads(caller: AgentCaller, agentId: string): TranscriptThread[];
   /** A conversation's stored messages, oldest first. Never wakes anything. */
   messages(threadId: string): StoredMessage[];
+  /** #3217: the language to word server lines in for this caller (a
+   * person's own, else the server's). Absent: they stay in English. */
+  language?(caller: AgentCaller): string | undefined;
   /** #3203: a stored attached image by its bare name, fitted for a model
    * (or null when it is gone or unreadable). Absent: read_transcript_attachment
    * is refused. The handler checks the caller may read it first. */
@@ -566,9 +571,15 @@ export interface TurnResult {
   agent_id: string;
   thread_id: string;
   finished: boolean;
-  status: "finished" | "failed" | "running" | "waiting_for_approval" | "queued" | "still_working";
+  status: "finished" | "failed" | "running" | "waiting_for_approval" | "queued" | "still_working" | "interrupted";
   /** The agent's words in this turn; empty with finished=true means it said nothing. */
   reply: string;
+  /** #3217: a server restart cut this turn. With finished=false (status
+   * interrupted) it is being resumed; finished=true says whether it was
+   * (resumed true, the reply is the resumed answer) or not (status
+   * interrupted, resumed false: the person sends the request again). */
+  interrupted?: boolean;
+  resumed?: boolean;
   /** #3008: status failed: why the turn ended without its answer, in plain words. */
   error?: string;
   /** When finished is false after a wait: progress so far and where to resume. */
@@ -588,6 +599,10 @@ const ANCHOR_SLACK_MS = 1_000;
 
 /** #2922: a card under model review: wait this long before looking again. */
 export const AWAIT_REVIEW_WAIT_MS = 3_000;
+/** #3217: how long after a restart's note a cut turn may stay unanswered
+ * before await_turn reads it as not resumed: the start's resume watch
+ * (server/index-leaves/resumeTurnsCutByRestart.ts) ends well before. */
+export const CUT_TURN_ANSWER_MS = 45 * 60_000;
 
 // ── validation ────────────────────────────────────────────────────────
 
@@ -810,7 +825,7 @@ export class AgentRateLimiter {
  * reads (reasoning, cards' internals, empty rows). Tool rows keep the tool's
  * name and outcome, and a failed call's own error as the chat shows it (#3126);
  * never its input or a successful output. */
-export function toEntry(threadId: string, message: StoredMessage): TranscriptEntry | null {
+export function toEntry(threadId: string, message: StoredMessage, language?: string): TranscriptEntry | null {
   if (!message || typeof message.id !== "string" || typeof message.at !== "number") return null;
   const role = message.role === "user" ? "user" : message.role === "bot" ? "agent" : null;
   if (!role) return null;
@@ -819,9 +834,12 @@ export function toEntry(threadId: string, message: StoredMessage): TranscriptEnt
   const images = imageRefs(message);
   const base = { cursor: encodeCursor({ at: message.at, threadId, id: message.id }), id: message.id, thread_id: threadId, role, at: message.at, from: message.sender ?? null } as const;
   if (kind === "activity") {
-    const name = message.tool?.name?.trim();
-    if (!name) return null;
+    const stored = message.tool?.name?.trim();
+    if (!stored) return null;
     const failed = message.tool?.ok === false;
+    // #3217: a restart line in the person's language, as the app shows it
+    const cause = failed ? failedTurnCause(stored) : null;
+    const name = cause !== null ? `error: ${restartLineIn(language, cause)}` : restartLineIn(language, stored);
     const error = failed && typeof message.tool?.output === "string" ? redactSecretsInText(message.tool.output.trim().replace(/\s+/g, " ")) : "";
     return { ...base, kind: "tool", text: `${name}${failed ? (error ? ` (failed): ${error}` : " (failed)") : ""}`.slice(0, 300) };
   }
@@ -856,11 +874,11 @@ export function attachmentRefArg(value: unknown): string | null {
   return /^[A-Za-z0-9-]+\.(png|jpg|jpeg|gif|webp)$/i.test(ref) ? ref : null;
 }
 
-function collectEntries(deps: AgentApiDeps, threads: readonly TranscriptThread[]): TranscriptEntry[] {
+function collectEntries(deps: AgentApiDeps, threads: readonly TranscriptThread[], language?: string): TranscriptEntry[] {
   const out: TranscriptEntry[] = [];
   for (const thread of threads) {
     for (const message of deps.messages(thread.threadId)) {
-      const entry = toEntry(thread.threadId, message);
+      const entry = toEntry(thread.threadId, message, language);
       if (entry) out.push(entry);
     }
   }
@@ -931,9 +949,17 @@ function turnFailureWords(cause: string): string {
  * ended. #2579: the lines the agent says before a tool call ("Je cherche
  * d'abord…") are progress, kept in the steps: the reply is the last run of
  * text, the words after the turn's last tool call. */
-function turnReply(messages: readonly StoredMessage[], anchor: { id: string | null; at: number }): { reply: string; sawAnchor: boolean; failed: string | null; followUp: "answer" | "text" | null; answerNotStartedAt: number | null } {
+type TurnRestart = "pending" | "resumed" | "not_resumed" | null;
+
+function turnReply(messages: readonly StoredMessage[], anchor: { id: string | null; at: number }, language?: string): { reply: string; sawAnchor: boolean; failed: string | null; followUp: "answer" | "text" | null; answerNotStartedAt: number | null; restart: TurnRestart; restartAt: number | null } {
   const start = turnAnchorIndex(messages, anchor);
-  if (start < 0) return { reply: "", sawAnchor: false, failed: null, followUp: null, answerNotStartedAt: null };
+  if (start < 0) return { reply: "", sawAnchor: false, failed: null, followUp: null, answerNotStartedAt: null, restart: null, restartAt: null };
+  // #3217: a server restart cut this turn: "pending" from the stop's note
+  // (or the resuming step) until the resumed turn's words ("resumed") or a
+  // row saying it did not resume ("not_resumed"). The words written before
+  // the cut are progress, never the reply.
+  let restart: TurnRestart = null;
+  let restartAt: number | null = null;
   let run: string[] = [];
   let lastRun: string[] = [];
   // #3008: the turn's last word is a failed-turn row (the engine died, a
@@ -971,15 +997,29 @@ function turnReply(messages: readonly StoredMessage[], anchor: { id: string | nu
       continue;
     }
     if (kind === "activity") {
+      if (typeof message.tool?.name === "string" && restartPendingRow(message.tool.name, message.tool.ok !== false)) {
+        restart = "pending";
+        restartAt = message.at;
+        run = [];
+        lastRun = [];
+        continue;
+      }
       if (run.length) lastRun = run;
       run = [];
       const cause = message.tool?.ok === false && typeof message.tool.name === "string" ? failedTurnCause(message.tool.name) : null;
-      if (cause !== null) failed = cause;
+      if (cause !== null) {
+        failed = cause;
+        // Any failed-turn row after the restart's mark ends the wait for
+        // its resume: the turn stopped there (the engine died, a rate
+        // limit, the runtime's own rerun failed) and nothing resumes it.
+        if (restart === "pending" || restartCauseNotResumed(cause)) restart = "not_resumed";
+      }
       continue;
     }
     if (kind === "text" && typeof message.text === "string" && message.text.trim()) {
       run.push(message.text.trim());
       failed = null;
+      if (restart !== null) restart = "resumed";
       if (followUp === "text") followUp = null;
     }
   }
@@ -989,9 +1029,11 @@ function turnReply(messages: readonly StoredMessage[], anchor: { id: string | nu
   return {
     reply: joined.length > REPLY_MAX_CHARS ? `${joined.slice(0, REPLY_MAX_CHARS)}\n[...]` : joined,
     sawAnchor: true,
-    failed: failed === null ? null : turnFailureWords(failed),
+    failed: failed === null ? null : turnFailureWords(restartLineIn(language, failed)),
     followUp,
     answerNotStartedAt: followUp === "text" ? answerNotStartedAt : null,
+    restart,
+    restartAt,
   };
 }
 
@@ -1001,6 +1043,7 @@ function turnSteps(
   messages: readonly StoredMessage[],
   anchor: { id: string | null; at: number },
   after: CursorKey | null,
+  language?: string,
 ): TurnStep[] {
   const start = turnAnchorIndex(messages, anchor);
   if (start < 0) return [];
@@ -1010,7 +1053,7 @@ function turnSteps(
       if (!message.replyToId) break;
       continue;
     }
-    const entry = toEntry(threadId, message);
+    const entry = toEntry(threadId, message, language);
     if (!entry || (entry.kind !== "tool" && entry.kind !== "note" && !(entry.kind === "text" && entry.role === "agent"))) continue;
     const key = keyOf(entry);
     if (after && compareKeys(key, after) <= 0) continue;
@@ -1034,9 +1077,10 @@ function buildProgress(
   state: TurnState,
   reply: string,
   after: CursorKey | null,
+  language?: string,
 ): { progress: TurnProgress; wait_cursor: string | null } {
-  const all = turnSteps(threadId, messages, anchor, null);
-  const fresh = after ? turnSteps(threadId, messages, anchor, after) : all;
+  const all = turnSteps(threadId, messages, anchor, null, language);
+  const fresh = after ? turnSteps(threadId, messages, anchor, after, language) : all;
   const shown = fresh.slice(-AWAIT_STEPS_MAX);
   const last = all.at(-1);
   return {
@@ -1534,13 +1578,14 @@ function createAgentApiHandlers(env: {
       // No handle: the in-flight turn of the caller's newest conversation
       // with this agent, else its last message.
       const threads = deps.threads(caller, agentId);
-      const entries = collectEntries(deps, threads);
+      const entries = collectEntries(deps, threads, deps.language?.(caller));
       const lastUser = [...entries].reverse().find((entry) => entry.role === "user");
       const threadId = lastUser?.thread_id ?? entries.at(-1)?.thread_id ?? null;
       if (!threadId) return ok({ agent_id: agentId, finished: true, status: "idle", reply: "", note: "You have no conversation with this agent yet." });
       const body: HandleBody = { a: agentId, t: threadId, m: lastUser?.id ?? null, i: lastUser?.at ?? now(), c: callerKey(caller) };
       const handle = signHandle(deps.secret, body);
-      if (deps.turnState(agentId, threadId) === "idle") {
+      // #3217: a turn a restart cut is read through the wait, never as idle
+      if (deps.turnState(agentId, threadId) === "idle" && turnReply(deps.messages(threadId), { id: body.m, at: body.i }).restart !== "pending") {
         const last = [...entries].reverse().find((entry) => entry.thread_id === threadId && entry.role === "agent" && entry.kind === "text");
         return ok({ handle, ...handleLifetime(body.i), agent_id: agentId, thread_id: threadId, finished: true, status: "idle", reply: last?.text ?? "" });
       }
@@ -1554,7 +1599,7 @@ function createAgentApiHandlers(env: {
       if (isRefusal(agentId)) return agentId;
       const agent = await reachable(caller, agentId);
       if (isRefusal(agent)) return agent;
-      const all = collectEntries(deps, deps.threads(caller, agentId));
+      const all = collectEntries(deps, deps.threads(caller, agentId), deps.language?.(caller));
       const page = pageBefore(all, null, FULL_TRANSCRIPT_MAX);
       const truncated = all.length > page.entries.length;
       return ok({
@@ -1581,7 +1626,7 @@ function createAgentApiHandlers(env: {
       if (isRefusal(cursor)) return cursor;
       const agent = await reachable(caller, agentId);
       if (isRefusal(agent)) return agent;
-      const all = collectEntries(deps, deps.threads(caller, agentId)).filter((entry) => entry.at <= upper && (typeof lower !== "number" || entry.at >= lower));
+      const all = collectEntries(deps, deps.threads(caller, agentId), deps.language?.(caller)).filter((entry) => entry.at <= upper && (typeof lower !== "number" || entry.at >= lower));
       const page = pageBefore(all, cursor, limit as number);
       return ok({ agent_id: agentId, entries: page.entries, next_cursor: page.next_cursor });
     },
@@ -1605,7 +1650,7 @@ function createAgentApiHandlers(env: {
       if (isRefusal(agent)) return agent;
       // Cold: the stored transcript only. No live state is read and nothing
       // of the agent is started (turnState is never called).
-      const page = pageBefore(collectEntries(deps, deps.threads(caller, agentId)), cursor, COLD_PAGE_SIZE);
+      const page = pageBefore(collectEntries(deps, deps.threads(caller, agentId), deps.language?.(caller)), cursor, COLD_PAGE_SIZE);
       return ok({ agent_id: agentId, entries: page.entries, next_cursor: page.next_cursor, cold: true });
     },
 
@@ -1874,9 +1919,10 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
     reply: string,
     after: CursorKey | null,
     status: TurnResult["status"],
+    language?: string,
   ): TurnResult => {
     const live = state === "idle" ? "queued" : state;
-    const { progress, wait_cursor } = buildProgress(body.t, deps.messages(body.t), { id: body.m, at: body.i }, live, reply, after);
+    const { progress, wait_cursor } = buildProgress(body.t, deps.messages(body.t), { id: body.m, at: body.i }, live, reply, after, language);
     return {
       handle,
       agent_id: body.a,
@@ -1903,10 +1949,16 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
     let followUpLooks = 0;
     // #3056: the answer line (by time) whose own turn this call saw running
     let answerTurnSeen: number | null = null;
+    const language = caller ? deps.language?.(caller) : undefined;
     for (;;) {
       const raw = deps.turnState(body.a, body.t);
       const messages = deps.messages(body.t);
-      const read = turnReply(messages, { id: body.m, at: body.i });
+      const read = turnReply(messages, { id: body.m, at: body.i }, language);
+      // #3217: cut by a restart and not answered yet: never "finished"
+      // with the words written before the cut. Past the time the start's
+      // resume watch takes, it did not resume.
+      const restartPending = read.restart === "pending" && (read.restartAt === null || now() - read.restartAt < CUT_TURN_ANSWER_MS);
+      const restartLost = read.restart === "pending" && !restartPending;
       // #2922: a card of THIS turn (created after the handle's time) the
       // caller must answer, here or down the handoff, is the answer, before
       // any "finished": the turn is blocked on it.
@@ -1919,7 +1971,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         ? (pending.blockedElsewhere || pending.engineBusy ? "running" : "idle")
         : raw;
       if (pending?.approvals.length) {
-        const result = unfinished(body, handle, "waiting", read.reply, after, "waiting_for_approval");
+        const result = unfinished(body, handle, "waiting", read.reply, after, "waiting_for_approval", language);
         return { ...result, approval: pending.approvals[0]!, approvals: pending.approvals };
       }
       const reviewing = pending?.reviewing === true;
@@ -1929,6 +1981,9 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         && now() - read.answerNotStartedAt < ANSWER_TURN_START_MS;
       if (state === "idle" && read.sawAnchor && reviewing) {
         // a reviewer still decides a card of this turn: not finished
+        idleLooks = 0;
+      } else if (state === "idle" && read.sawAnchor && restartPending) {
+        // #3217: the restart's resume has not answered yet: not finished
         idleLooks = 0;
       } else if (state === "idle" && read.sawAnchor && read.followUp === "answer" && followUpLooks < FOLLOW_UP_LOOKS) {
         // #3007: an ask_choice was answered and the person's answer line is
@@ -1953,30 +2008,39 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
           // the reply is collected: an AI client's conversation leaves the
           // person's list (server/threads/background-sweep.ts)
           deps.collected?.(body.a, body.t);
+          // #3217: a turn a restart cut and nothing resumed says so: the
+          // person sends the request again.
+          if (read.restart === "not_resumed" || restartLost) {
+            return { handle, agent_id: body.a, thread_id: body.t, finished: true, status: "interrupted", interrupted: true, resumed: false, reply: "",
+              error: read.failed ?? turnFailureWords(restartLineIn(language, TURN_NOT_RESUMED)) };
+          }
           // #3008: a turn that ended on a failed-turn row says so, never
           // "finished" with an empty reply.
           if (read.failed !== null) {
             return { handle, agent_id: body.a, thread_id: body.t, finished: true, status: "failed", reply: read.reply, error: read.failed };
           }
-          return { handle, agent_id: body.a, thread_id: body.t, finished: true, status: "finished", reply: read.reply };
+          return { handle, agent_id: body.a, thread_id: body.t, finished: true, status: "finished", reply: read.reply,
+            ...(read.restart === "resumed" ? { interrupted: true, resumed: true } : {}) };
         }
       } else if (state === "idle") {
         // The prompt is not in the conversation yet (queued behind a slot).
         idleLooks += 1;
         if (idleLooks >= IDLE_LOOKS_DONE * 25) {
-          return unfinished(body, handle, "queued", "", after, "queued");
+          return unfinished(body, handle, "queued", "", after, "queued", language);
         }
       } else {
         idleLooks = 0;
         if (state === "waiting" && !reviewing) {
           // A card waits for a person: waiting longer only burns the timeout.
-          return unfinished(body, handle, state, read.reply, after, "waiting_for_approval");
+          return unfinished(body, handle, state, read.reply, after, "waiting_for_approval", language);
         }
       }
       // Return still_working before the caller's (or gateway) ceiling so the
       // answer is a structured resume, never a killed tool call.
       if (signal?.aborted || now() >= deadline) {
-        const result = unfinished(body, handle, state === "idle" ? (reviewing ? "running" : "queued") : state, read.reply, after, "still_working");
+        const result = unfinished(body, handle, state === "idle" ? (reviewing ? "running" : "queued") : state, read.reply, after,
+          state === "idle" && restartPending ? "interrupted" : "still_working", language);
+        if (read.restart === "pending") return { ...result, interrupted: true };
         if (reviewing && result.progress) {
           return { ...result, progress: { ...result.progress, phase: "approval_under_review" }, recommended_wait_ms: AWAIT_REVIEW_WAIT_MS };
         }
@@ -1992,9 +2056,13 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
   const resultBody = (result: TurnResult): Record<string, unknown> => ({
     ...result,
     ...(result.finished
-      ? (result.reply ? {} : { note: "The turn finished without text." })
+      ? (result.status === "interrupted"
+        ? { note: "A server restart cut this turn and it did not resume (see error). Tell the person; send the prompt again only if they still want it." }
+        : result.reply ? {} : { note: "The turn finished without text." })
       : {
-          next: result.status === "waiting_for_approval" && result.approval
+          next: result.status === "interrupted"
+            ? "A server restart cut this turn; it is being resumed. Call await_turn again with this handle (wait_cursor as cursor). Never send the prompt again."
+            : result.status === "waiting_for_approval" && result.approval
             ? (result.approval.answerWith === "option"
               ? `Ask the person, then call sagax_approve with thread_id ${result.approval.threadId}, approval_id ${result.approval.id} and option (one of approval.choices, by id or label); then call await_turn again with this handle.`
               : `Ask the person, then call sagax_approve with thread_id ${result.approval.threadId}, approval_id ${result.approval.id} and decision allow or deny; then call await_turn again with this handle.`)
@@ -2021,7 +2089,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
     // One conversation only, when asked: one of the caller's own.
     const threads = wanted === null ? allThreads : allThreads.filter((thread) => thread.threadId === wanted);
     if (wanted !== null && !threads.length) return refuse(404, "unknown_thread", "No conversation of yours with this agent has that id. Use the thread_id send_prompt or await_turn returned.");
-    const all = collectEntries(deps, threads);
+    const all = collectEntries(deps, threads, deps.language?.(caller));
     const page = pageBefore(all, cursor, limit!);
     const body: Record<string, unknown> = { agent_id: agentId, status: agent.status, entries: page.entries, next_cursor: page.next_cursor };
     if (withThreads) {

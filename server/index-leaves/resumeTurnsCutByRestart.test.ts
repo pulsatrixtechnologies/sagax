@@ -1,6 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { RUNTIME_RESUME_GRACE_MS, TURN_NOT_RESUMED } from "../turns/interrupted-turns.ts";
-import { watchDirectResumes } from "./resumeTurnsCutByRestart.ts";
+import { failedTurnTool } from "../../shared/failed-turn.ts";
+import { RESTART_TURN_NOTE } from "../../shared/restart-words.ts";
+import { INTERRUPTED_OUTWARD } from "../runtime/tree.ts";
+import { heldCutTurnSpeakers, RUNTIME_RESUME_GRACE_MS, saveInterruptedTurns, TURN_NOT_RESUMED } from "../turns/interrupted-turns.ts";
+import { ENGINE_EXITED_SENTENCE } from "../../shared/engine-exit-words.ts";
+import { createResumeTurnsCutByRestart, watchDirectResumes } from "./resumeTurnsCutByRestart.ts";
+
+import { DATA_DIR as dataDir } from "../config.ts";
+
+vi.mock("../config.ts", async (original) => {
+  const { mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  return { ...(await original<Record<string, unknown>>()), DATA_DIR: mkdtempSync(join(tmpdir(), "cut-turns-")) };
+});
 
 // #3217: a chat turn the restart cut, resumed at start, that never answers.
 function fakeHost(answerOn?: number) {
@@ -63,5 +76,121 @@ describe("watchDirectResumes (#3217)", () => {
     await vi.advanceTimersByTimeAsync(RUNTIME_RESUME_GRACE_MS * 3);
     expect(host.startTurn).not.toHaveBeenCalled();
     expect(failed).not.toHaveBeenCalled();
+  });
+});
+
+// #3217: a chat turn running at a restart, on every path the start takes.
+describe("resumeTurnsCutByRestart (#3217)", () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(100_000); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  /** The conversation as the stop left it: the person's request, the bot's
+   * first words, a step already done, then the stop's note. */
+  function cutConversation(step: { name: string; output?: string }) {
+    return [
+      { id: "u1", role: "user", kind: "text", text: "Lis le réglage de sauvegarde et dis-moi sa valeur", at: 90_000 },
+      { id: "b1", role: "bot", kind: "text", text: "Je lis le réglage sans rien modifier.", at: 91_000 },
+      { id: "s1", role: "bot", kind: "activity", tool: { name: step.name, ok: true, itemId: "call-1", ...(step.output ? { output: step.output } : {}) }, at: 92_000 },
+      { id: "n1", role: "bot", kind: "activity", tool: { name: RESTART_TURN_NOTE, ok: true }, at: 95_500 },
+    ];
+  }
+
+  function bootHost(messages: any[], options: { runtimeHoldsAtBoot?: boolean; rootWaits?: boolean } = {}) {
+    let holds = options.runtimeHoldsAtBoot === true;
+    const host = {
+      turnSpeakers: new Map<string, unknown>(),
+      runtimeRootWaiting: () => options.rootWaits === true,
+      routines: { takeRestartResumes: () => [] },
+      coordinator: { continuesAfterRestart: () => false },
+      runtimeHoldsRoot: () => holds,
+      threadBusy: () => false,
+      store: {
+        messagesFor: () => messages,
+        taskByThread: () => ({ threadId: "t1" }),
+        appendMessage: (_threadId: string, message: any) => { messages.push({ ...message, at: Date.now() }); },
+      },
+      startTurn: vi.fn(async () => { messages.push({ role: "bot", kind: "text", text: "La valeur est 7 jours.", at: Date.now() }); }),
+      resumeHeldSteersAfterCrash: vi.fn(),
+      botForThread: () => ({ id: "b1" }),
+      mirrorBackgroundReply: vi.fn(),
+      personAttentionDeps: {},
+      release: () => { holds = false; },
+    };
+    return host;
+  }
+
+  it("a turn the runtime held but never ran is resumed with the person's request, and its answer arrives", async () => {
+    const messages = cutConversation({ name: "read_setting" });
+    saveInterruptedTurns(dataDir, [{ botId: "b1", threadId: "t1", at: 95_000, runtimeHeld: true }]);
+    const host = bootHost(messages, { runtimeHoldsAtBoot: true });
+    createResumeTurnsCutByRestart(() => host)();
+    host.release();
+    await vi.advanceTimersByTimeAsync(RUNTIME_RESUME_GRACE_MS);
+    expect(host.startTurn).toHaveBeenCalledTimes(1);
+    const prompt = String((host.startTurn.mock.calls[0] as unknown[])[1]);
+    expect(prompt).toContain("Lis le réglage de sauvegarde et dis-moi sa valeur");
+    expect(prompt).toContain("read_setting");
+    expect(messages.at(-1)).toMatchObject({ role: "bot", kind: "text", text: "La valeur est 7 jours." });
+    await vi.advanceTimersByTimeAsync(RUNTIME_RESUME_GRACE_MS * 3);
+    expect(messages.some((m) => m.tool?.name?.includes(TURN_NOT_RESUMED))).toBe(false);
+    expect(host.startTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("a runtime-held turn with a speaker gets its answer from the runtime's own rerun, as that person", async () => {
+    const messages = cutConversation({ name: "read_setting" });
+    const speaker = { origin: "person", principalId: "p1" };
+    saveInterruptedTurns(dataDir, [{ botId: "b1", threadId: "t1", at: 95_000, runtimeHeld: true, speaker }]);
+    // Read at load, before the runtime's first tick, without taking the record.
+    expect(heldCutTurnSpeakers(dataDir)).toEqual([{ threadId: "t1", speaker }]);
+    const host = bootHost(messages, { runtimeHoldsAtBoot: true });
+    createResumeTurnsCutByRestart(() => host)();
+    // The runtime's rerun (runRootTurn) speaks for turnSpeakers' entry; with
+    // none the engine gate fails closed and the turn ends on a failed row.
+    const rerun = host.turnSpeakers.get("t1");
+    (messages as any[]).push(rerun
+      ? { id: "r1", role: "bot", kind: "text", text: "La valeur est 7 jours.", at: Date.now() }
+      : { id: "r1", role: "bot", kind: "activity", tool: failedTurnTool(ENGINE_EXITED_SENTENCE), at: Date.now() });
+    host.release();
+    expect(rerun).toEqual(speaker);
+    await vi.advanceTimersByTimeAsync(RUNTIME_RESUME_GRACE_MS * 16);
+    expect(messages.at(-1)).toMatchObject({ role: "bot", kind: "text", text: "La valeur est 7 jours." });
+    expect(messages.some((m) => m.tool?.ok === false)).toBe(false);
+    expect(host.startTurn).not.toHaveBeenCalled();
+  });
+
+  it("a held root that waits on its teammates is not run a second time on the watch's last look", async () => {
+    const messages = cutConversation({ name: "read_setting" });
+    saveInterruptedTurns(dataDir, [{ botId: "b1", threadId: "t1", at: 95_000, runtimeHeld: true }]);
+    const host = bootHost(messages, { runtimeHoldsAtBoot: true, rootWaits: true });
+    createResumeTurnsCutByRestart(() => host)();
+    await vi.advanceTimersByTimeAsync(RUNTIME_RESUME_GRACE_MS * 20);
+    expect(host.startTurn).not.toHaveBeenCalled();
+    expect(messages.some((m) => m.tool?.ok === false)).toBe(false);
+  });
+
+  it("a direct cut turn resumes at once with the request it answers and the steps already done", async () => {
+    const messages = cutConversation({ name: "read_setting" });
+    saveInterruptedTurns(dataDir, [{ botId: "b1", threadId: "t1", at: 95_000 }]);
+    const host = bootHost(messages);
+    createResumeTurnsCutByRestart(() => host)();
+    expect(host.startTurn).toHaveBeenCalledTimes(1);
+    const prompt = String((host.startTurn.mock.calls[0] as unknown[])[1]);
+    expect(prompt).toContain("Lis le réglage de sauvegarde et dis-moi sa valeur");
+    expect(prompt).toContain("Steps that turn already completed");
+    expect(prompt).toContain("read_setting");
+    expect(messages.filter((m) => m.tool?.name === "Resuming after a restart")).toHaveLength(1);
+  });
+
+  it("a cut turn that already sent something is not run again and says what it did", async () => {
+    const messages = cutConversation({ name: "GMAIL_SEND_EMAIL" });
+    saveInterruptedTurns(dataDir, [{ botId: "b1", threadId: "t1", at: 95_000 }]);
+    const host = bootHost(messages);
+    createResumeTurnsCutByRestart(() => host)();
+    await vi.advanceTimersByTimeAsync(RUNTIME_RESUME_GRACE_MS * 3);
+    expect(host.startTurn).not.toHaveBeenCalled();
+    const lines = messages.filter((m) => m.tool?.ok === false).map((m) => String(m.tool!.name));
+    expect(lines).toEqual([failedTurnTool(lines[0].slice("error: ".length)).name]);
+    expect(lines[0]).toContain(INTERRUPTED_OUTWARD);
+    expect(lines[0]).toContain("GMAIL_SEND_EMAIL");
   });
 });

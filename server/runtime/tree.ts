@@ -6,31 +6,14 @@
 // wait on work it already returned.
 import type { RuntimeStore } from "./store.ts";
 import { terminal, type Assignment, type Owner, type TurnEvidence } from "./types.ts";
+import { INTERRUPTED_OUTWARD, outwardKind, outwardSentence } from "../../shared/restart-words.ts";
 
-/** A turn a restart cut runs again once; cut again, it ends with this. */
-export const CUT_TWICE = "Interrupted by another Sagax restart after resuming once; not resumed again. Some of its steps may already have taken effect.";
-
-/** A cut turn that already acted outward is not run again: its outcome
- * detail opens with this (the host's restart line and a requester's restart
- * note read it), then names what it did. */
-export const INTERRUPTED_OUTWARD = "Interrupted by a Sagax restart after it already";
+// The restart lines live with the other restart words, so a reader's
+// language can say them (shared/restart-words.ts).
+export { CUT_TWICE, INTERRUPTED_OUTWARD } from "../../shared/restart-words.ts";
 
 const OUTWARD_SHOWN = 4;
 const OUTWARD_LABEL_MAX = 48;
-
-/** A short label of an outward action as a verb phrase: the host names the
- * tool ("GMAIL_SEND_EMAIL", "git push"); the person reads what it did. */
-function describeOutward(label: string): string {
-  // Tool slugs join words with underscores, which are word characters, so
-  // the money words are matched bare rather than on word boundaries.
-  if (/\bgit\s+push\b/i.test(label)) return `pushed (${label})`;
-  if (/\bgit\s+commit\b/i.test(label)) return `committed (${label})`;
-  if (/pay|charge|refund|transfer/i.test(label)) return `made a payment (${label})`;
-  if (/mail/i.test(label)) return `sent an email (${label})`;
-  if (/send|message|reply/i.test(label)) return `sent a message (${label})`;
-  if (/post|publish|tweet/i.test(label)) return `posted (${label})`;
-  return `completed an outward action (${label})`;
-}
 
 /** The outcome detail of a cut turn that acted outward (contract §5):
  * what it already did, and that nothing is done twice. */
@@ -41,9 +24,8 @@ export function outwardDetail(labels: readonly string[]): string {
     if (short) seen.add(short);
   }
   const all = [...seen];
-  const shown = all.slice(0, OUTWARD_SHOWN).map(describeOutward);
-  const more = all.length > OUTWARD_SHOWN ? ` and ${all.length - OUTWARD_SHOWN} more` : "";
-  return `${INTERRUPTED_OUTWARD} ${shown.join(", ")}${more}; not resumed, so nothing is done twice.`;
+  const shown = all.slice(0, OUTWARD_SHOWN).map((label) => ({ kind: outwardKind(label), label }));
+  return outwardSentence(shown, Math.max(0, all.length - OUTWARD_SHOWN));
 }
 
 /** Whether a restart ended this node because its cut turn had acted outward. */

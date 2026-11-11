@@ -18523,7 +18523,17 @@
       "proactive.briefOffer.title": "adbc71057a8ffa6b113963b2540a40d78d8b10a138d8b7cf09e34ee604d06287",
       "proactive.briefOffer.body": "f56b69fdecc39611b7c3786df6760d8e8be9bc16b41d1270a3c51dfe9fc87d10",
       "proactive.briefOffer.yes": "85a39ab345d672ff8ca9b9c6876f3adcacf45ee7c1e2dbd2408fd338bd55e07e",
-      "proactive.briefOffer.notNow": "a0e63d7c7125d29af84d6919af5550529be77c327324940c98c4b2cb13a99c8c"
+      "proactive.briefOffer.notNow": "a0e63d7c7125d29af84d6919af5550529be77c327324940c98c4b2cb13a99c8c",
+      "chat.restart.outward": "4d75f0f3ca61fe09edcaf275271f3fb42c4d03e7e883c2ba5697e0d664348d3c",
+      "chat.restart.outward.pushed": "89a1a69db628fc9b3412474d72ad2f9a2be27cb4ffa6aeca1d46151b5f694e27",
+      "chat.restart.outward.committed": "3c469d4d5659aac3b6f614005e230f794abf8b912f1cbaeb92b331c5197676fe",
+      "chat.restart.outward.payment": "ad8ee9a2c1563eaba292ace09ee48a7f53d19eb3e7c70c29ff722dd7cd1107d6",
+      "chat.restart.outward.email": "073982692c40ef1041e8b8d64fffc1c7b407506de6955b204c81950f1ec66765",
+      "chat.restart.outward.message": "9fdf2b294285b3818450abc708104f681c1b4322ee6abde9fda93f4866d563d0",
+      "chat.restart.outward.posted": "67c8f95e1b6b129e2786bf2df8590adfb4ec405d1e9392f6fbfc13f771a45b76",
+      "chat.restart.outward.other": "1e520d184b3cc3d6b3ab2942e64238426c9ef9f5b714b36670cd7e05c7ce7f2c",
+      "chat.restart.outward.more": "1a2612705dd797842beda42948a2979b5b6c763ee71acf4f87868f5c2c254420",
+      "chat.restart.cutTwice": "a5b3a839efc1d2b8b1468258ca79df98249cc9bd19471dacae0ed512b5a65332"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

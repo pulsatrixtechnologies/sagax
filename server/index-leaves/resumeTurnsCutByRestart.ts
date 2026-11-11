@@ -5,7 +5,8 @@ import { TURN_CUT_BY_RESTART, TURN_RESUME_FAILED_PREFIX } from "../../shared/res
 import { DATA_DIR } from "../config.ts";
 import { ROUTINE_RESTARTED, ROUTINE_RESUME_PROMPT } from "../routines/routines.ts";
 import { migrateLegacyHeldSteers, takeHeldSteersForThread, resumePromptWithHeld } from "../turns/held-steers.ts";
-import { directResumeStep, type DirectResumeStep, RUNTIME_RESUME_GRACE_MS, runtimeResumeVerdict, takeInterruptedTurns, TURN_NOT_RESUMED, TURN_NOT_RESUMED_NEWER, TURN_RESUME_PROMPT } from "../turns/interrupted-turns.ts";
+import { outwardDetail } from "../runtime/tree.ts";
+import { cutTurnContext, cutTurnResumePrompt, directResumeStep, type DirectResumeStep, restorableSpeakers, RUNTIME_RESUME_GRACE_MS, runtimeResumeVerdict, takeInterruptedTurns, TURN_NOT_RESUMED, TURN_NOT_RESUMED_NEWER } from "../turns/interrupted-turns.ts";
 export type Host = Record<string, any>;
 
 export function createResumeTurnsCutByRestart(getHost: () => Host): any {
@@ -37,17 +38,26 @@ function resumeTurnsCutByRestart(): void {
   }
   const failed = (threadId: string, why: string) =>
     host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: failedTurnTool(why) });
+  // #3217: the runtime reruns the roots it held as the person each spoke
+  // for (restored at load, before its first tick; again here when that
+  // read missed), never as nobody.
+  for (const { threadId, speaker } of restorableSpeakers(cut.resume)) if (host.turnSpeakers && !host.turnSpeakers.has(threadId)) host.turnSpeakers.set(threadId, speaker);
   for (const turn of cut.stale) if (host.store.taskByThread(turn.botId, turn.threadId)) failed(turn.threadId, TURN_CUT_BY_RESTART);
-  // #2602: the runtime resumes these itself; a turn that never comes back
-  // says so in its conversation instead of leaving the promise standing.
-  const promised = cut.resume.filter((turn) => turn.runtimeHeld && host.store.taskByThread(turn.botId, turn.threadId));
-  if (promised.length) watchRuntimeResumes(host, promised, failed);
   const resumedThreads = new Set<string>();
-  const launched: DirectResume[] = [];
+  // #3217: every cut turn is watched until it answers or says it did not
+  // resume: the ones this start resumes, and the ones the runtime accounts
+  // for (#2602), which are resumed here when the runtime never runs them.
+  const watched: DirectResume[] = [];
   for (const turn of cut.resume) {
-    if (turn.runtimeHeld || !host.store.taskByThread(turn.botId, turn.threadId) || host.coordinator.continuesAfterRestart(turn.threadId) || host.runtimeHoldsRoot(turn.threadId)) continue;
+    if (!host.store.taskByThread(turn.botId, turn.threadId)) continue;
+    if (turn.runtimeHeld || host.coordinator.continuesAfterRestart(turn.threadId) || host.runtimeHoldsRoot(turn.threadId)) {
+      watched.push({ ...turn, prompt: "", runtime: true });
+      continue;
+    }
     // A newer request already runs here: the cut turn is not resumed, and the conversation says so.
     if (host.threadBusy(turn.botId, turn.threadId)) { failed(turn.threadId, TURN_NOT_RESUMED_NEWER); continue; }
+    const prompt = resumePromptFor(host, turn, failed);
+    if (prompt === null) continue;
     host.store.appendMessage(turn.threadId, { role: "bot", kind: "activity", tool: { name: "Resuming after a restart", ok: true } });
     // Messages accepted into the cut turn stay answered once: fold them into
     // this resume (D2), then drop the durable rows so crash recovery does not
@@ -55,15 +65,14 @@ function resumeTurnsCutByRestart(): void {
     let held: ReturnType<typeof takeHeldSteersForThread> = [];
     try { held = takeHeldSteersForThread(DATA_DIR, turn.threadId); }
     catch (error) { console.warn(`held-steers: could not take for resume: ${error instanceof Error ? error.message : String(error)}`); }
-    const prompt = resumePromptWithHeld(TURN_RESUME_PROMPT, held);
     resumedThreads.add(turn.threadId);
-    const resume: DirectResume = { ...turn, prompt };
+    const resume: DirectResume = { ...turn, prompt: resumePromptWithHeld(prompt, held) };
     launchDirectResume(host, resume, failed);
-    launched.push(resume);
+    watched.push(resume);
   }
   // #3217: a resumed chat turn that ends without a word (an early return,
   // a setup cut) is relaunched once, then says so in its conversation.
-  if (launched.length) watchDirectResumes(host, launched, failed);
+  if (watched.length) watchDirectResumes(host, watched, failed);
   // Crash path (no interrupted-turns.json): held rows that no resume took
   // become one follow-up turn per thread, like busy lines draining together.
   host.resumeHeldSteersAfterCrash(resumedThreads);
@@ -71,7 +80,20 @@ function resumeTurnsCutByRestart(): void {
   return resumeTurnsCutByRestart;
 }
 
-type DirectResume = { botId: string; threadId: string; at: number; speaker?: unknown; prompt: string; relaunched?: boolean };
+type DirectResume = { botId: string; threadId: string; at: number; speaker?: unknown; prompt: string; relaunched?: boolean;
+  /** The runtime accounts for this turn (it resumes it itself): only watched until it is seen lost. */
+  runtime?: boolean; runtimeHeld?: boolean };
+
+/** #3217: the prompt that resumes a cut chat turn: the request it answers
+ * and the steps it already did (cutTurnResumePrompt). A cut turn that
+ * already sent, posted, pushed or paid is not run again, as the runtime's
+ * restart policy does (contract §5): its conversation says what it did, and
+ * the answer is null. */
+function resumePromptFor(host: Host, turn: { threadId: string; at: number }, failed: (threadId: string, why: string) => void): string | null {
+  const context = cutTurnContext(host.store.messagesFor(turn.threadId) ?? [], turn.at);
+  if (context.outward.length) { failed(turn.threadId, outwardDetail(context.outward)); return null; }
+  return cutTurnResumePrompt(context);
+}
 
 function launchDirectResume(host: Host, turn: DirectResume, failed: (threadId: string, why: string) => void): void {
   void host.startTurn(turn.botId, turn.prompt, {
@@ -81,37 +103,49 @@ function launchDirectResume(host: Host, turn: DirectResume, failed: (threadId: s
 }
 
 /** #3217: the 0.8.77 routine resume, extended to chat turns. After a grace
- * period each directly resumed turn is checked: still running waits, an
- * answer is done, nothing at all starts the turn once more (a visible
- * "Resuming after a restart" row), and a second silence posts
+ * period each cut turn is checked: still running waits, an answer or a
+ * failed-turn row is done, nothing at all starts the turn once more (a
+ * visible "Resuming after a restart" row), and a second silence posts
  * TURN_NOT_RESUMED in the thread and, for a background (MCP) thread, a
- * trace in the bot's own chat. */
+ * trace in the bot's own chat. A turn the runtime holds is waited on; one
+ * it never ran by the last look is lost like any other. */
 export function watchDirectResumes(host: Host, turns: DirectResume[], failed: (threadId: string, why: string) => void, tries = 15): void {
   const timer = setTimeout(() => {
     const waiting: DirectResume[] = [];
+    let relaunchedNow = false;
     for (const turn of turns) {
       let step: DirectResumeStep;
       try {
+        const held = turn.runtime ? Boolean(host.runtimeHoldsRoot(turn.threadId) || host.coordinator.continuesAfterRestart(turn.threadId)) : false;
+        // A held root that is live and waits (on teammates it handed work
+        // to, on a card) is the runtime's to resume: never run it a second
+        // time beside it, even on the last look.
+        const rootWaits = held && Boolean(host.runtimeRootWaiting?.(turn.threadId));
         step = directResumeStep(runtimeResumeVerdict(turn as any, {
-          held: false,
+          held,
           busy: Boolean(host.threadBusy(turn.botId, turn.threadId)),
           messages: host.store.messagesFor(turn.threadId) ?? [],
-        }), Boolean(turn.relaunched));
+        }, tries <= 1 && !rootWaits), Boolean(turn.relaunched));
       } catch { continue; }
       if (step === "wait") waiting.push(turn);
       else if (step === "relaunch") {
         if (!host.store.taskByThread(turn.botId, turn.threadId)) continue;
-        console.error(`[restart-resume] thread=${turn.threadId} resumed turn ended without an answer: starting it again`);
+        const prompt = turn.prompt || resumePromptFor(host, turn, failed);
+        if (prompt === null) continue;
+        console.error(`[restart-resume] thread=${turn.threadId} cut turn has no answer: starting it again`);
         host.store.appendMessage(turn.threadId, { role: "bot", kind: "activity", tool: { name: "Resuming after a restart", ok: true } });
-        const again = { ...turn, relaunched: true };
+        const again: DirectResume = { ...turn, prompt, relaunched: true, runtime: false };
         launchDirectResume(host, again, failed);
         waiting.push(again);
+        relaunchedNow = true;
       } else if (step === "report") {
         failed(turn.threadId, TURN_NOT_RESUMED);
         reportInBotChat(host, turn);
       }
     }
-    if (waiting.length && tries > 1) watchDirectResumes(host, waiting, failed, tries - 1);
+    // A turn started again on the last look still gets its own looks.
+    const next = tries > 1 ? tries - 1 : relaunchedNow ? 2 : 0;
+    if (waiting.length && next > 0) watchDirectResumes(host, waiting, failed, next);
   }, RUNTIME_RESUME_GRACE_MS);
   timer.unref?.();
 }
@@ -126,26 +160,4 @@ function reportInBotChat(host: Host, turn: DirectResume): void {
   } catch (error) {
     console.error(`[restart-resume] not relayed: ${error instanceof Error ? error.message.slice(0, 160) : "error"}`);
   }
-}
-
-/** Check, after a grace period, each turn the runtime promised to resume;
- * a thread still held or busy is checked again, up to half an hour. */
-function watchRuntimeResumes(host: Host, turns: any[], failed: (threadId: string, why: string) => void, tries = 15): void {
-  const timer = setTimeout(() => {
-    const waiting = [];
-    for (const turn of turns) {
-      let verdict: string;
-      try {
-        verdict = runtimeResumeVerdict(turn, {
-          held: Boolean(host.runtimeHoldsRoot(turn.threadId) || host.coordinator.continuesAfterRestart(turn.threadId)),
-          busy: Boolean(host.threadBusy(turn.botId, turn.threadId)),
-          messages: host.store.messagesFor(turn.threadId) ?? [],
-        });
-      } catch { continue; }
-      if (verdict === "lost") failed(turn.threadId, TURN_NOT_RESUMED);
-      else if (verdict === "wait") waiting.push(turn);
-    }
-    if (waiting.length && tries > 1) watchRuntimeResumes(host, waiting, failed, tries - 1);
-  }, RUNTIME_RESUME_GRACE_MS);
-  timer.unref?.();
 }

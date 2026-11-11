@@ -8,7 +8,9 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
+import { failedTurnCause } from "../../shared/failed-turn.ts";
 import { writeFileAtomic } from "../atomic.ts";
+import { outwardActions } from "./turn-outcome.ts";
 
 export interface InterruptedTurn {
   botId: string;
@@ -37,14 +39,88 @@ export function turnResumedSince(messages: readonly { role?: string; kind?: stri
   return false;
 }
 
-/** What to do now with a turn the runtime promised to resume: wait while it
- * is held or busy, say so once when it never came back, else nothing. */
+type CutRow = { role?: string; kind?: string; at?: number; tool?: { name?: unknown; ok?: unknown } };
+
+/** #3217: whether a turn cut at `cutAt` came to an end the person can read:
+ * an answer (turnResumedSince), or a failed-turn row saying why it stopped
+ * (the runtime ended it after an outward action, the resume failed to
+ * start). Nothing more is owed to such a turn. */
+export function cutTurnSettled(messages: readonly CutRow[], cutAt: number): boolean {
+  if (turnResumedSince(messages, cutAt)) return true;
+  for (const message of messages) {
+    if (typeof message.at !== "number" || message.at <= cutAt) continue;
+    if (message.role === "user") return false;
+    if (message.role === "bot" && message.kind === "activity" && message.tool?.ok === false
+      && typeof message.tool.name === "string" && failedTurnCause(message.tool.name) !== null) return true;
+  }
+  return false;
+}
+
+/** What to do now with a turn cut by the last stop: wait while it is held
+ * or busy, call it lost when nothing came back, else nothing. On the
+ * watch's last look (`final`) a turn the runtime still holds without
+ * running it is lost too: a hold that never runs is no answer. */
 export function runtimeResumeVerdict(turn: InterruptedTurn, view: {
-  held: boolean; busy: boolean; messages: readonly { role?: string; kind?: string; at?: number }[];
-}): "wait" | "resumed" | "lost" {
-  if (turnResumedSince(view.messages, turn.at)) return "resumed";
-  if (view.held || view.busy) return "wait";
+  held: boolean; busy: boolean; messages: readonly CutRow[];
+}, final = false): "wait" | "resumed" | "lost" {
+  if (cutTurnSettled(view.messages, turn.at)) return "resumed";
+  if (view.busy) return "wait";
+  if (view.held && !final) return "wait";
   return "lost";
+}
+
+/** The most steps a resume prompt names, and how long each label is. */
+const RESUME_STEPS_MAX = 30;
+const RESUME_STEP_CHARS = 120;
+/** The longest request a resume prompt quotes. */
+const RESUME_REQUEST_CHARS = 6_000;
+
+export interface CutTurnContext {
+  /** The person's words that started the cut turn. */
+  request?: string;
+  /** The tool steps the cut turn completed, oldest first. */
+  steps: string[];
+  /** Outward actions it completed (sends, posts, pushes, payments). */
+  outward: string[];
+}
+
+/** #3217: what a cut chat turn was asked and already did, read from its
+ * conversation: the person's line that started it (the last one at or
+ * before the cut), the steps recorded after it, and the outward actions
+ * among them (the runtime's own classifier, contract §5). */
+export function cutTurnContext(messages: readonly CutRow[], cutAt: number): CutTurnContext {
+  let start = -1;
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index]! as CutRow & { text?: unknown };
+    if (typeof message.at === "number" && message.at > cutAt) continue;
+    if (message.role === "user" && (message.kind ?? "text") === "text" && typeof message.text === "string" && message.text.trim()) { start = index; break; }
+  }
+  const head = start >= 0 ? (messages[start] as { text?: string }).text!.trim() : undefined;
+  const rows = messages.slice(start + 1).filter((message) => typeof message.at !== "number" || message.at <= cutAt);
+  const steps: string[] = [];
+  for (const row of rows as Array<CutRow & { tool?: { name?: unknown; ok?: unknown; itemId?: unknown } }>) {
+    if (row.role !== "bot" || row.kind !== "activity" || !row.tool || row.tool.ok === false || row.tool.itemId === undefined) continue;
+    if (typeof row.tool.name !== "string" || !row.tool.name.trim()) continue;
+    const label = row.tool.name.replace(/\s+/g, " ").trim();
+    steps.push(label.length > RESUME_STEP_CHARS ? `${label.slice(0, RESUME_STEP_CHARS - 1)}…` : label);
+  }
+  return {
+    ...(head ? { request: head.length > RESUME_REQUEST_CHARS ? `${head.slice(0, RESUME_REQUEST_CHARS)}\n[...]` : head } : {}),
+    steps: steps.slice(-RESUME_STEPS_MAX),
+    outward: outwardActions(rows as never),
+  };
+}
+
+/** #3217: the resume prompt of a cut chat turn, on any engine: the request
+ * it answers (an engine whose session did not survive the restart has no
+ * other copy of it) and the steps already done, so none runs twice. */
+export function cutTurnResumePrompt(context: CutTurnContext, base = TURN_RESUME_PROMPT): string {
+  const parts = [base];
+  if (context.request) parts.push(`The person's request that turn was answering:\n${context.request}`);
+  if (context.steps.length) {
+    parts.push(`Steps that turn already completed (their results are in this conversation; do not run again a step that changed something): ${context.steps.join("; ")}`);
+  }
+  return parts.join("\n\n");
 }
 
 export type DirectResumeStep = "wait" | "done" | "relaunch" | "report";
@@ -109,15 +185,20 @@ export function saveInterruptedTurns(dataDir: string, turns: readonly Interrupte
  * is resumed at most once. */
 export function takeInterruptedTurns(dataDir: string, now = Date.now()): { resume: InterruptedTurn[]; stale: InterruptedTurn[] } {
   const path = join(dataDir, FILE);
+  if (!existsSync(path)) return { resume: [], stale: [] };
+  const out = readInterruptedTurns(path, now);
+  rmSync(path, { force: true });
+  return out;
+}
+
+function readInterruptedTurns(path: string, now: number): { resume: InterruptedTurn[]; stale: InterruptedTurn[] } {
   const none = { resume: [], stale: [] };
-  if (!existsSync(path)) return none;
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(path, "utf8"));
   } catch {
     parsed = null;
   }
-  rmSync(path, { force: true });
   const turns = (parsed as { turns?: unknown } | null)?.turns;
   if (!Array.isArray(turns)) return none;
   const seen = new Set<string>();
@@ -131,5 +212,23 @@ export function takeInterruptedTurns(dataDir: string, now = Date.now()): { resum
     const turn = { botId: t.botId, threadId: t.threadId, at: t.at, ...(speaker ? { speaker } : {}), ...(t.runtimeHeld === true ? { runtimeHeld: true } : {}) };
     (now - t.at > INTERRUPTED_TURN_MAX_AGE_MS || now < t.at - 60_000 ? out.stale : out.resume).push(turn);
   }
+  return out;
+}
+
+/** #3217: who each cut turn the runtime holds spoke for, read without
+ * taking the record (the start's resume still takes it). The runtime's own
+ * rerun of such a root speaks for that person; a process that just started
+ * knows nobody, and the engine gate fails closed without it. Read before
+ * the runtime's first tick. */
+export function heldCutTurnSpeakers(dataDir: string, now = Date.now()): Array<{ threadId: string; speaker: Record<string, unknown> }> {
+  const path = join(dataDir, FILE);
+  if (!existsSync(path)) return [];
+  return restorableSpeakers(readInterruptedTurns(path, now).resume);
+}
+
+/** The cut turns (runtime-held, with a saved speaker) whose speaker a new process restores. */
+export function restorableSpeakers(turns: readonly InterruptedTurn[]): Array<{ threadId: string; speaker: Record<string, unknown> }> {
+  const out: Array<{ threadId: string; speaker: Record<string, unknown> }> = [];
+  for (const turn of turns) if (turn.runtimeHeld && turn.speaker) out.push({ threadId: turn.threadId, speaker: turn.speaker });
   return out;
 }

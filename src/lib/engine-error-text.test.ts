@@ -8,8 +8,8 @@ import {
   NO_ENGINE_PERSON,
 } from "../../shared/bot-engine-error";
 import { MODEL_ACCESS_DISABLED_MESSAGE } from "../../shared/model-access-disabled";
-import { PARALLEL_NOT_STARTED, TURN_CUT_BY_RESTART, TURN_RESUME_FAILED_PREFIX } from "../../shared/restart-words";
-import { engineErrorMessage, localizedEngineCause } from "./engine-error-text";
+import { CUT_TWICE, PARALLEL_NOT_STARTED, TURN_CUT_BY_RESTART, TURN_RESUME_FAILED_PREFIX, outwardSentence } from "../../shared/restart-words";
+import { engineErrorMessage, localizedEngineCause, restartSentence } from "./engine-error-text";
 
 afterEach(() => setLocale("en"));
 
@@ -63,5 +63,22 @@ describe("the lines a restart leaves, in the app's language", () => {
   it("keeps the English words equal to the server's", () => {
     setLocale("en");
     expect(localizedEngineCause(TURN_CUT_BY_RESTART)).toBe(en["chat.restart.cut"]);
+  });
+});
+
+describe("#3217 a cut turn that already acted outward, in the app's language", () => {
+  const line = outwardSentence([{ kind: "email", label: "GMAIL_SEND_EMAIL" }, { kind: "payment", label: "STRIPE_CREATE_REFUND" }], 1);
+
+  it("keeps the English catalog equal to the line the server stores", () => {
+    setLocale("en");
+    expect(restartSentence(line)).toBe(line);
+    expect(restartSentence(CUT_TWICE)).toBe(CUT_TWICE);
+  });
+
+  it("says the line and what it did in French", () => {
+    setLocale("fr");
+    expect(restartSentence(line)).toBe(
+      "Interrompu par un redémarrage de Sagax après avoir déjà envoyé un courriel (GMAIL_SEND_EMAIL), fait un paiement (STRIPE_CREATE_REFUND) et 1 de plus ; pas repris, pour que rien ne soit fait deux fois.");
+    expect(restartSentence(CUT_TWICE)).toContain("Interrompu par un autre redémarrage de Sagax");
   });
 });

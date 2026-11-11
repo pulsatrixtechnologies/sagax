@@ -63,6 +63,9 @@ export interface UnattendedHostRow {
   os?: UnattendedHostOs;
   /** What bots may do with this host, for the person asking (#2723). */
   access?: UnattendedHostAccess;
+  /** Perspicax lists a session open on this computer (`active_session` is
+   * set, whatever its shape): true then, absent otherwise (#3564). */
+  activeSession?: true;
   /** Which of the person's bots may use this host (#2957): null or absent =
    * all bots; otherwise the ids of the allowed bots. */
   bots?: string[] | null;
@@ -104,6 +107,14 @@ function scopeOf(value: unknown): UnattendedHostScope {
   return UNATTENDED_HOST_SCOPES.find((scope) => scope === value) ?? "full-control";
 }
 
+/** An `active_session` that names a session: a non-empty string, a
+ * non-empty object or true. Its shape is Perspicax's: nothing is read inside. */
+function hasSession(value: unknown): boolean {
+  if (typeof value === "string") return value.trim() !== "";
+  if (isObject(value)) return Object.keys(value).length > 0;
+  return value === true;
+}
+
 /** One Perspicax host row (snake_case, table `remote_support_hosts`), or null
  * when it has no valid host id or no dates. */
 export function parseUnattendedHost(raw: unknown, now: number): UnattendedHostRow | null {
@@ -132,6 +143,7 @@ export function parseUnattendedHost(raw: unknown, now: number): UnattendedHostRo
     revokedAt,
     state,
     ...(osOf(raw.os ?? raw.platform) ? { os: osOf(raw.os ?? raw.platform)! } : {}),
+    ...(hasSession(raw.active_session) ? { activeSession: true as const } : {}),
   };
 }
 

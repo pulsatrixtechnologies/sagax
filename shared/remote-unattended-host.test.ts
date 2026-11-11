@@ -20,6 +20,15 @@ const row = (over: Record<string, unknown> = {}) => ({
 });
 
 describe("enrolled hosts", () => {
+  it("reads active_session as a flag without looking inside it (#3564)", () => {
+    const flag = (value: unknown) => parseUnattendedHosts([row({ active_session: value })], NOW)[0]!.activeSession;
+    expect(flag(true)).toBe(true);
+    expect(flag({ code_hash: "x" })).toBe(true);
+    expect(flag("abc")).toBe(true);
+    for (const none of [false, null, "", "  ", {}, 0]) expect(flag(none)).toBeUndefined();
+    expect(parseUnattendedHosts([row()], NOW)[0]).not.toHaveProperty("activeSession");
+  });
+
   it("parses the contract's host rows and derives the state", () => {
     const hosts = parseUnattendedHosts({ hosts: [
       row({ host_id: B, hostname: "MBP", revoked_at: "2026-10-20T00:00:00Z" }),

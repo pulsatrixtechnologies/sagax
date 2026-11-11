@@ -172,6 +172,24 @@ export function hostExecWorstCaseMs(commandMs: number = HOST_COMMAND_TIME_MAX_MS
 export function hostCallWorstCaseMs(commandMs: number = HOST_COMMAND_TIME_MAX_MS): number {
   return hostExecWorstCaseMs(commandMs) + 3 * HOST_GATEWAY_LIST_MS + 3 * HOST_GATEWAY_CLOSE_MS + HOST_GATEWAY_OPEN_MS + 2 * HOST_OS_READ_WAIT_MAX_MS;
 }
+/** The longest the sessions left by an earlier run of this server, and all
+ * of them at a server stop, are waited for (#3564): one session close (the
+ * running call stopped, the session's stop command, the gateway close).
+ * They run before the first open of a person, or at a stop, and a person has
+ * no session of this run in the worst path of `hostCallWorstCaseMs` (a known
+ * session means that first open already ran), so this is not in that sum;
+ * `hostFirstCallWorstCaseMs` holds the call that carries it. */
+export const HOST_LEFTOVER_CLOSE_MS = 2 * (KILL_GRACE_MS + KILL_RELEASE_MS) + SESSION_STOP_TIME_MS + HOST_GATEWAY_CLOSE_MS;
+/** The longest one `exec` call can take when it is the first of its person
+ * on this run (#3564): it ends the sessions left by the earlier run, opens,
+ * waits for the host, and the command runs on the new session. */
+export function hostFirstCallWorstCaseMs(commandMs: number = HOST_COMMAND_TIME_MAX_MS): number {
+  const stop = KILL_GRACE_MS + KILL_RELEASE_MS;
+  const probe = TUNNEL_PROBE_WAIT_MAX_MS + TUNNEL_PROBE_TIME_MS + stop;
+  const close = stop + SESSION_STOP_TIME_MS + stop;
+  const command = TUNNEL_QUEUE_WAIT_MAX_MS + commandMs + stop;
+  return HOST_LEFTOVER_CLOSE_MS + 3 * HOST_GATEWAY_LIST_MS + HOST_GATEWAY_OPEN_MS + HOST_CONNECT_WAIT_MS + CONNECT_POLL_MS + HOST_OS_READ_WAIT_MAX_MS + command + probe + close + HOST_GATEWAY_CLOSE_MS;
+}
 const VM_POLL_MS = 15_000;
 const VM_POLL_MAX_MS = 25 * 60_000;
 
@@ -211,6 +229,10 @@ interface SessionDeps {
   /** Whether the session's tunnel still answers (one ping in the tunnel's
    * queue, #3492): null when it could not be asked. */
   reachable?(input: { principalId: string; botId: string; id: string }): Promise<boolean | null>;
+  /** The person's bot-computer sessions an earlier run of this server left
+   * connected (#3564): their support code is in the session store, so
+   * `close` ends them at the gateway like any other. */
+  inherited?(principalId: string): { botId: string; id: string }[];
 }
 
 interface HostsDeps {
@@ -452,7 +474,29 @@ export function createHostComputerRouter(deps: {
     const known = open.get(k);
     if (!known || known.sessionId !== sessionId) return;
     open.delete(k);
+    log("host-computer: closing a session that ended or no longer answers");
     await deps.sessions.close(known.principalId, known.botId, known.sessionId).catch(() => null);
+  }
+
+  /** End the person's sessions an earlier run of this server left (#3564):
+   * one session per person and host, and the host stays in the old session
+   * until it ends. They close through the usual close, which also ends them
+   * at the gateway with the code kept in the session store. Only this
+   * person's own; bounded. */
+  async function endInherited(principalId: string): Promise<void> {
+    const left = deps.sessions.inherited?.(principalId) ?? [];
+    if (!left.length) return;
+    log(`host-computer: closing ${left.length} session(s) left by an earlier run of this server`);
+    await withinLimit(Promise.all(left.map((one) => Promise.resolve(deps.sessions.close(principalId, one.botId, one.id)).catch(() => null))), HOST_LEFTOVER_CLOSE_MS, null);
+  }
+
+  /** At a server stop: close every session this run holds (#3564), bounded. */
+  async function closeAll(): Promise<number> {
+    const all = [...open.values()];
+    open.clear();
+    if (all.length) log(`host-computer: server stopping, closing ${all.length} session(s)`);
+    await withinLimit(Promise.all(all.map((row) => Promise.resolve(deps.sessions.close(row.principalId, row.botId, row.sessionId)).catch(() => null))), HOST_LEFTOVER_CLOSE_MS, null);
+    return all.length;
   }
 
   /** Open (or reuse) the person's quiet session on that host. Any bot of
@@ -499,11 +543,16 @@ export function createHostComputerRouter(deps: {
       if (!threadId) return { error: "That bot has no conversation to open the session on." };
       // the host takes the session after this: its life there ends no earlier
       const askedAt = now();
+      await endInherited(principalId);
       const outcome = await gateway.open({ principalId }, hostId, {
         seatFor: { botId, threadId },
         onSession: (id) => deps.sessions.markQuiet(id),
       });
-      if (!outcome.ok) return { error: outcome.message };
+      if (!outcome.ok) {
+        log(`host-computer: open refused (${outcome.error})`);
+        return { error: outcome.message };
+      }
+      log(`host-computer: session opened, waiting up to ${HOST_CONNECT_WAIT_MS / 1000}s for the host to join${outcome.otherSession ? " (the host already listed a session)" : ""}`);
       deps.sessions.markQuiet(outcome.session);
       const deadline = now() + HOST_CONNECT_WAIT_MS;
       while (now() < deadline) {
@@ -516,9 +565,13 @@ export function createHostComputerRouter(deps: {
       // The host never took it: closed at the gateway, so it does not count
       // in the gateway's limit of waiting sessions (#3505), and here in case
       // its row came just now.
+      log(`host-computer: gave up, the host did not join in ${HOST_CONNECT_WAIT_MS / 1000}s${outcome.otherSession ? "; another session was already open on it" : ""}; closing the session`);
       await gateway.closeUnconnected({ principalId }, outcome.session);
       await deps.sessions.close(principalId, botId, outcome.session).catch(() => null);
-      return { error: "The host did not answer in time. It may be asleep or offline; try again in a moment." };
+      log("host-computer: session closed (the host never joined)");
+      return { error: outcome.otherSession
+        ? "A session is already open on that computer (probably left by an earlier run of this server), so it did not join a new one. That session ends by itself within 30 minutes; try again then."
+        : "The host did not answer in time. It may be asleep or offline; try again in a moment." };
     })().finally(() => opening.delete(k));
     opening.set(k, run);
     return run;
@@ -581,6 +634,7 @@ export function createHostComputerRouter(deps: {
       const live = deps.sessions.target({ principalId: row.principalId, botId: row.botId, threadId: "", id: row.sessionId });
       if (live && timeLeft(row, live.endAt) > 0 && (busy.has(k) || now() - row.lastUsed < HOST_SESSION_IDLE_MS)) continue;
       open.delete(k);
+      log("host-computer: closing an idle or ended session");
       await deps.sessions.close(row.principalId, row.botId, row.sessionId).catch(() => null);
       closed += 1;
     }
@@ -866,7 +920,7 @@ export function createHostComputerRouter(deps: {
     return `The person shared these hosts with you as bot computers: ${list}.${hint} ${how} select_computer with host makes one your computer.`;
   }
 
-  return { views, choices, botHosts, select, selectByBot, answer, ask, call, needsCard, turnNote, provision, refreshVm, sweep, promptPart, sessionOn };
+  return { views, choices, botHosts, select, selectByBot, answer, ask, call, needsCard, turnNote, provision, refreshVm, sweep, closeAll, promptPart, sessionOn };
 }
 
 function engineLabel(engine: BotComputerVmEngine): string {

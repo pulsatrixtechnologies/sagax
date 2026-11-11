@@ -281,6 +281,7 @@ type RemoteSessionEnv = {
   refresh: (session: StoredSession) => void;
   writeCard: (session: StoredSession) => void;
   quietIds: Set<string>;
+  inheritedQuiet: Set<string>;
 };
 
 function buildRemoteSessionEnv(deps: RemoteSessionDeps): RemoteSessionEnv {
@@ -314,6 +315,9 @@ function buildRemoteSessionEnv(deps: RemoteSessionDeps): RemoteSessionEnv {
   } catch {
     rows = [];
   }
+  // The bot-computer sessions an earlier run of this server left connected:
+  // nothing in this process holds them (#3564).
+  const inheritedQuiet = new Set(rows.filter((row) => row.quiet && row.state === "connected").map((row) => row.id));
   // An ended row older than 48 hours, and a support folder untouched that long,
   // are dropped so neither grows without bound.
   const PRUNE_MS = 48 * 60 * 60 * 1000;
@@ -542,6 +546,7 @@ function buildRemoteSessionEnv(deps: RemoteSessionDeps): RemoteSessionEnv {
     refresh,
     writeCard,
     quietIds,
+    inheritedQuiet,
   };
 }
 
@@ -559,6 +564,11 @@ function createRemoteSessionLifecycle(env: RemoteSessionEnv) {
      * panel: no card, no row (server/remote-support/host-computer-router.ts). */
     markQuiet(id: string): void {
       env.quietIds.add(id.trim().toLowerCase());
+    },
+    /** The person's bot-computer sessions an earlier run of this server left
+     * connected (#3564), to be closed by `close` before a new one opens. */
+    inherited(principalId: string): { botId: string; id: string }[] {
+      return rows.filter((row) => env.inheritedQuiet.has(row.id) && row.state === "connected" && row.principalId === principalId).map((row) => ({ botId: row.botId, id: row.id }));
     },
     list(principalId: string, botId: string): RemoteSessionView[] {
       const mine = rows.filter((row) => row.principalId === principalId && row.botId === botId && row.state === "connected" && !row.quiet && !env.quietIds.has(row.id));

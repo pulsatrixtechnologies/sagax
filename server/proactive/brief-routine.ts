@@ -17,6 +17,7 @@
 //   (proactive-ask.ts `offerBrief`).
 import type { Routine, RoutineInput } from "../routines/routines.ts";
 import { BRIEF_DEFAULT_AT, type BriefSettings, type BriefStore } from "./background-brief.ts";
+import { personWord } from "../people/person-words.ts";
 
 export const BRIEF_ROUTINE_CHECK = "daily_brief" as const;
 
@@ -79,20 +80,14 @@ function clockWords(at: string, language: BriefLanguage): string {
   return language === "fr" ? `${Number(hour)} h ${minute}` : at;
 }
 
-/** The card « Garder le brief du jour ? »: what changed, what the yes does. */
+/** The card « Garder le brief du jour ? »: what changed, what the yes does.
+ * #3512: its words come from the locale catalogs (server/people/person-words.ts). */
 export function briefCard(at: string, language: BriefLanguage): { title: string; subtitle: string; options: [string, string] } {
-  const clock = clockWords(HHMM.test(at) ? at : BRIEF_DEFAULT_AT, language);
-  if (language === "fr") {
-    return {
-      title: "Garder le brief du jour ?",
-      subtitle: `Le brief du jour était actif par défaut, sans que tu l'aies choisi : je l'ai arrêté. Si tu dis oui, je te l'envoie chaque jour à ${clock}, comme une de mes routines, que tu peux mettre en pause, modifier ou supprimer.`,
-      options: ["Oui", "Pas maintenant"],
-    };
-  }
+  const time = clockWords(HHMM.test(at) ? at : BRIEF_DEFAULT_AT, language);
   return {
-    title: "Keep today's brief?",
-    subtitle: `Today's brief was on by default, without you choosing it: I stopped it. If you say yes, I send it to you every day at ${clock}, as one of my routines, which you can pause, edit or delete.`,
-    options: ["Yes", "Not now"],
+    title: personWord(language, "proactive.briefOffer.title"),
+    subtitle: personWord(language, "proactive.briefOffer.body", { time }),
+    options: [personWord(language, "proactive.briefOffer.yes"), personWord(language, "proactive.briefOffer.notNow")],
   };
 }
 

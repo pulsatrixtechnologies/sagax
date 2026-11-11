@@ -15,9 +15,12 @@
 //   GET  /api/org/member/bots/{id}/docs        the owner's documents
 //   GET  /api/org/member/bots/{id}/memory      the owner's memory
 //   GET  /api/org/member/bots/{id}/connectors  connector names of an owned bot
-//   GET  /api/org/member/approvals?status=pending  the cards waiting on the person
+//   GET  /api/org/member/approvals?status=pending  what waits on the person
+//                                               (#3512: every kind, the one
+//                                               source of shared/waiting-items.ts)
 //   GET  /api/org/member/approvals/{id}        may the person answer it
-//   POST /api/org/member/approvals/{id}        allow, deny or pick an option
+//   POST /api/org/member/approvals/{id}        allow, deny, pick an option,
+//                                               send words, or skip
 //   POST /api/org/member/people/{id}/nudge     nudge a person
 //   GET  /api/org/member/threads/{id}/stream   watch a running turn (NDJSON)
 //   POST /api/org/member/agents/{tool}          the agent-to-agent API
@@ -58,6 +61,7 @@ import { can, permissionLabel, type PermissionKey, type PermissionPrincipal } fr
 import { mask, redactSecretsInText } from "../../shared/redact.ts";
 import { reviewedSkillSha256, skillRequestBehavior } from "../../shared/skill-request.ts";
 import { terminalRequestBehavior } from "../../shared/terminal-request.ts";
+import { OFFER_ID_PREFIX, REQUEST_ID_PREFIX, type WaitingItem } from "../../shared/waiting-items.ts";
 import { parseMemoryPath } from "../memory/memory-store.ts";
 import type { ConsoleAssertion } from "../auth/oidc-rp.ts";
 import { AssertionReplayCache } from "./org-admin-routes.ts";
@@ -197,6 +201,14 @@ export interface OrgMemberRouteDeps {
   /** #2633: the person's words for the text Sagax itself puts on a card (the
    * generic question title), in their language. English without it. */
   approvalWords?(person: MemberPerson): ApprovalTranslate;
+  /** #3512: what waits on the person (shared/waiting-items.ts), the one
+   * source Today and the pinned row read, each item with its message as the
+   * person's conversation shows it. Null when it cannot be read now. */
+  waitingItems?(person: MemberPerson): Array<{ item: WaitingItem; message?: unknown }> | null;
+  /** #3512: a question in words settled from an AI client: `handled` once
+   * the person's words went to the waiting work, `skipped` without an
+   * answer (the waiting work is told). False when it is not open. */
+  settleRequest?(person: MemberPerson, where: { botId: string; threadId: string; messageId: string }, how: "handled" | "skipped"): boolean;
 }
 
 interface Answer {
@@ -437,7 +449,19 @@ export interface ApprovalQuestion {
   options: ApprovalChoice[];
 }
 
-export interface MemberApproval {
+/** #3512, additive (an older client ignores them): what waits, read from
+ * the one source. `waitingKind` names the kind (approval, question, request:
+ * a question in words, proposal: a proposal or offer card), `text` its whole
+ * text, `ageMs` how long it has waited, `skippable` that `POST approvals/{id}`
+ * with `{ threadId, skip: true }` closes it without an answer. */
+export interface MemberWaitingFields {
+  waitingKind?: WaitingItem["kind"];
+  text?: string;
+  ageMs?: number;
+  skippable?: true;
+}
+
+export interface MemberApproval extends MemberWaitingFields {
   id: string;
   threadId: string;
   title: string;
@@ -550,6 +574,32 @@ export function describeMemberApproval(
 function memberCardTitle(kind: ApprovalKind, title: string | null, translate?: ApprovalTranslate): string {
   if (kind === "question" && translate && (title === null || title === GENERIC_QUESTION_TITLE)) return translate("question.card.title");
   return title ?? "";
+}
+
+/** #3512: a question in words or an offer, as an AI client reads a card: a
+ * question answered by option or text (an offer by option, or allow or
+ * deny), so an older client answers it as it answers any question. */
+export function memberWaitingApproval(item: WaitingItem): MemberApproval {
+  const choices = choicesOf(item.options);
+  return {
+    id: item.id,
+    threadId: item.threadId,
+    title: item.title,
+    subtitle: item.text,
+    tool: null,
+    options: item.options,
+    kind: "question",
+    answerWith: "option",
+    choices,
+    freeText: item.freeText,
+    context: buildNotificationContext({
+      question: item.title,
+      detail: item.text === item.title ? "" : item.text,
+      choices: choices.map((choice) => ({ answer: choice.label })),
+    }),
+    createdAt: item.at,
+    expiresAt: null,
+  };
 }
 
 /** What `POST approvals/{id}` asks Sagax's respond route, or why it cannot. */
@@ -1263,6 +1313,7 @@ function memberRouteTools(deps: OrgMemberRouteDeps) {
   /** Threads where a card may wait for this person: each bot's threads the
    * person sees in Sagax, and their hidden AI-client conversation with it. */
   const pendingApprovals = async (person: MemberPerson): Promise<Answer> => {
+    if (deps.waitingItems) return waitingApprovals(person);
     const listed = await deps.perform(person, { method: "GET", path: "/api/bots", query: { messages: "0" } });
     if (!okStatus(listed)) return passThrough(listed, "Your bots cannot be read.");
     const threads = new Map<string, { botId: string; botName: string }>();
@@ -1295,6 +1346,78 @@ function memberRouteTools(deps: OrgMemberRouteDeps) {
     }
     approvals.sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0) || a.id.localeCompare(b.id));
     return answer({ approvals, count: approvals.length });
+  };
+
+  /** #3512: the pending list read from the one source of what waits on the
+   * person (Today's rows, shared/waiting-items.ts): every approval and
+   * question card, every question in words and every proposal or offer card
+   * of their conversations, with its text and options, oldest first. A card
+   * keeps the shape it always had; a question in words and an offer read as
+   * a question answered by option or text. Never a confidential one. */
+  const waitingApprovals = (person: MemberPerson): Answer => {
+    const entries = deps.waitingItems?.(person);
+    if (!entries) return fail(503, "not_ready", "What waits on you cannot be read now. Try again in a moment.");
+    const approvals: Array<MemberApproval & { botId: string; botName: string; canAnswer: boolean; whoCanApprove: WhoCanApprove | null }> = [];
+    for (const { item, message } of entries) {
+      if (item.confidential || deps.confidential?.(item.threadId)) continue;
+      const about = { botId: item.botId, botName: item.botName };
+      const extra: MemberWaitingFields = { waitingKind: item.kind, text: item.text, ageMs: item.ageMs, skippable: true };
+      const shown = objectOf(message);
+      const card = objectOf(shown?.card);
+      if (!item.id.startsWith(REQUEST_ID_PREFIX) && !item.id.startsWith(OFFER_ID_PREFIX) && shown && card) {
+        deps.expireDueApprovals?.(item.threadId);
+        const info = deps.approvalAnswerer?.(item.threadId, item.id) ?? null;
+        if (info && !info.open) continue;
+        const check = info ? answerCheck(person, info) : null;
+        approvals.push({ ...describeMemberApproval(item.threadId, shown, card, expireDaysFor(person), deps.approvalWords?.(person)), ...extra, ...about,
+          canAnswer: check?.canAnswer ?? true, whoCanApprove: check?.whoCanApprove ?? null });
+        continue;
+      }
+      approvals.push({ ...memberWaitingApproval(item), ...extra, ...about, canAnswer: true, whoCanApprove: null });
+    }
+    approvals.sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0) || a.id.localeCompare(b.id));
+    return answer({ approvals, count: approvals.length });
+  };
+
+  /** #3512: answer or skip a question in words or an offer from an AI
+   * client, as the person: their words go to the thread the bot asked in
+   * (the app's own route), an offer takes its yes or its no, and a skip
+   * closes it without an answer. */
+  const answerWaiting = async (person: MemberPerson, threadId: string, id: string, input: AnswerInput & { skip?: boolean }): Promise<Answer> => {
+    const entries = deps.waitingItems?.(person);
+    if (!entries) return fail(503, "not_ready", "What waits on you cannot be read now. Try again in a moment.");
+    const item = entries.find((entry) => entry.item.id === id && entry.item.threadId === threadId)?.item;
+    if (!item || item.confidential) return fail(404, "not_found", "Nothing waits on you under this id in this conversation: it was answered, skipped or expired.");
+    const choices = choicesOf(item.options);
+    const done = (decision: "allow" | "deny" | null, state: string, how: string, picked?: string) => {
+      deps.record(person, { action: "client.approval", target: { kind: "thread", id: threadId }, after: { requestId: id, decision: decision ?? "skip", answer: how } });
+      return answer({ answered: state !== "skipped", closed: true, decision, state, ...(picked ? { option: picked } : {}) });
+    };
+    const options = Array.isArray(input.option) ? input.option : input.option !== undefined ? [input.option] : [];
+    if (options.length > 1) return fail(400, "bad_request", "This item takes one option.");
+    const picked = options.length ? matchChoice(choices, options[0]!) : null;
+    if (options.length && !picked) return fail(409, "option_unknown", `No such option. Its options: ${optionList(choices) || "none"}.`, { options: choices, freeText: item.freeText });
+    if (item.kind === "proposal" && item.proactiveId) {
+      if (input.text !== undefined) return fail(400, "bad_request", "An offer takes one of its options, or decision allow or deny.");
+      const accept = picked ? picked === choices[0] : input.decision === "allow" ? true : input.decision === "deny" ? false : null;
+      const body = input.skip ? { skip: true } : accept === null ? null : { accept };
+      if (!body) return fail(409, "option_required", `Choose one of ${optionList(choices)}, or skip it.`, { options: choices, freeText: false });
+      const reply = await deps.perform(person, { method: "POST", path: `/api/bots/${encodeURIComponent(item.botId)}/proactive/${encodeURIComponent(item.proactiveId)}`, body });
+      if (!okStatus(reply)) return passThrough(reply, "This offer cannot be answered.");
+      if (input.skip) return done(null, "skipped", "skip");
+      return done(accept ? "allow" : "deny", accept ? "allowed" : "denied", picked ? "option" : "decision", picked?.label ?? choices[accept ? 0 : 1]?.label);
+    }
+    const where = { botId: item.botId, threadId: item.threadId, messageId: item.messageId ?? id.slice(REQUEST_ID_PREFIX.length) };
+    if (input.skip || (input.decision === "deny" && !picked && input.text === undefined)) {
+      if (!deps.settleRequest?.(person, where, "skipped")) return fail(409, "not_closed", "This item could not be skipped. Read the list again.");
+      return done(null, "skipped", "skip");
+    }
+    const words = input.text?.trim() || picked?.label || "";
+    if (!words) return fail(409, "text_required", choices.length ? `Send text with the person's own words, or option, one of ${optionList(choices)}.` : "Send text with the person's own words.", { options: choices, freeText: true });
+    const reply = await deps.perform(person, { method: "POST", path: `/api/bots/${encodeURIComponent(item.workBotId ?? item.botId)}/messages`, body: { text: words, threadId: item.workThreadId ?? item.threadId } });
+    if (!okStatus(reply)) return passThrough(reply, "The answer could not be sent.");
+    deps.settleRequest?.(person, where, "handled");
+    return done("allow", "answered", picked ? "option" : "text", picked?.label);
   };
 
   /** An agent tool that stopped on a card (send_prompt, await_turn): the
@@ -1369,7 +1492,7 @@ function memberRouteTools(deps: OrgMemberRouteDeps) {
   };
   return {
     readThread, isRead, holdsAnswerPermission, answerCheck, rawPage, watchTurn, cardIn,
-    answering, answerCard, pendingApprovals, withApproval, ownedBot, ownRoutineRows,
+    answering, answerCard, pendingApprovals, answerWaiting, withApproval, ownedBot, ownRoutineRows,
   };
 }
 
@@ -1562,7 +1685,7 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
 function memberRoutesWrite(deps: OrgMemberRouteDeps, tools: MemberRouteTools): MemberRoute[] {
   const {
     readThread, isRead, holdsAnswerPermission, answerCheck, rawPage, cardIn, answering,
-    answerCard, pendingApprovals, withApproval, ownedBot, ownRoutineRows,
+    answerCard, pendingApprovals, answerWaiting, withApproval, ownedBot, ownRoutineRows,
   } = tools;
   return [
     {
@@ -1750,6 +1873,12 @@ function memberRoutesWrite(deps: OrgMemberRouteDeps, tools: MemberRouteTools): M
         if (deps.confidential?.(threadId)) return fail(404, "not_found", "No such approval in this conversation.");
         const read = await readThread(person, threadId, null, 1);
         if (!isRead(read)) return read;
+        // #3512: a question in words or an offer is the person's own
+        if (params.id!.startsWith(REQUEST_ID_PREFIX) || params.id!.startsWith(OFFER_ID_PREFIX)) {
+          const listed = deps.waitingItems?.(person)?.some(({ item }) => item.id === params.id && item.threadId === threadId) ?? false;
+          if (!listed) return fail(404, "not_found", "No such approval in this conversation.");
+          return answer({ id: params.id!, threadId, open: true, canAnswer: true, whoCanApprove: { kind: "owner", principalId: person.principalId, name: person.name || null, sentence: "You." } });
+        }
         const info = deps.approvalAnswerer?.(threadId, params.id!) ?? null;
         if (!info?.found) return fail(404, "not_found", "No such approval in this conversation.");
         const check = answerCheck(person, info);
@@ -1789,15 +1918,28 @@ function memberRoutesWrite(deps: OrgMemberRouteDeps, tools: MemberRouteTools): M
         const threadId = input?.threadId;
         const option = input?.option;
         const text = input?.text;
-        const usage = "Send { \"threadId\": \"...\", \"decision\": \"allow\" or \"deny\" }, with \"option\" (an option id or label) for a question, or \"text\" (the person's own words).";
-        if (!input || Object.keys(input).some((key) => !["decision", "threadId", "option", "text"].includes(key)) || typeof threadId !== "string" || !THREAD_ID.test(threadId)) return fail(400, "bad_request", usage);
+        const skip = input?.skip;
+        const usage = "Send { \"threadId\": \"...\", \"decision\": \"allow\" or \"deny\" }, with \"option\" (an option id or label) for a question, or \"text\" (the person's own words); or { \"threadId\": \"...\", \"skip\": true } to close it without an answer.";
+        if (!input || Object.keys(input).some((key) => !["decision", "threadId", "option", "text", "skip"].includes(key)) || typeof threadId !== "string" || !THREAD_ID.test(threadId)) return fail(400, "bad_request", usage);
+        if (skip !== undefined && skip !== true) return fail(400, "bad_request", usage);
         if (decision !== undefined && decision !== "allow" && decision !== "deny") return fail(400, "bad_request", usage);
         const optionOk = option === undefined || (typeof option === "string" && option.trim().length > 0 && option.length <= 200)
           || (Array.isArray(option) && option.length > 0 && option.length <= MAX_OPTIONS && option.every((o) => typeof o === "string" && o.trim().length > 0 && o.length <= 200));
         if (!optionOk) return fail(400, "bad_request", "option is an option id or label, or a list of them (one per question).");
         if (text !== undefined && (typeof text !== "string" || !text.trim() || text.length > MAX_CUSTOM_ANSWER)) return fail(400, "bad_request", `text is 1 to ${MAX_CUSTOM_ANSWER} characters.`);
-        if (decision === undefined && option === undefined && text === undefined) return fail(400, "bad_request", usage);
+        if (decision === undefined && option === undefined && text === undefined && skip === undefined) return fail(400, "bad_request", usage);
+        if (skip === true && (decision !== undefined || option !== undefined || text !== undefined)) return fail(400, "bad_request", "Send skip alone.");
         if (deps.confidential?.(threadId)) return fail(404, "not_found", "No such approval in this conversation.");
+        // #3512: a question in words or an offer, from the one source
+        if (params.id!.startsWith(REQUEST_ID_PREFIX) || params.id!.startsWith(OFFER_ID_PREFIX)) {
+          if (!deps.waitingItems) return fail(404, "not_found", "No such approval in this conversation.");
+          return answerWaiting(person, threadId, params.id!, {
+            ...(decision ? { decision: decision as "allow" | "deny" } : {}),
+            ...(option !== undefined ? { option: option as string | string[] } : {}),
+            ...(text !== undefined ? { text: text as string } : {}),
+            ...(skip === true ? { skip: true } : {}),
+          });
+        }
         const info = deps.approvalAnswerer?.(threadId, params.id!) ?? null;
         if (!holdsAnswerPermission(person, info)) {
           return fail(403, "forbidden_permission", `Your profile does not include ${permissionLabel("clients.approvalsAnswer", "en")}, and this bot is not yours. Ask an admin to add it in Perspicax.`, { permission: "clients.approvalsAnswer" });
@@ -1808,6 +1950,16 @@ function memberRoutesWrite(deps: OrgMemberRouteDeps, tools: MemberRouteTools): M
         if (running) {
           const first = await running;
           return first.status === 200 ? answer({ ...(first.body as Record<string, unknown>), alreadyAnswered: true }) : first;
+        }
+        // #3512: an open card skipped from an AI client: closed as skipped,
+        // never denied (the respond route's #3471 skip)
+        if (skip === true && info.open) {
+          const check = answerCheck(person, info);
+          if (!check.canAnswer) return fail(403, "forbidden", check.reason ?? "This approval is not yours to answer.");
+          const reply = await deps.perform(person, { method: "POST", path: `/api/threads/${encodeURIComponent(threadId)}/respond`, body: { requestId: params.id!, behavior: "deny", skip: true } });
+          if (!okStatus(reply)) return passThrough(reply, "This card cannot be skipped.");
+          deps.record(person, { action: "client.approval", target: { kind: "thread", id: threadId }, after: { requestId: params.id!, decision: "skip", answer: "skip" } });
+          return answer({ answered: false, closed: true, decision: null, state: "skipped" });
         }
         if (!info.open) {
           // Idempotent: the same answer twice, or one given in Sagax.

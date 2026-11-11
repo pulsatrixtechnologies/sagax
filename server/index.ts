@@ -136,7 +136,8 @@ import { ProactiveMetricsLedger } from "./proactive/proactive-metrics.ts";
 import { ProactiveBudget, ProactiveEngine, proactiveDryRunSummary } from "./proactive/proactive.ts";
 import { domainLabel, FlowWatchLoop, WATCH_TICK_MS, WatchMemory } from "./proactive/flow-watches.ts";
 import { ProactiveChoices, watchMovedLine, watchPauseLine } from "./proactive/proactive-choices.ts";
-import { askTurnRefusal, PROACTIVE_ASK_WAIT_MS, ProactiveAsk, withinWait, type AskBot, type AskTurnFacts } from "./proactive/proactive-ask.ts";
+import { askTurnRefusal, BRIEF_ASK_DOMAIN, PROACTIVE_ASK_WAIT_MS, ProactiveAsk, withinWait, type AskBot, type AskTurnFacts } from "./proactive/proactive-ask.ts";
+import { personLanguageCode } from "./people/person-words.ts";
 import { createProactiveAskInternalRoutes } from "./routes/proactive-ask.ts";
 import { createProactiveChoicesRoutes } from "./routes/proactive-choices.ts";
 import { flowHelperIn } from "./proactive/flow-watch-helper.ts";
@@ -968,7 +969,7 @@ import { turnConnectorsRecord, withHubCall } from "./turns/turn-connectors.ts";
 import { remoteSessionReach } from "./remote-support/remote-session-reach.ts";
 import { createHarnessCommandRoutes, HarnessCommandCatalog, typedCommandForTurn, unavailableCommandError } from "./harness-commands.ts";
 import { ProviderAuthSessions } from "./engines/provider-auth-sessions.ts";
-import { cookieMaxAgeSeconds, isBotActSession, SessionRegistry, type SessionRecord } from "./auth/sessions.ts";
+import { cookieMaxAgeSeconds, isBotActSession, SessionRegistry, type Scope, type SessionRecord } from "./auth/sessions.ts";
 import { recentPersonSignIn } from "./auth/recent-sign-in.ts";
 import { createAuthRefusalLogger } from "./auth/auth-refusal-log.ts";
 import { isAccountEmail, isPrincipalId, PrincipalRegistry, type Principal } from "./auth/principals.ts";
@@ -1510,6 +1511,7 @@ import { createStartDuplexCallTurn } from "./index-leaves/startDuplexCallTurn.ts
 import { createSseFrameFor } from "./index-leaves/sseFrameFor.ts";
 import { createInboxPending, todayDepsFor } from "./index-leaves/inboxPending.ts";
 import { markAttentionHandled, skipPersonRequestCard } from "./approvals/today-rows.ts";
+import { waitingEntriesFrom, type WaitingItem } from "../shared/waiting-items.ts";
 import { createProvideSecretFromPhone } from "./index-leaves/provideSecretFromPhone.ts";
 import { createReportIncident } from "./index-leaves/reportIncident.ts";
 import { createRespondToCard } from "./index-leaves/respondToCard.ts";
@@ -20310,7 +20312,8 @@ const PROACTIVE_RUN_NAMES: Record<ProactiveSource, string> = {
 /** #2694: the person's memory keeps one line per feedback, for them alone. */
 function briefLanguage(botId: string): "fr" | "en" {
   const bot = store.bot(botId);
-  return reachMeLanguage(reachMePerson(bot ? effectiveBotOwner(bot) || localPrincipalId() : localPrincipalId()) || null);
+  // #3512: the person's language, their app's included (never only the server's)
+  return personLanguageCode(languageOfPerson(reachMePerson(bot ? effectiveBotOwner(bot) || localPrincipalId() : localPrincipalId()) || null));
 }
 function rememberBriefFeedback(botId: string, choice: BriefFeedback, text: string, topic: string): void {
   const language = briefLanguage(botId);
@@ -24613,6 +24616,13 @@ function backgroundBriefConnected(botId: string): readonly string[] {
 /** Where a brief is posted: the bot's one conversation with the person
  * (#1586, conversationOrStart), started when they have none. */
 function backgroundBriefThread(bot: BotRecord, person: string): string | undefined {
+  return serverCardThread(bot, person);
+}
+/** #3512: where a card the server posts for a bot on its own goes (the
+ * brief and its offer, the first question, a daily suggestion): that bot's
+ * main conversation with the person (shared/single-stream.ts, the one their
+ * app opens), started when they have none; never an older topic. */
+function serverCardThread(bot: BotRecord, person: string): string | undefined {
   return IDENTITY.kind === "perspicax" ? conversationOrStart(bot, person) : conversationOrStart(bot);
 }
 /** #2693: the primary bot's free daily suggestions, as proactive proposal
@@ -24813,7 +24823,8 @@ const proactiveAsk = new ProactiveAsk({
     return owner ? [owner] : [];
   })).size,
   timeZone: (person) => (isPrincipalId(person) ? botSettings.person(person).timeZone ?? undefined : undefined) ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
-  language: (person) => reachMeLanguage(reachMePerson(person) || null),
+  // #3512: the person's language, their app's included (never only the server's)
+  language: (person) => personLanguageCode(languageOfPerson(reachMePerson(person) || null)),
   // the choice card: no wake, no push (the person is in that conversation)
   postCard: ({ botId, threadId, card, choice }) => {
     const proposal = proactiveProposals.add({ botId, threadId, messageId: "", events: [], more: 0, hops: 0, confined: true, choice });
@@ -24844,11 +24855,12 @@ function proactiveAskTurnFacts(bot: BotRecord, threadId: string, depth: number):
     tainted: phoneToolTaintedThreads.has(threadId)
   };
 }
-/** The first question, in the asking bot's own chat: no model, no card, no sound. */
-function proactiveQuestionLine(botId: string, text: string): void {
+/** The first question, in the asking bot's own chat: no model, no card, no
+ * sound. #3512: the person's own conversation with it (serverCardThread). */
+function proactiveQuestionLine(botId: string, text: string, person: string): void {
   const bot = store.bot(botId);
-  const threadId = bot ? botMainThread(bot.id) ?? bot.threadId : undefined;
-  if (bot && threadId) store.appendMessage(threadId, { role: "bot", kind: "text", text });
+  const threadId = bot ? serverCardThread(bot, person) : undefined;
+  if (bot && threadId && !store.isConfidentialThread(threadId)) store.appendMessage(threadId, { role: "bot", kind: "text", text });
 }
 /** #3431: at an owner's one-to-one turn, the first question when one is
  * due, then the turn's Proactive alerts section ("" when nothing is
@@ -24863,7 +24875,7 @@ async function proactiveAskForTurn(bot: BotRecord, threadId: string, depth: numb
   const work = (async () => {
     if (!opts.warm) {
       const asked = await proactiveAsk.onOwnerTurn(person, bot.id);
-      if (asked) proactiveQuestionLine(asked.botId, asked.text);
+      if (asked) proactiveQuestionLine(asked.botId, asked.text, person);
     }
     return proactiveAsk.turnSection(person, bot.id);
   })().catch(() => "");
@@ -24883,7 +24895,7 @@ async function proactiveIntroQuestion(botId: string, auth: RequestAuth): Promise
   let late = false;
   const work = proactiveAsk.question(person, bot.id, false).then((text) => {
     // asked after the closing line went out: its own line, once
-    if (late && text) proactiveQuestionLine(bot.id, text);
+    if (late && text) proactiveQuestionLine(bot.id, text, person);
     return text ?? "";
   }).catch(() => "");
   return Promise.race([work, new Promise<string>((resolve) => { setTimeout(() => { late = true; resolve(""); }, PROACTIVE_ASK_WAIT_MS).unref?.(); })]);
@@ -24938,24 +24950,70 @@ function offerOwedBriefCards(): void {
       continue;
     }
     const person = briefPerson(bot);
-    const threadId = person ? backgroundBriefThread(bot, person) : undefined;
-    if (!person || !threadId || store.isConfidentialThread(threadId)) continue;
+    // #3512: the card speaks the person's language: it waits until it is
+    // known (saved, or the language their app asks in), never the server's guess
+    if (!person || !personLanguageKnown(person)) continue;
+    const threadId = backgroundBriefThread(bot, person);
+    if (!threadId || store.isConfidentialThread(threadId)) continue;
     const offered = proactiveAsk.offerBrief({ person, botId, threadId, at: backgroundBriefs.settings(botId).at });
     if (offered !== "later") backgroundBriefs.setCardOwed(botId, false);
   }
+}
+/** #3512, once: an open brief card that sits outside its bot's main
+ * conversation, or speaks another language than the person's, is posted
+ * again there in their language and closed where it was. Nothing else that
+ * was posted moves. */
+function relocateOpenBriefOffers(): number {
+  let moved = 0;
+  for (const proposal of proactiveProposals.open()) {
+    if (proposal.choice?.domain !== BRIEF_ASK_DOMAIN) continue;
+    const bot = store.bot(proposal.botId);
+    const message = store.messagesFor(proposal.threadId).find((row) => row.id === proposal.messageId);
+    const card = message?.card;
+    if (!bot || !message || !card || card.answered || card.dismissed || card.expired) continue;
+    const person = proposal.choice.person;
+    if (!personLanguageKnown(person)) continue;
+    const home = serverCardThread(bot, person);
+    if (!home || store.isConfidentialThread(home)) continue;
+    const fresh = proactiveAsk.repostBrief({ person, botId: bot.id, threadId: home, at: backgroundBriefs.settings(bot.id).at, proposalId: proposal.id, postedIn: proposal.threadId, postedTitle: card.title });
+    if (!fresh) continue;
+    proactiveProposals.answer(proposal.id, "skipped");
+    store.patchMessage(proposal.threadId, message.id, { card: { ...card, expired: true, options: [] } });
+    moved += 1;
+  }
+  return moved;
+}
+/** #3512: whether the person's language is known: saved in their settings,
+ * or the language their app asks in. */
+function personLanguageKnown(person: string): boolean {
+  const id = reachMePerson(person);
+  try {
+    const saved = userPreferenceStore.get(id).preferences["omb-language"];
+    if (typeof saved === "string" && saved.trim()) return true;
+  } catch { /* not saved */ }
+  return Boolean(askedLanguageOf(id) ?? (IDENTITY.kind === "perspicax" ? undefined : askedLanguageOf(null)));
+}
+function briefCardsPass(): void {
+  try {
+    const moved = relocateOpenBriefOffers();
+    if (moved) console.log(`background brief: ${moved} open card(s) posted again in the main conversation`);
+  } catch (error) {
+    reportBackgroundError(error);
+  }
+  offerOwedBriefCards();
 }
 if (!process.env.VITEST) {
   // the upgrade, once: saved settings that were on become the routine
   const upgraded = briefRoutines.upgrade(store.bots.filter((bot) => !bot.hidden && !bot.temporary).map((bot) => ({ id: bot.id, main: bot.chiefOfStaff === true })));
   if (upgraded.created.length || upgraded.owed.length) console.log(`background brief: ${upgraded.created.length} routine(s) from saved settings, ${upgraded.owed.length} card(s) owed`);
   try {
-    offerOwedBriefCards();
+    briefCardsPass();
   } catch (error) {
     reportBackgroundError(error);
   }
   setInterval(() => {
     try {
-      offerOwedBriefCards();
+      briefCardsPass();
     } catch (error) {
       reportBackgroundError(error);
     }
@@ -25561,16 +25619,53 @@ ROUTES.push(createApprovalsInboxRoutes({
     team: managedTeamIds(viewer.principalId).size > 0
   }),
   answer: (auth, item, decision, rule) => answerInboxCard(auth, item.threadId, item.requestId, decision, rule),
-  handled: (auth, viewer, item) => markAttentionHandled({
-    ...todayDepsFor(getLeafHost(), auth, viewer),
-    patch: (threadId, messageId, attention) => { store.patchMessage(threadId, messageId, { attention }); }
-  }, item.botId, item.threadId, item.messageId),
+  handled: inboxRequestHandled,
   // #3471: a question in words skipped, in a conversation of this person's
-  skip: (auth, viewer, item) => skipPersonRequestCard({
+  skip: inboxRequestSkipped
+}));
+/** #2689, #3512: one of the viewer's questions in words (a "needs you" card
+ * or an input request row) marked handled. */
+function inboxRequestHandled(auth: RequestAuth, viewer: InboxViewer, item: { botId: string; threadId: string; messageId: string }): boolean {
+  return markAttentionHandled({
+    ...todayDepsFor(getLeafHost(), auth, viewer),
+    patch: (threadId, messageId, attention) => { store.patchMessage(threadId, messageId, { attention }); },
+    patchRequest: (threadId, messageId, inputRequest) => { store.patchMessage(threadId, messageId, { inputRequest }); }
+  }, item.botId, item.threadId, item.messageId);
+}
+/** #3471: one of the viewer's questions in words skipped. */
+function inboxRequestSkipped(auth: RequestAuth, viewer: InboxViewer, item: { botId: string; threadId: string; messageId: string }): boolean {
+  return skipPersonRequestCard({
     ...todayDepsFor(getLeafHost(), auth, viewer),
     close: (threadId, message) => waitingCardSkip.closeRequest(threadId, message as Message, { kind: "skipped" })
-  }, item.botId, item.threadId, item.messageId)
-}));
+  }, item.botId, item.threadId, item.messageId);
+}
+/** #3512: `work` with the person's own request auth, for a short session of
+ * theirs (as performAsMember opens one), revoked once it returns: Today's
+ * rows are read exactly as the person's own app reads them. */
+function asMemberAuth<T>(person: MemberPerson, work: (auth: RequestAuth) => T): T | null {
+  const principal = principals.byId(person.principalId);
+  const scopes: Scope[] = person.admin && principal?.orgRole === "admin" ? ["admin", "client"] : ["client"];
+  const opened = sessions.actAs({
+    principalId: person.principalId,
+    scopes,
+    label: person.name.trim().slice(0, 80) || "AI client (Perspicax)",
+    ...(IDENTITY.kind === "perspicax" ? { idp: { iss: IDENTITY.issuer, sub: person.sub, role: person.admin ? "admin" : "employee" } } : {})
+  });
+  if (!opened) return null;
+  try {
+    const session = sessions.authenticate(opened.token);
+    return session ? work({ kind: "session", session, via: "bearer", scopes: session.scopes }) : null;
+  } finally {
+    sessions.revoke(opened.session.id);
+  }
+}
+/** #3512: what waits on this person (shared/waiting-items.ts), read from
+ * the rows of their Today, each with its message as their conversation
+ * shows it: the list served to the organization's connector. */
+function memberWaitingItems(person: MemberPerson): Array<{ item: WaitingItem; message?: unknown }> | null {
+  return asMemberAuth(person, (auth) => waitingEntriesFrom(inboxPending(auth, { principalId: person.principalId }), Date.now())
+    .map(({ item, row }) => ({ item, ...(row.message ? { message: row.message } : {}) })));
+}
 
 ROUTES.push(createCodeRoutes({
   client: perspicaxAgentsClient,
@@ -31975,6 +32070,12 @@ const orgMember = createOrgMemberRoutes({
   expireDueApprovals: expireDueApprovalsInThread,
   pendingApprovalExpireDays: (person) => pendingExpireDaysForPerson(person.principalId),
   approvalWords: (person) => serverApprovalWords(languageOfPerson(person.principalId)).t,
+  // #3512: the one source of what waits on the person
+  waitingItems: memberWaitingItems,
+  settleRequest: (person, where, how) => asMemberAuth(person, (auth) => {
+    const viewer = { principalId: person.principalId };
+    return how === "skipped" ? inboxRequestSkipped(auth, viewer, where) : inboxRequestHandled(auth, viewer, where);
+  }) ?? false,
   approvalAnswerer: (threadId, requestId) => {
     const message = store.messagesFor(threadId).find((row) => row.card?.requestId === requestId);
     if (!message?.card) return null;

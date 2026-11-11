@@ -1,7 +1,10 @@
 // The Approvals screen's data (2026-10-19, shared/approvals-inbox.ts):
 //
 //   GET  /api/approvals          { pending, history, scopes } for this person
-//                                (history only with ?history=1)
+//                                (history only with ?history=1; with
+//                                ?waiting=1, `waiting`: what waits on the
+//                                person, shared/waiting-items.ts, one bot's
+//                                with &botId=, #3512)
 //   POST /api/approvals/bulk     { decision: "allow" | "deny", items: [{ threadId, requestId }] }
 //   GET  /api/approvals/journal  ?days=7|30: the Journal, every action of
 //                                this person's own bots with what decided it
@@ -35,6 +38,7 @@ import type { JournalChain } from "../action-journal.ts";
 import { isCustomRuleBehavior, isRiskClass, MAX_RULE_TEXT } from "../../shared/custom-rules.ts";
 import { liveDecisionRefusal } from "../../shared/live-approval.ts";
 import { approvalTypeOf } from "../approvals/approval-type.ts";
+import { waitingItemsFrom, waitingItemsOfBot } from "../../shared/waiting-items.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
@@ -68,6 +72,8 @@ export interface ApprovalsInboxDeps {
   /** #3471: the person skipped a question in words (`skip: true`): closed
    * as skipped, the waiting work told there is no answer. */
   skip?(auth: RequestAuth, viewer: InboxViewer, item: { botId: string; threadId: string; messageId: string }): boolean;
+  /** The clock of the waiting items' age (tests). */
+  now?: () => number;
 }
 
 /** A rule test's body, or why not. Nothing is saved. */
@@ -119,12 +125,21 @@ export function createApprovalsInboxRoutes(deps: ApprovalsInboxDeps): RouteHandl
       const viewer = deps.viewer(auth);
       if (!viewer) return json(res, 403, { error: "Sign in to see your approvals.", code: "no_person" });
       res.setHeader("cache-control", "no-store");
+      const pending = deps.pending(auth, viewer);
       const payload: InboxPayload = {
-        pending: deps.pending(auth, viewer),
+        pending,
         // the answered cards are read from the log only when asked for
         history: url.searchParams.get("history") === "1" ? deps.history(auth, viewer) : [],
         scopes: deps.scopes(auth, viewer),
       };
+      // #3512: what waits on the person, read from the same rows (the pinned
+      // row asks for one bot's): Today, the pinned row and the connector's
+      // list count the same items
+      if (url.searchParams.get("waiting") === "1") {
+        const items = waitingItemsFrom(pending, (deps.now ?? Date.now)());
+        const botId = url.searchParams.get("botId");
+        payload.waiting = botId ? waitingItemsOfBot(items, botId) : items;
+      }
       return json(res, 200, payload);
     }
 

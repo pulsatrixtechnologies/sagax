@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Message } from "@/state/store";
-import { inputRequestsDrawnElsewhere, pendingQuestions, pendingRequests, pinnedItems, pinnedQuestionAnswer, topicsToScan } from "./pending-question";
+import { inputRequestsDrawnElsewhere, pendingOffers, pendingQuestions, pendingRequests, pinnedItems, pinnedQuestionAnswer, topicsToScan } from "./pending-question";
 
 const question = (id: string, card: Record<string, unknown> = {}): Message =>
   ({ id, at: 1, role: "bot", kind: "options", card: { title: "q", options: [], requestId: `r-${id}`, questionRequest: { version: 1, questions: [] }, ...card } }) as unknown as Message;
@@ -153,5 +153,24 @@ describe("questions in words and earlier topics (#3438)", () => {
   it("the same ask seen in two topics is pinned once", () => {
     const entry = pendingRequests([inputRequest("ir", 10)]);
     expect(pinnedItems([], [], entry, [{ threadId: "old", questions: [], requests: entry }])).toHaveLength(1);
+  });
+});
+
+describe("#3512: the offers a bot posts on its own are pinned too", () => {
+  const offer = (id: string, at: number, card: Record<string, unknown> = {}): Message =>
+    ({ id, at, role: "bot", kind: "options", card: { title: "Garder le brief du jour ?", subtitle: "", options: ["Oui", "Pas maintenant"], proactiveProposal: { id: `p-${id}` }, ...card } }) as unknown as Message;
+
+  it("keeps only open offer cards", () => {
+    const list = [offer("a", 1), offer("b", 2, { answered: "Oui" }), offer("c", 3, { expired: true }), offer("d", 4, { dismissed: true }), question("q")];
+    expect(pendingOffers(list).map((m) => m.id)).toEqual(["a"]);
+  });
+
+  it("pins an offer of this topic and one an earlier topic still holds, once each, oldest first", () => {
+    const items = pinnedItems([], [{ ...question("q"), at: 20 }], [], [{ threadId: "older", questions: [], requests: [], offers: [offer("old", 5)] }], [offer("now", 30)]);
+    expect(items.map((item) => [item.kind, item.key, item.threadId])).toEqual([
+      ["offer", "offer:p-old", "older"],
+      ["question", "question:r-q", undefined],
+      ["offer", "offer:p-now", undefined],
+    ]);
   });
 });

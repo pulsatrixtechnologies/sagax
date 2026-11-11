@@ -20,6 +20,23 @@ export function pendingQuestions(messages: readonly Message[]): Message[] {
   );
 }
 
+/** #3512: open offer and proposal cards a bot posted on its own (a
+ * proactive proposal: the daily brief's « Garder le brief du jour ? », a
+ * watch domain's choice, a daily suggestion), oldest first. They wait on the
+ * person like a question, and were pinned nowhere: one sat in an older topic
+ * where nothing showed it. */
+export function pendingOffers(messages: readonly Message[]): Message[] {
+  return messages.filter(
+    (m) =>
+      m.kind === "options" &&
+      m.card?.proactiveProposal &&
+      !m.card.requestId &&
+      !m.card.answered &&
+      !m.card.dismissed &&
+      !m.card.expired,
+  );
+}
+
 /** A question in words a bot's work left for the person (#3438): the card
  * of a hand-off's question (WireMessage.attention, kind "question") or a
  * parked teammate's input request (WireMessage.inputRequest), drawn as the
@@ -150,6 +167,8 @@ export interface TopicPending {
   questions: readonly Message[];
   requests: readonly PersonRequest[];
   approvals?: readonly Pending[];
+  /** #3512: its open offer cards */
+  offers?: readonly Message[];
 }
 
 /** The earlier topics of a bot's one conversation that may hold something
@@ -172,25 +191,30 @@ export function topicsToScan(tasks: readonly Task[] | undefined, currentThreadId
 export type PinnedItem =
   | { kind: "approval"; key: string; at: number; pending: Pending; threadId?: string }
   | { kind: "question"; key: string; at: number; message: Message; threadId?: string }
-  | { kind: "request"; key: string; at: number; message: Message; card: PersonAttentionCard; threadId?: string };
+  | { kind: "request"; key: string; at: number; message: Message; card: PersonAttentionCard; threadId?: string }
+  | { kind: "offer"; key: string; at: number; message: Message; threadId?: string };
 
 export function pinnedItems(
   approvals: readonly Pending[],
   questions: readonly Message[],
   requests: readonly PersonRequest[] = [],
   topics: readonly TopicPending[] = [],
+  offers: readonly Message[] = [],
 ): PinnedItem[] {
   const question = (message: Message, threadId?: string): PinnedItem => ({ kind: "question", key: `question:${message.card?.requestId ?? message.id}`, at: message.at, message, ...(threadId ? { threadId } : {}) });
   const request = (entry: PersonRequest, threadId?: string): PinnedItem => ({ kind: "request", key: `request:${entry.card.threadId}:${entry.card.items[0]?.text ?? entry.message.id}`, at: entry.message.at, message: entry.message, card: entry.card, ...(threadId ? { threadId } : {}) });
   const approval = (pending: Pending, threadId?: string): PinnedItem => ({ kind: "approval", key: `approval:${pending.threadId ?? threadId ?? ""}:${pending.requestId}`, at: pending.message.at, pending, ...(threadId ? { threadId } : {}) });
+  const offer = (message: Message, threadId?: string): PinnedItem => ({ kind: "offer", key: `offer:${message.card?.proactiveProposal?.id ?? message.id}`, at: message.at, message, ...(threadId ? { threadId } : {}) });
   const all: PinnedItem[] = [
     ...approvals.map((pending) => approval(pending)),
     ...questions.map((message) => question(message)),
     ...requests.map((entry) => request(entry)),
+    ...offers.map((message) => offer(message)),
     ...topics.flatMap((topic) => [
       ...(topic.approvals ?? []).map((pending) => approval({ ...pending, threadId: pending.threadId ?? topic.threadId }, topic.threadId)),
       ...topic.questions.map((message) => question(message, topic.threadId)),
       ...topic.requests.map((entry) => request(entry, topic.threadId)),
+      ...(topic.offers ?? []).map((message) => offer(message, topic.threadId)),
     ]),
   ];
   // one item per request: the same ask seen in two topics is pinned once

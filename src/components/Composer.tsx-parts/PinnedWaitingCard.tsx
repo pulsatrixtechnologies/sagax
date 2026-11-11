@@ -28,14 +28,15 @@ import { PendingApprovalActions, PendingApprovalPanel, readOnlyApprovals, Steppe
 import { QuestionCard } from "../QuestionCard";
 import { PersonRequestCard, skipPersonRequest, skipPlace } from "../InputRequestCard";
 import { CardCloseButton } from "../AskCard";
+import { OptionCard } from "../OptionCard";
 
 /** How much of the question the folded line keeps. */
 const FOLDED_TEXT_MAX = 72;
 
 /** The pinned card's own state, kept by the composer session so the box
  * knows which item the person is on (typing answers that one). */
-export function usePinnedWaiting(approvals: readonly Pending[], questions: readonly Message[], requests: readonly PersonRequest[] = [], topics: readonly TopicPending[] = []) {
-  const items = pinnedItems(approvals, questions, requests, topics);
+export function usePinnedWaiting(approvals: readonly Pending[], questions: readonly Message[], requests: readonly PersonRequest[] = [], topics: readonly TopicPending[] = [], offers: readonly Message[] = []) {
+  const items = pinnedItems(approvals, questions, requests, topics, offers);
   // the item is remembered by key, not by position: one answered ahead of
   // it must not move the person to another request
   const [place, setPlace] = useState<{ key: string; at: number } | undefined>(undefined);
@@ -63,6 +64,8 @@ export type PinnedWaiting = ReturnType<typeof usePinnedWaiting>;
 export function pinnedItemText(item: PinnedItem): string {
   const raw = item.kind === "question"
     ? item.message.card?.questionRequest?.questions[0]?.question ?? item.message.card?.title ?? ""
+    : item.kind === "offer"
+      ? item.message.card?.title || item.message.card?.subtitle || ""
     : item.kind === "request"
       ? item.card.items[0]?.text ?? ""
       : item.pending.message.card?.title || item.pending.detail || item.pending.tool;
@@ -75,7 +78,7 @@ export function pinnedItemText(item: PinnedItem): string {
  * approval, or one whose card never stays in the chat, has nothing to
  * scroll to. An approval of an earlier topic sits in that topic. */
 export function pinnedItemMessageId(item: PinnedItem, threadId: string): string | undefined {
-  if (item.kind === "question" || item.kind === "request") return item.message.id;
+  if (item.kind === "question" || item.kind === "request" || item.kind === "offer") return item.message.id;
   if (!item.threadId && item.pending.threadId && item.pending.threadId !== threadId) return undefined;
   return approvalCardStaysInChat(item.pending.message.card) ? item.pending.message.id : undefined;
 }
@@ -185,6 +188,17 @@ export function PinnedWaitingCard({
           </div>
           <PersonRequestCard key={current.key} message={current.message} card={current.card} threadId={askedIn} conversationBotId={bot?.id} embedded />
         </div>
+      ) : current.kind === "offer" ? (
+        // #3512: an offer the bot posted on its own (the daily brief's, a
+        // watch domain's), drawn flat as a question is, skipped from the top row
+        <div className="px-4 pb-3 pt-2.5" data-pinned-body="offer">
+          <div className="mb-2 flex min-w-0 items-center gap-2">
+            {mark}
+            <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink-secondary" data-pinned-title="">{t("pinned.waiting", { name })}</span>
+            {controls}
+          </div>
+          <OptionCard key={current.key} botId={current.message.from?.botId ?? bot?.id ?? ""} threadId={askedIn} message={current.message} embedded />
+        </div>
       ) : current.kind === "question" ? (
         <div className="px-4 pb-3 pt-2.5" data-pinned-body="question">
           <div className="mb-2 flex min-w-0 items-center gap-2">
@@ -244,6 +258,12 @@ export function pinnedItemSkip(item: PinnedItem, askedIn: string, conversationBo
   if (item.kind === "question") {
     const requestId = item.message.card?.requestId;
     return requestId ? () => dispatch({ type: "skipCard", threadId: askedIn, requestId }) : undefined;
+  }
+  // #3512: an offer is skipped by its proposal, closed as skipped
+  if (item.kind === "offer") {
+    const proposal = item.message.card?.proactiveProposal;
+    const botId = item.message.from?.botId ?? conversationBotId;
+    return proposal && botId ? () => dispatch({ type: "skipCard", threadId: askedIn, proposal: { botId, id: proposal.id } }) : undefined;
   }
   const where = skipPlace(item.card, item.message, askedIn, conversationBotId);
   return where ? () => { void skipPersonRequest(where, dispatch, item.message).catch(() => undefined); } : undefined;

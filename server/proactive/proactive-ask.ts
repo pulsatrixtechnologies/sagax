@@ -402,7 +402,7 @@ export function choiceCard(input: { domain: OfferedDomain; chosen: readonly stri
 // ── the service ──────────────────────────────────────────────────────────
 
 export interface ProactiveAskDeps {
-  choices: Pick<ProactiveChoices, "get" | "apply" | "noteAsk" | "answerAsk" | "noteQuestion" | "noteFirstSaid" | "since" | "chosen">;
+  choices: Pick<ProactiveChoices, "get" | "apply" | "noteAsk" | "answerAsk" | "noteQuestion" | "noteFirstSaid" | "since" | "chosen"> & Partial<Pick<ProactiveChoices, "moveAsk">>;
   /** The person's bots that can carry a watch: their own, visible, not
    * temporary. */
   bots(person: string): AskBot[];
@@ -657,6 +657,21 @@ export class ProactiveAsk {
     const proposalId = this.deps.postCard({ botId: input.botId, threadId: input.threadId, card, choice: { person: input.person, domain: BRIEF_ASK_DOMAIN, watches: [], others: [] } });
     this.deps.choices.noteAsk(input.person, { domain: BRIEF_ASK_DOMAIN, botId: input.botId, at: now, proposalId }, { firstQuestion: false });
     return "posted";
+  }
+
+  /** #3512, once: the open brief card posted again in the bot's main
+   * conversation (`threadId`), in the person's language, when it sits in
+   * another conversation or speaks another language. The caller closes the
+   * old card; the ask keeps its place in the ledger under the new card.
+   * Null when nothing moves. */
+  repostBrief(input: { person: string; botId: string; threadId: string; at: string; proposalId: string; postedIn: string; postedTitle: string }): string | null {
+    const ask = (this.deps.choices.get(input.person).asks ?? []).find((entry) => entry.proposalId === input.proposalId && entry.domain === BRIEF_ASK_DOMAIN);
+    if (!ask || ask.answer || ask.movedAt !== undefined || !this.deps.choices.moveAsk) return null;
+    const card = briefCard(input.at, this.deps.language(input.person));
+    if (input.postedIn === input.threadId && input.postedTitle === card.title) return null;
+    const proposalId = this.deps.postCard({ botId: input.botId, threadId: input.threadId, card, choice: { person: input.person, domain: BRIEF_ASK_DOMAIN, watches: [], others: [] } });
+    this.deps.choices.moveAsk(input.person, input.proposalId, proposalId);
+    return proposalId;
   }
 
   /** The card's answer: a yes writes the choice with the bot that proposed

@@ -14730,5 +14730,9 @@
   "waitingCard.skipped": "Skipped, no answer",
   "waitingCard.expired": "Expired, no answer",
   "approval.pill.skipped": "Skipped",
-  "approval.status.skipped": "Skipped, nothing was run"
+  "approval.status.skipped": "Skipped, nothing was run",
+  "proactive.briefOffer.title": "Keep today's brief?",
+  "proactive.briefOffer.body": "Today's brief was on by default, without you choosing it: I stopped it. If you say yes, I send it to you every day at {time}, as one of my routines, which you can pause, edit or delete.",
+  "proactive.briefOffer.yes": "Yes",
+  "proactive.briefOffer.notNow": "Not now"
 }

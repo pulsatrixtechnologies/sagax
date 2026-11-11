@@ -44,11 +44,15 @@ export function OptionCard({
   message,
   /** set when the card is in a room: the answer belongs to the room's thread */
   groupId,
+  /** #3512: inside the pinned card over the composer: no frame of its own,
+   * its skip sits on the pinned card's top row */
+  embedded = false,
 }: {
   botId: string;
   threadId?: string;
   message: Message;
   groupId?: string;
+  embedded?: boolean;
 }) {
   const { state, dispatch } = useStore();
   const [custom, setCustom] = useState("");
@@ -80,7 +84,7 @@ export function OptionCard({
         onNever={async () => {
           await api(`/api/bots/${botId}/proactive/${card.proactiveProposal!.id}/feedback`, { method: "POST", body: JSON.stringify({ choice: "never" }) });
         }}
-        onSkip={threadId ?? bot?.threadId ? () => {
+        onSkip={!embedded && (threadId ?? bot?.threadId) ? () => {
           dispatch({ type: "skipCard", threadId: (threadId ?? bot?.threadId)!, proposal: { botId, id: card.proactiveProposal!.id } });
           returnFocusToComposer();
         } : undefined}
@@ -115,7 +119,7 @@ export function OptionCard({
   // never denied; an answered one is put away as before
   const waiting = !card.answered && !card.expired && !card.dismissed && Boolean(card.requestId || card.proactiveProposal);
   const skipThread = threadId ?? bot?.threadId;
-  const skip = waiting && skipThread
+  const skip = waiting && skipThread && !embedded
     ? () => {
       dispatch({
         type: "skipCard",
@@ -165,6 +169,7 @@ export function OptionCard({
       ariaLabel={title}
       title={title}
       settled={settled}
+      embedded={embedded}
       onDismiss={dismiss}
       dismissLabel={skip ? t("waitingCard.skipAria") : t("onboarding.card.dismiss")}
       onKeyDown={settled ? undefined : sheetKeyHandler(choices.length, (index) => pick(choices[index]!.id ?? choices[index]!.label))}

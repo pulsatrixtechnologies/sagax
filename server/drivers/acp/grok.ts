@@ -1030,7 +1030,7 @@ const support: AcpSupport = {
   async configureSession({ request, sessionId, turn, currentModelId, sessionModels, notice, reused, mcpServerNames, noteToolWait }) {
     if (turn.toolScope !== undefined) {
       // #3623: each poll also times the servers for the latency line (toolsBy)
-      const clock = grokMcpWaitClock(mcpServerNames ?? [], Date.now());
+      const clock = grokMcpWaitClock(mcpServerNames ?? [], Date.now(), turn.threadId);
       const deadline = Date.now() + 10_000;
       let limitHit = false;
       for (;;) {
@@ -1067,7 +1067,7 @@ const support: AcpSupport = {
       if (reused === true && grokMcpAlreadySettled(sessionId)) {
         /* MCP mounts of this live session already settled on an earlier turn */
       } else {
-        const clock = grokMcpWaitClock(mcpServerNames ?? [], Date.now());
+        const clock = grokMcpWaitClock(mcpServerNames ?? [], Date.now(), turn.threadId);
         const settled = await waitForGrokMcpSettled(request, sessionId, GROK_MCP_SETTLE_MS, (catalog) => {
           clock.note(catalog);
           rememberGrokCatalog(sessionId, catalog);

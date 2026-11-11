@@ -1,11 +1,17 @@
 // #3623: which of the engine's tool servers the bounded wait of
 // configureSession (grok.ts) waited for. Each poll of `_x.ai/mcp/list` is
 // read once more here: a server's time is the time from the wait's start to
-// the first poll where it no longer waits (grokMcpServerWaiting, the same
-// reading grokMcpSettled makes). The poll interval (50 to 100 ms plus the
-// request) bounds the precision. Numbers and fixed product names only: the
-// person's own connections are counted, never named.
+// the first poll after the last one where it was seen waiting
+// (grokMcpServerWaiting, the same reading grokMcpSettled makes). At the first
+// poll the engine has often not begun to connect anything (no state yet), so
+// a server never seen waiting gets no time of its own; `resolvedMs` is the
+// first poll where the engine said `sessionMcpResolved`. The poll interval
+// (50 to 100 ms plus the request) bounds the precision. Numbers and fixed
+// product names only: the person's own connections are counted, never named.
+// Sagax's own side of the same wait (its endpoints' first request and tool
+// list answer) rides the turn's trace (server/turns/turn-trace.ts).
 import { PERSPICAX_MCP_PREFIX, RESERVED_MCP_NAMES } from "../../../shared/mcp-reserved-names.ts";
+import { closeTurnServing, openTurnServing } from "../../turns/turn-trace.ts";
 import type { TurnToolWait } from "./turn-latency.ts";
 
 type CatalogServer = { name?: unknown; session?: { enabled?: unknown; status?: unknown } } | null | undefined;
@@ -34,31 +40,44 @@ export function grokMountLabel(name: string): string {
 const normalized = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 /** Times each server of the catalog from `start` (epoch ms). `mounted` is the
- * list of servers the turn sent with session/new or load (by name). */
-export function grokMcpWaitClock(mounted: readonly string[], start: number) {
+ * list of servers the turn sent with session/new or load (by name).
+ * `threadId`: the turn whose own endpoints note what they served meanwhile. */
+export function grokMcpWaitClock(mounted: readonly string[], start: number, threadId?: string) {
   const mounts = new Map<string, string>();
   for (const name of mounted) mounts.set(normalized(name), name);
-  /** catalog name -> ms from start to the first poll it no longer waited */
+  if (threadId) openTurnServing(threadId, start);
+  const since = (at: number) => Math.max(0, Math.round(at - start));
+  /** catalog name -> ms from start to the first poll after its last wait */
   const answered = new Map<string, number>();
+  /** servers seen waiting (pending, connecting, starting) at some poll */
+  const waited = new Set<string>();
   let waiting = new Set<string>();
+  let resolvedMs: number | undefined;
   return {
     /** One poll's answer (`result` of `_x.ai/mcp/list`), read at `at`. */
     note(catalog: unknown, at = Date.now()): void {
-      const servers = (catalog as { servers?: unknown } | null | undefined)?.servers;
+      const value = catalog as { servers?: unknown; sessionMcpResolved?: unknown } | null | undefined;
+      const servers = value?.servers;
       if (!Array.isArray(servers)) return;
+      if (resolvedMs === undefined && value?.sessionMcpResolved === true) resolvedMs = since(at);
       const still = new Set<string>();
       for (const server of servers as CatalogServer[]) {
         const name = typeof server?.name === "string" ? server.name : "";
         if (!name || server?.session?.enabled === false) continue;
-        if (grokMcpServerWaiting(server)) still.add(name);
-        else if (!answered.has(name)) answered.set(name, Math.max(0, Math.round(at - start)));
+        if (grokMcpServerWaiting(server)) {
+          still.add(name);
+          waited.add(name);
+          answered.delete(name);
+        } else if (waited.has(name) && !answered.has(name)) {
+          answered.set(name, since(at));
+        }
       }
       waiting = still;
     },
     /** What the turn's latency line prints. `limitHit`: the wait ended on its
      * time limit (or without the engine's word) with servers still waiting. */
     result(end: number, limitHit: boolean): TurnToolWait {
-      const wait: TurnToolWait = { waitedMs: Math.max(0, Math.round(end - start)), mounts: [] };
+      const wait: TurnToolWait = { waitedMs: since(end), mounts: [] };
       let ownCount = 0;
       let ownLongest = 0;
       for (const [name, ms] of answered) {
@@ -73,6 +92,9 @@ export function grokMcpWaitClock(mounted: readonly string[], start: number) {
       wait.mounts.sort((a, b) => b[1] - a[1]);
       if (ownCount) wait.own = { count: ownCount, longestMs: ownLongest };
       if (limitHit && waiting.size) wait.pending = waiting.size;
+      if (resolvedMs !== undefined) wait.resolvedMs = resolvedMs;
+      const served = threadId ? closeTurnServing(threadId) : [];
+      if (served.length) wait.served = served;
       return wait;
     },
   };

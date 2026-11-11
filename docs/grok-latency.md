@@ -31,14 +31,40 @@ Every ACP turn logs one line when it settles (server/drivers/acp/turn-latency.ts
   of the servers Sagax mounts for the turn by its product name (`agents`, `browser`,
   `perspicax`...; a mount under any other name, which may carry a person's or a bot's
   identifier, prints as `connector`) with the ms from the wait's start to the first poll of
-  `_x.ai/mcp/list` where it no longer waited (pending, connecting or starting), slowest first,
-  at most eight. Then the other servers of the engine's catalog (the person's own connections
-  of their engine account) as one entry `own:<count>:<longest ms>`, never by name, and
-  `pending:<count>` when the wait ended on its limit with servers still connecting. The poll
-  interval (50 to 100 ms plus the request) bounds the precision. A turn that skipped the wait
-  (a reused session) or waited under 50 ms prints no toolsBy.
+  `_x.ai/mcp/list` after the last poll where it was seen waiting (pending, connecting or
+  starting), slowest first, at most eight. A server never seen waiting prints nothing for
+  itself: at the first poll the engine has often not begun to connect anything (a server has
+  no state yet), and the first reading of this field (it printed every server at the first
+  poll's 40 to 175 ms while the wait lasted 2.6 to 3.1 s) counted that as settled. Then the
+  other servers of the engine's catalog (the person's own connections of their engine
+  account) as one entry `own:<count>:<longest ms>`, never by name, `resolved:<ms>`, the first
+  poll where the engine said its tool servers were resolved (`sessionMcpResolved`), and
+  `pending:<count>` when the wait ended on its limit with servers still connecting. When
+  every server's time is well under `resolved`, the wait went to the engine's own resolve.
+  The poll interval (50 to 100 ms plus the request) bounds the precision. A turn that skipped
+  the wait (a reused session) or waited under 50 ms prints no toolsBy.
+- toolsServed (#3623): Sagax's own side of the same wait, right after toolsBy. Each of its
+  endpoints a mount reaches (`data`, `browser`, `messages`, `perspicax`, `sagax-computer`,
+  `sagax-desktop`, `sagax-environment`, `computer`; a connector's or a person's own server
+  relayed by Sagax as `connector`) as `<mount>:<first request>-<tool list answer>`, in ms from
+  the wait's start, in order of arrival, at most eight; a mount whose tool list was not
+  answered during the wait prints its arrival only. The request in the server's internal
+  route (server/request-pipeline/run-internal.ts) notes the mount by its turn capability's
+  kind into the turn's trace (server/turns/turn-trace.ts) while the wait is open; mount names
+  and milliseconds only, never a request's content. A mount that got no request during the
+  wait is not printed: `agents` answers its tool list inside its own process, so it never
+  shows here. `browser`, `data` and `computer` on their streamable HTTP route note their
+  first request there (`initialize`, which that route answers itself); a mount whose stdio
+  proxy answers `initialize` itself (`messages`, `sagax-computer`, `sagax-desktop`,
+  `sagax-environment`) can only show its `tools/list` as its first request. It says whether the engine connects its servers one after the other, which of
+  Sagax's endpoints is slow, and how long the engine takes before its first request. A
+  reused session prints no toolsServed.
 
-      setupBy=prepare:100,init:300,session:100,tools:2700,prompt:10 toolsBy=perspicax:2650,agents:410,browser:380,own:2:900
+  Example of a turn whose engine connected its servers one after the other (each endpoint
+  answers in tens of ms, the engine starts the next one about 300 ms later, and resolves
+  last):
+
+      setupBy=prepare:100,init:270,session:230,tools:2680,prompt:6 toolsBy=sagax-computer:2310,perspicax:2010,messages:1700,browser:1390,data:1080,agents:770,resolved:2660 toolsServed=data:910-950,browser:1220-1300,messages:1530-1560,perspicax:1840-1990,sagax-computer:2150-2190
 
   Example of a turn that opened a conversation on a new process:
 

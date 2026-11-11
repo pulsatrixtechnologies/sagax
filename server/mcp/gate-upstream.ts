@@ -222,8 +222,24 @@ function startThreadUpstream(script: string, input: StartInput): GateUpstream {
     if (winner === "thread" || (winner === undefined && (!fallback || fallbackEnded))) for (const listener of exitListeners) listener(code ?? 1);
   });
 
-  const forward = (target: Writable, chunk: Buffer): Promise<void> | undefined =>
-    target.write(chunk) ? undefined : new Promise((settle) => target.once("drain", () => settle()));
+  // A write that waits for `drain` also ends when its target closes or fails
+  // (#3707): a fallback process stopped because the thread won, or dead before
+  // its exit event, never drains, and the pending write would hold every
+  // later line meant for the winner.
+  const forward = (target: Writable, chunk: Buffer): Promise<void> | undefined => {
+    if (target.write(chunk) || target.destroyed) return undefined;
+    return new Promise((settle) => {
+      const done = () => {
+        target.off("drain", done);
+        target.off("close", done);
+        target.off("error", done);
+        settle();
+      };
+      target.on("drain", done);
+      target.on("close", done);
+      target.on("error", done);
+    });
+  };
   const stdin = new Writable({
     write(chunk: Buffer, _encoding, callback) {
       if (winner === undefined) {

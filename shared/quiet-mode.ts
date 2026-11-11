@@ -1,20 +1,10 @@
 // #3480 quiet mode, retired by #3581: what it did is how every bot behaves
 // (shared/chat-relevance.ts), with no switch. The server no longer stores a
-// switch, counts runs or writes the line; its routes are gone.
+// switch, counts runs or writes the line; its routes are gone, and so are the
+// screens that called them.
 //
 // What stays: the reader of the line it wrote in a bot's chat when it went
-// off (`quietSummary` on a stored row, drawn by src/components/QuietModeLine.tsx),
-// and, until the screens that still call the old routes are removed with the
-// next app release, the route paths and the shapes those screens import
-// (a released app's call answers 404 and draws nothing).
-
-/** GET the person's all-bots switch (retired: answers 404). */
-export const QUIET_MODE_PERSON_PATH = "/api/me/quiet";
-
-/** GET one bot's state (retired: answers 404). */
-export function quietModeBotPath(botId: string): string {
-  return `/api/bots/${encodeURIComponent(botId)}/quiet`;
-}
+// off (`quietSummary` on a stored row, drawn by src/components/QuietModeLine.tsx).
 
 /** What quiet mode kept out of the chat since it went on. */
 export interface QuietKept {
@@ -24,36 +14,6 @@ export interface QuietKept {
   problems: number;
   /** When quiet mode went on (ms), when it is on. */
   since?: number;
-}
-
-/** One bot's quiet mode, as the bot's page reads it. */
-export interface BotQuietState {
-  botId: string;
-  /** The bot's own switch. */
-  bot: boolean;
-  /** The person's switch for all their bots. */
-  all: boolean;
-  /** Whether the bot is quiet now: `bot` or `all`. */
-  quiet: boolean;
-  kept: QuietKept;
-}
-
-/** The answer of the bot route (GET and PUT). */
-export interface BotQuietView extends BotQuietState {
-  /** PUT: the one line the bot says when it changed its own mode. */
-  said?: string;
-  /** PUT that turned quiet mode off: the line written in the bot's chat. */
-  summary?: string;
-}
-
-/** The answer of the person route (GET and PUT). */
-export interface PersonQuietView {
-  /** The person's switch for all their bots. */
-  all: boolean;
-  /** Each of the person's bots. */
-  bots: BotQuietState[];
-  /** PUT: the one line the bot says when it changed the mode. */
-  said?: string;
 }
 
 type Language = "fr" | "en";

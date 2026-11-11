@@ -18,7 +18,9 @@ is work, which stays in its own thread. It is how every bot behaves, with no
 switch: quiet mode (#3480) is retired. Its routes (`/api/me/quiet`,
 `/api/bots/:id/quiet`) are gone and answer 404; a bot that still sets
 `bot.quietMode` or `notifications.quietMode` gets one line to say
-(`chat.quietRetired`, in the person's language) and nothing changes; a line
+(`chat.quietRetired`, in the person's language) and nothing changes; the
+switch, its mark and its row are gone from the bot's page and from Settings,
+Notifications; a line
 it wrote in a chat when it went off (`quietSummary`) is still read
 (`shared/quiet-mode.ts`, `QuietModeLine`). The per bot notification switch
 and quiet hours (`shared/signal-levels.ts`) stay the controls of sound.

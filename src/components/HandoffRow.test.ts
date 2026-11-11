@@ -81,21 +81,22 @@ describe("hand-off line (threads off, #3289)", () => {
     expect(markup).toContain("could not ask Olive");
   });
 
-  it("the teammate's chat shows who asked, with their face, name and first words", () => {
+  // #3581: the other direction is the same names line, never the request's words
+  it("the teammate's chat says Asked by and who, never the request's words", () => {
     fixture.bots = [bot("wren", "Wren"), bot("olive", "Olive", [incoming])];
     const markup = render(incoming, "olive");
-    expect(markup).toContain('data-handoff-side="incoming"');
+    expect(markup).toContain('data-incoming="askedBy"');
+    expect(markup).toContain("Asked by");
     expect(markup).toContain("Wren");
-    expect(markup).toContain("asked");
-    expect(markup).toContain("Check the build on staging");
-    expect(markup).not.toContain("Asked by Wren");
+    expect(markup).not.toContain("Check the build on staging");
+    expect(markup).not.toContain("“");
   });
 
-  it("a result whose receipt is not on this page still shows on its own line", () => {
+  it("a result whose receipt is not on this page says Answer from, without its words", () => {
     fixture.bots = [bot("wren", "Wren", [replied()]), bot("olive", "Olive")];
     const markup = render(replied(), "wren");
-    expect(markup).toContain('data-handoff-side="result"');
+    expect(markup).toContain('data-incoming="answerFrom"');
+    expect(markup).toContain("Answer from");
     expect(markup).toContain("Olive");
-    expect(markup).toContain("answered");
   });
 });

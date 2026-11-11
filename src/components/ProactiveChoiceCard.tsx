@@ -130,7 +130,7 @@ export function ProactiveChoiceCard({ card, onAnswer, onNever, onSkip, showNever
       data-proactive-choice=""
       data-ask-card="pending"
       // #3414: the compact surface every ask of the chat shares (AskCard)
-      className="w-full max-w-[600px] rounded-3xl bg-composer px-4 py-3 text-start ring-1 ring-composer-ring"
+      className="w-full rounded-3xl bg-composer px-4 py-3 text-start ring-1 ring-composer-ring"
     >
       <ApprovalHeading icon={<BellRing size={15} />} title={card.title} summary={card.subtitle} aside={onSkip ? <CardCloseButton label={t("waitingCard.skipAria")} onClick={onSkip} className="-mt-1" /> : undefined} />
       {choice.watches.length > 0 && (

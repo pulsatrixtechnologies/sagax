@@ -23,6 +23,30 @@ an AI client's conversation is archived once await_turn collects its reply.
 Scenario: `server/threads/background-sweep.test.ts`. Captures:
 `scripts/capture/background-threads.mjs`.
 
+## Traces between bots in a bot's chat (#3581, 2026-11-11)
+
+Every trace between bots is the one quiet names line (`NamesLine` in
+`src/components/BotNamesLine.tsx`), in both directions, never the quoted
+request: "Asked [faces]" / "Messaged [faces]" for what this bot sent (a
+`send_to_bot` receipt joins the Messaged line, `messagedChip`; its state is
+the line's tail only when it failed or waits on the person), and "Asked by",
+"Message from", "Answer from" for what came in (`src/lib/incoming-line.ts`,
+drawn by `IncomingLine` in `src/components/HandoffRow.tsx`): a received
+hand-off, a surfaced notice, an answer whose receipt is above the page, and
+every stored copy of a background reply from a teammate or an AI client
+(`relayVia` `teammate` or `mcp`, written before or after the change; the
+server still writes the AI client's copy in the shape the released apps
+draw). A run folds into one line, one name per party and "N requests" when
+there are more requests than names; a name opens that party's exchanges of
+the line, newest first, in the bot-to-bot sheet (a stored copy's request and
+reply; a thread's live transcript, one at a time). Two or more teammates'
+replies relayed for one request are one step row each (`relayedFrom`), one
+stays the bubble. Every card of a chat has the approval card's width.
+Quiet mode has no screen left. Tests: `src/lib/incoming-line.test.ts`,
+`src/components/ChatView.ask-line.test.ts`,
+`src/components/HandoffRow.incoming.dom.test.ts`,
+`src/components/chat-rows.guard.test.ts`.
+
 ## A result that needs the person reaches the person (2026-11-05, #2014)
 
 A bot's turn that ends outside the person's own conversation with it (a
@@ -548,7 +572,14 @@ exported and read by older builds, no client reads it). Rules, covered by
 - The conversation shows the request line (`parallelTask.role: request`),
   a live card (`card`: state from the task's busy/activity, Stop, Open) and,
   when the first turn settles, the answer as a reply to the request
-  (`result`, `settleParallelTask`, once: `reportedAt`). Later turns in the
+  (`result`, `settleParallelTask`, once: `reportedAt`). In the unified chat
+  (#3581) the live card is one step row (`StepRow`, "Working in the
+  background", the title, the elapsed time, Stop) and draws nothing once the
+  task ended; the answer to the person's request is the whole bubble under
+  its quote; the answer of a task the bot opened itself (no `replyToId`) is
+  one step row with its first sentence (`reportBrief(text, "start")`) that
+  unfolds to the whole answer. A coding job is the chat's compact card
+  (`CodingJobCard` on `AskCard`), "Details" opening the coding chat. Later turns in the
   task's own thread stay there. A done task closes (`closedBy`), a failed
   or stopped one stays.
 - Limits: `threads.maxParallelPerPerson` (default 3) running per person per

@@ -37,15 +37,17 @@ export function chatColumnMaxPx(width: ChatWidth): number | null {
   }
 }
 
-/** Composer dock gutter: mirrors the transcript column so the field lines up. */
+/** Composer dock gutter: mirrors the transcript column (its px-5 pane) so
+ * the field and a card pinned over it line up with the cards of the chat:
+ * one card width at every size (#3581). */
 export function chatComposerShellClass(width: ChatWidth = "reading"): string {
   switch (width) {
     case "wide":
-      return "pointer-events-none relative overflow-x-clip px-[max(16px,calc((100%-1280px)/2))] pb-4";
+      return "pointer-events-none relative overflow-x-clip px-[max(20px,calc((100%-1280px)/2))] pb-4";
     case "full":
-      return "pointer-events-none relative overflow-x-clip px-4 pb-4";
+      return "pointer-events-none relative overflow-x-clip px-5 pb-4";
     default:
-      return "pointer-events-none relative overflow-x-clip px-[max(16px,calc((100%-960px)/2))] pb-4";
+      return "pointer-events-none relative overflow-x-clip px-[max(20px,calc((100%-960px)/2))] pb-4";
   }
 }
 

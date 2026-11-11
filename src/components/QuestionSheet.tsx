@@ -23,9 +23,6 @@ const CHOICE_ICONS: Record<string, LucideIcon> = {
   box: Box,
 };
 
-/** The card's width follows a prose bubble's, so the two line up. */
-export const QUESTION_SHEET_WIDTH = "w-full max-w-[min(80%,560px,calc(100%-82px))]";
-
 /** The key that picks row `index`: A, B, C… Latin in every locale, since it is a key. */
 export function sheetKey(index: number): string {
   return String.fromCharCode(65 + index);
@@ -89,7 +86,7 @@ export function QuestionSheet({
       // focusable so A, B, C work as soon as the card is clicked
       tabIndex={settled ? undefined : -1}
       onKeyDown={onKeyDown}
-      className={cn(embedded ? "w-full" : cn(QUESTION_SHEET_WIDTH, "rounded-2xl bg-card p-4"), "text-start text-ink outline-none")}
+      className={cn("w-full", !embedded && "rounded-2xl bg-card p-4", "text-start text-ink outline-none")}
     >
       {(title || meta || onDismiss) && (
         <div className="mb-2.5 flex min-w-0 items-start gap-2">

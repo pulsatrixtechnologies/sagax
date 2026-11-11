@@ -605,7 +605,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         {/* One centred column, a comfortable reading width (Grok Bot), a
             16px gutter on a phone. */}
         <div data-bot-profile-column="" className="mx-auto flex w-full max-w-[760px] flex-col px-4 pb-10 sm:px-6">
-          <BotProfileHeader bot={bot} derived={derived} hero={hero} onOpenQuiet={() => openPage("actsAlone")} />
+          <BotProfileHeader bot={bot} derived={derived} hero={hero} />
 
           {(!page || search.searching) && <BotProfileTabBar tabs={tabs} tab={tab} onTab={openTab} search={search} />}
 

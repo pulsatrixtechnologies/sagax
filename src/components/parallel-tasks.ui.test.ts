@@ -16,7 +16,7 @@ vi.mock("@/state/store", () => ({
 }));
 
 import type { BotActivityDetail } from "../../shared/bot-activity";
-import { ParallelResultLabel, ParallelTaskCard, parallelCardState } from "./ParallelTaskCard";
+import { ParallelTaskCard, parallelCardState } from "./ParallelTaskCard";
 import { parallelPendings, waitingParallelTasks } from "./parallel-approvals";
 import { ActivityDetailBody } from "./bot-settings/ActivityDetailModal";
 import { humanStepName, stepTree } from "@/lib/activity-steps";
@@ -35,26 +35,32 @@ describe("parallel task card", () => {
     expect(html).toContain('data-parallel-state="running"');
     expect(html).toContain("Parallel task · Draft the email");
     expect(html).toContain("data-parallel-stop");
-    // the one conversation (#2099): one line like Claude Code's delegation,
-    // `● Agent(@Pepper · Draft the email)` then `⎿ Backgrounded agent`; no
-    // card, no Open, no thread
-    expect(html).toContain("data-parallel-line");
-    expect(html).toContain("Agent</span><span");
-    expect(html).toContain("(@Pepper · Draft the email)");
-    expect(html).toContain("Backgrounded agent");
+    // the one conversation (#2099, #3581): one step row in the chat's own
+    // look, never a terminal line (no mono font, no dot, no `⎿`, no
+    // `Agent(`); no card, no Open, no thread
+    expect(html).toContain('data-testid="parallel-task-row"');
+    expect(html).toContain("Working in the background");
+    expect(html).toContain("Draft the email");
+    expect(html).not.toMatch(/font-mono|●|⎿|Agent\(|Backgrounded agent/);
     expect(html).not.toContain("data-parallel-open");
+    // a narrow row keeps the task's title whole: "Working in the background"
+    // gives way first, then drops (#3581, phone width)
+    const wrapper = html.replace(/&gt;/g, ">").replace(/&amp;/g, "&").match(/<div class="([^"]*)" data-step-whole="target">/);
+    expect(wrapper?.[1]).toContain("[&>[data-step-row]>*>[data-step-target]]:shrink-0");
+    expect(wrapper?.[1]).toContain("@max-[20rem]:[&>[data-step-row]>*>[data-step-label]]:hidden");
     expect(html).not.toMatch(/Open thread/i);
     fixture.tasks = [{ threadId: "par", title: "Draft the email", busy: true, activity: "waiting-on-you" }];
     html = renderToStaticMarkup(createElement(ParallelTaskCard, { message: card("running"), botId: "pepper" }));
     expect(html).toContain('data-parallel-state="waiting"');
     expect(html).toContain("Waiting for your approval");
     fixture.tasks = [{ threadId: "par", title: "Draft the email", busy: false }];
-    html = renderToStaticMarkup(createElement(ParallelTaskCard, { message: card("done"), botId: "pepper" }));
-    expect(html).toContain('data-parallel-state="done"');
-    expect(html).not.toContain("data-parallel-stop");
+    // ended: no row at all, the answer under it says the same thing
+    for (const end of ["done", "failed", "stopped"]) {
+      expect(renderToStaticMarkup(createElement(ParallelTaskCard, { message: card(end), botId: "pepper" }))).toBe("");
+    }
     expect(parallelCardState(card("queued"), { busy: false })).toBe("queued");
-    const result = { id: "r", role: "bot", kind: "text", at: NOW, text: "ok", parallelTask: { threadId: "par", title: "Draft the email", requestMessageId: "req", role: "result" } } as never;
-    expect(renderToStaticMarkup(createElement(ParallelResultLabel, { message: result }))).toContain("Answer from the parallel task · Draft the email");
+    html = renderToStaticMarkup(createElement(ParallelTaskCard, { message: card("queued"), botId: "pepper" }));
+    expect(html).toContain("Waiting for a free slot");
   });
 });
 

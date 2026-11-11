@@ -27,10 +27,12 @@ describe("coding job card in the chat", () => {
     const html = draw(base, undefined, () => {});
     expect(html).toContain('data-coding-job-card="t1"');
     expect(html).toContain('data-coding-job-state="running"');
-    expect(html).toContain(">Coding<");
+    // #3581: the chat's compact card (AskCard), its state while it runs
+    expect(html).toContain('data-ask-card="result"');
+    expect(html).toContain("data-coding-job-status");
     expect(html).toContain("data-coding-job-stop");
     expect(html).toContain("Running the tests");
-    expect(html).toContain("animate-spin");
+    expect(html).toContain("data-coding-spinner");
     expect(html).toContain('data-coding-job-branch="fix/lexer"');
     expect(html).not.toMatch(NO_THREAD);
   });
@@ -39,7 +41,7 @@ describe("coding job card in the chat", () => {
     const html = draw(done, "**Done.** I split the lexer and opened the PR.", () => {});
     expect(html).toContain('data-coding-job-state="finished"');
     expect(html).not.toContain("data-coding-job-stop");
-    expect(html).not.toContain("animate-spin");
+    expect(html).not.toContain("data-coding-spinner");
     expect(html).toContain("Done. I split the lexer and opened the PR.");
     expect(html).toContain('data-coding-job-pr="https://github.com/acme/parser/pull/42"');
     expect(html).toContain("PR #42");

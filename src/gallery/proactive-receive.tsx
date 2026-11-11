@@ -2,8 +2,7 @@
  * Settings, Notifications, « Ce que je reçois » under the daily budget and
  * quiet hours (its conforming neighbour, SignalSettings), and the bot
  * page's Permissions with « Ce que ce bot suit pour toi » under the
- * Proactive rows. ?skin=<id>&lang=<code>&view=settings|bot|empty
- * #3480: &quiet=off|on|all adds quiet mode (none: a server without it). */
+ * Proactive rows. ?skin=<id>&lang=<code>&view=settings|bot|empty */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { PermissionsSection } from "../components/bot-settings/PermissionsSection";
@@ -50,15 +49,6 @@ let choices: Record<string, unknown> = {
   security: { state: "on", botId: "bot-main", at: now, via: "card", by: "me" },
 };
 
-const quietParam = params.get("quiet");
-const quietMode = quietParam ? { all: quietParam === "all", own: { "bot-main": quietParam === "on" } as Record<string, boolean> } : null;
-const quietView = () => ({
-  all: quietMode!.all,
-  bots: bots.map((bot) => {
-    const own = quietMode!.own[bot.id] === true;
-    return { botId: bot.id, bot: own, all: quietMode!.all, quiet: own || quietMode!.all, kept: { runs: 0, problems: 0 } };
-  }),
-});
 
 const original = window.fetch.bind(window);
 const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
@@ -70,15 +60,6 @@ window.fetch = async (input, init) => {
     const body = JSON.parse(String(init?.body ?? "{}"));
     choices = { ...choices, [body.domain]: { state: body.state ?? "off", ...(body.botId ? { botId: body.botId } : {}), at: Date.now(), via: "settings", by: "me" } };
     return json({ domains: choices });
-  }
-  if (path === "/api/me/quiet" && quietMode) {
-    if ((init?.method ?? "GET") === "PUT") quietMode.all = JSON.parse(String(init?.body ?? "{}")).on === true;
-    return json(quietView());
-  }
-  const quietBot = /^\/api\/bots\/([^/]+)\/quiet$/.exec(path)?.[1];
-  if (quietBot && quietMode) {
-    if ((init?.method ?? "GET") === "PUT") quietMode.own[quietBot] = JSON.parse(String(init?.body ?? "{}")).on === true;
-    return json(quietView().bots.find((row) => row.botId === quietBot));
   }
   if (path === "/api/me/signals") return json({ budget: "10", quiet: JSON.stringify({ start: "22:00", end: "07:00", timeZone: "America/Toronto" }) });
   // the store's own snapshot hydrates too: answer it with the same bots, or it

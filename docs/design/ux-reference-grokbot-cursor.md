@@ -883,6 +883,24 @@ besoin d'elle.
 - Code : `server/proactive/proactive-wake.ts` (`peerNoticeEvent`, `PeerNoticeHops`,
   `PEER_WAKE_RULES`), `server/index.ts` (`offerPeerNotice`, rapport d'un avis à sens unique,
   `postInputRequest`).
+- **Dans le chat, une seule forme dans les deux sens (#3581, lot 3, 2026-11-11).** Toute
+  trace entre bots est la ligne de noms centrée (`NamesLine`, 12 px, encre secondaire, le
+  visage de 16 px et le nom en encre neutre, mi-gras), jamais la demande citée ni une
+  infobulle qui la cite : « Demandé par [visage] Bot B » pour une demande reçue (une remise
+  reçue, et les copies gardées d'une demande d'un coéquipier ou d'un client IA, d'avant et
+  d'après le changement), « Message de [visage] Bot B » pour un avis, « Réponse de [visage]
+  Bot B » pour une réponse dont la demande est plus haut que la page. Une rafale se replie
+  en une ligne : un nom par demandeur, dans l'ordre, les trois premiers puis « et N
+  autres », et « · 5 demandes » quand il y a plus de demandes que de noms. Le nom ouvre les
+  échanges de cette ligne, du plus récent au plus ancien (la demande, puis la réponse), dans
+  la feuille bot à bot ; « Demande plus récente » et « Demande plus ancienne » passent d'un
+  fil à l'autre. Un client IA a l'icône neutre d'agent. Un envoi (`send_to_bot`) rejoint la
+  ligne « Messaged » ; son état n'y est dit que s'il a échoué ou t'attend. Deux réponses de
+  coéquipiers relayées ou plus pour une demande = une rangée d'étape chacune (le visage de
+  14 px, le nom, la première phrase) qui se déplie ; une seule reste la bulle. Toutes les
+  cartes d'un chat (question, choix, approbation, résultat) ont la largeur de la carte
+  d'approbation : toute la colonne des messages. Code : `src/lib/incoming-line.ts`,
+  `src/components/HandoffRow.tsx` (`IncomingLine`), `src/lib/messaged-line.ts`.
 
 ---
 
@@ -947,9 +965,21 @@ terminal, un point d'état, « ⎿ » ou « Bash(…) » hors d'un bloc de code.
   deuxième ligne = l'étape en mots puis « repo · branche » ; Stop sur la rangée.
   Au-delà de 5 : « ↓ N more ». Un clic ouvre le chat de code dans la colonne
   du chat, jamais un panneau latéral.
-- Dans le chat unifié, une délégation = une ligne « ● Agent(@Marc · work)
-  ⎿ Backgrounded agent » (Waiting for your approval quand elle attend), avec
-  Stop ; le détail est dans la rangée Coding.
+- Dans le chat unifié (#3581, lot 3), une tâche en arrière-plan qui roule =
+  la rangée d'étape du chat (`StepRow`), police de l'interface : « Working in
+  the background », le titre de la tâche en cible plus pâle, la durée, le
+  petit Stop rond (« Waiting for a free slot » en file, « Waiting for your
+  answer » quand elle demande, sa question reste dessous). Finie, la rangée
+  disparaît : sa réponse dit la même chose. La réponse à une demande de la
+  personne reste une bulle entière sous la citation de sa demande, sans
+  étiquette ; la réponse d'une tâche que le bot a ouverte lui-même = une
+  rangée d'étape (le titre, puis la première phrase) qui se déplie sur la
+  réponse entière. Une tâche de code = la carte compacte du chat (`AskCard`,
+  la forme du résultat de routine) : l'icône code (le spinner pointillé tant
+  qu'elle roule), le titre, l'heure, le résultat court sur deux lignes, l'état
+  tant qu'elle n'est pas finie, la branche (monospace) et le lien de la PR,
+  « Details » ouvre le chat de code, « Stop » tant qu'elle roule. Le détail
+  reste dans la rangée Coding.
 - Chemins et identifiants : relatifs au dossier de la tâche, sinon les deux
   derniers segments ; aucun UUID.
 

@@ -52,9 +52,9 @@ export function AskCard({
       onKeyDown={onKeyDown}
       // the composer's own surface, so an ask reads as part of the
       // conversation's controls (the approval row uses the same).
-      // #3581: a result takes the approval card's width, the whole message
-      // column, so one card reads at one width in the chat.
-      className={cn("w-full rounded-3xl bg-composer px-4 py-3 text-start ring-1 ring-composer-ring", !result && "max-w-[600px]")}
+      // #3581: every card of a chat (an ask, a result) takes the approval
+      // card's width, the whole message column: one card, one width.
+      className="w-full rounded-3xl bg-composer px-4 py-3 text-start ring-1 ring-composer-ring"
     >
       <div className={cn("flex min-w-0 gap-2", plain ? "items-start" : "items-center")}>
         {icon && <span aria-hidden="true" className="flex shrink-0 text-accent-text">{icon}</span>}

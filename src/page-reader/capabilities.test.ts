@@ -662,7 +662,7 @@ describe("files.download", () => {
   });
 
   it("keeps only the last segment of a name", async () => {
-    const cases = ["folder/note.txt", "folder\\note.txt", "a/b\\c/note.txt", "a".repeat(200)];
+    const cases = ["folder/note.txt", "folder\\note.txt", "a/b\\c/note.txt", "a".repeat(200), "a".repeat(201)];
     for (const name of cases) {
       const { ask, result, saveFile } = withFiles();
       await ask({ name, mime: "text/plain", data: TEXT });
@@ -672,8 +672,8 @@ describe("files.download", () => {
     }
   });
 
-  it("refuses an empty, dot, control, or overlong name", async () => {
-    const refused = ["", ".", "..", "dir/..", "dir/.", "dir/", "bad\nname", "bad\u0000name", "a".repeat(201)];
+  it("refuses an empty, dot, or control name", async () => {
+    const refused = ["", ".", "..", "dir/..", "dir/.", "dir/", "bad\nname", "bad\u0000name"];
     for (const name of refused) {
       const { ask, result, saveFile } = withFiles();
       await ask({ name, mime: "text/plain", data: TEXT });

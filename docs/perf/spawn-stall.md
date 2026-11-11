@@ -18,7 +18,14 @@ descriptors 3 and 4) come back through the helper too. The helper runs at
 nice 10, which its children inherit, so a burst of engine starts leaves the
 server's main thread its processor. When the helper is down the server starts
 processes itself and logs one line, `[spawn-helper] down (...)`, then
-`[spawn-helper] back` once it runs again. Where no helper runs (macOS,
+`[spawn-helper] back` once it runs again. The helper runs in a process
+group of its own, so a Ctrl+C on the terminal of a server run by hand reaches
+only the server: the server passes that SIGINT on to the helper, which gives
+it to the children not started detached (the ones that sat in the server's
+group before). A child's pid comes back a moment after the call: a stop in
+that moment goes through `killCliTree` (which waits for the start) or
+`whenStarted` (a group signal sent once the pid is there), never a read of
+`child.pid` at once. Where no helper runs (macOS,
 Windows, a test that does not start it), `execChild` is Node's `execFile`.
 
 What goes through them, on a turn's path and around it:

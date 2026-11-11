@@ -19,7 +19,7 @@
 // `skip` (default) checks only while it is awake; `wake` starts it in the
 // background and the next check reads it. A tool watch never touches the
 // computer at all.
-import { spawnChild } from "../process/spawn-helper.ts";
+import { spawnChild, whenStarted } from "../process/spawn-helper.ts";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { lstat, readdir, realpath } from "node:fs/promises";
@@ -223,11 +223,11 @@ export function spawnLocalWatch(command: string, cwd: string, options: { timeout
     let size = 0;
     let truncated = false;
     let timedOut = false;
+    // An abort before the spawn helper has the pid still kills the whole
+    // group, once the pid is there (#3709).
     const kill = () => {
-      try {
-        if (process.platform !== "win32" && child.pid) process.kill(-child.pid, "SIGKILL");
-        else child.kill("SIGKILL");
-      } catch { /* gone */ }
+      if (process.platform !== "win32") whenStarted(child, (pid) => { try { process.kill(-pid, "SIGKILL"); } catch { /* gone */ } });
+      else try { child.kill("SIGKILL"); } catch { /* gone */ }
     };
     const timer = setTimeout(() => { timedOut = true; kill(); }, options.timeoutMs);
     const onAbort = () => { timedOut = true; kill(); };

@@ -43,16 +43,11 @@ export async function codexAccountEmail(
       if (finishing) return;
       finishing = true;
       clearTimeout(timer);
+      // killCliTree waits for a child the spawn helper is still starting, so
+      // a timeout in its first milliseconds still stops the whole group
+      // (#3709); a second call goes straight to SIGKILL.
       let stopped = await killCliTree(child, 1_000);
-      if (!stopped && child.pid) {
-        try {
-          if (process.platform === "win32") child.kill("SIGKILL");
-          else process.kill(-child.pid, "SIGKILL");
-        } catch {
-          try { child.kill("SIGKILL"); } catch { /* already gone */ }
-        }
-        stopped = await killCliTree(child, 1_000);
-      }
+      if (!stopped) stopped = await killCliTree(child, 0);
       resolveEmail(stopped ? email : null);
     };
     const timer = setTimeout(() => { void finish(null).catch(reportBackgroundError); }, timeoutMs);

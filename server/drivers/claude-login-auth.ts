@@ -426,13 +426,9 @@ export class ClaudeLoginController {
 
   private async stopChild(child: ChildProcess | null): Promise<boolean> {
     if (!child || (await killCliTree(child, this.options.terminateTimeoutMs ?? 1500))) return true;
-    if (process.platform !== "win32" && child.pid) {
-      try {
-        process.kill(-child.pid, "SIGKILL");
-      } catch {
-        child.kill("SIGKILL");
-      }
-    } else child.kill("SIGKILL");
+    // Again, straight to SIGKILL, through killCliTree: it waits for a child
+    // the spawn helper is still starting (#3709).
+    if (await killCliTree(child, 0)) return true;
     await new Promise<void>((resolveStop) => {
       if (child.exitCode !== null || child.signalCode !== null) return resolveStop();
       const timer = setTimeout(resolveStop, 1500);

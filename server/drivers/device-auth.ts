@@ -371,10 +371,10 @@ export class DeviceAuthController {
   private async stopChild(child: ChildProcess | null): Promise<boolean> {
     if (!child || await killCliTree(child, this.options.terminateTimeoutMs ?? 1500)) return true;
     // A broken CLI may ignore SIGTERM. Do not leave a stale device flow able
-    // to write credentials after the user cancelled it.
-    if (process.platform !== "win32" && child.pid) {
-      try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); }
-    } else child.kill("SIGKILL");
+    // to write credentials after the user cancelled it. killCliTree again,
+    // straight to SIGKILL: it waits for a child the spawn helper is still
+    // starting, where a read of child.pid would skip the group (#3709).
+    if (await killCliTree(child, 0)) return true;
     await new Promise<void>((resolveStop) => {
       if (child.exitCode !== null || child.signalCode !== null) return resolveStop();
       const timer = setTimeout(resolveStop, 1500);

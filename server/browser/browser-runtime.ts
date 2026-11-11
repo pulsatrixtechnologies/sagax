@@ -426,12 +426,10 @@ class BrowserClient {
     }
     this.pending.clear();
     this.onClose();
-    this.stoppedPromise = scope === "transport" ? this.retireTransport() : killCliTree(this.child, 1_000).then((stopped) => {
-      if (stopped) return;
-      try {
-        if (process.platform !== "win32" && this.child.pid) process.kill(-this.child.pid, "SIGKILL");
-        else this.child.kill("SIGKILL");
-      } catch { /* owned process already exited */ }
+    // Again, straight to SIGKILL, through killCliTree: it waits for a child
+    // the spawn helper is still starting (#3709).
+    this.stoppedPromise = scope === "transport" ? this.retireTransport() : killCliTree(this.child, 1_000).then(async (stopped) => {
+      if (!stopped) await killCliTree(this.child, 0);
     });
     return this.stoppedPromise;
   }

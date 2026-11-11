@@ -124,6 +124,35 @@ working. Tests: `scripts/install-sh.test.ts` (fake docker, shellcheck),
   `decision: "expired"` with `by` null (`server/org/org-admin-routines.test.ts`).
   The bot activity log reads it as denied (nothing ran).
 
+## Event loop stall line (#3629)
+
+`server/process/event-loop-lag.ts` writes `[loop-lag] p50 .. p99 .. max ..`
+every minute and one line per stop of the event loop of one second or more.
+The main thread is sampled all the time (every `SAMPLE_INTERVAL_MS`, 20 ms,
+about 0.6% of one core on a loop busy at 30%, in
+windows of `WINDOW_MS` rotated without tearing the profiler down); a window
+in which nothing stopped is dropped unread. A stop reads its window once the
+loop is back, cut to the stopped stretch, and the line says what RAN during
+it: at most eight functions by self time with their share (name, file
+without its folder, line), then the heaviest stack, innermost frame first.
+Native work called from JavaScript (a hash, a synchronous write, a SQLite
+statement) shows under its own native name with its JavaScript caller in the
+stack; `mostly garbage collection` follows the gc figure when collection took
+most of the stop. A real line:
+
+```
+[loop-lag] event loop blocked 7779 ms (rss 474 MB, heap 202 MB), of which gc 35 ms; ran during the block (321 samples every 20 ms): update 94%, buildIndex ex.mjs:6 3%, (garbage collector) 2%, compileRoutes ex.mjs:8 1%, (program) 0%, writeFileUtf8 0%; heaviest stack:
+  update
+  update hash:179
+  sealIndex ex.mjs:7
+  compileRoutes ex.mjs:8
+  (anonymous) ex.mjs:0
+```
+
+When the profiler cannot start, the watchdog pauses the main thread instead
+and the line says `stack after the block`: that names the first function
+entered after the stop, not the one that did the work.
+
 ## Launch flow (desktop)
 
 First run on the desktop app's own window opens the launch screen

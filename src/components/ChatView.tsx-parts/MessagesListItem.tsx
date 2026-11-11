@@ -44,6 +44,8 @@ import { ScreenFrame } from "../ScreenFrame";
 import { VideoPlayerWidget } from "../video/VideoPlayerWidget";
 import { showToolCallsEnabled } from "@/lib/feature-flags";
 import { isStatusActivity, isTurnStoppedNotice } from "@/lib/activity-runs";
+import { foldsLiveTurn } from "@/lib/tool-liveness";
+import { LiveTurnsContext } from "@/hooks/use-live-tool-ids";
 import { isFailedTeammateStep } from "@/lib/step-label";
 import { botNames } from "../ToolActivity";
 import { SeenByRow, type SeenFace } from "../SeenBy";
@@ -287,7 +289,7 @@ export function MessagesListItem({
             <ActivityRun
               messages={shown}
               elapsedMs={item.elapsedMs}
-              bare={!showToolCalls}
+              live={foldsLiveTurn(item.messages, use(LiveTurnsContext))}
               focusedId={focusedId}
               nameOf={botNames(bots)}
               renderStep={(step) => (

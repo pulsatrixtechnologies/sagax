@@ -1,4 +1,4 @@
-import { useLiveToolIds } from "@/hooks/use-live-tool-ids";
+import { useLiveToolIds, useLiveTurnIds } from "@/hooks/use-live-tool-ids";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type Dispatch } from "react";
 import {
   visibleMessages,
@@ -97,6 +97,7 @@ export function useChatViewTranscript({
   // now — plus a run with something to keep. Incomplete tools only count as
   // running while they belong to the live turn.
   const liveTools = useLiveToolIds(messages, bot);
+  const liveTurns = useLiveTurnIds(messages, bot);
   const recordedRun = useMemo(() => runSteps(messages, liveTools), [messages, liveTools]);
   const recordedRunCounts = runSummary(recordedRun);
   const engineSupportsAgents = Boolean(
@@ -188,7 +189,7 @@ export function useChatViewTranscript({
     recordedRun, recordedRunCounts, canSaveRun, runDismissed, setRunDismissed, lastRunStep, showRunCard,
     scrollRef, transcriptRef, topSentinelRef, transcriptKey, following, followRef, stopFollowing,
     windowedMessages, hiddenCount, laterCount, olderPending, showLater, jumpToLatest, scrollHandlers,
-    runOverlayRef, runCardOpen, liveTools,
+    runOverlayRef, runCardOpen, liveTools, liveTurns,
     lastBotTextId, unreadDivider,
     bots, mentionPeers, showToolCalls, tts, localVoice, locale, viewerName, busy, hasMore,
     reactionSelf, botDmIds, rows, place, branch, onBranch,

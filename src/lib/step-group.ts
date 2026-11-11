@@ -2,7 +2,9 @@
 // more (the count of tools and failures is read by VoiceOver and seen by
 // opening the row). Opened, the steps in order, each on a row of the same kind,
 // with the same step repeated back to back read once with a count ("Read a
-// file ×3"). While the bot still works, the row says what it is doing now.
+// file ×3"). While the bot still works, the row says "Working" and nothing
+// more: the working line under the transcript (TurnPresence) is the one place
+// that names the step in progress (#3581, one state told once).
 import type { Message } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { isToolStep } from "@/lib/activity-runs";
@@ -100,10 +102,8 @@ export function summarizeSteps(messages: readonly Message[]): StepGroupSummary {
 }
 
 export type StepGroupWords = {
-  /** "Worked 2m 53s", or the step running now */
+  /** "Worked 2m 53s", or "Working" while the turn runs */
   label: string;
-  /** what the running step acts on */
-  target?: string;
   /** "12 tools": not drawn on the row, only spoken */
   tools?: string;
   /** "5 failed": not drawn on the row, only spoken */
@@ -114,14 +114,15 @@ export type StepGroupWords = {
   phase: StepPhase;
 };
 
-/** The group's one line, in the person's language. */
-export function stepGroupWords(summary: StepGroupSummary, elapsedMs: number | undefined, nameOf?: StepNameOf): StepGroupWords {
+/** The group's one line, in the person's language. `live`: the turn still
+ * runs, even between two steps (a turn writing a note has no running step). */
+export function stepGroupWords(summary: StepGroupSummary, elapsedMs: number | undefined, live = false): StepGroupWords {
   const tools = summary.tools > 0 ? t(summary.tools === 1 ? "step.turn.tools.one" : "step.turn.tools.many", { count: summary.tools }) : undefined;
   const failed = summary.failed > 0 ? t(summary.failed === 1 ? "step.turn.failed.one" : "step.turn.failed.many", { count: summary.failed }) : undefined;
   const spoken = (...parts: Array<string | undefined>) => t("step.turn.a11y", { summary: parts.filter(Boolean).join(", ") });
-  if (summary.running) {
-    const reading = readStep(summary.running.tool, nameOf);
-    return { label: reading.label, target: reading.target, tools, failed, ariaLabel: spoken(reading.label, reading.target, tools, failed), phase: "running" };
+  if (live || summary.running) {
+    const label = t("chat.activity.working");
+    return { label, tools, failed, ariaLabel: spoken(label, tools, failed), phase: "running" };
   }
   const elapsed = elapsedMs !== undefined && elapsedMs >= 1_000 ? stepDuration(elapsedMs) : undefined;
   const label = elapsed ? t("step.turn.workedFor", { elapsed }) : t("step.turn.worked");

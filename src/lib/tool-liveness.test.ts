@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { liveToolIds, type ToolRunMessage } from "./tool-liveness";
+import { foldsLiveTurn, liveToolIds, liveTurnIds, type ToolRunMessage } from "./tool-liveness";
 
 describe("liveToolIds", () => {
   const toolMsg = (id: string, at: number, extra: Partial<ToolRunMessage> = {}): ToolRunMessage => ({
@@ -64,5 +64,36 @@ describe("liveToolIds", () => {
     const live = liveToolIds(msgs, { busy: true, turnStartedAt: 50 });
     expect(live.has("t1")).toBe(false);
     expect(live.has("t2")).toBe(true);
+  });
+});
+
+describe("liveTurnIds (#3581)", () => {
+  const row = (id: string, at: number, extra: Partial<ToolRunMessage> = {}): ToolRunMessage => ({ id, at, role: "bot", kind: "text", ...extra });
+
+  it("is the busy turn since it started, a turn that only writes notes included", () => {
+    const msgs = [row("old", 10, { turnId: "before" }), row("note", 60, { turnId: "a" })];
+    expect([...liveTurnIds(msgs, { busy: true, turnStartedAt: 50 })]).toEqual(["a"]);
+    expect(foldsLiveTurn([msgs[1]!], liveTurnIds(msgs, { busy: true, turnStartedAt: 50 }))).toBe(true);
+  });
+
+  it("keeps the turn live when the person writes during it (a steer)", () => {
+    const msgs = [
+      row("ask", 40, { role: "user" }),
+      row("note", 60, { turnId: "a" }),
+      row("step", 70, { turnId: "a", kind: "activity" }),
+      row("steer", 80, { role: "user" }),
+    ];
+    const live = liveTurnIds(msgs, { busy: true, turnStartedAt: 50 });
+    expect(foldsLiveTurn([msgs[1]!, msgs[2]!], live)).toBe(true);
+    // the room's rule reads the same turn as live
+    expect(liveToolIds(msgs, { busy: true, turnStartedAt: 50 }).has("step")).toBe(true);
+  });
+
+  it("is empty when the chat is idle, and leaves out a turn with its terminal or completed row", () => {
+    const msgs = [row("note", 60, { turnId: "a" }), row("answer", 70, { turnId: "a", turnTerminal: true }), row("b", 80, { turnId: "b", turnCompletedAt: 90 })];
+    expect(liveTurnIds(msgs, { busy: false, turnStartedAt: 50 }).size).toBe(0);
+    expect(liveTurnIds(msgs, { busy: true, turnStartedAt: null }).size).toBe(0);
+    expect(liveTurnIds(msgs, { busy: true, turnStartedAt: 50 }).size).toBe(0);
+    expect(foldsLiveTurn([msgs[0]!], liveTurnIds(msgs, { busy: true, turnStartedAt: 50 }))).toBe(false);
   });
 });

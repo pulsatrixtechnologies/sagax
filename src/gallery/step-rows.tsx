@@ -3,6 +3,8 @@
  * "Could not use mcp" ten times over) and after (one group per turn, the
  * steps inside, the same step merged with a count). Not shipped in the app.
  * ?skin=<id>&lang=<code>&view=before|after|after-open|after-live|handoff|handoff-open
+ * after-live: the turn still runs; its row says "Working" and never names the
+ * step (#3581: the working line does). The chat itself: gallery turn-fold.
  * handoff: a bot-to-bot hand-off in the unified chat (2026-11-09), the
  * sender's row (asked, answered with a verdict, failed) and the teammate's.
  * send: send_to_bot receipts in the sender's chat (#3246).

@@ -493,6 +493,12 @@ export function tailcatSshArgv(bin: string, keyPath: string, address: string, co
   return [...tailcatPtyArgv(bin, keyPath, address), command];
 }
 
+/** Does the host behind a tunnel still answer: the same `tailcat ping` the
+ * status check makes (remote-support-local.ts absorbStatus). */
+export function tailcatPingArgv(bin: string, keyPath: string, address: string): string[] {
+  return [bin, "--key", keyPath, "ping", "--timeout=8s", address];
+}
+
 export function tailcatCopyArgv(bin: string, keyPath: string, from: string, to: string): string[] {
   return [bin, "cp", "--key", keyPath, from, to];
 }

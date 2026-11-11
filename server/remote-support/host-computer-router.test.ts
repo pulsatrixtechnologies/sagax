@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createHostComputerRouter, HOST_SESSION_IDLE_MS, NO_HYPERVISOR } from "./host-computer-router.ts";
+import { createHostComputerRouter, HOST_SESSION_FRESH_MS, HOST_SESSION_IDLE_MS, HOST_SESSION_LIFE_MS, NO_HYPERVISOR } from "./host-computer-router.ts";
 import { createHostComputerStore } from "./host-computer-store.ts";
 import type { UnattendedHostRow } from "../../shared/remote-unattended-host.ts";
 
@@ -389,18 +389,27 @@ describe("hosts shared with the bot, no pick", () => {
 describe("the person's session on a host (#3393)", () => {
   const BOB_PERSON = "bob@example.test";
 
-  function shared(opts: { endAt?: string; failReused?: "ended" | "expired" | "live" | "no-tunnel" } = {}) {
+  function shared(opts: {
+    endAt?: string;
+    failReused?: "ended" | "expired" | "live" | "no-tunnel";
+    /** The host ends each session this long after it opened (#3492: its
+     * first grant renewal is refused at 30 min): ssh answers 255 from then
+     * on, while the local row stays connected with its own end time. */
+    hostLifeMs?: number;
+    /** The tunnel probe after a 255 (#3492); absent = no probe. */
+    reachable?: (id: string) => boolean | null;
+  } = {}) {
     const dir = mkdtempSync(path.join(tmpdir(), "host-computer-"));
     dirs.push(dir);
     const store = createHostComputerStore({ dataDir: dir, now: () => NOW });
     // session id -> the bot whose row it is, its end time, still connected
-    const rows = new Map<string, { botId: string; principalId: string; endAt: string; connected: boolean }>();
+    const rows = new Map<string, { botId: string; principalId: string; endAt: string; connected: boolean; openedAt: number }>();
     let opened = 0;
     let clock = NOW;
     const open = vi.fn(async (viewer: { principalId: string }, _hostId: string, options: { seatFor?: { botId: string } }) => {
       opened += 1;
       const session = `s${opened}`;
-      rows.set(session, { botId: options.seatFor?.botId ?? "primary", principalId: viewer.principalId, endAt: opts.endAt ?? new Date(NOW + 30 * 60_000).toISOString(), connected: true });
+      rows.set(session, { botId: options.seatFor?.botId ?? "primary", principalId: viewer.principalId, endAt: opts.endAt ?? new Date(NOW + 30 * 60_000).toISOString(), connected: true, openedAt: clock });
       return { ok: true as const, code: `K7QMN${opened}`, botId: options.seatFor?.botId ?? "primary", threadId: "t", session };
     });
     const target = ({ principalId, botId, id }: { principalId: string; botId: string; id?: string }) => {
@@ -409,6 +418,8 @@ describe("the person's session on a host (#3393)", () => {
     };
     const exec = vi.fn(async (input: { principalId: string; botId: string; id?: string; command: string; actor?: string }) => {
       if (!target({ principalId: input.principalId, botId: input.botId, id: input.id })) return { error: "No remote session is connected in this conversation." };
+      const at = rows.get(input.id!)!;
+      if (opts.hostLifeMs !== undefined && clock - at.openedAt >= opts.hostLifeMs) return { error: "The remote computer did not answer (the tunnel is down or the session ended)." };
       if (opts.failReused && input.id === "s1" && exec.mock.calls.length > 1) {
         if (opts.failReused === "no-tunnel") return { error: "This server does not have the tunnel of that session." };
         // ssh exit 255 with no output: the session ended at the server, or
@@ -423,11 +434,15 @@ describe("the person's session on a host (#3393)", () => {
     const router = createHostComputerRouter({
       store,
       hosts: {
-        list: async () => ({ available: true as const, hosts: [row(FS01, "FS-01")] }),
+        // the host keeps beating: seen 30 s before the clock, wherever it is
+        list: async () => ({ available: true as const, hosts: [row(FS01, "FS-01", new Date(clock - 30_000).toISOString())] }),
         open,
         installCode: async () => ({ ok: false as const, error: "unavailable" as const, message: "no" }),
       },
-      sessions: { target, exec, screen: async () => null, close, markQuiet: vi.fn() },
+      sessions: {
+        target, exec, screen: async () => null, close, markQuiet: vi.fn(),
+        ...(opts.reachable ? { reachable: async ({ id }: { id: string }) => opts.reachable!(id) } : {}),
+      },
       botThread: (botId) => `t-${botId}`,
       botName: () => "Bot",
       access: () => "always",
@@ -437,9 +452,178 @@ describe("the person's session on a host (#3393)", () => {
       sleep: () => Promise.resolve(),
     });
     for (const person of [ALICE, BOB_PERSON]) store.update(person, FS01, { botComputer: true });
-    const run = (principalId: string, botId: string) => router.call({ principalId, botId, threadId: `t-${botId}`, action: "exec", command: "whoami", host: "FS-01" });
+    const run = (principalId: string, botId: string, command = "whoami", timeoutMs?: number) => router.call({ principalId, botId, threadId: `t-${botId}`, action: "exec", command, host: "FS-01", ...(timeoutMs ? { timeoutMs } : {}) });
     return { router, open, exec, close, rows, run, tick: (ms: number) => { clock += ms; } };
   }
+
+  // #3492: Sagax records the end time it asked for (2 hours), but the host
+  // ends the session 30 minutes after it took it (its first grant renewal is
+  // refused): the local row still says connected, 1 h 30 to go. Every
+  // command then answered 255 on the dead session, which was never replaced.
+  describe("the session's 30 minute life on the host (#3492)", () => {
+    const TWO_HOURS = new Date(NOW + 2 * 60 * 60_000).toISOString();
+
+    it("a session the host ended at 30 minutes is replaced before the next command, which runs once on the new one", async () => {
+      const { open, exec, close, rows, run, tick } = shared({ endAt: TWO_HOURS, hostLifeMs: HOST_SESSION_LIFE_MS });
+      expect(JSON.parse((await run(ALICE, "sagax-test")).text)).toMatchObject({ exitCode: 0 });
+      tick(HOST_SESSION_LIFE_MS);
+      // the local row is the production one: connected, its end 1 h 30 away
+      expect(rows.get("s1")).toMatchObject({ connected: true, endAt: TWO_HOURS });
+      const out = await run(ALICE, "ember");
+      expect(out).not.toHaveProperty("isError");
+      expect(JSON.parse(out.text)).toMatchObject({ exitCode: 0 });
+      expect(close).toHaveBeenCalledWith(ALICE, "sagax-test", "s1");
+      expect(open).toHaveBeenCalledTimes(2);
+      expect(exec.mock.calls.map(([input]) => [input.id, input.actor])).toEqual([["s1", "sagax-test"], ["s2", "ember"]]);
+    });
+
+    it("use never pushes the end past 30 minutes from the open: a session used every 5 minutes is still replaced at 30 minutes", async () => {
+      const { open, exec, run, tick } = shared({ endAt: TWO_HOURS, hostLifeMs: HOST_SESSION_LIFE_MS });
+      await run(ALICE, "sagax-test");
+      for (let minute = 5; minute < 30; minute += 5) {
+        tick(5 * 60_000);
+        expect(JSON.parse((await run(ALICE, "ember")).text)).toMatchObject({ exitCode: 0 });
+      }
+      expect(open).toHaveBeenCalledTimes(1);
+      tick(5 * 60_000);
+      const out = await run(ALICE, "architect");
+      expect(JSON.parse(out.text)).toMatchObject({ exitCode: 0 });
+      expect(open).toHaveBeenCalledTimes(2);
+      expect(exec.mock.calls.at(-1)![0]).toMatchObject({ id: "s2", actor: "architect" });
+      // a work of more than 30 minutes goes on: the new session has its own 30
+      tick(29 * 60_000);
+      expect(JSON.parse((await run(ALICE, "ember")).text)).toMatchObject({ exitCode: 0 });
+      expect(open).toHaveBeenCalledTimes(2);
+    });
+
+    it("the end is never later than the gateway's own end time", async () => {
+      const { open, run, tick } = shared({ endAt: new Date(NOW + 10 * 60_000).toISOString() });
+      await run(ALICE, "sagax-test");
+      tick(10 * 60_000);
+      await run(ALICE, "ember");
+      expect(open).toHaveBeenCalledTimes(2);
+    });
+
+    it("a 255 once the 30 minutes passed during the command is not run again, closes the session, and the next call opens a new one", async () => {
+      const { open, exec, close, run, tick } = shared({ endAt: TWO_HOURS, hostLifeMs: HOST_SESSION_LIFE_MS });
+      await run(ALICE, "sagax-test");
+      tick(HOST_SESSION_LIFE_MS - 60_000);
+      // sent at 29:00 with 60 s left (a 30 s command fits), the host ends the session during it
+      exec.mockImplementationOnce(async () => {
+        tick(60_000);
+        return { error: "The remote computer did not answer (the tunnel is down or the session ended)." };
+      });
+      const out = await run(ALICE, "ember");
+      expect(out).toMatchObject({ isError: true });
+      expect(out.text).toMatch(/^The connection to FS-01 dropped during the command, so it may have run: /);
+      expect(exec.mock.calls.map(([input]) => [input.id, input.actor])).toEqual([["s1", "sagax-test"], ["s1", "ember"]]);
+      expect(close).toHaveBeenCalledWith(ALICE, "sagax-test", "s1");
+      expect(open).toHaveBeenCalledTimes(1);
+      const next = await run(ALICE, "architect");
+      expect(JSON.parse(next.text)).toMatchObject({ exitCode: 0 });
+      expect(open).toHaveBeenCalledTimes(2);
+      expect(exec.mock.calls.at(-1)![0]).toMatchObject({ id: "s2", actor: "architect" });
+    });
+
+    it("a 255 whose tunnel no longer answers closes the session (the command is not run again); one that answers keeps it", async () => {
+      const dead = shared({ endAt: TWO_HOURS, failReused: "live", reachable: () => false });
+      await dead.run(ALICE, "sagax-test");
+      const out = await dead.run(ALICE, "ember");
+      expect(out.text).toMatch(/^The connection to FS-01 dropped during the command, so it may have run: /);
+      expect(dead.exec).toHaveBeenCalledTimes(2);
+      expect(dead.close).toHaveBeenCalledWith(ALICE, "sagax-test", "s1");
+      await dead.run(ALICE, "architect");
+      expect(dead.open).toHaveBeenCalledTimes(2);
+
+      const alive = shared({ endAt: TWO_HOURS, failReused: "live", reachable: () => true });
+      await alive.run(ALICE, "sagax-test");
+      await alive.run(ALICE, "ember");
+      expect(alive.close).not.toHaveBeenCalled();
+      await alive.run(ALICE, "architect");
+      expect(alive.open).toHaveBeenCalledTimes(1);
+    });
+
+    it("a session whose tunnel is gone is replaced before the command is sent, which runs once on the new one", async () => {
+      const asked: string[] = [];
+      const { open, exec, close, run, tick } = shared({ endAt: TWO_HOURS, reachable: (id) => { asked.push(id); return id !== "s1"; } });
+      await run(ALICE, "sagax-test");
+      tick(2 * 60_000);
+      const out = await run(ALICE, "ember", "make build");
+      expect(out).not.toHaveProperty("isError");
+      expect(JSON.parse(out.text)).toMatchObject({ exitCode: 0 });
+      expect(asked).toEqual(["s1"]);
+      expect(close).toHaveBeenCalledWith(ALICE, "sagax-test", "s1");
+      expect(open).toHaveBeenCalledTimes(2);
+      expect(exec.mock.calls.filter(([input]) => input.command === "make build").map(([input]) => input.id)).toEqual(["s2"]);
+    });
+
+    it("the tunnel is asked only after a minute without an answer, and a probe that could not ask keeps the session", async () => {
+      let asked = 0;
+      let answer: boolean | null = true;
+      const { open, exec, run, tick } = shared({ endAt: TWO_HOURS, reachable: () => { asked += 1; return answer; } });
+      await run(ALICE, "sagax-test");
+      tick(HOST_SESSION_FRESH_MS - 1);
+      await run(ALICE, "ember");
+      expect(asked).toBe(0);
+      tick(HOST_SESSION_FRESH_MS);
+      await run(ALICE, "ember");
+      expect(asked).toBe(1);
+      // the answer counts: the next command within the minute is not preceded by a ping
+      await run(ALICE, "architect");
+      expect(asked).toBe(1);
+      tick(HOST_SESSION_FRESH_MS);
+      answer = null;
+      expect(JSON.parse((await run(ALICE, "ember")).text)).toMatchObject({ exitCode: 0 });
+      expect(asked).toBe(2);
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(exec.mock.calls.every(([input]) => input.id === "s1")).toBe(true);
+    });
+
+    it("a session running another bot's command is neither asked nor replaced for a long command", async () => {
+      let asked = 0;
+      const { open, exec, close, run, tick } = shared({ endAt: TWO_HOURS, reachable: () => { asked += 1; return asked === 1; } });
+      await run(ALICE, "sagax-test");
+      // 60 s left: the first command fits and its tunnel answers
+      tick(HOST_SESSION_LIFE_MS - 60_000);
+      let release: () => void = () => undefined;
+      exec.mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve({ exitCode: 0, stdout: "", stderr: "", timedOut: false }); }));
+      const running = run(ALICE, "ember", "make test");
+      await vi.waitFor(() => expect(exec).toHaveBeenCalledTimes(2));
+      const queued = run(ALICE, "architect", "make build", 120_000);
+      await vi.waitFor(() => expect(exec).toHaveBeenCalledTimes(3));
+      release();
+      await Promise.all([running, queued]);
+      expect(close).not.toHaveBeenCalled();
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(asked).toBe(1);
+    });
+
+    it("a command longer than the time left opens a new session first and runs once there; a short one stays", async () => {
+      const { open, exec, close, run, tick } = shared({ endAt: TWO_HOURS, hostLifeMs: HOST_SESSION_LIFE_MS });
+      await run(ALICE, "sagax-test");
+      tick(HOST_SESSION_LIFE_MS - 60_000);
+      // 60 s left: a 30 s command fits
+      expect(JSON.parse((await run(ALICE, "ember", "uptime", 30_000)).text)).toMatchObject({ exitCode: 0 });
+      expect(exec.mock.calls.at(-1)![0]).toMatchObject({ id: "s1" });
+      tick(30_000);
+      // 30 s left: a 120 s build does not fit, a new session takes it
+      const out = await run(ALICE, "ember", "make build", 120_000);
+      expect(JSON.parse(out.text)).toMatchObject({ exitCode: 0 });
+      expect(close).toHaveBeenCalledWith(ALICE, "sagax-test", "s1");
+      expect(open).toHaveBeenCalledTimes(2);
+      expect(exec.mock.calls.filter(([input]) => input.command === "make build").map(([input]) => input.id)).toEqual(["s2"]);
+    });
+
+    it("the idle sweep closes a session past its 30 minutes", async () => {
+      const { router, close, run, tick } = shared({ endAt: TWO_HOURS });
+      await run(ALICE, "sagax-test");
+      tick(HOST_SESSION_LIFE_MS - 60_000);
+      await run(ALICE, "ember");
+      tick(60_000);
+      expect(await router.sweep()).toBe(1);
+      expect(close).toHaveBeenCalledWith(ALICE, "sagax-test", "s1");
+    });
+  });
 
   it("every bot of the same person reaches the host through the one open session", async () => {
     const { open, exec, run } = shared();

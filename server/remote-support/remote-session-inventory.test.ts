@@ -376,6 +376,37 @@ describe("commands for the bot", () => {
     expect(await service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "echo quick" })).toMatchObject({ exitCode: 0 });
   });
 
+  // #3492: after a 255 the host router asks whether the tunnel still answers,
+  // through the tunnel's own queue (a second tailcat with the same key at the
+  // same time would reset the running one, #3430). The command is never run again.
+  it("tells whether a session's tunnel still answers, with one tailcat ping in the tunnel's queue (#3492)", async () => {
+    let answers = true;
+    const pings: string[][] = [];
+    const { service, commands } = harness(async (command, argv) => {
+      if (command === OS_PROBE_UNIX) return ok("Darwin");
+      if (command === inventoryCommand("macos")) return ok(MAC_INVENTORY);
+      if (argv.includes("ping")) {
+        pings.push(argv);
+        return answers ? ok("pong\n") : { code: 1, stdout: "", stderr: "timeout" };
+      }
+      return { code: 255, stdout: "", stderr: "" };
+    });
+    await service.publish(open);
+    expect(await service.exec({ principalId: PERSON, botId: BOT, threadId: THREAD, id: ID, command: "make build" })).toEqual({ error: expect.stringContaining("did not answer") });
+    expect(await service.reachable({ principalId: PERSON, botId: BOT, id: ID })).toBe(true);
+    answers = false;
+    expect(await service.reachable({ principalId: PERSON, botId: BOT, id: ID })).toBe(false);
+    expect(pings).toHaveLength(2);
+    expect(pings[0]).toEqual(expect.arrayContaining(["--key", "ping", ADDRESS]));
+    // the command itself went out once
+    expect(commands.filter((command) => command === "make build")).toHaveLength(1);
+    // another person, or a closed session, is never asked
+    expect(await service.reachable({ principalId: "person-2", botId: BOT, id: ID })).toBeNull();
+    await service.close(PERSON, BOT, ID);
+    expect(await service.reachable({ principalId: PERSON, botId: BOT, id: ID })).toBeNull();
+    expect(pings).toHaveLength(2);
+  });
+
   it("keeps the queue moving after a command that failed or threw (#3430)", async () => {
     let calls = 0;
     const { service } = harness(async (command) => {

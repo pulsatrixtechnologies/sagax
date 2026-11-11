@@ -54,6 +54,16 @@ describe("GET and PUT /api/me/proactive (#3423)", () => {
     expect(await call(route, { method: "GET", person: "person-2" })).toMatchObject({ status: 200, body: { domains: {}, available: [] } });
   });
 
+  it("#3513: answers what was already asked, and when, beside the choices", async () => {
+    const { route, store } = setup();
+    store.noteQuestion("person-1", "main");
+    store.noteAsk("person-1", { domain: "service", botId: "main", at: 5, proposalId: "p1" });
+    const read = await call(route, { method: "GET" }) as { body: { asks: unknown; firstAskedAt: unknown; asked: Record<string, unknown> } };
+    expect(read.body.asks).toEqual([{ domain: "service", botId: "main", at: 5, proposalId: "p1" }]);
+    expect(typeof read.body.firstAskedAt).toBe("number");
+    expect(Object.keys(read.body.asked)).toEqual(["main"]);
+  });
+
   it("a yes without a bot goes to the person's main bot; another person's bot is refused", async () => {
     const { route, store } = setup();
     expect(await call(route, { method: "PUT", body: { domain: "service", state: "on" } })).toMatchObject({ status: 200 });

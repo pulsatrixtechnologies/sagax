@@ -130,6 +130,19 @@ export class ProactiveChoices {
     this.save();
   }
 
+  /** #3513: the main bot said its one sentence of the upgrade while
+   * nothing could be offered: the sentence is not said again, and no bot's
+   * first question is spent (each still asks once something can be
+   * offered). */
+  noteFirstSaid(person: string): void {
+    const key = personKey(person);
+    if (!key) return;
+    const row = this.people[key] ?? emptyChoices();
+    row.firstAskedAt ??= this.now();
+    this.people[key] = row;
+    this.save();
+  }
+
   /** A deleted bot: each domain it carried moves to `fallback` (the
    * person's main bot) when given, else stays named and pauses. Returns the
    * domains that moved, per person. */

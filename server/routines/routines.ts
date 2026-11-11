@@ -1055,6 +1055,38 @@ function loadAttachments(value: unknown): RoutineContextAttachment[] {
   }
 }
 
+/** How many stored settled runs one slice after a start loads (#3563). */
+const STORED_RUNS_PER_SLICE = 200;
+
+/** One run as the routines file stored it, cleaned for the scheduler. */
+function loadStoredRun(run: RoutineRun): RoutineRun {
+  const target = loadTarget(run.target);
+  const loaded: RoutineRun = {
+    ...run,
+    readiness: loadRoutineReadiness(run.readiness),
+    target,
+    goalStatus: loadGoalStatus(run.goalStatus, target),
+    groupId: loadGroupId(run.groupId, target),
+    runOn: run.runOn ?? "maus",
+    timeoutMinutes: loadTimeoutMinutes(run.timeoutMinutes),
+    attachments: loadAttachments(run.attachments),
+    sourceThreadId: persistedSourceThreadId.parse(run.sourceThreadId),
+    resultsThreadId: persistedSourceThreadId.parse(run.resultsThreadId),
+    runAs: loadRunAs(run.runAs),
+    access: run.access === "read-and-draft" ? "read-and-draft" as const : undefined,
+    eventSource: run.eventSource === "app" || run.eventSource === "wait" ? run.eventSource : undefined,
+    checkKey: typeof run.checkKey === "string" && run.checkKey ? run.checkKey.slice(0, 200) : undefined,
+    claimCardAt: typeof run.claimCardAt === "number" && Number.isFinite(run.claimCardAt) ? run.claimCardAt : undefined,
+  };
+  if (loaded.timeoutMinutes === undefined) delete loaded.timeoutMinutes;
+  if (loaded.runAs === undefined) delete loaded.runAs;
+  if (loaded.access === undefined) delete loaded.access;
+  if (loaded.eventSource === undefined) delete loaded.eventSource;
+  if (loaded.checkKey === undefined) delete loaded.checkKey;
+  if (loaded.claimCardAt === undefined) delete loaded.claimCardAt;
+  return loaded;
+}
+
 function cloneSchedule(schedule: RoutineSchedule): RoutineSchedule {
   if (schedule.type === "webhook") return { type: "webhook" };
   if (schedule.type === "event") {
@@ -1696,7 +1728,22 @@ export class RoutineManager {
    * never run, but every save writes them back unchanged so unrelated work
    * cannot delete a row that is still repairable on disk. */
   private unloadedRoutines: Routine[] = [];
-  private runs: RoutineRun[] = [];
+  /** #3563: every run in stored order. A settled run read off disk stays as
+   * stored (in storedRuns) until the history is read: a start loads only the
+   * live runs, the rest load in slices after it (loadStoredRunsInSlices) or at
+   * once on the first read of `runs`. A save writes a stored run back as is. */
+  private runList: RoutineRun[] = [];
+  private readonly storedRuns = new Set<RoutineRun>();
+  private storedCursor = 0;
+  private get runs(): RoutineRun[] {
+    if (this.storedRuns.size) this.loadStoredRuns(Infinity);
+    return this.runList;
+  }
+  private set runs(value: RoutineRun[]) {
+    this.runList = value;
+    this.storedRuns.clear();
+    this.storedCursor = 0;
+  }
   private routineRequestReceipts: RoutineRequestReceipt[] = [];
   private webhookRunReceipts: WebhookRunReceipt[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -1862,35 +1909,19 @@ export class RoutineManager {
             return [loaded];
           })
         : [];
-      this.runs = Array.isArray(disk.runs)
-        ? disk.runs.map((run) => {
-            const target = loadTarget(run.target);
-            const loaded: RoutineRun = {
-              ...run,
-              readiness: loadRoutineReadiness(run.readiness),
-              target,
-              goalStatus: loadGoalStatus(run.goalStatus, target),
-              groupId: loadGroupId(run.groupId, target),
-              runOn: run.runOn ?? "maus",
-              timeoutMinutes: loadTimeoutMinutes(run.timeoutMinutes),
-              attachments: loadAttachments(run.attachments),
-              sourceThreadId: persistedSourceThreadId.parse(run.sourceThreadId),
-              resultsThreadId: persistedSourceThreadId.parse(run.resultsThreadId),
-              runAs: loadRunAs(run.runAs),
-              access: run.access === "read-and-draft" ? "read-and-draft" as const : undefined,
-              eventSource: run.eventSource === "app" || run.eventSource === "wait" ? run.eventSource : undefined,
-              checkKey: typeof run.checkKey === "string" && run.checkKey ? run.checkKey.slice(0, 200) : undefined,
-              claimCardAt: typeof run.claimCardAt === "number" && Number.isFinite(run.claimCardAt) ? run.claimCardAt : undefined,
-            };
-            if (loaded.timeoutMinutes === undefined) delete loaded.timeoutMinutes;
-            if (loaded.runAs === undefined) delete loaded.runAs;
-            if (loaded.access === undefined) delete loaded.access;
-            if (loaded.eventSource === undefined) delete loaded.eventSource;
-            if (loaded.checkKey === undefined) delete loaded.checkKey;
-            if (loaded.claimCardAt === undefined) delete loaded.claimCardAt;
-            return loaded;
-          })
-        : [];
+      // #3563: only the live runs load here; a settled one stays as stored
+      // until the history is read. An entry that is not a run is skipped.
+      const runList: RoutineRun[] = [];
+      for (const run of Array.isArray(disk.runs) ? disk.runs : []) {
+        if (!run || typeof run !== "object" || Array.isArray(run)) continue;
+        if (ACTIVE_RUN_STATUSES.has(run.status)) {
+          runList.push(loadStoredRun(run));
+        } else {
+          runList.push(run);
+          this.storedRuns.add(run);
+        }
+      }
+      this.runList = runList;
       this.routineRequestReceipts = Array.isArray(disk.routineRequestReceipts)
         ? disk.routineRequestReceipts.filter((receipt): receipt is RoutineRequestReceipt =>
             typeof receipt?.requestId === "string" &&
@@ -1914,14 +1945,18 @@ export class RoutineManager {
       this.folderOrder = loadFolderOrder(disk.folders);
       this.frozenPending = disk.frozenResultsCleared !== true;
       if (typeof disk.startupLaunchId === "string") this.startupLaunchId = disk.startupLaunchId;
-      // Upgrade old run logs before history pruning can discard their IDs.
-      const known = new Set(this.webhookRunReceipts.map((r) => JSON.stringify([r.webhookId, r.deliveryId])));
-      for (const run of this.runs) {
-        if (!run.webhookId || !run.deliveryId || run.createdAt < this.now() - WEBHOOK_RETRY_WINDOW_MS) continue;
-        const key = JSON.stringify([run.webhookId, run.deliveryId]);
-        if (known.has(key)) continue;
-        this.webhookRunReceipts.push({ webhookId: run.webhookId, deliveryId: run.deliveryId, runId: run.id, acceptedAt: run.createdAt });
-        known.add(key);
+      // Upgrade old run logs before history pruning can discard their IDs:
+      // a file from before the receipts (every save writes them since, with
+      // the run they belong to).
+      if (!Array.isArray(disk.webhookRunReceipts)) {
+        const known = new Set(this.webhookRunReceipts.map((r) => JSON.stringify([r.webhookId, r.deliveryId])));
+        for (const run of this.runList) {
+          if (!run.webhookId || !run.deliveryId || run.createdAt < this.now() - WEBHOOK_RETRY_WINDOW_MS) continue;
+          const key = JSON.stringify([run.webhookId, run.deliveryId]);
+          if (known.has(key)) continue;
+          this.webhookRunReceipts.push({ webhookId: run.webhookId, deliveryId: run.deliveryId, runId: run.id, acceptedAt: run.createdAt });
+          known.add(key);
+        }
       }
       // 2026-10-22 before postResults a routine's completed runs always
       // posted a card into its conversation. Pin every existing routine to
@@ -1963,7 +1998,9 @@ export class RoutineManager {
     // before.
     const recovered: RoutineRun[] = [];
     let resumable = false;
-    for (const run of this.runs) {
+    // Only live runs change here: the settled history stays as stored.
+    const live = this.runList.filter((run) => !this.storedRuns.has(run));
+    for (const run of live) {
       // Only a run whose turn was working: a waiting one (an approval, its
       // teammates) fails as before, its card or the runtime owns what's next.
       if (run.status === "running" && run.target === "bot" && run.threadId &&
@@ -2003,9 +2040,9 @@ export class RoutineManager {
     // behind another queued scheduled run, would make a second one: it is
     // kept in the history as missed. Manual and webhook runs were asked
     // for one by one and stay.
-    const resuming = new Set(this.runs.filter(run => this.restartResumes.includes(run.id)).map(run => run.routineId));
+    const resuming = new Set(live.filter(run => this.restartResumes.includes(run.id)).map(run => run.routineId));
     const keptQueued = new Set<string>();
-    for (const run of [...this.runs].sort((a, b) => b.scheduledFor - a.scheduledFor || b.createdAt - a.createdAt)) {
+    for (const run of live.sort((a, b) => b.scheduledFor - a.scheduledFor || b.createdAt - a.createdAt)) {
       if (run.status !== "queued" || (run.triggerSource ?? (run.manual ? "manual" : "schedule")) !== "schedule") continue;
       if (!resuming.has(run.routineId) && !keptQueued.has(run.routineId)) { keptQueued.add(run.routineId); continue; }
       run.status = "missed";
@@ -2020,6 +2057,34 @@ export class RoutineManager {
         this.notifyRunChanged(run);
         if (run.status !== "cancelled") this.options.onRunFailed?.(run);
       }
+    }
+    this.loadStoredRunsInSlices();
+  }
+
+  /** #3563: the settled runs a start left as stored load a slice at a time,
+   * each slice giving the loop back, unless a read of `runs` loads the rest
+   * first. */
+  private loadStoredRunsInSlices(): void {
+    const step = () => {
+      if (!this.storedRuns.size) return;
+      this.loadStoredRuns(STORED_RUNS_PER_SLICE);
+      if (this.storedRuns.size) setImmediate(step).unref?.();
+    };
+    if (this.storedRuns.size) setImmediate(step).unref?.();
+  }
+
+  private loadStoredRuns(limit: number): void {
+    const list = this.runList;
+    let left = limit;
+    // a save's trim can move entries behind the cursor: one more pass from the start finds them
+    for (let pass = 0; pass < 2 && left > 0 && this.storedRuns.size; pass += 1) {
+      for (; this.storedCursor < list.length && left > 0; this.storedCursor += 1) {
+        const run = list[this.storedCursor]!;
+        if (!this.storedRuns.delete(run)) continue;
+        list[this.storedCursor] = loadStoredRun(run);
+        left -= 1;
+      }
+      if (this.storedCursor >= list.length) this.storedCursor = 0;
     }
   }
 
@@ -2218,6 +2283,24 @@ export class RoutineManager {
 
   listRuns(from?: number, to?: number): RoutineRun[] {
     return this.listRunsRaw(from, to).map(cloneRun);
+  }
+
+  /** #3563: the team goal runs only, for the recovery at a start. A settled
+   * run still as stored is matched on its stored target and only a match
+   * loads: the rest of the history stays for the slices after the start. */
+  listRoomGoalRuns(): RoutineRun[] {
+    const list = this.runList;
+    const found: RoutineRun[] = [];
+    for (let index = 0; index < list.length; index += 1) {
+      let run = list[index]!;
+      if (loadTarget(run.target) !== "room-goal") continue;
+      if (this.storedRuns.delete(run)) {
+        run = loadStoredRun(run);
+        list[index] = run;
+      }
+      found.push(cloneRun(run));
+    }
+    return found.sort((a, b) => b.scheduledFor - a.scheduledFor);
   }
 
   /** One bot's runs only. The activity panel used to call listRuns() (clone
@@ -5472,9 +5555,12 @@ export class RoutineManager {
    * uncommitted action for a durable one.
    */
   private commitMutation(mutate: () => void, rollback?: () => void): void {
+    // A settled run still as stored (#3563) is never changed in place: the
+    // snapshot keeps it as is instead of loading the whole history to clone it.
     const before = {
       routines: this.routines.map(cloneRoutine),
-      runs: this.runs.map(cloneRun),
+      runs: this.runList.map((run) => this.storedRuns.has(run) ? run : cloneRun(run)),
+      stored: [...this.storedRuns],
       receipts: this.routineRequestReceipts.map((receipt) => ({ ...receipt })),
       folders: new Map([...this.folderOrder].map(([botId, names]) => [botId, [...names]])),
     };
@@ -5486,6 +5572,7 @@ export class RoutineManager {
     } catch (error) {
       this.routines = before.routines;
       this.runs = before.runs;
+      for (const run of before.stored) this.storedRuns.add(run);
       this.routineRequestReceipts = before.receipts;
       this.folderOrder = before.folders;
       try {
@@ -5508,13 +5595,17 @@ export class RoutineManager {
     // evicting one would strand live work. Treat MAX_RUNS as a soft history
     // cap and reclaim only the oldest terminal receipts. An unusually large
     // active queue may exceed it until work settles.
-    let excess = this.runs.length - MAX_RUNS;
-    for (let index = 0; index < this.runs.length && excess > 0;) {
-      if (["queued", "running", "waiting"].includes(this.runs[index]!.status)) {
+    // A settled run not loaded yet (#3563) is trimmed or written back as stored.
+    const runs = this.runList;
+    let excess = runs.length - MAX_RUNS;
+    for (let index = 0; index < runs.length && excess > 0;) {
+      if (["queued", "running", "waiting"].includes(runs[index]!.status)) {
         index += 1;
         continue;
       }
-      this.runs.splice(index, 1);
+      const [trimmed] = runs.splice(index, 1);
+      this.storedRuns.delete(trimmed!);
+      if (index < this.storedCursor) this.storedCursor -= 1;
       excess -= 1;
     }
     mkdirSync(dirname(this.file), { recursive: true });
@@ -5523,7 +5614,7 @@ export class RoutineManager {
       ...(this.frozenPending ? {} : { frozenResultsCleared: true }),
       ...(this.postResultsPending ? {} : { postResultsMigrated: true }),
       routines: [...this.routines, ...this.unloadedRoutines],
-      runs: this.runs,
+      runs,
       routineRequestReceipts: this.routineRequestReceipts,
       webhookRunReceipts: this.webhookRunReceipts,
       ...(this.startupLaunchId === undefined ? {} : { startupLaunchId: this.startupLaunchId }),

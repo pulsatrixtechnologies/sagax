@@ -9,6 +9,7 @@
  * Pure, no i18n: the UI composes the sentences (src/lib/routine-display.ts),
  * the server uses the same reader for a blocking reason. */
 
+import { markdownToPlainText } from "./plain-text.ts";
 import { fencedLines, runStatusNote, RUN_STATUS_PROBLEM_LINE, type RunStatusNote } from "./person-attention.ts";
 
 export interface RoutineResultParts {
@@ -243,6 +244,133 @@ export function withoutRunMarkersIn<T extends { role?: string; text?: unknown; r
     ...(note ? { runStatus: note } : {}),
     ...(summaryChanged ? { routineRun: { ...message.routineRun, summary: summary || undefined } } : {}),
   };
+}
+
+/** #3581: the longest brief a result's card shows (two lines of the card). */
+export const REPORT_BRIEF_MAX = 200;
+/** A closing line shorter than this does not read alone ("Done."). */
+const BRIEF_MIN = 12;
+
+const TABLE_LINE = /^\|/;
+const HEADING_LINE = /^#{1,6}\s/;
+const RULE_LINE = /^(?:[-*_]\s*){3,}$/;
+const HTML_LINE = /^<\/?[a-z!]/i;
+const LIST_ITEM = /^(?:[-*+]|\d{1,3}[.)])\s+/;
+
+/** The prose of a text, one entry per paragraph, in order: fenced blocks,
+ * tables, headings, rules and HTML left out; a list item is its own entry,
+ * marked so prose paragraphs come first. */
+function proseOf(text: string): Array<{ text: string; item: boolean }> {
+  const lines = text.split(/\r?\n/);
+  const fenced = fencedLines(lines);
+  const out: Array<{ text: string; item: boolean }> = [];
+  let current: string[] = [];
+  const flush = () => {
+    const joined = markdownToPlainText(current.join(" "));
+    if (joined && !PUNCTUATION_ONLY.test(joined)) out.push({ text: joined, item: false });
+    current = [];
+  };
+  lines.forEach((raw, index) => {
+    const line = raw.trim();
+    if (fenced[index] || !line || TABLE_LINE.test(line) || HEADING_LINE.test(line) || RULE_LINE.test(line) || HTML_LINE.test(line)) return flush();
+    if (LIST_ITEM.test(line)) {
+      flush();
+      const item = markdownToPlainText(line.replace(LIST_ITEM, ""));
+      if (item) out.push({ text: item, item: true });
+      return;
+    }
+    current.push(line);
+  });
+  flush();
+  return out;
+}
+
+/** The sentences of a paragraph (a period inside "2.5" or "1,204" splits nothing). */
+function sentencesOf(paragraph: string): string[] {
+  return paragraph.split(/(?<=[.!?…])\s+(?=\S)/).map((part) => part.trim()).filter(Boolean);
+}
+
+/** A paragraph within REPORT_BRIEF_MAX: whole when it fits, else its whole
+ * sentences from the start that fit, else cut at a word (clipReadable). */
+function fitBrief(paragraph: string): string {
+  if (paragraph.length <= REPORT_BRIEF_MAX) return paragraph;
+  let kept = "";
+  for (const sentence of sentencesOf(paragraph)) {
+    const next = kept ? `${kept} ${sentence}` : sentence;
+    if (next.length > REPORT_BRIEF_MAX) break;
+    kept = next;
+  }
+  return kept || clipReadable(paragraph, REPORT_BRIEF_MAX);
+}
+
+/** The words of a structure a brief can read: its summary, its reason, what
+ * the person must do, what was done, or its excerpt. */
+function structureWords(parts: RoutineResultParts): string {
+  return parts.summary || parts.reason || parts.todo.join("; ") || parts.done.join("; ") || parts.blocked.join("; ") || parts.excerpt || "";
+}
+
+/** #3581 (the owner: "synthesize the information"): a sentence that only
+ * offers more help or signs off to the reader, and says nothing of what was
+ * done, in the two shipped languages. Matched at the sentence's start only:
+ * "let me know" inside a fact is a fact. One list, pinned by the vectors. */
+const COURTESY_OPENINGS = [
+  // English
+  "(?:just |please )?let me know (?:if|whether|when|should)\\b",
+  "(?:please )?feel free to\\b",
+  "(?:just )?tell me if\\b",
+  "(?:i'?m |i am |i'?d be |i would be |always )?(?:happy|glad) to\\b(?! (?:report|say|confirm|announce|share that)\\b)",
+  "(?:please )?don'?t hesitate\\b",
+  "if you (?:need|have|want) (?:anything|any|more)\\b",
+  "hope (?:this|that) helps\\b",
+  "have a (?:good|great|nice|lovely) (?:day|evening|night|weekend|one)\\b",
+  // French
+  "(?:sinon, )?di(?:s|tes)[- ]moi si\\b",
+  "n'h[ée]sit(?:e|ez) pas\\b",
+  "fai(?:s|tes)[- ]moi (?:signe|savoir)\\b",
+  "laisse(?:z)?[- ]moi savoir\\b",
+  "si (?:tu as|vous avez) besoin\\b",
+  "bonne (?:journ[ée]e|soir[ée]e|nuit|fin de semaine)\\b",
+];
+const COURTESY = new RegExp(`^[\\s"'«“*_(]*(?:${COURTESY_OPENINGS.join("|")})`, "iu");
+
+/** #3581: the sentence is an offer of more help or a sign-off, never a brief. */
+export function isCourtesyLine(sentence: string): boolean {
+  return COURTESY.test(sentence.replace(/[’‘]/g, "'"));
+}
+
+/** #3581: a result's one or two lines, from the bot's own words (never a
+ * model call). `end`: a routine's report, read from the closing line the run
+ * contract asks for (its last prose paragraph; run markers, code blocks,
+ * tables, headings and list items left out), or its first prose sentence
+ * when that line is shorter than 12 characters or ends with a colon.
+ * `start`: the first sentence (a reply to another bot, the answer of a task
+ * a bot opened; verdict first). A courtesy (isCourtesyLine: an offer of more
+ * help, a sign-off) is never the brief: the last prose before it is, and
+ * the first prose sentence when nothing comes before it. At most
+ * REPORT_BRIEF_MAX characters, whole sentences, never cut inside a word, no
+ * Markdown. Empty when the text holds no prose. The server writes it on a
+ * run's card; the apps read the same function for a card stored without one
+ * (shared/routine-result.vectors.json). */
+export function reportBrief(text: string | undefined, from: "end" | "start"): string {
+  const clean = unwrap(withoutRoutineMarkers(text ?? ""));
+  if (!clean) return "";
+  const parts = routineResultParts(clean);
+  const source = parts.structured ? structureWords(parts) : clean;
+  if (!source.trim()) return "";
+  const prose = proseOf(source);
+  if (!prose.length) return "";
+  // each entry's sentences without its courtesies; an entry left empty goes
+  const kept = prose
+    .map((entry) => ({ item: entry.item, text: sentencesOf(entry.text).filter((sentence) => !isCourtesyLine(sentence)).join(" ") }))
+    .filter((entry) => entry.text);
+  const pick = (entries: Array<{ text: string; item: boolean }>) => (entries.some((entry) => !entry.item) ? entries.filter((entry) => !entry.item) : entries);
+  // nothing but courtesies: the bot's own first sentence, the only words there are
+  const paragraphs = pick(kept.length ? kept : prose);
+  const firstSentence = () => fitBrief(sentencesOf(paragraphs[0]!.text)[0] ?? paragraphs[0]!.text);
+  if (from === "start") return firstSentence();
+  const closing = paragraphs[paragraphs.length - 1]!.text;
+  if (closing.length < BRIEF_MIN || /:\s*$/.test(closing)) return paragraphs.length > 1 || sentencesOf(closing).length > 1 ? firstSentence() : fitBrief(closing);
+  return fitBrief(closing);
 }
 
 /** A failure's meaningful line for a problem line, clipped readably. */

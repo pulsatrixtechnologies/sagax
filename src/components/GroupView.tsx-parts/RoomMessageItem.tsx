@@ -188,7 +188,7 @@ export function RoomMessageItem({
           botOf={(id) => state.bots.find((candidate) => candidate.id === id)}
           modelOf={(id, threadId) => delegateModelLabel(state.bots.find((candidate) => candidate.id === id), state.instances, threadId)}
           onOpen={routineRunRef
-            ? () => openRoutineRun(dispatch, { runId: routineRunRef.runId, routineId: routineRunRef.routineId })
+            ? () => openRoutineRun(dispatch, { runId: routineRunRef.runId, routineId: routineRunRef.routineId, report: { text: routineRunRef.summary ?? "", at: m.at } })
             : undefined}
         />
       </div>

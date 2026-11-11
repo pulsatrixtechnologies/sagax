@@ -13,19 +13,65 @@ import type { Routine, RoutineRun } from "@/lib/routines";
 import type { BotActivityDetail } from "@/lib/bot-activity";
 import { routineRunPendingExchange, routineRunToExchange, routineRunExchangeMeta } from "@/lib/routine-run-exchange";
 import { api, useStore, type Bot } from "@/state/store";
+import type { RoutineRunCardReport } from "@/state/store/model";
 import { ExchangeSheet } from "../BotExchangeChip";
 import { RunActivityState } from "./RunActivityState";
 import { WaitingOnYou } from "../task/WaitingOnYou";
 import type { WaitingItem } from "@/lib/use-waiting-cards";
 
-export type RoutineRunWindowTarget = { runId: string; routineId?: string; botId?: string };
+/** #3581: `report` is the chat card's own report (its message's summary),
+ * the window's fallback when the run's record is gone or holds less. */
+export type RoutineRunWindowTarget = { runId: string; routineId?: string; botId?: string; report?: RoutineRunCardReport };
+
+/** What a run's record keeps of its output (server/routines/routines.ts
+ * clips it with clipReadable, which may end it a little earlier with "…"). */
+const RECORD_OUTPUT_MAX = 2_000;
+
+/** The record's output may be a clip of a longer report. */
+function recordMayBeClipped(output: string | undefined): boolean {
+  const length = output?.length ?? 0;
+  return length >= RECORD_OUTPUT_MAX || (length > RECORD_OUTPUT_MAX / 2 && output!.trimEnd().endsWith("…"));
+}
 
 function fallbackBot(botId: string, routine: Routine | null): Bot {
   return { id: botId, name: routine?.bot?.name ?? t("routines.unavailableBot"), color: "blue" } as Bot;
 }
 
-function RoutineRunWindowSheet({ run, routine, bot, bots, detail, detailError, reload, waiting, onClose, onStop }: {
+/** #3581: a finished run's whole report, so the window is whole from every
+ * entry (the chat's card, the panel, Automations). The app's runs keep the
+ * record's 2,000 characters; the single-run read gives the rest as `report`,
+ * asked once and only when the record may be a clip (`asked`: the window
+ * already loaded this run by id, with its report when the server had one).
+ * The card's own report (`cardReport`) wins whenever it holds more: the
+ * run's task thread may be gone while the chat still holds the whole text. */
+function useWholeReport(run: RoutineRun, cardReport: string | undefined, asked: boolean): RoutineRun {
+  const [report, setReport] = useState<string | undefined>(undefined);
+  const card = cardReport?.trim() ?? "";
+  const known = run.report ?? run.output ?? "";
+  const wanted = !asked && !run.report && !run.redacted && run.status === "completed"
+    && recordMayBeClipped(run.output) && card.length <= known.length;
+  useEffect(() => {
+    if (!wanted) return;
+    let live = true;
+    api<{ runs?: RoutineRun[] }>(`/api/routines?run=${encodeURIComponent(run.id)}`)
+      .then(({ runs }) => {
+        const whole = runs?.find((candidate) => candidate.id === run.id)?.report;
+        if (live && whole) setReport(whole);
+      })
+      .catch(() => { /* the record's text stays */ });
+    return () => { live = false; };
+  }, [wanted, run.id]);
+  return useMemo(() => {
+    if (run.redacted) return run;
+    const longest = [run.report, report, card].reduce<string>((best, text) => (text && text.length > best.length ? text : best), run.output ?? "");
+    return longest && longest !== (run.output ?? "") && longest !== run.report ? { ...run, report: longest } : run;
+  }, [run, report, card]);
+}
+
+function RoutineRunWindowSheet({ run: listed, cardReport, asked, routine, bot, bots, detail, detailError, reload, waiting, onClose, onStop }: {
   run: RoutineRun;
+  cardReport?: string;
+  asked: boolean;
   routine: Routine | null;
   bot: Bot;
   bots: readonly Bot[];
@@ -36,10 +82,11 @@ function RoutineRunWindowSheet({ run, routine, bot, bots, detail, detailError, r
   onClose: () => void;
   onStop: (runId: string) => void;
 }) {
+  const run = useWholeReport(listed, cardReport, asked);
   const live = ["queued", "running", "waiting"].includes(run.status);
   const exchange = useMemo(
     () => routineRunToExchange({ run, routine, bot, detail }),
-    [run, run.output, run.status, run.error, routine, bot, detail],
+    [run, run.output, run.report, run.status, run.error, routine, bot, detail],
   );
   const meta = (
     <span data-routine-run-meta>
@@ -92,6 +139,8 @@ export function RoutineRunWindow({ target, bots, onClose, onStop }: {
   // A run not in the app's window yet: load it by id, then the store has it.
   const [missing, setMissing] = useState<"loading" | "gone" | null>(run ? null : "loading");
   const [attempt, setAttempt] = useState(0);
+  // #3581: this window read the run by id, its whole report with it
+  const [loadedById, setLoadedById] = useState(false);
   useEffect(() => {
     if (run) { setMissing(null); return; }
     let live = true;
@@ -99,12 +148,41 @@ export function RoutineRunWindow({ target, bots, onClose, onStop }: {
     api<{ runs?: RoutineRun[] }>(`/api/routines?run=${encodeURIComponent(target.runId)}`)
       .then(({ runs }) => {
         if (!live) return;
-        if (Array.isArray(runs) && runs.length) dispatch({ type: "routineRunsLoaded", runs });
-        else setMissing("gone");
+        if (Array.isArray(runs) && runs.length) {
+          setLoadedById(true);
+          dispatch({ type: "routineRunsLoaded", runs });
+        } else setMissing("gone");
       })
       .catch(() => { if (live) setMissing("gone"); });
     return () => { live = false; };
   }, [run ? run.id : null, target.runId, attempt, dispatch]);
+
+  // #3581: a run whose record is gone (the run log trimmed) still opens the
+  // report its card holds: the window is whole from every entry.
+  const cardReport = target.report?.text.trim();
+  if (!run && missing === "gone" && cardReport) {
+    const kept = {
+      id: target.runId,
+      routineId: routineId ?? "",
+      routineName: routine?.name ?? "",
+      botId: bot.id,
+      target: "bot",
+      status: "completed",
+      scheduledFor: target.report!.at,
+      output: cardReport,
+    } as RoutineRun;
+    return (
+      <ExchangeSheet
+        chrome="window"
+        run={routineRunToExchange({ run: kept, routine, bot })}
+        bots={[...bots]}
+        showToolCalls
+        onClose={onClose}
+        testId="routine-run-window"
+        ariaLabel={routine?.name}
+      />
+    );
+  }
 
   if (!run) {
     return (
@@ -126,6 +204,8 @@ export function RoutineRunWindow({ target, bots, onClose, onStop }: {
     <RunActivityState key={run.id} run={run}>{({ detail, error, reload, waiting }) => (
       <RoutineRunWindowSheet
         run={run}
+        cardReport={cardReport}
+        asked={loadedById}
         routine={routine}
         bot={bot}
         bots={bots}

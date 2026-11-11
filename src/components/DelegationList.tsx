@@ -326,6 +326,7 @@ export function DelegationLine({ entries, owner, botOf, modelOf, onOpen }: {
       tailTone={stopped.length ? "danger" : waiting ? "accent" : undefined}
       data={{ "data-delegation-card-state": cardState }}
       className="mt-1 w-full self-stretch"
+      align="start"
     >
       {shown && (
         <Suspense fallback={null}>

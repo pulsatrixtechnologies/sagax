@@ -151,7 +151,9 @@ afterAll(async () => {
 });
 
 const cardOf = () => container.querySelector<HTMLElement>("section[data-routine-run-card]") ?? container.querySelector<HTMLElement>("section[aria-label*='routine run']");
-const bubbleOf = () => cardOf()?.querySelector<HTMLElement>("[data-routine-run-bubble]") ?? cardOf()?.firstElementChild as HTMLElement | null;
+// #3581: the run's one form: the live row while it runs, the result card once it has settled
+const bubbleOf = () => cardOf()?.firstElementChild as HTMLElement | null;
+const formOf = () => cardOf()?.getAttribute("data-routine-run-form") ?? "";
 const statusText = () => cardOf()?.querySelector("[data-routine-run-status]")?.textContent ?? "";
 
 describe("a routine run's card flipping status fast", () => {
@@ -201,6 +203,7 @@ describe("a routine run's card flipping status fast", () => {
     let cardGone = 0;
     const bubbleSizes = new Set<number>();
     const statusesShown: string[] = [statusText()];
+    const formsShown: string[] = [formOf()];
     let lastCard = firstCard;
     let lastBubble = firstBubble;
     const sample = () => {
@@ -212,6 +215,7 @@ describe("a routine run's card flipping status fast", () => {
       bubbleSizes.add(bubble?.textContent?.length ?? 0);
       const text = statusText();
       if (statusesShown.at(-1) !== text) statusesShown.push(text);
+      if (formsShown.at(-1) !== formOf()) formsShown.push(formOf());
     };
     // ten changes, 20 to 100 ms apart, each frame rendered as it arrives
     for (const [index, status] of burst.entries()) {
@@ -227,22 +231,24 @@ describe("a routine run's card flipping status fast", () => {
     const toggled = [...added.keys()].filter((key) => removed.has(key)).map((key) => `${key} +${added.get(key)} -${removed.get(key)}`);
     const report = {
       cardRemounts: cardSwaps, cardGone, bubbleRemounts: bubbleSwaps, bubbleSizes: [...bubbleSizes],
-      statusesShown, toggled, outsideMutations: outside, outsideKinds: Object.fromEntries(outsideKinds), cardMutations: insideCard,
+      statusesShown, formsShown, toggled, outsideMutations: outside, outsideKinds: Object.fromEntries(outsideKinds), cardMutations: insideCard,
       shellCommits: commits.shell - before.shell, chatCommits: commits.chat - before.chat,
       scrolls: vi.mocked(HTMLElement.prototype.scrollIntoView).mock.calls.length - scrolls,
       columnSame: container.querySelector("[data-chat-column]") === column,
       focusSame: document.activeElement === focused,
     };
     if (process.env.STATUS_FLASH_REPORT) process.stdout.write(`STATUS-FLASH ${JSON.stringify(report)}\n`);
-    // the card and its bubble: the same nodes, never gone, one size
+    // the run's section: the same node, never gone
     expect(report.cardRemounts).toBe(0);
     expect(report.cardGone).toBe(0);
-    expect(report.bubbleRemounts).toBe(0);
-    expect(report.bubbleSizes).toHaveLength(1);
-    // nothing came and went, in the card or the transcript
-    expect(report.toggled).toEqual([]);
-    // the burst draws once: Running, then its last status. Completed keeps
-    // no status badge (#2283): the muted line says Running while it runs, then only the plain message stays.
+    // #3581: the burst draws once: the live row (Running) holds through every
+    // flip, then the settled result becomes its card, one swap, at the end
+    expect(report.formsShown).toEqual(["row", "card"]);
+    expect(report.bubbleRemounts).toBe(1);
+    expect(report.bubbleSizes.length).toBeLessThanOrEqual(2);
+    // nothing came and went but that one swap (the row out, the card in)
+    expect(report.toggled).toEqual(["div[aria-label][data-ask-card] +1 -1"]);
+    // a finished result without problems has no state word (#2283)
     expect(report.statusesShown).toEqual(["Running", ""]);
     // nothing outside the card changed, the column is the same, no jump
     expect(report.outsideMutations).toBe(0);
@@ -254,12 +260,15 @@ describe("a routine run's card flipping status fast", () => {
     expect(seen.bots.find((bot) => bot.id === BOT)?.messages.find((m) => m.id === "receipt")?.routineRun?.status).toBe("completed");
     expect(cardOf()?.getAttribute("aria-label")).toBe("Project completion recalc routine run: Done");
     expect(cardOf()?.querySelector(".animate-spin")).toBeNull();
-    expect(cardOf()?.textContent).toContain("Project 18");
+    // the card's lines: the report's own first sentence (its closing line ends
+    // with a colon); the whole report opens behind Details
+    expect(cardOf()?.querySelector("[data-routine-run-brief]")?.textContent).toBe("The 18 open projects are there (385 tickets).");
+    expect(cardOf()?.textContent).not.toContain("Project 18");
   });
 
   it("still shows a single status change once it has held", async () => {
-    // Card starts completed from the burst above; running holds the previous
-    // plain look (no badge) until ROUTINE_STATUS_SETTLE_MS, then flips once.
+    // The card starts completed from the burst above; running holds the
+    // previous card until ROUTINE_STATUS_SETTLE_MS, then flips to the live row once.
     for (const frame of statusFrames("running")) send(frame);
     await settle();
     expect(statusText()).toBe("");

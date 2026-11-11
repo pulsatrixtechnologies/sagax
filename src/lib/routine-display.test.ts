@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { setLocale } from "./i18n";
 import type { RoutineRun } from "./routines";
-import { routineAutoPauseChoices, routineAutoPausedText, routineAutoPauseOption, routineResultText, routineRunLabel, routineRunError, routineRunPreview, routineRunProblems, routineRunsOn, routineRunSummary, routineWeekRunsText, scheduleRepeatsEventDate } from "./routine-display";
+import { routineAutoPauseChoices, routineAutoPausedText, routineAutoPauseOption, routineResultText, routineRunBrief, routineRunLabel, routineRunError, routineRunPreview, routineRunProblems, routineRunsOn, routineRunSummary, routineWeekRunsText, scheduleRepeatsEventDate } from "./routine-display";
 
 describe("a routine's details (#1516)", () => {
   it("says one run in the singular", () => {
@@ -159,5 +159,15 @@ describe("a run another model took over after a limit", () => {
 
   it("keeps the reset wording for a run that did wait for one", () => {
     expect(routineRunLabel({ ...run, limitTakeovers: undefined })).toBe("Ran after the usage limit reset · Completed");
+  });
+});
+
+// #3581: a card stored before the server wrote `brief` shows the same brief
+describe("routineRunBrief", () => {
+  it("reads the server's brief, else the same function over the stored report", () => {
+    const summary = "Read 14 messages.\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\n3 messages need you.";
+    expect(routineRunBrief({ summary })).toBe("3 messages need you.");
+    expect(routineRunBrief({ summary, brief: "Written by the server." })).toBe("Written by the server.");
+    expect(routineRunBrief({})).toBe("");
   });
 });

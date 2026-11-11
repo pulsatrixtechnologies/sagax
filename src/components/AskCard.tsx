@@ -11,6 +11,7 @@ import { Check, X } from "lucide-react";
 export function AskCard({
   icon,
   plain = false,
+  result = false,
   title,
   meta,
   explanation,
@@ -26,6 +27,9 @@ export function AskCard({
   /** the title is the ask itself (a question), in plain ink that wraps,
    * rather than an accent label */
   plain?: boolean;
+  /** #3581: the card tells a result (a routine's), it asks nothing: it is
+   * never one of the asks that wait (`data-ask-card="result"`). */
+  result?: boolean;
   title: ReactNode;
   /** small trailing text on the title line, such as "1 of 2 answered" */
   meta?: ReactNode;
@@ -44,11 +48,13 @@ export function AskCard({
       role="group"
       aria-label={ariaLabel}
       data-tour={tour}
-      data-ask-card="pending"
+      data-ask-card={result ? "result" : "pending"}
       onKeyDown={onKeyDown}
       // the composer's own surface, so an ask reads as part of the
-      // conversation's controls (the approval row uses the same)
-      className="w-full max-w-[600px] rounded-3xl bg-composer px-4 py-3 text-start ring-1 ring-composer-ring"
+      // conversation's controls (the approval row uses the same).
+      // #3581: a result takes the approval card's width, the whole message
+      // column, so one card reads at one width in the chat.
+      className={cn("w-full rounded-3xl bg-composer px-4 py-3 text-start ring-1 ring-composer-ring", !result && "max-w-[600px]")}
     >
       <div className={cn("flex min-w-0 gap-2", plain ? "items-start" : "items-center")}>
         {icon && <span aria-hidden="true" className="flex shrink-0 text-accent-text">{icon}</span>}

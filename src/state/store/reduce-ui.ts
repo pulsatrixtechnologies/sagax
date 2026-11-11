@@ -106,7 +106,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         ...state,
         activeView: "chat",
         codingChat: null,
-        routineRunWindow: { runId: action.runId, ...(routineId ? { routineId } : {}), ...(botId ? { botId } : {}) },
+        routineRunWindow: { runId: action.runId, ...(routineId ? { routineId } : {}), ...(botId ? { botId } : {}), ...(action.report ? { report: action.report } : {}) },
         personPanelId: null,
         appSettingsOpen: false,
         pluginsOpen: false,

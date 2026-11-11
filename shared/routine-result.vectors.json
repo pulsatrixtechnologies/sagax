@@ -1,0 +1,191 @@
+{
+  "about": "The brief of a result (reportBrief in shared/routine-result.ts): the one or two lines a routine's card shows, from the bot's own words, never a model call. from end: the closing line the run contract asks for (the last prose paragraph; run markers, code blocks, tables, headings and list items left out), or the first prose sentence when that line is shorter than 12 characters or ends with a colon. from start: the first sentence (a reply to another bot, the answer of a task a bot opened). A courtesy (an offer of more help or a sign-off to the reader, in English or French) is never the brief: the last prose before it is, and the first prose sentence when nothing comes before it. At most 200 characters, whole sentences, never cut inside a word, no Markdown. The same cases run on the server, the desktop and the phone.",
+  "cases": [
+    {
+      "name": "the closing line of a routine's report",
+      "from": "end",
+      "text": "Here is this morning's pass.\n\nI read 14 new messages and filed 11 of them.\n\n3 messages need you: two quotes to sign and one meeting to confirm.",
+      "brief": "3 messages need you: two quotes to sign and one meeting to confirm."
+    },
+    {
+      "name": "a long report with headings, tables and a list: the closing line, never a table row",
+      "from": "end",
+      "text": "Here is this evening's dispatch pass.\n\n## Board state\n\n| Board | Open | Unassigned |\n|---|---|---|\n| Service desk | 41 | 3 |\n| Projects | 18 | 0 |\n\nThree tickets waited on a client answer for more than five days; I sent the follow-up note on each one.\n\n## Left alone\n\n- #4790: the client asked to wait until Monday.\n- #4801: the parts order is in transit.\n\nNothing else needs a decision tonight.",
+      "brief": "Nothing else needs a decision tonight."
+    },
+    {
+      "name": "a report that ends with a table: the last prose paragraph before it",
+      "from": "end",
+      "text": "All 12 backups completed; the largest took 41 minutes.\n\n| Job | Size | Time |\n|---|---|---|\n| Files | 220 GB | 41 min |\n| Mail | 80 GB | 12 min |",
+      "brief": "All 12 backups completed; the largest took 41 minutes."
+    },
+    {
+      "name": "a report that ends with a code block: the last prose paragraph before it",
+      "from": "end",
+      "text": "The export ran and wrote 3 files to the shared folder.\n\n```\nexport-2026-11-11.csv\nexport-2026-11-11.json\n```",
+      "brief": "The export ran and wrote 3 files to the shared folder."
+    },
+    {
+      "name": "a closing line too short to read alone: the first prose sentence",
+      "from": "end",
+      "text": "Sorted the inbox: 9 messages archived and 2 flagged for you. Nothing urgent.\n\nDone.",
+      "brief": "Sorted the inbox: 9 messages archived and 2 flagged for you."
+    },
+    {
+      "name": "a closing line that ends with a colon announces more: the first prose sentence",
+      "from": "end",
+      "text": "Two invoices are still unpaid after 30 days. I sent the reminder on both.\n\nHere is the list:\n\n- Invoice 1042\n- Invoice 1057",
+      "brief": "Two invoices are still unpaid after 30 days."
+    },
+    {
+      "name": "a run marker is never in the brief",
+      "from": "end",
+      "text": "The mailbox refused the sign-in, so 4 messages were not sorted. Sign in again from Connect apps.\n\nRUN_STATUS: partial: sign-in refused",
+      "brief": "The mailbox refused the sign-in, so 4 messages were not sorted. Sign in again from Connect apps."
+    },
+    {
+      "name": "the quiet marker on its own line is never in the brief",
+      "from": "end",
+      "text": "Checked the calendar for tomorrow; nothing moved.\n\nNOTHING_TO_REPORT",
+      "brief": "Checked the calendar for tomorrow; nothing moved."
+    },
+    {
+      "name": "Markdown leaves the brief: emphasis, inline code and links read as words",
+      "from": "end",
+      "text": "Pass done.\n\n**3 tickets** assigned, `1` waits for a part, see [the board](https://example.test/board).",
+      "brief": "3 tickets assigned, 1 waits for a part, see the board."
+    },
+    {
+      "name": "a closing paragraph over 200 characters keeps its whole sentences that fit",
+      "from": "end",
+      "text": "Report.\n\nThe nightly sync copied 1,204 files from the shared drive to the archive and checked every checksum against the source. Four files changed while they were copied and were copied again at the end. The archive now matches the source and nothing needs you tonight.",
+      "brief": "The nightly sync copied 1,204 files from the shared drive to the archive and checked every checksum against the source. Four files changed while they were copied and were copied again at the end."
+    },
+    {
+      "name": "one sentence over 200 characters is cut at a word and marked, never inside a word",
+      "from": "end",
+      "text": "The nightly sync copied every file from the shared drive to the archive, checked every checksum against the source, copied again the four files that changed while it ran, and left the archive matching the source with nothing for you to do tonight",
+      "brief": "The nightly sync copied every file from the shared drive to the archive, checked every checksum against the source, copied again the four files that changed while it ran, and left the archive…"
+    },
+    {
+      "name": "a report that is a structure: its summary field",
+      "from": "end",
+      "text": "{\n  \"summary\": \"Bank watch updated\",\n  \"todo\": [\"Approve sheet 100203\"]\n}",
+      "brief": "Bank watch updated"
+    },
+    {
+      "name": "a structure without a summary: its reason",
+      "from": "end",
+      "text": "{\"status\": \"blocked\", \"reason\": \"The supplier site asks for a new password.\"}",
+      "brief": "The supplier site asks for a new password."
+    },
+    {
+      "name": "a structure with only a to-do list: what the person must do",
+      "from": "end",
+      "text": "{\"todo\": [\"Sign the quote for the new printer\", \"Confirm Friday's visit\"]}",
+      "brief": "Sign the quote for the new printer; Confirm Friday's visit"
+    },
+    {
+      "name": "a courtesy after a real closing line: the closing line, never the courtesy",
+      "from": "end",
+      "text": "I reconciled the 6 open agreements; one is over its bank by 2.5 hours.\n\nLet me know if you need anything else!",
+      "brief": "I reconciled the 6 open agreements; one is over its bank by 2.5 hours."
+    },
+    {
+      "name": "French: a courtesy after a real closing line: the closing line",
+      "from": "end",
+      "text": "J'ai rapproché les 6 ententes ouvertes; une dépasse sa banque de 2,5 heures.\n\nDis-moi si tu as besoin d'autre chose!",
+      "brief": "J'ai rapproché les 6 ententes ouvertes; une dépasse sa banque de 2,5 heures."
+    },
+    {
+      "name": "a courtesy at the end of the closing paragraph: the sentence before it",
+      "from": "end",
+      "text": "Pass done.\n\nAll 12 backups completed and the largest took 41 minutes. Feel free to ask for the job list.",
+      "brief": "All 12 backups completed and the largest took 41 minutes."
+    },
+    {
+      "name": "French: N'hésite pas and Fais-moi signe are courtesies too",
+      "from": "end",
+      "text": "Les 4 certificats sont renouvelés jusqu'en 2027.\n\nN'hésite pas si tu veux le détail. Fais-moi signe au besoin.",
+      "brief": "Les 4 certificats sont renouvelés jusqu'en 2027."
+    },
+    {
+      "name": "a courtesy with a typographic apostrophe and a sign-off",
+      "from": "end",
+      "text": "Three quotes were sent to the clients today.\n\nDon’t hesitate to reach out. Have a great evening!",
+      "brief": "Three quotes were sent to the clients today."
+    },
+    {
+      "name": "a courtesy after a list only: the last item before it",
+      "from": "end",
+      "text": "- Renewed the certificate for the web server.\n- Moved the old backup to cold storage.\n\nHappy to help with anything else.",
+      "brief": "Moved the old backup to cold storage."
+    },
+    {
+      "name": "a courtesy alone: the bot's own words, nothing else to read",
+      "from": "end",
+      "text": "Let me know if you need anything else!",
+      "brief": "Let me know if you need anything else!"
+    },
+    {
+      "name": "French: a courtesy alone: the bot's own words",
+      "from": "end",
+      "text": "Dis-moi si tu as besoin d'autre chose!",
+      "brief": "Dis-moi si tu as besoin d'autre chose!"
+    },
+    {
+      "name": "a real closing line that holds let me know in the middle of a fact stays",
+      "from": "end",
+      "text": "Pass done.\n\nThe supplier will let me know if the part ships Friday; 2 tickets wait on it.",
+      "brief": "The supplier will let me know if the part ships Friday; 2 tickets wait on it."
+    },
+    {
+      "name": "French: a real closing line that holds dis-moi in the middle of a fact stays",
+      "from": "end",
+      "text": "Passe faite.\n\nLe client m'a écrit « dis-moi si la pièce arrive vendredi »; 2 billets l'attendent.",
+      "brief": "Le client m'a écrit « dis-moi si la pièce arrive vendredi »; 2 billets l'attendent."
+    },
+    {
+      "name": "happy to report is a fact, not a courtesy",
+      "from": "end",
+      "text": "Happy to report that all 12 backups passed tonight.",
+      "brief": "Happy to report that all 12 backups passed tonight."
+    },
+    {
+      "name": "a reply that opens with a courtesy: its first real sentence",
+      "from": "start",
+      "text": "Happy to help! The 11 board tests pass and the build is green.",
+      "brief": "The 11 board tests pass and the build is green."
+    },
+    {
+      "name": "only list items: the last item, without its mark",
+      "from": "end",
+      "text": "- Renewed the certificate for the web server.\n- Moved the old backup to cold storage.",
+      "brief": "Moved the old backup to cold storage."
+    },
+    {
+      "name": "a reply to another bot: the first sentence (verdict first)",
+      "from": "start",
+      "text": "PASS. The 11 board tests pass and the build is green.\n\nDetails below.",
+      "brief": "PASS."
+    },
+    {
+      "name": "a reply that opens with a heading: the first prose sentence",
+      "from": "start",
+      "text": "## Review\n\nTwo findings, both fixed on the branch. The tests pass.",
+      "brief": "Two findings, both fixed on the branch."
+    },
+    {
+      "name": "nothing but a table: no brief",
+      "from": "end",
+      "text": "| A | B |\n|---|---|\n| 1 | 2 |",
+      "brief": ""
+    },
+    {
+      "name": "empty: no brief",
+      "from": "end",
+      "text": "   ",
+      "brief": ""
+    }
+  ]
+}

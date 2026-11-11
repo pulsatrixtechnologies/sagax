@@ -1,84 +1,72 @@
-/** Isolated gallery for headless screenshots of routine run cards in the chat
- * (2026-11-04 / #2081): a clean Done report reads as a normal bot message
- * under a provenance line; status cards stay for Nothing to report (with a
- * hand-off), Completed with problems, Failed and paused, Running live. Under
- * a team goal card for comparison, through the chat's own row and the real
- * store. Neutral fictional bots and routines. Not shipped in the app.
- * ?width=<px>&height=<px>&skin=<id> (pulsatrix: dark, pulsatrix-light: light)
- * ?scene=delegation (2026-11-06): a run that handed work to three teammates,
- * Done and Running mixed, as Grok Bot's sub-agent list.
- * ?scene=feedback (#2694): a heartbeat and a mail wake rated in place, a
- * "needs you" card and each point of a brief, beside a suggestion card
- * (the compliant neighbour, OptionCard with its feedback row), and a chosen
- * watch's alert with « Stop this watch » and « Stop this domain » (#3457).
- * ?scene=repeat (#3479): a problem said once, its row counting the runs
- * since, beside a plain problem row (the compliant neighbour), then the
- * first success after it, said once. */
+/** Isolated gallery for headless screenshots of a routine's result in the
+ * chat (#3581): the compact card (AskCard) with the report's closing line in
+ * at most two lines and "Details", the one quiet row (AskSettledLine) of a
+ * run in progress or a folded result, through the chat's own row and the
+ * real store. Every scene opens with the conforming neighbour, the compact
+ * approval card (#3414), so each shot holds both. Neutral fictional bots and
+ * routines. Not shipped in the app.
+ * ?width=<px>&height=<px|auto>&skin=<id>&lang=en|fr&scene=<scene>
+ * scenes: states (every state, the default), reports (real-shaped reports: a
+ * long one with tables, one that ends with a courtesy, one that is a
+ * structure), stack (17 results in one hour, three with problems, as a
+ * heavy user's chat), banner (a failed run's passing banner, a paused
+ * routine with Resume), room (a room's chat that holds a result), window (the
+ * run window that Details opens, with a long report that holds a table),
+ * window-gone (the run window opened from a card whose run's record is gone:
+ * the card's own report, whole),
+ * feedback (wakes rated in place, a watch alert's exits, a brief), card
+ * (#2719: two runs that handed work to teammates beside a finished coding
+ * job; a click on Tester's row opens its work in the chat). */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
+import { PendingApprovalBox, pendingApprovals } from "../components/PendingApproval";
 import { ChatMarkdown } from "../components/ChatMarkdown";
-import { AttentionRow, RoutineRunRow } from "../components/ChatView";
+import { RoutineRunRow } from "../components/ChatView";
+import { ChatViewSheets } from "../components/ChatView.tsx-parts/ChatViewSheets";
 import { CodingJobCard } from "../components/CodingJobCard";
-import { GoalRunCard } from "../components/GoalRunCard";
-import { NewMessagesDivider } from "../components/NewMessagesDivider";
-import { OptionCard } from "../components/OptionCard";
+import { DesktopCapabilitiesProvider } from "../components/DesktopCapabilities";
+import { TransientNotice } from "../components/TransientNotice";
 import { BriefItemsFeedback } from "../components/WakeFeedback";
 import type { BotActivityItem } from "../lib/bot-activity";
 import { chatBubbleWidth, useChatBubbleWidthClasses } from "../lib/chat-bubble-width";
 import { codingJobView } from "../lib/coding-job-card";
 import { loadLocale } from "../lib/i18n";
 import { prefersWideBubble } from "../lib/rich-blocks";
+import type { Routine, RoutineRun } from "../lib/routines";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
-import { StoreProvider, useStore, type Bot, type Message } from "../state/store";
+import { openRoutineRun, StoreProvider, useStore, type Bot, type Message } from "../state/store";
 import type { RoutineRunCardData } from "../../shared/routine-run";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
 const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
-await loadLocale(new URLSearchParams(location.search).get("lang") === "fr" ? "fr" : "en");
+const FR = params.get("lang") === "fr";
+await loadLocale(FR ? "fr" : "en");
 const width = Number(params.get("width") ?? 900);
-const height = Number(params.get("height") ?? 1500);
-/** ?scene=report: one finished run with a long report (headings, two tables, lists)
- * under a normal bot reply, to compare the two renderings side by side (#2081). */
-const scene = params.get("scene") ?? "all";
+const autoHeight = params.get("height") === "auto";
+const height = autoHeight ? undefined : Number(params.get("height") ?? 1500);
+const scene = params.get("scene") ?? "states";
+const say = (en: string, fr: string) => (FR ? fr : en);
 
 const NOW = Date.now();
 const M = 60_000;
-const makeBot = (id: string, name: string, color: string) => ({
-  id, threadId: `${id}-thread`, mainThreadId: `${id}-thread`, name, title: "", description: "", color, notifications: true, unread: false, busy: false, messages: [],
+const makeBot = (id: string, name: string, color: string, messages: Message[] = []) => ({
+  id, threadId: `${id}-thread`, mainThreadId: `${id}-thread`, name, title: "", description: "", color, notifications: true, unread: false, busy: false, messages,
   modelSelection: { instanceId: "test", model: "test" }, tasks: [{ threadId: `${id}-thread`, title: "Main", createdAt: NOW - 48 * 60 * M }],
 }) as unknown as Bot;
-const atlas = makeBot("atlas", "Atlas", "blue");
-const nova = makeBot("nova", "Nova", "pink");
-const teammate = (id: string, name: string, color: string, model: string, threadId: string, busy: boolean) => {
-  const bot = makeBot(id, name, color) as unknown as { modelSelection: unknown; tasks: unknown[] };
-  bot.modelSelection = { instanceId: "test", model };
-  bot.tasks = [...bot.tasks, { threadId, title: name, createdAt: NOW - 10 * M, busy, activity: busy ? "working" : "idle" }];
-  return bot as unknown as Bot;
-};
-const harrie = teammate("harrie", "Harrie", "green", "Opus 4.7", "harrie-work", false);
-const orla = teammate("orla", "Orla", "orange", "Sonnet 4.6", "orla-work", true);
-const quill = teammate("quill", "Quill", "purple", "Haiku 4.5", "quill-work", true);
-const team = [atlas, nova, harrie, orla, quill];
 
-const card = (id: string, run: Partial<RoutineRunCardData> & Pick<RoutineRunCardData, "routineName" | "status">, at: number): Message => ({
-  id, role: "bot", kind: "routine.run", at, from: { botId: "atlas" },
+type CardRun = Partial<RoutineRunCardData> & Pick<RoutineRunCardData, "routineName" | "status">;
+const card = (id: string, run: CardRun, at: number, extra: Partial<Message> = {}): Message => ({
+  id, role: "bot", kind: "routine.run", at, from: { botId: "server" },
   routineRun: { runId: `run-${id}`, routineId: `r-${id}`, scheduledFor: at, ...run },
+  ...extra,
 }) as unknown as Message;
 
-const messages: Message[] = [
-  card("done", { routineName: "Morning brief", status: "completed", summary: "Three things today:\n\n- The build is green.\n- Two dependency updates are waiting.\n- One meeting moved to 2 PM." }, NOW - 50 * M),
-  card("quiet", { routineName: "Close past meetings", status: "nothing_to_report", handedTo: [{ botId: "nova", threadId: "nova-work", name: "Nova", status: "completed" }] }, NOW - 31 * M),
-  card("problems", { routineName: "Weekly inventory", status: "completed", summary: "Counted 42 items; the shelf list is updated.", problems: "One supplier page did not load." }, NOW - 20 * M),
-  card("failed", { routineName: "Backup check", status: "failed", error: "The storage service did not answer after three tries.", autoPausedAfter: 3 }, NOW - 12 * M),
-  card("running", { routineName: "Project health watch", status: "running", startedAt: NOW - 2 * M - 14_000, handedTo: [{ botId: "nova", threadId: "nova-run", name: "Nova", status: "running" }] } as Partial<RoutineRunCardData> & Pick<RoutineRunCardData, "routineName" | "status">, NOW - 3 * M),
-];
-const repeatedRun = card("repeat", { routineName: "Backup check", status: "completed", summary: "The backup host did not answer.", problems: "The backup host has not answered since Monday.",
-  repeat: { firstRunId: "run-repeat", count: 7, since: NOW - 6 * 60 * M, lastAt: NOW - 8 * M } }, NOW - 6 * 60 * M);
-const recoveredRun = card("recovered", { routineName: "Backup check", status: "nothing_to_report", recovered: { afterRuns: 7, since: NOW - 6 * 60 * M } }, NOW - 2 * M);
-const REPORT = `Here is this evening's dispatch pass.
+/** A real-shaped long report: headings, two tables, a list, and the closing
+ * line the run contract asks for. */
+const LONG_REPORT = say(`Here is this evening's dispatch pass.
 
 ## Board state
 
@@ -88,80 +76,189 @@ const REPORT = `Here is this evening's dispatch pass.
 | Projects | 18 | 0 | 0 |
 | Alerts | 7 | 7 | 0 |
 
-Three tickets were waiting on a client answer for more than five days; I sent the follow-up note on each one.
+Three tickets waited on a client answer for more than five days; I sent the follow-up note on each one.
 
 ## Reassigned
 
 | Ticket | From | To | Why |
 |---|---|---|---|
-| #4812 | Nova | Atlas | Nova is off tomorrow |
-| #4830 | (queue) | Nova | Printer site visit, Nova is on site anyway |
+| #4812 | Bot B | Tester | Bot B is off tomorrow |
+| #4830 | (queue) | Bot B | On site anyway |
 
 ## Left alone
 
 - #4790: the client asked to wait until Monday.
 - #4801: the parts order is in transit, nothing to do before Thursday.
 
-Nothing else needs a decision tonight.`;
-const NEIGHBOUR = `Two things changed since this morning:
+3 tickets reassigned, 2 over SLA; nothing else needs a decision tonight.`, `Voici la passe de répartition de ce soir.
 
-| Item | Before | Now |
-|---|---|---|
-| Build | red | green |
-| Open PRs | 6 | 4 |
+## État des tableaux
 
-The 2 PM meeting moved to 3 PM; the room is the same.`;
-const delegatedRun = card("delegated", {
-  routineName: "dispatch-gox-pass", status: "running", startedAt: NOW - 4 * M,
-  handedTo: [
-    { botId: "harrie", threadId: "harrie-work", name: "Harrie", status: "completed", task: "Reconcile the bank overage for Northwind", startedAt: NOW - 4 * M, finishedAt: NOW - 1 * M, note: "Moved 2.5 h to the right agreement." },
-    { botId: "orla", threadId: "orla-work", name: "Orla", status: "running", task: "Draft the weekly client summary", startedAt: NOW - 3 * M },
-    { botId: "quill", threadId: "quill-work", name: "Quill", status: "running", startedAt: NOW - 2 * M },
-  ],
-} as Partial<RoutineRunCardData> & Pick<RoutineRunCardData, "routineName" | "status">, NOW - 4 * M);
-const reportRun = card("report", { routineName: "dispatch-gox-pass", status: "completed", summary: REPORT }, NOW - 9 * M);
+| Tableau | Ouverts | Sans technicien | Hors SLA |
+|---|---|---|---|
+| Centre de services | 41 | 3 | 2 |
+| Projets | 18 | 0 | 0 |
+| Alertes | 7 | 7 | 0 |
 
-/** ?scene=unified (#2096, #2098): the bot's conversation with threads off. A
- * live run (Stop beside View run, the hand-off as one grey line), a question
- * answered in place (no Open thread) and the finished report, in the chat. */
-const liveRun = card("live", {
-  routineName: "dispatch-gox-pass", status: "running", startedAt: NOW - 1 * M - 20_000,
-  handedTo: [{ botId: "nova", threadId: "nova-run", name: "Nova", status: "running" }],
-} as Partial<RoutineRunCardData> & Pick<RoutineRunCardData, "routineName" | "status">, NOW - 2 * M);
-const question: Message = {
-  id: "question", role: "bot", kind: "text", at: NOW - 5 * M, from: { botId: "atlas" },
-  text: "Atlas has a question for you: Which agreement do I bill #4812 to?",
-  attention: {
-    id: "attention-1", kind: "question", botId: "atlas", botName: "Atlas", threadId: "atlas-job", routineName: "dispatch-gox-pass", createdAt: NOW - 5 * M,
-    items: [{ text: "Which agreement do I bill **#4812** to? The client has two active ones.", ticketId: 4812, ticketUrl: "https://example.test/v4_6_release/services/system_io/Service/fv_sr100_request.rails?service_recid=4812" }],
+Trois billets attendaient une réponse du client depuis plus de cinq jours; j'ai envoyé le suivi sur chacun.
+
+## Réassignés
+
+| Billet | De | À | Pourquoi |
+|---|---|---|---|
+| #4812 | Bot B | Tester | Bot B est en congé demain |
+| #4830 | (file) | Bot B | Déjà sur place |
+
+## Laissés tels quels
+
+- #4790 : le client a demandé d'attendre lundi.
+- #4801 : la commande de pièces est en route, rien à faire avant jeudi.
+
+3 billets réassignés, 2 hors SLA; rien d'autre ne demande une décision ce soir.`);
+/** A report that ends with a courtesy: the brief is the real line before it, never the courtesy. */
+const COURTESY_REPORT = say(
+  "I reconciled the 6 open agreements; one is over its bank by 2.5 hours and I moved the extra time to the right agreement.\n\nLet me know if you need anything else!",
+  "J'ai rapproché les 6 ententes ouvertes; une dépasse sa banque de 2,5 heures et j'ai déplacé le temps en trop vers la bonne entente.\n\nDis-moi si tu as besoin d'autre chose!",
+);
+/** A report that is a structure (a bot that ended with JSON). */
+const STRUCTURE_REPORT = JSON.stringify({
+  summary: say("Bank watch updated: 2 agreements under 10% of their hours.", "Veille des banques à jour : 2 ententes sous 10 % de leurs heures."),
+  todo: [say("Approve sheet 100203", "Approuver la feuille 100203")],
+}, null, 2);
+
+const reportCard = card("report", { routineName: say("Evening dispatch", "Répartition du soir"), status: "completed", summary: LONG_REPORT }, NOW - 9 * M);
+/** A result whose run the run log no longer holds (trimmed after weeks). */
+const goneCard = card("gone", { routineName: say("Evening dispatch", "Répartition du soir"), status: "completed", summary: LONG_REPORT }, NOW - 40 * 24 * 60 * M);
+
+/** Every state of a run, through the chat's own row. */
+const STATES: Message[] = [
+  reportCard,
+  card("problems", { routineName: say("New mail triage", "Tri du courriel"), status: "completed",
+    summary: say("The mailbox refused the sign-in, so 4 messages were not sorted. Sign in again from Connect apps.", "La boîte a refusé la connexion, donc 4 messages n'ont pas été triés. Reconnecte-toi depuis Connecter des apps."),
+    problems: "sign-in refused", repeat: { firstRunId: "run-p0", count: 4, since: NOW - 2 * 24 * 60 * M, lastAt: NOW - 8 * M } }, NOW - 8 * M),
+  card("recovered", { routineName: say("Backup check", "Vérification des sauvegardes"), status: "completed",
+    summary: say("All 12 backups completed; the largest took 41 minutes.", "Les 12 sauvegardes sont faites; la plus longue a pris 41 minutes."),
+    recovered: { afterRuns: 7, since: NOW - 6 * 60 * M } }, NOW - 7 * M),
+  card("blocked", { routineName: say("Supplier prices", "Prix des fournisseurs"), status: "blocked",
+    error: say("The supplier site asks for a new password.", "Le site du fournisseur demande un nouveau mot de passe.") }, NOW - 6 * M),
+  card("manual", { routineName: say("Month-end export", "Export de fin de mois"), status: "running", startedAt: NOW - 2 * M - 14_000 }, NOW - 3 * M),
+  card("waiting", { routineName: say("Quote follow-up", "Suivi des soumissions"), status: "waiting",
+    attention: say("Waits for your answer on the quote card.", "Attend ta réponse sur la carte de la soumission.") }, NOW - 5 * M),
+  card("quiet", { routineName: say("Close past meetings", "Fermer les réunions passées"), status: "nothing_to_report" }, NOW - 4 * M),
+  card("items", { routineName: say("Invoice review", "Revue des factures"), status: "completed",
+    summary: say("Two invoices are ready; one needs your approval before it goes out.", "Deux factures sont prêtes; une demande ton approbation avant l'envoi.") }, NOW - 3 * M, {
+    attention: { id: "att-1", kind: "human", botId: "server", botName: "Server", threadId: "server-run", sourceMessageId: "m", createdAt: NOW - 3 * M,
+      items: [{ text: say("Approve invoice **1042** before it goes out.", "Approuve la facture **1042** avant l'envoi.") }] },
+  } as Partial<Message>),
+  card("asked", { routineName: say("Weekly review", "Revue hebdomadaire"), status: "completed",
+    summary: say("Reviewer and Tester checked the release branch; both found nothing to change.", "Reviewer et Tester ont vérifié la branche de version; rien à changer."),
+    handedTo: [
+      { botId: "reviewer", threadId: "reviewer-work", name: "Reviewer", status: "completed", task: say("Review the release branch", "Revoir la branche de version") },
+      { botId: "tester", threadId: "tester-work", name: "Tester", status: "completed", task: say("Run the board tests", "Rouler les tests du tableau") },
+    ] }, NOW - 2 * M),
+];
+const wake = card("wake", { routineName: say("Heartbeat: Server", "Battement : Server"), status: "completed", wakeTopic: "heartbeat",
+  summary: say("The backup service stopped at 3:10 AM. I restarted it; it is running again.", "Le service de sauvegarde s'est arrêté à 3 h 10. Je l'ai redémarré; il roule de nouveau.") }, NOW - 1 * M);
+
+/** A heavy user's hour: 17 routines report, three of them with a problem. */
+const STACK_NAMES = ["Morning dispatch", "New mail triage", "Backup check", "Calendar sweep", "Invoice review", "Supplier prices", "Ticket aging", "Agreement banks",
+  "Certificate watch", "Disk space", "Patch status", "License count", "Quote follow-up", "Time entries", "Project health", "Alert digest", "Close past meetings"];
+const STACK_NAMES_FR = ["Répartition du matin", "Tri du courriel", "Vérification des sauvegardes", "Balayage de l'agenda", "Revue des factures", "Prix des fournisseurs", "Âge des billets", "Banques des ententes",
+  "Veille des certificats", "Espace disque", "État des correctifs", "Nombre de licences", "Suivi des soumissions", "Entrées de temps", "Santé des projets", "Résumé des alertes", "Fermer les réunions passées"];
+const STACK_BRIEFS = [
+  say("3 tickets assigned, 1 waits for a part.", "3 billets assignés, 1 attend une pièce."),
+  say("Sorted 14 messages; 2 flagged for you.", "14 messages triés; 2 marqués pour toi."),
+  say("All 12 backups completed.", "Les 12 sauvegardes sont faites."),
+];
+const STACK: Message[] = Array.from({ length: 17 }, (_, index) => {
+  const at = NOW - (60 - index * 3.5) * M;
+  const problem = index === 4 || index === 9 || index === 13;
+  const name = FR ? STACK_NAMES_FR[index]! : STACK_NAMES[index]!;
+  return card(`stack-${index}`, {
+    routineName: name, routineId: `r-stack-${index}`, status: "completed",
+    summary: problem
+      ? say("The service refused the sign-in, so the pass stopped halfway. Sign in again from Connect apps.", "Le service a refusé la connexion, donc la passe s'est arrêtée à mi-chemin. Reconnecte-toi depuis Connecter des apps.")
+      : `${LONG_REPORT.split("\n\n").slice(0, 3).join("\n\n")}\n\n${STACK_BRIEFS[index % 3]!}`,
+    ...(problem ? { problems: "sign-in refused", repeat: { firstRunId: `run-s${index}`, count: 2, since: NOW - 3 * 60 * M, lastAt: at } } : {}),
+  } as CardRun, at);
+});
+
+const failedRun = card("failed", { routineName: say("Backup check", "Vérification des sauvegardes"), status: "failed",
+  error: say("The storage service did not answer after three tries.", "Le service de stockage n'a pas répondu après trois essais."), autoPausedAfter: 3 }, NOW - 20_000);
+
+/** The conforming neighbour: the compact approval card (#3414). */
+const approval = {
+  id: "approval", role: "bot", kind: "options", at: NOW - 10 * M,
+  card: {
+    title: say("Approval needed", "Approbation requise"),
+    subtitle: JSON.stringify({ resource: "service/tickets", conditions: "closedFlag=false", pageSize: 25 }),
+    toolInput: JSON.stringify({ resource: "service/tickets", conditions: "closedFlag=false", pageSize: 25 }),
+    options: ["Allow", "Deny"], requestId: "req-approval", tool: "mcp__example__desk_query", allowSession: true,
   },
 } as unknown as Message;
 
-const heartbeatWake = card("heartbeat", { routineName: "Heartbeat: Atlas", status: "completed", wakeTopic: "heartbeat", summary: "The backup service stopped at 3:10 AM. I restarted it; it is running again." }, NOW - 40 * M);
-const mailWake = card("mailwake", { routineName: "Mail", status: "completed", wakeTopic: "mail", feedback: "less", summary: "Carla asked for the signed quote; I drafted the answer in your Drafts folder." }, NOW - 30 * M);
-// #3457: a chosen watch's alert, with its two exits under the card
-const WATCH_FR = params.get("lang") === "fr";
-const watchWake = card("watchwake", {
-  routineName: WATCH_FR ? "Proactif : veille Pulsatrix" : "Proactive: Pulsatrix watch", status: "completed", wakeTopic: "watch",
-  watches: [{ id: "unassigned-tickets", domain: "dispatch" }],
-  summary: WATCH_FR
-    ? "Trois billets sont sans technicien depuis plus d'une heure : #4812, #4815 et #4821. Je peux les assigner selon la charge de chacun."
-    : "Three tickets have had no technician for over an hour: #4812, #4815 and #4821. I can assign them by each person's load.",
-}, NOW - 25 * M);
 const BRIEF_ITEMS = [
-  { id: "b1", text: "Answer Carla about the signed quote (Outlook)" },
-  { id: "b2", text: "Follow up with Paul on the renewal (Outlook)", feedback: "up" as const },
-  { id: "b3", text: "Read the release thread (Teams)" },
+  { id: "b1", text: say("Answer the quote request (mail)", "Répondre à la demande de soumission (courriel)") },
+  { id: "b2", text: say("Follow up on the renewal (mail)", "Faire le suivi du renouvellement (courriel)"), feedback: "up" as const },
 ];
 const brief: Message = {
-  id: "brief", role: "bot", kind: "text", at: NOW - 20 * M, from: { botId: "atlas" },
-  text: "**Today's brief**\n\n" + BRIEF_ITEMS.map((item) => `- ${item.text} (2026-11-08)`).join("\n"),
+  id: "brief", role: "bot", kind: "text", at: NOW - 20 * M, from: { botId: "server" },
+  text: `**${say("Today's brief", "Le point du jour")}**\n\n${BRIEF_ITEMS.map((item) => `- ${item.text}`).join("\n")}`,
   briefItems: BRIEF_ITEMS,
 } as unknown as Message;
-const proposal: Message = {
-  id: "proposal", role: "bot", kind: "options", at: NOW - 10 * M, from: { botId: "atlas" },
-  card: { title: "Carla asked for the signed quote. Should I draft the answer?", subtitle: "", options: ["Yes, handle it", "No thanks"], requestId: "req-proposal", proactiveProposal: { id: "p1" } },
-} as unknown as Message;
+const watchWake = card("watchwake", {
+  routineName: say("Proactive: watch", "Proactif : veille"), status: "completed", wakeTopic: "watch",
+  watches: [{ id: "unassigned-tickets", domain: "dispatch" }],
+  summary: say("Three tickets have had no technician for over an hour: #4812, #4815 and #4821.", "Trois billets sont sans technicien depuis plus d'une heure : #4812, #4815 et #4821."),
+}, NOW - 25 * M);
+
+const server = makeBot("server", "Server", "blue", scene === "stack" ? STACK : []);
+const team = [server, makeBot("reviewer", "Reviewer", "green"), makeBot("tester", "Tester", "orange"), makeBot("bot-b", "Bot B", "pink")];
+const room = { id: "room", name: say("Operations", "Opérations"), color: "violet", memberIds: ["server", "reviewer"], threadId: "room-thread", mainThreadId: "room-thread", messages: [], tasks: [] };
+
+/** The run behind Details in the window scene, and the routine it ran. */
+const windowRoutine = { id: "r-report", botId: "server", name: say("Evening dispatch", "Répartition du soir"), prompt: say("Go through every board, reassign what waits, and tell me what needs a decision.", "Passe chaque tableau, réassigne ce qui attend et dis-moi ce qui demande une décision."),
+  target: "bot", runOn: "maus", createdAt: 1, updatedAt: 1, enabled: true, schedule: { type: "cron", expression: "0 18 * * *", timeZone: "UTC" } } as unknown as Routine;
+const windowRun = { id: "run-report", routineId: "r-report", routineName: windowRoutine.name, botId: "server", target: "bot", runOn: "maus", status: "completed", manual: false,
+  scheduledFor: NOW - 12 * M, createdAt: NOW - 12 * M, startedAt: NOW - 12 * M, finishedAt: NOW - 9 * M, output: LONG_REPORT.slice(0, 600), threadId: "server-run" } as unknown as RoutineRun;
+
+/** ?scene=card (#2719): the delegation rows of a run, beside a coding job. */
+const finishedRun = card("finished", { routineName: say("Morning dispatch", "Répartition du matin"), status: "completed", startedAt: NOW - 70 * M,
+  summary: say("Morning pass done: 41 open tickets, 3 reassigned, nothing over SLA.", "Passe du matin faite : 41 billets ouverts, 3 réassignés, rien hors SLA."),
+  handedTo: [
+    { botId: "reviewer", threadId: "reviewer-work-1", name: "Reviewer", status: "completed", task: say("Reconcile the bank overage", "Rapprocher le dépassement de banque"), startedAt: NOW - 70 * M, finishedAt: NOW - 66 * M, note: say("Moved 2.5 h to the right agreement.", "2,5 h déplacées vers la bonne entente.") },
+    { botId: "tester", threadId: "tester-work-1", name: "Tester", status: "completed", task: say("Draft the weekly summary", "Rédiger le résumé de la semaine"), startedAt: NOW - 69 * M, finishedAt: NOW - 63 * M },
+  ] } as CardRun, NOW - 62 * M);
+const activeRun = card("active", { routineName: say("Morning dispatch", "Répartition du matin"), status: "running", startedAt: NOW - 4 * M,
+  handedTo: [
+    { botId: "reviewer", threadId: "reviewer-work", name: "Reviewer", status: "completed", task: say("Reconcile the bank overage", "Rapprocher le dépassement de banque"), startedAt: NOW - 4 * M, finishedAt: NOW - 1 * M },
+    { botId: "tester", threadId: "tester-work", name: "Tester", status: "running", task: say("Draft the weekly summary", "Rédiger le résumé de la semaine"), startedAt: NOW - 3 * M },
+  ] } as CardRun, NOW - 4 * M);
+const codingJob = {
+  id: "thread:job-0", kind: "session", botId: "server", botName: "Server", title: say("Add the tools widget", "Ajouter le widget des outils"), status: "finished",
+  startedAt: NOW - 52 * M, endedAt: NOW - 31 * M, updatedAt: NOW - 31 * M, threadId: "job-0", coding: true,
+  code: { folder: "/srv/repos/example", branch: "feat/tools-widget", repo: "example/app", pullRequests: [], branches: [], commits: [] },
+} as unknown as BotActivityItem;
+const testerMessages = [
+  { id: "o1", role: "user", kind: "text", at: NOW - 3 * M, text: say("Draft the weekly summary: closed tickets and open escalations.", "Rédige le résumé de la semaine : billets fermés et escalades ouvertes.") },
+  { id: "o2", role: "bot", kind: "text", at: NOW - 1 * M, turnId: "t1", text: say("14 tickets closed, 2 escalations still open. Drafting the summary now.", "14 billets fermés, 2 escalades encore ouvertes. Je rédige le résumé.") },
+];
+
+const instances = [{ instanceId: "test", driverKind: "codex", displayName: "Test", snapshot: { state: "available" }, models: { options: [{ id: "test", label: "Test" }] } }];
+const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+const realFetch = window.fetch.bind(window);
+window.fetch = async (input, init) => {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  if (url.includes("/api/bots?")) return json({ bots: team, groups: [room], sections: [], computerControl: {} });
+  if (url.includes("/api/instances")) return json({ instances });
+  if (url.includes("/api/threads/tester-work/messages")) return json({ messages: testerMessages, activeLeafId: "o2", hasMore: false });
+  if (url.includes("/api/routines?run=run-gone")) return json({ routines: [windowRoutine], runs: [] });
+  if (url.includes("/api/routines?run=")) return json({ routines: [windowRoutine], runs: [{ ...windowRun, report: LONG_REPORT }] });
+  if (url.includes("/api/routines")) return json({ routines: [windowRoutine], runs: [windowRun], scope: "mine", allowed: { mine: true, team: false, all: false }, facets: { teams: [], owners: [], botChoices: [] } });
+  if (url.includes("/api/me/proactive")) return json({ domains: {}, available: [{ domain: "dispatch", label: { fr: "Répartition", en: "Dispatch" }, eligible: true, watches: [{ id: "unassigned-tickets", summary: say("Tickets with no technician assigned", "Billets sans technicien assigné"), cadence: "1h", products: [], runs: true }] }] });
+  if (url.includes("/api/")) return json({});
+  return realFetch(input, init);
+};
 
 /** A bot reply as ChatView's own Bubble renders it (same classes, same markdown). */
 function NeighbourBubble({ text }: { text: string }) {
@@ -172,137 +269,89 @@ function NeighbourBubble({ text }: { text: string }) {
     </div>
   );
 }
-
-const goal: Message = {
-  id: "goal", role: "bot", kind: "goal.run", at: NOW - 60 * M, from: { botId: "atlas" },
-  goalRun: { runId: "g1", goal: "Prepare the launch checklist", status: "working", coordinatorBotId: "atlas", coordinatorName: "Atlas", turnCount: 2, maxTurns: 6, startedAt: NOW - 60 * M },
-} as unknown as Message;
-
-/** ?scene=card (#2719): a realistic stretch of Atlas's conversation with
- * two hand-offs as cards (one finished and folded, one still running and
- * open) between normal bubbles, under the finished coding job card (#2148,
- * the conforming neighbour) and across the "New" separator. A click on
- * Orla's row opens her work right there (her messages come from the fetch
- * override below). */
-const finishedRun = card("finished", {
-  routineName: "dispatch-gox-pass", status: "completed", startedAt: NOW - 70 * M, finishedAt: NOW - 62 * M,
-  summary: "Morning pass done: 41 open tickets, 3 reassigned, nothing over SLA. Harrie fixed the Northwind overage and Orla sent the weekly summary.",
-  handedTo: [
-    { botId: "harrie", threadId: "harrie-work-1", name: "Harrie", status: "completed", task: "Reconcile the bank overage for Northwind", startedAt: NOW - 70 * M, finishedAt: NOW - 66 * M, note: "Moved 2.5 h to the right agreement." },
-    { botId: "orla", threadId: "orla-work-1", name: "Orla", status: "completed", task: "Draft the weekly client summary", startedAt: NOW - 69 * M, finishedAt: NOW - 63 * M, note: "Summary sent to the three account managers." },
-  ],
-} as Partial<RoutineRunCardData> & Pick<RoutineRunCardData, "routineName" | "status">, NOW - 70 * M);
-const activeRun = card("active", {
-  routineName: "dispatch-gox-pass", status: "running", startedAt: NOW - 4 * M,
-  handedTo: [
-    { botId: "harrie", threadId: "harrie-work", name: "Harrie", status: "completed", task: "Reconcile the bank overage for Northwind", startedAt: NOW - 4 * M, finishedAt: NOW - 1 * M, note: "Moved 2.5 h to the right agreement." },
-    { botId: "orla", threadId: "orla-work", name: "Orla", status: "running", task: "Draft the weekly client summary", startedAt: NOW - 3 * M },
-  ],
-} as Partial<RoutineRunCardData> & Pick<RoutineRunCardData, "routineName" | "status">, NOW - 4 * M);
-/** The finished coding job of src/gallery/coding-job-cards.tsx, as the neighbour card. */
-const codingJob = {
-  id: "thread:job-0", kind: "session", botId: "atlas", botName: "Atlas", title: "Ajouter le widget des outils TI", status: "finished",
-  startedAt: NOW - 52 * M, endedAt: NOW - 31 * M, updatedAt: NOW - 31 * M, threadId: "job-0", coding: true,
-  code: {
-    folder: "/srv/repos/marketplace", branch: "feat/it-tools-widget", repo: "acme/marketplace",
-    pullRequests: [{ repo: "acme/marketplace", number: 42, title: "Widget des outils TI", url: "https://github.com/acme/marketplace/pull/42", action: "opened", branch: "feat/it-tools-widget", at: NOW - 32 * M }],
-    branches: [{ name: "feat/it-tools-widget", repo: "acme/marketplace", pushed: true, url: "https://github.com/acme/marketplace/tree/feat/it-tools-widget", at: NOW - 33 * M }],
-    commits: [],
-  },
-} as unknown as BotActivityItem;
-const codingResult = "J'ai ajouté le widget en grille de trois colonnes, avec ses tests. Les 48 tests passent et la PR est ouverte.";
-/** Orla's work conversation (what the click on her row shows). */
-const orlaMessages: Message[] = [
-  { id: "o1", role: "user", kind: "text", at: NOW - 3 * M, text: "Draft the weekly client summary for the three account managers: closed tickets, open escalations and the two projects that moved this week. Send it to them when it reads well." },
-  { id: "o2", role: "bot", kind: "text", at: NOW - 3 * M + 20_000, turnId: "t1", text: "I'll pull this week's closed tickets and the open escalations first." },
-  { id: "o3", role: "bot", kind: "activity", at: NOW - 3 * M + 40_000, turnId: "t1", tool: { name: "cw_psa_find_tickets", ok: true, durationMs: 1_840, input: "closedFlag=true closedSince=this week", output: "14 tickets" } },
-  { id: "o4", role: "bot", kind: "activity", at: NOW - 2 * M, turnId: "t1", tool: { name: "cw_psa_find_project_tickets", ok: true, durationMs: 960, input: "projects=Northwind rollout, Contoso VoIP", output: "2 projects, 6 tickets moved" } },
-  { id: "o5", role: "bot", kind: "text", at: NOW - 1 * M, turnId: "t1", text: "14 tickets closed, 2 escalations still open (one waiting on the client). Drafting the summary now, one paragraph per manager." },
-] as unknown as Message[];
-
-// The engine the team's bots run on; also what GET /api/instances answers,
-// since the live store reloads that list after hydrate.
-const instances = [{ instanceId: "test", driverKind: "codex", displayName: "Test", snapshot: { state: "available" }, models: { options: [{ id: "Opus 4.7", label: "Opus 4.7" }, { id: "Sonnet 4.6", label: "Sonnet 4.6" }, { id: "Haiku 4.5", label: "Haiku 4.5" }] } }];
-
-const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
-const realFetch = window.fetch.bind(window);
-window.fetch = async (input, init) => {
-  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-  if (url.includes("/api/bots?")) return json({ bots: team, groups: [], sections: [], computerControl: {} });
-  if (url.includes("/api/instances")) return json({ instances });
-  if (url.includes("/api/threads/orla-work/messages")) return json({ messages: orlaMessages, activeLeafId: "o5", hasMore: false });
-  if (url.includes("/api/routines")) return json({ routines: [], runs: [], scope: "mine", allowed: { mine: true, team: false, all: false }, facets: { teams: [], owners: [], botChoices: [] } });
-  if (url.includes("/api/me/proactive")) return json({ domains: {}, available: [{ domain: "dispatch", label: { fr: "Répartition", en: "Dispatch" }, eligible: true, watches: [{ id: "unassigned-tickets", summary: WATCH_FR ? "Billets sans technicien assigné" : "Tickets with no technician assigned", cadence: "1h", products: [], runs: true }] }] });
-  if (url.includes("/api/")) return json({});
-  return realFetch(input, init);
-};
+const Mine = ({ children }: { children: string }) => <div className="ml-auto w-fit rounded-[18px] bg-bubble-user px-3 py-[7px] text-[13px] leading-5 text-ink">{children}</div>;
 
 function Shell() {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
   useEffect(() => {
-    dispatch({ type: "hydrate", bots: team, groups: [], sections: [], computerControl: {} } as never);
+    dispatch({ type: "hydrate", bots: team, groups: [room], sections: [], computerControl: {} } as never);
     dispatch({ type: "instances", instances } as never);
-    dispatch({ type: "routinesHydrated", routines: [], runs: [] });
-    dispatch({ type: "select", id: "atlas" });
+    dispatch({ type: "routinesHydrated", routines: [windowRoutine], runs: [windowRun] });
+    dispatch({ type: "select", id: scene === "room" ? "room" : "server" });
+    if (scene === "window") openRoutineRun(dispatch, { runId: "run-report", routineId: "r-report" });
+    // #3581: the run log no longer holds this run; Details opens the card's own report
+    if (scene === "window-gone") openRoutineRun(dispatch, { runId: goneCard.routineRun!.runId, routineId: "r-report", botId: "server", report: { text: goneCard.routineRun!.summary ?? "", at: goneCard.at } });
   }, [dispatch]);
+  const neighbour = <div data-gallery-neighbour><PendingApprovalBox approvals={pendingApprovals([approval])} threadId="server-thread" botFor={() => server} onCancelTurn={() => {}} /></div>;
   return (
-    <div data-gallery-sample="routine-run-cards" className="flex overflow-hidden bg-app text-ink" style={{ width, height }}>
-      <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col">
-        <div className="flex min-h-[52px] items-center px-4 text-[14px] font-semibold">Atlas</div>
-        <div className="mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-3 overflow-y-auto px-6 py-4">
+    <div data-gallery-sample="routine-run-cards" className="flex overflow-hidden bg-app text-ink" style={{ width, ...(height ? { height } : {}) }}>
+      <div className="app-content-frame relative flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-[52px] items-center px-4 text-[14px] font-semibold">{scene === "room" ? room.name : "Server"}</div>
+        <div data-gallery-transcript className={`mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-3 px-4 py-4 sm:px-6 ${height ? "overflow-y-auto" : ""}`}>
           {scene === "card" ? (
             <>
-              <div className="ml-auto w-fit rounded-[18px] bg-bubble-user px-3 py-[7px] text-[13px] leading-5 text-ink">Add the IT tools widget to the marketplace.</div>
-              <CodingJobCard job={codingJobView(codingJob, codingResult)} threadId="job-0" now={NOW} />
-              <div className="ml-auto w-fit rounded-[18px] bg-bubble-user px-3 py-[7px] text-[13px] leading-5 text-ink">Run the dispatch pass.</div>
-              <RoutineRunRow message={finishedRun} botId="atlas" />
-              <NeighbourBubble text="Both teammates are done; the Northwind overage is on the right agreement now." />
-              <NewMessagesDivider fading={false} />
-              <div className="ml-auto w-fit rounded-[18px] bg-bubble-user px-3 py-[7px] text-[13px] leading-5 text-ink">Run it again for the evening.</div>
-              <RoutineRunRow message={activeRun} botId="atlas" />
+              <Mine>{say("Add the tools widget.", "Ajoute le widget des outils.")}</Mine>
+              <CodingJobCard job={codingJobView(codingJob, say("The widget is in, with its tests; the 48 tests pass.", "Le widget est ajouté avec ses tests; les 48 tests passent."))} threadId="job-0" now={NOW} />
+              <Mine>{say("Run the dispatch pass.", "Lance la passe de répartition.")}</Mine>
+              <RoutineRunRow message={finishedRun} botId="server" />
+              <NeighbourBubble text={say("Both teammates are done.", "Les deux coéquipiers ont fini.")} />
+              <Mine>{say("Run it again for the evening.", "Relance-la pour le soir.")}</Mine>
+              <RoutineRunRow message={activeRun} botId="server" />
             </>
-          ) : scene === "report" ? (
+          ) : scene === "reports" ? (
             <>
-              <div className="ml-auto w-fit rounded-[18px] bg-bubble-user px-3 py-[7px] text-[13px] leading-5 text-ink">What changed today?</div>
-              <NeighbourBubble text={NEIGHBOUR} />
-              <RoutineRunRow message={reportRun} botId="atlas" />
+              {neighbour}
+              <Mine>{say("Run the evening pass.", "Lance la passe du soir.")}</Mine>
+              <RoutineRunRow message={reportCard} botId="server" />
+              <RoutineRunRow message={card("courtesy", { routineName: say("Agreement banks", "Banques des ententes"), status: "completed", summary: COURTESY_REPORT }, NOW - 5 * M)} botId="server" />
+              <RoutineRunRow message={card("structure", { routineName: say("Bank watch", "Veille des banques"), status: "completed", summary: STRUCTURE_REPORT }, NOW - 2 * M)} botId="server" />
             </>
-          ) : scene === "delegation" ? (
+          ) : scene === "stack" ? (
             <>
-              <div className="ml-auto w-fit rounded-[18px] bg-bubble-user px-3 py-[7px] text-[13px] leading-5 text-ink">Run the dispatch pass.</div>
-              <RoutineRunRow message={delegatedRun} botId="atlas" />
+              {neighbour}
+              {STACK.map((message) => <RoutineRunRow key={message.id} message={message} botId="server" />)}
+            </>
+          ) : scene === "banner" ? (
+            <>
+              <div data-gallery-banner className="chat-banners">
+                <TransientNotice messages={[failedRun]} settled={() => false} render={(m) => <RoutineRunRow message={m} botId="server" onResume={() => {}} />} />
+              </div>
+              {neighbour}
+              <Mine>{say("Check the backups tonight.", "Vérifie les sauvegardes ce soir.")}</Mine>
+            </>
+          ) : scene === "room" ? (
+            <>
+              {neighbour}
+              <Mine>{say("Run the weekly review for the room.", "Lance la revue hebdomadaire pour la salle.")}</Mine>
+              <RoutineRunRow message={STATES[8]!} botId="room" />
+            </>
+          ) : scene === "window" ? (
+            <>
+              {neighbour}
+              <RoutineRunRow message={reportCard} botId="server" />
+              <ChatViewSheets state={{ codingChat: null, routineRunWindow: state.routineRunWindow }} storeBots={team} dispatch={dispatch} />
+            </>
+          ) : scene === "window-gone" ? (
+            <>
+              {neighbour}
+              <RoutineRunRow message={goneCard} botId="server" />
+              <ChatViewSheets state={{ codingChat: null, routineRunWindow: state.routineRunWindow }} storeBots={team} dispatch={dispatch} />
             </>
           ) : scene === "feedback" ? (
             <>
-              <OptionCard botId="atlas" threadId="atlas-thread" message={proposal} />
-              <RoutineRunRow message={heartbeatWake} botId="atlas" threadId="atlas-thread" />
-              <RoutineRunRow message={mailWake} botId="atlas" threadId="atlas-thread" />
-              <div data-gallery-watch-alert><RoutineRunRow message={watchWake} botId="atlas" threadId="atlas-thread" /></div>
-              <AttentionRow message={question} threadId="atlas-thread" />
+              {neighbour}
+              <RoutineRunRow message={wake} botId="server" threadId="server-thread" />
+              <div data-gallery-watch-alert><RoutineRunRow message={watchWake} botId="server" threadId="server-thread" /></div>
               <div>
                 <NeighbourBubble text={brief.text ?? ""} />
-                <BriefItemsFeedback message={brief} botId="atlas" threadId="atlas-thread" />
+                <BriefItemsFeedback message={brief} botId="server" threadId="server-thread" />
               </div>
-            </>
-          ) : scene === "repeat" ? (
-            <>
-              <RoutineRunRow message={messages[2]!} botId="atlas" />
-              <RoutineRunRow message={repeatedRun} botId="atlas" />
-              <RoutineRunRow message={recoveredRun} botId="atlas" />
-            </>
-          ) : scene === "unified" ? (
-            <>
-              <RoutineRunRow message={reportRun} botId="atlas" />
-              <AttentionRow message={question} />
-              <div className="ml-auto w-fit rounded-[18px] bg-bubble-user px-3 py-[7px] text-[13px] leading-5 text-ink">Run the dispatch pass again.</div>
-              <RoutineRunRow message={liveRun} botId="atlas" />
             </>
           ) : (
             <>
-              <GoalRunCard message={goal} />
-              <div className="ml-auto w-fit rounded-2xl bg-accent/15 px-4 py-2.5 text-[14px]">Run my routines and tell me how they went.</div>
-              <div className="w-fit max-w-[min(42rem,88%)] rounded-2xl bg-card px-4 py-2.5 text-[14px] leading-relaxed text-ink">Sure. Each run shows below as it goes.</div>
-              {messages.map((message) => <RoutineRunRow key={message.id} message={message} botId="atlas" onResume={message.id === "failed" ? () => {} : undefined} />)}
+              {neighbour}
+              {STATES.map((message) => <RoutineRunRow key={message.id} message={message} botId="server" />)}
+              <RoutineRunRow message={wake} botId="server" threadId="server-thread" />
             </>
           )}
         </div>
@@ -312,5 +361,5 @@ function Shell() {
 }
 
 createRoot(document.getElementById("root")!).render(
-  <StrictMode><StoreProvider><Shell /></StoreProvider></StrictMode>,
+  <StrictMode><DesktopCapabilitiesProvider><StoreProvider><Shell /></StoreProvider></DesktopCapabilitiesProvider></StrictMode>,
 );

@@ -3,7 +3,7 @@
 import type { RoutineRunCardData } from "../../shared/routine-run.ts";
 import { readableRoutineProblems } from "../../shared/routine-problems.ts";
 import { clipMarkdownPreservingFences, unclosedFenceOffset } from "../../src/lib/rich-blocks.ts";
-import { clipReadable } from "../../shared/routine-result.ts";
+import { clipReadable, reportBrief } from "../../shared/routine-result.ts";
 import { redactSecretsInText } from "../redact.ts";
 import type { RoutineRun } from "./routines.ts";
 import { personWord, readerLanguage } from "../people/person-words.ts";
@@ -85,6 +85,10 @@ export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullRepor
   if (run.deferredAt != null && run.status === "queued") card.deferredAt = run.deferredAt;
   if (run.threadId) card.executionThreadId = run.threadId;
   if (summary) card.summary = summary;
+  // #3581: the card's one or two lines, the report's own closing line; the
+  // whole report stays in `summary` (released apps draw it, Details opens it).
+  const brief = visibleSummary && run.status !== "waiting" ? reportBrief(redactSecretsInText(visibleSummary), "end") : "";
+  if (brief) card.brief = brief;
   if (error) card.error = error;
   if (run.readiness) card.readiness = structuredClone(run.readiness);
   if (run.autoPaused) card.autoPausedAfter = run.autoPaused.failures;

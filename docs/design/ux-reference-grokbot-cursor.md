@@ -431,6 +431,19 @@ dessous (« écran de » suivi du nom du bot).
   qui attend la personne ; puis les étapes groupées ; les faits repliés sous Détails.
   Historique : liste datée avec un mot d'état vert (« Réussi ») ou rouge. Le rapport
   arrive dans la conversation unique du bot.
+- **Résultat dans le chat (#3581)** : la carte compacte du chat (`AskCard`, la même surface
+  que la carte d'approbation compacte) : le glyphe de routine (le triangle d'avertissement
+  quand il y a un problème), le nom de la routine en titre, l'heure à droite, puis une ou deux
+  lignes tirées des propres mots du bot (sa ligne de conclusion, `reportBrief`), jamais un appel
+  de modèle. Une ligne d'état seulement s'il y a quelque chose à dire (« Terminé avec des
+  problèmes · même problème depuis… », « Bloqué : … », « Fonctionne de nouveau »), les points
+  pour la personne, la ligne « A demandé » des coéquipiers, puis « Détails » à droite. Le
+  rapport ne se déplie jamais dans la carte : « Détails » ouvre la fenêtre de l'exécution avec
+  le rapport entier, comme un message normal du bot. Une passe en cours, en file, en attente,
+  échouée, annulée ou sans rien à dire est une seule rangée discrète (`AskSettledLine`) ; un
+  résultat suivi d'un résultat plus récent se replie en rangée, un résultat qui demande la
+  personne reste une carte jusqu'à ce qu'il soit réglé. Aucune police de terminal, aucune
+  pastille.
 
 ### 2.8 Bibliothèque, skills, Connecter des apps
 

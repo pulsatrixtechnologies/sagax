@@ -86,7 +86,9 @@ export function routineRunExchangeMessages(args: {
   }
 
   const botFrom = { botId: bot.id, name: bot.name, color: (bot.color ?? "blue") as NonNullable<Message["from"]>["color"] };
-  const output = (run.output ?? "").trim();
+  // #3581: the whole report when the single-run read gave it (the card's
+  // "Details"), else the record's own text.
+  const output = (run.report ?? run.output ?? "").trim();
   if (output && !run.redacted) {
     messages.push({
       id: "routine-report",

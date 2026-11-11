@@ -24,6 +24,7 @@ import { t } from "@/lib/i18n";
 import { WakeFeedback, useOwnsBot } from "../WakeFeedback";
 import { WatchAlertExits, watchAlertOf } from "../WatchAlertExits";
 import { useChatRows } from "./types";
+import { routineResultFolded } from "@/lib/routine-result-stack";
 
 export function PeerLabel({ peer, autoModel }: { peer: PeerLine; autoModel?: Message["autoModel"] }) {
   "use memo";
@@ -157,6 +158,11 @@ export function RoutineRunRow({ message, botId, threadId, onResume }: { message:
   }, shallowEqual);
   const owner = bots.find((candidate) => candidate.id === ownerId);
   const instances = useStoreSelector((state) => state.instances);
+  // #3581: a result a newer one follows folds to its row (one card per stack)
+  const folded = useStoreSelector((state) => {
+    const owner = state.bots.find((candidate) => candidate.id === botId) ?? state.groups.find((group) => group.id === botId);
+    return routineResultFolded(owner?.messages ?? [], message.id);
+  });
   // #2694: a heartbeat or an email or calendar wake is rated once it has finished
   const rated = run?.wakeTopic && run.status !== "running" && run.status !== "queued" && run.status !== "waiting" ? run.wakeTopic : undefined;
   // #3457: every alert of a chosen watch carries « Arrêter cette veille » and
@@ -168,10 +174,11 @@ export function RoutineRunRow({ message, botId, threadId, onResume }: { message:
     <RoutineRunCard
       message={message}
       bot={owner}
+      folded={folded}
       botOf={(id) => bots.find((candidate) => candidate.id === id)}
       onResume={onResume}
-      onOpen={run?.runId ? () => openRoutineRun(dispatch, { runId: run.runId, routineId: run.routineId }) : undefined}
-      // 2026-11-05 (#2096): Stop on the running card itself; the card shows it while the run is live.
+      onOpen={run?.runId ? () => openRoutineRun(dispatch, { runId: run.runId, routineId: run.routineId, ...(message.from?.botId ? { botId: message.from.botId } : {}), report: { text: run.summary ?? "", at: message.at } }) : undefined}
+      // 2026-11-05 (#2096): Stop on the run itself while it is live.
       onStop={run?.runId ? () => dispatch({ type: "cancelRoutineRun", runId: run.runId }) : undefined}
       // 2026-11-03: a run that handed work to a teammate links that thread;
       // threads shown only (#2081): one conversation names the teammate, no link.

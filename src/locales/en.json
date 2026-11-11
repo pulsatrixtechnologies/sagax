@@ -12953,6 +12953,7 @@
   "routineRun.blockedLine": "Blocked: {reason}",
   "routineRun.blockedNoReason": "Blocked: a step stopped the run. Open the run to see which one.",
   "routineRun.blockedWaitingFor": "Blocked: waiting for {name}",
+  "routineRun.stateLine": "{status}: {reason}",
   "routineRun.aTeammate": "a teammate",
   "routineRun.card.done": "Done",
   "routineResult.failed": "Did not finish: {reason}",

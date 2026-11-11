@@ -38,6 +38,9 @@ export interface RoutinesHttpDeps {
   listRoutines(): Routine[];
   check?(routine: Routine): Promise<RoutineReadinessAnswer>;
   listRuns(from?: number, to?: number): RoutineRun[];
+  /** #3581: a finished run's whole report (its task's last message), when
+   * the run's record keeps only its start. */
+  fullReport?(run: RoutineRun): string | undefined;
   listFolders(): Record<string, string[]>;
   create(
     body: unknown,
@@ -134,6 +137,15 @@ export function createRoutinesHttpRoutes(deps: RoutinesHttpDeps): RouteHandler {
         runs,
         deps.scopeDeps(auth, visible, viewerId),
       );
+      // #3581: the single-run read (the run window) carries the whole report
+      // as `report`; the record's `output` keeps its 2,000 characters.
+      if (url.searchParams.get("run") && deps.fullReport) {
+        listing.runs = listing.runs.map((run) => {
+          if ("redacted" in run && run.redacted) return run;
+          const report = deps.fullReport!(run);
+          return report ? { ...run, report } : run;
+        });
+      }
       const listedBots = new Set(listing.routines.map((row) => row.bot.id));
       const folders = Object.fromEntries(Object.entries(deps.listFolders()).filter(([botId]) =>
         (visible.everything || visible.bot(botId)) && (listedBots.has(botId) || !deps.needsRun(auth, botId))));

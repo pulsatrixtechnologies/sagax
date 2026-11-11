@@ -670,4 +670,53 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     send({ jsonrpc: "2.0", id: 1, method: "peek" });
     expect(JSON.parse(await nextLine()).result).toEqual({ scope: null, upstreamOnly: "yes" });
   });
+
+  describe("Sagax's own relay as the upstream (#3623)", () => {
+    const FIXTURE = join(HERE, "testing", "gate-upstream-fixture.mjs");
+    const startRelay = (extraEnv: Record<string, string> = {}) => {
+      gate = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", GATE], {
+        stdio: ["pipe", "pipe", "pipe"],
+        env: {
+          ...process.env,
+          SAGAX_GATE_NAME: "data",
+          SAGAX_GATE_SPILL_DIR: join(scratch, "spill"),
+          SAGAX_GATE_UPSTREAM: JSON.stringify({
+            command: process.execPath,
+            args: [FIXTURE, "data"],
+            env: { FIXTURE_OWN: "mine", FIXTURE_CLOSED: join(scratch, "closed"), ...extraEnv },
+          }),
+        },
+      }) as ChildProcessWithoutNullStreams;
+      createInterface({ input: gate.stdout }).on("line", (line) => {
+        const next = waiting.shift();
+        if (next) next(line);
+        else lines.push(line);
+      });
+    };
+
+    it("runs inside the gate's own process instead of a second one, with only its own environment", async () => {
+      startRelay();
+      send({ jsonrpc: "2.0", id: 1, method: "peek" });
+      const result = JSON.parse(await nextLine()).result;
+      // one process per mount, not two: the relay answers from the gate's pid
+      expect(result.pid).toBe(gate!.pid);
+      expect(result.mainThread).toBe(false);
+      expect(result).toMatchObject({ own: "mine", gateKeys: [], argv: ["data"] });
+    });
+
+    it("lets the relay shut down on its own when the engine ends the gate", async () => {
+      startRelay();
+      send({ jsonrpc: "2.0", id: 1, method: "peek" });
+      await nextLine();
+      const closed = once(gate!, "close");
+      gate!.kill("SIGTERM");
+      await closed;
+      expect(readFileSync(join(scratch, "closed"), "utf8")).toBe("closed");
+    });
+
+    it("keeps an upstream outside the gate's own directory as its own process", async () => {
+      start({ content: [{ type: "text", text: "ok" }] });
+      expect((await call("get_food_cart")).result).toEqual({ content: [{ type: "text", text: "ok" }] });
+    });
+  });
 });

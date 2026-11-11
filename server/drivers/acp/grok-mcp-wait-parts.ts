@@ -17,11 +17,14 @@ import type { TurnToolWait } from "./turn-latency.ts";
 type CatalogServer = { name?: unknown; session?: { enabled?: unknown; status?: unknown } } | null | undefined;
 
 /** Whether one server of an `_x.ai/mcp/list` answer is still connecting
- * (pending, connecting or starting) and enabled: the one reading of a
- * server's state, shared with grokMcpSettled. */
+ * (pending, connecting, starting or initializing) and enabled: the one
+ * reading of a server's state, shared with grokMcpSettled. Grok 1.0.77
+ * reports a server it is still starting as `initializing` (seen on a fixture
+ * turn, #3623); without it no server was ever seen waiting and toolsBy only
+ * ever printed `resolved`. */
 export function grokMcpServerWaiting(server: CatalogServer): boolean {
   const status = typeof server?.session?.status === "string" ? server.session.status.toLowerCase() : "";
-  return server?.session?.enabled !== false && (status === "pending" || status === "connecting" || status === "starting");
+  return server?.session?.enabled !== false && (status === "pending" || status === "connecting" || status === "starting" || status === "initializing");
 }
 
 /** The servers Sagax mounts under a fixed product name (instance-mcp.ts,

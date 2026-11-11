@@ -20,24 +20,23 @@
 // tool puts into the model's context.
 //
 // stdout is the MCP transport. Never log there.
-import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { connect, type Socket } from "node:net";
 import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline";
 import { allowsTool, MCP_SERVER_NAME, parseToolScope, type ToolScope } from "../shared/tool-scope.ts";
 
-import { resolveCliSpawn } from "./env-path.ts";
+import { startGateUpstream } from "./mcp/gate-upstream.ts";
 import { DESCRIBE_TOOL, SEARCH_TOOL, ToolDirectory, directoryCallTarget, isDirectoryTool, type CatalogTool, type DirectoryContext } from "./mcp/mcp-directory.ts";
 import { lenientToolValidator, schemaProblems } from "./mcp/mcp-schema-validator.ts";
 import { parseGateSearch, pinnedToolNames, searchedCatalog } from "./mcp/mcp-gate-search.ts";
 import { QUERY_TOOL, QUERY_TOOL_NAME, ResultStore, UPSTREAM_QUERY_TOOL_NAME, answerQuery, describeShape, exampleQuery, isNamedHandle, isUpstreamHandle } from "./mcp/mcp-shape.ts";
 import { DEFAULT_RESULT_BUDGET, type HeldResult, trimResultText } from "./mcp/mcp-trim.ts";
 import { ToolNameAliases, mapJsonStrings } from "./mcp/mcp-tool-names.ts";
-import { parseAgentsWithhold, resolvedServerLog } from "./mcp/agents-tool-priority.ts";
+import { parseAgentsWithhold, resolvedServerLog } from "./mcp/agents-withhold.ts";
 import { fitToolList } from "./mcp/mcp-tool-schema.ts";
-import { killCliTree } from "./procs.ts";
 import { toolSchemaProfileFromEnv } from "./tool-schema-profile.ts";
 import { misuseGateBlockText } from "../shared/misuse-guardrails.ts";
 import { BRIDGE_FIND_TOOL, BRIDGE_SERVER, readBridgeCall } from "../shared/searched-tool-call.ts";
@@ -69,6 +68,8 @@ function gateEnvironment(): NodeJS.ProcessEnv {
 /** The gate's own settings never reach the upstream server's environment. */
 const GATE_ENV_KEYS = ["SAGAX_GATE_NAME", "SAGAX_GATE_SPILL_DIR", "SAGAX_GATE_BUDGET", "SAGAX_GATE_UPSTREAM", "SAGAX_GATE_SPILL_HINT", "SAGAX_GATE_TOOL_SCOPE", "SAGAX_GATE_DIRECTORY", "SAGAX_GATE_TOOL_NAMES", "SAGAX_GATE_REPORT_DIR", "SAGAX_GATE_APPROVAL_SOCKET", "SAGAX_GATE_APPROVAL_TOKEN", "SAGAX_GATE_READ_ONLY", "SAGAX_GATE_MISUSE_MODE", "SAGAX_GATE_SEARCH", "SAGAX_GATE_WITHHOLD"];
 const gateEnv = gateEnvironment();
+/** Where this gate runs from: Sagax's own relays lie beside it. */
+const GATE_DIR = dirname(fileURLToPath(import.meta.url));
 const NAME = gateEnv.SAGAX_GATE_NAME || "mcp";
 const SPILL_DIR = gateEnv.SAGAX_GATE_SPILL_DIR || "";
 const rawBudget = Number(gateEnv.SAGAX_GATE_BUDGET);
@@ -369,42 +370,23 @@ if (SPILL_DIR) sweepSpill(SPILL_DIR);
 const childEnv: NodeJS.ProcessEnv = { ...process.env, ...spec.env };
 for (const key of Object.keys(childEnv)) if (key.startsWith("SAGAX_GATE_")) delete childEnv[key];
 
-// The CLI used to spawn this server itself, on every platform, so the gate
-// has to spawn it exactly as well. On Windows CreateProcess cannot exec an
-// npm .cmd shim or a node-shebang script, which is what `npx -y mcp-remote`
-// is — resolveCliSpawn rewrites it to the real executable without a shell, so
-// quoting-sensitive JSON argv survives. A shell here would re-interpret the
-// server's own arguments.
-const resolved = resolveCliSpawn(spec.command, spec.args ?? []);
-const child = spawn(resolved.command, resolved.args, {
-  stdio: ["pipe", "pipe", "pipe"],
-  env: childEnv,
-  shell: false,
-  // a console app spawned from the desktop shell flashes a window otherwise
-  ...(process.platform === "win32" ? { windowsHide: true } : {}),
-});
+// #3623: Sagax's own relays run as a thread of this process, anything else
+// as its own process, spawned exactly as the CLI used to (gate-upstream.ts).
+const child = startGateUpstream({ command: spec.command, args: spec.args ?? [], env: childEnv, ownDir: GATE_DIR });
 
-// The gate owns this process. If the gate is killed rather than closed —
-// the CLI reaping its MCP servers at the end of a turn — the real server
-// must not be left behind, and on Windows only taskkill /T reaps a tree.
-let reaping = false;
-const reapChild = () => {
-  if (reaping) return;
-  reaping = true;
-  void killCliTree(child).catch(reportBackgroundError);
+// The gate owns its upstream. If the gate is killed rather than closed (the
+// CLI reaping its MCP servers at the end of a turn), the real server must not
+// be left behind.
+const UPSTREAM_SHUTDOWN_MS = 2_000;
+const endWithUpstream = () => {
+  void child.shutdown(UPSTREAM_SHUTDOWN_MS).catch(reportBackgroundError).finally(() => process.exit(0));
 };
-process.on("SIGTERM", () => {
-  reapChild();
-  process.exit(0);
-});
-process.on("SIGINT", () => {
-  reapChild();
-  process.exit(0);
-});
-process.on("exit", reapChild);
+process.on("SIGTERM", endWithUpstream);
+process.on("SIGINT", endWithUpstream);
+process.on("exit", () => child.kill());
 
-child.on("error", (error) => {
-  process.stderr.write(`mcp-gate(${NAME}): could not start ${resolved.command}: ${String(error)}\n`);
+child.onError((error) => {
+  process.stderr.write(`mcp-gate(${NAME}): could not start ${spec.command}: ${String(error)}\n`);
   process.exit(1);
 });
 child.stderr.pipe(process.stderr);
@@ -817,4 +799,4 @@ createInterface({ input: child.stdout }).on("line", (line) => {
   process.stdout.write(`${JSON.stringify(message)}\n`);
 });
 
-child.on("exit", (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
+child.onExit((code) => process.exit(code));

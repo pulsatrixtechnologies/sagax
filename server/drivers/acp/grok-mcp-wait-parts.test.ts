@@ -7,7 +7,7 @@ import { rememberGrokMcpSettled, resetGrokCatalogs } from "./grok-tool-catalog.t
 import { newTurnLatency, turnLatencyLine, type TurnToolWait } from "./turn-latency.ts";
 import { clearTurnCounters, isToolListRequest, noteTurnServed, turnServedMount } from "../../turns/turn-trace.ts";
 
-type Status = "pending" | "connecting" | "starting" | "ready" | "failed" | undefined;
+type Status = "pending" | "connecting" | "starting" | "initializing" | "ready" | "failed" | "unavailable" | undefined;
 const catalog = (servers: Record<string, Status>, resolved = true) => ({
   sessionMcpResolved: resolved,
   servers: Object.entries(servers).map(([name, status]) => ({ name, session: { enabled: true, ...(status ? { status } : {}) } })),
@@ -82,6 +82,24 @@ describe("toolsBy on the latency line (#3623)", () => {
     // a person's own connection and a mount under a person's name are never written
     expect(line).not.toContain("Team Wiki");
     expect(line).not.toContain("my-private-notes");
+  });
+
+  it("times a server the engine reports as initializing, the status Grok 1.0.77 gives one it is still starting", async () => {
+    // the shape of a fixture turn with the installed engine: every mount
+    // starts as initializing, then turns ready one by one
+    const { request } = scripted([
+      catalog({ agents: "initializing", browser: "initializing", connector: "initializing" }, false),
+      catalog({ agents: "ready", browser: "initializing", connector: "initializing" }, false),
+      catalog({ agents: "ready", browser: "ready", connector: "initializing" }, false),
+      catalog({ agents: "ready", browser: "ready", connector: "ready" }, true),
+    ], 400);
+    const line = lineWith(await configure(request, { mounted: ["agents", "browser", "connector"] }));
+    expect(line).toContain(" toolsBy=connector:1600,browser:1200,agents:800,resolved:1600 ok");
+  });
+
+  it("does not take the turn's tools as settled while a server is still initializing", () => {
+    expect(grokMcpSettled(catalog({ agents: "ready", browser: "initializing" }, true))).toBe(false);
+    expect(grokMcpSettled(catalog({ agents: "ready", browser: "unavailable" }, true))).toBe(true);
   });
 
   it("counts the person's own connections as one entry, never by name", async () => {
@@ -173,7 +191,7 @@ describe("toolsBy on the latency line (#3623)", () => {
       resolvedMs: 2_100,
     });
     const line = lineWith(wait);
-    expect(line).toContain(" toolsBy=perspicax:1500,data:1200,agents:900,resolved:2100 ok");
+    expect(line).toContain(" toolsBy=perspicax:1500,data:1200,agents:900,resolved:2100 toolsGap=after:600 ok");
     // never the first poll's time
     expect(line).not.toMatch(/(agents|data|perspicax):300\b/);
   });
@@ -205,7 +223,7 @@ describe("toolsBy on the latency line (#3623)", () => {
     noteTurnServed("t1", "agents", "in");
     const wait = await configure(request, { mounted: ["data", "browser"] });
     expect(wait?.served).toEqual([["data", 270, 510], ["browser", 530, 790]]);
-    expect(lineWith(wait)).toContain(" toolsBy=browser:1000,data:750,resolved:1000 toolsServed=data:270-510,browser:530-790 ok");
+    expect(lineWith(wait)).toContain(" toolsBy=browser:1000,data:750,resolved:1000 toolsServed=data:270-510,browser:530-790 toolsGap=first:270 ok");
     // the wait is over: a later request is not noted
     noteTurnServed("t1", "agents", "in");
     expect(wait?.served).toHaveLength(2);

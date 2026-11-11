@@ -40,6 +40,11 @@
 // stream to the server in the person's environment), hello (the server's
 // answer to initialize), list (its answer to tools/list) and kb (that
 // answer's size). Mounts are separated by `;`. Names and numbers only.
+// toolsGap names the time of the tools part spent outside the mounts'
+// answers, each part only when it is over 250 ms: first (the wait's start to
+// the first request any of Sagax's endpoints got: the engine starting its
+// tool server processes) and after (the last tool list answered, by an
+// endpoint or as the engine saw a mount ready, to the engine saying resolved).
 
 export type TurnLatencyPath = "pooled" | "load" | "spawn";
 
@@ -120,6 +125,30 @@ export function turnToolsSlow(wait: TurnToolWait | undefined): string | undefine
   return slow.slice(0, TOOLS_BY_MOUNTS_MAX)
     .map(([label, , , parts]) => `${label}:${parts!.map(([part, ms]) => `${part}:${Math.round(ms)}`).join(",")}`)
     .join(";");
+}
+
+/** The toolsGap field: `first:2510,after:2800`, each part only when it is
+ * over TOOLS_SLOW_MS; nothing when neither is. */
+export function turnToolsGap(wait: TurnToolWait | undefined): string | undefined {
+  if (!wait || wait.waitedMs < 50) return undefined;
+  const out: string[] = [];
+  const served = wait.served ?? [];
+  if (served.length) {
+    const first = Math.min(...served.map(([, inMs]) => inMs));
+    if (first > TOOLS_SLOW_MS) out.push(`first:${Math.round(first)}`);
+  }
+  if (wait.resolvedMs !== undefined) {
+    const answers = [
+      ...served.flatMap(([, , outMs]) => (outMs === undefined ? [] : [outMs])),
+      ...wait.mounts.map(([, ms]) => ms),
+      ...(wait.own ? [wait.own.longestMs] : []),
+    ];
+    if (answers.length) {
+      const after = wait.resolvedMs - Math.max(...answers);
+      if (after > TOOLS_SLOW_MS) out.push(`after:${Math.round(after)}`);
+    }
+  }
+  return out.length ? out.join(",") : undefined;
 }
 
 export function newTurnLatency(start: number, receivedAt?: number): TurnLatency {
@@ -231,6 +260,8 @@ export function turnLatencyLine(driver: string, threadId: string, trace: TurnLat
   if (toolsServed) parts.push(`toolsServed=${toolsServed}`);
   const toolsSlow = turnToolsSlow(trace.toolWait);
   if (toolsSlow) parts.push(`toolsSlow=${toolsSlow}`);
+  const toolsGap = turnToolsGap(trace.toolWait);
+  if (toolsGap) parts.push(`toolsGap=${toolsGap}`);
   if (trace.stallMs !== undefined) parts.push(`stallGuard=${trace.stallMs}ms${trace.stallRetried ? " retried" : ""}`);
   parts.push(outcome);
   return parts.join(" ");

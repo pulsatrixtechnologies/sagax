@@ -6,13 +6,19 @@
 // deciding file stopped reading the gate, or a registered surface nothing
 // emits any more, each fails here. Runs with the merge gate on every PR.
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { FULL_ACCESS_MARKER, FULL_ACCESS_SURFACES, type FullAccessSurface } from "./full-access-gate.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const SERVER = join(ROOT, "server");
+
+/** A source file as the rule reads it on every platform: a Windows checkout
+ * hands the scan CRLF lines, which no line pattern below expects. */
+const readText = (path: string): string => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
+/** A repository path with "/" on every platform, as DECIDED_IN names it. */
+const repoPath = (path: string): string => relative(ROOT, path).split(sep).join("/");
 
 /** What emits a card or a permission request the person may have to answer. */
 const EMITTERS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
@@ -65,7 +71,7 @@ function* sourceFiles(dir: string): Generator<string> {
     const path = join(dir, entry);
     if (entry === "node_modules" || entry === "testing" || entry === "self-knowledge") continue;
     if (statSync(path).isDirectory()) { yield* sourceFiles(path); continue; }
-    if (!path.endsWith(".ts") || SKIP.test(path)) continue;
+    if (!path.endsWith(".ts") || SKIP.test(repoPath(path))) continue;
     yield path;
   }
 }
@@ -75,7 +81,7 @@ interface Hit { file: string; line: number; emitter: string; text: string; marke
 function scan(): Hit[] {
   const hits: Hit[] = [];
   for (const file of sourceFiles(SERVER)) {
-    const lines = readFileSync(file, "utf8").split("\n");
+    const lines = readText(file).split("\n");
     lines.forEach((text, index) => {
       // a definition, a type member, a deps method signature or a comment is not an emitter
       if (/^\s*(?:export\s+)?(?:async\s+)?function\b/.test(text)) return;
@@ -89,7 +95,7 @@ function scan(): Hit[] {
         // the marker on the line itself or the three lines above it
         const window = lines.slice(Math.max(0, index - 3), index + 1).join("\n");
         const marker = FULL_ACCESS_MARKER.exec(window)?.[1];
-        hits.push({ file: relative(ROOT, file), line: index + 1, emitter: emitter.name, text: text.trim(), ...(marker ? { marker } : {}) });
+        hits.push({ file: repoPath(file), line: index + 1, emitter: emitter.name, text: text.trim(), ...(marker ? { marker } : {}) });
       }
     });
   }
@@ -132,7 +138,7 @@ describe("every approval or choice card reads the Full access decision", () => {
     const hostGateCall = /\bhost\.fullAccess(?:Decision|Acts|ChoiceAnswer)\(/;
     for (const [surface, file] of Object.entries(DECIDED_IN) as Array<[FullAccessSurface, string | null]>) {
       if (!file) continue;
-      const text = readFileSync(join(ROOT, file), "utf8");
+      const text = readText(join(ROOT, file));
       // the safety review carries the decision in from the gate's resolver;
       // request.opened reads it via the leaf host after #1388
       const reads = gateImport.test(text)
@@ -154,14 +160,14 @@ describe("every approval or choice card reads the Full access decision", () => {
 
   it("the one permission handler reads the decision before the safety review and before any card", () => {
     // #1388: request.opened handler lives in runtime-events/request-opened.ts
-    const openedSrc = readFileSync(join(SERVER, "runtime-events/request-opened.ts"), "utf8");
+    const openedSrc = readText(join(SERVER, "runtime-events/request-opened.ts"));
     const opened = openedSrc.indexOf('case "request.opened":');
     expect(opened).toBeGreaterThan(0);
     const handler = openedSrc.slice(opened);
     expect(handler).toMatch(/const fullTurn = host\.fullAccessDecision\(effectiveApprovalMode\)/);
     expect(handler).toMatch(/fullAccess: fullTurn\.acts/);
     // The choice answer is read in the present split, before the question card.
-    const presentSrc = readFileSync(join(SERVER, "runtime-events/request-opened-present.ts"), "utf8");
+    const presentSrc = readText(join(SERVER, "runtime-events/request-opened-present.ts"));
     const choiceAt = presentSrc.indexOf("host.fullAccessChoiceAnswer(effectiveApprovalMode");
     const questionCardAt = presentSrc.indexOf("// full-access: question");
     expect(choiceAt).toBeGreaterThan(0);
@@ -172,15 +178,15 @@ describe("every approval or choice card reads the Full access decision", () => {
   });
 
   it("the browser's held card reads the decision before the card, and the route wires the level and the record (#3502)", () => {
-    const pilot = readFileSync(join(SERVER, "browser", "my-chrome", "pilot.ts"), "utf8");
+    const pilot = readText(join(SERVER, "browser", "my-chrome", "pilot.ts"));
     const run = pilot.slice(pilot.indexOf("export async function runMyChromeTool"));
     expect(run.indexOf("myChromeLevelAnswers(read.level, read.facts)")).toBeGreaterThan(0);
     expect(run.indexOf("myChromeLevelAnswers(read.level, read.facts)")).toBeLessThan(run.indexOf("// full-access: browser-held"));
     expect(pilot).toMatch(/function myChromeLevelAnswers[\s\S]{0,200}fullAccessDecision\(level, facts\)\.acts/);
-    const route = readFileSync(join(SERVER, "routes", "internal-environments-handlers.ts"), "utf8");
+    const route = readText(join(SERVER, "routes", "internal-environments-handlers.ts"));
     expect(route).toMatch(/heldLevel: [\s\S]{0,200}deps\.myChromeHeldLevel!\(/);
     expect(route).toMatch(/answeredByLevel: [\s\S]{0,200}deps\.myChromeLevelAnswered!\(/);
-    const index = readFileSync(join(SERVER, "index.ts"), "utf8");
+    const index = readText(join(SERVER, "index.ts"));
     expect(index).toMatch(/function myChromeHeldLevel[\s\S]{0,600}approvalModeForTurn\(/);
     expect(index).toMatch(/\n    myChromeHeldLevel,\n    myChromeLevelAnswered,\n/);
   });
@@ -189,12 +195,12 @@ describe("every approval or choice card reads the Full access decision", () => {
     const held = hits.filter((hit) => hit.file === "server/harness/held-requests.ts" && hit.emitter === "permission request");
     expect(held).toHaveLength(1);
     expect(held[0]?.marker).toBe("connector-held");
-    const source = readFileSync(join(SERVER, "harness", "held-requests.ts"), "utf8");
+    const source = readText(join(SERVER, "harness", "held-requests.ts"));
     // it is published on the bus as a request.opened, never answered where it is emitted
     expect(source).toMatch(/this\.publish\(\{[\s\S]{0,400}type: "request\.opened"/);
     expect(source).not.toMatch(/fullAccess(?:Decision|Acts)\(/);
     // and request.opened reads its connector facts into the verdict the level decides
-    const opened = readFileSync(join(SERVER, "runtime-events", "request-opened.ts"), "utf8");
+    const opened = readText(join(SERVER, "runtime-events", "request-opened.ts"));
     expect(opened).toMatch(/const connectorRead = Boolean\(permission && event\.accountConnector === true && event\.engineConnector === true && event\.outbound !== true/);
     expect(opened).toMatch(/autoVerdict\(strictCard \|\| foreignDestination \? "ask" : effectiveApprovalMode/);
   });
@@ -204,12 +210,12 @@ describe("every approval or choice card reads the Full access decision", () => {
     // check gates (peerReviewRequired comes in through their deps)
     for (const hit of hits) {
       if (hit.emitter !== "peer card") continue;
-      const lines = readFileSync(join(ROOT, hit.file), "utf8").split("\n");
+      const lines = readText(join(ROOT, hit.file)).split("\n");
       const before = lines.slice(Math.max(0, hit.line - 41), hit.line).join("\n");
       // or the shared approval bus, whose autoApply is fullAccessForSource (checked below)
       expect(/peerReviewRequired\(/.test(before) || /requestPeerApproval\(approvalBus,/.test(lines[hit.line - 1] ?? ""), `${describeHit(hit)}: requestPeerApproval without peerReviewRequired in reach`).toBe(true);
     }
-    const index = readFileSync(join(SERVER, "index.ts"), "utf8");
+    const index = readText(join(SERVER, "index.ts"));
     expect(index).toMatch(/function peerReviewRequired[\s\S]{0,400}peerContactCardRequired\(/);
     expect(index).toMatch(/function fullAccessForSource[\s\S]{0,300}fullAccessActs\(/);
     expect(index).toMatch(/const approvalBus: ApprovalBus = \{[^}]*autoApply: fullAccessForSource/);
@@ -219,22 +225,22 @@ describe("every approval or choice card reads the Full access decision", () => {
   });
 
   it("the shared safety review reads Full access as an allow, never a safer path or a confirmation; the verdict is read before the hold", () => {
-    const shared = readFileSync(join(ROOT, "shared", "safety-review.ts"), "utf8");
+    const shared = readText(join(ROOT, "shared", "safety-review.ts"));
     expect(shared).toMatch(/fullAccess\?: boolean/);
     expect(shared).toMatch(/if \(input\.fullAccess === true\) return verdict\("allow", "full_access"/);
     // after every block and after the triage approval, before the review steps
     expect(shared.indexOf('verdict("block", "credentials"')).toBeLessThan(shared.indexOf('"full_access", ""'));
     expect(shared.indexOf('"full_access", ""')).toBeLessThan(shared.indexOf("const next = step(memory"));
-    const server = readFileSync(join(SERVER, "safety", "safety-review.ts"), "utf8");
+    const server = readText(join(SERVER, "safety", "safety-review.ts"));
     expect(server).toMatch(/if \(verdict\.code === "full_access"\) return null;/);
-    const auto = readFileSync(join(SERVER, "approvals", "auto-approve.ts"), "utf8");
+    const auto = readText(join(SERVER, "approvals", "auto-approve.ts"));
     expect(auto.indexOf("fullAccessDecision(")).toBeLessThan(auto.indexOf('source: "safety-hold"'));
     expect(auto).toMatch(/if \(context\?\.safetyHold && !full\.acts && !full\.hold\)/);
     expect(auto).toMatch(/if \(full\.acts && !\(context\?\.sagaxGate && context\.stepUpRequired\?\.length\)\)/);
   });
 
   it("the chat-completions engines never answer Full themselves: every MCP ask reaches request.opened (#1982)", () => {
-    const chat = readFileSync(join(SERVER, "drivers", "openai-chat-turn.ts"), "utf8");
+    const chat = readText(join(SERVER, "drivers", "openai-chat-turn.ts"));
     expect(chat).not.toMatch(/fullAccessActs\(turn\.approvalMode\)/);
     expect(chat).not.toMatch(/turn\.approvalMode === "full" \|\| !shown\.ask/);
     expect(chat).toMatch(/\/\/ full-access: engine-bridge/);

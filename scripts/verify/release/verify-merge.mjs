@@ -37,7 +37,7 @@
 // test commit into the branch being pushed (issue #1705).
 import { spawnSync, execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { existingGuardTests } from "./guard-tests.mjs";
 
@@ -57,7 +57,7 @@ export function sanitizeGitEnv(env = process.env) {
 /** Absolute stamp path for a HEAD sha under the common git dir, or null. */
 export function stampPathFor(commonDir, sha, root = ROOT) {
   if (!commonDir || !sha || /[^0-9a-f]/.test(sha)) return null;
-  const common = commonDir.startsWith("/") ? commonDir : join(root, commonDir);
+  const common = isAbsolute(commonDir) ? commonDir : join(root, commonDir);
   return join(common, STAMP_FOLDER, `ok-${sha}`);
 }
 

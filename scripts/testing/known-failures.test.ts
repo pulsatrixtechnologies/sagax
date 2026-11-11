@@ -9,6 +9,7 @@ import {
   EVERY_PLATFORM,
   extractResults,
   identityKey,
+  listedGuardTests,
   onlyShrinks,
   openRegressionIssues,
   regressionMarker,
@@ -48,6 +49,18 @@ describe("the known-failures list", () => {
     expect(typeof list.$comment).toBe("string");
     expect(Array.isArray(list.tests)).toBe(true);
     for (const test of list.tests) expect(Object.keys(test).sort()).toEqual(["file", "owner", "reason", "since", "test"]);
+  });
+
+  it("names no guard test: a guard test is fixed on every platform, never listed (#3558)", () => {
+    expect(listedGuardTests(JSON.parse(readFileSync(listPath, "utf8")))).toEqual([]);
+  });
+
+  it("refuses a list that names a file of the guard tests list, whatever the test", () => {
+    const list = { tests: [entry("server/a.test.ts", "breaks"), entry("scripts/testing/agents-md.guard.test.ts", WHOLE_FILE)] };
+    expect(listedGuardTests(list)).toEqual([
+      "scripts/testing/agents-md.guard.test.ts > (whole file) is a guard test: fix it, never list it in scripts/testing/known-failures.json",
+    ]);
+    expect(listedGuardTests(list, ["server/a.test.ts"])).toHaveLength(1);
   });
 });
 

@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -9,6 +10,21 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 describe("docs-copies", () => {
   it("keeps every generated copy in step with its docs site source", () => {
     expect(staleCopies(root).map((entry) => entry.copy)).toEqual([]);
+  });
+
+  it("reads a CRLF checkout (Windows) as the same files, so a copy in step stays in step", () => {
+    const dir = mkdtempSync(join(tmpdir(), "docs-copies-"));
+    try {
+      for (const entry of DOC_COPIES) {
+        for (const path of [entry.source, entry.copy]) {
+          mkdirSync(dirname(join(dir, path)), { recursive: true });
+          writeFileSync(join(dir, path), readFileSync(join(root, path), "utf8").replace(/\r?\n/g, "\r\n"));
+        }
+      }
+      expect(staleCopies(dir).map((entry) => entry.copy)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("generates each copy from an .mdx the docs site builds", () => {

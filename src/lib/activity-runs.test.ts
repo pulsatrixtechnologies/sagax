@@ -313,18 +313,46 @@ describe("groupTranscript", () => {
   const step = (name: string, turnId: string, at = ++seq * 1_000, ok = true): Message =>
     ({ id: `t${++seq}`, at, role: "bot", kind: "activity", tool: { name, ok }, turnId });
 
-  it("keeps the bot's progress lines above the answer and folds only the settled turn's tool steps", () => {
+  it("#3581: folds a settled turn's notes with its steps, so only the answer stays a bubble", () => {
     const user: Message = { id: "u1", at: 1_000, role: "user", kind: "text", text: "compare note-takers" };
     const ack = assistant("I'll check current pricing since this changes often.", "turn-1", false, 2_000);
     const search = step("WebSearch", "turn-1", 2_500);
     const read = step("WebFetch", "turn-1", 3_000);
     const helper = assistant("I'll spin up a research specialist for the details.", "turn-1", false, 3_500);
     const fetch = step("WebFetch", "turn-1", 4_000);
+    const third = assistant("Two of them changed their prices this month.", "turn-1", false, 4_500);
     const final = assistant("Here are the three best.", "turn-1", true, 30_000);
 
-    const items = groupTranscript([user, ack, search, read, helper, fetch, final]);
-    expect(items.map((item) => item.kind === "message" ? item.message.id : item.kind)).toEqual([user.id, ack.id, "run", helper.id, final.id]);
-    expect(items[2]).toMatchObject({ kind: "run", id: `run:${search.id}`, elapsedMs: 29_000, messages: [search, read, fetch] });
+    const items = groupTranscript([user, ack, search, read, helper, fetch, third, final]);
+    expect(items.map((item) => item.kind === "message" ? item.message.id : item.kind)).toEqual([user.id, "run", final.id]);
+    expect(items[1]).toMatchObject({ kind: "run", id: `run:${ack.id}`, elapsedMs: 29_000, messages: [ack, search, read, helper, fetch, third] });
+  });
+
+  it("#3581: in a running turn a note followed by a later row folds, the newest note does not", () => {
+    const user: Message = { id: "u-live", at: 1_000, role: "user", kind: "text", text: "read my mail" };
+    const first = assistant("Reading your inbox.", "turn-run", false, 2_000);
+    const read = step("Read", "turn-run", 3_000);
+    const now = assistant("Three messages need you, drafting the replies.", "turn-run", false, 4_000);
+    const items = groupTranscript([user, first, read, now]);
+    expect(items.map((item) => item.kind === "message" ? item.message.id : item.kind)).toEqual([user.id, "run", now.id]);
+    expect(items[1]).toMatchObject({ kind: "run", id: `run:${first.id}`, messages: [first, read] });
+    // the next row arrives: the note joins the row, the row keeps its key
+    const writing = running("Write");
+    writing.turnId = "turn-run";
+    const later = groupTranscript([user, first, read, now, writing]);
+    expect(later.map((item) => item.kind === "message" ? item.message.id : item.kind)).toEqual([user.id, "run"]);
+    expect(later[1]).toMatchObject({ id: `run:${first.id}`, messages: [first, read, now, writing] });
+  });
+
+  it("#3581: a failed hand-off to a teammate stays visible, outside the turn's row, while it runs and after", () => {
+    const note = assistant("Asking Bot B.", "turn-h", false, 2_000);
+    const handoff = step("Sent to Bot B", "turn-h", 3_000, false);
+    const after = assistant("Bot B did not answer, I will do it myself.", "turn-h", false, 4_000);
+    const live = groupTranscript([note, handoff, after]);
+    expect(live.map((item) => item.kind === "message" ? item.message.id : item.kind)).toEqual(["run", handoff.id, after.id]);
+    const final = assistant("Done.", "turn-h", true, 9_000);
+    const settled = groupTranscript([note, handoff, after, final]);
+    expect(settled.map((item) => item.kind === "message" ? item.message.id : item.kind)).toEqual(["run", handoff.id, final.id]);
   });
 
   it("shows just the answer for a turn with nothing to say: its steps fold, no line of it is hidden", () => {
@@ -353,10 +381,11 @@ describe("groupTranscript", () => {
     expect(byTerminalId.get(final.id)).toMatchObject({ messages: [first] });
   });
 
-  it("keeps every message visible until the turn settles", () => {
+  it("#3581: keeps only the newest note of a turn that has no answer yet", () => {
     const first = assistant("Checking.", "turn-live");
     const second = assistant("Still checking.", "turn-live");
-    expect(groupTranscript([first, second]).map((item) => item.kind)).toEqual(["message", "message"]);
+    expect(groupTranscript([first, second]).map((item) => item.kind === "message" ? item.message.id : item.kind)).toEqual(["run", second.id]);
+    expect(groupTranscript([first]).map((item) => item.kind)).toEqual(["message"]);
   });
 
   it("keeps a lone terminal message as the answer", () => {
@@ -368,8 +397,9 @@ describe("groupTranscript", () => {
     const older = step("Read", "turn-old");
     const progress = step("Edit", "turn-new");
     const final = assistant("Done.", "turn-new", true);
+    // each turn has its own row (#3581: a turn that ended without an answer folds too)
     expect(groupTranscript([older, progress, final]).map((item) => item.kind === "run" ? item.messages.map((m) => m.id) : item.kind)).toEqual([
-      "message",
+      [older.id],
       [progress.id],
       "message",
     ]);
@@ -471,3 +501,4 @@ describe("#3296 the live environment wait row", () => {
     expect(statusActivity(row({ waitingFor: "cluster", since, endedAt: since + 40_000, outcome: "interrupted" }))).toEqual(later);
   });
 });
+

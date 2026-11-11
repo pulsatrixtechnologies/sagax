@@ -1,10 +1,14 @@
 import { createContext, useMemo, useRef } from "react";
-import { liveToolIds, type LiveToolRun, type ToolRunMessage } from "@/lib/tool-liveness";
+import { liveToolIds, liveTurnIds, type LiveToolRun, type ToolRunMessage } from "@/lib/tool-liveness";
 
 /** The running tool calls, apart from the chat's other row values: only tool
  * rows read them, so a call starting or finishing re-renders those rows and
  * not every message bubble. */
 export const LiveToolsContext = createContext<ReadonlySet<string>>(new Set());
+
+/** The turns still running, by the same rule (#3581): a chat's step row reads
+ * it to say "Working", even while its turn only writes notes. */
+export const LiveTurnsContext = createContext<ReadonlySet<string>>(new Set());
 
 const sameIds = (a: ReadonlySet<string>, b: ReadonlySet<string>) => a.size === b.size && [...a].every((id) => b.has(id));
 
@@ -16,6 +20,18 @@ export function useLiveToolIds(messages: readonly ToolRunMessage[], run: LiveToo
   const { busy, turnStartedAt } = run;
   return useMemo(() => {
     const next = liveToolIds(messages, { busy, turnStartedAt });
+    if (previous.current && sameIds(previous.current, next)) return previous.current;
+    return (previous.current = next);
+  }, [messages, busy, turnStartedAt]);
+}
+
+/** The turns still running, computed once per list; the set keeps its
+ * identity while the same turns run. */
+export function useLiveTurnIds(messages: readonly ToolRunMessage[], run: LiveToolRun): ReadonlySet<string> {
+  const previous = useRef<ReadonlySet<string> | null>(null);
+  const { busy, turnStartedAt } = run;
+  return useMemo(() => {
+    const next = liveTurnIds(messages, { busy, turnStartedAt });
     if (previous.current && sameIds(previous.current, next)) return previous.current;
     return (previous.current = next);
   }, [messages, busy, turnStartedAt]);

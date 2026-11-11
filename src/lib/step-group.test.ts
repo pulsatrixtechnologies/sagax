@@ -143,11 +143,14 @@ describe("the group's one line", () => {
     expect(stepGroupWords(summarizeSteps([said("…")]), 12_000)).toMatchObject({ label: "Worked 12s", tools: undefined });
   });
 
-  it("says what runs now while the bot still works", () => {
+  it("#3581: says Working while the bot still works, never the step (the working line names it)", () => {
     const live = [...turn, step("mcp", undefined, tickets)];
     const words = stepGroupWords(summarizeSteps(live), undefined);
-    expect(words).toMatchObject({ label: "Viewing tickets in Acme Desk", phase: "running", tools: "13 tools", failed: "5 failed" });
-    expect(words.ariaLabel).toBe("Viewing tickets in Acme Desk, service.tickets, 13 tools, 5 failed, press to see the detail");
+    expect(words).toMatchObject({ label: "Working", phase: "running", tools: "13 tools", failed: "5 failed" });
+    expect(words.ariaLabel).toBe("Working, 13 tools, 5 failed, press to see the detail");
+    expect(JSON.stringify(words)).not.toContain("tickets");
+    // a turn writing a note has no running step: still Working
+    expect(stepGroupWords(summarizeSteps([said("…")]), 12_000, true)).toMatchObject({ label: "Working", phase: "running" });
   });
 
   it("speaks French when the interface is in French", () => {

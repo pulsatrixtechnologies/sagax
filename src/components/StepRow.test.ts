@@ -129,16 +129,25 @@ describe("a group of steps", () => {
     expect(node.querySelectorAll('[data-testid="activity-run-repeat"] [data-testid="tool-activity"]')).toHaveLength(3);
   });
 
-  it("says what runs now while the bot works, in place, without piling rows", () => {
+  it("#3581: says Working while the bot works, in place, without piling rows or naming the step", () => {
     const live: Message = { id: "z", role: "bot", kind: "activity", at: 2, tool: { name: "WebSearch", input: JSON.stringify({ query: "sagax" }) } };
     const node = mount(createElement(ActivityRun, { messages: [...steps, live], renderStep }));
     expect(node.querySelectorAll("[data-step-row]")).toHaveLength(1);
     const label = node.querySelector("[data-step-label]")!;
-    expect(label.textContent).toBe("Searching the web");
+    expect(label.textContent).toBe("Working");
     expect(label.className).toContain("thinking-shimmer");
+    expect(node.querySelector("[data-step-target]")).toBeNull();
     expect(node.querySelector("button")?.textContent).not.toContain("tools");
-    expect(node.querySelector("button")?.getAttribute("aria-label")).toContain("Searching the web");
+    expect(node.querySelector("button")?.getAttribute("aria-label")).not.toContain("Searching");
     expect(node.querySelector('[data-testid="activity-run"]')?.getAttribute("data-live")).toBe("true");
+  });
+
+  it("#3581: says Working for a running turn that is only writing notes", () => {
+    const note: Message = { id: "w", role: "bot", kind: "text", at: 1, text: "Reading your inbox.", turnId: "t" };
+    const node = mount(createElement(ActivityRun, { messages: [note], live: true, renderStep, renderMessage }));
+    expect(node.querySelector("[data-step-label]")?.textContent).toBe("Working");
+    expect(node.querySelector('[data-testid="activity-run"]')?.getAttribute("data-live")).toBe("true");
+    expect(node.textContent).not.toContain("Reading your inbox.");
   });
 
   it("reads a short turn's narration and tools as one line: Worked 15s", () => {
@@ -160,12 +169,14 @@ describe("a group of steps", () => {
     expect(node.textContent).toContain("first narration");
   });
 
-  it("drops the Worked line and shows the narration when tool calls are hidden", () => {
-    const narration: Message = { id: "n1", role: "bot", kind: "text", at: 1, text: "plain narration", turnId: "t" };
-    const node = mount(createElement(ActivityRun, { messages: [narration], elapsedMs: 401_000, renderStep, renderMessage, bare: true }));
-    expect(node.textContent).not.toContain("Worked");
-    expect(node.querySelector("[data-step-row]")).toBeNull();
-    expect(node.textContent).toContain("plain narration");
+  it("#3581: a search hit on a note opens the turn's row", () => {
+    const notes = [
+      { id: "h-1", role: "bot", kind: "text", at: 1, text: "first note", turnId: "t" },
+      steps[0]!,
+      { id: "h-2", role: "bot", kind: "text", at: 2, text: "the note searched for", turnId: "t" },
+    ] as Message[];
+    const node = mount(createElement(ActivityRun, { messages: notes, elapsedMs: 9_000, focusedId: "h-2", renderStep, renderMessage }));
+    expect(node.querySelector("[data-step-detail]")?.textContent).toContain("the note searched for");
   });
 
   it("keeps the Worked line when tool calls show", () => {

@@ -152,6 +152,16 @@ d'apps, puis une capsule de recherche large. Rien d'autre à l'écran.
   plus ancien à ce message, sans panneau de fil.
 - Ligne de travail : sous le dernier message, la mascotte, des points animés et l'étape
   en mots simples (« Lecture de ton courriel »), jamais un nom d'outil.
+- Rangée du tour (#3581) : dans le chat d'une personne, seule la réponse reste une
+  bulle. Les notes du bot pendant qu'il travaille et ses étapes finies se rangent
+  derrière une seule rangée d'étape (StepRow, chevron discret) : « Au travail » qui
+  scintille tant que le tour roule, puis « A travaillé 2 min 53 s ». Une note se range
+  dès qu'une rangée plus récente du même tour existe : pendant le tour on voit la
+  rangée, la ligne en cours d'écriture et la ligne de travail. La rangée ne nomme
+  jamais l'étape (la ligne de travail le fait). Ouverte, elle montre les notes dans
+  l'ordre, et les étapes quand « Appels d'outils » est actif ; sans eux, elle est
+  quand même dessinée et s'ouvre sur les notes seules. Une délégation échouée reste
+  visible hors de la rangée. Même rangée que « A travaillé » d'un salon.
 - Compositeur : une capsule flottante, détachée du bas, largeur de la colonne. À gauche
   un bouton +, au centre « Message » suivi du nom du bot, à droite le micro (dictée)
   puis un bouton rond plein à la couleur du bot (mode voix). Le + ouvre un petit menu

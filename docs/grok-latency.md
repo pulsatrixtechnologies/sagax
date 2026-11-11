@@ -59,6 +59,31 @@ Every ACP turn logs one line when it settles (server/drivers/acp/turn-latency.ts
   `sagax-environment`) can only show its `tools/list` as its first request. It says whether the engine connects its servers one after the other, which of
   Sagax's endpoints is slow, and how long the engine takes before its first request. A
   reused session prints no toolsServed.
+- toolsSlow (#3623): right after toolsServed, the parts of each of those endpoints whose tool
+  list took more than 250 ms from its first request, `<mount>:<part>:<ms>,...`, mounts
+  separated by `;`. Today the relayed `connector` mount (a person's own or a plugin's server
+  command, run in the person's environment by server/sandbox/sandbox-stdio-mcp.ts) names
+  them: `env` (the plugin copy into the person's environment), `open` (the stream to the
+  server's new process), `hello` (the server's answer to initialize), `list` (its answer to
+  tools/list) and `kb` (that answer's size). Example of a first turn after a server start:
+  `toolsSlow=connector:env:12,open:410,hello:230,list:980,kb:85`. What the parts leave out is
+  the engine's own proxy start and the hops between the proxy and Sagax. Names and numbers
+  only.
+
+  What is kept between turns (#3623): a turn that starts an engine process starts the
+  person's server again (a new initialize is a new client), and the engine waits for its tool
+  list before the prompt leaves. The relay keeps, per person, bot, server and command (with its
+  variables), the server's last answer to initialize and to an unpaged tools/list, never
+  shared between two people. The next engine gets both at once from that copy, while the
+  server starts in the background with the engine's own initialize; every other frame waits
+  for that start, then reaches the server as before, so a call to a tool the server no longer
+  serves gets the server's own answer. Each list served from the copy is checked again in the
+  background on the new process, and so is a list the server says changed
+  (`notifications/tools/list_changed`): the next turn gets the fresh one. The copy goes with a
+  changed command or variable (a new sign-in in the server's variables), a server removed,
+  changed, turned off or stopped, the person's sign-out, a start that failed and a check that
+  failed. The first turn after a Sagax start pays the whole path; the later turns of the same
+  person and server show no toolsSlow for that mount.
 
   Example of a turn whose engine connected its servers one after the other (each endpoint
   answers in tens of ms, the engine starts the next one about 300 ms later, and resolves

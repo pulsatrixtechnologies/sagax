@@ -22,8 +22,11 @@ interface TurnClock {
   /** #3623: while the engine's setup waits for its tool servers, Sagax's own
    * endpoints of this thread: the mount, its first request and its tool list
    * answer (epoch ms). Mount names and times only, never a request's content. */
-  serving?: { since: number; mounts: Array<[label: string, inAt: number, outAt?: number]> };
+  serving?: { since: number; mounts: Array<[label: string, inAt: number, outAt?: number]>; parts?: Map<string, Array<[part: string, ms: number]>> };
 }
+
+/** #3623: one mount's tool list, named by its parts (toolsSlow). */
+export type ServedParts = Array<[part: string, ms: number]>;
 
 /** Steps kept per thread: a routine's turns never restart the clock. */
 const MAX_MARKS = 64;
@@ -120,16 +123,36 @@ export function noteTurnServed(threadId: string, label: string, phase: "in" | "o
   }
 }
 
+/** #3623: one part of one of Sagax's own endpoints of this thread while the
+ * setup waits for its tool servers (the environment, the stream's opening,
+ * the server's handshake, its tool list): a name and milliseconds (or a size
+ * in KB), added up per part. Only while the setup waits. */
+export function noteTurnServedPart(threadId: string, label: string, part: string, ms: number): void {
+  const serving = clocks.get(threadId)?.serving;
+  if (!serving || !label || !part || !Number.isFinite(ms)) return;
+  serving.parts ??= new Map();
+  const parts = serving.parts.get(label) ?? [];
+  const entry = parts.find(([name]) => name === part);
+  if (entry) entry[1] += ms;
+  else parts.push([part, ms]);
+  serving.parts.set(label, parts);
+}
+
 /** #3623: the wait ended: what Sagax's own endpoints saw, in order of
  * arrival, in ms from the wait's start. Stops the noting. */
-export function closeTurnServing(threadId: string): Array<[label: string, inMs: number, outMs?: number]> {
+export function closeTurnServing(threadId: string): Array<[label: string, inMs: number, outMs?: number, parts?: ServedParts]> {
   const row = clocks.get(threadId);
   const serving = row?.serving;
   if (!row || !serving) return [];
   delete row.serving;
   const ms = (at: number) => Math.max(0, Math.round(at - serving.since));
-  return serving.mounts.map(([label, inAt, outAt]) =>
-    outAt === undefined ? [label, ms(inAt)] as [string, number] : [label, ms(inAt), ms(outAt)] as [string, number, number]);
+  return serving.mounts.map(([label, inAt, outAt]) => {
+    if (outAt === undefined) return [label, ms(inAt)] as [string, number];
+    const parts = serving.parts?.get(label);
+    return parts?.length
+      ? [label, ms(inAt), ms(outAt), parts.map(([part, value]) => [part, Math.round(value)] as [string, number])] as [string, number, number, ServedParts]
+      : [label, ms(inAt), ms(outAt)] as [string, number, number];
+  });
 }
 
 /** #3623: the mount a turn capability's requests serve, by its kind (the

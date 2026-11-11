@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { clearTurnCounters, noteFirstResponse, noteTurnQueued, setTurnTimingWriter, turnCounters, turnTrace, turnTraceMarks, turnTracePayloadHash } from "./turn-trace.ts";
+import { clearTurnCounters, closeTurnServing, noteFirstResponse, noteTurnQueued, noteTurnServed, noteTurnServedPart, openTurnServing, setTurnTimingWriter, turnCounters, turnTrace, turnTraceMarks, turnTracePayloadHash } from "./turn-trace.ts";
 
 describe("turn trace (SAGAX_TURN_TRACE)", () => {
   afterEach(() => {
@@ -152,5 +152,25 @@ describe("turn trace (SAGAX_TURN_TRACE)", () => {
     expect(turnTraceMarks(thread, 0, 9_000).length).toBe(64);
     expect(turnTraceMarks("unknown-thread", 0, 9_000)).toEqual([]);
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("adds up the parts of a mount's tool list while the setup waits, and only then (#3623)", () => {
+    const thread = "parts-thread-1";
+    noteTurnServedPart(thread, "connector", "open", 400);
+    openTurnServing(thread, 1_000);
+    noteTurnServed(thread, "connector", "in", 1_570);
+    noteTurnServedPart(thread, "connector", "open", 410.4);
+    noteTurnServedPart(thread, "connector", "hello", 230);
+    noteTurnServedPart(thread, "connector", "list", 900);
+    noteTurnServedPart(thread, "connector", "list", 80);
+    noteTurnServed(thread, "connector", "out", 3_511);
+    noteTurnServed(thread, "data", "in", 1_738);
+    noteTurnServed(thread, "data", "out", 1_740);
+    expect(closeTurnServing(thread)).toEqual([
+      ["connector", 570, 2_511, [["open", 410], ["hello", 230], ["list", 980]]],
+      ["data", 738, 740],
+    ]);
+    noteTurnServedPart(thread, "connector", "open", 5);
+    expect(closeTurnServing(thread)).toEqual([]);
   });
 });

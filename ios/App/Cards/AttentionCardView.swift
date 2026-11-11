@@ -21,11 +21,20 @@ struct AttentionCardView: View {
     var openRun: (() -> Void)? = nil
     /// One conversation: the person's answer, sent into the bot's thread.
     var reply: ((String) async throws -> Void)? = nil
+    /// #3471: one conversation: skipped without an answer (the waiting work
+    /// is told there is none). Nil hides the control.
+    var skip: (() async -> Void)? = nil
+    /// The message id, for the control's identifier.
+    var messageId: String = ""
 
     @State private var answer = ""
     @State private var sending = false
     @State private var sent = false
     @State private var sendError: String?
+    /// A skip in flight: hides the control while it is sent. The fold
+    /// itself comes from the message (the session folds it at once and
+    /// opens it again when the skip does not land).
+    @State private var skipping = false
 
     private var title: String {
         switch card.kind {
@@ -44,20 +53,36 @@ struct AttentionCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             // the bot's own bubble, as its replies are drawn
+            let skippable = skip != nil && card.isWaiting && !sent && !skipping
             AttentionItemsView(items: card.items)
-                .padding(.horizontal, Theme.Chat.bubblePaddingH)
+                .padding(.leading, Theme.Chat.bubblePaddingH)
+                .padding(.trailing, skippable ? 30 : Theme.Chat.bubblePaddingH)
                 .padding(.vertical, Theme.Chat.bubblePaddingV)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: Theme.Metric.bubbleRadius, style: .continuous).fill(BubbleColor.theirs)
                 )
+                // #3471: the one quiet × at the end of the top row
+                .overlay(alignment: .topTrailing) {
+                    if skippable {
+                        CardSkipButton(ink: BubbleColor.theirsText.opacity(0.55), id: messageId) {
+                            Task { await runSkip() }
+                        }
+                        .padding(.top, 2)
+                        .padding(.trailing, 2)
+                    }
+                }
                 .accessibilityIdentifier("attention-bubble")
 
             provenance
 
-            if reply != nil, !sent {
+            if let fold = WaitingCardSkip.fold(card) {
+                // closed without an answer: one quiet line
+                WaitingCardFoldLine(fold: fold, ink: Theme.textSecondary, size: 11.5, id: messageId)
+                    .padding(.leading, 2)
+            } else if reply != nil, !sent, card.isWaiting {
                 replyBox
-            } else if sent {
+            } else if sent || card.handledAt != nil {
                 Text(String(localized: "Answered"))
                     .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(Theme.textSecondary)
@@ -158,6 +183,13 @@ struct AttentionCardView: View {
         }
         .padding(.top, 4)
         .accessibilityIdentifier("attention-reply")
+    }
+
+    private func runSkip() async {
+        guard let skip, !skipping else { return }
+        skipping = true
+        defer { skipping = false }
+        await skip()
     }
 
     private func send() async {

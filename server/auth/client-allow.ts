@@ -404,6 +404,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // cards, answered with the same refusals as /respond, once, never remembered
   { methods: ["GET"], path: /^\/api\/approvals$/ },
   { methods: ["POST"], path: /^\/api\/approvals\/bulk$/ },
+  // #3471: a "needs you" card of the person's own conversation marked
+  // handled, or skipped (`skip: true`); the handler keeps it to their cards
+  { methods: ["POST"], path: /^\/api\/approvals\/handled$/ },
   // 2026-10-26: the Journal of the person's own bots and "Tester cette
   // règle" (read only, nothing saved); the handler keeps it to their bots
   { methods: ["GET"], path: /^\/api\/approvals\/journal$/ },

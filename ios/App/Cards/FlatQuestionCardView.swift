@@ -38,14 +38,20 @@ struct FlatQuestionCardView: View {
         if let card = message.card, !hidden {
             let colors = QuestionSheetColors(desktop: desktop)
             let proposal = ProactiveProposalRules.isProposal(card)
-            let settled = ((card.requestId != nil || proposal) && card.answered != nil) || sent != nil
+            // #3471: skipped or expired, it is closed too, never live again
+            let fold = WaitingCardSkip.fold(card)
+            let settled = ((card.requestId != nil || proposal) && (card.answered != nil || fold != nil)) || sent != nil
             let skipped = QuestionIgnore.isSkip(card.answeredText) || QuestionIgnore.isSkip(sent)
-            let closed = skipped || (card.answered != nil && card.answeredText == nil && (card.answered == "deny" || card.answered == "unavailable"))
+            let closed = skipped || fold != nil || (card.answered != nil && card.answeredText == nil && (card.answered == "deny" || card.answered == "unavailable"))
             let given = settled && !closed ? (card.answeredText ?? sent ?? (card.answered == "answer" || card.answered == "allow" ? "" : card.answered ?? "")) : ""
             let reading = AskQuestionAnswer.picks(in: given, labels: card.options)
-            // no X: a waiting live question is answered, never silently
-            // dismissed (canDismissOptionCard in OptionCard.tsx)
-            QuestionSheet(colors: colors, title: card.title) {
+            // #3471: the one quiet × skips a waiting question or proposal
+            // (never a refusal): it folds into "Skipped, no answer"
+            QuestionSheet(
+                colors: colors, title: card.title,
+                onDismiss: !settled && WaitingCardSkip.waits(card) && !answering ? { skip() } : nil,
+                dismissLabel: WaitingCardWords.skip, dismissId: "card-skip-\(message.id)"
+            ) {
                 if !card.subtitle.isEmpty {
                     Text(card.subtitle)
                         .font(colors.font(13))
@@ -84,12 +90,22 @@ struct FlatQuestionCardView: View {
                         .accessibilityIdentifier("question-ignore-\(message.id)")
                 }
                 if closed {
-                    QuestionSheetNote(colors: colors, text: String(localized: "Closed without an answer"), closed: true)
+                    QuestionSheetNote(colors: colors, text: fold.map(WaitingCardWords.fold) ?? String(localized: "Closed without an answer"), closed: true)
                 } else if settled && (!reading.rest.isEmpty || (reading.picked.isEmpty && given.isEmpty)) {
                     QuestionSheetNote(colors: colors, text: reading.rest.isEmpty ? String(localized: "Answered") : reading.rest)
                 }
             }
             .accessibilityIdentifier("flat-question-\(message.id)")
+        }
+    }
+
+    private func skip() {
+        guard sent == nil, !answering else { return }
+        answering = true
+        fieldFocused = false
+        Task {
+            await session.skipOptionCard(message, in: chat)
+            answering = false
         }
     }
 

@@ -408,12 +408,15 @@ public enum ApprovalDockRules {
 
 /// What a settled approval card says happened (`approvalCardOutcome`).
 public enum ApprovalOutcome: Hashable, Sendable {
+    /// #3471: skipped without an answer: nothing ran, never a refusal.
+    case skipped
     case expired, allowed, alwaysAllowed, denied, cancelled
     case routineScheduled, routineCreatedPaused, routineUpdated, routinePaused, routineResumed, routineRunQueued, routineDeleted
     case skillEnabled, skillUpdated, profileUpdated, ruleUpdated
     case teamSetupApplied, botDeleted
 
     public static func of(_ card: OptionCard) -> ApprovalOutcome? {
+        if card.skipped == true { return .skipped }
         if card.expired == true { return .expired }
         guard let answered = card.answered else { return nil }
         let proposal = ApprovalDockRules.isProposal(card)

@@ -74,7 +74,8 @@ struct QuestionCardView: View {
     private func isAnswered(_ position: Int) -> Bool { !answers(for: position).isEmpty }
     private var complete: Bool { questions.indices.allSatisfy(isAnswered) }
     private var answeredCount: Int { questions.indices.filter(isAnswered).count }
-    private var settled: Bool { (card?.answered != nil) || sent != nil }
+    /// #3471: skipped or expired, it is closed too, never a live sheet again.
+    private var settled: Bool { (card?.answered != nil) || sent != nil || card.flatMap(WaitingCardSkip.fold) != nil }
 
     private var colors: QuestionSheetColors { QuestionSheetColors(desktop: desktop) }
 
@@ -97,7 +98,10 @@ struct QuestionCardView: View {
         return QuestionSheet(
             colors: colors,
             title: single ? current.question : named,
-            meta: single ? nil : String(localized: "\(answeredCount) of \(questions.count)")
+            meta: single ? nil : String(localized: "\(answeredCount) of \(questions.count)"),
+            // #3471: the one quiet × skips it, never a refusal
+            onDismiss: WaitingCardSkip.waits(card) && !answering ? { skip() } : nil,
+            dismissLabel: WaitingCardWords.skip, dismissId: "card-skip-\(message.id)"
         ) {
             if card.questionRequest?.origin == "output" {
                 Text("Agent-composed question")
@@ -212,7 +216,8 @@ struct QuestionCardView: View {
     private func settledCard(_ card: OptionCard) -> some View {
         let answer = card.answeredText ?? sent
         let skipped = QuestionIgnore.isSkip(answer)
-        let closed = skipped || (answer == nil && card.answered != nil && card.answered != "answer")
+        let fold = WaitingCardSkip.fold(card)
+        let closed = skipped || fold != nil || (answer == nil && card.answered != nil && card.answered != "answer")
         let readable = skipped ? nil : answer
         // Page-target answers are a bare id; match by id ?? label (#2048).
         let byQuestion: [String: String]
@@ -258,7 +263,7 @@ struct QuestionCardView: View {
                 QuestionSheetNote(colors: colors, text: AskQuestionAnswer.withoutPreamble(readable))
             }
             if closed {
-                QuestionSheetNote(colors: colors, text: String(localized: "Closed without an answer"), closed: true)
+                QuestionSheetNote(colors: colors, text: fold.map(WaitingCardWords.fold) ?? String(localized: "Closed without an answer"), closed: true)
             } else if answer == nil {
                 QuestionSheetNote(colors: colors, text: String(localized: "Answered"))
             }
@@ -303,6 +308,17 @@ struct QuestionCardView: View {
         other.insert(index)
         if !question.allowsMultiple { picked[index] = [] }
         otherFocused = true
+    }
+
+    /// #3471: skipped without an answer: folded at once, the bot told.
+    private func skip() {
+        guard !settled, !answering else { return }
+        answering = true
+        otherFocused = false
+        Task {
+            await session.skipOptionCard(message, in: chat)
+            answering = false
+        }
     }
 
     private func ignore() {

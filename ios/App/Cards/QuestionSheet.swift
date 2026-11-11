@@ -42,6 +42,9 @@ struct QuestionSheet<Content: View>: View {
     let title: String
     var meta: String? = nil
     var onDismiss: (() -> Void)? = nil
+    /// #3471: the × of a waiting card skips it ("Skip this without answering").
+    var dismissLabel: String? = nil
+    var dismissId: String? = nil
     @ViewBuilder var content: () -> Content
 
     var body: some View {
@@ -72,7 +75,8 @@ struct QuestionSheet<Content: View>: View {
                     .buttonStyle(.plain)
                     .padding(.top, -5)
                     .padding(.trailing, -6)
-                    .accessibilityLabel(Text("Dismiss"))
+                    .accessibilityLabel(dismissLabel.map { Text(verbatim: $0) } ?? Text("Dismiss"))
+                    .accessibilityIdentifier(dismissId ?? "question-dismiss")
                 }
             }
             content()

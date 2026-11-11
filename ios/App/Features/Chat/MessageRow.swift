@@ -270,7 +270,10 @@ struct MessageRow: View {
                 tint: MausPalette.color(chat.color),
                 openThread: threadsShown ? openThread : nil,
                 openRun: attention.routineRunId.map { runId in { Task { await session.openRoutineRunInChat(id: runId) } } },
-                reply: threadsShown ? nil : { text in try await session.answerAttention(attention, text: text) }
+                reply: threadsShown ? nil : { text in try await session.answerAttention(attention, text: text, message: message, in: chat) },
+                // #3471: one conversation: skipped without an answer
+                skip: threadsShown ? nil : { await session.skipAttention(message, in: chat) },
+                messageId: message.id
             )
             // #3465: a watch alert's two exits, for the bot's owner
             if let watches = WatchAlertRules.alert(of: message.routineRun), let bot = session.state.bot(attention.botId),

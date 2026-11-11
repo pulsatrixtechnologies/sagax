@@ -167,10 +167,13 @@ public enum ApprovalHeldNote {
 /// The status pill of a settled tool ask (`approvalPill`).
 public enum ApprovalPill: Hashable, Sendable {
     case expired, undone, alwaysAllowed, alwaysDenied, allowedOnce, declined
+    /// #3471: skipped without an answer, never a refusal.
+    case skipped
 
     public enum Tone: Hashable, Sendable { case success, danger, neutral }
 
     public static func of(_ card: OptionCard) -> ApprovalPill? {
+        if card.skipped == true { return .skipped }
         if card.expired == true { return .expired }
         guard let answered = card.answered else { return nil }
         if card.undone == true { return .undone }
@@ -185,7 +188,7 @@ public enum ApprovalPill: Hashable, Sendable {
         switch self {
         case .alwaysAllowed, .allowedOnce: .success
         case .alwaysDenied, .declined: .danger
-        case .expired, .undone: .neutral
+        case .expired, .undone, .skipped: .neutral
         }
     }
 }

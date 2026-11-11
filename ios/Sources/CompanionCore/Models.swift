@@ -208,6 +208,10 @@ public struct OptionCard: Codable, Hashable, Sendable {
     /// Terminal: the proposal went stale while open. Nothing can answer it
     /// and no client may offer its options (`OptionCardData.expired`).
     public var expired: Bool? = nil
+    /// #3471: the person skipped it without an answer (`answered` reads
+    /// "skipped"). Not a refusal: the waiting bot was told there is no
+    /// answer and nothing ran.
+    public var skipped: Bool? = nil
     /// Catalog key for `held` when it is one of the fixed notes.
     public var heldCode: String? = nil
     /// The server's plain English words for a permission card ("Allow
@@ -604,6 +608,14 @@ public struct PersonAttentionCard: Codable, Hashable, Sendable {
     public var openedBy: Opener? = nil
     public var routineRunId: String? = nil
     public var routineName: String? = nil
+    /// When the person answered or closed it (milliseconds since 1970).
+    public var handledAt: Double? = nil
+    /// #3471: how it closed without the person's answer, "skipped" or
+    /// "expired" (`handledAt` is set too).
+    public var closed: String? = nil
+
+    /// Still waits for the person: neither answered nor closed.
+    public var isWaiting: Bool { handledAt == nil && closed == nil }
 
     /// Where the person opens it: the thread the bot said it in.
     public var threadRef: ThreadRef { ThreadRef(botId: botId, threadId: threadId, title: threadTitle ?? botName) }

@@ -1,0 +1,183 @@
+[
+ {
+  "id": "w-approval-2",
+  "role": "bot",
+  "kind": "options",
+  "at": 1787028900000,
+  "text": "",
+  "card": {
+   "title": "Approval needed",
+   "subtitle": "xcodebuild -scheme App -configuration Release archive",
+   "options": [
+    "Allow",
+    "Deny"
+   ],
+   "requestId": "preview-request-2",
+   "tool": "Bash",
+   "commandAllowlist": {
+    "command": "xcodebuild -scheme App -configuration Release archive",
+    "cwd": "/work/app",
+    "providerInstanceId": "preview"
+   },
+   "ownerRule": {
+    "description": "Run a command (xcodebuild)"
+   }
+  }
+ },
+ {
+  "id": "w-skipped-approval",
+  "role": "bot",
+  "kind": "options",
+  "at": 1787028910000,
+  "text": "",
+  "card": {
+   "title": "Approval needed",
+   "subtitle": "rm -rf build",
+   "options": [
+    "Allow",
+    "Deny"
+   ],
+   "requestId": "preview-skipped-approval",
+   "tool": "Bash",
+   "answered": "skipped",
+   "skipped": true,
+   "expired": true
+  }
+ },
+ {
+  "id": "w-expired-approval",
+  "role": "bot",
+  "kind": "options",
+  "at": 1787028920000,
+  "text": "",
+  "card": {
+   "title": "Approval needed",
+   "subtitle": "open https://example.com/status",
+   "options": [
+    "Allow",
+    "Deny"
+   ],
+   "requestId": "preview-expired-approval",
+   "tool": "WebFetch",
+   "expired": true
+  }
+ },
+ {
+  "id": "w-routine-done",
+  "role": "bot",
+  "kind": "options",
+  "at": 1787028930000,
+  "text": "",
+  "card": {
+   "title": "Confirm this routine",
+   "subtitle": "Every weekday at 9:00: sweep the inbox and draft replies.",
+   "options": [
+    "Confirm",
+    "Cancel"
+   ],
+   "requestId": "preview-routine-done",
+   "tool": "schedule_routine",
+   "answered": "allow",
+   "routineRequest": {
+    "operation": {
+     "action": "create"
+    }
+   }
+  }
+ },
+ {
+  "id": "w-skipped-question",
+  "role": "bot",
+  "kind": "options",
+  "at": 1787028940000,
+  "text": "",
+  "card": {
+   "title": "Do I notify the testers now?",
+   "subtitle": "",
+   "options": [
+    "Yes",
+    "Later"
+   ],
+   "requestId": "preview-skipped-question",
+   "answered": "skipped",
+   "skipped": true,
+   "expired": true
+  }
+ },
+ {
+  "id": "w-expired-question",
+  "role": "bot",
+  "kind": "options",
+  "at": 1787028950000,
+  "text": "",
+  "card": {
+   "title": "Which changelog goes out?",
+   "subtitle": "",
+   "options": [
+    "Short",
+    "Full"
+   ],
+   "requestId": "preview-expired-question",
+   "expired": true
+  }
+ },
+ {
+  "id": "w-proposal",
+  "role": "bot",
+  "kind": "options",
+  "at": 1787028960000,
+  "text": "",
+  "card": {
+   "title": "Receive the build alerts?",
+   "subtitle": "I can tell you when a nightly build fails.",
+   "options": [
+    "Yes",
+    "Not now"
+   ],
+   "proactiveProposal": {
+    "id": "preview-proposal"
+   }
+  }
+ },
+ {
+  "id": "w-attention",
+  "role": "bot",
+  "kind": "text",
+  "at": 1787028970000,
+  "text": "",
+  "attention": {
+   "kind": "question",
+   "items": [
+    {
+     "text": "Which account should sign the release?"
+    }
+   ],
+   "botId": "preview-pixel",
+   "botName": "Pixel",
+   "threadId": "preview-thread-pixel",
+   "sourceMessageId": "pixel-reply",
+   "routineName": "Nightly build"
+  }
+ },
+ {
+  "id": "w-attention-skipped",
+  "role": "bot",
+  "kind": "text",
+  "at": 1787028980000,
+  "text": "",
+  "attention": {
+   "kind": "question",
+   "items": [
+    {
+     "text": "Should the beta notes mention the new widget?"
+    }
+   ],
+   "botId": "preview-pixel",
+   "botName": "Pixel",
+   "threadId": "preview-thread-pixel",
+   "sourceMessageId": "pixel-reply",
+   "handledAt": 1787028990000,
+   "closed": "skipped"
+  }
+ }
+]

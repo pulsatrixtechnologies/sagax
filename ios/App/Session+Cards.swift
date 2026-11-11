@@ -114,6 +114,50 @@ extension Session {
         }
     }
 
+    // MARK: Skip a waiting card (#3471)
+
+    /// The one quiet control of every waiting card: the card folds at once
+    /// ("Skipped, no answer"), the server closes it as skipped and tells the
+    /// waiting bot there is no answer. Never a refusal. `threadId` is the
+    /// thread the message sits in; a failure opens the card again, except a
+    /// card already closed elsewhere (409), as on the desktop.
+    func skipWaitingCard(_ message: Message, route: WaitingCardSkip.Route, threadId: String) async {
+        applyLocalCard(WaitingCardSkip.skipped(message), threadId: threadId)
+        await perform { client in
+            do {
+                try await client.skipWaitingCard(route)
+            } catch {
+                // closed elsewhere (409): the server's outcome stays;
+                // any other failure opens the card again
+                if let reopened = WaitingCardSkip.reopened(message, after: error) {
+                    applyLocalCard(reopened, threadId: threadId)
+                    throw error
+                }
+            }
+        }
+    }
+
+    /// Skip one option card (an approval, a question, a proposal).
+    func skipOptionCard(_ message: Message, in chat: Chat, threadId: String? = nil) async {
+        guard let card = message.card else { return }
+        let thread = threadId ?? chat.threadId
+        guard let route = WaitingCardSkip.route(for: card, threadId: thread, botId: cardBotId(message, in: chat)) else { return }
+        await skipWaitingCard(message, route: route, threadId: thread)
+    }
+
+    /// Skip the dock's approval: on its own thread (a parallel task's).
+    func skipApproval(_ pending: PendingApproval, in chat: Chat) async {
+        await skipOptionCard(pending.message, in: chat, threadId: pending.answerThread(conversation: chat.threadId))
+    }
+
+    /// Skip a question in words (an attention card) of this conversation.
+    func skipAttention(_ message: Message, in chat: Chat) async {
+        guard let card = message.attention,
+              let route = WaitingCardSkip.route(for: card, messageId: message.id, threadId: chat.threadId, botId: cardBotId(message, in: chat))
+        else { return }
+        await skipWaitingCard(message, route: route, threadId: chat.threadId)
+    }
+
     // MARK: Parallel task
 
     func stopParallelTask(botId: String, threadId: String) async {

@@ -76,6 +76,7 @@ enum ApprovalWords {
         case .alwaysDenied: String(localized: "Always denied")
         case .allowedOnce: String(localized: "Allowed once")
         case .declined: String(localized: "Declined")
+        case .skipped: String(localized: "approval.pill.skipped", defaultValue: "Skipped")
         }
     }
 

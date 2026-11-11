@@ -607,6 +607,26 @@ final class Session: ObservableObject {
                 }
                 if arguments.contains("-roles-top") { focusedMessageId = "roles-user" }
             }
+            if arguments.contains("-waiting-cards-preview"),
+               let url = Bundle.main.url(forResource: "WaitingCardsPreview", withExtension: "json"),
+               let data = try? Data(contentsOf: url),
+               let rows = try? JSONDecoder().decode([Message].self, from: data),
+               let index = state.bots.firstIndex(where: { $0.id == "preview-scout" }) {
+                // #3415, #3471: every kind of waiting card, open, skipped
+                // and expired, after the cards chat's own (the captures)
+                let thread = state.bots[index].threadId
+                var parent = state.bots[index].activeLeafId
+                var chained = state.messages[thread] ?? []
+                for var row in rows {
+                    row.parentId = parent
+                    parent = row.id
+                    chained.append(row)
+                }
+                state.messages[thread] = chained
+                state.bots[index].activeLeafId = parent
+                state.activeLeafIds[thread] = parent
+                if arguments.contains("-waiting-cards-top") { focusedMessageId = "w-skipped-approval" }
+            }
             if arguments.contains("-cards-top") {
                 // The cards chat from its first cards (the theme captures).
                 focusedMessageId = "c-tool"
@@ -1202,6 +1222,12 @@ final class Session: ObservableObject {
     private func applyDemoFrame(_ frame: Frame) {
         guard isDemo else { return }
         if frame.isStreamedText { foldQuietly { state.apply(frame) } } else { state.apply(frame) }
+    }
+
+    /// #3471: a card folded here before the server's patch lands (a skip),
+    /// or opened again when the skip failed. The server's frame wins after.
+    func applyLocalCard(_ message: Message, threadId: String) {
+        state.apply(.message(threadId: threadId, message: message))
     }
 
     // MARK: - Publishing the state
@@ -4004,9 +4030,15 @@ final class Session: ObservableObject {
     /// #2081 (one conversation): the person's answer to a bot's question goes
     /// into the thread the bot asked in, as their own message, which the
     /// runtime takes as the answer (desktop AttentionCard onReply).
-    func answerAttention(_ card: PersonAttentionCard, text: String) async throws {
+    func answerAttention(_ card: PersonAttentionCard, text: String, message: Message? = nil, in chat: Chat? = nil) async throws {
         guard let client else { throw APIError.transport("This computer is offline.") }
         _ = try await client.send(text: text, toBot: card.botId, threadId: card.threadId)
+        // then the card marked handled, so every place that draws it
+        // settles (desktop answerPersonRequest); best effort
+        if let message, let chat {
+            let botId = cardBotId(message, in: chat) ?? card.botId
+            try? await client.markAttentionHandled(botId: botId, threadId: chat.threadId, messageId: message.id)
+        }
     }
 
     /// Opens what a notification named: the conversation it points at. A

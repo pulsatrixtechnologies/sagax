@@ -175,6 +175,27 @@ describe.runIf(posix)("spawn helper (#3680)", () => {
     expect((await closed).signal).toBe("SIGTERM");
   });
 
+  // #3709: the helper runs in a group of its own, so a Ctrl+C on the server's
+  // terminal reaches its children only when the server passes it on.
+  it("passes the server's SIGINT on to the children that are not detached", async () => {
+    const attached = spawnChild(process.execPath, ["-e", WAIT], { stdio: ["pipe", "pipe", "pipe"] });
+    const detached = spawnCli(process.execPath, ["-e", WAIT], { stdio: ["pipe", "pipe", "pipe"] });
+    await Promise.all([attached, detached].map((child) => new Promise((resolve) => child.once("spawn", resolve))));
+    const closed = run(attached);
+    // the server's own handler (a process with none would end on the signal)
+    const server = () => {};
+    process.on("SIGINT", server);
+    try {
+      process.emit("SIGINT", "SIGINT");
+      expect((await closed).signal).toBe("SIGINT");
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(detached.exitCode === null && detached.signalCode === null).toBe(true);
+    } finally {
+      process.off("SIGINT", server);
+      expect(await killCliTree(detached, 1_000)).toBe(true);
+    }
+  });
+
   it("reports a missing program as Node's spawn does", async () => {
     const child = spawnCli("/nonexistent/spawn-helper-test", [], { stdio: ["pipe", "pipe", "pipe"] });
     const closed = new Promise((resolve) => child.once("close", resolve));

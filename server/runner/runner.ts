@@ -10,7 +10,7 @@
 //
 // The runner never listens on a port, never holds a write token, and masks
 // every known secret (and the run token) in what it sends.
-import { spawnChild } from "../process/spawn-helper.ts";
+import { spawnChild, whenStarted } from "../process/spawn-helper.ts";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -596,7 +596,8 @@ class Runner {
       };
       child.stdout.on("data", out);
       child.stderr.on("data", out);
-      const killGroup = (signal: NodeJS.Signals) => { try { process.kill(-child.pid!, signal); } catch { child.kill(signal); } };
+      // once the spawn helper has the pid: a stop before it still reaches the group (#3709)
+      const killGroup = (signal: NodeJS.Signals) => whenStarted(child, (pid) => { try { process.kill(-pid, signal); } catch { child.kill(signal); } });
       const timer = setTimeout(() => { killGroup("SIGTERM"); setTimeout(() => killGroup("SIGKILL"), 5_000).unref?.(); }, options.timeoutMs);
       let settled = false;
       const onStop = () => { if (!settled) killGroup("SIGTERM"); };

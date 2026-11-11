@@ -1,6 +1,6 @@
 // Fixed read-only probes for a Tailcat session. The command text is ours:
 // nothing the person or the model typed is interpolated into it.
-import { spawnChild } from "../process/spawn-helper.ts";
+import { spawnChild, whenStarted } from "../process/spawn-helper.ts";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -561,11 +561,11 @@ export function createRunCommand(options: { killGraceMs?: number; releaseMs?: nu
       finish(1);
       return;
     }
+    // A stop before the spawn helper has the pid (an abort at once) still
+    // signals the whole group, once the pid is there (#3709).
     const kill = (sig: NodeJS.Signals) => {
-      try {
-        if (group && child.pid) process.kill(-child.pid, sig);
-        else child.kill(sig);
-      } catch { /* already gone */ }
+      if (group) whenStarted(child, (pid) => { try { process.kill(-pid, sig); } catch { /* already gone */ } });
+      else try { child.kill(sig); } catch { /* already gone */ }
     };
     const stop = () => {
       if (stopping || settled) return;

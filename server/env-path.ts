@@ -10,7 +10,7 @@
 // on this machine, plus (async, best-effort) whatever PATH the user's
 // real login shell reports.
 import type { ChildProcess } from "node:child_process";
-import { spawnChild } from "./process/spawn-helper.ts";
+import { spawnChild, whenStarted } from "./process/spawn-helper.ts";
 import { closeSync, existsSync, openSync, readFileSync, readSync, statSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, extname, join } from "node:path";
@@ -175,8 +175,10 @@ export function runLoginShellProbe(shell: string, timeoutMs: number, found: (pat
     return null;
   }
   let stdout = "";
+  // A child the spawn helper is still starting has no pid yet: its group
+  // is killed once the pid is there (#3709).
   const killGroup = () => {
-    try { if (child.pid) process.kill(-child.pid, "SIGKILL"); } catch { /* already gone */ }
+    whenStarted(child, (pid) => { try { process.kill(-pid, "SIGKILL"); } catch { /* already gone */ } });
     try { child.kill("SIGKILL"); } catch { /* already gone */ }
   };
   const timer = setTimeout(killGroup, timeoutMs);

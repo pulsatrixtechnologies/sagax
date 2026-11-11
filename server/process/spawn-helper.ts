@@ -70,7 +70,9 @@ const { spawn } = require("node:child_process");
 try { require("node:os").setPriority(${CHILD_NICE}); } catch {}
 const info = (e) => ({ code: e && e.code, errno: e && e.errno, syscall: e && e.syscall, path: e && e.path, message: String(e && e.message || e) });
 const send = (m, h) => { try { process.send(m, h); } catch {} };
+const attached = new Set();
 process.on("message", (m) => {
+  if (m && m.op === "signal") { for (const c of attached) { try { c.kill(m.signal); } catch {} } return; }
   if (!m || m.op !== "spawn") return;
   let child;
   try {
@@ -85,6 +87,7 @@ process.on("message", (m) => {
     if (stream._handle && typeof stream._handle.readStop === "function") stream._handle.readStop();
     send({ op: "stdio", id: m.id, fd }, stream);
   }
+  if (!m.detached) { attached.add(child); child.once("exit", () => attached.delete(child)); }
   child.once("exit", (code, signal) => send({ op: "exit", id: m.id, code, signal }));
 });
 process.on("disconnect", () => process.exit(0));
@@ -331,9 +334,26 @@ const QUICK_DEATH_MS = 1_000;
 const RETRY_MS = 10_000;
 let log: (line: string) => void = (line) => console.warn(line);
 
+/** A Ctrl+C on the server's terminal signals the server's process group; the
+ * helper runs in a group of its own, so the server passes the signal on and
+ * the helper gives it to the children that are not detached, the ones that
+ * would have been in the server's group (#3709). A process with no SIGINT
+ * handler of its own still ends on it, once the helper has the signal. */
+function passInterrupt(): void {
+  const alone = process.listenerCount("SIGINT") === 1;
+  const end = () => {
+    if (!alone) return;
+    process.off("SIGINT", passInterrupt);
+    process.kill(process.pid, "SIGINT");
+  };
+  if (!helper?.connected) return end();
+  try { helper.send({ op: "signal", signal: "SIGINT" }, end); } catch { end(); }
+}
+
 /** Start the helper (the server calls this once at boot). */
 export function startSpawnHelper(options: { log?: (line: string) => void } = {}): void {
   if (options.log) log = options.log;
+  if (!wanted) process.on("SIGINT", passInterrupt);
   wanted = true;
   if (!helper) launch();
 }
@@ -341,6 +361,7 @@ export function startSpawnHelper(options: { log?: (line: string) => void } = {})
 /** Stop the helper; later spawns are the server's own again. */
 export function stopSpawnHelper(): void {
   wanted = false;
+  process.off("SIGINT", passInterrupt);
   const current = helper;
   helper = null;
   if (current && current.exitCode === null && current.signalCode === null) current.kill("SIGKILL");

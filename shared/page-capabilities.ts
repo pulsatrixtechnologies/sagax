@@ -317,12 +317,11 @@ const PAGE_CAP_B64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+
 
 /** The download filename: the last segment after a slash or a backslash.
  * Null, which the caller answers as bad_request, when that segment is empty,
- * a single dot, a double dot, longer than 200 characters, or contains a
- * control character. The limit stays inside this helper. Pure. */
+ * a single dot, a double dot, or contains a control character. Pure. */
 export function pageCapFileName(name: unknown): string | null {
   if (typeof name !== "string") return null;
   const segment = name.split(/[/\\]/).pop() ?? "";
-  if (!segment || segment === "." || segment === ".." || segment.length > 200) return null;
+  if (!segment || segment === "." || segment === "..") return null;
   for (let i = 0; i < segment.length; i++) {
     const code = segment.charCodeAt(i);
     if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) return null;

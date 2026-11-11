@@ -619,14 +619,14 @@ describe("ACP turns (fake CLI)", () => {
 
   it("detects a collapse against the previous turn's context", async () => {
     const { usage, send } = await usageThread("cross-turn");
-    expect(await send("turn 1")).toBe(FULL + "\n\nturn 1");
+    expect(await send("turn 1")).toBe(OPENING + "\n\nturn 1");
     usage(150000);
     expect(await send("turn 2")).toBe("turn 2");
     // compaction before the first report: a collapse against last turn's peak
     usage(50000);
     expect(await send("turn 3")).toBe("turn 3");
     usage();
-    expect(await send("turn 4")).toBe(FULL + "\n\nturn 4");
+    expect(await send("turn 4")).toBe(OPENING + "\n\nturn 4");
   });
 
   it("detects a cumulative collapse against an earlier turn's high-water mark", async () => {

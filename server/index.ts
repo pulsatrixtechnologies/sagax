@@ -11454,9 +11454,9 @@ const quietMode = new QuietMode<BotRecord>({
   bots: () => store.bots,
   owner: (bot) => effectiveBotOwner(bot),
   language: (person) => languageOfPerson(person),
-  line: (bot, text) => {
+  line: (bot, text, kept) => {
     const threadId = botMainThread(bot.id) ?? bot.threadId;
-    if (threadId) store.appendMessage(threadId, { role: "bot", kind: "text", text, from: { botId: bot.id, name: bot.name, color: bot.color } });
+    if (threadId) store.appendMessage(threadId, { role: "bot", kind: "text", text, quietSummary: kept, from: { botId: bot.id, name: bot.name, color: bot.color } });
   },
 });
 /** Whether this bot is in quiet mode now (its own switch or its person's). */

@@ -185,6 +185,8 @@ export interface Message extends Pick<import("../../../shared/wire").WireMessage
   /** #3461: the quiet note an orchestrator reads at its next turn (WireMessage.teamNote);
    * #3462: drawn as one quiet line in the conversation with the bot that opened the thread. */
   teamNote?: import("../../../shared/wire").WireMessage["teamNote"];
+  /** #3480: the quiet line when the bot's quiet mode went off (WireMessage.quietSummary). */
+  quietSummary?: import("../../../shared/wire").WireMessage["quietSummary"];
   /** A parallel task this line belongs to (shared/parallel-tasks.ts). */
   parallelTask?: ParallelTaskRef;
   dataResult?: import("../../../shared/wire").WireMessage["dataResult"];

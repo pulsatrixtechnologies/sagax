@@ -7,6 +7,7 @@ import {
   quietModeLevel,
   quietModeNotification,
   quietModeSaid,
+  quietModeCounts,
   quietModeSummary,
   quietRunHadProblems,
 } from "./quiet-mode.ts";
@@ -55,6 +56,9 @@ describe("quiet mode contract (#3480)", () => {
     expect(quietModeSummary({ runs: 4, problems: 1 }, "fr")).toBe("Mode silencieux terminé : 4 exécutions gardées en silence, dont 1 avec des problèmes. Tu les retrouves dans Automatisations, sous Exécutions de chaque routine.");
     expect(quietModeSummary({ runs: 2, problems: 0 }, "en")).toBe("Quiet mode is off: 2 runs kept quiet, none with problems. See them in Automations, under each routine's Runs.");
     expect(quietModeSummary({ runs: 0, problems: 0 }, "fr")).toBe("Mode silencieux terminé : aucune exécution n'a été gardée en silence.");
+    // the chat's quiet line shows the counts beside its link (#3480, interface lot)
+    expect(quietModeCounts({ runs: 4, problems: 1 }, "fr")).toBe("Mode silencieux terminé : 4 exécutions gardées en silence, dont 1 avec des problèmes");
+    expect(quietModeCounts({ runs: 1, problems: 0 }, "en")).toBe("Quiet mode is off: 1 run kept quiet, none with problems");
     for (const line of [quietModeSummary({ runs: 3, problems: 2 }, "fr"), quietModeSaid(true, "bot", "fr"), quietModeSaid(false, "all", "fr")]) {
       expect(line).not.toMatch(/[–—\n]/);
       expect(line).not.toMatch(/\bvous\b/i);

@@ -69,8 +69,9 @@ export interface QuietModeDeps<B extends QuietModeBot> {
   owner(bot: B): string;
   /** The person's language ("fr", "en", ...). */
   language(person: string): string | undefined;
-  /** Write the line in the bot's main conversation. */
-  line(bot: B, text: string): void;
+  /** Write the line in the bot's main conversation, with what it counts
+   * (the chat draws it as a quiet line that opens the runs). */
+  line(bot: B, text: string, kept: Pick<QuietKept, "runs" | "problems">): void;
   now?(): number;
 }
 
@@ -207,7 +208,7 @@ export class QuietMode<B extends QuietModeBot> {
     delete row.counted;
     if (!always && kept.runs === 0) return undefined;
     const summary = quietModeSummary(kept, language);
-    try { this.deps.line(bot, summary); } catch { /* the answer still carries it */ }
+    try { this.deps.line(bot, summary, { runs: kept.runs, problems: kept.problems }); } catch { /* the answer still carries it */ }
     return summary;
   }
 

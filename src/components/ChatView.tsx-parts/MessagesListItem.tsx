@@ -14,6 +14,7 @@ import { GotoGroupChip } from "../GotoGroupChip";
 import { MessagedLine } from "../MessagedLine";
 import { AskLine } from "../AskLine";
 import { TeamNoteLine } from "../TeamNoteLine";
+import { QuietModeLine } from "../QuietModeLine";
 import { teamNoteCount, teamNoteFolded } from "@/lib/team-work";
 import { askAlreadyLined } from "@/lib/ask-line";
 import type { GotoTarget } from "@/lib/goto-lines";
@@ -339,6 +340,10 @@ export function MessagesListItem({
     // #2109: connect_github's sign-in card (code, Copy code, Open link)
     if (m.githubConnect && m.role === "bot" && m.kind === "text") {
       return <MessageBoundary fallbackText={m.text ?? ""}><GithubConnectCard card={m.githubConnect} /></MessageBoundary>;
+    }
+    // #3480: the bot's quiet mode went off: one quiet line that opens the runs
+    if (m.quietSummary && m.role === "bot" && m.kind === "text") {
+      return <MessageBoundary fallbackText={m.text ?? ""}><QuietModeLine kept={m.quietSummary} botId={m.from?.botId ?? botId} /></MessageBoundary>;
     }
     // #3462: the person wrote to a team bot in a step's chat: one quiet line,
     // a burst that still meets the next row folds into it

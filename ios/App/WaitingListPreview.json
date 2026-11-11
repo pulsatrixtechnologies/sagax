@@ -1,0 +1,509 @@
+{
+ "pending": [
+  {
+   "key": "preview-thread-scout-earlier:preview-earlier",
+   "threadId": "preview-thread-scout-earlier",
+   "requestId": "preview-earlier",
+   "botId": "preview-scout",
+   "botName": "Scout",
+   "scope": "mine",
+   "kind": "question",
+   "at": 1786950000000,
+   "decidable": true,
+   "bulk": true,
+   "messageId": "e-question",
+   "message": {
+    "id": "e-question",
+    "role": "bot",
+    "kind": "options",
+    "at": 1786950000000,
+    "text": "",
+    "card": {
+     "title": "Which build channel do we use for the beta?",
+     "subtitle": "",
+     "options": [
+      "TestFlight internal",
+      "TestFlight external"
+     ],
+     "requestId": "preview-earlier"
+    }
+   }
+  },
+  {
+   "key": "preview-thread-scout:preview-question",
+   "threadId": "preview-thread-scout",
+   "requestId": "preview-question",
+   "botId": "preview-scout",
+   "botName": "Scout",
+   "scope": "mine",
+   "kind": "question",
+   "at": 1787028770000,
+   "decidable": true,
+   "bulk": true,
+   "messageId": "c-question",
+   "message": {
+    "kind": "options",
+    "card": {
+     "title": "Your bot has a question",
+     "subtitle": "Which build should go to testers?",
+     "options": [
+      "Build 41",
+      "Build 42"
+     ],
+     "requestId": "preview-question",
+     "questionRequest": {
+      "version": 1,
+      "questions": [
+       {
+        "question": "Which build should go to testers?",
+        "header": "Build",
+        "multiSelect": false,
+        "options": [
+         {
+          "label": "Build 41",
+          "description": "Passed every check."
+         },
+         {
+          "label": "Build 42",
+          "description": "Has the new onboarding."
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "role": "bot",
+    "id": "c-question",
+    "at": 1787028770000
+   }
+  },
+  {
+   "key": "preview-thread-scout:preview-request",
+   "threadId": "preview-thread-scout",
+   "requestId": "preview-request",
+   "botId": "preview-scout",
+   "botName": "Scout",
+   "scope": "mine",
+   "kind": "permission",
+   "at": 1787028800000,
+   "decidable": true,
+   "bulk": true,
+   "messageId": "c-approval",
+   "message": {
+    "kind": "options",
+    "card": {
+     "title": "Approval needed",
+     "subtitle": "Upload build 1 to TestFlight for internal testing?",
+     "options": [
+      "Allow",
+      "Deny"
+     ],
+     "requestId": "preview-request",
+     "tool": "App Store Connect",
+     "allowKey": "testflight:upload"
+    },
+    "role": "bot",
+    "id": "c-approval",
+    "at": 1787028800000
+   }
+  },
+  {
+   "key": "preview-thread-scout:preview-flat",
+   "threadId": "preview-thread-scout",
+   "requestId": "preview-flat",
+   "botId": "preview-scout",
+   "botName": "Scout",
+   "scope": "mine",
+   "kind": "question",
+   "at": 1787028860000,
+   "decidable": true,
+   "bulk": true,
+   "messageId": "c-q-flat",
+   "message": {
+    "kind": "options",
+    "card": {
+     "title": "Je mets en pause mes deux webhooks ?",
+     "subtitle": "",
+     "options": [
+      "Oui, mets-les en pause",
+      "Non, garde-les actifs"
+     ],
+     "requestId": "preview-flat"
+    },
+    "role": "bot",
+    "id": "c-q-flat",
+    "at": 1787028860000
+   }
+  },
+  {
+   "key": "preview-thread-scout:preview-multi",
+   "threadId": "preview-thread-scout",
+   "requestId": "preview-multi",
+   "botId": "preview-scout",
+   "botName": "Scout",
+   "scope": "mine",
+   "kind": "question",
+   "at": 1787028920000,
+   "decidable": true,
+   "bulk": true,
+   "messageId": "c-q-multi",
+   "message": {
+    "kind": "options",
+    "card": {
+     "title": "Your bot has a question",
+     "subtitle": "",
+     "options": [],
+     "requestId": "preview-multi",
+     "questionRequest": {
+      "version": 1,
+      "questions": [
+       {
+        "question": "Quels webhooks je mets en pause ?",
+        "multiSelect": true,
+        "options": [
+         {
+          "label": "Billets entrants"
+         },
+         {
+          "label": "Facturation"
+         },
+         {
+          "label": "Alertes RMM"
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "role": "bot",
+    "id": "c-q-multi",
+    "at": 1787028920000
+   }
+  },
+  {
+   "key": "preview-thread-scout:preview-request-2",
+   "threadId": "preview-thread-scout",
+   "requestId": "preview-request-2",
+   "botId": "preview-scout",
+   "botName": "Scout",
+   "scope": "mine",
+   "kind": "permission",
+   "at": 1787028900000,
+   "decidable": true,
+   "bulk": true,
+   "messageId": "w-approval-2",
+   "message": {
+    "id": "w-approval-2",
+    "role": "bot",
+    "kind": "options",
+    "at": 1787028900000,
+    "text": "",
+    "card": {
+     "title": "Approval needed",
+     "subtitle": "xcodebuild -scheme App -configuration Release archive",
+     "options": [
+      "Allow",
+      "Deny"
+     ],
+     "requestId": "preview-request-2",
+     "tool": "Bash",
+     "commandAllowlist": {
+      "command": "xcodebuild -scheme App -configuration Release archive",
+      "cwd": "/work/app",
+      "providerInstanceId": "preview"
+     },
+     "ownerRule": {
+      "description": "Run a command (xcodebuild)"
+     }
+    }
+   }
+  },
+  {
+   "key": "preview-thread-scout:proactive:preview-proposal",
+   "threadId": "preview-thread-scout",
+   "requestId": "proactive:preview-proposal",
+   "botId": "preview-scout",
+   "botName": "Scout",
+   "scope": "mine",
+   "kind": "proposal",
+   "at": 1787028960000,
+   "decidable": true,
+   "bulk": true,
+   "messageId": "w-proposal",
+   "message": {
+    "id": "w-proposal",
+    "role": "bot",
+    "kind": "options",
+    "at": 1787028960000,
+    "text": "",
+    "card": {
+     "title": "Receive the build alerts?",
+     "subtitle": "I can tell you when a nightly build fails.",
+     "options": [
+      "Yes",
+      "Not now"
+     ],
+     "proactiveProposal": {
+      "id": "preview-proposal"
+     }
+    }
+   }
+  },
+  {
+   "key": "preview-thread-scout:attention:w-attention",
+   "threadId": "preview-thread-scout",
+   "requestId": "attention:w-attention",
+   "botId": "preview-scout",
+   "botName": "Scout",
+   "scope": "mine",
+   "kind": "attention",
+   "at": 1787028970000,
+   "decidable": true,
+   "bulk": true,
+   "messageId": "w-attention",
+   "message": {
+    "id": "w-attention",
+    "role": "bot",
+    "kind": "text",
+    "at": 1787028970000,
+    "text": "",
+    "attention": {
+     "kind": "question",
+     "items": [
+      {
+       "text": "Which account should sign the release?"
+      }
+     ],
+     "botId": "preview-pixel",
+     "botName": "Pixel",
+     "threadId": "preview-thread-pixel",
+     "sourceMessageId": "pixel-reply",
+     "routineName": "Nightly build"
+    }
+   }
+  },
+  {
+   "key": "preview-thread-scout:attention:w-input-request",
+   "threadId": "preview-thread-scout",
+   "requestId": "attention:w-input-request",
+   "botId": "preview-scout",
+   "botName": "Scout",
+   "scope": "mine",
+   "kind": "attention",
+   "at": 1787028990000,
+   "decidable": true,
+   "bulk": true,
+   "messageId": "w-input-request",
+   "message": {
+    "id": "w-input-request",
+    "role": "bot",
+    "kind": "activity",
+    "at": 1787028990000,
+    "from": {
+     "botId": "preview-pixel",
+     "name": "Pixel",
+     "color": "orange"
+    },
+    "tool": {
+     "name": "Pixel needs your input: Which test group gets the beta first?",
+     "ok": true
+    },
+    "inputRequest": {
+     "botId": "preview-pixel",
+     "threadId": "preview-thread-pixel-beta",
+     "botName": "Pixel",
+     "title": "Beta rollout",
+     "question": "Which test group gets the beta first?"
+    },
+    "threadRef": {
+     "botId": "preview-pixel",
+     "threadId": "preview-thread-pixel-beta",
+     "title": "Beta rollout"
+    },
+    "attention": {
+     "kind": "question",
+     "items": [
+      {
+       "text": "Which test group gets the beta first?"
+      }
+     ],
+     "botId": "preview-pixel",
+     "botName": "Pixel",
+     "threadId": "preview-thread-pixel-beta",
+     "threadTitle": "Beta rollout",
+     "sourceMessageId": "w-input-request"
+    }
+   }
+  }
+ ],
+ "history": [],
+ "scopes": {
+  "org": false,
+  "team": false
+ },
+ "waiting": [
+  {
+   "id": "preview-earlier",
+   "kind": "question",
+   "botId": "preview-scout",
+   "botName": "Scout",
+   "threadId": "preview-thread-scout-earlier",
+   "messageId": "e-question",
+   "at": 1786950000000,
+   "ageMs": 0,
+   "title": "Which build channel do we use for the beta?",
+   "text": "Which build channel do we use for the beta?",
+   "options": [
+    "TestFlight internal",
+    "TestFlight external"
+   ],
+   "answerWith": "option",
+   "freeText": false,
+   "skippable": true
+  },
+  {
+   "id": "preview-question",
+   "kind": "question",
+   "botId": "preview-scout",
+   "botName": "Scout",
+   "threadId": "preview-thread-scout",
+   "messageId": "c-question",
+   "at": 1787028770000,
+   "ageMs": 0,
+   "title": "Your bot has a question",
+   "text": "Your bot has a question",
+   "options": [
+    "Build 41",
+    "Build 42"
+   ],
+   "answerWith": "option",
+   "freeText": false,
+   "skippable": true
+  },
+  {
+   "id": "preview-request",
+   "kind": "approval",
+   "botId": "preview-scout",
+   "botName": "Scout",
+   "threadId": "preview-thread-scout",
+   "messageId": "c-approval",
+   "at": 1787028800000,
+   "ageMs": 0,
+   "title": "Approval needed",
+   "text": "Approval needed",
+   "options": [
+    "Allow",
+    "Deny"
+   ],
+   "answerWith": "decision",
+   "freeText": false,
+   "skippable": true
+  },
+  {
+   "id": "preview-flat",
+   "kind": "question",
+   "botId": "preview-scout",
+   "botName": "Scout",
+   "threadId": "preview-thread-scout",
+   "messageId": "c-q-flat",
+   "at": 1787028860000,
+   "ageMs": 0,
+   "title": "Je mets en pause mes deux webhooks ?",
+   "text": "Je mets en pause mes deux webhooks ?",
+   "options": [
+    "Oui, mets-les en pause",
+    "Non, garde-les actifs"
+   ],
+   "answerWith": "option",
+   "freeText": false,
+   "skippable": true
+  },
+  {
+   "id": "preview-multi",
+   "kind": "question",
+   "botId": "preview-scout",
+   "botName": "Scout",
+   "threadId": "preview-thread-scout",
+   "messageId": "c-q-multi",
+   "at": 1787028920000,
+   "ageMs": 0,
+   "title": "Your bot has a question",
+   "text": "Your bot has a question",
+   "options": [],
+   "answerWith": "option",
+   "freeText": false,
+   "skippable": true
+  },
+  {
+   "id": "preview-request-2",
+   "kind": "approval",
+   "botId": "preview-scout",
+   "botName": "Scout",
+   "threadId": "preview-thread-scout",
+   "messageId": "w-approval-2",
+   "at": 1787028900000,
+   "ageMs": 0,
+   "title": "Approval needed",
+   "text": "Approval needed",
+   "options": [
+    "Allow",
+    "Deny"
+   ],
+   "answerWith": "decision",
+   "freeText": false,
+   "skippable": true
+  },
+  {
+   "id": "proactive:preview-proposal",
+   "kind": "proposal",
+   "botId": "preview-scout",
+   "botName": "Scout",
+   "threadId": "preview-thread-scout",
+   "messageId": "w-proposal",
+   "at": 1787028960000,
+   "ageMs": 0,
+   "title": "Receive the build alerts?",
+   "text": "Receive the build alerts?",
+   "options": [
+    "Yes",
+    "Not now"
+   ],
+   "answerWith": "option",
+   "freeText": false,
+   "skippable": true,
+   "proactiveId": "preview-proposal"
+  },
+  {
+   "id": "attention:w-attention",
+   "kind": "request",
+   "botId": "preview-scout",
+   "botName": "Scout",
+   "threadId": "preview-thread-scout",
+   "messageId": "w-attention",
+   "at": 1787028970000,
+   "ageMs": 0,
+   "title": "Which account should sign the release?",
+   "text": "Which account should sign the release?",
+   "options": [],
+   "answerWith": "text",
+   "freeText": true,
+   "skippable": true
+  },
+  {
+   "id": "attention:w-input-request",
+   "kind": "request",
+   "botId": "preview-scout",
+   "botName": "Scout",
+   "threadId": "preview-thread-scout",
+   "messageId": "w-input-request",
+   "at": 1787028990000,
+   "ageMs": 0,
+   "title": "Which test group gets the beta first?",
+   "text": "Which test group gets the beta first?",
+   "options": [],
+   "answerWith": "text",
+   "freeText": true,
+   "skippable": true
+  }
+ ]
+}

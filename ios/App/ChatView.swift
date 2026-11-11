@@ -574,6 +574,9 @@ struct ChatView: View {
         // Can this bot answer the person now? Asked on opening, on a bot,
         // thread or model change, then every 15 s while it cannot.
         .task(id: sendBlockTaskKey) { await runSendStateChecks() }
+        // #3415, #3471: what waits for the person, from the server's one
+        // list, read on opening; live frames read it again after
+        .task(id: current.conversationID) { await session.loadWaiting(for: current) }
         // A turn ended: ask again, it may have been refused before any
         // prompt went out (#2013), or it cleared a refusal.
         .onValueChange(of: current.busy) { busy in

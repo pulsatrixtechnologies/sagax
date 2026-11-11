@@ -118,6 +118,12 @@ describe("scopes", () => {
       expect(routePermission(method, "/api/instances/mistral/api-key", { orgDirectory: true })).toBeNull();
     }
   });
+  // #3471: a question in words of the person's own conversation is marked
+  // handled or skipped from any client (the handler keeps it to their cards)
+  it("lets a person mark or skip their own waiting card without an admin", () => {
+    expect(requiredScope("POST", "/api/approvals/handled")).toBe("client");
+    expect(requiredScope("GET", "/api/approvals/handled")).toBe("admin");
+  });
   it("lets a person read their own Claude connectors; only an admin turns them off", () => {
     expect(requiredScope("GET", "/api/me/harness-connectors")).toBe("client");
     // A member sees the images a bot's Markdown renders, not only downloads.

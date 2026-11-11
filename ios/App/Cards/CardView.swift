@@ -51,9 +51,11 @@ struct CardView: View {
 
     /// Issue #426: a plain tool ask (not a proposal) is one line in the
     /// thread, while it waits on the dock and once answered or expired.
+    /// #3415: an answered proposal folds into that one row too; an open one
+    /// keeps its card (what it proposes is reviewed there).
     private var toolAsk: Bool {
         guard answeredInDock, let card = message.card else { return false }
-        return !ApprovalDockRules.isProposal(card)
+        return !ApprovalDockRules.isProposal(card) || !card.isPending
     }
 
     /// A first-run quiz goes once picked, dismissed or talked past.
@@ -86,26 +88,36 @@ struct CardView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     if canDismiss(card) {
                         Spacer(minLength: 4)
-                        // OptionCard.tsx's X: a quiz is put away, a live
-                        // question declined (never denied).
-                        Button {
-                            Haptics.selection()
-                            answering = true
-                            Task {
-                                await session.dismissOptionCard(message, in: chat)
-                                answering = false
+                        // OptionCard.tsx's X: a quiz is put away; #3471: a
+                        // card that still waits is skipped (never denied)
+                        if WaitingCardSkip.waits(card) {
+                            CardSkipButton(ink: Theme.attentionSecondary, disabled: answering, id: message.id) {
+                                answering = true
+                                Task {
+                                    await session.skipOptionCard(message, in: chat)
+                                    answering = false
+                                }
                             }
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(Theme.attentionSecondary)
-                                .frame(width: 28, height: 28)
-                                .contentShape(Rectangle())
+                        } else {
+                            Button {
+                                Haptics.selection()
+                                answering = true
+                                Task {
+                                    await session.dismissOptionCard(message, in: chat)
+                                    answering = false
+                                }
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(Theme.attentionSecondary)
+                                    .frame(width: 28, height: 28)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(answering)
+                            .accessibilityLabel(Text("Dismiss"))
+                            .accessibilityIdentifier("card-dismiss-\(message.id)")
                         }
-                        .buttonStyle(.plain)
-                        .disabled(answering)
-                        .accessibilityLabel(Text("Dismiss"))
-                        .accessibilityIdentifier("card-dismiss-\(message.id)")
                     }
                 }
                 if !card.subtitle.isEmpty, AllowRuleText.savedRule(card) == nil {
@@ -203,6 +215,9 @@ struct CardView: View {
                         .font(.system(size: 14))
                         .foregroundStyle(Theme.attentionSecondary)
                         .accessibilityIdentifier("card-outcome-\(message.id)")
+                } else if let fold = WaitingCardSkip.fold(card) {
+                    // #3471: closed without an answer, in one quiet line
+                    WaitingCardFoldLine(fold: fold, ink: Theme.attentionSecondary, size: 14, id: message.id)
                 } else if let answered = card.answeredText ?? card.answered {
                     Label(answered, systemImage: "checkmark.circle")
                         .font(.system(size: 14))
@@ -258,6 +273,7 @@ struct CardView: View {
 
     static func outcomeText(_ outcome: ApprovalOutcome) -> String {
         switch outcome {
+        case .skipped: String(localized: "approval.status.skipped", defaultValue: "Skipped, nothing was run")
         case .expired: String(localized: "Expired. Ask for a fresh proposal")
         case .allowed: String(localized: "Allowed")
         case .alwaysAllowed: String(localized: "approval.outcome.alwaysAllowed", defaultValue: "Always allowed")

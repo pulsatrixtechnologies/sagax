@@ -78,6 +78,14 @@ struct ProactiveChoiceCardView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                // #3471: the one quiet × skips it, neither a yes nor a no
+                // (ProactiveChoiceCard.tsx `onSkip`)
+                if WaitingCardSkip.waits(card) {
+                    CardSkipButton(ink: inkTertiary, disabled: answering, id: message.id) { skip() }
+                        .padding(.top, -4)
+                        .padding(.trailing, -6)
+                }
             }
             if !choice.watches.isEmpty {
                 Button {
@@ -190,7 +198,9 @@ struct ProactiveChoiceCardView: View {
 
     private func receipt(_ card: OptionCard, _ choice: ProactiveChoiceCardData) -> some View {
         let accepted = sent.map { ProactiveProposalRules.accepts(card, answer: $0) } ?? ProactiveProposalRules.receiptAccepted(card)
-        let said = card.expired == true ? String(localized: "Closed without an answer") : (card.answeredText ?? card.answered ?? sent ?? "")
+        // #3471: skipped or expired, it says so in the words of every waiting card
+        let said = WaitingCardSkip.fold(card).map(WaitingCardWords.fold)
+            ?? (card.expired == true ? String(localized: "Closed without an answer") : (card.answeredText ?? card.answered ?? sent ?? ""))
         return VStack(alignment: .leading, spacing: 6) {
             Button {
                 Haptics.selection()
@@ -240,6 +250,16 @@ struct ProactiveChoiceCardView: View {
     }
 
     // MARK: Answers
+
+    /// #3471: skipped without an answer: folded at once, the bot told.
+    private func skip() {
+        guard sent == nil, !answering else { return }
+        answering = true
+        Task {
+            await session.skipOptionCard(message, in: chat)
+            answering = false
+        }
+    }
 
     private func answer(_ card: OptionCard, _ option: String) {
         guard !answering, sent == nil, !option.isEmpty else { return }

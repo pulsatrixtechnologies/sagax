@@ -536,10 +536,8 @@ describe("ACP turns (fake CLI)", () => {
   // One split-prompt thread: usage() sets the context sizes the fake reports
   // on the next turn, and send() returns the prompt text the agent received.
   const SYSTEM = "Standing rules.\n\nMemory: likes quiet hours.";
-  // Grok appends its standing tool line (stableSystemHint) to what it delivers
-  const FULL = SYSTEM + HINT;
-  // what a new or re-anchored session gets since #3534: the stable half and
-  // its standing line first, then the volatile half
+  // What a new or re-anchored session gets since #3534: the stable half and
+  // Grok's standing tool line (stableSystemHint) first, then the volatile half
   const OPENING = "Standing rules." + HINT + "\n\nMemory: likes quiet hours.";
   const usageThread = async (name: string) => {
     const dump = join(scratch, `acp-${name}.json`);
@@ -660,7 +658,7 @@ describe("ACP turns (fake CLI)", () => {
   it("ignores a zero usage report", async () => {
     const { usage, send } = await usageThread("zero-usage");
     usage(150000);
-    expect(await send("turn 1")).toBe(FULL + "\n\nturn 1");
+    expect(await send("turn 1")).toBe(OPENING + "\n\nturn 1");
     // zero is not a measurement: no trigger, and the peak stays
     usage(0);
     expect(await send("turn 2")).toBe("turn 2");

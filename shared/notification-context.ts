@@ -273,9 +273,30 @@ function finalQuestionSentence(question: string): string | null {
   return (lastQuestion.split(/(?<=[.!?\n])\s+/).filter(Boolean).pop() ?? lastQuestion).trim();
 }
 
+// #3537: an "or" / "ou" inside a quantity or a fixed phrase names no path.
+// A number word or a digit, "or", then a number, "more" or "several" ("one
+// or more", "deux ou trois", "un ou plusieurs"); a pair of digits counts only
+// before the word it counts ("1 or 2 files"), since "version 1 or 2?" picks.
+const NUMBER_WORD = "one|two|three|four|five|six|seven|eight|nine|ten|un|une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix";
+const MORE_WORD = "more|several|many|plusieurs|plus|davantage";
+const QUANTITY_OR = new RegExp(
+  `(?<![\\p{L}\\p{N}])(?:(?:${NUMBER_WORD})\\s+(?:or|ou)\\s+(?:${NUMBER_WORD}|${MORE_WORD}|\\d+)|\\d+\\s+(?:or|ou)\\s+(?:${MORE_WORD})|\\d+\\s+(?:or|ou)\\s+\\d+(?=\\s+\\p{L}))(?![\\p{L}\\p{N}])`,
+  "gu",
+);
+const FIXED_OR = /(?<![\p{L}\p{N}])(?:more or less|sooner or later|whether or not|plus ou moins|t[oô]t ou tard)(?![\p{L}\p{N}])/gu;
+
+/** The sentence with every quantity or fixed-phrase "or" / "ou" joined into
+ * one word ("one_or_more"), so only an "or" between two paths remains. */
+function withoutQuantityOr(sentence: string): string {
+  const join = (phrase: string) => phrase.replace(/\s+/g, "_");
+  return sentence.replace(FIXED_OR, join).replace(QUANTITY_OR, join);
+}
+
 /** "A or B?", "A ou B ?", "Je publie (ou j'attends) ?" on a final question
- * sentence: two paths named with "or" / "ou". "... or not?" is not. */
-function namesTwoPaths(sentence: string): boolean {
+ * sentence: two paths named with "or" / "ou". "... or not?" is not, nor an
+ * "or" inside a quantity or a fixed phrase ("one or more", "plus ou moins"). */
+function namesTwoPaths(question: string): boolean {
+  const sentence = withoutQuantityOr(question);
   if (/\b(?:or not|ou non|ou pas)\)?\?$/.test(sentence)) return false;
   // "(ou j'attends) ?" / "(or wait)?"
   if (/\(\s*(?:or|ou)\s+[^)]+\)\s*\?$/.test(sentence)) return true;

@@ -185,6 +185,9 @@ function Preview() {
         <Row id="person-answered" label="ask_person, répondue">
           <OptionCard botId="preview-bot" threadId="t" message={flat("g", { answered: "Non, garde-les actifs", answeredText: "Non, garde-les actifs" })} />
         </Row>
+        <Row id="legacy-question" label="Carte d'avant 0.8.78 (#3515) : titre et Oui / Non dans la langue de l'app">
+          <OptionCard botId="preview-bot" threadId="t" message={{ id: "lq", role: "bot", kind: "options", at: 1, card: { title: "Your bot has a question", subtitle: FR ? "Je continue avec la facture de mars ?" : "Do I go on with the March invoice?", options: ["Yes", "No"], requestId: "req-lq", requestType: "question" } } as Message} />
+        </Row>
         <Row id="suggestion-card" label="Suggestion du jour (#2694, avis)">
           <OptionCard botId="preview-bot" threadId="t" message={{ id: "s", role: "bot", kind: "options", at: 1, card: { title: "Répondre à Carla pour le contrat à signer", subtitle: "Suggestion du jour, gratuite. D'après Outlook / read_mail, 2026-11-08. Je m'en occupe ?", options: ["Fais-le", "Pas maintenant"], proactiveProposal: { id: "pp-s" } } } as Message} />
         </Row>

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import voiceFixture from "./fixtures/perspicax-voice-tools.json" with { type: "json" };
+import { twilioToolsOf } from "./perspicax/perspicax-mcp-helpers.ts";
 import { TELEPHONY_CALL_REFUSAL, TELEPHONY_NUMBER_REFUSAL, TELEPHONY_WRITE_REFUSAL, telephonyRefusal } from "./telephony-guard.ts";
 
 const TELEPHONY_REDIRECT_REFUSAL = TELEPHONY_WRITE_REFUSAL;
@@ -99,7 +101,43 @@ describe("telephonyRefusal", () => {
     expect(telephonyRefusal("voice_line", { action: "read" }, { twilioTools })).toBeNull();
     expect(telephonyRefusal("mcp__perspicax__voice_line", {}, { twilioTools })).toBeNull();
     expect(telephonyRefusal("mcp__perspicax_osprey__voice_line", {}, { twilioTools })).toBeNull();
-    // voice_number still changes numbers: refuse when aliased
-    expect(telephonyRefusal("voice_number", { action: "buy" }, { twilioTools })).toBe(TELEPHONY_WRITE_REFUSAL);
+  });
+
+  // #3603: the tools of the bot's own line are the line's, not raw vendor
+  // writes. They pass by their identity, whatever the descriptions the
+  // gateway serves (which name the vendor), and the bot's directives decide.
+  it("lets the five line tools through with the descriptions the gateway serves (#3603)", () => {
+    const twilioTools = new Set(twilioToolsOf({ result: { tools: voiceFixture.tools } }));
+    // the served descriptions name the vendor: the old rule took them for vendor writes
+    expect([...twilioTools].sort()).toEqual(["voice_call", "voice_line", "voice_number", "voice_sms"]);
+    const calls: Array<[string, Record<string, unknown>]> = [
+      ["voice_line", {}],
+      ["voice_sms", { to: "+15145550142", body: "On arrive jeudi." }],
+      ["voice_call", { to: "+15145550142", purpose: "livraison", message: "jeudi", dry_run: true }],
+      ["voice_number", { action: "search", area_code: "514" }],
+      ["voice_number", { action: "buy", phone_number: "+15145550143", target: { kind: "sagax", bot_id: "bot_1" } }],
+      ["voice_number", { action: "adopt", phone_number: "+15145550143" }],
+      ["voice_number", { action: "verify", phone_number: "+15145550144" }],
+      ["voice_number", { action: "confirm", phone_number: "+15145550144", code: "123456" }],
+      ["voice_number", { action: "directive", bot: "sagax:bot_1", third_party_call: "card" }],
+      ["voice_number", { action: "menu", menu: [] }],
+      ["voice_client_code", { action: "send", phone: "+15145550145" }],
+      ["voice_client_code", { action: "check", code_id: "c1", code: "123456" }],
+    ];
+    for (const [name, args] of calls) {
+      for (const spelled of [name, `mcp__perspicax__${name}`, `mcp__perspicax_example__${name}`]) {
+        expect(telephonyRefusal(spelled, args, { twilioTools }), `${spelled} ${JSON.stringify(args)}`).toBeNull();
+      }
+    }
+  });
+
+  it("keeps the raw vendor writes on their rule when the line tools pass (#3603)", () => {
+    const twilioTools = new Set([...twilioToolsOf({ result: { tools: voiceFixture.tools } }), "sms_gateway__write"]);
+    expect(telephonyRefusal("twilio_api_write", { resource: "IncomingPhoneNumbers", action: "create" }, { twilioTools })).toBe(TELEPHONY_NUMBER_REFUSAL);
+    expect(telephonyRefusal("twilio_api_write", { resource: "Calls", action: "create", set: { To: "+15145550142" } }, { twilioTools })).toBe(TELEPHONY_CALL_REFUSAL);
+    expect(telephonyRefusal("twilio_api_write", { resource: "Keys", action: "create" }, { twilioTools })).toBe(TELEPHONY_WRITE_REFUSAL);
+    expect(telephonyRefusal("sms_gateway__write", { resource: "IncomingPhoneNumbers", action: "update" }, { twilioTools })).toBe(TELEPHONY_NUMBER_REFUSAL);
+    expect(telephonyRefusal("twilio_api_write", { resource: "Messages", action: "create", set: { To: "+15145550142" } }, { twilioTools })).toBeNull();
+    expect(telephonyRefusal("twilio_api_write", { resource: "Messages", action: "create", set: { To: "+15145550142", StatusCallback: "https://x" } }, { twilioTools })).toBe(TELEPHONY_WRITE_REFUSAL);
   });
 });

@@ -886,7 +886,11 @@ interne** (conditions de l'ÉFVP Loi 25 du 2026-10-22) :
   webhooks, flux, paiements, conférences, applications, domaines SIP, codes
   courts, identifiants d'appelant, clés, comptes. Les noms d'outils sont
   comparés séparateurs repliés (`twilio_api-write`) et par ressource
-  (`twilio_api_Calls_write`). Les `_dry_run` restent permis.
+  (`twilio_api_Calls_write`). Les `_dry_run` restent permis. Les outils de
+  la ligne du bot (`voice_line`, `voice_sms`, `voice_call`, `voice_number`,
+  `voice_client_code`, liste `VOICE_LINE_TOOLS`) ne sont pas des écritures
+  brutes chez le fournisseur : ils passent, reconnus par leur nom et jamais
+  par leur description, et les directives du bot décident (#3603).
 - **Pilote désactivé par défaut** : un admin l'active dans Réglages >
   Organisation > Appels téléphoniques, y saisit le **numéro de rappel**
   (obligatoire : sans numéro, aucun appel) et tient la liste **« Ne pas

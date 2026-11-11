@@ -9,6 +9,8 @@
  * Pure, no i18n: the UI composes the sentences (src/lib/routine-display.ts),
  * the server uses the same reader for a blocking reason. */
 
+import { fencedLines, runStatusNote, RUN_STATUS_PROBLEM_LINE, type RunStatusNote } from "./person-attention.ts";
+
 export interface RoutineResultParts {
   /** The bot's own words before or instead of the structure. */
   summary?: string;
@@ -134,15 +136,113 @@ export const FAILURE_DETAIL_MAX = 300;
 
 /** `text` within `max` characters (#3127): whole when it fits, else cut at
  * the last line, sentence or word that fits and marked with "…", never in
- * the middle of a word (a hint the person and the bot act on). */
-export function clipReadable(text: string, max: number): string {
+ * the middle of a word (a hint the person and the bot act on). #3515: every
+ * place that shortens a message for a reader uses it; `mark` is what says
+ * the rest was left out ("…", or a line of its own such as "\n[...]"). */
+export function clipReadable(text: string, max: number, mark = "…"): string {
   if (text.length <= max) return text;
-  const head = text.slice(0, max - 1);
+  const head = text.slice(0, Math.max(1, max - mark.length));
   const line = head.lastIndexOf("\n");
-  const sentence = Math.max(head.lastIndexOf(". "), head.lastIndexOf(": "));
+  const sentence = Math.max(head.lastIndexOf(". "), head.lastIndexOf("! "), head.lastIndexOf("? "), head.lastIndexOf(": "));
   const word = head.search(/\s\S*$/);
   const end = line > max / 2 ? line : sentence > max / 2 ? sentence + 1 : word > max / 2 ? word : head.length;
-  return `${head.slice(0, end).trimEnd()}…`;
+  return `${head.slice(0, end).trimEnd()}${mark}`;
+}
+
+/** The run contract's tokens (the routine prompts write them, the server
+ * reads them): the quiet marker, the same-problem marker and the status
+ * line's lead. #3515: the one definition, shared by the report reader
+ * (server/routines/routine-report.ts) and the store's strip below. */
+export const ROUTINE_QUIET_MARKER = "NOTHING_TO_REPORT";
+export const ROUTINE_SAME_PROBLEM_MARKER = "SAME_PROBLEM";
+export const ROUTINE_STATUS_MARKER = "RUN_STATUS:";
+
+/** The quiet marker on a line of its own, in the shapes models write it in
+ * (any case, "NOTHING_TO_REPORT", "nothing to report", "nothing-to-report"). */
+export const QUIET_MARKER_LINE = /^[\s`*_[(<"']*nothing[\s_-]to[\s_-]report[\s`*_\])>"'.!]*$/i;
+/** The same-problem marker on a line of its own, in the same shapes
+ * ("SAME_PROBLEM", "Same problem", "same-problem"). */
+export const SAME_PROBLEM_LINE = /^[\s`*_[(<"']*same[\s_-]problem[\s`*_\])>"'.!]*$/i;
+/** Any status line of the run contract, whatever its status ("RUN_STATUS:
+ * skipped", "RUN_STATUS: complete.", "RUN_STATUS: failed: why"): its exact
+ * token followed by a colon or nothing. A prose line that starts with "Run
+ * status" is the bot's words, except the failed or partial line the report
+ * reader also takes in that shape (RUN_STATUS_PROBLEM_LINE). */
+const RUN_STATUS_ANY_LINE = /^[\s`*_>]*RUN_STATUS[\s`*_]*(?::|$)/;
+
+/** The contract's own tokens on a line of their own, written as the routine
+ * prompts write them (upper case, with their underscore; emphasis marks or a
+ * closing period allowed). Ordinary words ("Nothing to report.", "Same
+ * problem.") are never one of them. */
+const tokenLine = (token: string) => new RegExp(`^[\\s\`*_]*${token}[\\s\`*_.!]*$`);
+const QUIET_TOKEN_LINE = tokenLine(ROUTINE_QUIET_MARKER);
+const SAME_PROBLEM_TOKEN_LINE = tokenLine(ROUTINE_SAME_PROBLEM_MARKER);
+
+/** #3515: a line a bot writes for the server to read, never for the person,
+ * in any message: the status line and the contract's exact tokens. The store
+ * strips these from every bot row, on write and on read. Anything else a bot
+ * writes ("MOVED Archive" after moving a mail: no tool, prompt or skill
+ * writes that form, the bot chose those words; "Nothing to report." as a
+ * chat answer) is the bot's words and stays. */
+export function isRunMarkerLine(line: string): boolean {
+  const trimmed = line.trim();
+  return RUN_STATUS_ANY_LINE.test(trimmed) || RUN_STATUS_PROBLEM_LINE.test(trimmed) || QUIET_TOKEN_LINE.test(trimmed) || SAME_PROBLEM_TOKEN_LINE.test(trimmed);
+}
+
+/** #3515: a marker line in text written under the routine contract (a run's
+ * report, its card summary, a run's late or background reply, the report
+ * reader): the exact markers plus the wider shapes models write them in
+ * ("Nothing to report.", "Same problem", "same-problem", any case). Only
+ * routine output is read this way: in a chat answer those are the bot's words. */
+export function isRoutineMarkerLine(line: string): boolean {
+  const trimmed = line.trim();
+  return isRunMarkerLine(trimmed) || QUIET_MARKER_LINE.test(trimmed) || SAME_PROBLEM_LINE.test(trimmed);
+}
+
+const RUN_MARKER_HINT = /RUN[_ ]STATUS|nothing[\s_-]to[\s_-]report|same[\s_-]problem/i;
+
+/** `text` without the lines `isMarker` matches; a line inside a fenced code
+ * block is what the bot quoted, never a marker. The same string when none. */
+function withoutLines(text: string, isMarker: (line: string) => boolean): string {
+  if (!RUN_MARKER_HINT.test(text)) return text;
+  const lines = text.split(/\r?\n/);
+  const fenced = fencedLines(lines);
+  const kept = lines.filter((line, index) => fenced[index] || !isMarker(line));
+  if (kept.length === lines.length) return text;
+  return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/** Any bot text without its run marker lines (`isRunMarkerLine`). */
+export function withoutRunMarkers(text: string): string {
+  return withoutLines(text, isRunMarkerLine);
+}
+
+/** Routine output without its marker lines (`isRoutineMarkerLine`). */
+export function withoutRoutineMarkers(text: string): string {
+  return withoutLines(text, isRoutineMarkerLine);
+}
+
+/** #3515: a bot's stored message without run markers, in its text and in
+ * the report a routine run's card carries. The store applies it when a
+ * message is written and when a row is read, so no reader ever sees one. A
+ * failed or partial status line is never lost: its state and its reason
+ * stay on the row as `runStatus` (the relay's failure card and the thread
+ * API read it there). */
+export function withoutRunMarkersIn<T extends { role?: string; text?: unknown; routineRun?: { summary?: string } | undefined; runStatus?: RunStatusNote }>(message: T): T {
+  if (message.role !== "bot") return message;
+  const note = typeof message.text === "string" ? runStatusNote(message.text) : undefined;
+  // a run's own row (its report and its card's summary) is routine output
+  const strip = message.routineRun ? withoutRoutineMarkers : withoutRunMarkers;
+  const text = typeof message.text === "string" ? strip(message.text) : message.text;
+  const summary = typeof message.routineRun?.summary === "string" ? withoutRoutineMarkers(message.routineRun.summary) : undefined;
+  const summaryChanged = summary !== undefined && summary !== message.routineRun?.summary;
+  if (text === message.text && !summaryChanged && !note) return message;
+  return {
+    ...message,
+    text,
+    ...(note ? { runStatus: note } : {}),
+    ...(summaryChanged ? { routineRun: { ...message.routineRun, summary: summary || undefined } } : {}),
+  };
 }
 
 /** A failure's meaningful line for a problem line, clipped readably. */

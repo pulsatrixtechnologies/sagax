@@ -34,6 +34,7 @@ import { autoOnlyDestination, type Destination } from "./surface.ts";
 import { newId, type ModelSelection } from "./contracts.ts";
 import { pickBotName } from "./names.ts";
 import { redactSecretsInText } from "./redact.ts";
+import { withoutRunMarkersIn } from "../shared/routine-result.ts";
 import { AVATAR_FOCUS_CENTER, AVATAR_ZOOM_MIN, botAvatarProfile, clampAvatarFocus, clampAvatarZoom } from "../shared/bot-avatar.ts";
 import { approvalModeFor, isApprovalException, isApprovalMode, modelSwitchNeedsAsk, threadApprovalFields, type ApprovalException, type ApprovalMode } from "../shared/approval-mode.ts";
 import { lastChangeRequestUrl } from "../shared/thread-link.ts";
@@ -394,7 +395,9 @@ function redactBotAuthored<T extends Omit<Message, "id" | "at"> & { at?: number 
       error: out.signIn.error ? redactSecretsInText(out.signIn.error) : undefined,
     };
   }
-  return out;
+  // #3515: run markers are the server's to read, never stored in a message;
+  // a failed or partial status line stays on the row as runStatus
+  return withoutRunMarkersIn(out);
 }
 
 /** What changed, emitted by the store itself right after each write. The
@@ -2341,7 +2344,8 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     const t = this.thread(threadId);
     const idx = t.messages.findIndex((m) => m.id === messageId);
     if (idx === -1) return null;
-    const next = { ...t.messages[idx], ...patch, card: patch.card ?? t.messages[idx].card };
+    // #3515: a bot's text patched in (its final words, a routine's report) is stored without run markers
+    const next = withoutRunMarkersIn({ ...t.messages[idx], ...patch, card: patch.card ?? t.messages[idx].card });
     // SQLite is the durable source of truth. Persist before changing memory so
     // a failed write cannot make this process believe a card was answered
     // while a restart would still show it as pending.

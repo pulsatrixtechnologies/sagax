@@ -3,7 +3,7 @@
 import { wakeTopicOf } from "../routines/routine-run-card.ts";
 import type { RoutineRun } from "../routines/routines.ts";
 import { textLanguage } from "../../shared/looks-french.ts";
-import { ROUTINE_QUIET_MARKER, isSameProblemLine } from "../routines/routine-report.ts";
+import { withoutRoutineMarkers } from "../../shared/routine-result.ts";
 import { needsYouNotificationWords } from "../runtime-events/question-notification-words.ts";
 import { quietModeLevel, quietRunHadProblems } from "../../shared/quiet-mode.ts";
 export type Host = Record<string, any>;
@@ -25,16 +25,14 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   const host = getHost();
 
   const known = host.routineSourceOwner(run);
-  // #3219: the NOTHING_TO_REPORT marker is a status the parser consumes; the
-  // run's own thread never shows it raw.
+  // #3219, #3479: the run's markers (NOTHING_TO_REPORT, SAME_PROBLEM) never
+  // show in its own thread, in every shape the report reader takes. #3515:
+  // its final words are routine output, read by the one shared strip; the
+  // store strips only the exact tokens from every other bot row.
   if (run.status === "completed" && run.threadId) {
-    // #3479: the same-problem line in every shape routineReportOutcome reads.
-    const isMarker = (line: string) => line.trim() === ROUTINE_QUIET_MARKER || isSameProblemLine(line);
     const last = host.store.messagesFor(run.threadId)?.findLast?.((message) => message.role === "bot" && !message.kind && typeof message.text === "string" && message.text.trim());
-    const lines = last?.text ? last.text.split(/\r?\n/) : [];
-    if (lines.some(isMarker)) {
-      host.store.patchMessage(run.threadId, last.id, { text: lines.filter((line) => !isMarker(line)).join("\n").replace(/\n{3,}/g, "\n\n").trim() });
-    }
+    const text = last ? withoutRoutineMarkers(last.text) : undefined;
+    if (last && text !== last.text) host.store.patchMessage(run.threadId, last.id, { text });
   }
   // 2026-11-05: a completed report with items only the person can do
   // ([HUMAIN], needs_human, a question) always posts, as a card with them.

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api, useStore, visibleMessages, type Message } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { questionCardTitle } from "@/lib/question-card-title";
+import { questionCardOptionLabel, questionCardSubtitle, questionCardTitle } from "@/lib/question-card-title";
 import { isPersistentQuestionCard, parseChoices } from "../../shared/ask-question";
 import { otherChoiceIndex } from "../../shared/other-choice";
 import { returnFocusToComposer } from "./AskCard";
@@ -97,7 +97,8 @@ export function OptionCard({
     : undefined;
   // A terminal card names the destination picked right now, in the app's language.
   const title = terminalPicked ? t("terminal.card.title", { destination: terminalDestinationLabel(terminalPicked) }) : questionCardTitle(card);
-  const subtitle = card.subtitle;
+  // #3515: an old card's English body reads in the app's language
+  const subtitle = questionCardSubtitle(card);
   // Cards saved before the server flattened `ask_user` choices can still hold
   // `{ label }` rows; a label is drawable, an object as a React child is not.
   const options = parseChoices(card.options, LETTERS.length) ?? [];
@@ -149,7 +150,12 @@ export function OptionCard({
   // Other row, so the card never shows two of them (#2804)
   const botOther = freeText ? otherChoiceIndex(options) : -1;
   const choices: SheetChoice[] = [
-    ...options.map((label, index) => (index === botOther ? { label, id: OTHER_ROW } : { label })),
+    // #3515: an old card's English options read in the app's language; it answers with its stored label
+    ...options.map((label, index) => {
+      if (index === botOther) return { label, id: OTHER_ROW };
+      const shown = questionCardOptionLabel(card, label);
+      return shown === label ? { label } : { label: shown, id: label };
+    }),
     // a permission ask has no free-text answer: the broker only accepts
     // allow/deny, so typing here used to fail silently
     ...(freeText && botOther < 0 ? [{ label: t("question.other"), id: OTHER_ROW }] : []),

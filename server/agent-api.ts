@@ -1,7 +1,12 @@
 import { ENGINE_EXITED_SENTENCE, isEngineExitedBeforeReply } from "../shared/engine-exit-words.ts";
-import { failedTurnCause, failedTurnRepeatsReply } from "../shared/failed-turn.ts";
+import { failedTurnCause, failedTurnRepeatsReply, failedTurnTool } from "../shared/failed-turn.ts";
 import { TURN_NOT_RESUMED } from "../shared/restart-words.ts";
-import { restartCauseNotResumed, restartLineIn, restartPendingRow } from "./turns/restart-line-words.ts";
+import { restartCauseNotResumed, restartPendingRow } from "./turns/restart-line-words.ts";
+import { botTextIn, serverLineIn } from "./people/person-words.ts";
+import type { RunStatusNote } from "../shared/person-attention.ts";
+import { clipReadable, withoutRoutineMarkers, withoutRunMarkers } from "../shared/routine-result.ts";
+import { routineRunFallbackText } from "./routines/routine-run-card.ts";
+import type { RoutineRunCardData } from "../shared/routine-run.ts";
 import { redactSecretsInText } from "../shared/redact.ts";
 import { parseRoutineEffort } from "../shared/routine-effort.ts";
 import { parseRoutineGoal } from "../shared/routine-goal.ts";
@@ -188,6 +193,12 @@ export const AGENT_NAME_MAX = 80;
 export const AGENT_DESCRIPTION_MAX = 1_000;
 export const ENTRY_TEXT_MAX = 16_000;
 export const REPLY_MAX_CHARS = 32_000;
+/** The most of a tool row's line (its name, outcome and error) an entry carries. */
+const TOOL_ENTRY_MAX = 300;
+/** What marks a shortened entry or reply: the rest is left out. */
+const CUT_MARK = "\n[...]";
+/** #3515: `text` within `max` characters and its mark, cut at a sentence. */
+const clipEntry = (text: string, max: number): string => clipReadable(text, max + CUT_MARK.length, CUT_MARK);
 /** create_agent's workspace: where its Auto turns start (server/computer/auto-computer.ts). */
 export type AgentWorkspace = "this_computer" | "browser" | "cloud" | "local_vm";
 const AGENT_WORKSPACES: readonly AgentWorkspace[] = ["this_computer", "browser", "cloud", "local_vm"];
@@ -360,6 +371,11 @@ export interface StoredMessage {
    * `late` when no engine holds the question (a harness ask_choice): the
    * answer then comes back as the person's next line, a turn of its own. */
   question?: { answered: boolean; late: boolean };
+  /** #3515: a routine run's card: its line is said again from it in the
+   * reader's language (routineRunFallbackText). */
+  routineRun?: RoutineRunCardData;
+  /** #3515: the failed or partial status line the row ended on, as data. */
+  runStatus?: RunStatusNote;
 }
 
 /** #2922: the cards a conversation (and the threads it handed work to)
@@ -459,6 +475,9 @@ export interface AgentApiDeps {
   /** #3217: the language to word server lines in for this caller (a
    * person's own, else the server's). Absent: they stay in English. */
   language?(caller: AgentCaller): string | undefined;
+  /** #3515: the person's time zone, for the times a routine run's line says
+   * (a lasting problem's start). Absent: those times read in UTC. */
+  timeZone?(caller: AgentCaller): string | undefined;
   /** #3203: a stored attached image by its bare name, fitted for a model
    * (or null when it is gone or unreadable). Absent: read_transcript_attachment
    * is refused. The handler checks the caller may read it first. */
@@ -825,7 +844,7 @@ export class AgentRateLimiter {
  * reads (reasoning, cards' internals, empty rows). Tool rows keep the tool's
  * name and outcome, and a failed call's own error as the chat shows it (#3126);
  * never its input or a successful output. */
-export function toEntry(threadId: string, message: StoredMessage, language?: string): TranscriptEntry | null {
+export function toEntry(threadId: string, message: StoredMessage, language?: string, timeZone?: string): TranscriptEntry | null {
   if (!message || typeof message.id !== "string" || typeof message.at !== "number") return null;
   const role = message.role === "user" ? "user" : message.role === "bot" ? "agent" : null;
   if (!role) return null;
@@ -837,17 +856,25 @@ export function toEntry(threadId: string, message: StoredMessage, language?: str
     const stored = message.tool?.name?.trim();
     if (!stored) return null;
     const failed = message.tool?.ok === false;
-    // #3217: a restart line in the person's language, as the app shows it
+    // #3217, #3515: a server line in the person's language, as the app shows it
     const cause = failed ? failedTurnCause(stored) : null;
-    const name = cause !== null ? `error: ${restartLineIn(language, cause)}` : restartLineIn(language, stored);
-    const error = failed && typeof message.tool?.output === "string" ? redactSecretsInText(message.tool.output.trim().replace(/\s+/g, " ")) : "";
-    return { ...base, kind: "tool", text: `${name}${failed ? (error ? ` (failed): ${error}` : " (failed)") : ""}`.slice(0, 300) };
+    const name = cause !== null ? failedTurnTool(serverLineIn(language, cause)).name : serverLineIn(language, stored);
+    const error = failed && typeof message.tool?.output === "string" ? serverLineIn(language, redactSecretsInText(message.tool.output.trim().replace(/\s+/g, " "))) : "";
+    // #3515: shortened at a sentence, never in the middle of a word
+    return { ...base, kind: "tool", text: clipReadable(`${name}${failed ? (error ? ` (failed): ${error}` : " (failed)") : ""}`, TOOL_ENTRY_MAX) };
   }
   // A routine run's result card is part of the chat (#3152): it reads as a note.
   if (kind === "text" || kind === "nudge" || kind === "access" || kind === "routine.run") {
-    const text = typeof message.text === "string" ? message.text : "";
+    // #3515: a run's line in the reader's language, from its card; never a run marker
+    const card = kind === "routine.run" && language && message.routineRun ? message.routineRun : null;
+    // #3515: a failed or partial status the row ended on is said in the
+    // reader's language; a run's card already says how it ended (its line,
+    // or its stored text when the language is unknown): never twice
+    const text = role === "agent"
+      ? botTextIn(language, card ? withoutRoutineMarkers(routineRunFallbackText(card, language, timeZone)) : withoutRunMarkers(typeof message.text === "string" ? message.text : ""), kind === "routine.run" ? undefined : message.runStatus)
+      : typeof message.text === "string" ? message.text : "";
     if (!text.trim() && !files.length) return null;
-    return { ...base, kind: kind === "text" ? "text" : "note", text: text.length > ENTRY_TEXT_MAX ? `${text.slice(0, ENTRY_TEXT_MAX)}\n[...]` : text, ...(files.length ? { files } : {}), ...(images.length ? { images } : {}) };
+    return { ...base, kind: kind === "text" ? "text" : "note", text: clipEntry(text, ENTRY_TEXT_MAX), ...(files.length ? { files } : {}), ...(images.length ? { images } : {}) };
   }
   return null;
 }
@@ -874,11 +901,11 @@ export function attachmentRefArg(value: unknown): string | null {
   return /^[A-Za-z0-9-]+\.(png|jpg|jpeg|gif|webp)$/i.test(ref) ? ref : null;
 }
 
-function collectEntries(deps: AgentApiDeps, threads: readonly TranscriptThread[], language?: string): TranscriptEntry[] {
+function collectEntries(deps: AgentApiDeps, threads: readonly TranscriptThread[], language?: string, timeZone?: string): TranscriptEntry[] {
   const out: TranscriptEntry[] = [];
   for (const thread of threads) {
     for (const message of deps.messages(thread.threadId)) {
-      const entry = toEntry(thread.threadId, message, language);
+      const entry = toEntry(thread.threadId, message, language, timeZone);
       if (entry) out.push(entry);
     }
   }
@@ -1016,8 +1043,10 @@ function turnReply(messages: readonly StoredMessage[], anchor: { id: string | nu
       }
       continue;
     }
-    if (kind === "text" && typeof message.text === "string" && message.text.trim()) {
-      run.push(message.text.trim());
+    // #3515: a failed or partial status the row ended on is said, never lost
+    const said = kind === "text" && typeof message.text === "string" ? botTextIn(language, withoutRunMarkers(message.text), message.runStatus).trim() : "";
+    if (said) {
+      run.push(said);
       failed = null;
       if (restart !== null) restart = "resumed";
       if (followUp === "text") followUp = null;
@@ -1027,9 +1056,9 @@ function turnReply(messages: readonly StoredMessage[], anchor: { id: string | nu
   // a row that only repeats the reply (flagged after it answered) is no failure
   if (failed !== null && joined && failedTurnRepeatsReply(failed, [joined])) failed = null;
   return {
-    reply: joined.length > REPLY_MAX_CHARS ? `${joined.slice(0, REPLY_MAX_CHARS)}\n[...]` : joined,
+    reply: clipEntry(joined, REPLY_MAX_CHARS),
     sawAnchor: true,
-    failed: failed === null ? null : turnFailureWords(restartLineIn(language, failed)),
+    failed: failed === null ? null : turnFailureWords(serverLineIn(language, failed)),
     followUp,
     answerNotStartedAt: followUp === "text" ? answerNotStartedAt : null,
     restart,
@@ -1578,7 +1607,7 @@ function createAgentApiHandlers(env: {
       // No handle: the in-flight turn of the caller's newest conversation
       // with this agent, else its last message.
       const threads = deps.threads(caller, agentId);
-      const entries = collectEntries(deps, threads, deps.language?.(caller));
+      const entries = collectEntries(deps, threads, deps.language?.(caller), deps.timeZone?.(caller));
       const lastUser = [...entries].reverse().find((entry) => entry.role === "user");
       const threadId = lastUser?.thread_id ?? entries.at(-1)?.thread_id ?? null;
       if (!threadId) return ok({ agent_id: agentId, finished: true, status: "idle", reply: "", note: "You have no conversation with this agent yet." });
@@ -1599,7 +1628,7 @@ function createAgentApiHandlers(env: {
       if (isRefusal(agentId)) return agentId;
       const agent = await reachable(caller, agentId);
       if (isRefusal(agent)) return agent;
-      const all = collectEntries(deps, deps.threads(caller, agentId), deps.language?.(caller));
+      const all = collectEntries(deps, deps.threads(caller, agentId), deps.language?.(caller), deps.timeZone?.(caller));
       const page = pageBefore(all, null, FULL_TRANSCRIPT_MAX);
       const truncated = all.length > page.entries.length;
       return ok({
@@ -1626,7 +1655,7 @@ function createAgentApiHandlers(env: {
       if (isRefusal(cursor)) return cursor;
       const agent = await reachable(caller, agentId);
       if (isRefusal(agent)) return agent;
-      const all = collectEntries(deps, deps.threads(caller, agentId), deps.language?.(caller)).filter((entry) => entry.at <= upper && (typeof lower !== "number" || entry.at >= lower));
+      const all = collectEntries(deps, deps.threads(caller, agentId), deps.language?.(caller), deps.timeZone?.(caller)).filter((entry) => entry.at <= upper && (typeof lower !== "number" || entry.at >= lower));
       const page = pageBefore(all, cursor, limit as number);
       return ok({ agent_id: agentId, entries: page.entries, next_cursor: page.next_cursor });
     },
@@ -1650,7 +1679,7 @@ function createAgentApiHandlers(env: {
       if (isRefusal(agent)) return agent;
       // Cold: the stored transcript only. No live state is read and nothing
       // of the agent is started (turnState is never called).
-      const page = pageBefore(collectEntries(deps, deps.threads(caller, agentId), deps.language?.(caller)), cursor, COLD_PAGE_SIZE);
+      const page = pageBefore(collectEntries(deps, deps.threads(caller, agentId), deps.language?.(caller), deps.timeZone?.(caller)), cursor, COLD_PAGE_SIZE);
       return ok({ agent_id: agentId, entries: page.entries, next_cursor: page.next_cursor, cold: true });
     },
 
@@ -2012,7 +2041,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
           // person sends the request again.
           if (read.restart === "not_resumed" || restartLost) {
             return { handle, agent_id: body.a, thread_id: body.t, finished: true, status: "interrupted", interrupted: true, resumed: false, reply: "",
-              error: read.failed ?? turnFailureWords(restartLineIn(language, TURN_NOT_RESUMED)) };
+              error: read.failed ?? turnFailureWords(serverLineIn(language, TURN_NOT_RESUMED)) };
           }
           // #3008: a turn that ended on a failed-turn row says so, never
           // "finished" with an empty reply.
@@ -2089,7 +2118,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
     // One conversation only, when asked: one of the caller's own.
     const threads = wanted === null ? allThreads : allThreads.filter((thread) => thread.threadId === wanted);
     if (wanted !== null && !threads.length) return refuse(404, "unknown_thread", "No conversation of yours with this agent has that id. Use the thread_id send_prompt or await_turn returned.");
-    const all = collectEntries(deps, threads, deps.language?.(caller));
+    const all = collectEntries(deps, threads, deps.language?.(caller), deps.timeZone?.(caller));
     const page = pageBefore(all, cursor, limit!);
     const body: Record<string, unknown> = { agent_id: agentId, status: agent.status, entries: page.entries, next_cursor: page.next_cursor };
     if (withThreads) {

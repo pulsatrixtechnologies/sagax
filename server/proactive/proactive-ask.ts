@@ -26,6 +26,7 @@
 // The eligibility listing is the watch loop's (flow-watches.ts `offered`),
 // the store is the person's choices (proactive-choices.ts): nothing here is
 // a second listing or a second store.
+import { personWord } from "../people/person-words.ts";
 import type { AskEntry, PersonChoices } from "../../shared/proactive-choices.ts";
 import type { OfferedDomain, OfferedListing, OfferedWatch } from "./flow-watches.ts";
 import { parseCadence, readableName } from "./flow-watches.ts";
@@ -319,25 +320,17 @@ function namedList(names: readonly string[], language: AskLanguage): string {
  * offered yet: it sends nothing on its own, and what is missing, by its
  * readable name (never an identifier). */
 export function nothingYetText(nothing: NothingOffered, language: AskLanguage): string {
-  const fr = language === "fr";
+  // #3515: the words come from the locale catalogs (server/people/person-words.ts)
+  const say = (key: string, vars?: Record<string, string>) => personWord(language, key, vars);
   const reasons: string[] = [];
   if (nothing.skills.length) {
-    const many = nothing.skills.length > 1;
-    reasons.push(fr ? `il manque ${many ? "les skills" : "le skill"} ${namedList(nothing.skills, language)} à tes bots` : `your bots lack the skill${many ? "s" : ""} ${namedList(nothing.skills, language)}`);
+    reasons.push(say(nothing.skills.length > 1 ? "proactive.nothingYet.skillMany" : "proactive.nothingYet.skillOne", { names: namedList(nothing.skills, language) }));
   }
-  if (nothing.products.length) {
-    reasons.push(fr ? `ta connexion ne donne pas accès à ${namedList(nothing.products, language)}` : `your connection does not give access to ${namedList(nothing.products, language)}`);
-  }
-  if (nothing.causes.includes("no-flow")) {
-    reasons.push(fr ? "le pack Flow de ton organisation n'est pas sur tes bots" : "your organization's Flow pack is not on your bots");
-  }
-  if (nothing.causes.includes("no-access") || nothing.causes.includes("bot-not-eligible")) {
-    reasons.push(fr ? "tes bots n'ont pas ta connexion au serveur de ton organisation" : "your bots do not have your connection to your organization's server");
-  }
-  if (!reasons.length) reasons.push(fr ? "le pack de ton organisation ne propose encore aucune alerte" : "your organization's pack offers no alert yet");
-  return fr
-    ? `Du nouveau : je ne t'envoie plus rien de moi-même tant que tu ne l'as pas choisi. Je ne peux encore rien te proposer : ${reasons.join(" ; ")}.`
-    : `Something changed: I no longer send you anything on my own until you choose it. I cannot offer you anything yet: ${reasons.join("; ")}.`;
+  if (nothing.products.length) reasons.push(say("proactive.nothingYet.products", { names: namedList(nothing.products, language) }));
+  if (nothing.causes.includes("no-flow")) reasons.push(say("proactive.nothingYet.noFlow"));
+  if (nothing.causes.includes("no-access") || nothing.causes.includes("bot-not-eligible")) reasons.push(say("proactive.nothingYet.noAccess"));
+  if (!reasons.length) reasons.push(say("proactive.nothingYet.none"));
+  return say("proactive.nothingYet.text", { reasons: reasons.join(language === "fr" ? " ; " : "; ") });
 }
 
 /** The card's options: options[0] is the yes (shared/proactive-proposal.ts). */

@@ -5,7 +5,9 @@
  * ?skin=<id>&lang=<code>&view=before|after|after-open|after-live|handoff|handoff-open
  * handoff: a bot-to-bot hand-off in the unified chat (2026-11-09), the
  * sender's row (asked, answered with a verdict, failed) and the teammate's.
- * send: send_to_bot receipts in the sender's chat (#3246). */
+ * send: send_to_bot receipts in the sender's chat (#3246).
+ * refusal: a connector's refused sign-in in a failed step's detail, in the
+ * app's language (#3515), under the neighbouring failed step. */
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { ActivityRun } from "../components/ActivityRun";
@@ -22,6 +24,7 @@ import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { stepLabel, stepDuration } from "../lib/step-label";
 import type { Message } from "../state/store";
+import { MCP_CREDENTIALS_REFUSED } from "../../shared/connector-refusal";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -242,12 +245,28 @@ function Sends() {
   );
 }
 
+/* ---- #3515: a connector's refused sign-in, said from its catalog key ---- */
+const refusal: Tool = {
+  name: "mcp__remote__acme_desk__find_tickets", ok: false, durationMs: 1_100, product: "Acme Desk",
+  output: `MCP error -32603: ${MCP_CREDENTIALS_REFUSED}`,
+};
+function Refusal() {
+  return (
+    <Section title="refusal">
+      <div data-shot="refusal" className="flex flex-col gap-2">
+        <ToolActivity tool={failed} defaultOpen />
+        <ToolActivity tool={refusal} defaultOpen />
+      </div>
+    </Section>
+  );
+}
+
 function Gallery() {
   return (
     <div className="min-h-screen bg-app p-8 text-ink">
       <div className="mx-auto flex max-w-xl flex-col gap-5" data-gallery={view}>
         <div className="self-end rounded-[18px] bg-bubble-user px-3 py-2 text-[13px] text-ink">Résume le billet #296221</div>
-        {view === "before" ? <Before /> : view === "send" ? <Sends /> : view.startsWith("handoff") ? <Handoff /> : <After />}
+        {view === "before" ? <Before /> : view === "refusal" ? <Refusal /> : view === "send" ? <Sends /> : view.startsWith("handoff") ? <Handoff /> : <After />}
         <div className="self-start rounded-[18px] bg-card px-3 py-2 text-[13px] text-ink">Voici le résumé du billet #296221 : gabarit de courriel dans Bamboo, 4 notes.</div>
       </div>
     </div>

@@ -16,6 +16,8 @@ import { failedTurnTool } from "../shared/failed-turn.ts";
 import { CUT_TWICE, RESTART_TURN_NOTE, TURN_NOT_RESUMED } from "../shared/restart-words.ts";
 import { outwardDetail } from "./runtime/tree.ts";
 import { ENGINE_EXITED_SENTENCE } from "../shared/engine-exit-words.ts";
+import { MCP_CREDENTIALS_REFUSED } from "../shared/connector-refusal.ts";
+import { withoutRunMarkersIn } from "../shared/routine-result.ts";
 
 const SECRET = Buffer.alloc(32, 7);
 const ALL: AgentScope[] = ["agents.read", "agents.send", "agents.create"];
@@ -2014,5 +2016,114 @@ describe("await_turn and a pending card (#2922)", () => {
     w.add(threadId, { role: "bot", kind: "text", text: "Merci, c'est fait." });
     const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
     expect(r.body).toMatchObject({ finished: true, reply: "Merci, c'est fait." });
+  });
+});
+
+describe("the server's lines read through the thread API in the person's language (#3515)", () => {
+  const card = {
+    runId: "run-1", routineId: "rt-1", routineName: "Veille", status: "completed" as const,
+    summary: "RUN_STATUS: complete. Nothing needs the person's decision.\nTrois points nouveaux ce matin.", problems: "a tool failed",
+  };
+  const rows = (): Array<Omit<StoredMessage, "id" | "at">> => [
+    { role: "bot", kind: "activity", tool: { name: "notice: Workspace: In the cloud", ok: true } },
+    { role: "bot", kind: "text", text: "RUN_STATUS: skipped\nJ'ai laissé la question de côté." },
+    { role: "bot", kind: "activity", tool: { name: "Asked by Beta", ok: true } },
+    { role: "bot", kind: "activity", tool: { name: "mcp_remote_call_tool_with_a_long_name_for_the_connector", ok: false, output: `MCP error -32603: ${MCP_CREDENTIALS_REFUSED}` } },
+    { role: "bot", kind: "routine.run", text: `${card.summary}\n\nCompleted with problems.\n\nRoutine “Veille”`, routineRun: card },
+  ];
+  const ENGLISH = ["RUN_STATUS", "In the cloud", "Asked by", "Completed with problems", "Routine “", "refused its credentials"];
+
+  async function conversation(language: string) {
+    const w = world();
+    w.deps.language = () => language;
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "Bonjour", mode: "blocking" });
+    const threadId = sent.body.thread_id as string;
+    for (const row of rows()) w.add(threadId, row);
+    const read = async (tool: "read_transcript" | "read_latest_page") => {
+      const r = await w.api.call(c, tool, tool === "read_transcript" ? { agent_id: "bot-a" } : { agent_id: "bot-a", thread_id: threadId, limit: 50 });
+      return (r.body.entries as Array<{ text: string }>).map((entry) => entry.text);
+    };
+    return { transcript: await read("read_transcript"), latest: await read("read_latest_page") };
+  }
+
+  it("a French-speaking person's conversation holds no English server line and no run marker", async () => {
+    const { transcript, latest } = await conversation("fr-CA");
+    for (const lines of [transcript, latest]) {
+      const all = lines.join("\n");
+      for (const english of ENGLISH) expect(all).not.toContain(english);
+      expect(all).toContain("Dans l'infonuagique");
+      expect(all).toContain("Beta a demandé");
+      expect(all).toContain("J'ai laissé la question de côté.");
+      expect(all).toContain("Terminée avec des problèmes.");
+      expect(all).toContain("Routine « Veille »");
+      expect(all).toContain("Trois points nouveaux ce matin.");
+      // the connector's refusal keeps the step the person must take, whole
+      const refusal = lines.find((line) => line.includes("(HTTP 401)"))!;
+      expect(refusal).toContain("ouvre Capacités > Installés et reconnecte-toi");
+      expect(refusal.endsWith("en-têtes.")).toBe(true);
+    }
+  });
+
+  it("an English-speaking person still reads English, without run markers", async () => {
+    const { transcript } = await conversation("en");
+    const all = transcript.join("\n");
+    expect(all).toContain("In the cloud");
+    expect(all).toContain("Asked by Beta");
+    expect(all).toContain("Completed with problems.");
+    expect(all).toContain("Routine “Veille”");
+    expect(all).toContain("open Capabilities > Installed and sign in to it again");
+    expect(all).not.toContain("RUN_STATUS");
+  });
+
+  it("a run that ended failed or partial says so, with its reason, in the owner's language and without a marker", async () => {
+    for (const [line, french, english] of [
+      ["RUN_STATUS: failed: the login was refused", "Non terminée : the login was refused", "Did not finish: the login was refused"],
+      ["RUN_STATUS: partial: two tickets were skipped", "Faite en partie : two tickets were skipped", "Partly done: two tickets were skipped"],
+    ] as const) {
+      for (const [language, said] of [["fr-CA", french], ["en", english]] as const) {
+        const w = world({ replyAfterPolls: 1, replyRows: () => [] });
+        w.deps.language = () => language;
+        const c = person("p1");
+        const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "Fais la passe", mode: "async" });
+        const threadId = String(sent.body.thread_id);
+        // the row as the store keeps it: the line is out of its text, its state and reason are data
+        w.add(threadId, withoutRunMarkersIn({ role: "bot", kind: "text", text: `Je n'ai pas pu entrer dans le portail.\n${line}` }) as never);
+        const transcript = await w.api.call(c, "read_transcript", { agent_id: "bot-a" });
+        const last = (transcript.body.entries as Array<{ text: string }>).at(-1)!.text;
+        expect(last).toBe(`Je n'ai pas pu entrer dans le portail.\n\n${said}`);
+        const waited = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
+        expect(waited.body).toMatchObject({ finished: true });
+        expect(waited.body.reply).toContain(said);
+        expect(String(waited.body.reply)).not.toContain("RUN_STATUS");
+      }
+    }
+  });
+
+  it("a routine run's row read without a known language says its failure once", async () => {
+    const w = world();
+    w.deps.language = () => undefined;
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "Bonjour", mode: "blocking" });
+    const threadId = sent.body.thread_id as string;
+    w.add(threadId, withoutRunMarkersIn({
+      role: "bot", kind: "routine.run", text: "RUN_STATUS: failed: the login was refused\nThe portal refused the login.\n\nDid not finish: the login was refused",
+      routineRun: { ...card, status: "failed", summary: "The portal refused the login." },
+    }) as never);
+    const r = await w.api.call(c, "read_transcript", { agent_id: "bot-a" });
+    const last = (r.body.entries as Array<{ text: string }>).at(-1)!.text;
+    expect(last.match(/the login was refused/g)).toHaveLength(1);
+    expect(last).not.toContain("RUN_STATUS");
+  });
+
+  it("a long message is cut at a sentence, never in the middle of a word", async () => {
+    const w = world();
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "Bonjour", mode: "blocking" });
+    const sentence = "Les deux camps sont partisans, et la discussion continue longtemps. ";
+    w.add(sent.body.thread_id as string, { role: "bot", kind: "text", text: sentence.repeat(Math.ceil(ENTRY_TEXT_MAX / sentence.length) + 5) });
+    const r = await w.api.call(c, "read_transcript", { agent_id: "bot-a" });
+    const long = (r.body.entries as Array<{ text: string }>).at(-1)!.text;
+    expect(long.endsWith("longtemps.\n[...]")).toBe(true);
   });
 });

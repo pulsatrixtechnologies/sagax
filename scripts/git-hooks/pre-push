@@ -4,8 +4,8 @@
 # lint, typecheck, locale catalogs, source terms, skin contrast, the guard
 # tests that break main silently (ratchets, goldens, source scans), the
 # tests beside the files of the diff, and iOS when ios/ or shared/ changed
-# (skipped, and said so in the summary and the PR report, on a host without
-# Swift: the Swift tests then run after the merge).
+# (skipped, and said so in the summary and the PR report, only when the swift
+# binary is missing; any other probe failure fails the gate: the Swift tests then run after the merge).
 # A few minutes. The full suite is deliberately NOT here: it runs once, at
 # the version cut.
 #

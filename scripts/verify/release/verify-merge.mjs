@@ -26,7 +26,10 @@
 //      gate goes on and can end OK, and the summary, the OK stamp and the
 //      pull request report all say the Swift tests were not run on that host
 //      (#3639); they run after the merge, off the Mac (#3678). With Swift
-//      present, `swift test` runs and a red result fails the gate.
+//      present, `swift test` runs and a red result fails the gate. The skip is for
+//      ONE case: the binary is missing (ENOENT). A `swift --version` that
+//      fails any other way (non-zero status, timeout after 120 s, EACCES) fails
+//      the gate with the reason; it is never a skip.
 //
 // Exit 1 on the first stage that fails; the summary names it. SAGAX_SKIP_HOOKS=1
 // skips the pre-push hook that runs this, never the gate itself.
@@ -191,19 +194,35 @@ const REPORT_MARK = "<!-- verify:merge -->";
 export const IOS_NOT_RUN_NOTE = "iOS stage not run on this host: swift is not installed, so the Swift tests (CompanionCore) were not run here; they run after the merge";
 export const IOS_SKIPPED_LINE = `\n== iOS stage: skipped, swift is not installed on this host (the Swift tests were not run here; they run after the merge)`;
 
-/** True when `swift --version` answers on this host. Bounded, no shell. */
-export function swiftAvailable(spawn = spawnSync) {
-  const result = spawn("swift", ["--version"], { stdio: "ignore", timeout: 15000 });
-  return !result.error && result.status === 0;
+/** The probe of `swift --version`: "missing" only when the binary is not on
+ * the PATH (ENOENT); "ok" on status 0; "failed" for anything else (a shim that
+ * exits non-zero, a timeout, EACCES...) with the reason. A host that has Swift
+ * must never lose the Swift tests because the probe stumbled. Bounded, no
+ * shell. The bound is 120 s: a cold Swift under nice on a busy machine can
+ * take far longer than a few seconds to answer. */
+export function swiftProbe(spawn = spawnSync) {
+  const result = spawn("swift", ["--version"], { stdio: ["ignore", "ignore", "pipe"], encoding: "utf8", timeout: 120000 });
+  if (result.error?.code === "ENOENT") return { state: "missing" };
+  if (!result.error && result.status === 0) return { state: "ok" };
+  const stderr = String(result.stderr ?? "").trim().split("\n")[0];
+  const why = result.error ? `error ${result.error.code ?? result.error.message}` : `status ${result.status}${result.signal ? ` (signal ${result.signal})` : ""}`;
+  return { state: "failed", why: stderr ? `${why}: ${stderr}` : why };
 }
 
-/** The iOS stage. Without Swift: one explicit line, a note for the summary,
- * the stamp and the report, and nothing else. With Swift: `swift test`, then
- * the simulator build when xcodegen and xcodebuild exist. Returns the notes. */
+/** The iOS stage. Swift missing (and only that): one explicit line, a note for
+ * the summary, the stamp and the report, and nothing else. A probe that fails
+ * any other way fails the gate. With Swift: `swift test`, then the simulator
+ * build when xcodegen and xcodebuild exist. Returns the notes. */
 export function runIosStage({ iosDir, stop, run: runStage = run, spawn = spawnSync, log = console.log }) {
-  if (!swiftAvailable(spawn)) {
+  const probe = swiftProbe(spawn);
+  if (probe.state === "missing") {
     log(IOS_SKIPPED_LINE);
     return [IOS_NOT_RUN_NOTE];
+  }
+  if (probe.state === "failed") {
+    log(`\n== iOS stage: FAILED, the Swift probe (swift --version) failed: ${probe.why}. the Swift tests are not skipped, fix the probe or the toolchain`);
+    stop({ label: "swift probe (swift --version)", ok: false, seconds: "0" });
+    return [];
   }
   stop(runStage("swift test (CompanionCore)", ["swift", "test"], { cwd: iosDir }));
   if (spawn("xcodegen", ["--version"], { stdio: "ignore" }).status === 0 && spawn("xcodebuild", ["-version"], { stdio: "ignore" }).status === 0) {
@@ -265,7 +284,7 @@ function main() {
   console.log(`  guard tests: ${guards.length}`);
   console.log(`  tests of the diff: ${diffTests.length ? diffTests.join(", ") : "none"}`);
   if (electronTests.length) console.log(`  electron tests: ${electronTests.join(", ")}`);
-  console.log(`  iOS: ${ios ? "swift test + simulator build (skipped on a host without swift)" : "skipped (no ios/ or shared/ change)"}`);
+  console.log(`  iOS: ${ios ? "swift test + simulator build (skipped only when swift is missing)" : "skipped (no ios/ or shared/ change)"}`);
   if (options.list) return;
 
   const started = Date.now();

@@ -104,8 +104,8 @@ Before every merge (and before every push, through the pre-push hook), run
 `pnpm verify:merge`: the local gate (lint, typecheck, locale catalogs, source
 terms, contrast, unused files via `pnpm check:unused`, the guard tests that
 break `main` silently, the tests beside the files of the diff, iOS when `ios/`
-or `shared/` changed; on a host without Swift that stage is skipped, the
-summary and the pull request comment say the Swift tests were not run there,
+or `shared/` changed; when the `swift` binary is missing (and only then) that stage is
+skipped; a `swift --version` that fails any other way fails the gate. The summary and the pull request comment say the Swift tests were not run there,
 and they run after the merge), a few minutes;
 no CI runs on a private PR. It writes its result on the branch's pull request
 (a "verify:merge" comment with the commit it ran on): merge only a PR whose

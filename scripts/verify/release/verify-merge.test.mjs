@@ -1,6 +1,6 @@
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { areaTests, IOS_NOT_RUN_NOTE, IOS_SKIPPED_LINE, reportBody, runIosStage, sanitizeGitEnv, stampPathFor, swiftAvailable } from "./verify-merge.mjs";
+import { areaTests, IOS_NOT_RUN_NOTE, IOS_SKIPPED_LINE, reportBody, runIosStage, sanitizeGitEnv, stampPathFor, swiftProbe } from "./verify-merge.mjs";
 
 describe("sanitizeGitEnv", () => {
   it("strips every GIT_* key and leaves the rest", () => {
@@ -74,13 +74,39 @@ describe("iOS stage without Swift (#3639)", () => {
     return { ran, logs, stops, args: { iosDir: "/x", stop, run, spawn, log: (line) => logs.push(line) } };
   };
 
-  it("probes swift with no shell and a bound", () => {
+  it("probes swift with no shell and a bound of 120 s", () => {
     let seen;
-    swiftAvailable((cmd, args, options) => { seen = [cmd, args, options]; return { status: 0 }; });
+    swiftProbe((cmd, args, options) => { seen = [cmd, args, options]; return { status: 0 }; });
     expect(seen[0]).toBe("swift");
     expect(seen[1]).toEqual(["--version"]);
-    expect(seen[2].timeout).toBeGreaterThan(0);
+    expect(seen[2].timeout).toBe(120000);
     expect(seen[2].shell).toBeUndefined();
+  });
+
+  const failing = (swift) => {
+    const t = setup("green");
+    t.args.spawn = (cmd) => (cmd === "swift" ? swift : { status: 1 });
+    return t;
+  };
+  it.each([
+    ["timeout", { error: Object.assign(new Error("spawnSync swift ETIMEDOUT"), { code: "ETIMEDOUT" }), status: null }, "ETIMEDOUT"],
+    ["status 1", { status: 1, stderr: "xcode-select: error: no developer tools\nmore" }, "status 1: xcode-select: error: no developer tools"],
+    ["EACCES", { error: Object.assign(new Error("EACCES"), { code: "EACCES" }), status: null }, "EACCES"],
+  ])("fails the gate, never skips, when the probe fails by %s", (_name, swift, why) => {
+    const t = failing(swift);
+    const notes = runIosStage(t.args);
+    expect(t.ran).toEqual([]);
+    expect(t.stops.map((r) => r.ok)).toEqual([false]);
+    expect(notes).toEqual([]);
+    expect(t.logs[0]).toContain("the Swift probe (swift --version) failed");
+    expect(t.logs[0]).toContain(why);
+    expect(t.logs).not.toContain(IOS_SKIPPED_LINE);
+  });
+
+  it("runs the stage when the probe answers with status 0", () => {
+    const t = setup("green");
+    runIosStage(t.args);
+    expect(t.ran).toEqual(["swift"]);
   });
 
   it("skips the whole stage with one explicit line and a note when swift is missing", () => {

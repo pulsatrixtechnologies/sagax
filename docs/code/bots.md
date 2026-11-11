@@ -930,10 +930,15 @@ Covered by `shared/bot-task-list.test.ts` and `server/bots/bot-task-list.test.ts
   (`TeamWorkSection.tsx`, words in `src/lib/team-work.ts`, data in
   `src/lib/use-team-work.ts`); a bot without a team, a read not back yet and a
   failed first read keep today's section, the same DOM.
-- The team row shows each team bot's mascot with its name, the title under it
-  (as the chat header pill does), so a tile matches the rows that name it.
-- Live marks follow the shared rule (`shared/team-work.ts` `teamLive`), never a
-  plan; no live mark while the live stream is down. No polling: one read, the
+- #3575: no team grid. Each piece of work is a `CodingSessionRow`, the row of
+  the existing Coding list, in the same card (`AgentRows` `lead`): the status
+  icon, the full title, one grey line (the working bot's small mascot and
+  name, "2/5", its last action), the chevron. Unfolded: one grey line with
+  the duration and the tokens, then the steps as the same row one level in,
+  each with its bot in its grey line. "Done today" is the same row.
+- Live states follow the shared rule (`shared/team-work.ts` `teamLive`), never
+  a plan; a silent turn takes the rows' warning icon, never while the live
+  stream is down. No polling: one read, the
   `team.work` frame (debounced 1 s), runtime events of step threads in a ref,
   a safety read each 60 s while a step is open.
 - A step opens today's coding chat on the team bot (`CodingChatTarget.step`);

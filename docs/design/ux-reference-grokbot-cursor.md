@@ -924,19 +924,27 @@ Code : `src/components/coding/CodingChat.tsx`, `ToolLine.tsx`, `CodingDiff.tsx`,
 (galeries `src/gallery/coding-chat.html`, `bot-panel-coding.html`). iOS et
 Android : la section Coding liste les tâches en cours seulement ; le chat de
 code y reste à porter.
-- Section Coding d'un bot orchestrateur (#3462) : seule cette section change,
-  dans la même carte du panneau. Rangée d'équipe : la mascotte de chaque bot qui
-  tient une étape, son titre dessous, un point accent s'il travaille, un point
-  d'avertissement s'il est silencieux depuis 3 min, la mascotte pâlie s'il est
-  inactif. Une rangée par travail : la mascotte du bot qui travaille, le nom,
-  « 2/5 · 25 min · 38k tokens », une barre mince et une ligne d'état
-  (« Server · dernière action il y a 20 s »). La rangée se déplie en étapes
-  (crochet vert fini, étape à venir pâlie et non cliquable, « N more » après 8).
-  « Fini aujourd'hui · N fusionnés » en dernier. Un clic sur une étape ou une
-  mascotte ouvre le chat de code de ce bot, tel qu'aujourd'hui, avec une ligne
-  « travail · étape 2 sur 3 · dernière action… » sous la barre ; le compositeur
-  écrit à ce bot ; le chat de l'orchestrateur reçoit une ligne discrète « Tu as
-  écrit à [visage] bot ». Flux coupé : aucune marque en direct. Captures :
+- Section Coding d'un bot orchestrateur (#3462, refait par #3575) : seule cette
+  section change, et elle reprend 1:1 les rangées Coding déjà là, dans la même
+  carte, au-dessus des rangées propres du bot. Aucune grille de mascottes,
+  aucune barre de progression, aucun point sur une mascotte, aucun chiffre
+  aligné à droite. Un travail = la même rangée (`CodingSessionRow`) : l'icône
+  d'état des rangées existantes (spinner pointillé en cours, crochet vert
+  fini, main d'attente, triangle d'avertissement quand le tour est silencieux
+  depuis 3 min), le titre complet, puis une seule ligne grise : la petite
+  mascotte du bot qui travaille (16 px, son vrai avatar) et son nom, la
+  progression (« 2/5 ») et sa dernière action (« il y a 20 s », « silencieux
+  depuis 6 min », « attend l'ordinateur »), puis le chevron. Un clic déplie :
+  une ligne grise « 39 min · 16,7M tokens » (durée et tokens, une seule fois),
+  puis les étapes, la même rangée décalée d'un cran (icône sous le titre du
+  travail), chacune avec la mascotte et le nom de son bot dans sa ligne grise ;
+  étape à venir = horloge, non cliquable ; « ↓ N more » après 8. « Fini
+  aujourd'hui · N fusionnés » est la même rangée, sans ligne grise. L'en-tête
+  « 3 au travail · 1 silencieux » reste. Un clic sur une étape ouvre le chat de
+  code de ce bot, tel qu'aujourd'hui, avec une ligne « travail · étape 2 sur 3
+  · dernière action… » sous la barre ; le compositeur écrit à ce bot ; le chat
+  de l'orchestrateur reçoit une ligne discrète « Tu as écrit à [visage] bot ».
+  Flux coupé : aucun avertissement de silence. Captures :
   `node scripts/capture/team-work.mjs` (galerie `bot-panel-team-work.html`).
 
 ---

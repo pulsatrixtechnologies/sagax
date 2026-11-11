@@ -5,7 +5,10 @@
 // review · #40") whose "#N" is an underlined link to the pull request, and a
 // grey chevron at the right. A click opens the session in the chat column;
 // Status, Duration, Tokens and the rest live there. The one shared row:
-// every place a coding session shows in the panel draws this.
+// every place a coding session shows in the panel draws this, the work of an
+// orchestrator and its steps included (#3575: their grey line names the bot
+// with its small mascot; a work row unfolds, its chevron turns).
+import type { ReactNode } from "react";
 import { Check, ChevronRight, Loader2, Square, X, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -36,12 +39,11 @@ export function DottedSpinner({ size = 16 }: { size?: number }) {
 const ICON_SIZE = 20;
 const PR_ICON = { size: ICON_SIZE, strokeWidth: 1.9, "aria-hidden": true as const };
 
-/** The green check of a finished session (merged here; a finished step of
- * an orchestrator's work on its bot's face, #3462). */
-export function DoneMark({ small = false, data = { "data-coding-icon": "merged" }, className }: { small?: boolean; data?: Record<`data-${string}`, string>; className?: string }) {
+/** The green check of a merged session. */
+function DoneMark() {
   return (
-    <span {...data} className={cn("flex", small ? "size-3" : "size-5", "shrink-0 items-center justify-center rounded-full bg-success", className)}>
-      <Check size={small ? 8 : 13} strokeWidth={3} aria-hidden="true" />
+    <span data-coding-icon="merged" className="flex size-5 shrink-0 items-center justify-center rounded-full bg-success">
+      <Check size={13} strokeWidth={3} aria-hidden="true" />
     </span>
   );
 }
@@ -86,9 +88,22 @@ export interface CodingSessionRowProps {
   onStop?: () => void;
   stopId?: string;
   stopping?: boolean;
+  /** The grey line in place of the state words (#3575: an orchestrator's work
+   * or step, "<mascot> Server · 2/5 · 20 s ago"); null: no grey line. */
+  subtitle?: ReactNode | null;
+  /** The grey line's tooltip, when it may be cut. */
+  subtitleHint?: string;
+  /** A row that unfolds: its state, and the chevron turns while unfolded. */
+  expanded?: boolean;
+  /** The row whose chat is open. */
+  current?: boolean;
+  /** The open button's accessible name, when "Open <title>" is not it. */
+  openLabel?: string;
+  /** A row under another (a step of a work): its icon under that row's title. */
+  inset?: boolean;
 }
 
-export function CodingSessionRow({ title, hint, status, pull, attrs, onOpen, onIgnore, ignoreId, onStop, stopId, stopping = false }: CodingSessionRowProps) {
+export function CodingSessionRow({ title, hint, status, pull, attrs, onOpen, onIgnore, ignoreId, onStop, stopId, stopping = false, subtitle, subtitleHint, expanded, current = false, openLabel, inset = false }: CodingSessionRowProps) {
   const state = codingRowState(status, pull);
   const number = state.pr ? prNumberText(state.pr) : "";
   return (
@@ -97,7 +112,7 @@ export function CodingSessionRow({ title, hint, status, pull, attrs, onOpen, onI
       data-agent-row
       data-agent-status={status}
       data-coding-state={state.kind}
-      className={cn("group relative flex min-h-14 items-center gap-3 hover:bg-hover", PANEL_ROW)}
+      className={cn("group relative flex min-h-14 items-center gap-3 hover:bg-hover", PANEL_ROW, inset && "pl-11", current && "bg-hover")}
     >
       {/* The open button covers the row; the content above it lets clicks
           through, except the "#N" link. */}
@@ -106,7 +121,9 @@ export function CodingSessionRow({ title, hint, status, pull, attrs, onOpen, onI
         data-coding-open
         onClick={onOpen}
         disabled={!onOpen}
-        aria-label={t("botPanel.coding.openAria", { title })}
+        aria-label={openLabel ?? t("botPanel.coding.openAria", { title })}
+        aria-expanded={expanded}
+        aria-current={current ? "true" : undefined}
         className="absolute inset-0 rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60 disabled:cursor-default"
       />
       <span className="pointer-events-none relative flex size-5 shrink-0 items-center justify-center">
@@ -114,9 +131,10 @@ export function CodingSessionRow({ title, hint, status, pull, attrs, onOpen, onI
       </span>
       <span className="pointer-events-none relative flex min-w-0 flex-1 flex-col">
         <span data-agent-title className="truncate text-[15px] leading-[20px] text-ink" title={hint ? `${title} (${hint})` : title}>{title}</span>
-        <span data-coding-subtitle className="flex min-w-0 items-center gap-1 text-[14px] leading-[20px] text-ink-secondary">
-          <span data-coding-label className="shrink-0">{state.label}</span>
-          {state.pr && number && (
+        {subtitle !== null && (
+        <span data-coding-subtitle className="flex min-w-0 items-center gap-1 text-[14px] leading-[20px] text-ink-secondary" title={subtitleHint}>
+          {subtitle !== undefined ? subtitle : <span data-coding-label className="shrink-0">{state.label}</span>}
+          {subtitle === undefined && state.pr && number && (
             <>
               <span aria-hidden="true">·</span>
               <button
@@ -132,13 +150,14 @@ export function CodingSessionRow({ title, hint, status, pull, attrs, onOpen, onI
             </>
           )}
         </span>
+        )}
       </span>
       {onOpen && (
         <ChevronRight
           size={16}
           aria-hidden="true"
           data-coding-chevron
-          className={cn("pointer-events-none relative shrink-0 text-ink-tertiary", (onIgnore || onStop) && "group-hover:invisible group-focus-within:invisible")}
+          className={cn("pointer-events-none relative shrink-0 text-ink-tertiary", (onIgnore || onStop) && "group-hover:invisible group-focus-within:invisible", expanded && "rotate-90")}
         />
       )}
       {onStop && (

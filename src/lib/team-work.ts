@@ -1,6 +1,6 @@
 // The words and the client-side reading of an orchestrator bot's work
-// (#3451, lot 2 #3462): what the Coding section of its panel says about the
-// team row, each piece of work and its steps, and the meta line of a step's
+// (#3451, lot 2 #3462, #3575): what the Coding section of its panel says
+// about each piece of work and its steps, and the meta line of a step's
 // coding chat. The read model and the one live rule are shared
 // (shared/team-work.ts); this file only words them, re-ages them on the
 // person's clock and folds the live events the app already receives. Labels
@@ -149,10 +149,9 @@ function waitPhrase(live: TeamLive): string {
 
 /** The state in a few words, without the bot: "last action 40 s ago",
  * "silent for 6 min", "waiting for your answer", "idle". */
-export function livePhrase(live: TeamLive, now: number, options: { doing?: string } = {}): string {
+export function livePhrase(live: TeamLive, now: number): string {
   switch (live.state) {
     case "working":
-      if (live.toolSince !== undefined && options.doing) return `${options.doing} · ${teamAge(now - live.toolSince)}`;
       return live.lastActionAt !== undefined ? t("teamWork.phrase.lastAction", { age: teamAge(now - live.lastActionAt) }) : t("teamWork.phrase.working");
     case "silent":
       return t("teamWork.phrase.silent", { age: teamAge(live.silentMs ?? (live.lastActionAt !== undefined ? now - live.lastActionAt : 0)) });
@@ -177,23 +176,6 @@ export function teamBotName(names: TeamName | undefined): string {
   return names?.name?.trim() || t("teamWork.unnamed");
 }
 
-/** The tile's label: the bot's name, as its rows name it. */
-export function teamTileLabel(names: TeamName | undefined): string {
-  return teamBotName(names);
-}
-
-/** The title under the tile's name, when it says more than the name. */
-export function teamTileTitle(names: TeamName | undefined): string | undefined {
-  const title = names?.title?.trim();
-  return title && title !== teamBotName(names) ? title : undefined;
-}
-
-/** The tile's accessible name: "<bot>, silent for 6 min". */
-export function teamTileAria(names: TeamName | undefined, live: TeamLive, now: number): string {
-  const state = live.state === "working" ? t("teamWork.phrase.workingNow") : livePhrase(live, now);
-  return t("teamWork.tile.aria", { name: teamBotName(names), state });
-}
-
 /** The header's count: "3 working now · 1 silent", only the parts above zero. */
 export function teamCount(team: readonly TeamWorkBot[]): string {
   const working = team.filter((bot) => bot.live.state === "working").length;
@@ -204,16 +186,25 @@ export function teamCount(team: readonly TeamWorkBot[]): string {
   return parts.join(" · ");
 }
 
-/** A work row's figures: "3/5 · 12 min · 38k tokens". */
-export function teamWorkMeta(item: Pick<TeamWorkItem, "done" | "total" | "durationMs" | "tokens">): string {
-  const parts = [`${item.done}/${item.total}`, teamAge(item.durationMs)];
-  if (item.tokens > 0) parts.push(t("teamWork.meta.tokens", { count: formatTokens(item.tokens) }));
-  return parts.join(" · ");
+/** The grey line of a row (#3575): the bot (its small mascot and its name),
+ * then what it says, joined by " · ". */
+export interface TeamLine {
+  /** The bot whose mascot leads the line, when there is one. */
+  botId?: string;
+  who?: string;
+  parts: string[];
 }
 
-/** The share of the bar: steps done over the total. */
-export function teamWorkShare(item: Pick<TeamWorkItem, "done" | "total">): number {
-  return item.total > 0 ? Math.min(1, Math.max(0, item.done / item.total)) : 0;
+/** The line as one string (tooltips, accessible names, tests). */
+export function teamLineText(line: TeamLine): string {
+  return [line.who, ...line.parts].filter(Boolean).join(" · ");
+}
+
+/** What a piece of work spent, in its unfolded detail: "12 min · 38k tokens". */
+export function teamWorkSpend(item: Pick<TeamWorkItem, "durationMs" | "tokens">): string {
+  const parts = [teamAge(item.durationMs)];
+  if (item.tokens > 0) parts.push(t("teamWork.meta.tokens", { count: formatTokens(item.tokens) }));
+  return parts.join(" · ");
 }
 
 /** The step of a piece of work its current bot holds. */
@@ -221,44 +212,51 @@ function currentStep(item: TeamWorkItem): TeamWorkStep | undefined {
   return item.current ? item.steps.find((step) => step.id === item.current!.stepId) : undefined;
 }
 
-/** A work row's state line: "<bot> · last action 40 s ago". */
-export function teamWorkStateLine(item: TeamWorkItem, nameOf: (botId: string) => TeamName | undefined, now: number, orchestrator?: TeamName): string {
+/** A working bot's last action: "20 s ago", or what its tool call does and
+ * for how long; any other state in its own words. */
+function lastAction(live: TeamLive, now: number, doing?: string): string {
+  if (live.state !== "working") return livePhrase(live, now);
+  if (live.toolSince !== undefined && doing) return `${doing} · ${teamAge(now - live.toolSince)}`;
+  return live.lastActionAt !== undefined ? t("teamWork.phrase.ago", { age: teamAge(now - live.lastActionAt) }) : t("teamWork.phrase.working");
+}
+
+/** A work row's grey line: "<bot> · 2/5 · 20 s ago", "<bot> · 3/3 · merged 8 min ago". */
+export function teamWorkLine(item: TeamWorkItem, nameOf: (botId: string) => TeamName | undefined, now: number, orchestrator?: TeamName & { botId?: string }): TeamLine {
+  const progress = `${item.done}/${item.total}`;
   if (item.finished) {
     const last = [...item.steps].sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt))[0];
-    const who = last ? teamBotName(nameOf(last.botId)) : undefined;
     const phrase = endPhrase(last?.status ?? "completed", item.merged, item.endedAt, now);
-    return who ? `${who} · ${phrase}` : phrase;
+    return last ? { botId: last.botId, who: teamBotName(nameOf(last.botId)), parts: [progress, phrase] } : { parts: [progress, phrase] };
   }
   const step = currentStep(item);
-  if (!step && item.toCome.length > 0 && orchestrator) return `${teamBotName(orchestrator)} · ${t("teamWork.phrase.nextStep")}`;
-  const who = teamBotName(step ? nameOf(step.botId) : undefined);
-  return `${who} · ${livePhrase(item.live, now, { doing: step?.doing })}`;
+  if (!step && item.toCome.length > 0 && orchestrator) {
+    return { ...(orchestrator.botId ? { botId: orchestrator.botId } : {}), who: teamBotName(orchestrator), parts: [progress, t("teamWork.phrase.nextStep")] };
+  }
+  return { ...(step ? { botId: step.botId } : {}), who: teamBotName(step ? nameOf(step.botId) : undefined), parts: [progress, lastAction(item.live, now, step?.doing)] };
 }
 
-/** What a step does or did, after its bot: "<bot> · 14 tests, red before". */
-export function teamStepNote(step: TeamWorkStep, nameOf: (botId: string) => TeamName | undefined, now: number): string {
+/** A step's grey line: "<bot> · 14 tests, red before · 9 min". */
+export function teamStepLine(step: TeamWorkStep, nameOf: (botId: string) => TeamName | undefined, now: number): TeamLine {
   const who = teamBotName(nameOf(step.botId));
+  let note: string;
   if (teamStepEnded(step.status)) {
     const said = step.status === "completed" ? step.did : step.status === "failed" ? step.failure : undefined;
-    return `${who} · ${said?.trim() || endPhrase(step.status, step.merged, step.finishedAt, now)}`;
-  }
-  if (step.live.state === "working" && step.doing) {
+    note = said?.trim() || endPhrase(step.status, step.merged, step.finishedAt, now);
+  } else if (step.live.state === "working" && step.doing) {
     const since = step.live.lastActionAt;
-    return since !== undefined && step.live.toolSince === undefined
-      ? `${who} · ${step.doing} · ${t("teamWork.phrase.ago", { age: teamAge(now - since) })}`
-      : `${who} · ${step.doing}`;
+    note = since !== undefined && step.live.toolSince === undefined ? `${step.doing} · ${t("teamWork.phrase.ago", { age: teamAge(now - since) })}` : step.doing;
+  } else {
+    note = livePhrase(step.live, now);
   }
-  return `${who} · ${livePhrase(step.live, now)}`;
+  const time = step.startedAt !== undefined ? teamAge(step.durationMs) : "";
+  return { botId: step.botId, who, parts: time ? [note, time] : [note] };
 }
 
-/** A step of the plan that was not handed out yet. */
-export function teamToComeNote(name: TeamName | undefined): string {
-  return name ? `${teamBotName(name)} · ${t("teamWork.phrase.toCome")}` : t("teamWork.phrase.toCome");
-}
-
-/** A step's duration on its row: none for a step that did not start. */
-export function teamStepTime(step: TeamWorkStep): string {
-  return step.startedAt !== undefined ? teamAge(step.durationMs) : "";
+/** A step of the plan that was not handed out yet: "<bot> · to come". */
+export function teamToComeLine(planned: { botId?: string }, nameOf: (botId: string) => TeamName | undefined): TeamLine {
+  const named = planned.botId ? nameOf(planned.botId) : undefined;
+  const toCome = t("teamWork.phrase.toCome");
+  return planned.botId ? { botId: planned.botId, who: teamBotName(named), parts: [toCome] } : { parts: [toCome] };
 }
 
 /** "Done today · 6 merged", "Done today · 6 done, 2 merged", "Done today · 6". */

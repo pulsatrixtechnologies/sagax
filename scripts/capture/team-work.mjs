@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
- * Headless screenshots of an orchestrator bot's work (#3462,
- * src/gallery/bot-panel-team-work.html): the Coding section of its panel
- * beside today's panel of a bot without a team (folded, then one piece of
- * work unfolded and Done today open), and a step's coding chat beside
+ * Headless screenshots of an orchestrator bot's work (#3462, #3575,
+ * src/gallery/bot-panel-team-work.html): the Coding section of its panel,
+ * its work rows above its own coding rows in one card, beside today's panel
+ * of a bot without a team (folded, then one piece of work unfolded and Done
+ * today open), and a step's coding chat beside
  * today's coding chat; light and dark, French and English, wide, 700 and
  * 390 px. Headless Chrome only: no window opens, nothing takes the focus.
  * Usage: node scripts/capture/team-work.mjs [--out DIR] [--port N]
@@ -56,17 +57,17 @@ try {
       for (const width of widths) {
         await page.setViewportSize({ width: width.panel, height: 1100 });
         await page.goto(`${base}?skin=${id}&lang=${lang}&view=panel`, { waitUntil: "load" });
-        await page.waitForSelector("[data-team-work-card]");
+        await page.waitForSelector("[data-team-work-item]");
         await page.waitForTimeout(300);
         await shot(`panel-${lang}-${label}-${width.label}.png`);
         if (width.label === "wide") {
           // one piece of work unfolded into its steps, and Done today open
-          await page.locator('[data-gallery-panel="team"] [data-team-work-toggle]').first().click();
-          await page.locator('[data-gallery-panel="team"] [data-team-done-toggle]').click();
+          await page.locator('[data-gallery-panel="team"] [data-team-work-item] [data-coding-open]').first().click();
+          await page.locator('[data-gallery-panel="team"] [data-team-done-today] [data-coding-open]').click();
           await page.waitForTimeout(250);
           await shot(`panel-open-${lang}-${label}-${width.label}.png`);
           // keyboard focus on a step
-          await page.locator('[data-gallery-panel="team"] [data-team-step-open]').nth(2).focus();
+          await page.locator('[data-gallery-panel="team"] [data-team-step-open] [data-coding-open]').nth(2).focus();
           await page.waitForTimeout(150);
           await shot(`panel-focus-${lang}-${label}-${width.label}.png`, { fullPage: false });
         }

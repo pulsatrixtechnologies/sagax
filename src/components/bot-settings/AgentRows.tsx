@@ -3,8 +3,9 @@
 // label. State mark, title, grey subtitle (state and "#N" pull request
 // link), chevron (2026-11-07). Past five
 // rows, "↓ N more" shows the rest. A click opens the session in the chat
-// column (the coding chat), never a side panel.
-import { useEffect, useState } from "react";
+// column (the coding chat), never a side panel. An orchestrator's work rows
+// (#3575) lead the same card, drawn by the same row.
+import { useEffect, useState, type ReactNode } from "react";
 
 import { activityStatusActive, activityTitle, codingWhere, type BotActivityItem, type BotLaunchedAgentItem } from "@/lib/bot-activity";
 import { loadBranchPull } from "@/lib/code-branches";
@@ -30,6 +31,9 @@ export interface AgentRowsProps {
   /** #2148: Ignore on a finished row (by its id): it leaves the list at
    * once and stays gone; the work itself is kept. */
   onIgnore?: (id: string) => void;
+  /** Rows drawn first in the same card, never folded under "↓ N more" (an
+   * orchestrator's work, #3575). */
+  lead?: ReactNode;
 }
 
 const LIVE_MS = 60_000;
@@ -100,18 +104,19 @@ function LaunchedRow({ item, onOpen, onIgnore }: { item: BotLaunchedAgentItem; o
   );
 }
 
-export function AgentRows({ items, launched = [], onOpen, onOpenLaunched, onStop, stopping, shown = AGENT_ROWS_SHOWN, onIgnore }: AgentRowsProps) {
+export function AgentRows({ items, launched = [], onOpen, onOpenLaunched, onStop, stopping, shown = AGENT_ROWS_SHOWN, onIgnore, lead }: AgentRowsProps) {
   const [all, setAll] = useState(false);
   const rows: Array<{ key: string; node: React.ReactNode }> = [
     ...launched.map((item) => ({ key: `launched:${item.id}`, node: <LaunchedRow key={`launched:${item.id}`} item={item} onOpen={onOpenLaunched} onIgnore={onIgnore} /> })),
     ...items.map((item) => ({ key: item.id, node: <ItemRow key={item.id} item={item} onOpen={onOpen} onStop={onStop} stopping={stopping} onIgnore={onIgnore} /> })),
   ];
-  if (rows.length === 0) return null;
+  if (rows.length === 0 && !lead) return null;
   const hidden = all ? 0 : Math.max(0, rows.length - shown);
   const drawn = hidden > 0 ? rows.slice(0, shown) : rows;
   return (
     <div data-agent-rows className="flex flex-col gap-1">
       <ul aria-label={t("botPanel.coding.title")} className={PANEL_CARD} {...(launched.length > 0 ? { "data-launched-agents": "" } : {})}>
+        {lead}
         {drawn.map((row) => row.node)}
       </ul>
       {hidden > 0 && (

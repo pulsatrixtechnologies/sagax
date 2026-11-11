@@ -148,6 +148,7 @@ import { askedBotChange, askedChange, createSettingsActions } from "./settings-a
 import { createCwActionPasses } from "./widgets/cw-widget-actions.ts";
 import { cwActionInstruction, parseCwAction } from "../shared/cw-widgets/actions.ts";
 import { cwRecordLink, cwSite } from "../shared/cw-widgets/links.ts";
+import { BOT_QUESTION_SWEEP } from "./turns/bot-to-bot.ts";
 import { attentionCard, mirrorBackgroundReply, mirrorLateRunReply, relayPersonAttention, type AttentionRelayDeps } from "./turns/person-attention-relay.ts";
 import { personAttention } from "../shared/person-attention.ts";
 import { createApprovalModeSupport } from "./capabilities/harness-capabilities.ts";
@@ -526,7 +527,7 @@ import { BUILT_IN_DRIVERS } from "./drivers/builtIn.ts";
 import { orgWithholdHostTools } from "./org/org-engine-admission.ts";
 import { openCodeProviderKeysAllowed, setOpenCodeProviderKeyPolicy } from "./drivers/acp/opencode-go.ts";
 import { getOrCreateChannel, mirrorActivity, mirrorReply, type CommsBus } from "./comms-visibility.ts";
-import { openApprovalCardMessages, openPendingInboxCards, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, threadsReferencingAsync, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./messages/message-db.ts";
+import { openApprovalCardMessages, openPendingInboxCards, readCommandReceipt, putCommandReceipt, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, threadsReferencingAsync, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./messages/message-db.ts";
 import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
 import { contentEncryptionFromEnv } from "./encryption/content-encryption-env.ts";
 import { briefCrossingLabel, claimRecallCrossings } from "./recall/recall-disclosure.ts";
@@ -6377,6 +6378,7 @@ bindLeafHost({
   get botActSendIds() { return botActSendIds; },
   get openInputRequests() { return openInputRequests; },
   get postInputRequest() { return postInputRequest; },
+  get sameBotOwner() { return sameBotOwner; },
   get settleInputRequests() { return settleInputRequests; },
   get answerSignInsInChat() { return answerSignInsInChat; },
   get groupUsageReader() { return groupUsageReader; },
@@ -18133,6 +18135,8 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
   relayVia: (botId, threadId) => relayViaOf(botId, threadId),
   // #2915: the mirror reads the chat's newest rows, never its whole path
   recent: (threadId, limit) => store.messagesTail(threadId, limit).messages,
+  // #3503: a thread another bot of the same person opened stays theirs
+  sameOwner: sameBotOwner,
 };
 /** 2026-11-05 (visible roles, #2032): the role a Perspicax turn starts under.
  * Only a Pulsatrix Flow routine's "Au nom de" (the run's snapshot, else the
@@ -26448,6 +26452,15 @@ const compactPinsByBot = new Map<string, { day: string; value: Pick<CompactPromp
 function effectiveBotOwner(bot: { ownerUserId?: unknown }): string {
   return resolveBotOwner(bot, localPrincipalId());
 }
+/** #3503: two bots of the same person (server/turns/bot-to-bot.ts). A bot of
+ * another person never counts as one. */
+function sameBotOwner(botId: string, otherBotId: string): boolean {
+  const bot = store.bot(botId);
+  const other = store.bot(otherBotId);
+  if (!bot || !other) return false;
+  const owner = effectiveBotOwner(bot).trim().toLowerCase();
+  return Boolean(owner) && owner === effectiveBotOwner(other).trim().toLowerCase();
+}
 /** A shared bot's model and notification switch stay on the owner's record.
  * The viewer writes their own through /api/me/bot-overrides. */
 /** A bot owner's organization role on a server signed in with Perspicax.
@@ -34685,6 +34698,22 @@ try {
   console.warn(`[approval] startup expiry of open approval cards failed: ${error instanceof Error ? error.message : String(error)}`);
 }
 setInterval(() => { runPendingApprovalExpirySweep(); settleStaleWaiting(); }, 60 * 60_000).unref();
+// #3503, once at the upgrade: the questions a bot asked another bot of the
+// same person that were left waiting on the person close as skipped. After
+// the boot, one conversation at a time (#3473); a receipt keeps it to once.
+setTimeout(() => {
+  try {
+    if (readCommandReceipt(BOT_QUESTION_SWEEP.kind, BOT_QUESTION_SWEEP.key)) return;
+  } catch {
+    return;
+  }
+  void waitingCardSkip.sweepBotQuestions().then((closed: number) => {
+    putCommandReceipt(BOT_QUESTION_SWEEP.kind, BOT_QUESTION_SWEEP.key, String(closed), Date.now());
+    if (closed > 0) console.log(`[approval] closed ${closed} question(s) a bot asked another bot that waited on the person`);
+  }).catch((error: unknown) => {
+    console.warn(`[approval] bot question sweep failed: ${error instanceof Error ? error.message : String(error)}`);
+  });
+}, 20_000).unref();
 
 try {
   cleanupResumableUploads(Date.now(), recoverArchiveUpload);

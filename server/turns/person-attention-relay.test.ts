@@ -437,3 +437,70 @@ describe("mirrorBackgroundReply, a teammate's ask (#3289)", () => {
     expect(w.threads.get("main")!.at(-1)).toMatchObject({ relayTrace: "stopped", relayAsk: { text: "", by: "Nova", botId: "bot-nova" } });
   });
 });
+
+describe("#3503: what two bots of the same person say to each other stays in their thread", () => {
+  // "work" is a thread the orchestrator bot (Nova) opened with Atlas
+  const ownTeam = (owners: Record<string, string> = { "bot-atlas": "person-a", "bot-nova": "person-a" }) => {
+    const w = world();
+    w.deps.relayVia = (_botId, threadId) => threadId === "work" ? "teammate" : threadId === "client" ? "mcp" : undefined;
+    w.deps.sameOwner = (botId, other) => Boolean(owners[botId]) && owners[botId] === owners[other];
+    return w;
+  };
+  const ask = (w: ReturnType<typeof world>, text: string) => {
+    const list = w.threads.get("work") ?? [];
+    list.push({ id: `ask-${list.length}`, at: 0, role: "bot", kind: "text", text, from: { botId: "bot-nova", name: "Nova", color: "blue" } } as unknown as WireMessage);
+    w.threads.set("work", list);
+  };
+
+  it("an answer to another bot's ask is not copied into the person's conversation, nor any trace line", () => {
+    const w = ownTeam();
+    ask(w, "Which branch holds the fix?");
+    w.say("work", "The fix is on the branch of the queue.");
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toBe(false);
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-2", ok: true, stopped: true }, w.deps)).toBe(false);
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-3", ok: false }, w.deps)).toBe(false);
+    expect(w.threads.get("main") ?? []).toEqual([]);
+    expect(w.notified).toEqual([]);
+    expect(w.unread).toEqual([]);
+  });
+
+  it("a question at the end of its turn is for the bot that opened the thread: no card, no unread, no notification", () => {
+    const w = ownTeam();
+    ask(w, "Ship the lot.");
+    w.say("work", "Two branches conflict.\n\nNEEDS INPUT: which one goes first, the queue or the hot fix?");
+    expect(relayPersonAttention({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toEqual({ posted: false, reason: "for-opener" });
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toBe(false);
+    expect(w.threads.get("main") ?? []).toEqual([]);
+    expect(w.notified).toEqual([]);
+    expect(w.unread).toEqual([]);
+  });
+
+  it("an item tagged for the person and a failure of the work from the same thread still reach the person", () => {
+    const tagged = ownTeam();
+    tagged.say("work", REPORT);
+    expect(relayPersonAttention({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, tagged.deps)).toMatchObject({ posted: true, threadId: "main", card: { kind: "human" } });
+    expect(tagged.notified).toHaveLength(1);
+    const failed = ownTeam();
+    failed.say("work", "RUN_STATUS: failed: the build does not start.");
+    expect(relayPersonAttention({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, failed.deps)).toMatchObject({ posted: true, card: { kind: "failure" } });
+    expect(failed.notified).toHaveLength(1);
+  });
+
+  it("a thread a bot of another person opened keeps today's rules", () => {
+    const w = ownTeam({ "bot-atlas": "person-a", "bot-nova": "person-b" });
+    ask(w, "Which branch holds the fix?");
+    w.say("work", "The queue branch.");
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toBe(true);
+    const question = ownTeam({ "bot-atlas": "person-a", "bot-nova": "person-b" });
+    question.say("work", "NEEDS INPUT: which one goes first?");
+    expect(relayPersonAttention({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, question.deps)).toMatchObject({ posted: true, card: { kind: "question" } });
+  });
+
+  it("an AI client's conversation is still mirrored", () => {
+    const w = ownTeam();
+    w.deps.task = (_botId, threadId) => ({ threadId, title: "Client", openedBy: { botId: "agent:client", name: "Client", kind: "agent", at: 1 } }) as never;
+    w.say("client", "Le lot est prêt.");
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "client", turnId: "turn-1", ok: true }, w.deps)).toBe(true);
+    expect(w.threads.get("main")!.at(-1)).toMatchObject({ relayVia: "mcp", text: "Le lot est prêt." });
+  });
+});

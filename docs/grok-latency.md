@@ -18,9 +18,11 @@ Every ACP turn logs one line when it settles (server/drivers/acp/turn-latency.ts
 - queueBy / setupBy (#3561): the parts of queue and setup in ms, from the turn's own step marks
   (server/turns/turn-trace.ts), each step closing the part it names; a part the turn did not
   reach is left out, and the parts add up to the stage.
-  - queueBy: admit (checks before the turn starts), prewarm (a warm being joined), compact,
+  - queueBy: admit (checks before the turn starts, and since #3679 the message's admission and
+    the claim after them), prewarm (a warm being joined), engines (#3679: the engines' list
+    read once after a start), compact (the fold check only, since #3679),
     context (selection, soul, skills), mcp (the tool servers' sign-in refresh and probe),
-    connector (the account's connection), place (workspace, sandbox, mounts), prompt, recall,
+    connector (the account's connection, and the turn's connectors plan), place (workspace, sandbox, mounts), prompt, recall,
     access (the turn's credentials, a typed command), slot (an engine start slot), send,
     dispatch (pictures, hand-off to the engine).
   - setupBy: prepare (sign-in check, command, spawn contract), init (process start and

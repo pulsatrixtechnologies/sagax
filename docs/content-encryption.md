@@ -249,6 +249,7 @@ same setting (`SAGAX_CONTENT_ENCRYPTION`).
 | admin activity | `admin-activity/YYYY-MM.ndjson` | the workspace | Activity, the organization audit |
 | video jobs | `video-jobs/<jobId>.json` | the job's thread | video generation resume and status |
 | held steers | `held-steers/<threadId>.json` | the thread's key | restart recovery of messages accepted into a running turn |
+| tool use | `tool-uses/<threadId>.json` (the MCP tools a conversation called in its log's newest events) | the thread's key, sealed as it is written | the compact prompt's pinned tools |
 
 **File format** (`server/encryption/content-file-crypto.ts`): a header (`SGXF`, version,
 chunk size, key id, context) then AES-256-GCM chunks of 64 KiB, each with its

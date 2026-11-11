@@ -92,14 +92,19 @@ export function createSetupStartTurn(host: StartTurnHost) {
       state.instance.adapter.releaseWarmSession?.(state.threadId);
       return { kind: "return" };
     }
+    // #3679: the checks, the message's admission and the claim close their
+    // own part, so compact names only the fold check
+    if (!state.warmOnly) turnTrace(state.threadId, "admitted");
     // Lot L2 of the connectors design: this turn's connectors, and whose,
     // computed once here and read by the prompt, the reach line, the
     // Connectors record and the dispatch (server/connectors/turn-plan.ts).
     state.connectorPlan = connectorPlanForTurn(state.bot, state.instance, state.speaker, state.threadId, undefined, { guestConfined: state.guestConfined === true });
+    if (!state.warmOnly) turnTrace(state.threadId, "connectors-planned");
     const ownEngineRead = typeof engineRead === "function" ? engineRead(state.instance.instanceId) : (state.enginesRead ? state.enginesRead : null);
     if (ownEngineRead) {
       await ownEngineRead;
       if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) throw new DirectTurnSetupCancelled("turn stopped while the engine was read");
+      if (!state.warmOnly) turnTrace(state.threadId, "engines-read");
     }
     // Perspicax token exchange, session open/verify and tools/list do not
     // need custom mount names. Start them beside
@@ -124,6 +129,9 @@ export function createSetupStartTurn(host: StartTurnHost) {
     const settlePerspicaxPrepare = async () => {
       if (perspicaxPrepared) await perspicaxPrepared.catch(() => {});
     };
+    // #3679: the conversation as the fold check read it, when it changed
+    // nothing: the context selection below reads it from there, not again
+    let foldRead: { messages: any[]; context: any[] } | undefined;
     // A call warm must not compact or rewrite the resume cursor. The first
     // spoken turn decides that, and a reset discards this process.
     if (!state.warmOnly) {
@@ -144,7 +152,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     }
     // A call turn starts its own short session: the conversation's fold
     // waits for its next written turn, off the person's silence.
-    if (!state.voiceCallTurn) await compactConversation({ bot: state.bot, threadId: state.threadId, generation: state.dispatchClaimId, instance: state.instance, model: state.model,
+    if (!state.voiceCallTurn) foldRead = await compactConversation({ bot: state.bot, threadId: state.threadId, generation: state.dispatchClaimId, instance: state.instance, model: state.model,
       excludedIds: new Set([state.userMessage.id, ...(state.opts?.excludeMessageIds ?? [])]), manual: state.opts?.compactOnly === true });
     turnTrace(state.threadId, "compacted");
     if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) {
@@ -173,6 +181,9 @@ export function createSetupStartTurn(host: StartTurnHost) {
     // replay entries by bytes. A compacted prefix is represented by its record.
     const skipTranscript = new Set<string>([state.userMessage.id, ...(state.opts?.excludeMessageIds ?? [])]);
     state.activeMessages = store.activePath(state.threadId);
+    // the same messages, unchanged since the fold check: its context entries stand
+    const sameRead = foldRead !== undefined && foldRead.messages.length === state.activeMessages.length
+      && foldRead.messages.every((message: any, index: number) => message === state.activeMessages[index]);
     const coordinationChildren = state.opts?.coordination?.resumed
       ? new Set(coordinator.children(state.opts.coordination.id).map((child: any) => child.id)) : undefined;
     for (const m of state.activeMessages) {
@@ -180,7 +191,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
       if ((m.roomRequest.phase === "request" && m.roomRequest.id === state.opts.coordination.id) ||
         (m.roomRequest.phase === "result" && coordinationChildren?.has(m.roomRequest.id))) skipTranscript.add(m.id);
     }
-    const context = directContext(state.bot, state.threadId, state.activeMessages);
+    const context = sameRead ? foldRead!.context : directContext(state.bot, state.threadId, state.activeMessages);
     state.contextOrder = context.map((m: any) => m.id);
     const replayable = context.filter((m: any) => !skipTranscript.has(m.id));
     state.record = latestCompaction(state.activeMessages, state.task);

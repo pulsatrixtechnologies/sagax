@@ -36,10 +36,13 @@ function assertThreadId(threadId: string) {
 
 type RecordGuard<T> = (value: unknown) => value is T;
 
-function parseRecent<T>(reader: LogReader, text: string, includeFirst: boolean, limit: number, valid: RecordGuard<T>): T[] {
+function parseRecent<T>(reader: LogReader, text: string, includeFirst: boolean, limit: number, valid: RecordGuard<T>, from?: { start: number; offsets: number[] }): T[] {
   const lines = text.split("\n");
   if (!includeFirst) lines.shift();
   const out: T[] = [];
+  // where each line starts in the file, walking back from the window's end
+  let end = from ? from.start + Buffer.byteLength(text, "utf8") + 1 : 0;
+  if (from) from.offsets.length = 0;
   // a log sealed at rest opens here, a block at a time (server/encryption/content-at-rest.ts);
   // a locked key throws ContentKeyUnavailable rather than show a shorter log
   // newest first, and no further than `limit` valid entries: an older line
@@ -47,10 +50,15 @@ function parseRecent<T>(reader: LogReader, text: string, includeFirst: boolean, 
   for (let index = lines.length - 1; index >= 0 && out.length < limit; index--) {
     // A torn line during a write, or a hand-edited record (undefined), or an
     // erased one (null): keep looking farther back for `limit` valid entries.
+    if (from) end -= Buffer.byteLength(lines[index]!, "utf8") + 1;
     const value = reader.at(lines, index);
     if (value === undefined || value === null) continue;
-    if (isProjectedRecord(value) || valid(value)) out.push(value as T);
+    if (isProjectedRecord(value) || valid(value)) {
+      out.push(value as T);
+      from?.offsets.push(end);
+    }
   }
+  from?.offsets.reverse();
   return out.reverse();
 }
 
@@ -61,7 +69,10 @@ export type ProjectionOnly = (projection: Record<string, unknown>) => boolean;
 /** The newest `limit` valid lines of a log, read backwards from its end:
  * never more than the tail window, however long the log. How many lines the
  * whole log holds is logLineTotal's (server/threads/log-line-count.ts). */
-export function readRecentLines<T>(file: string, limit: number, valid: RecordGuard<T>, projectionOnly?: ProjectionOnly): { lines: T[] } {
+/** `at`, when given: the size of the file read and where each returned line
+ * starts in it (bytes), from the file itself (never the opened tail kept in
+ * memory, whose lines are not the file's bytes). */
+export function readRecentLines<T>(file: string, limit: number, valid: RecordGuard<T>, projectionOnly?: ProjectionOnly, at?: { size: number; offsets: number[] }): { lines: T[] } {
   // one reader for the whole read: a block opened once, however the window grows
   const reader = new LogReader(file, projectionOnly);
   let fd: number;
@@ -75,7 +86,8 @@ export function readRecentLines<T>(file: string, limit: number, valid: RecordGua
     // A sealed log a view read a moment ago, unchanged but for this
     // process's own appends: its newest lines are in memory, opened
     // (server/encryption/content-at-rest.ts), and need no disk read nor opening.
-    const tail = logTail(file, stat);
+    if (at) { at.size = stat.size; at.offsets.length = 0; }
+    const tail = at ? null : logTail(file, stat);
     if (tail && (tail.fromStart || tail.lines.length >= limit)) {
       // newest first, as parseRecent does, straight from the kept lines
       const kept: T[] = [];
@@ -110,12 +122,12 @@ export function readRecentLines<T>(file: string, limit: number, valid: RecordGua
       // enough complete candidates exist; corrupt candidates make us keep
       // walking backwards rather than returning fewer valid rows.
       if (position === 0 || newlines >= limit) {
-        lines = parseRecent(reader, windowText(), position === 0, limit, valid);
+        lines = parseRecent(reader, windowText(), position === 0, limit, valid, at && { start: position, offsets: at.offsets });
         if (lines.length >= limit || position === 0) break;
       }
     }
     if (lines.length === 0 && held > 0) {
-      lines = parseRecent(reader, windowText(), position === 0, limit, valid);
+      lines = parseRecent(reader, windowText(), position === 0, limit, valid, at && { start: position, offsets: at.offsets });
     }
     // a sealed log: its tail, opened, kept for the next read of this view
     if (held > 0 && reader.sawSealed) {

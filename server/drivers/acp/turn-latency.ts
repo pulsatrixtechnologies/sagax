@@ -14,9 +14,12 @@
 // #3561: queueBy and setupBy name the parts of queue and setup, in ms, from
 // the turn's own step marks (server/turns/turn-trace.ts). Each step closes
 // the part it names; a part the turn did not reach is left out.
-//   queueBy: admit (checks before the turn starts), prewarm (a warm being
-//   joined), compact, context (selection, soul, skills), mcp (the tool
-//   servers' sign-in refresh and probe), connector (the account's connection),
+//   queueBy: admit (checks before the turn starts, and #3679 the message's
+//   admission and the claim after them), prewarm (a warm being joined),
+//   engines (#3679: the engines' list read once after a start), compact
+//   (the fold check), context (selection, soul, skills), mcp (the tool
+//   servers' sign-in refresh and probe), connector (the account's connection, and
+//   the turn's connectors plan),
 //   place (where it runs: workspace, sandbox, the computer, what is left of
 //   the stage), mounts (#3619: the person's and the plugins' tool servers),
 //   plugins (the plugin copy into the person's environment), checkpoint
@@ -166,10 +169,14 @@ export function noteTurnActivity(trace: TurnLatency | undefined, kind: string, a
 
 type Mark = readonly [step: string, at: number];
 
-const QUEUE_PARTS = ["admit", "prewarm", "compact", "context", "mcp", "connector", "place", "mounts", "plugins", "checkpoint", "browser", "prompt", "recall", "access", "slot", "send", "dispatch"] as const;
+const QUEUE_PARTS = ["admit", "prewarm", "engines", "compact", "context", "mcp", "connector", "place", "mounts", "plugins", "checkpoint", "browser", "prompt", "recall", "access", "slot", "send", "dispatch"] as const;
 const QUEUE_STEP: Record<string, (typeof QUEUE_PARTS)[number]> = {
   start: "admit",
   "prewarm-joined": "prewarm",
+  // #3679: what ran before the fold check closes its own part
+  admitted: "admit",
+  "connectors-planned": "connector",
+  "engines-read": "engines",
   compacted: "compact",
   "context-selected": "context",
   "soul-drift": "context",

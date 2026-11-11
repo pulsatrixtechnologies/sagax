@@ -98,6 +98,9 @@ async function deliverLateQuestionAnswer(
   if (latest && !latest.answered && !latest.dismissed) {
     host.store.patchMessage(threadId, cardMessage.id, { card: { ...latest, answered: "answer", answeredText: answer, dismissed: false } });
   }
+  // #3514: queued behind the turn that posted the card, the answer ends that
+  // turn at its safe point and starts its own turn at once
+  host.cardTurnSettled?.(threadId, cardMessage.id);
   return receipt;
 }
   return deliverLateQuestionAnswer;

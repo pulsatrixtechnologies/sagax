@@ -169,6 +169,8 @@ async function handleBotRespond(deps: BotsMessagesRouteDeps, ctx: RouteContext):
       const outcome = await answerRequest(bot.threadId, bot.modelSelection.instanceId, requestId, behavior, message, { id: bot.id, name: bot.name }, body.always === true, body.rememberCommand === true);
       if (outcome === "unavailable" && declined && pending) {
         const closed = closeDeclinedQuestion(store, bot.threadId, pending.id);
+        // #3514: the turn that posted the card hears it now, not at its end
+        deps.cardTurnSettled?.(bot.threadId, pending.id);
         return json(res, closed.status, closed.body);
       }
       if (outcome === "unavailable" && isPersistentQuestionCard(pending?.card) && behavior === "answer") {
@@ -405,6 +407,8 @@ async function handleThreadRespond(deps: BotsMessagesRouteDeps, ctx: RouteContex
       const outcome = await answerRequest(threadId, requestOwner?.modelSelection.instanceId ?? "", requestId, behavior, message, owner ? { id: owner.id, name: owner.name } : undefined, body.always === true, body.rememberCommand === true);
       if (outcome === "unavailable" && declined && pending) {
         const closed = closeDeclinedQuestion(store, threadId, pending.id);
+        // #3514: the turn that posted the card hears it now, not at its end
+        deps.cardTurnSettled?.(threadId, pending.id);
         return json(res, closed.status, closed.body);
       }
       if (outcome === "unavailable" && isPersistentQuestionCard(pending?.card) && behavior === "answer") {

@@ -21,6 +21,8 @@ function pendingExpiryDeps() {
       const instance = host.runningTurnEngines.get(threadId) ?? (instanceId ? host.registry.get(instanceId) : undefined);
       // #3471: a question refuses a deny, so it is answered with the note
       void instance?.adapter.respondToRequest(threadId, requestId, { behavior: card?.tool ? "deny" : "answer", message: note }).catch(() => { /* request may already be gone */ });
+      // #3514: the turn that posted the card hears it now, not at its end
+      host.cardTurnSettledByRequest?.(threadId, requestId);
       host.askMessageByRequest.delete(`${threadId}:${requestId}`);
       host.pendingCommandRules.delete(`${threadId}:${requestId}`);
       host.settleWaitingActivity(threadId);

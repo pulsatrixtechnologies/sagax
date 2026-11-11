@@ -91,17 +91,27 @@ describe("fast-gate.sh", () => {
     expect(out).toContain("[terms] npm run -s check:terms");
   });
 
-  // #3587 to #3596: a prompt change in server/drivers/acp/ left ten cases of
-  // acp.test.ts red, as the gate ran only the tests of the same stem.
-  it("runs every test of a touched source's folder, and only its folder", () => {
-    write("server/drivers/acp/acp.test.ts", "// driver test\n");
-    write("server/drivers/acp/prompt-fit.test.ts", "// fit test\n");
+  // A touched source brings the tests of its stem and the tests that import
+  // it, never its whole folder: the two largest folders hold over 400 and 500
+  // test files, and one touched file there ran nearly the whole suite on the
+  // author's machine. A test that reaches the source through other files
+  // (#3587 to #3596: a prompt change left ten cases of a driver's test red)
+  // is caught by the run of every test after the merge, which names the
+  // pull request.
+  it("runs the tests of a touched source's stem and its importers, not its whole folder", () => {
+    write("server/drivers/acp/turn-prompt-build.test.ts", "// same stem\n");
+    write("server/drivers/acp/turn-prompt-build.fit.test.ts", "// same stem, a second file\n");
+    write("server/drivers/acp/turn-prompt-builder.test.ts", "// a longer name, not this source\n");
+    write("server/drivers/acp/acp.test.ts", 'import { x } from "./turn-prompt-build.ts";\n');
+    write("server/drivers/acp/prompt-fit.test.ts", "// same folder, another source\n");
     write("server/drivers/other.test.ts", "// another folder\n");
     git("add", "-A");
     git("commit", "-q", "-m", "tests");
     write("server/drivers/acp/turn-prompt-build.ts", "export const x = 1;\n");
     const { out } = gate("--base", "HEAD", "--only", "tests", "--dry-run");
-    expect(out).toMatch(/\[tests\] .*vitest' run --reporter=dot 'server\/drivers\/acp\/acp\.test\.ts' 'server\/drivers\/acp\/prompt-fit\.test\.ts'$/m);
+    expect(out).toMatch(/\[tests\] .*vitest' run --reporter=dot 'server\/drivers\/acp\/acp\.test\.ts' 'server\/drivers\/acp\/turn-prompt-build\.fit\.test\.ts' 'server\/drivers\/acp\/turn-prompt-build\.test\.ts'$/m);
+    expect(out).not.toContain("prompt-fit.test.ts");
+    expect(out).not.toContain("turn-prompt-builder.test.ts");
     expect(out).not.toContain("other.test.ts");
   });
 
@@ -118,7 +128,8 @@ describe("fast-gate.sh", () => {
     expect(line).toContain("'tests/imports-b.test.ts'");
     expect(line).toContain("'tests/mocks-b.test.ts'");
     expect(line).toContain("'tests/deep/requires-b.test.ts'");
-    expect(line).toContain("'src/a.test.ts'");
+    // the test of another source of the same folder is not this change's
+    expect(line).not.toContain("'src/a.test.ts'");
     expect(line).not.toContain("near-name");
   });
 

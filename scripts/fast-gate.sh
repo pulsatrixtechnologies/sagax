@@ -24,7 +24,7 @@
 #                  tsconfig.json exists), lint (oxlint, else eslint, on the
 #                  touched files), terms (script "check:terms"), tests
 #                  (vitest on the touched tests and, for a touched source,
-#                  every test of its folder and every test importing it)
+#                  the tests of its stem and every test importing it)
 #   Cargo.toml     rust-fmt (cargo fmt --check on the touched crates), rust
 #                  (cargo clippy -D warnings then cargo test, on the touched
 #                  crates, one job so they do not wait on the build lock)
@@ -134,11 +134,13 @@ if [ -f package.json ]; then
       elif [ -x "$BIN/eslint" ]; then add_check lint "$(q "$BIN/eslint") --max-warnings 0$(printf '%s\n' "$LINTABLE" | qlist)"
       fi
     fi
-    # The touched tests, and for a touched source the tests of its folder and
+    # The touched tests, and for a touched source the tests of its stem and
     # every test that imports it (a relative import, a dynamic import or a
-    # mock of it). The same stem alone missed a test that reaches the source
-    # through its folder's other files: a prompt change left ten cases of a
-    # driver's test red on the branch that made it.
+    # mock of it). Never the whole folder: src/lib and src/components hold
+    # over 400 and 500 test files, so one touched file there ran nearly the
+    # whole suite on the author's machine, which the rule of this gate
+    # forbids (the tests of the touched files only; every test runs by
+    # itself after the merge, names the pull request and opens an issue).
     TESTS="$LOG_DIR/tests.txt"
     : > "$TESTS"
     FAST_GATE_TOUCHED_JS="$JS" node -e '
@@ -153,8 +155,8 @@ if [ -f package.json ]; then
       const sources = new Map();
       for (const f of touched) {
         if (isTest(f)) { out.add(f); continue; }
-        const dir = path.dirname(f);
-        for (const t of all) if (path.dirname(t) === dir) out.add(t);
+        const stem = noExt(f) + ".";
+        for (const t of all) if (t.startsWith(stem)) out.add(t);
         sources.set(noExt(f), f);
       }
       if (sources.size) {

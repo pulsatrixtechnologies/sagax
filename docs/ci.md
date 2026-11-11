@@ -48,12 +48,31 @@ minutes of tests on Windows against 13 to 16 for the others, and every PR
 waited for it. `scripts/testing/duration-sequencer.ts` deals the files out by
 recorded time instead, slowest first, each to the shard with the least time so
 far. The times are `scripts/testing/vitest-shard-weights.json`: each file's
-median seconds on the Windows runners, for every file over five seconds and
-every e2e file. A file not in it counts one second, or the median e2e time if
+median seconds across runs, where one run counts a file at its slowest
+platform (a POSIX-only file that skips itself on Windows still takes minutes
+on Linux), for every file over five seconds and every e2e file. A file not in it counts one second, or the median e2e time if
 it is an e2e file. Every file still runs exactly once, and each shard job logs
 a `duration-sequencer:` line with its share.
 
-Refresh the times from a few recent green runs when shards drift apart:
+### Shard count and caps
+
+The suite runs in twenty shards per platform, with a 30 minute cap on Linux
+and 45 on Windows and macOS. In November 2026 it had grown to about 2,900
+files and three hours of tests on one runner, and its four shards no longer
+fit: every Linux shard was cancelled at 30 minutes with most of its files
+never run, and the Windows shards that finished took 42 to 45 of their 45
+(#3521). The count is sized from measured runs, not guessed:
+`scripts/testing/duration-sequencer.test.ts` plans the shards from the
+recorded seconds and fails when the slowest one, at 1.25 times its recorded
+seconds (vitest's own overhead on CI) plus two minutes of setup, would take
+more than 60% of the Linux cap. When the suite grows past that, add shards
+rather than raising the cap. The count is written in three places in
+`ci.yml` (the matrix, the `--shard` flag with the job name, and the
+`known failures` job's expected result count); `scripts/ci-workflow.test.ts`
+keeps them equal.
+
+Refresh the times from a few recent runs when shards drift apart (a
+cancelled shard's finished files count too):
 
 ```sh
 node scripts/testing/update-shard-weights.mjs --run <run id> --run <run id> --run <run id>
@@ -67,8 +86,8 @@ only after one is a real ordering dependency between test files.
 ## macOS runners
 
 The account runs at most five macOS jobs at a time, and a PR used to queue
-seven (four Vitest shards, two smokes, the iOS job with its hour-long
-simulator suite). With 25 open PRs the macOS jobs waited a median of six and a
+seven (four Vitest shards at the time, two smokes, the iOS job with its
+hour-long simulator suite). With 25 open PRs the macOS jobs waited a median of six and a
 half hours. Now:
 
 - Pull requests, pushes to main and merge groups run the Vitest shards on
@@ -133,7 +152,7 @@ are bounded per file: once a listed test fails all three attempts, that is a
 real failure, and the file's later listed tests get no retry. Otherwise a
 regression that breaks a whole fixture (six listed tests share
 `server/context/delta-context.e2e.test.ts`) would triple their wall time and push the
-Linux shard past its 20-minute cap, and a timed-out job loses the failing
+Linux shard past its cap, and a timed-out job loses the failing
 tests' annotations and this summary. The cost: a real flake listed after a
 broken test in the same file is not retried in that run. A listed
 test that needed a retry is written to the vitest job's summary and raised as

@@ -74,9 +74,21 @@ describe("CI concurrency", () => {
     expect(workflow.jobs.gate.strategy).toBeUndefined();
     expect(workflow.permissions).toEqual({ contents: "read" });
     expect(workflow.jobs.vitest.strategy.matrix).toEqual({
-      os: "${{ fromJSON(needs.static.outputs.vitest_os) }}", shard: [1, 2, 3, 4],
+      os: "${{ fromJSON(needs.static.outputs.vitest_os) }}", shard: Array.from({ length: 20 }, (_, i) => i + 1),
     });
     expect(workflow.jobs.vitest["timeout-minutes"]).toBe("${{ matrix.os == 'ubuntu-latest' && 30 || 45 }}");
+  });
+
+  it("writes the same shard count in the matrix, the --shard flag, the job name and the expected result count (#3521)", () => {
+    // A count changed in one place only would run some files twice or never,
+    // or turn every run red for missing results.
+    const count = workflow.jobs.vitest.strategy.matrix.shard.length;
+    expect(workflow.jobs.vitest.strategy.matrix.shard).toEqual(Array.from({ length: count }, (_, i) => i + 1));
+    expect(workflow.jobs.vitest.name).toBe(`vitest (\${{ matrix.os }}, shard \${{ matrix.shard }}/${count})`);
+    const run = workflow.jobs.vitest.steps.find((step: { name?: string }) => step.name === "Run tests").run as string;
+    expect(run).toContain(`--shard=\${{ matrix.shard }}/${count} `);
+    const verdict = workflow.jobs["known-failures"].steps.find((step: { name?: string }) => step.name === "Every failure is a known failure").run as string;
+    expect(verdict).toContain(`JSON.parse(process.env.VITEST_OS).length * ${count})`);
   });
 
   it("keeps each PR to one macOS job unless native code changed", () => {

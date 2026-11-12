@@ -211,9 +211,10 @@ How a run decides (`scripts/testing/known-failures.mjs`):
 
 1. Each vitest job writes vitest's JSON report, records the exit code
    instead of failing, and uploads its results (`extract`): one entry per
-   test, plus `(whole file)` for a file that did not load, plus a failure of
-   its own when vitest exited non-zero with no failing test (an unhandled
-   error). A job that crashed or timed out sends nothing, and so does a job
+   test, plus `(whole file)` for a file that did not load, plus one row for
+   the vitest run itself (`(vitest run)`): a failure when vitest exited
+   non-zero with no failing test (an unhandled error), a pass otherwise, so
+   its issue can close like any test's. A job that crashed or timed out sends nothing, and so does a job
    that never got a runner.
 2. The `known failures` job (`report`) reads every job's results and the
    run's job list (`--jobs`, from the Actions API). The run is red when a
@@ -263,19 +264,28 @@ How a run decides (`scripts/testing/known-failures.mjs`):
    failures. Each test's marker is on its line, so a later run never opens a
    second issue for it.
 
-   Every run on main then reads the open `regression` issues against its
-   results (`updateRegressionIssues`): a test that ran and passed in every
-   job, on each runner it failed on (the sighting's `failedOn`; with no
-   record, on every platform), is green. An issue for one test closes with
-   the run as evidence; a run's issue ticks each green test, unticks one that
-   fails again, and closes once every test is ticked. A test that did not run
-   leaves its issue as it is.
+   A file whose checklist does not fit under GitHub's body limit keeps one
+   line with its count; its tests stay tied to the issue by the sightings.
 
-   `scripts/testing/close-green-regressions.mjs --run <id>` does the same by
-   hand for the issues opened one per test before this: it reads each title
-   (`Regression: <file> > <test>`) against the results of a named green run
-   and closes only the issues whose test ran and passed there, with the run
-   as evidence. It lists them by default and closes them with `--close`.
+   Every run on main then reads the open `regression` issues against its
+   results (`planRegressionUpdates`, #4052). One rule says green
+   (`isGreen`): the test passed and failed in no job, on each runner it
+   failed on (the sighting's `failedOn`); with no runner on record, the run
+   covers every platform and the test's file ran on each, so a test that
+   runs on one platform only is green from where it ran. The same rule
+   forgets a sighting. An issue's tests are the markers in its body and the
+   sightings tied to it, listed or not: it closes, with the run as evidence,
+   once each is green in this run or ticked by an earlier one. A run's issue
+   ticks each green test and unticks one that fails again. A test that did
+   not run leaves its issue as it is.
+
+   `scripts/testing/close-green-regressions.mjs --run <id> --repo <owner/name>`
+   does the same by hand, with the same function, for the issues opened one
+   per test before this: it reads the open issues against the results and
+   the sightings of a named green run on main and closes those the rail
+   would close, with the run as evidence. A test seen failing on one
+   platform closes only from a run that covers that platform. It lists them
+   by default and closes them with `--close`.
 5. Red Swift package tests on main (`Swift package tests` after a merge, the
    Swift step of the nightly's iOS job) open one `regression` issue at the
    first failure, or comment on the open one, with the commit, the failing

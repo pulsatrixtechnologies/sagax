@@ -1,52 +1,48 @@
-// Run by hand, once (#4037): closes the open `regression` issues whose test
-// passes in a named green run of CI on main, with that run as evidence, and
+// Run by hand, once (#4037): closes the open `regression` issues whose tests
+// pass in a named green run of CI on main, with that run as evidence, and
 // leaves the others. The rail (known-failures.mjs open-issues) closes them by
 // itself from then on; this clears the ones it opened, one per test, before
 // it did.
 //
 //   node scripts/testing/close-green-regressions.mjs --run <run id> [--repo <owner/name>] [--close]
 //
-// Without --close it only lists what it would close (a dry run). An issue is
-// read by its title, "Regression: <file> > <test name>" (with or without
-// " (broken by #N)"), against the run's test results (the
-// `vitest-results-*` artifacts): it closes only when that test ran and passed
-// in every job that ran it. A test absent from the run or failed in it keeps
-// its issue, and so does any other regression issue (the Swift package tests,
-// a run's issue). For an offline check, --results <dir> and --issues <file>
-// (the JSON of `gh issue list --json number,title`) replace the downloads.
+// Without --close it only lists what it would close (a dry run). It decides
+// as the rail does, with the same function (planRegressionUpdates, #4052):
+// an issue's tests are the markers in its body and the sightings tied to it
+// (the run's `known-failures-sightings` artifact), each read against the
+// run's test results (the `vitest-results-*` artifacts). A test seen failing
+// on some runners must pass on each of them; with no runner on record, the
+// run must cover every platform. A test absent from the run or failed in it
+// keeps its issue, and so does a regression issue with no test of the rail
+// (the Swift package tests). For an offline check, --results <dir>,
+// --issues <file> (the JSON of `gh issue list --json number,title,body`) and
+// --sightings <file> replace the downloads.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { greenEvidence, indexRun, loadResults, stateInRun } from "./known-failures.mjs";
-
-/** The test a regression issue's title names, or null for a title of
- * another shape. The test name keeps its own " > " (describe blocks).
- * @returns {{ file: string, test: string } | null} */
-export function parseRegressionTitle(title) {
-  const match = /^Regression: (.+?) > (.+?)(?: \(broken by #\d+\))?$/.exec(String(title ?? "").trim());
-  return match ? { file: match[1], test: match[2] } : null;
-}
+import { greenEvidence, loadResults, planRegressionUpdates } from "./known-failures.mjs";
 
 const REASONS = {
-  absent: "its test did not run in this run",
-  fail: "its test failed in this run",
-  other: "its title does not name one test",
+  "not-green": "a test of it did not run in this run, or not on each runner it failed on",
+  fail: "a test of it failed in this run",
+  other: "it names no test of the rail",
 };
 
-/** Which issues the run closes and which stay, with the reason.
- * @param {{ number: number, title: string }[]} issues
- * @param {{ file: string, test: string, state: string }[]} results */
-export function planClosures(issues, results) {
-  const index = indexRun(results);
+/** Which issues the run closes and which stay, with the reason: the rail's
+ * own decision (planRegressionUpdates). The run's platforms are the runners
+ * its results came from.
+ * @param {{ number: number, title: string, body?: string }[]} issues
+ * @param {{ file: string, test: string, state: string, os?: string }[]} results
+ * @param {{ sightings?: { tests?: Record<string, { failedOn?: string[], issue?: number | null }> } | null }} [options] */
+export function planClosures(issues, results, { sightings = null } = {}) {
+  const platforms = [...new Set(results.map((result) => result.os).filter(Boolean))].sort();
   const close = [];
   const keep = [];
-  for (const issue of issues) {
-    const identity = parseRegressionTitle(issue.title);
-    const state = identity ? stateInRun(index, identity) : "other";
-    if (state === "pass") close.push({ number: issue.number, title: issue.title });
-    else keep.push({ number: issue.number, title: issue.title, reason: REASONS[state] });
+  for (const plan of planRegressionUpdates(issues, { results, platforms, sightings })) {
+    if (plan.close) close.push({ number: plan.number, title: plan.title });
+    else keep.push({ number: plan.number, title: plan.title, reason: REASONS[plan.reason] });
   }
   return { close, keep };
 }
@@ -59,6 +55,22 @@ function flags(argv) {
     else out[name] = argv[(i += 1)];
   }
   return out;
+}
+
+/** The run's sightings (its `known-failures-sightings` artifact): the
+ * runners each test failed on and the issue it is tied to. A run without
+ * them gives null: an issue then closes only from a run on every platform. */
+function downloadSightings(runGh, run, repoArgs) {
+  const dir = mkdtempSync(join(tmpdir(), "green-sightings-"));
+  try {
+    runGh(["run", "download", run, ...repoArgs, "--name", "known-failures-sightings", "--dir", dir]);
+    const file = join(dir, "sightings.json");
+    return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null;
+  } catch {
+    return null;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], maxBuffer: 256 * 1024 * 1024 });
@@ -82,12 +94,13 @@ export function main(argv, { run: runGh = gh, log = console.log } = {}) {
       rmSync(dir, { recursive: true, force: true });
     }
   }
+  const sightings = typeof options.sightings === "string" ? JSON.parse(readFileSync(options.sightings, "utf8")) : typeof options.results === "string" ? null : downloadSightings(runGh, options.run, repoArgs);
   const issues = typeof options.issues === "string"
     ? JSON.parse(readFileSync(options.issues, "utf8"))
-    : JSON.parse(runGh(["issue", "list", ...repoArgs, "--label", "regression", "--state", "open", "--limit", "5000", "--json", "number,title"]));
+    : JSON.parse(runGh(["issue", "list", ...repoArgs, "--label", "regression", "--state", "open", "--limit", "5000", "--json", "number,title,body"]));
   const runUrl = view.url ?? (typeof options.repo === "string" ? `https://github.com/${options.repo}/actions/runs/${options.run}` : `run ${options.run}`);
-  log(`Run ${options.run}${view.headBranch ? ` on ${view.headBranch}` : ""}${view.conclusion ? `, ${view.conclusion}` : ""}: ${results.length} test result(s), ${issues.length} open regression issue(s).`);
-  const { close, keep } = planClosures(issues, results);
+  log(`Run ${options.run}${view.headBranch ? ` on ${view.headBranch}` : ""}${view.conclusion ? `, ${view.conclusion}` : ""}: ${results.length} test result(s), ${issues.length} open regression issue(s), ${sightings ? `${Object.keys(sightings.tests ?? {}).length} sighting(s)` : "no sightings"}.`);
+  const { close, keep } = planClosures(issues, results, { sightings });
   const doClose = options.close === true;
   for (const issue of close) {
     log(`${doClose ? "Closing" : "Would close"} #${issue.number} ${issue.title}`);

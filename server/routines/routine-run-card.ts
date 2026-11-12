@@ -129,9 +129,10 @@ function shortAt(at: number, timeZone?: string): string {
 }
 
 /** #3479: how long a lasting problem has been there, for the row's text. */
-export function routineRepeatLine(repeat: { count: number; since: number; streak?: true }, language?: string, timeZone?: string): string {
-  // #3695: a repeating routine's streak counts runs with problems, whatever they said
-  const key = repeat.streak ? "routineRun.problemStreak" : "routineRun.sameProblem";
+export function routineRepeatLine(repeat: { count: number; since: number; streak?: true; anyProblem?: true }, language?: string, timeZone?: string): string {
+  // #3695: a repeating routine's streak counts runs with problems, whatever
+  // they said; #3910: on each of its cards, the summary and a run the person started
+  const key = repeat.streak || repeat.anyProblem ? "routineRun.problemStreak" : "routineRun.sameProblem";
   return `${personWord(readerLanguage(language), key, { since: shortAt(repeat.since, timeZone), count: repeat.count })}.`;
 }
 

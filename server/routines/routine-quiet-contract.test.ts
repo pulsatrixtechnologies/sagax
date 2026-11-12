@@ -318,7 +318,7 @@ describe("a routine that repeats more than once a day reports by its streak (#36
     // problems, problems reworded: nothing yet
     const p1 = await step(problem("the merge queue is stuck on one branch"));
     const p2 = await step(problem("two branches wait in the queue and nothing lands"));
-    expect(p2.problemRepeat).toEqual({ firstRunId: p1.id, since: p1.finishedAt, count: 2 });
+    expect(p2.problemRepeat).toEqual({ firstRunId: p1.id, since: p1.finishedAt, count: 2, anyProblem: true });
     expect(chat.rows).toEqual([]);
     expect(chat.unread).toEqual([]);
     expect(ringsDone(p1, routines) || ringsDone(p2, routines)).toBe(false);
@@ -427,6 +427,13 @@ describe("a routine that repeats more than once a day reports by its streak (#36
     expect(summary.text).toContain("4 runs with problems since");
     // the person's own run shows its result on its own card
     expect(routineCards(chat.rows).map((row) => row.routineRun.runId)).toEqual([p3.id, byHand.id]);
+    // #3910: in the streak's words, never the #3479 same-problem wording; the
+    // summary stays the one card with the streak flag
+    const own = chat.rows.find((row) => row.routineRun?.runId === byHand.id)!;
+    expect(own.routineRun.repeat).toMatchObject({ count: 4, anyProblem: true });
+    expect(own.routineRun.repeat.streak).toBeUndefined();
+    expect(own.text).toContain("4 runs with problems since");
+    expect(own.text).not.toContain("Same problem");
     // the next good run turns the summary card to works again
     const fixed = await run(routine.id, OK);
     chat.sync(fixed);

@@ -39,6 +39,10 @@ export interface RoutineRunCardData {
     /** #3695: the one summary card of a routine that repeats more than once
      * a day: `count` runs in a row ended with problems, whatever they said. */
     streak?: true;
+    /** #3910: `count` runs in a row ended with problems, whatever they said
+     * (a routine that repeats more than once a day), on any of its cards: a
+     * run the person started reads the streak's words too. */
+    anyProblem?: true;
   };
   /** #3479: the first run without problems after `afterRuns` runs with them. */
   recovered?: { afterRuns: number; since: number };

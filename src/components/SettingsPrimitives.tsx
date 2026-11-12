@@ -112,7 +112,7 @@ type CardProps = {
 /** How the surfaces of a settings page draw (#2313, the bot's profile):
  * "bordered" is Settings' thin outline over the page's background; "plain"
  * is the profile page's one filled card (rounded, no border, the
- * background of Channels and Bot accounts), every group, card and editor
+ * background of Channels and Access), every group, card and editor
  * alike, so a page reads as one system. */
 export type SettingsSurface = "bordered" | "plain";
 const SettingsSurfaceContext = createContext<SettingsSurface>("bordered");

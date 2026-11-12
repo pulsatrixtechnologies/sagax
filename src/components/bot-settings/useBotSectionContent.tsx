@@ -359,7 +359,7 @@ export function useBotSectionContent(bot: Bot, {
         return <VisibilitySection bot={bot} />;
       case "sharing":
         // The shared vault of a team bot sits with its sharing in Edit bot;
-        // on the profile page it is under Bot accounts (owner decision 2026-11-10, #3399).
+        // on the profile page it is under Access (owner decision 2026-11-10, #3399).
         return (
           <>
             {!sharingElsewhere && <SharingSection bot={bot} />}

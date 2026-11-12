@@ -136,7 +136,7 @@ extension DesktopPanelSection {
         case .model, .worksOn: "One engine, one fallback, one place to run. Applies to the bot and all its conversations."
         case .slack: "Where people talk to it and where it reaches you."
         case .sharing, .visibility: "Who can talk to it and who can set it up."
-        case .access: "Bot accounts and connectors. One place for both."
+        case .access: "Apps, servers and vault logins this bot can use. One place for all."
         case .voice: "How it sounds on the phone and in voice notes."
         case .history: "Every settings change, restorable."
         case .skills: "What else it knows how to do. Each skill turns on or off."

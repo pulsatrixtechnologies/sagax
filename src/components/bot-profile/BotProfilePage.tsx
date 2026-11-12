@@ -286,7 +286,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     slackUrl,
     channelsElsewhere: true,
     sharingElsewhere: true,
-    // the shared vault is under Bot accounts (owner decision 2026-11-10, #3399)
+    // the shared vault is under Access (owner decision 2026-11-10, #3399)
     vaultElsewhere: true,
     // #3398: both switches sit in place in General > Settings.
     notifyElsewhere: true,
@@ -308,7 +308,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     if (id === "summary") return renderSectionBody("overview");
     // Shared with: one summary row whose Manage opens the top bar's Share
     // popover (the people and groups are edited there, nowhere else). The
-    // shared vault is under Bot accounts (#3399); who pays for the replies
+    // shared vault is under Access (#3399); who pays for the replies
     // is on Model (#2625).
     if (id === "sharing") {
       return (
@@ -557,7 +557,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   return (
     <MascotHeroSlotContext.Provider value={heroSlot}>
     {/* The plain surface (JC 2026-11-06): every card of the page is the
-        Channels / Bot accounts look, a grey label over a borderless filled
+        Channels / Access look, a grey label over a borderless filled
         surface, whichever section component draws it. */}
     <SettingsSurfaceProvider surface="plain">
     <main

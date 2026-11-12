@@ -1,6 +1,6 @@
 // The page's cards and rows (#2271, split from BotProfilePage for #1383):
 // the grey-label card, its rows, a locked section's note, a tab's block,
-// and the General tab's Channels and Bot accounts cards.
+// and the General tab's Channels and Access cards.
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { BellRing, Cpu, KeyRound, Lock, Mail, MessageCircle, Plug, ServerCog, Trash2 } from "lucide-react";
 
@@ -8,6 +8,7 @@ import { useStore, type Bot, type BotSettingsSection } from "@/state/store";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { cn } from "@/lib/cn";
+import { SHOW_MORE_ROW } from "@/lib/grouped-card";
 import { useBotInboundMailState } from "@/lib/bot-inbound-mail";
 import { useReachMe } from "@/lib/reach-me";
 import { loadMessagesSetup } from "@/lib/mac-messages-setup";
@@ -276,7 +277,10 @@ function AccountLogo({ name, form }: { name: string; form: "app" | "mcp" }) {
   return <PluginIcon item={{ kind: form, name, logo: mark.logo ?? undefined, domain: mark.site ?? undefined }} className="size-5 rounded-md text-[11px]" />;
 }
 
-/** General > Bot accounts (#3399): what this bot has, one row each (its
+/** The Access card's rows shown before "Show N more", the engine's included (#4075). */
+const ACCESS_ROWS_SHOWN = 3;
+
+/** General > Access (#3399, named in #4075): what this bot has, one row each (its
  * engine, then each app or server that is on, off, set by the organization
  * or in need of attention, then the shared vault's logins), each with its
  * control at the right. An app or server still to connect is listed in the
@@ -294,6 +298,7 @@ export function AccountsCard({ bot, onEngine, derived, vault }: {
   const { servers, error: serversError, refresh } = useMcpServers();
   const logins = useTeamBotVault(bot.id, vault);
   const [adding, setAdding] = useState(false);
+  const [unfolded, setUnfolded] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (adding) firstFieldRef.current?.focus(); }, [adding]);
@@ -417,6 +422,11 @@ export function AccountsCard({ bot, onEngine, derived, vault }: {
     );
   }
   const empty = Boolean(data) && rows.length === 0 && !adding;
+  // #4075: a long list shows its first rows (the engine first), then one
+  // "Show N more" line that unfolds the rest in place and folds it back.
+  const total = rows.length + 1;
+  const foldable = total > ACCESS_ROWS_SHOWN;
+  const shownRows = foldable && !unfolded ? rows.slice(0, ACCESS_ROWS_SHOWN - 1) : rows;
 
   const add = (
     <AddMenu
@@ -457,7 +467,18 @@ export function AccountsCard({ bot, onEngine, derived, vault }: {
             state={t("botProfile.engine")}
             action={<button type="button" data-bot-profile-action="engine" onClick={onEngine} className={cn(PILL, "shrink-0")}>{t("botProfile.manage")}</button>}
           />
-          {rows}
+          {shownRows}
+          {foldable && (
+            <button
+              type="button"
+              data-bot-profile-accounts-fold={unfolded ? "less" : "more"}
+              aria-expanded={unfolded}
+              onClick={() => setUnfolded((open) => !open)}
+              className={SHOW_MORE_ROW}
+            >
+              {unfolded ? t("botProfile.accounts.showLess") : t("botProfile.accounts.showMore", { count: total - ACCESS_ROWS_SHOWN })}
+            </button>
+          )}
           {empty && (
             <div data-bot-profile-accounts-empty="">
               <CardRow rowId="accounts-empty" icon={<Plug />} label={t("botProfile.accounts.emptyTitle")} state={t("botProfile.accounts.emptyLine")} action={add} />

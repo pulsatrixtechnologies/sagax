@@ -292,8 +292,13 @@ avec l'app de référence : #3388 ; ce patron : #3398.
     Slack et Microsoft Teams comme canal entre une équipe et le bot sont retirés pour
     le moment (décision de JC du 2026-11-10, `shared/team-chat-channels.ts`) ;
     l'intégration complète suit après le gel (#3411).
-  - Comptes du bot : un seul nom pour la carte (jamais « Ce qu'il peut utiliser »), la
-    rangée du moteur avec Gérer, les comptes, et Ajouter à droite de l'étiquette.
+  - Accès (« Access », #4075 : ni « Comptes du bot », ce ne sont pas des comptes du
+    bot, ni « Ce qu'il peut utiliser ») : un seul nom pour la carte, la rangée du
+    moteur avec Gérer, les applications, serveurs et connexions du coffre, et Ajouter
+    à droite de l'étiquette. Une longue liste montre ses trois premières rangées (le
+    moteur d'abord), puis une ligne grise centrée « Afficher N de plus » qui déplie le
+    reste sur place et devient « Afficher moins » ; trois rangées ou moins : aucune
+    ligne. Même ligne que Routines et Codage (`SHOW_MORE_ROW`, `src/lib/grouped-card.ts`).
     Chaque app, serveur ou connexion du coffre une seule fois, son contrôle dans sa
     rangée ; une personne que le serveur refuserait voit l'état sans interrupteur.
     Sans compte, une rangée vide porte Ajouter. Le menu Ajouter : Applications,

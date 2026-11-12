@@ -13,7 +13,7 @@ import { BotAvatar } from "@/components/Avatar";
 import { PILL_INFO } from "@/lib/status-tones";
 import { Switch } from "../SettingsPrimitives";
 import { RoutineOwnerBadge } from "./RoutineScopeBar";
-import { GROUPED_CARD, GROUPED_ROW, PANEL_CARD, PANEL_ROW } from "@/lib/grouped-card";
+import { GROUPED_CARD, GROUPED_ROW, PANEL_CARD, PANEL_ROW, SHOW_MORE_ROW } from "@/lib/grouped-card";
 import { cn } from "@/lib/cn";
 import { RoutineNameInput } from "./RoutineRowMenu";
 
@@ -229,7 +229,7 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
         {/* #2174: like Grok Bot, Show more expands once and then disappears. */}
         {collapseAfter != null && !showAll && sorted.length > collapseAfter && (
           <button type="button" data-routines-show-more="more" aria-expanded={false} onClick={() => setShowAll(true)}
-            className={cn("w-full py-2 text-center text-[13px] leading-[18px] text-ink-secondary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60", leadingClock ? "px-3" : grouped && GROUPED_ROW)}>
+            className={cn(SHOW_MORE_ROW, leadingClock ? "px-3" : grouped && GROUPED_ROW)}>
             {t("botPanel.library.showMore")}
           </button>
         )}

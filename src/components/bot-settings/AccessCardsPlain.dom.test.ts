@@ -2,7 +2,7 @@
 // The bot's profile page (#2313), Model & tools > Access and General > Shared
 // vault under the plain surface: the background brief, the shared vault and
 // the tool access cards each carry their own grey label, rows are drawn like
-// the page's Channels and Bot accounts rows (icon, 14px name over a 12px
+// the page's Channels and Access rows (icon, 14px name over a 12px
 // subtitle), fields are filled and actions are plain pills. Nothing is
 // bordered, underlined or a primary pill; every label and action stays.
 import { act, createElement, type ReactNode } from "react";

@@ -292,6 +292,16 @@ const capabilityItem = (key: string, form: string, name: string, label: string, 
   key, form, name, source: { kind: "account", label }, scope: "bot", state, enabled: state === "on", canToggle: true, engine: { mcp: "ok" },
 });
 
+/** ?accounts=many: a bot whose Access card has sixteen rows (the engine,
+ * fourteen apps and servers, one vault login); ?accounts=two: the engine
+ * and one app (#4075, the fold of a long list). Fictional names only. */
+const ACCOUNTS = ((value) => (value === "many" || value === "two" ? value : null))(params.get("accounts"));
+const MANY_APPS = ["Calendar", "Mail", "Drive", "Docs", "Sheets", "Tasks", "Contacts", "Notes", "Tickets", "Wiki", "Chat", "Forms", "Billing", "Inventory"];
+function accessItems(kind: "many" | "two") {
+  const names = kind === "two" ? ["Calendar"] : MANY_APPS;
+  return names.map((name, index) => capabilityItem(`connector:account:${name.toLowerCase()}`, "connector", name, "Example account", index === 7 ? "off" : "on"));
+}
+
 const rulesListing = {
   budgets: { set: { maxLines: 100, maxBytes: 12000 }, total: { maxLines: 250, maxBytes: 24000 } }, maxSets: 20, maxNameLength: 60,
   template: "- Ask before sending anything outside the team.",
@@ -346,8 +356,8 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
   if (path === "/api/org") return json({ org: { name: "Northwind Studio", identity: { kind: "perspicax", issuer: "https://perspicax.example.test" } }, link: { state: "ok" }, viewerRole: "admin", settings: {} });
   if (path === "/api/org/directory") return json({ people: PEOPLE, teams: [{ id: "tm_studio", name: "Studio team", managers: ["pr_alex"], members: ["pr_alex", "pr_sam", "pr_jordan"] }], viewer: { principalId: "pr_alex" } });
   if (path === "/api/bots") return json({ bots: [bot, ...neighbours], groups: [], sections: [], computerControl: {}, botQueuedMessages: {} });
-  // the bot's shared vault (#3399, under Bot accounts): one login, never its value
-  if (path === `${bots}/credentials/list`) return json({ items: [{ id: "v1", kind: "login", name: "Supplier portal", domains: ["portal.northwind.example"], hasPassword: true, hasTotp: false, hasApiKey: false, hasNotes: false }] });
+  // the bot's shared vault (#3399, under Access): one login, never its value
+  if (path === `${bots}/credentials/list`) return json({ items: ACCOUNTS === "two" ? [] : [{ id: "v1", kind: "login", name: "Supplier portal", domains: ["portal.northwind.example"], hasPassword: true, hasTotp: false, hasApiKey: false, hasNotes: false }] });
   if (method !== "GET" && (path === bots || path.startsWith(`${bots}/`) || path.startsWith("/api/"))) {
     if (path.endsWith("/history/restore")) return json({ ok: true, revision: HISTORY.length + 1 });
     if (!/\/(analytics|history)$/.test(path)) return json(body ?? { ok: true });
@@ -376,6 +386,7 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
     soul: { ...workspaceEntry("SOUL.md", SOUL.length), virtual: "soul" },
     entries: [workspaceEntry("MEMORY.md", MEMORY.length), workspaceEntry("RULES.md", RULES.length), workspaceEntry("topics/vendors.md", 1840, { load: "on demand" }), workspaceEntry("topics/market-notes.md", 3120, { load: "on demand" })], truncated: false,
   });
+  if (path === `${bots}/capabilities` && ACCOUNTS) return json({ botId: BOT_ID, engine: { kind: "claude", label: "Claude" }, items: accessItems(ACCOUNTS) });
   if (path === `${bots}/capabilities`) return json({ botId: BOT_ID, engine: { kind: "claude", label: "Claude" }, items: [
     capabilityItem("connector:account:github", "connector", "GitHub", "Example account"), capabilityItem("mcp:installation:calendar", "mcp", "Calendar", "Example account"),
     capabilityItem("mcp:installation:mail", "mcp", "Mail", "Alex Example"), capabilityItem("mcp:me:notes", "mcp", "Notes", "Alex Example", "off"),
@@ -411,6 +422,7 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
   if (path === "/api/routines") return json({ routines, runs, folders: [] });
   if (path === "/api/webhooks") return json({ webhooks: [], attempts: [], ingress: null, graphConnectors: [] });
   if (path === "/api/live/call") return json({});
+  if (path === "/api/mcp/servers" && ACCOUNTS) return json({ servers: [] });
   if (path === "/api/mcp/servers") return json({ servers: [{ name: "mail", enabled: true, auth: "connected" }, { name: "calendar", enabled: true, auth: "connected" }, { name: "github", enabled: true, auth: "none" }] });
   if (path === "/api/messages") return json({ available: true, onThisMac: true, useMessages: true, permissions: { fullDiskAccess: "granted", automation: "granted" } });
   if (path === "/api/custom-rules") return json(customRules);

@@ -14,7 +14,7 @@ import { MessageBoundary } from "../MessageBoundary";
 import { QuestionCard } from "../QuestionCard";
 import { ApprovalCard, approvalCardStaysInChat } from "../ApprovalCard";
 import { OptionCard } from "../OptionCard";
-import { AccessCard } from "../AccessCard";
+import { AccessNoticeRow } from "../AccessCard";
 import { GoalRunCard, goalRunPlace } from "../GoalRunCard";
 import { delegateModelLabel } from "../DelegationList";
 import { RoutineRunCard } from "../RoutineRunCard";
@@ -162,13 +162,13 @@ export function RoomMessageItem({
         </MessageBoundary>
       </div>
     ) : m.kind === "access" && m.access ? (
-      <div className="flex justify-start">
-        <AccessCard
-          access={m.access}
-          viewer={{ principalId: state.config?.viewer?.principalId ?? null, admin: state.config?.viewer?.role === "admin" || state.config?.viewer?.role === "owner" }}
-          onSignIn={() => dispatch({ type: "toggleAppSettings", open: true, section: "providers" })}
-        />
-      </div>
+      <AccessNoticeRow
+        message={m}
+        transcript={transcript}
+        room
+        viewer={{ principalId: state.config?.viewer?.principalId ?? null, admin: state.config?.viewer?.role === "admin" || state.config?.viewer?.role === "owner" }}
+        onSignIn={() => dispatch({ type: "toggleAppSettings", open: true, section: "providers" })}
+      />
     ) : m.kind === "goal.run" ? (
       <div className="flex justify-start">
         <GoalRunCard

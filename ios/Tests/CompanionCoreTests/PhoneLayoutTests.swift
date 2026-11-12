@@ -38,16 +38,45 @@ final class PhoneLayoutTests: XCTestCase {
     func testTheAppearancePaneStacksOnAPhone() throws {
         let pane = try source("App/Desktop/PersonaAppearancePane.swift")
         XCTAssertTrue(pane.contains("static let compactBelow"))
-        // the preview: stage, name and buttons stacked; the moves in its flow
-        XCTAssertTrue(pane.contains("moveList(width: nil)"))
-        // the search on its own row, the chips scrolling in theirs
-        XCTAssertTrue(pane.contains("mascotSearch(width: nil)"))
         // no fixed desktop width left in the pane's flow
         XCTAssertFalse(pane.contains(".frame(width: 352, alignment: .leading)"))
         XCTAssertFalse(pane.contains(".frame(width: 206, height: 32)"))
         // the side by side band keeps its buttons column only when wide
         let hero = try declaration(pane, from: "private var hero: some View {")
         XCTAssertTrue(hero.contains("if compact {"))
+    }
+
+    func testTheAppearancePaneHasNoSourceBarAndNothingUnderTheName() throws {
+        // regression #4076: the owner asked to hide the source bar (Mascot,
+        // Generate, Upload, the search) and the strip under the mascot's
+        // name (the summary line, In use, the moves menu, Play a move)
+        let pane = try source("App/Desktop/PersonaAppearancePane.swift")
+        for gone in ["persona-appearance.mode.", "persona-appearance.search", "persona-appearance.generate",
+                     "persona-appearance.upload", "persona-appearance.summary", "persona-appearance.action",
+                     "persona-appearance.moves", "persona-appearance.move-list", "persona-appearance.play",
+                     "PhotosPicker", "\"Avatar source\"", "\"Play a move\"", "\"In use\""] {
+            XCTAssertFalse(pane.contains(gone), gone)
+        }
+        // the preview keeps its stage, the name and Randomize; Reset sits in the tab row
+        let hero = try declaration(pane, from: "private var hero: some View {")
+        XCTAssertTrue(hero.contains("heroName(name)"))
+        XCTAssertTrue(hero.contains("randomizeButton"))
+        let tabs = try declaration(pane, from: "private func tabRow(")
+        XCTAssertTrue(tabs.contains("resetButton"))
+    }
+
+    func testResetNeverSqueezesThePhoneTabs() throws {
+        // regression #4076: on the smallest phone, Reset beside the scrolling
+        // tabs cut a tab's value; compact, Reset sits on its own row under
+        // the full width tabs
+        let pane = try source("App/Desktop/PersonaAppearancePane.swift")
+        let tabs = try declaration(pane, from: "private func tabRow(")
+        let compactBranch = try XCTUnwrap(tabs.components(separatedBy: "} else {").first)
+        XCTAssertTrue(compactBranch.contains("VStack(alignment: .trailing"))
+        XCTAssertFalse(compactBranch.contains("HStack"))
+        let scroll = try XCTUnwrap(compactBranch.range(of: "ScrollView(.horizontal"))
+        let reset = try XCTUnwrap(compactBranch.range(of: "resetButton"))
+        XCTAssertLessThan(scroll.lowerBound, reset.lowerBound)
     }
 
     func testTheHomeHeaderFadeCoversTheHeaderNotOnlyTheStatusBar() throws {

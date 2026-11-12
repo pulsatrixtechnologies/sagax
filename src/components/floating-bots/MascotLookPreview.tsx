@@ -1,13 +1,13 @@
-// The Appearance mascot editor's preview band: stage, name, summary, use /
-// unlock action, move chips, Play and Randomize. On the bot's profile page it
-// is the page's hero (Grok Bot, the owner 2026-11-09): the mascot small and bare on
-// the left, no card, the bot's name and label stacked under it, aligned left; the
-// summary, Use, the moves and Play a move then sit in the Appearance tab
-// (MascotLookControls). A bot wearing a picture shows it on the stage,
-// without moves.
-import { useState, type ReactNode } from "react";
-import { Check, ChevronDown, Lock, Play, Shuffle } from "lucide-react";
-import { lockHint, type LockInfo } from "@/lib/achievements";
+// The Appearance mascot editor's preview band: the stage (hover plays the
+// first move, a click the next), the name and Randomize. No strip under the
+// name: no summary line, no In use pill, no moves menu, no Play a move (the
+// owner 2026-11-12, #4076). On the bot's profile page it is the page's hero
+// (Grok Bot, the owner 2026-11-09): the mascot small and bare on the left,
+// no card, the bot's name and label stacked under it, aligned left. A bot
+// wearing a picture shows it on the stage.
+import type { ReactNode } from "react";
+import { Lock, Shuffle } from "lucide-react";
+import type { LockInfo } from "@/lib/achievements";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { MausColor, MausMotion, MausState } from "@/lib/mascot";
@@ -17,12 +17,11 @@ import type { MascotCharacter, MascotLook } from "../../../shared/mascot-look";
 import type { FxMoveRequest } from "@/components/skin-fx/skin-fx";
 import type { OwlMove } from "./moves";
 
-const sectionHeading = "text-[11px] font-medium text-ink-secondary";
 const focusRing = "outline-none focus-visible:ring-2 focus-visible:ring-accent";
 /** The mascot's size in the profile page's hero (Grok Bot's avatar size,
  * the owner 2026-11-09: smaller, on the left). */
 export const MASCOT_HERO_SIZE = 84;
-/** The preview card's right-hand buttons (Play a move, Randomize). */
+/** The preview card's Randomize button (and the tab row's, beside Reset). */
 export const MASCOT_HERO_BUTTON = cn("inline-flex items-center justify-center gap-1.5 rounded-xl border border-hairline-weak bg-control/70 px-3.5 py-2 text-[13px] leading-4 text-ink hover:bg-raised-hover disabled:opacity-50", focusRing);
 
 export interface MascotLookPreviewProps {
@@ -31,16 +30,13 @@ export interface MascotLookPreviewProps {
   shownName: string;
   shownLook: MascotLook;
   shownLock: LockInfo;
-  summary: string;
   tint: string;
   owlSkin: MascotSkinId;
   previewSkin: string | null;
-  inUse: boolean;
   disabled?: boolean;
-  moves: { id: string; label: string; clip: string; owl?: OwlMove }[];
+  moves: { clip: string; owl?: OwlMove }[];
   owlMotion: { kind: Exclude<MausMotion, "none">; nonce: number } | null;
   fxMove: FxMoveRequest | null;
-  onUse: () => void;
   onPlay: (move: { clip: string; owl?: OwlMove }) => void;
   onPlayNext: () => void;
   /** Without it, no Randomize button. */
@@ -49,27 +45,11 @@ export interface MascotLookPreviewProps {
    * bare hero (the mascot, the name and label under it), no card. */
   heading?: ReactNode;
   subheading?: ReactNode;
-  /** A bot wearing a picture: the stage shows it, with no moves and no Use. */
+  /** A bot wearing a picture: the stage shows it. */
   picture?: Parameters<typeof BotAvatar>[0]["bot"];
   /** The bot's live state and the moves it plays across the app. */
   liveState?: MausState;
   liveMotion?: { kind: Exclude<MausMotion, "none">; nonce: number } | null;
-}
-
-/** The summary line: the parts in order, each once ("Shapes · Shapes"
- * was the character's name and its family's, JC 2026-11-08). */
-export function mascotSummaryLine(...parts: (string | null | undefined)[]): string {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const part of parts) {
-    const text = part?.trim();
-    if (!text) continue;
-    const key = text.toLocaleLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(text);
-  }
-  return out.join(" · ");
 }
 
 type StageProps = Pick<MascotLookPreviewProps, "bot" | "shown" | "shownName" | "shownLook" | "shownLock" | "owlSkin" | "previewSkin" | "moves" | "fxMove" | "onPlay" | "onPlayNext" | "picture" | "liveState"> & {
@@ -117,104 +97,19 @@ function MascotStage({ bot, shown, shownName, shownLook, shownLock, owlSkin, pre
   );
 }
 
-type ControlsProps = Pick<MascotLookPreviewProps, "shownName" | "shownLock" | "inUse" | "disabled" | "moves" | "onUse" | "onPlay">;
-
-/** Use / In use (or the lock's hint) and the move chips behind "N moves". */
-function MascotUseAndMoves({ shownName, shownLock, inUse, disabled, moves, onUse, onPlay, align }: ControlsProps & { align: "center" | "start" }) {
-  const [movesOpen, setMovesOpen] = useState(false);
-  return (
-    <div className={cn("relative flex flex-wrap items-center gap-2", align === "center" ? "justify-center @[34rem]:justify-start" : "justify-start")}>
-      <button
-        type="button"
-        data-mascot-action={shownLock.locked ? "locked" : inUse ? "in-use" : "use"}
-        disabled={disabled || inUse || shownLock.locked}
-        onClick={onUse}
-        className={cn(
-          "inline-flex min-h-7 items-center gap-1.5 rounded-full px-3 py-1 text-[12px] leading-4",
-          focusRing,
-          !inUse && !shownLock.locked ? "bg-accent font-medium text-accent-ink hover:brightness-110" : inUse ? "bg-success/15 text-success" : "bg-control text-ink-secondary",
-        )}
-      >
-        {shownLock.locked ? <Lock size={12} className="shrink-0" aria-hidden="true" /> : inUse ? <Check size={13} strokeWidth={3} className="shrink-0" aria-hidden="true" /> : null}
-        <span>{shownLock.locked ? lockHint(shownLock) : inUse ? t("appearance.inUse") : t("appearance.use", { name: shownName })}</span>
-      </button>
-      <button
-        type="button"
-        data-mascot-moves=""
-        aria-expanded={movesOpen}
-        aria-controls="mascot-moves"
-        onClick={() => setMovesOpen((open) => !open)}
-        className={cn("inline-flex items-center gap-1 rounded-full px-2 py-1 text-[12px] leading-4 text-ink-tertiary hover:bg-control hover:text-ink", focusRing)}
-      >
-        {t("appearance.moveCount", { count: moves.length })}
-        <ChevronDown size={12} aria-hidden="true" className={cn("transition-transform", movesOpen && "rotate-180")} />
-      </button>
-      <div
-        id="mascot-moves"
-        data-mascot-move-list=""
-        hidden={!movesOpen}
-        className="absolute left-0 top-full z-20 mt-1.5 w-[min(22rem,80vw)] rounded-xl border border-hairline-weak bg-elevated p-2.5 shadow-lg"
-        onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setMovesOpen(false); } }}
-      >
-        <div className={cn(sectionHeading, "mb-1.5")}>{t("mascot.moves.title")}</div>
-        <div className="flex flex-wrap gap-1">
-          {moves.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              data-character-move={item.id}
-              aria-label={t("mascot.moves.play", { move: item.label })}
-              onClick={() => onPlay(item)}
-              onMouseEnter={() => onPlay(item)}
-              className={cn("rounded-md bg-control px-2 py-0.5 text-[12px] leading-4 text-ink hover:bg-raised-hover", focusRing)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** On the profile page, the Appearance tab's head: what the hero shows
- * (the character and its look), Use, the moves and Play a move, as a plain
- * row (no card; the mascot itself is the page's hero). */
-export function MascotLookControls({ shownName, shownLock, summary, inUse, disabled, moves, onUse, onPlay, onPlayNext, picture }: ControlsProps & Pick<MascotLookPreviewProps, "summary" | "onPlayNext" | "picture">) {
-  return (
-    <div data-mascot-controls="" className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <div className="max-w-full truncate text-[13px] leading-5 text-ink-secondary" data-mascot-summary="">
-          {picture ? summary : mascotSummaryLine(shownName, ...summary.split(" · "))}
-        </div>
-        {!picture && <MascotUseAndMoves shownName={shownName} shownLock={shownLock} inUse={inUse} disabled={disabled} moves={moves} onUse={onUse} onPlay={onPlay} align="start" />}
-      </div>
-      {!picture && (
-        <button type="button" data-mascot-play="" disabled={!moves.length} onClick={onPlayNext} className={MASCOT_HERO_BUTTON}>
-          <Play size={13} aria-hidden="true" />
-          {t("appearance.playMove")}
-        </button>
-      )}
-    </div>
-  );
-}
-
 export function MascotLookPreview({
   bot,
   shown,
   shownName,
   shownLook,
   shownLock,
-  summary,
   tint,
   owlSkin,
   previewSkin,
-  inUse,
   disabled,
   moves,
   owlMotion,
   fxMove,
-  onUse,
   onPlay,
   onPlayNext,
   onRandomize,
@@ -256,34 +151,20 @@ export function MascotLookPreview({
 
       <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5 text-center @[34rem]:items-start @[34rem]:text-left">
         <div className="max-w-full truncate text-[24px] font-semibold leading-8 text-ink" data-mascot-name="">{shownName}</div>
-        <div className="max-w-full truncate text-[13px] leading-5 text-ink-secondary" data-mascot-summary="">{summary}</div>
-        {!picture && <div className="mt-2.5"><MascotUseAndMoves shownName={shownName} shownLock={shownLock} inUse={inUse} disabled={disabled} moves={moves} onUse={onUse} onPlay={onPlay} align="center" /></div>}
       </div>
 
-      <div className="flex shrink-0 flex-row gap-2 @[34rem]:flex-col">
-        {!picture && <button
+      {onRandomize && (
+        <button
           type="button"
-          data-mascot-play=""
-          disabled={!moves.length}
-          onClick={onPlayNext}
-          className={MASCOT_HERO_BUTTON}
+          data-mascot-randomize=""
+          disabled={disabled}
+          onClick={onRandomize}
+          className={cn(MASCOT_HERO_BUTTON, "shrink-0")}
         >
-          <Play size={13} aria-hidden="true" />
-          {t("appearance.playMove")}
-        </button>}
-        {onRandomize && (
-          <button
-            type="button"
-            data-mascot-randomize=""
-            disabled={disabled}
-            onClick={onRandomize}
-            className={MASCOT_HERO_BUTTON}
-          >
-            <Shuffle size={13} aria-hidden="true" />
-            {t("appearance.randomize")}
-          </button>
-        )}
-      </div>
+          <Shuffle size={13} aria-hidden="true" />
+          {t("appearance.randomize")}
+        </button>
+      )}
     </section>
   );
 }

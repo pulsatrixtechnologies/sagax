@@ -4,10 +4,8 @@ import { describe, expect, it } from "vitest";
 import en from "@/locales/en.json";
 import fr from "@/locales/fr.json";
 import { MASCOTS } from "./mascots";
-import { filterWardrobe, MASCOT_FAMILIES, MASCOT_FAMILY_LABEL, wardrobeFilters, wardrobeShelf, wardrobeShelves, wardrobeStep, type MascotFamily, type WardrobeEntry } from "./wardrobe";
+import { filterWardrobe, MASCOT_FAMILIES, MASCOT_FAMILY_LABEL, wardrobeFilters, wardrobeShelf, wardrobeShelves, wardrobeStep, type WardrobeEntry } from "./wardrobe";
 
-const NAMES: Record<string, string> = { owl: "Owl", crab: "Crab", shape: "Shapes", trombi: "Trombi", bunbu: "Bunbu", shiba: "Shiba", grump: "Grump", ogre: "Ogre", frog: "Frog", axolotl: "Axolotl", robo: "Robo" };
-const FAMILY_NAMES: Record<MascotFamily, string> = { classics: "Classics", shapes: "Shapes", animals: "Animals" };
 
 const ids = (entries: readonly WardrobeEntry[]) => entries.map((entry) => entry.id);
 
@@ -65,8 +63,7 @@ describe("shelves and filters", () => {
   // the bot wears the owl; Trombi and Bunbu were earned; Robo was bought
   const unlocked = new Set(["owl", "trombi", "bunbu", "robo"]);
   const lockedOf = (entry: WardrobeEntry) => !unlocked.has(entry.id);
-  const run = (filter: Parameters<typeof filterWardrobe>[1]["filter"], query = "") =>
-    ids(filterWardrobe(catalog, { filter, query, nameOf: (entry) => NAMES[entry.id], familyNameOf: (family) => FAMILY_NAMES[family], lockedOf }));
+  const run = (filter: Parameters<typeof filterWardrobe>[1]) => ids(filterWardrobe(catalog, filter, lockedOf));
 
   it("puts an unlocked entry on Yours, a locked one on To unlock, and an unbought paid edition on Premium", () => {
     expect(wardrobeShelf({ id: "owl", family: "classics" }, false)).toBe("yours");
@@ -93,19 +90,6 @@ describe("shelves and filters", () => {
     expect(run("family:classics")).toEqual(["owl", "trombi"]);
     expect(run("family:shapes")).toEqual(["shape", "robo"]);
     expect(run("family:animals")).toEqual(["crab", "bunbu", "shiba", "grump", "ogre", "frog", "axolotl"]);
-  });
-
-  it("searches the name and the family, any case and any accent, within the chip", () => {
-    expect(run("all", "OGR")).toEqual(["ogre"]);
-    expect(run("all", "og")).toEqual(["ogre", "frog"]);
-    expect(run("all", "  fro ")).toEqual(["frog"]);
-    expect(run("all", "anim")).toEqual(["crab", "bunbu", "shiba", "grump", "ogre", "frog", "axolotl"]);
-    expect(run("locked", "anim")).toEqual(["crab", "shiba", "grump", "ogre", "frog"]);
-    expect(run("all", "zzz")).toEqual([]);
-    const accented = filterWardrobe(catalog, { filter: "all", query: "grenou", nameOf: (entry) => (entry.id === "frog" ? "Grenouille" : NAMES[entry.id]), familyNameOf: () => "Créatures", lockedOf });
-    expect(ids(accented)).toEqual(["frog"]);
-    const families = filterWardrobe(catalog, { filter: "all", query: "creat", nameOf: (entry) => NAMES[entry.id], familyNameOf: (family) => (family === "animals" ? "Créatures" : FAMILY_NAMES[family]), lockedOf });
-    expect(ids(families)).toEqual(["crab", "bunbu", "shiba", "grump", "ogre", "frog", "axolotl"]);
   });
 });
 

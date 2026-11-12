@@ -1526,16 +1526,6 @@
         }
       }
     },
-    "%@ moves": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ mouvements"
-          }
-        }
-      }
-    },
     "%@ needs a decision": {
       "localizations": {
         "fr": {
@@ -14164,16 +14154,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Avatar"
-          }
-        }
-      }
-    },
-    "Avatar source": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Source de l’avatar"
           }
         }
       }
@@ -50516,16 +50496,6 @@
         }
       }
     },
-    "No mascot matches “%@”.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aucune mascotte ne correspond à « %@ »."
-          }
-        }
-      }
-    },
     "No match": {
       "localizations": {
         "fr": {
@@ -71841,16 +71811,6 @@
         }
       }
     },
-    "Search %@ mascots": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rechercher parmi %@ mascottes"
-          }
-        }
-      }
-    },
     "Search (tag:, folder:, author:, tier:, has:)": {
       "localizations": {
         "fr": {
@@ -72199,16 +72159,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chercher des fichiers…"
-          }
-        }
-      }
-    },
-    "Search mascots": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rechercher une mascotte"
           }
         }
       }

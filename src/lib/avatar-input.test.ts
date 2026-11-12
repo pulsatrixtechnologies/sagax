@@ -1,7 +1,7 @@
 // Avatar from a drop or a paste (src/lib/avatar-input.ts), the 25 MB limit,
 // and the export; the reset of a bot's history (src/lib/bot-history-reset.ts)
 // and the link to a bot (src/lib/thread-refs.ts botRefUrl).
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { AVATAR_INPUT_MAX_BYTES, avatarFileProblem, avatarImageFrom, dragMayCarryImage } from "./avatar-input";
 import { historyResetThreads } from "./bot-history-reset";
@@ -31,12 +31,6 @@ describe("avatar input", () => {
     expect(avatarFileProblem({ type: "image/webp", size: AVATAR_INPUT_MAX_BYTES })).toBeNull();
     expect(avatarFileProblem({ type: "image/webp", size: AVATAR_INPUT_MAX_BYTES + 1 })).toBe("size");
     expect(avatarFileProblem({ type: "image/svg+xml", size: 10 })).toBe("type");
-  });
-
-  it("exports the current picture named after the bot, and fails loudly when it cannot be read", async () => {
-    const { exportAvatarImage } = await import("./avatar-input");
-    const failing = vi.fn(async () => new Response("", { status: 404 }));
-    await expect(exportAvatarImage("/api/attachments/a.png", "Sky", failing as unknown as typeof fetch)).rejects.toThrow();
   });
 });
 

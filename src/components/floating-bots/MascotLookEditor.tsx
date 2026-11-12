@@ -6,15 +6,13 @@
 // Laid out as one preview and one grid at a time (track A, 2026-10-28):
 //
 //   The preview band, full width: the character shown (the real avatar,
-//   which plays the moves and the equip animation) large on a ground tinted
-//   with the bot's color, its name, the line "family · shape · color · skin",
-//   the action (In use, Use <name>, or the unlock hint), its move count
-//   (opening every move as a chip that plays on the stage), Play a move
-//   (the next move) and Randomize (an owned character, shape, color and
-//   skin, saved at once).
+//   which plays the moves and the equip animation: hover plays the first,
+//   a click the next) large on a ground tinted with the bot's color, its
+//   name and Randomize (an owned character, shape, color and skin, saved at
+//   once). No strip under the name (the owner 2026-11-12, #4076).
 //   Then four tabs, each with its current value under its label, the open
 //   one underlined in the bot's color:
-//     Mascot: a search, the filter chips (All, Owned, Premium while one is
+//     Mascot: the filter chips (All, Owned, Premium while one is
 //       sold, then one per family) and the shelves (Yours with its "n of m",
 //       To unlock, Premium; wardrobe.ts), one tile per character of the
 //       registry (mascots.tsx) in the bot's color. A locked character sits
@@ -30,14 +28,14 @@
 //   Each chip row opens on the current choice (editor-tabs.ts).
 //
 // An unlocked character saves at once when picked (as the avatar popover
-// did). A locked character previews only. Every skin of a character shows
+// did). A locked character previews only (its tile names the achievement). Every skin of a character shows
 // (2026-10-14): a locked one greyed with its padlock, not selectable,
 // its tooltip naming the achievement that unlocks it. Each character keeps
 // its own skin, so switching and back finds it again. Loaded lazily with
 // the pane.
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, Lock, Search, Shuffle } from "lucide-react";
+import { Check, Lock, Shuffle } from "lucide-react";
 import { characterLock, lockHint, reportAchievement, skinLock, useUnlocks, type LockInfo } from "@/lib/achievements";
 import "@/components/achievements/achievements.css";
 import { cn } from "@/lib/cn";
@@ -62,7 +60,7 @@ import { colorGroupsFor, colorTabFor, colorTabs, nextTab, skinTabFor, skinTierTa
 import { MASCOTS, SHAPE_CHOICES, type CompleteLook, type MascotDefinition } from "./mascots";
 import { characterMoves, type OwlMove } from "./moves";
 import { filterWardrobe, MASCOT_FAMILY_LABEL, wardrobeFilters, wardrobeShelves, wardrobeStep, type WardrobeFilter, type WardrobeShelf } from "./wardrobe";
-import { MASCOT_HERO_BUTTON, MascotLookControls, MascotLookPreview } from "./MascotLookPreview";
+import { MASCOT_HERO_BUTTON, MascotLookPreview } from "./MascotLookPreview";
 import { useMascotHeroSlot } from "./mascot-hero-slot";
 
 export interface MascotLookPatch {
@@ -83,10 +81,8 @@ export interface MascotLookEditorProps {
   heroOnly?: boolean;
   /** Draws the hero card (false while a picture, not the mascot, is the bot's avatar: the page keeps its picture hero). */
   hero?: boolean;
-  /** Opens the Mascot tab's tool row, beside the search and the filters: the avatar source switch (AppearancePane). */
-  sources?: ReactNode;
-  /** In the Mascot tab in place of the gallery: a picture source (Generate, Upload) or the picture in use. */
-  sourcePanel?: ReactNode;
+  /** In the Mascot tab in place of the gallery: the picture in use (AppearancePane). */
+  picturePanel?: ReactNode;
   /** At the right of the tab row, before Randomize: Reset (AppearancePane). */
   tabActions?: ReactNode;
 }
@@ -469,13 +465,11 @@ export default function MascotLookEditor({
   initialTab = "mascot",
   heroOnly = false,
   hero = true,
-  sources,
-  sourcePanel,
+  picturePanel,
   tabActions,
 }: MascotLookEditorProps) {
   // On the bot's profile page the mascot is the page's hero: the open
-  // editor draws it there (a portal), its controls at the top of the
-  // Appearance tab and Randomize in its tab row.
+  // editor draws it there (a portal) and Randomize in its tab row.
   const slot = useMascotHeroSlot();
   const portalTarget = !heroOnly && hero && slot ? slot.target : null;
   const claim = slot?.claim;
@@ -525,7 +519,6 @@ export default function MascotLookEditor({
     ? { ...look, character: shown, skins: { ...look.skins, [shown]: previewSkin } as MascotLook["skins"] }
     : { ...look, character: shown };
   const shownName = t(CHARACTER_LABEL[shown]);
-  const inUse = shown === look.character;
   // A locked character previews only: its options show, disabled.
   const optionsOff = disabled || shownLock.locked;
 
@@ -542,17 +535,10 @@ export default function MascotLookEditor({
   const tint = MAUS_COLORS[bot.color] ?? MAUS_COLORS.green;
   const ink = mausInk(bot.color) ?? tint;
 
-  // the gallery: a search and a chip narrow it, the shelves split what is left
-  const [query, setQuery] = useState("");
+  // the gallery: a chip narrows it, the shelves split what is left
   const [filter, setFilter] = useState<WardrobeFilter>("all");
   const filters = wardrobeFilters(listed, (entry) => characterLock(unlocks, entry.id as MascotCharacter).locked && entry.id !== look.character);
-  const kept = filterWardrobe(listed, {
-    filter,
-    query,
-    nameOf: (option) => t(CHARACTER_LABEL[option.id]),
-    familyNameOf: (family) => t(MASCOT_FAMILY_LABEL[family]),
-    lockedOf: (option) => lockOf(option.id).locked,
-  });
+  const kept = filterWardrobe(listed, filter, (option) => lockOf(option.id).locked);
   const shelves = wardrobeShelves(kept, (option) => lockOf(option.id).locked);
   const owned = listed.filter((option) => !lockOf(option.id).locked).length;
   const browser = useRef<HTMLDivElement>(null);
@@ -570,7 +556,7 @@ export default function MascotLookEditor({
   // the stage plays a move: the owl's wing motion, and every character's clip with its skin's effect
   const [owlMotion, setOwlMotion] = useState<{ kind: Exclude<MausMotion, "none">; nonce: number } | null>(null);
   const [fxMove, setFxMove] = useState<FxMoveRequest | null>(null);
-  const moves: { id: string; label: string; clip: string; owl?: OwlMove }[] = characterMoves(shownLook).map((move) => ({ ...move, label: t(move.label) }));
+  const moves: { clip: string; owl?: OwlMove }[] = characterMoves(shownLook);
   const stagePick = useRef(0);
   const play = (move: { clip: string; owl?: OwlMove }) => {
     if (move.owl) {
@@ -616,13 +602,6 @@ export default function MascotLookEditor({
     ),
     skin: skinName,
   };
-  const summary = [
-    t(MASCOT_FAMILY_LABEL[shownOption.family]),
-    shown === "shape" ? shapeName : null,
-    shownOption.paint.colors ? paletteName : null,
-    skinName,
-  ].filter(Boolean).join(" · ");
-
   const skinPicker = shown === "owl" ? (
     <SkinPicker
       key="owl"
@@ -664,16 +643,13 @@ export default function MascotLookEditor({
         shownName={shownName}
         shownLook={shownLook}
         shownLock={shownLock}
-        summary={summary}
         tint={tint}
         owlSkin={owlSkin}
         previewSkin={previewSkin}
-        inUse={inUse}
         disabled={disabled}
         moves={moves}
         owlMotion={owlMotion}
         fxMove={fxMove}
-        onUse={() => setLook({ character: shown })}
         onPlay={play}
         onPlayNext={playNext}
         onRandomize={slot || randomizeInTabRow ? undefined : randomize}
@@ -689,9 +665,10 @@ export default function MascotLookEditor({
     <div data-mascot-look-editor="" className="flex flex-col gap-4">
       {slot ? portalTarget && createPortal(preview, portalTarget) : hero && preview}
 
-      {/* the tabs: each its current value under its label, the open one underlined in the bot's color; Reset and Randomize at the right */}
-      <div className="flex min-w-0 items-center gap-2 border-b border-hairline-weak" data-appearance-tab-bar="">
-        <div role="tablist" aria-label={t("appearance.tabs")} className="flex min-w-0 flex-1 gap-1 overflow-x-auto" data-appearance-tabs="">
+      {/* the tabs: each its current value under its label, the open one underlined in the bot's color; Reset and Randomize at the right.
+          Narrow (a phone), the tabs keep the full width and wrap rather than scroll out of sight, and Reset and Randomize sit on their own row under them (#4076). */}
+      <div className="flex min-w-0 flex-col gap-2 @[34rem]:flex-row @[34rem]:items-center @[34rem]:border-b @[34rem]:border-hairline-weak" data-appearance-tab-bar="">
+        <div role="tablist" aria-label={t("appearance.tabs")} className="flex min-w-0 flex-wrap gap-1 border-b border-hairline-weak @[34rem]:flex-1 @[34rem]:flex-nowrap @[34rem]:overflow-x-auto @[34rem]:border-b-0" data-appearance-tabs="">
           {tabs.map((id) => {
             const selected = id === tab;
             return (
@@ -714,7 +691,7 @@ export default function MascotLookEditor({
                 }}
                 style={{ borderBottomColor: selected ? ink : "transparent" }}
                 className={cn(
-                  "-mb-px flex min-w-0 shrink-0 flex-col items-start gap-0.5 border-b-2 px-4 pb-2.5 pt-2 text-left transition-colors",
+                  "-mb-px flex min-w-0 shrink-0 flex-col items-start gap-0.5 border-b-2 px-3 pb-2.5 pt-2 text-left transition-colors @[34rem]:px-4",
                   focusRing,
                   selected ? "text-ink" : "text-ink-secondary hover:text-ink",
                 )}
@@ -726,7 +703,7 @@ export default function MascotLookEditor({
           })}
         </div>
         {(tabActions || randomizeInTabRow) && (
-          <div className="flex shrink-0 items-center gap-2 pb-1.5" data-appearance-tab-actions="">
+          <div className="flex shrink-0 items-center justify-end gap-2 @[34rem]:pb-1.5" data-appearance-tab-actions="">
             {tabActions}
             {randomizeInTabRow && (
               <button type="button" data-mascot-randomize="" disabled={disabled} onClick={randomize} className={MASCOT_HERO_BUTTON}>
@@ -741,49 +718,23 @@ export default function MascotLookEditor({
       <div id="appearance-tab-panel" role="tabpanel" aria-labelledby={`appearance-tab-${tab}`} data-appearance-tab-panel={tab} data-character-options={shown}>
         {tab === "mascot" && (
           <div ref={browser} data-mascot-browser="" className="flex min-w-0 flex-col gap-3">
-            <div className="flex flex-wrap items-center gap-2" data-mascot-tools="">
-              {sources}
-              {!sourcePanel && (
-                <>
-                  <label className="flex h-8 min-w-[12rem] flex-1 items-center gap-1.5 rounded-lg border border-hairline-weak bg-elevated px-2.5 @[34rem]:max-w-[18rem]">
-                    <Search size={13} aria-hidden="true" className="shrink-0 text-ink-secondary" />
-                    <input
-                      type="search"
-                      value={query}
-                      onChange={(event) => setQuery(event.target.value)}
-                      onKeyDown={(event) => {
-                        // Escape clears a search first; an empty one leaves Escape to the modal
-                        if (event.key === "Escape" && query) {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          setQuery("");
-                        }
-                      }}
-                      placeholder={t("appearance.search", { count: listed.length })}
-                      aria-label={t("appearance.searchLabel")}
-                      data-mascot-search=""
-                      className="w-full min-w-0 bg-transparent text-[12px] text-ink placeholder:text-ink-secondary focus:outline-none"
-                    />
-                  </label>
-                  <div role="group" aria-label={t("appearance.filters")} className="flex flex-wrap gap-1.5" data-mascot-filters="">
-                    {filters.map((id) => (
-                      <button
-                        key={id}
-                        type="button"
-                        aria-pressed={filter === id}
-                        data-mascot-filter={id}
-                        onClick={() => setFilter(id)}
-                        className={cn(chip, focusRing, filter === id ? chipOn : chipOff)}
-                      >
-                        {filterLabel(id)}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-            {sourcePanel}
-            {!sourcePanel && shelves.map(({ shelf, entries }) => (
+            {picturePanel ?? (
+              <div role="group" aria-label={t("appearance.filters")} className="flex flex-wrap gap-1.5" data-mascot-filters="">
+                {filters.map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={filter === id}
+                    data-mascot-filter={id}
+                    onClick={() => setFilter(id)}
+                    className={cn(chip, focusRing, filter === id ? chipOn : chipOff)}
+                  >
+                    {filterLabel(id)}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!picturePanel && shelves.map(({ shelf, entries }) => (
               <section key={shelf} data-mascot-shelf={shelf} aria-labelledby={`mascot-shelf-${shelf}`}>
                 <div className="mb-1.5 flex items-baseline gap-2">
                   <h3 id={`mascot-shelf-${shelf}`} className={heading}>{t(SHELF_LABEL[shelf])}</h3>
@@ -810,9 +761,9 @@ export default function MascotLookEditor({
                 </div>
               </section>
             ))}
-            {!sourcePanel && shelves.length === 0 && (
+            {!picturePanel && shelves.length === 0 && (
               <p className="py-4 text-center text-[12px] text-ink-secondary" data-mascot-empty="">
-                {query.trim() ? t("appearance.noMatch", { query: query.trim() }) : t("appearance.empty")}
+                {t("appearance.empty")}
               </p>
             )}
           </div>
@@ -844,22 +795,6 @@ export default function MascotLookEditor({
         )}
         {tab === "skin" && skinPicker}
       </div>
-      {/* On the profile page the mascot is the page's bare hero: what it
-          shows, Use, the moves and Play a move come after the picker, under
-          the tabs and their panel (the owner 2026-11-09), never above them. */}
-      {slot && hero && (
-        <MascotLookControls
-          shownName={shownName}
-          shownLock={shownLock}
-          summary={summary}
-          inUse={inUse}
-          disabled={disabled}
-          moves={moves}
-          onUse={() => setLook({ character: shown })}
-          onPlay={play}
-          onPlayNext={playNext}
-        />
-      )}
     </div>
   );
 }

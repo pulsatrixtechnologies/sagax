@@ -583,16 +583,20 @@ name and label are edited where they show (`InlineEditableText`). The
 description is not a line under the label; `IdentitySection` still edits it.
 There are no Name or Label fields in this panel. The persona editor's
 categories (`src/lib/persona-sections.ts`) start with Overview, then
-Appearance (2026-10-11, `appearance/AppearancePane.tsx`): a Mascot,
-Generate and Upload control with Reset, and under Mascot a compact gallery
-that fits the modal without scrolling (search, filter chips All, Owned,
-Premium only while one is sold, then one chip per family; the To unlock
-chip is omitted when no listed character is locked; shelves Yours and
-Premium, from `floating-bots/wardrobe.ts`) beside a detail column (a
-preview stage that plays the moves, then color, skin, moves and In use or
-Use). It is a size container: the two columns stack when the pane is under
-34rem. The gallery lists unlocked characters and the character the bot
-already wears. A locked character stays out. An unlocked character saves
+Appearance (2026-10-11, `appearance/AppearancePane.tsx`): a preview stage
+(the bot's avatar, which plays its moves on hover and click), the
+mascot's name and Randomize, then the Mascot, Shape (shapes only), Color
+and Skin tabs with Reset at the right of the tab row. Under Mascot: filter
+chips All, Owned, Premium only while one is sold, then one chip per family;
+the To unlock chip is omitted when no listed character is locked; shelves
+Yours and Premium, from `floating-bots/wardrobe.ts`. While a picture
+(dropped or pasted on the avatar) is the bot's avatar, the Mascot tab shows
+a "picture in use" line with "Use the mascot" in place of the gallery.
+There is no source bar (no Generate or Upload control, no search) and no
+strip under the name (2026-11-12). The preview band stacks when the pane
+is narrow (a size container). The gallery lists unlocked characters and
+the character the bot already wears. A locked character stays out. An
+unlocked character saves
 on pick. Clicking the bot's avatar (`BotProfileAvatarCard`,
 in the panel and in the editor's Overview) opens the editor on Appearance;
 there is no avatar popover, and a right click keeps the mascot menu. The

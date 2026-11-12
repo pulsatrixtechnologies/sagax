@@ -15,7 +15,6 @@ const translated = [
   "botPanel.skills.title",
   "botPanel.routines.hint",
   "botPanel.routines.hintAsk",
-  "botPanel.avatar.generateAvatar",
   "settings.profile.uploadPhoto",
   "routines.empty",
 ] as const;

@@ -16,6 +16,7 @@ import { BUNBU_EARFLOP_CLIP, BunbuMascot, bunbuSkinId, bunbuSkinPaint } from "./
 import { bunbuActionFor, bunbuMoodFor, MASCOTS, mascotFor } from "./floating-bots/mascots";
 import MascotLookEditor, { BUNBU_SKIN_LABEL, CHARACTER_LABEL } from "./floating-bots/MascotLookEditor";
 import { skinTierTabs } from "./floating-bots/editor-tabs";
+import { characterMoves } from "./floating-bots/moves";
 
 const draw = (props: Partial<Parameters<typeof BunbuMascot>[0]> = {}) => renderToStaticMarkup(createElement(BunbuMascot, { color: "mint", ...props }));
 
@@ -173,9 +174,12 @@ describe("Bunbu on the desktop and in the popover", () => {
     expect(render({ character: "bunbu" }, "color")).toContain("data-color-tabs");
     for (const skin of ["plain", "pastel", "night", "plush"]) expect(html).toContain(`data-bunbu-skin-option="${skin}"`);
     for (const skin of BUNBU_SKINS) expect(render({ character: "bunbu", skins: { bunbu: skin } })).toContain(`data-bunbu-skin-option="${skin}"`);
-    expect(html).toContain(`data-character-move="${BUNBU_EARFLOP_CLIP}"`);
-    expect(html).toContain(en["floatingBots.move.earFlop"]);
-    expect(html).not.toContain('data-character-move="spread-wings"');
+    // no moves menu on the page (#4076): the stage plays Bunbu's own moves
+    expect(html).not.toContain("data-character-move");
+    const moves = characterMoves(botMascotLook({ character: "bunbu" }));
+    expect(moves.map((move) => move.clip)).toContain(BUNBU_EARFLOP_CLIP);
+    expect(moves.map((move) => move.id)).not.toContain("spread-wings");
+    expect(en["floatingBots.move.earFlop"]).toBeTruthy();
   });
 
   it("is offered as an app icon", () => {

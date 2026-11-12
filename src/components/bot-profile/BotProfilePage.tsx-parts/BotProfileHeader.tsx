@@ -101,15 +101,12 @@ export function useBotProfileHero({ bot, derived }: {
       shownName=""
       shownLook={heroLook}
       shownLock={{ locked: false }}
-      summary={heroPicture ? t("appearance.pictureInUse") : ""}
       tint={MAUS_COLORS[bot.color] ?? MAUS_COLORS.green}
       owlSkin={botMascotSkin(bot.mascotSkin)}
       previewSkin={null}
-      inUse
       moves={[]}
       owlMotion={null}
       fxMove={null}
-      onUse={() => {}}
       onPlay={() => {}}
       onPlayNext={() => {}}
       heading={heroTitle}

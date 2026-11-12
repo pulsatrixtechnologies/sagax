@@ -7,6 +7,7 @@ import { launchVerificationServer, runControlOmb, verificationServerEnvironment 
 import { handleToolCall, request } from "../../scripts/mcp-server.ts";
 import { PEER_ACCESS_HELP } from "./peer-roster.ts";
 import { ENVELOPE_MARK } from "../runtime/envelope.ts";
+import { COORDINATE_MESSAGE_MAX_CHARS } from "../../shared/turn-limits.ts";
 import { waitForExit } from "../testing/cleanup.ts";
 import { readHandoffs } from "../testing/handoff-rows.ts";
 
@@ -313,11 +314,13 @@ it("dispatches queued work to a recipient moved to another of the same person's 
   await f.cli("wait", "--bot", f.target.id, "--timeout", "15");
 }), 45_000);
 
-it.each([4000, 4001])("enforces the %i-character request boundary on the real server", length => withRooms(async f => {
+// The bound is the product's own (shared/turn-limits.ts): 4 000 cut real
+// briefs short and was raised to 16 000 (2026-11-09).
+it.each([COORDINATE_MESSAGE_MAX_CHARS, COORDINATE_MESSAGE_MAX_CHARS + 1])("enforces the %i-character request boundary on the real server", length => withRooms(async f => {
   f.plan[f.sender.id].steps[0].arguments.message = "x".repeat(length);
-  f.plan[f.sender.id].steps[0].expectError = length > 4000;
+  f.plan[f.sender.id].steps[0].expectError = length > COORDINATE_MESSAGE_MAX_CHARS;
   await f.start(); expect((await f.wait()).status).toBe("settled");
-  if (length > 4000) expect(f.nodes().filter((n: any) => n.parentId)).toEqual([]);
+  if (length > COORDINATE_MESSAGE_MAX_CHARS) expect(f.nodes().filter((n: any) => n.parentId)).toEqual([]);
   else expect(f.nodes().find((n: any) => n.parentId).status).toBe("completed");
 }), 45_000);
 

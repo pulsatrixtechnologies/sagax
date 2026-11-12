@@ -730,13 +730,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "server/peers/room-coordination.e2e.test.ts",
-      "test": "enforces the 4001-character request boundary on the real server",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "src/components/bot-settings/ProposalStatus.test.ts",
       "test": "Edit Profile boundary markers in sections > a member manages their own bot's fields, the level without a lock (#1107, one approval level)",
       "owner": "unassigned",

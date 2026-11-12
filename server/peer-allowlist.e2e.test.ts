@@ -303,17 +303,19 @@ describe("peer allow-list", () => {
       // Ordinary chats may coordinate bounded subwork, but never inherit a
       // Chief's authority or a teammate's permissions.
       // The common peer wording is a brief since #1997; the full text is
-      // behind sagax_help "prompt:peers-bounded".
+      // behind sagax_help. Since 0.1.107 one reference serves bounded and
+      // direct coordination alike: "prompt:peers", or "prompt:peers-creator"
+      // for a bot that may create one (prompt-references.ts); the old
+      // "peers-bounded" ids still answer as aliases.
       expect(systemPrompt).toContain("Necessary advice/work uses coordinate_bots");
       expect(systemPrompt).toContain("Reachable teammates use their own permissions; you cannot grant access");
-      expect(systemPrompt).toContain('"prompt:peers-bounded');
       expect(systemPrompt).not.toContain("Use delegate_bot");
       expect(systemPrompt).not.toContain("use ask_bot");
       // 2026-10-17 (server/bots/bot-creation.ts): a bot a person made may create
       // one bot for them, never team setup. The brief since #1997; the full
-      // wording is behind sagax_help "prompt:peers-bounded-creator".
+      // wording is behind sagax_help "prompt:peers-creator".
       expect(systemPrompt).toContain("For your person's request for one new bot, use create_bot; team setup uses a reachable Primary Bot");
-      expect(systemPrompt).toContain('"prompt:peers-bounded-creator"');
+      expect(systemPrompt).toContain('"prompt:peers-creator"');
       expect(systemPrompt).not.toContain("only the Primary Bot creates bots");
       expect(systemPrompt).not.toContain("propose_team_setup");
       // The harness keeps appending its own rules with a bare leading space

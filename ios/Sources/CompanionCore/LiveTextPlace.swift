@@ -64,7 +64,8 @@ public enum LiveTextPlace: String, Hashable, Sendable {
             switch message.kind {
             case .digest, .compaction, .unknown: return false
             case .screen, .video: return message.requested == true
-            default: return !isHiddenStatusNotice(message) && !isHiddenReceipt(message)
+            default:
+                return !isHiddenStatusNotice(message) && !isHiddenReceipt(message) && !RoutineRunRows.outOfChat(message)
             }
         }
     }

@@ -524,6 +524,8 @@ public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showTh
             continue
         }
         if isHiddenStatusNotice(message) || isHiddenReceipt(message) { continue }
+        // #4066: the routine run rows the desktop chat leaves out
+        if RoutineRunRows.outOfChat(message) { continue }
         // #3581: a reply to a request received is read behind the asker's
         // name; the request itself joins its burst's names line, whatever
         // the threads setting (it is the trace that the bot worked for a teammate)

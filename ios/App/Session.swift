@@ -753,6 +753,11 @@ final class Session: ObservableObject {
                 if let reasoning = scene.reasoning { state.reasoning[LiveNotePreview.threadId] = reasoning }
                 streamingStore.sync(text: state.streaming, reasoning: state.reasoning)
             }
+            // #4066: the routine run rows the chat draws and the ones it leaves out
+            if let fleet = RoutineRowsPreview.fleet(in: arguments, french: Bundle.main.preferredLocalizations.first?.hasPrefix("fr") == true) {
+                state = CompanionState()
+                state.hydrate(fleet)
+            }
             if let longCount = LongTranscript.previewCount(in: arguments) {
                 // DEBUG / demo measure: one synthetic thread of ~2000 lines so
                 // the chat transcript can be timed before and after LazyVStack.

@@ -310,8 +310,10 @@ posixOnly("Perspicax organization, slice 6: routines in their person's name", ()
   }, 30_000);
 
   it("scenario D: her routine runs while she has no session, on her key and her delegation", async () => {
-    const routine = await api("POST", "/api/routines", alice, { name: "Hourly report", botId: x.id, prompt: "Write the hourly report.", postResults: true,
-      schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 4_000 } });
+    // A daily routine: one that runs more than once a day posts no card per
+    // run since #3695, a daily one still posts each report.
+    const routine = await api("POST", "/api/routines", alice, { name: "Daily report", botId: x.id, prompt: "Write the daily report.", postResults: true,
+      schedule: { type: "interval", everyMinutes: 24 * 60, anchorAt: Date.now() + 4_000 } });
     expect(routine.status, routine.text).toBe(201);
     r1 = routine.body.routine.id;
     expect(routine.body.routine.runAs).toEqual({ principalId: ids.alice, name: "Alice" });
@@ -413,10 +415,19 @@ posixOnly("Perspicax organization, slice 6: routines in their person's name", ()
     });
     if (existsSync(dump)) rmSync(dump);
     const exchangesBefore = idp.exchanges.length;
+    const mcpBefore = idp.mcpRequests.length;
     const ran = await runNow(bob, r2);
     expect(ran.status, ran.error).toBe("completed");
-    // the run's exchange and the readiness probe's (#1945): bob's only
-    expect([...new Set(idp.exchanges.slice(exchangesBefore).map((e) => e.sub))]).toEqual([BOB.sub]);
+    // the run's exchange and the readiness probe's (#1945): bob's
+    expect(idp.exchanges.slice(exchangesBefore).some((e) => e.sub === BOB.sub)).toBe(true);
+    // A routine works in its bot owner's environment: the turn's workplace
+    // line refreshes alice's own computers in the background, on her own
+    // sign-in. That list is all her token is used for; no tool of the run
+    // reaches Perspicax as her.
+    const asAlice = idp.mcpRequests.slice(mcpBefore).filter((r) => r.sub === ALICE.sub);
+    expect(asAlice.filter((r) => r.rpcMethod === "tools/call").map((r) => r.tool)).toEqual(
+      asAlice.filter((r) => r.rpcMethod === "tools/call").map(() => "remote_support_hosts"));
+    expect(asAlice.some((r) => r.rpcMethod === "tools/list")).toBe(false);
     expect(engineEnv().ANTHROPIC_API_KEY).toBe(ALICE_KEY);
     expect(engineEnv().CLAUDE_CONFIG_DIR ?? "").not.toContain(ids.bob!);
     expect(idp.resolveRequests.at(-1)).toEqual({ sub: ALICE.sub, provider: "anthropic" });
@@ -479,9 +490,10 @@ posixOnly("Perspicax organization, slice 6: routines in their person's name", ()
     // her notification names no thread, only the run: it opens the bot's
     // Coding activity; bob, not in the card's audience, gets none
     const notified = await waitFor(async () => notificationsIn(aliceStream.text()).find((n) => n.routineRunId === refused.id) ?? null, 15_000);
-    expect(notified).toMatchObject({ kind: "turn-failed", botId: x.id, threadId: "", audience: [ids.alice] });
+    // An access card is a needs-you: only its audience can clear it (#3719).
+    expect(notified).toMatchObject({ kind: "needs-you", botId: x.id, threadId: "", audience: [ids.alice] });
     expect(notificationsIn(aliceStream.text()).some((n) => n.threadId === thread)).toBe(false);
-    expect(notificationsIn(bobStream.text()).some((n) => n.routineRunId === refused.id || (n.kind === "turn-failed" && n.threadId === thread))).toBe(false);
+    expect(notificationsIn(bobStream.text()).some((n) => n.routineRunId === refused.id || (["needs-you", "turn-failed"].includes(n.kind) && n.threadId === thread))).toBe(false);
     aliceStream.close();
     bobStream.close();
     // there, the run carries her card with its actions (her subscription,

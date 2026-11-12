@@ -686,6 +686,18 @@ private struct GroupPanelDetails: View {
                     .accessibilityIdentifier("group-panel-manage-members")
                 }
             }
+            // desktop GroupPanel #3690: what a group costs, under its roster
+            if DesktopRoomBanners.showsCostNotice(room) {
+                Text("Group conversations use more: every bot in the group reads the whole thread. For a simple question, chat with a single bot instead.")
+                    .font(theme.font(12))
+                    .lineSpacing(max(0, 17 - theme.uiFont(12).lineHeight))
+                    .foregroundStyle(theme.inkSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 4)
+                    .padding(.top, -12)
+                    .accessibilityIdentifier("group-panel-cost-hint")
+            }
             if access.canLeave {
                 Button("Leave group", action: leave)
                     .buttonStyle(GroupLeaveButtonStyle())

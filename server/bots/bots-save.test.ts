@@ -7,7 +7,8 @@ vi.mock("node:fs", { spy: true });
 vi.resetModules();
 const fs = await import("node:fs");
 const realFs = await vi.importActual<typeof import("node:fs")>("node:fs");
-const { flushOwnedFiles } = await import("../atomic.ts");
+const { flushOwnedFiles, flushOwnedFilesSync } = await import("../atomic.ts");
+const { closeMessageDb } = await import("../messages/message-db.ts");
 const { BotsSaveError } = await import("./bots-save.ts");
 const { DATA_DIR } = await import("../config.ts");
 const { Store } = await import("../store.ts");
@@ -62,11 +63,18 @@ function storeWithTwoThreads() {
 }
 
 describe("bots.json save failures", () => {
+  // This file's modules are its own (vi.resetModules above), so the shared
+  // setup's afterEach closes another message database: close this one, or a
+  // transcript written to the previous case's deleted file is lost when the
+  // handle notices the wiped folder, a second later, in the middle of a case.
   beforeEach(() => {
+    closeMessageDb();
     realFs.rmSync(DATA_DIR, { recursive: true, force: true });
   });
   afterEach(() => {
     failing = undefined;
+    flushOwnedFilesSync();
+    closeMessageDb();
   });
 
   it("keeps a thread switch whose deferred save failed, says so in the log, and the next save writes it (#3663)", async () => {

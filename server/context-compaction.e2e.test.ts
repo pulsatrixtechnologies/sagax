@@ -34,13 +34,25 @@ async function setup(hang: boolean, fakeEnv: NodeJS.ProcessEnv) {
     const plan = join(session.info.dataDir, "room-plan.json");
     writeFileSync(plan, JSON.stringify({ [bot.id]: { reply: "Acknowledged" } }));
     const messages = async () => (await api(`/api/threads/${thread}/messages`)).messages as any[];
-    const task = () => JSON.parse(readFileSync(join(session.info.dataDir, "bots.json"), "utf8"))
+    const botsFile = () => readFileSync(join(session.info.dataDir, "bots.json"), "utf8");
+    const task = () => JSON.parse(botsFile())
       .find((b: any) => b.id === bot.id).tasks.find((t: any) => t.threadId === thread);
+    // A thread's engine session, folds and usage are bookkeeping: written off
+    // the event loop, at most once a second (#3663). Read once no write is due.
+    const saved = async () => {
+      for (let last = botsFile(); ;) {
+        await new Promise(resolve => setTimeout(resolve, 1_200));
+        const now = botsFile();
+        if (now === last) return;
+        last = now;
+      }
+    };
     const idle = () => expect.poll(async () => (await api("/api/bots?messages=0")).bots
       .find((b: any) => b.id === bot.id).tasks.find((t: any) => t.threadId === thread).busy, { timeout: 15_000 }).toBe(false);
     const send = async (text: string) => {
       await cli("send", "--bot", bot.id, "--task", thread, "--text", text);
       expect((await cli("wait", "--bot", bot.id, "--task", thread, "--timeout", "30")).status).toBe("settled");
+      await saved();
     };
     const turns = () => existsSync(`${plan}.evidence.jsonl`) ? readFileSync(`${plan}.evidence.jsonl`, "utf8")
       .trim().split("\n").filter(Boolean).map(line => JSON.parse(line)) : [];

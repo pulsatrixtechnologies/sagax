@@ -1190,7 +1190,6 @@
   "New confidential thread": "confidential.new",
   "New ordinary thread": "confidential.newOrdinary",
   "Group conversations use more: every bot in the group reads the whole thread. For a simple question, chat with a single bot instead.": "chat.notice.groupCost",
-  "Dismiss the group conversation usage notice": "chat.notice.groupCost.dismiss",
   "Message %@ · %@": "composer.placeholder.group",
   "Write a message…": "composer.placeholder.write",
   "continue the conversation": "composer.hint.dm",

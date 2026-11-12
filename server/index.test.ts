@@ -410,7 +410,18 @@ const statusWithHeaders = (headers: Record<string, string>): Promise<number> =>
 
 beforeAll(async () => {
   home = mkdtempSync(join(tmpdir(), "omb-api-test-"));
-  writeFileSync(join(home, "fake-agent-browser"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  // The bots' browser engine stand-in, one Node program: it logs each call,
+  // answers `session list`, and fails while browser-clear-fails exists. It
+  // runs as the file itself, so a child started by the spawn helper (Linux,
+  // #3708), which the server's preloaded seams never reach, gets it too; the
+  // prelude below runs it through node where a script cannot run (Windows).
+  writeFileSync(join(home, "fake-agent-browser"), `#!${process.execPath}\n${[
+    'const fs = require("node:fs"); const path = require("node:path");',
+    `const base = ${JSON.stringify(home)};`,
+    'fs.appendFileSync(path.join(base, "browser-calls.jsonl"), JSON.stringify({ args: process.argv.slice(2), session: process.env.AGENT_BROWSER_SESSION }) + "\\n");',
+    'if (process.argv[2] === "session" && process.argv[3] === "list") fs.writeSync(1, JSON.stringify({ success: true, data: { sessions: [] } }));',
+    'process.exit(fs.existsSync(path.join(base, "browser-clear-fails")) ? 1 : 0);',
+  ].join("\n")}\n`, { mode: 0o755 });
   staticDir = join(home, "static");
   fakeClaudeDump = join(home, "fake-claude-dump.json");
   fakeClaudePrompts = join(home, "fake-claude-prompts.jsonl");
@@ -1231,21 +1242,16 @@ beforeAll(async () => {
   await new Promise<void>((r) => boatStub.listen(0, "127.0.0.1", r));
   boatStubPort = (boatStub.address() as { port: number }).port;
 
-  // Emulate only our temporary browser executable, including on Windows where
-  // the shell-script marker is not executable. No installed browser is used.
+  // Our temporary browser executable runs through node where the server
+  // starts it itself, including on Windows where the file is not executable.
+  // No installed browser is used.
   const browserPrelude = `data:text/javascript,${encodeURIComponent(`
     import childProcess from "node:child_process";
     import { syncBuiltinESMExports } from "node:module";
     const spawn = childProcess.spawn;
-    const base = ${JSON.stringify(home)};
     childProcess.spawn = function(command, args, options) {
       if (command !== process.env.SAGAX_AGENT_BROWSER_PATH) return spawn(command, args, options);
-      const program = 'const fs = require("node:fs"); const path = require("node:path"); '
-        + 'const base = ' + JSON.stringify(base) + '; '
-        + 'fs.appendFileSync(path.join(base, "browser-calls.jsonl"), JSON.stringify({args: process.argv.slice(1), session: process.env.AGENT_BROWSER_SESSION}) + "\\\\n"); '
-        + 'if (process.argv[1] === "session" && process.argv[2] === "list") fs.writeSync(1, JSON.stringify({ success: true, data: { sessions: [] } })); '
-        + 'process.exit(fs.existsSync(path.join(base, "browser-clear-fails")) ? 1 : 0);';
-      return spawn(process.execPath, ["-e", program, ...args], options);
+      return spawn(process.execPath, [command, ...args], options);
     };
     syncBuiltinESMExports();
   `)}`;

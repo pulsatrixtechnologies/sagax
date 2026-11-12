@@ -845,54 +845,26 @@ struct DesktopConversationWindowScene: View {
 
 // MARK: - A group's banners
 
-/// GroupView.tsx under its header (a band, not a float): the group usage
-/// notice (ChatUsageNotices.tsx `GroupCostNotice`, dismissed for good) and
-/// the group instructions line (the bulletin: a pin and its first line, or
+/// GroupView.tsx under its header (a band, not a float): the group
+/// instructions line (the bulletin: a pin and its first line, or
 /// "Add group instructions…"; tapped, an editor that saves on leaving it).
 struct DesktopRoomBanners: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
     let room: Room
-    @AppStorage("sagax.notice.dismissed.group-cost") private var costDismissed = false
     @State private var editing = false
     @State private var draft = ""
     @FocusState private var focused: Bool
 
-    /// `showsGroupCostNotice`: a group of two bots or more.
+    /// `showsGroupCostNotice`: a group of two bots or more. Its words sit
+    /// under the roster in the group panel's Members tab, never as a banner
+    /// above the chat (desktop #3690).
     static func showsCostNotice(_ room: Room) -> Bool {
         room.dm != true && room.peopleDm != true && room.memberIds.count > 1
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if !costDismissed && Self.showsCostNotice(room) {
-                HStack(alignment: .top, spacing: 8) {
-                    Text("Group conversations use more: every bot in the group reads the whole thread. For a simple question, chat with a single bot instead.")
-                        .font(theme.font(13))
-                        // CSS's 1.5 line box (19.5 pt), not the face's own line
-                        .lineSpacing(max(0, 19.5 - theme.uiFont(13).lineHeight))
-                        .frame(minHeight: 19.5)
-                        .foregroundStyle(theme.inkSecondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Button { costDismissed = true } label: {
-                        DesktopIconView(icon: .x, size: 13)
-                            .foregroundStyle(theme.inkSecondary)
-                            .frame(width: 17, height: 17)
-                            .frame(width: 32, height: 32)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(-7.5)
-                    .accessibilityLabel(Text("Dismiss the group conversation usage notice"))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(theme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
-                .padding(.bottom, 8)
-                .accessibilityIdentifier("desktop-group-cost-notice")
-            }
             if room.peopleDm != true { bulletin }
         }
         .padding(.horizontal, 20)

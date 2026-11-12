@@ -870,6 +870,11 @@ struct TopScrollEdgeFade: ViewModifier {
         }
     }
 
+    /// `height` is measured from the safe area's top (the header's band).
+    /// Under the status bar, the band above it is the background itself.
+    /// The gradient used to be moved up into the status bar at its fixed
+    /// height, so it covered the status bar alone and rows scrolled sharp
+    /// under the header's buttons (#4041).
     private var fade: some View {
         LinearGradient(
             stops: [
@@ -882,7 +887,12 @@ struct TopScrollEdgeFade: ViewModifier {
             startPoint: .top, endPoint: .bottom
         )
         .frame(height: height)
-        .ignoresSafeArea(edges: underStatusBar ? .top : [])
+        .background(alignment: .top) {
+            if underStatusBar {
+                // zero high at the safe area's top, grown up to the screen's edge
+                Color.clear.frame(height: 0).background(background.ignoresSafeArea(edges: .top))
+            }
+        }
         .allowsHitTesting(false)
     }
 }

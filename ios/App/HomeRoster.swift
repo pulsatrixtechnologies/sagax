@@ -600,33 +600,17 @@ enum HomeApp: String, CaseIterable {
 }
 
 /// The apps button at the bottom leading corner (reference app's grid with a
-/// +): the places the account menu lists (Settings, Team map,
-/// Automations, Achievements, Release notes, About, Help), then Updates,
-/// Connect apps and Templates.
+/// +): it opens `HomeAppsMenu`, the places the account menu lists, then
+/// Templates, Plugins and Updates.
 struct HomeAppsButton: View {
     @Environment(\.themePalette) var themePalette
     @EnvironmentObject private var session: Session
-    let select: (AccountMenuItem) -> Void
-    let openApp: (HomeApp) -> Void
+    let open: () -> Void
 
     var body: some View {
-        Menu {
-            Section {
-                Button { openApp(.updates) } label: {
-                    let count = session.state.updates.count
-                    Label(count > 0 ? String(localized: "Updates (\(count))") : String(localized: "Updates"), systemImage: "tray")
-                }
-                .accessibilityIdentifier("home-apps.updates")
-                Button { openApp(.connectApps) } label: {
-                    Label(String(localized: "Connect apps"), systemImage: "puzzlepiece.extension")
-                }
-                .accessibilityIdentifier("home-apps.connectApps")
-                Button { openApp(.templates) } label: {
-                    Label(String(localized: "Templates"), systemImage: "square.on.square")
-                }
-                .accessibilityIdentifier("home-apps.templates")
-            }
-            HomeAccountMenuItems(select: select)
+        Button {
+            Haptics.selection()
+            open()
         } label: {
             AppsGridGlyph()
                 .frame(width: 20, height: 20)
@@ -637,7 +621,6 @@ struct HomeAppsButton: View {
         .buttonStyle(.plain)
         .themeGlass(Circle())
         .chatGlassRim(Circle())
-        .simultaneousGesture(TapGesture().onEnded { Haptics.selection() })
         .overlay(alignment: .topTrailing) {
             if !session.state.updates.isEmpty {
                 Circle()
@@ -650,6 +633,116 @@ struct HomeAppsButton: View {
         }
         .accessibilityLabel(Text("Apps"))
         .accessibilityIdentifier("home-apps")
+    }
+}
+
+/// What the apps button opens (#4041): an opaque card over a dimmed home,
+/// growing up from the button, so nothing of the list reads through it and
+/// the bottom bar stays whole under the dim. The account menu's groups
+/// above, then Templates, Plugins (the desktop's word since 0.8.52) and
+/// Updates nearest the button. A long list scrolls inside the card.
+struct HomeAppsMenu: View {
+    @Environment(\.themePalette) var themePalette
+    @EnvironmentObject private var session: Session
+    @ObservedObject private var achievements = AchievementStore.shared
+    @ObservedObject private var routines = AccountRowModel.shared
+    let select: (AccountMenuItem) -> Void
+    let openApp: (HomeApp) -> Void
+    let dismiss: () -> Void
+
+    static let width: CGFloat = 268
+    static let row: CGFloat = 44
+
+    private var surface: Color { Theme.parity(Color(hex: 0x323232), Theme.menuGlass) }
+    private var ink: Color { Theme.parity(Color(hex: 0xF9F9F9), Theme.textPrimary) }
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            // the home under the card, dimmed so it never reads through
+            Theme.dim
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture(perform: dismiss)
+                .accessibilityElement()
+                .accessibilityLabel(Text("Close"))
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { dismiss() }
+                .accessibilityIdentifier("home-apps.dismiss")
+            ViewThatFits(in: .vertical) {
+                entries
+                ScrollView { entries }
+            }
+            .frame(width: Self.width)
+            .background(surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Theme.hairline, lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.35), radius: 24, y: 10)
+            .padding(.leading, HomeMetrics.bottomInset - 8)
+            .padding(.top, 8)
+            // above the apps button, which stays in its place under the dim
+            .padding(.bottom, HomeMetrics.bottomControl + 14)
+            .transition(.scale(scale: 0.6, anchor: .bottomLeading).combined(with: .opacity))
+            .accessibilityElement(children: .contain)
+            .accessibilityAddTraits(.isModal)
+            .accessibilityIdentifier("home-apps-menu")
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+        .accessibilityAction(.escape) { dismiss() }
+    }
+
+    private var entries: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // the order the system menu showed from this button: the first
+            // entry nearest the button, so the groups read bottom up
+            let groups = HomeAccountMenuItems.groups(session: session, achievements: achievements).reversed().map { Array($0.reversed()) }
+            ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
+                if index > 0 { divider }
+                ForEach(group, id: \.self) { item in
+                    let title = item == .automations && routines.activeRoutines > 0
+                        ? HomeAccountMenuItems.title(item) + " (\(routines.activeRoutines))"
+                        : HomeAccountMenuItems.title(item)
+                    row(title, symbol: HomeAccountMenuItems.symbol(item), id: "account-menu.\(item.rawValue)") { select(item) }
+                }
+            }
+            if !groups.isEmpty { divider }
+            row(String(localized: "Templates"), symbol: "square.on.square", id: "home-apps.templates") { openApp(.templates) }
+            row(String(localized: "Plugins"), symbol: "puzzlepiece.extension", id: "home-apps.connectApps") { openApp(.connectApps) }
+            let count = session.state.updates.count
+            row(count > 0 ? String(localized: "Updates (\(count))") : String(localized: "Updates"), symbol: "tray", id: "home-apps.updates") {
+                openApp(.updates)
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(ink.opacity(0.14))
+            .frame(height: 0.5)
+            .padding(.horizontal, 20)
+            .frame(height: 9)
+    }
+
+    private func row(_ title: String, symbol: String, id: String, action: @escaping () -> Void) -> some View {
+        Button {
+            dismiss()
+            action()
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: symbol)
+                    .font(.system(size: 17, weight: .regular))
+                    .frame(width: 24)
+                Text(verbatim: title)
+                    .font(Theme.Font.body)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(ink)
+            .padding(.horizontal, 20)
+            .frame(height: Self.row)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(id)
     }
 }
 

@@ -335,13 +335,19 @@ struct HomeAccountMenuItems: View {
     @ObservedObject private var achievements = AchievementStore.shared
     @ObservedObject private var routines = AccountRowModel.shared
 
-    var body: some View {
-        let groups = NavigationMenus.account(
+    /// The account menu's groups, for this menu and the apps menu (`HomeAppsMenu`).
+    @MainActor
+    static func groups(session: Session, achievements: AchievementStore) -> [[AccountMenuItem]] {
+        NavigationMenus.account(
             gate: session.surfaceGate,
             hasArchivedBots: !session.surfaceGate.restorableArchivedBots(session.state.bots).isEmpty,
             achievementsReady: session.connection != nil && achievements.status != .unavailable,
             connected: session.connection != nil
         )
+    }
+
+    var body: some View {
+        let groups = Self.groups(session: session, achievements: achievements)
         // the desktop row's name, title and points (#194)
         Section { } header: { AccountMenuHeader() }
         ForEach(Array(groups.enumerated()), id: \.offset) { index, group in

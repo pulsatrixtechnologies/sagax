@@ -1,6 +1,7 @@
 // Analytics tab, the desktop's BotUsageBreakdownSection (#2612, #3030,
 // #3401): who uses what on this bot, over 7 days, 30 days or this month, in
 // $ or in tokens, under a grey group label, money in the reader's language.
+// The splits are the sources and the people (#4077: no account or model group).
 // One bar per row in a single hue (the rows are their own legend); the top
 // six rows, then the rest folded into "Others (N)" that opens them.
 import CompanionCore
@@ -22,7 +23,7 @@ struct BotUsageBreakdownView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             BotProfileGroupLabel(title: "Usage statistics")
-                .accessibilityHint(Text("Who uses what: each account, model, source and person, in $ and in tokens. Open a row for the detail."))
+                .accessibilityHint(Text("Who uses what: each source and person, in $ and in tokens."))
             controls
             if let error {
                 ProfileCard {
@@ -41,8 +42,6 @@ struct BotUsageBreakdownView: View {
             } else if let breakdown {
                 totalsCard(breakdown)
                 if !breakdown.days.isEmpty { daysCard(breakdown) }
-                split("By account", breakdown.byAccount, id: "account")
-                split("By model", breakdown.byModel, id: "model")
                 split("By source", breakdown.bySource.map(sourceNamed), id: "source")
                 split("By person", breakdown.byPerson, id: "person")
             } else {

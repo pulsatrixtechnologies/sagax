@@ -12,7 +12,7 @@ public enum BotUsagePeriod: String, CaseIterable, Hashable, Sendable, Identifiab
     public var id: String { rawValue }
 }
 
-/// One row of a split: an account, a model, a source or a person.
+/// One row of a split: a source or a person.
 public struct BotUsageGroup: Decodable, Hashable, Sendable, Identifiable {
     public var key: String
     public var label: String
@@ -80,39 +80,33 @@ public struct BotUsageDay: Decodable, Hashable, Sendable, Identifiable {
     }
 }
 
-/// `view=breakdown`: totals, the four splits, the days.
+/// `view=breakdown`: totals, the source and person splits (#4077), the days.
 public struct BotUsageBreakdown: Decodable, Hashable, Sendable {
     public var from: String
     public var to: String
     public var totals: BotUsageGroup
-    public var byAccount: [BotUsageGroup]
-    public var byModel: [BotUsageGroup]
     public var bySource: [BotUsageGroup]
     public var byPerson: [BotUsageGroup]
     public var days: [BotUsageDay]
     public var currency: String?
 
-    public init(from: String = "", to: String = "", totals: BotUsageGroup = BotUsageGroup(key: "total", label: ""), byAccount: [BotUsageGroup] = [], byModel: [BotUsageGroup] = [], bySource: [BotUsageGroup] = [], byPerson: [BotUsageGroup] = [], days: [BotUsageDay] = [], currency: String? = nil) {
+    public init(from: String = "", to: String = "", totals: BotUsageGroup = BotUsageGroup(key: "total", label: ""), bySource: [BotUsageGroup] = [], byPerson: [BotUsageGroup] = [], days: [BotUsageDay] = [], currency: String? = nil) {
         self.from = from
         self.to = to
         self.totals = totals
-        self.byAccount = byAccount
-        self.byModel = byModel
         self.bySource = bySource
         self.byPerson = byPerson
         self.days = days
         self.currency = currency
     }
 
-    private enum CodingKeys: String, CodingKey { case from, to, totals, byAccount, byModel, bySource, byPerson, days, currency }
+    private enum CodingKeys: String, CodingKey { case from, to, totals, bySource, byPerson, days, currency }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         from = (try? c.decodeIfPresent(String.self, forKey: .from)) ?? ""
         to = (try? c.decodeIfPresent(String.self, forKey: .to)) ?? ""
         totals = (try? c.decodeIfPresent(BotUsageGroup.self, forKey: .totals)) ?? BotUsageGroup(key: "total", label: "")
-        byAccount = (try? c.decodeIfPresent([BotUsageGroup].self, forKey: .byAccount)) ?? []
-        byModel = (try? c.decodeIfPresent([BotUsageGroup].self, forKey: .byModel)) ?? []
         bySource = (try? c.decodeIfPresent([BotUsageGroup].self, forKey: .bySource)) ?? []
         byPerson = (try? c.decodeIfPresent([BotUsageGroup].self, forKey: .byPerson)) ?? []
         days = (try? c.decodeIfPresent([BotUsageDay].self, forKey: .days)) ?? []

@@ -599,7 +599,7 @@ struct BotProfilePage: View {
     private static let appearanceWords: [LocalizedStringKey] = ["Appearance", "Mascot", "Colour", "Picture", "Avatar", "Play a move"]
     private static let statsWords: [LocalizedStringKey] = [
         "Analytics", "Stats", "Messages", "Hours saved", "Top users", "Usage", "Turns", "Tokens", "Cost",
-        "By account", "By model", "By source", "By person", "This month",
+        "By source", "By person", "This month",
     ]
 
     private func tabMatches(_ item: BotProfileTab) -> Bool {
@@ -1406,6 +1406,8 @@ struct BotProfilePage: View {
         VStack(alignment: .leading, spacing: 24) {
             BotProfileAnalyticsBlock(bot: current, fillsMain: fillsMain)
             BotUsageBreakdownView(bot: current)
+                // `-parityBotProfileScroll usage` (the captures) lands here
+                .id("bot-profile-anchor.usage")
             group(nil, rows: context.sections.contains(.usage) ? [sectionRow(.usage)] : [], id: "bot-profile-group.stats")
         }
     }

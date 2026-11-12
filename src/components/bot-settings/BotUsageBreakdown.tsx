@@ -1,6 +1,8 @@
 // The V6 "Statistiques d'usage" (#2612): who uses what on this bot, split by
 // account, model, source and person, in $ or in tokens, over 7 days, 30 days
-// or the current month. Each row opens its detail (calls, tokens, tools).
+// or the current month. The chart groups by any of the four; the details
+// list the sources and the people only (#4077: no account, model or tools
+// group), and each of their rows opens its detail (calls, tokens).
 // On the Analytics tab it comes after the reference block (#3401): a grey
 // group label with its intro behind a help tip, its own period, unit and
 // group-by controls in the header row of the chart card, money written as
@@ -19,12 +21,14 @@ import { formatMoney, formatMoneyCompact, formatTokens, hasFiniteCost } from "@/
 import type { LocaleKey } from "@/locales";
 import { api, useStore, type Bot } from "@/state/store";
 import { BOT_USAGE_PERIODS, type BotUsagePeriod } from "../../../shared/bot-analytics";
-import type { BotUsageBreakdown, UsageStatsGroup, UsageToolStat } from "../../../shared/telemetry";
+import type { BotUsageBreakdown, UsageStatsGroup } from "../../../shared/telemetry";
 import { HelpTip, PILL, SettingsGroup } from "../SettingsPrimitives";
 import { OTHER_COLOR, SERIES_SLOTS, TextToggle, UsageChartCard, UsageChartControls, formatTileShare, seriesColor, type ChartSeries } from "../usage-chart/UsageChartCard";
 
 export type BotUsageUnit = "usd" | "tokens";
 type Dimension = "account" | "model" | "source" | "person";
+/** The groups listed under the details; the account and model splits stay in the chart only (#4077). */
+type ListedDimension = "source" | "person";
 
 const PERIOD_LABEL: Record<string, LocaleKey> = {
   "7": "botProfile.usage.period7",
@@ -318,7 +322,7 @@ export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, ac
     );
   };
 
-  const section = (dimension: Dimension, groups: readonly UsageStatsGroup[]) => {
+  const section = (dimension: ListedDimension, groups: readonly UsageStatsGroup[]) => {
     const firstLines = subLabels(dimension, groups);
     const merged = mergeAlike(groups, (group) => `${label(dimension, group)}\u0000${firstLines.get(group) ?? ""}`);
     const lines = subLabels(dimension, merged);
@@ -464,11 +468,8 @@ export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, ac
           </button>
           {details && (
             <>
-              {section("account", data.byAccount)}
-              {section("model", data.byModel)}
               {section("source", data.bySource)}
               {section("person", data.byPerson)}
-              {data.tools.length > 0 && <ToolList tools={data.tools} />}
             </>
           )}
         </>
@@ -483,24 +484,6 @@ function Detail({ label, value }: { label: string; value: string }) {
     <div className="flex min-w-0 items-baseline justify-between gap-2">
       <dt className="truncate text-ink-secondary">{label}</dt>
       <dd className="tabular-nums text-ink">{value}</dd>
-    </div>
-  );
-}
-
-const TOOLS_SHOWN = 10;
-
-function ToolList({ tools }: { tools: readonly UsageToolStat[] }) {
-  return (
-    <div data-bot-usage-tools="" className="min-w-0">
-      <SettingsGroup title={t("botProfile.usage.tools")} groupId="bot-usage-tools">
-        {tools.slice(0, TOOLS_SHOWN).map((tool) => (
-          <div key={`${tool.kind}:${tool.mcpServer ?? ""}:${tool.tool}`} data-bot-usage-tool="" className="flex min-h-[44px] min-w-0 items-center gap-3 px-4 py-2">
-            <span className="min-w-0 flex-1 truncate text-[14px] leading-5 text-ink">{tool.mcpServer ? `${tool.mcpServer} · ${tool.tool}` : tool.tool}</span>
-            {tool.errors > 0 && <span className="shrink-0 tabular-nums text-[12px] leading-4 text-ink-secondary">{tool.errors === 1 ? t("botProfile.usage.toolErrorOne") : t("botProfile.usage.toolErrors", { count: String(tool.errors) })}</span>}
-            <span className="w-24 shrink-0 text-right tabular-nums text-[13px] leading-5 text-ink-secondary">{t("botProfile.usage.toolCallCount", { count: String(tool.calls) })}</span>
-          </div>
-        ))}
-      </SettingsGroup>
     </div>
   );
 }

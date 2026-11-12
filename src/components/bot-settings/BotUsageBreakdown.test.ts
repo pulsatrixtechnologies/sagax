@@ -65,14 +65,35 @@ describe("bot usage breakdown (#2612)", () => {
     expect(shares(groups, "tokens").map((row) => [row.group.key, row.percent])).toEqual([[`${ENGINE_ID}:api`, 95], ["grok:api", 5]]);
   });
 
-  it("shows the four sections, the summary cards and the tools", () => {
+  it("shows the source and person groups and the summary cards", () => {
     const html = render();
-    for (const dimension of ["account", "model", "source", "person"]) expect(html).toContain(`data-bot-usage-dimension="${dimension}"`);
+    for (const dimension of ["source", "person"]) expect(html).toContain(`data-bot-usage-dimension="${dimension}"`);
     for (const card of ["cost", "tokens", "calls"]) expect(html).toContain(`data-bot-usage-card="${card}"`);
     expect(html).toContain("$4.00");
+  });
+
+  // #4077: the owner hid the "Tools and MCP", "By account" and "By model"
+  // groups of the details; the chart keeps grouping by account and model.
+  it("draws no account, model or tools group under the details (#4077)", () => {
+    for (const locale of ["en", "fr"] as const) {
+      setLocale(locale);
+      const html = render({ initialOpen: ["account:others", "model:others"] });
+      for (const gone of ["account", "model", "tools"]) {
+        expect(html).not.toContain(`data-bot-usage-dimension="${gone}"`);
+        expect(html).not.toContain(`data-settings-group="bot-usage-${gone}"`);
+        expect(html).not.toContain(`data-bot-usage-row="${gone}"`);
+      }
+      expect(html).not.toContain("data-bot-usage-tools");
+      expect(html).not.toContain("data-bot-usage-tool=");
+      expect(html).not.toContain("send_mail");
+      expect(html).not.toContain(locale === "fr" ? "Outils et MCP" : "Tools and MCP");
+    }
+  });
+
+  it("names an account and the way it is paid in the chart grouped by account", () => {
+    const html = render({ initialDimension: "account", initialDetails: false });
     expect(html).toContain("Work Claude");
     expect(html).toContain("API key, pay per use");
-    expect(html).toContain("mail · send_mail");
   });
 
   it("switches the rows to tokens", () => {
@@ -93,34 +114,33 @@ describe("bot usage breakdown (#2612)", () => {
     expect(html).toContain("Input tokens");
   });
 
-  it("names models by their label and counts one tool error in the singular", () => {
+  it("names models by their label in the chart", () => {
     const html = render({ modelName: (id: string) => (id === "opus" ? "Opus" : undefined) });
     expect(html).toContain(">Opus<");
-    expect(html).toContain("1 error<");
     expect(render()).toContain(">opus<");
   });
 
   it("speaks French", () => {
     setLocale("fr");
     const html = render({ period: "month" });
-    expect(html).toContain("Par compte");
+    expect(html).toContain("Par source");
     expect(html).toContain("Mois courant");
   });
 
   it("folds the rows past the top six and the rows at zero into one Others row (#2671)", () => {
-    const models = Array.from({ length: 16 }, (_, index) => group(`m${index}`, `model-${index}`, index < 10 ? 10 - index : 0, [1000, 0]));
-    const { shown, others } = foldRows(shares(models, "usd"));
-    expect(shown.map((row) => row.group.key)).toEqual(["m0", "m1", "m2", "m3", "m4", "m5"]);
+    const sources = Array.from({ length: 16 }, (_, index) => group(`s${index}`, `source-${index}`, index < 10 ? 10 - index : 0, [1000, 0]));
+    const { shown, others } = foldRows(shares(sources, "usd"));
+    expect(shown.map((row) => row.group.key)).toEqual(["s0", "s1", "s2", "s3", "s4", "s5"]);
     expect(others).toHaveLength(10);
-    const html = render({ data: { ...data(), byModel: models } });
+    const html = render({ data: { ...data(), bySource: sources } });
     expect(html).toContain("Others (10)");
-    expect(html.match(/data-bot-usage-row="model"/g)).toHaveLength(6);
-    const opened = render({ data: { ...data(), byModel: models }, initialOpen: ["model:others"] });
-    expect(opened.match(/data-bot-usage-row="model"/g)).toHaveLength(16);
+    expect(html.match(/data-bot-usage-row="source"/g)).toHaveLength(6);
+    const opened = render({ data: { ...data(), bySource: sources }, initialOpen: ["source:others"] });
+    expect(opened.match(/data-bot-usage-row="source"/g)).toHaveLength(16);
   });
 
   it("draws no legend, no stacked bar and no cycled colors: one hue per row bar, a dot for a sliver", () => {
-    const html = render({ data: { ...data(), byModel: [group("big", "big", 99.6, [1000, 0]), group("tiny", "tiny", 0.4, [10, 0])] } });
+    const html = render({ data: { ...data(), bySource: [group("big", "big", 99.6, [1000, 0]), group("tiny", "tiny", 0.4, [10, 0])] } });
     expect(html).not.toMatch(/background:\s*#/);
     expect(html).toContain("data-bot-usage-dot");
     expect(html).toContain("0.4%");
@@ -138,13 +158,16 @@ describe("bot usage breakdown (#2612)", () => {
         byPerson: [group("pr_a", "alex@example.com", 2, [100, 0]), group("alex@example.com", "alex@example.com", 1, [100, 0])],
       },
       accountName: () => "",
-      initialOpen: ["account:others"],
+      initialDimension: "account",
     });
+    // The chart drops rows at $0: the unpriced voice account shows in tokens.
+    expect(html).not.toContain(">xaiVoice<");
+    const inTokens = render({ data: { ...data(), byAccount: [group("xaiVoice", "xaiVoice", null, [100, 0], { engine: "xai-voice" })] }, unit: "tokens", initialDimension: "account" });
+    expect(inTokens).toContain("xAI Voice");
     expect(html).toContain("Owner&#x27;s own key");
     expect(html).toContain("Organization key");
     expect(html).not.toContain("owner-key<");
     expect(html).not.toContain("org-key<");
-    expect(html).toContain("xAI Voice");
     expect(html.match(/data-bot-usage-row="person"/g)).toHaveLength(1);
     expect(html).toContain("$3.00");
     expect(html).not.toMatch(/>-</);
@@ -155,7 +178,8 @@ describe("bot usage breakdown (#2612)", () => {
     const html = render({
       data: { ...data(), byAccount: [group(`${guid}:org-key`, "claudeAgent", 2, [100, 0], { engine: "claude", access: "org-key" })] },
       accountName: (id) => (id === guid ? "Claude (work)" : ""),
-    });
+      initialDimension: "account",
+    }).replace(/data-[a-z-]+="[^"]*"/g, "");
     expect(html).toContain("Claude (work)");
     expect(html).not.toContain(guid);
   });

@@ -16112,16 +16112,6 @@
         }
       }
     },
-    "By account": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Par compte"
-          }
-        }
-      }
-    },
     "By bot": {
       "localizations": {
         "en": {
@@ -96537,18 +96527,18 @@
         }
       }
     },
-    "Who uses what: each account, model, source and person, in $ and in tokens. Open a row for the detail.": {
+    "Who uses what: each source and person, in $ and in tokens.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Who uses what: each account, model, source and person, in $ and in tokens. Open a row for the detail."
+            "value": "Who uses what: each source and person, in $ and in tokens."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Qui utilise quoi : chaque compte, modèle, source et personne, en $ et en jetons. Ouvre une ligne pour le détail."
+            "value": "Qui utilise quoi : chaque source et personne, en $ et en jetons."
           }
         }
       }

@@ -74,10 +74,11 @@ it("a silent run leaves the chat and sidebar untouched; a reporting run posts on
     expect(quietTranscript.some((message) => message.role === "user" && String(message.text).includes("finance-invoice-sweep"))).toBe(true);
     expect(quietTranscript.some((message) => message.role === "bot" && String(message.text).includes("October 22 is outside days 1-5"))).toBe(true);
     // The bot was told the quiet contract in its cold prompt (#1997 brief;
-    // full ROUTINE_EXECUTION_PROMPT remains behind sagax_help prompt:routine-execution).
+    // full ROUTINE_EXECUTION_PROMPT remains behind sagax_help prompt:routine-execution;
+    // #4048 reworded it to fit its prompt budget, the same contract).
     const dump = JSON.parse(readFileSync(fixture.fixtureDumpPath, "utf8"));
     const seen = JSON.stringify(dump);
-    expect(seen).toContain("Quiet: last line NOTHING_TO_REPORT");
+    expect(seen).toContain("Quiet/nothing to do: last line NOTHING_TO_REPORT, never partial");
     expect(seen).toContain('sagax_help with question \\"prompt:routine-execution\\"');
     // The chat is exactly as it was: no card, no prompt, no answer.
     const afterQuietMessages = await messages(main);

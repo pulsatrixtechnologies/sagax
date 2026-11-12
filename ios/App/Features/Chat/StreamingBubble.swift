@@ -3,8 +3,10 @@ import SwiftUI
 import CompanionCore
 
 /// The reply as it is being typed, styled to match the settled reply it is
-/// about to become (flat since #1024): the handover should be invisible, and
-/// any difference in padding reads as the message jumping on arrival.
+/// about to become: the same bubble, fill, padding and ink as the bot's
+/// settled reply (TextBubble, #4066; it was flat text on the background
+/// until the reply landed in its bubble). The handover should be invisible,
+/// and any difference in padding reads as the message jumping on arrival.
 ///
 /// A caret rather than a spinner: a spinner says "something is happening
 /// somewhere", which the reader already knows. A caret at the end of real
@@ -23,19 +25,26 @@ struct StreamingBubble: View {
     var color: String = "blue"
     /// iPad desktop shell: the desktop's ink.
     @Environment(\.desktopChatText) private var desktop
+    /// iPad desktop shell: the settled bubble's width cap.
+    @Environment(\.desktopBubbleCap) private var bubbleCap
+    /// So the bubble repaints when the person flips the bot-colour switch.
+    @ObservedObject private var bubblePrefs = SidebarPrefsModel.shared
+    @ObservedObject private var openBot = ThemeStore.shared
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                if let reasoning, !reasoning.isEmpty, text?.isEmpty != false {
-                    AgentThoughtChamberView(
-                        reasoning: reasoning,
-                        botName: "Bot",
-                        mascotColor: MausPalette.color(color),
-                        isStreaming: true
-                    )
-                }
-                if let text, !text.isEmpty {
+        VStack(alignment: .leading, spacing: 4) {
+            if let reasoning, !reasoning.isEmpty, text?.isEmpty != false {
+                AgentThoughtChamberView(
+                    reasoning: reasoning,
+                    botName: "Bot",
+                    mascotColor: MausPalette.color(color),
+                    isStreaming: true
+                )
+                .padding(.vertical, 2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let text, !text.isEmpty {
+                HStack(alignment: .bottom, spacing: 0) {
                     // Same renderer as the settled bubble, for the same
                     // reason as the padding: a live reply showing `**bold**`
                     // that snaps to bold on arrival is the message jumping,
@@ -44,12 +53,21 @@ struct StreamingBubble: View {
                     // unclosed fence renders as code, an unclosed link as the
                     // characters typed so far.
                     MarkdownText(source: text, caret: true)
-                        .foregroundStyle(desktop?.ink ?? Theme.textPrimary)
+                        .foregroundStyle(desktop?.ink ?? BubbleColor.theirsText)
+                        .fixedSize(horizontal: false, vertical: true)
+                        // a growing answer wraps: on the iPad desktop shell
+                        // it takes the bubble's cap, as a settled one that wraps
+                        .frame(maxWidth: desktop != nil ? .infinity : nil, alignment: .leading)
+                        .padding(.horizontal, desktop != nil ? DesktopChatMetrics.bubblePadding.leading : Theme.Chat.bubblePaddingH)
+                        .padding(.vertical, desktop != nil ? DesktopChatMetrics.bubblePadding.top : Theme.Chat.bubblePaddingV)
+                        .background(
+                            RoundedRectangle(cornerRadius: desktop != nil ? DesktopChatMetrics.bubbleRadius : Theme.Metric.bubbleRadius, style: .continuous)
+                                .fill(BubbleColor.theirs(desktop: desktop))
+                        )
+                        .frame(maxWidth: desktop != nil ? (bubbleCap ?? .infinity) : nil, alignment: .leading)
+                    Spacer(minLength: desktop == nil ? Theme.Chat.bubbleTrailingGap : 0)
                 }
             }
-            // #1024: flat, as the settled reply it becomes (TextBubble)
-            .padding(.vertical, 2)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         // No `.textSelection` on purpose: selecting text that is still growing
         // fights the reader, and the settled bubble a frame later is

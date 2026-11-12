@@ -140,4 +140,17 @@ final class PhoneLayoutTests: XCTestCase {
         XCTAssertFalse(body.contains(".lineLimit(2)"))
         XCTAssertTrue(body.contains(".lineLimit(nil)"))
     }
+
+    // #4066: the answer being written was flat text on the background until
+    // it landed in the grey bubble of the settled reply: it grows in that
+    // same bubble now, with the same fill, padding and ink.
+    func testTheStreamingAnswerGrowsInTheSettledReplysBubble() throws {
+        let live = try source("App/Features/Chat/StreamingBubble.swift")
+        let settled = try source("App/Features/Chat/TextBubble.swift")
+        XCTAssertTrue(live.contains(".fill(BubbleColor.theirs(desktop: desktop))"))
+        XCTAssertTrue(settled.contains("return BubbleColor.theirs(desktop: desktop)"))
+        XCTAssertTrue(live.contains("Theme.Chat.bubblePaddingH"))
+        XCTAssertTrue(live.contains("BubbleColor.theirsText"))
+        XCTAssertFalse(live.contains("Theme.textPrimary)"))
+    }
 }

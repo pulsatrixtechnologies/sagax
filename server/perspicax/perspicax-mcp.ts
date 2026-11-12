@@ -426,7 +426,8 @@ function toolError(id: unknown, text: string): PerspicaxRelayAnswer {
 }
 
 /** #3694: a dry run (`_dry_run` or `dry_run`) attempts nothing at the vendor,
- * so its refusal never arms the role logic. */
+ * so its refusal never arms the role logic, and a bot's dry `voice_call` goes
+ * as it is (#3701: the one dry run check). */
 function dryRunCall(args: Record<string, unknown>): boolean {
   return args._dry_run === true || args.dry_run === true;
 }
@@ -1735,7 +1736,7 @@ export class PerspicaxMcp {
     if (!input.judged && frame.method === "tools/call") {
       const params = isObject(frame.params) ? frame.params : {};
       const voice = voiceToolCall(String(params.name ?? ""), params.arguments);
-      if (voice?.tool === "voice_call" && voice.args.dry_run !== true && voice.args._dry_run !== true) {
+      if (voice?.tool === "voice_call" && !dryRunCall(voice.args)) {
         const placed = this.options.placeCall
           ? await this.options.placeCall({ threadId: input.threadId, generation: input.generation, botId: input.botId }, placeArgsFromVoiceCall(voice.args))
           : { text: VOICE_CALL_UNAVAILABLE, isError: true };

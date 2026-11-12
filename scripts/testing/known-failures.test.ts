@@ -28,6 +28,7 @@ import {
   swiftOutcome,
   updateRegressionIssues,
   updateSightings,
+  VITEST_RUN,
   WHOLE_FILE,
 } from "./known-failures.mjs";
 
@@ -87,12 +88,13 @@ describe("extractResults", () => {
       { file: "server/a.test.ts", test: "outer > inner > breaks", state: "fail" },
       { file: "server/a.test.ts", test: "works", state: "pass" },
       { file: "server/a.test.ts", test: WHOLE_FILE, state: "pass" },
+      { ...VITEST_RUN, state: "pass" },
     ]);
   });
 
   it("counts a file that failed to load as one failure of the whole file", () => {
     const results = extractResults(report([{ name: "server/b.test.ts", status: "failed", message: "SyntaxError", tests: [] }]), root, 1);
-    expect(results).toEqual([{ file: "server/b.test.ts", test: WHOLE_FILE, state: "fail", message: "SyntaxError" }]);
+    expect(results).toEqual([{ file: "server/b.test.ts", test: WHOLE_FILE, state: "fail", message: "SyntaxError" }, { ...VITEST_RUN, state: "pass" }]);
   });
 
   it("keeps the first lines of a failure's first error, for the run's issue (#4037)", () => {
@@ -103,7 +105,7 @@ describe("extractResults", () => {
 
   it("turns a non-zero vitest exit with no failing test into a failure, so an unhandled error is never green", () => {
     const results = extractResults(report([{ name: "server/c.test.ts", status: "passed", tests: [[[], "ok", "passed"]] }]), root, 1);
-    expect(results.filter((result) => result.state === "fail")).toEqual([{ file: "(vitest run)", test: "exited with code 1 and no failing test", state: "fail" }]);
+    expect(results.filter((result) => result.state === "fail")).toEqual([{ ...VITEST_RUN, state: "fail", message: "vitest exited with code 1" }]);
     expect(extractResults(report([{ name: "server/c.test.ts", status: "passed", tests: [[[], "ok", "passed"]] }]), root, 0).every((result) => result.state === "pass")).toBe(true);
   });
 });
@@ -393,7 +395,8 @@ describe("openRegressionIssues", () => {
     await openRegressionIssues(many, { repo: "owner/repo", token: "t", fetch: github.fetch, runUrl: "u", apiUrl: "https://api.example.test", bisect: () => null });
     const body = String(github.calls.find((call) => call.method === "POST" && call.path.endsWith("/issues"))?.body?.body);
     expect(body.length).toBeLessThan(65_536);
-    expect(body).toMatch(/- and \d+ more failing tests: see the run\./);
+    expect(body).toMatch(/- `server\/some\/rather\/long\/path\/to\/a\/folder\/file\d+\.test\.ts`: 1 failing test not listed \(GitHub limits an issue's length\); see the run\./);
+    expect(body).toMatch(/- \d+ more failing tests in other files, not listed; see the run\./);
     expect(body).toContain(RUN_MARKER);
   });
 });
@@ -474,6 +477,59 @@ describe("updateRegressionIssues (#4037)", () => {
     expect(github.calls).toEqual([]);
     // The Windows run passes it: closed.
     expect(await updateRegressionIssues([issue], options(github.fetch, [{ ...test(1), state: "pass", os: "windows-latest" }], ["windows-latest"], sightings))).toEqual([{ issue: 6, ticked: 1, closed: true }]);
+  });
+
+  it("closes a run's issue from the tests tied to it, listed in its body or not (#4052)", async () => {
+    // One cause fails 270 tests of one big file and 6 of a small one: the big
+    // file's block does not fit under GitHub's body limit.
+    const big = Array.from({ length: 270 }, (_, i) => ({ file: "server/index.test.ts", test: `a describe block of the server > a rather long test name that says what it checks, number ${i}` }));
+    const small = Array.from({ length: 6 }, (_, i) => ({ file: "server/small.test.ts", test: `s${i}` }));
+    const all = [...big, ...small];
+    const failAll = all.map((entry) => ({ ...entry, state: "fail", os: "ubuntu-latest" }));
+    let sightings = updateSightings(null, { newFailures: all, results: failAll, sha: "s1", platforms: ["ubuntu-latest"] }).sightings;
+    const red = updateSightings(sightings, { newFailures: all, results: failAll, sha: "s2", platforms: ["ubuntu-latest"] });
+    const created: { body: string }[] = [];
+    const opening = async (_url: string, init: { method?: string; body?: string } = {}) => {
+      if (init.method === "POST" && init.body?.includes("title")) created.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({ number: 300 }), { status: 201 });
+    };
+    for (const { key, issue } of await openRegressionIssues(red.due, { repo: "owner/repo", token: "t", fetch: opening, runUrl: "u", apiUrl: "https://api.example.test", bisect: () => null, open: [] })) red.sightings.tests[key].issue = issue;
+    sightings = red.sightings;
+    const body = created[0]!.body;
+    expect(body.length).toBeLessThan(65_536);
+    // The six listed tests pass, the 270 left out still fail: it stays open.
+    const github = fakeGitHub();
+    const halfGreen = [...small.map((entry) => ({ ...entry, state: "pass", os: "ubuntu-latest" })), ...big.map((entry) => ({ ...entry, state: "fail", os: "ubuntu-latest" }))];
+    const half = await updateRegressionIssues([{ number: 300, body }], options(github.fetch, halfGreen, ["ubuntu-latest"], sightings));
+    expect(half.map((update) => update.closed)).toEqual([false]);
+    expect(github.calls.some((call) => call.body?.state === "closed")).toBe(false);
+    // Every test passes: closed.
+    const green = all.map((entry) => ({ ...entry, state: "pass", os: "ubuntu-latest" }));
+    expect((await updateRegressionIssues([{ number: 300, body }], options(github.fetch, green, ["ubuntu-latest"], sightings)))[0]!.closed).toBe(true);
+    // The left-out block still says, truthfully, what it holds.
+    expect(body).toContain("- `server/index.test.ts`: 270 failing tests not listed (GitHub limits an issue's length); see the run.");
+  });
+
+  it("closes the issue of the '(vitest run)' failure once a job exits cleanly (#4052)", async () => {
+    const clean = extractResults(report([{ name: "server/c.test.ts", status: "passed", tests: [[[], "ok", "passed"]] }]), root, 0).map((result) => ({ ...result, os: "ubuntu-latest" }));
+    expect(clean).toContainEqual({ ...VITEST_RUN, state: "pass", os: "ubuntu-latest" });
+    const sightings = { tests: { [identityKey(VITEST_RUN)]: { ...VITEST_RUN, failedOn: ["ubuntu-latest"], issue: 11 } } };
+    const github = fakeGitHub();
+    expect(await updateRegressionIssues([{ number: 11, body: regressionMarker(VITEST_RUN) }], options(github.fetch, clean, ["ubuntu-latest"], sightings))).toEqual([{ issue: 11, ticked: 1, closed: true }]);
+  });
+
+  it("closes the issue of a test that runs on one platform only, once a run on every platform passes it (#4052)", async () => {
+    const windowsOnly = test(1);
+    const sightingsBefore = { lastSha: "s2", tests: { [identityKey(windowsOnly)]: { ...windowsOnly, count: 2, firstSha: "s1", lastSha: "s2", good: null, issue: 12 } } };
+    // The nightly: the file runs on every platform, the test only on Windows.
+    const results = [
+      ...EVERY_PLATFORM.map((os) => ({ file: windowsOnly.file, test: WHOLE_FILE, state: "pass", os })),
+      { ...windowsOnly, state: "pass", os: "windows-latest" },
+    ];
+    // As open-issues does: the sightings of this run, then the issues.
+    const { sightings } = updateSightings(sightingsBefore, { newFailures: [], results, sha: "n1", platforms: EVERY_PLATFORM });
+    const github = fakeGitHub();
+    expect(await updateRegressionIssues([{ number: 12, body: regressionMarker(windowsOnly) }], options(github.fetch, results, EVERY_PLATFORM, sightings))).toEqual([{ issue: 12, ticked: 1, closed: true }]);
   });
 
   it("leaves the Swift package tests' issue alone", async () => {

@@ -28,6 +28,10 @@ import { GUARD_TESTS } from "../verify/release/guard-tests.mjs";
 
 /** The test name of a failure that belongs to the whole file (it did not load, or a hook failed). */
 export const WHOLE_FILE = "(whole file)";
+/** A job's vitest run itself: it fails when vitest exits non-zero with no
+ * failing test (an unhandled error, a crashed worker) and passes otherwise,
+ * so its issue can turn green like any test's (#4052). */
+export const VITEST_RUN = { file: "(vitest run)", test: "exited non-zero with no failing test" };
 export const LIST_PATH = "scripts/testing/known-failures.json";
 const DEFAULT_LIST = join(dirname(fileURLToPath(import.meta.url)), "known-failures.json");
 const REGRESSION_LABEL = "regression";
@@ -51,7 +55,8 @@ export function loadKnownFailures(path = DEFAULT_LIST) {
 /** One test job's results from vitest's JSON report (`--reporter=json`).
  * Paths become relative to `root` with forward slashes, so Windows and Linux
  * jobs name a test the same way. A non-zero exit with no failing test (an
- * unhandled error, a crashed worker) is a failure of its own.
+ * unhandled error, a crashed worker) is a failure of its own (VITEST_RUN),
+ * and every other job passes it.
  * @returns {Result[]} */
 export function extractResults(report, root, exitCode) {
   /** @type {Result[]} */
@@ -68,9 +73,8 @@ export function extractResults(report, root, exitCode) {
     const fileFailed = file.status === "failed" && failedTests === 0;
     results.push({ file: path, test: WHOLE_FILE, state: fileFailed ? "fail" : "pass", ...failureMessage(fileFailed ? "fail" : "pass", file.message) });
   }
-  if (Number(exitCode) !== 0 && !results.some((result) => result.state === "fail")) {
-    results.push({ file: "(vitest run)", test: `exited with code ${exitCode} and no failing test`, state: "fail" });
-  }
+  const crashed = Number(exitCode) !== 0 && !results.some((result) => result.state === "fail");
+  results.push(crashed ? { ...VITEST_RUN, state: "fail", message: `vitest exited with code ${exitCode}` } : { ...VITEST_RUN, state: "pass" });
   return results;
 }
 
@@ -191,11 +195,11 @@ export function updateSightings(previous, { newFailures, results, sha, platforms
   const tests = { ...previous?.tests };
   if (coversEveryPlatform(platforms)) {
     // A file that did not run on a platform (its job got no runner) is not
-    // known to pass there: its sightings stay (#3672).
-    const ranEverywhere = filesRunOn(results, platforms);
-    const failing = new Set(results.filter((result) => result.state === "fail").map(identityKey));
-    for (const result of results) {
-      if (result.state === "pass" && ranEverywhere.has(result.file) && !failing.has(identityKey(result))) delete tests[identityKey(result)];
+    // known to pass there: its sightings stay (#3672). The rule is isGreen's
+    // with no runner on record.
+    const ranEverywhere = filesRunOn(results ?? [], platforms);
+    for (const item of indexRun(results, platforms).values()) {
+      if (isGreen(item, { platforms, ranEverywhere })) delete tests[identityKey(item)];
     }
   }
   const failingOs = new Map();
@@ -224,7 +228,8 @@ export function updateSightings(previous, { newFailures, results, sha, platforms
 }
 
 /** The hidden line that ties an issue to its test, so a test never gets two. */
-export const regressionMarker = (identity) => `<!-- known-failures: ${identityKey(identity).replace(/--/g, "- -")} -->`;
+export const regressionMarker = (identity) => markerOfKey(identityKey(identity));
+const markerOfKey = (key) => `<!-- known-failures: ${key.replace(/--/g, "- -")} -->`;
 
 /** The jobs of ci.yml that run `swift test --package-path ios`, and their step that does. */
 export const SWIFT_JOBS = [SWIFT_AFTER_MERGE, "Swift tests + iOS build"];
@@ -370,9 +375,10 @@ const inline = (text) => String(text ?? "").replace(/`/g, "'").replace(/\n/g, " 
 /** The issue of a run whose many tests failed together: its commit, the
  * tests grouped by file (most failures first) as a checklist that later runs
  * tick, and the first failing assertion of each file. Bisect runs once, on
- * the file with the most failures. A list longer than GitHub takes ends with
- * the count of the tests left out; they stay tied to this issue by the
- * sightings. */
+ * the file with the most failures. A file whose block does not fit under
+ * GitHub's body limit keeps one line with its count; its tests stay tied to
+ * this issue by the sightings, and the issue closes only once they pass too
+ * (planRegressionUpdates, #4052). */
 export function runIssueText(entries, { runUrl, results = [], bisectOnce = () => null }) {
   const files = [...Map.groupBy(entries, (entry) => entry.file)].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
   const firstMessage = new Map();
@@ -383,7 +389,7 @@ export function runIssueText(entries, { runUrl, results = [], bisectOnce = () =>
   const found = bisectOnce(files[0][1][0]);
   const culprit = found?.verdict === "found" && found.pullRequest ? ` (broken by #${found.pullRequest})` : "";
   const head = [
-    `${entries.length} tests in ${files.length} files failed in two runs of CI on main after a merge and are not in \`${LIST_PATH}\`. They failed together, so this one issue lists them all instead of one issue per test.`,
+    `${entries.length} tests in ${files.length} files failed in two runs of CI on main after a merge and are not in \`${LIST_PATH}\`. They failed together, so this one issue tracks them all instead of one issue per test.`,
     "",
     `Commit: ${sha} (first seen on ${entries[0].firstSha})`,
     `Run: ${runUrl}`,
@@ -393,13 +399,13 @@ export function runIssueText(entries, { runUrl, results = [], bisectOnce = () =>
   ];
   const tail = [
     "",
-    "Later runs on main tick a test that passes again and untick one that fails again; the issue closes when every test is ticked. Fix the tests or the change that broke them. This issue does not block a merge.",
+    "Later runs on main tick a test that passes again and untick one that fails again; the issue closes once every test of the run passes again, listed here or not. Fix the tests or the change that broke them. This issue does not block a merge.",
     "",
     RUN_MARKER,
   ];
   const blocks = [];
   let size = [...head, ...tail].join("\n").length;
-  let left = 0;
+  const left = [];
   for (const [file, tests] of files) {
     const message = firstMessage.get(file);
     const block = [
@@ -410,13 +416,26 @@ export function runIssueText(entries, { runUrl, results = [], bisectOnce = () =>
       "",
     ].join("\n");
     if (size + block.length > BODY_LIMIT) {
-      left += tests.length;
+      left.push([file, tests.length]);
       continue;
     }
     size += block.length + 1;
     blocks.push(block);
   }
-  const more = left ? [`- and ${left} more failing tests: see the run.`, ""] : [];
+  // Each file left out keeps its count while the lines fit; the rest are
+  // counted together. GitHub's own limit leaves room for these lines.
+  const more = [];
+  let rest = 0;
+  for (const [file, count] of left) {
+    const line = `- \`${inline(file)}\`: ${count} failing test${count === 1 ? "" : "s"} not listed (GitHub limits an issue's length); see the run.`;
+    if (size + line.length + 1 > BODY_LIMIT) rest += count;
+    else {
+      size += line.length + 1;
+      more.push(line);
+    }
+  }
+  if (rest) more.push(`- ${rest} more failing tests in other files, not listed; see the run.`);
+  if (more.length) more.push("");
   return {
     title: `Regression: ${entries.length} tests failing on main at ${String(sha).slice(0, 7)}${culprit}`,
     body: [...head, ...blocks, ...more, ...tail].join("\n"),
@@ -437,12 +456,70 @@ export function indexRun(results, platforms = []) {
   return index;
 }
 
-/** What a run says of one test: "absent" (it did not run), "fail" (it failed
- * in at least one job) or "pass". */
-export function stateInRun(index, identity) {
-  const item = index.get(identityKey(identity));
-  if (!item) return "absent";
-  return item.failed ? "fail" : "pass";
+/** The one rule for "this run passed the test" (#4052), for the rail
+ * (updateSightings, planRegressionUpdates) and the close by hand
+ * (close-green-regressions.mjs). `item` is indexRun's. It must have passed
+ * and failed in no job. With the runners it failed on (the sighting's
+ * `failedOn`), it must have passed on each of them. With none on record, the
+ * run must cover every platform and its file must have run on each: a test
+ * that runs on one platform only (skipped elsewhere) is green from where it
+ * ran, and a push that runs Linux only closes nothing seen on Windows.
+ * @param {{ file: string, failed: boolean, passedOn: Set<string> } | undefined} item
+ * @param {{ failedOn?: string[], platforms?: string[], ranEverywhere: Set<string> }} context */
+export function isGreen(item, { failedOn, platforms, ranEverywhere }) {
+  if (!item || item.failed || item.passedOn.size === 0) return false;
+  if (failedOn?.length) return failedOn.every((os) => item.passedOn.has(os));
+  return coversEveryPlatform(platforms) && ranEverywhere.has(item.file);
+}
+
+const CHECK_LINE = /^- \[( |x)\] .*(<!-- known-failures: .*? -->)\s*$/;
+const MARKER = /<!-- known-failures: .*? -->/g;
+
+/** What a run on main does to each open regression issue (#4037, #4052),
+ * shared by the rail and the close by hand. An issue's tests are the markers
+ * in its body and the sightings tied to it (`issue`), so a test a run's issue
+ * could not list still counts. Each is done when it is green in this run
+ * (isGreen), or when its checklist line was ticked by an earlier run and it
+ * did not fail in this one. A run's issue gets its lines ticked or unticked
+ * (`body`, null when unchanged). An issue closes when it has a test and every
+ * test is done; `reason` says why one stays: "other" (no test of the rail),
+ * "fail" (a test failed in this run) or "not-green" (a test did not run, or
+ * not on each runner it failed on).
+ * @returns {{ number: number, title?: string, body: string | null, ticked: number, close: boolean, reason?: "other" | "fail" | "not-green" }[]} */
+export function planRegressionUpdates(open, { results, platforms = [], sightings }) {
+  const index = indexRun(results, platforms);
+  const ranEverywhere = filesRunOn(results ?? [], platforms ?? []);
+  const recorded = sightings?.tests ?? {};
+  const byMarker = new Map([...index.values()].map((item) => [regressionMarker(item), item]));
+  const failedOn = new Map(Object.entries(recorded).map(([key, entry]) => [markerOfKey(key), entry?.failedOn]));
+  const tied = Map.groupBy(Object.entries(recorded).filter(([, entry]) => entry?.issue), ([, entry]) => entry.issue);
+  const green = (marker) => isGreen(byMarker.get(marker), { failedOn: failedOn.get(marker), platforms, ranEverywhere });
+  const plans = [];
+  for (const issue of open ?? []) {
+    if (issue.pull_request) continue;
+    const body = String(issue.body ?? "");
+    const ticks = new Map();
+    let ticked = 0;
+    const next = !body.includes(RUN_MARKER) ? body : body.split("\n").map((line) => {
+      const match = CHECK_LINE.exec(line);
+      if (!match) return line;
+      let mark = match[1];
+      if (green(match[2])) mark = "x";
+      else if (byMarker.get(match[2])?.failed) mark = " ";
+      if (mark === "x" && match[1] !== "x") ticked += 1;
+      ticks.set(match[2], mark === "x");
+      return mark === match[1] ? line : line.replace(/^- \[( |x)\]/, `- [${mark}]`);
+    }).join("\n");
+    const markers = new Set([...body.matchAll(MARKER)].map((match) => match[0]));
+    for (const [key] of tied.get(issue.number) ?? []) markers.add(markerOfKey(key));
+    // A tied test the body does not list, green now, counts as passing again.
+    for (const marker of markers) if (!ticks.has(marker) && body.includes(RUN_MARKER) && green(marker)) ticked += 1;
+    const done = (marker) => green(marker) || (ticks.get(marker) === true && !byMarker.get(marker)?.failed);
+    const close = markers.size > 0 && [...markers].every(done);
+    const reason = close ? undefined : markers.size === 0 ? "other" : [...markers].some((marker) => byMarker.get(marker)?.failed) ? "fail" : "not-green";
+    plans.push({ number: issue.number, title: issue.title, body: next === body ? null : next, ticked: body.includes(RUN_MARKER) ? ticked : close ? markers.size : 0, close, ...(reason ? { reason } : {}) });
+  }
+  return plans;
 }
 
 /** The comment that closes a regression issue, with the green run as evidence. */
@@ -450,23 +527,12 @@ export const greenEvidence = ({ runUrl, sha }) =>
   `Passes on main in ${runUrl}${sha ? ` (commit ${sha})` : ""}, so this regression issue is closed. A new failure of the test opens a new one.`;
 
 /** The open regression issues whose tests passed in this run on main
- * (#4037). A test counts as green when it ran and passed in every job that
- * ran it, on each runner it failed on (the sighting's `failedOn`); with no
- * such record, on every platform, so a push that runs Linux only does not
- * close an issue of a test that fails on Windows. An issue for one test
- * closes, with the run as evidence. A run's issue ticks each test that
- * passed, unticks each that failed again, and closes once every test is
- * ticked. A test that did not run leaves its line as it is.
+ * (#4037), as planRegressionUpdates decides: a run's issue gets its lines
+ * ticked or unticked, and an issue closes, with the run as evidence, once
+ * every test tied to it is green. A test that did not run leaves its line as
+ * it is.
  * @returns {Promise<{ issue: number, ticked: number, closed: boolean }[]>} */
 export async function updateRegressionIssues(open, { results, platforms, sightings, runUrl, sha, repo, token, fetch: fetchImpl = fetch, apiUrl = "https://api.github.com" }) {
-  const index = indexRun(results, platforms);
-  const byMarker = new Map([...index.values()].map((item) => [regressionMarker(item), item]));
-  const green = (item) => {
-    if (!item || item.failed) return false;
-    const failedOn = sightings?.tests?.[identityKey(item)]?.failedOn;
-    const required = failedOn?.length ? failedOn : coversEveryPlatform(platforms) ? EVERY_PLATFORM : null;
-    return Boolean(required) && required.every((os) => item.passedOn.has(os));
-  };
   const close = async (number) => {
     const comment = await github(fetchImpl, apiUrl, token, "POST", `/repos/${repo}/issues/${number}/comments`, { body: greenEvidence({ runUrl, sha }) });
     if (comment.status !== 201) throw new Error(`HTTP ${comment.status} commenting on #${number}`);
@@ -474,39 +540,13 @@ export async function updateRegressionIssues(open, { results, platforms, sightin
     if (closed.status !== 200) throw new Error(`HTTP ${closed.status} closing #${number}`);
   };
   const updates = [];
-  for (const issue of open ?? []) {
-    const body = String(issue.body ?? "");
-    if (issue.pull_request) continue;
-    if (body.includes(RUN_MARKER)) {
-      let ticked = 0;
-      let lines = 0;
-      let done = 0;
-      const next = body.split("\n").map((line) => {
-        const match = /^- \[( |x)\] .*(<!-- known-failures: .*? -->)\s*$/.exec(line);
-        if (!match) return line;
-        lines += 1;
-        const item = byMarker.get(match[2]);
-        let mark = match[1];
-        if (green(item)) mark = "x";
-        else if (item?.failed) mark = " ";
-        if (mark === "x") done += 1;
-        if (mark === "x" && match[1] !== "x") ticked += 1;
-        return mark === match[1] ? line : line.replace(/^- \[( |x)\]/, `- [${mark}]`);
-      }).join("\n");
-      if (next !== body) {
-        const { status } = await github(fetchImpl, apiUrl, token, "PATCH", `/repos/${repo}/issues/${issue.number}`, { body: next });
-        if (status !== 200) throw new Error(`HTTP ${status} updating #${issue.number}`);
-      }
-      const closed = lines > 0 && done === lines;
-      if (closed) await close(issue.number);
-      if (next !== body || closed) updates.push({ issue: issue.number, ticked, closed });
-      continue;
+  for (const plan of planRegressionUpdates(open, { results, platforms, sightings })) {
+    if (plan.body !== null) {
+      const { status } = await github(fetchImpl, apiUrl, token, "PATCH", `/repos/${repo}/issues/${plan.number}`, { body: plan.body });
+      if (status !== 200) throw new Error(`HTTP ${status} updating #${plan.number}`);
     }
-    const items = [...body.matchAll(/<!-- known-failures: .*? -->/g)].map((match) => byMarker.get(match[0]));
-    if (items.length && items.every(green)) {
-      await close(issue.number);
-      updates.push({ issue: issue.number, ticked: items.length, closed: true });
-    }
+    if (plan.close) await close(plan.number);
+    if (plan.body !== null || plan.close) updates.push({ issue: plan.number, ticked: plan.ticked, closed: plan.close });
   }
   return updates;
 }

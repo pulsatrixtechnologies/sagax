@@ -30,6 +30,9 @@ describe("plugin scope", () => {
     expect(initialPluginScope("rex", { id: "rex" })).toBe("bot");
     expect(initialPluginScope(null, { id: "maya" })).toBe("me");
     expect(initialPluginScope("rex", null)).toBe("me");
+    // #3910: sent to add a server, where servers are added (the panel shows Me to a non-manager)
+    expect(initialPluginScope("rex", { id: "rex" }, "mcp")).toBe("workspace");
+    expect(initialPluginScope("rex", { id: "rex" }, "apps")).toBe("bot");
   });
 
   it("reads the one marketplace list with installed meaning on this bot, linking nothing of the workspace", () => {

@@ -2195,7 +2195,7 @@ export class RoutineManager {
     const first = earlier.at(-1);
     if (!first) return;
     if (isRoutineProblemRun(run)) {
-      run.problemRepeat = { firstRunId: first.id, since: first.finishedAt!, count: earlier.length + 1 };
+      run.problemRepeat = { firstRunId: first.id, since: first.finishedAt!, count: earlier.length + 1, anyProblem: true };
       return;
     }
     if (run.status === "completed") run.recovered = { afterRuns: earlier.length, since: first.finishedAt! };

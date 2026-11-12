@@ -3,8 +3,8 @@
 // process; the provisioner address and its key stay in the Sagax server, which
 // runs the call in the sandbox of the person the turn's capability names
 // (the speaker, or the bot owner for routines).
-import { pathToFileURL } from "node:url";
 import { reportBackgroundError } from "./background-error.ts";
+import { isProgramEntry } from "./program-entry.ts";
 
 const MAX_INPUT_BYTES = 2_097_152;
 const MAX_OUTPUT_BYTES = 16_777_216;
@@ -154,4 +154,4 @@ function run(): void {
   });
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();
+if (isProgramEntry("user-sandbox-proxy", process.argv[1], import.meta.url)) run();

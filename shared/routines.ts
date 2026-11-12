@@ -304,8 +304,10 @@ export interface RoutineRun {
    * run (the bot's SAME_PROBLEM line, or the same recorded problems): the
    * row of the first run with it is updated in place, nothing new is posted
    * or rung. `count` is how many runs in a row had it, this one included,
-   * since `since` (when the first of them finished). */
-  problemRepeat?: { firstRunId: string; since: number; count: number };
+   * since `since` (when the first of them finished). `anyProblem` (#3695,
+   * #3910): a routine that repeats within a day counts its runs with
+   * problems, whatever they said. */
+  problemRepeat?: { firstRunId: string; since: number; count: number; anyProblem?: true };
   /** #3479: the first run without problems after `afterRuns` runs with
    * problems, the first of them finished at `since`: said once. */
   recovered?: { afterRuns: number; since: number };

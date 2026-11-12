@@ -147,6 +147,17 @@ describe("RoutineRunCard (#3581): a result is the chat's compact card, its repor
     expect(again).not.toContain("data-routine-run-repeat");
   });
 
+  // #3910: a run the person started in the middle of that streak posts its
+  // own card, in the summary's words, and stays an ordinary card
+  it("a run the person started during a repeating routine's streak reads the streak's words", () => {
+    const since = Date.UTC(2026, 10, 11, 17, 22);
+    const repeat = { firstRunId: "run-0", count: 4, since, lastAt: since + 900_000, anyProblem: true as const };
+    const own = draw({ message: message("completed", { brief: "The queue is still stuck.", problems: "queue stuck", repeat }), onOpen: vi.fn() });
+    expect(words(own)).toContain("4 runs with problems since");
+    expect(words(own)).not.toContain("Same problem");
+    expect(words(own)).not.toContain("in a row");
+  });
+
   it("works again: said once, in the card's state line", () => {
     const markup = draw({ message: message("nothing_to_report", { recovered: { afterRuns: 7, since: Date.UTC(2026, 10, 9) } }), onOpen: vi.fn() });
     expect(markup).toContain('data-routine-run-form="card"');

@@ -69,7 +69,8 @@ describe("Inspector words (#3676)", () => {
     expect(host.textContent).toContain("Inspecteur");
     openTab("events");
     await settle();
-    expect(count()?.replace(/\s/g, " ")).toBe("3 sur 1 687");
+    // #3910: "last" kept, and the thousands gap a person can see (a no-break space)
+    expect(count()).toBe("3 derniers sur 1\u00a0687");
     openTab("raw");
     await settle();
     expect(text('[role="tabpanel"]')).toBe("Aucun message natif du protocole enregistré dans cette conversation pour l'instant.");
@@ -94,7 +95,9 @@ describe("Inspector words (#3676)", () => {
     expect(inspectorCountLine({ shown: 300, total: 120, counting: true })).toBe("last 300 of at least 300");
     expect(inspectorCountLine({ shown: 1, total: 1, counting: false })).toBe("1 entry");
     await setLocale("fr");
-    expect(inspectorCountLine({ shown: 300, total: 1687, counting: false }).replace(/\s/g, " ")).toBe("300 sur 1 687");
+    expect(inspectorCountLine({ shown: 300, total: 1687, counting: false })).toBe("300 derniers sur 1\u00a0687");
+    expect(inspectorCountLine({ shown: 300, total: 120, counting: true })).toBe("300 derniers sur au moins 300");
+    expect(inspectorCountLine({ shown: 1200, total: 1687, counting: true })).toBe("1\u00a0200 derniers sur au moins 1\u00a0687");
     expect(inspectorCountLine({ shown: 12, total: 12, counting: false })).toBe("12 entrées");
   });
 

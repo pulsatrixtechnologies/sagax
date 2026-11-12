@@ -30,7 +30,11 @@ export function reduceUiSurfaces(
         ...state,
         activeView: "apps",
         pluginsOpen: true,
-        pluginsSurface: action.surface ?? state.pluginsSurface,
+        // The surface is one-shot (#3910): a fresh open without one is the
+        // home ("apps"), so a bot's Add > MCP servers never leaves the next
+        // sidebar, palette or Library open on Manage. A change while open
+        // keeps it.
+        pluginsSurface: action.surface ?? (state.pluginsOpen ? state.pluginsSurface : "apps"),
         // A bot panel opens it on that bot; a change of surface while it is
         // open keeps the bot it is on.
         pluginsBotId: action.page ? null : action.botId !== undefined ? action.botId : state.pluginsOpen ? state.pluginsBotId : null,

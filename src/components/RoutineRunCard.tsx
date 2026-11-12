@@ -84,7 +84,7 @@ export function useSettledRoutineRun(run: RoutineRunCardData | undefined): Routi
  * routine's summary card how many runs in a row had problems (#3695). */
 function routineRepeatText(repeat: NonNullable<RoutineRunCardData["repeat"]>): string {
   const vars = { since: routineDateTime(repeat.since), count: repeat.count };
-  return repeat.streak ? t("routineRun.problemStreak", vars) : t("routineRun.sameProblem", vars);
+  return repeat.streak || repeat.anyProblem ? t("routineRun.problemStreak", vars) : t("routineRun.sameProblem", vars);
 }
 
 /** #3695: the one summary card of a lasting problem of a routine that

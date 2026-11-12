@@ -398,9 +398,10 @@ function Manage() {
   const { state, dispatch } = useStore();
   const ready = state.bots.some((bot) => bot.id === "bot-a");
   useEffect(() => {
-    if (superseded && ready) dispatch({ type: "togglePlugins", open: true, surface: "mcp", botId: "bot-a" });
+    if (superseded && ready) dispatch({ type: "togglePlugins", open: true, surface: "apps", botId: "bot-a" });
     // ?bot=1 (#2759): Plugins opened for Rocket, its own plugins in the "This bot" scope
-    else if (forBot && ready) dispatch({ type: "togglePlugins", open: true, surface: "mcp", botId: "bot-a" });
+    // ?bot=1&add=mcp (#3910): the same bot's Add > MCP servers, on Manage where a server is added
+    else if (forBot && ready) dispatch({ type: "togglePlugins", open: true, surface: params.get("add") === "mcp" ? "mcp" : "apps", botId: "bot-a" });
   }, [ready, dispatch]);
   useEffect(() => {
     if (deepLinkPage) dispatch({ type: "togglePlugins", open: true, page: deepLinkPage });

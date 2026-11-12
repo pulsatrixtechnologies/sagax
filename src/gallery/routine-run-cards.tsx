@@ -21,7 +21,9 @@
  * repeats every five minutes, before and after), streak-3, streak-5,
  * streak-again, streak-failed and streak-failed-again (its one summary card
  * at three runs with problems, at five, works again, told by a failed run,
- * and that card turned to works again with the failure words kept). */
+ * and that card turned to works again with the failure words kept),
+ * streak-by-hand (#3910: the summary card at four, and below it the card of
+ * a run the person started in the middle of the streak, in the same words). */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -214,6 +216,9 @@ const STREAK_BEFORE: Message[] = [
 ];
 const streakRepeat = (count: number) => ({ firstRunId: "run-sb2", count, since: streakAt(2), lastAt: streakAt(1 + count), streak: true as const });
 const STREAK_TOLD = (count: number) => streakCard("streak", 4, { runId: "run-streak", summary: STREAK_SUMMARY, brief: STREAK_SUMMARY, problems: "queue stuck", repeat: streakRepeat(count) });
+/** #3910: a run the person started during the streak, its own card. */
+const STREAK_BY_HAND = streakCard("streak-hand", 5, { runId: "run-streak-hand", summary: say("The queue is still stuck on the same two branches.", "La file reste bloquée sur les deux mêmes branches."),
+  problems: "queue stuck", repeat: { firstRunId: "run-sb2", count: 4, since: streakAt(2), lastAt: streakAt(5), anyProblem: true } });
 const STREAK_AGAIN = streakCard("streak", 4, { runId: "run-streak", summary: STREAK_SUMMARY, brief: STREAK_SUMMARY, recovered: { afterRuns: 4, since: streakAt(2) } });
 const STREAK_FAILED = card("streak-failed", { routineName: STREAK_NAME, routineId: "r-streak", status: "failed",
   error: say("The engine stopped answering.\nThe merge queue did not answer after three tries.", "Le moteur a cessé de répondre.\nLa file de fusion n'a pas répondu après trois essais."), repeat: streakRepeat(3) } as CardRun, streakAt(4));
@@ -354,6 +359,7 @@ function Shell() {
               {scene === "streak-after" && <RoutineRunRow message={STREAK_AGAIN} botId="server" />}
               {scene === "streak-3" && <RoutineRunRow message={STREAK_TOLD(3)} botId="server" />}
               {scene === "streak-5" && <RoutineRunRow message={STREAK_TOLD(5)} botId="server" />}
+              {scene === "streak-by-hand" && <><RoutineRunRow message={STREAK_TOLD(4)} botId="server" /><RoutineRunRow message={STREAK_BY_HAND} botId="server" /></>}
               {scene === "streak-again" && <RoutineRunRow message={STREAK_AGAIN} botId="server" />}
               {scene === "streak-failed" && <RoutineRunRow message={STREAK_FAILED} botId="server" />}
               {scene === "streak-failed-again" && <RoutineRunRow message={STREAK_FAILED_AGAIN} botId="server" />}

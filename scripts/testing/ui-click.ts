@@ -66,6 +66,18 @@ export function openBotMenuJs(): string {
   })()`;
 }
 
+/** Plugins' own close button, in its frame's header (PluginsPanelFrame,
+ * data-tour="apps-close"). Its accessible name is just "Close", like the
+ * close of any other dialog on screen, so a click by name can hit the wrong
+ * one (#3910). False while Plugins is not open. */
+export function closePluginsJs(): string {
+  return `(() => {
+    const close = document.querySelector("[data-plugins-page] [data-tour='apps-close']");
+    close?.click();
+    return Boolean(close);
+  })()`;
+}
+
 export function overlaysOpenJs(): string {
   return `Boolean(document.querySelector("[data-bot-catalog-modal], [role=dialog]"))`;
 }

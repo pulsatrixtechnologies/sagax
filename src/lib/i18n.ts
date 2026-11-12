@@ -99,9 +99,13 @@ let active = "en";
 let activePack: LocalePack = en;
 
 /** A number in the language t() answers in: 1687 reads "1,687" in English and
- * "1 687" in French. The one formatter for counts shown beside catalog text. */
+ * "1 687" in French. The one formatter for counts shown beside catalog text.
+ * The French pack is Quebec French: its numbers group with a no-break space
+ * (fr-CA); plain "fr" groups with a narrow one, which small text draws with
+ * no visible gap ("1687", #3910). */
 export function formatNumber(value: number): string {
-  return new Intl.NumberFormat(documentLanguage(active)).format(value);
+  const tag = documentLanguage(active);
+  return new Intl.NumberFormat(tag === "fr" ? "fr-CA" : tag).format(value);
 }
 
 /** The language of the page that holds this one in a frame, when that page is

@@ -12,8 +12,13 @@ export function pluginScopeBot<B extends { id: string }>(input: { pluginsBotId: 
   return input.bots.find((bot) => bot.id === wanted) ?? null;
 }
 
-/** Opened from a bot (its panel): that bot's scope first. */
-export function initialPluginScope(pluginsBotId: string | null, bot: { id: string } | null): PluginScope {
+/** Opened from a bot (its panel): that bot's scope first. Sent to add an
+ * MCP server (surface "mcp", a bot's Add > MCP servers): the organization's
+ * scope, where servers are added and every bot's switch lists them; the
+ * panel shows Me, which adds them too, to a person who may not manage the
+ * organization (#3910: "This bot" has no Add for servers). */
+export function initialPluginScope(pluginsBotId: string | null, bot: { id: string } | null, surface: "apps" | "mcp" = "apps"): PluginScope {
+  if (surface === "mcp") return "workspace";
   return pluginsBotId && bot?.id === pluginsBotId ? "bot" : "me";
 }
 

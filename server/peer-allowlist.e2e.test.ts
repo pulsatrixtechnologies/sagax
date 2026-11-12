@@ -217,16 +217,17 @@ describe("peer allow-list", () => {
       expect(changed.status).toBe(200);
       expect((await state()).managedSections).toEqual([]);
       expect((await api("POST", "/api/sidebar-sections", { name: team, botIds: [engineer.id] })).status).toBe(200);
-      // The saved grant is gone and stays gone (managedSections above). A
-      // Primary Bot still covers every bot its person owns whatever the team
-      // (#897), so the recreated team is reachable through that cover, not
-      // through a revived grant. Once the bot is no longer a Primary Bot the
-      // other team is out of reach again.
+      // The saved grant is gone and stays gone (managedSections above and
+      // below). Reach is the person rule, not a grant (2026-11-09, #3264): a
+      // bot reaches every visible bot of the same person whatever the
+      // section, so the engineer in the recreated team stays reachable as a
+      // Primary Bot and after demotion alike, and the demotion brings no
+      // grant back. Another person's bot stays out of reach whatever the
+      // grant (peer-roster.test.ts, the 2026-11-09 block).
       expect(await peerNames(clive.id, token)).toEqual([`Engineer ${mode}`]);
       await api("PATCH", `/api/bots/${clive.id}`, { chiefOfStaff: false });
-      expect(await peerNames(clive.id, token)).toEqual([]);
-      const refused = await api("POST", "/api/internal/ask-bot", { toBotId: engineer.id, message: "Old grants must not return" }, { authorization: `Bearer ${token}` });
-      expect(refused.status).toBe(403);
+      expect(await peerNames(clive.id, token)).toEqual([`Engineer ${mode}`]);
+      expect((await state()).managedSections ?? []).toEqual([]);
     } finally {
       for (const bot of [clive, engineer]) {
         await api("POST", `/api/bots/${bot.id}/interrupt`, {}).catch(() => undefined);
@@ -254,8 +255,11 @@ describe("peer allow-list", () => {
       expect(outcome.body.error).toBeUndefined();
       expect(outcome.body.text).toBeTruthy();
       await api("PATCH", `/api/bots/${clive.id}`, { chiefOfStaff: false });
-      // Demoted: out of the other team again, and the grant is not back.
-      expect(await peerNames(clive.id, token)).toEqual([]);
+      // Demoted: the grant goes (checked after the promotion below), and the
+      // engineer stays reachable through the person rule, not through it: a
+      // bot reaches every visible bot of the same person whatever the
+      // section (2026-11-09, #3264).
+      expect(await peerNames(clive.id, token)).toEqual(["Engineer"]);
       await api("PATCH", `/api/bots/${clive.id}`, { chiefOfStaff: true });
       // Promoted again: the Primary Bot covers every bot its person owns
       // whatever the team (#897), without any managed team.

@@ -703,27 +703,6 @@
     },
     {
       "file": "server/peer-allowlist.e2e.test.ts",
-      "test": "peer allow-list > requires existing teams and never revives grants after rename and recreation",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/peer-allowlist.e2e.test.ts",
-      "test": "peer allow-list > requires existing teams and never revives grants after delete and recreation",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/peer-allowlist.e2e.test.ts",
-      "test": "peer allow-list > requires an explicit Chief grant for legacy consultation and revokes it on demotion",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/peer-allowlist.e2e.test.ts",
       "test": "peer allow-list > gives an ordinary bot a roster, then narrows it and the comms endpoints",
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",

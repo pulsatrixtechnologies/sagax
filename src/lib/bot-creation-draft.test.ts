@@ -74,6 +74,14 @@ describe("isolated creation draft", () => {
     expect(network).not.toHaveBeenCalled();
   });
 
+  it("has no avatar generation path once the Appearance page lost its Generate control (#4076)", async () => {
+    const network = vi.fn();
+    const draft = new BotCreationDraft(EMPTY_BOT_DEFAULTS, vi.fn(), network as typeof api);
+    await expect(draft.request(`/api/bots/${draft.id}/avatar/generate`, { method: "POST", body: JSON.stringify({ prompt: "fixture" }) }))
+      .rejects.toThrow("This operation requires a created bot");
+    expect(network).not.toHaveBeenCalled();
+  });
+
   it("imports a preview without installing it, and enables only the reviewed draft copy", async () => {
     const skill = { name: "fixture", description: "Fixture", source: "example/fixture", warnings: [], text: "synthetic", enabled: false };
     const network = vi.fn().mockResolvedValue({ skills: [skill] });

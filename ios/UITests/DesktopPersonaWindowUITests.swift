@@ -95,10 +95,10 @@ final class DesktopPersonaWindowUITests: XCTestCase {
         }
         XCTAssertFalse(element(app, "desktop-persona-window").exists, "no centred Edit bot window")
 
-        // the Appearance page: the modes, the hero and the gallery
-        XCTAssertTrue(element(app, "persona-appearance.mode.mascot").isSelected, "Mascot is the source")
+        // the Appearance page: the hero and the gallery, no source bar and nothing under the name (#4076)
         XCTAssertTrue(element(app, "persona-appearance.hero").waitForExistence(timeout: 10), "the preview band")
-        XCTAssertTrue(element(app, "persona-appearance.play").exists, "Play a move")
+        XCTAssertFalse(element(app, "persona-appearance.mode.mascot").exists, "no source bar")
+        XCTAssertFalse(element(app, "persona-appearance.play").exists, "no Play a move")
         XCTAssertTrue(element(app, "persona-appearance.randomize").exists, "Randomize")
         XCTAssertTrue(element(app, "persona-appearance.tab.color").exists, "the Color tab")
         XCTAssertTrue(element(app, "persona-appearance.filter.all").exists, "the All chip")

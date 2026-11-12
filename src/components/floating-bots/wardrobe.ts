@@ -54,33 +54,15 @@ export function wardrobeShelf(entry: WardrobeEntry, locked: boolean): WardrobeSh
   return entry.premium ? "premium" : "locked";
 }
 
-/**
- * The entries a chip and a search keep, in registry order. The search
- * matches the name and the family's name as shown (any case, any accent),
- * so "anim" finds every animal.
- */
-export function filterWardrobe<E extends WardrobeEntry>(
-  entries: readonly E[],
-  { filter, query, nameOf, familyNameOf, lockedOf }: {
-    filter: WardrobeFilter;
-    query: string;
-    nameOf: (entry: E) => string;
-    familyNameOf: (family: MascotFamily) => string;
-    lockedOf: (entry: E) => boolean;
-  },
-): E[] {
-  const needle = fold(query);
+/** The entries a chip keeps, in registry order. */
+export function filterWardrobe<E extends WardrobeEntry>(entries: readonly E[], filter: WardrobeFilter, lockedOf: (entry: E) => boolean): E[] {
   return entries.filter((entry) => {
     const shelf = wardrobeShelf(entry, lockedOf(entry));
-    const kept =
-      filter === "all" ? true
-        : filter === "owned" ? shelf === "yours"
-          : filter === "locked" ? shelf === "locked"
-            : filter === "premium" ? Boolean(entry.premium)
-              : entry.family === filter.slice("family:".length);
-    if (!kept) return false;
-    if (!needle) return true;
-    return fold(nameOf(entry)).includes(needle) || fold(familyNameOf(entry.family)).includes(needle);
+    return filter === "all" ? true
+      : filter === "owned" ? shelf === "yours"
+        : filter === "locked" ? shelf === "locked"
+          : filter === "premium" ? Boolean(entry.premium)
+            : entry.family === filter.slice("family:".length);
   });
 }
 
@@ -90,10 +72,6 @@ export function wardrobeShelves<E extends WardrobeEntry>(entries: readonly E[], 
   return order
     .map((shelf) => ({ shelf, entries: entries.filter((entry) => wardrobeShelf(entry, lockedOf(entry)) === shelf) }))
     .filter((group) => group.entries.length > 0);
-}
-
-function fold(text: string): string {
-  return text.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
 }
 
 /**

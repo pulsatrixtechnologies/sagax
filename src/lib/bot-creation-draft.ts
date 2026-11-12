@@ -155,14 +155,6 @@ export class BotCreationDraft {
       } else if (method === "DELETE") {
         this.template.skills = this.template.skills.filter(item => item !== skill); this.changed(); result = { ok: true };
       } else throw new Error("Unsupported draft skill operation");
-    } else if (path === `${base}/avatar/generate` && method === "POST") {
-      const { name, title, description } = this.bot;
-      const { dataUrl } = await this.network<{ dataUrl: string }>("/api/bot-defaults/avatar", {
-        method: "POST", body: JSON.stringify({ profile: { name, title, description }, prompt: body.prompt }),
-      });
-      const blob = await (await fetch(dataUrl)).blob();
-      const avatarUrl = await this.uploadAvatar(new File([blob], "avatar.png", { type: blob.type }));
-      result = { avatarUrl, bot: { ...this.bot, avatarUrl, avatarCrop: "circle" } };
     } else if ((path === "/api/routines" && method === "POST") || (path.startsWith("/api/routines/draft-") && method === "PATCH")) {
       if (body.target && body.target !== "bot") throw new Error("A new bot's routine must target that bot");
       if (body.botId !== this.id) throw new Error("Routine belongs to another bot");

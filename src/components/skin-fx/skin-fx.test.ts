@@ -253,9 +253,10 @@ describe("the Appearance gallery's layout", () => {
     const html = render({ character: "shape" });
     expect(html).toContain('data-character-row=""');
     expect(html).toContain('data-mascot-stage=""');
-    // the mascot large on its stage, its name, what it wears and its action beside it
-    expect(html).toContain("size-[170px] shrink-0 place-items-center");
-    expect(html).toMatch(/data-mascot-stage=""[\s\S]*data-mascot-name=""[\s\S]*data-mascot-action=/);
+    // the mascot large on its stage, its name beside it, nothing under it (#4076)
+    expect(html).toMatch(/style="width:170px;height:170px"[^>]*class="relative grid shrink-0 place-items-center/);
+    expect(html).toMatch(/data-mascot-stage=""[\s\S]*data-mascot-name=""/);
+    expect(html).not.toContain("data-mascot-action");
     // a 210px row from a 34rem pane (a size container query), stacked under it
     expect(html).toContain("@[34rem]:h-[210px] @[34rem]:flex-row");
     expect(html).toMatch(/data-mascot-detail="shape"[\s\S]*data-appearance-tabs=""[\s\S]*data-mascot-browser=""/);

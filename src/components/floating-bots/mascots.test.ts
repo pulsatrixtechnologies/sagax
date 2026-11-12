@@ -203,7 +203,7 @@ describe("the Appearance gallery", () => {
     setGrokAccountLinked(false);
   });
 
-  it("offers the owl its colors, skins and wing moves when nothing is locked", () => {
+  it("offers the owl its colors and skins when nothing is locked, its moves on the stage only", () => {
     const html = render(undefined);
     for (const id of ["owl", "crab", "shape", "trombi"]) expect(html).toContain(`data-character-option="${id}"`);
     expect(html).toContain('data-character-options="owl"');
@@ -213,7 +213,8 @@ describe("the Appearance gallery", () => {
     for (const tier of ["common", "rare", "epic", "legendary"]) expect(html).toMatch(new RegExp(`role="tab"[^>]*data-tab="${tier}"`));
     expect(html).toContain("data-color-tabs");
     expect(html).not.toContain("data-character-style");
-    expect(html).toContain('data-character-move="spread-wings"');
+    // no moves menu (#4076): the stage plays them
+    expect(html).not.toContain("data-character-move");
     expect(html).not.toContain("data-character-shape");
   });
 
@@ -246,7 +247,7 @@ describe("the Appearance gallery", () => {
     expect(lockedIds(render(undefined))).not.toContain("crab");
   });
 
-  it("offers a shape its shapes, colors, skins by rarity and its own moves, and nothing of the owl", () => {
+  it("offers a shape its shapes, colors, skins by rarity and its own moves, and nothing of the owl", async () => {
     const html = render({ character: "shape", shape: "cloud" });
     for (const shape of MASCOT_SHAPES) expect(html).toContain(`data-character-shape="${shape}"`);
     for (const skin of SHAPE_SKINS) {
@@ -254,12 +255,12 @@ describe("the Appearance gallery", () => {
       expect(open, skin).toContain(`data-shape-skin-option="${skin}"`);
     }
     expect(html).not.toContain("data-mascot-skin-option");
-    expect(html).not.toContain('data-character-move="spread-wings"');
-    // the fourteen Shapes moves, in order, each named
-    const moves = [...html.matchAll(/data-character-move="([a-z]+)"/g)].map((m) => m[1]);
+    // the fourteen Shapes moves, in order, each named, played by the stage (no moves menu, #4076)
+    const { characterMoves } = await import("./moves");
+    const moves = characterMoves(botMascotLook({ character: "shape", shape: "cloud" })).map((move) => move.id);
     expect(moves).toEqual([...SHAPE_MOVES]);
     expect(moves).toHaveLength(14);
-    for (const move of SHAPE_MOVES) expect(html).toContain(`aria-label="Play the ${(en as Record<string, string>)[`mascot.shapeMove.${move}`]} move"`);
+    for (const move of SHAPE_MOVES) expect((en as Record<string, string>)[`mascot.shapeMove.${move}`]).toBeTruthy();
     // every shape, each named
     expect([...html.matchAll(/data-character-shape="([a-z]+)"/g)].map((m) => m[1])).toEqual([...MASCOT_SHAPES]);
     expect(html).toContain('aria-label="Pebble"');
@@ -270,11 +271,11 @@ describe("the Appearance gallery", () => {
     expect(html).toContain('data-tab="clay"');
   });
 
-  it("offers Trombi his skins and moves only, no colors", () => {
+  it("offers Trombi his skins only, no colors", () => {
     const html = render({ character: "trombi" });
     for (const skin of TROMBI_SKINS) expect(render({ character: "trombi", skins: { trombi: skin } })).toContain(`data-trombi-skin-option="${skin}"`);
     expect(html).not.toContain("mascot color");
-    expect((html.match(/data-character-move=/g) ?? []).length).toBe(MASCOTS.find((entry) => entry.id === "trombi")!.moves.length);
+    expect(html).not.toContain("data-character-move");
   });
 });
 

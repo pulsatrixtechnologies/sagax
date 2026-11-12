@@ -307,6 +307,32 @@ describe("bot profile page shell", () => {
     expect(barHtml).toContain(">Pepper<");
   });
 
+  it("regression #4078 (« the back section should be moved to the top next to the X »): a sub-page's link back is in the top bar beside the close button", () => {
+    for (const section of ["permissions", "soul", "model", "rules"] as const) {
+      const html = render(section);
+      const bar = at(html, "data-bot-profile-topbar");
+      const close = at(html, "data-window-close");
+      const back = at(html, 'data-bot-profile-back=""');
+      const banner = at(html, 'data-bot-profile-banner=""');
+      const sub = at(html, "data-bot-profile-subpage=");
+      expect(sub, section).toBeGreaterThan(0);
+      // in the bar, right after the X, before the condensed name and Share
+      expect(back, section).toBeGreaterThan(close);
+      expect(close, section).toBeGreaterThan(bar);
+      expect(back, section).toBeLessThan(at(html, 'data-bot-profile-condensed=""'));
+      expect(back, section).toBeLessThan(banner);
+      // one link back on the page: none left in the column above the title
+      expect(html.split('data-bot-profile-back=""').length - 1, section).toBe(1);
+      // the bar's labelled pill, Share's look
+      const tag = html.slice(html.lastIndexOf("<", back), html.indexOf(">", back) + 1);
+      for (const cls of CIRCLE_LABEL.split(" ")) expect(tag, section).toContain(cls);
+      // the place it left is closed up: the title opens the sub-page
+      expect(html, section).toMatch(/data-bot-profile-subpage="[^"]+" class="mt-4 [^"]*"><h2 data-bot-profile-subpage-title="" class="text-\[20px\]/);
+    }
+    // the tabs themselves have no link back
+    expect(render("overview")).not.toContain("data-bot-profile-back");
+  });
+
   it("names the tabs, the header and the channels in French", () => {
     setLocale("fr");
     const html = render("overview");

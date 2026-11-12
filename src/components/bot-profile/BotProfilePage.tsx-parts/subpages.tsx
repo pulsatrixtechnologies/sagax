@@ -1,7 +1,8 @@
 // The V6 bot page's rows and sub-pages (#2612, the "Épuré Grok Bot"
-// canvas): a row under a grey label opens its own sub-page (Back to the tab,
-// a title, one line of intro, then the section bodies), for a setting too
-// long for a card (#3398: the channels and the accounts are cards in place).
+// canvas): a row under a grey label opens its own sub-page (a title, one line
+// of intro, then the section bodies), for a setting too long for a card
+// (#3398: the channels and the accounts are cards in place). The link back
+// to the tab sits in the page's top bar beside the close button (#4078).
 import type { ReactNode } from "react";
 import {
   AudioLines,
@@ -19,6 +20,7 @@ import {
   Zap,
 } from "lucide-react";
 
+import { CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import type { BotProfileSubPage, BotProfileTab } from "@/lib/persona-sections";
@@ -75,25 +77,35 @@ export function SubPageRow({ page, value, onOpen }: { page: BotProfileSubPage; v
   );
 }
 
-/** A sub-page: the link back named after the tab it returns to (focused
- * when the page opens, #3398), its title in the Settings page title style,
- * one line of intro, then its cards. */
-export function SubPage({ page, tab, onBack, children }: { page: BotProfileSubPage; tab: BotProfileTab; onBack: () => void; children: ReactNode }) {
-  const entry = SUBPAGE_META[page];
+/** The link back of every sub-page, named after the tab it returns to: one
+ * control, drawn in the page's top bar beside the close button (#4078) as
+ * the bar's labelled pill (Share's look). It takes the focus when a
+ * sub-page opens (#3398). */
+export function SubPageBack({ tab, onBack }: { tab: BotProfileTab; onBack: () => void }) {
   const tabName = t(TAB_LABEL[tab]);
   return (
-    <div data-bot-profile-subpage={page} className="mt-4 flex min-w-0 flex-col">
-      <button
-        type="button"
-        data-bot-profile-back=""
-        aria-label={t("botProfile.v6.backTo", { tab: tabName })}
-        onClick={onBack}
-        className="-ml-1 flex min-h-[32px] w-fit items-center gap-1 rounded-lg px-1 text-[13px] leading-5 text-ink-secondary transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-      >
-        <ChevronLeft size={16} aria-hidden="true" />
-        {tabName}
-      </button>
-      <h2 data-bot-profile-subpage-title="" className="mt-2 text-[20px] font-semibold leading-7 tracking-[-0.012em] text-ink">{t(entry.title)}</h2>
+    <button
+      type="button"
+      data-bot-profile-back=""
+      aria-label={t("botProfile.v6.backTo", { tab: tabName })}
+      onClick={onBack}
+      className={CIRCLE_LABEL_BUTTON}
+    >
+      <ChevronLeft size={14} aria-hidden="true" />
+      {tabName}
+    </button>
+  );
+}
+
+/** A sub-page: its title in the Settings page title style where the tab
+ * row was, one line of intro, then its cards. Its link back is in the top
+ * bar (SubPageBack). The scroll margin keeps the title clear of the sticky
+ * bar when the page opens scrolled to it. */
+export function SubPage({ page, children }: { page: BotProfileSubPage; children: ReactNode }) {
+  const entry = SUBPAGE_META[page];
+  return (
+    <div data-bot-profile-subpage={page} className="mt-4 flex min-w-0 scroll-mt-16 flex-col">
+      <h2 data-bot-profile-subpage-title="" className="text-[20px] font-semibold leading-7 tracking-[-0.012em] text-ink">{t(entry.title)}</h2>
       <p className="mt-1 text-[13px] leading-5 text-ink-secondary">{t(entry.intro)}</p>
       <div className="mt-5 flex min-w-0 flex-col gap-6">{children}</div>
     </div>

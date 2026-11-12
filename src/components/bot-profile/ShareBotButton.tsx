@@ -16,7 +16,7 @@ import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { useStore, type Bot } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
-import { CIRCLE_LABEL } from "@/lib/circle-button";
+import { CIRCLE_LABEL_BUTTON } from "@/lib/circle-button";
 import { copyText } from "@/lib/copy-text";
 import { botRefUrl } from "@/lib/thread-refs";
 import { initialsOf } from "@/lib/page-share-plan";
@@ -324,7 +324,7 @@ export function ShareBotButton({ bot, open, onOpenChange, style, className }: {
         onClick={() => onOpenChange(!open)}
         data-bot-profile-share=""
         style={style}
-        className={cn(CIRCLE_LABEL, "transition-colors hover:bg-elevated-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 motion-reduce:transition-none", className)}
+        className={cn(CIRCLE_LABEL_BUTTON, className)}
       >
         <Share2 size={14} aria-hidden="true" />
         {t("botProfile.share")}

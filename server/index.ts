@@ -340,7 +340,7 @@ import { createWebBotAuthRoutes } from "./routes/web-bot-auth.ts";
 import { createGrokBridgeRoutes } from "./routes/grok-bridge.ts";
 import { createGrokBridgeInboundRoutes } from "./routes/grok-bridge-inbound.ts";
 import { askInputDetail } from "./tools/tool-summary.ts";
-import { createSandboxBridgeRoutes, sandboxBridgeEnv, sandboxBridgeRuleTool, sandboxBridgeStartupNote, sandboxBridgeUrl, SandboxBridgeGrants, SandboxBridgeWatchSessions, type SandboxBridgeGrant } from "./perspicax/sandbox-bridge.ts";
+import { createSandboxBridgeRoutes, sandboxBridgeEnv, sandboxBridgeArgsDigest, sandboxBridgeRuleTool, sandboxBridgeStartupNote, sandboxBridgeUrl, SandboxBridgeGrants, SandboxBridgeWatchSessions, type SandboxBridgeGrant } from "./perspicax/sandbox-bridge.ts";
 import { PassThrough } from "node:stream";
 import { createPushRelayRoutes } from "./routes/push-relay.ts";
 import { createGrokBridgeInternalRoutes } from "./routes/grok-bridge-internal.ts";
@@ -29661,7 +29661,7 @@ const CONNECTOR_CALL_EXPIRED = "Nobody answered this connector call within nine 
 /** #3348: the held request of one call_connector, on the turn running the
  * thread (a direct turn or a room turn), decided by the same pipeline as an
  * engine's own ask. Undefined when no turn runs there. */
-function holdConnectorCall(input: { threadId: string; mcpTool: string; summary: string; input?: string; outbound?: boolean; asEngine?: boolean }) {
+function holdConnectorCall(input: { threadId: string; mcpTool: string; summary: string; input?: string; outbound?: boolean; asEngine?: boolean; sameArgs?: string }) {
   const engine = runningTurnEngines.get(input.threadId);
   if (!engine) return undefined;
   const turnId = liveTurnByThread.get(input.threadId);
@@ -29675,6 +29675,7 @@ function holdConnectorCall(input: { threadId: string; mcpTool: string; summary: 
     ...(input.input !== undefined ? { input: input.input } : {}),
     ...(input.outbound ? { outbound: true } : {}),
     ...(input.asEngine ? { asEngine: true } : {}),
+    ...(input.sameArgs ? { sameArgs: input.sameArgs } : {}),
   });
   const timer = setTimeout(() => heldRequests.expire(requestId, CONNECTOR_CALL_EXPIRED), CONNECTOR_CALL_WAIT_MS);
   timer.unref?.();
@@ -33771,6 +33772,8 @@ PRE_AUTH_ROUTES.push(createSandboxBridgeRoutes({
       summary: `Perspicax: ${call.name}`,
       ...(detail ? { input: detail } : {}),
       asEngine: true,
+      // grouped only with the very same call: the complete arguments
+      sameArgs: sandboxBridgeArgsDigest(call.args),
     })?.decision;
   },
   // The same pipeline as the engine's stdio bridge, under the turn's own

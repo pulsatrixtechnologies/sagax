@@ -359,7 +359,7 @@ to the bot's own Perspicax connection, with no Perspicax token there
   the engine's own ask (organization Refuse and Ask first rules, the
   person's rules and Always allow, the level, the reviewed Perspicax reads;
   never a connector read). One state: an Always allow saved on either card
-  answers both. Identical calls still waiting share one card. Refused: a
+  answers both. Calls still waiting share one card only when tool and complete arguments (a digest of their canonical JSON, never the preview) are the same. Refused: a
   tool error `Refused: ...`, nothing sent; a script that left while its
   card waited never gets its call sent. Then the frame goes through
   `runInternal` on `/api/internal/perspicax/mcp` under the turn's own

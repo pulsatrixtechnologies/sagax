@@ -260,6 +260,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+/** Canonical JSON: object keys sorted at every depth, nothing cut. */
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.keys(value as Record<string, unknown>).sort().map((key) => [key, canonical((value as Record<string, unknown>)[key])]));
+  }
+  return value;
+}
+
+/** The digest of a call's complete arguments: two calls share a card only
+ * when it is the same (never the card's shortened preview). */
+export function sandboxBridgeArgsDigest(args: Record<string, unknown>): string {
+  return createHash("sha256").update(JSON.stringify(canonical(args)) ?? "").digest("hex");
+}
+
 /** The tool as the person's rules and an engine's own ask name it. */
 export function sandboxBridgeRuleTool(name: string): string {
   return `mcp__perspicax__${name}`;

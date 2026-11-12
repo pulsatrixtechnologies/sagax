@@ -24,6 +24,8 @@ import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { makeFakeDriver } from "../testing/fake-driver.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
+import { sandboxBridgeArgsDigest } from "../perspicax/sandbox-bridge.ts";
+import { askInputDetail } from "../tools/tool-summary.ts";
 import { EventBus } from "./bus.ts";
 import { HELD_REQUEST_EXPIRED, HeldRequests, isHeldRequestId } from "./held-requests.ts";
 
@@ -118,11 +120,12 @@ describe("#4081: a request decided as the engine's own ask (the sandbox bridge)"
     for (const fact of ["engineConnector", "accountConnector", "connectorHub", "outbound"]) expect(fact in opened).toBe(false);
   });
 
-  it("a burst of the same call waits on one request; another input opens its own", async () => {
+  it("a burst of the very same call waits on one request; other arguments open their own", async () => {
     const { held, instance, seen } = await bus();
-    const first = held.open(call);
-    const again = held.open(call);
-    const other = held.open({ ...call, input: "{\"query\":\"closed\"}" });
+    const same = { ...call, sameArgs: sandboxBridgeArgsDigest({ query: "open" }) };
+    const first = held.open(same);
+    const again = held.open({ ...same, sameArgs: sandboxBridgeArgsDigest({ query: "open" }) });
+    const other = held.open({ ...call, input: "{\"query\":\"closed\"}", sameArgs: sandboxBridgeArgsDigest({ query: "closed" }) });
     expect(again.requestId).toBe(first.requestId);
     expect(other.requestId).not.toBe(first.requestId);
     expect(seen.filter((event) => event.type === "request.opened")).toHaveLength(2);
@@ -130,7 +133,31 @@ describe("#4081: a request decided as the engine's own ask (the sandbox bridge)"
     expect(await first.decision).toEqual({ behavior: "allow" });
     expect(await again.decision).toEqual({ behavior: "allow" });
     // settled: the next identical call is a request of its own
-    expect(held.open(call).requestId).not.toBe(first.requestId);
+    expect(held.open(same).requestId).not.toBe(first.requestId);
+  });
+
+  it("never groups two writes whose card preview is the same but whose arguments differ", async () => {
+    const { held, seen } = await bus();
+    const write = { ...call, mcpTool: "mcp__perspicax__api_write" };
+    const items = Array.from({ length: 41 }, (_, index) => ({ id: index }));
+    const changed = items.map((item, index) => (index === 40 ? { id: 999 } : item));
+    const long = { notes: "x".repeat(7_000) };
+    const longer = { notes: `${"x".repeat(6_999)}y` };
+    for (const [a, b] of [[{ items }, { items: changed }], [long, longer]] as Array<[Record<string, unknown>, Record<string, unknown>]>) {
+      // the preview the card shows (and the old grouping read) is the same
+      expect(askInputDetail(a)).toBe(askInputDetail(b));
+      const one = held.open({ ...write, input: askInputDetail(a), sameArgs: sandboxBridgeArgsDigest(a) });
+      const two = held.open({ ...write, input: askInputDetail(b), sameArgs: sandboxBridgeArgsDigest(b) });
+      expect(two.requestId).not.toBe(one.requestId);
+    }
+    expect(seen.filter((event) => event.type === "request.opened")).toHaveLength(4);
+    // key order is not a difference
+    expect(sandboxBridgeArgsDigest({ a: 1, b: { c: 2, d: 3 } })).toBe(sandboxBridgeArgsDigest({ b: { d: 3, c: 2 }, a: 1 }));
+  });
+
+  it("without a digest nothing is grouped", async () => {
+    const { held } = await bus();
+    expect(held.open(call).requestId).not.toBe(held.open(call).requestId);
   });
 });
 
@@ -314,7 +341,10 @@ posixOnly("#3346: server-held requests through the organization server", () => {
     }, { "x-openmausbot-test-capability": CAPABILITY });
   }
   /** #4081: what the sandbox bridge opens for a script's Perspicax call. */
-  const bridged = (bot: Bot, tool: string) => hold(bot, `mcp__perspicax__${tool}`, false, true);
+  const bridged = (bot: Bot, tool: string) => api("POST", "/api/testing/held-request", undefined, {
+    threadId: bot.threadId, mcpTool: `mcp__perspicax__${tool}`, summary: `Call ${tool}`, input: JSON.stringify({ to: "client" }),
+    asEngine: true, sameArgs: sandboxBridgeArgsDigest({ to: "client" }),
+  }, { "x-openmausbot-test-capability": CAPABILITY });
 
   const messages = async (auth: Auth, bot: Bot) => ((await api("GET", `/api/threads/${bot.threadId}/messages?limit=200`, auth)).body.messages ?? []) as any[];
   const heldCards = async (auth: Auth, bot: Bot) => (await messages(auth, bot)).filter((m) => m.card?.requestType === "permission" && typeof m.card.requestId === "string" && isHeldRequestId(m.card.requestId)).map((m) => m.card);

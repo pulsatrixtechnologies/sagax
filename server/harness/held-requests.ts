@@ -44,10 +44,14 @@ export interface HeldRequestInput {
    * this tool, never as a connector call: the event names the tool as the
    * engine does and carries no connector facts and no `outbound`, so the
    * pipeline reads it with the rules of that tool (a Perspicax call: the
-   * reviewed reads, never at Ask). A request identical to one still open on
-   * the same turn (tool and input) waits on that one's card: a burst of the
-   * same call raises one card. */
+   * reviewed reads, never at Ask). */
   asEngine?: boolean;
+  /** A digest of the call's complete arguments (canonical JSON, never the
+   * card's preview, which cuts lists, depth and long text and hides some
+   * keys). A request with the same tool and digest as one still open on the
+   * same turn waits on that one's card: a burst of the very same call
+   * raises one card. Absent: never grouped. */
+  sameArgs?: string;
 }
 
 export interface HeldDecision {
@@ -82,8 +86,8 @@ export class HeldRequests {
    * rule, the level, a connector read), by a person on the card, or by the
    * turn's end (deny). */
   open(input: HeldRequestInput): { requestId: string; decision: Promise<HeldDecision> } {
-    const sameKey = input.asEngine
-      ? [input.threadId, input.turnId ?? "", input.providerInstanceId, input.mcpTool, input.input ?? ""].join("\u0000")
+    const sameKey = input.sameArgs
+      ? [input.threadId, input.turnId ?? "", input.providerInstanceId, input.mcpTool, input.sameArgs].join("\u0000")
       : undefined;
     const open = sameKey ? this.same.get(sameKey) : undefined;
     const waiting = open ? this.pending.get(open) : undefined;

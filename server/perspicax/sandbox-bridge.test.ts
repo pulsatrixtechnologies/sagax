@@ -1,6 +1,6 @@
 // #4081: a script in a bot's server environment reaches the bot's own
 // Perspicax connection through the bridge, never with a Perspicax token.
-import type { IncomingMessage, ServerResponse } from "node:http";
+import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from "node:http";
 import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 
@@ -208,6 +208,43 @@ describe("the bridge route", () => {
     await sent;
     expect(forwardTurn).not.toHaveBeenCalled();
     expect(out.status).toBeUndefined();
+  });
+
+  it("never sends a call whose script's connection really closed while its card waited", async () => {
+    const kept = grants();
+    let approve!: (value: { behavior: "allow" }) => void;
+    let asked!: () => void;
+    const holding = new Promise<void>((resolve) => { asked = resolve; });
+    const forwardTurn = vi.fn(async () => undefined);
+    const route = createSandboxBridgeRoutes(deps({
+      grants: kept, forwardTurn,
+      hold: () => { asked(); return new Promise((resolve) => { approve = resolve; }); },
+    }));
+    let served!: Promise<unknown>;
+    const server = createServer((req, res) => {
+      served = route({
+        req, res, url: new URL(`http://x${SANDBOX_BRIDGE_PATH}`), path: SANDBOX_BRIDGE_PATH, method: "POST", auth: null,
+        json: ((answer: ServerResponse, status: number, value: unknown) => { answer.writeHead(status, { "content-type": "application/json" }); answer.end(JSON.stringify(value)); }) as never,
+        readBody: (async () => ({})) as never,
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const port = (server.address() as { port: number }).port;
+      const client = httpRequest({ host: "127.0.0.1", port, method: "POST", path: SANDBOX_BRIDGE_PATH, headers: { authorization: `Bearer ${kept.mintTurn(TURN)}`, "content-type": "application/json" } });
+      client.on("error", () => undefined);
+      client.end(JSON.stringify(call("api_write", { resource: "time_entry" })));
+      await holding;
+      // the script is killed while the card waits: its socket closes
+      client.destroy();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      approve({ behavior: "allow" });
+      await served;
+      expect(forwardTurn).not.toHaveBeenCalled();
+    } finally {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 
   it("keeps people apart: a turn speaking for someone else, or with no connection, relays nothing", async () => {

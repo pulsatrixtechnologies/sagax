@@ -95,6 +95,8 @@ export interface FakeMcpRequest {
   sessionId: string | null;
   rpcMethod?: string;
   clientInfo?: unknown;
+  /** The tool a tools/call names. */
+  tool?: string;
   status: number;
 }
 
@@ -764,6 +766,7 @@ export async function startFakeOidcProvider(options: { clientId?: string; user?:
           method: req.method!, sub: live ? entry.sub : null, profile: live ? entry.profile : null, sessionId,
           ...(typeof frame.method === "string" ? { rpcMethod: frame.method } : {}),
           ...(frame.method === "initialize" ? { clientInfo: frame.params?.clientInfo } : {}),
+          ...(frame.method === "tools/call" && typeof frame.params?.name === "string" ? { tool: frame.params.name } : {}),
           status: live ? 200 : 401,
         };
         if (!live) {

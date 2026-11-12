@@ -125,12 +125,20 @@ describe("one rule for every routine, whatever starts it (#3990)", () => {
       row({ status: "completed", summary: "A new mail from the supplier.", wakeTopic: "email" }),
       row({ status: "completed", summary: "Meeting moved to 3 pm.", wakeTopic: "calendar" }),
       row({ status: "completed", summary: "All quiet.", wakeTopic: "heartbeat" }),
+      // #3990: a chosen wake's row stored before (an accepted suggestion, a
+      // watch): its words were forced out of a quiet ending, so a stored
+      // row cannot tell "nothing for you" from a report; it leaves the chat
+      row({ status: "completed", summary: "Rien à remonter.", wakeTopic: "watch" }),
+      row({ status: "completed", summary: "Messages from teammates:\n- Bot B: ticket closed", wakeTopic: "peer" }),
+      row({ status: "completed", summary: "The suggestion you accepted.", wakeTopic: "suggestion" }),
+      row({ status: "completed", summary: "Your watch found a new ticket.", wakeTopic: "watch" }),
     ];
     for (const message of out) expect(routineRunRowOutOfChat(message), JSON.stringify(message)).toBe(true);
     const kept = [
       row({ status: "completed", summary: "Three meetings today." }),
-      row({ status: "completed", summary: "The suggestion you accepted.", wakeTopic: "suggestion" }),
-      row({ status: "completed", summary: "Your watch found a new ticket.", wakeTopic: "watch" }),
+      // #3990: a wake's report written for the person since
+      row({ status: "completed", summary: "The suggestion you accepted.", wakeTopic: "suggestion", forPerson: true }),
+      row({ status: "completed", summary: "Your watch found a new ticket.", wakeTopic: "watch", forPerson: true }),
       row({ status: "completed", summary: "Replied to the teammate.", wakeTopic: "peer" }, { attention: { items: [{ text: "decide" }] } }),
       row({ status: "completed", summary: "Replied to the teammate.", wakeTopic: "peer", startedBy: "person" }),
       row({ status: "completed", problems: "x", repeat: { firstRunId: "a", count: 3, since: 1, lastAt: 2, streak: true } }),

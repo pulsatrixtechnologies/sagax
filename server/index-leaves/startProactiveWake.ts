@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** startProactiveWake (#1388). Pure move from server/index.ts. */
-import { peerWakeDigest, proactiveWakePrompt, wakeAlwaysReports } from "../proactive/proactive-wake.ts";
+import { proactiveWakePrompt, wakeAlwaysReports } from "../proactive/proactive-wake.ts";
 export type Host = Record<string, any>;
 
 export function createStartProactiveWake(getHost: () => Host): any {
@@ -17,7 +17,6 @@ function startProactiveWake(batch: ProactiveWakeBatch, accepted = false, runAs?:
   // else the bot owner. Never an arbitrary member's credentials.
   const person = runAs || host.effectiveBotOwner(bot) || undefined;
   const sources = [...new Set(batch.events.map((event) => event.source))];
-  const peerDigest = peerWakeDigest(batch.events, batch.more);
   const alwaysReport = wakeAlwaysReports(batch.events);
   // #3423: the chosen watches it reports, so the row's "never" stops them
   // #3431: with the reads the yes covers in this wake (decision 3)
@@ -33,7 +32,6 @@ function startProactiveWake(batch: ProactiveWakeBatch, accepted = false, runAs?:
       sources,
       ...(batch.confined ? { confined: true as const } : {}),
       ...(accepted ? { accepted: true as const } : {}),
-      ...(peerDigest ? { peerDigest } : {}),
       ...(alwaysReport ? { alwaysReport: true as const } : {}),
       ...(watches.length ? { watches } : {})
     },

@@ -23,7 +23,6 @@ import {
   proactiveWakePrompt,
   peerNoticeDropped,
   peerNoticeEvent,
-  peerWakeDigest,
   DM_WAKE_RULES,
   ProactivePendingFile,
   wakeAlwaysReports,
@@ -508,12 +507,6 @@ describe("teammates' messages, second pass (production, 2026-11-02)", () => {
     expect(wakeAlwaysReports([notice("m", 1)])).toBe(false);
   });
 
-  it("the digest names who wrote and about what, with a status other than done", () => {
-    const digest = peerWakeDigest([notice("m", 1), notice("m", 2, { status: "expired" }), { botId: "m", source: "mail", key: "x", label: "Email", detail: "d" }], 2);
-    expect(digest).toBe("Messages from teammates:\n- Osprey: Urgent Northwind 1\n- Osprey: Urgent Northwind 2 (expired)\n- and 2 more");
-    expect(peerWakeDigest([{ botId: "m", source: "mail", key: "x", label: "Email", detail: "d" }])).toBeUndefined();
-  });
-
   it("every verdict that means no wake is a notice to show the person: off, the hop limit, an expired sign-in, a temporary bot", () => {
     for (const verdict of ["off", "hops", "auth", "gone", "own", "irrelevant"] as const) expect(peerNoticeDropped(verdict)).toBe(true);
     expect(peerNoticeDropped("gathered")).toBe(false);
@@ -642,7 +635,6 @@ describe("pending wakes survive a restart; a two-bot DM post always reports (202
     const prompt = proactiveWakePrompt(h.woken[0]!);
     expect(prompt).toContain(DM_WAKE_RULES);
     expect(prompt).not.toContain("never ends with NOTHING_TO_REPORT");
-    expect(peerWakeDigest([dmPost("m")])).toBe("Messages from teammates:\n- Post by Osprey in Osprey and Wren");
     expect(proactiveWakePrompt({ mode: "proactive", events: [dmPost("m", { dm: undefined })], more: 0 })).not.toContain(DM_WAKE_RULES);
   });
 });

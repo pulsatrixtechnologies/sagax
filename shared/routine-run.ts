@@ -63,6 +63,11 @@ export interface RoutineRunCardData {
   /** #3423: the Pulsatrix watches a watch wake reported, with their domain:
    * the row's "never" stops these watches for good (the person's choice). */
   watches?: Array<{ id: string; domain: string }>;
+  /** #3990: a wake's report the bot wrote for the person (it did not end
+   * with the nothing-to-report line). A wake's row stored without it holds
+   * words a quiet ending was forced into, so the chat leaves it out
+   * (shared/routine-repeat.ts routineRunRowOutOfChat). */
+  forPerson?: true;
   /** #2694: the person's feedback on that wake, kept across card updates. */
   feedback?: "up" | "down" | "less" | "never";
 }

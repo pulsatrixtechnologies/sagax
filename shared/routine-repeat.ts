@@ -150,8 +150,9 @@ export function routinePostsEachResult(schedule: { type: string } | null | undef
  * (server/index.ts routineEffectivePostResults). A proactive wake posts its
  * result only when it is what the person chose to hear (an accepted
  * suggestion, a watch they keep: `alwaysReport`, drawn with its feedback
- * strip); a wake on a teammate's message, a mail or a calendar event posts
- * none. A routine's run follows routinePostsEachResult with the routine's
+ * strip) and only when the bot had something for them: a wake that ends
+ * quiet (the nothing-to-report line) posts nothing, as any run; a wake on a
+ * teammate's message, a mail or a calendar event posts none. A routine's run follows routinePostsEachResult with the routine's
  * choice, else `byDefault` (the installation's); a webhook's own run (no
  * routine behind it) is started by a trigger, so it posts none. A request
  * that waits on the person, items only they can do and a problem's one
@@ -168,18 +169,13 @@ export function routineRunPostsResult(
   return routinePostsEachResult(routine.schedule, chosen, after);
 }
 
-/** #3990: the proactive wakes whose result the person chose to hear (an
- * accepted suggestion, a watch they keep). Any other wake topic of a stored
- * card (a teammate's message, a mail, a calendar event, a heartbeat:
- * server/routines/routine-run-card.ts wakeTopicOf) is left out of the chat. */
-const CHOSEN_WAKE_TOPICS = new Set(["suggestion", "watch"]);
-
 type RunRowFacts = {
   kind: string;
   attention?: unknown;
   routineRun?: {
     status?: string;
     wakeTopic?: string | null;
+    forPerson?: true | null;
     goalStatus?: string | null;
     startedBy?: string | null;
     problems?: unknown;
@@ -192,8 +188,13 @@ type RunRowFacts = {
 /** #3990: a routine run's row the chat no longer draws, cards stored by
  * older servers included: a row that only says how a run went (completed
  * with problems, works again, nothing to report, blocked, cancelled, the
- * same problem again), and a wake's result the person did not choose to
- * hear (a teammate's message, a mail, a calendar event). Drawn as before: a live or waiting run, a result,
+ * same problem again), and a wake's row that carries nothing for the person,
+ * whatever its topic (a teammate's message, a mail, a calendar event, a
+ * heartbeat, a watch, an accepted suggestion). A wake's row tells a report
+ * for the person by `forPerson`, written since the server stopped forcing a
+ * quiet chosen wake to report; a row stored before cannot tell its forced
+ * "nothing for you" words from a report, so it leaves the chat (the run log
+ * keeps it). Drawn as before: a live or waiting run, a result,
  * items for the person, a run the person started, the streak's one summary
  * (and its works again), a team goal's card, and a failure (a passing
  * banner, shared/transient-notices.ts). Every run stays in its routine's
@@ -211,7 +212,7 @@ export function routineRunRowOutOfChat(message: RunRowFacts): boolean {
     case "missed":
       return false;
     case "completed":
-      return Boolean(run.problems || run.recovered || (run.wakeTopic && !CHOSEN_WAKE_TOPICS.has(run.wakeTopic)));
+      return Boolean(run.problems || run.recovered || (run.wakeTopic && !run.forPerson));
     default:
       return true;
   }

@@ -104,6 +104,8 @@ export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullRepor
   if (run.startedAt) card.startedAt = run.startedAt;
   const wakeTopic = wakeTopicOf(run);
   if (wakeTopic) card.wakeTopic = wakeTopic;
+  // #3990: a wake's real report, told apart from the rows stored before
+  if (run.proactive && wakeTopic && run.status === "completed" && !run.quiet && !run.problems) card.forPerson = true;
   if (run.proactive?.watches?.length) card.watches = run.proactive.watches.map((entry) => ({ id: entry.id, domain: entry.domain }));
   if (run.handedTo?.length) card.handedTo = run.handedTo.map((entry) => ({
     botId: entry.botId, threadId: entry.threadId, status: entry.status,

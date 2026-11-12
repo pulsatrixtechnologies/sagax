@@ -2013,6 +2013,21 @@ export class PerspicaxMcp {
     return this.turnEntry(threadId, generation, botId)?.principalId || undefined;
   }
 
+  /** #4081 (sandbox bridge): whether this frame only reads, by the same
+   * reading the relay uses to replay a call (Perspicax's readOnlyHint for the
+   * turn's catalog, read again first when a role change forgot it). False
+   * when the turn has no connection. */
+  async frameReads(threadId: string, generation: string, botId: string, frame: unknown): Promise<boolean> {
+    const entry = this.turnEntry(threadId, generation, botId);
+    if (!entry || !isObject(frame)) return false;
+    const params = isObject(frame.params) ? frame.params : null;
+    const name = params && typeof params.name === "string" ? params.name : "";
+    if (frame.method === "tools/call" && name && !entry.readOnlyTools && !PERSPICAX_READ_ONLY_TOOLS.has(name)) {
+      await this.identityRpc(entry, "tools/list").catch(() => undefined);
+    }
+    return perspicaxReplayable(frame, entry.readOnlyTools);
+  }
+
   /** Whether this turn of the bot has its Perspicax connection mounted, so the
    * harness may call a Perspicax tool in the speaker's name (callTool). */
   hasMounted(threadId: string, generation: string, botId: string): boolean {

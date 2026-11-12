@@ -334,3 +334,38 @@ aggregate. The server's own instructions win if they differ.
   emoji and hearts in a multi-line report, turns a bare ConnectWise ticket
   link into `billet #N`, and removes UUIDs and "Carte c16f208c" id prefixes.
   Code, inline code and markdown links stay as they are.
+
+## Scripts in the server environment reach the bot's connection (#4081)
+
+A script the bot runs in its server environment speaks plain MCP over HTTP
+to the bot's own Perspicax connection, with no Perspicax token there
+(`server/perspicax/sandbox-bridge.ts`).
+
+- Every `run_command` of a turn gets `SAGAX_BRIDGE_MCP_URL` (the server's
+  `/api/bridge/perspicax/mcp`, from `SAGAX_SANDBOX_BRIDGE_URL`, else
+  `SAGAX_PUBLIC_URL`) and `SAGAX_BRIDGE_TOKEN` (`sgx_brg_`), only when the
+  turn's connection speaks for the person whose environment runs the
+  command. The token is one per turn and person, held by hash in memory,
+  and ends with the turn (12 h at most). A routine watch command gets a
+  token of its own for the check, revoked after it.
+- The route is public (`PRE_AUTH_ROUTES`): the environment reaches the
+  server by its public address, never its loopback. Without a live token:
+  401.
+- `initialize` and notifications are answered by the bridge, so a script
+  never replaces the engine's MCP session. A turn's `tools/call` is first a
+  held request (`holdConnectorCall`, tool `mcp__perspicax__<name>`, outbound
+  unless Perspicax lists it read-only), decided like an engine's own call:
+  organization Refuse and Ask first rules, the person's rules and Always
+  allow, the level, a read of their own connection with no card. Refused:
+  a tool error `Refused: ...`, nothing sent. Then the frame goes through
+  `runInternal` on `/api/internal/perspicax/mcp` under the turn's own
+  Perspicax capability: the confidential, misuse, safety and role checks of
+  the stdio bridge.
+- A watch check has no turn: its frames go through the person's routine
+  delegation (`prepareTurn` as `owner-routine`), reads only, like the
+  watch's own tool reads.
+- Isolation: a token answers only while the turn's connection speaks for
+  its person (`wrong_person`); a turn without a connection is
+  `profile_not_mounted`.
+- The watch exec passes only `SAGAX_*` names (`EXEC_ENV_KEY_RE`); the image
+  sets `LANG` itself.

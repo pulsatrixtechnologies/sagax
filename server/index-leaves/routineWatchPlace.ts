@@ -23,14 +23,27 @@ function routineWatchPlace(routine: WatchRoutine) {
         wake: () => { void host.userSandbox?.prewake(target.principal, bot.id); },
         exec: async (command, options) => {
           if (!host.userSandbox) return { exitCode: null, stdout: "", truncated: false, timedOut: false };
+          // #4081: the check reads the bot's own Perspicax connection
+          // through the bridge (routine delegation, reads only), its token
+          // ended with the check (server/perspicax/sandbox-bridge.ts).
+          const bridge = host.sandboxBridgeWatch?.({
+            botId: bot.id, principalId: target.principal, ownerPrincipalId: host.effectiveBotOwner(bot), ttlMs: options.timeoutMs + 5_000
+          }) ?? null;
           // In the bot's own folder, like its commands (server/sandbox/sandbox-bot-folder.ts).
+          // Only SAGAX_* names cross into an environment (sandboxd-core.ts
+          // EXEC_ENV_KEY_RE): LANG here made every check a bad_exec; the
+          // image sets LANG=C.UTF-8 itself.
           const input = {
-            argv: ["/bin/sh", "-c", command], env: { LANG: "C.UTF-8" },
+            argv: ["/bin/sh", "-c", command], ...(bridge ? { env: bridge.env } : {}),
             timeoutSec: Math.max(1, Math.floor(options.timeoutMs / 1000)), maxOutputBytes: options.maxOutputBytes
           };
           const folder = host.sandboxBotFolder(bot.id);
-          const result = await host.userSandbox.exec(target.principal, folder ? host.inBotFolder(input, folder) : input, bot.id);
-          return { exitCode: result.exitCode, stdout: result.stdout, truncated: result.truncated, timedOut: result.timedOut };
+          try {
+            const result = await host.userSandbox.exec(target.principal, folder ? host.inBotFolder(input, folder) : input, bot.id);
+            return { exitCode: result.exitCode, stdout: result.stdout, truncated: result.truncated, timedOut: result.timedOut };
+          } finally {
+            bridge?.end();
+          }
         }
       };
     }

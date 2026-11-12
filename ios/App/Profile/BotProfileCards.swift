@@ -685,7 +685,7 @@ struct BotProfileAnalyticsBlock: View {
     }
 }
 
-// MARK: - Bot accounts > Vault login
+// MARK: - Access > Vault login
 
 /// "+ Add" > Vault login: a username and password this bot fills on its
 /// sites, saved in its shared vault. The password is sent once and never

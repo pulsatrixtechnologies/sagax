@@ -53,7 +53,7 @@ export function BotPayerCard({ bot }: { bot: Bot }) {
 function BotPayerRow({ bot }: { bot: Bot }) {
   const { shown, save, saving, error } = useBotRuntimeSettings(bot);
   const labelId = useId();
-  // The bot's profile page (#2313): drawn like its Channels and Bot accounts
+  // The bot's profile page (#2313): drawn like its Channels and Access
   // rows (icon, 14px name over a 12px subtitle, the menu at the right).
   const plain = useSettingsSurface() === "plain";
   const current = botTurnPayer(shown);

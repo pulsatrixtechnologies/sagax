@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // The bot profile page after the 2026-11-06 refonte (the owner): one column on
 // every tab, every section a plain filled card in the style of General >
-// Channels and Bot accounts (no border, no ring, no underlined link), every
+// Channels and Access (no border, no ring, no underlined link), every
 // section of the former editor still named, and one option in one place:
 // who pays, sharing, usage, changes and the Plugins link each render once
 // on the whole page. Rendered on the bot editor gallery's stand-in /api, in
@@ -287,7 +287,8 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
     expect(named).not.toContain("Skills");
     const general = await home("general");
     expect(general.textContent).toContain("Avant d'agir");
-    expect(general.textContent).toContain("Comptes du bot");
+    expect(general.textContent).toContain("Accès");
+    expect(general.textContent, "the group is not named as accounts (#4075)").not.toContain("Comptes du bot");
   });
 
   it("one option in one place: who pays, sharing, usage, changes and the Plugins link render once on the whole page", async () => {
@@ -340,7 +341,7 @@ describe("bot profile page: General cards in place (#3398)", () => {
     expect(channels, "the Channels card on General").not.toBeNull();
     expect(channels!.querySelector('[data-bot-profile-row="reachMe"] [data-bot-profile-action="reachMe"]'), "Reach me with its button").not.toBeNull();
     const accounts = panel.querySelector<HTMLElement>('[data-settings-group="bot-profile-accounts"]');
-    expect(accounts, "the Bot accounts card on General").not.toBeNull();
+    expect(accounts, "the Access card on General").not.toBeNull();
     expect(accounts!.querySelector("[data-bot-profile-add]"), "the Add button").not.toBeNull();
     expect(accounts!.querySelector('[data-bot-profile-row="engine"] [data-bot-profile-action="engine"]'), "the engine row and its Manage").not.toBeNull();
     expect(panel.textContent).not.toContain("What it can use");
@@ -485,12 +486,19 @@ describe("bot profile page: General cards in place (#3398)", () => {
   });
 });
 
-// #3399: the Bot accounts card holds what this bot has, one row each with its
+// #3399: the Access card (named in #4075) holds what this bot has, one row each with its
 // control (no second MCP servers card), an empty row with "+ Add" when it has
 // nothing, an Add menu whose items say what they do and that the keyboard
 // walks, and the bot's vault logins (moved from Shared with, owner decision 2026-11-10).
-describe("bot profile page: Bot accounts card (#3399)", () => {
-  const accounts = async () => (await home("general")).querySelector<HTMLElement>('[data-settings-group="bot-profile-accounts"]')!;
+describe("bot profile page: Access card (#3399, #4075)", () => {
+  const folded = async () => (await home("general")).querySelector<HTMLElement>('[data-settings-group="bot-profile-accounts"]')!;
+  /** the card with every row drawn (a long list folds to three, #4075) */
+  const accounts = async () => {
+    const card = await folded();
+    const more = card.querySelector<HTMLElement>('[data-bot-profile-accounts-fold="more"]');
+    if (more) await click(more, "Show more");
+    return card;
+  };
   const rowLabels = (card: HTMLElement) => Array.from(card.querySelectorAll("[data-bot-profile-row] span.truncate.text-ink")).map((node) => node.textContent);
   const key = async (node: Element, which: string) => {
     await act(async () => { node.dispatchEvent(new KeyboardEvent("keydown", { key: which, bubbles: true, cancelable: true })); });
@@ -567,7 +575,7 @@ describe("bot profile page: Bot accounts card (#3399)", () => {
     expect(document.activeElement?.getAttribute("data-bot-profile-add-item")).toBe("apps");
   });
 
-  it("the vault logins sit under Bot accounts, added from the Add menu, and leave Shared with", async () => {
+  it("the vault logins sit under Access, added from the Add menu, and leave Shared with", async () => {
     await mount("en");
     const card = await accounts();
     expect(rowLabels(card)).toContain("Supplier portal");
@@ -601,13 +609,64 @@ describe("bot profile page: Bot accounts card (#3399)", () => {
     expect(card.textContent, "no Use all").not.toContain(t("botAccess.mcpUseAll"));
   });
 
+  // #4075: the owner, "That is not bot accounts. Find another term. Also
+  // show only 3 lines and add a show more."
+  const app = (name: string) => ({ key: `connector:account:${name.toLowerCase()}`, form: "connector", name, source: { kind: "account", label: "Example account" }, scope: "bot", state: "on", enabled: true, canToggle: true, engine: { mcp: "ok" } });
+  const MANY = ["Billing", "Calendar", "Chat", "Contacts", "Docs", "Drive", "Forms", "Inventory", "Mail", "Notes", "Sheets", "Tasks", "Tickets", "Wiki", "Zoom"];
+  const rowIds = (card: HTMLElement) => Array.from(card.querySelectorAll("[data-bot-profile-row]")).map((node) => node.getAttribute("data-bot-profile-row"));
+
+  it("#4075: the group is named Access, and sixteen rows fold to the engine and two rows, then Show 13 more that unfolds in place and folds back", async () => {
+    capabilitiesAnswer = { botId: "b1", engine: { kind: "claude", label: "Claude" }, items: MANY.map(app) };
+    serversAnswer = { servers: [] };
+    vaultAnswer = { items: [] };
+    await mount("en");
+    const card = await folded();
+    expect(card.querySelector("h3")?.textContent).toBe("Access");
+    expect(card.textContent).not.toContain("Bot accounts");
+    expect(rowIds(card), "the engine first, then two rows").toEqual(["engine", "account-0", "account-1"]);
+    const more = card.querySelector<HTMLElement>("[data-bot-profile-accounts-fold]")!;
+    expect(more, "one Show more line").not.toBeNull();
+    expect(more.textContent).toBe("Show 13 more");
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    await click(more, "Show 13 more");
+    expect(rowIds(card).length, "every row once unfolded").toBe(16);
+    expect(rowIds(card)[0]).toBe("engine");
+    for (const name of MANY) expect(card.textContent).toContain(name);
+    expect(card.querySelector('[data-bot-profile-action="engine"]'), "Manage stays on the engine").not.toBeNull();
+    const less = card.querySelector<HTMLElement>("[data-bot-profile-accounts-fold]")!;
+    expect(less.textContent).toBe("Show less");
+    expect(less.getAttribute("aria-expanded")).toBe("true");
+    await click(less, "Show less");
+    expect(rowIds(card).length, "folded back").toBe(3);
+  });
+
+  it("#4075: two rows show no fold control, and French names the group Accès", async () => {
+    capabilitiesAnswer = { botId: "b1", engine: { kind: "claude", label: "Claude" }, items: [app("Calendar")] };
+    serversAnswer = { servers: [] };
+    vaultAnswer = { items: [] };
+    await mount("fr");
+    const card = await folded();
+    expect(card.querySelector("h3")?.textContent).toBe("Accès");
+    expect(rowIds(card)).toEqual(["engine", "account-0"]);
+    expect(card.querySelector("[data-bot-profile-accounts-fold]"), "no control for two rows").toBeNull();
+  });
+
+  it("#4075: French counts the hidden rows (Afficher 2 de plus)", async () => {
+    capabilitiesAnswer = { botId: "b1", engine: { kind: "claude", label: "Claude" }, items: MANY.slice(0, 4).map(app) };
+    serversAnswer = { servers: [] };
+    vaultAnswer = { items: [] };
+    await mount("fr");
+    const card = await folded();
+    expect(card.querySelector("[data-bot-profile-accounts-fold]")?.textContent).toBe("Afficher 2 de plus");
+  });
+
   it("French: the menu items and the empty row say what they do", async () => {
     capabilitiesAnswer = { botId: "b1", engine: { kind: "claude", label: "Claude" }, items: [] };
     serversAnswer = { servers: [] };
     vaultAnswer = { items: [] };
     await mount("fr");
     const card = await accounts();
-    expect(card.textContent).toContain("Ce bot n'a aucun compte pour l'instant");
+    expect(card.textContent).toContain("Ce bot n'a encore aucun accès");
     await click(card.querySelector<HTMLElement>("[data-bot-profile-add]"), "Ajouter");
     const menu = document.querySelector<HTMLElement>("[role='menu']")!;
     expect(menu.textContent).toContain("Connecte une application au nom de ce bot");

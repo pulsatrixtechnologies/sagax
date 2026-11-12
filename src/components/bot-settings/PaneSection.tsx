@@ -14,7 +14,7 @@ import { HelpTip, useSettingsSurface } from "../SettingsPrimitives";
  * room for free-form controls rather than rows). */
 export const PANE_CARD = "rounded-xl border-[0.5px] border-border bg-elevated px-3.5 py-3";
 /** The same card on the plain surface (the bot's profile page, #2313):
- * one filled rounded card, no border, as Channels and Bot accounts. */
+ * one filled rounded card, no border, as Channels and Access. */
 export const PLAIN_PANE_CARD = "rounded-2xl bg-card px-4 py-3";
 
 export function PaneSection({
@@ -55,7 +55,7 @@ export function PaneSection({
 /** How a full-width list sits in a section's card: its rows reach the
  * card's edges and keep the card's side padding. The plain surface (the
  * bot's profile page) draws the reference rows: a 14px title, a 12px
- * subtitle and no rule between rows, as Channels and Bot accounts. */
+ * subtitle and no rule between rows, as Channels and Access. */
 export function usePaneRows() {
   const plain = useSettingsSurface() === "plain";
   return plain

@@ -12620,6 +12620,22 @@
         }
       }
     },
+    "Apps, servers and vault logins this bot can use. One place for all.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apps, servers and vault logins this bot can use. One place for all."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applications, serveurs et connexions du coffre que ce bot peut utiliser. Un seul endroit pour tout."
+          }
+        }
+      }
+    },
     "Archive": {
       "localizations": {
         "en": {
@@ -14902,38 +14918,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bot"
-          }
-        }
-      }
-    },
-    "Bot accounts": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bot accounts"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Comptes du bot"
-          }
-        }
-      }
-    },
-    "Bot accounts and connectors. One place for both.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bot accounts and connectors. One place for both."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Comptes du bot et connecteurs. Un seul endroit pour les deux."
           }
         }
       }

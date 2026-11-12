@@ -7,7 +7,7 @@
 // menu (Archive, Delete) only where this pairing allows them (hidden, never
 // greyed). Pill tabs General / Appearance / Knowledge / Analytics with a
 // search beside them. The tabs follow the desktop's page (#3398 to #3403):
-// General's Settings, Channels and Bot accounts cards with their controls
+// General's Settings, Channels and Access cards with their controls
 // in place, Knowledge's To review and Skills cards, and Analytics opening
 // on the block of the reference.
 import CompanionCore
@@ -1023,7 +1023,7 @@ struct BotProfilePage: View {
         }
     }
 
-    // MARK: Bot accounts
+    // MARK: Access
 
     /// What the card lists (#3399): what this bot has, never a connector
     /// still to connect (that one stays in the apps page Add opens).
@@ -1063,7 +1063,7 @@ struct BotProfilePage: View {
 
     private var accountsHit: Bool {
         guard context.sections.contains(.access) else { return false }
-        return hit(Self.words("Bot accounts")) || hit(Self.words("Accounts")) || hit(capabilities?.engine.label ?? "")
+        return hit(Self.words("Access")) || hit(Self.words("Accounts")) || hit(capabilities?.engine.label ?? "")
             || accounts.contains { hit(Self.accountName($0)) }
             || vaultItems.contains { hit($0.name) }
     }
@@ -1091,18 +1091,18 @@ struct BotProfilePage: View {
 
     private var addMenu: some View { BotProfileAddMenu(items: addItems, identifier: "bot-profile-accounts.add") }
 
-    /// General > Bot accounts, always in place: the engine, then each app
+    /// General > Access (#4075), always in place: the engine, then each app
     /// or server the bot has with its state, then the shared vault's
     /// logins; "+ Add" at the right of the label, or in the empty row.
     @ViewBuilder
     private var accountsGroup: some View {
         if context.sections.contains(.access), accountsHit {
-            let whole = hit(Self.words("Bot accounts")) || hit(Self.words("Accounts"))
+            let whole = hit(Self.words("Access")) || hit(Self.words("Accounts"))
             let shown = whole ? accounts : accounts.filter { hit(Self.accountName($0)) }
             let logins = whole ? vaultItems : vaultItems.filter { hit($0.name) }
             let empty = capabilities != nil && accounts.isEmpty && vaultItems.isEmpty
             VStack(alignment: .leading, spacing: 8) {
-                BotProfileGroupLabel(title: "Bot accounts") {
+                BotProfileGroupLabel(title: "Access") {
                     if !empty { addMenu }
                 }
                 ProfileCard {

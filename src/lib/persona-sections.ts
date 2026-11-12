@@ -85,7 +85,7 @@ export function personaGroupSections(group: PersonaGroup): readonly PersonaCateg
  * Stats shows the usage in place.
  *
  * - General: Settings (two switches in place, then Personality, Model,
- *   Before it acts), the Channels card and the Bot accounts card in place,
+ *   Before it acts), the Channels card and the Access card in place,
  *   More (Shared with, Rules, When it acts alone, Voice, Advanced settings,
  *   Versions).
  * - Appearance: the whole mascot editor in place (character, shape, colour,

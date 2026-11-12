@@ -74,7 +74,7 @@ describe("bot setup and tools in the real renderer", () => {
       await expect.poll(snapshot, { timeout: 10_000 }).toContain(section);
       await click(section);
     };
-    // Bot accounts > Add > MCP servers (BotProfilePage.tsx-parts/cards.tsx).
+    // Access > Add > MCP servers (BotProfilePage.tsx-parts/cards.tsx).
     const addMcpServers = async () => {
       await expect.poll(() => evaluate(`(() => {
         const card = document.querySelector('[data-settings-group="bot-profile-accounts"]');
@@ -145,9 +145,9 @@ describe("bot setup and tools in the real renderer", () => {
 
     await openPersona("Access");
     // #3399: the MCP servers card left the profile; each server is one row of
-    // Bot accounts, with its switch. With none, the card's empty row carries
+    // Access, with its switch. With none, the card's empty row carries
     // Add, whose "MCP servers" opens Plugins where a server is added.
-    await expect.poll(snapshot, { timeout: 10_000 }).toContain("This bot has no accounts yet");
+    await expect.poll(snapshot, { timeout: 10_000 }).toContain("This bot has no access yet");
     await addMcpServers();
     // Plugins > Manage > + Add > Paste config (#2104: one "+ Add" menu in
     // Manage's title row, PluginsPanelView.tsx).

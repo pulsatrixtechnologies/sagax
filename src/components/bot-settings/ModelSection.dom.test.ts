@@ -304,7 +304,7 @@ describe("Who pays for a shared bot (#1137 regression)", () => {
     const row = card.querySelector<HTMLElement>('[data-settings-row="botPayerMode"]')!;
     expect(row.querySelector("[data-bot-payer-label]")?.textContent).toBe("Paid by: The owner");
     expect(row.dataset.botPayer).toBe("owner");
-    // Drawn like the Channels and Bot accounts rows of the same page.
+    // Drawn like the Channels and Access rows of the same page.
     expect(row.className).toContain("px-4");
     expect(row.querySelector("[data-bot-payer-label]")?.className).toContain("text-[14px] leading-5 text-ink");
     expect(row.querySelector("svg")?.getAttribute("class")).toContain("size-5 shrink-0 text-ink-secondary");

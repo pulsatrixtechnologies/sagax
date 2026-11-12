@@ -2,7 +2,7 @@
 import XCTest
 
 /// The bot profile on the phone and the tablet follows the desktop's cards
-/// (#3403): the Bot accounts card lists what the bot has, "+ Add" offers
+/// (#3403): the Access card lists what the bot has, "+ Add" offers
 /// described choices, Knowledge decides a learning in place, and Analytics
 /// reads the reference block.
 final class BotProfileCardsTests: XCTestCase {

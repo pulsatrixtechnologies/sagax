@@ -394,7 +394,7 @@ final class ProfileUITests: XCTestCase {
     }
 
     /// The phone follows the desktop's General (#3398, #3399): Channels and
-    /// Bot accounts in place, no app still to connect in the accounts card,
+    /// Access in place, no app still to connect in the accounts card,
     /// and "+ Add" offers two choices that each say what they do.
     @MainActor
     func testBotAccountsCardListsWhatTheBotHasAndAddDescribesEachChoice() throws {
@@ -404,7 +404,7 @@ final class ProfileUITests: XCTestCase {
         XCTAssertFalse(element("bot-profile-channels.toggle", in: app).exists, "no row unfolds the channels")
         XCTAssertFalse(element("bot-profile-channel.sharing", in: app).exists, "sharing left the channels for More")
         let accounts = element("bot-profile-group.accounts", in: app)
-        guard accounts.waitForExistence(timeout: 10) else { throw XCTSkip("this pairing has no Bot accounts section: start the fixture with PARITY_OWNER=1") }
+        guard accounts.waitForExistence(timeout: 10) else { throw XCTSkip("this pairing has no Access section: start the fixture with PARITY_OWNER=1") }
         XCTAssertFalse(element("bot-profile-accounts.toggle", in: app).exists, "no row unfolds the accounts")
         let engine = element("bot-profile-accounts.engine", in: app)
         XCTAssertTrue(engine.waitForExistence(timeout: 20), "the engine row comes first")

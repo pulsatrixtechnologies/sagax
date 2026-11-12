@@ -1,11 +1,11 @@
 // The data rules of the bot profile's cards on the phone and the tablet,
-// the desktop's (#3399, #3401, #3403): the Bot accounts card lists what the
+// the desktop's (#3399, #3401, #3403): the Access card lists what the
 // bot has, and the Analytics tab opens on the date range, Messages, Hours
 // saved and Top users of `GET /api/bots/:id/analytics?days=N`
 // (shared/bot-analytics.ts).
 import Foundation
 
-// MARK: - Bot accounts
+// MARK: - Access
 
 public enum BotAccountsCard {
     /// What the card lists: each app or server the bot has (on, off, set by

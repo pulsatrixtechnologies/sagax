@@ -161,7 +161,7 @@ describe("bot profile page shell", () => {
     // opens a sub-page only for a long setting; no Settings fold, no identity card of facts
     expect(html).not.toContain("data-bot-profile-settings-toggle");
     expect(rowsOf(html)).toEqual(["personality", "model", "beforeActing", "sharing", "rules", "actsAlone", "voice", "advanced", "versions"]);
-    for (const label of [">Settings<", ">Channels<", ">Bot accounts<", ">More<"]) expect(html).toContain(label);
+    for (const label of [">Settings<", ">Channels<", ">Access<", ">More<"]) expect(html).toContain(label);
     expect(html).not.toContain(">Identity<");
     expect(selectedTab(html)).toBe("general");
     expect(html).toContain('aria-label="Close"');
@@ -310,7 +310,7 @@ describe("bot profile page shell", () => {
   it("names the tabs, the header and the channels in French", () => {
     setLocale("fr");
     const html = render("overview");
-    for (const label of [">Général<", ">Connaissances<", ">Analytique<", ">Apparence", ">Réglages<", ">Canaux<", ">Comptes du bot<", ">Plus<", ">Avant d&#x27;agir<", ">Quand il agit seul<"]) expect(html).toContain(label);
+    for (const label of [">Général<", ">Connaissances<", ">Analytique<", ">Apparence", ">Réglages<", ">Canaux<", ">Accès<", ">Plus<", ">Avant d&#x27;agir<", ">Quand il agit seul<"]) expect(html).toContain(label);
     // the channels are in place on General (#3398); a sub-page's link back names its tab
     for (const label of [">Courriel<", ">Me joindre<"]) expect(html).toContain(label);
     const rules = render("rules");
@@ -368,7 +368,7 @@ describe("bot profile page shell", () => {
     const accounts = render("access");
     expect(selectedTab(accounts)).toBe("general");
     expect(subPageOf(accounts)).toBeUndefined();
-    expect(accounts).toContain("This bot has no accounts yet");
+    expect(accounts).toContain("This bot has no access yet");
   });
 
   it("draws the top bar's X from the app's round header control, not a black disc", () => {
@@ -420,7 +420,7 @@ describe("General cards and sub-pages", () => {
     expect(channels).toContain("pepper@bots.example");
     expect(channels).toContain('data-bot-profile-action="email"');
     expect(channels).toContain('data-bot-profile-action="reachMe"');
-    // Bot accounts in place, one name, its Add button
+    // Access in place (#4075), one name, its Add button
     const accounts = general.slice(at(general, 'data-settings-group="bot-profile-accounts"'));
     expect(general).not.toContain("What it can use");
     expect([...accounts.matchAll(/data-bot-profile-row="([\w-]+)"/g)].map((match) => match[1]).slice(0, 2)).toEqual(["engine", "account-0"]);
@@ -460,10 +460,10 @@ describe("General cards and sub-pages", () => {
     expect(html).toContain('data-section-body="slack"');
   });
 
-  it("says when the accounts are loading and when the bot has none", () => {
-    expect(render("access")).toContain("Loading accounts");
+  it("says when the access list is loading and when the bot has none", () => {
+    expect(render("access")).toContain("Loading access");
     fixture.capabilities = { engine: { kind: "claude", label: "Claude Code" }, items: [] };
-    expect(render("access")).toContain("This bot has no accounts yet");
+    expect(render("access")).toContain("This bot has no access yet");
   });
 
   it("each row carries its name, description and value; the permissions and access pieces each live in one sub-page", () => {

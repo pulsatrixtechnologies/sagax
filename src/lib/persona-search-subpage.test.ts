@@ -24,7 +24,7 @@ describe("search lands on the option's sub-page (#2623)", () => {
     expect(personaSubPageForQuery("permissions", "hooks")).toBe("advanced");
     expect(personaSubPageForQuery("access", "navigateur")).toBe("advanced");
   });
-  it("opens Rules for the custom rules, and no sub-page for MCP (the Bot accounts card is in place on General, #3398)", () => {
+  it("opens Rules for the custom rules, and no sub-page for MCP (the Access card is in place on General, #3398)", () => {
     expect(personaSubPageForQuery("permissions", "règles personnalisées")).toBe("rules");
     expect(personaSubPageForQuery("access", "mcp")).toBeNull();
     expect(personaSubPageForQuery("slack", "slack")).toBeNull();

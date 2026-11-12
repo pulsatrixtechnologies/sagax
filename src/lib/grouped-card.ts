@@ -16,3 +16,9 @@ export const PANEL_ROW = "px-3 py-2";
 
 /** A section label above a PANEL_CARD: Upcoming, Suggested, Computer, Voice chat. */
 export const PANEL_LABEL = "px-0.5 text-[13px] font-normal leading-[18px] text-ink-tertiary";
+
+/** The reference's "Show more" line at the end of a long list in a card
+ * (Grok Bot, #2174): the card's full width, centered, small grey words,
+ * darker on hover. One place for its look: Routines, Coding and a bot
+ * profile's Access card (#4075). */
+export const SHOW_MORE_ROW = "w-full py-2 text-center text-[13px] leading-[18px] text-ink-secondary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60";

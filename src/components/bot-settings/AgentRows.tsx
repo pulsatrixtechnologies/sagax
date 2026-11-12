@@ -10,7 +10,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { activityStatusActive, activityTitle, codingWhere, type BotActivityItem, type BotLaunchedAgentItem } from "@/lib/bot-activity";
 import { loadBranchPull } from "@/lib/code-branches";
 import { pullOfItem, type CodingRowPull } from "@/lib/coding-row-state";
-import { PANEL_CARD } from "@/lib/grouped-card";
+import { PANEL_CARD, SHOW_MORE_ROW } from "@/lib/grouped-card";
 import { t } from "@/lib/i18n";
 import { CodingSessionRow } from "./CodingSessionRow";
 
@@ -124,7 +124,7 @@ export function AgentRows({ items, launched = [], onOpen, onOpenLaunched, onStop
           type="button"
           data-agent-rows-more
           onClick={() => setAll(true)}
-          className="w-full rounded-md px-3 py-2 text-center text-[13px] leading-[18px] text-ink-secondary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60"
+          className={`${SHOW_MORE_ROW} rounded-md px-3`}
         >
           ↓ {t("botPanel.coding.more", { count: hidden })}
         </button>

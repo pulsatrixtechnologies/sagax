@@ -421,6 +421,8 @@ export type StoreChange =
   | { type: "message"; threadId: string; message: Message }
   | { type: "message.patch"; threadId: string; message: Message }
   | { type: "thread"; threadId: string; activeLeafId: string }
+  /** A message left the conversation for good (removeMessage). */
+  | { type: "message.removed"; threadId: string; messageId: string }
   /** A participant's read position moved (server/messages/read-receipts.ts). */
   | { type: "thread.read"; threadId: string; participantId: string; read: ReadPosition }
   | { type: "thread.deleted"; threadId: string }
@@ -2290,8 +2292,10 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
 
   /** #3551: take one message out of the conversation for good (a notice
    * that should never have been written). Its replies chain onto its parent
-   * and a branch that ended on it ends on its parent, so every client walks
-   * past it at once and a reload no longer has it. False when it is gone. */
+   * and a branch that ended on it ends on its parent, and a reload no longer
+   * has it. #4039: every removal is announced (message.removed), so an open
+   * chat drops the row at once, the only row of a conversation and a room's
+   * linear transcript included. False when it is gone. */
   removeMessage(threadId: string, messageId: string): boolean {
     const t = this.thread(threadId);
     const gone = t.messages.find((m) => m.id === messageId);
@@ -2305,6 +2309,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
       mdb.setActiveLeaf(threadId, t.activeLeafId);
       if (t.activeLeafId) this.emit({ type: "thread", threadId, activeLeafId: t.activeLeafId });
     }
+    this.emit({ type: "message.removed", threadId, messageId });
     return true;
   }
 

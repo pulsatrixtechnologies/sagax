@@ -222,6 +222,7 @@ describe("live frames for a member", () => {
     const hidden: Array<Record<string, unknown>> = [
       { kind: "message", threadId: "t-hr", message: { id: "x" } },
       { kind: "message.patch", threadId: "t-room-mixed", message: { id: "x" } },
+      { kind: "message.removed", threadId: "t-hr", messageId: "x" },
       { kind: "thread", threadId: "t-hr", activeLeafId: "x" },
       { kind: "thread.read", threadId: "t-hr", participantId: "bot:hr", read: { messageId: "x", at: 1 } },
       { kind: "bot", bot: { id: "hr" } },
@@ -247,6 +248,9 @@ describe("live frames for a member", () => {
     const ctx = context(bob);
     const message = { kind: "message", threadId: "t-pub-2", message: { id: "x" } };
     expect(frameForMember(message, ctx, seen())).toBe(message);
+    // #4039: a removal in a thread they see reaches them, so the row leaves
+    const removed = { kind: "message.removed", threadId: "t-pub-2", messageId: "x" };
+    expect(frameForMember(removed, ctx, seen())).toBe(removed);
     const hook = { kind: "webhook.attempt", attempt: { webhookId: "hook-pub" } };
     expect(frameForMember(hook, ctx, seen())).toBe(hook);
     expect(frameForMember({ kind: "sections", sections: ["Ops", "People"] }, ctx, seen())).toEqual({ kind: "sections", sections: ["Ops"] });

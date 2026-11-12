@@ -101,6 +101,9 @@ export function foldLiveFrame(frame: ServerFrame, ctx: FoldLiveFrameCtx): void {
         case "message.patch":
           rawDispatch({ type: "messagePatched", threadId: frame.threadId, message: frame.message as Message });
           break;
+        case "message.removed":
+          rawDispatch({ type: "messageRemoved", threadId: frame.threadId, messageId: frame.messageId });
+          break;
         case "thread":
           rawDispatch({ type: "threadActive", threadId: frame.threadId, activeLeafId: frame.activeLeafId });
           // a rewind also invalidates any half-streamed text from the old branch

@@ -90,6 +90,7 @@ export function prependOlder(transcript: SideTranscript, older: readonly Message
 type SideFrame =
   | { kind: "message"; threadId: string; message: Message }
   | { kind: "message.patch"; threadId: string; message: Message }
+  | { kind: "message.removed"; threadId: string; messageId: string }
   | { kind: "thread"; threadId: string; activeLeafId: string }
   | { kind: string; threadId?: string };
 
@@ -133,6 +134,15 @@ export function applySideFrame(transcript: SideTranscript, frame: SideFrame, thr
     const messages = transcript.messages.slice();
     messages[index] = message;
     return { ...transcript, messages };
+  }
+  if (frame.kind === "message.removed" && "messageId" in frame && typeof frame.messageId === "string") {
+    const gone = transcript.messages.find((existing) => existing.id === frame.messageId);
+    if (!gone) return transcript;
+    return {
+      ...transcript,
+      messages: transcript.messages.filter((existing) => existing.id !== gone.id),
+      activeLeafId: transcript.activeLeafId === gone.id ? gone.parentId ?? null : transcript.activeLeafId,
+    };
   }
   if (frame.kind === "thread" && "activeLeafId" in frame && typeof frame.activeLeafId === "string") {
     if (frame.activeLeafId === transcript.activeLeafId) return transcript;

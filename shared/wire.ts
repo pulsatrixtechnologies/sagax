@@ -1790,6 +1790,9 @@ export type ServerFrame =
   | { kind: "bot.queued"; queues: BotQueuedMessages }
   | { kind: "message"; threadId: string; message: WireMessage }
   | { kind: "message.patch"; threadId: string; message: WireMessage }
+  /** A message left the conversation for good: drop the row; a branch
+   * that ended on it ends on its parent. */
+  | { kind: "message.removed"; threadId: string; messageId: string }
   | { kind: "thread"; threadId: string; activeLeafId: string }
   /** A read position moved (server/messages/read-receipts.ts): `participantId` is a
    * person's principal id or `bot:<botId>`. `reset` alone (no participant)

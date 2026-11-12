@@ -14,7 +14,7 @@ import { reduceTasks } from "./reduce-tasks";
 export type ReduceFn = (state: AppState, action: Action) => AppState;
 
 function reduce(state: AppState, action: Action): AppState {
-  if (action.type === "messageAdded" || action.type === "messagePatched" || action.type === "threadActive" || action.type === "optimisticMessageRemoved") {
+  if (action.type === "messageAdded" || action.type === "messagePatched" || action.type === "messageRemoved" || action.type === "threadActive" || action.type === "optimisticMessageRemoved") {
     const owner = state.bots.find((bot) => (bot.threadId !== action.threadId || bot.awaitingThreadSnapshot) && bot.tasks?.some((task) => task.threadId === action.threadId));
     if (owner) {
       // ponytail: a bounded race buffer, not a second transcript store. The

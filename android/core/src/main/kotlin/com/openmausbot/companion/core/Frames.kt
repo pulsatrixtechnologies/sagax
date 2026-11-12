@@ -52,6 +52,8 @@ sealed interface Frame {
     data class Hello(val cursor: String, val resumed: Boolean) : Frame
     data class Message(val threadId: String, val message: com.openmausbot.companion.core.Message) : Frame
     data class MessagePatch(val threadId: String, val message: com.openmausbot.companion.core.Message) : Frame
+    /** A message left the conversation for good: the row goes, a branch that ended on it ends on its parent. */
+    data class MessageRemoved(val threadId: String, val messageId: String) : Frame
     data class Thread(val threadId: String, val activeLeafId: String?) : Frame
     data class Bot(val bot: com.openmausbot.companion.core.Bot) : Frame
     data class BotDeleted(val botId: String) : Frame
@@ -75,6 +77,7 @@ val Frame.threadId: String?
     get() = when (this) {
         is Frame.Message -> threadId
         is Frame.MessagePatch -> threadId
+        is Frame.MessageRemoved -> threadId
         is Frame.Thread -> threadId
         is Frame.Notify -> notification.threadId
         is Frame.Runtime -> event.threadId
@@ -108,6 +111,10 @@ object FrameSerializer : KSerializer<Frame> {
                     com.openmausbot.companion.core.Message.serializer(),
                     objectValue.required("message"),
                 ),
+            )
+            "message.removed" -> Frame.MessageRemoved(
+                threadId = objectValue.requiredString("threadId"),
+                messageId = objectValue.requiredString("messageId"),
             )
             "thread" -> Frame.Thread(
                 threadId = objectValue.requiredString("threadId"),
@@ -234,6 +241,11 @@ private fun Frame.toJsonObject(output: JsonEncoder): JsonObject = buildJsonObjec
             put("kind", "message.patch")
             put("threadId", threadId)
             put("message", output.json.encodeToJsonElement(com.openmausbot.companion.core.Message.serializer(), message))
+        }
+        is Frame.MessageRemoved -> {
+            put("kind", "message.removed")
+            put("threadId", threadId)
+            put("messageId", messageId)
         }
         is Frame.Thread -> {
             put("kind", "thread")

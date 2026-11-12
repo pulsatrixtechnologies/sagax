@@ -343,6 +343,8 @@ data class CompanionState(
                 .let { next -> if (index >= 0) next else next.noteThreadActivity(frame.threadId, frame.message.at) }
         }
 
+        is Frame.MessageRemoved -> removeMessage(frame.threadId, frame.messageId)
+
         is Frame.Thread -> copy(
             activeLeafIds = activeLeafIds + (frame.threadId to frame.activeLeafId),
             bots = bots.map {
@@ -366,6 +368,21 @@ data class CompanionState(
     }
 
     fun clearScreen(botId: String): CompanionState = copy(screens = screens - botId)
+
+    /** #4039: the server took a message out for good. Its row leaves the
+     * transcript, and a branch that ended on it ends on its parent. */
+    fun removeMessage(threadId: String, messageId: String): CompanionState {
+        val held = transcript(threadId)
+        val gone = held.firstOrNull { it.id == messageId } ?: return this
+        val parent = gone.parentId
+        return copy(
+            messages = messages + (threadId to held.filter { it.id != messageId }),
+            activeLeafIds = if (activeLeafIds[threadId] == messageId) activeLeafIds + (threadId to parent) else activeLeafIds,
+            bots = bots.map {
+                if (it.threadId == threadId && it.activeLeafId == messageId) it.copy(activeLeafId = parent) else it
+            },
+        )
+    }
 
     fun clearStream(threadId: String): CompanionState = copy(
         streaming = streaming - threadId,

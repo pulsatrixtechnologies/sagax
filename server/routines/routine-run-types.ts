@@ -173,8 +173,10 @@ export interface RoutineRun {
   problemRepeat?: { firstRunId: string; since: number; count: number; anyProblem?: true };
   /** #4050: this run is the one of its streak that tells the person (its
    * one summary card, its alert, its ring), decided once when it finished
-   * (RoutineManager.settleRepeatingStreak), whatever is read again later. */
-  tellsStreak?: true;
+   * (RoutineManager.settleRepeatingStreak), whatever is read again later.
+   * False on a problem run of its streak that does not tell; absent on a run
+   * settled before #4050. */
+  tellsStreak?: boolean;
   /** #3479: the first run without problems after `afterRuns` runs with them. */
   recovered?: { afterRuns: number; since: number };
   /** 2026-11-03: the teammates this run handed work to and their threads. */

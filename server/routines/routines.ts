@@ -2192,7 +2192,9 @@ export class RoutineManager {
       return;
     }
     const earlier = this.problemStreakBefore(run);
-    if (isRoutineProblemRun(run) && this.streakTellsAt(run, earlier)) run.tellsStreak = true;
+    // false, not absent: a run settled before #4050 carries neither
+    // (streakTold reads its count instead)
+    if (isRoutineProblemRun(run)) run.tellsStreak = this.streakTellsAt(run, earlier);
     const first = earlier.at(-1);
     if (!first) return;
     if (isRoutineProblemRun(run)) {
@@ -2208,7 +2210,16 @@ export class RoutineManager {
    * (problemToldAt). A streak is told once, even when the told count
    * changes in its middle (a schedule edit). */
   private streakTellsAt(run: RoutineRun, earlier: readonly RoutineRun[]): boolean {
-    return earlier.length + 1 >= this.problemToldAt(run) && !earlier.some((entry) => entry.tellsStreak);
+    return earlier.length + 1 >= this.problemToldAt(run) && !this.streakTold(earlier);
+  }
+
+  /** #4050: whether one of a streak's earlier problem runs told the person.
+   * A run settled before `tellsStreak` existed (an upgrade in the middle of
+   * a streak) told when its count reached its told count, as that server
+   * did: its streak is not told a second time. */
+  private streakTold(earlier: readonly RoutineRun[]): boolean {
+    return earlier.some((entry) => entry.tellsStreak
+      ?? (entry.problemRepeat?.count ?? 1) >= this.problemToldAt(entry));
   }
 
   /** #3695: what the streak's runs said, oldest first, deduplicated: the
@@ -2277,7 +2288,7 @@ export class RoutineManager {
   private beforeTellingRun(run: RoutineRun): boolean {
     if (!this.streakTells(run)) return false;
     const earlier = this.problemStreakBefore(run);
-    return !earlier.some((entry) => entry.tellsStreak) && !this.streakTellsAt(run, earlier);
+    return !this.streakTellsAt(run, earlier) && !this.streakTold(earlier);
   }
 
   /** A problem that belongs to the bot (its engine's limit, sign-in or

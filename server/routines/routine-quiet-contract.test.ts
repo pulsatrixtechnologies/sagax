@@ -953,6 +953,54 @@ describe("#4050: one streak per thing, told once at the run it names", () => {
     expect(routineCards(chat.rows)).toHaveLength(1);
     expect(ringsDone(second, h.routines)).toBe(true);
   });
+
+  /** The runs a server before #4050 settled carry no `tellsStreak`. */
+  const settledBefore = (routines: RoutineManager) => {
+    for (const entry of (routines as unknown as { runs: RoutineRun[] }).runs) delete entry.tellsStreak;
+  };
+
+  it("an upgrade in the middle of a streak told at its third run tells it no second time", async () => {
+    const h = manager(start);
+    const routine = h.routines.create({ name: "Work watch", prompt: "Make sure the work goes on", botId: "maus-1", enabled: false, schedule: EVERY_FIVE });
+    const chat = conversation({ routines: h.routines });
+    for (let index = 0; index < 3; index += 1) chat.sync(await h.run(routine.id, problem("stuck")));
+    settledBefore(h.routines);
+    const rang = chat.rang.length;
+    const fourth = await h.run(routine.id, problem("stuck"));
+    chat.sync(fourth);
+    expect(fourth.problemRepeat).toMatchObject({ count: 4 });
+    expect(fourth.tellsStreak).toBe(false);
+    expect(h.routines.problemAlert(fourth, { detail: "told" })).toBeNull();
+    expect(ringsDone(fourth, h.routines)).toBe(false);
+    expect(routineCards(chat.rows)).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun.repeat).toMatchObject({ count: 4, streak: true });
+    expect(chat.rang).toHaveLength(rang);
+  });
+
+  it("an upgrade after a daily routine's first problem, told then, tells its streak no second time", async () => {
+    const h = manager(start);
+    const routine = h.routines.create({ name: "Backup check", prompt: "Check the backups", botId: "maus-1", enabled: false, schedule: DAILY });
+    const chat = conversation({ routines: h.routines });
+    chat.sync(await h.run(routine.id, problem("the backup host is down")));
+    settledBefore(h.routines);
+    const second = await h.run(routine.id, problem("the backup host is down"));
+    chat.sync(second);
+    expect(second.tellsStreak).toBe(false);
+    expect(h.routines.problemAlert(second, { detail: "told" })).toBeNull();
+    expect(ringsDone(second, h.routines)).toBe(false);
+    expect(routineCards(chat.rows)).toHaveLength(1);
+  });
+
+  it("an upgrade before a streak reached its told count still tells it at that count", async () => {
+    const h = manager(start);
+    const routine = h.routines.create({ name: "Work watch", prompt: "Make sure the work goes on", botId: "maus-1", enabled: false, schedule: EVERY_FIVE });
+    const chat = conversation({ routines: h.routines });
+    for (let index = 0; index < 2; index += 1) chat.sync(await h.run(routine.id, problem("stuck")));
+    settledBefore(h.routines);
+    const third = await h.run(routine.id, problem("stuck"));
+    expect(third.tellsStreak).toBe(true);
+    expect(h.routines.problemAlert(third, { detail: "told" })).toEqual({ detail: "told" });
+  });
 });
 
 describe("#4051: a row always reaches a final state, and a run the person started keeps its row", () => {

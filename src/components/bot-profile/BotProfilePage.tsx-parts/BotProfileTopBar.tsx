@@ -6,6 +6,7 @@
 // blurred strip of the page's ground with the small mascot and the name.
 // Nothing is ever cut by an opaque coloured band.
 import type { Bot } from "@/state/store";
+import type { BotProfileTab } from "@/lib/persona-sections";
 import { cn } from "@/lib/cn";
 import { useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
 import { BotAvatar } from "@/components/Avatar";
@@ -13,6 +14,7 @@ import { splitBotNameTitle } from "../../bot-settings/bot-name-title";
 import { useCaptionChrome, useMacInsetChrome } from "../../DesktopCapabilities";
 import { WindowCloseButton } from "../../WindowCloseButton";
 import { ShareBotButton } from "../ShareBotButton";
+import { SubPageBack } from "./subpages";
 
 /** The macOS inset strip above the page (the logo shows in the sidebar):
  * outside the scroll, the window's own top. */
@@ -24,9 +26,11 @@ export function BotProfileInsetStrip() {
   return <div aria-hidden="true" data-bot-profile-inset-strip="" className="content-topbar-strip h-9 shrink-0 bg-app" {...dragProps} />;
 }
 
-export function BotProfileTopBar({ bot, onClose, shareShown, shareOpen, onShareOpenChange, condensed }: {
+export function BotProfileTopBar({ bot, onClose, back, shareShown, shareOpen, onShareOpenChange, condensed }: {
   bot: Bot;
   onClose: () => void;
+  /** On a sub-page: the link back to its tab, beside the close button (#4078). */
+  back: { tab: BotProfileTab; onBack: () => void } | null;
   shareShown: boolean;
   shareOpen: boolean;
   onShareOpenChange: (open: boolean) => void;
@@ -57,6 +61,11 @@ export function BotProfileTopBar({ bot, onClose, shareShown, shareOpen, onShareO
     >
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <WindowCloseButton onClose={onClose} place="relative shrink-0 max-sm:ml-11" />
+        {back && (
+          <div className="flex shrink-0" style={noDragStyle}>
+            <SubPageBack tab={back.tab} onBack={back.onBack} />
+          </div>
+        )}
         {/* the condensed header: the small mascot and the name, once the hero is gone */}
         <div
           data-bot-profile-condensed=""

@@ -214,11 +214,15 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
         expect(sub, `sub-page ${id}`).not.toBeNull();
         expect(sub!.querySelector("[data-bot-profile-subpage-title]")?.textContent).toBe(t(`botProfile.v6.page.${id}.title` as never));
         expect(node.querySelector("[role='tablist']"), `no tabs on ${id}`).toBeNull();
-        // #3398: the link back names the tab it returns to, and has the focus
-        const back = sub!.querySelector<HTMLElement>("[data-bot-profile-back]")!;
+        // #3398: the link back names the tab it returns to, and has the focus;
+        // #4078: it is in the top bar beside the close button, not in the column
+        expect(sub!.querySelector("[data-bot-profile-back]"), `no back in the column of ${id}`).toBeNull();
+        const back = host.querySelector<HTMLElement>("[data-bot-profile-topbar] [data-bot-profile-back]")!;
+        expect(back, `back in the top bar of ${id}`).not.toBeNull();
         expect(back.textContent, `back on ${id}`).toBe(t(`botProfile.tab.${tab}` as never));
         expect(document.activeElement, `focus on Back of ${id}`).toBe(back);
-        await click(sub!.querySelector<HTMLElement>("[data-bot-profile-back]"), "Back");
+        await click(back, "Back");
+        expect(host.querySelector("[data-bot-profile-back]"), `no back on the tab after ${id}`).toBeNull();
         expect(node.querySelector(`[data-bot-profile-subpage]`)).toBeNull();
         expect(document.activeElement?.getAttribute("data-bot-profile-subpage-open"), `focus back on row ${id}`).toBe(id);
       }

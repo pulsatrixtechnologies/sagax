@@ -14,6 +14,11 @@ export const CIRCLE_ICON = { size: 18, strokeWidth: 1.75 } as const;
 export const CIRCLE_LABEL =
   "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-hairline-weak bg-elevated px-3 text-[12px] font-medium leading-none text-ink";
 
+// CIRCLE_LABEL as a button of a top bar (the bot page's Share, and the link
+// back of its sub-pages, #4078): the same pill, with a hover and the accent
+// focus ring.
+export const CIRCLE_LABEL_BUTTON = `${CIRCLE_LABEL} transition-colors hover:bg-elevated-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 motion-reduce:transition-none`;
+
 // The same 36px circle for a control that sits on the sidebar rail (the
 // head's search and New buttons). It paints from the rail's own tokens
 // (bg-sidebar-elevated, border-sidebar-hairline-weak, sidebar ink), never the

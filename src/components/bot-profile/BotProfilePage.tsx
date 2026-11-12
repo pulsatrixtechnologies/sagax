@@ -22,8 +22,9 @@
 // - Stats: the bot's usage over 7, 30 or 90 days.
 //
 // A row opens its own sub-page in the same column, only for a setting too
-// long for a card: a link back named after the tab (focused when the page
-// opens), the title, one line of intro, then the cards. Each change applies in place, at once, as
+// long for a card: a link back named after the tab in the top bar beside
+// the close button (focused when the page opens, #4078), the title where the
+// tab row was, one line of intro, then the cards. Each change applies in place, at once, as
 // on the Settings pages (#3397): no Cancel and no Save bar, no question on
 // leaving; Versions restores a change. Nothing of the editor is gone: each
 // sub-page shows the same section bodies (useBotSectionContent, and the
@@ -240,9 +241,9 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
     const node = rootRef.current?.querySelector<HTMLElement>(selector);
     node?.scrollIntoView?.({ block: "start", inline: "nearest" });
     if (node?.matches("[data-bot-profile-row]")) node.focus({ preventScroll: true });
-    // A sub-page just opened: the focus goes to its link back (#3398), so
-    // the next Tab is the page's first control, not the top bar's Close.
-    if (node?.matches("[data-bot-profile-subpage]")) node.querySelector<HTMLElement>("[data-bot-profile-back]")?.focus({ preventScroll: true });
+    // A sub-page just opened: the focus goes to its link back (#3398), in
+    // the top bar beside Close (#4078).
+    if (node?.matches("[data-bot-profile-subpage]")) rootRef.current?.querySelector<HTMLElement>("[data-bot-profile-back]")?.focus({ preventScroll: true });
   });
 
   const goTo = (id: BotSettingsSection) => {
@@ -589,6 +590,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         <BotProfileTopBar
           bot={bot}
           onClose={onClose}
+          back={page ? { tab, onBack: back } : null}
           shareShown={shown("sharing")}
           shareOpen={shareOpen}
           onShareOpenChange={setShareOpen}
@@ -610,7 +612,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
           {(!page || search.searching) && <BotProfileTabBar tabs={tabs} tab={tab} onTab={openTab} search={search} />}
 
           {page ? (
-            <SubPage key={page} page={page} tab={tab} onBack={back}>
+            <SubPage key={page} page={page}>
               {subPageBody(page)}
             </SubPage>
           ) : (

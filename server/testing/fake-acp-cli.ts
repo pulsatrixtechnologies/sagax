@@ -252,7 +252,10 @@
 //                        only): this process is not counted or dumped
 //   SAGAX_GROK_REACH_PROBE=1  set by Sagax's grok.com reach probe: not counted
 //   SAGAX_ACP_BACKGROUND_TEXT=1  set by memory/review one-shots: not counted
-//                        (a chat session's launch counter stays honest, #1970)
+//                        (a chat session's launch counter stays honest, #1970),
+//                        and it leaves <FAKE_ACP_DUMP>.mcp.json and .prompt.json
+//                        to the chat turns (memory upkeep fires after a chat
+//                        goes quiet, mid test, on the same CLI, #4063)
 //   FAKE_ACP_LAUNCH_TRACE_FILE  append one JSON line per process start
 //
 // With FAKE_ACP_DUMP and FAKE_ACP_MODES or FAKE_ACP_MODELS, every
@@ -1178,7 +1181,7 @@ function handle(msg: any) {
       }
       agentsMcp = servers.find((s: any) => s?.name === "agents") ?? null;
       sessionMcp = servers as AnyMcpEntry[];
-      if (process.env.FAKE_ACP_DUMP) {
+      if (process.env.FAKE_ACP_DUMP && !backgroundText) {
         writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.json`, JSON.stringify(servers, null, 2));
       }
       const opts = configOptions();
@@ -1350,7 +1353,7 @@ function handle(msg: any) {
           sessionId: msg.params.sessionId, model: currentModel, variant: currentVariant,
         }));
       }
-      if (process.env.FAKE_ACP_DUMP && process.env.FAKE_ACP_DUMP_PROMPT === "1") {
+      if (process.env.FAKE_ACP_DUMP && process.env.FAKE_ACP_DUMP_PROMPT === "1" && !backgroundText) {
         writeFileSync(`${process.env.FAKE_ACP_DUMP}.prompt.json`, JSON.stringify(msg.params?.prompt ?? null, null, 2));
       }
       if (failRpc(msg)) return;

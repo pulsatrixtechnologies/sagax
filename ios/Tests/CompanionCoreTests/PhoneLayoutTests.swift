@@ -121,4 +121,13 @@ final class PhoneLayoutTests: XCTestCase {
             XCTAssertTrue(menu.contains("HomeMenuDivider()"))
         }
     }
+
+    // #4066: the pane's width began at 0, so an iPad drew the phone layout
+    // for one frame: before it is measured, the size class decides.
+    func testTheAppearancePaneStartsFromTheWindowsSizeClass() throws {
+        let pane = try source("App/Desktop/PersonaAppearancePane.swift")
+        XCTAssertFalse(pane.contains("@State private var paneWidth: CGFloat = 0"))
+        XCTAssertTrue(pane.contains("@State private var paneWidth: CGFloat?"))
+        XCTAssertTrue(pane.contains("@Environment(\\.horizontalSizeClass)"))
+    }
 }

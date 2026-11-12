@@ -18,12 +18,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "./testing/fake-oidc-provider.ts";
+import { hostTimeout } from "./testing/host-timeout.ts";
 import { freePortBlock } from "./testing/ports.ts";
+import { waitForServerReady } from "./testing/server-ready.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(SERVER_DIR, "..");
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const TEST_CAPABILITY_KEY = "agent-api-fixture-capability-key-0001";
+const SERVER_START_MS = 180_000;
 
 let child: ChildProcess;
 let home = "";
@@ -68,18 +71,11 @@ beforeAll(async () => {
     stdio: ["ignore", "pipe", "pipe"],
   });
   child.stderr!.on("data", (chunk) => (stderr += chunk));
-  const deadline = Date.now() + 20_000;
-  for (;;) {
-    if (child.exitCode !== null) throw new Error(`server exited ${child.exitCode}: ${stderr}`);
-    try {
-      if ((await fetch(`${base}/api/health`)).status === 200) break;
-    } catch {
-      // still starting
-    }
-    if (Date.now() >= deadline) throw new Error(`server never became healthy: ${stderr}`);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-}, 30_000);
+  // The shared readiness wait returns as soon as the server answers. Its
+  // margin holds a cold start on a saturated machine: 20 seconds here failed
+  // a tag push three times (#3684).
+  await waitForServerReady(child, base, () => stderr, undefined, SERVER_START_MS);
+}, hostTimeout(SERVER_START_MS + 30_000));
 
 afterAll(async () => {
   if (child) await waitForExit(child, { signal: "SIGTERM" });
@@ -285,18 +281,8 @@ describe.skipIf(process.platform === "win32")("agent-to-agent API between people
     });
     org.stdout!.on("data", (chunk) => (orgLog += chunk));
     org.stderr!.on("data", (chunk) => (orgLog += chunk));
-    const deadline = Date.now() + 30_000;
-    for (;;) {
-      if (org.exitCode !== null) throw new Error(`server exited ${org.exitCode}: ${orgLog}`);
-      try {
-        if ((await fetch(`${orgBase}/api/health`)).ok) break;
-      } catch {
-        // still starting
-      }
-      if (Date.now() >= deadline) throw new Error(`server never became healthy: ${orgLog}`);
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }, 60_000);
+    await waitForServerReady(org, orgBase, () => orgLog, undefined, SERVER_START_MS);
+  }, hostTimeout(SERVER_START_MS + 30_000));
 
   afterAll(async () => {
     if (org) await waitForExit(org, { signal: "SIGTERM" });

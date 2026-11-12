@@ -12,7 +12,10 @@
 # Under nice, through a one-at-a-time queue (mkdir lock in the common git
 # dir), and with every GIT_* the hook inherited stripped so a test cannot
 # commit into the branch being pushed via a leaked GIT_DIR (issue #1705).
-# Skips when a verify:merge OK stamp already exists for this HEAD sha.
+# Skips when a verify:merge OK stamp already exists for this HEAD sha. The
+# stamp means HEAD itself (#3684): verify-merge.mjs takes the diff from the
+# commit and refuses while a tracked file differs from HEAD or the diff imports
+# an untracked file; ignored files and untracked scratch files never block.
 #
 # Installed by `pnpm install` through scripts/install-git-hooks.mjs (sets
 # core.hooksPath). Skip once with `git push --no-verify`, or for a session

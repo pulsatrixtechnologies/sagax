@@ -10,8 +10,9 @@ export async function waitForServerReady(
   base: string,
   output: () => string,
   accepts: (health: ServerHealth) => boolean = health => health.app === "openmausbot",
+  timeoutMs = 60_000,
 ): Promise<void> {
-  const deadline = Date.now() + hostTimeout(60_000);
+  const deadline = Date.now() + hostTimeout(timeoutMs);
   let lastHealth = "none";
   let spawnError: Error | undefined;
   const onError = (error: Error) => { spawnError = error; };

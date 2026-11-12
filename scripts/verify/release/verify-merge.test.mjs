@@ -1,6 +1,9 @@
-import { join, resolve } from "node:path";
-import { describe, expect, it } from "vitest";
-import { areaTests, IOS_NOT_RUN_NOTE, IOS_SKIPPED_LINE, reportBody, runIosStage, sanitizeGitEnv, stampPathFor, swiftProbe } from "./verify-merge.mjs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { areaTests, changedFiles, commitDrift, driftMessage, IOS_NOT_RUN_NOTE, IOS_SKIPPED_LINE, reportBody, runIosStage, sanitizeGitEnv, stampPathFor, swiftProbe } from "./verify-merge.mjs";
 
 describe("sanitizeGitEnv", () => {
   it("strips every GIT_* key and leaves the rest", () => {
@@ -146,5 +149,80 @@ describe("iOS stage without Swift (#3639)", () => {
     const full = setup("green", { xcode: true });
     expect(runIosStage(full.args)).toEqual([]);
     expect(full.ran).toEqual(["swift", "xcodegen", "xcodebuild"]);
+  });
+});
+
+describe("the gate verifies the commit, not the working tree (#3684)", () => {
+  const repos = [];
+  afterEach(() => { for (const dir of repos.splice(0)) rmSync(dir, { recursive: true, force: true }); });
+  const env = { ...sanitizeGitEnv({ ...process.env }), GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.com" };
+  const sh = (root, ...args) => execFileSync("git", args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" });
+  const put = (root, file, text) => { mkdirSync(dirname(join(root, file)), { recursive: true }); writeFileSync(join(root, file), text); };
+  /** A repo with a base commit on main and one branch commit: a source, its
+   * test (importing the source and a helper) and the helper. */
+  const repo = () => {
+    const root = mkdtempSync(join(tmpdir(), "verify-merge-3684-"));
+    repos.push(root);
+    sh(root, "init", "-q", "-b", "main");
+    sh(root, "config", "commit.gpgsign", "false");
+    sh(root, "config", "core.hooksPath", "/dev/null");
+    put(root, ".gitignore", "*.log\nignored/\n");
+    put(root, "server/base.ts", "export const base = 1;\n");
+    sh(root, "add", "-A");
+    sh(root, "commit", "-q", "-m", "base");
+    sh(root, "checkout", "-q", "-b", "topic");
+    put(root, "server/feature.ts", "export const feature = 2;\n");
+    put(root, "server/feature.test.ts", 'import { feature } from "./feature";\nimport { helper } from "./helper.js";\nimport { util } from "@/lib/util";\n');
+    put(root, "server/helper.ts", "export const helper = 3;\n");
+    sh(root, "add", "-A");
+    sh(root, "commit", "-q", "-m", "topic");
+    return root;
+  };
+
+  it("takes the changed files from the commit, never from uncommitted or untracked files", () => {
+    const root = repo();
+    put(root, "server/base.ts", "export const base = 2; // uncommitted fix\n");
+    put(root, "server/stray.test.ts", "untracked\n");
+    expect(changedFiles("main", root)).toEqual(["server/feature.test.ts", "server/feature.ts", "server/helper.ts"]);
+  });
+
+  it("passes a clean commit", () => {
+    const root = repo();
+    expect(commitDrift(root, ["server/feature.test.ts"])).toEqual({ tracked: [], untrackedImported: [] });
+  });
+
+  it("names a tracked file that differs from HEAD, staged or not", () => {
+    const root = repo();
+    put(root, "server/feature.ts", "export const feature = 20; // the fix, not committed\n");
+    put(root, "server/helper.ts", "export const helper = 30;\n");
+    sh(root, "add", "server/helper.ts");
+    sh(root, "rm", "-q", "--cached", "server/base.ts");
+    expect(commitDrift(root, []).tracked).toEqual(["server/base.ts", "server/feature.ts", "server/helper.ts"]);
+    const message = driftMessage(commitDrift(root, []));
+    expect(message).toContain("server/feature.ts");
+    expect(message).toContain("commit");
+  });
+
+  it("never blocks on an ignored file or an untracked scratch file nothing imports", () => {
+    const root = repo();
+    put(root, "debug.log", "x\n");
+    put(root, "ignored/out.ts", "x\n");
+    put(root, "NOTES.md", "scratch\n");
+    put(root, "scratch.mjs", "console.log(1)\n");
+    put(root, "server/unused-draft.ts", "export {}\n");
+    expect(commitDrift(root, ["server/feature.test.ts", "server/feature.ts"])).toEqual({ tracked: [], untrackedImported: [] });
+    expect(driftMessage(commitDrift(root, ["server/feature.test.ts"]))).toBe("");
+  });
+
+  it("blocks on an untracked file that a file of the diff imports (relative, .js for .ts, index, @/ alias)", () => {
+    const root = repo();
+    sh(root, "rm", "-q", "server/helper.ts");
+    sh(root, "commit", "-q", "-m", "drop the helper from the commit");
+    put(root, "server/helper.ts", "export const helper = 3;\n");
+    put(root, "src/lib/util/index.ts", "export const util = 4;\n");
+    put(root, "server/other-draft.ts", "export {}\n");
+    const drift = commitDrift(root, ["server/feature.test.ts", "server/missing.ts"]);
+    expect(drift).toEqual({ tracked: [], untrackedImported: ["server/helper.ts", "src/lib/util/index.ts"] });
+    expect(driftMessage(drift)).toContain("server/helper.ts");
   });
 });

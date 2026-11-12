@@ -23955,10 +23955,15 @@ const smsConversation = new SmsConversation({
         sender: { name: label.trim() || directoryName || viaLabel, id: existingId },
       });
     }
-    return { ok: true, threadId, messageId: typeof messageId === "string" ? messageId : "" };
+    // #4046: the route says how it took the words (steered into the running
+    // turn, queued behind it, or a turn of their own)
+    const receipt = sent.body as { steered?: unknown; queued?: unknown };
+    const delivery = receipt?.steered === true ? "steered" : receipt?.queued === true ? "queued" : "started";
+    return { ok: true, threadId, messageId: typeof messageId === "string" ? messageId : "", delivery };
   },
   state: (botId, threadId) => agentTurnState(botId, threadId),
   replyAfter: smsReplyAfter,
+  receivedAt: (messageId) => handoffs.receivedAt(messageId),
   textBack: async ({ person, botId, to, body }) => {
     const answer = await reachMeVoice(person, botId, "voice_sms", { to, body });
     return answer.ok;

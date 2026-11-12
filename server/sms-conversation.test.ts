@@ -104,3 +104,122 @@ describe("the answer by text", () => {
     expect(slow.texts.map((entry) => entry.body)).toEqual(["Helper travaille encore. La réponse sera dans Sagax."]);
   });
 });
+
+// #4046: a text that lands while a turn runs is answered within seconds, not
+// at the end of the turn. The send says how the words were taken: steered
+// into the running turn (the chat's mid-turn path), queued behind it, or the
+// start of a turn of their own. Poll n happens at n * 2s; a bot row of step n
+// is finished at that time; the engine takes the steered line in half a
+// poll before `takenStep` (`steer.received`).
+const POLL = 2_000;
+function midTurn(opts: {
+  delivery: "started" | "steered" | "queued";
+  script: SmsTurnState[];
+  /** The bot's text rows after the line, by the poll step they finished. */
+  rows: Array<{ step: number; text: string; attention?: boolean }>;
+  /** The step by which the engine said it took the line in; none when it never says. */
+  takenStep?: number;
+}) {
+  const texts: Array<{ body: string; step: number }> = [];
+  const logs: string[] = [];
+  let step = 0;
+  let clock = 0;
+  const at = () => opts.script[Math.min(step, opts.script.length - 1)]!;
+  const conversation = new SmsConversation({
+    send: async () => ({ ok: true, threadId: "t1", messageId: opts.delivery === "queued" ? "" : "m1", delivery: opts.delivery }),
+    state: () => at(),
+    replyAfter: (_thread, _message, since) => opts.rows
+      .filter((row) => row.step <= step && !row.attention && (since === undefined || row.step * POLL > since))
+      .map((row) => row.text).join("\n\n"),
+    ...(opts.takenStep === undefined ? {} : { receivedAt: () => (step >= opts.takenStep! ? opts.takenStep! * POLL - POLL / 2 : undefined) }),
+    textBack: async ({ body }) => { texts.push({ body, step }); return true; },
+    botName: () => "Helper",
+    language: () => "fr",
+    sleep: async (ms) => { step += 1; clock += ms; },
+    now: () => clock,
+    log: (line) => logs.push(line),
+  });
+  return { conversation, texts, logs };
+}
+
+const LONG_TURN: SmsTurnState[] = [...Array.from({ length: 200 }, () => "running" as const), "idle"];
+const ANSWER = "Oui, la facture est partie.";
+const NARRATION = "Je vérifie maintenant les factures du mois.";
+
+describe("a text while a turn runs (#4046)", () => {
+  it("steered into the running turn: the answer leaves as soon as the bot wrote it, long before the turn ends", async () => {
+    const { conversation, texts, logs } = midTurn({ delivery: "steered", script: LONG_TURN, rows: [{ step: 2, text: ANSWER }], takenStep: 1 });
+    await conversation.start(EVENT);
+    await conversation.drain();
+    expect(texts).toEqual([{ body: ANSWER, step: 2 }]);
+    expect(texts[0]!.step).toBeLessThan(200);
+    expect(logs.some((line) => /^sms-conversation: b1 answered \*\*\*0100 after 4s \(steered\)$/.test(line))).toBe(true);
+  });
+
+  it("a narration finished before the engine took the line in is not the answer", async () => {
+    const { conversation, texts } = midTurn({
+      delivery: "steered", script: LONG_TURN, takenStep: 2,
+      rows: [{ step: 1, text: NARRATION }, { step: 3, text: ANSWER }],
+    });
+    await conversation.start(EVENT);
+    await conversation.drain();
+    expect(texts).toEqual([{ body: ANSWER, step: 3 }]);
+  });
+
+  it("a relayed card written after the line is never sent as the answer", async () => {
+    const { conversation, texts } = midTurn({
+      delivery: "steered", script: LONG_TURN, takenStep: 1,
+      rows: [{ step: 2, text: "Une autre personne attend une carte.", attention: true }, { step: 4, text: ANSWER }],
+    });
+    await conversation.start(EVENT);
+    await conversation.drain();
+    expect(texts).toEqual([{ body: ANSWER, step: 4 }]);
+  });
+
+  it("an engine that never says it took the line in: answered when the turn ends, as before", async () => {
+    const { conversation, texts } = midTurn({ delivery: "steered", script: ["running", "running", "running", "idle"], rows: [{ step: 1, text: ANSWER }] });
+    await conversation.start(EVENT);
+    await conversation.drain();
+    expect(texts).toEqual([{ body: ANSWER, step: 3 }]);
+  });
+
+  it("a call request steered into the running turn is answered the same way", async () => {
+    const { conversation, texts } = midTurn({ delivery: "steered", script: LONG_TURN, rows: [{ step: 1, text: ANSWER }], takenStep: 1 });
+    await conversation.start({ ...EVENT, via: "call" });
+    await conversation.drain();
+    expect(texts.map((entry) => entry.step)).toEqual([1]);
+  });
+
+  it("the running turn cannot take it: one busy text at once, then the answer when it comes", async () => {
+    const { conversation, texts, logs } = midTurn({ delivery: "queued", script: [...LONG_TURN.slice(0, 5), "waiting", "running", "idle"], rows: [{ step: 0, text: ANSWER }] });
+    await conversation.start(EVENT);
+    await conversation.drain();
+    expect(texts).toEqual([
+      { body: "Helper termine une tâche en cours. La réponse à ton texto viendra une fois cette tâche finie.", step: 0 },
+      { body: ANSWER, step: 7 },
+    ]);
+    expect(logs.some((line) => line.startsWith("sms-conversation: b1 told ***0100 busy after 0s"))).toBe(true);
+  });
+
+  it("steered into a turn blocked on a card: one notice saying so, then the answer when it comes", async () => {
+    const { conversation, texts } = midTurn({ delivery: "steered", script: ["waiting", "waiting", "waiting", "running", ...LONG_TURN], rows: [{ step: 4, text: ANSWER }], takenStep: 3 });
+    await conversation.start(EVENT);
+    await conversation.drain();
+    expect(texts).toEqual([
+      { body: "Helper attend ta réponse à une carte dans Sagax.", step: 0 },
+      { body: ANSWER, step: 4 },
+    ]);
+  });
+
+  it("the idle case is unchanged: a turn of its own is answered when it ends", async () => {
+    const { conversation, texts } = midTurn({ delivery: "started", script: ["running", "running", "running", "idle"], rows: [{ step: 1, text: ANSWER }] });
+    await conversation.start(EVENT);
+    await conversation.drain();
+    expect(texts).toEqual([{ body: ANSWER, step: 3 }]);
+  });
+
+  it("says busy in English too, with no promise of when", async () => {
+    const { smsBusyBody } = await import("./sms-conversation.ts");
+    expect(smsBusyBody("Helper", "en")).toBe("Helper is finishing a task in progress. The answer to your text will come once that task is done.");
+  });
+});

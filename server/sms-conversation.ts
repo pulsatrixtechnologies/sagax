@@ -25,11 +25,18 @@ import { reportBackgroundError } from "./background-error.ts";
 // It is sent through the same route the app uses, as the person
 // (performAsMember), so every check of a typed line applies.
 //
-// The answer: when the turn ends, the bot's words after that line go back
-// by text (voice_sms with the person's own access, to the number the
-// request came from), cut to one text of at most SMS_REPLY_MAX characters.
-// A card that waits on the person is said in one text. Nothing retries a
-// send: a text costs money.
+// The answer: the bot's words after that line go back by text (voice_sms
+// with the person's own access, to the number the request came from), cut
+// to one text of at most SMS_REPLY_MAX characters. A line that starts a turn
+// of its own is answered when that turn ends. A line that lands while a turn
+// runs joins it through the chat's own mid-turn path (the send route steers
+// it in), and its answer leaves as soon as the bot wrote it, while the turn
+// carries on (#4046): only words finished after a model call took the line
+// in (`steer.received`); an engine that never says so is answered when the
+// turn ends. A line the running turn cannot take waits in the queue: the
+// person gets one text at once saying the bot is finishing a task, then the
+// answer once it is done. A card that waits on the person is said in one text. One notice
+// at most per line. Nothing retries a send: a text costs money.
 //
 // Logs carry the bot and a masked number only, never the words.
 
@@ -103,16 +110,30 @@ export function smsLateBody(botName: string, language: "fr" | "en"): string {
     : `${botName} is still working. The answer will be in Sagax.`;
 }
 
+export function smsBusyBody(botName: string, language: "fr" | "en"): string {
+  return language === "fr"
+    ? `${botName} termine une tâche en cours. La réponse à ton texto viendra une fois cette tâche finie.`
+    : `${botName} is finishing a task in progress. The answer to your text will come once that task is done.`;
+}
+
+/** How the send route took the line: the start of a turn of its own, steered
+ * into the running turn, or queued behind a turn that could not take it. */
+export type OwnLineDelivery = "started" | "steered" | "queued";
+
 export type SmsTurnState = "running" | "queued" | "waiting" | "idle";
 
 export interface SmsConversationDeps {
   /** Send the words as the person into their conversation with the bot.
    * `label` is the human caller label stamped on the message (never a raw id).
    * `via` is `"sms"` or `"call"` for the chat stamp. */
-  send(input: { person: string; sub: string; botId: string; text: string; label: string; via: OwnLineVia }): Promise<{ ok: true; threadId: string; messageId: string } | { ok: false; error: string }>;
+  send(input: { person: string; sub: string; botId: string; text: string; label: string; via: OwnLineVia }): Promise<{ ok: true; threadId: string; messageId: string; delivery?: OwnLineDelivery } | { ok: false; error: string }>;
   state(botId: string, threadId: string): SmsTurnState;
-  /** The bot's words after `messageId` (text replies), or "" when none. */
-  replyAfter(threadId: string, messageId: string): string;
+  /** The bot's words after `messageId` (text replies), or "" when none.
+   * With `since`, only words finished after that time. */
+  replyAfter(threadId: string, messageId: string, since?: number): string;
+  /** When a model call of the running turn took in the steered line, or
+   * undefined while it has not (or for an engine that never says). */
+  receivedAt?(messageId: string): number | undefined;
   /** One text to the person's number, with their own access. */
   textBack(input: { person: string; botId: string; to: string; body: string }): Promise<boolean>;
   botName(botId: string): string;
@@ -156,13 +177,14 @@ export class SmsConversation {
   /** The text becomes a turn; the answer goes back on its own. False when
    * the turn could not start (the caller then keeps its usual way). */
   async start(event: OwnTextEvent): Promise<boolean> {
+    const textedAt = this.now();
     const via = event.via ?? "sms";
     const sent = await this.deps.send({ person: event.person, sub: event.sub, botId: event.botId, text: event.text, label: event.label, via });
     if (!sent.ok) {
       this.log(`sms-conversation: ${event.botId} could not start (${sent.error.slice(0, 120)})`);
       return false;
     }
-    const work = this.answer(event, sent.threadId, sent.messageId)
+    const work = this.answer(event, sent.threadId, sent.messageId, sent.delivery ?? "started", textedAt)
       .catch((error: unknown) => this.log(`sms-conversation: ${event.botId} reply to ${mask(event.from)} failed (${error instanceof Error ? error.message.slice(0, 80) : "error"})`));
     this.inflight.add(work);
     void work.finally(() => this.inflight.delete(work)).catch(reportBackgroundError);
@@ -174,32 +196,49 @@ export class SmsConversation {
     while (this.inflight.size) await Promise.allSettled(this.inflight);
   }
 
-  private async answer(event: OwnTextEvent, threadId: string, messageId: string): Promise<void> {
+  private async answer(event: OwnTextEvent, threadId: string, messageId: string, delivery: OwnLineDelivery, textedAt: number): Promise<void> {
     const language = this.deps.language(event.person);
     const botName = this.deps.botName(event.botId);
+    const to = mask(event.from);
+    const after = () => `${Math.round((this.now() - textedAt) / 1_000)}s`;
     const text = (body: string) => this.deps.textBack({ person: event.person, botId: event.botId, to: event.from, body });
     const until = this.now() + SMS_TURN_WAIT_MS;
-    let toldWaiting = false;
+    // one notice at most per line: busy, or a card waiting on the person
+    let told = false;
+    const notice = async (kind: "busy" | "waiting", body: string) => {
+      told = true;
+      await text(body);
+      this.log(`sms-conversation: ${event.botId} told ${to} ${kind} after ${after()} (${delivery})`);
+    };
+    // #4046: words steered into the running turn are answered as soon as the
+    // bot wrote its reply to them, without waiting for the turn to end. Only
+    // words finished after a model call took the line in count: text the
+    // call already running was writing is not the answer. An engine that
+    // never says it took the line in is answered when the turn ends.
+    const steered = delivery === "steered" && Boolean(messageId);
+    let takenIn: number | undefined;
     // the turn may not have registered as running yet: idle only counts once
     // the bot said something, or after a first look
     let looked = false;
     while (this.now() < until) {
       const state = this.deps.state(event.botId, threadId);
-      if (state === "waiting" && !toldWaiting) {
-        toldWaiting = true;
-        await text(smsWaitingBody(botName, language));
-      }
-      if (state === "idle") {
-        const reply = this.deps.replyAfter(threadId, messageId).trim();
+      if (state === "waiting" && !told) await notice("waiting", smsWaitingBody(botName, language));
+      // queued behind a turn that could not take the words: say so at once
+      if (delivery === "queued" && !told && (state === "running" || state === "queued")) await notice("busy", smsBusyBody(botName, language));
+      if (steered && takenIn === undefined) takenIn = this.deps.receivedAt?.(messageId);
+      if (state === "idle" || takenIn !== undefined) {
+        const reply = this.deps.replyAfter(threadId, messageId, takenIn).trim();
         if (reply) {
           await text(smsReplyBody(reply, language));
+          this.log(`sms-conversation: ${event.botId} answered ${to} after ${after()} (${delivery})`);
           return;
         }
-        if (looked) return;
+        if (state === "idle" && looked) return;
       }
       looked = true;
       await this.sleep(POLL_MS);
     }
     await text(smsLateBody(botName, language));
+    this.log(`sms-conversation: ${event.botId} told ${to} late after ${after()} (${delivery})`);
   }
 }

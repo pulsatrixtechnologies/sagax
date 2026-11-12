@@ -93,31 +93,56 @@ process.on("message", (m) => {
 process.on("disconnect", () => process.exit(0));
 `;
 
+/** Writes made before a child's real socket arrives. #4049: each one is
+ * answered, with an error when the stream is destroyed first (the start
+ * failed or the child ended), so no caller waits forever on its callback. */
+class PendingWrites {
+  private queue: Array<{ run: () => void; callback: (error?: Error | null) => void }> = [];
+
+  add(run: () => void, callback: (error?: Error | null) => void): void {
+    this.queue.push({ run, callback });
+  }
+
+  run(): void {
+    for (const { run } of this.queue.splice(0)) run();
+  }
+
+  fail(error: Error | null): void {
+    const reason = error ?? Object.assign(new Error("the child's stream closed before the child started"), { code: "ERR_STREAM_DESTROYED" });
+    for (const { callback } of this.queue.splice(0)) callback(reason);
+  }
+}
+
 /** The stdin of a child the helper is still starting: writes wait for the real socket. */
 class PendingStdin extends Writable {
   private target: Writable | null = null;
-  private waiting: Array<() => void> = [];
+  private readonly waiting = new PendingWrites();
+
+  get pending(): boolean {
+    return this.target === null;
+  }
 
   attach(target: Writable): void {
+    if (this.destroyed) { target.destroy(); return; }
     this.target = target;
     target.on("error", () => this.destroy());
     target.on("close", () => this.destroy());
-    for (const run of this.waiting.splice(0)) run();
+    this.waiting.run();
   }
 
   override _write(chunk: Buffer, encoding: BufferEncoding, callback: (error?: Error | null) => void): void {
     if (this.target) this.target.write(chunk, encoding, callback);
-    else this.waiting.push(() => this._write(chunk, encoding, callback));
+    else this.waiting.add(() => this._write(chunk, encoding, callback), callback);
   }
 
   override _final(callback: (error?: Error | null) => void): void {
     if (this.target) this.target.end(callback);
-    else this.waiting.push(() => this._final(callback));
+    else this.waiting.add(() => this._final(callback), callback);
   }
 
   override _destroy(error: Error | null, callback: (error?: Error | null) => void): void {
     this.target?.destroy();
-    this.waiting = [];
+    this.waiting.fail(error);
     callback(error);
   }
 }
@@ -127,9 +152,14 @@ class PendingStdin extends Writable {
  * arrives. */
 class PendingPipe extends Duplex {
   private target: Duplex | null = null;
-  private waiting: Array<() => void> = [];
+  private readonly waiting = new PendingWrites();
+
+  get pending(): boolean {
+    return this.target === null;
+  }
 
   attach(target: Duplex): void {
+    if (this.destroyed) { target.destroy(); return; }
     this.target = target;
     target.on("data", (chunk: Buffer) => { if (!this.push(chunk)) target.pause(); });
     target.on("end", () => this.push(null));
@@ -139,7 +169,7 @@ class PendingPipe extends Duplex {
       if (this.readableEnded || this.readableLength === 0) this.destroy();
       else this.once("end", () => this.destroy());
     });
-    for (const run of this.waiting.splice(0)) run();
+    this.waiting.run();
   }
 
   override _read(): void {
@@ -148,17 +178,17 @@ class PendingPipe extends Duplex {
 
   override _write(chunk: Buffer, encoding: BufferEncoding, callback: (error?: Error | null) => void): void {
     if (this.target) this.target.write(chunk, encoding, callback);
-    else this.waiting.push(() => this._write(chunk, encoding, callback));
+    else this.waiting.add(() => this._write(chunk, encoding, callback), callback);
   }
 
   override _final(callback: (error?: Error | null) => void): void {
     if (this.target) this.target.end(callback);
-    else this.waiting.push(() => this._final(callback));
+    else this.waiting.add(() => this._final(callback), callback);
   }
 
   override _destroy(error: Error | null, callback: (error?: Error | null) => void): void {
     this.target?.destroy();
-    this.waiting = [];
+    this.waiting.fail(error);
     callback(error);
   }
 }
@@ -266,6 +296,9 @@ export class HelperChild extends EventEmitter {
     this.exitCode = code;
     this.signalCode = signal;
     this.emit("exit", code, signal);
+    // #4049: a pipe whose socket never came can take no more writes; the
+    // ones waiting for it are answered with an error.
+    for (const stream of this.stdio) if ((stream instanceof PendingStdin || stream instanceof PendingPipe) && stream.pending) stream.destroy();
     // As Node does at exit: an output nobody reads is drained so it can end.
     for (const stream of [this.stdout, this.stderr]) if (stream && stream.readableFlowing === null) stream.resume();
     this.maybeClose();

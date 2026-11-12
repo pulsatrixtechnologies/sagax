@@ -147,9 +147,18 @@ export function createSessionHelpers(deps: SessionHelperDeps) {
 
   const writeUser = (s: ClaudeSession, threadId: string, promptMsg: ClaudeUserMessage): Promise<boolean> => {
     if (!s.child.stdin.writable || s.child.stdin.destroyed) return Promise.resolve(false);
+    const stdin = s.child.stdin;
     return new Promise((resolve) => {
+      // #4049: the turn's launch holds the thread's slot until this settles,
+      // so it also settles when stdin closes or fails with the write still
+      // unanswered: the process is gone and the next message must launch.
+      const gone = () => { stdin.off("close", gone); stdin.off("error", gone); resolve(false); };
+      stdin.once("close", gone);
+      stdin.once("error", gone);
       try {
-        s.child.stdin.write(JSON.stringify(promptMsg) + "\n", (error) => {
+        stdin.write(JSON.stringify(promptMsg) + "\n", (error) => {
+          stdin.off("close", gone);
+          stdin.off("error", gone);
           if (error) return resolve(false);
           appendNative(threadId, {
             dir: "out",
@@ -159,7 +168,7 @@ export function createSessionHelpers(deps: SessionHelperDeps) {
           resolve(true);
         });
       } catch {
-        resolve(false);
+        gone();
       }
     });
   };

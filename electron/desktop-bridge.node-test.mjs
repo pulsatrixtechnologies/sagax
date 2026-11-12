@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 
-import { attachmentName, botTmpDir, botTmpName, bridgeOperationError, commandEnvironment, commandNamesOtherBotTmp, createDesktopBridge, commandNamesAppData, createLocalVm, executeBridgeOperation, localPath, removeClosedTree, sandboxedCommandArgv, sweepBotTmpRoot, validBridgeOperation, vmCommandWithBotTmp, windowsRootAclArgs } from "./desktop-bridge.mjs";
+import { attachmentName, botTmpDir, botTmpName, bridgeOperationError, commandEnvironment, createDesktopBridge, commandNamesAppData, createLocalVm, executeBridgeOperation, localPath, removeClosedTree, sandboxedCommandArgv, sweepBotTmpRoot, validBridgeOperation, vmCommandWithBotTmp } from "./desktop-bridge.mjs";
 import net from "node:net";
 import { zipArchive } from "../server/testing/archive-fixtures.mjs";
 
@@ -865,16 +865,19 @@ test("run_command refuses the app's own data folder, by any spelling", async () 
   assert.equal(commandNamesAppData("grep -r sagax ~/work", [path.join(home, ".sagax")], home), null);
 });
 
-// #2828: the folder of them all is 0300 (nobody lists it), so a plain rm
-// cannot remove it: opened back then removed after the test, pass or fail.
+// A bot may have closed a subfolder of its own (chmod 0500 or 0000), so a
+// plain rm may not remove it: opened back then removed after the test.
 function botTmpRootFor(t) {
   const parent = fs.mkdtempSync(path.join(os.tmpdir(), "omb-bot-tmp-"));
   t.after(() => removeClosedTree(parent));
   return path.join(parent, "sagax-bots");
 }
 
-// #2828: each bot its own temporary folder on this computer and in the Local VM.
-test("a bot's temporary folder is its own: TMPDIR set, another bot's refused", { skip: !posix }, async (t) => {
+// #2828: each bot its own temporary folder on this computer and in the Local
+// VM, a convenience so bots do not step on each other's files. #3582: every
+// bot on this computer is the same person's, so another of their bots'
+// folders is within reach like any other folder of theirs.
+test("a bot's temporary folder is its own TMPDIR; the person's other bots' folders stay within reach", { skip: !posix }, async (t) => {
   const home = sandboxHome();
   const tmpRoot = botTmpRootFor(t);
   const botTmpKey = Buffer.alloc(32, 7);
@@ -887,66 +890,43 @@ test("a bot's temporary folder is its own: TMPDIR set, another bot's refused", {
   assert.equal(validBridgeOperation({ action: "run_command", command: "ls", tmp_scope: "../x" }), false);
   assert.equal(validBridgeOperation({ action: "fetch_url", url: "https://x.example", tmp_scope: ada }), false);
 
-  // The folder name is a keyed hash: not the scope, different per key.
   assert.match(botTmpName(ada, botTmpKey), /^[a-f0-9]{32}$/);
-  assert.notEqual(botTmpName(ada, botTmpKey), botTmpName(ada, Buffer.alloc(32, 8)));
-  assert.ok(!botTmpName(ada, botTmpKey).includes(ada));
+  assert.notEqual(botTmpName(ada, botTmpKey), botTmpName(bob, botTmpKey));
   const own = await executeBridgeOperation({ action: "run_command", command: "printf %s \"$TMPDIR\" && echo secret > \"$TMPDIR/note.txt\"", tmp_scope: ada }, d, signal());
   assert.ok(own.content[0].text.includes(botTmpName(ada, botTmpKey)), own.content[0].text);
   assert.equal(fs.statSync(adaDir).mode & 0o777, 0o700);
-  // Nobody lists the folder of them all.
-  assert.equal(fs.statSync(tmpRoot).mode & 0o777, 0o300);
-  assert.throws(() => fs.readdirSync(tmpRoot), /EACCES|EPERM/);
   const again = await executeBridgeOperation({ action: "read_file", path: path.join(adaDir, "note.txt"), tmp_scope: ada }, d, signal());
   assert.match(again.content[0].text, /secret/);
+  // The folder of them all is an ordinary folder of the person's.
+  assert.deepEqual(fs.readdirSync(tmpRoot), [path.basename(adaDir)]);
 
-  // Bob reaches none of it: by file tool, as working folder, or by name in a command.
-  for (const op of [
-    { action: "read_file", path: path.join(adaDir, "note.txt") },
-    { action: "list_files", path: adaDir },
-    { action: "list_files", path: tmpRoot },
-    { action: "search_files", path: adaDir, pattern: "secret" },
-    { action: "write_file", path: path.join(adaDir, "x.txt"), content: "x" },
-    { action: "run_command", command: "ls", cwd: adaDir },
-  ]) await assert.rejects(executeBridgeOperation({ ...op, tmp_scope: bob }, d, signal()), /another bot's temporary folder/, `${op.action} ${op.path ?? ""}`);
-  await assert.rejects(executeBridgeOperation({ action: "run_command", command: `cat ${adaDir}/note.txt`, tmp_scope: bob }, d, signal()), /another bot's temporary folder/);
-  await assert.rejects(executeBridgeOperation({ action: "run_command", command: "ls \"$TMPDIR/..\"", tmp_scope: bob }, d, signal()), /another bot's temporary folder/);
-
-  // A symlink into it is refused.
+  // Bob, another bot of the same person, reaches Ada's folder: by file tool,
+  // as working folder, by name in a command, by a climb or through a link.
+  const read = await executeBridgeOperation({ action: "read_file", path: path.join(adaDir, "note.txt"), tmp_scope: bob }, d, signal());
+  assert.match(read.content[0].text, /secret/);
+  const listed = await executeBridgeOperation({ action: "list_files", path: tmpRoot, tmp_scope: bob }, d, signal());
+  assert.ok(listed.content[0].text.includes(path.basename(adaDir)), listed.content[0].text);
+  const found = await executeBridgeOperation({ action: "search_files", path: adaDir, pattern: "secret", tmp_scope: bob }, d, signal());
+  assert.match(found.content[0].text, /note\.txt/);
+  await executeBridgeOperation({ action: "write_file", path: path.join(adaDir, "from-bob.txt"), content: "hi", tmp_scope: bob }, d, signal());
+  assert.equal(fs.readFileSync(path.join(adaDir, "from-bob.txt"), "utf8"), "hi");
+  const inCwd = await executeBridgeOperation({ action: "run_command", command: "cat note.txt", cwd: adaDir, tmp_scope: bob }, d, signal());
+  assert.match(inCwd.content[0].text, /secret/);
+  const named = await executeBridgeOperation({ action: "run_command", command: `cat ${adaDir}/note.txt`, tmp_scope: bob }, d, signal());
+  assert.match(named.content[0].text, /secret/);
+  const climb = await executeBridgeOperation({ action: "run_command", command: "cat \"$TMPDIR\"/../*/note.txt", tmp_scope: bob }, d, signal());
+  assert.match(climb.content[0].text, /secret/);
   fs.symlinkSync(adaDir, path.join(home, "work", "peek"));
-  await assert.rejects(executeBridgeOperation({ action: "read_file", path: "~/work/peek/note.txt", tmp_scope: bob }, d, signal()), /another bot's temporary folder/);
-  // The person (no scope) still reads everything on their own computer.
+  const linked = await executeBridgeOperation({ action: "read_file", path: "~/work/peek/note.txt", tmp_scope: bob }, d, signal());
+  assert.match(linked.content[0].text, /secret/);
+  // The person (no scope) reads everything on their own computer too.
   const person = await executeBridgeOperation({ action: "read_file", path: path.join(adaDir, "note.txt") }, d, signal());
   assert.match(person.content[0].text, /secret/);
 });
 
-// Only macOS confines a bot's command at the operating system (sandbox-exec);
-// on Linux a detour the command text does not show still reaches past the
-// text check, and whether that guard is wanted is issue #3582.
-const noCommandConfinement = !posix ? true : process.platform === "linux" ? "no operating system confinement of a bot's command on Linux; the guard itself is in issue #3582" : false;
-
-// #2828 follow-up: a detour the command text does not show (dirname, a glob,
-// a chmod back) still finds nothing of Ada's.
-test("a bot's command cannot reach another bot's temporary folder by a detour", { skip: noCommandConfinement }, async (t) => {
-  const home = sandboxHome();
-  const tmpRoot = botTmpRootFor(t);
-  const d = { ...deps(home), botTmpRoot: tmpRoot, botTmpKey: Buffer.alloc(32, 3) };
-  const ada = "a".repeat(16);
-  const bob = "b".repeat(16);
-  await executeBridgeOperation({ action: "run_command", command: "echo adasecret > \"$TMPDIR/note.txt\"", tmp_scope: ada }, d, signal());
-  for (const command of [
-    "cat \"$(dirname \"$TMPDIR\")\"/*/note.txt",
-    "ls \"$(dirname \"$TMPDIR\")\"",
-    "p=\"$(dirname \"$TMPDIR\")\"; chmod 700 \"$p\"; cat \"$p\"/*/note.txt",
-    "find \"$(dirname \"$TMPDIR\")\" -name note.txt -exec cat {} +",
-  ]) {
-    const out = await executeBridgeOperation({ action: "run_command", command, tmp_scope: bob }, d, signal()).catch((error) => ({ content: [{ text: String(error) }] }));
-    assert.doesNotMatch(JSON.stringify(out.content), /adasecret/, command);
-  }
-  // Bob's own folder works as usual.
-  const mine = await executeBridgeOperation({ action: "run_command", command: "echo bob > \"$TMPDIR/b.txt\" && cat \"$TMPDIR/b.txt\"", tmp_scope: bob }, d, signal());
-  assert.match(mine.content[0].text, /bob/);
-});
+// Only macOS confines a bot's command at the operating system (sandbox-exec)
+// for the app's own data; on Linux only the text check refuses it.
+const noCommandConfinement = !posix ? true : process.platform === "linux" ? "no operating system confinement of a bot's command on Linux" : false;
 
 // #3565: the same detour toward the app's own data. In solo mode the local
 // server keeps every local bot's workspace and memory and the provider keys
@@ -994,15 +974,6 @@ test("a bot's command cannot reach the app's legacy data folder either", { skip:
   }
 });
 
-test("the Windows lock leaves the account no list and no way to rewrite the ACL", () => {
-  const args = windowsRootAclArgs("C:\\T\\sagax-bots", "S-1-5-21-1");
-  const owner = args.find(arg => arg.startsWith("*S-1-3-4:"));
-  assert.ok(owner, "an OWNER RIGHTS entry replaces the owner's implicit rights");
-  for (const grant of args.filter(arg => /^\*S-1-(5-21-1|3-4):\(X/.test(arg))) {
-    assert.doesNotMatch(grant, /\b(RD|WDAC|WO|F|M|GA|GW|GR)\b/, grant);
-  }
-});
-
 // #2828 follow-up: the key lives in memory only, so the bot folders of an
 // earlier run are unreachable: swept once per run, this run's kept.
 test("the bot folders of an earlier run are swept, closed ones included", { skip: !posix }, async (t) => {
@@ -1019,21 +990,20 @@ test("the bot folders of an earlier run are swept, closed ones included", { skip
   t.after(() => removeClosedTree(outside));
   fs.chmodSync(outside, 0o500);
   fs.symlinkSync(outside, path.join(old, "out"));
+  // An earlier build left the folder of them all unlistable (#3582): opened back.
   fs.chmodSync(tmpRoot, 0o300);
 
-  await sweepBotTmpRoot({ root: tmpRoot, platform: "darwin" });
-  assert.equal(fs.statSync(tmpRoot).mode & 0o777, 0o300);
-  fs.chmodSync(tmpRoot, 0o700);
+  await sweepBotTmpRoot({ root: tmpRoot });
+  assert.equal(fs.statSync(tmpRoot).mode & 0o777, 0o700);
   assert.deepEqual(fs.readdirSync(tmpRoot), ["other.txt"]);
   assert.equal(fs.statSync(outside).mode & 0o777, 0o500);
 
   // This run's folder is kept: the sweep of a fresh root spares it.
   const fresh = botTmpRootFor(t);
-  const mine = await botTmpDir(fresh, "e".repeat(16), { key: Buffer.alloc(32, 9), platform: "darwin" });
-  fs.chmodSync(fresh, 0o700);
+  const mine = await botTmpDir(fresh, "e".repeat(16), { key: Buffer.alloc(32, 9) });
   assert.deepEqual(fs.readdirSync(fresh), [path.basename(mine)]);
   // No root yet: nothing to do.
-  await sweepBotTmpRoot({ root: path.join(fresh, "none"), platform: "darwin" });
+  await sweepBotTmpRoot({ root: path.join(fresh, "none") });
 });
 
 test("a bot folder made while the start sweep lists the root is kept", { skip: !posix }, async (t) => {
@@ -1045,49 +1015,48 @@ test("a bot folder made while the start sweep lists the root is kept", { skip: !
   fsp.readdir = async function (target, ...rest) {
     if (target === tmpRoot && !making) {
       // The bot folder lands between the sweep's start and its listing.
-      making = botTmpDir(tmpRoot, "f".repeat(16), { key: Buffer.alloc(32, 7), platform: "darwin" });
+      making = botTmpDir(tmpRoot, "f".repeat(16), { key: Buffer.alloc(32, 7) });
       const name = botTmpName("f".repeat(16), Buffer.alloc(32, 7));
       for (let i = 0; i < 200 && !fs.existsSync(path.join(tmpRoot, name)); i += 1) await new Promise(r => setTimeout(r, 5));
     }
     return readdir.call(this, target, ...rest);
   };
   t.after(() => { fsp.readdir = readdir; });
-  await sweepBotTmpRoot({ root: tmpRoot, platform: "darwin" });
+  await sweepBotTmpRoot({ root: tmpRoot });
   const mine = await making;
   fsp.readdir = readdir;
-  fs.chmodSync(tmpRoot, 0o700);
   assert.deepEqual(fs.readdirSync(tmpRoot), [path.basename(mine)]);
 });
 
-test("on macOS a bot's command runs under sandbox-exec, denied the other folders", () => {
-  const argv = sandboxedCommandArgv("ls", { root: "/r/sagax-bots", own: "/r/sagax-bots/abc", shell: "/bin/zsh" });
+test("on macOS a bot's command runs under sandbox-exec, denied the app's own data only", () => {
+  const argv = sandboxedCommandArgv("ls", { hidden: ["/h/data"], shell: "/bin/zsh" });
   assert.equal(argv[0], "/usr/bin/sandbox-exec");
   assert.equal(argv[1], "-p");
   assert.deepEqual(argv.slice(3), ["/bin/zsh", "-lc", "ls"]);
-  assert.ok(argv[2].includes('(deny file-read* file-write* (subpath "/r/sagax-bots"))'), argv[2]);
-  assert.ok(argv[2].includes('(allow file-read* file-write* (subpath "/r/sagax-bots/abc"))'), argv[2]);
-  assert.ok(sandboxedCommandArgv("ls", { root: '/r/a"b', own: '/r/a"b/c', shell: "/bin/sh" })[2].includes('"/r/a\\"b"'));
+  assert.equal(argv[2], '(version 1)(allow default)(deny file-read* file-write* (subpath "/h/data"))');
+  // #3582: nothing of the bots' temporary folders in the profile.
+  assert.doesNotMatch(argv[2], /sagax-bots/);
+  assert.ok(sandboxedCommandArgv("ls", { hidden: ['/h/a"b'], shell: "/bin/sh" })[2].includes('"/h/a\\"b"'));
 });
 
-test("the Local VM command gets the bot's own TMPDIR; another bot's is refused", async () => {
+test("the Local VM command gets the bot's own TMPDIR; the person's other bots' folders stay within reach", async () => {
   const ada = "a".repeat(16);
   const bob = "b".repeat(16);
   const key = Buffer.alloc(32, 5);
   const adaName = botTmpName(ada, key);
-  assert.equal(commandNamesOtherBotTmp(`ls /tmp/sagax-bots/${adaName}`, adaName), null);
-  assert.equal(commandNamesOtherBotTmp(`ls /tmp/sagax-bots/${adaName}`, botTmpName(bob, key)), `sagax-bots/${adaName}`);
-  assert.equal(commandNamesOtherBotTmp("ls /tmp/sagax-bots", adaName), "sagax-bots");
-  assert.equal(commandNamesOtherBotTmp("ls \"$TMPDIR\" /tmp", adaName), null);
   const command = vmCommandWithBotTmp("python3 -c 'print(1)'", adaName);
   const dir = `/tmp/sagax-bots/${adaName}`;
-  assert.ok(command.startsWith("sudo -n install -d -o root -g root -m 0311 /tmp/sagax-bots && "), command);
+  assert.ok(command.startsWith("sudo -n install -d -o root -g root -m 0755 /tmp/sagax-bots && "), command);
   assert.ok(command.includes(`-m 0700 ${dir} ||`), command);
   assert.ok(command.includes(`\nexport TMPDIR=${dir} TMP=${dir} TEMP=${dir}\n`), command);
-  assert.ok(command.endsWith("\nexec setpriv --no-new-privs bash -lc 'python3 -c '\\''print(1)'\\'''"), command);
+  // #3582: the command keeps sudo (no no_new_privs).
+  assert.ok(command.endsWith("\nexec bash -lc 'python3 -c '\\''print(1)'\\''" + "'"), command);
+  assert.doesNotMatch(command, /setpriv|no-new-privs/);
   const seen = [];
   const localVm = { exec: async (_container, cmd) => { seen.push(cmd); return { content: [{ type: "text", text: "ok" }] }; } };
   const home = sandboxHome();
   await executeBridgeOperation({ action: "vm_run_command", command: "ls", tmp_scope: ada }, { ...deps(home), localVm, botTmpKey: key }, signal());
   assert.equal(seen.at(-1), vmCommandWithBotTmp("ls", adaName));
-  await assert.rejects(executeBridgeOperation({ action: "vm_run_command", command: `cat /tmp/sagax-bots/${adaName}/x`, tmp_scope: bob }, { ...deps(home), localVm, botTmpKey: key }, signal()), /another bot's temporary folder/);
+  await executeBridgeOperation({ action: "vm_run_command", command: `cat /tmp/sagax-bots/${adaName}/x`, tmp_scope: bob }, { ...deps(home), localVm, botTmpKey: key }, signal());
+  assert.equal(seen.at(-1), vmCommandWithBotTmp(`cat /tmp/sagax-bots/${adaName}/x`, botTmpName(bob, key)));
 });

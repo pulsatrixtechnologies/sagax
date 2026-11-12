@@ -35,9 +35,8 @@ guard-tests: G="$(node scripts/verify/release/guard-tests.mjs)"; if [ -n "$G" ];
 
 # electron-unit (#3565): the Electron unit tests (electron/*.node-test.mjs,
 # node --test, not vitest) ran nowhere but the full CI run, so two of the
-# desktop bridge's guard tests stayed red on main unseen (a bot's command
-# reaching another bot's temporary folder, the bundled page getting the full
-# screen frame). They break from changes outside electron/ too (shared/,
-# server/testing/), so they run on every lot, whatever it touches: about
-# 15 s together (45 s on a busy machine).
+# desktop bridge's guard tests stayed red on main unseen (the bundled page
+# getting the full screen frame). They break from changes outside electron/
+# too (shared/, server/testing/), so they run on every lot, whatever it
+# touches: about 15 s together (45 s on a busy machine).
 electron-unit: node --test "electron/*.node-test.mjs"

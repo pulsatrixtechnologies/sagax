@@ -7,6 +7,7 @@
 // tap, streaming or not. The model watches the transcript's UIScrollView
 // and publishes only when the follow flips, so scrolling does not redraw
 // the chat.
+import CompanionCore
 import SwiftUI
 import UIKit
 
@@ -53,12 +54,20 @@ final class BottomFollow: ObservableObject {
         scrollView = view
         view.panGestureRecognizer.addTarget(self, action: #selector(dragged(_:)))
         observations.append(view.observe(\.contentOffset, options: [.new]) { [weak self] scroll, _ in
-            MainActor.assumeIsolated { self?.check(scroll) }
+            MainActor.assumeIsolated {
+                self?.check(scroll)
+                Self.rescueBlank(scroll)
+            }
         })
         // LazyVStack grows contentSize as rows appear. While following, pin
         // to the end so open/stream/settle still land on the newest message.
         observations.append(view.observe(\.contentSize, options: [.new]) { [weak self] scroll, _ in
-            MainActor.assumeIsolated { self?.pinToBottomIfFollowing(scroll) }
+            MainActor.assumeIsolated {
+                self?.pinToBottomIfFollowing(scroll)
+                // drawn rows shorter than their estimates can leave the
+                // offset past the content without the offset moving
+                Self.rescueBlank(scroll)
+            }
         })
         pinToBottomIfFollowing(view)
     }
@@ -73,16 +82,38 @@ final class BottomFollow: ObservableObject {
         if !following, !held, distance(scroll) <= Self.threshold { following = true }
     }
 
+    /// A short transcript is pinned too: SwiftUI bottom aligns it with a top
+    /// inset, and its resting offset is `-inset.top` (#3992).
     private func pinToBottomIfFollowing(_ scroll: UIScrollView) {
         guard following else { return }
-        let inset = scroll.adjustedContentInset
-        let visible = scroll.bounds.height - inset.top - inset.bottom
-        guard scroll.contentSize.height > visible else { return }
-        let y = scroll.contentSize.height - scroll.bounds.height + inset.bottom
-        let target = CGPoint(x: scroll.contentOffset.x, y: max(-inset.top, y))
-        if abs(scroll.contentOffset.y - target.y) > 0.5 {
-            scroll.setContentOffset(target, animated: false)
+        if let y = TranscriptScrollPin.followOffset(Self.geometry(scroll), userScrolling: Self.userScrolling(scroll)) {
+            scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: y), animated: false)
         }
+    }
+
+    /// A scroll to the bottom computed on a lazy stack's estimated row
+    /// heights can leave the offset past the content: nothing of the
+    /// transcript on screen (#3992). Bring it back to the nearest resting
+    /// offset, following or not.
+    private static func rescueBlank(_ scroll: UIScrollView) {
+        if let y = TranscriptScrollPin.blankRescueOffset(geometry(scroll), userScrolling: userScrolling(scroll)) {
+            scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: y), animated: false)
+        }
+    }
+
+    private static func geometry(_ scroll: UIScrollView) -> TranscriptScrollGeometry {
+        let inset = scroll.adjustedContentInset
+        return TranscriptScrollGeometry(
+            offsetY: scroll.contentOffset.y,
+            contentHeight: scroll.contentSize.height,
+            boundsHeight: scroll.bounds.height,
+            insetTop: inset.top,
+            insetBottom: inset.bottom
+        )
+    }
+
+    private static func userScrolling(_ scroll: UIScrollView) -> Bool {
+        scroll.isTracking || scroll.isDragging || scroll.isDecelerating
     }
 
     /// An upward drag away from the end breaks the follow, like an upward

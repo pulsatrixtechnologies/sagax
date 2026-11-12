@@ -436,6 +436,19 @@ public struct CompanionState: Sendable {
                 noteThreadActivity(threadId: threadId, at: message.at)
             }
 
+        case let .messageRemoved(threadId, messageId):
+            // #4039: the server took it out for good. The row leaves at once
+            // and a branch that ended on it ends on its parent.
+            guard var thread = messages[threadId],
+                  let index = thread.firstIndex(where: { $0.id == messageId }) else { break }
+            let parent = thread[index].parentId
+            thread.remove(at: index)
+            messages[threadId] = thread
+            if activeLeafIds[threadId] == messageId { activeLeafIds[threadId] = parent }
+            if let botIndex = bots.firstIndex(where: { $0.threadId == threadId }), bots[botIndex].activeLeafId == messageId {
+                bots[botIndex].activeLeafId = parent
+            }
+
         case let .thread(threadId, activeLeafId):
             activeLeafIds[threadId] = activeLeafId
             if let index = bots.firstIndex(where: { $0.threadId == threadId }) {

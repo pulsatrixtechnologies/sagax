@@ -88,6 +88,19 @@ describe("the side thread's transcript", () => {
     expect(applySideFrame(appended, { kind: "message", threadId: "a", message: message("m2", "m1") }, "a")).toBe(appended);
   });
 
+  // #4039: a row the server took back leaves the column at once
+  it("drops a removed message, the only one included", () => {
+    const alone = applySidePage(EMPTY_SIDE_TRANSCRIPT, { messages: [message("m1")], activeLeafId: "m1" });
+    const empty = applySideFrame(alone, { kind: "message.removed", threadId: "a", messageId: "m1" }, "a");
+    expect(empty.messages).toEqual([]);
+    expect(empty.activeLeafId).toBeNull();
+    const two = applySidePage(EMPTY_SIDE_TRANSCRIPT, { messages: [message("m1"), message("m2", "m1")], activeLeafId: "m2" });
+    const one = applySideFrame(two, { kind: "message.removed", threadId: "a", messageId: "m2" }, "a");
+    expect(one.messages.map((m) => m.id)).toEqual(["m1"]);
+    expect(one.activeLeafId).toBe("m1");
+    expect(applySideFrame(one, { kind: "message.removed", threadId: "a", messageId: "m2" }, "a")).toBe(one);
+  });
+
   it("keeps the leaf on a late artifact parented elsewhere, like the store", () => {
     const start = applySidePage(EMPTY_SIDE_TRANSCRIPT, { messages: [message("m1"), message("m2", "m1")], activeLeafId: "m2" });
     const late = applySideFrame(start, { kind: "message", threadId: "a", message: message("shot", "m1") }, "a");

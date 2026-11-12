@@ -62,7 +62,7 @@ extension Session {
     func noteWaitingFrame(_ frame: Frame) {
         guard !waitingLists.isEmpty else { return }
         switch frame {
-        case .message, .messagePatch: break
+        case .message, .messagePatch, .messageRemoved: break
         default: return
         }
         for (key, payload) in waitingLists {

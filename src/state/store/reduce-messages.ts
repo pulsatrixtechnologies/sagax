@@ -87,35 +87,11 @@ export function reduceMessages(state: AppState, action: Action, _reduce: ReduceF
       const animated = motion ? withMascotMotion(next, bot.id, motion) : next;
       return animated;
     }
-    case "optimisticMessageRemoved": {
-      const id = optimisticMessageId(action.sendId);
-      const bot = state.bots.find((candidate) => candidate.threadId === action.threadId);
-      if (bot) {
-        const optimistic = bot.messages.find((message) => message.id === id);
-        if (!optimistic) return state;
-        const cleared = updateBot(state, bot.id, (current) => ({
-          ...current,
-          messages: current.messages.filter((message) => message.id !== id),
-          activeLeafId: current.activeLeafId === id
-            ? (action.restoreLeafId !== undefined ? action.restoreLeafId : (optimistic.parentId ?? null))
-            : current.activeLeafId,
-        }));
-        const task = bot.tasks?.find((candidate) => candidate.threadId === action.threadId);
-        const kept = cleared.bots.find((candidate) => candidate.id === bot.id)?.messages ?? [];
-        return rewindThreadUpdatedAt(cleared, action.threadId, kept, task?.createdAt ?? 0);
-      }
-      const group = state.groups.find((candidate) => candidate.threadId === action.threadId);
-      if (!group || !group.messages.some((message) => message.id === id)) return state;
-      const cleared = {
-        ...state,
-        groups: state.groups.map((candidate) => candidate.id === group.id
-          ? { ...candidate, messages: candidate.messages.filter((message) => message.id !== id) }
-          : candidate),
-      };
-      const task = group.tasks?.find((candidate) => candidate.threadId === action.threadId);
-      const kept = cleared.groups.find((candidate) => candidate.id === group.id)?.messages ?? [];
-      return rewindThreadUpdatedAt(cleared, action.threadId, kept, task?.createdAt ?? group.createdAt);
-    }
+    case "optimisticMessageRemoved":
+      return withoutMessage(state, action.threadId, optimisticMessageId(action.sendId), action.restoreLeafId);
+    // #4039: the server took a message out for good (store.removeMessage)
+    case "messageRemoved":
+      return withoutMessage(state, action.threadId, action.messageId);
     case "cardSettled": {
       const settle = (messages: Message[]) => messages.map((m) =>
         m.card?.requestId === action.requestId ? { ...m, card: { ...m.card, ...action.patch } } : m);
@@ -154,4 +130,36 @@ export function reduceMessages(state: AppState, action: Action, _reduce: ReduceF
     }
   }
   return undefined;
+}
+
+/** One row out of a held transcript (a bot's or a room's): a branch that
+ * ended on it ends on its parent (or `restoreLeafId`), and the thread's row
+ * time goes back to what is left. */
+function withoutMessage(state: AppState, threadId: string, id: string, restoreLeafId?: string | null): AppState {
+  const bot = state.bots.find((candidate) => candidate.threadId === threadId);
+  if (bot) {
+    const gone = bot.messages.find((message) => message.id === id);
+    if (!gone) return state;
+    const cleared = updateBot(state, bot.id, (current) => ({
+      ...current,
+      messages: current.messages.filter((message) => message.id !== id),
+      activeLeafId: current.activeLeafId === id
+        ? (restoreLeafId !== undefined ? restoreLeafId : (gone.parentId ?? null))
+        : current.activeLeafId,
+    }));
+    const task = bot.tasks?.find((candidate) => candidate.threadId === threadId);
+    const kept = cleared.bots.find((candidate) => candidate.id === bot.id)?.messages ?? [];
+    return rewindThreadUpdatedAt(cleared, threadId, kept, task?.createdAt ?? 0);
+  }
+  const group = state.groups.find((candidate) => candidate.threadId === threadId);
+  if (!group || !group.messages.some((message) => message.id === id)) return state;
+  const cleared = {
+    ...state,
+    groups: state.groups.map((candidate) => candidate.id === group.id
+      ? { ...candidate, messages: candidate.messages.filter((message) => message.id !== id) }
+      : candidate),
+  };
+  const task = group.tasks?.find((candidate) => candidate.threadId === threadId);
+  const kept = cleared.groups.find((candidate) => candidate.id === group.id)?.messages ?? [];
+  return rewindThreadUpdatedAt(cleared, threadId, kept, task?.createdAt ?? group.createdAt);
 }

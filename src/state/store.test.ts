@@ -1420,6 +1420,34 @@ describe("optimistic sent messages", () => {
     expect(removed.bots[0]?.activeLeafId).toBe(root.id);
   });
 
+  // #4039: a row the server takes back leaves the open chat at once, the
+  // only row of a conversation and a room's row included.
+  it("drops a row the server removed, without a reload", () => {
+    const only: Message = { id: "routine-row", role: "bot", kind: "text", text: "waiting", at: 2 };
+    const alone = reducer(
+      { ...initialState, bots: [{ ...bot, messages: [only], activeLeafId: only.id }] },
+      { type: "messageRemoved", threadId: bot.threadId, messageId: only.id },
+    );
+    expect(alone.bots[0]?.messages).toEqual([]);
+    expect(visibleMessages(alone.bots[0]!)).toEqual([]);
+    expect(alone.bots[0]?.activeLeafId).toBeNull();
+
+    const tail: Message = { id: "routine-tail", role: "bot", kind: "text", text: "waiting", at: 3, parentId: root.id };
+    const after = reducer(
+      { ...initialState, bots: [{ ...bot, messages: [root, tail], activeLeafId: tail.id }] },
+      { type: "messageRemoved", threadId: bot.threadId, messageId: tail.id },
+    );
+    expect(visibleMessages(after.bots[0]!)).toEqual([root]);
+
+    const roomRow: Message = { id: "room-row", role: "bot", kind: "text", text: "waiting", at: 2 };
+    const room = { id: "room", threadId: "room-thread", name: "Room", memberIds: [bot.id], defaultResponder: { kind: "member" as const, botId: bot.id }, bulletin: "", unread: false, createdAt: 1, messages: [roomRow] };
+    const roomAfter = reducer(
+      { ...initialState, groups: [room] },
+      { type: "messageRemoved", threadId: room.threadId, messageId: roomRow.id },
+    );
+    expect(roomAfter.groups[0]?.messages).toEqual([]);
+  });
+
   describe("edits", () => {
     const question: Message = { id: "q1", role: "user", kind: "text", text: "first try", at: 2, parentId: root.id };
     const answer: Message = { id: "a1", role: "bot", kind: "text", text: "old answer", at: 3, parentId: question.id };

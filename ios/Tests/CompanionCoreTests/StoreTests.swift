@@ -312,6 +312,31 @@ final class StoreTests: XCTestCase {
         XCTAssertNil(bot.projected(forThread: "not-owned"))
     }
 
+    // #4039: a row the server takes back leaves at once, the only one included.
+    func testRemovedMessageLeavesTheTranscriptAtOnce() throws {
+        var state = try hydrated()
+        let threadId = try XCTUnwrap(state.bots.first?.threadId)
+        state.messages[threadId] = [message("only", at: 1, text: "waiting")]
+        state.apply(.thread(threadId: threadId, activeLeafId: "only"))
+        state.apply(.messageRemoved(threadId: threadId, messageId: "only"))
+        XCTAssertEqual(state.visibleTranscript(forThread: threadId).map(\.id), [])
+        XCTAssertNil(state.activeLeafIds[threadId] ?? nil)
+
+        var tail = message("tail", at: 2, text: "waiting")
+        tail.parentId = "root"
+        state.messages[threadId] = [message("root", at: 1, text: "Ready"), tail]
+        state.apply(.thread(threadId: threadId, activeLeafId: "tail"))
+        state.apply(.messageRemoved(threadId: threadId, messageId: "tail"))
+        XCTAssertEqual(state.visibleTranscript(forThread: threadId).map(\.id), ["root"])
+    }
+
+    func testRemovedMessageFrameDecodes() throws {
+        let frame = try JSONDecoder().decode(Frame.self, from: Data(#"{"kind":"message.removed","threadId":"t","messageId":"m"}"#.utf8))
+        guard case let .messageRemoved(threadId, messageId) = frame else { return XCTFail("decoded as \(frame)") }
+        XCTAssertEqual(threadId, "t")
+        XCTAssertEqual(messageId, "m")
+    }
+
     /// root → question → old answer, with the old answer visible.
     func editableConversation() throws -> (CompanionState, String) {
         var state = try hydrated()

@@ -303,9 +303,9 @@ public enum PinnedWaiting {
 
     /// A live frame that may open or close an item waiting on the person in
     /// one bot's conversations (`threads`): a card, a question in words or
-    /// an offer posted or changed there, or the person's own words in a
+    /// an offer posted or changed there, the person's own words in a
     /// conversation where something waits (`waiting`), which settle a
-    /// "needs you" card. The pinned card reads the list again on these only
+    /// "needs you" card, or a row taken back there. The pinned card reads the list again on these only
     /// (shared/waiting-items.ts `waitingChangeFrame`).
     public static func changes(_ frame: Frame, threads: Set<String>, waiting: Set<String>) -> Bool {
         let threadId: String
@@ -316,6 +316,9 @@ public enum PinnedWaiting {
             threadId = id; message = row; fresh = true
         case let .messagePatch(id, row):
             threadId = id; message = row; fresh = false
+        case let .messageRemoved(id, _):
+            // #4039: a row taken back where something waits (a routine's request)
+            return waiting.contains(id)
         default:
             return false
         }

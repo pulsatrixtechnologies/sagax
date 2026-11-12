@@ -199,6 +199,26 @@ class StoreTest {
         assertEquals(listOf("root", "fork", "tail"), state.visibleTranscript(bot.threadId).map(Message::id))
     }
 
+    // #4039: a row the server takes back leaves at once, the only one included.
+    @Test
+    fun removedMessageLeavesTheTranscriptAtOnce() {
+        val hydrated = hydrated()
+        val bot = hydrated.bots.first()
+        val only = message("only")
+        val alone = hydrated.copy(messages = hydrated.messages + (bot.threadId to listOf(only)))
+            .apply(Frame.Thread(bot.threadId, only.id))
+            .apply(Frame.MessageRemoved(bot.threadId, only.id))
+        assertEquals(emptyList(), alone.visibleTranscript(bot.threadId).map(Message::id))
+        assertNull(alone.botForThread(bot.threadId)?.activeLeafId)
+
+        val root = message("root")
+        val tail = message("tail", 2.0).copy(parentId = root.id)
+        val after = hydrated.copy(messages = hydrated.messages + (bot.threadId to listOf(root, tail)))
+            .apply(Frame.Thread(bot.threadId, tail.id))
+            .apply(Frame.MessageRemoved(bot.threadId, tail.id))
+        assertEquals(listOf("root"), after.visibleTranscript(bot.threadId).map(Message::id))
+    }
+
     /** root → question → old answer, with the old answer visible. */
     private fun editableConversation(): Pair<CompanionState, String> {
         val hydrated = hydrated()

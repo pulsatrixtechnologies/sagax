@@ -14595,7 +14595,7 @@ function pageIfThreadChanged(id: string, threadId: string) {
 }
 store.onChange((change) => {
   // Who owns which thread, and what each member may see, follow the fleet.
-  if (change.type !== "message" && change.type !== "message.patch" && change.type !== "thread" && change.type !== "thread.read" && change.type !== "sections") forgetVisibility();
+  if (change.type !== "message" && change.type !== "message.patch" && change.type !== "message.removed" && change.type !== "thread" && change.type !== "thread.read" && change.type !== "sections") forgetVisibility();
   switch (change.type) {
     case "sections":
       broadcast({ kind: "sections", sections: store.sections });
@@ -14615,6 +14615,9 @@ store.onChange((change) => {
       }
       break;
     }
+    case "message.removed":
+      broadcast({ kind: "message.removed", threadId: change.threadId, messageId: change.messageId });
+      break;
     case "thread":
       broadcast({ kind: "thread", threadId: change.threadId, activeLeafId: change.activeLeafId });
       break;

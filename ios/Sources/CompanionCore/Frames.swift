@@ -80,6 +80,9 @@ public enum Frame: Sendable {
     case hello(cursor: String, resumed: Bool)
     case message(threadId: String, message: Message)
     case messagePatch(threadId: String, message: Message)
+    /// A message left the conversation for good: its row goes, and a branch
+    /// that ended on it ends on its parent (#4039).
+    case messageRemoved(threadId: String, messageId: String)
     /// A branch switch: which leaf of the conversation is now visible.
     case thread(threadId: String, activeLeafId: String?)
     case bot(Bot)
@@ -142,7 +145,7 @@ extension Notification.Name {
 
 extension Frame: Decodable {
     private enum CodingKeys: String, CodingKey {
-        case kind, cursor, resumed, threadId, message, activeLeafId
+        case kind, cursor, resumed, threadId, message, messageId, activeLeafId
         case bot, botId, group, groupId, roomId, notification, png, mime, state, event, queues
         case audience, fromId, fromName, at, open, principalId, label, people, count, added
         case preferences, updatedAt
@@ -171,6 +174,11 @@ extension Frame: Decodable {
             self = .messagePatch(
                 threadId: try container.decode(String.self, forKey: .threadId),
                 message: try container.decode(Message.self, forKey: .message)
+            )
+        case "message.removed":
+            self = .messageRemoved(
+                threadId: try container.decode(String.self, forKey: .threadId),
+                messageId: try container.decode(String.self, forKey: .messageId)
             )
         case "thread":
             self = .thread(
@@ -302,6 +310,8 @@ extension Frame {
             return threadId
         case let .messagePatch(threadId, _):
             return threadId
+        case let .messageRemoved(threadId, _):
+            return threadId
         case let .thread(threadId, _):
             return threadId
         case let .notify(notification):
@@ -359,7 +369,7 @@ extension Frame {
     /// Whether this frame can change the unread count (#3017 L12).
     public var canChangeUnread: Bool {
         switch self {
-        case .message, .messagePatch, .bot, .botDeleted, .room, .roomDeleted, .threadRead, .thread:
+        case .message, .messagePatch, .messageRemoved, .bot, .botDeleted, .room, .roomDeleted, .threadRead, .thread:
             return true
         case let .runtime(event):
             return event.type.hasPrefix("turn.") && event.type != "turn.started"

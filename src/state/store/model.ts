@@ -1465,7 +1465,7 @@ export interface AppState {
   consumedQueueIds: Record<string, true>;
   /** Frames arriving outside the visible thread, including the small gap
    * between a switch snapshot and its HTTP response. */
-  backgroundThreadEvents: Record<string, Array<Extract<Action, { type: "messageAdded" | "messagePatched" | "threadActive" | "optimisticMessageRemoved" }>>>;
+  backgroundThreadEvents: Record<string, Array<Extract<Action, { type: "messageAdded" | "messagePatched" | "messageRemoved" | "threadActive" | "optimisticMessageRemoved" }>>>;
   /** Threads with a scrollback page in flight, so one click cannot ask the
    * server for the same page twice. */
   loadingOlder: Record<string, true>;
@@ -1779,6 +1779,8 @@ export type Action =
   /** `restoreLeafId` puts back the branch an optimistic edit replaced; a
    * plain send falls back to the removed row's parent. */
   | { type: "optimisticMessageRemoved"; threadId: string; sendId: string; restoreLeafId?: string | null }
+  /** The server took a message out for good (live frame message.removed). */
+  | { type: "messageRemoved"; threadId: string; messageId: string }
   | { type: "computerStart"; botId: string; start: ComputerStart | null }
   | { type: "computerControl"; botId: string; held: boolean; helpReason: string | null; help?: import("../../../shared/wire").ComputerHelpRef | null }
   | { type: "openSignIn"; botId: string; messageId: string; url: string; site: string; place: import("../../../shared/wire").Surface }

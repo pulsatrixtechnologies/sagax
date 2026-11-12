@@ -21,6 +21,12 @@ describe("waitingChangeFrame (#3542)", () => {
     expect(waitingChangeFrame({ kind: "message", threadId: "conv", message: { role: "user", text: "hi" } }, own, waiting)).toBe(false);
   });
 
+  // #4039: a routine's request taken back where something waits closes it
+  it("asks again when a row is taken back where something waits", () => {
+    expect(waitingChangeFrame({ kind: "message.removed", threadId: "topic", messageId: "m" } as Parameters<typeof waitingChangeFrame>[0], own, waiting)).toBe(true);
+    expect(waitingChangeFrame({ kind: "message.removed", threadId: "conv", messageId: "m" } as Parameters<typeof waitingChangeFrame>[0], own, waiting)).toBe(false);
+  });
+
   it("ignores the bot's words, other bots' conversations and other frames", () => {
     expect(waitingChangeFrame({ kind: "message", threadId: "conv", message: { role: "bot", text: "hello" } }, own, waiting)).toBe(false);
     expect(waitingChangeFrame({ kind: "message", threadId: "elsewhere", message: { role: "bot", card: { requestId: "r1" } } }, own, waiting)).toBe(false);

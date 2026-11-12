@@ -217,16 +217,17 @@ describe("peer allow-list", () => {
       expect(changed.status).toBe(200);
       expect((await state()).managedSections).toEqual([]);
       expect((await api("POST", "/api/sidebar-sections", { name: team, botIds: [engineer.id] })).status).toBe(200);
-      // The saved grant is gone and stays gone (managedSections above). A
-      // Primary Bot still covers every bot its person owns whatever the team
-      // (#897), so the recreated team is reachable through that cover, not
-      // through a revived grant. Once the bot is no longer a Primary Bot the
-      // other team is out of reach again.
+      // The saved grant is gone and stays gone (managedSections above and
+      // below). Reach is the person rule, not a grant (2026-11-09, #3264): a
+      // bot reaches every visible bot of the same person whatever the
+      // section, so the engineer in the recreated team stays reachable as a
+      // Primary Bot and after demotion alike, and the demotion brings no
+      // grant back. Another person's bot stays out of reach whatever the
+      // grant (peer-roster.test.ts, the 2026-11-09 block).
       expect(await peerNames(clive.id, token)).toEqual([`Engineer ${mode}`]);
       await api("PATCH", `/api/bots/${clive.id}`, { chiefOfStaff: false });
-      expect(await peerNames(clive.id, token)).toEqual([]);
-      const refused = await api("POST", "/api/internal/ask-bot", { toBotId: engineer.id, message: "Old grants must not return" }, { authorization: `Bearer ${token}` });
-      expect(refused.status).toBe(403);
+      expect(await peerNames(clive.id, token)).toEqual([`Engineer ${mode}`]);
+      expect((await state()).managedSections ?? []).toEqual([]);
     } finally {
       for (const bot of [clive, engineer]) {
         await api("POST", `/api/bots/${bot.id}/interrupt`, {}).catch(() => undefined);
@@ -254,8 +255,11 @@ describe("peer allow-list", () => {
       expect(outcome.body.error).toBeUndefined();
       expect(outcome.body.text).toBeTruthy();
       await api("PATCH", `/api/bots/${clive.id}`, { chiefOfStaff: false });
-      // Demoted: out of the other team again, and the grant is not back.
-      expect(await peerNames(clive.id, token)).toEqual([]);
+      // Demoted: the grant goes (checked after the promotion below), and the
+      // engineer stays reachable through the person rule, not through it: a
+      // bot reaches every visible bot of the same person whatever the
+      // section (2026-11-09, #3264).
+      expect(await peerNames(clive.id, token)).toEqual(["Engineer"]);
       await api("PATCH", `/api/bots/${clive.id}`, { chiefOfStaff: true });
       // Promoted again: the Primary Bot covers every bot its person owns
       // whatever the team (#897), without any managed team.
@@ -299,17 +303,19 @@ describe("peer allow-list", () => {
       // Ordinary chats may coordinate bounded subwork, but never inherit a
       // Chief's authority or a teammate's permissions.
       // The common peer wording is a brief since #1997; the full text is
-      // behind sagax_help "prompt:peers-bounded".
+      // behind sagax_help. Since 0.1.107 one reference serves bounded and
+      // direct coordination alike: "prompt:peers", or "prompt:peers-creator"
+      // for a bot that may create one (prompt-references.ts); the old
+      // "peers-bounded" ids still answer as aliases.
       expect(systemPrompt).toContain("Necessary advice/work uses coordinate_bots");
       expect(systemPrompt).toContain("Reachable teammates use their own permissions; you cannot grant access");
-      expect(systemPrompt).toContain('"prompt:peers-bounded');
       expect(systemPrompt).not.toContain("Use delegate_bot");
       expect(systemPrompt).not.toContain("use ask_bot");
       // 2026-10-17 (server/bots/bot-creation.ts): a bot a person made may create
       // one bot for them, never team setup. The brief since #1997; the full
-      // wording is behind sagax_help "prompt:peers-bounded-creator".
+      // wording is behind sagax_help "prompt:peers-creator".
       expect(systemPrompt).toContain("For your person's request for one new bot, use create_bot; team setup uses a reachable Primary Bot");
-      expect(systemPrompt).toContain('"prompt:peers-bounded-creator"');
+      expect(systemPrompt).toContain('"prompt:peers-creator"');
       expect(systemPrompt).not.toContain("only the Primary Bot creates bots");
       expect(systemPrompt).not.toContain("propose_team_setup");
       // The harness keeps appending its own rules with a bare leading space

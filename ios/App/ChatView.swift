@@ -683,6 +683,12 @@ struct ChatView: View {
                 session.freshTopics[bot.id] = openedChat.threadId
             }
             if ProcessInfo.processInfo.arguments.contains("-open-profile") { openProfile() }
+            // `-open-bot-conversation`: the chat's first bot-to-bot exchange
+            // open, for the screenshot harness (#4066)
+            if ProcessInfo.processInfo.arguments.contains("-open-bot-conversation"), case let .bot(bot) = current {
+                let split = conversationLayout(storedBot: session.state.bot(bot.id), transcript: rows).split
+                openBotConversation = (split.leading + split.inline).first
+            }
             await pageDebugLaunch()
             if let screen = ParityLaunch.current?.screen {
                 if screen.opensComputer { showingComputer = true }

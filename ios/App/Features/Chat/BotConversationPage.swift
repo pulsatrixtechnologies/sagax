@@ -19,6 +19,7 @@ struct BotConversationPage: View {
     @State private var lines: [BotConversationLine] = []
     @State private var loaded = false
     @State private var stopped = false
+    private static let endId = "bot-exchange-end"
 
     private var running: Bool {
         guard !stopped else { return false }
@@ -31,6 +32,7 @@ struct BotConversationPage: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     if loaded, lines.isEmpty {
@@ -66,10 +68,19 @@ struct BotConversationPage: View {
                         .frame(maxWidth: .infinity, alignment: end ? .trailing : .leading)
                         .accessibilityElement(children: .combine)
                     }
+                    Color.clear.frame(height: 0).id(Self.endId)
                 }
                 .padding(.horizontal, 20).padding(.vertical, 16)
                 .frame(maxWidth: CompanionLayout.chatWidth)
                 .frame(maxWidth: .infinity)
+            }
+            // the newest line at the bottom on opening, as in any chat (#4066)
+            .scrollAnchorCompat(.bottom)
+            // (the bottom anchor keeps a reader at the bottom with the lines
+            // that arrive; one who scrolled up stays where they are)
+            .onValueChangePair(of: lines.isEmpty) { was, now in
+                if was, !now { proxy.scrollTo(Self.endId, anchor: .bottom) }
+            }
             }
             .accessibilityLabel(Text("Transcript of the exchange between Bots"))
             footer

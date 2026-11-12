@@ -3,7 +3,7 @@
 // proposal's answer and the version listing, and a paged read of a source
 // (or the whole source saved to the bot's workspace).
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { IncomingMessage, ServerResponse } from "node:http";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -154,6 +154,32 @@ describe("size and SHA-256 of a stored source", () => {
     const reread = new PublishedPages(dir, () => 1_800_000_000_000);
     expect(reread.get(proposed.page.id)!.versions[0]!.sha256).toBe(sha(SOURCE));
   });
+
+  it("#3584: a hash that cannot be saved never fails the read it belongs to", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-pages-3584-readonly-"));
+    dirs.push(dir);
+    const first = new PublishedPages(dir, () => 1_800_000_000_000);
+    const proposed = first.propose({ botId: "bot1", threadId: "t1", title: "R", kind: "html", content: SOURCE });
+    if (!proposed.ok) throw new Error(proposed.error);
+    const index = join(dir, "published-pages.json");
+    const raw = JSON.parse(readFileSync(index, "utf8"));
+    for (const page of raw.pages) for (const version of page.versions) delete version.sha256;
+    writeFileSync(index, JSON.stringify(raw));
+    const pages = new PublishedPages(dir, () => 1_800_000_000_000);
+    // the index's folder read only: the save of the hash fails (as on a full disk)
+    chmodSync(dir, 0o500);
+    try {
+      const read = pages.source(proposed.page.id, 1, { offset: 0, limit: 100 });
+      expect(read).not.toBeNull();
+      expect(read!.version).toMatchObject({ n: 1, bytes: Buffer.byteLength(SOURCE), sha256: sha(SOURCE) });
+      expect(Buffer.from(SOURCE, "utf8").subarray(0, Buffer.byteLength(read!.content)).toString("utf8")).toBe(read!.content);
+      expect(pages.source(proposed.page.id, 1)!.content).toBe(SOURCE);
+    } finally {
+      chmodSync(dir, 0o700);
+    }
+    // nothing was saved: the next read records it
+    expect(new PublishedPages(dir, () => 1_800_000_000_000).get(proposed.page.id)!.versions[0]!.sha256).toBeUndefined();
+  });
 });
 
 describe("paged read of a source", () => {
@@ -217,6 +243,22 @@ describe("paged read of a source", () => {
     expect(text).toBe(SOURCE);
     expect((await get(`${base}?offset=-1`)).status).toBe(400);
     expect((await get(`${base}?limit=0`)).status).toBe(400);
+  });
+});
+
+describe("#3584: workspace_read from an offset inside a character", () => {
+  it("starts at the next character, never with a broken one, and goes on to the end exactly", () => {
+    writeFileSync(join(workspaceDir(BOT), "docs", "page.html"), SOURCE);
+    const whole = Buffer.from(SOURCE, "utf8");
+    // byte 1 is inside the 3-byte BOM; the first "É" of "Été" is 2 bytes
+    const inside = [1, 2, whole.indexOf(Buffer.from("Été", "utf8")) + 1, whole.indexOf(Buffer.from("😀", "utf8")) + 3];
+    for (const offset of inside) {
+      const read = readWorkspaceText(BOT, "docs/page.html", offset);
+      expect(read.offset, `offset ${offset}`).toBeGreaterThan(offset);
+      expect(read.offset - offset, `offset ${offset}`).toBeLessThan(4);
+      expect(read.text).not.toContain("�");
+      expect(Buffer.from(read.text, "utf8").equals(whole.subarray(read.offset, read.offset + Buffer.byteLength(read.text)))).toBe(true);
+    }
   });
 });
 
@@ -351,6 +393,13 @@ describe("the bot's internal routes", () => {
     const designFile = readFileSync(join(workspaceDir(BOT), "docs", "design.html"));
     expect(design).toMatchObject({ ok: true, given: { sha256: sha(designFile) }, changedBy: ["design_system_applied"] });
     expect(design.sha256).toBe(sha(pages.content(design.pageId, 1)!));
+    // #3584: both causes on one file: both named, the stored hash is the stored source's
+    writeFileSync(join(workspaceDir(BOT), "docs", "both.html"), `<section data-screen="Home" data-device="phone"><p>${secret}</p></section>\n`);
+    const both = await propose({ title: "B", kind: "design", content: "", path: "docs/both.html" }) as Record<string, any>;
+    const bothFile = readFileSync(join(workspaceDir(BOT), "docs", "both.html"));
+    expect(both).toMatchObject({ ok: true, given: { bytes: bothFile.length, sha256: sha(bothFile) }, changedBy: ["secret_masked", "design_system_applied"] });
+    expect(both.sha256).toBe(sha(pages.content(both.pageId, 1)!));
+    expect(pages.content(both.pageId, 1)).not.toContain(secret);
     // nothing changed: no given, no changedBy
     writeFileSync(join(workspaceDir(BOT), "docs", "plain.html"), SOURCE);
     const plain = await propose({ title: "P", kind: "html", content: "", path: "docs/plain.html" }) as Record<string, any>;

@@ -148,11 +148,13 @@ export function routinePostsEachResult(schedule: { type: string } | null | undef
 
 /** #3990: whether this finished run's result is posted in the chat
  * (server/index.ts routineEffectivePostResults). A proactive wake posts its
- * result only when it is what the person chose to hear (an accepted
- * suggestion, a watch they keep: `alwaysReport`, drawn with its feedback
- * strip) and only when the bot had something for them: a wake that ends
- * quiet (the nothing-to-report line) posts nothing, as any run; a wake on a
- * teammate's message, a mail or a calendar event posts none. A routine's run follows routinePostsEachResult with the routine's
+ * result only when its kind is told to answer the person (`alwaysReport`:
+ * an accepted suggestion, a watch they keep, a screen offer, a room or DM
+ * mention, a text, its look at its own failed run: server/proactive/
+ * proactive-wake.ts wakeAlwaysReports) and only when the bot had something
+ * for them: a wake that ends quiet (the nothing-to-report line) posts
+ * nothing, as any run; a wake on a teammate's message, a mail, a calendar
+ * event or a webhook post posts none. A routine's run follows routinePostsEachResult with the routine's
  * choice, else `byDefault` (the installation's); a webhook's own run (no
  * routine behind it) is started by a trigger, so it posts none. A request
  * that waits on the person, items only they can do and a problem's one

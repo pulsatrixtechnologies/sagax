@@ -630,14 +630,21 @@ export const DM_WAKE_RULES = [
   "Reply in that conversation only when the other bot waits on you.",
 ].join(" ");
 
-/** Whether a wake of these events posts its report in the chat: what the
- * person chose themselves, a suggestion they accepted or a watch they keep
- * (shared/routine-repeat.ts routineRunPostsResult). #3990: like any wake,
- * it ends quiet with nothing for the person and then posts nothing.
- * #3581: a teammate's message or a post in a two-bot DM posts no report:
- * exchanges between bots stay out of the person's chat. */
+/** #4051: the wake kinds whose prompt tells the bot to give its answer to
+ * the person: what they chose (a suggestion they accepted, a watch they
+ * keep), an offer on what stays on their screen, a room or a two-bot DM
+ * that names the bot, a text on its phone line and its look at its own
+ * failed run. The kinds the owner named silent (a teammate's message, a
+ * mail, a calendar entry, a webhook post) post no report: what needs the
+ * person there still reaches them as a request or items. */
+const WAKE_KINDS_FOR_PERSON: ReadonlySet<ProactiveSource> = new Set(["suggestion", "watch", "screen", "bot", "sms", "run"]);
+
+/** Whether a wake of these events posts its report in the chat
+ * (WAKE_KINDS_FOR_PERSON, shared/routine-repeat.ts routineRunPostsResult).
+ * #3990: like any wake, it ends quiet with nothing for the person and then
+ * posts nothing. */
 export function wakeAlwaysReports(events: readonly ProactiveEvent[]): boolean {
-  return events.some((event) => event.source === "suggestion" || event.source === "watch");
+  return events.some((event) => WAKE_KINDS_FOR_PERSON.has(event.source));
 }
 
 /** #2693: a daily suggestion the person accepted with one gesture. */

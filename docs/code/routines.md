@@ -90,6 +90,43 @@ each run as before (#3479). Tests: `shared/routine-repeat.test.ts`,
 `server/routines/routine-reliability.test.ts`,
 `src/components/RoutineRunCard.test.ts`.
 
+## No routine run in the chat, whatever starts the routine (#3990, 2026-11-11)
+
+#3990 extends the streak rule above to every routine, whatever starts it (a
+schedule, a webhook, a new email, a GitHub event, a proactive wake on a
+teammate's message, a mail or a calendar event). A finished run writes
+nothing in the person's chat. What reaches it: a request that waits on the
+person (the pinned row), items only they can do, a run they started, a
+proactive wake they chose to hear (`alwaysReport`: an accepted suggestion, a
+watch, with its feedback strip), the result of a routine they set to post its
+results when it runs at most once a day, and the one summary card of a
+problem (`routineRunPostsResult` and `routineReportsByStreak` in
+`shared/routine-repeat.ts`).
+
+When the summary is told (`routineProblemToldAt`): at the third run in a row
+with a problem for a routine that can run several times a day
+(`routineRunsSeveralTimesADay`: a trigger, or a clock that repeats within a
+day; a run without a routine of its own, such as a proactive wake, counts as
+one), at the first run with a problem for a routine that runs at most once a
+day. In both cases later runs count on that card in place and the first good
+run turns it to works again in place. A pre-flight block is one more run of
+the streak; only a run the person started gets its own notice line.
+
+A run's outcome comes from explicit signals only: the bot's
+`RUN_STATUS: failed|partial` line, its `NOTHING_TO_REPORT` line, a tool call
+that failed twice and never succeeded, an approval nobody answered. The
+server never reads the bot's closing words or a tool's error text to decide
+that a run had nothing to do. Instead the run contract
+(`ROUTINE_REPORT_CONTRACT`, read by every routine run and every proactive
+wake) carries `ROUTINE_NOTHING_TO_DO_RULE`: a run that found nothing to do
+ends with `NOTHING_TO_REPORT`, never a partial status.
+
+The chat (desktop `MessagesList`, a group's `Transcript`, receipts) leaves
+out the rows of runs stored before (`routineRunRowOutOfChat`); they stay in
+the routine's run log. Tests: `shared/routine-repeat.test.ts`,
+`server/routines/routine-quiet-contract.test.ts`,
+`server/routines/routine-reliability.test.ts`.
+
 ## Event subscriptions (#2700, 2026-11-08)
 
 `BotEventSubscriptions` (`server/bot-events/bot-event-subscriptions.ts`,

@@ -70,25 +70,39 @@ describe("routine reliability in an isolated journal", () => {
     h.advance(31 * 60_000 + 60_000); await h.flush();
     expect(h.manager.listRuns()[0]?.status).toBe("running");
   });
-  it("says a run blocked or skipped at pre-flight in the bot's chat with the person, in their language (#3130)", async () => {
+  it("says a run the person started that is blocked or skipped at pre-flight in the bot's chat with them, in their language (#3130, #3990)", async () => {
     const onRunNotice = vi.fn();
     const h = fixture({ onRunNotice, resolveResultsThread: () => ({ threadId: "chat-1" }), languageFor: () => "fr-CA" }, ONCE_A_DAY);
     h.probes.engine = () => ({ engine: `${h.engine}-boot`, name: "Claude", signedIn: false, starting: true });
-    h.advance(60 * 60_000); await h.flush();
+    h.manager.runNow(h.routine.id, undefined, "person");
+    await h.flush();
     expect(onRunNotice).not.toHaveBeenCalled();
     for (let i = 0; i < ROUTINE_STARTING_MAX_ATTEMPTS; i++) { h.advance(ROUTINE_STARTING_RETRY_MS); await h.flush(); }
     expect(onRunNotice).toHaveBeenCalledTimes(1);
     expect(onRunNotice.mock.calls[0]![1]).toEqual({ threadIds: ["chat-1"], text: `La routine « Inbox review » n'a pas démarré : ${ROUTINE_STARTING_SKIPPED}` });
     const other = fixture({ onRunNotice, resolveResultsThread: () => ({ threadId: "chat-2" }) }, ONCE_A_DAY);
     other.probes.engine = () => ({ engine: `${other.engine}-out`, name: "Claude", signedIn: false });
-    other.advance(60 * 60_000); await other.flush();
+    other.manager.runNow(other.routine.id, undefined, "person");
+    await other.flush();
     const run = other.manager.listRuns()[0]!;
     expect(run.status).toBe("blocked");
     expect(onRunNotice).toHaveBeenCalledTimes(2);
     expect(onRunNotice.mock.calls[1]![1]).toEqual({ threadIds: ["chat-2"], text: `The routine "Inbox review" did not start: ${run.error}` });
     expect(run.error).toBeTruthy();
   });
-  it("a routine that repeats more than once a day says a pre-flight block by its streak, never a line per run (#3695)", async () => {
+  it("a routine that runs once a day says its first pre-flight block as its one summary, never as a line of its own (#3990)", async () => {
+    const onRunNotice = vi.fn();
+    const h = fixture({ onRunNotice, postsEachResult: () => true, resolveResultsThread: () => ({ threadId: "chat-1" }) }, ONCE_A_DAY);
+    h.probes.engine = () => ({ engine: `${h.engine}-out`, name: "Claude", signedIn: false });
+    h.advance(60 * 60_000); await h.flush();
+    const run = h.manager.listRuns()[0]!;
+    expect(run.status).toBe("blocked");
+    // the first run of its streak is the one that tells the person (its summary card)
+    expect(run.problemRepeat).toBeUndefined();
+    expect(h.manager.problemToldAt(run)).toBe(1);
+    expect(onRunNotice).not.toHaveBeenCalled();
+  });
+  it("a routine that does not post each result says a pre-flight block by its streak, never a line per run (#3695, #3990)", async () => {
     const onRunNotice = vi.fn();
     const h = fixture({ onRunNotice, resolveResultsThread: () => ({ threadId: "chat-1" }) });
     h.probes.engine = () => ({ engine: `${h.engine}-out`, name: "Claude", signedIn: false });

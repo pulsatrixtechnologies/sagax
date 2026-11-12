@@ -159,12 +159,18 @@ describe("syncRoutineRunToSource reads one rule for every bot (#3581: quiet mode
     expect(kept.unread).toEqual([]);
   });
 
-  it("a run with problems, a failed run and a blocked run post whatever the routine's choice", () => {
+  it("#3990: a run with problems, a failed run and a blocked run wait for their streak, whatever the routine's choice; one the person started posts", () => {
     for (const run of [{ problems: "one step failed" }, { status: "failed", error: "timeout" }, { status: "blocked" }]) {
-      const w = ruleWorld(run, false);
-      w.sync();
-      expect(w.rows, JSON.stringify(run)).toHaveLength(1);
-      expect(w.unread).toEqual(["main"]);
+      for (const postResults of [true, false]) {
+        const w = ruleWorld(run, postResults);
+        w.sync();
+        expect(w.rows, JSON.stringify(run)).toEqual([]);
+        expect(w.unread).toEqual([]);
+      }
+      const mine = ruleWorld({ ...run, startedBy: "person" }, false);
+      mine.sync();
+      expect(mine.rows, JSON.stringify(run)).toHaveLength(1);
+      expect(mine.unread).toEqual(["main"]);
     }
   });
 

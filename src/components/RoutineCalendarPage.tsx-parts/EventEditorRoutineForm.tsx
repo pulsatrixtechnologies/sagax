@@ -25,7 +25,7 @@ import { modelEffortLevels } from "../../../shared/model-capabilities";
 import type { EffortLevel } from "../../../shared/model-selection";
 import { effortLabel } from "@/lib/effort-label";
 import type { ScheduleFrequency } from "../../../shared/schedule-model";
-import { ROUTINE_PROBLEM_STREAK_TOLD, routineRepeatsWithinDay } from "../../../shared/routine-repeat";
+import { ROUTINE_PROBLEM_STREAK_TOLD, routineRunsSeveralTimesADay } from "../../../shared/routine-repeat";
 import { viewerCanCreateBots } from "@/lib/viewer";
 import { personLabel } from "@/lib/human-label";
 import { cn } from "@/lib/cn";
@@ -62,19 +62,23 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
   // instruction reads folded and turns into its editor on a click (or
   // focused from the start when an old Edit entry opened the page).
   const onPage = Boolean(page) && panel;
-  // #3695: a routine that repeats more than once a day posts no run in the
-  // conversation, whatever "Post results" says; its words say what it does.
-  // The same rule as the server: an interval's window and start, a run at
-  // every usage-limit reset (shared/routine-repeat.ts).
+  // #3695, #3990: a routine that can run several times a day, on its clock
+  // or on a trigger, posts no run in the conversation, whatever "Post
+  // results" says, and tells a problem once it lasts a few runs; its words
+  // say what it does. The server's own rule on the draft's schedule
+  // (shared/routine-repeat.ts routineRunsSeveralTimesADay).
   const savedSchedule = existingRoutine?.schedule;
-  const repeatsWithinDay = recurrence === "interval"
-    ? routineRepeatsWithinDay({
-      type: "interval", everyMinutes: intervalMinutes,
-      ...(intervalWindow === "custom" ? { window: { start: intervalWindowStart, end: intervalWindowEnd } } : {}),
-      ...(savedSchedule?.type === "interval" ? { anchorAt: savedSchedule.anchorAt } : {}),
-    } as { type: string })
-    : recurrence === "limit_reset" ? routineRepeatsWithinDay({ type: "limit_reset", repeat: limitReset.repeat } as { type: string })
-    : (recurrence === "pattern" || recurrence === "advanced") && routineRepeatsWithinDay(pattern?.schedule);
+  const draftSchedule: { type: string; source?: string } | null | undefined = triggered
+    ? (recurrence === "webhook" ? { type: "webhook" } : { type: "event", source: recurrence })
+    : recurrence === "interval"
+      ? {
+        type: "interval", everyMinutes: intervalMinutes,
+        ...(intervalWindow === "custom" ? { window: { start: intervalWindowStart, end: intervalWindowEnd } } : {}),
+        ...(savedSchedule?.type === "interval" ? { anchorAt: savedSchedule.anchorAt } : {}),
+      } as { type: string }
+      : recurrence === "limit_reset" ? { type: "limit_reset", repeat: limitReset.repeat } as { type: string }
+      : recurrence === "pattern" || recurrence === "advanced" ? pattern?.schedule : null;
+  const repeatsWithinDay = routineRunsSeveralTimesADay(draftSchedule);
   const [instructionEditing, setInstructionEditing] = useState(() => !existingRoutine || Boolean(page?.focusInstruction));
   // 2026-11-06 (JC): on the panel's page the rarely used rows (required
   // skills and MCP servers, the mail tag, Duplicate, the server note) sit

@@ -1,14 +1,23 @@
-// #3695: a routine that repeats more than once a day reports by its streak.
-// The person does not read each of its runs: a finished run that only says
-// how it went writes nothing in their chat; a problem that lasts
-// ROUTINE_PROBLEM_STREAK_TOLD runs in a row is told once, as one summary
-// card, and that same card says when it works again. A routine that runs
-// once a day or less often (a briefing, a weekly report) reports each run.
+// #3695, #3990: a routine reports by its streak, whatever starts it (a
+// schedule, a trigger such as a webhook, a new email or a teammate's
+// message, a proactive watch) and however often it runs. The person does
+// not read each of its runs: a finished run that only says how it went
+// writes nothing in their chat; a problem is told once, as one summary
+// card, and that same card says when it works again: at its first run with
+// a problem for a routine that runs at most once a day, once it lasts
+// ROUTINE_PROBLEM_STREAK_TOLD runs in a row for one that can run several
+// times a day (routineProblemToldAt). What else reaches the
+// chat from a routine: a request that waits on the person, items only they
+// can do, a run they started themselves, and the result of a routine they
+// set to post its results when it runs on a clock once a day or less often
+// (a briefing, a weekly report). Every run stays in the routine's run log.
 import { createCronRunPreview, type RoutineCronSchedule } from "./routine-schedule.ts";
 import { parseClock } from "./schedule-model.ts";
+import { isTriggerSchedule } from "./routines.ts";
 
-/** How many runs in a row must end with problems before the person is told
- * (the owner's "after an error has occurred x times", 2026-11-11). */
+/** How many runs in a row of a routine that can run several times a day
+ * must end with problems before the person is told (the owner's "after an
+ * error has occurred x times", 2026-11-11). */
 export const ROUTINE_PROBLEM_STREAK_TOLD = 3;
 
 const DAY_MINUTES = 24 * 60;
@@ -100,5 +109,110 @@ export function routineRepeatsWithinDay(schedule: { type: string } | null | unde
       return fields.repeat === "every_reset";
     default:
       return false;
+  }
+}
+
+/** #3990: whether a run reports by its routine's streak (nothing in the
+ * chat but the one summary). Every run but one a person started and a team
+ * goal's run (its goal card is its own). */
+export function routineReportsByStreak(run: { startedBy?: string | null; target?: string | null }): boolean {
+  return run.startedBy !== "person" && run.target !== "room-goal";
+}
+
+/** #3990: whether a routine can run several times a day: on a trigger (a
+ * webhook, a new email, a GitHub event) or on a clock that repeats within a
+ * day (routineRepeatsWithinDay). A daily, weekly or monthly time, a single
+ * date and no schedule do not. */
+export function routineRunsSeveralTimesADay(schedule: { type: string; source?: unknown } | null | undefined, after = Date.now(), timeZone?: string): boolean {
+  return isTriggerSchedule(schedule) || routineRepeatsWithinDay(schedule, after, timeZone);
+}
+
+/** #3990: after how many runs in a row with a problem the person gets the
+ * routine's one summary. A routine that can run several times a day waits
+ * ROUTINE_PROBLEM_STREAK_TOLD runs (one slip is not worth a card); one that
+ * runs at most once a day tells at its first run with a problem, since
+ * waiting would mean days of silence on a real failure. */
+export function routineProblemToldAt(schedule: { type: string; source?: unknown } | null | undefined, after = Date.now(), timeZone?: string): number {
+  return routineRunsSeveralTimesADay(schedule, after, timeZone) ? ROUTINE_PROBLEM_STREAK_TOLD : 1;
+}
+
+/** #3990: whether each completed result of this routine is posted in the
+ * chat: only when the person set it to post its results and it runs at
+ * most once a day. A routine that can run several times a day, on its
+ * clock or on a trigger, posts no run, whatever that choice says: the
+ * choice then only names where its summary and a run the person starts
+ * go. */
+export function routinePostsEachResult(schedule: { type: string } | null | undefined, postResults: boolean, after = Date.now()): boolean {
+  return postResults && !routineRunsSeveralTimesADay(schedule, after);
+}
+
+/** #3990: whether this finished run's result is posted in the chat
+ * (server/index.ts routineEffectivePostResults). A proactive wake posts its
+ * result only when it is what the person chose to hear (an accepted
+ * suggestion, a watch they keep: `alwaysReport`, drawn with its feedback
+ * strip); a wake on a teammate's message, a mail or a calendar event posts
+ * none. A routine's run follows routinePostsEachResult with the routine's
+ * choice, else `byDefault` (the installation's); a webhook's own run (no
+ * routine behind it) is started by a trigger, so it posts none. A request
+ * that waits on the person, items only they can do and a problem's one
+ * summary are told whatever this says. */
+export function routineRunPostsResult(
+  run: { proactive?: { alwaysReport?: boolean } | null; webhookId?: string | null },
+  routine: { schedule?: { type: string } | null; postResults?: boolean } | null | undefined,
+  byDefault: boolean,
+  after = Date.now(),
+): boolean {
+  if (run.proactive) return run.proactive.alwaysReport === true;
+  const chosen = routine?.postResults ?? byDefault;
+  if (!routine) return !run.webhookId && chosen;
+  return routinePostsEachResult(routine.schedule, chosen, after);
+}
+
+/** #3990: the proactive wakes whose result the person chose to hear (an
+ * accepted suggestion, a watch they keep). Any other wake topic of a stored
+ * card (a teammate's message, a mail, a calendar event, a heartbeat:
+ * server/routines/routine-run-card.ts wakeTopicOf) is left out of the chat. */
+const CHOSEN_WAKE_TOPICS = new Set(["suggestion", "watch"]);
+
+type RunRowFacts = {
+  kind: string;
+  attention?: unknown;
+  routineRun?: {
+    status?: string;
+    wakeTopic?: string | null;
+    goalStatus?: string | null;
+    startedBy?: string | null;
+    problems?: unknown;
+    recovered?: { streak?: true | null } | null;
+    repeat?: { streak?: true | null } | null;
+    autoPausedAfter?: number | null;
+  } | null;
+};
+
+/** #3990: a routine run's row the chat no longer draws, cards stored by
+ * older servers included: a row that only says how a run went (completed
+ * with problems, works again, nothing to report, blocked, cancelled, the
+ * same problem again), and a wake's result the person did not choose to
+ * hear (a teammate's message, a mail, a calendar event). Drawn as before: a live or waiting run, a result,
+ * items for the person, a run the person started, the streak's one summary
+ * (and its works again), a team goal's card, and a failure (a passing
+ * banner, shared/transient-notices.ts). Every run stays in its routine's
+ * run log (Automations). */
+export function routineRunRowOutOfChat(message: RunRowFacts): boolean {
+  const run = message.kind === "routine.run" ? message.routineRun : null;
+  if (!run?.status) return false;
+  if (message.attention || run.goalStatus || run.startedBy === "person" || run.repeat?.streak || run.recovered?.streak) return false;
+  if ((run.autoPausedAfter ?? 0) > 0) return false;
+  switch (run.status) {
+    case "queued":
+    case "running":
+    case "waiting":
+    case "failed":
+    case "missed":
+      return false;
+    case "completed":
+      return Boolean(run.problems || run.recovered || (run.wakeTopic && !CHOSEN_WAKE_TOPICS.has(run.wakeTopic)));
+    default:
+      return true;
   }
 }

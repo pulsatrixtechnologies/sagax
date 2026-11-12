@@ -11,7 +11,6 @@ import { AttentionItems } from "./AttentionCard";
 import { DottedSpinner } from "./bot-settings/CodingSessionRow";
 import { DelegationLine, DelegationList, type DelegationEntry } from "./DelegationList";
 import type { RoutineRunCardData } from "../../shared/routine-run";
-import { ROUTINE_PROBLEM_STREAK_TOLD } from "../../shared/routine-repeat";
 import { formatTime, type Bot, type Message } from "@/state/store";
 import { dayLabel, localDay } from "@/lib/transcript-derivations";
 
@@ -87,10 +86,12 @@ function routineRepeatText(repeat: NonNullable<RoutineRunCardData["repeat"]>): s
   return repeat.streak || repeat.anyProblem ? t("routineRun.problemStreak", vars) : t("routineRun.sameProblem", vars);
 }
 
-/** #3695: the one summary card of a lasting problem of a routine that
- * repeats more than once a day (the server writes it at the third run). */
+/** #3695, #3990: a routine's one summary card of a problem: the server
+ * marks it `streak` when it tells the person (at the first run with a
+ * problem for a routine that runs at most once a day, the third for one
+ * that can run several times a day: shared/routine-repeat.ts). */
 function isProblemStreakCard(run: RoutineRunCardData): boolean {
-  return Boolean(run.repeat?.streak && run.repeat.count >= ROUTINE_PROBLEM_STREAK_TOLD);
+  return Boolean(run.repeat?.streak);
 }
 
 function compactDetail(value: string | undefined): string {

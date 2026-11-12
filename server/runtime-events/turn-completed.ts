@@ -6,19 +6,25 @@ import { isEngineEmptyFailure } from "../peers/incidents.ts";
 import { withBotNotify } from "../../shared/notification.ts";
 import { retireSafetyHolds } from "../safety/safety-review.ts";
 import { firstSignedOut } from "../engines/engine-refusals.ts";
-import { ROUTINE_PROBLEM_STREAK_TOLD } from "../../shared/routine-repeat.ts";
+import { ROUTINE_PROBLEM_STREAK_TOLD, routineReportsByStreak } from "../../shared/routine-repeat.ts";
 /** Whether a finished routine run rings "done": a completed result the
  * routine posts, never a quiet one, never one whose items for the person
- * rang "needs you" from its card, and (#3479) never the same problem as the
- * previous run, which its first run said already. */
+ * rang "needs you" from its card. #3695, #3990: any other run of a routine
+ * (whatever starts it) rings once, with its one summary card, at the run
+ * of its streak that tells the person (routines.problemToldAt). A run the
+ * person started (Run now) rings when it ends, as its card always posts. */
 export function routineRunRingsDone(routineRun: any, host: any): boolean {
-  // #3695: a routine that repeats more than once a day rings once, with the
-  // card that says its problems lasted ROUTINE_PROBLEM_STREAK_TOLD runs
-  if (host.routines?.reportsByStreak?.(routineRun) && !host.personAttention(routineRun.output)) {
-    return routineRun.status === "completed" && Boolean(routineRun.problems) && (routineRun.problemRepeat?.count ?? 1) === ROUTINE_PROBLEM_STREAK_TOLD;
+  if (host.personAttention(routineRun.output)) return false;
+  const result = routineRun.status === "completed" && !routineRun.quiet && !routineRun.problems && !routineRun.problemRepeat;
+  if (result && host.routineEffectivePostResults(routineRun)) return true;
+  if (routineReportsByStreak(routineRun)) {
+    return routineRun.status === "completed" && Boolean(routineRun.problems) && (routineRun.problemRepeat?.count ?? 1) === (host.routines?.problemToldAt?.(routineRun) ?? ROUTINE_PROBLEM_STREAK_TOLD);
   }
-  return routineRun.status === "completed" && !routineRun.quiet && !routineRun.problemRepeat
-    && host.routineEffectivePostResults(routineRun) && !host.personAttention(routineRun.output);
+  const told = routineRun.status === "completed" && !routineRun.quiet && !routineRun.problemRepeat;
+  // a run the person started: its card always posts (routineRunRowOutOfChat), so it rings
+  if (routineRun.startedBy === "person") return told;
+  // a team goal's run follows its routine's choice
+  return told && host.routineEffectivePostResults(routineRun);
 }
 
 export function handleTurnCompleted(event: any, ctx: any, host: any): void {

@@ -5,10 +5,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { GroupGoalRunStatus } from "../../shared/group-goal-run.ts";
 import { isRoutineProblemRun } from "../../shared/routines.ts";
-import { ROUTINE_REPEATING_RULE } from "./routine-report.ts";
+import { routineRepeatingRule } from "./routine-report.ts";
 
-/** #3695: a run of a routine that repeats more than once a day reads its rule after the work. */
-const repeating = (prompt: string) => `${prompt}\n\n${ROUTINE_REPEATING_RULE}`;
+/** #3695, #3990: a run of a routine that does not post each result reads its rule after the work;
+ * `told`: the run of a streak that tells the person (1 for a routine that runs at most once a day). */
+const repeating = (prompt: string, told = 3) => `${prompt}\n\n${routineRepeatingRule(told)}`;
 import { ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST } from "./routine-execution.ts";
 import {
   nextOccurrence,
@@ -613,7 +614,7 @@ describe("cron routines use the existing persistent scheduler", () => {
     await h.manager.tick(); expect(h.started).toHaveLength(0);
     h.setNow(routine.nextRunAt!);
     await h.manager.tick(); await h.manager.tick();
-    expect(h.started).toEqual([{ botId: "maus-1", threadId: "thread-1", prompt: "Write the report" }]);
+    expect(h.started).toEqual([{ botId: "maus-1", threadId: "thread-1", prompt: repeating("Write the report", 1) }]);
     expect(h.manager.listRuns()[0]).toMatchObject({ scheduledFor: routine.nextRunAt, status: "running", triggerSource: "schedule" });
     expect(h.manager.listRoutines()[0].nextRunAt).toBe(Date.parse("2026-11-01T09:00:00Z"));
   });
@@ -1872,7 +1873,7 @@ describe("RoutineManager", () => {
 
     h.setBot("ready");
     await h.manager.tick();
-    expect(h.started).toEqual([{ botId: "maus-2", threadId: "thread-1", prompt: "Review the queue" }]);
+    expect(h.started).toEqual([{ botId: "maus-2", threadId: "thread-1", prompt: repeating("Review the queue", 1) }]);
     expect(h.manager.listRuns()[0]).toMatchObject({ status: "running", threadId: "thread-1" });
     expect(h.manager.activeRunForBot("maus-2")?.threadId).toBe("thread-1");
     expect(h.manager.isActiveThread("thread-1")).toBe(true);
@@ -1938,7 +1939,7 @@ describe("RoutineManager", () => {
     expect(h.manager.update(routine.id, { name: "Renamed", prompt: "Updated" })?.nextRunAt).toBe(routine.nextRunAt);
     await h.manager.tick();
     expect(h.manager.listRuns()[0]).toMatchObject({ scheduledFor: routine.nextRunAt, status: "running" });
-    expect(h.started[0]?.prompt).toBe("Updated");
+    expect(h.started[0]?.prompt).toBe(repeating("Updated", 1));
   });
 
   it("keeps delegated work active through its continuation and accumulates turn costs", async () => {
@@ -2636,7 +2637,7 @@ describe("RoutineManager", () => {
     h.setBot("ready");
     await h.manager.tick();
 
-    expect(h.started[0]?.prompt).toBe("Use the original instructions");
+    expect(h.started[0]?.prompt).toBe(repeating("Use the original instructions", 1));
     expect(h.manager.listRuns()[0]).toMatchObject({
       routineName: "Original brief",
       prompt: "Use the original instructions",
@@ -2681,7 +2682,7 @@ describe("RoutineManager", () => {
     h.setBot("ready");
     await h.manager.tick();
     expect(h.started[0]?.prompt).toBe(
-      'Use the original attachment\n\n<attached-file path="/tmp/original.txt" name="original.txt" />',
+      `${repeating("Use the original attachment", 1)}\n\n<attached-file path="/tmp/original.txt" name="original.txt" />`,
     );
     expect(h.manager.listRuns()[0]?.attachments?.[0]?.path).toBe("/tmp/original.txt");
     expect(h.manager.listRoutines()[0]?.attachments?.[0]?.path).toBe("/tmp/replacement.txt");
@@ -2707,7 +2708,7 @@ describe("RoutineManager", () => {
     await h.manager.tick();
 
     expect(h.started[0]?.prompt).toBe(
-      'Inspect it\n\n<attached-image path="/tmp/a&quot;&amp;&lt;&gt;&#9;&#10;&#13;.png" name="image.png" />',
+      `${repeating("Inspect it", 1)}\n\n<attached-image path="/tmp/a&quot;&amp;&lt;&gt;&#9;&#10;&#13;.png" name="image.png" />`,
     );
     expect(h.manager.listRoutines()[0]?.prompt).toBe("Inspect it");
     expect(h.manager.listRoutines()[0]?.attachments?.[0]?.path).toBe(unusualPath);
@@ -2838,7 +2839,7 @@ describe("RoutineManager", () => {
       scheduledFor: receivedAt,
     });
     expect(queued).not.toHaveProperty("durationMinutes");
-    expect(h.started).toEqual([{ botId: "maus-webhook", threadId: "thread-1", prompt: "Handle ticket 42" }]);
+    expect(h.started).toEqual([{ botId: "maus-webhook", threadId: "thread-1", prompt: repeating("Handle ticket 42") }]);
     expect(h.runOns).toEqual(["cloud"]);
     expect(h.triggerSources).toEqual(["webhook"]);
     expect(h.taskActivations).toEqual([false]);
@@ -2863,7 +2864,7 @@ describe("RoutineManager", () => {
     h.setBot("ready");
     await h.manager.tick();
     expect(h.manager.listRuns().find((run) => run.id === queued.id)).toMatchObject({ status: "running" });
-    expect(h.started).toEqual([{ botId: "maus-1", threadId: "thread-1", prompt: "Handle after the turn" }]);
+    expect(h.started).toEqual([{ botId: "maus-1", threadId: "thread-1", prompt: repeating("Handle after the turn") }]);
   });
 
   it("folds provider lifecycle events into the calendar receipt", async () => {

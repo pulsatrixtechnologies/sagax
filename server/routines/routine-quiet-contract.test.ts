@@ -1,9 +1,11 @@
-// #3479: routines stay quiet when nothing needs the person. A run started by
-// a trigger follows the same report rule as a scheduled run, and a problem
-// that repeats is said once: the row of the first run with it is updated in
-// place (how many runs, since when), with no new row and no notification. A
-// different problem, and the first success after a problem, are said once.
-// Every run stays in the run list with its outcome.
+// #3479, #3695, #3990: routines stay quiet when nothing needs the person. A
+// run started by a trigger follows the same report rule as a scheduled run,
+// and every routine reports by its streak: no run in the chat, one summary
+// (at the first run with a problem for a routine that runs at most once a
+// day, at the third in a row for one that can run several times a day),
+// turned to works again in place. A routine set to post its results posts
+// each one when it runs at most once a day. A run's outcome comes from
+// explicit signals only. Every run stays in the run list with its outcome.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,14 +14,16 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createSyncRoutineRunToSource } from "../index-leaves/syncRoutineRunToSource.ts";
 import { routineRunRingsDone } from "../runtime-events/turn-completed.ts";
 import { ROUTINE_EXECUTION_PROMPT, WEBHOOK_PROMPT, routineExecutionPromptFor } from "../system-prompt.ts";
-import { routineReportOutcome, routineRunReportable } from "./routine-report.ts";
+import { proactiveWakePrompt } from "../proactive/proactive-wake.ts";
+import { ROUTINE_NOTHING_TO_DO_RULE, ROUTINE_REPORT_CONTRACT, routineReportOutcome, routineRunReportable } from "./routine-report.ts";
 import { routineRunCard, routineRunFallbackText } from "./routine-run-card.ts";
 import { RoutineManager, type RoutineManagerOptions, type RoutineRun } from "./routines.ts";
+import { routineRunPostsResult } from "../../shared/routine-repeat.ts";
 
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
-function manager(start: number) {
+function manager(start: number, extra: Partial<RoutineManagerOptions> = {}) {
   let now = start;
   let task = 0;
   const prompts: string[] = [];
@@ -37,6 +41,7 @@ function manager(start: number) {
     startGoal: async () => {},
     interruptTurn: async () => {},
     interruptGoal: async () => {},
+    ...extra,
   };
   const routines = new RoutineManager(options);
   const send = (event: Record<string, unknown>) =>
@@ -52,13 +57,13 @@ function manager(start: number) {
     send({ threadId, type: "turn.completed", ok: true });
     return routines.listRuns().find((candidate) => candidate.id === started.id)!;
   };
-  return { routines, prompts, run };
+  return { routines, prompts, run, advance: (ms: number) => { now += ms; return now; } };
 }
 
 type Row = { id: string; kind?: string; role?: string; text?: string; routineRun?: any };
 
 /** The person's one conversation, with the real card, text and report rule. */
-function conversation(options: { personAttention?: (text: string | undefined) => any; ownThread?: Row[]; routines?: RoutineManager; needsPerson?: boolean } = {}) {
+function conversation(options: { personAttention?: (text: string | undefined) => any; ownThread?: Row[]; routines?: RoutineManager; needsPerson?: boolean; postResults?: boolean } = {}) {
   const rows: Row[] = [];
   const unread: string[] = [];
   const rang: string[] = [];
@@ -69,7 +74,8 @@ function conversation(options: { personAttention?: (text: string | undefined) =>
     routineFullReport: (r: RoutineRun) => r.output,
     routineRunReportable,
     routineRunNeedsPerson: () => options.needsPerson === true,
-    routineEffectivePostResults: () => false,
+    // the server's rule (server/index.ts routineEffectivePostResults)
+    routineEffectivePostResults: (r: RoutineRun) => routineRunPostsResult(r, options.routines?.getRoutine(r.routineId), options.postResults === true),
     routines: options.routines,
     store: {
       taskByThread: () => null,
@@ -95,8 +101,12 @@ function conversation(options: { personAttention?: (text: string | undefined) =>
 }
 
 /** Whether the finished turn of `run` rings "done" (server/runtime-events/turn-completed.ts),
- * for a routine that posts its results. */
-const ringsDone = (run: RoutineRun, routines?: RoutineManager) => routineRunRingsDone(run, { routineEffectivePostResults: () => true, personAttention: () => undefined, routines });
+ * for a routine set to post its results. */
+const ringsDone = (run: RoutineRun, routines?: RoutineManager) => routineRunRingsDone(run, {
+  routineEffectivePostResults: (r: RoutineRun) => routineRunPostsResult(r, routines?.getRoutine(r.routineId), true),
+  personAttention: () => undefined,
+  routines,
+});
 
 const PROBLEM = "RUN_STATUS: partial: the backup host has not answered since Monday";
 /** A routine that runs once a day: each run is told as before (#3695). */
@@ -143,104 +153,13 @@ describe("a run started by a trigger follows the same report rule (#3479)", () =
   });
 });
 
-describe("a problem that repeats is said once (#3479)", () => {
+describe("a problem's words and its card (#3479)", () => {
   it("reads the bot's SAME_PROBLEM line and never shows it", () => {
     const outcome = routineReportOutcome(`${PROBLEM}\nStill down.\nSAME_PROBLEM`);
     expect(outcome.sameProblem).toBe(true);
     expect(outcome.declared?.status).toBe("partial");
     expect(outcome.report).toBe("Still down.");
     expect(routineReportOutcome(`${PROBLEM}\nStill down.`).sameProblem).toBeUndefined();
-  });
-
-  it("the same problem updates the first row in place; a different one and the first success are said once", async () => {
-    const { routines, prompts, run } = manager(start);
-    const routine = routines.create({ name: "Backup check", prompt: "Check the backups", botId: "maus-1", enabled: false,
-      schedule: DAILY });
-    const chat = conversation();
-
-    // 1. A new problem: one row, unread once.
-    const first = await run(routine.id, `${PROBLEM}\nThe backup host did not answer.`);
-    expect(first.problems).toContain("has not answered since Monday");
-    expect(first.problemRepeat).toBeUndefined();
-    chat.sync(first);
-    expect(chat.rows).toHaveLength(1);
-    expect(chat.unread).toEqual(["main"]);
-
-    // 2. The bot is shown the previous problems and says it is the same.
-    const second = await run(routine.id, `${PROBLEM}\nStill no answer from the backup host.\nSAME_PROBLEM`);
-    expect(prompts.at(-1)).toContain("<previous-problems");
-    expect(prompts.at(-1)).toContain("has not answered since Monday");
-    expect(prompts.at(-1)).toContain("SAME_PROBLEM");
-    expect(second.problemRepeat).toEqual({ firstRunId: first.id, since: first.finishedAt, count: 2 });
-    chat.sync(second);
-    expect(chat.rows).toHaveLength(1);
-    expect(chat.unread).toEqual(["main"]);
-    expect(chat.rang).toEqual([]);
-    expect(ringsDone(second)).toBe(false);
-    expect(chat.rows[0]!.routineRun.runId).toBe(first.id);
-    expect(chat.rows[0]!.routineRun.repeat).toMatchObject({ count: 2, since: first.finishedAt, lastAt: second.finishedAt });
-    expect(chat.rows[0]!.text).toContain("2 runs in a row");
-
-    // 3. The very same recorded problems, without the line: still the same.
-    const third = await run(routine.id, `${PROBLEM}\nThe backup host did not answer.`);
-    expect(third.problemRepeat).toEqual({ firstRunId: first.id, since: first.finishedAt, count: 3 });
-    chat.sync(third);
-    expect(chat.rows).toHaveLength(1);
-    expect(chat.rows[0]!.routineRun.repeat.count).toBe(3);
-    expect(chat.unread).toEqual(["main"]);
-
-    // 4. A different problem is said: a new row, unread again.
-    const other = await run(routine.id, "RUN_STATUS: partial: the CRM refused the login\nCould not read the CRM.");
-    expect(other.problemRepeat).toBeUndefined();
-    chat.sync(other);
-    expect(chat.rows).toHaveLength(2);
-    expect(chat.unread).toEqual(["main", "main"]);
-    expect(ringsDone(other)).toBe(true);
-
-    // 5. The first success after it is said once, even when quiet.
-    const fixed = await run(routine.id, "All backups answered.\nNOTHING_TO_REPORT");
-    expect(fixed.quiet).toBe(true);
-    expect(fixed.recovered).toEqual({ afterRuns: 1, since: other.finishedAt });
-    chat.sync(fixed);
-    expect(chat.rows).toHaveLength(3);
-    expect(chat.rows[2]!.text).toContain("Works again");
-    expect(chat.unread).toHaveLength(3);
-
-    // 6. The next quiet success is quiet again.
-    const quiet = await run(routine.id, "All backups answered.\nNOTHING_TO_REPORT");
-    expect(quiet.recovered).toBeUndefined();
-    chat.sync(quiet);
-    expect(chat.rows).toHaveLength(3);
-
-    // Nothing is hidden: every run stays listed with its outcome.
-    const listed = routines.listRuns().filter((candidate) => candidate.routineId === routine.id);
-    expect(listed.map((candidate) => candidate.status)).toEqual(Array(6).fill("completed"));
-    expect(listed.filter((candidate) => candidate.problems)).toHaveLength(4);
-  });
-
-  it("a run that says the problem is the same, with no recorded problem, is never marked recovered", async () => {
-    const { routines, prompts, run } = manager(start);
-    const routine = routines.create({ name: "Backup check", prompt: "Check the backups", botId: "maus-1", enabled: false,
-      schedule: DAILY });
-    const chat = conversation();
-
-    const first = await run(routine.id, `${PROBLEM}\nThe backup host did not answer.`);
-    chat.sync(first);
-    expect(chat.rows).toHaveLength(1);
-
-    // The note asks the bot to keep its RUN_STATUS line beside SAME_PROBLEM.
-    const second = await run(routine.id, "The backup host is still unreachable.\nSAME_PROBLEM");
-    expect(prompts.at(-1)).toContain("Keep your RUN_STATUS: line as usual");
-    expect(second.recovered).toBeUndefined();
-    expect(second.problems).toBe(first.problems);
-    expect(second.problemRepeat).toEqual({ firstRunId: first.id, since: first.finishedAt, count: 2 });
-    chat.sync(second);
-    expect(chat.rows).toHaveLength(1);
-    expect(chat.rows[0]!.text).not.toContain("Works again");
-    expect(chat.rows[0]!.routineRun.repeat).toMatchObject({ count: 2 });
-    expect(chat.unread).toEqual(["main"]);
-    expect(chat.rang).toEqual([]);
-    expect(ringsDone(second)).toBe(false);
   });
 
   it("the fallback text gives the times in the person's zone, like the card", () => {
@@ -253,29 +172,32 @@ describe("a problem that repeats is said once (#3479)", () => {
     expect(routineRunFallbackText(recovered, "fr", "America/Toronto")).toContain("depuis 2026-11-10 09:00.");
   });
 
-  it("a repeat run with a new item only the person can do still posts its card and rings needs-you", async () => {
+  it("a run with a new item only the person can do posts its card and rings needs-you, its problems aside", async () => {
     const { routines, run } = manager(start);
+    // a routine that can run several times a day: its first problem waits for its streak
     const routine = routines.create({ name: "Incoming mail", prompt: "Sort the mail", botId: "maus-1", enabled: false,
-      schedule: DAILY });
+      schedule: { type: "interval", everyMinutes: 30, anchorAt: start } });
     const ASK = "[HUMAIN] Answer the new mail from the supplier.";
     const chat = conversation({
+      routines,
       personAttention: (text) => text?.includes("[HUMAIN]") ? { kind: "items", items: [{ text: "Answer the new mail from the supplier." }] } : undefined,
     });
     const CRM = "RUN_STATUS: partial: the CRM is unreachable";
 
+    // #3990: a first run with problems is not told (its streak is one run of three)
     const first = await run(routine.id, `${CRM}\nCould not reach the CRM.`);
     chat.sync(first);
-    expect(chat.rows).toHaveLength(1);
+    expect(chat.rows).toHaveLength(0);
     expect(chat.rang).toEqual([]);
 
     const second = await run(routine.id, `${CRM}\nStill no CRM.\n${ASK}\nSAME_PROBLEM`);
     expect(second.problemRepeat).toMatchObject({ firstRunId: first.id, count: 2 });
     chat.sync(second);
     // its own card, with the item, unread and ringing once
-    expect(chat.rows).toHaveLength(2);
-    expect(chat.rows[1]!.routineRun.runId).toBe(second.id);
-    expect((chat.rows[1] as any).attention?.items?.[0]?.text).toContain("Answer the new mail");
-    expect(chat.unread).toEqual(["main", "main"]);
+    expect(chat.rows).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun.runId).toBe(second.id);
+    expect((chat.rows[0] as any).attention?.items?.[0]?.text).toContain("Answer the new mail");
+    expect(chat.unread).toEqual(["main"]);
     expect(chat.rang).toEqual(["needs-you"]);
   });
 
@@ -486,14 +408,274 @@ describe("a routine that repeats more than once a day reports by its streak (#36
     expect(routineCards(items.rows)).toHaveLength(1);
   });
 
-  it("a routine that runs once a day reports each run as before", async () => {
+  it("a routine that runs once a day tells its first problem at once, as the one summary, counted and turned to works again in place (#3990)", async () => {
+    const { routines, prompts, run } = manager(start);
+    const routine = routines.create({ name: "Backup check", prompt: "Check the backups", botId: "maus-1", enabled: false, schedule: DAILY });
+    const chat = conversation({ routines });
+    // the run is told that its problem reaches the person at once
+    const first = await run(routine.id, problem("the backup host did not answer"));
+    expect(prompts.at(-1)).toContain("the person gets your final message as one summary of the problem");
+    expect(prompts.at(-1)).not.toContain("runs in a row");
+    chat.sync(first);
+    expect(routineCards(chat.rows)).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: first.id, repeat: { count: 1, streak: true } });
+    expect(chat.rows[0]!.text).not.toContain("runs with problems");
+    expect(ringsDone(first, routines)).toBe(true);
+    expect(chat.unread).toEqual(["main"]);
+    // the next day, still wrong: the same card counts, in place, quietly
+    const second = await run(routine.id, problem("the backup host did not answer"));
+    expect(prompts.at(-1)).toContain("already has one summary");
+    chat.sync(second);
+    expect(ringsDone(second, routines)).toBe(false);
+    expect(routineCards(chat.rows)).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: first.id, repeat: { count: 2, streak: true } });
+    expect(chat.rows[0]!.text).toContain("2 runs with problems since");
+    // fixed: that card turns to works again, in place, and nothing else is drawn
+    chat.sync(await run(routine.id, "All backups ran.\nNOTHING_TO_REPORT"));
+    expect(routineCards(chat.rows)).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: first.id, status: "completed", recovered: { afterRuns: 2, streak: true } });
+    expect(chat.rows[0]!.text).toContain("Works again");
+  });
+
+  it("a routine that runs once a day and posts its results posts each result; its first problem is its one summary (#3990)", async () => {
     const { routines, run } = manager(start);
     const routine = routines.create({ name: "Morning brief", prompt: "Brief me", botId: "maus-1", enabled: false, schedule: DAILY });
-    const chat = conversation({ routines });
+    const chat = conversation({ routines, postResults: true });
     const first = await run(routine.id, problem("the calendar did not answer"));
     chat.sync(first);
     expect(routineCards(chat.rows)).toHaveLength(1);
-    expect(chat.rows[0]!.routineRun.repeat).toBeUndefined();
-    expect(routines.reportsByStreak(first)).toBe(false);
+    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: first.id, repeat: { count: 1, streak: true } });
+    const brief = await run(routine.id, "Three meetings today, the first at nine.");
+    chat.sync(brief);
+    expect(routineCards(chat.rows)).toHaveLength(2);
+    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: first.id, recovered: { afterRuns: 1, streak: true } });
+    expect(chat.rows[1]!.routineRun.runId).toBe(brief.id);
+    expect(ringsDone(brief, routines)).toBe(true);
+  });
+});
+
+/** #3990: one rule for every routine, whatever starts it. */
+describe("no routine run in the chat, whatever starts the routine (#3990)", () => {
+  const ON_MAIL = { type: "event" as const, source: "email" as const };
+  const problem = (why: string) => `RUN_STATUS: partial: ${why}\nCould not finish the pass.`;
+  const routineCards = (rows: Row[]) => rows.filter((row) => row.kind === "routine.run");
+
+  /** One run of `routineId` started by its trigger (a webhook delivery), ten
+   * minutes after the previous one, that ends with `said` after `tools`. */
+  function triggered(start: number) {
+    const m = manager(start);
+    let delivery = 0;
+    const send = (event: Record<string, unknown>) =>
+      m.routines.handleRuntimeEvent({ eventId: String(Math.random()), provider: "fake", createdAt: new Date().toISOString(), ...event } as never);
+    const fire = async (routineId: string, said: string, tools: Array<{ title: string; ok: boolean; output: string }> = []): Promise<RoutineRun> => {
+      const now = m.advance(6 * 60_000);
+      const queued = m.routines.enqueueWebhook({ webhookId: `hook-${routineId}`, webhookName: "New email", prompt: "A mail arrived", botId: "maus-1", runOn: "maus", deliveryId: `d${++delivery}`, receivedAt: now, routineId });
+      await m.routines.tick();
+      const threadId = m.routines.listRuns().find((candidate) => candidate.id === queued.id)!.threadId!;
+      for (const [index, tool] of tools.entries()) {
+        send({ threadId, type: "item.started", itemType: "tool", itemId: `t${index}`, title: tool.title });
+        send({ threadId, type: "item.completed", itemType: "tool", itemId: `t${index}`, ok: tool.ok, output: tool.output });
+      }
+      send({ threadId, type: "item.completed", itemType: "assistant_text", text: said });
+      send({ threadId, type: "turn.completed", ok: true });
+      return m.routines.listRuns().find((candidate) => candidate.id === queued.id)!;
+    };
+    return { ...m, fire };
+  }
+
+  it("a routine started by a trigger, ten runs in an hour, set to post its results: nothing in the chat, nothing rings", async () => {
+    const { routines, fire } = triggered(start);
+    const routine = routines.create({ name: "New email", prompt: "Sort the mail", botId: "maus-1", enabled: false, schedule: ON_MAIL, postResults: true });
+    const chat = conversation({ routines, postResults: true });
+    const said = [
+      "Newsletter, nothing for you.\nNOTHING_TO_REPORT", "Filed the invoice from the supplier.", problem("the mailbox refused one move"),
+      "Archived two notices.", "Replied to the meeting request as you asked.", problem("the archive folder was missing"),
+      "Nothing urgent, and it is no longer in the inbox.", "Filed a receipt.", problem("the mailbox refused one move"), "Sorted three mails.",
+    ];
+    const runs: RoutineRun[] = [];
+    for (const words of said) {
+      const done = await fire(routine.id, words);
+      runs.push(done);
+      chat.sync(done);
+      expect(ringsDone(done, routines)).toBe(false);
+    }
+    expect(runs.every((done) => done.status === "completed" && !done.startedBy)).toBe(true);
+    expect(chat.rows).toEqual([]);
+    expect(chat.unread).toEqual([]);
+    expect(chat.rang).toEqual([]);
+    // every run stays in the routine's run log with its report
+    const listed = routines.listRuns().filter((candidate) => candidate.routineId === routine.id);
+    expect(listed).toHaveLength(10);
+    expect(listed.map((candidate) => candidate.output)).toContain("Filed the invoice from the supplier.");
+  });
+
+  it("three runs in a row with the same problem: one summary, its count in place, then works again in place", async () => {
+    const { routines, fire } = triggered(start);
+    const routine = routines.create({ name: "New email", prompt: "Sort the mail", botId: "maus-1", enabled: false, schedule: ON_MAIL, postResults: true });
+    const chat = conversation({ routines, postResults: true });
+    for (const words of [problem("the mailbox refused the move"), problem("the mailbox refused the move")]) chat.sync(await fire(routine.id, words));
+    expect(chat.rows).toEqual([]);
+    const third = await fire(routine.id, `${problem("the mailbox refused the move")}\nThe mailbox has refused every move for twenty minutes: sign in to it again.`);
+    chat.sync(third);
+    expect(routineCards(chat.rows)).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: third.id, repeat: { count: 3, streak: true } });
+    expect(ringsDone(third, routines)).toBe(true);
+    chat.sync(await fire(routine.id, problem("the mailbox refused the move")));
+    expect(routineCards(chat.rows)).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun.repeat).toMatchObject({ count: 4 });
+    chat.sync(await fire(routine.id, "Moved the mail.\nNOTHING_TO_REPORT"));
+    expect(routineCards(chat.rows)).toHaveLength(1);
+    // the streak's card, turned to works again, stays the streak's
+    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: third.id, recovered: { afterRuns: 4, streak: true } });
+    expect(chat.unread).toEqual(["main"]);
+  });
+
+  it("a run the person starts shows its result, and a routine set to post its results that runs once a day posts each one", async () => {
+    const { routines, run } = manager(start);
+    const watch = routines.create({ name: "New email", prompt: "Sort the mail", botId: "maus-1", enabled: false, schedule: ON_MAIL, postResults: true });
+    const byHand = conversation({ routines, postResults: true });
+    const sorted = await run(watch.id, "Sorted three mails.", "person");
+    byHand.sync(sorted);
+    expect(routineCards(byHand.rows)).toHaveLength(1);
+    expect(byHand.rows[0]!.routineRun.startedBy).toBe("person");
+    // the person who pressed Run now hears it is done, on a trigger routine too
+    expect(ringsDone(sorted, routines)).toBe(true);
+    // and on a routine that runs several times a day, even one not set to post its results
+    const often = routines.create({ name: "Queue check", prompt: "Check the queue", botId: "maus-1", enabled: false, schedule: { type: "interval", everyMinutes: 5, anchorAt: start }, postResults: false });
+    expect(ringsDone(await run(often.id, "The queue is empty.", "person"), routines)).toBe(true);
+    const daily = routines.create({ name: "Morning brief", prompt: "Brief me", botId: "maus-1", enabled: false, schedule: DAILY, postResults: true });
+    const posted = conversation({ routines, postResults: true });
+    posted.sync(await run(daily.id, "Three meetings today."));
+    expect(routineCards(posted.rows)).toHaveLength(1);
+    // a routine like it, not set to post its results: nothing
+    const quiet = routines.create({ name: "Evening brief", prompt: "Brief me", botId: "maus-1", enabled: false, schedule: DAILY, postResults: false });
+    const kept = conversation({ routines, postResults: true });
+    kept.sync(await run(quiet.id, "Two meetings today."));
+    expect(kept.rows).toEqual([]);
+  });
+});
+
+/** #3990: a run's outcome comes from explicit signals only: the bot's
+ * status line, its NOTHING_TO_REPORT line, a tool call that failed and
+ * never succeeded, an approval nobody answered. Never from its words. */
+describe("a run's outcome comes from explicit signals, never from its words (#3990)", () => {
+  async function ending(said: string, tools: Array<{ title: string; ok: boolean; output: string }>) {
+    const { routines } = manager(start);
+    const routine = routines.create({ name: "New email", prompt: "Sort the mail", botId: "maus-1", enabled: false, schedule: { type: "event", source: "email" } });
+    const queued = routines.enqueueWebhook({ webhookId: "hook", webhookName: "New email", prompt: "A mail arrived", botId: "maus-1", runOn: "maus", deliveryId: "d1", receivedAt: start, routineId: routine.id });
+    await routines.tick();
+    const threadId = routines.listRuns().find((candidate) => candidate.id === queued.id)!.threadId!;
+    const send = (event: Record<string, unknown>) =>
+      routines.handleRuntimeEvent({ eventId: String(Math.random()), provider: "fake", createdAt: new Date().toISOString(), threadId, ...event } as never);
+    for (const [index, tool] of tools.entries()) {
+      send({ type: "item.started", itemType: "tool", itemId: `t${index}`, title: tool.title });
+      send({ type: "item.completed", itemType: "tool", itemId: `t${index}`, ok: tool.ok, output: tool.output });
+    }
+    send({ type: "item.completed", itemType: "assistant_text", text: said });
+    send({ type: "turn.completed", ok: true });
+    return routines.listRuns().find((candidate) => candidate.id === queued.id)!;
+  }
+
+  it("every routine run and every proactive wake is told that a run with nothing to do ends with NOTHING_TO_REPORT, never a partial status", () => {
+    expect(ROUTINE_NOTHING_TO_DO_RULE).toBe("A run that found nothing to do, or whose only finding is that nothing needs the person (the item was already handled, is gone, or needs no answer), did its work: end it with the line NOTHING_TO_REPORT, never with a partial or failed RUN_STATUS: line. Use that status line only when a step the work needed failed or work that was needed was left undone.");
+    expect(ROUTINE_REPORT_CONTRACT).toContain(ROUTINE_NOTHING_TO_DO_RULE);
+    expect(ROUTINE_EXECUTION_PROMPT).toContain(ROUTINE_NOTHING_TO_DO_RULE);
+    const wake = proactiveWakePrompt({ mode: "act", events: [{ source: "peer", label: "A teammate wrote", detail: "The ticket is closed." }], more: 0 } as never);
+    expect(wake).toContain(ROUTINE_NOTHING_TO_DO_RULE);
+    // plain words for a model: no dash
+    expect(ROUTINE_NOTHING_TO_DO_RULE).not.toMatch(/[\u2013\u2014]/);
+  });
+
+  it("a run that ends with NOTHING_TO_REPORT and nothing failed is done and quiet", async () => {
+    const done = await ending("The mail was already handled.\nNOTHING_TO_REPORT", []);
+    expect(done.status).toBe("completed");
+    expect(done.quiet).toBe(true);
+    expect(done.problems).toBeUndefined();
+  });
+
+  it("a send that failed twice with 403 stays a problem, whatever the closing words say", async () => {
+    const refused = { title: "outlook_send_mail", ok: false, output: "403 Forbidden" };
+    const done = await ending("Drafted the reply to the supplier. Nothing else to do.", [refused, refused]);
+    expect(done.status).toBe("completed");
+    expect(done.problems).toContain("failed 2 times and never succeeded after: 403 Forbidden");
+    const plain = await ending("Drafted the reply to the supplier.", [refused, refused]);
+    expect(plain.problems).toBe(done.problems);
+    // the bot's own quiet line does not hide it either
+    const quiet = await ending("Nothing else to do.\nNOTHING_TO_REPORT", [refused, refused]);
+    expect(quiet.problems).toContain("failed 2 times and never succeeded after: 403 Forbidden");
+  });
+
+  it("a partial status stays a problem, whatever else its reason says", async () => {
+    for (const reason of [
+      "the backup host has not answered since Monday, nothing new otherwise",
+      "already handled the urgent ones; the CRM is unreachable",
+      "the CRM is down, nothing else to report",
+      "skipped 3 mails because the mailbox is not reachable, nothing more",
+      "only sorted 2 of 5, the rest did not load; nothing else",
+    ]) {
+      const done = await ending(`RUN_STATUS: partial: ${reason}\nSorted what I could.`, []);
+      expect(done.problems, reason).toContain(reason);
+      expect(done.quiet, reason).toBeUndefined();
+      expect(routineReportOutcome(`RUN_STATUS: partial: ${reason}`).declared, reason).toEqual({ status: "partial", reason });
+    }
+  });
+
+  it("a tool that answered \"not found\" twice and never succeeded stays a problem", async () => {
+    for (const output of [
+      "HTTP 404 Not Found",
+      "The requested URL /v2/tickets was not found on this server",
+      "Mailbox not found: someone@example.com",
+    ]) {
+      const failed = { title: "http_get", ok: false, output };
+      const done = await ending("Sorted the inbox.", [failed, failed]);
+      expect(done.problems, output).toContain(`failed 2 times and never succeeded after: ${output}`);
+    }
+  });
+
+  it("an announcement stays one, whatever words follow it", async () => {
+    const cut = await ending("I'll leave it: nothing urgent, and it is no longer in the inbox.", []);
+    expect(cut.problems).toContain("announcement");
+  });
+});
+
+/** #3990: a proactive wake posts only a request or its streak's summary. */
+describe("a proactive wake posts no result of its own (#3990)", () => {
+  async function wake(said: string, alwaysReport = false) {
+    const { routines } = manager(start);
+    const queued = routines.enqueueProactive({ botId: "maus-1", name: "Proactive: teammate message", prompt: "A teammate wrote",
+      proactive: { mode: "act", hops: 0, sources: ["peer"], ...(alwaysReport ? { alwaysReport: true as const } : {}) } as never });
+    await routines.tick();
+    const threadId = routines.listRuns().find((candidate) => candidate.id === queued.id)!.threadId!;
+    const send = (event: Record<string, unknown>) =>
+      routines.handleRuntimeEvent({ eventId: String(Math.random()), provider: "fake", createdAt: new Date().toISOString(), threadId, ...event } as never);
+    send({ type: "item.completed", itemType: "assistant_text", text: said });
+    send({ type: "turn.completed", ok: true });
+    return { routines, run: routines.listRuns().find((candidate) => candidate.id === queued.id)! };
+  }
+
+  it("a teammate's message whose result needs nothing from the person posts nothing and rings nothing", async () => {
+    const { routines, run } = await wake("I read the teammate's note: the ticket is closed and nothing needs you.");
+    expect(run.status).toBe("completed");
+    expect(run.quiet).toBeUndefined();
+    const chat = conversation({ routines, postResults: true });
+    chat.sync(run);
+    expect(chat.rows).toEqual([]);
+    expect(chat.unread).toEqual([]);
+    expect(ringsDone(run, routines)).toBe(false);
+  });
+
+  it("a wake the person chose to hear (an accepted suggestion, a watch) posts its result, with its feedback strip", async () => {
+    const { routines, run } = await wake("The watch saw the queue grow: I drafted a reply for you to review.", true);
+    const chat = conversation({ routines, postResults: true });
+    chat.sync(run);
+    expect(chat.rows.filter((row) => row.kind === "routine.run")).toHaveLength(1);
+    expect(ringsDone(run, routines)).toBe(true);
+  });
+
+  it("an item only the person can do still reaches them", async () => {
+    const { routines, run } = await wake("[HUMAIN] Approve the refund the teammate prepared.");
+    const chat = conversation({ routines, personAttention: (text) => text?.includes("[HUMAIN]") ? { kind: "items", items: [{ text: "Approve the refund" }] } : undefined });
+    chat.sync(run);
+    expect(chat.rows.filter((row) => row.kind === "routine.run")).toHaveLength(1);
   });
 });

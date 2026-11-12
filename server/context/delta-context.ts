@@ -252,8 +252,8 @@ interface PendingHandoff extends Handoff {
   steers: string[];
   /** steer ids given to the engine, with the messages each carried */
   steerIds: Map<string, string[]>;
-  /** steer ids the engine said a model call took in */
-  takenIn: Set<string>;
+  /** steer ids the engine said a model call took in, with when */
+  takenIn: Map<string, number>;
   /** steered messages the engine took in: received, never offered again */
   confirmed: string[];
   /** context messages the turn wrote itself through a tool (a widget) */
@@ -272,19 +272,44 @@ function actedOn(event: RuntimeEvent): boolean {
  * recorded once the provider is seen acting on it: output, a tool or an ask,
  * or a successful completion. A turn that fails before that records nothing,
  * so what it carried stays eligible for the next turn. */
+/** Steered messages whose receipt is remembered past their turn. */
+const RECEIPTS_MAX = 500;
+
 export class Handoffs {
   private readonly pending = new Map<string, PendingHandoff>();
   private readonly store: HandoffStore;
+  private readonly now: () => number;
+  /** steered message id -> when a model call took it in (#4046) */
+  private readonly receipts = new Map<string, number>();
 
-  constructor(store: HandoffStore) {
+  constructor(store: HandoffStore, now: () => number = Date.now) {
     this.store = store;
+    this.now = now;
+  }
+
+  /** When a model call of the running turn took in a message steered into
+   * it (`steer.received`), or undefined while it has not (or for an engine
+   * that never says). What the bot wrote after that point answers it; what
+   * it finished before came from the call already running (#4046). */
+  receivedAt(messageId: string): number | undefined {
+    return this.receipts.get(messageId);
+  }
+
+  private received(messageId: string, at: number): void {
+    this.receipts.delete(messageId);
+    this.receipts.set(messageId, at);
+    while (this.receipts.size > RECEIPTS_MAX) {
+      const oldest = this.receipts.keys().next().value;
+      if (oldest === undefined) break;
+      this.receipts.delete(oldest);
+    }
   }
 
   /** Registered when the turn claims the thread, before any provider work. */
   begin(threadId: string, claimId: string, handoff: Handoff): void {
     this.pending.set(threadId, {
       ...handoff, claimId, dispatched: false, replaced: false, rebuilt: false, accepted: false, stopped: false, steers: [],
-      steerIds: new Map(), takenIn: new Set(), confirmed: [], authored: [],
+      steerIds: new Map(), takenIn: new Map(), confirmed: [], authored: [],
     });
   }
 
@@ -339,8 +364,11 @@ export class Handoffs {
     if (!pending || pending !== target || pending.instanceId !== instanceId) return;
     pending.steers.push(messageId);
     if (!steerId) return;
-    if (pending.takenIn.has(steerId)) pending.confirmed.push(messageId);
-    else pending.steerIds.set(steerId, [...(pending.steerIds.get(steerId) ?? []), messageId]);
+    const takenAt = pending.takenIn.get(steerId);
+    if (takenAt !== undefined) {
+      pending.confirmed.push(messageId);
+      this.received(messageId, takenAt);
+    } else pending.steerIds.set(steerId, [...(pending.steerIds.get(steerId) ?? []), messageId]);
   }
 
   /** The bot routed a message steered into its running turn elsewhere
@@ -380,11 +408,13 @@ export class Handoffs {
     if (pending.turnId && event.turnId && event.turnId !== pending.turnId) return;
     if (event.type === "steer.received") {
       // the echo can beat the steer's own acknowledgement: remember either way
-      pending.takenIn.add(event.steerId);
+      const at = this.now();
+      pending.takenIn.set(event.steerId, at);
       const messageIds = pending.steerIds.get(event.steerId);
       if (messageIds) {
         pending.steerIds.delete(event.steerId);
         pending.confirmed.push(...messageIds);
+        for (const messageId of messageIds) this.received(messageId, at);
       }
       return;
     }

@@ -155,7 +155,7 @@ describe("renderUnseen", () => {
 
 // The acceptance fold, driven by runtime events against an in-memory store.
 describe("Handoffs", () => {
-  const setup = (order: string[], record?: HandedState) => {
+  const setup = (order: string[], record?: HandedState, now?: () => number) => {
     const records = new Map<string, HandedState>(record ? [["claude", record]] : []);
     const replies = new Map<string, string[]>();
     const handoffs = new Handoffs({
@@ -163,7 +163,7 @@ describe("Handoffs", () => {
       read: (_bot, _thread, instance) => records.get(instance),
       write: (_bot, _thread, instance, state) => { records.set(instance, state); },
       replies: (_thread, turnId) => replies.get(turnId) ?? [],
-    });
+    }, now);
     let n = 0;
     const event = (e: Record<string, unknown>) => handoffs.onEvent({
       eventId: `e${n++}`, provider: "claudeAgent", providerInstanceId: "claude", threadId: "t", createdAt: "", turnId: "turn", ...e,
@@ -310,6 +310,27 @@ describe("Handoffs", () => {
     f.event({ type: "steer.received", steerId: "steer-0003" });
     f.event({ type: "turn.completed", ok: true });
     expect(unseenIds(order, f.records.get("claude")!)).toEqual([]);
+  });
+
+  it("says when the engine took a steered message in, past the end of its turn (#4046)", () => {
+    let clock = 1_000;
+    const f = setup(ids(7), { session: "s", through: "m2", ids: [] }, () => clock);
+    f.start({ resumeCursor: "s", carried: ["m3"], own: ["m3"] });
+    f.event(output);
+    f.handoffs.steered("t", f.handoffs.current("t"), "claude", "m4", "steer-0005");
+    expect(f.handoffs.receivedAt("m4")).toBeUndefined();
+    clock = 5_000;
+    f.event({ type: "steer.received", steerId: "steer-0005" });
+    // the echo beat the steer's own acknowledgement: its time is kept too
+    clock = 7_000;
+    f.event({ type: "steer.received", steerId: "steer-0006" });
+    clock = 9_000;
+    f.handoffs.steered("t", f.handoffs.current("t"), "claude", "m5", "steer-0006");
+    f.handoffs.steered("t", f.handoffs.current("t"), "claude", "m6", "steer-0007");
+    f.event({ type: "turn.completed", ok: true });
+    expect(f.handoffs.receivedAt("m4")).toBe(5_000);
+    expect(f.handoffs.receivedAt("m5")).toBe(7_000);
+    expect(f.handoffs.receivedAt("m6")).toBeUndefined();
   });
 
   it("still offers a steer the engine never said it took in", () => {

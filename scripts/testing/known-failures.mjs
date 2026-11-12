@@ -2,7 +2,9 @@
 // today. A CI run is green when every failure it sees is in that list, and the
 // list can only shrink. A failure that is not listed and is seen in two runs
 // opens one `regression` issue per test, named after the pull request that
-// scripts/stability/bisect.mjs finds. Red Swift package tests on main (the
+// scripts/stability/bisect.mjs finds; when more than a handful are due in one
+// run, one issue for the run lists them all (#4037). Later runs on main tick
+// the tests that pass again and close an issue whose tests all pass. Red Swift package tests on main (the
 // swift-package job after a merge, the nightly's ios job) open one
 // `regression` issue at the first sighting, or comment on the open one: a
 // package that does not compile is not a flaky test (#3678). Nothing here
@@ -12,8 +14,10 @@
 //   extract       one test job: vitest's JSON report to this job's results
 //   report        all test jobs: the verdict, the summary, the shrunk list
 //   check-shrink  the list at a git revision against the working copy
-//   open-issues   the failures seen twice: bisect, then one issue each; and
-//                 the red Swift package tests: one issue, or a comment
+//   open-issues   the regression issues whose tests pass again: ticked or
+//                 closed; the failures seen twice: bisect, then one issue
+//                 each, or one for the run; and the red Swift package tests:
+//                 one issue, or a comment
 import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
@@ -30,7 +34,8 @@ const REGRESSION_LABEL = "regression";
 
 /** @typedef {{ file: string, test: string }} Identity */
 /** `os` is the runner of the job that saw it (report adds it from the job's results file name). */
-/** @typedef {Identity & { state: "pass" | "fail", os?: string }} Result */
+/** `message` is the first lines of a failure's first error, for the issue. */
+/** @typedef {Identity & { state: "pass" | "fail", os?: string, message?: string }} Result */
 /** @typedef {Identity & { owner: string, reason: string, since: string }} Entry */
 /** @typedef {{ $comment?: string, seeded?: string, tests: Entry[] }} List */
 
@@ -58,15 +63,24 @@ export function extractResults(report, root, exitCode) {
       const state = assertion.status === "passed" ? "pass" : assertion.status === "failed" ? "fail" : null;
       if (!state) continue;
       if (state === "fail") failedTests += 1;
-      results.push({ file: path, test: [...(assertion.ancestorTitles ?? []), assertion.title].join(" > "), state });
+      results.push({ file: path, test: [...(assertion.ancestorTitles ?? []), assertion.title].join(" > "), state, ...failureMessage(state, assertion.failureMessages?.[0]) });
     }
     const fileFailed = file.status === "failed" && failedTests === 0;
-    results.push({ file: path, test: WHOLE_FILE, state: fileFailed ? "fail" : "pass" });
+    results.push({ file: path, test: WHOLE_FILE, state: fileFailed ? "fail" : "pass", ...failureMessage(fileFailed ? "fail" : "pass", file.message) });
   }
   if (Number(exitCode) !== 0 && !results.some((result) => result.state === "fail")) {
     results.push({ file: "(vitest run)", test: `exited with code ${exitCode} and no failing test`, state: "fail" });
   }
   return results;
+}
+
+/** The first lines of a failure's error, short enough for an issue. */
+function failureMessage(state, text) {
+  if (state !== "fail") return {};
+  const lines = stripVTControlCharacters(String(text ?? "")).split(/\r?\n/).map((line) => line.trimEnd()).filter((line) => line.trim());
+  const message = lines.slice(0, 3).join("\n");
+  if (!message) return {};
+  return { message: message.length > 300 ? `${message.slice(0, 300)}...` : message };
 }
 
 /** A test that failed in any job is failing; one that only passed is fixed.
@@ -184,6 +198,10 @@ export function updateSightings(previous, { newFailures, results, sha, platforms
       if (result.state === "pass" && ranEverywhere.has(result.file) && !failing.has(identityKey(result))) delete tests[identityKey(result)];
     }
   }
+  const failingOs = new Map();
+  for (const result of results ?? []) {
+    if (result.state === "fail" && result.os) failingOs.set(identityKey(result), [...(failingOs.get(identityKey(result)) ?? []), result.os]);
+  }
   for (const failure of newFailures) {
     const key = identityKey(failure);
     const recorded = tests[key];
@@ -191,9 +209,15 @@ export function updateSightings(previous, { newFailures, results, sha, platforms
     // that fails after its issue closed gets a new one when seen twice
     // more, not silence for good (#3672). `openIssues` unknown: kept as is.
     const known = recorded?.issue && openIssues && !openIssues.has(recorded.issue) ? null : recorded;
-    tests[key] = known
-      ? { ...known, count: known.count + (known.lastSha === sha ? 0 : 1), lastSha: sha }
-      : { file: failure.file, test: failure.test, count: 1, firstSha: sha, lastSha: sha, good: previous?.lastSha ?? null, issue: null };
+    // The runners it failed on: a later run closes its issue only when the
+    // test passed on each of them (updateRegressionIssues).
+    const failedOn = [...new Set([...(known?.failedOn ?? []), ...(failingOs.get(key) ?? [])])].sort();
+    tests[key] = {
+      ...(known
+        ? { ...known, count: known.count + (known.lastSha === sha ? 0 : 1), lastSha: sha }
+        : { file: failure.file, test: failure.test, count: 1, firstSha: sha, lastSha: sha, good: previous?.lastSha ?? null, issue: null }),
+      ...(failedOn.length ? { failedOn } : {}),
+    };
   }
   const due = Object.values(tests).filter((entry) => entry.count >= 2 && !entry.issue && newFailures.some((failure) => identityKey(failure) === identityKey(entry)));
   return { sightings: { lastSha: sha, tests }, due };
@@ -258,12 +282,6 @@ async function github(fetchImpl, apiUrl, token, method, path, body) {
  * sightings must still be uploaded after the issues are opened. */
 export const BISECT_BUDGET_MS = 25 * 60_000;
 
-/** One issue per due failure, labelled `regression`; an open issue that
- * already carries the test's marker is reused. `bisect(entry, { deadline })`
- * returns what scripts/stability/bisect.mjs found, or null. Bisect runs the
- * whole file, so it runs once per file for all of that file's tests. Once
- * `budgetMs` is spent, the remaining issues still open, without the pull
- * request, each with the command that finds it. */
 /** The open issues labelled `regression`. */
 export async function listOpenRegressionIssues({ repo, token, fetch: fetchImpl = fetch, apiUrl = "https://api.github.com" }) {
   const open = [];
@@ -276,7 +294,26 @@ export async function listOpenRegressionIssues({ repo, token, fetch: fetchImpl =
   return open;
 }
 
-export async function openRegressionIssues(due, { repo, token, fetch: fetchImpl = fetch, runUrl, apiUrl = "https://api.github.com", bisect, budgetMs = BISECT_BUDGET_MS, now = Date.now, open: listed }) {
+/** Above this many tests due in one run, they open one issue for the run
+ * instead of one each: a single cause that breaks a whole suite opened 294
+ * issues in one night (#4037). */
+export const GROUP_ABOVE = 5;
+
+/** The hidden line of an issue that lists a run's failing tests. */
+export const RUN_MARKER = "<!-- known-failures-run -->";
+
+/** GitHub refuses an issue body above 65536 characters. */
+const BODY_LIMIT = 60_000;
+
+/** One issue per due failure, labelled `regression`; an open issue that
+ * already carries the test's marker is reused. More than GROUP_ABOVE new ones
+ * in one run open one issue for the run (openRunIssue). `bisect(entry, {
+ * deadline })` returns what scripts/stability/bisect.mjs found, or null.
+ * Bisect runs the whole file, so it runs once per file for all of that file's
+ * tests. Once `budgetMs` is spent, the remaining issues still open, without
+ * the pull request, each with the command that finds it. `results` are the
+ * run's results, for the first failing assertion of each file. */
+export async function openRegressionIssues(due, { repo, token, fetch: fetchImpl = fetch, runUrl, apiUrl = "https://api.github.com", bisect, budgetMs = BISECT_BUDGET_MS, now = Date.now, open: listed, results = [] }) {
   if (due.length === 0) return [];
   const deadline = now() + budgetMs;
   const byFile = new Map();
@@ -292,13 +329,20 @@ export async function openRegressionIssues(due, { repo, token, fetch: fetchImpl 
   const open = listed ?? await listOpenRegressionIssues({ repo, token, fetch: fetchImpl, apiUrl });
   await ensureRegressionLabel(fetchImpl, apiUrl, token, repo);
   const opened = [];
+  const fresh = [];
   for (const entry of due) {
     const marker = regressionMarker(entry);
     const existing = open.find((issue) => String(issue.body ?? "").includes(marker));
-    if (existing) {
-      opened.push({ key: identityKey(entry), issue: existing.number, created: false });
-      continue;
-    }
+    if (existing) opened.push({ key: identityKey(entry), issue: existing.number, created: false });
+    else fresh.push(entry);
+  }
+  if (fresh.length > GROUP_ABOVE) {
+    const { title, body } = runIssueText(fresh, { runUrl, results, bisectOnce });
+    const { status, json } = await github(fetchImpl, apiUrl, token, "POST", `/repos/${repo}/issues`, { title, body, labels: [REGRESSION_LABEL] });
+    if (status !== 201 || typeof json?.number !== "number") throw new Error(`HTTP ${status} opening the issue for ${fresh.length} failing tests`);
+    return [...opened, ...fresh.map((entry) => ({ key: identityKey(entry), issue: json.number, created: true }))];
+  }
+  for (const entry of fresh) {
     const found = bisectOnce(entry);
     const culprit = found?.verdict === "found" && found.pullRequest ? ` (broken by #${found.pullRequest})` : "";
     const body = [
@@ -312,13 +356,159 @@ export async function openRegressionIssues(due, { repo, token, fetch: fetchImpl 
       "",
       "Fix the test or the change that broke it. This issue does not block a merge.",
       "",
-      marker,
+      regressionMarker(entry),
     ].join("\n");
     const { status, json } = await github(fetchImpl, apiUrl, token, "POST", `/repos/${repo}/issues`, { title: `Regression: ${identityKey(entry)}${culprit}`, body, labels: [REGRESSION_LABEL] });
     if (status !== 201 || typeof json?.number !== "number") throw new Error(`HTTP ${status} opening the issue for ${identityKey(entry)}`);
     opened.push({ key: identityKey(entry), issue: json.number, created: true });
   }
   return opened;
+}
+
+const inline = (text) => String(text ?? "").replace(/`/g, "'").replace(/\n/g, " ");
+
+/** The issue of a run whose many tests failed together: its commit, the
+ * tests grouped by file (most failures first) as a checklist that later runs
+ * tick, and the first failing assertion of each file. Bisect runs once, on
+ * the file with the most failures. A list longer than GitHub takes ends with
+ * the count of the tests left out; they stay tied to this issue by the
+ * sightings. */
+export function runIssueText(entries, { runUrl, results = [], bisectOnce = () => null }) {
+  const files = [...Map.groupBy(entries, (entry) => entry.file)].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+  const firstMessage = new Map();
+  for (const result of results) {
+    if (result.state === "fail" && result.message && !firstMessage.has(result.file)) firstMessage.set(result.file, result.message);
+  }
+  const sha = entries[0].lastSha;
+  const found = bisectOnce(files[0][1][0]);
+  const culprit = found?.verdict === "found" && found.pullRequest ? ` (broken by #${found.pullRequest})` : "";
+  const head = [
+    `${entries.length} tests in ${files.length} files failed in two runs of CI on main after a merge and are not in \`${LIST_PATH}\`. They failed together, so this one issue lists them all instead of one issue per test.`,
+    "",
+    `Commit: ${sha} (first seen on ${entries[0].firstSha})`,
+    `Run: ${runUrl}`,
+    "",
+    bisectLine(found, files[0][1][0]),
+    "",
+  ];
+  const tail = [
+    "",
+    "Later runs on main tick a test that passes again and untick one that fails again; the issue closes when every test is ticked. Fix the tests or the change that broke them. This issue does not block a merge.",
+    "",
+    RUN_MARKER,
+  ];
+  const blocks = [];
+  let size = [...head, ...tail].join("\n").length;
+  let left = 0;
+  for (const [file, tests] of files) {
+    const message = firstMessage.get(file);
+    const block = [
+      `### \`${file}\` (${tests.length})`,
+      ...(message ? ["", "First failing assertion:", "", "~~~text", message.replace(/~~~/g, "~ ~ ~"), "~~~"] : []),
+      "",
+      ...tests.map((entry) => `- [ ] \`${inline(entry.test)}\` ${regressionMarker(entry)}`),
+      "",
+    ].join("\n");
+    if (size + block.length > BODY_LIMIT) {
+      left += tests.length;
+      continue;
+    }
+    size += block.length + 1;
+    blocks.push(block);
+  }
+  const more = left ? [`- and ${left} more failing tests: see the run.`, ""] : [];
+  return {
+    title: `Regression: ${entries.length} tests failing on main at ${String(sha).slice(0, 7)}${culprit}`,
+    body: [...head, ...blocks, ...more, ...tail].join("\n"),
+  };
+}
+
+/** Each test of a run, by `identityKey`: whether it failed in any job, and
+ * the runners it passed on (a row with no `os` passed on every `platforms`). */
+export function indexRun(results, platforms = []) {
+  const index = new Map();
+  for (const result of results ?? []) {
+    const key = identityKey(result);
+    const item = index.get(key) ?? { file: result.file, test: result.test, failed: false, passedOn: new Set() };
+    if (result.state === "fail") item.failed = true;
+    else if (result.state === "pass") for (const os of result.os ? [result.os] : platforms) item.passedOn.add(os);
+    index.set(key, item);
+  }
+  return index;
+}
+
+/** What a run says of one test: "absent" (it did not run), "fail" (it failed
+ * in at least one job) or "pass". */
+export function stateInRun(index, identity) {
+  const item = index.get(identityKey(identity));
+  if (!item) return "absent";
+  return item.failed ? "fail" : "pass";
+}
+
+/** The comment that closes a regression issue, with the green run as evidence. */
+export const greenEvidence = ({ runUrl, sha }) =>
+  `Passes on main in ${runUrl}${sha ? ` (commit ${sha})` : ""}, so this regression issue is closed. A new failure of the test opens a new one.`;
+
+/** The open regression issues whose tests passed in this run on main
+ * (#4037). A test counts as green when it ran and passed in every job that
+ * ran it, on each runner it failed on (the sighting's `failedOn`); with no
+ * such record, on every platform, so a push that runs Linux only does not
+ * close an issue of a test that fails on Windows. An issue for one test
+ * closes, with the run as evidence. A run's issue ticks each test that
+ * passed, unticks each that failed again, and closes once every test is
+ * ticked. A test that did not run leaves its line as it is.
+ * @returns {Promise<{ issue: number, ticked: number, closed: boolean }[]>} */
+export async function updateRegressionIssues(open, { results, platforms, sightings, runUrl, sha, repo, token, fetch: fetchImpl = fetch, apiUrl = "https://api.github.com" }) {
+  const index = indexRun(results, platforms);
+  const byMarker = new Map([...index.values()].map((item) => [regressionMarker(item), item]));
+  const green = (item) => {
+    if (!item || item.failed) return false;
+    const failedOn = sightings?.tests?.[identityKey(item)]?.failedOn;
+    const required = failedOn?.length ? failedOn : coversEveryPlatform(platforms) ? EVERY_PLATFORM : null;
+    return Boolean(required) && required.every((os) => item.passedOn.has(os));
+  };
+  const close = async (number) => {
+    const comment = await github(fetchImpl, apiUrl, token, "POST", `/repos/${repo}/issues/${number}/comments`, { body: greenEvidence({ runUrl, sha }) });
+    if (comment.status !== 201) throw new Error(`HTTP ${comment.status} commenting on #${number}`);
+    const closed = await github(fetchImpl, apiUrl, token, "PATCH", `/repos/${repo}/issues/${number}`, { state: "closed", state_reason: "completed" });
+    if (closed.status !== 200) throw new Error(`HTTP ${closed.status} closing #${number}`);
+  };
+  const updates = [];
+  for (const issue of open ?? []) {
+    const body = String(issue.body ?? "");
+    if (issue.pull_request) continue;
+    if (body.includes(RUN_MARKER)) {
+      let ticked = 0;
+      let lines = 0;
+      let done = 0;
+      const next = body.split("\n").map((line) => {
+        const match = /^- \[( |x)\] .*(<!-- known-failures: .*? -->)\s*$/.exec(line);
+        if (!match) return line;
+        lines += 1;
+        const item = byMarker.get(match[2]);
+        let mark = match[1];
+        if (green(item)) mark = "x";
+        else if (item?.failed) mark = " ";
+        if (mark === "x") done += 1;
+        if (mark === "x" && match[1] !== "x") ticked += 1;
+        return mark === match[1] ? line : line.replace(/^- \[( |x)\]/, `- [${mark}]`);
+      }).join("\n");
+      if (next !== body) {
+        const { status } = await github(fetchImpl, apiUrl, token, "PATCH", `/repos/${repo}/issues/${issue.number}`, { body: next });
+        if (status !== 200) throw new Error(`HTTP ${status} updating #${issue.number}`);
+      }
+      const closed = lines > 0 && done === lines;
+      if (closed) await close(issue.number);
+      if (next !== body || closed) updates.push({ issue: issue.number, ticked, closed });
+      continue;
+    }
+    const items = [...body.matchAll(/<!-- known-failures: .*? -->/g)].map((match) => byMarker.get(match[0]));
+    if (items.length && items.every(green)) {
+      await close(issue.number);
+      updates.push({ issue: issue.number, ticked: items.length, closed: true });
+    }
+  }
+  return updates;
 }
 
 const ensureRegressionLabel = (fetchImpl, apiUrl, token, repo) =>
@@ -396,11 +586,17 @@ function writeJson(path, value) {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-function report(options) {
-  const list = loadKnownFailures(options.list || DEFAULT_LIST);
-  const dir = String(options.results);
+/** The results files of a run's test jobs under `dir` (the `vitest-results-*`
+ * artifacts, `<os>-<shard>.json`), each row tagged with its runner. */
+export function loadResults(dir) {
   const files = existsSync(dir) ? readdirSync(dir, { recursive: true }).map(String).filter((name) => name.endsWith(".json")) : [];
   const results = files.flatMap((name) => (readJson(join(dir, name), { results: [] }).results ?? []).map((result) => ({ ...result, os: platformOfResults(name) })));
+  return { files, results };
+}
+
+function report(options) {
+  const list = loadKnownFailures(options.list || DEFAULT_LIST);
+  const { files, results } = loadResults(String(options.results));
   const expected = Number(options.expect);
   const missingCount = Number.isFinite(expected) && files.length < expected ? expected - files.length : 0;
   // A job that never got a runner is told apart from one that crashed: the
@@ -508,9 +704,20 @@ async function openIssues(options) {
     console.log(`Open regression issues not listed (${String(error)}): recorded issues kept as is.`);
   }
   const openIssues = open ? new Set(open.map((issue) => issue.number)) : undefined;
-  const { sightings, due } = updateSightings(previous, { newFailures, results, sha: String(options.sha), platforms: readPlatforms(options.platforms), openIssues });
+  const platforms = readPlatforms(options.platforms);
+  const { sightings, due } = updateSightings(previous, { newFailures, results, sha: String(options.sha), platforms, openIssues });
   // Written first, so a failed issue call still keeps this run's sightings.
   writeJson(String(options.out), sightings);
+  // The regression issues whose tests pass again: ticked or closed (#4037).
+  if (open) {
+    try {
+      for (const { issue, ticked, closed } of await updateRegressionIssues(open, { results, platforms, sightings, runUrl: options["run-url"], sha: String(options.sha), repo, token, apiUrl })) {
+        console.log(`${closed ? "Closed" : "Updated"}: #${issue}, ${ticked} test(s) passing again.`);
+      }
+    } catch (error) {
+      console.log(`::warning title=Regression issues::${escapeData(`The issues of tests that pass again were not all updated: ${String(error)}`)}`);
+    }
+  }
   const swiftFailed = await reportSwift(options, { repo, token, apiUrl, open });
   const { bisect } = await import("../stability/bisect.mjs");
   const opened = await openRegressionIssues(due, {
@@ -518,6 +725,7 @@ async function openIssues(options) {
     token,
     apiUrl,
     open,
+    results,
     runUrl: options["run-url"],
     bisect: (entry, { deadline }) => {
       try {
@@ -537,7 +745,7 @@ async function openIssues(options) {
     if (entry?.issue && !opened.some((item) => item.key === identityKey(failure))) console.log(`Tracked by open issue #${entry.issue}: ${identityKey(failure)}`);
   }
   writeJson(String(options.out), sightings);
-  console.log(`${Object.keys(sightings.tests).length} unlisted failure(s) tracked, ${opened.filter((item) => item.created).length} issue(s) opened.`);
+  console.log(`${Object.keys(sightings.tests).length} unlisted failure(s) tracked, ${new Set(opened.filter((item) => item.created).map((item) => item.issue)).size} issue(s) opened.`);
   return swiftFailed ? 1 : 0;
 }
 

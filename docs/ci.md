@@ -255,6 +255,27 @@ How a run decides (`scripts/testing/known-failures.mjs`):
    a push runs Linux only, so a test that fails only on Windows or macOS
    keeps its count through it, and so does a test whose file did not run on
    one platform of a nightly run. Nothing here blocks a merge.
+
+   When more than a handful of tests (`GROUP_ABOVE`, 5) are due in one run,
+   they open one issue for the run instead of one each (#4037): its commit,
+   the run, the tests grouped by file as a checklist, the first failing
+   assertion of each file, and one bisect on the file with the most
+   failures. Each test's marker is on its line, so a later run never opens a
+   second issue for it.
+
+   Every run on main then reads the open `regression` issues against its
+   results (`updateRegressionIssues`): a test that ran and passed in every
+   job, on each runner it failed on (the sighting's `failedOn`; with no
+   record, on every platform), is green. An issue for one test closes with
+   the run as evidence; a run's issue ticks each green test, unticks one that
+   fails again, and closes once every test is ticked. A test that did not run
+   leaves its issue as it is.
+
+   `scripts/testing/close-green-regressions.mjs --run <id>` does the same by
+   hand for the issues opened one per test before this: it reads each title
+   (`Regression: <file> > <test>`) against the results of a named green run
+   and closes only the issues whose test ran and passed there, with the run
+   as evidence. It lists them by default and closes them with `--close`.
 5. Red Swift package tests on main (`Swift package tests` after a merge, the
    Swift step of the nightly's iOS job) open one `regression` issue at the
    first failure, or comment on the open one, with the commit, the failing

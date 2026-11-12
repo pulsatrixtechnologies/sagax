@@ -13,6 +13,7 @@ import {
   extractResults,
   failingSwiftTests,
   filesRunOn,
+  GROUP_ABOVE,
   jobsWithoutRunner,
   identityKey,
   listedGuardTests,
@@ -20,10 +21,12 @@ import {
   openRegressionIssues,
   openSwiftRegressionIssue,
   regressionMarker,
+  RUN_MARKER,
   seedList,
   shrink,
   SWIFT_IDENTITY,
   swiftOutcome,
+  updateRegressionIssues,
   updateSightings,
   WHOLE_FILE,
 } from "./known-failures.mjs";
@@ -47,7 +50,7 @@ const report = (files: { name: string; status: string; message?: string; tests: 
     name: `${root}/${file.name}`,
     status: file.status,
     message: file.message ?? "",
-    assertionResults: file.tests.map(([ancestorTitles, title, status]) => ({ ancestorTitles, title, status, fullName: [...ancestorTitles, title].join(" ") })),
+    assertionResults: file.tests.map(([ancestorTitles, title, status]) => ({ ancestorTitles, title, status, fullName: [...ancestorTitles, title].join(" "), failureMessages: [] as string[] })),
   })),
 });
 const entry = (file: string, test: string) => ({ file, test, owner: "unassigned", reason: "r", since: "2026-11-10" });
@@ -89,7 +92,13 @@ describe("extractResults", () => {
 
   it("counts a file that failed to load as one failure of the whole file", () => {
     const results = extractResults(report([{ name: "server/b.test.ts", status: "failed", message: "SyntaxError", tests: [] }]), root, 1);
-    expect(results).toEqual([{ file: "server/b.test.ts", test: WHOLE_FILE, state: "fail" }]);
+    expect(results).toEqual([{ file: "server/b.test.ts", test: WHOLE_FILE, state: "fail", message: "SyntaxError" }]);
+  });
+
+  it("keeps the first lines of a failure's first error, for the run's issue (#4037)", () => {
+    const failed = report([{ name: "server/a.test.ts", status: "failed", tests: [[[], "breaks", "failed"]] }]);
+    failed.testResults[0]!.assertionResults[0]!.failureMessages = ["AssertionError: expected 1 to be 2\n\n  at a.test.ts:3:5\n  at more\n  at even more"];
+    expect(extractResults(failed, root, 1)[0]).toEqual({ file: "server/a.test.ts", test: "breaks", state: "fail", message: "AssertionError: expected 1 to be 2\n  at a.test.ts:3:5\n  at more" });
   });
 
   it("turns a non-zero vitest exit with no failing test into a failure, so an unhandled error is never green", () => {
@@ -335,6 +344,141 @@ describe("openRegressionIssues", () => {
     const opened = await openRegressionIssues(due, { repo: "owner/repo", token: "t", fetch: github.fetch, runUrl: "u", apiUrl: "https://api.example.test", bisect: () => null });
     expect(opened).toEqual([{ key: identityKey(due[0]!), issue: 5, created: false }]);
     expect(github.calls.filter((call) => call.method === "POST" && call.path.endsWith("/issues"))).toEqual([]);
+  });
+
+  it("opens one issue for a run whose many tests failed together: commit, tests by file, first failing assertion (#4037)", async () => {
+    const github = fakeGitHub([]);
+    const fifty = Array.from({ length: 50 }, (_, i) => ({ ...due[0]!, file: `f${i % 3}.test.ts`, test: `t${i}`, firstSha: "aaaaaaa1", lastSha: "bbbbbbbbb2" }));
+    const results = [
+      { file: "f0.test.ts", test: "t0", state: "fail", message: "Error: server did not start", os: "ubuntu-latest" },
+      { file: "f1.test.ts", test: "t1", state: "fail", message: "TypeError: x is undefined", os: "ubuntu-latest" },
+    ];
+    const bisected: string[] = [];
+    const opened = await openRegressionIssues(fifty, {
+      repo: "owner/repo", token: "t", fetch: github.fetch, runUrl: "https://example.test/run/9", apiUrl: "https://api.example.test", results,
+      bisect: (entry: { file: string }) => {
+        bisected.push(entry.file);
+        return { verdict: "found", sha: "abc1234", subject: "feat: change (#42)", pullRequest: 42, runs: 3 };
+      },
+    });
+    const creates = github.calls.filter((call) => call.method === "POST" && call.path === "/repos/owner/repo/issues");
+    expect(creates).toHaveLength(1);
+    expect(bisected).toEqual(["f0.test.ts"]);
+    expect(opened).toHaveLength(50);
+    expect(new Set(opened.map((item) => item.issue))).toEqual(new Set([77]));
+    const { title, body, labels } = creates[0]!.body as { title: string; body: string; labels: string[] };
+    expect(labels).toEqual(["regression"]);
+    expect(title).toBe("Regression: 50 tests failing on main at bbbbbbb (broken by #42)");
+    expect(title).not.toContain(" > ");
+    expect(body).toContain("Commit: bbbbbbbbb2");
+    expect(body).toContain("https://example.test/run/9");
+    expect(body).toContain("### `f0.test.ts` (17)");
+    expect(body).toContain("Error: server did not start");
+    expect(body).toContain("TypeError: x is undefined");
+    expect(body).toContain(RUN_MARKER);
+    for (const entry of fifty) expect(body).toContain(`- [ ] \`${entry.test}\` ${regressionMarker(entry)}`);
+  });
+
+  it("keeps one issue per test up to a handful", async () => {
+    const github = fakeGitHub([]);
+    const few = Array.from({ length: GROUP_ABOVE }, (_, i) => ({ ...due[0]!, test: `t${i}` }));
+    await openRegressionIssues(few, { repo: "owner/repo", token: "t", fetch: github.fetch, runUrl: "u", apiUrl: "https://api.example.test", bisect: () => null });
+    const titles = github.calls.filter((call) => call.method === "POST" && call.path.endsWith("/issues")).map((call) => call.body?.title);
+    expect(titles).toEqual(few.map((entry) => `Regression: a.test.ts > ${entry.test}`));
+  });
+
+  it("keeps a run's issue under GitHub's body limit and counts the tests it leaves out", async () => {
+    const github = fakeGitHub([]);
+    const many = Array.from({ length: 900 }, (_, i) => ({ ...due[0]!, file: `server/some/rather/long/path/to/a/folder/file${i}.test.ts`, test: `a describe block > a fairly long test name number ${i}` }));
+    await openRegressionIssues(many, { repo: "owner/repo", token: "t", fetch: github.fetch, runUrl: "u", apiUrl: "https://api.example.test", bisect: () => null });
+    const body = String(github.calls.find((call) => call.method === "POST" && call.path.endsWith("/issues"))?.body?.body);
+    expect(body.length).toBeLessThan(65_536);
+    expect(body).toMatch(/- and \d+ more failing tests: see the run\./);
+    expect(body).toContain(RUN_MARKER);
+  });
+});
+
+describe("updateRegressionIssues (#4037)", () => {
+  const test = (n: number) => ({ file: `f${n % 2}.test.ts`, test: `t${n}` });
+  function fakeGitHub() {
+    const calls: { method: string; path: string; body?: Record<string, unknown> }[] = [];
+    const fetch = async (url: string, init: { method?: string; body?: string } = {}) => {
+      const method = init.method ?? "GET";
+      calls.push({ method, path: new URL(url).pathname, body: init.body ? JSON.parse(init.body) : undefined });
+      return new Response("{}", { status: method === "POST" ? 201 : 200 });
+    };
+    return { calls, fetch };
+  }
+  const options = (fetch: unknown, results: unknown[], platforms: string[], sightings?: unknown) =>
+    ({ results, platforms, sightings, runUrl: "https://example.test/run/10", sha: "c0ffee", repo: "owner/repo", token: "t", fetch, apiUrl: "https://api.example.test" });
+  const runIssueBody = (tests: { file: string; test: string }[]) =>
+    ["intro", ...tests.map((entry) => `- [ ] \`${entry.test}\` ${regressionMarker(entry)}`), "", RUN_MARKER].join("\n");
+
+  it("a red run with fifty failing tests opens one issue, and the next green run closes it", async () => {
+    const fifty = Array.from({ length: 50 }, (_, i) => test(i));
+    // The red run: seen twice, so all fifty are due at once.
+    let sightings = updateSightings(null, { newFailures: fifty, results: fifty.map((entry) => ({ ...entry, state: "fail", os: "ubuntu-latest" })), sha: "s1", platforms: ["ubuntu-latest"] }).sightings;
+    const red = updateSightings(sightings, { newFailures: fifty, results: fifty.map((entry) => ({ ...entry, state: "fail", os: "ubuntu-latest" })), sha: "s2", platforms: ["ubuntu-latest"] });
+    expect(red.due).toHaveLength(50);
+    expect(red.due[0]!.failedOn).toEqual(["ubuntu-latest"]);
+    const created: { title: string; body: string }[] = [];
+    const opening = async (_url: string, init: { method?: string; body?: string } = {}) => {
+      if (init.method === "POST" && init.body?.includes("title")) created.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({ number: 300 }), { status: 201 });
+    };
+    const opened = await openRegressionIssues(red.due, { repo: "owner/repo", token: "t", fetch: opening, runUrl: "u", apiUrl: "https://api.example.test", bisect: () => null, open: [] });
+    expect(created).toHaveLength(1);
+    for (const { key, issue } of opened) red.sightings.tests[key].issue = issue;
+    sightings = red.sightings;
+    // The next run, on Linux like the red one, is green.
+    const github = fakeGitHub();
+    const green = fifty.flatMap((entry) => [{ ...entry, state: "pass", os: "ubuntu-latest" }]);
+    const updates = await updateRegressionIssues([{ number: 300, body: created[0]!.body }], options(github.fetch, green, ["ubuntu-latest"], sightings));
+    expect(updates).toEqual([{ issue: 300, ticked: 50, closed: true }]);
+    const patch = github.calls.find((call) => call.method === "PATCH" && call.body?.body);
+    expect(String(patch?.body?.body)).not.toContain("- [ ]");
+    expect(github.calls.find((call) => call.method === "POST")?.body?.body).toContain("https://example.test/run/10");
+    expect(github.calls.at(-1)).toEqual({ method: "PATCH", path: "/repos/owner/repo/issues/300", body: { state: "closed", state_reason: "completed" } });
+  });
+
+  it("ticks the tests that pass, unticks one that fails again, and leaves the issue open while one still fails", async () => {
+    const tests = [test(1), test(2), test(3)];
+    const body = runIssueBody(tests).replace(`- [ ] \`t3\``, `- [x] \`t3\``);
+    const github = fakeGitHub();
+    const results = [{ ...tests[0]!, state: "pass" }, { ...tests[2]!, state: "fail" }];
+    const updates = await updateRegressionIssues([{ number: 8, body }], options(github.fetch, results, EVERY_PLATFORM));
+    expect(updates).toEqual([{ issue: 8, ticked: 1, closed: false }]);
+    const next = String(github.calls[0]!.body?.body);
+    expect(next).toContain("- [x] `t1`");
+    expect(next).toContain("- [ ] `t2`"); // did not run: as it was
+    expect(next).toContain("- [ ] `t3`");
+    expect(github.calls.some((call) => call.body?.state === "closed")).toBe(false);
+  });
+
+  it("closes an issue for one test that passes, with the run as evidence", async () => {
+    const github = fakeGitHub();
+    const updates = await updateRegressionIssues([{ number: 5, body: `text ${regressionMarker(test(1))}` }], options(github.fetch, [{ ...test(1), state: "pass" }], EVERY_PLATFORM));
+    expect(updates).toEqual([{ issue: 5, ticked: 1, closed: true }]);
+    expect(github.calls.map((call) => `${call.method} ${call.path}`)).toEqual(["POST /repos/owner/repo/issues/5/comments", "PATCH /repos/owner/repo/issues/5"]);
+  });
+
+  it("does not close for a Linux push when the test failed on Windows, nor when it did not run or still fails anywhere", async () => {
+    const github = fakeGitHub();
+    const issue = { number: 6, body: regressionMarker(test(1)) };
+    const sightings = { tests: { [identityKey(test(1))]: { failedOn: ["windows-latest"] } } };
+    expect(await updateRegressionIssues([issue], options(github.fetch, [{ ...test(1), state: "pass", os: "ubuntu-latest" }], ["ubuntu-latest"], sightings))).toEqual([]);
+    // Unknown runners: only a run on every platform closes it.
+    expect(await updateRegressionIssues([issue], options(github.fetch, [{ ...test(1), state: "pass", os: "ubuntu-latest" }], ["ubuntu-latest"]))).toEqual([]);
+    expect(await updateRegressionIssues([issue], options(github.fetch, [], EVERY_PLATFORM))).toEqual([]);
+    expect(await updateRegressionIssues([issue], options(github.fetch, [{ ...test(1), state: "pass", os: "ubuntu-latest" }, { ...test(1), state: "fail", os: "windows-latest" }], EVERY_PLATFORM))).toEqual([]);
+    expect(github.calls).toEqual([]);
+    // The Windows run passes it: closed.
+    expect(await updateRegressionIssues([issue], options(github.fetch, [{ ...test(1), state: "pass", os: "windows-latest" }], ["windows-latest"], sightings))).toEqual([{ issue: 6, ticked: 1, closed: true }]);
+  });
+
+  it("leaves the Swift package tests' issue alone", async () => {
+    const github = fakeGitHub();
+    expect(await updateRegressionIssues([{ number: 9, body: regressionMarker(SWIFT_IDENTITY) }], options(github.fetch, [{ ...test(1), state: "pass" }], EVERY_PLATFORM))).toEqual([]);
   });
 });
 

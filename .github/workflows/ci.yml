@@ -363,7 +363,9 @@ jobs:
     # a listed test that passed is dropped from the file this job uploads, and
     # on main a failure not in the list that is seen in two runs opens one
     # `regression` issue per test, named after the pull request that
-    # scripts/stability/bisect.mjs finds. Nothing here blocks a merge: it runs
+    # scripts/stability/bisect.mjs finds, or one issue for the run when more
+    # than a handful are due together; each run on main ticks or closes the
+    # issues whose tests pass again (#4037). Nothing here blocks a merge: it runs
     # after the merge. docs/ci.md, "Known failures".
     # It also reads the Swift package tests (swift-package after a merge, the
     # nightly's ios job) and opens a `regression` issue when they fail on main.
@@ -379,7 +381,7 @@ jobs:
       contents: read
       # Reads the previous main run's sightings artifact.
       actions: read
-      # Opens one `regression` issue per new failure seen twice.
+      # Opens, ticks and closes the `regression` issues.
       issues: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -465,7 +467,9 @@ jobs:
           path: ${{ runner.temp }}/swift-test
           merge-multiple: true
       - name: Open a regression issue for each new failure seen twice
-        # and one for red Swift package tests, at the first sighting
+        # (one for the run when many are due together), close the ones whose
+        # tests pass again, and one for red Swift package tests, at the first
+        # sighting
         if: ${{ !cancelled() && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule') }}
         env:
           GH_TOKEN: ${{ github.token }}

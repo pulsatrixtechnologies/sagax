@@ -1352,6 +1352,9 @@ extension ChatListView {
             if ProcessInfo.processInfo.arguments.contains("-parity-bulk-edit") { selection.editing = true }
         }
         .task {
+            // capture only (#4066): the "+" card without the parity server
+            if ProcessInfo.processInfo.arguments.contains("-home-plus-menu-preview") { showingPlusMenu = true }
+            if ProcessInfo.processInfo.arguments.contains("-home-apps-menu-preview") { showingAppsMenu = true }
             switch ParityLaunch.current?.screen {
             case .homePlusMenu?: showingPlusMenu = true
             case .search?: showingSearch = true
@@ -1956,11 +1959,11 @@ extension ChatListView {
                 HomePlusMenu(
                     groups: NewMenuLabels.groups(session),
                     title: { NewMenuLabels.title($0, session: session) },
-                    select: selectNew
+                    select: selectNew,
+                    topInset: HomeMetrics.headerTop - 6
                 ) {
                     withAnimation(.easeOut(duration: 0.18)) { showingPlusMenu = false }
                 }
-                .padding(.top, HomeMetrics.headerTop - 6)
                 .zIndex(5)
             }
         }

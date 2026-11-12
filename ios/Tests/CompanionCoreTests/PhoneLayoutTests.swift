@@ -97,8 +97,28 @@ final class PhoneLayoutTests: XCTestCase {
         XCTAssertTrue(menu.contains("String(localized: \"Plugins\")"))
         XCTAssertFalse(menu.contains("\"Connect apps\""))
         XCTAssertFalse(home.contains("Label(String(localized: \"Connect apps\")"))
-        // a dimmed home under an opaque card
-        XCTAssertTrue(menu.contains("Theme.dim"))
-        XCTAssertTrue(menu.contains(".background(surface, in:"))
+        // a dimmed home under an opaque card: the one card both menus share
+        XCTAssertTrue(menu.contains("HomeMenuCard("))
+        let card = try declaration(home, from: "struct HomeMenuCard<Content: View>: View {")
+        XCTAssertTrue(card.contains("Theme.dim"))
+        XCTAssertTrue(card.contains(".background(HomeMenuStyle.surface, in:"))
+    }
+
+    // #4066: the "+" menu drew over a nearly transparent layer, so the list
+    // read through it, and the apps menu carried its own copy of the card.
+    func testThePlusMenuIsTheSameOpaqueCardOverTheDimmedHome() throws {
+        let home = try source("App/HomeRoster.swift")
+        let plus = try declaration(home, from: "struct HomePlusMenu: View {")
+        XCTAssertTrue(plus.contains("HomeMenuCard("))
+        XCTAssertFalse(plus.contains("Color.black.opacity(0.001)"))
+        XCTAssertFalse(plus.contains(".themeGlass("))
+        let apps = try declaration(home, from: "struct HomeAppsMenu: View {")
+        // one card, one divider: neither menu draws its own
+        for menu in [plus, apps] {
+            XCTAssertFalse(menu.contains("Theme.dim"))
+            XCTAssertFalse(menu.contains("RoundedRectangle(cornerRadius: 24"))
+            XCTAssertFalse(menu.contains("Rectangle()\n"))
+            XCTAssertTrue(menu.contains("HomeMenuDivider()"))
+        }
     }
 }

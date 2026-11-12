@@ -10,9 +10,11 @@
 //   - in a turn, through the very pipeline of the engine's stdio bridge
 //     (/api/internal/perspicax/mcp with the turn's own capability: the
 //     confidential, misuse and safety checks, the role logic), after each
-//     tools/call passed the same approval decision as a native call (a held
-//     request: organization Refuse and Ask first rules, the person's rules,
-//     the level; a read of their own connection passes with no card);
+//     tools/call passed the decision of the engine's own ask of that tool
+//     (a held request `asEngine`: organization Refuse and Ask first rules,
+//     the person's rules and Always allow, the level, the reviewed
+//     Perspicax reads; one state for both, a burst of the same call is one
+//     card). A call whose script left while its card waited is never sent;
 //   - in a watch check (no turn, nobody to answer a card), through the
 //     routine delegation like the watch's own tool reads, reads only.
 // The Perspicax token never leaves this process. The bridge token is no
@@ -141,9 +143,32 @@ export class SandboxBridgeGrants {
 /** The address a script posts to, from the base the environment reaches
  * the server by; null when none is set (the variables are then not given). */
 export function sandboxBridgeUrl(env: NodeJS.ProcessEnv = process.env): string | null {
-  const base = (env.SAGAX_SANDBOX_BRIDGE_URL?.trim() || env.SAGAX_PUBLIC_URL?.trim() || "").replace(/\/+$/, "");
-  if (!/^https?:\/\/[^\s/]+/i.test(base)) return null;
+  const base = sandboxBridgeBase(env);
+  if (!base) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(base);
+  } catch {
+    return null;
+  }
+  // the token rides in clear over http: only on this machine's own loopback
+  const loopback = ["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname.toLowerCase());
+  if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && loopback)) return null;
   return `${base}${SANDBOX_BRIDGE_PATH}`;
+}
+
+/** The base set for the bridge, before any check (the startup line names it). */
+export function sandboxBridgeBase(env: NodeJS.ProcessEnv = process.env): string {
+  return (env.SAGAX_SANDBOX_BRIDGE_URL?.trim() || env.SAGAX_PUBLIC_URL?.trim() || "").replace(/\/+$/, "");
+}
+
+/** The startup line when the bridge stays off on a server with environments
+ * and Perspicax, or null when it is on. Never a token, only the setting. */
+export function sandboxBridgeStartupNote(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (sandboxBridgeUrl(env)) return null;
+  return sandboxBridgeBase(env)
+    ? "sandbox bridge: off, SAGAX_SANDBOX_BRIDGE_URL (or SAGAX_PUBLIC_URL) must be https (http only on loopback); scripts in server environments cannot reach Perspicax"
+    : "sandbox bridge: off, set SAGAX_SANDBOX_BRIDGE_URL (or SAGAX_PUBLIC_URL) to the https address the server environments reach this server by; scripts in server environments cannot reach Perspicax";
 }
 
 /** The two variables of one command. */
@@ -163,6 +188,8 @@ export interface SandboxBridgeMcp {
  * routine delegation of the person, ended with the check. */
 export class SandboxBridgeWatchSessions {
   private readonly opened = new Map<string, Promise<PerspicaxTurnPlan>>();
+  /** Checks already over: a late frame never opens a connection nobody ends. */
+  private readonly ended = new Set<string>();
   private readonly mcp: () => SandboxBridgeMcp | null;
   constructor(mcp: () => SandboxBridgeMcp | null) {
     this.mcp = mcp;
@@ -171,6 +198,7 @@ export class SandboxBridgeWatchSessions {
   async relay(grant: Extract<SandboxBridgeGrant, { kind: "watch" }>, frame: Record<string, unknown>): Promise<PerspicaxRelayAnswer> {
     const mcp = this.mcp();
     const id = frame.id ?? null;
+    if (this.ended.has(grant.threadId)) return { status: 401, body: { error: "unauthorized" } };
     if (!mcp) return { status: 200, body: { jsonrpc: "2.0", id, error: { code: -32000, message: "Perspicax is unavailable" } } };
     let plan = this.opened.get(grant.threadId);
     if (!plan) {
@@ -190,6 +218,9 @@ export class SandboxBridgeWatchSessions {
 
   /** The check is over: its connection and its tokens end. */
   async end(grant: SandboxBridgeGrant): Promise<void> {
+    this.ended.add(grant.threadId);
+    // bounded: the oldest checks are long over
+    if (this.ended.size > 2_000) this.ended.delete(this.ended.values().next().value as string);
     const plan = this.opened.get(grant.threadId);
     if (!plan) return;
     this.opened.delete(grant.threadId);
@@ -204,11 +235,9 @@ export interface SandboxBridgeRouteDeps {
   turnCapabilityToken(grant: Extract<SandboxBridgeGrant, { kind: "turn" }>): string | null;
   /** The person the turn's Perspicax connection speaks for. */
   turnPrincipal(grant: Extract<SandboxBridgeGrant, { kind: "turn" }>): string | undefined;
-  /** Whether a frame only reads (the relay's reading). */
-  frameReads(grant: Extract<SandboxBridgeGrant, { kind: "turn" }>, frame: Record<string, unknown>): Promise<boolean>;
-  /** The approval of one tools/call on the turn, as a native call is
-   * decided; undefined when no turn runs there. */
-  hold(grant: Extract<SandboxBridgeGrant, { kind: "turn" }>, call: { name: string; args: Record<string, unknown>; read: boolean }): Promise<{ behavior: "allow" | "deny"; message?: string }> | undefined;
+  /** The approval of one tools/call on the turn, decided as the engine's
+   * own ask of that tool; undefined when no turn runs there. */
+  hold(grant: Extract<SandboxBridgeGrant, { kind: "turn" }>, call: { name: string; args: Record<string, unknown> }): Promise<{ behavior: "allow" | "deny"; message?: string }> | undefined;
   /** Hands the frame to the internal pipeline under the turn's capability and answers `res`. */
   forwardTurn(req: IncomingMessage, res: ServerResponse, capabilityToken: string, raw: Buffer): Promise<void>;
   watch: SandboxBridgeWatchSessions;
@@ -300,10 +329,16 @@ export function createSandboxBridgeRoutes(deps: SandboxBridgeRouteDeps): PreAuth
       const name = typeof params.name === "string" ? params.name : "";
       if (!name) return json(res, 400, { jsonrpc: "2.0", id, error: { code: -32602, message: "tools/call needs a tool name" } });
       const args = isRecord(params.arguments) ? params.arguments : {};
-      const read = await deps.frameReads(grant, frame);
-      const held = deps.hold(grant, { name, args, read });
+      const held = deps.hold(grant, { name, args });
       if (!held) return json(res, 401, { error: "unauthorized" });
       const decision = await held;
+      // The script left while the card waited (killed, timed out, retried):
+      // a later yes never sends its call, nor twice. (`req.destroyed` is
+      // already true once the body is read, so the answer's side is read.)
+      if (res.destroyed || res.writableEnded) {
+        deps.log?.("sandbox bridge: the script left before its approval; the call was not sent");
+        return;
+      }
       if (decision.behavior !== "allow") {
         const why = decision.message?.trim() || "the approval was declined";
         return json(res, 200, { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: `Refused: ${why}` }], isError: true } });

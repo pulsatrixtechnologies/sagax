@@ -1,0 +1,40 @@
+{{- /*
+#4081: a sandbox reaches the Sagax server's Perspicax bridge
+(/api/bridge/perspicax/mcp) when the server runs in this same cluster. Its
+public address is then translated to the server Pod's private address,
+which every egress policy here refuses (egressDeny holds the private
+ranges). This one named policy allows exactly that: sandbox Pods to the
+server's Pods, on the bridge's one port. NetworkPolicies add up, so it
+widens the chart's policy and the provisioner's per-person policies alike,
+and opens nothing else of the private ranges. Off by default: turn it on
+together with SAGAX_SANDBOX_BRIDGE_URL (or SAGAX_PUBLIC_URL) on the server.
+*/ -}}
+{{- if include "sandboxes.on" (list .Values.sagaxBridge "enabled" false) }}
+{{- if not .Values.sagaxBridge.podLabels }}
+{{- fail "sagaxBridge.podLabels must name the Sagax server Pods (for the server chart: app.kubernetes.io/name: sagax-server)" }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sandbox-to-sagax-bridge
+  namespace: {{ .Values.sandboxNamespace | quote }}
+  labels:
+    {{- include "sandboxes.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      com.pulsatrix.sagax.sandbox: "1"
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.sagaxBridge.namespace | default .Values.sagax.namespace | quote }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.sagaxBridge.podLabels | nindent 14 }}
+      ports:
+        - port: {{ .Values.sagaxBridge.port }}
+          protocol: TCP
+{{- end }}

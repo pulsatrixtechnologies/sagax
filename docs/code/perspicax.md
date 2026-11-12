@@ -353,17 +353,26 @@ to the bot's own Perspicax connection, with no Perspicax token there
   401.
 - `initialize` and notifications are answered by the bridge, so a script
   never replaces the engine's MCP session. A turn's `tools/call` is first a
-  held request (`holdConnectorCall`, tool `mcp__perspicax__<name>`, outbound
-  unless Perspicax lists it read-only), decided like an engine's own call:
-  organization Refuse and Ask first rules, the person's rules and Always
-  allow, the level, a read of their own connection with no card. Refused:
-  a tool error `Refused: ...`, nothing sent. Then the frame goes through
+  held request opened `asEngine` (`holdConnectorCall`): the event names
+  `mcp__perspicax__<name>` as the engine does, with the engine's input
+  shape and no connector fact, so `decideRequestOpened` reads it exactly as
+  the engine's own ask (organization Refuse and Ask first rules, the
+  person's rules and Always allow, the level, the reviewed Perspicax reads;
+  never a connector read). One state: an Always allow saved on either card
+  answers both. Identical calls still waiting share one card. Refused: a
+  tool error `Refused: ...`, nothing sent; a script that left while its
+  card waited never gets its call sent. Then the frame goes through
   `runInternal` on `/api/internal/perspicax/mcp` under the turn's own
   Perspicax capability: the confidential, misuse, safety and role checks of
   the stdio bridge.
 - A watch check has no turn: its frames go through the person's routine
-  delegation (`prepareTurn` as `owner-routine`), reads only, like the
-  watch's own tool reads.
+  delegation (`prepareTurn` as `owner-routine`), reads only by the relay's
+  own reading (`frameReads`), like the watch's own tool reads; a frame after
+  the check ends is refused.
+- The token is masked in any text (`shared/redact.ts`). The bridge needs an
+  https address (http only on loopback); without one the server logs it
+  once and the bridge stays off. Same-cluster servers: the sandboxes chart's
+  `sagaxBridge` policy (`docs/self-hosting.md`).
 - Isolation: a token answers only while the turn's connection speaks for
   its person (`wrong_person`); a turn without a connection is
   `profile_not_mounted`.

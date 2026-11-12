@@ -94,6 +94,46 @@ describe("#3346: held requests on the bus", () => {
   });
 });
 
+describe("#4081: a request decided as the engine's own ask (the sandbox bridge)", () => {
+  async function bus() {
+    const fake = makeFakeDriver({ kind: "claudeAgent" });
+    await fake.driver.create({ instanceId: "engine-1", displayName: undefined, environment: {}, enabled: true, config: {} });
+    const { instance } = fake.created.get("engine-1")!;
+    instance.adapter.respondToRequest = async () => "allowed-once";
+    const events = new EventBus(async () => {});
+    const seen: RuntimeEvent[] = [];
+    events.subscribe((event) => seen.push(event));
+    const held = new HeldRequests((event) => events.publish(event));
+    events.setHeldRequests(held);
+    events.attach([instance]);
+    return { held, instance, seen };
+  }
+  const call = { threadId: "thread-1", turnId: "turn-1", providerInstanceId: "engine-1", provider: "claudeAgent", mcpTool: "mcp__perspicax__api_search", input: "{\"query\":\"open\"}", asEngine: true };
+
+  it("names the tool as the engine does and carries no connector fact", async () => {
+    const { held, seen } = await bus();
+    held.open({ ...call, outbound: true });
+    const opened = seen.find((event) => event.type === "request.opened") as any;
+    expect(opened).toMatchObject({ tool: "mcp__perspicax__api_search", mcpTool: "mcp__perspicax__api_search" });
+    for (const fact of ["engineConnector", "accountConnector", "connectorHub", "outbound"]) expect(fact in opened).toBe(false);
+  });
+
+  it("a burst of the same call waits on one request; another input opens its own", async () => {
+    const { held, instance, seen } = await bus();
+    const first = held.open(call);
+    const again = held.open(call);
+    const other = held.open({ ...call, input: "{\"query\":\"closed\"}" });
+    expect(again.requestId).toBe(first.requestId);
+    expect(other.requestId).not.toBe(first.requestId);
+    expect(seen.filter((event) => event.type === "request.opened")).toHaveLength(2);
+    await instance.adapter.respondToRequest("thread-1", first.requestId, { behavior: "allow" });
+    expect(await first.decision).toEqual({ behavior: "allow" });
+    expect(await again.decision).toEqual({ behavior: "allow" });
+    // settled: the next identical call is a request of its own
+    expect(held.open(call).requestId).not.toBe(first.requestId);
+  });
+});
+
 // ── through the real organization server ─────────────────────────────
 
 const SERVER_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -266,13 +306,15 @@ posixOnly("#3346: server-held requests through the organization server", () => {
 
   /** The server holds a connector call for the bot's running turn. The
    * promise settles once the request is decided. */
-  function hold(bot: Bot, mcpTool: string, outbound?: boolean): Promise<{ status: number; body: any; text: string }> {
+  function hold(bot: Bot, mcpTool: string, outbound?: boolean, asEngine?: boolean): Promise<{ status: number; body: any; text: string }> {
     // like the capability route: no session, only the private test key; the
     // principal is the turn's, never the caller's
     return api("POST", "/api/testing/held-request", undefined, {
-      threadId: bot.threadId, mcpTool, summary: `Call ${mcpTool}`, input: JSON.stringify({ to: "client" }), ...(outbound ? { outbound: true } : {}),
+      threadId: bot.threadId, mcpTool, summary: `Call ${mcpTool}`, input: JSON.stringify({ to: "client" }), ...(outbound ? { outbound: true } : {}), ...(asEngine ? { asEngine: true } : {}),
     }, { "x-openmausbot-test-capability": CAPABILITY });
   }
+  /** #4081: what the sandbox bridge opens for a script's Perspicax call. */
+  const bridged = (bot: Bot, tool: string) => hold(bot, `mcp__perspicax__${tool}`, false, true);
 
   const messages = async (auth: Auth, bot: Bot) => ((await api("GET", `/api/threads/${bot.threadId}/messages?limit=200`, auth)).body.messages ?? []) as any[];
   const heldCards = async (auth: Auth, bot: Bot) => (await messages(auth, bot)).filter((m) => m.card?.requestType === "permission" && typeof m.card.requestId === "string" && isHeldRequestId(m.card.requestId)).map((m) => m.card);
@@ -409,6 +451,58 @@ posixOnly("#3346: server-held requests through the organization server", () => {
     });
     expect(expired.options).toEqual([]);
     rmSync(releaseFile(), { force: true });
+  }, 90_000);
+
+  it("#4081: a script's Perspicax read is the engine's: a card at Ask, never a connector read", async () => {
+    const bot = await botOf(member, "Bridge ask", "ask");
+    await startTurn(member, bot);
+    const pending = bridged(bot, "api_search");
+    const card = await cardFor(member, bot);
+    expect(card.mcpTool ?? card.tool).toMatch(/perspicax__api_search/);
+    await respond(member, bot, card.requestId, "allow");
+    expect((await pending).body.behavior).toBe("allow");
+    await end(member, bot);
+  }, 90_000);
+
+  it("#4081: at Auto the level answers a script's call as it answers the engine's ask, never as a connector read", async () => {
+    const bot = await botOf(member, "Bridge auto", "auto");
+    await startTurn(member, bot);
+    const read = await bridged(bot, "api_search");
+    expect(read.body.behavior, read.text).toBe("allow");
+    expect(await heldCards(member, bot)).toHaveLength(0);
+    await decidedBy(member, bot, "owner-auto");
+    const rows = ((await api("GET", "/api/decisions", admin)).body.decisions ?? []) as any[];
+    expect(rows.filter((row) => row.botId === bot.id).map((row) => row.source)).not.toContain("connector-read");
+    await end(member, bot);
+  }, 90_000);
+
+  it("#4081: an organization Refuse rule refuses a script's Perspicax call, even at Full", async () => {
+    const rule = await api("POST", "/api/org/admin/org-approvals/rules", adminConsole(), { when: "utiliser l'outil mcp__perspicax__api_write", behavior: "deny" });
+    expect(rule.status, rule.text).toBe(201);
+    const bot = await botOf(member, "Bridge refused", "full");
+    await startTurn(member, bot);
+    const answer = await bridged(bot, "api_write");
+    expect(answer.body.behavior, answer.text).toBe("deny");
+    expect(await heldCards(member, bot)).toHaveLength(0);
+    await end(member, bot);
+  }, 90_000);
+
+  it("#4081: a burst of the same script call raises one card, and Always allow answers the next with none", async () => {
+    const bot = await botOf(member, "Bridge burst", "ask");
+    await startTurn(member, bot);
+    const first = bridged(bot, "api_describe");
+    const second = bridged(bot, "api_describe");
+    const card = await cardFor(member, bot);
+    await sleep(500);
+    expect(await heldCards(member, bot)).toHaveLength(1);
+    await respond(member, bot, card.requestId, "allow", "allow");
+    expect((await first).body.behavior).toBe("allow");
+    expect((await second).body.behavior).toBe("allow");
+    const later = await bridged(bot, "api_describe");
+    expect(later.body.behavior).toBe("allow");
+    expect(await heldCards(member, bot)).toHaveLength(1);
+    await decidedBy(member, bot, "owner-rule");
+    await end(member, bot);
   }, 90_000);
 
   it("an answer after a restart is unavailable", async () => {

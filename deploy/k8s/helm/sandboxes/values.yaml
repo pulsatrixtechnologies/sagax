@@ -91,6 +91,19 @@ sagax:
   port: 8791
   cidrs: []
 
+# #4081: the Perspicax bridge, when the Sagax server runs in this cluster.
+# Its public address then lands on the server Pod's private address, which
+# egressDeny refuses: this opens only sandbox Pods to the server Pods on the
+# port the server's edge serves HTTPS on (the server chart: 443). Leave it
+# off while the server has no SAGAX_SANDBOX_BRIDGE_URL (or SAGAX_PUBLIC_URL),
+# and when the server runs off the cluster (its public address is reached
+# through the public egress already). namespace empty: sagax.namespace.
+sagaxBridge:
+  enabled: false
+  namespace: ""
+  podLabels: {}
+  port: 443
+
 # Kubernetes API the provisioner is allowed to reach. k3s default service IP.
 apiServer:
   cidrs:

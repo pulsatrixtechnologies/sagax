@@ -392,3 +392,19 @@ describe("held secret scrubber API (Lot A0)", () => {
     }
   });
 });
+
+describe("#4081: the sandbox bridge token", () => {
+  it("is masked in a command's output, alone or in env output, and only at its full length", () => {
+    // assembled at runtime, never a token-shaped literal in the source
+    const token = `${"sgx_" + "brg_"}${"Ab1-_".repeat(8)}xyz`;
+    expect(token).toHaveLength(8 + 43);
+    for (const text of [token, `SAGAX_BRIDGE_TOKEN=${token}\nPATH=/usr/bin`, `echo: ${token}.`]) {
+      const out = redactSecretsInText(text);
+      expect(out).not.toContain(token);
+      expect(out).not.toContain("Ab1-_Ab1-_");
+    }
+    // a shorter look-alike is not a token
+    const short = `${"sgx_" + "brg_"}abc`;
+    expect(redactSecretsInText(`see ${short}`)).toContain(short);
+  });
+});

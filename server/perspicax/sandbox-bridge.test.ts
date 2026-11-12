@@ -10,6 +10,7 @@ import { PASS } from "../routes/table.ts";
 import {
   createSandboxBridgeRoutes,
   sandboxBridgeEnv,
+  sandboxBridgeStartupNote,
   sandboxBridgeUrl,
   SandboxBridgeGrants,
   SandboxBridgeWatchSessions,
@@ -65,7 +66,6 @@ function deps(over: Partial<SandboxBridgeRouteDeps> & { grants: SandboxBridgeGra
   return {
     turnCapabilityToken: () => "cap-turn",
     turnPrincipal: () => TURN.principalId,
-    frameReads: async () => true,
     hold: () => Promise.resolve({ behavior: "allow" as const }),
     forwardTurn: async (_req, res) => { (res as unknown as { writableEnded: boolean }).writableEnded = true; },
     watch: new SandboxBridgeWatchSessions(() => null),
@@ -120,6 +120,14 @@ describe("sandboxBridgeUrl", () => {
     expect(sandboxBridgeUrl({ SAGAX_PUBLIC_URL: "not a url" })).toBeNull();
   });
 
+  it("never sends the token in clear past this machine: http only on loopback", () => {
+    expect(sandboxBridgeUrl({ SAGAX_SANDBOX_BRIDGE_URL: "http://sagax.example" })).toBeNull();
+    expect(sandboxBridgeUrl({ SAGAX_SANDBOX_BRIDGE_URL: "http://127.0.0.1:8799" })).toBe(`http://127.0.0.1:8799${SANDBOX_BRIDGE_PATH}`);
+    expect(sandboxBridgeStartupNote({ SAGAX_SANDBOX_BRIDGE_URL: "http://sagax.example" })).toMatch(/must be https/);
+    expect(sandboxBridgeStartupNote({})).toMatch(/set SAGAX_SANDBOX_BRIDGE_URL/);
+    expect(sandboxBridgeStartupNote({ SAGAX_PUBLIC_URL: "https://sagax.example" })).toBeNull();
+  });
+
   it("only gives names the environment accepts", () => {
     for (const name of Object.keys(sandboxBridgeEnv("https://x.example/p", "sgx_brg_t"))) expect(EXEC_ENV_KEY_RE.test(name)).toBe(true);
   });
@@ -165,22 +173,41 @@ describe("the bridge route", () => {
     const route = createSandboxBridgeRoutes(deps({ grants: kept, hold, forwardTurn }));
     const frame = call("api_search", { query: "open tickets" });
     await post(route, kept.mintTurn(TURN), frame);
-    expect(hold).toHaveBeenCalledWith(expect.objectContaining({ kind: "turn", threadId: "t-1" }), { name: "api_search", args: { query: "open tickets" }, read: true });
+    expect(hold).toHaveBeenCalledWith(expect.objectContaining({ kind: "turn", threadId: "t-1" }), { name: "api_search", args: { query: "open tickets" } });
     expect(forwardTurn).toHaveBeenCalledTimes(1);
     const [, , capability, raw] = forwardTurn.mock.calls[0] as unknown as [unknown, unknown, string, Buffer];
     expect(capability).toBe("cap-turn");
     expect(JSON.parse(raw.toString("utf8"))).toEqual(frame);
   });
 
-  it("marks a write outbound and answers a refused approval as a tool error, unsent", async () => {
+  it("answers a refused approval as a tool error, unsent", async () => {
     const kept = grants();
-    const hold = vi.fn((_grant: unknown, _call: { read: boolean }) => Promise.resolve({ behavior: "deny" as const, message: "an organization rule refuses this call" }));
+    const hold = vi.fn(() => Promise.resolve({ behavior: "deny" as const, message: "an organization rule refuses this call" }));
     const forwardTurn = vi.fn(async () => undefined);
-    const route = createSandboxBridgeRoutes(deps({ grants: kept, hold, forwardTurn, frameReads: async () => false }));
+    const route = createSandboxBridgeRoutes(deps({ grants: kept, hold, forwardTurn }));
     const { out } = await post(route, kept.mintTurn(TURN), call("api_write", { resource: "ticket" }));
-    expect(hold.mock.calls[0]?.[1]).toMatchObject({ read: false });
     expect(out).toMatchObject({ status: 200, body: { id: 7, result: { isError: true, content: [{ text: "Refused: an organization rule refuses this call" }] } } });
     expect(forwardTurn).not.toHaveBeenCalled();
+  });
+
+  it("never sends a call whose script left while its card waited", async () => {
+    const kept = grants();
+    let approve!: (value: { behavior: "allow" }) => void;
+    const forwardTurn = vi.fn(async () => undefined);
+    const route = createSandboxBridgeRoutes(deps({ grants: kept, forwardTurn, hold: () => new Promise((resolve) => { approve = resolve; }) }));
+    const { res, out } = response();
+    const sent = route({
+      req: request(kept.mintTurn(TURN), call("api_write", { resource: "time_entry" })),
+      res, url: new URL(`http://x${SANDBOX_BRIDGE_PATH}`), path: SANDBOX_BRIDGE_PATH, method: "POST", auth: null,
+      json: ((_res: ServerResponse, status: number, value: unknown) => { out.status = status; out.body = value; }) as never,
+      readBody: (async () => ({})) as never,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    (res as unknown as { destroyed: boolean }).destroyed = true;
+    approve({ behavior: "allow" });
+    await sent;
+    expect(forwardTurn).not.toHaveBeenCalled();
+    expect(out.status).toBeUndefined();
   });
 
   it("keeps people apart: a turn speaking for someone else, or with no connection, relays nothing", async () => {
@@ -226,6 +253,9 @@ describe("a watch check's bridge", () => {
     expect(mcp.relayed).toHaveLength(2);
     await watch.end(minted.grant);
     expect(mcp.ended).toEqual([minted.grant.threadId]);
+    // a frame arriving after the check never opens a connection nobody ends
+    expect(await watch.relay(minted.grant as never, call("api_search"))).toMatchObject({ status: 401 });
+    expect(mcp.prepared).toHaveLength(1);
   });
 
   it("never sends a write, nobody being there to approve it", async () => {

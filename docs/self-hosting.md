@@ -1494,6 +1494,52 @@ links and hook URLs use the public address (hook URLs also accept a dedicated
 `SAGAX_WEBHOOK_PUBLIC_URL` when the webhook host differs).
 [`deploy/Caddyfile`](../deploy/Caddyfile) is the reference implementation.
 
+## Scripts in server environments reach Perspicax (organization server)
+
+A script a bot runs in its server environment (a `run_command`, a routine
+watch command) reaches the bot's own Perspicax connection through the
+server, with no Perspicax token in the environment (#4081). Each command
+gets `SAGAX_BRIDGE_MCP_URL` and a short `SAGAX_BRIDGE_TOKEN`; the script
+posts plain MCP JSON-RPC there.
+
+```sh
+# the address the server environments reach this server by, no path, https
+SAGAX_SANDBOX_BRIDGE_URL=https://bot.yourcompany.com
+```
+
+- Without `SAGAX_SANDBOX_BRIDGE_URL` the bridge uses `SAGAX_PUBLIC_URL`.
+  Without either, or with an `http://` address that is not this machine's
+  loopback (the token would cross the network in clear), the server starts
+  as usual and only the bridge is off: commands get no bridge variables and
+  the server log says so once at startup.
+- The environment must reach that address. Its egress refuses every private
+  range (`SAGAX_SANDBOX_EGRESS_DENY` and the defaults), so the name must
+  resolve, from the environment, to a public address that leads to this
+  server's HTTPS edge.
+  - Docker environments on the server's own host: the public address of the
+    host. Check that the host's network sends traffic to its own public
+    address back to it (some cloud load balancers do not); if it does not,
+    put the server behind an address that does.
+  - A Kubernetes pool with the server off the cluster: the public address,
+    nothing to open.
+  - The server in the same cluster as the environments: the cluster sends
+    its public address straight to the server Pod's private address, which
+    the egress refuses. Turn on the one named policy of the sandboxes chart,
+    `sagaxBridge` (sandbox Pods to the server Pods, on the edge's HTTPS port
+    only; nothing else of the private ranges opens):
+
+    ```sh
+    helm upgrade sandboxes deploy/k8s/helm/sandboxes --reuse-values \
+      --set sagaxBridge.enabled=true \
+      --set sagaxBridge.namespace=<server namespace> \
+      --set-string 'sagaxBridge.podLabels.app\.kubernetes\.io/name=sagax-server' \
+      --set sagaxBridge.port=443
+    ```
+
+- Check from an environment: `curl -sS -o /dev/null -w '%{http_code}' -X POST "$SAGAX_BRIDGE_MCP_URL"`
+  answers `401` (no token) at once, never a timeout; then a real read in a
+  bot's turn.
+
 ## Opening a desktop from another device
 
 In a paired admin browser, **Open live desktop** uses the same address as

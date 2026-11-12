@@ -11,6 +11,11 @@ enum LiveNotePreview {
     static let frames = [
         "first-words", "short-sentence", "first-step", "second-step",
         "answer-first-words", "answer-opened", "turn-ended",
+        // #4066: the note while the reasoning streams (Tool calls on), and a
+        // note of nearly `LiveTextPlace.lineTextMax` units on the line
+        "note-reasoning", "long-note",
+        // #4066: a long answer with Markdown, still streaming, and settled
+        "answer-markdown", "answer-markdown-ended",
     ]
     static let botId = "reviewer"
     static let threadId = "reviewer-thread"
@@ -19,6 +24,8 @@ enum LiveNotePreview {
         let fleet: Fleet
         /// The text being written now, if any.
         let streaming: String?
+        /// The reasoning streaming now, if any (#4066).
+        var reasoning: String? = nil
     }
 
     /// The frame named after `-live-note-preview`, if any.
@@ -65,6 +72,18 @@ enum LiveNotePreview {
         let read = step("s1", start + 4_000, "Read", readInput, key: "readFile", detail: "1042.md", ok: true)
         let searchRunning = step("s2", start + 9_000, "WebSearch", searchInput, key: "searchWeb", detail: nil, ok: nil)
         let search = step("s2", start + 9_000, "WebSearch", searchInput, key: "searchWeb", detail: nil, ok: true)
+        let longNote = say(
+            "I read the request, its notes and the two tickets it points to, then I come back to you with a plan.",
+            "Je lis la demande, ses notes et les deux billets liés, puis je reviens vers toi avec un plan clair."
+        )
+        let thinking = say(
+            "The request names ticket 1042. Its notes mention ticket 1040, so both need reading before any answer.",
+            "La demande nomme le billet 1042. Ses notes citent le billet 1040 : il faut lire les deux avant de répondre."
+        )
+        let markdown = say(
+            "## Ticket 1042\n\nThe printer on the **second floor** has failed three times since Monday.\n\n- Two of its notes repeat ticket 1040, which is *still open*.\n- The fuser error matches the `4250` model.\n\nI suggest merging 1042 into 1040 and ordering the part. Then I will",
+            "## Billet 1042\n\nL'imprimante du **2e étage** a fait défaut trois fois depuis lundi.\n\n- Deux de ses notes reprennent le billet 1040, *encore ouvert*.\n- L'erreur de l'unité de fusion correspond au modèle `4250`.\n\nJe te propose de fusionner 1042 dans 1040 et de commander la pièce. Ensuite je vais"
+        )
         let table: [String: (rows: [[String: Any]], streaming: String?, busy: Bool)] = [
             "first-words": ([], words(note, 2), true),
             "short-sentence": ([], note, true),
@@ -73,6 +92,10 @@ enum LiveNotePreview {
             "answer-first-words": ([n1, read, search], words(answer, 4), true),
             "answer-opened": ([n1, read, search], words(answer, 24), true),
             "turn-ended": ([n1, read, search, text("a", start + 40_000, answer, terminal: true)], nil, false),
+            "note-reasoning": ([n1], nil, true),
+            "answer-markdown": ([n1, read, search], markdown, true),
+            "answer-markdown-ended": ([n1, read, search, text("a", start + 40_000, markdown, terminal: true)], nil, false),
+            "long-note": ([text("n1", start + 2_000, longNote)], nil, true),
         ]
         guard let current = table[frame] else { return nil }
         var rows = earlier + current.rows
@@ -89,7 +112,7 @@ enum LiveNotePreview {
         let json: [String: Any] = ["bots": [bot], "groups": [], "botQueuedMessages": [:], "sections": []]
         guard let data = try? JSONSerialization.data(withJSONObject: json),
               let fleet = try? JSONDecoder().decode(Fleet.self, from: data) else { return nil }
-        return Scene(fleet: fleet, streaming: current.streaming)
+        return Scene(fleet: fleet, streaming: current.streaming, reasoning: frame == "note-reasoning" ? thinking : nil)
     }
 }
 #endif

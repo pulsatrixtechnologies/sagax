@@ -69,3 +69,36 @@ public enum LiveTextPlace: String, Hashable, Sendable {
         }
     }
 }
+
+/// What the end of a chat draws while its bot works (the app's
+/// `ChatLiveTail`), in order: the answer's bubble once it opened, the short
+/// text on the working line, the reasoning before any answer exists, then
+/// the working line. #4066: the reasoning no longer takes the note's place;
+/// the transcript leaves the note to the working line, so it stays under
+/// the reasoning (the desktop keeps its line under the streamed thinking).
+public enum LiveTail: Equatable, Sendable {
+    /// The answer being written, in its bubble.
+    case bubble(String)
+    /// A short text on the working line, without its inline marks.
+    case line(String)
+    /// The reasoning, and the bot's note on the working line under it.
+    case reasoning(String, note: String?)
+    /// The working line, with the bot's note when it has one.
+    case working(note: String?)
+    case nothing
+
+    public static func of(
+        text: String?, reasoning: String?, note: String?,
+        streams: Bool, onCall: Bool, showsReasoning: Bool, busy: Bool
+    ) -> LiveTail {
+        if !onCall, streams, let text, !text.isEmpty {
+            if LiveTextPlace.of(text) == .bubble { return .bubble(text) }
+            let words = LiveTextPlace.lineWords(text)
+            if !words.isEmpty { return .line(words) }
+        }
+        if !onCall, showsReasoning, let reasoning, !reasoning.isEmpty {
+            return .reasoning(reasoning, note: note)
+        }
+        return busy ? .working(note: note) : .nothing
+    }
+}

@@ -130,4 +130,14 @@ final class PhoneLayoutTests: XCTestCase {
         XCTAssertTrue(pane.contains("@State private var paneWidth: CGFloat?"))
         XCTAssertTrue(pane.contains("@Environment(\\.horizontalSizeClass)"))
     }
+
+    // #4066: the bot's note on the working line is never cut (at most
+    // `LiveTextPlace.lineTextMax` units, so it wraps as the desktop's does).
+    func testTheWorkingNoteIsNeverCut() throws {
+        let chat = try source("App/ChatView.swift")
+        let note = try XCTUnwrap(chat.range(of: "private func noteText(_ words: String) -> some View {"))
+        let body = chat[note.upperBound...].prefix(400)
+        XCTAssertFalse(body.contains(".lineLimit(2)"))
+        XCTAssertTrue(body.contains(".lineLimit(nil)"))
+    }
 }

@@ -1395,37 +1395,45 @@ struct ChatLiveTail: View {
 
     /// #3712: a short text is written on the working line from its first
     /// word; it opens into the bubble once it grows past it, and stays one
-    /// (LiveTextPlace, the desktop's live-text-place.ts).
-    private var liveWords: String? {
-        guard !onCall, streams, let live = store.text[threadId], !live.isEmpty,
-              LiveTextPlace.of(live) == .line else { return nil }
-        let words = LiveTextPlace.lineWords(live)
-        return words.isEmpty ? nil : words
-    }
-
+    /// (LiveTextPlace, the desktop's live-text-place.ts). #4066: the note
+    /// stays on the working line under the reasoning (LiveTail).
     @ViewBuilder
     private var tail: some View {
-        if !onCall, streams, let live = store.text[threadId], !live.isEmpty, LiveTextPlace.of(live) == .bubble {
+        switch LiveTail.of(
+            text: store.text[threadId], reasoning: store.reasoning[threadId], note: note,
+            streams: streams, onCall: onCall, showsReasoning: showsReasoning, busy: busy
+        ) {
+        case let .bubble(live):
             StreamingBubble(text: live, reasoning: nil, color: color)
                 .padding(.top, ChatView.rowGap)
                 .id(ChatView.liveBubbleId)
-        } else if let words = liveWords {
+        case let .line(words):
             workingLine(words: words)
-        } else if !onCall, showsReasoning, let thinking = store.reasoning[threadId], !thinking.isEmpty {
-            // Only while there is no answer yet. Once tokens
-            // of the reply exist, the reasoning is behind us
-            // and showing both is just noise.
-            StreamingBubble(text: nil, reasoning: thinking, color: color)
-                .padding(.top, ChatView.rowGap)
-                .id(ChatView.liveBubbleId)
-        } else if busy {
+        case let .reasoning(thinking, note):
+            // Only while there is no answer yet. Once tokens of the reply
+            // exist, the reasoning is behind us and showing both is noise.
+            if let note {
+                // the line under it carries the tail's scroll anchor
+                VStack(alignment: .leading, spacing: 0) {
+                    StreamingBubble(text: nil, reasoning: thinking, color: color)
+                        .padding(.top, ChatView.rowGap)
+                    workingLine(words: note)
+                }
+            } else {
+                StreamingBubble(text: nil, reasoning: thinking, color: color)
+                    .padding(.top, ChatView.rowGap)
+                    .id(ChatView.liveBubbleId)
+            }
+        case let .working(note):
             workingLine(words: note)
+        case .nothing:
+            EmptyView()
         }
     }
 
     /// The reference design's thinking line: the bot's own small mascot at
     /// work, then a quiet word (the dots for a room). `words`: the bot's own
-    /// short text, in the line's look, on two lines at most (#3712).
+    /// short text, in the line's look, never cut (#3712, #4066).
     private func workingLine(words: String?) -> some View {
         Group {
             if let chat, chat.isBot {
@@ -1469,13 +1477,14 @@ struct ChatLiveTail: View {
         .accessibilityIdentifier("chat-thinking")
     }
 
-    /// The bot's own words on the line, in its look, never cut: two lines
-    /// at most on a phone (`LiveTextPlace.lineTextMax`).
+    /// The bot's own words on the line, in its look, never cut (#4066): at
+    /// most `LiveTextPlace.lineTextMax` units, so it wraps as the desktop's
+    /// line does instead of ending in an ellipsis on a narrow phone.
     private func noteText(_ words: String) -> some View {
         Text(verbatim: words)
             .font(Theme.Font.body)
             .foregroundStyle(Theme.textTertiary)
-            .lineLimit(2)
+            .lineLimit(nil)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityIdentifier("chat-working-note")
     }

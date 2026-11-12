@@ -750,6 +750,7 @@ final class Session: ObservableObject {
                 state = CompanionState()
                 state.hydrate(scene.fleet)
                 if let streaming = scene.streaming { state.streaming[LiveNotePreview.threadId] = streaming }
+                if let reasoning = scene.reasoning { state.reasoning[LiveNotePreview.threadId] = reasoning }
                 streamingStore.sync(text: state.streaming, reasoning: state.reasoning)
             }
             if let longCount = LongTranscript.previewCount(in: arguments) {

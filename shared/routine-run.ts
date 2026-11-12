@@ -44,8 +44,12 @@ export interface RoutineRunCardData {
      * run the person started reads the streak's words too. */
     anyProblem?: true;
   };
-  /** #3479: the first run without problems after `afterRuns` runs with them. */
-  recovered?: { afterRuns: number; since: number };
+  /** #3479: the first run without problems after `afterRuns` runs with them.
+   * #3990: `streak` on the streak's own summary card, turned to works again
+   * in place. */
+  recovered?: { afterRuns: number; since: number; streak?: true };
+  /** #3990: a person started this run (Run now): its card is theirs. */
+  startedBy?: "person";
   /** 2026-11-01: why a queued or waiting run has not gone on yet. */
   attention?: string;
   /** 2026-11-03: the teammates the run handed work to, linked from the card. */

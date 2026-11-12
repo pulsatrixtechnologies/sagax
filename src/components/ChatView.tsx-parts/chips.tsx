@@ -163,8 +163,10 @@ export function RoutineRunRow({ message, botId, threadId, onResume }: { message:
     const owner = state.bots.find((candidate) => candidate.id === botId) ?? state.groups.find((group) => group.id === botId);
     return routineResultFolded(owner?.messages ?? [], message.id);
   });
-  // #2694: a heartbeat or an email or calendar wake is rated once it has finished
-  const rated = run?.wakeTopic && run.status !== "running" && run.status !== "queued" && run.status !== "waiting" ? run.wakeTopic : undefined;
+  // #2694: a heartbeat or an email or calendar wake is rated once it has finished.
+  // #3990: only what it suggested to the person (a result): never under a
+  // run's state (with problems, works again, a failure, a streak's summary)
+  const rated = run?.wakeTopic && run.status === "completed" && !run.problems && !run.recovered && !run.repeat ? run.wakeTopic : undefined;
   // #3457: every alert of a chosen watch carries « Arrêter cette veille » and
   // « Arrêter ce domaine », for the bot's owner, at once
   const watchAlert = watchAlertOf(run);

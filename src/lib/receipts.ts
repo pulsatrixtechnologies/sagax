@@ -1,5 +1,6 @@
 import { isQuietWorkspaceLine } from "../../shared/workspace-line";
 import { isTechnicalNoticeName } from "../../shared/chat-notices";
+import { routineRunRowOutOfChat } from "../../shared/routine-repeat";
 
 // The harness's receipts about a turn (Phase 0): the work digest written
 // after every settled turn, and a compaction record. A finished Live call's
@@ -51,7 +52,8 @@ type PreviewableRun = { kind: string; routineRun?: { summary?: string; status?: 
 function isSilentRunReceipt(message: PreviewableRun): boolean {
   if (message.kind !== "routine.run") return false;
   const run = message.routineRun;
-  return !(run && run.status === "completed" && run.summary?.trim());
+  // #3990: a row the chat no longer draws is no preview either
+  return !(run && run.status === "completed" && run.summary?.trim()) || routineRunRowOutOfChat(message);
 }
 
 /** What a bot's conversation reads as the bot's last words, for a preview

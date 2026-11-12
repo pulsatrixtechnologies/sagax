@@ -21,8 +21,8 @@ import type { RuntimeEvent } from "../contracts.ts";
 import { OwnedFile } from "../atomic.ts";
 import { saveSoon } from "../save-batch.ts";
 import { redactSecretsInText } from "../redact.ts";
-import { flowRunBlockedReason, routineProblemStreakNote, routineReportOutcome, routineSameProblemNote, ROUTINE_REPEATING_RULE, type RoutineReportOutcome } from "./routine-report.ts";
-import { routineRepeatsWithinDay } from "../../shared/routine-repeat.ts";
+import { flowRunBlockedReason, routineProblemStreakNote, routineReportOutcome, routineRepeatingRule, type RoutineReportOutcome } from "./routine-report.ts";
+import { ROUTINE_PROBLEM_STREAK_TOLD, routineProblemToldAt, routineReportsByStreak } from "../../shared/routine-repeat.ts";
 import { clipReadable, failureDetail } from "../../shared/routine-result.ts";
 import { stopCause } from "../drivers/engine-errors.ts";
 import {
@@ -592,6 +592,10 @@ export function runTitleDate(at: number, language?: string): string {
 }
 
 export interface RoutineManagerOptions {
+  /** #3990: this run's routine posts each completed result in the chat
+   * (shared/routine-repeat.ts routinePostsEachResult, with the installation
+   * default): its run is not told to say nothing. */
+  postsEachResult?: (run: RoutineRun) => boolean;
   /** 2026-11-02: a bot's name, for a waiting line that names who a send goes to. */
   botName?: (botId: string) => string | undefined;
   file?: string;
@@ -2142,30 +2146,6 @@ export class RoutineManager {
       .sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt) || b.createdAt - a.createdAt);
   }
 
-  /** #3479: the routine's previous outcome when it completed with problems,
-   * on the same bot (its problems are never shown to another bot). */
-  private previousProblemRun(run: RoutineRun): (RoutineRun & { problems: string }) | null {
-    const last = this.outcomesNewestFirst(run.routineId, run.id).find((candidate) => candidate.finishedAt !== undefined && candidate.createdAt <= run.createdAt);
-    return last && last.botId === run.botId && last.status === "completed" && last.problems ? last as RoutineRun & { problems: string } : null;
-  }
-
-  /** #3695: whether this run reports by its routine's streak: a run of a
-   * routine that repeats more than once a day (shared/routine-repeat.ts),
-   * which the person did not start and did not choose to always hear. Its
-   * finished run writes nothing in the person's chat; a problem that lasts
-   * ROUTINE_PROBLEM_STREAK_TOLD runs is told once. */
-  reportsByStreak(run: Pick<RoutineRun, "routineId" | "startedBy" | "proactive" | "target">): boolean {
-    if (run.startedBy === "person" || run.proactive || run.target === "room-goal") return false;
-    const routine = this.routines.find((candidate) => candidate.id === run.routineId);
-    return Boolean(routine && routineRepeatsWithinDay(routine.schedule, this.now(), scheduleZone(undefined)));
-  }
-
-  /** Whether the routine of this run repeats more than once a day, whoever
-   * started the run: its streak and its one summary card are the routine's. */
-  routineRepeats(run: Pick<RoutineRun, "routineId" | "proactive" | "target">): boolean {
-    return this.reportsByStreak({ ...run, startedBy: undefined });
-  }
-
   /** #3695: the runs of this run's routine that ended with problems right
    * before it, newest first, whatever their wording: completed with
    * problems, failed (a restart's cut aside) or blocked. A missed or
@@ -2213,49 +2193,30 @@ export class RoutineManager {
     return [...new Set(said)];
   }
 
-  /** #3695: what a run of a repeating routine reads: the rule, and the
-   * earlier runs' problems when some ended with problems in a row. */
-  private repeatingRoutineNote(run: RoutineRun): string {
+  /** #3990: the run of its routine's streak that tells the person
+   * (shared/routine-repeat.ts routineProblemToldAt). A run without a routine
+   * of its own (a proactive wake on a teammate's message, a webhook's own
+   * run) runs on events, so several times a day. */
+  problemToldAt(run: Pick<RoutineRun, "routineId">): number {
+    const routine = this.routines.find((candidate) => candidate.id === run.routineId);
+    return routine ? routineProblemToldAt(routine.schedule, this.now(), scheduleZone(undefined)) : ROUTINE_PROBLEM_STREAK_TOLD;
+  }
+
+  /** #3695, #3990: what a run reads of its streak: the rule (the person
+   * does not read each run), and the earlier runs' problems when some ended
+   * with problems in a row. A run the person started reads nothing of it;
+   * a routine that posts each result (a daily briefing) is not told to say
+   * nothing, only its earlier problems. */
+  private problemsNote(run: RoutineRun): string | undefined {
+    if (!routineReportsByStreak(run)) return undefined;
     const earlier = this.problemStreakBefore(run).filter((entry) => entry.botId === run.botId).reverse()
       .map((entry) => ({ finishedAt: entry.finishedAt!, said: redactSecretsInText((entry.status === "completed" ? entry.problems : entry.error) ?? "") }));
-    return earlier.length ? `${ROUTINE_REPEATING_RULE}\n${routineProblemStreakNote(earlier)}` : ROUTINE_REPEATING_RULE;
-  }
-
-  private problemsNote(run: RoutineRun): string | undefined {
-    return this.reportsByStreak(run) ? this.repeatingRoutineNote(run) : this.previousProblemsNote(run);
-  }
-
-  private previousProblemsNote(run: RoutineRun): string | undefined {
-    const previous = this.previousProblemRun(run);
-    return previous ? routineSameProblemNote({ problems: redactSecretsInText(previous.problems), finishedAt: previous.finishedAt! }) : undefined;
-  }
-
-  /** #3479: a problem that repeats is said once. "The same problem" is the
-   * bot's own judgment (its SAME_PROBLEM line, after reading the previous
-   * run's problems in its prompt), or the very same recorded problems (the
-   * server's own lines, word for word). The server never compares the
-   * meaning of free text: a reworded or new problem is said. The first run
-   * without problems after some is marked recovered, said once too. */
-  private settleProblemStreak(run: RoutineRun, sameProblem: boolean): void {
-    const previous = this.previousProblemRun(run);
-    delete run.problemRepeat;
-    delete run.recovered;
-    if (!previous) return;
-    const first = previous.problemRepeat ?? { firstRunId: previous.id, since: previous.finishedAt!, count: 1 };
-    // The bot says the problem goes on, though the server recorded none this
-    // time (one failure it lets pass, a dropped RUN_STATUS line): the run
-    // carries the previous problems and the streak goes on. Never "works
-    // again" under a summary that says it does not.
-    if (!run.problems && sameProblem) {
-      run.problems = previous.problems;
-      delete run.quiet;
-    }
-    if (!run.problems) {
-      run.recovered = { afterRuns: first.count, since: first.since };
-      return;
-    }
-    const sameText = previous.problems.trim() === run.problems.trim();
-    if (sameProblem || sameText) run.problemRepeat = { firstRunId: first.firstRunId, since: first.since, count: first.count + 1 };
+    const told = this.problemToldAt(run);
+    const said = [
+      ...(this.options.postsEachResult?.(run) ? [] : [routineRepeatingRule(told)]),
+      ...(earlier.length ? [routineProblemStreakNote(earlier, told)] : []),
+    ];
+    return said.length ? said.join("\n") : undefined;
   }
 
   private failsLikeLastOutcome(run: RoutineRun): boolean {
@@ -4598,8 +4559,7 @@ export class RoutineManager {
       run.problems = clipReadable(readable, 1_000);
       delete run.quiet;
     } else delete run.problems;
-    if (this.routineRepeats(run)) this.settleRepeatingStreak(run);
-    else this.settleProblemStreak(run, outcome.sameProblem === true);
+    this.settleRepeatingStreak(run);
     const engine = this.readinessEngines.get(run.id) ?? this.options.engineForRun?.(run);
     if (engine) clearEngineRefusal(engine.engine, engine.account, this.now());
     // A run that completes ends the owner's open notices for its bot.
@@ -4988,7 +4948,7 @@ export class RoutineManager {
     delete run.problemRepeat;
     delete run.recovered;
     // #3695: a failure of a repeating routine is one more run of its streak
-    if (run.error !== ROUTINE_RESTARTED && this.routineRepeats(run)) this.settleRepeatingStreak(run);
+    if (run.error !== ROUTINE_RESTARTED) this.settleRepeatingStreak(run);
     const paused = this.autoPauseAfterFailure(run);
     this.saveLater();
     this.emitRun(run);
@@ -5018,12 +4978,13 @@ export class RoutineManager {
     delete run.quiet;
     delete run.problemRepeat;
     delete run.recovered;
-    if (this.routineRepeats(run)) this.settleRepeatingStreak(run);
+    this.settleRepeatingStreak(run);
     this.saveLater();
     this.emitRun(run);
-    // #3695: a repeating routine's block is one more run of its streak: its
-    // one summary card says it once the block lasts, never a line per run
-    if (preflight && !this.reportsByStreak(run)) {
+    // #3695, #3990: a routine's block is one more run of its streak: its
+    // one summary card says it (routineProblemToldAt), never a line per
+    // run; a run the person started is said at once
+    if (preflight && !routineReportsByStreak(run)) {
       const notice = this.preflightNotice(run);
       if (notice) {
         try {

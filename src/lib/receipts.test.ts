@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { lastNonReceipt } from "./receipts";
+import { lastNonReceipt, lastSpokenLine } from "./receipts";
 
 describe("lastNonReceipt", () => {
   it("reads past digests, compactions and a stored stop notice", () => {
@@ -24,5 +24,16 @@ describe("lastNonReceipt", () => {
   it("keeps a real failure as the last row", () => {
     const failure = { kind: "activity", tool: { name: "error: engine missing", ok: false } };
     expect(lastNonReceipt([{ kind: "text" }, failure])).toBe(failure);
+  });
+});
+
+describe("lastSpokenLine (#3990)", () => {
+  it("never previews a routine run's row the chat no longer draws", () => {
+    const reply = { kind: "text", text: "Here is the plan." };
+    const problems = { kind: "routine.run", routineRun: { status: "completed", summary: "Nothing urgent.", problems: "a step failed" } };
+    const worksAgain = { kind: "routine.run", routineRun: { status: "completed", summary: "Sorted.", recovered: { afterRuns: 2, since: 1 } } };
+    expect(lastSpokenLine([reply, problems, worksAgain])).toBe(reply);
+    const result = { kind: "routine.run", routineRun: { status: "completed", summary: "Three meetings today." } };
+    expect(lastSpokenLine([reply, result])).toBe(result);
   });
 });

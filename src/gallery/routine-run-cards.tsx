@@ -217,9 +217,9 @@ const STREAK_BEFORE: Message[] = [
 const streakRepeat = (count: number) => ({ firstRunId: "run-sb2", count, since: streakAt(2), lastAt: streakAt(1 + count), streak: true as const });
 const STREAK_TOLD = (count: number) => streakCard("streak", 4, { runId: "run-streak", summary: STREAK_SUMMARY, brief: STREAK_SUMMARY, problems: "queue stuck", repeat: streakRepeat(count) });
 /** #3910: a run the person started during the streak, its own card. */
-const STREAK_BY_HAND = streakCard("streak-hand", 5, { runId: "run-streak-hand", summary: say("The queue is still stuck on the same two branches.", "La file reste bloquée sur les deux mêmes branches."),
+const STREAK_BY_HAND = streakCard("streak-hand", 5, { runId: "run-streak-hand", startedBy: "person", summary: say("The queue is still stuck on the same two branches.", "La file reste bloquée sur les deux mêmes branches."),
   problems: "queue stuck", repeat: { firstRunId: "run-sb2", count: 4, since: streakAt(2), lastAt: streakAt(5), anyProblem: true } });
-const STREAK_AGAIN = streakCard("streak", 4, { runId: "run-streak", summary: STREAK_SUMMARY, brief: STREAK_SUMMARY, recovered: { afterRuns: 4, since: streakAt(2) } });
+const STREAK_AGAIN = streakCard("streak", 4, { runId: "run-streak", summary: STREAK_SUMMARY, brief: STREAK_SUMMARY, recovered: { afterRuns: 4, since: streakAt(2), streak: true } });
 const STREAK_FAILED = card("streak-failed", { routineName: STREAK_NAME, routineId: "r-streak", status: "failed",
   error: say("The engine stopped answering.\nThe merge queue did not answer after three tries.", "Le moteur a cessé de répondre.\nLa file de fusion n'a pas répondu après trois essais."), repeat: streakRepeat(3) } as CardRun, streakAt(4));
 

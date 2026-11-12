@@ -82,6 +82,8 @@ export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullRepor
     status: run.status === "completed" && run.quiet ? "nothing_to_report" : run.status,
   };
   if (run.goalStatus) card.goalStatus = run.goalStatus;
+  // #3990: a run the person started stays theirs in the chat (shared/routine-repeat.ts routineRunRowOutOfChat)
+  if (run.startedBy === "person") card.startedBy = "person";
   if (run.deferredAt != null && run.status === "queued") card.deferredAt = run.deferredAt;
   if (run.threadId) card.executionThreadId = run.threadId;
   if (summary) card.summary = summary;
@@ -177,7 +179,7 @@ export function routineRunFallbackText(card: RoutineRunCardData, language?: stri
   // (View run), never in the conversation, this text included (an older
   // client, the notification, the search and the thread preview read it).
   const problems = card.status === "completed" && card.problems
-    ? `\n\n${say("routines.status.completedWithProblems")}.${card.repeat ? ` ${routineRepeatLine(card.repeat, language, timeZone)}` : ""}`
+    ? `\n\n${say("routines.status.completedWithProblems")}.${card.repeat && card.repeat.count > 1 ? ` ${routineRepeatLine(card.repeat, language, timeZone)}` : ""}`
     : "";
   // #3479: the first success after runs with problems is said once.
   const recovered = card.recovered && (card.status === "completed" || card.status === "nothing_to_report") ? routineRecoveredLine(card.recovered, language, timeZone) : "";
@@ -190,6 +192,6 @@ export function routineRunFallbackText(card: RoutineRunCardData, language?: stri
     ? say("routineRun.text.linePaused", { routine, state, count: card.autoPausedAfter })
     : say("routineRun.text.line", { routine, state });
   // #3695: a repeating routine's one summary card of a failure says how long it lasts
-  const streak = card.repeat?.streak && !card.autoPausedAfter ? ` ${routineRepeatLine(card.repeat, language, timeZone)}` : "";
+  const streak = card.repeat?.streak && card.repeat.count > 1 && !card.autoPausedAfter ? ` ${routineRepeatLine(card.repeat, language, timeZone)}` : "";
   return `${line}${streak ? `.${streak}` : ""}${detail ? `\n\n${detail}` : ""}`;
 }

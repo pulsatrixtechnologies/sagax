@@ -623,10 +623,11 @@ describe("pending wakes survive a restart; a two-bot DM post always reports (202
     }
   });
 
-  it("#3581: a wake on a two-bot DM post, like one on a teammate's message, is quiet unless something needs the person", () => {
+  it("#3581, #4051: a wake on a teammate's message posts no report; one on a two-bot DM or a room post that names the bot posts what it tells the person", () => {
     expect(wakeAlwaysReports([notice("m", 1)])).toBe(false);
-    expect(wakeAlwaysReports([dmPost("m")])).toBe(false);
-    expect(wakeAlwaysReports([dmPost("m", { dm: undefined })])).toBe(false);
+    // DM_WAKE_RULES: tell the person only what needs them, else NOTHING_TO_REPORT (a quiet wake posts nothing)
+    expect(wakeAlwaysReports([dmPost("m")])).toBe(true);
+    expect(wakeAlwaysReports([dmPost("m", { dm: undefined })])).toBe(true);
     expect(wakeAlwaysReports([{ botId: "m", source: "mail", key: "k", label: "Email", detail: "d" }])).toBe(false);
     expect(wakeAlwaysReports([{ botId: "m", source: "watch", key: "k", label: "Watch", detail: "d" }])).toBe(true);
     const h = harness({ wren: "proactive" });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { routineRunReportable } from "../routines/routine-report.ts";
-import { createRoutineRunLateCard, createSyncRoutineRunToSource } from "./syncRoutineRunToSource.ts";
+import { createRoutineRunLateRow, createSyncRoutineRunToSource } from "./syncRoutineRunToSource.ts";
 
 type Row = { id: string; kind: string; text?: string; routineRun?: { runId: string; wakeTopic?: string }; attention?: unknown };
 
@@ -196,6 +196,11 @@ describe("a run's late answer goes through the run's own card write (#3581)", ()
     const host = {
       routines: { runForThread: (threadId: string) => threadId === "run" ? { id: "run-1", botId: "bot-atlas", routineName: "Hourly pass", status: "completed", quiet: true, runAs: "person-1" } : undefined },
       store: { messagesFor: () => rows },
+      // a routine that posts its results (the one row gate, #4051)
+      routineEffectivePostResults: () => true,
+      routineRunNeedsPerson: () => false,
+      personAttention: () => undefined,
+      routineRunReportable,
       isPrincipalId: () => true,
       botSettings: { person: () => ({ timeZone }) },
       routineTimeZone: () => "UTC",
@@ -203,7 +208,7 @@ describe("a run's late answer goes through the run's own card write (#3581)", ()
       routineRunCard: (r: { id: string; quiet?: boolean }, _target: string, report: string) => ({ runId: r.id, summary: report, quiet: r.quiet }),
       routineRunFallbackText: (_card: unknown, language: unknown, zone: unknown) => { languages.push(language); zones.push(zone); return "Hourly pass"; },
     };
-    return { late: createRoutineRunLateCard(() => host), zones, languages };
+    return { late: createRoutineRunLateRow(() => host), zones, languages };
   }
 
   it("keeps the person's feedback and the lasting-problem count, and gives times in the person's zone", () => {
@@ -215,9 +220,8 @@ describe("a run's late answer goes through the run's own card write (#3581)", ()
     expect(w.languages).toEqual(["en"]);
   });
 
-  it("#3990: a late answer that ends with the nothing-to-report line keeps the quiet signal", () => {
-    const card = lateWorld("UTC").late("run", "main", "Rien à remonter.\nNOTHING_TO_REPORT");
-    expect(card?.routineRun.quiet).toBe(true);
+  it("#3990, #4051: a late answer that ends with the nothing-to-report line gives no row: the gate reads it quiet", () => {
+    expect(lateWorld("UTC").late("run", "main", "Rien à remonter.\nNOTHING_TO_REPORT")).toBeUndefined();
   });
 
   it("a thread with no run gives no card", () => {

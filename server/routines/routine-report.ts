@@ -285,14 +285,16 @@ const LIVE_RUN = new Set<string>(["queued", "running", "waiting"]);
  * chat: a request that waits on the person (an approval or a question, items
  * only they can do), a result the person set that routine to post (a wake
  * they chose included, when the bot has something for them), a run they
- * started, a team goal's card, and the streak's one summary (or a routine
+ * started (to its end, quiet or stopped), a team goal's card, and the streak's one summary (or a routine
  * that paused itself). A live run keeps the row its request put there until
  * it settles. Anything else, a wake on a teammate's message that ends with
  * nothing for the person above all, on time or late, with or without the
  * nothing-to-report line, writes nothing and keeps nothing. */
 export function routineRunMayWriteRow(run: RoutineRunRowFacts): boolean {
   const signal = routineRunSignal(run);
-  if (signal === "wait" || run.attention === true) return true;
+  // #4051: a run the person started keeps its row to the end, a quiet
+  // result and a stop included
+  if (signal === "wait" || run.attention === true || run.startedBy === "person") return true;
   if (!run.byStreak) return routineRunReportable(run);
   if (LIVE_RUN.has(run.status)) return run.existing === true;
   if (signal === "result") return run.postResults === true;

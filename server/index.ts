@@ -775,7 +775,7 @@ import { createSavedSteps, savedStepsEnabled } from "./saved-steps/saved-steps.t
 import { redactSecretsInText } from "./redact.ts";
 import { routineRunCard, routineRunFallbackText } from "./routines/routine-run-card.ts";
 
-import { routineReportOutcome, routineRunMayWriteRow, routineRunReportable } from "./routines/routine-report.ts";
+import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
 import { createHeadlessTaskRunner } from "./headless-task-runner.ts";
 import * as vps from "./computer/vps-computer.ts";
 import { runAsRefusal } from "./routines/routine-run-as.ts";
@@ -2292,7 +2292,7 @@ import { createHoldSignInRefusal } from "./index-leaves/holdSignInRefusal.ts";
 import { createIndexSettingsActions } from "./index-leaves/settingsActions.ts";
 import { createIndexPrimaryApprovals } from "./index-leaves/primaryApprovals.ts";
 import { createSafetyReviewer } from "./index-leaves/safetyReviewer.ts";
-import { createRoutineRunLateCard, createSyncRoutineRunToSource } from "./index-leaves/syncRoutineRunToSource.ts";
+import { createRoutineRunLateRow, createSyncRoutineRunToSource } from "./index-leaves/syncRoutineRunToSource.ts";
 import { createBotForViewer } from "./index-leaves/botForViewer.ts";
 import { createSettleProposalByRule } from "./index-leaves/settleProposalByRule.ts";
 import { createScopeApprovalMessage } from "./index-leaves/scopeApprovalMessage.ts";
@@ -18285,17 +18285,10 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
   ticketUrl: attentionTicketUrl,
   notify: (bot, threadId, title, body) => notify(deliverableNotification("needs-you", bot, threadId, body, { avatarUrl: bot.avatarUrl, title })),
   feedback: (botId, topic) => backgroundBriefs.wakeLevel(botId, topic),
-  // #3581: a run's late answer goes onto the run's own card (the card write
-  // of syncRoutineRunToSource, with that answer as its report)
-  runCard: createRoutineRunLateCard(getLeafHost),
-  // #3990: the one row gate for a run's late answer
-  runRowAllowed: (runThreadId, late, existing) => {
-    const run = routines?.runForThread(runThreadId);
-    return Boolean(run && routineRunMayWriteRow({
-      status: "completed", quiet: late.quiet, ...(late.problem ? { problems: "late" } : {}),
-      postResults: routineEffectivePostResults(run), startedBy: run.startedBy, byStreak: routineReportsByStreak(run), existing,
-    }));
-  },
+  // #3581, #4051: a run's late answer goes onto the run's own card (the card
+  // write of syncRoutineRunToSource, with that answer as its report), through
+  // the same row gate and facts
+  runRow: createRoutineRunLateRow(getLeafHost),
   rowLog: (line) => console.info(line),
   relayVia: (botId, threadId) => relayViaOf(botId, threadId),
   // #2915: the mirror reads the chat's newest rows, never its whole path

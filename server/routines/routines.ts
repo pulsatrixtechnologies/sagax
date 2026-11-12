@@ -91,6 +91,7 @@ import { routineLimitUnknownEngineText } from "./routine-limit-words.ts";
 import { hostTimeZone } from "../turns/turn-clock.ts";
 import { ROUTINE_DEFERRAL_NOTICE_MS, ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST, ROUTINE_TURN_LOST_MS, skipNeedsNotice, supersededBy } from "./routine-execution.ts";
 import { reportBackgroundError } from "../background-error.ts";
+import { wakeStreakOf } from "./routine-run-card.ts";
 
 export type { RoutineAccess };
 
@@ -2022,6 +2023,7 @@ export class RoutineManager {
         run.error = ROUTINE_RESTARTED;
         run.attention = undefined;
         run.finishedAt = this.now();
+        this.settleRepeatingStreak(run);
         // Restarts never count toward auto-pause.
         const paused = this.autoPauseAfterFailure(run);
         if (paused) recovered.push(...paused.cancelled.map(cloneRun));
@@ -2042,6 +2044,7 @@ export class RoutineManager {
       run.attention = undefined;
       run.error = ROUTINE_ONE_RUN_AFTER_RESTART;
       run.finishedAt = this.now();
+      this.settleRepeatingStreak(run);
       recovered.push(cloneRun(run));
     }
     if (recovered.length > 0 || resumable) {
@@ -2135,13 +2138,33 @@ export class RoutineManager {
       .sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt) || b.createdAt - a.createdAt);
   }
 
-  /** #3695: the runs of this run's routine that ended with problems right
-   * before it, newest first, whatever their wording: completed with
-   * problems, failed (a restart's cut aside) or blocked. A missed or
-   * cancelled occurrence neither counts nor ends the streak. */
+  /** #4050: whether a run's routine is a routine of this manager. A run
+   * without one (a proactive wake, a webhook's own run, a wait_until
+   * follow-up, a heartbeat, the last run of a routine deleted once
+   * finished) carries an id other runs share. */
+  private hasRoutine(routineId: string): boolean {
+    return this.routines.some((routine) => routine.id === routineId);
+  }
+
+  /** #4050: whether two runs belong to one streak. A real routine's runs by
+   * its id; a run without a routine by its id, its bot, the person it runs
+   * as and its wake kind, so one person's runs are never counted, quoted or
+   * printed for another and unrelated wake kinds never end, inflate or
+   * recover each other's streak. */
+  private sameStreak(run: RoutineRun, candidate: RoutineRun, byRoutine: boolean): boolean {
+    if (candidate.routineId !== run.routineId) return false;
+    if (byRoutine) return true;
+    return candidate.botId === run.botId && (candidate.runAs ?? "") === (run.runAs ?? "") && wakeStreakOf(candidate) === wakeStreakOf(run);
+  }
+
+  /** #3695: the runs of this run's streak (sameStreak) that ended with
+   * problems right before it, newest first, whatever their wording:
+   * completed with problems, failed (a restart's cut aside) or blocked. A
+   * missed or cancelled occurrence neither counts nor ends the streak. */
   private problemStreakBefore(run: RoutineRun): RoutineRun[] {
+    const byRoutine = this.hasRoutine(run.routineId);
     const outcomes = this.runs
-      .filter((candidate) => candidate.routineId === run.routineId && candidate.id !== run.id && candidate.finishedAt !== undefined
+      .filter((candidate) => candidate.id !== run.id && candidate.finishedAt !== undefined && this.sameStreak(run, candidate, byRoutine)
         && candidate.createdAt <= run.createdAt
         && (candidate.status === "completed" || candidate.status === "blocked" || (candidate.status === "failed" && candidate.error !== ROUTINE_RESTARTED)))
       .sort((a, b) => b.finishedAt! - a.finishedAt! || b.createdAt - a.createdAt);
@@ -2156,55 +2179,117 @@ export class RoutineManager {
   /** #3695: a finished run of a repeating routine carries its place in the
    * streak: `problemRepeat` (how many runs in a row, this one included,
    * since when) when it ended with problems after others, `recovered` when
-   * it ended well after some. */
+   * it ended well after some. #4050: whether it is the run that tells the
+   * person (`tellsStreak`) is decided here, once, when it finishes: every
+   * later reading (its card, its alert, its ring, a sync again after Mark
+   * all as read, a schedule edit or the routine's deletion) reads that. */
   private settleRepeatingStreak(run: RoutineRun): void {
     delete run.problemRepeat;
     delete run.recovered;
+    // Every path a run ends by settles here (its end, failRun, blockRun, a
+    // restart's cut in the load path, every missed occurrence), so a run
+    // this server settled always carries a boolean: only a run settled
+    // before #4050 carries none (tellsPerson reads its count instead).
+    run.tellsStreak = false;
+    // a restart's cut is no run of a streak: it is told on its own, once
+    if (run.status === "failed" && run.error === ROUTINE_RESTARTED) {
+      run.tellsStreak = true;
+      return;
+    }
+    // a missed occurrence neither counts nor ends a streak: it is told on
+    // its own where a routine's first problem is told (problemToldAt 1)
+    if (run.status === "missed") {
+      run.tellsStreak = this.problemToldAt(run) <= 1;
+      return;
+    }
     const earlier = this.problemStreakBefore(run);
+    if (isRoutineProblemRun(run)) run.tellsStreak = this.streakTellsAt(run, earlier);
     const first = earlier.at(-1);
     if (!first) return;
     if (isRoutineProblemRun(run)) {
       run.problemRepeat = { firstRunId: first.id, since: first.finishedAt!, count: earlier.length + 1, anyProblem: true };
       return;
     }
-    if (run.status === "completed") run.recovered = { afterRuns: earlier.length, since: first.finishedAt! };
+    if (run.status === "completed") run.recovered = { afterRuns: earlier.length, since: first.finishedAt!, firstRunId: first.id };
+  }
+
+  /** #4050: whether a run that ends with a problem after `earlier` (its
+   * streak's problem runs, newest first) is the one that tells the person:
+   * the first of its streak whose count reaches the routine's told count
+   * (problemToldAt). A streak is told once, even when the told count
+   * changes in its middle (a schedule edit). */
+  private streakTellsAt(run: RoutineRun, earlier: readonly RoutineRun[]): boolean {
+    return earlier.length + 1 >= this.problemToldAt(run) && !this.streakTold(earlier);
+  }
+
+  /** #4050: whether one of a streak's earlier problem runs told the person.
+   * A run settled before `tellsStreak` existed (an upgrade in the middle of
+   * a streak) told when its count reached its told count, as that server
+   * did: its streak is not told a second time. */
+  private streakTold(earlier: readonly RoutineRun[]): boolean {
+    return earlier.some((entry) => entry.tellsStreak
+      ?? (entry.problemRepeat?.count ?? 1) >= this.problemToldAt(entry));
   }
 
   /** #3695: what the streak's runs said, oldest first, deduplicated: the
    * card's own words when the run that tells the person failed before its
-   * bot could write. Only this bot's runs (never another bot's records). */
+   * bot could write. Only this streak's runs (sameStreak: never another
+   * bot's or another person's records). */
   problemStreakTexts(run: RoutineRun): string[] {
     const own = this.runs.find((candidate) => candidate.id === run.id) ?? run;
-    const said = [...this.problemStreakBefore(own).reverse(), own]
-      .filter((entry) => entry.botId === run.botId)
+    const earlier = own.status === "failed" && own.error === ROUTINE_RESTARTED ? [] : this.problemStreakBefore(own);
+    const said = [...earlier.reverse(), own]
       .map((entry) => (entry.status === "completed" ? entry.problems : entry.error)?.trim())
       .filter((text): text is string => Boolean(text));
     return [...new Set(said)];
   }
 
+  /** #4050, #4051: whether a run works in the background, out of the
+   * person's sight: a routine's run, a proactive wake, a webhook's or a
+   * trigger's run. A wait_until follow-up and a heartbeat run in the
+   * person's own chat (`eventSource` "wait"), and a run whose routine is
+   * gone has no streak to wait for. */
+  private inBackground(run: Pick<RoutineRun, "routineId" | "eventSource" | "proactive" | "webhookId">): boolean {
+    if (run.eventSource === "wait") return false;
+    return this.hasRoutine(run.routineId) || Boolean(run.proactive) || Boolean(run.webhookId);
+  }
+
   /** #3990: the run of its routine's streak that tells the person
-   * (shared/routine-repeat.ts routineProblemToldAt). A run without a routine
-   * of its own (a proactive wake on a teammate's message, a webhook's own
-   * run) runs on events, so several times a day. */
-  problemToldAt(run: Pick<RoutineRun, "routineId">): number {
+   * (shared/routine-repeat.ts routineProblemToldAt). A run in the
+   * background without a routine of its own (a proactive wake, a webhook's
+   * own run) runs on events, so several times a day. #4050: any other run
+   * without a routine (a wait_until follow-up, a heartbeat, the last run of
+   * a routine deleted once finished) is told at its first problem. */
+  problemToldAt(run: Pick<RoutineRun, "routineId"> & Partial<Pick<RoutineRun, "eventSource" | "proactive" | "webhookId">>): number {
     const routine = this.routines.find((candidate) => candidate.id === run.routineId);
-    return routine ? routineProblemToldAt(routine.schedule, this.now(), scheduleZone(undefined)) : ROUTINE_PROBLEM_STREAK_TOLD;
+    if (routine) return routineProblemToldAt(routine.schedule, this.now(), scheduleZone(undefined));
+    return this.inBackground(run) ? ROUTINE_PROBLEM_STREAK_TOLD : 1;
   }
 
   /** #3695, #3990: the one rule for what a run that ended with a problem
    * (failed, blocked, missed) tells the person now (its notification and its
    * incident): the alert it carries, or null when nothing is told. A run
    * that reports by its streak, a proactive wake included, tells at the run
-   * of its streak that tells the person (problemToldAt, the run its summary
-   * card is drawn for), with the alert it came with: null stays null (a run
-   * its caller means to stay silent, a Flow refusal or a skipped admission).
-   * The runs before it were not told, so the same failure as the last run
-   * never takes that turn away, and a cause that belongs to the bot is
-   * still told once per bot (ownerNoticeTells). Any other run (one the person started, a team
-   * goal's, one that paused its routine) keeps the alert it came with. */
-  problemAlert<T>(run: Pick<RoutineRun, "routineId" | "startedBy" | "target" | "autoPaused" | "problemRepeat">, alert: T | null | undefined): T | null | undefined {
+   * its streak names (`tellsStreak`, settleRepeatingStreak: the run its
+   * summary card is drawn for), with the alert it came with: null stays
+   * null (a run its caller means to stay silent, a Flow refusal or a
+   * skipped admission). The runs before it were not told, so the same
+   * failure as the last run never takes that turn away, and a cause that
+   * belongs to the bot is still told once per bot (ownerNoticeTells). Any
+   * other run (one the person started, a team goal's, one that paused its
+   * routine) keeps the alert it came with. */
+  problemAlert<T>(run: RoutineRun, alert: T | null | undefined): T | null | undefined {
     if (!this.streakTells(run)) return alert;
-    return (run.problemRepeat?.count ?? 1) === this.problemToldAt(run) ? alert : null;
+    return this.tellsPerson(run) ? alert : null;
+  }
+
+  /** #4050: whether a run is the one of its streak that tells the person,
+   * the one reading of it (its alert, its card, its ring): what
+   * settleRepeatingStreak decided when it finished. A run settled before
+   * `tellsStreak` existed keeps the count rule that server read: its count
+   * (or 1) is its told count. */
+  tellsPerson(run: Pick<RoutineRun, "routineId" | "tellsStreak" | "problemRepeat"> & Partial<Pick<RoutineRun, "eventSource" | "proactive" | "webhookId">>): boolean {
+    return run.tellsStreak ?? (run.problemRepeat?.count ?? 1) === this.problemToldAt(run);
   }
 
   /** Whether a run's problem is told by its streak (problemAlert) rather
@@ -2213,13 +2298,15 @@ export class RoutineManager {
     return routineReportsByStreak(run) && !run.autoPaused;
   }
 
-  /** #3990: whether a run that ends with a problem now comes strictly
-   * before the run of its streak that tells the person (problemAlert), before
-   * it is settled. Only those runs are silenced by their streak: the telling
-   * run and every run after it (the one that pauses its routine included)
-   * check their bot's once per cause. */
+  /** #3990: whether a run that ends with a problem now comes before the run
+   * of its streak that tells the person (problemAlert), before it is
+   * settled. Only those runs are silenced by their streak: the telling run
+   * and every run after it (the one that pauses its routine included) check
+   * their bot's once per cause. */
   private beforeTellingRun(run: RoutineRun): boolean {
-    return this.streakTells(run) && this.problemStreakBefore(run).length + 1 < this.problemToldAt(run);
+    if (!this.streakTells(run)) return false;
+    const earlier = this.problemStreakBefore(run);
+    return !this.streakTellsAt(run, earlier) && !this.streakTold(earlier);
   }
 
   /** A problem that belongs to the bot (its engine's limit, sign-in or
@@ -2239,10 +2326,13 @@ export class RoutineManager {
    * does not read each run), and the earlier runs' problems when some ended
    * with problems in a row. A run the person started reads nothing of it;
    * a routine that posts each result (a daily briefing) is not told to say
-   * nothing, only its earlier problems. */
+   * nothing, only its earlier problems. #4051: a run in the person's own
+   * chat (a wait_until follow-up, a heartbeat) reads none of it either: its
+   * prompt is saved there as the person's line, and its job is to answer
+   * them. */
   private problemsNote(run: RoutineRun): string | undefined {
-    if (!routineReportsByStreak(run)) return undefined;
-    const earlier = this.problemStreakBefore(run).filter((entry) => entry.botId === run.botId).reverse()
+    if (!routineReportsByStreak(run) || !this.inBackground(run)) return undefined;
+    const earlier = this.problemStreakBefore(run).reverse()
       .map((entry) => ({ finishedAt: entry.finishedAt!, said: redactSecretsInText((entry.status === "completed" ? entry.problems : entry.error) ?? "") }));
     const told = this.problemToldAt(run);
     const said = [
@@ -4052,6 +4142,7 @@ export class RoutineManager {
             run.status = "missed";
             run.finishedAt = now;
             run.error = "This computer was offline for more than 12 hours after the scheduled time";
+            this.settleRepeatingStreak(run);
           }
           scheduledRuns.push(run);
         } else {
@@ -4062,6 +4153,7 @@ export class RoutineManager {
             missed.status = "missed";
             missed.finishedAt = now;
             missed.error = ROUTINE_SKIPPED_WHILE_WAITING;
+            this.settleRepeatingStreak(missed);
             scheduledRuns.push(missed);
           }
           routine.skippedRuns = Math.min(Number.MAX_SAFE_INTEGER, (routine.skippedRuns ?? 0) + 1);
@@ -4987,10 +5079,9 @@ export class RoutineManager {
     run.attention = undefined;
     run.error = redactSecretsInText(message).slice(0, 500);
     run.finishedAt = this.now();
-    delete run.problemRepeat;
-    delete run.recovered;
-    // #3695: a failure of a repeating routine is one more run of its streak
-    if (run.error !== ROUTINE_RESTARTED) this.settleRepeatingStreak(run);
+    // #3695: a failure of a repeating routine is one more run of its
+    // streak; #4050: a restart's cut is told on its own
+    this.settleRepeatingStreak(run);
     const paused = this.autoPauseAfterFailure(run);
     this.saveLater();
     this.emitRun(run);
@@ -5019,8 +5110,6 @@ export class RoutineManager {
     run.finishedAt = this.now();
     delete run.problems;
     delete run.quiet;
-    delete run.problemRepeat;
-    delete run.recovered;
     this.settleRepeatingStreak(run);
     this.saveLater();
     this.emitRun(run);
@@ -5109,6 +5198,7 @@ export class RoutineManager {
     run.attention = undefined;
     run.error = redactSecretsInText(message).slice(0, 500);
     run.finishedAt = this.now();
+    this.settleRepeatingStreak(run);
     this.saveLater();
     this.emitRun(run);
     this.options.onRunFailed?.(cloneRun(run));

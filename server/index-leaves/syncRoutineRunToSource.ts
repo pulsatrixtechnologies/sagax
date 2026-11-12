@@ -1,17 +1,12 @@
 // @ts-nocheck
 /** syncRoutineRunToSource (#1388). Pure move from server/index.ts. */
 import { wakeTopicOf } from "../routines/routine-run-card.ts";
-import { routineReportOutcome, routineRowLogLine, routineRunMayWriteRow } from "../routines/routine-report.ts";
+import { routineReportOutcome, routineRowLogLine, routineRunMayWriteRow, type RoutineRunRowFacts } from "../routines/routine-report.ts";
 import type { RoutineRun } from "../routines/routines.ts";
 import { textLanguage } from "../../shared/looks-french.ts";
 import { clipReadable, withoutRoutineMarkers } from "../../shared/routine-result.ts";
 import { needsYouNotificationWords } from "../runtime-events/question-notification-words.ts";
-import { ROUTINE_PROBLEM_STREAK_TOLD, routineReportsByStreak } from "../../shared/routine-repeat.ts";
-
-/** #3990: the run of this run's streak that tells the person (the first
- * for a routine that runs at most once a day, the third for one that can
- * run several times a day: shared/routine-repeat.ts routineProblemToldAt). */
-const toldAt = (host: Host, run: RoutineRun): number => host.routines?.problemToldAt?.(run) ?? ROUTINE_PROBLEM_STREAK_TOLD;
+import { routineReportsByStreak, routineRunRowInEveryChat, routineRunRowOutOfChat } from "../../shared/routine-repeat.ts";
 import { redactSecretsInText } from "../redact.ts";
 export type Host = Record<string, any>;
 
@@ -54,23 +49,71 @@ function routineRunCardRow(host: Host, run: RoutineRun, sourceThreadId: string, 
   return { text: host.routineRunFallbackText(card, language, routineRunZone(host, run)), routineRun: card };
 }
 
+/** #3581: what the run reports by (the shared rule, routineRunReportable):
+ * whether a request waits on the person and whether its routine posts its
+ * results. */
+function reportFacts(host: Host, run: RoutineRun): any {
+  return { ...run, needsPerson: run.status === "waiting" && host.routineRunNeedsPerson(run), postResults: host.routineEffectivePostResults(run) };
+}
+
+/** #3990, #4051: the facts the one row gate (routineRunMayWriteRow) reads,
+ * for the run's card write and its late answer alike. Its works again is
+ * the streak card's to tell, so its own row is read without it; items for
+ * the person on its row are still for them. */
+function rowFacts(host: Host, run: RoutineRun, facts: { attention: boolean; existing: any; streakTells: boolean }): RoutineRunRowFacts {
+  return {
+    ...reportFacts(host, run), recovered: undefined, attention: facts.attention || Boolean(facts.existing?.attention),
+    byStreak: routineReportsByStreak(run), streakTells: facts.streakTells, autoPaused: Boolean(run.autoPaused), existing: Boolean(facts.existing),
+  };
+}
+
+/** #4051: whether the desktop chat draws this row (routineRunRowOutOfChat):
+ * a row it would leave out is never written, marked unread or rung for. */
+function drawn(card: any, attention: unknown): boolean {
+  return !routineRunRowOutOfChat({ kind: "routine.run", attention: attention ? true : undefined, routineRun: card });
+}
+
+/** #4051: whether every desktop in use draws this row
+ * (routineRunRowInEveryChat): only such a row marks its conversation unread
+ * or rings. */
+function drawnEverywhere(card: any, attention: unknown): boolean {
+  return routineRunRowInEveryChat({ kind: "routine.run", attention: attention ? true : undefined, routineRun: card });
+}
+
 /** #3581: a run's late answer (a teammate's reply after the run ended) goes
  * onto the run's own card through the same card write, with that answer as
  * its report. The answer is what the run says now, even after a quiet end.
- * #3990: an answer that ends with the nothing-to-report line stays quiet, so
- * its card is never a report for the person. */
-export function createRoutineRunLateCard(getHost: () => Host): (runThreadId: string, target: string, report: string) => { text: string; routineRun: any } | undefined {
-  return (runThreadId, target, report) => {
+ * #4051: `said` is the answer with its markers (the store keeps them as data
+ * on the row: shared/routine-result.ts withRunMarkers), read by the same
+ * report reader as a run's own end, and the row gate reads the same facts as
+ * the card write. Undefined when the answer may not reach the chat (nothing
+ * written, nothing unread, nothing rung); `rings` when it is something for
+ * the person (unread and a notification). */
+export function createRoutineRunLateRow(getHost: () => Host): (runThreadId: string, target: string, said: string) => { text: string; routineRun: any; rings: boolean } | undefined {
+  return (runThreadId, target, said) => {
     const host = getHost();
-    const run = host.routines?.runForThread(runThreadId);
-    if (!run) return undefined;
+    const stored = host.routines?.runForThread(runThreadId);
+    if (!stored) return undefined;
+    const outcome = routineReportOutcome(said);
+    const run: RoutineRun = {
+      ...stored,
+      output: outcome.report || undefined,
+      quiet: outcome.quiet && !outcome.declared ? true : undefined,
+      problems: outcome.declared ? outcome.declared.reason : undefined,
+      recovered: undefined,
+    };
     const existing = host.store.messagesFor(target)?.findLast?.((message) => message.kind === "routine.run" && message.routineRun?.runId === run.id);
-    const quiet = routineReportOutcome(report).quiet ? true : undefined;
-    return routineRunCardRow(host, { ...run, quiet }, target, report, existing, report);
+    const found = run.quiet ? undefined : host.personAttention(said);
+    const streakTells = Boolean(existing?.routineRun?.repeat?.streak);
+    if (!routineRunMayWriteRow(rowFacts(host, run, { attention: Boolean(found), existing, streakTells }))) return undefined;
+    const row = routineRunCardRow(host, run, target, outcome.report, existing, outcome.report);
+    if (!drawn(row.routineRun, existing?.attention ?? found)) return undefined;
+    return { ...row, rings: host.routineRunReportable({ ...reportFacts(host, run), attention: Boolean(found) }) && drawnEverywhere(row.routineRun, existing?.attention ?? found) };
   };
 }
 
 const FINISHED = new Set(["completed", "failed", "blocked"]);
+const LIVE = new Set(["queued", "running", "waiting"]);
 
 /** #3695, #3990: what a finished routine run says in the chat
  * (shared/routine-repeat.ts), whatever starts its routine. `out`: nothing.
@@ -84,33 +127,45 @@ function problemRun(run: RoutineRun): boolean {
 }
 
 /** The streak's one summary card in this conversation (#3695): the card
- * whose count started at the run's first problem run; when the run ended
- * its streak, the card of that streak. */
+ * whose count started at the run's streak's first problem run (the run
+ * itself when it is the first); when the run ended its streak, the card of
+ * that streak (by its first run, the streak's identity). */
 function repeatAnchor(host: Host, threadId: string, run: RoutineRun): any {
   const rows = host.store.messagesFor(threadId) ?? [];
   const told = (message: any) => message.kind === "routine.run" && message.routineRun?.repeat?.streak;
-  if (run.problemRepeat) {
-    const firstRunId = run.problemRepeat.firstRunId;
+  if (problemRun(run)) {
+    const firstRunId = run.problemRepeat?.firstRunId ?? run.id;
     return rows.findLast?.((message: any) => told(message) && message.routineRun.repeat.firstRunId === firstRunId);
   }
   if (run.recovered) {
-    const since = run.recovered.since;
-    return rows.findLast?.((message: any) => told(message) && message.routineRun.routineId === run.routineId && message.routineRun.repeat?.since === since);
+    // the streak it ended, by its first run (the streak's identity,
+    // sameStreak); a run settled before #4050 by its routine and its start
+    const { firstRunId, since } = run.recovered;
+    return rows.findLast?.((message: any) => told(message) && (firstRunId
+      ? message.routineRun.repeat.firstRunId === firstRunId
+      : message.routineRun.routineId === run.routineId && message.routineRun.repeat?.since === since));
   }
   return undefined;
 }
 
-/** The streak's state for this run, or null outside it. */
+/** #4050: the run tells the person (RoutineManager.tellsPerson, the one
+ * reading of `tellsStreak`, a run settled before it by its count). */
+function tellsPerson(host: Host, run: RoutineRun): boolean {
+  return host.routines?.tellsPerson?.(run) ?? run.tellsStreak === true;
+}
+
+/** The streak's state for this run, or null outside it. #4050: the run
+ * that tells is the one its streak named when it finished (`tellsStreak`),
+ * never a reading again; a count only ever goes up and works again is said
+ * once (the card then leaves its streak). */
 function streakSay(host: Host, run: RoutineRun, threadId: string): { say: StreakSay; anchor?: any } | null {
   if (!FINISHED.has(run.status) || run.target === "room-goal") return null;
-  const told = toldAt(host, run);
   if (problemRun(run)) {
-    const count = run.problemRepeat?.count ?? 1;
-    if (count < told) return { say: "out" };
     const anchor = repeatAnchor(host, threadId, run);
-    return anchor ? { say: "count", anchor } : { say: "tell" };
+    if (anchor) return (run.problemRepeat?.count ?? 1) > (anchor.routineRun.repeat.count ?? 0) ? { say: "count", anchor } : { say: "out" };
+    return { say: tellsPerson(host, run) ? "tell" : "out" };
   }
-  if (run.recovered && run.recovered.afterRuns >= told) {
+  if (run.recovered) {
     const anchor = repeatAnchor(host, threadId, run);
     return anchor ? { say: "recovered", anchor } : { say: "out" };
   }
@@ -165,7 +220,7 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   // Thumbs-down or "less": the card still comes, without ringing or unread.
   const attentionRings = attentionLevel === "normal";
   // #3581: what the run posts is the shared rule (routineRunReportable)
-  const reportableRun = { ...run, needsPerson: run.status === "waiting" && host.routineRunNeedsPerson(run), postResults: host.routineEffectivePostResults(run) };
+  const reportableRun = reportFacts(host, run);
   const reportable = host.routineRunReportable({ ...reportableRun, attention: Boolean(attentionFound) });
   // A card posted only for quieted attention items: in the chat, never unread.
   const reportableUnread = attentionRings ? reportable : host.routineRunReportable({ ...reportableRun, attention: false });
@@ -176,12 +231,9 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   // routine's streak, whatever starts the routine
   const byStreak = FINISHED.has(run.status) && routineReportsByStreak(run) && !postsResult;
   /** #3990: whether this run may put its row in the conversation now, or
-   * keep the one it has: the one gate (routineRunMayWriteRow). Its works
-   * again is the streak card's to tell, so its own row is read without it. */
-  const mayWrite = (existing: boolean, streakTells: boolean): boolean => routineRunMayWriteRow({
-    ...reportableRun, recovered: undefined, attention: Boolean(attentionFound), byStreak: routineReportsByStreak(run),
-    streakTells, autoPaused: Boolean(run.autoPaused), existing,
-  });
+   * keep the one it has: the one gate (routineRunMayWriteRow, rowFacts). */
+  const mayWrite = (existing: any, streakTells: boolean): boolean =>
+    routineRunMayWriteRow(rowFacts(host, run, { attention: Boolean(attentionFound), existing, streakTells }));
   // A bot run's task stays hidden (Automations, Open run) from its start.
   // 2026-10-28: a webhook's run too (it used to take the bot's live chat;
   // now it runs in its own task and reports into the one conversation).
@@ -211,11 +263,11 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
     const own = run.threadId ? host.store.taskByThread(run.botId, run.threadId) : null;
     // Thumbs-down or "less" (quiet): it still surfaces, never unread.
     // #3695, #3990: a run that reports by its streak surfaces only when it
-    // is the one of its streak that tells the person (toldAt), unless it
-    // has items only the person can do or paused its routine.
+    // is the one of its streak that tells the person (`tellsStreak`), unless
+    // it has items only the person can do or paused its routine.
     const streakOnly = byStreak && !attentionFound && !run.autoPaused;
-    const tells = streakOnly ? problemRun(run) && (run.problemRepeat?.count ?? 1) === toldAt(host, run) : !run.problemRepeat || attentionFound;
-    if (reportable && tells && mayWrite(false, streakOnly && tells) && own?.routineRunId === run.id) {
+    const tells = streakOnly ? problemRun(run) && tellsPerson(host, run) : !run.problemRepeat || attentionFound;
+    if (reportable && tells && mayWrite(undefined, streakOnly && tells) && own?.routineRunId === run.id) {
       host.store.patchTask(run.botId, own.threadId, { routineRunId: undefined, ...(reportableUnread ? { unread: true } : {}) });
     }
     return null;
@@ -226,6 +278,10 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
     (message) => message.kind === "routine.run" && message.routineRun?.runId === run.id,
   );
   const zone = routineRunZone(host, run);
+  // #4050: a row that is already its streak's card (the summary, or its
+  // works again) is the streak's: a sync again of its run (marking it seen,
+  // Mark all as read, an upgrade) leaves it as it is
+  if (existing && FINISHED.has(run.status) && (existing.routineRun?.repeat?.streak || existing.routineRun?.recovered?.streak)) return sourceThreadId;
   // #3695, #3990: a run the person started, a run that waits on them, items
   // only they can do, a result they set the routine to post and a routine
   // that paused itself are told as always; every other finished run writes
@@ -241,21 +297,24 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
     host.store.patchMessage(sourceThreadId, streak.anchor.id, { text: host.routineRunFallbackText(anchorCard, anchorLanguage, zone), routineRun: anchorCard });
     rowLog("streak", "patch", anchorCard, false);
   }
+  const tells = streak?.say === "tell";
+  // a run that reports by its streak never says works again on its own
+  // row: that is the streak card's to tell (#4051: a row that carried it
+  // was left out of the chat after it rang)
+  if (routineReportsByStreak(run) && run.recovered) run = { ...run, recovered: undefined };
+  const row = routineRunCardRow(host, run, sourceThreadId, host.routineFullReport(run), existing, run.output);
+  // #3695: the streak's one summary card, with its count and since when
+  const card = tells ? streakCard(host, run, row.routineRun) : row.routineRun;
   // #3990: the one gate. A row this run put there for a request that no
   // longer waits, on a run that ended with nothing for the person (a wake on
   // a teammate's message whose approval was answered), is taken back: the
-  // run log keeps the run.
-  const ownIsAnchor = Boolean(existing && streak?.anchor && streak.anchor.id === existing.id);
-  if (!mayWrite(Boolean(existing), streak?.say === "tell" || ownIsAnchor)) {
-    if (existing && FINISHED.has(run.status) && host.store.removeMessage?.(sourceThreadId, existing.id)) rowLog("run", "remove", { ...existing.routineRun, status: run.status }, false);
+  // run log keeps the run. #4051: so is a row the chat would not draw, and
+  // a row of a run that settled otherwise (cancelled, superseded, missed)
+  // never keeps its live state.
+  if (!mayWrite(existing, tells) || !drawn(card, attentionFound)) {
+    if (existing && !LIVE.has(run.status) && host.store.removeMessage?.(sourceThreadId, existing.id)) rowLog("run", "remove", { ...existing.routineRun, status: run.status }, false);
     return sourceThreadId;
   }
-  // a run told on its own (its card below) says its state there; the
-  // streak's card already says the works again
-  if (streak?.say === "recovered" && !ownIsAnchor) run = { ...run, recovered: undefined };
-  const row = routineRunCardRow(host, run, sourceThreadId, host.routineFullReport(run), existing, run.output);
-  // #3695: the streak's one summary card, with its count and since when
-  const card = streak?.say === "tell" ? streakCard(host, run, row.routineRun) : row.routineRun;
   const text = card === row.routineRun ? row.text : host.routineRunFallbackText(card, textLanguage(`${run.output ?? ""}\n${run.routineName ?? ""}`)
     ?? (run.runAs ? host.languageOfPerson?.(run.runAs) : undefined), zone);
   const statusChanged = existing?.routineRun?.status !== run.status;
@@ -283,7 +342,7 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
     cardId = host.store.appendMessage(sourceThreadId, message)?.id;
   }
   // Something for the person turns the conversation unread, once per state.
-  if (reportableUnread && (statusChanged || (attentionNew && attentionRings))) {
+  if (reportableUnread && drawnEverywhere(card, attentionFound) && (statusChanged || (attentionNew && attentionRings))) {
     if (source.group) host.store.patchGroup(source.group.id, { unread: true });
     else host.store.patchTask(source.bot.id, sourceThreadId, { unread: true });
   }

@@ -309,8 +309,10 @@ export interface RoutineRun {
    * problems, whatever they said. */
   problemRepeat?: { firstRunId: string; since: number; count: number; anyProblem?: true };
   /** #3479: the first run without problems after `afterRuns` runs with
-   * problems, the first of them finished at `since`: said once. */
-  recovered?: { afterRuns: number; since: number };
+   * problems, the first of them finished at `since`: said once.
+   * `firstRunId` (#4050): that streak's first run, its identity (a run
+   * settled before it carries none). */
+  recovered?: { afterRuns: number; since: number; firstRunId?: string };
   /** 2026-11-03: the teammates this run handed work to ("Sent work to a
    * teammate"), so the run and its card link the thread where that work's
    * outcome is. */

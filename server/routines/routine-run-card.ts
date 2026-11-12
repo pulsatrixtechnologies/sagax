@@ -52,6 +52,17 @@ export function wakeTopicOf(run: Pick<RoutineRun, "webhookId" | "proactive">): s
   return source && /^[a-z]{1,30}$/.test(source) ? source : undefined;
 }
 
+/** #4050: the wake's identity for its streak (RoutineManager.sameStreak): a
+ * heartbeat, or every source it gathered (a mail and a watch together are
+ * neither the mail streak nor the watch streak). Its card's topic
+ * (wakeTopicOf) is the first of them. A streak's cards are found by its
+ * first run (`problemRepeat.firstRunId`, `recovered.firstRunId`), which
+ * this identity chose. */
+export function wakeStreakOf(run: Pick<RoutineRun, "webhookId" | "proactive">): string {
+  if (wakeTopicOf(run) === "heartbeat") return "heartbeat";
+  return [...new Set(run.proactive?.sources ?? [])].sort().join(",");
+}
+
 /** `fullReport`: the bot's whole final message, read from the run's task
  * (syncRoutineRunToSource), when the run's record holds only its start. */
 export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullReport?: string): RoutineRunCardData {
@@ -99,7 +110,7 @@ export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullRepor
   if (run.status === "completed" && run.problems && run.problemRepeat) {
     card.repeat = { ...run.problemRepeat, lastAt: run.finishedAt ?? run.problemRepeat.since };
   }
-  if (run.status === "completed" && !run.problems && run.recovered) card.recovered = { ...run.recovered };
+  if (run.status === "completed" && !run.problems && run.recovered) card.recovered = { afterRuns: run.recovered.afterRuns, since: run.recovered.since };
   if (run.status === "queued" && run.attention) card.attention = clipReadable(redactSecretsInText(run.attention), 500);
   if (run.startedAt) card.startedAt = run.startedAt;
   const wakeTopic = wakeTopicOf(run);

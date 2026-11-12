@@ -148,11 +148,13 @@ export function routinePostsEachResult(schedule: { type: string } | null | undef
 
 /** #3990: whether this finished run's result is posted in the chat
  * (server/index.ts routineEffectivePostResults). A proactive wake posts its
- * result only when it is what the person chose to hear (an accepted
- * suggestion, a watch they keep: `alwaysReport`, drawn with its feedback
- * strip) and only when the bot had something for them: a wake that ends
- * quiet (the nothing-to-report line) posts nothing, as any run; a wake on a
- * teammate's message, a mail or a calendar event posts none. A routine's run follows routinePostsEachResult with the routine's
+ * result only when its kind is told to answer the person (`alwaysReport`:
+ * an accepted suggestion, a watch they keep, a screen offer, a room or DM
+ * mention, a text, its look at its own failed run: server/proactive/
+ * proactive-wake.ts wakeAlwaysReports) and only when the bot had something
+ * for them: a wake that ends quiet (the nothing-to-report line) posts
+ * nothing, as any run; a wake on a teammate's message, a mail, a calendar
+ * event or a webhook post posts none. A routine's run follows routinePostsEachResult with the routine's
  * choice, else `byDefault` (the installation's); a webhook's own run (no
  * routine behind it) is started by a trigger, so it posts none. A request
  * that waits on the person, items only they can do and a problem's one
@@ -201,9 +203,7 @@ type RunRowFacts = {
  * run log (Automations). */
 export function routineRunRowOutOfChat(message: RunRowFacts): boolean {
   const run = message.kind === "routine.run" ? message.routineRun : null;
-  if (!run?.status) return false;
-  if (message.attention || run.goalStatus || run.startedBy === "person" || run.repeat?.streak || run.recovered?.streak) return false;
-  if ((run.autoPausedAfter ?? 0) > 0) return false;
+  if (!run?.status || alwaysDrawn(message)) return false;
   switch (run.status) {
     case "queued":
     case "running":
@@ -216,4 +216,30 @@ export function routineRunRowOutOfChat(message: RunRowFacts): boolean {
     default:
       return true;
   }
+}
+
+/** A row every filter draws, whatever else it says: items for the person,
+ * a team goal's card, a run the person started, the streak's one summary
+ * (and its works again), a routine that paused itself. */
+function alwaysDrawn(message: RunRowFacts): boolean {
+  const run = message.routineRun;
+  return Boolean(message.attention || run?.goalStatus || run?.startedBy === "person" || run?.repeat?.streak || run?.recovered?.streak
+    || (run?.autoPausedAfter ?? 0) > 0);
+}
+
+/** The wake topics whose result the desktop released through 0.8.92 draws:
+ * its filter left out a completed wake row of any other topic. */
+const RELEASED_DRAWN_WAKE_TOPICS = new Set(["suggestion", "watch"]);
+
+/** #4051: whether every desktop in use draws this row: this filter and the
+ * one released through 0.8.92 (a completed wake row of a topic other than
+ * an accepted suggestion or a watch left the chat there). The server marks
+ * a conversation unread and rings only for such a row, so no desktop rings
+ * for a row it does not draw; a row only newer desktops draw is still
+ * written, quietly. */
+export function routineRunRowInEveryChat(message: RunRowFacts): boolean {
+  if (routineRunRowOutOfChat(message)) return false;
+  const run = message.kind === "routine.run" ? message.routineRun : null;
+  if (!run?.wakeTopic || run.status !== "completed" || alwaysDrawn(message)) return true;
+  return RELEASED_DRAWN_WAKE_TOPICS.has(run.wakeTopic);
 }

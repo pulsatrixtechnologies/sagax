@@ -15,10 +15,10 @@ import { createSyncRoutineRunToSource } from "../index-leaves/syncRoutineRunToSo
 import { openCardIn } from "../turns/person-attention-relay.ts";
 import { routineRunRingsDone } from "../runtime-events/turn-completed.ts";
 import { ROUTINE_EXECUTION_PROMPT, WEBHOOK_PROMPT, routineExecutionPromptFor } from "../system-prompt.ts";
-import { proactiveWakePrompt } from "../proactive/proactive-wake.ts";
+import { proactiveWakePrompt, wakeAlwaysReports } from "../proactive/proactive-wake.ts";
 import { ROUTINE_NOTHING_TO_DO_RULE, ROUTINE_REPORT_CONTRACT, routineReportOutcome, routineRunReportable } from "./routine-report.ts";
 import { routineRunCard, routineRunFallbackText } from "./routine-run-card.ts";
-import { RoutineManager, type RoutineManagerOptions, type RoutineRun } from "./routines.ts";
+import { ROUTINE_RESTARTED, RoutineManager, type RoutineManagerOptions, type RoutineRun } from "./routines.ts";
 import { routineRunPostsResult, routineRunRowOutOfChat } from "../../shared/routine-repeat.ts";
 
 const dirs: string[] = [];
@@ -58,7 +58,7 @@ function manager(start: number, extra: Partial<RoutineManagerOptions> = {}) {
     send({ threadId, type: "turn.completed", ok: true });
     return routines.listRuns().find((candidate) => candidate.id === started.id)!;
   };
-  return { routines, prompts, run, advance: (ms: number) => { now += ms; return now; } };
+  return { routines, prompts, run, options, now: () => now, advance: (ms: number) => { now += ms; return now; } };
 }
 
 type Row = { id: string; kind?: string; role?: string; text?: string; routineRun?: any };
@@ -282,7 +282,7 @@ describe("a routine that repeats more than once a day reports by its streak (#36
 
     // the first ok turns that card to works again, in place, once
     const fixed = await step(OK);
-    expect(fixed.recovered).toEqual({ afterRuns: 4, since: p1.finishedAt });
+    expect(fixed.recovered).toEqual({ afterRuns: 4, since: p1.finishedAt, firstRunId: p1.id });
     expect(chat.rows).toHaveLength(1);
     expect(chat.rows[0]!.routineRun).toMatchObject({ runId: p3.id, status: "completed", recovered: { afterRuns: 4, since: p1.finishedAt } });
     expect(chat.rows[0]!.routineRun.problems).toBeUndefined();
@@ -294,7 +294,7 @@ describe("a routine that repeats more than once a day reports by its streak (#36
     await step(OK);
     await step(problem("one branch failed its check"));
     const last = await step(OK);
-    expect(last.recovered).toEqual({ afterRuns: 1, since: runs.at(-2)!.finishedAt });
+    expect(last.recovered).toEqual({ afterRuns: 1, since: runs.at(-2)!.finishedAt, firstRunId: runs.at(-2)!.id });
     expect(chat.rows).toHaveLength(1);
     expect(chat.unread).toEqual(["main"]);
     expect(chat.rang).toEqual([]);
@@ -367,7 +367,7 @@ describe("a routine that repeats more than once a day reports by its streak (#36
     // the next good run turns the summary card to works again
     const fixed = await run(routine.id, OK);
     chat.sync(fixed);
-    expect(fixed.recovered).toEqual({ afterRuns: 4, since: p1.finishedAt });
+    expect(fixed.recovered).toEqual({ afterRuns: 4, since: p1.finishedAt, firstRunId: p1.id });
     const after = chat.rows.find((row) => row.routineRun?.runId === p3.id)!;
     expect(after.routineRun).toMatchObject({ status: "completed", recovered: { afterRuns: 4, since: p1.finishedAt } });
     expect(after.text).toContain("Works again");
@@ -653,7 +653,7 @@ describe("a proactive wake posts no result of its own (#3990)", () => {
   async function wake(said: string, alwaysReport = false) {
     const { routines } = manager(start);
     const queued = routines.enqueueProactive({ botId: "maus-1", name: "Proactive: teammate message", prompt: "A teammate wrote",
-      proactive: { mode: "act", hops: 0, sources: ["peer"], ...(alwaysReport ? { alwaysReport: true as const } : {}) } as never });
+      proactive: { mode: "act", hops: 0, sources: [alwaysReport ? "watch" : "peer"], ...(alwaysReport ? { alwaysReport: true as const } : {}) } as never });
     await routines.tick();
     const threadId = routines.listRuns().find((candidate) => candidate.id === queued.id)!.threadId!;
     const send = (event: Record<string, unknown>) =>
@@ -808,3 +808,395 @@ describe("a teammate's message wake, the real shape (#3990)", () => {
   });
 });
 
+
+/** #4050, #4051: a streak belongs to one thing; it is told once, at the run
+ * it names, whatever reads the run again; a row always reaches a final
+ * state; a run the person started keeps its row. */
+describe("#4050: one streak per thing, told once at the run it names", () => {
+  const EVERY_FIVE = { type: "interval" as const, everyMinutes: 5, anchorAt: start };
+  const OK = "Checked the work queue.\nNOTHING_TO_REPORT";
+  const problem = (why: string) => `RUN_STATUS: partial: ${why}\nCould not finish the pass.`;
+  const routineCards = (rows: Row[]) => rows.filter((row) => row.kind === "routine.run");
+
+  /** One proactive wake of `source`, run as `runAs`, that fails or ends with `said`. */
+  async function wake(h: ReturnType<typeof manager>, opts: { source: string; runAs?: string; said?: string; fail?: string; botId?: string }): Promise<RoutineRun> {
+    h.advance(60_000);
+    const queued = h.routines.enqueueProactive({ botId: opts.botId ?? "maus-1", name: `Proactive: ${opts.source}`, prompt: "Something happened",
+      ...(opts.runAs ? { runAs: opts.runAs } : {}), proactive: { mode: "proactive", hops: 0, sources: [opts.source] } as never });
+    await h.routines.tick();
+    return settle(h, queued.id, opts);
+  }
+  /** One webhook run (a wait_until follow-up, a reach run) that fails or ends with `said`. */
+  async function hook(h: ReturnType<typeof manager>, opts: { webhookId: string; eventSource?: "wait"; said?: string; fail?: string; botId?: string }): Promise<RoutineRun> {
+    h.advance(60_000);
+    const queued = h.routines.enqueueWebhook({ webhookId: opts.webhookId, webhookName: "Follow-up", prompt: "[Wait finished: the build] Deploy it and tell the person",
+      botId: opts.botId ?? "maus-1", runOn: "maus", deliveryId: `d-${h.advance(0)}`, receivedAt: h.advance(0), ...(opts.eventSource ? { eventSource: opts.eventSource } : {}) });
+    await h.routines.tick();
+    return settle(h, queued.id, opts);
+  }
+  function settle(h: ReturnType<typeof manager>, id: string, opts: { said?: string; fail?: string }): RoutineRun {
+    const threadId = h.routines.listRuns().find((candidate) => candidate.id === id)!.threadId!;
+    if (opts.fail) h.routines.failThread(threadId, opts.fail);
+    else {
+      const send = (event: Record<string, unknown>) =>
+        h.routines.handleRuntimeEvent({ eventId: String(Math.random()), provider: "fake", createdAt: new Date().toISOString(), threadId, ...event } as never);
+      send({ type: "item.completed", itemType: "assistant_text", text: opts.said ?? OK });
+      send({ type: "turn.completed", ok: true });
+    }
+    return h.routines.listRuns().find((candidate) => candidate.id === id)!;
+  }
+
+  it("one person's wake problems are never counted, quoted or printed for another person of the same bot", async () => {
+    const h = manager(start);
+    await wake(h, { source: "mail", runAs: "alice", fail: "Mail from the bank about invoice 42 could not be read" });
+    await wake(h, { source: "mail", runAs: "alice", fail: "Mail from the bank about invoice 42 could not be read" });
+    const bob = await wake(h, { source: "mail", runAs: "bob", fail: "The calendar did not answer" });
+    expect(h.prompts.at(-1)).not.toContain("invoice 42");
+    expect(bob.problemRepeat).toBeUndefined();
+    expect(h.routines.problemStreakTexts(bob)).toEqual(["The calendar did not answer"]);
+  });
+
+  it("a watch that fails each time is told at its third failure, whatever other wake kinds do in between", async () => {
+    const h = manager(start);
+    const chat = conversation({ routines: h.routines });
+    const watch = async () => { const done = await wake(h, { source: "watch", fail: "The board did not load" }); chat.sync(done); return done; };
+    const peer = async () => chat.sync(await wake(h, { source: "peer", said: "Nova closed it.\nNOTHING_TO_REPORT" }));
+    await watch(); await peer(); await watch(); await peer();
+    const third = await watch();
+    expect(third.problemRepeat).toMatchObject({ count: 3 });
+    expect(third.tellsStreak).toBe(true);
+    expect(h.routines.problemAlert(third, { detail: "told" })).toEqual({ detail: "told" });
+    expect(routineCards(chat.rows)).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: third.id, repeat: { count: 3, streak: true } });
+    // a good wake of another kind says nothing about the watch
+    await peer();
+    expect(chat.rows[0]!.routineRun.repeat).toMatchObject({ streak: true });
+  });
+
+  it("each bot's reach runs keep their own streak", async () => {
+    const h = manager(start);
+    await hook(h, { webhookId: "reach-me-teams", botId: "maus-1", fail: "Teams refused the token" });
+    await hook(h, { webhookId: "reach-me-teams", botId: "maus-2", said: "Sent.\nNOTHING_TO_REPORT" });
+    const again = await hook(h, { webhookId: "reach-me-teams", botId: "maus-1", fail: "Teams refused the token" });
+    expect(again.problemRepeat).toMatchObject({ count: 2 });
+  });
+
+  it("a wake that gathered a mail and a watch counts in neither the mail streak nor the watch streak", async () => {
+    const h = manager(start);
+    await wake(h, { source: "mail", fail: "The mailbox did not answer" });
+    h.advance(60_000);
+    const queued = h.routines.enqueueProactive({ botId: "maus-1", name: "Proactive: mail", prompt: "Something happened",
+      proactive: { mode: "proactive", hops: 0, sources: ["mail", "watch"] } as never });
+    await h.routines.tick();
+    const gathered = settle(h, queued.id, { fail: "The mailbox did not answer" });
+    expect(gathered.problemRepeat).toBeUndefined();
+    const mail = await wake(h, { source: "mail", fail: "The mailbox did not answer" });
+    expect(mail.problemRepeat).toMatchObject({ count: 2 });
+  });
+
+  it("a wait_until follow-up reads no background rule and is told at its first failure", async () => {
+    const h = manager(start);
+    const chat = conversation({ routines: h.routines });
+    const failed = await hook(h, { webhookId: "wait:w1", eventSource: "wait", fail: "The deploy tool is missing" });
+    expect(h.prompts.at(-1)).not.toContain("the person does not read each run");
+    expect(h.prompts.at(-1)).not.toContain("Say nothing unless you need them");
+    expect(failed.tellsStreak).toBe(true);
+    expect(h.routines.problemAlert(failed, { detail: "told" })).toEqual({ detail: "told" });
+    chat.sync(failed);
+    expect(routineCards(chat.rows)).toHaveLength(1);
+  });
+
+  it("the failed last run of a routine that is then deleted keeps its summary and its alert", async () => {
+    const h = manager(start);
+    const routine = h.routines.create({ name: "Reminder", prompt: "Remind me", botId: "maus-1", enabled: false, schedule: DAILY });
+    const chat = conversation({ routines: h.routines });
+    const failed = await h.run(routine.id, problem("the reminder could not be sent"));
+    chat.sync(failed);
+    expect(routineCards(chat.rows)).toHaveLength(1);
+    h.routines.remove(routine.id);
+    const after = h.routines.listRuns().find((candidate) => candidate.id === failed.id)!;
+    chat.sync(after);
+    expect(routineCards(chat.rows)).toHaveLength(1);
+    expect(h.routines.problemAlert(after, { detail: "told" })).toEqual({ detail: "told" });
+  });
+
+  /** The runs a manager hands its failure wiring (server/index.ts onRunFailed). */
+  const failures = () => {
+    const failed: RoutineRun[] = [];
+    return { failed, onRunFailed: (run: RoutineRun) => { failed.push(run); } };
+  };
+  /** What the failure wiring tells the person of a run: its alert through problemAlert. */
+  const told = (routines: RoutineManager, run: RoutineRun) => routines.problemAlert(run, { detail: "told" });
+
+  for (const [label, schedule] of [["a daily routine", DAILY], ["a routine that runs every five minutes", EVERY_FIVE]] as const) {
+    it(`a run a restart cut is told on its own, through the reload that cuts it: ${label}`, async () => {
+      const wiring = failures();
+      const h = manager(start, { onRunFailed: wiring.onRunFailed });
+      const routine = h.routines.create({ name: "Work watch", prompt: "Make sure the work goes on", botId: "maus-1", enabled: false, schedule });
+      h.routines.runNow(routine.id);
+      await h.routines.tick();
+      expect(h.routines.listRuns()[0]).toMatchObject({ status: "running" });
+      // the first restart resumes the run; the second cuts it in the load path
+      new RoutineManager(h.options);
+      const reloaded = new RoutineManager(h.options);
+      const cut = wiring.failed.at(-1)!;
+      expect(cut).toMatchObject({ status: "failed", error: ROUTINE_RESTARTED, tellsStreak: true });
+      expect(reloaded.listRuns()[0]).toMatchObject({ status: "failed", tellsStreak: true });
+      expect(told(reloaded, cut)).toEqual({ detail: "told" });
+      const chat = conversation({ routines: reloaded });
+      chat.sync(cut);
+      expect(routineCards(chat.rows)).toHaveLength(1);
+    });
+  }
+
+  it("a scheduled run missed while the computer was offline is told as before (scheduler)", async () => {
+    const wiring = failures();
+    const h = manager(start, { onRunFailed: wiring.onRunFailed });
+    const routine = h.routines.create({ name: "Morning brief", prompt: "Brief me", botId: "maus-1", schedule: DAILY });
+    const due = h.routines.getRoutine(routine.id)!.nextRunAt!;
+    h.advance(due - h.now() + 13 * 3_600_000);
+    await h.routines.tick();
+    const missed = wiring.failed.find((run) => run.status === "missed")!;
+    expect(missed).toMatchObject({ status: "missed", tellsStreak: true });
+    expect(told(h.routines, missed)).toEqual({ detail: "told" });
+  });
+
+  it("a queued run its routine ended before it could start is told as before (missQueuedRun)", async () => {
+    const wiring = failures();
+    let bot = "busy";
+    const h = manager(start, { onRunFailed: wiring.onRunFailed, botState: () => bot as never });
+    h.routines.create({ name: "Last check", prompt: "Check once more", botId: "maus-1",
+      schedule: { type: "interval", everyMinutes: 1_440, anchorAt: start + 60_000, endsAt: start + 60_000 } });
+    h.advance(60_000);
+    await h.routines.tick();
+    expect(h.routines.listRuns()[0]).toMatchObject({ status: "queued" });
+    h.advance(60_000);
+    bot = "ready";
+    await h.routines.tick();
+    const missed = wiring.failed.find((run) => run.status === "missed")!;
+    expect(missed).toMatchObject({ status: "missed", error: "The routine ended before this scheduled run could start", tellsStreak: true });
+    expect(told(h.routines, missed)).toEqual({ detail: "told" });
+  });
+
+  it("a queued run kept as missed after a restart is told as before (load path)", async () => {
+    const wiring = failures();
+    const h = manager(start, { onRunFailed: wiring.onRunFailed });
+    const routine = h.routines.create({ name: "Morning brief", prompt: "Brief me", botId: "maus-1", schedule: DAILY, overlap: "queue" } as never);
+    const due = h.routines.getRoutine(routine.id)!.nextRunAt!;
+    h.advance(due - h.now());
+    await h.routines.tick();
+    expect(h.routines.listRuns()[0]).toMatchObject({ status: "running" });
+    // the next day's run queues behind the one still running
+    h.advance(86_400_000);
+    await h.routines.tick();
+    expect(h.routines.listRuns().map((run) => run.status).sort()).toEqual(["queued", "running"]);
+    new RoutineManager(h.options);
+    const missed = wiring.failed.find((run) => run.status === "missed")!;
+    expect(missed).toMatchObject({ status: "missed", tellsStreak: true });
+    expect(told(h.routines, missed)).toEqual({ detail: "told" });
+  });
+
+  it("a run settled before #4050 keeps the count rule its server read", async () => {
+    const h = manager(start);
+    const routine = h.routines.create({ name: "Work watch", prompt: "Make sure the work goes on", botId: "maus-1", enabled: false, schedule: EVERY_FIVE });
+    const run = { ...h.routines.runNow(routine.id)!, status: "missed" as const, tellsStreak: undefined };
+    // a run settled before #4050 keeps the count rule that server read
+    expect(told(h.routines, run)).toBeNull();
+    expect(told(h.routines, { ...run, routineId: "gone" })).toEqual({ detail: "told" });
+  });
+
+  it("syncing an old run again never rewrites its works again, drops its streak, rolls its count back or adds a summary", async () => {
+    const h = manager(start);
+    const routine = h.routines.create({ name: "Work watch", prompt: "Make sure the work goes on", botId: "maus-1", enabled: false, schedule: EVERY_FIVE });
+    const chat = conversation({ routines: h.routines });
+    const step = async (said: string) => { const done = await h.run(routine.id, said); chat.sync(done); return done; };
+    await step(problem("stuck")); await step(problem("stuck"));
+    const p3 = await step(problem("stuck"));
+    // Mark all as read syncs the telling run again: its card stays the summary
+    chat.sync(p3);
+    expect(chat.rows[0]!.routineRun.repeat).toMatchObject({ count: 3, streak: true });
+    const p4 = await step(problem("stuck"));
+    await step(problem("stuck"));
+    // opening an older run of the streak never rolls the count back
+    chat.sync(p4);
+    expect(routineCards(chat.rows)).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun.repeat).toMatchObject({ count: 5, streak: true });
+    await step(OK);
+    const unread = chat.unread.length;
+    // after it works again: the telling run and a later problem run, synced again
+    chat.sync(h.routines.listRuns().find((candidate) => candidate.id === p3.id)!);
+    chat.sync(h.routines.listRuns().find((candidate) => candidate.id === p4.id)!);
+    expect(routineCards(chat.rows)).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: p3.id, status: "completed", recovered: { streak: true } });
+    expect(chat.unread).toHaveLength(unread);
+  });
+
+  it("a schedule edit in the middle of a streak tells it once, card and alert together", async () => {
+    const h = manager(start);
+    const routine = h.routines.create({ name: "Work watch", prompt: "Make sure the work goes on", botId: "maus-1", enabled: false, schedule: EVERY_FIVE });
+    const chat = conversation({ routines: h.routines });
+    chat.sync(await h.run(routine.id, problem("stuck")));
+    h.routines.update(routine.id, { schedule: DAILY });
+    const second = await h.run(routine.id, problem("stuck"));
+    chat.sync(second);
+    expect(second.tellsStreak).toBe(true);
+    expect(h.routines.problemAlert(second, { detail: "told" })).toEqual({ detail: "told" });
+    expect(routineCards(chat.rows)).toHaveLength(1);
+    expect(ringsDone(second, h.routines)).toBe(true);
+  });
+
+  /** The runs a server before #4050 settled carry no `tellsStreak`. */
+  const settledBefore = (routines: RoutineManager) => {
+    for (const entry of (routines as unknown as { runs: RoutineRun[] }).runs) delete entry.tellsStreak;
+  };
+
+  it("an upgrade in the middle of a streak told at its third run tells it no second time", async () => {
+    const h = manager(start);
+    const routine = h.routines.create({ name: "Work watch", prompt: "Make sure the work goes on", botId: "maus-1", enabled: false, schedule: EVERY_FIVE });
+    const chat = conversation({ routines: h.routines });
+    for (let index = 0; index < 3; index += 1) chat.sync(await h.run(routine.id, problem("stuck")));
+    settledBefore(h.routines);
+    const rang = chat.rang.length;
+    const fourth = await h.run(routine.id, problem("stuck"));
+    chat.sync(fourth);
+    expect(fourth.problemRepeat).toMatchObject({ count: 4 });
+    expect(fourth.tellsStreak).toBe(false);
+    expect(h.routines.problemAlert(fourth, { detail: "told" })).toBeNull();
+    expect(ringsDone(fourth, h.routines)).toBe(false);
+    expect(routineCards(chat.rows)).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun.repeat).toMatchObject({ count: 4, streak: true });
+    expect(chat.rang).toHaveLength(rang);
+  });
+
+  it("an upgrade after a daily routine's first problem, told then, tells its streak no second time", async () => {
+    const h = manager(start);
+    const routine = h.routines.create({ name: "Backup check", prompt: "Check the backups", botId: "maus-1", enabled: false, schedule: DAILY });
+    const chat = conversation({ routines: h.routines });
+    chat.sync(await h.run(routine.id, problem("the backup host is down")));
+    settledBefore(h.routines);
+    const second = await h.run(routine.id, problem("the backup host is down"));
+    chat.sync(second);
+    expect(second.tellsStreak).toBe(false);
+    expect(h.routines.problemAlert(second, { detail: "told" })).toBeNull();
+    expect(ringsDone(second, h.routines)).toBe(false);
+    expect(routineCards(chat.rows)).toHaveLength(1);
+  });
+
+  it("an upgrade before a streak reached its told count still tells it at that count", async () => {
+    const h = manager(start);
+    const routine = h.routines.create({ name: "Work watch", prompt: "Make sure the work goes on", botId: "maus-1", enabled: false, schedule: EVERY_FIVE });
+    const chat = conversation({ routines: h.routines });
+    for (let index = 0; index < 2; index += 1) chat.sync(await h.run(routine.id, problem("stuck")));
+    settledBefore(h.routines);
+    const third = await h.run(routine.id, problem("stuck"));
+    expect(third.tellsStreak).toBe(true);
+    expect(h.routines.problemAlert(third, { detail: "told" })).toEqual({ detail: "told" });
+  });
+});
+
+describe("#4051: a row always reaches a final state, and a run the person started keeps its row", () => {
+  it("Run now then Stop: the person's card says it stopped, never Running", async () => {
+    const { routines } = manager(start);
+    const routine = routines.create({ name: "Check", prompt: "Check", botId: "maus-1", enabled: false, schedule: DAILY });
+    const chat = conversation({ routines });
+    const started = routines.runNow(routine.id, undefined, "person")!;
+    await routines.tick();
+    chat.sync(routines.listRuns().find((candidate) => candidate.id === started.id)!);
+    expect(chat.rows[0]!.routineRun.status).toBe("running");
+    const stopped = (await routines.cancelRun(started.id))!;
+    chat.sync(stopped);
+    expect(chat.rows.filter((row) => row.kind === "routine.run")).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun.status).toBe("cancelled");
+  });
+
+  it("a waiting row of a background run that is cancelled is taken back", async () => {
+    const { routines } = manager(start);
+    const routine = routines.create({ name: "Check", prompt: "Check", botId: "maus-1", enabled: false, schedule: DAILY });
+    const chat = conversation({ routines, needsPerson: true });
+    const started = routines.runNow(routine.id)!;
+    await routines.tick();
+    const waiting = { ...routines.listRuns().find((candidate) => candidate.id === started.id)!, status: "waiting" as const };
+    chat.sync(waiting);
+    expect(chat.rows).toHaveLength(1);
+    chat.sync((await routines.cancelRun(started.id))!);
+    expect(chat.rows).toEqual([]);
+  });
+
+  it("a run the person started that ends quiet keeps its card, without ringing", async () => {
+    const { routines, run } = manager(start);
+    const routine = routines.create({ name: "Check", prompt: "Check", botId: "maus-1", enabled: false, schedule: DAILY });
+    const chat = conversation({ routines });
+    const done = await run(routine.id, "All good.\nNOTHING_TO_REPORT", "person");
+    chat.sync({ ...done, status: "running" });
+    chat.sync(done);
+    expect(chat.rows.filter((row) => row.kind === "routine.run")).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun.status).toBe("nothing_to_report");
+    expect(chat.rang).toEqual([]);
+    expect(ringsDone(done, routines)).toBe(false);
+  });
+
+  it("a result posted after an earlier problem is drawn: it never carries the streak's works again", async () => {
+    const { routines, run } = manager(start);
+    const routine = routines.create({ name: "Morning brief", prompt: "Brief me", botId: "maus-1", enabled: false, schedule: DAILY });
+    const chat = conversation({ routines, postResults: true });
+    // a problem told by an older server (no summary card in this chat)
+    await run(routine.id, "RUN_STATUS: partial: the calendar did not answer");
+    const brief = await run(routine.id, "Three meetings today, the first at nine.");
+    expect(brief.recovered).toBeTruthy();
+    chat.sync(brief);
+    const cards = chat.rows.filter((row) => row.kind === "routine.run");
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.routineRun.recovered).toBeUndefined();
+    expect(routineRunRowOutOfChat(cards[0] as never)).toBe(false);
+    expect(chat.unread).toEqual(["main"]);
+  });
+});
+
+describe("#4051: a wake kind told to answer the person posts its answer", () => {
+  it("a screen offer, a mention, a text and the bot's look at its failed run post; a teammate, a mail, a calendar or a webhook wake does not", () => {
+    const posts = (source: string) => wakeAlwaysReports([{ source, label: "x", detail: "y" } as never]);
+    expect(["screen", "bot", "sms", "run", "watch", "suggestion"].map(posts)).toEqual([true, true, true, true, true, true]);
+    expect(["peer", "mail", "calendar", "webhook"].map(posts)).toEqual([false, false, false, false]);
+  });
+});
+
+describe("#4051: a wake's answer rings only where every desktop in use draws its row", () => {
+  /** The chat filter of the desktop released as 0.8.92 (shared/routine-repeat.ts
+   * routineRunRowOutOfChat at that tag), as those desktops still run it. */
+  const releasedOutOfChat = (message: Row & { attention?: unknown }): boolean => {
+    const run = message.kind === "routine.run" ? message.routineRun : null;
+    if (!run?.status) return false;
+    if (message.attention || run.goalStatus || run.startedBy === "person" || run.repeat?.streak || run.recovered?.streak) return false;
+    if ((run.autoPausedAfter ?? 0) > 0) return false;
+    switch (run.status) {
+      case "queued": case "running": case "waiting": case "failed": case "missed": return false;
+      case "completed": return Boolean(run.problems || run.recovered || (run.wakeTopic && !new Set(["suggestion", "watch"]).has(run.wakeTopic)));
+      default: return true;
+    }
+  };
+
+  for (const source of ["screen", "bot", "sms", "run", "suggestion", "watch"]) {
+    it(`a ${source} wake's answer posts, and rings or turns unread only if the 0.8.92 desktop draws it`, async () => {
+      const h = manager(start);
+      const chat = conversation({ routines: h.routines });
+      h.advance(60_000);
+      const queued = h.routines.enqueueProactive({ botId: "maus-1", name: `Proactive: ${source}`, prompt: "Something happened",
+        proactive: { mode: "proactive", hops: 0, sources: [source], alwaysReport: true } as never });
+      await h.routines.tick();
+      const threadId = h.routines.listRuns().find((candidate) => candidate.id === queued.id)!.threadId!;
+      const send = (event: Record<string, unknown>) =>
+        h.routines.handleRuntimeEvent({ eventId: String(Math.random()), provider: "fake", createdAt: new Date().toISOString(), threadId, ...event } as never);
+      send({ type: "item.completed", itemType: "assistant_text", text: "The build on your screen failed at the signing step; I can retry it." });
+      send({ type: "turn.completed", ok: true });
+      const done = h.routines.listRuns().find((candidate) => candidate.id === queued.id)!;
+      chat.sync(done);
+      const rows = chat.rows.filter((row) => row.kind === "routine.run");
+      expect(rows).toHaveLength(1);
+      expect(routineRunRowOutOfChat(rows[0] as never)).toBe(false);
+      const releasedDraws = !releasedOutOfChat(rows[0]!);
+      expect(releasedDraws).toBe(source === "suggestion" || source === "watch");
+      expect(chat.unread.length > 0).toBe(releasedDraws);
+      expect(ringsDone(done, h.routines)).toBe(releasedDraws);
+    });
+  }
+});

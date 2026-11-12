@@ -122,6 +122,9 @@ async function runTestingHeldRequest(host: Host, req: IncomingMessage, res: Serv
     summary: z.string().max(500).optional(),
     input: z.string().max(10_000).optional(),
     outbound: z.boolean().optional(),
+    // #4081: decided as the engine's own ask (the sandbox bridge)
+    asEngine: z.boolean().optional(),
+    sameArgs: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   }).strict().safeParse(await readBody(req));
   if (!parsed.success) {
     json(res, 400, { error: "invalid held request" });

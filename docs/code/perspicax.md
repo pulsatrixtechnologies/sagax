@@ -334,3 +334,47 @@ aggregate. The server's own instructions win if they differ.
   emoji and hearts in a multi-line report, turns a bare ConnectWise ticket
   link into `billet #N`, and removes UUIDs and "Carte c16f208c" id prefixes.
   Code, inline code and markdown links stay as they are.
+
+## Scripts in the server environment reach the bot's connection (#4081)
+
+A script the bot runs in its server environment speaks plain MCP over HTTP
+to the bot's own Perspicax connection, with no Perspicax token there
+(`server/perspicax/sandbox-bridge.ts`).
+
+- Every `run_command` of a turn gets `SAGAX_BRIDGE_MCP_URL` (the server's
+  `/api/bridge/perspicax/mcp`, from `SAGAX_SANDBOX_BRIDGE_URL`, else
+  `SAGAX_PUBLIC_URL`) and `SAGAX_BRIDGE_TOKEN` (`sgx_brg_`), only when the
+  turn's connection speaks for the person whose environment runs the
+  command. The token is one per turn and person, held by hash in memory,
+  and ends with the turn (12 h at most). A routine watch command gets a
+  token of its own for the check, revoked after it.
+- The route is public (`PRE_AUTH_ROUTES`): the environment reaches the
+  server by its public address, never its loopback. Without a live token:
+  401.
+- `initialize` and notifications are answered by the bridge, so a script
+  never replaces the engine's MCP session. A turn's `tools/call` is first a
+  held request opened `asEngine` (`holdConnectorCall`): the event names
+  `mcp__perspicax__<name>` as the engine does, with the engine's input
+  shape and no connector fact, so `decideRequestOpened` reads it exactly as
+  the engine's own ask (organization Refuse and Ask first rules, the
+  person's rules and Always allow, the level, the reviewed Perspicax reads;
+  never a connector read). One state: an Always allow saved on either card
+  answers both. Calls still waiting share one card only when tool and complete arguments (a digest of their canonical JSON, never the preview) are the same. Refused: a
+  tool error `Refused: ...`, nothing sent; a script that left while its
+  card waited never gets its call sent. Then the frame goes through
+  `runInternal` on `/api/internal/perspicax/mcp` under the turn's own
+  Perspicax capability: the confidential, misuse, safety and role checks of
+  the stdio bridge.
+- A watch check has no turn: its frames go through the person's routine
+  delegation (`prepareTurn` as `owner-routine`), reads only by the relay's
+  own reading (`frameReads`), like the watch's own tool reads; a frame after
+  the check ends is refused.
+- The token is masked in any text (`shared/redact.ts`). The bridge needs an
+  https address (http only on loopback); without one the server logs it
+  once and the bridge stays off. Same-cluster servers: the sandboxes chart's
+  `sagaxBridge` policy (`docs/self-hosting.md`).
+- Isolation: a token answers only while the turn's connection speaks for
+  its person (`wrong_person`); a turn without a connection is
+  `profile_not_mounted`.
+- The watch exec passes only `SAGAX_*` names (`EXEC_ENV_KEY_RE`); the image
+  sets `LANG` itself.

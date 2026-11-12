@@ -339,6 +339,9 @@ import { createTelemetrySettingsStore } from "./telemetry/settings-store.ts";
 import { createWebBotAuthRoutes } from "./routes/web-bot-auth.ts";
 import { createGrokBridgeRoutes } from "./routes/grok-bridge.ts";
 import { createGrokBridgeInboundRoutes } from "./routes/grok-bridge-inbound.ts";
+import { askInputDetail } from "./tools/tool-summary.ts";
+import { createSandboxBridgeRoutes, sandboxBridgeEnv, sandboxBridgeArgsDigest, sandboxBridgeRuleTool, sandboxBridgeStartupNote, sandboxBridgeUrl, SandboxBridgeGrants, SandboxBridgeWatchSessions, type SandboxBridgeGrant } from "./perspicax/sandbox-bridge.ts";
+import { PassThrough } from "node:stream";
 import { createPushRelayRoutes } from "./routes/push-relay.ts";
 import { createGrokBridgeInternalRoutes } from "./routes/grok-bridge-internal.ts";
 import { GrokBridgeSecrets } from "./grok-bridge/secrets.ts";
@@ -4884,6 +4887,7 @@ bindLeafHost({
   get importBotZip() { return importBotZip; },
   get importTeamBackup() { return importTeamBackup; },
   get inBotFolder() { return inBotFolder; },
+  get sandboxBridgeWatch() { return sandboxBridgeWatch; },
   get inGitRepository() { return inGitRepository; },
   get inboxSpecialCard() { return inboxSpecialCard; },
   get incidentRequest() { return incidentRequest; },
@@ -23290,6 +23294,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     saveToolResult: (capability, text, truncated) => toolResults.save(capability, text, truncated),
     commandVariablesFor: (botId, threadId, principalId) => commandVariablesFor(botId, threadId, principalId),
     withCommandVariables,
+    sandboxBridgeEnv: (capability, ownerId) => sandboxBridgeTurnEnv(capability, ownerId),
     userSandboxExec: (ownerId, input, botId) => userSandbox!.exec(ownerId, input as never, botId),
     userSandboxOverQuota: async (ownerId, botId) => userSandbox!.workspaceOverQuota(ownerId, botId),
     sandboxBotFolder,
@@ -29656,7 +29661,7 @@ const CONNECTOR_CALL_EXPIRED = "Nobody answered this connector call within nine 
 /** #3348: the held request of one call_connector, on the turn running the
  * thread (a direct turn or a room turn), decided by the same pipeline as an
  * engine's own ask. Undefined when no turn runs there. */
-function holdConnectorCall(input: { threadId: string; mcpTool: string; summary: string; input: string; outbound: boolean }) {
+function holdConnectorCall(input: { threadId: string; mcpTool: string; summary: string; input?: string; outbound?: boolean; asEngine?: boolean; sameArgs?: string }) {
   const engine = runningTurnEngines.get(input.threadId);
   if (!engine) return undefined;
   const turnId = liveTurnByThread.get(input.threadId);
@@ -29667,12 +29672,53 @@ function holdConnectorCall(input: { threadId: string; mcpTool: string; summary: 
     provider: engine.driverKind,
     mcpTool: input.mcpTool,
     summary: input.summary,
-    input: input.input,
-    outbound: input.outbound,
+    ...(input.input !== undefined ? { input: input.input } : {}),
+    ...(input.outbound ? { outbound: true } : {}),
+    ...(input.asEngine ? { asEngine: true } : {}),
+    ...(input.sameArgs ? { sameArgs: input.sameArgs } : {}),
   });
   const timer = setTimeout(() => heldRequests.expire(requestId, CONNECTOR_CALL_EXPIRED), CONNECTOR_CALL_WAIT_MS);
   timer.unref?.();
   return { engine: engine.driverKind, decision: decision.finally(() => clearTimeout(timer)) };
+}
+
+// #4081: the commands of a bot's server environment reach the bot's own
+// Perspicax connection (server/perspicax/sandbox-bridge.ts). The bridge
+// token is minted per turn and person, never the Perspicax token.
+const SANDBOX_BRIDGE_URL = sandboxBridgeUrl();
+const sandboxBridgeGrants = new SandboxBridgeGrants({
+  turnActive: (threadId, generation) => activeInternalGenerationByThread.get(threadId) === generation,
+});
+const sandboxBridgeWatchSessions = new SandboxBridgeWatchSessions(() => perspicaxMcp);
+/** The bridge variables of one command of a turn in `ownerId`'s environment:
+ * only when the turn's Perspicax connection speaks for that same person. */
+function sandboxBridgeTurnEnv(capability: { botId: string; threadId: string; generation: string }, ownerId: string): Record<string, string> | null {
+  if (!SANDBOX_BRIDGE_URL || !perspicaxMcp || IDENTITY.kind !== "perspicax") return null;
+  const owner = ownerId.trim().toLowerCase();
+  const speaker = perspicaxMcp.turnPrincipal(capability.threadId, capability.generation, capability.botId)?.trim().toLowerCase();
+  if (!owner || speaker !== owner) return null;
+  const token = sandboxBridgeGrants.mintTurn({ botId: capability.botId, principalId: owner, threadId: capability.threadId, generation: capability.generation });
+  return sandboxBridgeEnv(SANDBOX_BRIDGE_URL, token);
+}
+/** A routine watch check's bridge variables (no turn): ended by `end`. */
+function sandboxBridgeWatch(input: { botId: string; principalId: string; ownerPrincipalId: string; ttlMs: number }): { env: Record<string, string>; end: () => void } | null {
+  if (!SANDBOX_BRIDGE_URL || !perspicaxMcp || IDENTITY.kind !== "perspicax" || !input.principalId.trim()) return null;
+  const minted = sandboxBridgeGrants.mintWatch(input);
+  return {
+    env: sandboxBridgeEnv(SANDBOX_BRIDGE_URL, minted.token),
+    end: () => {
+      minted.revoke();
+      void sandboxBridgeWatchSessions.end(minted.grant).catch(reportBackgroundError);
+    },
+  };
+}
+/** The turn's own Perspicax capability (the engine's stdio bridge's). */
+function sandboxBridgeCapabilityToken(grant: Extract<SandboxBridgeGrant, { kind: "turn" }>): string | null {
+  for (const [token, capability] of internalCapabilities) {
+    if (capability.kind === "perspicax" && capability.botId === grant.botId && capability.threadId === grant.threadId
+      && capability.generation === grant.generation && internalCapabilityIsActive(capability)) return token;
+  }
+  return null;
 }
 
 /** The turn's connector principal for the connectors tool (#3347): the
@@ -33710,6 +33756,58 @@ PRE_AUTH_ROUTES.push(createHealthPublicRoutes({
 }));
 // Signed inbound envelopes from a linked Grok (#2193): HMAC, no session.
 PRE_AUTH_ROUTES.push(createGrokBridgeInboundRoutes({ service: grokBridgeService }));
+// #4081: a bot's server environment to the bot's own Perspicax connection:
+// its bridge token only, no session (server/perspicax/sandbox-bridge.ts).
+PRE_AUTH_ROUTES.push(createSandboxBridgeRoutes({
+  grants: sandboxBridgeGrants,
+  turnCapabilityToken: sandboxBridgeCapabilityToken,
+  turnPrincipal: (grant) => perspicaxMcp?.turnPrincipal(grant.threadId, grant.generation, grant.botId),
+  // #4081 review: decided as the engine's own ask of the same tool (the
+  // same rules, the same Always allow), never as a connector read
+  hold: (grant, call) => {
+    const detail = askInputDetail(call.args);
+    return holdConnectorCall({
+      threadId: grant.threadId,
+      mcpTool: sandboxBridgeRuleTool(call.name),
+      summary: `Perspicax: ${call.name}`,
+      ...(detail ? { input: detail } : {}),
+      asEngine: true,
+      // grouped only with the very same call: the complete arguments
+      sameArgs: sandboxBridgeArgsDigest(call.args),
+    })?.decision;
+  },
+  // The same pipeline as the engine's stdio bridge, under the turn's own
+  // capability: the frame goes through every check of /api/internal.
+  forwardTurn: async (req, res, capabilityToken, raw) => {
+    const inner = Object.assign(new PassThrough(), {
+      // only what the internal route reads, never the caller's other headers
+      headers: {
+        host: `127.0.0.1:${PORT}`, authorization: `Bearer ${capabilityToken}`, "content-type": "application/json", "content-length": String(raw.length),
+        ...(typeof req.headers["mcp-protocol-version"] === "string" ? { "mcp-protocol-version": req.headers["mcp-protocol-version"] } : {}),
+      },
+      method: "POST",
+      url: "/api/internal/perspicax/mcp",
+      socket: req.socket,
+    }) as unknown as IncomingMessage;
+    (inner as unknown as PassThrough).end(raw);
+    const path = "/api/internal/perspicax/mcp";
+    try {
+      const served = await runInternal(inner, res, new URL(`http://127.0.0.1:${PORT}${path}`), path, "POST", { kind: "loopback", scopes: ["client"], trust: "service" });
+      if (!served && !res.headersSent) json(res, 403, { error: "the Perspicax connection is not mounted in this turn", code: "profile_not_mounted" });
+    } catch (error) {
+      if (res.headersSent) return;
+      const status = (error as { status?: number }).status;
+      json(res, status === 401 || status === 403 || status === 413 ? status : 500, { error: status === 401 ? "unauthorized" : "the bridge could not relay this call" });
+    }
+  },
+  watch: sandboxBridgeWatchSessions,
+  log: (line) => console.warn(line),
+}));
+// #4081: say once why scripts in server environments cannot reach Perspicax
+if (IDENTITY.kind === "perspicax" && userSandbox) {
+  const bridgeOff = sandboxBridgeStartupNote();
+  if (bridgeOff) console.warn(bridgeOff);
+}
 // APNs relay for keyless Sagax servers (#2697): off until SAGAX_APNS_RELAY_TOKENS is set.
 PRE_AUTH_ROUTES.push(createPushRelayRoutes({
   tokens: readApnsRelayTokens(),

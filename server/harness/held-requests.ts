@@ -40,6 +40,18 @@ export interface HeldRequestInput {
   input?: string;
   /** The call reaches outside (a send, a write): never passes as a read. */
   outbound?: boolean;
+  /** #4081 (the sandbox bridge): decided exactly as the engine's own ask of
+   * this tool, never as a connector call: the event names the tool as the
+   * engine does and carries no connector facts and no `outbound`, so the
+   * pipeline reads it with the rules of that tool (a Perspicax call: the
+   * reviewed reads, never at Ask). */
+  asEngine?: boolean;
+  /** A digest of the call's complete arguments (canonical JSON, never the
+   * card's preview, which cuts lists, depth and long text and hides some
+   * keys). A request with the same tool and digest as one still open on the
+   * same turn waits on that one's card: a burst of the very same call
+   * raises one card. Absent: never grouped. */
+  sameArgs?: string;
 }
 
 export interface HeldDecision {
@@ -53,10 +65,14 @@ interface Pending {
   provider: string;
   providerInstanceId: string;
   resolve: (decision: HeldDecision) => void;
+  decision: Promise<HeldDecision>;
+  /** An `asEngine` request's identity, for the burst of identical calls. */
+  sameKey?: string;
 }
 
 export class HeldRequests {
   private readonly pending = new Map<string, Pending>();
+  private readonly same = new Map<string, string>();
 
   /** `publish` is the bus's publish (the same path an engine's events take
    * after EventBus.attach), read at call time. */
@@ -70,6 +86,12 @@ export class HeldRequests {
    * rule, the level, a connector read), by a person on the card, or by the
    * turn's end (deny). */
   open(input: HeldRequestInput): { requestId: string; decision: Promise<HeldDecision> } {
+    const sameKey = input.sameArgs
+      ? [input.threadId, input.turnId ?? "", input.providerInstanceId, input.mcpTool, input.sameArgs].join("\u0000")
+      : undefined;
+    const open = sameKey ? this.same.get(sameKey) : undefined;
+    const waiting = open ? this.pending.get(open) : undefined;
+    if (open && waiting) return { requestId: open, decision: waiting.decision };
     const requestId = `${HELD_REQUEST_PREFIX}${newId()}`;
     let resolve!: (decision: HeldDecision) => void;
     const decision = new Promise<HeldDecision>((r) => { resolve = r; });
@@ -79,7 +101,10 @@ export class HeldRequests {
       provider: input.provider,
       providerInstanceId: input.providerInstanceId,
       resolve,
+      decision,
+      ...(sameKey ? { sameKey } : {}),
     });
+    if (sameKey) this.same.set(sameKey, requestId);
     this.publish({
       eventId: newId(),
       provider: input.provider,
@@ -91,17 +116,20 @@ export class HeldRequests {
       requestId,
       // full-access: connector-held
       requestType: "permission",
-      tool: "other",
+      tool: input.asEngine ? input.mcpTool : "other",
       mcpTool: input.mcpTool,
       summary: input.summary ?? input.mcpTool,
       ...(input.input !== undefined ? { input: input.input } : {}),
       // A connector the server reaches with the turn's own principal: the
       // facts the pipeline reads for a connector call (a read passes, a
-      // send asks), and connectorHub, which only the server may set.
-      engineConnector: true,
-      accountConnector: true,
-      connectorHub: true,
-      ...(input.outbound ? { outbound: true } : {}),
+      // send asks), and connectorHub, which only the server may set. An
+      // engine's own tool carries none of them (asEngine).
+      ...(input.asEngine ? {} : {
+        engineConnector: true,
+        accountConnector: true,
+        connectorHub: true,
+        ...(input.outbound ? { outbound: true } : {}),
+      }),
     } as RuntimeEvent);
     return { requestId, decision };
   }
@@ -152,6 +180,7 @@ export class HeldRequests {
 
   private settle(requestId: string, held: Pending, decision: HeldDecision, source: "user" | "timeout"): void {
     this.pending.delete(requestId);
+    if (held.sameKey && this.same.get(held.sameKey) === requestId) this.same.delete(held.sameKey);
     held.resolve(decision);
     this.publish({
       eventId: newId(),

@@ -281,6 +281,35 @@ describe("createInternalEnvironmentsRoutes", () => {
     expect(sent[0]?.status).toBe(200);
   });
 
+  it("sandbox/mcp gives a command the Perspicax bridge variables, a file script none (#4081)", async () => {
+    const ran: Array<{ argv: string[]; env?: Record<string, string> }> = [];
+    const asked: Array<{ threadId: string; ownerId: string }> = [];
+    const route = createInternalEnvironmentsRoutes(baseDeps({
+      sandboxBridgeEnv: (capability, ownerId) => {
+        asked.push({ threadId: capability.threadId, ownerId });
+        return { SAGAX_BRIDGE_MCP_URL: "https://sagax.example/api/bridge/perspicax/mcp", SAGAX_BRIDGE_TOKEN: "sgx_brg_test" };
+      },
+      userSandboxExec: async (_ownerId, input) => {
+        ran.push(input as { argv: string[]; env?: Record<string, string> });
+        return { stdout: "", stderr: "", exitCode: 0, truncated: false, timedOut: false };
+      },
+      handleUserSandboxMcp: (async (_method: string, _params: unknown, exec: { exec: (input: { argv: string[]; env?: Record<string, string> }) => Promise<unknown> }) => {
+        await exec.exec({ argv: ["bash", "-lc", "python3 scripts/dispatch_pass.py snapshot"], env: { SAGAX_OTHER: "1" } });
+        await exec.exec({ argv: ["sh", "-c", "cat -- \"$1\"", "sh", "notes.md"] });
+        return { content: [{ type: "text", text: "ok" }] };
+      }) as unknown as InternalEnvironmentsDeps["handleUserSandboxMcp"],
+    }));
+    const { sent } = await call(route, {
+      path: "/api/internal/sandbox/mcp",
+      body: { method: "tools/call", params: { name: "run_command", arguments: { command: "x" } } },
+      capability: { botId: BOT.id, threadId: "t-1", generation: "g1", sandboxPrincipalId: "pr_a" },
+    });
+    expect(sent[0]?.status).toBe(200);
+    expect(ran[0]?.env).toEqual({ SAGAX_OTHER: "1", SAGAX_BRIDGE_MCP_URL: "https://sagax.example/api/bridge/perspicax/mcp", SAGAX_BRIDGE_TOKEN: "sgx_brg_test" });
+    expect(ran[1]?.env).toBeUndefined();
+    expect(asked).toEqual([{ threadId: "t-1", ownerId: "pr_a" }]);
+  });
+
   it("personal-mcp 404 when not perspicax", async () => {
     const route = createInternalEnvironmentsRoutes(baseDeps());
     const { sent } = await call(route, { path: "/api/internal/personal-mcp", body: {} });

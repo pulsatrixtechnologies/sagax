@@ -187,6 +187,10 @@ export interface InternalEnvironmentsDeps {
   saveToolResult(capability: InternalCapabilityView, text: string, truncated?: boolean): { id: string };
   commandVariablesFor(botId: string, threadId: string, principalId?: string): Record<string, string>;
   withCommandVariables: typeof withCommandVariables;
+  /** #4081: the Perspicax bridge variables of this turn's commands in the
+   * person's environment (server/perspicax/sandbox-bridge.ts), or null when
+   * the turn has no Perspicax connection or the server no public address. */
+  sandboxBridgeEnv?(capability: InternalCapabilityView, ownerId: string): Record<string, string> | null;
   userSandboxExec(ownerId: string, input: unknown, botId: string): Promise<unknown>;
   userSandboxOverQuota(ownerId: string, botId: string): boolean | Promise<boolean>;
   /** The bot's own folder in the environment (server/sandbox/sandbox-bot-folder.ts),
@@ -584,8 +588,12 @@ async function handleSandboxMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
     const result = await deps.handleUserSandboxMcp(rpcMethod, frame?.params, {
       exec: async (input) => {
         const placed = deps.withCommandVariables(input as never, deps.commandVariablesFor(capability.botId, capability.threadId, ownerId)) as SandboxExecInput;
+        // #4081: a command (run_command) reaches the bot's own Perspicax
+        // connection through the bridge; a file tool's script needs nothing
+        const bridge = placed.argv[0] === "bash" && placed.argv[1] === "-lc" ? deps.sandboxBridgeEnv?.(capability, ownerId) ?? null : null;
+        const bridged: SandboxExecInput = bridge ? { ...placed, env: { ...placed.env, ...bridge } } : placed;
         try {
-          return await deps.userSandboxExec(ownerId, folder ? inBotFolder(placed, folder, capability.threadId) : placed, capability.botId) as never;
+          return await deps.userSandboxExec(ownerId, folder ? inBotFolder(bridged, folder, capability.threadId) : bridged, capability.botId) as never;
         } finally {
           // #3619: a command that names a plugin folder may have changed it:
           // the next turn reads the markers again

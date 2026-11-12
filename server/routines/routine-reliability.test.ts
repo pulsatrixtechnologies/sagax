@@ -158,7 +158,7 @@ describe("routine reliability in an isolated journal", () => {
     expect(dispatched).toEqual([backup, primary]);
     failover.stop();
   });
-  it.each(["manual", "schedule", "webhook"] as const)("blocks missing skills before creating a task for %s and notifies once per bot and cause", async (trigger) => {
+  it.each(["manual", "schedule", "webhook"] as const)("blocks missing skills before creating a task for %s and tells its streak once", async (trigger) => {
     const h = fixture();
     h.manager.update(h.routine.id, { requires: { skills: ["inbox-review"] } });
     if (trigger === "schedule") h.advance(60 * 60_000);
@@ -173,21 +173,30 @@ describe("routine reliability in an isolated journal", () => {
     expect(h.manager.getRoutine(h.routine.id)?.enabled).toBe(true);
     expect(h.manager.listRoutines()[0]?.failureStreak).toBeUndefined();
     const blocked = h.manager.listRuns()[0]!;
+    // #3990 (owner decision 2026-11-11): a routine's own runs tell their
+    // problem by their streak (problemAlert), at the third blocked run in a
+    // row for one that runs several times a day; each blocked run carries
+    // its words for that run, whatever its bot met before
+    const told = (manager = h.manager) => { const [run, alert] = h.onRunFailed.mock.calls.at(-1)!; return manager.problemAlert(run, alert); };
     expect(h.onRunFailed.mock.calls[0]?.[1]).toEqual({ detail: `Inbox review: "${blocked.error}"` });
+    expect(told()).toBeNull();
     h.manager.runNow(h.routine.id); await h.flush();
-    expect(h.onRunFailed.mock.calls.at(-1)?.[1]).toBeNull();
+    expect(h.onRunFailed.mock.calls.at(-1)?.[1]).toEqual({ detail: `Inbox review: "${blocked.error}"` });
+    expect(told()).toBeNull();
     const other = h.manager.create({ name: "Wren review", prompt: "Read the inbox.", botId: "osprey", schedule: { type: "webhook" }, requires: { skills: ["inbox-review"] } });
     h.manager.runNow(other.id); await h.flush();
-    expect(h.onRunFailed.mock.calls.at(-1)?.[1]).toBeNull();
+    expect(told()).toBeNull();
     h.manager.update(other.id, { requires: { computer: true } });
     h.probes.computers = () => [{ name: "Wren computer", online: false, needed: true }];
     h.manager.runNow(other.id); await h.flush();
     expect(h.onRunFailed.mock.calls.at(-1)?.[1]).toEqual({ detail: `Wren review: "${h.onRunFailed.mock.calls.at(-1)?.[0].error}"` });
+    expect(told()).toBeNull();
     const reloaded = new RoutineManager(h.options);
     expect(reloaded.listRuns()[0]?.readiness).toEqual(h.manager.listRuns()[0]?.readiness);
     reloaded.runNow(other.id);
     for (let i = 0; i < 10; i++) { await reloaded.tick(); await new Promise(resolve => setTimeout(resolve, 0)); }
-    expect(h.onRunFailed.mock.calls.at(-1)?.[1]).toBeNull();
+    // its third blocked run in a row is told, though its bot met the cause before
+    expect(told(reloaded)).toEqual({ detail: `Wren review: "${h.onRunFailed.mock.calls.at(-1)?.[0].error}"` });
     const wren = reloaded.create({ name: "Wren inbox", prompt: "Read the inbox.", botId: "wren", schedule: { type: "webhook" }, requires: { skills: ["inbox-review"] } });
     reloaded.runNow(wren.id);
     for (let i = 0; i < 10; i++) { await reloaded.tick(); await new Promise(resolve => setTimeout(resolve, 0)); }

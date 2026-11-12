@@ -218,7 +218,7 @@ export function firstOwnerNotice(notices: RoutineOwnerNotice[], botId: string, c
 /** What a failed attempt becomes. A queued run is changed in place; a failing one is the caller's to fail with `error`.
  * `words`: the language and zone of the person the run is for (its notices are theirs to read). */
 export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailureFacts, now: number, notices: RoutineOwnerNotice[],
-  words: RoutineLimitWordsOptions = {}): RoutineRecovery {
+  words: RoutineLimitWordsOptions = {}, toldByStreak = false): RoutineRecovery {
   const said: RoutineLimitWordsOptions = { ...words, timeZone: words.timeZone ?? hostTimeZone() };
   // The engine that refused, as the limit failover host saw it dispatched (a wake's fast model on another engine,
   // say), never "this bot's engine" by guess.
@@ -245,6 +245,10 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
   }
   if (verdict.kind === "final") return { queued: false, error: again };
   const first = firstOwnerNotice(notices, run.botId, verdict.cause, now);
+  // #3990: a run told by its streak ends told at its telling run, whatever
+  // its bot met before (RoutineManager.problemAlert keeps the runs before it
+  // silent); a wait it starts still says its cause only the first time.
+  const told = first || toldByStreak;
   if (verdict.cause === "usage_limit") {
     if (limit) {
       // The engine's own reset (the host also reads it from the engine's words), never an estimate passed off as one;
@@ -266,7 +270,7 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
       }
       // The run's own error says it too (its row, any tool reading runs); the engine's raw words stay in its thread.
       const text = routineLimitStoppedText(limit, said);
-      return { queued: false, error: text, alert: first ? { detail: text } : null };
+      return { queued: false, error: text, alert: told ? { detail: text } : null };
     }
     const reset = verdict.resetsAt;
     if (reset && !nextCovers(reset, facts.nextScheduled) && reset > now && reset - now <= ROUTINE_LIMIT_WAIT_MS) {
@@ -274,7 +278,7 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
       const text = routineLimitUnknownEngineText(said, at);
       if (requeueOnce(run, "usage_limit", failure, now, at, text)) return { queued: true, ...(first ? { alert: { detail: text } } : {}) };
     }
-    return { queued: false, error: failure, alert: first ? { detail: routineLimitUnknownEngineText(said) } : null };
+    return { queued: false, error: failure, alert: told ? { detail: routineLimitUnknownEngineText(said) } : null };
   }
   // Auth expired / signed out, or Claude extra-usage credits: pause until
   // reconnect. No failed status, so the proactive waker never loops on the
@@ -295,10 +299,10 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
   // The bot's own engine out of credit keeps the engine's own words (the provider's detail and what to add, #1995).
   if (verdict.cause === "credits" && limit && (limit.detour || limit.home)) {
     const text = routineLimitCreditsText(limit, said);
-    return { queued: false, error: text, alert: first ? { detail: text } : null };
+    return { queued: false, error: text, alert: told ? { detail: text } : null };
   }
   const action = verdict.cause === "setup" ? failure : OWNER_ACTION[verdict.cause];
-  return { queued: false, error: failure, alert: first ? { detail: action } : null };
+  return { queued: false, error: failure, alert: told ? { detail: action } : null };
 }
 
 export { isEngineReconnectCondition, CLAUDE_SIGN_IN_EXPIRED };

@@ -168,7 +168,9 @@ d'apps, puis une capsule de recherche large. Rien d'autre à l'écran.
   mesure, donc la même place à toute largeur). Elle y reste jusqu'à ce que les mots
   de l'étape suivante la remplacent, comme une étape remplace une étape. Une règle
   unique, `src/lib/live-text-place.ts`, lue par la ligne, la bulle en cours d'écriture
-  et la rangée du tour, au chat direct comme au salon.
+  et la rangée du tour, au chat direct comme au salon. Le téléphone et la tablette
+  (#3712) lisent la même règle, `ios/Sources/CompanionCore/LiveTextPlace.swift`, avec
+  les mêmes cas de test ; la phrase y tient sur deux lignes au plus.
 - Rangée du tour (#3581) : dans le chat d'une personne, seule la réponse reste une
   bulle. Les notes du bot pendant qu'il travaille et ses étapes finies se rangent
   derrière une seule rangée d'étape (StepRow, chevron discret) : « Au travail » qui

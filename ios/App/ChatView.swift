@@ -11,6 +11,7 @@
 // iPhone and the iPad desktop layout can reuse them and feature packages do
 // not collide in one file.
 import SwiftUI
+import Combine
 import CompanionCore
 import PhotosUI
 import UniformTypeIdentifiers
@@ -102,6 +103,8 @@ struct ChatView: View {
     /// A room's composer hint: Jev routes an Auto room (`jevRoomRoutingOn`).
     @State var roomJevOn = false
     @StateObject var follow = BottomFollow()
+    /// #3712: this thread's bot is writing a text now (StreamingStore).
+    @State var liveWriting = false
     @StateObject var citations = CitationDrafts()
     @State var shareFile: ShareFile?
     /// The bot's "Share as Template" sheet (a public template link).
@@ -284,6 +287,17 @@ struct ChatView: View {
         PinnedWaiting.heldIds(pinnedEntries, dockShown: session.account?.canWrite(in: threadId) != false)
     }
 
+    /// #3712: the bot's note the working line draws now (LiveTextPlace), so
+    /// the transcript draws no bubble for it. None while the bot writes its
+    /// next text, which takes the line (or opens a bubble): the note is then
+    /// in the turn's row, so its words are never off screen.
+    var lineNote: Message? {
+        guard !liveWriting else { return nil }
+        let live = session.liveTurns(forThread: threadId)
+        guard !live.isEmpty else { return nil }
+        return LiveTextPlace.liveLineNote(LiveTextPlace.lastDrawn(messages), liveTurns: live)
+    }
+
     /// The transcript as the reader has asked to see it: every chip, folded
     /// runs, or none at all.
     /// Memoized on its inputs (#3017, L01): the folding pass ran over the
@@ -292,11 +306,13 @@ struct ChatView: View {
         let key = TranscriptLayoutMemo.RowsKey(
             messages: PinnedWaiting.drawn(messages, held: pinnedHeld), detail: toolCalls.detail,
             showThreads: threadPrefs.threads.allows(.transcriptReceipts),
-            botId: current.isBot ? current.id : "", hides: current.isBot)
+            botId: current.isBot ? current.id : "", hides: current.isBot,
+            liveTurns: session.liveTurns(forThread: threadId), lineNoteId: lineNote?.id)
         if layoutMemo.rowsKey == key { return layoutMemo.rows }
         let built = transcriptRows(
             key.messages, detail: key.detail, showThreads: key.showThreads,
-            threadBotId: key.botId, hidesPreSendRefusals: key.hides
+            threadBotId: key.botId, hidesPreSendRefusals: key.hides,
+            liveTurns: key.liveTurns, lineNoteId: key.lineNoteId
         )
         layoutMemo.rowsKey = key
         layoutMemo.rows = built
@@ -488,6 +504,10 @@ struct ChatView: View {
         }
         .onValueChange(of: showingRoomInfo) { shown in
             if shown { dictation.stop() }
+        }
+        // #3712: only whether this thread writes now, not each word
+        .onReceive(session.streamingStore.$text.map { [threadId] in $0[threadId]?.isEmpty == false }.removeDuplicates()) { writing in
+            if liveWriting != writing { liveWriting = writing }
         }
         // a draft another screen prepared for this thread, unsent (Tasks "Answer")
         .onReceive(ComposerPrefill.shared.$pending) { pending in
@@ -944,7 +964,8 @@ struct ChatView: View {
                             color: current.color,
                             name: current.name,
                             chat: current,
-                            step: current.busy ? WorkingStepLine.current(messages) : nil
+                            step: current.busy ? WorkingStepLine.current(messages) : nil,
+                            note: lineNote.flatMap { $0.text.map(LiveTextPlace.lineWords) }
                         )
 
                         // The bottom of the conversation: 26.3 pt from the
@@ -1356,6 +1377,9 @@ struct ChatLiveTail: View {
     /// 2026-10-29: the running call's step, named on the line in place of
     /// "Thinking…" (shared/working-step.ts); nil between calls.
     var step: WorkingStepLine.Current? = nil
+    /// #3712: the bot's short note of the live turn (LiveTextPlace), written
+    /// on the line in place of the step until the next step's words replace it.
+    var note: String? = nil
     /// Replies that finished streaming while this chat was open.
     @State private var finished = 0
 
@@ -1369,12 +1393,24 @@ struct ChatLiveTail: View {
             }
     }
 
+    /// #3712: a short text is written on the working line from its first
+    /// word; it opens into the bubble once it grows past it, and stays one
+    /// (LiveTextPlace, the desktop's live-text-place.ts).
+    private var liveWords: String? {
+        guard !onCall, streams, let live = store.text[threadId], !live.isEmpty,
+              LiveTextPlace.of(live) == .line else { return nil }
+        let words = LiveTextPlace.lineWords(live)
+        return words.isEmpty ? nil : words
+    }
+
     @ViewBuilder
     private var tail: some View {
-        if !onCall, streams, let live = store.text[threadId], !live.isEmpty {
+        if !onCall, streams, let live = store.text[threadId], !live.isEmpty, LiveTextPlace.of(live) == .bubble {
             StreamingBubble(text: live, reasoning: nil, color: color)
                 .padding(.top, ChatView.rowGap)
                 .id(ChatView.liveBubbleId)
+        } else if let words = liveWords {
+            workingLine(words: words)
         } else if !onCall, showsReasoning, let thinking = store.reasoning[threadId], !thinking.isEmpty {
             // Only while there is no answer yet. Once tokens
             // of the reply exist, the reasoning is behind us
@@ -1383,41 +1419,65 @@ struct ChatLiveTail: View {
                 .padding(.top, ChatView.rowGap)
                 .id(ChatView.liveBubbleId)
         } else if busy {
-            // the reference design's thinking line: the bot's own small
-            // mascot at work, then a quiet word (the dots for a room)
-            Group {
-                if let chat, chat.isBot {
-                    HStack(spacing: 10) {
-                        ChatAvatarView(chat: chat, size: 28, state: .thinking, animated: true)
-                        if let step, let label = WorkingStepText.label(step.step) {
-                            // the step, and how long it has been quiet
-                            TimelineView(.periodic(from: .now, by: 15)) { context in
-                                Text([label, WorkingStepText.quiet(since: step.since, now: context.date)].compactMap { $0 }.joined(separator: " · "))
-                                    .font(Theme.Font.body)
-                                    .foregroundStyle(Theme.textTertiary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                            }
-                            .accessibilityIdentifier("chat-working-step")
-                        } else {
-                            Text("Thinking…")
+            workingLine(words: note)
+        }
+    }
+
+    /// The reference design's thinking line: the bot's own small mascot at
+    /// work, then a quiet word (the dots for a room). `words`: the bot's own
+    /// short text, in the line's look, on two lines at most (#3712).
+    private func workingLine(words: String?) -> some View {
+        Group {
+            if let chat, chat.isBot {
+                HStack(spacing: 10) {
+                    ChatAvatarView(chat: chat, size: 28, state: .thinking, animated: true)
+                    if let words {
+                        noteText(words)
+                    } else if let step, let label = WorkingStepText.label(step.step) {
+                        // the step, and how long it has been quiet
+                        TimelineView(.periodic(from: .now, by: 15)) { context in
+                            Text([label, WorkingStepText.quiet(since: step.since, now: context.date)].compactMap { $0 }.joined(separator: " · "))
                                 .font(Theme.Font.body)
                                 .foregroundStyle(Theme.textTertiary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                         }
+                        .accessibilityIdentifier("chat-working-step")
+                    } else {
+                        Text("Thinking…")
+                            .font(Theme.Font.body)
+                            .foregroundStyle(Theme.textTertiary)
                     }
-                    .padding(.leading, 4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityElement(children: .ignore)
-                } else {
-                    TypingIndicatorView(tintColor: MausPalette.color(color))
                 }
+                .padding(.leading, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .ignore)
+            } else if let words {
+                HStack(spacing: 10) {
+                    TypingIndicatorView(tintColor: MausPalette.color(color))
+                    noteText(words)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                TypingIndicatorView(tintColor: MausPalette.color(color))
             }
-            .padding(.top, ChatView.rowGap)
-            .id(ChatView.liveBubbleId)
-            .accessibilityLabel("\(name) is working")
-            .accessibilityValue(step.flatMap { WorkingStepText.label($0.step) } ?? "")
-            .accessibilityIdentifier("chat-thinking")
         }
+        .padding(.top, ChatView.rowGap)
+        .id(ChatView.liveBubbleId)
+        .accessibilityLabel("\(name) is working")
+        .accessibilityValue(words ?? step.flatMap { WorkingStepText.label($0.step) } ?? "")
+        .accessibilityIdentifier("chat-thinking")
+    }
+
+    /// The bot's own words on the line, in its look, never cut: two lines
+    /// at most on a phone (`LiveTextPlace.lineTextMax`).
+    private func noteText(_ words: String) -> some View {
+        Text(verbatim: words)
+            .font(Theme.Font.body)
+            .foregroundStyle(Theme.textTertiary)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("chat-working-note")
     }
 }
 
@@ -1651,6 +1711,9 @@ final class TranscriptLayoutMemo {
         var showThreads: Bool
         var botId: String
         var hides: Bool
+        /// #3712: the turns that run and the note the working line draws.
+        var liveTurns: Set<String>
+        var lineNoteId: String?
     }
     struct LinesKey: Equatable {
         var messages: [Message]

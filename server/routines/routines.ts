@@ -2198,9 +2198,9 @@ export class RoutineManager {
    * of its streak that tells the person (problemToldAt, the run its summary
    * card is drawn for), with the alert it came with: null stays null (a run
    * its caller means to stay silent, a Flow refusal or a skipped admission).
-   * The runs before it were not told, so the causes they already met (an
-   * owner notice, the same failure as the last run) never take that turn
-   * away (streakTells). Any other run (one the person started, a team
+   * The runs before it were not told, so the same failure as the last run
+   * never takes that turn away, and a cause that belongs to the bot is
+   * still told once per bot (ownerNoticeTells). Any other run (one the person started, a team
    * goal's, one that paused its routine) keeps the alert it came with. */
   problemAlert<T>(run: Pick<RoutineRun, "routineId" | "startedBy" | "target" | "autoPaused" | "problemRepeat">, alert: T | null | undefined): T | null | undefined {
     if (!this.streakTells(run)) return alert;
@@ -2211,6 +2211,23 @@ export class RoutineManager {
    * than by the run itself. */
   private streakTells(run: Pick<RoutineRun, "startedBy" | "target" | "autoPaused">): boolean {
     return routineReportsByStreak(run) && !run.autoPaused;
+  }
+
+  /** #3990: whether a run that ends with a problem now is the run of its
+   * streak that tells the person (problemAlert), before it is settled. */
+  private atTellingRun(run: RoutineRun): boolean {
+    return this.problemStreakBefore(run).length + 1 === this.problemToldAt(run);
+  }
+
+  /** A problem that belongs to the bot (its engine's limit, sign-in or
+   * credits, a missing skill, a readiness check) is told once per bot and
+   * cause (firstOwnerNotice; owner rule "one state is told once", #3990).
+   * A run told by its streak uses that up only at its telling run: the runs
+   * before it keep their words (problemAlert silences them) and leave it to
+   * that run, so a bot with two routines meeting the same cause rings once. */
+  private ownerNoticeTells(run: RoutineRun, cause: RoutineOwnerNotice["cause"]): boolean {
+    if (this.streakTells(run) && !this.atTellingRun(run)) return true;
+    return firstOwnerNotice(this.ownerNotices, run.botId, cause, this.now());
   }
 
   /** #3695, #3990: what a run reads of its streak: the rule (the person
@@ -3828,8 +3845,7 @@ export class RoutineManager {
                 continue;
               }
               run.readiness = readiness.checks;
-              // a run told by its streak says it at its telling run, whatever its bot met before (problemAlert)
-              const told = firstOwnerNotice(this.ownerNotices, run.botId, "probe_error", this.now()) || this.streakTells(run);
+              const told = this.ownerNoticeTells(run, "probe_error");
               this.blockRun(run, ROUTINE_STARTING_SKIPPED, told ? { detail: `${routine.name}: "${ROUTINE_STARTING_SKIPPED}"` } : null, true);
               continue;
             }
@@ -3852,7 +3868,7 @@ export class RoutineManager {
               }
               const cause = blocker.code === "engine_credits" ? "credits" : blocker.code === "engine_limit" ? "usage_limit"
                 : blocker.code === "engine_signed_out" ? "signed_out" : blocker.code === "ready" ? "probe_error" : blocker.code;
-              const told = firstOwnerNotice(this.ownerNotices, run.botId, cause, this.now()) || this.streakTells(run);
+              const told = this.ownerNoticeTells(run, cause);
               const alert = told ? { detail: `${routine.name}: "${blocker.line}"` } : null;
               this.blockRun(run, blocker.line, alert, true);
               continue;
@@ -4646,14 +4662,14 @@ export class RoutineManager {
     const who = { botId: run.botId, ...(run.runAs ? { runAs: run.runAs } : {}) };
     const language = this.options.languageFor?.(who);
     const timeZone = this.options.timeZoneFor?.(who);
-    // #3990: a run told by its streak ends told at its telling run; one that
-    // waited out a usage limit already said its cause at that wait
-    const toldByStreak = this.streakTells(run) && run.retried !== "usage_limit";
+    // #3990: a run told by its streak leaves its bot's once per cause to its
+    // telling run (one that waited out a usage limit said it at that wait)
+    const beforeTellingRun = this.streakTells(run) && !this.atTellingRun(run);
     const recovery = recoverRun(run, said, {
       ...(limit ? { ...facts, limit } : facts), nextScheduled: nextScheduledRun(run, this.routines),
     }, this.now(), this.ownerNotices, {
       ...(language ? { language } : {}), ...(timeZone ? { timeZone } : {}),
-    }, toldByStreak);
+    }, beforeTellingRun);
     if ("waiting" in recovery && recovery.waiting) {
       this.wait(run, recovery.attention);
       delete run.error;

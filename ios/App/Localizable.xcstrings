@@ -28026,16 +28026,6 @@
         }
       }
     },
-    "Dismiss the group conversation usage notice": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ignorer l'avis sur l'utilisation des conversations de groupe"
-          }
-        }
-      }
-    },
     "Dismiss the run": {
       "localizations": {
         "en": {
@@ -35969,7 +35959,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les conversations de groupe consomment davantage : chaque Bot du groupe relit tout le fil. Pour une question simple, discutez plutôt avec un seul Bot."
+            "value": "Les conversations de groupe consomment davantage : chaque Bot du groupe relit tout le fil. Pour une question simple, discute plutôt avec un seul Bot."
           }
         }
       }

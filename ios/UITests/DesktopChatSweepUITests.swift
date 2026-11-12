@@ -40,7 +40,6 @@ final class DesktopChatSweepUITests: XCTestCase {
             "-companion.onboarding.welcomeSeen", "YES",
             "-companion.onboarding.notificationsSeen", "YES",
             "-companion.sidebarPrefs.parity-harness", "{}",
-            "-sagax.notice.dismissed.group-cost", "NO",
         ]
         if let environment { arguments += ["-parityEnvironment", environment] }
         app.launchArguments = arguments
@@ -149,12 +148,13 @@ final class DesktopChatSweepUITests: XCTestCase {
         XCTAssertTrue(element(app, "desktop-message-actions").exists, "…")
     }
 
-    /// A group: the usage notice, the instructions line and who responds.
+    /// A group: no usage notice above the chat (it sits in the panel's
+    /// Members tab), the instructions line and who responds.
     @MainActor
     func testGroupBannersAndHint() throws {
         let app = launch("group-chat")
-        XCTAssertTrue(element(app, "desktop-group-cost-notice").waitForExistence(timeout: 20), "the usage notice")
-        XCTAssertTrue(element(app, "desktop-group-bulletin").exists, "the instructions line")
+        XCTAssertTrue(element(app, "desktop-group-bulletin").waitForExistence(timeout: 20), "the instructions line")
+        XCTAssertFalse(element(app, "desktop-group-cost-notice").exists, "no usage notice above the chat")
         let field = app.textViews["message-input"].exists ? app.textViews["message-input"] : app.textFields["message-input"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertTrue((field.placeholderValue ?? "").contains("responds"), "who responds: \(field.placeholderValue ?? "")")

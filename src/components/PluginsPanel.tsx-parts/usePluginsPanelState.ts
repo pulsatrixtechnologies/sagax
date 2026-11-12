@@ -66,7 +66,8 @@ export function usePluginsPanelState() {
   // The Connect Apps home is where a person lands (#2104, 2026-11-06: as
   // Grok Bot; Installed was the landing on 2026-11-05: what they have,
   // then Discover to add; Discover was first from 2026-10-28 to then).
-  const [tab, setTab] = useState<ConnectAppsTab>("discover");
+  // Sent to add an MCP server (#3910): Manage, whose "+ Add" adds it.
+  const [tab, setTab] = useState<ConnectAppsTab>(() => state.pluginsSurface === "mcp" ? "installed" : "discover");
   const harness = useHarnessConnectors();
   const claudeConnectors = harness.connected;
   const ownerOrAdmin = useOwnerOrAdmin();
@@ -111,7 +112,7 @@ export function usePluginsPanelState() {
   const [workspaceMarkets, setWorkspaceMarkets] = useState(false);
   const scopeBot = pluginScopeBot({ pluginsBotId: state.pluginsBotId, selectedId: state.selectedId, bots: state.bots });
   const scopeBotId = scopeBot?.id ?? null;
-  const [scopeChoice, setScopeChoice] = useState<PluginScope>(() => initialPluginScope(state.pluginsBotId, scopeBot));
+  const [scopeChoice, setScopeChoice] = useState<PluginScope>(() => initialPluginScope(state.pluginsBotId, scopeBot, state.pluginsSurface));
   const scope: PluginScope = (scopeChoice === "bot" && !scopeBot) || (scopeChoice === "workspace" && !mayManageOrganization) ? "me" : scopeChoice;
   const [botView, setBotView] = useState<BotPluginsView | null>(null);
   const [personalView, setPersonalView] = useState<BotPluginsView | null>(null);

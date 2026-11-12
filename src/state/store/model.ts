@@ -1290,8 +1290,9 @@ export interface AppState {
    * (activeView "apps"). Kept in sync with activeView for callers that
    * still read pluginsOpen. */
   pluginsOpen: boolean;
-  /** Which tab the Plugins panel opens on; "mcp" when a bot's tools
-   * sent the user there to add a server. */
+  /** "mcp" when a bot's Add > MCP servers sent the person there to add a
+   * server: Plugins opens on Manage in a scope whose "+ Add" adds one
+   * (src/lib/plugin-scope.ts initialPluginScope). */
   pluginsSurface: "apps" | "mcp";
   /** The bot Connect apps opens on, in its "For this bot" scope (a bot
    * panel sent the person there); null: the workspace scope. */

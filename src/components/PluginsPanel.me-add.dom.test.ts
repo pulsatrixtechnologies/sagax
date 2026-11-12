@@ -65,6 +65,8 @@ const API: Record<string, unknown> = {
   "/api/messages/setup": { useMessages: false },
 };
 
+// #3910: a bot's Add > MCP servers opens Plugins for that bot on the "mcp" surface
+let openedFrom: { pluginsBotId: string | null; pluginsSurface: "apps" | "mcp" } = { pluginsBotId: null, pluginsSurface: "apps" };
 vi.mock("@/state/store", async () => {
   const actual = await vi.importActual<typeof import("@/state/store")>("@/state/store");
   return {
@@ -76,10 +78,9 @@ vi.mock("@/state/store", async () => {
         activeView: "apps",
         connected: true,
         config: { viewer: { principalId: "p-1", role: "member" } },
-        selectedId: "",
-        pluginsBotId: null,
-        pluginsSurface: "apps",
-        bots: [],
+        selectedId: openedFrom.pluginsBotId ?? "",
+        ...openedFrom,
+        bots: openedFrom.pluginsBotId ? [{ id: openedFrom.pluginsBotId, name: "Wren", ownerUserId: "p-1", modelSelection: { instanceId: "codex", model: "default" }, messages: [], tasks: [] }] : [],
         instances: [],
       },
       dispatch: vi.fn(),
@@ -113,6 +114,7 @@ describe("Plugins > Me: the same + Add as Organization, the servers in Installed
     root = createRoot(host);
   });
   afterEach(() => {
+    openedFrom = { pluginsBotId: null, pluginsSurface: "apps" };
     act(() => root.unmount());
     host.remove();
     setLocale("en");
@@ -194,5 +196,17 @@ describe("Plugins > Me: the same + Add as Organization, the servers in Installed
     await act(async () => { form.querySelector<HTMLButtonElement>("button[type=submit]")!.click(); });
     await settle();
     expect(calls("PUT")).toContain("/api/me/mcp/servers/notes");
+  });
+
+  it("a bot's Add > MCP servers lands on Manage where + Add adds a server, not on This bot (#3910)", async () => {
+    openedFrom = { pluginsBotId: "bot-a", pluginsSurface: "mcp" };
+    await act(async () => { root.render(createElement(PluginsPanel)); });
+    await settle();
+    // no click on the home's link: it opens on Manage
+    expect(host.querySelector("[data-plugins-installed]")).not.toBeNull();
+    expect(host.querySelector("[data-plugins-scope]")?.getAttribute("data-plugins-scope")).toBe("me");
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-plugins-add]")!.click(); });
+    const ids = [...host.querySelectorAll("[data-plugins-add-action]")].map((item) => item.getAttribute("data-plugins-add-action"));
+    expect(ids).toContain("server");
   });
 });

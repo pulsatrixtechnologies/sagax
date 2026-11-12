@@ -94,7 +94,7 @@ vi.mock("@/state/store", async () => {
         config: { viewer: { principalId: "p-1", role: owner ? "owner" : "member" } },
         selectedId: resolved ? "bot-a" : "",
         pluginsBotId: resolved ? "bot-a" : null,
-        pluginsSurface: resolved ? "mcp" : "apps",
+        pluginsSurface: "apps",
         bots: resolved ? [{ id: "bot-a", name: "Wren", ownerUserId: "p-1", modelSelection: { instanceId: "codex", model: "default" }, messages: [], tasks: [] }] : [],
         instances: [],
       },

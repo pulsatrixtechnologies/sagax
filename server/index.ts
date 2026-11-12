@@ -142,7 +142,7 @@ import { flowHelperIn } from "./proactive/flow-watch-helper.ts";
 import { heldSkillNames } from "./proactive/held-skills.ts";
 import { apiNamesOf } from "./perspicax/perspicax-mcp-helpers.ts";
 import { frontMomentSampler, ScreenContextWatcher, screenContextAvailable, screenMomentKey } from "./proactive/screen-context.ts";
-import { ProactiveProposals, ProactiveWaker, proactivePrompt, PeerNoticeHops, ProactivePendingFile, runFailureWakesBot, type ProactiveSource } from "./proactive/proactive-wake.ts";
+import { ProactiveProposals, ProactiveWaker, PROACTIVE_WAKE_BUDGET, proactivePrompt, PeerNoticeHops, ProactivePendingFile, runFailureWakesBot, type ProactiveSource } from "./proactive/proactive-wake.ts";
 import { type BotActService, type PerformActor } from "./bots/bot-act.ts";
 import { askedBotChange, askedChange, createSettingsActions } from "./settings-actions.ts";
 import { createCwActionPasses } from "./widgets/cw-widget-actions.ts";
@@ -782,7 +782,7 @@ import { runAsRefusal } from "./routines/routine-run-as.ts";
 import { recordRoutineChange, recordRoutineToggle, routineToggleForViewer } from "./routines/routine-chat-events.ts";
 import { botReplyQuoteId } from "./turns/reply-to-turn.ts";
 import { isTriggerSchedule } from "../shared/routines.ts";
-import { routineReportsByStreak, routineRunPostsResult } from "../shared/routine-repeat.ts";
+import { routineRunPostsResult } from "../shared/routine-repeat.ts";
 import { routineTurnEffort } from "../shared/routine-effort.ts";
 import { routineTurnModel } from "../shared/routine-model.ts";
 import { nextOccurrence, PREWARM_ENGINE_LEAD_MS, ROUTINE_RESTARTED, RoutineManager, routineClaimedCardChoice, routineClaimedCardWaiting, routineRerunStartedBy, setRoutineTimeZone, type Routine, type RoutineRun, type RoutineRunOn, type RoutineRunTrigger } from "./routines/routines.ts";
@@ -19555,8 +19555,10 @@ const proactiveWaker = new ProactiveWaker({
     const payer = effectiveBotOwner(bot)?.trim();
     return Boolean(payer && engineLogins.expired(payer, driver, "primary", bot.modelSelection.instanceId));
   },
-  // the verification fixtures shorten the gathering window
-  ...(Number(process.env.SAGAX_PROACTIVE_GATHER_MS) > 0 ? { gatherMs: Number(process.env.SAGAX_PROACTIVE_GATHER_MS) } : {})
+  // the verification fixtures shorten the gathering window, and the time
+  // between one bot's wakes (a streak of wakes in seconds)
+  ...(Number(process.env.SAGAX_PROACTIVE_GATHER_MS) > 0 ? { gatherMs: Number(process.env.SAGAX_PROACTIVE_GATHER_MS) } : {}),
+  ...(Number(process.env.SAGAX_PROACTIVE_MIN_INTERVAL_MS) > 0 ? { budget: { ...PROACTIVE_WAKE_BUDGET, minIntervalMs: Number(process.env.SAGAX_PROACTIVE_MIN_INTERVAL_MS) } } : {})
 });
 
 // One-to-one chat this bot owns (not a room). Used by wait follow-ups and waits bootstrap.
@@ -20063,15 +20065,14 @@ routines = new RoutineManager({
   },
   onRunFailed: (run, alert) => {
     // 2026-11-05 (perspicax#880): a failed wake backs the bot's next wake
-    // off, and only the first failure of a streak reaches the person (one
-    // notification, one incident), whatever each error says.
-    if (run.proactive && run.status === "failed" && run.error !== ROUTINE_RESTARTED && !proactiveWaker.noteWakeFailed(run.botId)) alert = null;
+    // off. Who is told is the streak's rule below, a wake's as any run's.
+    if (run.proactive && run.status === "failed" && run.error !== ROUTINE_RESTARTED) proactiveWaker.noteWakeFailed(run.botId);
     // #3695, #3990: a routine says a failure once, at the run of its streak
     // that tells the person (routineProblemToldAt: the first for a routine
     // that runs at most once a day, the third for one that can run several
     // times a day, its one summary card), and a pause of its own as always;
     // the runs before stay in its run list.
-    if (routineReportsByStreak(run) && !run.autoPaused && (run.problemRepeat?.count ?? 1) !== routines?.problemToldAt(run)) alert = null;
+    if (routines) alert = routines.problemAlert(run, alert);
     if (run.threadId) {
       pendingDelegationWakes.delete(run.threadId);
       // A run a restart failed takes its teammates' work with it, before any

@@ -2191,6 +2191,50 @@ export class RoutineManager {
     return routine ? routineProblemToldAt(routine.schedule, this.now(), scheduleZone(undefined)) : ROUTINE_PROBLEM_STREAK_TOLD;
   }
 
+  /** #3695, #3990: the one rule for what a run that ended with a problem
+   * (failed, blocked, missed) tells the person now (its notification and its
+   * incident): the alert it carries, or null when nothing is told. A run
+   * that reports by its streak, a proactive wake included, tells at the run
+   * of its streak that tells the person (problemToldAt, the run its summary
+   * card is drawn for), with the alert it came with: null stays null (a run
+   * its caller means to stay silent, a Flow refusal or a skipped admission).
+   * The runs before it were not told, so the same failure as the last run
+   * never takes that turn away, and a cause that belongs to the bot is
+   * still told once per bot (ownerNoticeTells). Any other run (one the person started, a team
+   * goal's, one that paused its routine) keeps the alert it came with. */
+  problemAlert<T>(run: Pick<RoutineRun, "routineId" | "startedBy" | "target" | "autoPaused" | "problemRepeat">, alert: T | null | undefined): T | null | undefined {
+    if (!this.streakTells(run)) return alert;
+    return (run.problemRepeat?.count ?? 1) === this.problemToldAt(run) ? alert : null;
+  }
+
+  /** Whether a run's problem is told by its streak (problemAlert) rather
+   * than by the run itself. */
+  private streakTells(run: Pick<RoutineRun, "startedBy" | "target" | "autoPaused">): boolean {
+    return routineReportsByStreak(run) && !run.autoPaused;
+  }
+
+  /** #3990: whether a run that ends with a problem now comes strictly
+   * before the run of its streak that tells the person (problemAlert), before
+   * it is settled. Only those runs are silenced by their streak: the telling
+   * run and every run after it (the one that pauses its routine included)
+   * check their bot's once per cause. */
+  private beforeTellingRun(run: RoutineRun): boolean {
+    return this.streakTells(run) && this.problemStreakBefore(run).length + 1 < this.problemToldAt(run);
+  }
+
+  /** A problem that belongs to the bot (its engine's limit, sign-in or
+   * credits, a missing skill, a readiness check) is told once per bot and
+   * cause (firstOwnerNotice; owner rule "one state is told once", #3990).
+   * A run told by its streak never uses it up before its telling run: the
+   * runs before it keep their words (problemAlert silences them) and leave it
+   * to that run; the telling run and the runs after it (the one that pauses
+   * its routine included) check it, so a bot with two routines meeting the
+   * same cause rings once. */
+  private ownerNoticeTells(run: RoutineRun, cause: RoutineOwnerNotice["cause"]): boolean {
+    if (this.beforeTellingRun(run)) return true;
+    return firstOwnerNotice(this.ownerNotices, run.botId, cause, this.now());
+  }
+
   /** #3695, #3990: what a run reads of its streak: the rule (the person
    * does not read each run), and the earlier runs' problems when some ended
    * with problems in a row. A run the person started reads nothing of it;
@@ -3806,7 +3850,8 @@ export class RoutineManager {
                 continue;
               }
               run.readiness = readiness.checks;
-              this.blockRun(run, ROUTINE_STARTING_SKIPPED, firstOwnerNotice(this.ownerNotices, run.botId, "probe_error", this.now()) ? { detail: `${routine.name}: "${ROUTINE_STARTING_SKIPPED}"` } : null, true);
+              const told = this.ownerNoticeTells(run, "probe_error");
+              this.blockRun(run, ROUTINE_STARTING_SKIPPED, told ? { detail: `${routine.name}: "${ROUTINE_STARTING_SKIPPED}"` } : null, true);
               continue;
             }
             run.readiness = readiness.checks;
@@ -3828,7 +3873,8 @@ export class RoutineManager {
               }
               const cause = blocker.code === "engine_credits" ? "credits" : blocker.code === "engine_limit" ? "usage_limit"
                 : blocker.code === "engine_signed_out" ? "signed_out" : blocker.code === "ready" ? "probe_error" : blocker.code;
-              const alert = firstOwnerNotice(this.ownerNotices, run.botId, cause, this.now()) ? { detail: `${routine.name}: "${blocker.line}"` } : null;
+              const told = this.ownerNoticeTells(run, cause);
+              const alert = told ? { detail: `${routine.name}: "${blocker.line}"` } : null;
               this.blockRun(run, blocker.line, alert, true);
               continue;
             }
@@ -4621,11 +4667,15 @@ export class RoutineManager {
     const who = { botId: run.botId, ...(run.runAs ? { runAs: run.runAs } : {}) };
     const language = this.options.languageFor?.(who);
     const timeZone = this.options.timeZoneFor?.(who);
+    // #3990: a run told by its streak leaves its bot's once per cause to its
+    // telling run (one that waited out a usage limit said it at that wait);
+    // the runs from that one on, the pausing run included, check it
+    const beforeTellingRun = this.beforeTellingRun(run);
     const recovery = recoverRun(run, said, {
       ...(limit ? { ...facts, limit } : facts), nextScheduled: nextScheduledRun(run, this.routines),
     }, this.now(), this.ownerNotices, {
       ...(language ? { language } : {}), ...(timeZone ? { timeZone } : {}),
-    });
+    }, beforeTellingRun);
     if ("waiting" in recovery && recovery.waiting) {
       this.wait(run, recovery.attention);
       delete run.error;
@@ -4950,8 +5000,9 @@ export class RoutineManager {
       if (isTriggerSchedule(paused.routine.schedule)) this.notifyTriggerUpdated(paused.routine);
     }
     // Port of OpenMausBot #3052: the same failure as the last outcome is
-    // reported once per streak (null = the owner was already told).
-    this.options.onRunFailed?.(cloneRun(run), alert === undefined && this.failsLikeLastOutcome(run) ? null : alert);
+    // reported once per streak (null = the owner was already told). A run
+    // told by its streak was not told before its telling run (problemAlert).
+    this.options.onRunFailed?.(cloneRun(run), alert === undefined && !this.streakTells(run) && this.failsLikeLastOutcome(run) ? null : alert);
   }
 
   /** Flow refused this run (previous unclosed / unknown / run_exists): blocked

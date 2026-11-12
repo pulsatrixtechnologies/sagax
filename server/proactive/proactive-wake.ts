@@ -479,7 +479,8 @@ export class ProactiveWaker {
   /** 2026-11-05 (perspicax#880): a wake of this bot failed. Its next wake
    * waits (5 min, doubled per failure in a row, at most 2 h) and the events
    * that come meanwhile gather into that one wake. Returns true only for
-   * the first failure of a streak: the one the person is told about. */
+   * the first failure of a streak. Who is told is the routine streak's rule
+   * (server/routines/routines.ts problemAlert, #3990), not this. */
   noteWakeFailed(botId: string): boolean {
     const now = this.now();
     const previous = this.failures.get(botId);

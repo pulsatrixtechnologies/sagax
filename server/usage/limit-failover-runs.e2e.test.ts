@@ -43,7 +43,7 @@ async function bootWith(configure: (config: any, dataDir: string) => void) {
   const log = openSync(logPath, "a", 0o600);
   const server: ChildProcess = spawn(process.execPath, ["--experimental-strip-types", fileURLToPath(new URL("../index.ts", import.meta.url))], {
     cwd: fileURLToPath(new URL("../..", import.meta.url)),
-    env: { ...verificationServerEnvironment({}, dataDir, Number(new URL(url).port)), SAGAX_PROACTIVE_GATHER_MS: "200" },
+    env: { ...verificationServerEnvironment({}, dataDir, Number(new URL(url).port)), SAGAX_PROACTIVE_GATHER_MS: "200", SAGAX_PROACTIVE_MIN_INTERVAL_MS: "500" },
     stdio: ["ignore", log, log],
   });
   closeSync(log);
@@ -291,21 +291,34 @@ it("a proactive wake no engine could take fails with true words in its notificat
     writeFileSync(join(dataDir, "primary-limited.json"), JSON.stringify({
       code: -32603, message: "Internal error", data: { message: `You've hit your usage limit. Your plan resets at ${new Date(weekly).toISOString()}` },
     }));
-    await deliverTo(api, bot.id, "post", "FAILED_WAKE_3T");
     const runs = async () => ((await api("GET", "/api/routines")).runs as any[]).filter((run) => run.botId === bot.id);
-    await expect.poll(async () => (await runs()).find((run) => run.proactive)?.status, { timeout: 60_000, interval: 250 }).toBe("blocked");
-    const wake = (await runs()).find((run) => run.proactive);
-    evidence.push({ wake });
+    const wakes = async () => (await runs()).filter((run) => run.proactive);
+    // #3990 (owner decision 2026-11-11): a wake runs on events, so several
+    // times a day, and reports by its streak: a blocked wake stays in the run
+    // log with its true words, and the third in a row is told once (its
+    // summary card, its notification, its incident).
+    for (let wake = 1; wake <= 3; wake += 1) {
+      await deliverTo(api, bot.id, "post", `FAILED_WAKE_3T ${wake}`);
+      await expect.poll(async () => (await wakes()).filter((run) => run.status === "blocked").length, { timeout: 60_000, interval: 250 }).toBe(wake);
+    }
+    const blocked = (await wakes()).sort((a, b) => a.createdAt - b.createdAt);
+    const wake = blocked.at(-1);
+    evidence.push({ wakes: blocked });
+    expect(blocked[0].error).toBe(wake.error);
     // Its fast model was refused first (Claude's), then the bot's own engine took it and was refused in turn.
     expect(JSON.stringify(jsonLines(join(dataDir, "claude-prompts.jsonl")))).toContain("Proactive wake");
     expect(prompts(join(dataDir, "primary-rpc.jsonl")).length).toBeGreaterThanOrEqual(1);
-    expect(wake).toMatchObject({ limitTakeovers: 1, limitTakeover: PRIMARY });
+    // The first wake tried the takeover; the next ones know no engine can take them.
+    expect(blocked[0]).toMatchObject({ limitTakeovers: 1, limitTakeover: PRIMARY });
+    expect(wake).toMatchObject({ problemRepeat: { count: 3 } });
     const truth = /^Usage limit reached on Primary fixture\. No other engine can take over\. Primary fixture resets around .+; runs on it work again then\.$/;
     expect(wake.error).toMatch(truth);
     expect(wake.error).not.toMatch(/stays down|this bot's engine|choose another engine/i);
     // The notification: a proactive wake failed, in its own words.
     const failedNotice = await stream.until((frame) => frame.kind === "notify" && frame.notification?.kind === "routine-deferred" && frame.notification?.botId === bot.id, 20_000);
     evidence.push({ notification: failedNotice.notification });
+    // told once: the two wakes before it rang nothing
+    expect(stream.frames.filter((frame) => frame.kind === "notify" && frame.notification?.botId === bot.id && frame.notification?.kind === "routine-deferred")).toHaveLength(1);
     expect(failedNotice.notification.title).toBe("Fast wakes's proactive wake is blocked");
     expect(failedNotice.notification.body).toContain("Usage limit reached on Primary fixture.");
     expect(failedNotice.notification.body).not.toMatch(/routine failed|stays down|this bot's engine/i);

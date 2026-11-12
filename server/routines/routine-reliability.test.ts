@@ -158,7 +158,7 @@ describe("routine reliability in an isolated journal", () => {
     expect(dispatched).toEqual([backup, primary]);
     failover.stop();
   });
-  it.each(["manual", "schedule", "webhook"] as const)("blocks missing skills before creating a task for %s and notifies once per bot and cause", async (trigger) => {
+  it.each(["manual", "schedule", "webhook"] as const)("blocks missing skills before creating a task for %s and notifies once per bot and cause, at the telling run", async (trigger) => {
     const h = fixture();
     h.manager.update(h.routine.id, { requires: { skills: ["inbox-review"] } });
     if (trigger === "schedule") h.advance(60 * 60_000);
@@ -172,26 +172,67 @@ describe("routine reliability in an isolated journal", () => {
     expect(h.createTask).not.toHaveBeenCalled(); expect(h.startTurn).not.toHaveBeenCalled();
     expect(h.manager.getRoutine(h.routine.id)?.enabled).toBe(true);
     expect(h.manager.listRoutines()[0]?.failureStreak).toBeUndefined();
-    const blocked = h.manager.listRuns()[0]!;
-    expect(h.onRunFailed.mock.calls[0]?.[1]).toEqual({ detail: `Inbox review: "${blocked.error}"` });
-    h.manager.runNow(h.routine.id); await h.flush();
-    expect(h.onRunFailed.mock.calls.at(-1)?.[1]).toBeNull();
+    // #3990: a routine's own runs tell their problem by their streak
+    // (problemAlert), at the third run in a row for one that runs several
+    // times a day; a cause that belongs to the bot is told once per bot and
+    // cause, used up at that telling run (owner rule "one state is told once")
+    const told = (manager = h.manager) => { const [run, alert] = h.onRunFailed.mock.calls.at(-1)!; return manager.problemAlert(run, alert); };
+    const said = (name: string) => ({ detail: `${name}: "${h.onRunFailed.mock.calls.at(-1)?.[0].error}"` });
+    const streak = async (manager: RoutineManager, routineId: string, runs: number) => {
+      const out: unknown[] = [];
+      for (let i = 0; i < runs; i++) {
+        manager.runNow(routineId);
+        for (let tick = 0; tick < 10; tick++) { await manager.tick(); await new Promise(resolve => setTimeout(resolve, 0)); }
+        out.push(told(manager));
+      }
+      return out;
+    };
+    expect(h.manager.problemToldAt({ routineId: h.routine.id })).toBe(3);
+    expect(told()).toBeNull();
+    expect(await streak(h.manager, h.routine.id, 2)).toEqual([null, said("Inbox review")]);
+    // a second routine of the same bot meets the same cause: its streak's telling run stays silent
     const other = h.manager.create({ name: "Wren review", prompt: "Read the inbox.", botId: "osprey", schedule: { type: "webhook" }, requires: { skills: ["inbox-review"] } });
-    h.manager.runNow(other.id); await h.flush();
-    expect(h.onRunFailed.mock.calls.at(-1)?.[1]).toBeNull();
-    h.manager.update(other.id, { requires: { computer: true } });
+    expect(await streak(h.manager, other.id, 3)).toEqual([null, null, null]);
+    // another cause of the same bot is told at its own routine's telling run
+    const desk = h.manager.create({ name: "Osprey desk", prompt: "Read the desk.", botId: "osprey", schedule: { type: "webhook" }, requires: { computer: true } });
     h.probes.computers = () => [{ name: "Wren computer", online: false, needed: true }];
-    h.manager.runNow(other.id); await h.flush();
-    expect(h.onRunFailed.mock.calls.at(-1)?.[1]).toEqual({ detail: `Wren review: "${h.onRunFailed.mock.calls.at(-1)?.[0].error}"` });
+    const deskTold = await streak(h.manager, desk.id, 3);
+    expect(deskTold.slice(0, 2)).toEqual([null, null]);
+    expect(deskTold[2]).toEqual(said("Osprey desk"));
+    // the bot's notices outlive a restart
     const reloaded = new RoutineManager(h.options);
     expect(reloaded.listRuns()[0]?.readiness).toEqual(h.manager.listRuns()[0]?.readiness);
-    reloaded.runNow(other.id);
-    for (let i = 0; i < 10; i++) { await reloaded.tick(); await new Promise(resolve => setTimeout(resolve, 0)); }
-    expect(h.onRunFailed.mock.calls.at(-1)?.[1]).toBeNull();
+    const digest = reloaded.create({ name: "Osprey digest", prompt: "Read the inbox.", botId: "osprey", schedule: { type: "webhook" }, requires: { skills: ["inbox-review"] } });
+    expect(await streak(reloaded, digest.id, 3)).toEqual([null, null, null]);
+    // the same cause on another bot is its own
     const wren = reloaded.create({ name: "Wren inbox", prompt: "Read the inbox.", botId: "wren", schedule: { type: "webhook" }, requires: { skills: ["inbox-review"] } });
-    reloaded.runNow(wren.id);
-    for (let i = 0; i < 10; i++) { await reloaded.tick(); await new Promise(resolve => setTimeout(resolve, 0)); }
-    expect(h.onRunFailed.mock.calls.at(-1)?.[1]).toEqual({ detail: `Wren inbox: "${h.onRunFailed.mock.calls.at(-1)?.[0].error}"` });
+    const wrenTold = await streak(reloaded, wren.id, 3);
+    expect(wrenTold.slice(0, 2)).toEqual([null, null]);
+    expect(wrenTold[2]).toEqual(said("Wren inbox"));
+  });
+  it("tells a bot's setup cause once when two of its routines fail with it until both pause (#3901)", async () => {
+    const h = fixture();
+    const fail = async (routineId: string) => {
+      h.manager.runNow(routineId); await h.flush();
+      const run = h.manager.listRuns().find(entry => entry.routineId === routineId && entry.status === "running")!;
+      const at = new Date(h.now()).toISOString();
+      h.manager.handleRuntimeEvent({ eventId: `${run.id}-error`, provider: "fake", threadId: run.threadId!, createdAt: at, type: "runtime.error", message: "Claude Code is too old for this model. Update it.", setup: true, terminal: true });
+      h.manager.handleRuntimeEvent({ eventId: `${run.id}-done`, provider: "fake", threadId: run.threadId!, createdAt: at, type: "turn.completed", ok: false, stopReason: "update_required" });
+      const [failed, alert] = h.onRunFailed.mock.calls.at(-1)!;
+      expect(failed.id).toBe(run.id);
+      return { told: h.manager.problemAlert(failed, alert) != null, paused: failed.autoPaused !== undefined };
+    };
+    const hourly = { type: "interval" as const, everyMinutes: 60, anchorAt: h.now() };
+    const first = h.manager.create({ name: "Inbox digest", prompt: "Read the inbox.", botId: "osprey", schedule: hourly });
+    const second = h.manager.create({ name: "Desk digest", prompt: "Read the desk.", botId: "osprey", schedule: hourly });
+    const outcomes: { told: boolean; paused: boolean }[] = [];
+    for (const routine of [first, second]) {
+      while (h.manager.getRoutine(routine.id)?.enabled) outcomes.push(await fail(routine.id));
+    }
+    // both routines paused themselves, and the bot was told its cause only once
+    expect(outcomes.filter(outcome => outcome.paused)).toHaveLength(2);
+    expect(outcomes.filter(outcome => outcome.told)).toHaveLength(1);
+    expect(outcomes.findIndex(outcome => outcome.told)).toBe(h.manager.problemToldAt({ routineId: first.id }) - 1);
   });
   it("does not reserve or warm a task for an unready upcoming routine", async () => {
     const reserveTask = vi.fn(() => ({ threadId: "reserved" }));

@@ -312,10 +312,13 @@ describe("bounded scheduled overlap and run health", () => {
   it("tells of a failure once per streak, and again when it changes or after a run completes (port of OpenMausBot #3052)", async () => {
     const h = harness(start);
     const alerts: unknown[] = [];
-    h.options.onRunFailed = (_run, alert) => alerts.push(alert);
+    const told: unknown[] = [];
+    h.options.onRunFailed = (run, alert) => { alerts.push(alert); told.push(h.manager.problemAlert(run, alert)); };
     const routine = h.manager.create({ ...input(), enabled: false });
+    // a run the person started tells its own failure (a routine's own runs
+    // tell by their streak, the case below)
     const attempt = async (threadId: string, error?: string) => {
-      h.manager.runNow(routine.id); await h.manager.tick();
+      h.manager.runNow(routine.id, undefined, "person"); await h.manager.tick();
       if (error) h.manager.handleRuntimeEvent({ eventId: "error", provider: "fake", threadId, createdAt: new Date().toISOString(), type: "runtime.error", message: error });
       finish(h, threadId, !error);
     };
@@ -326,6 +329,31 @@ describe("bounded scheduled overlap and run health", () => {
     await attempt("thread-5", "Bridge rejected the chat id");
     expect(h.manager.listRuns().map(run => run.status)).toEqual(["failed", "failed", "failed", "completed", "failed"]);
     expect(alerts).toEqual([undefined, null, undefined, undefined]);
+    expect(told).toEqual(alerts);
+  });
+
+  it("tells a streak of the same failure at its telling run, never silenced as told before (#3990, owner decision 2026-11-11)", async () => {
+    const h = harness(start);
+    const alerts: unknown[] = [];
+    const told: unknown[] = [];
+    h.options.onRunFailed = (run, alert) => { alerts.push(alert); told.push(h.manager.problemAlert(run, alert)); };
+    const routine = h.manager.create(input());
+    let at = start;
+    const scheduled = async (error?: string) => {
+      at += 5 * 60_000;
+      h.setNow(at);
+      await h.manager.tick();
+      const run = h.manager.listRuns().find((candidate) => candidate.routineId === routine.id && candidate.status === "running")!;
+      if (error) h.manager.handleRuntimeEvent({ eventId: "error", provider: "fake", threadId: run.threadId!, createdAt: new Date().toISOString(), type: "runtime.error", message: error });
+      finish(h, run.threadId!, !error);
+    };
+    for (let run = 1; run <= 4; run += 1) await scheduled("Bridge rejected the token");
+    // a routine that runs every five minutes is told at its third run with a
+    // problem in a row, the same failure as the last run included; the runs
+    // before and after it stay in its run log (its summary card says them)
+    expect(h.manager.problemToldAt({ routineId: routine.id })).toBe(3);
+    expect(alerts).toEqual([undefined, undefined, undefined, undefined]);
+    expect(told).toEqual([null, null, undefined, null]);
   });
 
   it("excludes restart recovery and sanitizes obsolete or invalid health metadata", async () => {

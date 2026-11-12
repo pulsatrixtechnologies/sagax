@@ -1086,8 +1086,11 @@ it("gives a replacement session an earlier round's result that its rebuild could
   expect(count(recovery, "ROUND_ONE_RESULT_TOKEN")).toBe(0);
 
   // The replacement's record holds its own session and none of the old one's history.
+  // A thread's resume cursor and handed record are bookkeeping: on disk
+  // within a second, off the event loop (#3710).
+  await expect.poll(() => cursor(f), { timeout: 5_000 }).not.toBe(original);
   const replacement = cursor(f);
-  expect(replacement).not.toBe(original);
+  await expect.poll(() => (Object.values(f.handed()) as any[]).map((record) => record.session), { timeout: 5_000 }).toEqual([replacement]);
   const records = Object.values(f.handed()) as any[];
   expect(records).toHaveLength(1);
   expect(records[0].session).toBe(replacement);

@@ -145,7 +145,10 @@ describe("an unattended run that fails for a passing reason", () => {
     expect(h.started).toHaveLength(1);
     await h.advance(2 * SECOND);
     expect(h.started.map((turn) => turn.threadId)).toEqual(["thread-1", "thread-1"]);
-    expect(h.started[1]!.prompt).toBe(`${h.started[0]!.prompt}\n\n${retryNote("provider")}`);
+    // The note comes right after the work; since #4030 every unattended run
+    // also reads the run contract, which stays after it, unchanged.
+    expect(h.started[0]!.prompt.startsWith("Sweep the inbox\n\n")).toBe(true);
+    expect(h.started[1]!.prompt).toBe(h.started[0]!.prompt.replace("Sweep the inbox\n\n", `Sweep the inbox\n\n${retryNote("provider")}\n\n`));
     h.complete("thread-1");
     expect(h.run(run.id)).toMatchObject({ status: "completed", retried: "provider", output: "Inbox swept.", attention: undefined, error: undefined });
     expect(h.tasks()).toBe(1);
@@ -411,6 +414,48 @@ describe("an unattended run only its owner can fix", () => {
     expect(run).toMatchObject({ status: "waiting", attention: CLAUDE_NEEDS_RECONNECTING });
     expect(h.started).toEqual([]);
     expect(h.failed).toEqual([]);
+  });
+
+  it("tells a streak of failed proactive wakes once, at its telling run, even when each fails with the same words (#3990)", async () => {
+    const h = harness();
+    const REFUSED = "The engine refused the request.";
+    const told: boolean[] = [];
+    for (let wake = 1; wake <= 4; wake += 1) {
+      const run = h.manager.enqueueProactive({ botId: "maus-1", name: "Proactive: webhook", prompt: "A post came", proactive: { mode: "proactive", hops: 0, sources: ["webhook"] } });
+      await h.manager.tick();
+      h.fail(h.run(run.id).threadId!, REFUSED);
+      expect(h.run(run.id)).toMatchObject({ status: "failed", error: REFUSED });
+      const { run: failed, alert } = h.failed.at(-1)!;
+      told.push(h.manager.problemAlert(failed, alert) !== null);
+      await h.advance(MINUTE);
+    }
+    // a wake runs on events, so several times a day: the third in a row is
+    // the one its summary card is drawn for, and the one that rings
+    expect(h.manager.problemToldAt(h.failed[0]!.run)).toBe(3);
+    expect(told).toEqual([false, false, true, false]);
+  });
+
+  it("keeps a Flow refusal of a scheduled run silent, even at its streak's telling run (#3990)", async () => {
+    const h = harness();
+    const daily = h.manager.create({ name: "Brief", prompt: "Write the brief", botId: "maus-1", schedule: { type: "daily", time: "09:00", weekdays: [0, 1, 2, 3, 4, 5, 6] } });
+    const hourly = h.manager.create({ name: "Price check", prompt: "Check the price", botId: "maus-2", schedule: { type: "interval", everyMinutes: 60, anchorAt: START } });
+    const told: Array<[string, boolean]> = [];
+    for (let hour = 1; hour <= 3; hour += 1) {
+      await h.advance(60 * MINUTE);
+      for (const routine of [daily, hourly]) {
+        const run = h.runs().find((candidate) => candidate.routineId === routine.id && candidate.status === "running");
+        if (!run) continue;
+        h.complete(run.threadId!, "run init refused: previous_unclosed");
+        expect(h.run(run.id)).toMatchObject({ status: "blocked", triggerSource: "schedule" });
+        const { run: blocked, alert } = h.failed.at(-1)!;
+        told.push([routine.name, h.manager.problemAlert(blocked, alert) !== null]);
+      }
+    }
+    // the daily brief tells at its first run, the hourly check at its third:
+    // a Flow refusal is told by the streak's summary card, never rung
+    expect(h.manager.problemToldAt(h.failed.find(({ run }) => run.routineId === daily.id)!.run)).toBe(1);
+    expect(h.manager.problemToldAt(h.failed.find(({ run }) => run.routineId === hourly.id)!.run)).toBe(3);
+    expect(told).toEqual([["Brief", false], ["Price check", false], ["Price check", false], ["Price check", false]]);
   });
 
   it("pauses a proactive wake when the engine is already expired, without starting a turn", async () => {

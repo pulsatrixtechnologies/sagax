@@ -23,7 +23,6 @@ import { saveSoon } from "../save-batch.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { flowRunBlockedReason, routineProblemStreakNote, routineReportOutcome, routineRepeatingRule } from "./routine-report.ts";
 import { ROUTINE_PROBLEM_STREAK_TOLD, routineProblemToldAt, routineReportsByStreak } from "../../shared/routine-repeat.ts";
-import { wakeTopicOf } from "./routine-run-card.ts";
 import { clipReadable, failureDetail } from "../../shared/routine-result.ts";
 import { stopCause } from "../drivers/engine-errors.ts";
 import {
@@ -1713,6 +1712,14 @@ export interface RoutineFolderResult {
   undo?: RoutineFolderUndo;
 }
 
+/** #4050: the kind of wake a run without a routine is, for its streak: a
+ * heartbeat, or every source it gathered (a mail and a watch together are
+ * neither the mail streak nor the watch streak). */
+function wakeKind(run: RoutineRun): string {
+  if (run.webhookId?.startsWith("heartbeat:")) return "heartbeat";
+  return [...new Set(run.proactive?.sources ?? [])].sort().join(",");
+}
+
 export class RoutineManager {
   private readonly file: string; private readonly disk: OwnedFile;
   private readonly now: () => number;
@@ -2152,8 +2159,7 @@ export class RoutineManager {
   private sameStreak(run: RoutineRun, candidate: RoutineRun, byRoutine: boolean): boolean {
     if (candidate.routineId !== run.routineId) return false;
     if (byRoutine) return true;
-    return candidate.botId === run.botId && (candidate.runAs ?? "") === (run.runAs ?? "")
-      && (wakeTopicOf(candidate) ?? "") === (wakeTopicOf(run) ?? "");
+    return candidate.botId === run.botId && (candidate.runAs ?? "") === (run.runAs ?? "") && wakeKind(candidate) === wakeKind(run);
   }
 
   /** #3695: the runs of this run's streak (sameStreak) that ended with

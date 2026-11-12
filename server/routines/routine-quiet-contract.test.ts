@@ -653,7 +653,7 @@ describe("a proactive wake posts no result of its own (#3990)", () => {
   async function wake(said: string, alwaysReport = false) {
     const { routines } = manager(start);
     const queued = routines.enqueueProactive({ botId: "maus-1", name: "Proactive: teammate message", prompt: "A teammate wrote",
-      proactive: { mode: "act", hops: 0, sources: ["peer"], ...(alwaysReport ? { alwaysReport: true as const } : {}) } as never });
+      proactive: { mode: "act", hops: 0, sources: [alwaysReport ? "watch" : "peer"], ...(alwaysReport ? { alwaysReport: true as const } : {}) } as never });
     await routines.tick();
     const threadId = routines.listRuns().find((candidate) => candidate.id === queued.id)!.threadId!;
     const send = (event: Record<string, unknown>) =>
@@ -881,6 +881,19 @@ describe("#4050: one streak per thing, told once at the run it names", () => {
     expect(again.problemRepeat).toMatchObject({ count: 2 });
   });
 
+  it("a wake that gathered a mail and a watch counts in neither the mail streak nor the watch streak", async () => {
+    const h = manager(start);
+    await wake(h, { source: "mail", fail: "The mailbox did not answer" });
+    h.advance(60_000);
+    const queued = h.routines.enqueueProactive({ botId: "maus-1", name: "Proactive: mail", prompt: "Something happened",
+      proactive: { mode: "proactive", hops: 0, sources: ["mail", "watch"] } as never });
+    await h.routines.tick();
+    const gathered = settle(h, queued.id, { fail: "The mailbox did not answer" });
+    expect(gathered.problemRepeat).toBeUndefined();
+    const mail = await wake(h, { source: "mail", fail: "The mailbox did not answer" });
+    expect(mail.problemRepeat).toMatchObject({ count: 2 });
+  });
+
   it("a wait_until follow-up reads no background rule and is told at its first failure", async () => {
     const h = manager(start);
     const chat = conversation({ routines: h.routines });
@@ -1067,4 +1080,45 @@ describe("#4051: a wake kind told to answer the person posts its answer", () => 
     expect(["screen", "bot", "sms", "run", "watch", "suggestion"].map(posts)).toEqual([true, true, true, true, true, true]);
     expect(["peer", "mail", "calendar", "webhook"].map(posts)).toEqual([false, false, false, false]);
   });
+});
+
+describe("#4051: a wake's answer rings only where every desktop in use draws its row", () => {
+  /** The chat filter of the desktop released as 0.8.92 (shared/routine-repeat.ts
+   * routineRunRowOutOfChat at that tag), as those desktops still run it. */
+  const releasedOutOfChat = (message: Row & { attention?: unknown }): boolean => {
+    const run = message.kind === "routine.run" ? message.routineRun : null;
+    if (!run?.status) return false;
+    if (message.attention || run.goalStatus || run.startedBy === "person" || run.repeat?.streak || run.recovered?.streak) return false;
+    if ((run.autoPausedAfter ?? 0) > 0) return false;
+    switch (run.status) {
+      case "queued": case "running": case "waiting": case "failed": case "missed": return false;
+      case "completed": return Boolean(run.problems || run.recovered || (run.wakeTopic && !new Set(["suggestion", "watch"]).has(run.wakeTopic)));
+      default: return true;
+    }
+  };
+
+  for (const source of ["screen", "bot", "sms", "run", "suggestion", "watch"]) {
+    it(`a ${source} wake's answer posts, and rings or turns unread only if the 0.8.92 desktop draws it`, async () => {
+      const h = manager(start);
+      const chat = conversation({ routines: h.routines });
+      h.advance(60_000);
+      const queued = h.routines.enqueueProactive({ botId: "maus-1", name: `Proactive: ${source}`, prompt: "Something happened",
+        proactive: { mode: "proactive", hops: 0, sources: [source], alwaysReport: true } as never });
+      await h.routines.tick();
+      const threadId = h.routines.listRuns().find((candidate) => candidate.id === queued.id)!.threadId!;
+      const send = (event: Record<string, unknown>) =>
+        h.routines.handleRuntimeEvent({ eventId: String(Math.random()), provider: "fake", createdAt: new Date().toISOString(), threadId, ...event } as never);
+      send({ type: "item.completed", itemType: "assistant_text", text: "The build on your screen failed at the signing step; I can retry it." });
+      send({ type: "turn.completed", ok: true });
+      const done = h.routines.listRuns().find((candidate) => candidate.id === queued.id)!;
+      chat.sync(done);
+      const rows = chat.rows.filter((row) => row.kind === "routine.run");
+      expect(rows).toHaveLength(1);
+      expect(routineRunRowOutOfChat(rows[0] as never)).toBe(false);
+      const releasedDraws = !releasedOutOfChat(rows[0]!);
+      expect(releasedDraws).toBe(source === "suggestion" || source === "watch");
+      expect(chat.unread.length > 0).toBe(releasedDraws);
+      expect(ringsDone(done, h.routines)).toBe(releasedDraws);
+    });
+  }
 });

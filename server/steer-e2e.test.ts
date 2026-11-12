@@ -44,6 +44,7 @@ posixOnly("mid-turn steering e2e", () => {
   };
   const getBot = async (id: string) => (await api("GET", "/api/bots")).body.bots.find((b: any) => b.id === id);
   /** When a person last wrote in the thread, as the server keeps it (server/threads/main-thread.ts). */
+  // A thread's askedAt is bookkeeping: on disk within a second, off the event loop (#3663).
   const askedAt = (botId: string, threadId: string) => (JSON.parse(readFileSync(join(home, ".sagax", "bots.json"), "utf8")) as any[])
     .find((bot) => bot.id === botId).tasks.find((task: any) => task.threadId === threadId).askedAt;
   /** Pair the operator's own second device (a default, admin-scope code, so
@@ -210,7 +211,7 @@ posixOnly("mid-turn steering e2e", () => {
       const steered = bot.messages.find((m: any) => m.text === "and also this");
       expect(steered.steered).toBe(true);
       // Steered words are a person writing here, as the words that started the turn were.
-      expect(askedAt(created.id, created.threadId)).toBe(steered.at);
+      await expect.poll(() => askedAt(created.id, created.threadId), { timeout: 5_000 }).toBe(steered.at);
       // one turn, not two: exactly one reply
       expect(bot.messages.filter((m: any) => m.role === "bot" && m.kind === "text" && m.text.startsWith("reply to:"))).toHaveLength(1);
       // the tool chip keeps its command after the result settles it — the
@@ -687,7 +688,7 @@ second = await api("POST", `/api/bots/${created.id}/messages`, { text: imageText
     expect(folded.sender).toEqual(PAIRED);
     expect(steered.body.messages[0].sender).toEqual(PAIRED);
     // and the person wrote them here, as if a drained turn had started with them
-    expect(askedAt(created.id, created.threadId)).toBe(folded.at);
+    await expect.poll(() => askedAt(created.id, created.threadId), { timeout: 5_000 }).toBe(folded.at);
 
     await api("POST", `/api/bots/${created.id}/interrupt`);
     await waitFor(async () => (await getBot(created.id)).busy === false, "the queue-steered turn to settle");

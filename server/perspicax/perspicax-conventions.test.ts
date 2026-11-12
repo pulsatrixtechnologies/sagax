@@ -72,8 +72,14 @@ describe("Perspicax tool conventions (#1209)", () => {
   // #3694: the old lock taught a bot to stop switching roles after any 403
   it("teaches a refused write as one call's STOP and a guard refusal as a call to fix (#3694)", () => {
     expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("its STOP blocks that call only, never `identity_switch`");
-    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("A guard or policy refusal (`flow_guard`, unknown resource) is no permission problem: fix the call");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("A guard or policy refusal (`flow_guard`) is no permission problem");
     expect(PERSPICAX_CONVENTIONS_PROMPT).not.toMatch(/no other role, name the exact missing permission|or a refused write is a block|A refused write follows the Roles point above/);
+  });
+  // #3701: a refusal by the organization's data access policy is lifted by no
+  // change to the call: "fix the call" there made a bot try variations of it.
+  it("tells a refusal the call can fix from a policy refusal it cannot (#3701)", () => {
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("fix the call if its hint names the fault, else tell the person its hint, never retry.");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).not.toContain("is no permission problem: fix the call.");
   });
   it("counts tickets on the board's id and never per board from a page cut by limit", () => {
     expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("owner/id=<member id>, board/id=<board id>, closedFlag=false");

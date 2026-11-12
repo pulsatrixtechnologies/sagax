@@ -5635,8 +5635,8 @@ app.whenReady().then(async () => {
   // First thing once ready: no session but the app window's reaches the server.
   serverSessionGuard = { defaultSession: session.defaultSession, serverPort: () => SERVER_PORT };
   installSessionBlock(session.defaultSession, (line) => slog(`network: ${line}`));
-  // The bots' temporary folders of the previous run (#2828) are unreachable
-  // under this run's key: removed now, in the background.
+  // The bots' temporary folders of the previous run (#2828), named under
+  // its key: removed now, in the background.
   void sweepBotTmpRoot().catch(() => {});
   // screen is only safe after ready; keep the secondary cursor in sync with layout changes.
   screen.on("display-added", resyncAgentCursorOverlay);

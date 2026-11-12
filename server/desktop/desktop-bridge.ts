@@ -118,7 +118,8 @@ export const desktopBridgeOperation = z.object({
    * command's environment on the desktop. Never logged. */
   env: z.record(z.string().regex(/^[A-Z_][A-Z0-9_]{0,63}$/), z.string().max(100_000)).optional(),
   /** #2828: the asking bot's own temporary folder on the desktop and in the
-   * Local VM (a hash of the bot, never its id). Another bot's is refused. */
+   * Local VM (a hash of the bot, never its id). The person's other bots'
+   * folders stay within reach (#3582). */
   tmp_scope: z.string().regex(/^[a-f0-9]{16}$/).optional(),
 }).strict();
 export type DesktopBridgeOperation = z.infer<typeof desktopBridgeOperation>;

@@ -171,10 +171,13 @@ describe("setup navigation", () => {
     expect(reducer(next, { type: "toggleNewBot", open: false })).toMatchObject({ botWizard: null, settingsOpen: false, pluginsOpen: false });
   });
 
-  it("opens the requested Plugins surface and remembers it on reopen", () => {
+  it("opens the requested Plugins surface once; a later plain open is the home (#3910)", () => {
     const next = reducer({ ...initialState, settingsOpen: true }, { type: "togglePlugins", open: true, surface: "mcp" });
     expect(next).toMatchObject({ pluginsOpen: true, pluginsSurface: "mcp", settingsOpen: false });
+    // a change while open keeps the surface
+    expect(reducer(next, { type: "togglePlugins", open: true, focusApps: ["x"] })).toMatchObject({ pluginsSurface: "mcp" });
     const closed = reducer(next, { type: "togglePlugins", open: false });
-    expect(reducer(closed, { type: "togglePlugins", open: true })).toMatchObject({ pluginsSurface: "mcp" });
+    expect(reducer(closed, { type: "togglePlugins", open: true })).toMatchObject({ pluginsSurface: "apps" });
+    expect(reducer(closed, { type: "togglePlugins", open: true, botId: "bot-a" })).toMatchObject({ pluginsSurface: "apps", pluginsBotId: "bot-a" });
   });
 });

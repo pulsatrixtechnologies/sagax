@@ -203,9 +203,7 @@ type RunRowFacts = {
  * run log (Automations). */
 export function routineRunRowOutOfChat(message: RunRowFacts): boolean {
   const run = message.kind === "routine.run" ? message.routineRun : null;
-  if (!run?.status) return false;
-  if (message.attention || run.goalStatus || run.startedBy === "person" || run.repeat?.streak || run.recovered?.streak) return false;
-  if ((run.autoPausedAfter ?? 0) > 0) return false;
+  if (!run?.status || alwaysDrawn(message)) return false;
   switch (run.status) {
     case "queued":
     case "running":
@@ -218,4 +216,30 @@ export function routineRunRowOutOfChat(message: RunRowFacts): boolean {
     default:
       return true;
   }
+}
+
+/** A row every filter draws, whatever else it says: items for the person,
+ * a team goal's card, a run the person started, the streak's one summary
+ * (and its works again), a routine that paused itself. */
+function alwaysDrawn(message: RunRowFacts): boolean {
+  const run = message.routineRun;
+  return Boolean(message.attention || run?.goalStatus || run?.startedBy === "person" || run?.repeat?.streak || run?.recovered?.streak
+    || (run?.autoPausedAfter ?? 0) > 0);
+}
+
+/** The wake topics whose result the desktop released through 0.8.92 draws:
+ * its filter left out a completed wake row of any other topic. */
+const RELEASED_DRAWN_WAKE_TOPICS = new Set(["suggestion", "watch"]);
+
+/** #4051: whether every desktop in use draws this row: this filter and the
+ * one released through 0.8.92 (a completed wake row of a topic other than
+ * an accepted suggestion or a watch left the chat there). The server marks
+ * a conversation unread and rings only for such a row, so no desktop rings
+ * for a row it does not draw; a row only newer desktops draw is still
+ * written, quietly. */
+export function routineRunRowInEveryChat(message: RunRowFacts): boolean {
+  if (routineRunRowOutOfChat(message)) return false;
+  const run = message.kind === "routine.run" ? message.routineRun : null;
+  if (!run?.wakeTopic || run.status !== "completed" || alwaysDrawn(message)) return true;
+  return RELEASED_DRAWN_WAKE_TOPICS.has(run.wakeTopic);
 }

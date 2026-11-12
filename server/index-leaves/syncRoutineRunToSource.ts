@@ -6,7 +6,7 @@ import type { RoutineRun } from "../routines/routines.ts";
 import { textLanguage } from "../../shared/looks-french.ts";
 import { clipReadable, withoutRoutineMarkers } from "../../shared/routine-result.ts";
 import { needsYouNotificationWords } from "../runtime-events/question-notification-words.ts";
-import { routineReportsByStreak, routineRunRowOutOfChat } from "../../shared/routine-repeat.ts";
+import { routineReportsByStreak, routineRunRowInEveryChat, routineRunRowOutOfChat } from "../../shared/routine-repeat.ts";
 import { redactSecretsInText } from "../redact.ts";
 export type Host = Record<string, any>;
 
@@ -73,6 +73,13 @@ function drawn(card: any, attention: unknown): boolean {
   return !routineRunRowOutOfChat({ kind: "routine.run", attention: attention ? true : undefined, routineRun: card });
 }
 
+/** #4051: whether every desktop in use draws this row
+ * (routineRunRowInEveryChat): only such a row marks its conversation unread
+ * or rings. */
+function drawnEverywhere(card: any, attention: unknown): boolean {
+  return routineRunRowInEveryChat({ kind: "routine.run", attention: attention ? true : undefined, routineRun: card });
+}
+
 /** #3581: a run's late answer (a teammate's reply after the run ended) goes
  * onto the run's own card through the same card write, with that answer as
  * its report. The answer is what the run says now, even after a quiet end.
@@ -101,7 +108,7 @@ export function createRoutineRunLateRow(getHost: () => Host): (runThreadId: stri
     if (!routineRunMayWriteRow(rowFacts(host, run, { attention: Boolean(found), existing, streakTells }))) return undefined;
     const row = routineRunCardRow(host, run, target, outcome.report, existing, outcome.report);
     if (!drawn(row.routineRun, existing?.attention ?? found)) return undefined;
-    return { ...row, rings: host.routineRunReportable({ ...reportFacts(host, run), attention: Boolean(found) }) };
+    return { ...row, rings: host.routineRunReportable({ ...reportFacts(host, run), attention: Boolean(found) }) && drawnEverywhere(row.routineRun, existing?.attention ?? found) };
   };
 }
 
@@ -327,7 +334,7 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
     cardId = host.store.appendMessage(sourceThreadId, message)?.id;
   }
   // Something for the person turns the conversation unread, once per state.
-  if (reportableUnread && (statusChanged || (attentionNew && attentionRings))) {
+  if (reportableUnread && drawnEverywhere(card, attentionFound) && (statusChanged || (attentionNew && attentionRings))) {
     if (source.group) host.store.patchGroup(source.group.id, { unread: true });
     else host.store.patchTask(source.bot.id, sourceThreadId, { unread: true });
   }

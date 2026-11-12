@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ROUTINE_PROBLEM_STREAK_TOLD, routinePostsEachResult, routineProblemToldAt, routineReportsByStreak, routineRepeatsWithinDay, routineRunPostsResult, routineRunRowOutOfChat, routineRunsSeveralTimesADay } from "./routine-repeat.ts";
+import { ROUTINE_PROBLEM_STREAK_TOLD, routinePostsEachResult, routineProblemToldAt, routineReportsByStreak, routineRepeatsWithinDay, routineRunPostsResult, routineRunRowInEveryChat, routineRunRowOutOfChat, routineRunsSeveralTimesADay } from "./routine-repeat.ts";
 
 const at = Date.parse("2026-11-11T12:00:00Z");
 
@@ -153,5 +153,26 @@ describe("one rule for every routine, whatever starts it (#3990)", () => {
       { kind: "text", text: "hello" },
     ];
     for (const message of kept) expect(routineRunRowOutOfChat(message), JSON.stringify(message)).toBe(false);
+  });
+});
+
+describe("routineRunRowInEveryChat (#4051): a row rings only where every desktop in use draws it", () => {
+  const row = (routineRun: Record<string, unknown>, attention?: true) => ({ kind: "routine.run", ...(attention ? { attention } : {}), routineRun });
+  it("a wake's answer of a topic the 0.8.92 desktop leaves out is drawn here and rings nowhere", () => {
+    for (const wakeTopic of ["screen", "bot", "sms", "run"]) {
+      const answer = row({ status: "completed", wakeTopic, forPerson: true });
+      expect(routineRunRowOutOfChat(answer)).toBe(false);
+      expect(routineRunRowInEveryChat(answer)).toBe(false);
+      // items for the person are drawn by every desktop
+      expect(routineRunRowInEveryChat(row({ status: "completed", wakeTopic, forPerson: true }, true))).toBe(true);
+    }
+  });
+  it("what every desktop draws rings; what this one leaves out rings nowhere", () => {
+    expect(routineRunRowInEveryChat(row({ status: "completed", wakeTopic: "watch", forPerson: true }))).toBe(true);
+    expect(routineRunRowInEveryChat(row({ status: "completed", wakeTopic: "suggestion", forPerson: true }))).toBe(true);
+    expect(routineRunRowInEveryChat(row({ status: "completed" }))).toBe(true);
+    expect(routineRunRowInEveryChat(row({ status: "waiting", wakeTopic: "screen" }))).toBe(true);
+    expect(routineRunRowInEveryChat(row({ status: "completed", wakeTopic: "watch" }))).toBe(false);
+    expect(routineRunRowInEveryChat(row({ status: "cancelled" }))).toBe(false);
   });
 });

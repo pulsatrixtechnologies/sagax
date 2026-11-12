@@ -33,21 +33,19 @@ enum BotProfileTab: String, CaseIterable, Hashable, Identifiable {
     }
 }
 
-/// Where the name sits in the scroll: the bar condenses once it passes under it.
-private struct BotProfileNameEdgeKey: PreferenceKey {
-    static var defaultValue: CGFloat = .greatestFiniteMagnitude
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
-}
-
 /// The desktop's Appearance pane on the phone: its own shell model, the way
 /// the bot wizard hosts the engines sheet.
 private struct PhoneAppearancePane: View {
+    @Environment(\.themePalette) var themePalette
     @StateObject private var shell = DesktopShellModel()
     let bot: Bot
 
     var body: some View {
         PersonaAppearancePane(bot: bot)
             .environmentObject(shell)
+            // the page's palette, light or dark, as the hero above it (#4041):
+            // the desktop's default theme drew dark cards on a light page
+            .environment(\.desktopTheme, DesktopTheme.of(themePalette))
     }
 }
 
@@ -80,6 +78,10 @@ struct BotProfilePage: View {
     @State private var capabilities: BotCapabilityList?
     @State private var capabilitiesFailed = false
     @State private var condensed = false
+    /// The name's lower edge and the bar's lower edge, both on screen
+    /// (global): the bar condenses once the name passes under it (#4041).
+    @State private var nameEdge: CGFloat = .greatestFiniteMagnitude
+    @State private var barEdge: CGFloat = 0
     @State private var searching = false
     @State private var vaultItems: [VaultItemPublic] = []
     @State private var vaultError: String?
@@ -164,6 +166,7 @@ struct BotProfilePage: View {
 
     var body: some View {
         ZStack(alignment: .top) {
+            GeometryReader { viewport in
             ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 0) {
@@ -181,6 +184,10 @@ struct BotProfilePage: View {
                     .frame(maxWidth: fillsMain ? 760 : .infinity)
                     .frame(maxWidth: .infinity)
                 }
+                // The page is exactly as wide as the screen: a row wider
+                // than it scrolls or stacks inside itself, it never widens
+                // the whole page past both edges (#4041).
+                .frame(width: viewport.size.width)
             }
             #if DEBUG
             // `-parityBotProfileScroll tabs|accounts|more` (the captures): scroll there once loaded
@@ -191,15 +198,24 @@ struct BotProfilePage: View {
             }
             #endif
             }
-            .coordinateSpace(name: "botProfileScroll")
-            .onPreferenceChange(BotProfileNameEdgeKey.self) { edge in
-                let now = edge < (fillsMain ? 56 : 0)
-                if now != condensed { withAnimation(.easeOut(duration: 0.15)) { condensed = now } }
-            }
             .scrollIndicators(.visible)
             // typing in the hero fields: drag the list to put the keyboard away (G17)
             .scrollDismissesKeyboard(.interactively)
+            }
             if fillsMain { topBar }
+        }
+        // the top of the safe area is the bar's lower edge (the iPad's own
+        // bar is 56 under it)
+        .overlay(alignment: .top) {
+            GeometryReader { box in
+                Color.clear.onValueChange(of: box.frame(in: .global).minY, initial: true) { top in
+                    barEdge = top + (fillsMain ? 56 : 0)
+                    condense()
+                }
+            }
+            .frame(height: 0)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
         .background(Theme.bg.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
@@ -288,10 +304,10 @@ struct BotProfilePage: View {
             BotProfileHeroIdentity(bot: current, centered: true)
                 .background(
                     GeometryReader { geo in
-                        Color.clear.preference(
-                            key: BotProfileNameEdgeKey.self,
-                            value: geo.frame(in: .named("botProfileScroll")).maxY
-                        )
+                        Color.clear.onValueChange(of: geo.frame(in: .global).maxY, initial: true) { edge in
+                            nameEdge = edge
+                            condense()
+                        }
                     }
                 )
             BotProfileHeroDetails(bot: current, audience: privacy, centered: true)
@@ -421,6 +437,15 @@ struct BotProfilePage: View {
         .zIndex(1)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("bot-profile-topbar")
+    }
+
+    /// The bar condenses (material, small mascot and name) once the name
+    /// has passed under it. A preference read from inside the scroll never
+    /// reached the page, so the bar kept the banner's colour over the
+    /// content (#4041).
+    private func condense() {
+        let now = nameEdge < barEdge
+        if now != condensed { withAnimation(.easeOut(duration: 0.15)) { condensed = now } }
     }
 
     private func openAppearanceIfAsked(_ asked: Bool) {

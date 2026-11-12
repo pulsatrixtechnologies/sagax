@@ -174,6 +174,12 @@ enum PersonaMascotWords {
 
 // MARK: - Pane
 
+/// The width the Appearance pane is given (see `PersonaAppearancePane.compact`).
+private struct PersonaPaneWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 struct PersonaAppearancePane: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
@@ -202,6 +208,15 @@ struct PersonaAppearancePane: View {
     @State private var nextMove = 0
     @State private var hop = false
     @StateObject private var stageHandle = OwlMascotHandle()
+    /// The width the pane is given: under `compactBelow` (a phone, or a
+    /// narrow iPad window) its rows stack or scroll inside themselves
+    /// instead of widening the page past the screen (#4041).
+    @State private var paneWidth: CGFloat = 0
+
+    /// The desktop's side by side preview needs the stage (170), the name
+    /// and the two buttons beside it: below this width they stack.
+    static let compactBelow: CGFloat = 560
+    private var compact: Bool { paneWidth < Self.compactBelow }
 
     private var worn: CharacterDraft { CharacterDraft(bot: bot) }
     private var wornCharacter: MascotCharacter { worn.character }
@@ -218,25 +233,18 @@ struct PersonaAppearancePane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                modes
-                Spacer(minLength: 0)
-                Button {
-                    draft = .default
-                    shown = nil
-                    previewSkin = nil
-                    Task { await edit(.resetLook) }
-                } label: {
-                    Text(verbatim: AppStrings.localized("Reset"))
-                        .font(theme.font(13))
-                        .foregroundStyle(theme.inkSecondary)
-                        .padding(.horizontal, 12)
-                        .frame(height: 30)
-                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairlineWeak, lineWidth: 1))
-                        .contentShape(Rectangle())
+            // the source and Reset side by side, or Reset under the source
+            // when a language's words do not fit the phone's row (#4041)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    modes.fixedSize()
+                    Spacer(minLength: 0)
+                    resetButton
                 }
-                .buttonStyle(DesktopHoverFill(radius: 8, fill: \.control))
-                .accessibilityIdentifier("persona-appearance.reset")
+                VStack(alignment: .leading, spacing: 8) {
+                    modes.fixedSize()
+                    resetButton
+                }
             }
             .padding(.bottom, 16)
             Group {
@@ -247,6 +255,15 @@ struct PersonaAppearancePane: View {
                 case .upload: AnyView(uploadTab)
                 }
             }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background {
+            GeometryReader { box in
+                Color.clear.preference(key: PersonaPaneWidthKey.self, value: box.size.width)
+            }
+        }
+        .onPreferenceChange(PersonaPaneWidthKey.self) { width in
+            if abs(width - paneWidth) > 0.5 { paneWidth = width }
         }
         .overlay { if working { ProgressView().controlSize(.large) } }
         .onAppear { draft = worn }
@@ -267,6 +284,25 @@ struct PersonaAppearancePane: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("persona-appearance")
+    }
+
+    private var resetButton: some View {
+        Button {
+            draft = .default
+            shown = nil
+            previewSkin = nil
+            Task { await edit(.resetLook) }
+        } label: {
+            Text(verbatim: AppStrings.localized("Reset"))
+                .font(theme.font(13))
+                .foregroundStyle(theme.inkSecondary)
+                .padding(.horizontal, 12)
+                .frame(height: 30)
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairlineWeak, lineWidth: 1))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(DesktopHoverFill(radius: 8, fill: \.control))
+        .accessibilityIdentifier("persona-appearance.reset")
     }
 
     private var modes: some View {
@@ -419,99 +455,137 @@ struct PersonaAppearancePane: View {
         nextMove += 1
     }
 
+    /// The preview band. Wide (the desktop): the stage, the name column and
+    /// the two buttons side by side, 210 high. Compact (a phone): the stage
+    /// centred, the name, its pills and the moves under it, then the two
+    /// buttons side by side at full width (#4041).
     private var hero: some View {
         let name = PersonaWardrobe.characterName(current)
         let isLocked = locked(current)
         let inUse = current == draft.character
-        return HStack(spacing: 28) {
-            ZStack {
-                MascotCharacterView(look: shownLook, color: draft.color, skin: shownOwlSkin, size: 150, animated: true, owlHandle: stageHandle)
-                    .grayscale(isLocked ? 1 : 0)
-                    .opacity(isLocked ? 0.6 : 1)
-                    .offset(y: hop ? -10 : 0)
-                if isLocked {
-                    PersonaIconView(icon: .lock, size: 12, strokeWidth: 2.4)
-                        .foregroundStyle(theme.inkSecondary)
-                        .frame(width: 24, height: 24)
-                        .background(theme.control, in: Circle())
-                        .padding(4)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                }
-                if previewSkin != nil || isLocked {
-                    Text(verbatim: AppStrings.localized("Preview: locked, nothing is saved"))
-                        .font(theme.font(11))
-                        .foregroundStyle(theme.inkSecondary)
-                        .lineLimit(1)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(theme.control.opacity(0.9), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                        .padding(4)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                        .accessibilityIdentifier("persona-appearance.preview-note")
-                }
-            }
-            .frame(width: 170, height: 170)
-            .contentShape(Rectangle())
-            .onTapGesture { playNext() }
-            .onHover { inside in if inside, let first = moves.first { play(first) } }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text(verbatim: String(format: AppStrings.localized("%@ preview"), name)))
-            .accessibilityAddTraits(.isButton)
-            .accessibilityIdentifier("persona-appearance.stage")
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(verbatim: name)
-                    .font(theme.font(24, .semibold))
-                    .foregroundStyle(theme.ink)
-                    .lineLimit(1)
-                    .frame(height: 32)
-                    .accessibilityIdentifier("persona-appearance.name")
-                Text(verbatim: summary)
-                    .font(theme.font(13.5))
-                    .foregroundStyle(theme.inkSecondary)
-                    .lineLimit(1)
-                    .frame(height: 20)
-                    .accessibilityIdentifier("persona-appearance.summary")
-                HStack(spacing: 8) {
-                    actionPill(name: name, locked: isLocked, inUse: inUse)
-                    Button { withAnimation(.easeOut(duration: 0.12)) { movesOpen.toggle() } } label: {
-                        HStack(spacing: 4) {
-                            Text(verbatim: String(format: AppStrings.localized("%@ moves"), "\(moves.count)"))
-                                .font(theme.font(12))
-                            PersonaIconView(icon: .chevronDown, size: 12, strokeWidth: 2)
-                                .rotationEffect(.degrees(movesOpen ? 180 : 0))
-                        }
-                        .foregroundStyle(theme.inkTertiary)
-                        .padding(.horizontal, 8)
-                        .frame(height: 24)
-                        .contentShape(Rectangle())
+        return Group {
+            if compact {
+                VStack(spacing: 16) {
+                    heroStage(name: name, isLocked: isLocked)
+                    heroIdentity(name: name, isLocked: isLocked, inUse: inUse, centered: true)
+                    if movesOpen { AnyView(moveList(width: nil)) }
+                    // side by side, or one under the other when a
+                    // language's words do not fit half the row
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) { heroButtons }
+                        VStack(spacing: 8) { heroButtons }
                     }
-                    .buttonStyle(DesktopHoverFill(radius: 12, fill: \.control))
-                    .accessibilityIdentifier("persona-appearance.moves")
                 }
-                .padding(.top, 10)
-                .overlay(alignment: .topLeading) {
-                    if movesOpen { AnyView(moveList).offset(y: 46) }
+                .padding(16)
+                .frame(maxWidth: .infinity)
+            } else {
+                HStack(spacing: 28) {
+                    heroStage(name: name, isLocked: isLocked)
+                    heroIdentity(name: name, isLocked: isLocked, inUse: inUse, centered: false)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .zIndex(1)
+                    VStack(spacing: 8) { heroButtons }
+                        .fixedSize()
                 }
-                .zIndex(1)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 20)
+                .frame(maxWidth: .infinity, minHeight: 210, maxHeight: 210)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .zIndex(1)
-
-            VStack(spacing: 8) {
-                heroButton(.play, AppStrings.localized("Play a move"), id: "persona-appearance.play") { playNext() }
-                heroButton(.shuffle, AppStrings.localized("Randomize"), id: "persona-appearance.randomize") { randomize() }
-            }
-            .fixedSize()
         }
-        .padding(.horizontal, 28)
-        .padding(.vertical, 20)
-        .frame(maxWidth: .infinity, minHeight: 210, maxHeight: 210)
         .background { heroGround }
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(theme.hairlineWeak, lineWidth: 1))
         .zIndex(2)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("persona-appearance.hero")
+    }
+
+    /// The character large, a tap plays the next move.
+    private func heroStage(name: String, isLocked: Bool) -> some View {
+        ZStack {
+            MascotCharacterView(look: shownLook, color: draft.color, skin: shownOwlSkin, size: 150, animated: true, owlHandle: stageHandle)
+                .grayscale(isLocked ? 1 : 0)
+                .opacity(isLocked ? 0.6 : 1)
+                .offset(y: hop ? -10 : 0)
+            if isLocked {
+                PersonaIconView(icon: .lock, size: 12, strokeWidth: 2.4)
+                    .foregroundStyle(theme.inkSecondary)
+                    .frame(width: 24, height: 24)
+                    .background(theme.control, in: Circle())
+                    .padding(4)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            }
+            if previewSkin != nil || isLocked {
+                Text(verbatim: AppStrings.localized("Preview: locked, nothing is saved"))
+                    .font(theme.font(11))
+                    .foregroundStyle(theme.inkSecondary)
+                    .lineLimit(1)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(theme.control.opacity(0.9), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .padding(4)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .accessibilityIdentifier("persona-appearance.preview-note")
+            }
+        }
+        .frame(width: 170, height: 170)
+        .contentShape(Rectangle())
+        .onTapGesture { playNext() }
+        .onHover { inside in if inside, let first = moves.first { play(first) } }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: String(format: AppStrings.localized("%@ preview"), name)))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("persona-appearance.stage")
+    }
+
+    /// The name, "family · shape · palette · skin", then the action pill and
+    /// the move count. Wide, the moves open as a card over the band; compact,
+    /// the hero lists them in its own flow.
+    private func heroIdentity(name: String, isLocked: Bool, inUse: Bool, centered: Bool) -> some View {
+        VStack(alignment: centered ? .center : .leading, spacing: 6) {
+            Text(verbatim: name)
+                .font(theme.font(24, .semibold))
+                .foregroundStyle(theme.ink)
+                .lineLimit(1)
+                .frame(height: 32)
+                .accessibilityIdentifier("persona-appearance.name")
+            Text(verbatim: summary)
+                .font(theme.font(13.5))
+                .foregroundStyle(theme.inkSecondary)
+                .lineLimit(centered ? 2 : 1)
+                .multilineTextAlignment(centered ? .center : .leading)
+                .fixedSize(horizontal: false, vertical: centered)
+                .frame(minHeight: 20)
+                .accessibilityIdentifier("persona-appearance.summary")
+            HStack(spacing: 8) {
+                actionPill(name: name, locked: isLocked, inUse: inUse)
+                Button { withAnimation(.easeOut(duration: 0.12)) { movesOpen.toggle() } } label: {
+                    HStack(spacing: 4) {
+                        Text(verbatim: String(format: AppStrings.localized("%@ moves"), "\(moves.count)"))
+                            .font(theme.font(12))
+                        PersonaIconView(icon: .chevronDown, size: 12, strokeWidth: 2)
+                            .rotationEffect(.degrees(movesOpen ? 180 : 0))
+                    }
+                    .foregroundStyle(theme.inkTertiary)
+                    .padding(.horizontal, 8)
+                    .frame(height: 24)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(DesktopHoverFill(radius: 12, fill: \.control))
+                .accessibilityIdentifier("persona-appearance.moves")
+            }
+            .padding(.top, 10)
+            .overlay(alignment: .topLeading) {
+                if movesOpen, !centered { AnyView(moveList(width: 352)).offset(y: 46) }
+            }
+            .zIndex(1)
+        }
+    }
+
+    /// Play a move and Randomize: a column beside the name when wide, a row under it when compact.
+    @ViewBuilder
+    private var heroButtons: some View {
+        heroButton(.play, AppStrings.localized("Play a move"), id: "persona-appearance.play") { playNext() }
+        heroButton(.shuffle, AppStrings.localized("Randomize"), id: "persona-appearance.randomize") { randomize() }
     }
 
     /// `radial-gradient(120% 140% at 20% 50%, tint 26 % into panel, panel 58 %)`.
@@ -563,7 +637,9 @@ struct PersonaAppearancePane: View {
         .accessibilityIdentifier("persona-appearance.action")
     }
 
-    private var moveList: some View {
+    /// Every move. `width` set: a card floating over the band (wide); nil:
+    /// in the stacked hero's flow, as wide as the hero, without a shadow.
+    private func moveList(width: CGFloat?) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(verbatim: AppStrings.localized("Moves"))
                 .font(theme.font(11, .medium))
@@ -583,10 +659,11 @@ struct PersonaAppearancePane: View {
             }
         }
         .padding(10)
-        .frame(width: 352, alignment: .leading)
+        .frame(width: width, alignment: .leading)
+        .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
         .background(theme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairlineWeak, lineWidth: 1))
-        .shadow(color: .black.opacity(0.3), radius: 12, y: 6)
+        .shadow(color: .black.opacity(width == nil ? 0 : 0.3), radius: 12, y: 6)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("persona-appearance.move-list")
     }
@@ -595,7 +672,8 @@ struct PersonaAppearancePane: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 PersonaIconView(icon: icon, size: 13, strokeWidth: 2)
-                Text(verbatim: title).font(theme.font(13))
+                // one line in its 34 pt button, a longer language included
+                Text(verbatim: title).font(theme.font(13)).lineLimit(1).minimumScaleFactor(0.8)
             }
             .foregroundStyle(theme.ink)
             .padding(.horizontal, 14)
@@ -636,7 +714,27 @@ struct PersonaAppearancePane: View {
 
     // MARK: Tabs
 
+    /// Mascot, Shape, Color, Skin over one hairline. Compact, the row scrolls
+    /// inside itself and keeps the open tab in view (#4041).
+    @ViewBuilder
     private func tabRow(_ tabs: [PersonaWardrobe.Tab], open: PersonaWardrobe.Tab) -> some View {
+        if compact {
+            ScrollViewReader { reader in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    tabButtons(tabs, open: open)
+                }
+                .onAppear { reader.scrollTo(open, anchor: .center) }
+                .onValueChange(of: open) { now in
+                    withAnimation(.easeOut(duration: 0.15)) { reader.scrollTo(now, anchor: .center) }
+                }
+            }
+            .overlay(alignment: .bottom) { Rectangle().fill(theme.hairlineWeak).frame(height: 1) }
+        } else {
+            tabButtons(tabs, open: open)
+        }
+    }
+
+    private func tabButtons(_ tabs: [PersonaWardrobe.Tab], open: PersonaWardrobe.Tab) -> some View {
         HStack(spacing: 4) {
             ForEach(tabs, id: \.self) { item in
                 let on = item == open
@@ -663,6 +761,7 @@ struct PersonaAppearancePane: View {
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(on ? .isSelected : [])
                 .accessibilityIdentifier("persona-appearance.tab.\(item.rawValue)")
+                .id(item)
             }
             Spacer(minLength: 0)
         }
@@ -706,29 +805,17 @@ struct PersonaAppearancePane: View {
         let toUnlock = kept.filter { locked($0) }
         let owned = listed.filter { !locked($0) }.count
         return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                HStack(spacing: 6) {
-                    PersonaIconView(icon: .search, size: 13, strokeWidth: 2)
-                        .foregroundStyle(theme.inkSecondary)
-                    TextField(text: $query, prompt: Text(verbatim: String(format: AppStrings.localized("Search %@ mascots"), "\(listed.count)")).foregroundColor(theme.inkSecondary)) {
-                        Text(verbatim: AppStrings.localized("Search mascots"))
-                    }
-                    .font(theme.font(12.5))
-                    .foregroundStyle(theme.ink)
-                    .tint(theme.focus)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .accessibilityIdentifier("persona-appearance.search")
+            if compact {
+                // a phone: the search on its own row, the chips scrolling in theirs (#4041)
+                mascotSearch(width: nil)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) { filterChips(filters) }
+                        .padding(.vertical, 1)
                 }
-                .padding(.horizontal, 10)
-                .frame(width: 206, height: 32)
-                .background(theme.elevated, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairlineWeak, lineWidth: 1))
-                PanelFlow(spacing: 6, lineSpacing: 6) {
-                    ForEach(filters, id: \.self) { item in
-                        chip(PersonaWardrobe.filterName(item), on: filter == item) { filter = item }
-                            .accessibilityIdentifier("persona-appearance.filter.\(filterID(item))")
-                    }
+            } else {
+                HStack(spacing: 8) {
+                    mascotSearch(width: 206)
+                    PanelFlow(spacing: 6, lineSpacing: 6) { filterChips(filters) }
                 }
             }
             if !yours.isEmpty {
@@ -745,6 +832,35 @@ struct PersonaAppearancePane: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
             }
+        }
+    }
+
+    /// The mascot search: 206 wide beside the chips, the full row when `width` is nil.
+    private func mascotSearch(width: CGFloat?) -> some View {
+        HStack(spacing: 6) {
+            PersonaIconView(icon: .search, size: 13, strokeWidth: 2)
+                .foregroundStyle(theme.inkSecondary)
+            TextField(text: $query, prompt: Text(verbatim: String(format: AppStrings.localized("Search %@ mascots"), "\(listed.count)")).foregroundColor(theme.inkSecondary)) {
+                Text(verbatim: AppStrings.localized("Search mascots"))
+            }
+            .font(theme.font(12.5))
+            .foregroundStyle(theme.ink)
+            .tint(theme.focus)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .accessibilityIdentifier("persona-appearance.search")
+        }
+        .padding(.horizontal, 10)
+        .frame(width: width, height: 32)
+        .frame(maxWidth: width == nil ? .infinity : nil)
+        .background(theme.elevated, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairlineWeak, lineWidth: 1))
+    }
+
+    private func filterChips(_ filters: [PersonaWardrobe.Filter]) -> some View {
+        ForEach(filters, id: \.self) { item in
+            chip(PersonaWardrobe.filterName(item), on: filter == item) { filter = item }
+                .accessibilityIdentifier("persona-appearance.filter.\(filterID(item))")
         }
     }
 
@@ -1056,7 +1172,8 @@ struct PersonaAppearancePane: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("PNG, JPEG, GIF, or WebP, up to 10 MB. Images are stored on your paired computer.")
                 .panelText(12.5, 19).foregroundStyle(theme.inkSecondary)
-            HStack(spacing: 8) {
+            // compact: the two buttons stack, never past the screen's edge (#4041)
+            (compact ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))) {
                 PhotosPicker(selection: $photo, matching: .images) {
                     Label("Choose a picture", systemImage: "photo.badge.plus")
                         .font(theme.font(12.5, .medium))

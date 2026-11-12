@@ -66,6 +66,8 @@ struct ChatListView: View {
     @StateObject private var botActions = BotRowActions()
     @ObservedObject private var people = PeopleDirectory.shared
     @State private var showingPlusMenu = false
+    /// The apps button's menu (#4041), an opaque card over a dimmed home.
+    @State private var showingAppsMenu = false
     @State private var showingSearch = false
     /// The "+": the search sheet as New chat (bots and members).
     @State private var showingNewChat = false
@@ -1576,7 +1578,7 @@ extension ChatListView {
             HomeSelectionBar(model: selection)
         } else {
             HStack(spacing: HomeMetrics.bottomGap) {
-                HomeAppsButton(select: selectAccount, openApp: openHomeApp)
+                HomeAppsButton { withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) { showingAppsMenu = true } }
                 if avatarAtTrailingCorner {
                     if showUpdatesButton { updatesButton.frame(maxWidth: .infinity) } else { Spacer(minLength: 0) }
                     standardChromeTrailing
@@ -1943,6 +1945,12 @@ extension ChatListView {
                 }
                 .transition(.move(edge: .bottom))
                 .zIndex(4)
+            }
+            if showingAppsMenu {
+                HomeAppsMenu(select: selectAccount, openApp: openHomeApp) {
+                    withAnimation(.easeOut(duration: 0.18)) { showingAppsMenu = false }
+                }
+                .zIndex(5)
             }
             if showingPlusMenu {
                 HomePlusMenu(

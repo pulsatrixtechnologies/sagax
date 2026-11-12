@@ -369,12 +369,14 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     // rather than a policy refusal, is his to fix (his subscription, his key).
     expect(card.access).toMatchObject({ reason: "no_access", engine: "Claude", botId: shared.id, payer: "speaker", payerPrincipalId: bobId, cause: "no_credentials", subscriptionSignIn: true, keysUrl: `${idp.issuer}/console/credentials?kind=model` });
     expect(readFileSync(dump, "utf8")).toBe(before);
-    // private threads: bob hears his own thread's failure; alice, the bot's
-    // owner, hears nothing of bob's conversation
-    await waitFor(async () => bobStream.text().includes("turn-failed"));
+    // private threads: bob hears his own thread's card, a needs-you since
+    // #3719 (only he can clear it); alice, the bot's owner, hears nothing of
+    // bob's conversation
+    await waitFor(async () => bobStream.text().includes("needs-you"));
     bobStream.close();
     await sleep(300);
     expect(aliceStream.text()).not.toContain("no key now");
+    expect(aliceStream.text()).not.toContain("needs-you");
     expect(aliceStream.text()).not.toContain("turn-failed");
     aliceStream.close();
 
@@ -398,7 +400,7 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     // message and nothing in place of the card: not in the list, the room,
     // the live stream, the export or search.
     await waitFor(async () => bobRoomStream.text().includes('"kind":"access"'));
-    await waitFor(async () => bobRoomStream.text().includes("turn-failed"));
+    await waitFor(async () => bobRoomStream.text().includes("needs-you"));
     await sleep(300);
     const aliceRoom = await api("GET", `/api/threads/${roomThread}/messages`, alice);
     expect(aliceRoom.status, aliceRoom.text).toBe(200);
@@ -408,6 +410,7 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     expect(JSON.stringify(aliceGroups.body)).not.toContain('"kind":"access"');
     expect(aliceRoomStream.text()).toContain("room ping");
     expect(aliceRoomStream.text()).not.toContain('"kind":"access"');
+    expect(aliceRoomStream.text()).not.toContain("needs-you");
     expect(aliceRoomStream.text()).not.toContain("turn-failed");
     aliceRoomStream.close();
     bobRoomStream.close();

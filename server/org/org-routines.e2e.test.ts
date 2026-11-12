@@ -479,9 +479,10 @@ posixOnly("Perspicax organization, slice 6: routines in their person's name", ()
     // her notification names no thread, only the run: it opens the bot's
     // Coding activity; bob, not in the card's audience, gets none
     const notified = await waitFor(async () => notificationsIn(aliceStream.text()).find((n) => n.routineRunId === refused.id) ?? null, 15_000);
-    expect(notified).toMatchObject({ kind: "turn-failed", botId: x.id, threadId: "", audience: [ids.alice] });
+    // An access card is a needs-you: only its audience can clear it (#3719).
+    expect(notified).toMatchObject({ kind: "needs-you", botId: x.id, threadId: "", audience: [ids.alice] });
     expect(notificationsIn(aliceStream.text()).some((n) => n.threadId === thread)).toBe(false);
-    expect(notificationsIn(bobStream.text()).some((n) => n.routineRunId === refused.id || (n.kind === "turn-failed" && n.threadId === thread))).toBe(false);
+    expect(notificationsIn(bobStream.text()).some((n) => n.routineRunId === refused.id || (["needs-you", "turn-failed"].includes(n.kind) && n.threadId === thread))).toBe(false);
     aliceStream.close();
     bobStream.close();
     // there, the run carries her card with its actions (her subscription,

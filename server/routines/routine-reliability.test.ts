@@ -210,6 +210,30 @@ describe("routine reliability in an isolated journal", () => {
     expect(wrenTold.slice(0, 2)).toEqual([null, null]);
     expect(wrenTold[2]).toEqual(said("Wren inbox"));
   });
+  it("tells a bot's setup cause once when two of its routines fail with it until both pause (#3901)", async () => {
+    const h = fixture();
+    const fail = async (routineId: string) => {
+      h.manager.runNow(routineId); await h.flush();
+      const run = h.manager.listRuns().find(entry => entry.routineId === routineId && entry.status === "running")!;
+      const at = new Date(h.now()).toISOString();
+      h.manager.handleRuntimeEvent({ eventId: `${run.id}-error`, provider: "fake", threadId: run.threadId!, createdAt: at, type: "runtime.error", message: "Claude Code is too old for this model. Update it.", setup: true, terminal: true });
+      h.manager.handleRuntimeEvent({ eventId: `${run.id}-done`, provider: "fake", threadId: run.threadId!, createdAt: at, type: "turn.completed", ok: false, stopReason: "update_required" });
+      const [failed, alert] = h.onRunFailed.mock.calls.at(-1)!;
+      expect(failed.id).toBe(run.id);
+      return { told: h.manager.problemAlert(failed, alert) != null, paused: failed.autoPaused !== undefined };
+    };
+    const hourly = { type: "interval" as const, everyMinutes: 60, anchorAt: h.now() };
+    const first = h.manager.create({ name: "Inbox digest", prompt: "Read the inbox.", botId: "osprey", schedule: hourly });
+    const second = h.manager.create({ name: "Desk digest", prompt: "Read the desk.", botId: "osprey", schedule: hourly });
+    const outcomes: { told: boolean; paused: boolean }[] = [];
+    for (const routine of [first, second]) {
+      while (h.manager.getRoutine(routine.id)?.enabled) outcomes.push(await fail(routine.id));
+    }
+    // both routines paused themselves, and the bot was told its cause only once
+    expect(outcomes.filter(outcome => outcome.paused)).toHaveLength(2);
+    expect(outcomes.filter(outcome => outcome.told)).toHaveLength(1);
+    expect(outcomes.findIndex(outcome => outcome.told)).toBe(h.manager.problemToldAt({ routineId: first.id }) - 1);
+  });
   it("does not reserve or warm a task for an unready upcoming routine", async () => {
     const reserveTask = vi.fn(() => ({ threadId: "reserved" }));
     const prewarmEngine = vi.fn();

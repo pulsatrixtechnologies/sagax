@@ -848,6 +848,11 @@ public struct Message: Codable, Hashable, Identifiable, Sendable {
     /// person was viewing when they sent it. The page draws as a chip over
     /// the words; the text stays exactly what they typed.
     public var dataContext: MessageDataContext? = nil
+    /// #3461: what the person wrote to a team bot in a thread this bot
+    /// opened (shared/team-work.ts `TeamNote`), read by the bot at its next
+    /// turn. Only its presence is read here: a team note is never drawn as
+    /// the bot's words in the working line (#3712, `LiveTextPlace`).
+    public var teamNote: TeamNoteRef? = nil
 
     public var date: Date { Date(timeIntervalSince1970: at / 1000) }
 
@@ -861,6 +866,17 @@ public struct Message: Codable, Hashable, Identifiable, Sendable {
     /// so they read as prose in full rather than as a clipped tool log.
     public var isTeammateReport: Bool {
         kind == .activity && (threadRef != nil || comm != nil) && tool?.expandableOutput != nil
+    }
+}
+
+/// A team note's team bot (shared/team-work.ts `TeamNote`); the rest of it
+/// is not drawn on the phone.
+public struct TeamNoteRef: Codable, Hashable, Sendable {
+    public var botId: String?
+    public var botName: String?
+    public init(botId: String? = nil, botName: String? = nil) {
+        self.botId = botId
+        self.botName = botName
     }
 }
 

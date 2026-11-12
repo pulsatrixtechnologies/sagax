@@ -744,6 +744,14 @@ final class Session: ObservableObject {
                let frame = try? JSONDecoder().decode(Frame.self, from: frameData) {
                 state.apply(frame)
             }
+            // #3712: one frame of a live turn (LiveNotePreview), for captures
+            if let frame = LiveNotePreview.frame(in: arguments),
+               let scene = LiveNotePreview.scene(frame, french: Bundle.main.preferredLocalizations.first?.hasPrefix("fr") == true) {
+                state = CompanionState()
+                state.hydrate(scene.fleet)
+                if let streaming = scene.streaming { state.streaming[LiveNotePreview.threadId] = streaming }
+                streamingStore.sync(text: state.streaming, reasoning: state.reasoning)
+            }
             if let longCount = LongTranscript.previewCount(in: arguments) {
                 // DEBUG / demo measure: one synthetic thread of ~2000 lines so
                 // the chat transcript can be timed before and after LazyVStack.

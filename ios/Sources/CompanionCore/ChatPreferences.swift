@@ -402,8 +402,15 @@ public func settledPermissionLeavesChat(_ message: Message) -> Bool {
 /// `hidesPreSendRefusals` is a 1:1 bot chat (#2013): a failed turn the
 /// engine refused before any prompt went out (PreSendRefusal) is not drawn;
 /// the composer says it instead. A room keeps it as a quiet line.
+///
+/// `liveTurns` are the turns of this chat that still run
+/// (`TurnLiveness.liveTurnIds`) and `lineNoteId` the note the working line
+/// draws now (`LiveTextPlace.liveLineNote`, #3712): while a turn runs, where
+/// its text goes is read from the text, so nothing on screen goes from a
+/// bubble to hidden.
 public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showThreads: Bool = true, threadBotId: String = "",
-                           hidesPreSendRefusals: Bool = false) -> [TranscriptRow] {
+                           hidesPreSendRefusals: Bool = false, liveTurns: Set<String> = [],
+                           lineNoteId: String? = nil) -> [TranscriptRow] {
     let voice = makeVoiceCallPlan(messages)
     // The same failure of the same bot, repeated since it last answered,
     // draws once: the last row (FailureDedup, desktop repeatedFailureIds).
@@ -446,11 +453,22 @@ public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showTh
         }
     }
     // #3581: a turn with no final message yet (it runs, or ended without
-    // one): a note folds as soon as a later row of the same turn exists, so
-    // the chat shows the turn's row, the newest line and the working line.
+    // one). #3712: while it runs, where its text goes is read from the text
+    // (LiveTextPlace): a short note folds (the working line draws the newest
+    // one, the turn's row the others) and a text that opened into a bubble
+    // stays one, even with steps after it. A turn that ended without its
+    // final message folds a note as soon as a later row of the same turn
+    // exists. The chat shows the turn's row, the bubbles and the working line.
+    var inLine: String?
     for (turnID, items) in narration {
         guard let last = lastOfTurn[turnID] else { continue }
-        let folded = items.filter { (indexOf[$0.id] ?? last.index) < last.index }
+        let live = liveTurns.contains(turnID)
+        // in the working line: no row until a later row of its turn exists
+        if let lineNoteId, items.contains(where: { $0.id == lineNoteId }) { inLine = lineNoteId }
+        let folded = items.filter { item in
+            if item.id == inLine { return false }
+            return live ? LiveTextPlace.of(item.text) == .line : (indexOf[item.id] ?? last.index) < last.index
+        }
         guard let first = folded.first else { continue }
         var fold = AssistantTurnFold(turnId: turnID, messages: folded, elapsed: max(0, last.at - (startedAt[turnID] ?? first.at)))
         fold.settled = false
@@ -524,6 +542,7 @@ public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showTh
             continue
         }
         if repeatedFailures.contains(message.id) { continue }
+        if message.id == inLine { continue }
         if hidesPreSendRefusals, PreSendRefusal.kind(of: message) != nil { continue }
         // A failed routine run and a routine's access card pass as a
         // banner (TransientNotices), never a row.

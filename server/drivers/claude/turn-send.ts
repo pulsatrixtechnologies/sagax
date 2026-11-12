@@ -43,9 +43,11 @@ export function createSendTurn(deps: SendTurnDeps & { authRecovery: any }) {
 
   /** Everything that reads or replaces the thread's process, under its slot. */
   const launch = async (ctx: ClaudeTurnCtx): Promise<{ early?: ClaudeTurnEarly; after?: () => Promise<ClaudeTurnEarly> }> => {
-    const { turn } = ctx;
     const earlyArgs = await prepareClaudeTurnArgs(ctx);
     if (earlyArgs) return { early: earlyArgs };
+    // #4049: read after prepare, which replaces the turn with the rebuild
+    // when a fresh session follows a full one.
+    const { turn } = ctx;
     const earlyMcp = await prepareClaudeTurnMcp(ctx);
     if (earlyMcp) return { early: earlyMcp };
     const reused = await tryReuseClaudeSession(ctx);

@@ -1235,6 +1235,33 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(JSON.stringify(seen.prompt)).toContain("Earlier: find the keys on the server.");
   });
 
+  // #4049: a dispatched turn carries a split prompt, so its first message is
+  // the text with the volatile half as a note. The fresh session after a full
+  // one must get the rebuild there too, not the person's bare text.
+  it("gives the rebuild to the fresh session after a full one when the prompt is split", async () => {
+    const dump = join(scratch, "thrash-split.json");
+    const split = { system: "stable\n\nvolatile memo", systemStable: "stable", systemVolatile: "volatile memo" };
+    process.env.FAKE_CLAUDE_THRASH_AGAIN = "1";
+    try {
+      await create("happy", { FAKE_CLAUDE_DUMP: dump });
+      const turn = await instance.adapter.sendTurn({ threadId: "t-thrash-split", text: "Find the keys [fake:context-thrash]", ...split });
+      await expect(recorder.until((event) => event.type === "turn.completed" && event.turnId === turn.turnId))
+        .resolves.toMatchObject({ ok: false, stopReason: "context_full" });
+    } finally {
+      delete process.env.FAKE_CLAUDE_THRASH_AGAIN;
+    }
+    const last = recorder.events.filter((event) => event.type === "session.started").at(-1) as { sessionId: string };
+    const retry = await instance.adapter.sendTurn({
+      threadId: "t-thrash-split", text: "Find the keys", resumeCursor: last.sessionId,
+      recoveryText: "Earlier: find the keys on the server.\nFind the keys", ...split,
+    });
+    await expect(recorder.until((event) => event.type === "turn.completed" && event.turnId === retry.turnId)).resolves.toMatchObject({ ok: true });
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.argv).not.toContain("--resume");
+    expect(JSON.stringify(seen.prompt)).toContain("Earlier: find the keys on the server.");
+    expect(JSON.stringify(seen.prompt)).toContain("volatile memo");
+  });
+
   it("retires an outdated child before retry while preserving a healthy pooled session", async () => {
     await create(undefined, {
       FAKE_CLAUDE_API_ERROR: "Claude Code 2.1.268 does not support this model; version 2.1.280 or newer is required.",

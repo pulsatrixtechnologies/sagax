@@ -11,7 +11,7 @@ import { runLoginShellProbe } from "../env-path.ts";
 import { spawnPcHook } from "../hooks/lifecycle-hook-exec.ts";
 import { execCli, killCliTree, spawnCli } from "../procs.ts";
 import { spawnSource } from "../resource-usage/sources.ts";
-import { CHILD_NICE, execChild, execChildAsync, type ExecChildError, spawnChild, spawnHelperPid, startSpawnHelper, stopSpawnHelper } from "./spawn-helper.ts";
+import { CHILD_NICE, execChild, execChildAsync, type ExecChildError, HelperChild, pendingStart, spawnChild, spawnHelperPid, startSpawnHelper, stopSpawnHelper } from "./spawn-helper.ts";
 
 const PROBE = `
 const out = { argv: process.argv.slice(1), env: process.env, cwd: process.cwd(), uid: process.getuid(), gid: process.getgid(), ppid: process.ppid };
@@ -117,6 +117,25 @@ describe("turn-path process starts (#3680)", () => {
         expect({ file, name }).toEqual({ file, name: "(none)" });
       }
     }
+  });
+});
+
+// #3901: a child the helper failed to start (a missing engine CLI, the usual
+// case on a fresh machine) is not starting any more. Stopping it once looped
+// on its settled start forever, with no timer able to run, until the heap
+// ran out: a bundled server on Linux never served its health check. Built
+// here without a helper, so it runs on every platform.
+describe("a child the helper failed to start (#3901)", () => {
+  it("is not pending any more, and stopping it settles at once", async () => {
+    const child = new HelperChild({
+      op: "spawn", id: -1, command: "/nonexistent/engine", args: [], cwd: process.cwd(), env: {}, stdio: ["pipe", "pipe", "pipe"], detached: false,
+    });
+    expect(pendingStart(child as unknown as ChildProcess)).not.toBeNull();
+    const failed = new Promise((resolve) => child.once("error", resolve));
+    child.onFailed({ code: "ENOENT", errno: -2, syscall: "spawn /nonexistent/engine", path: "/nonexistent/engine", message: "spawn /nonexistent/engine ENOENT" });
+    await failed;
+    expect(pendingStart(child as unknown as ChildProcess)).toBeNull();
+    expect(await killCliTree(child as unknown as ChildProcess, 1_000)).toBe(true);
   });
 });
 const lines: string[] = [];

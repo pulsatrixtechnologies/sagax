@@ -25,7 +25,11 @@ it to the children not started detached (the ones that sat in the server's
 group before). A child's pid comes back a moment after the call: a stop in
 that moment goes through `killCliTree` (which waits for the start) or
 `whenStarted` (a group signal sent once the pid is there), never a read of
-`child.pid` at once. Where no helper runs (macOS,
+`child.pid` at once. A child the helper could not start (a missing program)
+is not starting any more: `pendingStart` is null for it and `killCliTree`
+settles at once, as for Node's own child with no pid (#3901: waiting on its
+settled start again and again kept a bundled server on Linux from ever
+serving). Where no helper runs (macOS,
 Windows, a test that does not start it), `execChild` is Node's `execFile`.
 
 What goes through them, on a turn's path and around it:

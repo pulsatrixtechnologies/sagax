@@ -19,7 +19,7 @@ import { GrokAgentDriver } from "./grok.ts";
 import { QwenAgentDriver } from "./qwen.ts";
 
 const FAKE_CLI = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "testing", "fake-acp-cli.ts");
-const ENV_KEYS = ["FAKE_ACP_MODE", "FAKE_ACP_DUMP", "FAKE_ACP_TEXT_REPLY", "FAKE_ACP_LAUNCH_COUNT_FILE"];
+const ENV_KEYS = ["FAKE_ACP_MODE", "FAKE_ACP_DUMP", "FAKE_ACP_DUMP_PROMPT", "FAKE_ACP_TEXT_REPLY", "FAKE_ACP_LAUNCH_COUNT_FILE"];
 
 describe("ACP memory one-shot (generateMemoryText)", () => {
   let instance: ProviderInstance | undefined;
@@ -83,6 +83,23 @@ describe("ACP memory one-shot (generateMemoryText)", () => {
     // Still a real one-shot process: dump was written, marked as background.
     const dump = JSON.parse(readFileSync(process.env.FAKE_ACP_DUMP, "utf8"));
     expect(dump.env.SAGAX_ACP_BACKGROUND_TEXT).toBe("1");
+  });
+
+  it("leaves a chat session's tool and prompt dumps alone (#4063)", async () => {
+    // Memory upkeep runs on the chat's own CLI after the chat goes quiet. Its
+    // tool-free session must not replace what the chat turn was handed, or a
+    // test reading the turn's mounts sees an empty list (#4063).
+    process.env.FAKE_ACP_TEXT_REPLY = "[]";
+    process.env.FAKE_ACP_DUMP = join(scratch, "dump.json");
+    process.env.FAKE_ACP_DUMP_PROMPT = "1";
+    const mounts = JSON.stringify([{ name: "agents", command: "node", args: [], env: [] }]);
+    const prompt = JSON.stringify([{ type: "text", text: "the chat turn" }]);
+    writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.json`, mounts);
+    writeFileSync(`${process.env.FAKE_ACP_DUMP}.prompt.json`, prompt);
+    await (await create(GrokAgentDriver)).generateMemoryText!("prompt");
+    expect(JSON.parse(readFileSync(`${process.env.FAKE_ACP_DUMP}.session.json`, "utf8")).mcpServers).toEqual([]);
+    expect(readFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.json`, "utf8")).toBe(mounts);
+    expect(readFileSync(`${process.env.FAKE_ACP_DUMP}.prompt.json`, "utf8")).toBe(prompt);
   });
 
   it("fails closed when the agent reaches for a tool", async () => {

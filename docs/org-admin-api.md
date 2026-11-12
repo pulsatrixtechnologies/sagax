@@ -384,7 +384,8 @@ disabled person's routines stop anyway). Listed in `GET capabilities` as
     "soul": { "chars": 1840, "summary": "Prepares the weekly sales digest." },
     "skills": [{ "id": "digest", "name": "digest", "source": "https://github.com/acme/skills" }],
     "permissions": { "approvalMode": "ask", "fullAccess": false },
-    "routineList": [{ "id": "r_1", "name": "Daily digest", "enabled": true, "schedule": "Every weekday at 09:00" }]
+    "routineList": [{ "id": "r_1", "name": "Daily digest", "enabled": true, "schedule": "Every weekday at 09:00" }],
+    "speech": { "xaiVoice": "ara", "provider": "openai", "voice": "cedar", "language": "fr" }
   }
 }
 ```
@@ -392,6 +393,18 @@ disabled person's routines stop anyway). Listed in `GET capabilities` as
 The AdminBot fields of `GET bots`, plus the facts above. `soul.summary` is
 the first line of the instructions (at most 140 characters), never the
 instructions themselves; no message, memory or routine prompt is answered.
+
+`speech` is the bot's effective voice for its owner, so a phone line speaks
+with the voice set on the bot: the bot's own voice (Edit bot > Voice) when
+it has one, else the owner's own (Settings > Voice), with the rules of the
+app (`effectiveVoiceChoice`, `spokenVoice` in shared/voice-providers.ts,
+`botSpeech` in shared/voice-mode.ts). It is always the owner's preference,
+whoever reads. `xaiVoice` is the xAI realtime voice of that choice;
+`provider` is one of `xai`, `openai`, `elevenlabs`, `fish`, `system`,
+`chatterbox` (Auto reads as `xai`) and `voice` that provider's voice id;
+`language` is the bot's voice language, else the owner's, a short code.
+A field is left out when empty: no xAI voice chosen, the provider's default
+voice, or a language set to detect. An older server leaves `speech` out.
 
 ### A bot's look and persona
 

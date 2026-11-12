@@ -30432,6 +30432,11 @@ const orgBotsDeps: BotsDeps = {
         .map((routine) => ({ id: routine.id, name: routine.name, enabled: routine.enabled, schedule: routineScheduleLabel(routine.schedule) }))
     };
   },
+  // #4087: the owner's own voice preference, read the way voice mode reads it
+  voice: {
+    preference: (principalId) => voiceModeDeps.preference?.({ principalId }),
+    language: (botId) => store.bot(botId)?.voiceLanguage,
+  },
   owner: consoleOwner,
   ownerBySub: (sub) => {
     if (IDENTITY.kind !== "perspicax") return null;

@@ -41,8 +41,7 @@ function writtenRows(): WireMessage[] {
     routineRun: (threadId) => threadId === "run" ? { id: "run-1", routineName: "Backup check", status: "completed" } : null,
     notify: () => {},
     relayVia: (_botId, threadId) => threadId === "client" ? "mcp" : threadId === "work" ? "teammate" : undefined,
-    runCard: (_runThreadId, _target, report) => ({ text: report, routineRun: { runId: "run-1", routineId: "rt-1", routineName: "Backup check", status: "completed", summary: report } }),
-    runRowAllowed: () => true,
+    runRow: (_runThreadId, _target, said) => ({ text: said, routineRun: { runId: "run-1", routineId: "rt-1", routineName: "Backup check", status: "completed", summary: said }, rings: true }),
   };
   add("work", { role: "bot", kind: "text", text: "- [HUMAIN] **100201**: decide which client it belongs to.", turnId: "t1" });
   relayPersonAttention({ bot: BOT, threadId: "work", turnId: "t1", ok: true }, deps);

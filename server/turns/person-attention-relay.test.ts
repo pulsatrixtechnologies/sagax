@@ -7,7 +7,12 @@ import { describe, expect, it } from "vitest";
 import { BriefStore, TOPIC_HALF_LIFE_MS } from "../proactive/background-brief.ts";
 
 import type { WireMessage, WireTask } from "../../shared/wire.ts";
-import { routineRunMayWriteRow } from "../routines/routine-report.ts";
+import { routineRunReportable } from "../routines/routine-report.ts";
+import { routineRunCard, routineRunFallbackText } from "../routines/routine-run-card.ts";
+import { createRoutineRunLateRow } from "../index-leaves/syncRoutineRunToSource.ts";
+import { personAttention } from "../../shared/person-attention.ts";
+import { withoutRunMarkersIn } from "../../shared/routine-result.ts";
+import { routineRunRowOutOfChat } from "../../shared/routine-repeat.ts";
 import { askedWords, mirrorBackgroundReply, mirrorLateRunReply, RELAY_GROUP_MS, RELAY_RECENT_ROWS, RELAY_TEXT_MAX, relayPersonAttention, type AttentionBot, type AttentionRelayDeps } from "./person-attention-relay.ts";
 
 const ATLAS: AttentionBot = { id: "bot-atlas", name: "Atlas" };
@@ -20,9 +25,11 @@ function world(opts: { run?: { id: string; routineName: string; status: string }
   tasks.set("work", { threadId: "work", title: "@Nova · work", openedBy: { botId: "bot-nova", name: "Nova", kind: "work", at: 1 } });
   tasks.set("run", { threadId: "run", title: "Hourly pass", routineRunId: "run-1" });
   let next = 0;
+  // #4051: like the real store, a bot row never keeps a run marker in its
+  // text (shared/routine-result.ts withoutRunMarkersIn)
   const say = (threadId: string, text: string, turnId = "turn-1") => {
     const list = threads.get(threadId) ?? [];
-    list.push({ id: `m${next++}`, at: next, role: "bot", kind: "text", text, turnId } as WireMessage);
+    list.push(withoutRunMarkersIn({ id: `m${next++}`, at: next, role: "bot", kind: "text", text, turnId } as WireMessage));
     threads.set(threadId, list);
   };
   const notified: Array<{ threadId: string; title: string; body: string }> = [];
@@ -32,7 +39,7 @@ function world(opts: { run?: { id: string; routineName: string; status: string }
     messages: (threadId) => threads.get(threadId) ?? [],
     append: (threadId, message) => {
       const list = threads.get(threadId) ?? [];
-      const row = { ...message, id: `m${next++}`, at: next } as WireMessage;
+      const row = withoutRunMarkersIn({ ...message, id: `m${next++}`, at: next } as WireMessage);
       list.push(row);
       threads.set(threadId, list);
       return row;
@@ -40,7 +47,7 @@ function world(opts: { run?: { id: string; routineName: string; status: string }
     patch: (threadId, messageId, patch) => {
       const list = threads.get(threadId) ?? [];
       const at = list.findIndex((row) => row.id === messageId);
-      if (at >= 0) list[at] = { ...list[at]!, ...patch };
+      if (at >= 0) list[at] = withoutRunMarkersIn({ ...list[at]!, ...patch });
     },
     markUnread: (_botId, threadId) => { unread.push(threadId); },
     conversation: () => "main",
@@ -155,13 +162,23 @@ describe("relayPersonAttention", () => {
   });
 });
 
-/** #3581: a run's card, as the routine's card write builds it. */
-function withRunCard(w: ReturnType<typeof world>, postsResults = false) {
-  w.deps.runCard = (_runThreadId, _target, report) => ({ text: `Hourly pass: ${report}`, routineRun: { runId: "run-1", routineId: "rt-1", routineName: "Hourly pass", status: "completed", summary: report } });
-  // the server's one row gate (server/index.ts runRowAllowed)
-  w.deps.runRowAllowed = (_runThreadId, late, existing) => routineRunMayWriteRow({
-    status: "completed", quiet: late.quiet, ...(late.problem ? { problems: "late" } : {}), postResults: postsResults, byStreak: true, existing,
-  });
+/** #3581, #4051: a run's row, as the routine's card write builds it, through
+ * the server's one row gate and facts (createRoutineRunLateRow). `run`: the
+ * stored run's own fields (a wake's kind, who started it, its problems). */
+function withRunCard(w: ReturnType<typeof world>, postsResults = false, run: Record<string, unknown> = {}) {
+  const base = w.deps.routineRun("run");
+  const host = {
+    routines: { runForThread: (threadId: string) => threadId === "run" && base ? { routineId: "rt-1", botId: ATLAS.id, target: "bot", createdAt: 1, finishedAt: 2, ...base, ...run } : undefined },
+    store: { messagesFor: (threadId: string) => w.threads.get(threadId) ?? [] },
+    routineRunNeedsPerson: () => false,
+    routineEffectivePostResults: () => postsResults,
+    personAttention: (text: string | undefined) => personAttention(text),
+    routineRunReportable,
+    routineRunCard,
+    routineRunFallbackText,
+    routineTimeZone: () => "UTC",
+  };
+  w.deps.runRow = createRoutineRunLateRow(() => host);
   return w;
 }
 
@@ -246,6 +263,52 @@ describe("#3990: a teammate's message wake, its late answer with nothing for the
       expect([bare.notified, bare.unread, carded.notified, carded.unread, lines]).toEqual([[], [], [], [], []]);
     });
   }
+});
+
+describe("#4051: a run's late answer is read with the facts its card write reads", () => {
+  const WATCH = { routineId: "proactive:bot-atlas", proactive: { mode: "proactive", hops: 0, sources: ["watch"], alwaysReport: true } };
+  const run = { id: "run-1", routineName: "Watch: tickets", status: "completed" };
+  const late = (w: ReturnType<typeof world>) => mirrorLateRunReply({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, w.deps);
+
+  it("a watch wake's late answer that ends with the nothing-to-report line posts nothing, though the store took the line out of its text", () => {
+    const w = withRunCard(world({ run }), true, WATCH);
+    w.say("run", "Nova a fermé le billet, rien pour toi.\nNOTHING_TO_REPORT");
+    expect(w.threads.get("run")!.at(-1)!.text).toBe("Nova a fermé le billet, rien pour toi.");
+    expect(late(w)).toBe(false);
+    expect([w.threads.get("main") ?? [], w.notified, w.unread]).toEqual([[], [], []]);
+  });
+
+  it("a watch wake that ended partial answers late with a report for the person: its card is that report, drawn by the chat", () => {
+    const w = withRunCard(world({ run }), true, { ...WATCH, problems: "The board did not load" });
+    w.say("run", "Nova a rechargé le tableau : trois billets t'attendent.");
+    expect(late(w)).toBe(true);
+    const [row] = w.threads.get("main")!;
+    expect(row!.routineRun).toMatchObject({ status: "completed", wakeTopic: "watch", forPerson: true, summary: "Nova a rechargé le tableau : trois billets t'attendent." });
+    expect(row!.routineRun!.problems).toBeUndefined();
+    expect(routineRunRowOutOfChat(row as never)).toBe(false);
+    expect([w.notified.length, w.unread]).toEqual([1, ["main"]]);
+  });
+
+  it("a run whose row carries items for the person takes a late answer with a new item on that row", () => {
+    const w = withRunCard(world({ run }), false);
+    const items = { kind: "action", items: [{ text: "decide", ticketId: 100201 }] };
+    w.threads.set("main", [{ id: "card", at: 1, role: "bot", kind: "routine.run", text: "Watch", attention: items, routineRun: { runId: "run-1", routineId: "rt-1", routineName: "Watch: tickets", status: "completed" } } as unknown as WireMessage]);
+    w.say("run", "- [HUMAIN] **100203** : approve the refund Nova prepared.");
+    expect(relayPersonAttention({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, w.deps)).toEqual({ posted: false, reason: "already" });
+    expect(late(w)).toBe(true);
+    expect(w.threads.get("main")!).toHaveLength(1);
+    expect(w.threads.get("main")![0]!.routineRun!.summary).toContain("100203");
+    expect(w.notified).toHaveLength(1);
+  });
+
+  it("a run the person started keeps its row for a quiet late answer, without ringing", () => {
+    const w = withRunCard(world({ run }), false, { startedBy: "person" });
+    w.threads.set("main", [{ id: "card", at: 1, role: "bot", kind: "routine.run", text: "Watch", routineRun: { runId: "run-1", routineId: "rt-1", routineName: "Watch: tickets", status: "completed", startedBy: "person", summary: "Waiting on Nova." } } as unknown as WireMessage]);
+    w.say("run", "Nova a fermé le billet.\nNOTHING_TO_REPORT");
+    expect(late(w)).toBe(true);
+    expect(w.threads.get("main")!).toHaveLength(1);
+    expect([w.notified, w.unread]).toEqual([[], []]);
+  });
 });
 
 describe("a run with [HUMAIN] items gives one card, not two", () => {

@@ -987,6 +987,10 @@ export interface WireMessage extends WaitLineField {
    * thread API says it in the reader's language. The app draws nothing from
    * it: the card in the person's conversation tells it. */
   runStatus?: RunStatusNote;
+  /** #4051: this bot row ended with the run contract's nothing-to-report
+   * line, kept as data when the line left its text (as `runStatus`): a run's
+   * late answer is read as the bot wrote it. The app draws nothing from it. */
+  runQuiet?: true;
   /** #2901 (2026-11-08): a line copied into the bot's chat from a background
    * conversation (MCP send_prompt, routine run, proactive wake, teammate
    * work). The chat shows a discreet provenance label; nothing stays hidden. */

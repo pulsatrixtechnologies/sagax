@@ -228,10 +228,13 @@ export function withoutRoutineMarkers(text: string): string {
  * message is written and when a row is read, so no reader ever sees one. A
  * failed or partial status line is never lost: its state and its reason
  * stay on the row as `runStatus` (the relay's failure card and the thread
- * API read it there). */
-export function withoutRunMarkersIn<T extends { role?: string; text?: unknown; routineRun?: { summary?: string } | undefined; runStatus?: RunStatusNote }>(message: T): T {
+ * API read it there). #4051: neither is the nothing-to-report line the bot
+ * ended its words with: it stays on the row as `runQuiet`, so a run's late
+ * answer is read as the bot wrote it (withRunMarkers). */
+export function withoutRunMarkersIn<T extends { role?: string; text?: unknown; routineRun?: { summary?: string } | undefined; runStatus?: RunStatusNote; runQuiet?: true }>(message: T): T {
   if (message.role !== "bot") return message;
   const note = typeof message.text === "string" ? runStatusNote(message.text) : undefined;
+  const quiet = typeof message.text === "string" && endsQuiet(message.text);
   // a run's own row (its report and its card's summary) is routine output
   const strip = message.routineRun ? withoutRoutineMarkers : withoutRunMarkers;
   const text = typeof message.text === "string" ? strip(message.text) : message.text;
@@ -242,8 +245,30 @@ export function withoutRunMarkersIn<T extends { role?: string; text?: unknown; r
     ...message,
     text,
     ...(note ? { runStatus: note } : {}),
+    ...(quiet ? { runQuiet: true as const } : {}),
     ...(summaryChanged ? { routineRun: { ...message.routineRun, summary: summary || undefined } } : {}),
   };
+}
+
+/** Whether a text's last line outside a fenced block is the exact quiet
+ * token (QUIET_TOKEN_LINE, the one the store strips). */
+function endsQuiet(text: string): boolean {
+  if (!text.includes(ROUTINE_QUIET_MARKER)) return false;
+  const lines = text.split(/\r?\n/);
+  const fenced = fencedLines(lines);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    if (!lines[index]!.trim()) continue;
+    return !fenced[index] && QUIET_TOKEN_LINE.test(lines[index]!.trim());
+  }
+  return false;
+}
+
+/** #4051: a stored bot text with the run markers the store kept as data put
+ * back where the bot wrote them (its status line first, its nothing-to-report
+ * line last), for the one report reader (routineReportOutcome). */
+export function withRunMarkers(text: string, kept: { runStatus?: RunStatusNote; runQuiet?: true }): string {
+  const status = kept.runStatus ? `${ROUTINE_STATUS_MARKER} ${kept.runStatus.state}${kept.runStatus.reason ? `: ${kept.runStatus.reason}` : ""}` : "";
+  return [status, text, kept.runQuiet ? ROUTINE_QUIET_MARKER : ""].filter(Boolean).join("\n");
 }
 
 /** #3581: the longest brief a result's card shows (two lines of the card). */

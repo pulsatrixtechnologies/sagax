@@ -180,9 +180,8 @@ describe("run markers in a stored message (#3515)", () => {
     const deps = {
       ...w.deps,
       routineRun: (threadId: string) => (threadId === w.work ? { id: "run-1", routineName: "Veille", status: "completed" } : null),
-      runCard: (_runThreadId: string, _target: string, report: string) => ({ text: report, routineRun: { runId: "run-1", routineId: "rt", routineName: "Veille", status: "completed", summary: report } }),
       // #3990: a routine that posts its results (the one row gate says yes)
-      runRowAllowed: () => true,
+      runRow: (_runThreadId: string, _target: string, said: string) => ({ text: said, routineRun: { runId: "run-1", routineId: "rt", routineName: "Veille", status: "completed", summary: said }, rings: true }),
     } as AttentionRelayDeps<AttentionBot>;
     expect(mirrorLateRunReply({ bot: w.bot, threadId: w.work, turnId: "turn-1", ok: true }, deps)).toBe(true);
     expect(w.store.activePath(w.owner.threadId).at(-1)?.routineRun?.summary).toBe("Le serveur est toujours hors ligne.");

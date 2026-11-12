@@ -18,7 +18,8 @@ export default function TeammateExchangeSheet({ owner, teammate, threadId, task,
   owner?: Pick<Bot, "id" | "name" | "color">;
   teammate: { id: string; name: string; color?: string };
   threadId: string;
-  /** The task, quiet under the header pill. */
+  /** The task, quiet under the header pill: two lines at most with
+   * "Show more" (#4043). */
   task?: string;
   bots?: readonly Bot[];
   /** A footer row (the older and newer requests of one "Asked by" line). */
@@ -42,7 +43,7 @@ export default function TeammateExchangeSheet({ owner, teammate, threadId, task,
       bots={bots}
       showToolCalls={false}
       loadError={transcript.failed && transcript.messages.length === 0}
-      meta={task}
+      subject={task}
       footer={footer}
       onClose={onClose}
     />

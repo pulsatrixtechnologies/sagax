@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   exchangeSide,
+  exchangeSubject,
   chipParty,
   collapseBotExchanges,
   commIsBotDm,
@@ -259,5 +260,19 @@ describe("exchangeSide", () => {
     expect(exchangeSide({ name: "Nova" }, first)).toBe("start");
     expect(exchangeSide({ name: "Pixel" }, first)).toBe("end");
     expect(exchangeSide({ id: "b", name: "Pixel" })).toBe("start");
+  });
+});
+
+describe("exchangeSubject (#4043)", () => {
+  it("keeps a subject that is not the first line", () => {
+    expect(exchangeSubject("Reconcile the bank sheet", "Please reconcile it. Then report.")).toBe("Reconcile the bank sheet");
+    expect(exchangeSubject("Please reconcile", "Please reconcile it. Then report.")).toBe("Please reconcile");
+    expect(exchangeSubject("  ", "anything")).toBeUndefined();
+  });
+
+  it("keeps the first sentence when the subject is the first line, whole or cut", () => {
+    const line = "Please reconcile it.  Then report\nthe gaps.";
+    expect(exchangeSubject(line, line)).toBe("Please reconcile it.");
+    expect(exchangeSubject("Please reconcile it. Then rep…", line)).toBe("Please reconcile it.");
   });
 });

@@ -17,7 +17,7 @@ const lines = [
   { id: "a", role: "user", kind: "text", text: "Please reconcile the bank sheet", at: now },
   { id: "b", role: "bot", kind: "text", text: "Sheet balanced", at: now + 1000 },
 ] as Message[];
-const transcript = { messages: lines, failed: false };
+const transcript: { messages: Message[]; failed: boolean } = { messages: lines, failed: false };
 vi.mock("@/lib/use-side-transcript", () => ({
   useSideTranscript: () => ({ ...transcript, activeLeafId: null, loaded: true, hasMore: false, loadingOlder: false, loadOlder: () => {} }),
 }));
@@ -71,5 +71,64 @@ describe("TeammateExchangeSheet", () => {
     expect(close.textContent).toBe("Close Chat");
     await act(async () => close.click());
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  // #4043: a page-long subject used to fill the sheet and hide the lines.
+  describe("the subject under the header pill", () => {
+    const owner = bot("boss", "Boss", "blue");
+    const teammate = bot("orla", "Orla", "orange");
+    const page = Array.from({ length: 30 }, (_, i) => `Step ${i + 1}: check the ledger rows for the month and note each gap.`).join(" ");
+    const open = async (task: string, messages: Message[] = lines) => {
+      transcript.messages = messages;
+      await act(async () => {
+        root.render(createElement(TeammateExchangeSheet, {
+          owner, teammate: { id: "orla", name: "Orla", color: "orange" }, threadId: "orla-work",
+          task, bots: [owner, teammate], onClose: () => {},
+        }));
+      });
+      return host.querySelector<HTMLElement>("[data-testid=bot-exchange-sheet]")!;
+    };
+    afterEach(() => {
+      transcript.messages = lines;
+    });
+
+    it("folds a long subject to two lines with Show more, unfolds it into the transcript, Show less folds it back", async () => {
+      const sheet = await open(page);
+      const header = sheet.querySelector("[data-exchange-header]")!;
+      const folded = header.querySelector<HTMLElement>("[data-testid=bot-exchange-subject]")!;
+      expect(folded.getAttribute("data-expandable")).toBe("folded");
+      expect(folded.firstElementChild!.className).toContain("line-clamp-2");
+      const more = folded.querySelector<HTMLButtonElement>("[data-expandable-toggle]")!;
+      expect(more.textContent).toBe("Show more");
+      await act(async () => more.click());
+      // open: no longer fixed under the pill, it scrolls with the lines
+      expect(header.querySelector("[data-testid=bot-exchange-subject]")).toBeNull();
+      const scroll = sheet.querySelector("[data-testid=bot-exchange-scroll]")!;
+      const opened = scroll.querySelector<HTMLElement>("[data-testid=bot-exchange-subject]")!;
+      expect(opened.getAttribute("data-expandable")).toBe("open");
+      expect(opened.firstElementChild!.className).not.toContain("line-clamp");
+      expect(opened.textContent).toContain("Step 30");
+      const less = opened.querySelector<HTMLButtonElement>("[data-expandable-toggle]")!;
+      expect(less.textContent).toBe("Show less");
+      await act(async () => less.click());
+      expect(scroll.querySelector("[data-testid=bot-exchange-subject]")).toBeNull();
+      expect(header.querySelector("[data-testid=bot-exchange-subject]")?.getAttribute("data-expandable")).toBe("folded");
+    });
+
+    it("shows no control under a short subject", async () => {
+      const sheet = await open("Reconcile the bank sheet");
+      const subject = sheet.querySelector("[data-exchange-header] [data-testid=bot-exchange-subject]")!;
+      expect(subject.querySelector("[data-expandable-toggle]")).toBeNull();
+      expect(subject.textContent).toBe("Reconcile the bank sheet");
+    });
+
+    it("keeps only the first sentence when the subject is the first line's own text", async () => {
+      const ask = `Please reconcile the bank sheet. ${page}`;
+      const sheet = await open(ask, [{ ...lines[0]!, text: ask }, lines[1]!]);
+      const subject = sheet.querySelector("[data-exchange-header] [data-testid=bot-exchange-subject]")!;
+      expect(subject.textContent).toBe("Please reconcile the bank sheet.");
+      // the line below holds the whole text, told once
+      expect(sheet.querySelector('[data-mid="a"]')?.textContent).toContain("Step 30");
+    });
   });
 });

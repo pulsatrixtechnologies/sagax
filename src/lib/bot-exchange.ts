@@ -8,6 +8,7 @@ import { isStatusActivity } from "@/lib/activity-runs";
 import { peerLine } from "@/lib/peer-message";
 import { t } from "@/lib/i18n";
 import { localDay } from "@/lib/transcript-derivations";
+import { firstSentence } from "@/lib/soul";
 
 /** Same gap the phone uses before a quiet date stamp starts a new cluster. */
 export const STRETCH_GAP_MS = 30 * 60 * 1000;
@@ -270,6 +271,26 @@ export function exchangeBody(message: Message): string {
   if (peer) return peer.body;
   if (quietRow(message)) return "";
   return message.text ?? "";
+}
+
+/** Text with its spacing folded, for comparing a subject with a line. */
+function flat(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/** The subject under an exchange's header pill (#4043). When it is the
+ * first line's own text (whole, or cut with an ellipsis), the line below
+ * already holds it all: the subject keeps its first sentence only, so the
+ * same words are never told twice. Any other subject stays as given. */
+export function exchangeSubject(subject: string | undefined, firstLine: string | undefined): string | undefined {
+  const own = subject?.trim();
+  if (!own) return undefined;
+  const line = firstLine ? flat(firstLine) : "";
+  if (!line) return own;
+  const head = flat(own).replace(/(?:…|\.\.\.)$/, "").trimEnd();
+  if (!head || !line.startsWith(head)) return own;
+  if (head.length < line.length && head === flat(own)) return own;
+  return firstSentence(own, own.length) || own;
 }
 
 /** How the open sheet draws one stored row: a line (speaker, bubble), a

@@ -7,6 +7,7 @@ import type { IncomingMessage } from "node:http";
 
 import { BOT_ZIP_MAX_BYTES, type BotZipPreview } from "../../shared/bot-zip.ts";
 import type { BotCapabilities } from "../../shared/capabilities.ts";
+import { botSpeech } from "../../shared/voice-mode.ts";
 import type { AdminBot, AdminBotReach, AdminPerson } from "./org-admin-routes.ts";
 import {
   badRequest,
@@ -38,6 +39,13 @@ export interface BotDetail {
 export interface BotsDeps {
   bots(): Array<{ bot: AdminBot; reach: AdminBotReach }>;
   detail(botId: string): BotDetail | null;
+  /** #4087: what a bot's page answers as `speech`, its effective voice for
+   * its OWNER: that person's saved voice preference (never the reader's)
+   * and the bot's own voice language. */
+  voice?: {
+    preference(principalId: string): unknown;
+    language(botId: string): string | undefined;
+  };
   /** A person of the organization who may own a bot (known, not disabled). */
   owner(principalId: string): AdminPerson | null;
   ownerBySub(sub: string): AdminPerson | null;
@@ -259,7 +267,9 @@ export function botsRoutes(deps: BotsDeps): ConsoleRoute[] {
         const entry = find(ctx, deps, ctx.params.id!);
         const detail = entry ? deps.detail(entry.bot.id) : null;
         if (!entry || !detail) return notFound("No such bot.");
-        return ok({ bot: { ...entry.bot, ...detail } });
+        const owner = entry.reach.ownerPrincipalId;
+        const speech = deps.voice ? botSpeech(deps.voice.preference(owner), entry.bot.id, deps.voice.language(entry.bot.id)) : null;
+        return ok({ bot: { ...entry.bot, ...detail, ...(speech ? { speech } : {}) } });
       },
     },
     ...(deps.capabilities ? [capabilitiesRoute(deps, deps.capabilities)] : []),

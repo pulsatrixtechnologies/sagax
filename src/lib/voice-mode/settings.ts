@@ -14,6 +14,7 @@ import {
 } from "../../../shared/voice-mode";
 import {
   effectiveVoiceChoice,
+  spokenVoice,
   type BotVoiceChoice,
   type ProviderVoices,
   type VoiceSttChoice,
@@ -115,8 +116,7 @@ export function voiceSettingsForBot(settings: VoiceModeSettings, botId?: string)
   // already this bot's view (a preview may have changed its voice): kept
   if (view.forBot !== undefined && view.forBot === (botId ?? "")) return settings as BotVoiceSettings;
   const choice = effectiveVoiceChoice(settings, botId);
-  const provider = choice.tts === "auto" ? "xai" : choice.tts;
-  return { ...settings, tts: choice.tts, stt: choice.stt, voices: choice.voices, voice: choice.voices[provider] ?? "", forBot: botId ?? "" };
+  return { ...settings, tts: choice.tts, stt: choice.stt, voices: choice.voices, voice: spokenVoice(choice).voice, forBot: botId ?? "" };
 }
 
 /** Does this bot have its own providers for this person (Edit bot > Voice)? */
@@ -129,7 +129,7 @@ export function botHasOwnVoice(settings: VoiceModeSettings, botId: string): bool
 export function writeVoiceForBot(botId: string | undefined, voice: string, store: Storage | null = storage(), resolvedProvider?: VoiceTtsProvider): VoiceModeSettings {
   const settings = readVoiceModeSettings(store);
   const choice = effectiveVoiceChoice(settings, botId);
-  const provider: VoiceTtsProvider = resolvedProvider ?? (choice.tts === "auto" ? "xai" : choice.tts);
+  const provider: VoiceTtsProvider = resolvedProvider ?? spokenVoice(choice).provider;
   const own = botId ? settings.bots?.[botId] : undefined;
   if (botId && own) {
     const voices = { ...own.voices, [provider]: voice || undefined };

@@ -70,13 +70,23 @@ function setup() {
       return id === "plain" ? null : { botId: id, engine: { kind: "claudeAgent", label: "Claude" }, items: [] };
     },
     avatar: (id) => (id === "a" ? { bytes: Buffer.from("PNGBYTES"), type: "image/png", version: "0123456789abcdef" } : id === "p" ? "too_large" : null),
+    // #4087: each person's saved voice preference (`omb.voiceMode.v1`) and each bot's language
+    voice: {
+      preference: (principalId) => ({
+        // Alice gave bot a its own voice; Bob's bots follow his own voice
+        pr_alice: JSON.stringify({ voice: "ara", speed: 1, language: "en", bots: { a: { tts: "openai", voices: { openai: "cedar" } } } }),
+        pr_bob: JSON.stringify({ voice: "eve", speed: 1, language: "en" }),
+        pr_mona: JSON.stringify({ voice: "rex", speed: 1, language: "es-MX", tts: "elevenlabs", voices: { elevenlabs: "abcdefghij0123456789" } }),
+      } as Record<string, string>)[principalId],
+      language: (id) => (id === "a" ? "fr" : undefined),
+    },
     importZip: async (_request, input) => {
       if (input.preview) return { preview: { kind: "zip", name: "A", importName: input.name ?? "A 2", includes: {}, hasConversations: false, hasSharing: false, created: [], skipped: [], needsAction: [] } };
       add("zipped", input.ownerPrincipalId, { name: input.name ?? "ZIPPED" });
       return { botId: "zipped", warnings: [] };
     },
   };
-  return { bots, calls, console: fakeConsole(botsRoutes(deps)) };
+  return { add, bots, calls, console: fakeConsole(botsRoutes(deps)) };
 }
 
 const MANAGER = { role: "manager" as const, principalId: "pr_mona", reach: ["pr_mona", "pr_bob"] };
@@ -88,6 +98,26 @@ describe("bots", () => {
     expect((await console.call("GET", "bots/a", MANAGER)).status).toBe(404);
     expect((await console.call("GET", "bots/b", MANAGER)).status).toBe(200);
     expect((await console.call("GET", "bots/zz")).status).toBe(404);
+  });
+
+  it("a bot's page carries its effective voice for its owner (#4087)", async () => {
+    const { add, console } = setup();
+    // a bot with its own voice: its provider and voice, the owner's xAI voice, its own language
+    expect((await console.call("GET", "bots/a")).body.bot.speech).toEqual({ xaiVoice: "ara", provider: "openai", voice: "cedar", language: "fr" });
+    // a bot that follows the person's voice answers that voice, never an empty speech
+    expect((await console.call("GET", "bots/b")).body.bot.speech).toEqual({ xaiVoice: "eve", provider: "xai", voice: "eve", language: "en" });
+    // a manager's read answers the owner's choice, never the manager's own
+    expect((await console.call("GET", "bots/b", MANAGER)).body.bot.speech).toEqual({ xaiVoice: "eve", provider: "xai", voice: "eve", language: "en" });
+    // the manager's own bot answers the manager's own voice and provider
+    add("m", "pr_mona");
+    expect((await console.call("GET", "bots/m", MANAGER)).body.bot.speech).toEqual({ xaiVoice: "rex", provider: "elevenlabs", voice: "abcdefghij0123456789", language: "es-MX" });
+    // an owner who never saved a voice: xAI with its default voice, the language detected
+    add("n", "pr_bob2");
+    expect((await console.call("GET", "bots/n")).body.bot.speech).toEqual({ provider: "xai" });
+    // the owner's own read under the own-bot grant; another person's bot stays out of reach
+    const own = { role: "employee" as const, principalId: "pr_alice", reach: ["pr_alice"], ownOnly: true };
+    expect((await console.call("GET", "bots/a", own)).body.bot.speech).toMatchObject({ provider: "openai", voice: "cedar" });
+    expect((await console.call("GET", "bots/b", own)).status).toBe(404);
   });
 
   it("create: a blank bot of the caller by default, a model, another owner in reach; audited", async () => {

@@ -14,8 +14,10 @@ import {
   cleanProviderVoices,
   cleanSttChoice,
   cleanTtsChoice,
-  isVoiceTtsProvider,
+  effectiveVoiceChoice,
   isProviderVoiceId,
+  isVoiceTtsProvider,
+  spokenVoice,
   type BotVoiceChoice,
   type ProviderVoices,
   type VoiceProviderId,
@@ -208,6 +210,43 @@ export function cleanVoiceModeSettings(input: unknown): VoiceModeSettings {
     ...(stt && stt !== "auto" ? { stt } : {}),
     ...(voices ? { voices } : {}),
     ...(bots ? { bots } : {}),
+  };
+}
+
+/** A bot's effective voice for its owner (#4087): what a bot's console page
+ * answers as `bot.speech`, so a phone line speaks with the voice set on the
+ * bot. Every field is left out when empty: no xAI voice chosen (xAI's
+ * default), the provider's default voice, or a language set to `auto`. */
+export interface BotSpeech {
+  /** the xAI realtime voice of the bot's effective choice (`voices.xai`) */
+  xaiVoice?: string;
+  /** the provider the bot speaks with ("auto" reads as xAI) */
+  provider?: VoiceTtsProvider;
+  /** that provider's voice id */
+  voice?: string;
+  /** the bot's voice language, else its owner's: a short code */
+  language?: string;
+}
+
+/** `preference` is the owner's saved preference (VOICE_MODE_STORAGE_KEY, raw
+ * or parsed), `botLanguage` the bot's own voice language (bot-profile.ts
+ * `voiceLanguage`), which wins over the person's. The same rules as the
+ * desktop (effectiveVoiceChoice, spokenVoice). */
+export function botSpeech(preference: unknown, botId: string, botLanguage?: string): BotSpeech {
+  let parsed = preference;
+  if (typeof preference === "string") {
+    try { parsed = JSON.parse(preference); } catch { parsed = null; }
+  }
+  const settings = cleanVoiceModeSettings(parsed);
+  const choice = effectiveVoiceChoice(settings, botId);
+  const { provider, voice } = spokenVoice(choice);
+  const xaiVoice = choice.voices.xai;
+  const language = botLanguage !== undefined && isVoiceModeLanguage(botLanguage) ? botLanguage : settings.language;
+  return {
+    ...(xaiVoice ? { xaiVoice } : {}),
+    provider,
+    ...(voice ? { voice } : {}),
+    ...(language && language !== "auto" ? { language } : {}),
   };
 }
 

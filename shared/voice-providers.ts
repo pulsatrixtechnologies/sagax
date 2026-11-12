@@ -135,6 +135,15 @@ export function effectiveVoiceChoice(preference: VoiceProviderPreference, botId?
   };
 }
 
+/** The voice a bot speaks with for this person: its provider ("auto" reads
+ * as xAI, the first provider) and that provider's voice ("" is the
+ * provider's default voice). What the desktop shows and sends, and what a
+ * bot's console page answers (#4087). */
+export function spokenVoice(choice: EffectiveVoiceChoice): { provider: VoiceTtsProvider; voice: string } {
+  const provider = choice.tts === "auto" ? "xai" : choice.tts;
+  return { provider, voice: choice.voices[provider] ?? "" };
+}
+
 /** The providers to try, in order: the chosen one first, then every other
  * available one in the default order. `available` lists the providers the
  * person has a key for. */

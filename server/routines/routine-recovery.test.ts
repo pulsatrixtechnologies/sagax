@@ -145,7 +145,10 @@ describe("an unattended run that fails for a passing reason", () => {
     expect(h.started).toHaveLength(1);
     await h.advance(2 * SECOND);
     expect(h.started.map((turn) => turn.threadId)).toEqual(["thread-1", "thread-1"]);
-    expect(h.started[1]!.prompt).toBe(`${h.started[0]!.prompt}\n\n${retryNote("provider")}`);
+    // The note comes right after the work; since #4030 every unattended run
+    // also reads the run contract, which stays after it, unchanged.
+    expect(h.started[0]!.prompt.startsWith("Sweep the inbox\n\n")).toBe(true);
+    expect(h.started[1]!.prompt).toBe(h.started[0]!.prompt.replace("Sweep the inbox\n\n", `Sweep the inbox\n\n${retryNote("provider")}\n\n`));
     h.complete("thread-1");
     expect(h.run(run.id)).toMatchObject({ status: "completed", retried: "provider", output: "Inbox swept.", attention: undefined, error: undefined });
     expect(h.tasks()).toBe(1);

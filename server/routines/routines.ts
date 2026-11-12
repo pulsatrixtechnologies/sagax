@@ -91,6 +91,7 @@ import { routineLimitUnknownEngineText } from "./routine-limit-words.ts";
 import { hostTimeZone } from "../turns/turn-clock.ts";
 import { ROUTINE_DEFERRAL_NOTICE_MS, ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST, ROUTINE_TURN_LOST_MS, skipNeedsNotice, supersededBy } from "./routine-execution.ts";
 import { reportBackgroundError } from "../background-error.ts";
+import { wakeStreakOf } from "./routine-run-card.ts";
 
 export type { RoutineAccess };
 
@@ -1712,14 +1713,6 @@ export interface RoutineFolderResult {
   undo?: RoutineFolderUndo;
 }
 
-/** #4050: the kind of wake a run without a routine is, for its streak: a
- * heartbeat, or every source it gathered (a mail and a watch together are
- * neither the mail streak nor the watch streak). */
-function wakeKind(run: RoutineRun): string {
-  if (run.webhookId?.startsWith("heartbeat:")) return "heartbeat";
-  return [...new Set(run.proactive?.sources ?? [])].sort().join(",");
-}
-
 export class RoutineManager {
   private readonly file: string; private readonly disk: OwnedFile;
   private readonly now: () => number;
@@ -2030,6 +2023,7 @@ export class RoutineManager {
         run.error = ROUTINE_RESTARTED;
         run.attention = undefined;
         run.finishedAt = this.now();
+        this.settleRepeatingStreak(run);
         // Restarts never count toward auto-pause.
         const paused = this.autoPauseAfterFailure(run);
         if (paused) recovered.push(...paused.cancelled.map(cloneRun));
@@ -2050,6 +2044,7 @@ export class RoutineManager {
       run.attention = undefined;
       run.error = ROUTINE_ONE_RUN_AFTER_RESTART;
       run.finishedAt = this.now();
+      this.settleRepeatingStreak(run);
       recovered.push(cloneRun(run));
     }
     if (recovered.length > 0 || resumable) {
@@ -2159,7 +2154,7 @@ export class RoutineManager {
   private sameStreak(run: RoutineRun, candidate: RoutineRun, byRoutine: boolean): boolean {
     if (candidate.routineId !== run.routineId) return false;
     if (byRoutine) return true;
-    return candidate.botId === run.botId && (candidate.runAs ?? "") === (run.runAs ?? "") && wakeKind(candidate) === wakeKind(run);
+    return candidate.botId === run.botId && (candidate.runAs ?? "") === (run.runAs ?? "") && wakeStreakOf(candidate) === wakeStreakOf(run);
   }
 
   /** #3695: the runs of this run's streak (sameStreak) that ended with
@@ -2191,15 +2186,23 @@ export class RoutineManager {
   private settleRepeatingStreak(run: RoutineRun): void {
     delete run.problemRepeat;
     delete run.recovered;
-    delete run.tellsStreak;
+    // Every path a run ends by settles here (its end, failRun, blockRun, a
+    // restart's cut in the load path, every missed occurrence), so a run
+    // this server settled always carries a boolean: only a run settled
+    // before #4050 carries none (tellsPerson reads its count instead).
+    run.tellsStreak = false;
     // a restart's cut is no run of a streak: it is told on its own, once
     if (run.status === "failed" && run.error === ROUTINE_RESTARTED) {
       run.tellsStreak = true;
       return;
     }
+    // a missed occurrence neither counts nor ends a streak: it is told on
+    // its own where a routine's first problem is told (problemToldAt 1)
+    if (run.status === "missed") {
+      run.tellsStreak = this.problemToldAt(run) <= 1;
+      return;
+    }
     const earlier = this.problemStreakBefore(run);
-    // false, not absent: a run settled before #4050 carries neither
-    // (streakTold reads its count instead)
     if (isRoutineProblemRun(run)) run.tellsStreak = this.streakTellsAt(run, earlier);
     const first = earlier.at(-1);
     if (!first) return;
@@ -2207,7 +2210,7 @@ export class RoutineManager {
       run.problemRepeat = { firstRunId: first.id, since: first.finishedAt!, count: earlier.length + 1, anyProblem: true };
       return;
     }
-    if (run.status === "completed") run.recovered = { afterRuns: earlier.length, since: first.finishedAt! };
+    if (run.status === "completed") run.recovered = { afterRuns: earlier.length, since: first.finishedAt!, firstRunId: first.id };
   }
 
   /** #4050: whether a run that ends with a problem after `earlier` (its
@@ -2275,9 +2278,18 @@ export class RoutineManager {
    * belongs to the bot is still told once per bot (ownerNoticeTells). Any
    * other run (one the person started, a team goal's, one that paused its
    * routine) keeps the alert it came with. */
-  problemAlert<T>(run: Pick<RoutineRun, "startedBy" | "target" | "autoPaused" | "tellsStreak">, alert: T | null | undefined): T | null | undefined {
+  problemAlert<T>(run: RoutineRun, alert: T | null | undefined): T | null | undefined {
     if (!this.streakTells(run)) return alert;
-    return run.tellsStreak ? alert : null;
+    return this.tellsPerson(run) ? alert : null;
+  }
+
+  /** #4050: whether a run is the one of its streak that tells the person,
+   * the one reading of it (its alert, its card, its ring): what
+   * settleRepeatingStreak decided when it finished. A run settled before
+   * `tellsStreak` existed keeps the count rule that server read: its count
+   * (or 1) is its told count. */
+  tellsPerson(run: Pick<RoutineRun, "routineId" | "tellsStreak" | "problemRepeat"> & Partial<Pick<RoutineRun, "eventSource" | "proactive" | "webhookId">>): boolean {
+    return run.tellsStreak ?? (run.problemRepeat?.count ?? 1) === this.problemToldAt(run);
   }
 
   /** Whether a run's problem is told by its streak (problemAlert) rather
@@ -4130,6 +4142,7 @@ export class RoutineManager {
             run.status = "missed";
             run.finishedAt = now;
             run.error = "This computer was offline for more than 12 hours after the scheduled time";
+            this.settleRepeatingStreak(run);
           }
           scheduledRuns.push(run);
         } else {
@@ -4140,6 +4153,7 @@ export class RoutineManager {
             missed.status = "missed";
             missed.finishedAt = now;
             missed.error = ROUTINE_SKIPPED_WHILE_WAITING;
+            this.settleRepeatingStreak(missed);
             scheduledRuns.push(missed);
           }
           routine.skippedRuns = Math.min(Number.MAX_SAFE_INTEGER, (routine.skippedRuns ?? 0) + 1);
@@ -5184,6 +5198,7 @@ export class RoutineManager {
     run.attention = undefined;
     run.error = redactSecretsInText(message).slice(0, 500);
     run.finishedAt = this.now();
+    this.settleRepeatingStreak(run);
     this.saveLater();
     this.emitRun(run);
     this.options.onRunFailed?.(cloneRun(run));

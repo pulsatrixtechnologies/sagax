@@ -84,9 +84,18 @@ its card, its alert, its incident and its ring all read that, so a sync again
 (marking a run seen, Mark all as read, an upgrade) never tells again, never
 rewrites a works again into a failure and never rolls a count back, and a
 row already the streak's card is left as it is. A problem run that does
-not tell carries `tellsStreak: false`; a run settled before the field
-existed carries neither, and told when its count reached its told count, so
-a streak already told when the server is upgraded is not told again. The run that makes it
+not tell carries `tellsStreak: false`. Every path a run ends by settles it
+there (its end, a failure, a block, a restart's cut in the load path, every
+missed occurrence: offline, skipped while waiting, its routine ended, one
+run after a restart), so a run this server settled always carries a
+boolean: a restart's cut tells, a missed occurrence tells where a routine's
+first problem does (`problemToldAt` 1). `RoutineManager.tellsPerson` is the
+one reading of it (the alert, the card, the ring); a run settled before the
+field existed carries neither, and tells when its count is its told count,
+as that server read, so a streak already told when the server is upgraded
+is not told again. A streak's cards are found by its first run
+(`problemRepeat.firstRunId`, `recovered.firstRunId`), which the streak's
+identity (`wakeStreakOf` for a wake, all its sources) chose. The run that makes it
 `ROUTINE_PROBLEM_STREAK_TOLD` (3) writes the one summary card
 (`syncRoutineRunToSource`, `repeat.streak`): the routine's name, how many
 runs, since when, and the bot's summary. That run's prompt told the bot it

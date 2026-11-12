@@ -129,7 +129,7 @@ function problemRun(run: RoutineRun): boolean {
 /** The streak's one summary card in this conversation (#3695): the card
  * whose count started at the run's streak's first problem run (the run
  * itself when it is the first); when the run ended its streak, the card of
- * that streak (the same routine and wake kind, since its first problem). */
+ * that streak (by its first run, the streak's identity). */
 function repeatAnchor(host: Host, threadId: string, run: RoutineRun): any {
   const rows = host.store.messagesFor(threadId) ?? [];
   const told = (message: any) => message.kind === "routine.run" && message.routineRun?.repeat?.streak;
@@ -138,12 +138,20 @@ function repeatAnchor(host: Host, threadId: string, run: RoutineRun): any {
     return rows.findLast?.((message: any) => told(message) && message.routineRun.repeat.firstRunId === firstRunId);
   }
   if (run.recovered) {
-    const since = run.recovered.since;
-    const topic = wakeTopicOf(run) ?? "";
-    return rows.findLast?.((message: any) => told(message) && message.routineRun.routineId === run.routineId
-      && (message.routineRun.wakeTopic ?? "") === topic && message.routineRun.repeat?.since === since);
+    // the streak it ended, by its first run (the streak's identity,
+    // sameStreak); a run settled before #4050 by its routine and its start
+    const { firstRunId, since } = run.recovered;
+    return rows.findLast?.((message: any) => told(message) && (firstRunId
+      ? message.routineRun.repeat.firstRunId === firstRunId
+      : message.routineRun.routineId === run.routineId && message.routineRun.repeat?.since === since));
   }
   return undefined;
+}
+
+/** #4050: the run tells the person (RoutineManager.tellsPerson, the one
+ * reading of `tellsStreak`, a run settled before it by its count). */
+function tellsPerson(host: Host, run: RoutineRun): boolean {
+  return host.routines?.tellsPerson?.(run) ?? run.tellsStreak === true;
 }
 
 /** The streak's state for this run, or null outside it. #4050: the run
@@ -155,7 +163,7 @@ function streakSay(host: Host, run: RoutineRun, threadId: string): { say: Streak
   if (problemRun(run)) {
     const anchor = repeatAnchor(host, threadId, run);
     if (anchor) return (run.problemRepeat?.count ?? 1) > (anchor.routineRun.repeat.count ?? 0) ? { say: "count", anchor } : { say: "out" };
-    return { say: run.tellsStreak ? "tell" : "out" };
+    return { say: tellsPerson(host, run) ? "tell" : "out" };
   }
   if (run.recovered) {
     const anchor = repeatAnchor(host, threadId, run);
@@ -258,7 +266,7 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
     // is the one of its streak that tells the person (`tellsStreak`), unless
     // it has items only the person can do or paused its routine.
     const streakOnly = byStreak && !attentionFound && !run.autoPaused;
-    const tells = streakOnly ? problemRun(run) && run.tellsStreak === true : !run.problemRepeat || attentionFound;
+    const tells = streakOnly ? problemRun(run) && tellsPerson(host, run) : !run.problemRepeat || attentionFound;
     if (reportable && tells && mayWrite(undefined, streakOnly && tells) && own?.routineRunId === run.id) {
       host.store.patchTask(run.botId, own.threadId, { routineRunId: undefined, ...(reportableUnread ? { unread: true } : {}) });
     }

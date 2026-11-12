@@ -177,8 +177,9 @@ export interface RoutineRun {
    * False on a problem run of its streak that does not tell; absent on a run
    * settled before #4050. */
   tellsStreak?: boolean;
-  /** #3479: the first run without problems after `afterRuns` runs with them. */
-  recovered?: { afterRuns: number; since: number };
+  /** #3479: the first run without problems after `afterRuns` runs with them.
+   * `firstRunId` (#4050): that streak's first run, its identity. */
+  recovered?: { afterRuns: number; since: number; firstRunId?: string };
   /** 2026-11-03: the teammates this run handed work to and their threads. */
   handedTo?: RoutineRunHandoff[];
   /** 2026-11-01: a person started this run (Run now, run_routine from

@@ -24,7 +24,7 @@ export function routineRunRingsDone(routineRun: any, host: any): boolean {
     return routineRunRowInEveryChat({ kind: "routine.run", routineRun: { status: "completed", wakeTopic, forPerson: wakeTopic && routineRun.proactive ? true : undefined } });
   }
   if (routineReportsByStreak(routineRun)) {
-    return routineRun.status === "completed" && Boolean(routineRun.problems) && routineRun.tellsStreak === true;
+    return routineRun.status === "completed" && Boolean(routineRun.problems) && (host.routines?.tellsPerson?.(routineRun) ?? routineRun.tellsStreak === true);
   }
   const told = routineRun.status === "completed" && !routineRun.quiet && !routineRun.problemRepeat;
   // a run the person started: its card always posts (routineRunRowOutOfChat), so it rings

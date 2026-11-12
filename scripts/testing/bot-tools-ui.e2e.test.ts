@@ -10,7 +10,7 @@ import { BOT_ROLES } from "../../src/lib/bot-roles.ts";
 import { runControlOmb } from "../control-omb.ts";
 import { UI_TOOLS_DIR } from "./control-omb-ui.ts";
 import { chooseStartFromJs, NEW_BOT_ROOT_JS, openNewBotDialog, START_FROM } from "./compose-flow.ts";
-import { clickAccessible, openBotMenuJs } from "./ui-click.ts";
+import { clickAccessible, closePluginsJs, openBotMenuJs } from "./ui-click.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const binary = resolveAgentBrowserBinary({ dataDir: UI_TOOLS_DIR, env: process.env });
@@ -84,10 +84,10 @@ describe("bot setup and tools in the real renderer", () => {
         return false;
       })()`), { timeout: 10_000 }).toBe(true);
     };
-    // Plugins' header: "Manage", or "N connected" once something is. Opened
-    // from a bot, Manage starts on "This bot", where only plugins install;
-    // servers are added for the organization, as the workspace registry the
-    // smoke reads (/api/mcp/servers) holds them.
+    // Add > MCP servers opens Plugins on Manage in the organization's scope
+    // (#3910), where "+ Add" adds a server to the workspace registry the
+    // smoke reads (/api/mcp/servers). Reopened another way, Manage is the
+    // header's "Manage" or "N connected", and the scope is chosen here.
     const openManage = async () => {
       await expect.poll(() => evaluate(`(() => {
         if (document.querySelector('[data-plugins-add]')) return true;
@@ -146,7 +146,7 @@ describe("bot setup and tools in the real renderer", () => {
     await openPersona("Access");
     // #3399: the MCP servers card left the profile; each server is one row of
     // Bot accounts, with its switch. With none, the card's empty row carries
-    // Add, whose "MCP servers" opens Plugins on that surface for this bot.
+    // Add, whose "MCP servers" opens Plugins where a server is added.
     await expect.poll(snapshot, { timeout: 10_000 }).toContain("This bot has no accounts yet");
     await addMcpServers();
     // Plugins > Manage > + Add > Paste config (#2104: one "+ Add" menu in
@@ -184,8 +184,9 @@ describe("bot setup and tools in the real renderer", () => {
     await expect.poll(snapshot, { timeout: 10_000 }).toContain("Turn fixture on");
     await click("Turn fixture on");
     await expect.poll(registry, { timeout: 10_000 }).toMatchObject([{ name: "fixture", enabled: true }]);
-    // Plugins' close button is "Close" in its header (PluginsPanelFrame).
-    await click("Close");
+    // Plugins' own close button in its header (PluginsPanelFrame): a click
+    // by the name "Close" alone could hit another dialog's (#3910).
+    await expect.poll(() => evaluate(closePluginsJs()), { timeout: 10_000 }).toBe(true);
     await press("Escape");
     await openPersona("Access");
     await expect.poll(() => evaluate("document.querySelector('[aria-label=\"Let this bot use Fixture\"]')?.getAttribute('aria-checked')"), { timeout: 10_000 }).toBe("true");

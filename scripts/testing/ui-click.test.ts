@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { clickByAccessibleNameJs, openPanelAria, overlaysOpenJs } from "./ui-click.ts";
+import { clickByAccessibleNameJs, closePluginsJs, openPanelAria, overlaysOpenJs } from "./ui-click.ts";
 
 describe("renderer e2e click helpers", () => {
   it("uses the possessive panel aria from chat.openPanelAria", () => {
@@ -26,6 +26,19 @@ describe("renderer e2e click helpers", () => {
   it("treats the bot catalog modal as an overlay that covers the sidebar", () => {
     expect(overlaysOpenJs()).toContain("data-bot-catalog-modal");
     expect(overlaysOpenJs()).toContain("[role=dialog]");
+  });
+});
+
+describe("Plugins' close in the bot tools smoke (#3910)", () => {
+  it("names Plugins' own close button, never a button called just Close", () => {
+    expect(closePluginsJs()).toContain("[data-plugins-page] [data-tour='apps-close']");
+    const smoke = readFileSync(new URL("./bot-tools-ui.e2e.test.ts", import.meta.url), "utf8");
+    expect(smoke).not.toMatch(/click\(\s*["']Close["']\s*\)/);
+    expect(smoke).toContain("closePluginsJs()");
+    // the frame still carries the mark the helper names
+    const frame = readFileSync(new URL("../../src/components/PluginsPanel.tsx-parts/PluginsPanelView.tsx", import.meta.url), "utf8");
+    expect(frame).toContain('data-tour="apps-close"');
+    expect(frame).toContain("data-plugins-page={page.page}");
   });
 });
 

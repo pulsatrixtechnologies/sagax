@@ -15,23 +15,53 @@ import { claudeUserMessage, volatileTurnMessage, withVolatileNote } from "./mess
 
 export type { SendTurnDeps } from "./turn-deps.ts";
 
-export function createSendTurn(deps: SendTurnDeps & { authRecovery: any }) {
-  const sendTurn = async (turn: SendTurnInput, logicalTurnId?: string): Promise<ClaudeTurnEarly> => {
-    const ctx = Object.assign(Object.create(deps), {
-      turn,
-      logicalTurnId,
-      sendTurn,
-      authRecovery: deps.authRecovery,
-    }) as ClaudeTurnCtx;
+/** #3703: one launch at a time per thread. A launch reads the thread's
+ * live process, may close it, and installs its own; two at once (a
+ * composer warm and the message it was warming for) each installed a
+ * process and the later one replaced the earlier in the session map,
+ * leaving it running untracked. Each launch now waits for the one before
+ * it on the same thread, and then sees what that one installed. Waits
+ * for an engine's init run after the launch is released. */
+function threadLaunches() {
+  const tails = new Map<string, Promise<void>>();
+  return async (threadId: string): Promise<() => void> => {
+    const before = tails.get(threadId) ?? Promise.resolve();
+    let release!: () => void;
+    const mine = new Promise<void>((resolve) => { release = resolve; });
+    const tail = before.then(() => mine);
+    tails.set(threadId, tail);
+    await before;
+    return () => {
+      release();
+      if (tails.get(threadId) === tail) tails.delete(threadId);
+    };
+  };
+}
 
+export function createSendTurn(deps: SendTurnDeps & { authRecovery: any }) {
+  const launchSlot = threadLaunches();
+
+  /** Everything that reads or replaces the thread's process, under its slot. */
+  const launch = async (ctx: ClaudeTurnCtx): Promise<{ early?: ClaudeTurnEarly; after?: () => Promise<ClaudeTurnEarly> }> => {
+    const { turn } = ctx;
     const earlyArgs = await prepareClaudeTurnArgs(ctx);
-    if (earlyArgs) return earlyArgs;
+    if (earlyArgs) return { early: earlyArgs };
     const earlyMcp = await prepareClaudeTurnMcp(ctx);
-    if (earlyMcp) return earlyMcp;
+    if (earlyMcp) return { early: earlyMcp };
     const reused = await tryReuseClaudeSession(ctx);
-    if (reused) return reused;
+    if (reused) {
+      const kept = ctx.prewarmWait;
+      if (!kept) return { early: reused };
+      return {
+        after: async () => {
+          await waitClaudePrewarmed(kept, turn.warmSignal);
+          turnTrace(ctx.threadId, "claude-prewarmed");
+          return reused;
+        },
+      };
+    }
     const spawned = await spawnClaudeSession(ctx);
-    if (spawned) return spawned;
+    if (spawned) return { early: spawned };
 
     attachClaudeWire(ctx);
     attachClaudeStream(ctx);
@@ -54,9 +84,13 @@ export function createSendTurn(deps: SendTurnDeps & { authRecovery: any }) {
       holdWarm(threadId, session, turnId, turn.warmSignal);
       // Pay cold boot (init) before the warm returns, so the first real turn
       // is a bare prompt on a ready process (#1971 / #2055 pattern).
-      await waitClaudePrewarmed(session, turn.warmSignal);
-      turnTrace(threadId, "claude-prewarmed");
-      return { turnId };
+      return {
+        after: async () => {
+          await waitClaudePrewarmed(session, turn.warmSignal);
+          turnTrace(threadId, "claude-prewarmed");
+          return { turnId };
+        },
+      };
     }
     active.set(threadId, { stop, turnId, broker });
     emit({ ...base(threadId, turnId), type: "turn.started" });
@@ -68,8 +102,25 @@ export function createSendTurn(deps: SendTurnDeps & { authRecovery: any }) {
       if (!session.turn?.stopRequested) settle(false, "stdin_write_failed");
       closeSession(threadId, "stdin write failed");
     }
+    return { early: { turnId } };
+  };
 
-    return { turnId };
+  const sendTurn = async (turn: SendTurnInput, logicalTurnId?: string): Promise<ClaudeTurnEarly> => {
+    const ctx = Object.assign(Object.create(deps), {
+      turn,
+      logicalTurnId,
+      sendTurn,
+      authRecovery: deps.authRecovery,
+    }) as ClaudeTurnCtx;
+
+    const release = await launchSlot(turn.threadId);
+    let launched: Awaited<ReturnType<typeof launch>>;
+    try {
+      launched = await launch(ctx);
+    } finally {
+      release();
+    }
+    return launched.early ?? await launched.after!();
   };
 
   return sendTurn;

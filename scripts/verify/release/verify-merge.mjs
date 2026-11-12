@@ -40,12 +40,18 @@
 // around the gate (`--no-verify`), and that shows. Nothing on GitHub blocks
 // a merge: no CI runs on a private PR. `--no-report` keeps it local.
 //
+// It verifies the commit, never the working tree (#3684): the changed files
+// come from the commit (merge base to HEAD), and the gate refuses to run while
+// a tracked file differs from HEAD (staged or not) or while a file of the diff
+// imports an untracked file, naming them. Ignored files and untracked scratch
+// files nothing imports never block. So the OK stamp, keyed on HEAD, means HEAD.
+//
 // On OK, writes a stamp under the common git dir (`sagax-verify-merge/ok-<sha>`;
 // its content names any stage skipped on the host) so the pre-push hook can skip a re-run for the same HEAD. Strips every GIT_*
 // from the process env before any stage so a leaked hook GIT_DIR cannot make a
 // test commit into the branch being pushed (issue #1705).
 import { spawnSync, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { existingGuardTests } from "./guard-tests.mjs";
@@ -114,9 +120,11 @@ function parseArgs(argv) {
   return options;
 }
 
-function git(args) {
-  return execFileSync("git", args, { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+function git(args, cwd = ROOT) {
+  return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 }
+
+const lines = (text) => text.split("\n").map((line) => line.trim()).filter(Boolean);
 
 function writeOkStamp(notes = []) {
   let common;
@@ -134,16 +142,67 @@ function writeOkStamp(notes = []) {
   console.log(`verify:merge: stamped OK for ${sha.slice(0, 7)} (${path})`);
 }
 
-/** Files changed since the merge base with `base`: committed, staged,
- * unstaged and untracked. */
-function changedFiles(base) {
-  let since = "HEAD";
-  try { since = git(["merge-base", "HEAD", base]); } catch { /* no such base: the working tree alone */ }
-  const lines = new Set();
-  for (const text of [git(["diff", "--name-only", since]), git(["ls-files", "--others", "--exclude-standard"])]) {
-    for (const line of text.split("\n")) if (line.trim()) lines.add(line.trim());
+/** Files the commit changes since the merge base with `base` (#3684: the
+ * commit only, never the uncommitted or untracked files beside it). */
+export function changedFiles(base, root = ROOT) {
+  let since;
+  try { since = git(["merge-base", "HEAD", base], root); } catch { return []; }
+  return [...new Set(lines(git(["diff", "--name-only", since, "HEAD"], root)))].sort();
+}
+
+const IMPORT_SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)["']([^"']+)["']/g;
+const RESOLVE_SUFFIXES = ["", ".ts", ".tsx", ".mts", ".mjs", ".js", ".cjs", ".json", "/index.ts", "/index.tsx", "/index.mjs", "/index.js"];
+
+/** The repo paths a relative or `@/` import of `file` may resolve to. */
+function importCandidates(file, specifier) {
+  let target;
+  if (specifier.startsWith("@/")) target = join("src", specifier.slice(2));
+  else if (specifier.startsWith(".")) target = join(dirname(file), specifier);
+  else return [];
+  target = target.split("\\").join("/");
+  const stems = [target, target.replace(/\.[cm]?jsx?$/, "")];
+  return [...new Set(stems.flatMap((stem) => RESOLVE_SUFFIXES.map((suffix) => stem + suffix)))];
+}
+
+/** What keeps the working tree from being the commit (#3684): the tracked
+ * files that differ from HEAD (staged or not), and the untracked files one of
+ * `scanned` (the files of the diff and their tests) imports. Ignored files and
+ * untracked files nothing of the diff imports are left out. */
+export function commitDrift(root, scanned) {
+  // One `git status` gives both sets (a third of the time of three calls).
+  // Entries are "XY path", a rename or copy followed by its source path.
+  const changed = new Set();
+  const untracked = new Set();
+  const entries = execFileSync("git", ["status", "--porcelain=v1", "-z", "--untracked-files=all"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).split("\0");
+  for (let i = 0; i < entries.length; i += 1) {
+    const entry = entries[i];
+    if (entry.length < 4) continue;
+    const code = entry.slice(0, 2);
+    const path = entry.slice(3);
+    if (code === "??") { untracked.add(path); continue; }
+    changed.add(path);
+    if (code.includes("R") || code.includes("C")) changed.add(entries[++i]);
   }
-  return [...lines].sort();
+  const tracked = [...changed].sort();
+  const imported = new Set();
+  if (untracked.size) {
+    for (const file of scanned) {
+      let text;
+      try { text = readFileSync(join(root, file), "utf8"); } catch { continue; }
+      for (const match of text.matchAll(IMPORT_SPECIFIER)) {
+        for (const candidate of importCandidates(file, match[1])) if (untracked.has(candidate)) imported.add(candidate);
+      }
+    }
+  }
+  return { tracked, untrackedImported: [...imported].sort() };
+}
+
+/** The refusal for a drift, or "" when the working tree is the commit. */
+export function driftMessage({ tracked, untrackedImported }) {
+  if (!tracked.length && !untrackedImported.length) return "";
+  return "verify:merge refused: the gate verifies the commit (HEAD), and the working tree is not it. Commit or restore these files, then run it again.\n"
+    + (tracked.length ? `  tracked files that differ from HEAD (staged or not):\n${tracked.map((file) => `    ${file}\n`).join("")}` : "")
+    + (untrackedImported.length ? `  untracked files the diff imports (add them to the commit):\n${untrackedImported.map((file) => `    ${file}\n`).join("")}` : "");
 }
 
 const isElectronTest = (file) => file.endsWith(".node-test.mjs");
@@ -285,7 +344,15 @@ function main() {
   console.log(`  tests of the diff: ${diffTests.length ? diffTests.join(", ") : "none"}`);
   if (electronTests.length) console.log(`  electron tests: ${electronTests.join(", ")}`);
   console.log(`  iOS: ${ios ? "swift test + simulator build (skipped only when swift is missing)" : "skipped (no ios/ or shared/ change)"}`);
-  if (options.list) return;
+  const refusal = driftMessage(commitDrift(ROOT, [...changed, ...tests, ...electronTests]));
+  if (options.list) {
+    if (refusal) console.log(`\n${refusal}`);
+    return;
+  }
+  if (refusal) {
+    console.error(`\n${refusal}`);
+    process.exit(1);
+  }
 
   const started = Date.now();
   const results = [];

@@ -69,6 +69,31 @@ function readText(path, root = ROOT) {
   }
 }
 
+/** The `names` that appear in `haystack`, found in one pass: every media
+ * basename ends with its extension, so each occurrence of a media extension
+ * in the text is checked against the names of each length ending there. One
+ * scan of the text, where a search per name read it once per file and took
+ * minutes on a loaded machine. */
+function citedNames(haystack, names) {
+  const byLength = new Map();
+  for (const name of names) {
+    if (!byLength.has(name.length)) byLength.set(name.length, new Set());
+    byLength.get(name.length).add(name);
+  }
+  const found = new Set();
+  // Longest first, so ".jpeg" is read whole and never as a shorter one.
+  const extension = new RegExp(`\\.(?:${[...MEDIA_EXT].map((ext) => ext.slice(1)).sort((a, b) => b.length - a.length).join("|")})`, "gi");
+  for (const match of haystack.matchAll(extension)) {
+    const end = match.index + match[0].length;
+    for (const [length, set] of byLength) {
+      if (length > end) continue;
+      const candidate = haystack.slice(end - length, end);
+      if (set.has(candidate)) found.add(candidate);
+    }
+  }
+  return found;
+}
+
 export function listDocsMediaOrphans(root = ROOT) {
   const tracked = gitLsFiles(root);
   const media = tracked.filter(isDocsMedia);
@@ -87,12 +112,18 @@ export function listDocsMediaOrphans(root = ROOT) {
     chunks.push(text);
   }
   const haystack = chunks.join("\n");
+  const cited = citedNames(haystack, media.map((path) => basename(path)));
+  const folderCited = new Map();
+  const isFolderCited = (dir) => {
+    if (!folderCited.has(dir)) folderCited.set(dir, haystack.includes(dir));
+    return folderCited.get(dir);
+  };
 
   const orphans = [];
   for (const path of media) {
-    const name = basename(path);
-    if (haystack.includes(path) || haystack.includes(name)) continue;
-    if (citedFolders(path).some((dir) => haystack.includes(dir))) continue;
+    // The full path ends with the basename, so citing it cites the basename.
+    if (cited.has(basename(path))) continue;
+    if (citedFolders(path).some(isFolderCited)) continue;
     let bytes = 0;
     try {
       bytes = statSync(join(root, path)).size;

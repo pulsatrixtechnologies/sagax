@@ -239,7 +239,9 @@ Keep these rules, covered by `server/pages/published-pages.test.ts`,
   gives what the bot sent (`given`) and why (`changedBy`). The version
   listing (`PageVersionSummary`) shows the recorded hash only: a version
   stored before it gets it on its first source read (`recordDigest`), read
-  from its file, never through the cache that serves published pages.
+  from its file, never through the cache that serves published pages. A save
+  of that hash that fails never fails the read (#3584): the read answers the
+  hash, and the next read tries to save it again.
   `GET /api/pages/:id/versions/:n/source?offset=&limit=` and the bot's
   `page_comments` action `source` read one slice by UTF-8 byte offset
   (`shared/utf8-slice.ts`, also behind `workspace_read`; follow

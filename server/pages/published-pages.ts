@@ -515,8 +515,12 @@ export class PublishedPages {
       return null;
     }
     const digest = pageSourceDigest(content);
-    // a version stored before its hash was recorded: kept on it from now on
-    if (!version.sha256) this.recordDigest(pageId, n, digest);
+    // a version stored before its hash was recorded: kept on it from now on.
+    // #3584: a save that fails (full disk, read only) never fails the read;
+    // the next read tries again
+    if (!version.sha256) {
+      try { this.recordDigest(pageId, n, digest); } catch { /* answered without saving it */ }
+    }
     const head = { n: version.n, kind: version.kind, title: version.title, bytes: digest.bytes, sha256: digest.sha256 };
     if (!range || (range.offset === undefined && range.limit === undefined)) return { version: head, content, offset: 0, nextOffset: null };
     const slice = pageSourceSlice(content, range.offset ?? 0, range.limit ?? PAGE_SOURCE_READ_BYTES.default);

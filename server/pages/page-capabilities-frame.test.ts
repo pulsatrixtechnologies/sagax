@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 
-import { CAP_HELLO_MESSAGE, CAP_MESSAGE, CAP_READY_MESSAGE, CAP_READY_TIMEOUT_MS, CAP_RESULT_MESSAGE, pageCapabilitiesAny, pageCapabilitiesOf, pageCapabilitiesPersonal, pageCapGranted, parsePageCapabilities, type PageCapCall, type PageCapabilities } from "../../shared/page-capabilities.ts";
+import { CAP_HELLO_MESSAGE, CAP_MESSAGE, CAP_READY_MESSAGE, CAP_RESULT_MESSAGE, CAP_TAKEN_MESSAGE, CAP_WAIT_MS, pageCapabilitiesAny, pageCapabilitiesOf, pageCapabilitiesPersonal, pageCapGranted, parsePageCapabilities, type PageCapCall, type PageCapabilities } from "../../shared/page-capabilities.ts";
 import { capabilityBridgeSource, pageDocument, PREVIEW_CAP_RELAY_SOURCE, STATE_BRIDGE_SOURCE, stateBridgeSource, wrapperDocument } from "./published-pages-render.ts";
 
 const HTML = `<!doctype html><html><head><title>t</title></head><body><h1>Board</h1><script>document.body.dataset.x="1"</script></body></html>`;
@@ -75,9 +75,104 @@ describe("capability handshake (#3413 lot 1b)", () => {
       const bridge = runBridge(capabilityBridgeSource(caps));
       const sagax = bridge.win.sagax as { viewer: { get(): Promise<unknown> } };
       const pending = sagax.viewer.get();
-      const caught = pending.catch((error: { code?: string }) => error.code);
-      vi.advanceTimersByTime(CAP_READY_TIMEOUT_MS + 1);
-      await expect(caught).resolves.toBe("unavailable");
+      const caught = pending.catch((error: { code?: string; message?: string }) => ({ code: error.code, message: error.message }));
+      vi.advanceTimersByTime(CAP_WAIT_MS + 1);
+      // no wrapper at all (a page opened outside the reader): nothing to update
+      await expect(caught).resolves.toEqual({ code: "unavailable", message: "The page's wrapper did not answer." });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("#3657: a ready without taken (a released app) keeps a sent call's unbounded wait", async () => {
+    vi.useFakeTimers();
+    try {
+      const bridge = runBridge(capabilityBridgeSource(caps));
+      const sagax = bridge.win.sagax as { data: { read(name: string): Promise<unknown> } };
+      // one queued before ready, one sent after it
+      const queued = sagax.data.read("team-board");
+      bridge.deliver(bridge.parent, { type: CAP_READY_MESSAGE, v: 1 });
+      const sent = sagax.data.read("team-board");
+      vi.advanceTimersByTime(CAP_WAIT_MS * 2);
+      bridge.deliver(bridge.parent, { type: CAP_RESULT_MESSAGE, v: 1, id: 1, ok: true, value: 1 });
+      bridge.deliver(bridge.parent, { type: CAP_RESULT_MESSAGE, v: 1, id: 2, ok: true, value: 2 });
+      await expect(queued).resolves.toBe(1);
+      await expect(sent).resolves.toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("#3657: a ready without taken (an app that predates files.download) still bounds files.download", async () => {
+    vi.useFakeTimers();
+    try {
+      const bridge = runBridge(capabilityBridgeSource({ ...caps, files: ["download" as const] }));
+      bridge.deliver(bridge.parent, { type: CAP_READY_MESSAGE, v: 1 });
+      const sagax = bridge.win.sagax as { files: { download(file: unknown): Promise<unknown> } };
+      let settled: unknown;
+      let message = "";
+      // such an app drops a call it does not know: no answer ever comes
+      sagax.files.download({ name: "a.txt", mime: "text/plain", data: "aGk=" }).then((value) => { settled = { value }; }, (error: { code?: string; message?: string }) => { settled = error.code; message = String(error.message); });
+      expect(bridge.posted.at(-1)).toMatchObject({ type: CAP_MESSAGE, id: 1, cap: "files.download" });
+      vi.advanceTimersByTime(CAP_WAIT_MS - 1);
+      await Promise.resolve();
+      expect(settled).toBeUndefined();
+      vi.advanceTimersByTime(2);
+      await Promise.resolve();
+      expect(settled).toBe("unavailable");
+      expect(message).toMatch(/Update the app/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("#3657: a call after ready that nobody takes settles unavailable after one bounded wait", async () => {
+    vi.useFakeTimers();
+    try {
+      const bridge = runBridge(capabilityBridgeSource({ ...caps, files: ["download" as const] }));
+      bridge.deliver(bridge.parent, { type: CAP_READY_MESSAGE, v: 1, taken: true });
+      const sagax = bridge.win.sagax as { files: { download(file: unknown): Promise<unknown> } };
+      let settled: unknown;
+      let message = "";
+      // an older wrapper drops a call it does not know: no taken, no answer
+      sagax.files.download({ name: "a.txt", mime: "text/plain", data: "aGk=" }).then((value) => { settled = { value }; }, (error: { code?: string; message?: string }) => { settled = error.code; message = String(error.message); });
+      expect(bridge.posted.at(-1)).toMatchObject({ type: CAP_MESSAGE, id: 1, cap: "files.download" });
+      vi.advanceTimersByTime(CAP_WAIT_MS - 1);
+      await Promise.resolve();
+      expect(settled).toBeUndefined();
+      vi.advanceTimersByTime(2);
+      await Promise.resolve();
+      expect(settled).toBe("unavailable");
+      expect(message).toMatch(/Update the app/);
+      // its late answer changes nothing
+      bridge.deliver(bridge.parent, { type: CAP_RESULT_MESSAGE, v: 1, id: 1, ok: true, value: true });
+      await Promise.resolve();
+      expect(settled).toBe("unavailable");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("#3657: a call the wrapper took waits for its answer past the wait (an Ask first card)", async () => {
+    vi.useFakeTimers();
+    try {
+      const bridge = runBridge(capabilityBridgeSource(caps));
+      const sagax = bridge.win.sagax as { data: { read(name: string): Promise<unknown> } };
+      // queued before ready: the wait starts again when it is sent
+      const pending = sagax.data.read("team-board");
+      vi.advanceTimersByTime(CAP_WAIT_MS - 1);
+      bridge.deliver(bridge.parent, { type: CAP_READY_MESSAGE, v: 1, taken: true });
+      expect(bridge.posted.at(-1)).toMatchObject({ type: CAP_MESSAGE, id: 1 });
+      vi.advanceTimersByTime(CAP_WAIT_MS - 1);
+      bridge.deliver(bridge.parent, { type: CAP_TAKEN_MESSAGE, v: 1, id: 1 });
+      vi.advanceTimersByTime(CAP_WAIT_MS * 10);
+      bridge.deliver(bridge.parent, { type: CAP_RESULT_MESSAGE, v: 1, id: 1, ok: true, value: { lanes: [] } });
+      await expect(pending).resolves.toEqual({ lanes: [] });
+      // a taken from anyone but the parent does not stop the wait
+      const other = sagax.data.read("team-board").catch((error: { code?: string }) => error.code);
+      bridge.deliver({}, { type: CAP_TAKEN_MESSAGE, v: 1, id: 2 });
+      vi.advanceTimersByTime(CAP_WAIT_MS + 1);
+      await expect(other).resolves.toBe("unavailable");
     } finally {
       vi.useRealTimers();
     }
@@ -132,10 +227,12 @@ describe("the app preview's relay (#3413 lot 1b)", () => {
     relay.deliver({}, { type: CAP_MESSAGE, v: 1, id: 2, cap: "data.read" });
     expect(relay.up).toEqual([{ type: CAP_HELLO_MESSAGE, v: 1 }, { type: CAP_MESSAGE, v: 1, id: 1, cap: "data.read" }]);
     relay.deliver(relay.parent, { type: CAP_READY_MESSAGE, v: 1 });
+    relay.deliver(relay.parent, { type: CAP_TAKEN_MESSAGE, v: 1, id: 1 });
     relay.deliver(relay.parent, { type: CAP_RESULT_MESSAGE, v: 1, id: 1, ok: true, value: 1 });
     relay.deliver(relay.parent, { type: CAP_MESSAGE, v: 1, id: 3 });
     relay.deliver({}, { type: CAP_RESULT_MESSAGE, v: 1, id: 1, ok: true });
-    expect(relay.down).toEqual([{ type: CAP_READY_MESSAGE, v: 1 }, { type: CAP_RESULT_MESSAGE, v: 1, id: 1, ok: true, value: 1 }]);
+    relay.deliver(relay.frameWindow, { type: CAP_TAKEN_MESSAGE, v: 1, id: 1 });
+    expect(relay.down).toEqual([{ type: CAP_READY_MESSAGE, v: 1 }, { type: CAP_TAKEN_MESSAGE, v: 1, id: 1 }, { type: CAP_RESULT_MESSAGE, v: 1, id: 1, ok: true, value: 1 }]);
   });
 
   it("is in the preview wrapper of a version that declares capabilities only", () => {

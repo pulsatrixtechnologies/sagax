@@ -6,7 +6,7 @@ import type { AddressInfo } from "node:net";
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 
 import type { TurnFacts } from "../shared/bot-act.ts";
 import { createBotActService } from "./bots/bot-act.ts";
@@ -19,9 +19,12 @@ import { dispatchRoutes } from "./routes/table.ts";
 
 const dirs: string[] = [];
 const servers: Server[] = [];
-const temp = () => {
+/** Where a test's folders and servers go; the shared big fixture keeps its own. */
+type Owned = { dirs: string[]; servers: Server[] };
+const perTest: Owned = { dirs, servers };
+const temp = (owned: Owned = perTest) => {
   const dir = mkdtempSync(join(tmpdir(), "sagax-plugin-act-"));
-  dirs.push(dir);
+  owned.dirs.push(dir);
   return dir;
 };
 afterEach(async () => {
@@ -66,9 +69,10 @@ function facts(person: string): TurnFacts {
 
 const pulledReads = { count: 0 };
 
-async function boot(options: { repos?: Record<string, string>; sources?: string[]; pulledAt?: ReadonlyMap<string, number> } = {}) {
+async function boot(options: { repos?: Record<string, string>; sources?: string[]; pulledAt?: ReadonlyMap<string, number>; owned?: Owned } = {}) {
+  const owned = options.owned ?? perTest;
   const plugins = botPluginsWithMarketplaces({
-    dataDir: temp(), git: fakeGit(options.repos ?? { "https://github.com/acme/tools.git": marketplaceRepo() }), gitEnvironment: () => ({}), policy: () => undefined,
+    dataDir: temp(owned), git: fakeGit(options.repos ?? { "https://github.com/acme/tools.git": marketplaceRepo() }), gitEnvironment: () => ({}), policy: () => undefined,
   });
   for (const source of options.sources ?? ["acme/tools"]) await plugins.addMarketplace("scout", { source }, "pr_owner");
   const routes = [createBotPluginRoutes<{ id: string; owner: string }>({
@@ -89,7 +93,7 @@ async function boot(options: { repos?: Record<string, string>; sources?: string[
       json(res, 500, { error: String(error) });
     }
   });
-  servers.push(server);
+  owned.servers.push(server);
   await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const service = createBotActService({
@@ -121,9 +125,11 @@ async function boot(options: { repos?: Record<string, string>; sources?: string[
   return { plugins, service, base };
 }
 
+const INSTALLED_IN_TESTS = [7, 150];
+
 /** #3637: a marketplace of `count` plugins, each with a long description. */
-function bigMarketplaceRepo(name: string, count: number): string {
-  const repo = temp();
+function bigMarketplaceRepo(name: string, count: number, owned: Owned): string {
+  const repo = temp(owned);
   const plugins = Array.from({ length: count }, (_, index) => ({
     name: `${name}-plugin-${index}`,
     source: `./plugins/p${index}`,
@@ -132,19 +138,31 @@ function bigMarketplaceRepo(name: string, count: number): string {
     description: `Plugin number ${index} of ${name}: ${"it does a useful thing for the person. ".repeat(4)}`,
   }));
   write(repo, ".claude-plugin/marketplace.json", JSON.stringify({ name, plugins }));
-  for (let index = 0; index < count; index += 1) {
+  // #3691: only the plugins a test installs get their folder; a listing reads
+  // the catalog from the manifest, and a missing folder lists without contents
+  for (const index of INSTALLED_IN_TESTS) {
     write(repo, `plugins/p${index}/.claude-plugin/plugin.json`, JSON.stringify({ name: `${name}-plugin-${index}`, version: "1.0.0" }));
     write(repo, `plugins/p${index}/skills/s/SKILL.md`, "---\nname: s\ndescription: S\n---\nBody");
   }
   return repo;
 }
 
-async function bootBig(options: { pulledAt?: ReadonlyMap<string, number> } = {}) {
+// #3691: three marketplaces of 200 plugins are slow to write and clone: built
+// once for the group that reads them, and torn down after it
+const bigOwned: Owned = { dirs: [], servers: [] };
+let big: ReturnType<typeof bootBigOnce> | undefined;
+async function bootBigOnce() {
   const names = ["alpha-market", "beta-market", "gamma-market"];
-  const repos = Object.fromEntries(names.map((name) => [`https://github.com/acme/${name}.git`, bigMarketplaceRepo(name, 200)]));
-  const booted = await boot({ repos, sources: names.map((name) => `acme/${name}`), ...options });
+  const repos = Object.fromEntries(names.map((name) => [`https://github.com/acme/${name}.git`, bigMarketplaceRepo(name, 200, bigOwned)]));
+  const booted = await boot({ repos, sources: names.map((name) => `acme/${name}`), pulledAt: new Map([["beta-market", Date.UTC(2026, 10, 10, 12)]]), owned: bigOwned });
   return { ...booted, names };
 }
+const bootBig = () => (big ??= bootBigOnce());
+afterAll(async () => {
+  big = undefined;
+  await Promise.all(bigOwned.servers.splice(0).map((server) => new Promise((done) => server.close(done))));
+  for (const dir of bigOwned.dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
 
 const act = (service: Awaited<ReturnType<typeof boot>>["service"], plugins: Record<string, unknown>) => service.handle({
   facts: facts("pr_owner"),
@@ -155,13 +173,13 @@ const act = (service: Awaited<ReturnType<typeof boot>>["service"], plugins: Reco
 /** What the model reads: the proxy's own cut (agents-tools/core.ts act). */
 const modelText = (result: { body: Record<string, unknown> }) => String(result.body.text ?? result.body.error ?? "").slice(0, 8000);
 
-// three clones of 200 plugins each: slow on a busy machine
-describe("what a bot reads from its plugins tool (#3637)", { timeout: 90_000 }, () => {
+describe("what a bot reads from its plugins tool (#3637)", () => {
   it("lists the installed plugins and one line per marketplace, whole, under the limit", async () => {
-    const { service, plugins, names } = await bootBig({ pulledAt: new Map([["beta-market", Date.UTC(2026, 10, 10, 12)]]) });
+    const { service, plugins, names } = await bootBig();
     await plugins.install("scout", { marketplace: "gamma-market", plugin: "gamma-market-plugin-150" }, "pr_owner");
     const reads = pulledReads.count;
     const listed = await act(service, { action: "list" });
+    await plugins.uninstall("scout", "gamma-market-plugin-150@gamma-market");
     expect(listed.status).toBe(200);
     // the last-pull dates come from one read per listing, not one per marketplace
     expect(pulledReads.count - reads).toBe(1);
@@ -211,8 +229,9 @@ describe("what a bot reads from its plugins tool (#3637)", { timeout: 90_000 }, 
   });
 
   it("answers an install with the installed plugin, never the marketplaces array", async () => {
-    const { service } = await bootBig();
+    const { service, plugins } = await bootBig();
     const installed = await act(service, { action: "install", marketplace: "alpha-market", plugin: "alpha-market-plugin-7" });
+    await plugins.uninstall("scout", "alpha-market-plugin-7@alpha-market");
     expect(installed.status).toBe(201);
     const answer = JSON.parse(modelText(installed)) as Record<string, unknown>;
     expect(answer.plugin).toMatchObject({ key: "alpha-market-plugin-7@alpha-market", version: "1.0.0" });
@@ -281,6 +300,50 @@ describe("what a bot reads from its plugins tool (#3637)", { timeout: 90_000 }, 
     const lines = pages.flatMap((page) => page.marketplaces);
     expect(lines.map((line) => line.split(":")[0])).toEqual(Array.from({ length: 50 }, (_, index) => `market-${index}`));
     for (const page of pages) expect(page.text.length).toBeLessThanOrEqual(max);
+  });
+
+  /** #3691: the next offset a cut page still carries (the cut text is not JSON). */
+  const nextOffset = (text: string) => {
+    const found = /"more":\{"offset":(\d+)/.exec(text);
+    return found ? Number(found[1]) : undefined;
+  };
+
+  it("#3691: a catalog entry larger than a page keeps the next offset, and paging goes on past it", async () => {
+    const shaped = await import("./bots/bot-plugins-answer.ts");
+    const plugins = ["one", "two", "three"].map((name) => ({ name, version: "1.0.0", category: name === "two" ? "c".repeat(9000) : "tools" }));
+    const listing = JSON.stringify({ marketplaces: [{ name: "wide", source: "acme/wide", plugins }], plugins: [] });
+    const read = (offset: number) => shaped.shapePluginAnswer({ kind: "route", method: "GET", path: "/api/bots/scout/plugins", query: { marketplace: "wide", ...(offset ? { offset: String(offset) } : {}) } }, listing);
+    const names: string[] = [];
+    let offset: number | undefined = 0;
+    for (let pages = 0; offset !== undefined; pages += 1) {
+      expect(pages).toBeLessThan(10);
+      const text = read(offset);
+      expect(text.length).toBeLessThan(8000);
+      names.push(...["one", "two", "three"].filter((name) => text.includes(`"name":"${name}"`)));
+      const next = nextOffset(text);
+      if (next !== undefined) expect(next).toBeGreaterThan(offset);
+      offset = next;
+    }
+    expect(names).toEqual(["one", "two", "three"]);
+  });
+
+  it("#3691: an installed plugin larger than a page keeps the next offset of a plain list", async () => {
+    // a cut page is not JSON: read by its offset
+    const shaped = await import("./bots/bot-plugins-answer.ts");
+    const listing = JSON.stringify({
+      marketplaces: [market(0)],
+      plugins: ["a", "b", "c"].map((name) => ({ key: `${name}@market-0`, name, marketplace: "market-0", version: name === "b" ? "9".repeat(9000) : "1.0.0", enabled: true })),
+    });
+    const keys: string[] = [];
+    let offset: number | undefined = 0;
+    for (let count = 0; offset !== undefined; count += 1) {
+      expect(count).toBeLessThan(10);
+      const text = shaped.shapePluginAnswer({ kind: "route", method: "GET", path: "/api/bots/scout/plugins", ...(offset ? { query: { offset: String(offset) } } : {}) }, listing);
+      expect(text.length).toBeLessThan(8000);
+      keys.push(...["a", "b", "c"].filter((name) => text.includes(`"key":"${name}@market-0"`)));
+      offset = nextOffset(text);
+    }
+    expect(keys).toEqual(["a", "b", "c"]);
   });
 
   it("leaves the person's own listing route answer whole", async () => {

@@ -33,6 +33,8 @@ import {
   CAP_HELLO_MESSAGE,
   CAP_READY_MESSAGE,
   CAP_RESULT_MESSAGE,
+  CAP_TAKEN_MESSAGE,
+  pageCapCallId,
   pageCapGranted,
   normalizePageLinkOrigin,
   pageLinkOpensDirectly,
@@ -408,8 +410,9 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
 
   return {
     start() {
-      // the frame's calls wait for this: it listens now
-      post({ type: CAP_READY_MESSAGE });
+      // the frame's calls wait for this: it listens now; taken: it says
+      // taken for each call it knows, so the frame may bound its wait (#3657)
+      post({ type: CAP_READY_MESSAGE, taken: true });
       started ??= load();
       return started;
     },
@@ -417,12 +420,21 @@ export function createCapabilityBroker(deps: BrokerDeps): CapabilityBroker {
       if (!fromPageFrame(event, deps.frame(), typeof deps.frameOrigin === "function" ? deps.frameOrigin() : deps.frameOrigin)) return false;
       // the bridge started (or restarted): tell it the broker listens
       if (event.data && typeof event.data === "object" && (event.data as { type?: unknown; v?: unknown }).type === CAP_HELLO_MESSAGE && (event.data as { v?: unknown }).v === 1) {
-        post({ type: CAP_READY_MESSAGE });
+        post({ type: CAP_READY_MESSAGE, taken: true });
         return true;
       }
       const request: PageCapRequest | null = parsePageCapRequest(event.data);
-      if (!request) return false;
+      if (!request) {
+        // #3657: a call this app does not know (a later capability) is
+        // answered, never dropped, so the page does not wait in silence
+        const unknown = pageCapCallId(event.data);
+        if (unknown === null) return false;
+        answer(unknown, { ok: false, error: "unavailable", message: deps.lang === "fr" ? "Cette app ne peut pas encore faire ça. Mets l'app à jour pour t'en servir." : "This app cannot do this yet. Update the app to use it." });
+        return true;
+      }
       const id = request.id;
+      // known: the page's bounded wait stops; the answer may wait on the reader
+      post({ type: CAP_TAKEN_MESSAGE, id });
       // no pageId: not signed in (or no right): no personal capability, and
       // no request leaves for the server
       if (!deps.pageId) {

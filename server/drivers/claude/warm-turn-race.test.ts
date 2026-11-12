@@ -6,10 +6,11 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { ensureDirs } from "../../config.ts";
 import type { ProviderInstance } from "../../contracts.ts";
+import { spawnHelperPid, startSpawnHelper, stopSpawnHelper } from "../../process/spawn-helper.ts";
 import { recordEvents, type EventRecorder } from "../../testing/events.ts";
 import { removeTempDir } from "../../testing/cleanup.ts";
 import { ClaudeDriver } from "../claude.ts";
@@ -70,4 +71,32 @@ describe("a turn racing a pre-warm of the same thread (#3703)", () => {
     instance.adapter.releaseWarmSession?.(threadId);
     await expect.poll(() => launches(launchLog).filter((row) => alive(row.pid)).length, { timeout: 10_000 }).toBe(0);
   });
+
+  // #4049: with the spawn helper on (the Linux server), a process that fails
+  // to start (its folder was deleted) left the first message's write
+  // unanswered, so the thread's launch slot was never released and every
+  // later message on the thread waited forever.
+  describe.runIf(process.platform !== "win32")("on the spawn helper", () => {
+    beforeAll(() => startSpawnHelper());
+    afterAll(() => stopSpawnHelper());
+
+    it("tells the start error and answers the next message on the same thread", async () => {
+      expect(spawnHelperPid()).toBeGreaterThan(0);
+      const threadId = "t-start-failed";
+      const failed = await withTimeout(instance.adapter.sendTurn({ threadId, text: "hello", cwd: join(scratch, "deleted-folder") }));
+      expect(failed).not.toBe("timed out");
+      await expect(recorder.until((event) => event.type === "turn.completed" && event.turnId === (failed as { turnId: string }).turnId, 10_000))
+        .resolves.toMatchObject({ ok: false });
+      const next = await withTimeout(instance.adapter.sendTurn({ threadId, text: "hello again", cwd: scratch }));
+      expect(next).not.toBe("timed out");
+      await expect(recorder.until((event) => event.type === "turn.completed" && event.turnId === (next as { turnId: string }).turnId, 15_000))
+        .resolves.toMatchObject({ ok: true });
+    });
+  });
 });
+
+const withTimeout = <T>(work: Promise<T>, ms = 10_000): Promise<T | "timed out"> => {
+  let timer: NodeJS.Timeout | undefined;
+  return Promise.race([work, new Promise<"timed out">((resolve) => { timer = setTimeout(() => resolve("timed out"), ms); })])
+    .finally(() => clearTimeout(timer));
+};

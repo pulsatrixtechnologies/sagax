@@ -137,6 +137,38 @@ describe("a child the helper failed to start (#3901)", () => {
     expect(pendingStart(child as unknown as ChildProcess)).toBeNull();
     expect(await killCliTree(child as unknown as ChildProcess, 1_000)).toBe(true);
   });
+
+  // #4049: a write queued while the child was starting got no answer when the
+  // start failed, so a caller awaiting it (the Claude driver's first message,
+  // under its per-thread launch slot) waited forever.
+  it("answers every write queued before the failure with an error", async () => {
+    const child = new HelperChild({
+      op: "spawn", id: -1, command: "/nonexistent/engine", args: [], cwd: process.cwd(), env: {}, stdio: ["pipe", "pipe", "pipe", "pipe"], detached: false,
+    });
+    child.on("error", () => {});
+    const write = (stream: NodeJS.WritableStream) => new Promise<Error | null | undefined>((resolve) => {
+      stream.on("error", () => {});
+      stream.write("prompt\n", (error) => resolve(error));
+    });
+    const stdin = write(child.stdin!);
+    const extra = write(child.stdio[3] as NodeJS.WritableStream);
+    child.onFailed({ code: "ENOENT", errno: -2, syscall: "spawn /nonexistent/engine", path: "/nonexistent/engine", message: "spawn /nonexistent/engine ENOENT" });
+    const settled = await Promise.race([Promise.all([stdin, extra]), new Promise((resolve) => setTimeout(() => resolve("pending"), 500))]);
+    expect(settled).not.toBe("pending");
+    expect((settled as Array<Error | null | undefined>).map((error) => error instanceof Error)).toEqual([true, true]);
+  });
+
+  it("answers a queued write with an error when the child ends before its stdin arrives", async () => {
+    const child = new HelperChild({
+      op: "spawn", id: -1, command: process.execPath, args: [], cwd: process.cwd(), env: {}, stdio: ["pipe", "pipe", "pipe"], detached: false,
+    });
+    child.stdin!.on("error", () => {});
+    const written = new Promise<Error | null | undefined>((resolve) => child.stdin!.write("prompt\n", (error) => resolve(error)));
+    child.onSpawned(2 ** 22 + 1);
+    child.onExit(1, null);
+    const settled = await Promise.race([written, new Promise((resolve) => setTimeout(() => resolve("pending"), 500))]);
+    expect(settled).toBeInstanceOf(Error);
+  });
 });
 const lines: string[] = [];
 

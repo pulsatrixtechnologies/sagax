@@ -175,8 +175,12 @@ of a routine). A row marks its conversation unread and rings only when every
 desktop in use draws it (`routineRunRowInEveryChat`): the desktop released
 through 0.8.92 leaves out a completed wake row of any topic other than an
 accepted suggestion or a watch, so the answer of a screen offer, a room or
-DM mention, a text or the bot's look at its failed run is written quietly
-there. A run that reports by its streak
+DM mention, a text or the bot's look at its failed run is posted without a
+ring and without marking the chat unread while that desktop filter is live
+(every desktop in use draws the row again once it is gone). A stored row
+the desktop chat no longer draws (`routineRunRowOutOfChat`) is removed at
+its run's next sync, although iOS drew it, so both apps show the same
+conversation. A run that reports by its streak
 never says works again on its own row: that is the streak card's. A run that ends with nothing for the
 person takes that row back (a wake on a teammate's message whose approval
 was answered), and writes nothing on time or late, with or without

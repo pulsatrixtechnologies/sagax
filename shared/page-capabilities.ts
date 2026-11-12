@@ -21,10 +21,20 @@
 //                     { type: "sagax-cap-result", v: 1, id, ok: false, error, message? }
 //   wrapper -> frame  { type: "sagax-cap-event", v: 1, cap: "data", name }
 //   frame -> wrapper  { type: "sagax-cap-hello", v: 1 }   once, when its bridge starts
-//   wrapper -> frame  { type: "sagax-cap-ready", v: 1 }   when the broker listens (on start,
-//                                                        and in answer to each hello)
-// The frame queues its calls until ready; each waits CAP_READY_TIMEOUT_MS at
-// most, then fails with code "unavailable". In the app's preview, the
+//   wrapper -> frame  { type: "sagax-cap-ready", v: 1, taken: true }  when the broker listens
+//                                                        (on start, and in answer to each hello);
+//                                                        taken: it says taken for each call it knows
+//   wrapper -> frame  { type: "sagax-cap-taken", v: 1, id }  a call it knows, before its answer
+// The frame queues its calls until ready. A call waits CAP_WAIT_MS at most
+// for ready; once sent, and only when the ready said taken, it waits
+// CAP_WAIT_MS again for the wrapper to take it (taken or its answer); past
+// either wait it fails with code "unavailable". A ready without taken (an
+// app released before #3657) keeps a sent call's unbounded wait for
+// PAGE_CAP_LEGACY_CARD_CALLS only; any other call is bounded. A call the
+// wrapper took waits for its answer as long as it takes (an Ask first card
+// waits on the reader). A wrapper answers "unavailable" to a call it does not
+// know (#3657), and the wait settles a call that an older wrapper drops, so a
+// page can say what to do (update the app). In the app's preview, the
 // server's preview wrapper relays these messages between its frame and the
 // app (PREVIEW_CAP_RELAY_SOURCE); the frame still talks to its parent only.
 //
@@ -55,12 +65,22 @@ export const CAP_EVENT_MESSAGE = "sagax-cap-event";
 export const CAP_HELLO_MESSAGE = "sagax-cap-hello";
 /** wrapper -> frame: the broker listens; queued calls go now. */
 export const CAP_READY_MESSAGE = "sagax-cap-ready";
-/** How long a call waits for ready before it fails ("unavailable"). */
-export const CAP_READY_TIMEOUT_MS = 10_000;
+/** wrapper -> frame: it knows this call and works on it; its answer follows. */
+export const CAP_TAKEN_MESSAGE = "sagax-cap-taken";
+/** The one bounded wait of a call (#3657): for ready, then, once sent to a
+ * wrapper whose ready said taken, for it to take the call. Past it the call
+ * fails ("unavailable"). */
+export const CAP_WAIT_MS = 10_000;
 
 /** The calls a page may make. */
 export const PAGE_CAP_CALLS = ["data.read", "viewer.get", "open", "files.download"] as const;
 export type PageCapCall = (typeof PAGE_CAP_CALLS)[number];
+/** #3657: the calls whose answer may wait on the reader (an Ask first card,
+ * a link card) in an app released before the wrapper said taken. Behind a
+ * ready without taken, only these keep an unbounded wait once sent; any
+ * other call (files.download, anything later) settles after CAP_WAIT_MS,
+ * since such an app either answers it at once or drops it. */
+export const PAGE_CAP_LEGACY_CARD_CALLS: readonly PageCapCall[] = ["data.read", "open"];
 
 /** The named data sources a page may declare (server/pages/page-sources.ts). */
 export const PAGE_DATA_SOURCES = ["team-board"] as const;
@@ -293,6 +313,17 @@ export function parsePageCapRequest(data: unknown): PageCapRequest | null {
   if ("gesture" in record && typeof record.gesture !== "boolean") return null;
   const gesture = typeof record.gesture === "boolean" ? { gesture: record.gesture } : {};
   return { type: CAP_MESSAGE, v: 1, id: record.id, cap: record.cap as PageCapCall, ...(args ? { args: args as Record<string, unknown> } : {}), ...gesture };
+}
+
+/** The id of a call the wrapper could not parse (a capability it does not
+ * know, or a shape it does not take), so that it answers "unavailable"
+ * instead of dropping it (#3657); null when the message is not a call with
+ * an id. Pure. */
+export function pageCapCallId(data: unknown): number | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const record = data as Record<string, unknown>;
+  if (record.type !== CAP_MESSAGE || record.v !== 1) return null;
+  return typeof record.id === "number" && Number.isSafeInteger(record.id) && record.id >= 0 ? record.id : null;
 }
 
 /** Whether a call is granted by a declaration (`data.read` also needs its

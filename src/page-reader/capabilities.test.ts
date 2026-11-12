@@ -1,7 +1,7 @@
 // The wrapper's broker for a page's capabilities (src/page-reader/capabilities.ts).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CAP_EVENT_MESSAGE, CAP_HELLO_MESSAGE, CAP_MESSAGE, CAP_READY_MESSAGE, CAP_RESULT_MESSAGE, PAGE_CAP_LIMITS } from "../../shared/page-capabilities";
+import { CAP_EVENT_MESSAGE, CAP_HELLO_MESSAGE, CAP_MESSAGE, CAP_READY_MESSAGE, CAP_RESULT_MESSAGE, CAP_TAKEN_MESSAGE, PAGE_CAP_LIMITS } from "../../shared/page-capabilities";
 import { PAGE_OPEN_MESSAGE } from "../../shared/published-pages";
 import { capFailure, CARD_GUARD_MS, createCapabilityBroker, fromPageFrame, parseDataEvent, splitAddress, type BrokerDeps } from "./capabilities";
 
@@ -70,10 +70,35 @@ describe("the page's frame is the only one heard", () => {
 
   it("ignores a message that is not a well-formed call", async () => {
     const { broker, frame, sent } = setup({}, ROUTES);
-    for (const data of [null, "x", { type: CAP_MESSAGE, v: 2, id: 1, cap: "data.read" }, { type: CAP_MESSAGE, v: 1, id: -1, cap: "data.read" }, { type: CAP_MESSAGE, v: 1, id: 1, cap: "model.ask" }]) {
+    for (const data of [null, "x", { type: CAP_MESSAGE, v: 2, id: 1, cap: "data.read" }, { type: CAP_MESSAGE, v: 1, id: -1, cap: "data.read" }, { type: CAP_MESSAGE, v: 1, id: 1.5, cap: "model.ask" }]) {
       expect(await broker.onMessage({ source: frame, origin: "null", data })).toBe(false);
     }
     expect(sent).toEqual([]);
+  });
+
+  it("#3657: answers unavailable to a call it does not know, never drops it, with no request", async () => {
+    const { broker, frame, sent, api } = setup({}, ROUTES);
+    expect(await broker.onMessage({ source: frame, origin: "null", data: { type: CAP_MESSAGE, v: 1, id: 7, cap: "model.ask", args: {} } })).toBe(true);
+    expect(sent).toEqual([expect.objectContaining({ type: CAP_RESULT_MESSAGE, v: 1, id: 7, ok: false, error: "unavailable" })]);
+    expect(String(sent[0]!.message)).toMatch(/update/i);
+    // a known call in a shape it does not take is answered the same way
+    expect(await broker.onMessage({ source: frame, origin: "null", data: { type: CAP_MESSAGE, v: 1, id: 8, cap: "files.download", gesture: "yes" } })).toBe(true);
+    expect(sent.at(-1)).toMatchObject({ type: CAP_RESULT_MESSAGE, id: 8, ok: false, error: "unavailable" });
+    expect(api).not.toHaveBeenCalled();
+  });
+
+  it("#3657: says it in the reader's language", async () => {
+    const { broker, frame, sent } = setup({ lang: "fr" }, ROUTES);
+    await broker.onMessage({ source: frame, origin: "null", data: { type: CAP_MESSAGE, v: 1, id: 7, cap: "model.ask", args: {} } });
+    expect(sent).toEqual([expect.objectContaining({ id: 7, error: "unavailable", message: expect.stringMatching(/Mets l'app à jour/) })]);
+  });
+
+  it("#3657: says it took a call it knows before it answers, so the page's wait stops", async () => {
+    const { call, sent } = setup({}, ROUTES);
+    await call("viewer.get", {}, 4);
+    const types = sent.filter((message) => message.id === 4).map((message) => message.type);
+    expect(types).toEqual([CAP_TAKEN_MESSAGE, CAP_RESULT_MESSAGE]);
+    expect(sent.find((message) => message.type === CAP_TAKEN_MESSAGE)).toEqual({ v: 1, type: CAP_TAKEN_MESSAGE, id: 4 });
   });
 });
 
@@ -253,6 +278,13 @@ describe("ready handshake", () => {
     const { broker, sent } = setup({ pageId: undefined, signedIn: false }, ROUTES);
     await broker.start();
     expect(sent[0]).toMatchObject({ type: CAP_READY_MESSAGE, v: 1 });
+  });
+
+  it("#3657: every ready says it sends taken, so the page may bound its wait", async () => {
+    const { broker, sent, frame } = setup({}, ROUTES);
+    await broker.start();
+    await broker.onMessage({ source: frame, origin: "null", data: { type: CAP_HELLO_MESSAGE, v: 1 } });
+    expect(sent.filter((message) => message.type === CAP_READY_MESSAGE)).toEqual([{ v: 1, type: CAP_READY_MESSAGE, taken: true }, { v: 1, type: CAP_READY_MESSAGE, taken: true }]);
   });
 });
 

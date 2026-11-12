@@ -28,16 +28,23 @@ and quiet hours (`shared/signal-levels.ts`) stay the controls of sound.
 On the server: `routineRunReportable` reads the rule for a routine's row (a
 result posts when the routine posts its results or a person started the run;
 a wait, a failure, a block, a result with problems, items for the person and
-"works again" always do). A wake on teammates' messages or on a post in a
-two-bot DM reports only what needs the person and may end with
-`NOTHING_TO_REPORT` (`PEER_WAKE_RULES`, `DM_WAKE_RULES`); a wake on what
-the person chose (a watch, an accepted suggestion: `wakeAlwaysReports`)
-posts its report, and like any wake ends quiet with nothing for the person
-(#3990: `WATCH_WAKE_RULES` says so; nothing is forced into a report). A
+"works again" always do). A wake whose prompt tells the bot to answer the
+person posts that answer (`wakeAlwaysReports`, #4051: what the person chose,
+a watch or an accepted suggestion; an offer on their screen; a room or a
+two-bot DM that names the bot, whose `DM_WAKE_RULES` say to tell only what
+needs the person; a text on its line; its look at its own failed run). A
+wake on a teammate's message, a mail, a calendar entry or a webhook post
+posts no report (`PEER_WAKE_RULES`): what needs the person there reaches
+them as a request or items. Like any wake, one that ends with
+`NOTHING_TO_REPORT` posts nothing (#3990: nothing is forced into a report). A
 run's late answer goes onto the run's own card (`mirrorLateRunReply` patches
 it in place), or posts as any result when the run has no card in the chat,
-through the same row gate (below); a late answer with nothing for the person
-posts nothing and rings nothing. A failed or stalled turn of an AI client's
+through the same row gate and the same facts as the run's card write
+(`createRoutineRunLateRow`, below); a late answer with nothing for the
+person posts nothing and rings nothing. The store keeps a bot row's run
+markers as data (`runStatus`, and `runQuiet` for a nothing-to-report end:
+`withoutRunMarkersIn`), and the late answer is read with them put back
+(`withRunMarkers`) by the one report reader (`routineReportOutcome`). A failed or stalled turn of an AI client's
 conversation starts no
 Primary Bot report (`reportIncident`; the problem log keeps it). Tests:
 `shared/chat-relevance.test.ts`, `server/routines/routine-report.test.ts`,
@@ -64,8 +71,18 @@ routine's Logs) with its report and its problems.
 
 The streak (`RoutineManager.settleRepeatingStreak`) counts the runs in a row
 that ended with problems, whatever their wording: completed with problems,
-failed (a restart's cut aside) or blocked; a missed or cancelled occurrence
-neither counts nor ends it. The run that makes it
+failed (a restart's cut aside: it is told on its own, once) or blocked; a
+missed or cancelled occurrence neither counts nor ends it. A streak belongs
+to one thing (#4050, `sameStreak`): a routine by its id; a run without a
+routine (a proactive wake, a webhook's or a reach run) by its id, its bot,
+the person it runs as and its wake kind, so one person's runs are never
+counted, quoted or printed for another and one wake kind never ends another's
+streak. The run that tells is decided once, when it finishes
+(`tellsStreak`: the first of the streak whose count reaches its told count);
+its card, its alert, its incident and its ring all read that, so a sync again
+(marking a run seen, Mark all as read, an upgrade) never tells again, never
+rewrites a works again into a failure and never rolls a count back, and a
+row already the streak's card is left as it is. The run that makes it
 `ROUTINE_PROBLEM_STREAK_TOLD` (3) writes the one summary card
 (`syncRoutineRunToSource`, `repeat.streak`): the routine's name, how many
 runs, since when, and the bot's summary. That run's prompt told the bot it
@@ -112,9 +129,13 @@ at most once a day, and the one summary card of a problem
 When the summary is told (`routineProblemToldAt`): at the third run in a row
 with a problem for a routine that can run several times a day
 (`routineRunsSeveralTimesADay`: a trigger, or a clock that repeats within a
-day; a run without a routine of its own, such as a proactive wake, counts as
-one), at the first run with a problem for a routine that runs at most once a
-day. In both cases later runs count on that card in place and the first good
+day; a proactive wake or a webhook's own run, without a routine of its own,
+counts as one), at the first run with a problem for a routine that runs at
+most once a day and for any other run without a routine (#4050: a
+wait_until follow-up, a heartbeat, the last run of a routine deleted once
+finished). A run in the person's own chat (a wait_until follow-up, a
+heartbeat: `eventSource` "wait") never reads the background rule nor the
+earlier problems: its prompt is saved there as the person's line. In both cases later runs count on that card in place and the first good
 run turns it to works again in place. A pre-flight block is one more run of
 the streak; only a run the person started gets its own notice line.
 
@@ -135,11 +156,17 @@ One row gate (#3990): every writer of a run's row asks
 `routineRunMayWriteRow` (`server/routines/routine-report.ts`) whether the
 run may put a row in the conversation now, or keep the one it has: the run's
 card write (`syncRoutineRunToSource`), its late answer
-(`mirrorLateRunReply`) and the items put on its row
-(`relayPersonAttention`). Yes for a request that waits on the person, items
-only they can do, a result the person set the routine to post, a run they
-started, a team goal and the streak's one summary; a live run keeps the row
-its request put there until it settles. A run that ends with nothing for the
+(`mirrorLateRunReply`, through `createRoutineRunLateRow`: one `rowFacts` for
+both) and the items put on its row (`relayPersonAttention`). Yes for a
+request that waits on the person, items only they can do (on the row
+already included), a result the person set the routine to post, a run they
+started (to its end, a quiet result or a stop included: #4051), a team goal
+and the streak's one summary; a live run keeps the row its request put there
+until it settles. A row the desktop chat would leave out
+(`routineRunRowOutOfChat`) is never written, marked unread or rung for, and
+a row of a run that settled otherwise (cancelled, superseded, missed) is
+taken back: no row keeps a live state. A run that reports by its streak
+never says works again on its own row: that is the streak card's. A run that ends with nothing for the
 person takes that row back (a wake on a teammate's message whose approval
 was answered), and writes nothing on time or late, with or without
 `NOTHING_TO_REPORT`. A request waits only on a card still open

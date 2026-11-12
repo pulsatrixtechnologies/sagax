@@ -11,9 +11,14 @@
  * summary (state=before: the run's own card as it was written before).
  * case=proactive: the result card a wake on a teammate's message stored
  * before, drawn by the released app (state=before) and left out of the
- * chat now (the same stored row in both states). Neutral fictional bots and routines; a mocked fetch answers
+ * chat now (the same stored row in both states). case=watch-wake: a dozen
+ * "Proactive: teammate message" rows (wake topic "peer"), each saying in
+ * the bot's words there is nothing for the person, among the person's
+ * messages and the teammates' notices, as the released app draws what the
+ * server wrote (state=before); the server writes none now (state=after).
+ * Neutral fictional bots and routines; a mocked fetch answers
  * /api, nothing reaches a server. Not shipped in the app.
- * ?lang=fr|en&skin=<id>&case=chat|streak|streak-again|daily-first|proactive&state=before|after */
+ * ?lang=fr|en&skin=<id>&case=chat|streak|streak-again|daily-first|proactive|watch-wake&state=before|after */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { loadLocale } from "../lib/i18n";
@@ -96,7 +101,33 @@ const PROACTIVE: Message[] = [
   // the same stored card in both states: the chat's own filter leaves it out
   run("peer", 10, { routineName: PEER, status: "completed", summary: PEER_WORDS, brief: PEER_WORDS, wakeTopic: "peer" }),
 ];
-const messages = which === "chat" ? CHAT : which === "daily-first" ? DAILY_FIRST : which === "proactive" ? PROACTIVE : STREAK;
+/** #3990: the words a teammate's message wake ended with when it had nothing for the person. */
+const NOTHING_FOR_YOU = [
+  say("Nothing to do on your side.", "Rien à faire de ton côté."),
+  say("Nothing to bring up.", "Rien à remonter."),
+  say("Iris closed the ticket, nothing is blocked, you have nothing to do.", "Iris a fermé le billet, rien n'est bloqué, tu n'as rien à faire."),
+  say("The teammate's note is handled, nothing for you.", "La note du coéquipier est réglée, rien pour toi."),
+];
+/** One teammate's notice: the bot-to-bot line that stays in the chat. */
+const notice = (id: string, minute: number): Message => ({ id, role: "bot", kind: "activity", at: at + minute * M, text: "",
+  tool: { name: say("Message from Iris: Ticket update", "Message d'Iris : Suivi du billet"), ok: true }, threadRef: { botId: "iris", threadId: `t-iris-${id}` } } as unknown as Message);
+/** The rows as the released app receives them: one per "Proactive:
+ * teammate message" wake (sources ["peer"] only), its request answered,
+ * completed with the bot's plain words (state=before). The server writes
+ * none of them now (state=after): the chat keeps the person's messages and
+ * the teammates' notices. */
+const WATCH_WAKE: Message[] = [
+  ...OPENING,
+  ...Array.from({ length: 12 }, (_, index) => {
+    const words = NOTHING_FOR_YOU[index % NOTHING_FOR_YOU.length]!;
+    const minute = 4 + index * 5;
+    const row = run(`wake-${index}`, minute + 1, { routineName: PEER, routineId: "proactive:atlas", status: "completed", summary: words, brief: words, wakeTopic: "peer" });
+    const mid = index === 4 ? [person("u2", minute + 2, say("Did the supplier answer?", "Est-ce que le fournisseur a répondu ?")), reply("b2", minute + 3, say("Not yet. I tell you as soon as they do.", "Pas encore. Je te le dis dès qu'il répond."))] : [];
+    return [notice(`n${index}`, minute), ...(before ? [row] : []), ...mid];
+  }).flat(),
+  person("u3", 70, say("Thanks, that is all for today.", "Merci, c'est tout pour aujourd'hui.")),
+];
+const messages = which === "chat" ? CHAT : which === "daily-first" ? DAILY_FIRST : which === "proactive" ? PROACTIVE : which === "watch-wake" ? WATCH_WAKE : STREAK;
 
 const realFetch = window.fetch.bind(window);
 window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {

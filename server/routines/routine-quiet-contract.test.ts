@@ -9,16 +9,17 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createSyncRoutineRunToSource } from "../index-leaves/syncRoutineRunToSource.ts";
+import { openCardIn } from "../turns/person-attention-relay.ts";
 import { routineRunRingsDone } from "../runtime-events/turn-completed.ts";
 import { ROUTINE_EXECUTION_PROMPT, WEBHOOK_PROMPT, routineExecutionPromptFor } from "../system-prompt.ts";
 import { proactiveWakePrompt } from "../proactive/proactive-wake.ts";
 import { ROUTINE_NOTHING_TO_DO_RULE, ROUTINE_REPORT_CONTRACT, routineReportOutcome, routineRunReportable } from "./routine-report.ts";
 import { routineRunCard, routineRunFallbackText } from "./routine-run-card.ts";
 import { RoutineManager, type RoutineManagerOptions, type RoutineRun } from "./routines.ts";
-import { routineRunPostsResult } from "../../shared/routine-repeat.ts";
+import { routineRunPostsResult, routineRunRowOutOfChat } from "../../shared/routine-repeat.ts";
 
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
@@ -63,7 +64,7 @@ function manager(start: number, extra: Partial<RoutineManagerOptions> = {}) {
 type Row = { id: string; kind?: string; role?: string; text?: string; routineRun?: any };
 
 /** The person's one conversation, with the real card, text and report rule. */
-function conversation(options: { personAttention?: (text: string | undefined) => any; ownThread?: Row[]; routines?: RoutineManager; needsPerson?: boolean; postResults?: boolean } = {}) {
+function conversation(options: { personAttention?: (text: string | undefined) => any; ownThread?: Row[]; routines?: RoutineManager; needsPerson?: boolean | ((run: RoutineRun) => boolean); postResults?: boolean } = {}) {
   const rows: Row[] = [];
   const unread: string[] = [];
   const rang: string[] = [];
@@ -73,7 +74,7 @@ function conversation(options: { personAttention?: (text: string | undefined) =>
     personAttention: options.personAttention ?? (() => undefined),
     routineFullReport: (r: RoutineRun) => r.output,
     routineRunReportable,
-    routineRunNeedsPerson: () => options.needsPerson === true,
+    routineRunNeedsPerson: (r: RoutineRun) => typeof options.needsPerson === "function" ? options.needsPerson(r) : options.needsPerson === true,
     // the server's rule (server/index.ts routineEffectivePostResults)
     routineEffectivePostResults: (r: RoutineRun) => routineRunPostsResult(r, options.routines?.getRoutine(r.routineId), options.postResults === true),
     routines: options.routines,
@@ -89,6 +90,13 @@ function conversation(options: { personAttention?: (text: string | undefined) =>
         list[at] = { ...list[at]!, ...patch };
       },
       appendMessage: (_t: string, message: Omit<Row, "id">) => { const row = { ...message, id: `m${rows.length}` }; rows.push(row); return row; },
+      removeMessage: (threadId: string, id: string) => {
+        const list = threadId === "main" ? rows : options.ownThread ?? [];
+        const at = list.findIndex((row) => row.id === id);
+        if (at < 0) return false;
+        list.splice(at, 1);
+        return true;
+      },
     },
     routineRunCard,
     routineRunFallbackText,
@@ -395,9 +403,11 @@ describe("a routine that repeats more than once a day reports by its streak (#36
     asking.sync({ ...done, status: "waiting", attention: "Publish the release notes?" } as RoutineRun);
     expect(routineCards(asking.rows)).toHaveLength(1);
     expect(asking.unread).toEqual(["main"]);
-    // its end after the answer updates that same card
+    // #3990: once answered, a run with nothing the routine posts takes its
+    // row back (the run log keeps it), whatever starts the routine
     asking.sync(done);
-    expect(routineCards(asking.rows)).toHaveLength(1);
+    expect(routineCards(asking.rows)).toHaveLength(0);
+    expect(asking.unread).toEqual(["main"]);
     // Run now from the person: its result shows as always
     const byHand = conversation({ routines });
     byHand.sync({ ...done, startedBy: "person" });
@@ -678,4 +688,123 @@ describe("a proactive wake posts no result of its own (#3990)", () => {
     chat.sync(run);
     expect(chat.rows.filter((row) => row.kind === "routine.run")).toHaveLength(1);
   });
+
+  // #3990 (owner, 2026-11-11 23:51): a wake the person chose (a watch they
+  // keep, an accepted suggestion) is a request to be told when there is
+  // something, never each time there is nothing.
+  it("a wake the person chose that ends with nothing for them posts nothing, rings nothing and stays in the run log", async () => {
+    const { routines, run } = await wake("Nothing to bring up, the teammate closed it.\nNOTHING_TO_REPORT", true);
+    expect(run.status).toBe("completed");
+    expect(run.quiet).toBe(true);
+    const chat = conversation({ routines, postResults: true });
+    chat.sync(run);
+    expect(chat.rows).toEqual([]);
+    expect(chat.unread).toEqual([]);
+    expect(chat.rang).toEqual([]);
+    expect(ringsDone(run, routines)).toBe(false);
+    expect(routines.listRuns().some((candidate) => candidate.id === run.id && candidate.quiet)).toBe(true);
+  });
+
+  it("the same wake with a report for the person posts it once, marked as for the person", async () => {
+    const { routines, run } = await wake("The watch saw three tickets past due: I drafted the reminders for you to review.", true);
+    expect(run.quiet).toBeUndefined();
+    const chat = conversation({ routines, postResults: true });
+    chat.sync(run);
+    chat.sync(run);
+    const cards = chat.rows.filter((row) => row.kind === "routine.run");
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.routineRun.forPerson).toBe(true);
+    expect(routineRunRowOutOfChat(cards[0] as never)).toBe(false);
+  });
+
+  it("the same wake that needs the person reaches them once, as a request", async () => {
+    const { routines, run } = await wake("[HUMAIN] Approve the refund the teammate prepared.", true);
+    const chat = conversation({ routines, postResults: true, personAttention: (text) => text?.includes("[HUMAIN]") ? { kind: "human", items: [{ text: "Approve the refund" }] } : undefined });
+    chat.sync(run);
+    chat.sync(run);
+    const cards = chat.rows.filter((row) => row.kind === "routine.run");
+    expect(cards).toHaveLength(1);
+    expect((cards[0] as { attention?: unknown }).attention).toBeTruthy();
+    expect(chat.rang).toEqual(["needs-you"]);
+  });
+
+  it("a watch's wake prompt says plainly to end with the nothing-to-report line when nothing is for the person", () => {
+    const prompt = proactiveWakePrompt({ mode: "proactive", more: 0, events: [{ botId: "maus-1", source: "watch", key: "w", label: "Watch", detail: "queue at 12" }] });
+    expect(prompt).not.toMatch(/never ends with NOTHING_TO_REPORT|ALWAYS tell the person/);
+    expect(prompt).toContain("When nothing in it is for the person, end with NOTHING_TO_REPORT");
+    expect(prompt).not.toMatch(/[–—]/);
+  });
 });
+
+// #3990 (owner, 2026-11-11 23:51, server v0.8.91 with #4030): a bot that
+// receives its teammates' notices got one row per "Proactive: teammate
+// message" wake, each saying in its own words there was nothing for the
+// person. The wake below is shaped as startProactiveWake builds it (sources
+// ["peer"] only, no alwaysReport). Its turn asks for an approval: while the
+// request waits on the person its row is in the chat (as the rule says);
+// once answered, the wake ends with plain words for the person. origin/main
+// kept that row, completed with those words (and the released app draws it
+// with its feedback strip); now the run takes it back: nothing in the chat,
+// nothing unread, nothing rings.
+describe("a teammate's message wake, the real shape (#3990)", () => {
+  async function peerWake(said: string, opts: { asks: boolean }) {
+    const ownThread: Row[] = [];
+    let chat!: ReturnType<typeof conversation>;
+    const { routines } = manager(start, { onRunChanged: (changed: RoutineRun) => chat?.sync(changed) } as never);
+    // the server's rule: a card still open in the run's task (server/index.ts routineRunNeedsPerson)
+    chat = conversation({ routines, ownThread, needsPerson: () => openCardIn(ownThread as never) });
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, "info").mockImplementation((line: unknown) => { if (typeof line === "string" && line.startsWith("[routine-row]")) lines.push(line); });
+    try {
+      const queued = routines.enqueueProactive({ botId: "maus-1", name: "Proactive: teammate message", prompt: "A teammate wrote",
+        proactive: { mode: "proactive", hops: 1, sources: ["peer"] } as never });
+      await routines.tick();
+      const threadId = routines.listRuns().find((candidate) => candidate.id === queued.id)!.threadId!;
+      const send = (event: Record<string, unknown>) =>
+        routines.handleRuntimeEvent({ eventId: String(Math.random()), provider: "fake", createdAt: new Date().toISOString(), threadId, ...event } as never);
+      const current = () => routines.listRuns().find((candidate) => candidate.id === queued.id)!;
+      if (opts.asks) {
+        send({ type: "request.opened", requestId: "req-1", requestType: "permission", summary: "Send a message to a teammate" });
+        // presentRequestOpened: the approval card in the run's task, and the run's row told
+        ownThread.push({ id: "approval", role: "bot", kind: "options", card: { requestId: "req-1" } } as Row);
+        chat.sync(current());
+        expect(chat.rows.map((row) => row.routineRun?.status)).toEqual(["waiting"]);
+        expect(chat.rows[0]!.routineRun.wakeTopic).toBe("peer");
+        ownThread[0] = { ...ownThread[0]!, card: { requestId: "req-1", answered: "allow" } } as Row;
+        send({ type: "request.resolved", requestId: "req-1" });
+        send({ type: "turn.started" });
+      }
+      send({ type: "item.completed", itemType: "assistant_text", text: said });
+      send({ type: "turn.completed", ok: true });
+      return { run: current(), chat, lines };
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  for (const said of ["Nothing to do on your side.", "Nothing to bring up.\nNOTHING_TO_REPORT"]) {
+    it(`a wake whose approval was answered and that ends with nothing for the person takes its row back: ${JSON.stringify(said)}`, async () => {
+      const { run, chat, lines } = await peerWake(said, { asks: true });
+      expect(run.status).toBe("completed");
+      expect(run.routineName).toBe("Proactive: teammate message");
+      expect(chat.rows).toEqual([]);
+      expect(chat.unread.filter((thread) => thread === "main")).toHaveLength(1); // the request, once
+      expect(chat.rang).toEqual([]);
+      // the server says which writer wrote and took back the row, never its words
+      expect(lines[0]).toMatch(/^\[routine-row\] run append run=\S+ kind=wake:peer status=waiting waits=yes$/);
+      expect(lines.at(-1)).toMatch(/^\[routine-row\] run remove run=\S+ kind=wake:peer status=completed waits=no$/);
+      expect(lines.join("\n")).not.toMatch(/Nothing/);
+    });
+
+    it(`the same wake on time without a request writes nothing at all: ${JSON.stringify(said)}`, async () => {
+      const { chat, lines } = await peerWake(said, { asks: false });
+      expect([chat.rows, chat.unread, chat.rang, lines]).toEqual([[], [], [], []]);
+    });
+  }
+
+  it("a card answered, dismissed or expired in the run's task is no request waiting on the person", () => {
+    expect(openCardIn([{ card: { requestId: "a", answered: "allow" } }, { card: { requestId: "b", expired: true } }, { card: { requestId: "c", dismissed: true } }] as never)).toBe(false);
+    expect(openCardIn([{ card: { requestId: "d" } }] as never)).toBe(true);
+  });
+});
+

@@ -149,7 +149,7 @@ import { createCwActionPasses } from "./widgets/cw-widget-actions.ts";
 import { cwActionInstruction, parseCwAction } from "../shared/cw-widgets/actions.ts";
 import { cwRecordLink, cwSite } from "../shared/cw-widgets/links.ts";
 import { BOT_QUESTION_SWEEP } from "./turns/bot-to-bot.ts";
-import { attentionCard, mirrorBackgroundReply, mirrorLateRunReply, relayPersonAttention, type AttentionRelayDeps } from "./turns/person-attention-relay.ts";
+import { attentionCard, mirrorBackgroundReply, mirrorLateRunReply, openCardIn, relayPersonAttention, type AttentionRelayDeps } from "./turns/person-attention-relay.ts";
 import { personAttention } from "../shared/person-attention.ts";
 import { createApprovalModeSupport } from "./capabilities/harness-capabilities.ts";
 import { threadRefUrl } from "../src/lib/thread-refs.ts";
@@ -775,7 +775,7 @@ import { createSavedSteps, savedStepsEnabled } from "./saved-steps/saved-steps.t
 import { redactSecretsInText } from "./redact.ts";
 import { routineRunCard, routineRunFallbackText } from "./routines/routine-run-card.ts";
 
-import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
+import { routineReportOutcome, routineRunMayWriteRow, routineRunReportable } from "./routines/routine-report.ts";
 import { createHeadlessTaskRunner } from "./headless-task-runner.ts";
 import * as vps from "./computer/vps-computer.ts";
 import { runAsRefusal } from "./routines/routine-run-as.ts";
@@ -18288,10 +18288,15 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
   // #3581: a run's late answer goes onto the run's own card (the card write
   // of syncRoutineRunToSource, with that answer as its report)
   runCard: createRoutineRunLateCard(getLeafHost),
-  runPostsResults: (runThreadId) => {
+  // #3990: the one row gate for a run's late answer
+  runRowAllowed: (runThreadId, late, existing) => {
     const run = routines?.runForThread(runThreadId);
-    return Boolean(run && routineEffectivePostResults(run));
+    return Boolean(run && routineRunMayWriteRow({
+      status: "completed", quiet: late.quiet, ...(late.problem ? { problems: "late" } : {}),
+      postResults: routineEffectivePostResults(run), startedBy: run.startedBy, byStreak: routineReportsByStreak(run), existing,
+    }));
   },
+  rowLog: (line) => console.info(line),
   relayVia: (botId, threadId) => relayViaOf(botId, threadId),
   // #2915: the mirror reads the chat's newest rows, never its whole path
   recent: (threadId, limit) => store.messagesTail(threadId, limit).messages,
@@ -19364,7 +19369,8 @@ function routineSourceThread(run: RoutineRun): string | null {
 
 /** An approval or question card in a run's own task waits on the person. */
 function routineRunNeedsPerson(run: RoutineRun): boolean {
-  return Boolean(run.threadId && store.messagesFor(run.threadId).some((message) => message.card && !message.card.answered));
+  // #3990: a card still open (never one answered, dismissed or expired)
+  return Boolean(run.threadId && openCardIn(store.messagesFor(run.threadId)));
 }
 
 /** Whether this run's routine posts its completed results in the conversation

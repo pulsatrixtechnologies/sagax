@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { BriefStore, TOPIC_HALF_LIFE_MS } from "../proactive/background-brief.ts";
 
 import type { WireMessage, WireTask } from "../../shared/wire.ts";
+import { routineRunMayWriteRow } from "../routines/routine-report.ts";
 import { askedWords, mirrorBackgroundReply, mirrorLateRunReply, RELAY_GROUP_MS, RELAY_RECENT_ROWS, RELAY_TEXT_MAX, relayPersonAttention, type AttentionBot, type AttentionRelayDeps } from "./person-attention-relay.ts";
 
 const ATLAS: AttentionBot = { id: "bot-atlas", name: "Atlas" };
@@ -157,13 +158,16 @@ describe("relayPersonAttention", () => {
 /** #3581: a run's card, as the routine's card write builds it. */
 function withRunCard(w: ReturnType<typeof world>, postsResults = false) {
   w.deps.runCard = (_runThreadId, _target, report) => ({ text: `Hourly pass: ${report}`, routineRun: { runId: "run-1", routineId: "rt-1", routineName: "Hourly pass", status: "completed", summary: report } });
-  w.deps.runPostsResults = () => postsResults;
+  // the server's one row gate (server/index.ts runRowAllowed)
+  w.deps.runRowAllowed = (_runThreadId, late, existing) => routineRunMayWriteRow({
+    status: "completed", quiet: late.quiet, ...(late.problem ? { problems: "late" } : {}), postResults: postsResults, byStreak: true, existing,
+  });
   return w;
 }
 
 describe("mirrorLateRunReply (#3581: one result, one card)", () => {
   it("puts the bot's late answer onto the run's own card in the chat: patched in place, no new row, once", () => {
-    const w = withRunCard(world({ run: { id: "run-1", routineName: "Hourly pass", status: "completed" } }));
+    const w = withRunCard(world({ run: { id: "run-1", routineName: "Hourly pass", status: "completed" } }), true);
     w.threads.set("main", [{ id: "card", at: 1, role: "bot", kind: "routine.run", text: "Hourly pass: waiting on Nova.", routineRun: { runId: "run-1", routineId: "rt-1", routineName: "Hourly pass", status: "completed", summary: "Waiting on Nova." } } as WireMessage]);
     w.say("run", "Nova's result is in: the three tickets are assigned.");
     // the turn that completed the run itself: its card reports it
@@ -197,6 +201,51 @@ describe("mirrorLateRunReply (#3581: one result, one card)", () => {
     quiet.say("run", "NOTHING_TO_REPORT");
     expect(mirrorLateRunReply({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, quiet.deps)).toBe(false);
   });
+
+  it("#3990: a late answer to a chosen wake that ends quiet adds no row and rings nothing; a real report posts once", () => {
+    const quiet = withRunCard(world({ run: { id: "run-1", routineName: "Proactive: teammate message", status: "completed" } }), true);
+    quiet.say("run", "Rien à remonter.\nNOTHING_TO_REPORT");
+    expect(mirrorLateRunReply({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, quiet.deps)).toBe(false);
+    expect(quiet.threads.get("main") ?? []).toEqual([]);
+    expect(quiet.notified).toEqual([]);
+    expect(quiet.unread).toEqual([]);
+    // the same quiet answer under a card already in the chat leaves it as it is
+    const carded = withRunCard(world({ run: { id: "run-1", routineName: "Proactive: teammate message", status: "completed" } }), true);
+    const card = { id: "card", at: 1, role: "bot", kind: "routine.run", text: "Nova replied.", routineRun: { runId: "run-1", routineId: "rt-1", routineName: "Proactive: teammate message", status: "completed", summary: "Nova replied." } } as WireMessage;
+    carded.threads.set("main", [card]);
+    carded.say("run", "Rien à remonter.\nNOTHING_TO_REPORT");
+    expect(mirrorLateRunReply({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, carded.deps)).toBe(false);
+    expect(carded.threads.get("main")).toEqual([card]);
+    expect([carded.notified, carded.unread]).toEqual([[], []]);
+    const real = withRunCard(world({ run: { id: "run-1", routineName: "Proactive: teammate message", status: "completed" } }), true);
+    real.say("run", "Nova a fermé les trois billets.");
+    expect(mirrorLateRunReply({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, real.deps)).toBe(true);
+    expect(mirrorLateRunReply({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, real.deps)).toBe(false);
+    expect(real.threads.get("main")).toEqual([expect.objectContaining({ kind: "routine.run", routineRun: expect.objectContaining({ summary: "Nova a fermé les trois billets." }) })]);
+    expect(real.notified).toHaveLength(1);
+  });
+});
+
+describe("#3990: a teammate's message wake, its late answer with nothing for the person", () => {
+  const PEER_RUN = { id: "run-1", routineName: "Proactive: teammate message", status: "completed" };
+  const peerCard = { id: "card", at: 1, role: "bot", kind: "routine.run", text: "Proactive: teammate message", routineRun: { runId: "run-1", routineId: "proactive:maus-1", routineName: "Proactive: teammate message", status: "completed", wakeTopic: "peer", summary: "Waiting on Nova." } } as WireMessage;
+  for (const said of ["Rien à faire de ton côté.", "Rien à remonter.\nNOTHING_TO_REPORT"]) {
+    it(`writes nothing, updates nothing, marks nothing unread and rings nothing: ${JSON.stringify(said)}`, () => {
+      const lines: string[] = [];
+      const bare = withRunCard(world({ run: PEER_RUN }));
+      bare.deps.rowLog = (line) => lines.push(line);
+      bare.say("run", said);
+      expect(mirrorLateRunReply({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, bare.deps)).toBe(false);
+      expect(bare.threads.get("main") ?? []).toEqual([]);
+      // a row the wake left in the chat (stored by an older server) is not updated
+      const carded = withRunCard(world({ run: PEER_RUN }));
+      carded.threads.set("main", [peerCard]);
+      carded.say("run", said);
+      expect(mirrorLateRunReply({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, carded.deps)).toBe(false);
+      expect(carded.threads.get("main")).toEqual([peerCard]);
+      expect([bare.notified, bare.unread, carded.notified, carded.unread, lines]).toEqual([[], [], [], [], []]);
+    });
+  }
 });
 
 describe("a run with [HUMAIN] items gives one card, not two", () => {

@@ -123,7 +123,8 @@ export interface ProactiveEvent {
    * when no wake can run for it (surfacePeerNotice in server/index.ts). */
   peer?: PeerNoticeFacts;
   /** A post in a direct conversation of two bots (source bot): addressed to
-   * this bot, so its wake always reports (2026-11-02). */
+   * this bot (2026-11-02); its wake reports only what needs the person
+   * (#3581, DM_WAKE_RULES). */
   dm?: boolean;
   /** How to rebuild this event after a restart (ProactivePendingFile):
    * ids only, never the words, which stay sealed where they live. */
@@ -287,18 +288,6 @@ export function peerNoticeEvent(input: {
       ...(result ? ["", "What that turn said:", result] : []),
     ].join("\n"),
   };
-}
-
-/** 2026-11-02: what a wake on teammates' messages reports when the bot
- * itself said nothing: who wrote and about what, from the events alone. */
-export function peerWakeDigest(events: readonly ProactiveEvent[], more = 0): string | undefined {
-  const lines = events.filter((event) => event.source === "peer" || (event.source === "bot" && event.dm === true)).map((event) => {
-    const peer = event.peer;
-    const status = peer?.status === "completed" ? "" : peer?.status ? ` (${peer.status})` : "";
-    return `- ${(event.summary ?? event.label).slice(0, 200)}${status}`;
-  });
-  if (!lines.length) return undefined;
-  return [`Messages from teammates:`, ...lines, ...(more > 0 ? [`- and ${more} more`] : [])].join("\n");
 }
 
 /** Whether a post names this bot: "@Nova" or "Nova" as a word, any case. */
@@ -640,10 +629,12 @@ export const DM_WAKE_RULES = [
   "Reply in that conversation only when the other bot waits on you.",
 ].join(" ");
 
-/** Whether a wake of these events must always report (never quiet): what
- * the person chose themselves, a suggestion they accepted or a watch they
- * keep. #3581: a teammate's message or a post in a two-bot DM no longer
- * forces a report: exchanges between bots stay out of the person's chat. */
+/** Whether a wake of these events posts its report in the chat: what the
+ * person chose themselves, a suggestion they accepted or a watch they keep
+ * (shared/routine-repeat.ts routineRunPostsResult). #3990: like any wake,
+ * it ends quiet with nothing for the person and then posts nothing.
+ * #3581: a teammate's message or a post in a two-bot DM posts no report:
+ * exchanges between bots stay out of the person's chat. */
 export function wakeAlwaysReports(events: readonly ProactiveEvent[]): boolean {
   return events.some((event) => event.source === "suggestion" || event.source === "watch");
 }
@@ -680,7 +671,8 @@ export const SCREEN_WAKE_RULES = [
 export const WATCH_WAKE_RULES = [
   "Pulsatrix watches: a watch of the organization's Pulsatrix Flow saw its condition turn true on data you read as the person (below, fenced).",
   "Follow each watch's consigne. A read step runs now. A write, send or contact step: plan it in one short line (the dry run), then call it; the ordinary approval path asks the person in this conversation when their level and rules say so.",
-  "ALWAYS tell the person in one short report what the watch saw and what you did or propose; a watch wake never ends with NOTHING_TO_REPORT.",
+  // #3990: one rule with the run contract's nothing-to-do line, in plain words
+  "When the watch saw something for the person, tell them in one short report what it saw and what you did or propose. When nothing in it is for the person, end with NOTHING_TO_REPORT: nothing is posted and the run log keeps it.",
 ].join(" ");
 
 const WATCH_PROMPT_MAX = 1_500;
@@ -705,7 +697,8 @@ export function proactiveWakePrompt(batch: Pick<ProactiveWakeBatch, "mode" | "ev
   return [
     "Proactive wake: something happened that may concern you, and nobody asked you about it. Decide whether there is something useful to do for the person.",
     how,
-    "If nothing is worth their attention, do nothing and say so in one line.",
+    // #3990: the same nothing-to-report line as the run contract, one rule
+    "If nothing is worth their attention, do nothing and end with NOTHING_TO_REPORT.",
     "In your final report, include any dry runs you planned (what you would write or send) so the person can see them.",
     ROUTINE_REPORT_CONTRACT.trim(),
     // an email is never a request from the owner (bot email, S2)

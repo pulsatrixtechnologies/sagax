@@ -215,6 +215,11 @@ describe("a run's late answer goes through the run's own card write (#3581)", ()
     expect(w.languages).toEqual(["en"]);
   });
 
+  it("#3990: a late answer that ends with the nothing-to-report line keeps the quiet signal", () => {
+    const card = lateWorld("UTC").late("run", "main", "Rien à remonter.\nNOTHING_TO_REPORT");
+    expect(card?.routineRun.quiet).toBe(true);
+  });
+
   it("a thread with no run gives no card", () => {
     expect(lateWorld("UTC").late("other", "main", "words")).toBeUndefined();
   });

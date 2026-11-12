@@ -26,7 +26,7 @@
 import { personAttention, personAttentionText, type PersonAttention, type PersonAttentionCard, type RunStatusNote } from "../../shared/person-attention.ts";
 import type { WireMessage, WireTask } from "../../shared/wire.ts";
 import { withoutRoutineMarkers } from "../../shared/routine-result.ts";
-import { chatPlace } from "../../shared/chat-relevance.ts";
+import { routineReportOutcome, routineRowLogLine } from "../routines/routine-report.ts";
 import { openedByOwnBot } from "./bot-to-bot.ts";
 
 export interface AttentionBot {
@@ -61,10 +61,14 @@ export interface AttentionRelayDeps<B extends AttentionBot> {
    * for the conversation `target`, with `report` as its report: a run's
    * late answer goes onto its own card. */
   runCard?(runThreadId: string, target: string, report: string): Pick<WireMessage, "text" | "routineRun"> | undefined;
-  /** #3581: whether that run's routine posts its results in the
-   * conversation (a run with no card in the chat posts its late answer only
-   * then, as any result). */
-  runPostsResults?(runThreadId: string): boolean;
+  /** #3990: the one row gate (server/routines/routine-report.ts
+   * routineRunMayWriteRow) for that run's late answer: whether it may put
+   * the run's row in the conversation, or update the one it has. `quiet`:
+   * the answer ends with the nothing-to-report line; `problem`: it ends on a
+   * failed or partial status. */
+  runRowAllowed?(runThreadId: string, late: { quiet: boolean; problem: boolean }, existing: boolean): boolean;
+  /** #3990: one log line per run row written or updated. */
+  rowLog?(line: string): void;
   /** #2901: why this thread is out of the person's sight (MCP send_prompt,
    * routine, proactive wake, teammate work); undefined for their own,
    * confidential or parallel threads. */
@@ -223,6 +227,7 @@ export function relayPersonAttention<B extends AttentionBot>(
   if (runCard) {
     if (runCard.attention) return { posted: false, reason: "already" };
     deps.patch(target, runCard.id, { attention: card });
+    deps.rowLog?.(routineRowLogLine("attention", "patch", runCard.routineRun, true));
     if (!ring) return { posted: true, threadId: target, card, onRunCard: true };
     deps.markUnread(bot.id, target);
     deps.notify(bot, target, card.kind === "question" ? `${bot.name} has a question for you` : `${bot.name} needs you`,
@@ -268,11 +273,13 @@ export function attentionCard<B extends AttentionBot>(
  * there (a teammate's result resumed it after the run closed) is the run's
  * last word. #3581: one result, one card. It goes onto the run's own card
  * in the conversation (the card's report becomes this answer, patched in
- * place, no new row). A run with no card there posts it as the rule says for
- * any routine result (shared/chat-relevance.ts): a card when the routine
- * posts its results, or when the answer is a problem; otherwise it stays in
- * the run's task, listed in the routine's runs. False when nothing was
- * written. */
+ * place, no new row). #3990: whether the row may be written or updated is
+ * the one row gate (routineRunMayWriteRow, through `runRowAllowed`): a
+ * result the routine posts, a run the person started. A wake on a
+ * teammate's message whose late answer has nothing for the person (the
+ * nothing-to-report line or plain words) writes nothing, updates nothing,
+ * marks nothing unread and rings nothing; the answer stays in the run's
+ * task, listed in the routine's runs. False when nothing was written. */
 export function mirrorLateRunReply<B extends AttentionBot>(
   input: AttentionTurn<B>,
   deps: AttentionRelayDeps<B>,
@@ -291,16 +298,16 @@ export function mirrorLateRunReply<B extends AttentionBot>(
   if (!target || target === threadId) return false;
   const rows = deps.messages(target);
   if (rows.some((message) => message.attention?.sourceMessageId === last.id || message.lateRunReplyOf === last.id)) return false;
+  const existing = rows.findLast((message) => message.kind === "routine.run" && message.routineRun?.runId === run.id);
+  // #3990: the one row gate, whether the run's row is there or not
+  const late = { quiet: routineReportOutcome(text).quiet, problem: Boolean(runStatus) };
+  if (deps.runRowAllowed?.(threadId, late, Boolean(existing)) !== true) return false;
   const card = deps.runCard?.(threadId, target, words);
   if (!card?.routineRun) return false;
-  const existing = rows.findLast((message) => message.kind === "routine.run" && message.routineRun?.runId === run.id);
-  const late = { ...card, lateRunReplyOf: last.id, ...(runStatus ? { runStatus } : {}) };
-  if (existing) deps.patch(target, existing.id, late);
-  else {
-    const signal = runStatus ? "problem" : "result";
-    if (chatPlace("routine", signal, { postsResults: deps.runPostsResults?.(threadId) === true }) !== "card") return false;
-    deps.append(target, { role: "bot", kind: "routine.run", ...late });
-  }
+  const row = { ...card, lateRunReplyOf: last.id, ...(runStatus ? { runStatus } : {}) };
+  deps.rowLog?.(routineRowLogLine("late", existing ? "patch" : "append", card.routineRun, false));
+  if (existing) deps.patch(target, existing.id, row);
+  else deps.append(target, { role: "bot", kind: "routine.run", ...row });
   deps.markUnread(bot.id, target);
   deps.notify(bot, target, `${bot.name}: ${run.routineName}`, words.slice(0, 300));
   return true;

@@ -157,27 +157,6 @@ describe("the bot's own run status (2026-11-01)", () => {
   });
 });
 
-describe("a wake on teammates' messages (#3581: exchanges between bots stay out of the chat)", async () => {
-  const { peerWakeOutcome } = await import("./routines.ts");
-  const { routineReportOutcome } = await import("./routine-report.ts");
-
-  it("ends quiet with NOTHING_TO_REPORT: nothing posts", () => {
-    const peer = { proactive: { mode: "proactive" as const, hops: 1, sources: ["peer"], peerDigest: "Messages from teammates:\n- Bot B: Urgent 100200" } };
-    expect(peerWakeOutcome(peer, routineReportOutcome("Handled Bot B's request.\n\nNOTHING_TO_REPORT"))).toMatchObject({ quiet: true });
-    expect(peerWakeOutcome(peer, routineReportOutcome("NOTHING_TO_REPORT")).quiet).toBe(true);
-    const dm = { proactive: { mode: "proactive" as const, hops: 1, sources: ["bot"], peerDigest: "Messages from teammates:\n- Post by Bot B" } };
-    expect(peerWakeOutcome(dm, routineReportOutcome("NOTHING_TO_REPORT")).quiet).toBe(true);
-  });
-
-  it("what the person chose (a watch, an accepted suggestion) still always reports", () => {
-    const watch = { proactive: { mode: "proactive" as const, hops: 0, sources: ["watch"], alwaysReport: true as const } };
-    expect(peerWakeOutcome(watch, routineReportOutcome("The queue is back under 10.\nNOTHING_TO_REPORT"))).toMatchObject({ quiet: false, report: "The queue is back under 10." });
-    const mail = { proactive: { mode: "proactive" as const, hops: 0, sources: ["mail"] } };
-    expect(peerWakeOutcome(mail, routineReportOutcome("NOTHING_TO_REPORT")).quiet).toBe(true);
-    expect(peerWakeOutcome({}, routineReportOutcome("NOTHING_TO_REPORT")).quiet).toBe(true);
-  });
-});
-
 describe("items only the person can do (2026-11-05)", () => {
   it("are never quiet and always post, whatever postResults says", () => {
     const outcome = routineReportOutcome("- [HUMAIN] **100201**: decide which client it belongs to.\nNOTHING_TO_REPORT");

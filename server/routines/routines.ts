@@ -21,7 +21,7 @@ import type { RuntimeEvent } from "../contracts.ts";
 import { OwnedFile } from "../atomic.ts";
 import { saveSoon } from "../save-batch.ts";
 import { redactSecretsInText } from "../redact.ts";
-import { flowRunBlockedReason, routineProblemStreakNote, routineReportOutcome, routineRepeatingRule, type RoutineReportOutcome } from "./routine-report.ts";
+import { flowRunBlockedReason, routineProblemStreakNote, routineReportOutcome, routineRepeatingRule } from "./routine-report.ts";
 import { ROUTINE_PROBLEM_STREAK_TOLD, routineProblemToldAt, routineReportsByStreak } from "../../shared/routine-repeat.ts";
 import { clipReadable, failureDetail } from "../../shared/routine-result.ts";
 import { stopCause } from "../drivers/engine-errors.ts";
@@ -438,17 +438,6 @@ export interface RoutineRunStanding {
    * until a later time), this one included. */
   queuedForBot?: number;
   reason?: string;
-}
-
-/** A wake on what the person chose (an accepted suggestion, a watch they
- * keep: alwaysReport, wakeAlwaysReports) always reports: what the bot wrote
- * without the marker, else the events' digest. #3581: a wake on teammates'
- * messages or a two-bot DM is quiet like any other when it ends with nothing
- * for the person (2026-11-02 forced it to report). */
-export function peerWakeOutcome(run: Pick<RoutineRun, "proactive">, outcome: RoutineReportOutcome): RoutineReportOutcome {
-  if (!outcome.quiet || run.proactive?.alwaysReport !== true) return outcome;
-  const report = outcome.report || run.proactive!.peerDigest || "A teammate sent a message; its thread has the details.";
-  return { ...outcome, quiet: false, report };
 }
 
 /** The previous report handed to the next run of a continuity routine. */
@@ -4234,9 +4223,12 @@ export class RoutineManager {
   }
 
   /** Whether the completed run has anything for the person (2026-10-22):
-   * a quiet run keeps its note in the logs, without the marker. */
+   * a quiet run keeps its note in the logs, without the marker. #3990: the
+   * same for every run, a wake the person chose (alwaysReport) included: a
+   * watch they keep is told when there is something, never each time there
+   * is nothing. */
   private settleReport(run: RoutineRun) {
-    const outcome = peerWakeOutcome(run, routineReportOutcome(run.output));
+    const outcome = routineReportOutcome(run.output);
     run.output = outcome.report || undefined;
     if (outcome.quiet) run.quiet = true;
     else delete run.quiet;

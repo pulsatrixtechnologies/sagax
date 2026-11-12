@@ -1,6 +1,7 @@
 // @ts-nocheck
 /** syncRoutineRunToSource (#1388). Pure move from server/index.ts. */
 import { wakeTopicOf } from "../routines/routine-run-card.ts";
+import { routineReportOutcome, routineRowLogLine, routineRunMayWriteRow } from "../routines/routine-report.ts";
 import type { RoutineRun } from "../routines/routines.ts";
 import { textLanguage } from "../../shared/looks-french.ts";
 import { clipReadable, withoutRoutineMarkers } from "../../shared/routine-result.ts";
@@ -13,6 +14,11 @@ import { ROUTINE_PROBLEM_STREAK_TOLD, routineReportsByStreak } from "../../share
 const toldAt = (host: Host, run: RoutineRun): number => host.routines?.problemToldAt?.(run) ?? ROUTINE_PROBLEM_STREAK_TOLD;
 import { redactSecretsInText } from "../redact.ts";
 export type Host = Record<string, any>;
+
+/** #3990: one log line per routine run row written, updated or taken back. */
+function rowLog(...args: Parameters<typeof routineRowLogLine>): void {
+  console.info(routineRowLogLine(...args));
+}
 
 /** #2694: the person's feedback on this run's attention cards (thumbs-down,
  * "less", "never"), read as on the relayed card: muted, quiet or normal. */
@@ -50,14 +56,17 @@ function routineRunCardRow(host: Host, run: RoutineRun, sourceThreadId: string, 
 
 /** #3581: a run's late answer (a teammate's reply after the run ended) goes
  * onto the run's own card through the same card write, with that answer as
- * its report. The answer is what the run says now, even after a quiet end. */
+ * its report. The answer is what the run says now, even after a quiet end.
+ * #3990: an answer that ends with the nothing-to-report line stays quiet, so
+ * its card is never a report for the person. */
 export function createRoutineRunLateCard(getHost: () => Host): (runThreadId: string, target: string, report: string) => { text: string; routineRun: any } | undefined {
   return (runThreadId, target, report) => {
     const host = getHost();
     const run = host.routines?.runForThread(runThreadId);
     if (!run) return undefined;
     const existing = host.store.messagesFor(target)?.findLast?.((message) => message.kind === "routine.run" && message.routineRun?.runId === run.id);
-    return routineRunCardRow(host, { ...run, quiet: undefined }, target, report, existing, report);
+    const quiet = routineReportOutcome(report).quiet ? true : undefined;
+    return routineRunCardRow(host, { ...run, quiet }, target, report, existing, report);
   };
 }
 
@@ -166,6 +175,13 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   // #3695, #3990: every other run that is not the person's reports by its
   // routine's streak, whatever starts the routine
   const byStreak = FINISHED.has(run.status) && routineReportsByStreak(run) && !postsResult;
+  /** #3990: whether this run may put its row in the conversation now, or
+   * keep the one it has: the one gate (routineRunMayWriteRow). Its works
+   * again is the streak card's to tell, so its own row is read without it. */
+  const mayWrite = (existing: boolean, streakTells: boolean): boolean => routineRunMayWriteRow({
+    ...reportableRun, recovered: undefined, attention: Boolean(attentionFound), byStreak: routineReportsByStreak(run),
+    streakTells, autoPaused: Boolean(run.autoPaused), existing,
+  });
   // A bot run's task stays hidden (Automations, Open run) from its start.
   // 2026-10-28: a webhook's run too (it used to take the bot's live chat;
   // now it runs in its own task and reports into the one conversation).
@@ -199,7 +215,7 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
     // has items only the person can do or paused its routine.
     const streakOnly = byStreak && !attentionFound && !run.autoPaused;
     const tells = streakOnly ? problemRun(run) && (run.problemRepeat?.count ?? 1) === toldAt(host, run) : !run.problemRepeat || attentionFound;
-    if (reportable && tells && own?.routineRunId === run.id) {
+    if (reportable && tells && mayWrite(false, streakOnly && tells) && own?.routineRunId === run.id) {
       host.store.patchTask(run.botId, own.threadId, { routineRunId: undefined, ...(reportableUnread ? { unread: true } : {}) });
     }
     return null;
@@ -215,7 +231,7 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   // that paused itself are told as always; every other finished run writes
   // nothing, whatever starts its routine, except the streak's one card.
   const streak = streakSay(host, run, sourceThreadId);
-  const exempt = !byStreak || Boolean(existing) || Boolean(attentionFound) || Boolean(run.autoPaused);
+  const waits = run.status === "waiting" && reportableRun.needsPerson;
   if (streak && (streak.say === "count" || streak.say === "recovered")) {
     const anchorCard = streak.say === "count"
       ? { ...streak.anchor.routineRun, repeat: { ...streak.anchor.routineRun.repeat, ...run.problemRepeat, lastAt: run.finishedAt ?? run.problemRepeat!.since, streak: true } }
@@ -223,15 +239,20 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
     const anchorLanguage = textLanguage(`${anchorCard.summary ?? ""}\n${run.routineName ?? ""}`)
       ?? (run.runAs ? host.languageOfPerson?.(run.runAs) : undefined);
     host.store.patchMessage(sourceThreadId, streak.anchor.id, { text: host.routineRunFallbackText(anchorCard, anchorLanguage, zone), routineRun: anchorCard });
-    if (!exempt) return sourceThreadId;
-    // a run told on its own (its card below) says its state there; the
-    // streak's card already says the works again
-    if (streak.say === "recovered") run = { ...run, recovered: undefined };
-  } else if (streak && !exempt && streak.say === "out") {
+    rowLog("streak", "patch", anchorCard, false);
+  }
+  // #3990: the one gate. A row this run put there for a request that no
+  // longer waits, on a run that ended with nothing for the person (a wake on
+  // a teammate's message whose approval was answered), is taken back: the
+  // run log keeps the run.
+  const ownIsAnchor = Boolean(existing && streak?.anchor && streak.anchor.id === existing.id);
+  if (!mayWrite(Boolean(existing), streak?.say === "tell" || ownIsAnchor)) {
+    if (existing && FINISHED.has(run.status) && host.store.removeMessage?.(sourceThreadId, existing.id)) rowLog("run", "remove", { ...existing.routineRun, status: run.status }, false);
     return sourceThreadId;
   }
-  // Never posted and nothing for the person: the chat is left alone.
-  if (!existing && !reportable) return sourceThreadId;
+  // a run told on its own (its card below) says its state there; the
+  // streak's card already says the works again
+  if (streak?.say === "recovered" && !ownIsAnchor) run = { ...run, recovered: undefined };
   const row = routineRunCardRow(host, run, sourceThreadId, host.routineFullReport(run), existing, run.output);
   // #3695: the streak's one summary card, with its count and since when
   const card = streak?.say === "tell" ? streakCard(host, run, row.routineRun) : row.routineRun;
@@ -245,6 +266,7 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
     : undefined;
   const attentionNew = Boolean(attention && !existing?.attention);
   let cardId: string | undefined = existing?.id;
+  rowLog("run", existing ? "patch" : "append", card, waits || Boolean(attention));
   if (existing) {
     host.store.patchMessage(sourceThreadId, existing.id, { text, routineRun: card, ...(attention ? { attention } : {}) });
   } else {

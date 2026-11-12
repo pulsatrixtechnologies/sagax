@@ -30,14 +30,18 @@ result posts when the routine posts its results or a person started the run;
 a wait, a failure, a block, a result with problems, items for the person and
 "works again" always do). A wake on teammates' messages or on a post in a
 two-bot DM reports only what needs the person and may end with
-`NOTHING_TO_REPORT` (`PEER_WAKE_RULES`, `DM_WAKE_RULES`); only a wake on what
+`NOTHING_TO_REPORT` (`PEER_WAKE_RULES`, `DM_WAKE_RULES`); a wake on what
 the person chose (a watch, an accepted suggestion: `wakeAlwaysReports`)
-always reports. A run's late answer goes onto the run's own card
-(`mirrorLateRunReply` patches it in place), or posts as any result when the
-run has no card in the chat. A failed or stalled turn of an AI client's
-conversation starts no Primary Bot report (`reportIncident`; the problem log
-keeps it). Tests: `shared/chat-relevance.test.ts`,
-`server/routines/routine-report.test.ts`,
+posts its report, and like any wake ends quiet with nothing for the person
+(#3990: `WATCH_WAKE_RULES` says so; nothing is forced into a report). A
+run's late answer goes onto the run's own card (`mirrorLateRunReply` patches
+it in place), or posts as any result when the run has no card in the chat,
+through the same row gate (below); a late answer with nothing for the person
+posts nothing and rings nothing. A failed or stalled turn of an AI client's
+conversation starts no
+Primary Bot report (`reportIncident`; the problem log keeps it). Tests:
+`shared/chat-relevance.test.ts`, `server/routines/routine-report.test.ts`,
+`server/turns/person-attention-relay.test.ts`,
 `server/index-leaves/syncRoutineRunToSource.test.ts`,
 `server/index-leaves/reportIncident.test.ts`,
 `server/routes/quiet-mode-retired.test.ts`,
@@ -98,9 +102,11 @@ teammate's message, a mail or a calendar event). A finished run writes
 nothing in the person's chat. What reaches it: a request that waits on the
 person (the pinned row), items only they can do, a run they started, a
 proactive wake they chose to hear (`alwaysReport`: an accepted suggestion, a
-watch, with its feedback strip), the result of a routine they set to post its
-results when it runs at most once a day, and the one summary card of a
-problem (`routineRunPostsResult` and `routineReportsByStreak` in
+watch, with its feedback strip) when it has something for them (a wake
+that ends with `NOTHING_TO_REPORT` posts nothing and rings nothing, whatever
+its kind), the result of a routine they set to post its results when it runs
+at most once a day, and the one summary card of a problem
+(`routineRunPostsResult` and `routineReportsByStreak` in
 `shared/routine-repeat.ts`).
 
 When the summary is told (`routineProblemToldAt`): at the third run in a row
@@ -123,7 +129,30 @@ ends with `NOTHING_TO_REPORT`, never a partial status.
 
 The chat (desktop `MessagesList`, a group's `Transcript`, receipts) leaves
 out the rows of runs stored before (`routineRunRowOutOfChat`); they stay in
-the routine's run log. Tests: `shared/routine-repeat.test.ts`,
+the routine's run log.
+
+One row gate (#3990): every writer of a run's row asks
+`routineRunMayWriteRow` (`server/routines/routine-report.ts`) whether the
+run may put a row in the conversation now, or keep the one it has: the run's
+card write (`syncRoutineRunToSource`), its late answer
+(`mirrorLateRunReply`) and the items put on its row
+(`relayPersonAttention`). Yes for a request that waits on the person, items
+only they can do, a result the person set the routine to post, a run they
+started, a team goal and the streak's one summary; a live run keeps the row
+its request put there until it settles. A run that ends with nothing for the
+person takes that row back (a wake on a teammate's message whose approval
+was answered), and writes nothing on time or late, with or without
+`NOTHING_TO_REPORT`. A request waits only on a card still open
+(`openCardIn`): an answered, dismissed or expired card does not. Each row
+written, updated or taken back logs one line, `[routine-row] <writer>
+<action> run=<id> kind=<wake:topic|routine> status=<status> waits=<yes|no>`,
+never its words.
+
+A wake's row is drawn only when it carries
+`forPerson` (written for a wake's report since the forced report was
+removed) or items for the person; a wake's row stored before cannot tell
+its forced "nothing for you" words from a report, so it leaves the chat.
+Tests: `shared/routine-repeat.test.ts`,
 `server/routines/routine-quiet-contract.test.ts`,
 `server/routines/routine-reliability.test.ts`.
 

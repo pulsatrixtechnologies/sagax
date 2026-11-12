@@ -260,3 +260,53 @@ export function routineRunReportable(run: RoutineRunReportFacts): boolean {
   const facts = { postsResults: run.postResults === true, startedByPerson: run.startedBy === "person" };
   return chatPlace("routine", routineRunSignal(run), facts) === "card";
 }
+
+/** The facts the one row gate reads (routineRunMayWriteRow). */
+export interface RoutineRunRowFacts extends RoutineRunReportFacts {
+  /** The run reports by its routine's streak (shared/routine-repeat.ts
+   * routineReportsByStreak): every run but one a person started and a team
+   * goal's run. */
+  byStreak?: boolean;
+  /** This run is the one of its streak that tells the person (or its row is
+   * already the streak's summary). */
+  streakTells?: boolean;
+  /** The run paused its routine. */
+  autoPaused?: boolean;
+  /** The run already has its row in this conversation. */
+  existing?: boolean;
+}
+
+const LIVE_RUN = new Set<string>(["queued", "running", "waiting"]);
+
+/** #3990: the one gate every writer of a routine run's row goes through
+ * (syncRoutineRunToSource, a run's late answer, items for the person put on
+ * a run's row): whether this run may put a row in this conversation now, or
+ * keep and update the one it has. Only what the owner decided reaches the
+ * chat: a request that waits on the person (an approval or a question, items
+ * only they can do), a result the person set that routine to post (a wake
+ * they chose included, when the bot has something for them), a run they
+ * started, a team goal's card, and the streak's one summary (or a routine
+ * that paused itself). A live run keeps the row its request put there until
+ * it settles. Anything else, a wake on a teammate's message that ends with
+ * nothing for the person above all, on time or late, with or without the
+ * nothing-to-report line, writes nothing and keeps nothing. */
+export function routineRunMayWriteRow(run: RoutineRunRowFacts): boolean {
+  const signal = routineRunSignal(run);
+  if (signal === "wait" || run.attention === true) return true;
+  if (!run.byStreak) return routineRunReportable(run);
+  if (LIVE_RUN.has(run.status)) return run.existing === true;
+  if (signal === "result") return run.postResults === true;
+  if (signal === "problem") return run.streakTells === true || run.autoPaused === true;
+  return false;
+}
+
+/** #3990: one log line per routine run row written, updated or taken back,
+ * so a reading of the server names the writer: which writer, the run's wake
+ * topic or routine kind, its status and whether a request waits on the
+ * person. Never its words. */
+export function routineRowLogLine(writer: "run" | "streak" | "late" | "attention", action: "append" | "patch" | "remove", card: {
+  runId?: string; routineId?: string; status?: string; wakeTopic?: string | null;
+} | null | undefined, waits: boolean): string {
+  const kind = card?.wakeTopic ? `wake:${card.wakeTopic}` : card?.routineId?.startsWith("proactive:") ? "wake" : "routine";
+  return `[routine-row] ${writer} ${action} run=${card?.runId ?? "?"} kind=${kind} status=${card?.status ?? "?"} waits=${waits ? "yes" : "no"}`;
+}

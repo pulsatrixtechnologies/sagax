@@ -75,14 +75,18 @@ failed (a restart's cut aside: it is told on its own, once) or blocked; a
 missed or cancelled occurrence neither counts nor ends it. A streak belongs
 to one thing (#4050, `sameStreak`): a routine by its id; a run without a
 routine (a proactive wake, a webhook's or a reach run) by its id, its bot,
-the person it runs as and its wake kind, so one person's runs are never
+the person it runs as and its wake kind (every source the wake gathered),
+so one person's runs are never
 counted, quoted or printed for another and one wake kind never ends another's
 streak. The run that tells is decided once, when it finishes
 (`tellsStreak`: the first of the streak whose count reaches its told count);
 its card, its alert, its incident and its ring all read that, so a sync again
 (marking a run seen, Mark all as read, an upgrade) never tells again, never
 rewrites a works again into a failure and never rolls a count back, and a
-row already the streak's card is left as it is. The run that makes it
+row already the streak's card is left as it is. A problem run that does
+not tell carries `tellsStreak: false`; a run settled before the field
+existed carries neither, and told when its count reached its told count, so
+a streak already told when the server is upgraded is not told again. The run that makes it
 `ROUTINE_PROBLEM_STREAK_TOLD` (3) writes the one summary card
 (`syncRoutineRunToSource`, `repeat.streak`): the routine's name, how many
 runs, since when, and the bot's summary. That run's prompt told the bot it
@@ -164,8 +168,15 @@ started (to its end, a quiet result or a stop included: #4051), a team goal
 and the streak's one summary; a live run keeps the row its request put there
 until it settles. A row the desktop chat would leave out
 (`routineRunRowOutOfChat`) is never written, marked unread or rung for, and
-a row of a run that settled otherwise (cancelled, superseded, missed) is
-taken back: no row keeps a live state. A run that reports by its streak
+no row keeps a live state: a run's row is patched to how it settled when the
+chat draws that state (missed, failed, a run the person started that was
+cancelled), and taken back when it does not (a cancelled or superseded run
+of a routine). A row marks its conversation unread and rings only when every
+desktop in use draws it (`routineRunRowInEveryChat`): the desktop released
+through 0.8.92 leaves out a completed wake row of any topic other than an
+accepted suggestion or a watch, so the answer of a screen offer, a room or
+DM mention, a text or the bot's look at its failed run is written quietly
+there. A run that reports by its streak
 never says works again on its own row: that is the streak card's. A run that ends with nothing for the
 person takes that row back (a wake on a teammate's message whose approval
 was answered), and writes nothing on time or late, with or without

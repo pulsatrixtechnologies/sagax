@@ -1,8 +1,9 @@
 // Proactive wakes through the real server and the fake engine
 // (server/proactive/proactive-wake.ts): a webhook post wakes the bot it was posted to
-// when proactive is on. The wake runs at the bot's approval level, reports
-// into its one conversation, and records dry runs before writes. Off does
-// nothing. One line in the conversation's Events tab per wake.
+// when proactive is on. The wake runs at the bot's approval level, keeps a
+// report that needs nobody in its run log (#3990), and records dry runs
+// before writes. Off does nothing. One line in the conversation's Events
+// tab per wake.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";
@@ -64,8 +65,9 @@ it("a webhook post wakes its bot when proactive is on, and stays quiet when off"
     await control(["wait", "--bot", doer.id, "--task", doerRun.threadId]);
     expect(systemPrompt()).toContain("Approval level of this turn: Auto-accept edits");
     expect(systemPrompt()).toContain("Proactive mode: on");
-    // its report lands in the bot's one conversation
-    await expect.poll(async () => (await messages(doer.threadId)).some((message) => message.kind === "routine.run" && String(message.text).includes(REPORT)), { timeout: 20_000 }).toBe(true);
+    // #3990 (owner decision 2026-11-11): a wake's report that needs nobody
+    // stays in its run log; the bot's one conversation gets no run row
+    expect(doerRun.output).toBe(REPORT);
     // the run read the post inside the fence
     const asked = (await messages(doerRun.threadId)).find((message) => message.role === "user");
     expect(String(asked?.text)).toContain("[UNTRUSTED PROACTIVE EVENT DATA");
@@ -73,6 +75,8 @@ it("a webhook post wakes its bot when proactive is on, and stays quiet when off"
     // one Events line, without the post's words
     await expect.poll(() => eventsLines(doer.threadId), { timeout: 10_000 }).toContain("Proactive wake (proactive): 1 event, webhook post. Webhook post");
     expect(eventsLines(doer.threadId)).not.toContain("Deploy 42");
+    // once the wake has settled and said its Events line: still no run row
+    expect((await messages(doer.threadId)).filter((message) => message.kind === "routine.run" || String(message.text ?? "").includes(REPORT))).toEqual([]);
 
     // legacy follow-rules on PATCH normalizes to proactive
     const legacy = await newBot("Legacy", "follow-rules");

@@ -6,19 +6,19 @@ import { isEngineEmptyFailure } from "../peers/incidents.ts";
 import { withBotNotify } from "../../shared/notification.ts";
 import { retireSafetyHolds } from "../safety/safety-review.ts";
 import { firstSignedOut } from "../engines/engine-refusals.ts";
-import { ROUTINE_PROBLEM_STREAK_TOLD, routineReportsByStreak } from "../../shared/routine-repeat.ts";
+import { routineReportsByStreak } from "../../shared/routine-repeat.ts";
 /** Whether a finished routine run rings "done": a completed result the
  * routine posts, never a quiet one, never one whose items for the person
  * rang "needs you" from its card. #3695, #3990: any other run of a routine
  * (whatever starts it) rings once, with its one summary card, at the run
- * of its streak that tells the person (routines.problemToldAt). A run the
+ * its streak named when it finished (`tellsStreak`, #4050). A run the
  * person started (Run now) rings when it ends, as its card always posts. */
 export function routineRunRingsDone(routineRun: any, host: any): boolean {
   if (host.personAttention(routineRun.output)) return false;
   const result = routineRun.status === "completed" && !routineRun.quiet && !routineRun.problems && !routineRun.problemRepeat;
   if (result && host.routineEffectivePostResults(routineRun)) return true;
   if (routineReportsByStreak(routineRun)) {
-    return routineRun.status === "completed" && Boolean(routineRun.problems) && (routineRun.problemRepeat?.count ?? 1) === (host.routines?.problemToldAt?.(routineRun) ?? ROUTINE_PROBLEM_STREAK_TOLD);
+    return routineRun.status === "completed" && Boolean(routineRun.problems) && routineRun.tellsStreak === true;
   }
   const told = routineRun.status === "completed" && !routineRun.quiet && !routineRun.problemRepeat;
   // a run the person started: its card always posts (routineRunRowOutOfChat), so it rings

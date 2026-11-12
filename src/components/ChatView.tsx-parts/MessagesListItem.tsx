@@ -24,7 +24,7 @@ import { CwActivityWidgets, CwWidgetView, shownCwWidget } from "../cw/CwWidgetVi
 import { OwnerSettled, OwnerWait } from "../OwnerWait";
 import { PagePublishCard } from "../PublishedPages";
 import { OutboundCard } from "../OutboundCard";
-import { AccessCard } from "../AccessCard";
+import { AccessNoticeRow } from "../AccessCard";
 import { SecretRequestCard } from "../SecretRequestCard";
 import { SignInRequestCard } from "../SignInRequestCard";
 import { GithubConnectCard } from "../GithubConnectCard";
@@ -420,9 +420,11 @@ export function MessagesListItem({
     // a widget row whose tree never arrived still reads as its text
     switch (m.kind === "widget" && !m.widget ? "text" : m.kind) {
       case "access":
+        // #3656: a row of the history, tied to the message that got no answer
         return m.access ? (
-          <AccessCard
-            access={m.access}
+          <AccessNoticeRow
+            message={m}
+            transcript={transcript}
             viewer={{ principalId: config?.viewer?.principalId ?? null, admin: config?.viewer?.role === "admin" || config?.viewer?.role === "owner" }}
             onSignIn={() => dispatch({ type: "toggleAppSettings", open: true, section: "providers" })}
           />

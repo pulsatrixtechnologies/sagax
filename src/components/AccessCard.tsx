@@ -18,9 +18,13 @@
 // for that bot). When the owner pays, a turn on the owner's computer's
 // model that is offline says so by name; a refusal of the owner's own
 // access tells the person who wrote that the owner pays.
-import { KeyRound } from "lucide-react";
+import { CheckCircle2, KeyRound } from "lucide-react";
 
-import { t } from "@/lib/i18n";
+import { activeLocale, t } from "@/lib/i18n";
+import { cn } from "@/lib/cn";
+import { accessNoticePlace } from "@/lib/access-notice";
+import { useMyEngines } from "@/lib/perspicax-org";
+import { formatTime, type Message } from "@/state/store";
 import { SettingsText } from "./SettingsLink";
 import type { WireAccessCard } from "../../shared/wire";
 import { permissionMissingText } from "@/lib/permissions";
@@ -132,6 +136,41 @@ export function accessCardLines(access: WireAccessCard, viewer: AccessViewer): A
   return { text: t("access.noAccess.other", { engine }), ...admin };
 }
 
+/** The card's words, hint, actions and detail: one body for the passing
+ * banner (AccessCard) and the conversation's row (AccessNoticeRow). A
+ * resolved card keeps its words and detail, without its actions. */
+function AccessCardBody({ access, lines, onSignIn, resolved }: { access: WireAccessCard; lines: AccessCardLines; onSignIn?: () => void; resolved?: boolean }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="break-words">{lines.text}</span>
+      {!resolved && lines.hint && (
+        lines.hint.includes("{settings}")
+          ? <SettingsText text={lines.hint} links={{ settings: { section: "providers" } }} className="break-words text-[12px] text-ink-secondary" />
+          : <span className="break-words text-[12px] text-ink-secondary">{lines.hint}</span>
+      )}
+      {!resolved && ((lines.signIn && onSignIn) || lines.link || lines.chooseModel) ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {lines.chooseModel && (
+            <button type="button" className="ui-button min-h-[44px] w-fit md:min-h-0" onClick={() => openModelWindow(access.botId)} data-access-choose-model>
+              {t("access.chooseModel")}
+            </button>
+          )}
+          {lines.signIn && onSignIn && (
+            <button type="button" className="ui-button min-h-[44px] w-fit md:min-h-0" onClick={onSignIn} data-access-sign-in>
+              {lines.signInLabel ?? t("access.signIn")}
+            </button>
+          )}
+          {lines.link && (
+            <a href={lines.link.href} target="_blank" rel="noreferrer noopener" className="break-words text-[12px] text-accent underline" data-access-add-key>{lines.link.label}</a>
+          )}
+        </div>
+      ) : null}
+      {lines.detail && <code className="break-words text-[11.5px] text-ink-secondary">{lines.detail}</code>}
+    </div>
+  );
+}
+
+/** The passing banner's card (TransientNotice: a routine's access card). */
 export function AccessCard({ access, viewer, onSignIn }: { access: WireAccessCard; viewer: AccessViewer; onSignIn?: () => void }) {
   const lines = accessCardLines(access, viewer);
   if (!lines) return null;
@@ -141,31 +180,43 @@ export function AccessCard({ access, viewer, onSignIn }: { access: WireAccessCar
   return (
     <div role="status" data-access-card={access.reason} className="flex w-fit max-w-full items-start gap-2 rounded-xl border border-accent/30 bg-accent/10 px-3 py-2 text-[13px] text-ink">
       <KeyRound size={14} aria-hidden="true" className="mt-0.5 shrink-0 text-warning" />
-      <div className="flex min-w-0 flex-col gap-1">
-        <span className="break-words">{lines.text}</span>
-        {lines.hint && (
-          lines.hint.includes("{settings}")
-            ? <SettingsText text={lines.hint} links={{ settings: { section: "providers" } }} className="break-words text-[12px] text-ink-secondary" />
-            : <span className="break-words text-[12px] text-ink-secondary">{lines.hint}</span>
-        )}
-        {(lines.signIn && onSignIn) || lines.link || lines.chooseModel ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {lines.chooseModel && (
-              <button type="button" className="ui-button min-h-[44px] w-fit md:min-h-0" onClick={() => openModelWindow(access.botId)} data-access-choose-model>
-                {t("access.chooseModel")}
-              </button>
-            )}
-            {lines.signIn && onSignIn && (
-              <button type="button" className="ui-button min-h-[44px] w-fit md:min-h-0" onClick={onSignIn} data-access-sign-in>
-                {lines.signInLabel ?? t("access.signIn")}
-              </button>
-            )}
-            {lines.link && (
-              <a href={lines.link.href} target="_blank" rel="noreferrer noopener" className="break-words text-[12px] text-accent underline" data-access-add-key>{lines.link.label}</a>
-            )}
+      <AccessCardBody access={access} lines={lines} onSignIn={onSignIn} />
+    </div>
+  );
+}
+
+/** #3656: the card as a row of the conversation (a 1:1 chat and a room
+ * alike): drawn as the bot's message, under it the person's message that got
+ * no answer with its time, and marked resolved once the access works again
+ * (src/lib/access-notice.ts). Never a status docked to the composer. */
+export function AccessNoticeRow({ message, transcript, viewer, onSignIn, room }: { message: Message; transcript: readonly Message[]; viewer: AccessViewer; onSignIn?: () => void; room?: boolean }) {
+  const engines = useMyEngines();
+  const access = message.access;
+  const lines = access ? accessCardLines(access, viewer) : null;
+  if (!access || !lines) return null;
+  if (lines.plain) {
+    return <p role="status" data-access-card={access.reason} className="break-words text-[12px] text-ink-secondary">{lines.text}</p>;
+  }
+  const { failed: place, laterAsks, mine, resolved } = accessNoticePlace(message, transcript, engines, viewer.principalId, room);
+  // someone else's message is never "your": the card then shows its own time
+  const failed = mine ? place : undefined;
+  return (
+    <div className="flex justify-start" data-access-notice={resolved ? "resolved" : "open"}>
+      <div className="flex w-fit max-w-[min(42rem,78%)] flex-col items-start">
+        <div role="status" data-access-card={access.reason} className={cn("flex items-start gap-2 rounded-[18px] bg-bubble-bot px-3 py-[7px] text-[13px] leading-5", resolved ? "text-ink-secondary" : "text-ink")}>
+          {resolved
+            ? <CheckCircle2 size={14} aria-hidden="true" className="mt-[3px] shrink-0 text-success" />
+            : <KeyRound size={14} aria-hidden="true" className="mt-[3px] shrink-0 text-warning" />}
+          <div className="flex min-w-0 flex-col gap-1">
+            {resolved && <span className="break-words font-medium text-ink">{t("access.notice.resolved", { engine: access.engine })}</span>}
+            <AccessCardBody access={access} lines={lines} onSignIn={onSignIn} resolved={resolved} />
           </div>
-        ) : null}
-        {lines.detail && <code className="break-words text-[11.5px] text-ink-secondary">{lines.detail}</code>}
+        </div>
+        <span className="mt-1 px-1 text-[11px] text-ink-tertiary" title={new Date((failed ?? message).at).toLocaleString(activeLocale())}>
+          {!failed ? formatTime(message.at)
+            : laterAsks ? t("access.notice.failedMessages", { count: laterAsks + 1, time: formatTime(failed.at) })
+            : t("access.notice.failedMessage", { time: formatTime(failed.at) })}
+        </span>
       </div>
     </div>
   );

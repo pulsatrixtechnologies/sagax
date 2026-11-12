@@ -187,6 +187,11 @@ export class HelperChild extends EventEmitter {
   private closesNeeded = 0;
   private closed = false;
   private failed = false;
+  /** True until the helper says the child started or failed to (#3901: a
+   * failed child has no pid either, but it is not starting any more). */
+  get starting(): boolean {
+    return this.pid === undefined && !this.failed;
+  }
   private watch: NodeJS.Timeout | null = null;
 
   request: Request;
@@ -678,5 +683,5 @@ export function whenStarted(child: ChildProcess, then: (pid: number) => void): v
 /** For a child the helper is still starting, settles once it is started or failed; else null. */
 export function pendingStart(child: ChildProcess): Promise<void> | null {
   const proxy = child as unknown;
-  return proxy instanceof HelperChild && proxy.pid === undefined ? proxy.started : null;
+  return proxy instanceof HelperChild && proxy.starting ? proxy.started : null;
 }

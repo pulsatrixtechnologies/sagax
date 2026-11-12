@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { harnessMcpRequest } from "./harness-mcp-proxy.ts";
+import { harnessMcpRequest, isProxyEntry } from "./harness-mcp-proxy.ts";
 
 let server: Server;
 let url = "";
@@ -130,5 +130,20 @@ describe("harness MCP capability proxy", () => {
     });
     const code = await new Promise<number | null>((resolve) => child.once("close", resolve));
     expect(code).toBe(2);
+  });
+});
+
+// #3901: this module is bundled into the server's index.js, whose
+// import.meta.url is the server's entry too; only the proxy's own file runs it.
+describe("harness MCP proxy entry", () => {
+  it("runs as the proxy only from its own file, never inside the server's bundle", () => {
+    const dir = fileURLToPath(new URL(".", import.meta.url));
+    for (const name of ["harness-mcp-proxy.js", "harness-mcp-proxy.ts"]) {
+      const entry = `${dir}${name}`;
+      expect(isProxyEntry(entry, new URL(name, import.meta.url).href)).toBe(true);
+    }
+    const server = `${dir}index.js`;
+    expect(isProxyEntry(server, new URL("index.js", import.meta.url).href)).toBe(false);
+    expect(isProxyEntry(undefined, import.meta.url)).toBe(false);
   });
 });

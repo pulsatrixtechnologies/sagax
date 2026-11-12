@@ -3,6 +3,7 @@
 // which one. Only a turn-scoped capability crosses into the agent process;
 // engine commands, session names, and provider credentials (the Boat token)
 // stay in OMB.
+import { basename } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { DATA_INSTRUCTIONS } from "./data/instructions.ts";
@@ -142,7 +143,15 @@ function run(kind: HarnessMcpKind): void {
   });
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+/** Whether this module runs as the proxy's own program. In the server's
+ * bundle this module is part of index.js, where import.meta.url is the
+ * server's entry too: the file name tells the two apart, so the server never
+ * prints this program's usage nor takes its exit code (#3901). */
+export function isProxyEntry(entry: string | undefined, moduleUrl: string): boolean {
+  return Boolean(entry) && moduleUrl === pathToFileURL(entry!).href && /^harness-mcp-proxy\.[cm]?[jt]s$/.test(basename(entry!));
+}
+
+if (isProxyEntry(process.argv[1], import.meta.url)) {
   const kind = parseHarnessMcpKind(process.argv[2]);
   if (!kind) {
     process.stderr.write("usage: harness-mcp-proxy browser|computer|data\n");

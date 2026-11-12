@@ -5,14 +5,18 @@
 // (every marketplace with its full catalog) was cut in the middle of the
 // first marketplace. Shaped here, at the tool boundary:
 //
-// - list: the bot's installed plugins (version, enabled, update waiting and
-//   the offered version), then one line of facts per marketplace;
+// - list: one line of facts per marketplace, then the bot's installed
+//   plugins (version, enabled, update waiting and the offered version), in
+//   one sequence paged with `offset`;
 // - list with `marketplace` (and an optional `filter`): that marketplace's
 //   catalog, paged with `offset`;
 // - a write: its own object (the installed plugin, the marketplace) without
 //   the listing.
 //
-// Whatever does not fit says what was left out and how to get it.
+// Whatever does not fit says what was left out and how to get it. The next
+// offset (`more`) is the first key of a paged answer, so it survives the cut
+// of a page whose single entry is larger than the budget (#3691: a
+// marketplace's manifest puts no limit on a name, a category or a version).
 
 import type { ActTarget } from "../../shared/bot-act.ts";
 
@@ -137,8 +141,8 @@ function listAnswer(target: ActTarget, listing: Json, pulledAt?: (name: string) 
       ? { more: { offset: next, left: matched.length - next, how: `Call act plugins list again with marketplace ${wanted}${filter ? ", the same filter" : ""} and offset ${next}.` } }
       : {};
     const entries = matched.map(catalogEntry);
-    const { page: shown, next } = page(entries, offset, (items) => ({ ...head, plugins: items, ...more(offset + items.length) }));
-    return { ...head, plugins: shown, ...more(next) };
+    const { page: shown, next } = page(entries, offset, (items) => ({ ...more(offset + items.length), ...head, plugins: items }));
+    return { ...more(next), ...head, plugins: shown };
   }
   // #3637 review: the marketplace lines first (few, short, and their token
   // state is what a bot acts on), then the installed plugins, in one budget.
@@ -160,11 +164,11 @@ function listAnswer(target: ActTarget, listing: Json, pulledAt?: (name: string) 
     } }
     : {};
   const shape = (taken: Item[], next: number): Json => ({
+    ...more(next),
     marketplaces: taken.flatMap((item) => ("line" in item ? [item.line] : [])),
     installed: taken.flatMap((item) => ("plugin" in item ? [item.plugin] : [])),
     ...head,
     ...(offset ? { offset } : {}),
-    ...more(next),
   });
   const { page: shown, next } = page(items, offset, (taken) => shape(taken, offset + taken.length));
   return shape(shown, next);

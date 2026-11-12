@@ -1,8 +1,10 @@
 /** Isolated gallery for headless screenshots of an open bot-to-bot
  * conversation ("A ⇆ B" header pill, Close Chat pill, #3245) over the whole chat column, so its
  * layout can be compared with a 1:1 chat at any window width. Neutral bot
- * names. Not shipped in the app. ?skin=<id>&lang=<code>&routine=1
- * (routine=1: a routine run's window, its X, meta line and pinned card). */
+ * names. Not shipped in the app. ?skin=<id>&lang=<code>&routine=1&subject=<kind>
+ * (routine=1: a routine run's window, its X, meta line and pinned card;
+ * subject=long|short|first: the subject under the pill, #4043: a page of
+ * text, one short line, or the first line's own text). */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ExchangeColumnProvider, ExchangeSheet, useExchangeColumn } from "../components/BotExchangeChip";
@@ -33,8 +35,23 @@ function line(from: { botId: string; name: string }, text: string): Message {
   return { id: `m${seq}`, role: "bot", kind: "text", text, at: start.getTime() + seq * 60_000, from } as Message;
 }
 
+const subjectKind = params.get("subject");
+const brief = [
+  "Hi Pixel, can you check which weekly reports are still missing before Friday?",
+  "For each team, open the shared folder for the week, compare the files with the list of teams, and note whether the report was sent, drafted or is still missing.",
+  "When a report is a draft, read it and say what is left to write: the numbers, the summary or the review.",
+  "When a report is missing, find who owns it from the team page and write down their name and the last time they sent one.",
+  "Then group the results by status, missing first, and add the link to each file so the person can open it in one click.",
+  "Keep the tone short and plain, one line per team, and end with the three next steps you would take today.",
+  "If a folder cannot be opened, say which one and why, and go on with the others instead of stopping.",
+  "Last, compare with last week: a team that was late twice in a row gets a note so the person can follow up.",
+].join(" ");
+const subject = subjectKind === "long" || subjectKind === "first" ? brief
+  : subjectKind === "short" ? "Weekly reports check"
+  : undefined;
+
 const messages = [
-  line(nova, "Hi Pixel, can you check which weekly reports are still missing before Friday?"),
+  line(nova, subjectKind === "first" ? brief : "Hi Pixel, can you check which weekly reports are still missing before Friday?"),
   line(pixel, "Sure. Here is what I found:\n\n| Team | Report | Status |\n| --- | --- | --- |\n| Design | Week 42 | Sent |\n| Support | Week 42 | Missing |\n| Platform | Week 42 | Draft |\n\nTwo of them still need work."),
   line(nova, "Thanks. Who owns the Support one?"),
   line(pixel, "The Support lead. Next steps:\n\n1. Remind the lead today.\n2. Merge the draft from Platform.\n3. Send the summary on Friday morning.\n\n```ts\nconst missing = reports.filter((r) => r.status !== \"sent\");\n```"),
@@ -66,7 +83,7 @@ function Gallery() {
                 meta={<span>Weekly reports · Today 9:00 · Done</span>}
                 pinned={<div className="rounded-xl bg-raised px-3 py-2 text-[13px]">Approve sending the summary?</div>}
               />
-            : <ExchangeSheet run={run} bots={bots} showToolCalls={false} onClose={() => {}} />)}
+            : <ExchangeSheet run={run} bots={bots} showToolCalls={false} subject={subject} onClose={() => {}} />)}
         </ExchangeColumnProvider>
       </div>
     </div>

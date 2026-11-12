@@ -1,7 +1,7 @@
 // A collapsed bot-to-bot run: one quiet chip in the transcript, the lines
 // themselves in a sheet that fills the chat column. The messages stay
 // stored; this only changes how they are drawn.
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeftRight } from "lucide-react";
 import { formatTime, type Bot } from "@/state/store";
@@ -22,6 +22,8 @@ import { getExchangeColumnHost, setExchangeColumnHost, subscribeExchangeColumnHo
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ClusterLabel } from "./ClusterLabel";
 import { MessageBoundary } from "./MessageBoundary";
+import { ExpandableText } from "./ExpandableText";
+import { BOTTOM_FOLLOW_THRESHOLD, useBottomFollowResize } from "@/lib/bottom-follow";
 import { ToolActivity, botNames } from "./ToolActivity";
 import {
   exchangeBody,
@@ -29,6 +31,7 @@ import {
   exchangeSheetRow,
   exchangeSide,
   exchangeSpeaker,
+  exchangeSubject,
   startsNewStretch,
   transcriptDateLabel,
   type ExchangeParty,
@@ -107,6 +110,7 @@ export function ExchangeSheet({
   loadError = false,
   onRetry,
   meta,
+  subject,
   footer,
   pinned,
   testId = "bot-exchange-sheet",
@@ -122,6 +126,11 @@ export function ExchangeSheet({
   onRetry?: () => void;
   /** Quiet status line under the header pill (routine runs). */
   meta?: ReactNode;
+  /** The exchange's subject under the header pill (#4043): two lines at
+   * most with "Show more"; unfolded, it moves to the top of the transcript
+   * and scrolls with it, "Show less" folds it back. When it is the first
+   * line's own text, only its first sentence shows. */
+  subject?: string;
   /** Actions in a footer row (routine runs: Continue, Stop, …); its
    * children are the row's items. No row without them (#2149). */
   footer?: ReactNode;
@@ -173,6 +182,48 @@ export function ExchangeSheet({
     const shape = exchangeSheetRow(message, showToolCalls);
     return shape ? [{ message, shape }] : [];
   });
+  const firstLine = rows.find((row) => row.shape === "line");
+  const shownSubject = exchangeSubject(subject, firstLine ? exchangeBody(firstLine.message) : undefined);
+  // #4043: folded, the subject stays under the pill (two lines at most);
+  // open, it is the first thing of the transcript and scrolls with it.
+  const [subjectOpen, setSubjectOpen] = useState(false);
+  const subjectInHeader = !windowed && !subjectOpen;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const logRef = useRef<HTMLDivElement>(null);
+  // The newest line at the bottom on opening, as in any chat; a reader
+  // who scrolls up stays where they are while lines arrive.
+  const followingRef = useRef(true);
+  const opened = useRef(false);
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller || rows.length === 0) return;
+    if (!opened.current || followingRef.current) scroller.scrollTop = scroller.scrollHeight;
+    opened.current = true;
+  }, [rows.length]);
+  useBottomFollowResize(scrollRef, logRef, followingRef, run.id);
+  const toggleSubject = (open: boolean) => {
+    setSubjectOpen(open);
+    followingRef.current = !open;
+  };
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller || !opened.current) return;
+    // Open: read it from its start, in place under the header. Folded
+    // back: the conversation again, newest at the bottom.
+    scroller.scrollTop = subjectOpen ? 0 : scroller.scrollHeight;
+  }, [subjectOpen]);
+  const subjectText = (open: boolean) => shownSubject && (
+    <ExpandableText
+      text={shownSubject}
+      lines={2}
+      expanded={open}
+      onToggle={toggleSubject}
+      tone="quiet"
+      moreLabel={t("botPanel.rules.showMore")}
+      lessLabel={t("botPanel.rules.showLess")}
+      testId="bot-exchange-subject"
+    />
+  );
   const pill = (
     <WindowHeaderPill label={run.ends.map((party) => party.name).join(" ⇄ ")}>
       {run.ends.map((party, index) => {
@@ -233,15 +284,25 @@ export function ExchangeSheet({
         >
           <div className="flex min-w-0 max-w-full justify-center">{pill}</div>
           {meta && <div data-exchange-meta className="max-w-[min(92%,36rem)] px-4 text-center text-[12px] text-ink-secondary">{meta}</div>}
+          {subjectInHeader && shownSubject && <div data-exchange-meta className="w-full max-w-[min(92%,36rem)] px-4 text-center text-[12px] text-ink-secondary">{subjectText(false)}</div>}
         </div>
       )}
       {/* The same pane and column as a 1:1 chat (ChatView): the gutter, the
           chat column, Geist at 13px, the Markdown renderer and the bubble
           widths, so the lines use the room a wider window gives. The scroll
           ends above the opaque footer band; no message text sits under it. */}
-      <div className={cn("min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-5", windowed && CHAT_UNDER_BAR_PAD)} data-testid="bot-exchange-scroll">
-      <div className={cn(chatColumnClassName, "py-6")} role="log" aria-live="off" onClick={(event) => event.stopPropagation()}>
+      <div
+        ref={scrollRef}
+        className={cn("min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-5", windowed && CHAT_UNDER_BAR_PAD)}
+        data-testid="bot-exchange-scroll"
+        onScroll={(event) => {
+          const el = event.currentTarget;
+          followingRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < BOTTOM_FOLLOW_THRESHOLD;
+        }}
+      >
+      <div ref={logRef} className={cn(chatColumnClassName, "py-6")} role="log" aria-live="off" onClick={(event) => event.stopPropagation()}>
         {windowed && meta && <div data-exchange-meta className="mx-auto mb-4 max-w-[min(92%,36rem)] px-4 text-center text-[12px] text-ink-secondary">{meta}</div>}
+        {!subjectInHeader && shownSubject && <div data-exchange-meta className="mx-auto mb-4 max-w-[min(92%,36rem)] px-4 text-center text-[12px] text-ink-secondary">{subjectText(subjectOpen)}</div>}
         {loadError ? (
           <div role="alert" data-testid="bot-exchange-error" className="flex flex-col items-center gap-2 py-8 text-center text-[13px] text-ink-secondary">
             <p>{t("chat.exchange.loadError")}</p>

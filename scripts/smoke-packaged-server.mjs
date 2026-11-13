@@ -279,7 +279,8 @@ if (listening) {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ password: "packaged-fixture-password-only" }), signal: AbortSignal.timeout(30_000),
     });
-    assert.equal(response.status, 200, "Packaged backup worker did not export successfully");
+    // the server's reason goes in the report: a 400 alone named no cause (#4128)
+    if (response.status !== 200) assert.fail(`Packaged backup worker did not export successfully: ${response.status} ${await response.text()}`);
     const archive = await response.json();
     assert.equal(archive.summary.format, "openmaus.workspace-backup");
     const download = await fetch(`http://127.0.0.1:${port}/api/workspace-backup/download/${archive.id}`);

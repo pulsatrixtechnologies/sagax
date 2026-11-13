@@ -57,6 +57,8 @@ unknown bot, an engine that cannot run or a failed turn settles it `failed`
 with the reason. One turn at a time per bot. A task a stopped server left
 `running` is queued again at the next start, and fails after 3 such stops.
 The CLI and the server change the queue under `headless-tasks.lock`.
+While a workspace backup copies the data folder, the server neither beats
+nor takes tasks (paused with the routines, #4128), and picks up after.
 `task wait` waits up to an hour by default and exits 0 (done, with the
 reply and the thread), 1 (failed or unknown id), 2 (timeout) or 3 (no
 server beats on this data folder: it says to start one, the task stays

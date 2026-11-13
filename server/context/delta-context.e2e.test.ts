@@ -1501,7 +1501,11 @@ it.skipIf(process.platform === "win32")("gives a delegated return today's fresh 
   expect(f.launches().at(-1).resume).toBeNull();
   expect(f.prompt(returned)).toContain("received an update outside your provider session");
   expect(count(f.prompt(returned), "SETUP_SOUL_RESULT")).toBe(1);
-  // and the record is the replay's, not the resume this turn set out to make
+  // and the record is the replay's, not the resume this turn set out to make.
+  // The cursor and the record are bookkeeping, on disk within a second (#3710):
+  // read once both name the session this turn started (#4128).
+  await expect.poll(() => [cursor(f), (Object.values(f.handed() ?? {})[0] as any)?.session], { timeout: 5_000 })
+    .toEqual([f.nativeSession(), f.nativeSession()]);
   const record = Object.values(f.handed())[0] as any;
   expect(record.session).toBe(Object.values(f.task().resumeCursors)[0]);
   expect(record.omitted).toBeUndefined();

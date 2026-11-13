@@ -137,7 +137,10 @@ posixOnly("AI client ping: what the engine is handed (sagax_send vs send_prompt)
           driver: "claudeAgent", access: "api",
           // one-shot calls (a conversation title) write elsewhere, so the
           // turn dump always holds the turn just measured
-          environment: { FAKE_CLAUDE_DUMP: dumpPath(), FAKE_CLAUDE_TEXT_DUMP: join(home, "one-shot-dump.json"), FAKE_CLAUDE_EXIT_AFTER_TURN: "1" },
+          // each turn ends on its words: one that ends on a tool call is
+          // continued once (server/turns/unfinished-turn.ts), and a job's
+          // wait could read that continuation as still working (#4128)
+          environment: { FAKE_CLAUDE_DUMP: dumpPath(), FAKE_CLAUDE_TEXT_DUMP: join(home, "one-shot-dump.json"), FAKE_CLAUDE_EXIT_AFTER_TURN: "1", FAKE_CLAUDE_TOOL_CALLS: "[]" },
           config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true },
         },
       },
@@ -236,5 +239,8 @@ posixOnly("AI client ping: what the engine is handed (sagax_send vs send_prompt)
     expect(continued.resumed).toBe(true);
     expect(continued.history).toBeGreaterThan(send.history);
     expect(continued.mcpServers).toEqual(send.mcpServers);
+    // #4128: every turn ended on its words, so no automatic continuation
+    // left a job's wait reading its thread as still working
+    expect(log).not.toContain("[unfinished-turn]");
   }, 240_000);
 });

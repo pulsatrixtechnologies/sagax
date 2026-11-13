@@ -136,6 +136,21 @@ d'apps, puis une capsule de recherche large. Rien d'autre à l'écran.
 - Colonne de lecture étroite et centrée (environ 70 caractères). Les messages du bot sont
   des blocs à fond légèrement plus clair, coins d'environ 12 px, sans avatar répété à
   chaque message. Les messages de la personne s'alignent à droite.
+- Encre de la bulle de la personne (#4096) : la référence écrit toute bulle en couleur
+  d'accent en blanc (son jeton « texte sur primaire », blanc en clair et presque blanc en
+  sombre), jamais en foncé, et elle garde pour chaque teinte sa propre nuance de bulle,
+  plus profonde que le bouton, pour que le blanc se lise. Règle ici : sur un accent en
+  couleur, le texte est blanc ; le fond est l'accent lui-même si le blanc s'y lit à 4.5:1,
+  sinon la même teinte un cran plus profonde jusqu'à 4.5:1. Tout ce que la bulle porte
+  suit (lien, code, mention, petite ligne « pris en compte », icônes), et ses surfaces
+  internes (code, citation, puce) s'assombrissent sous le blanc au lieu de pâlir. Un accent
+  neutre (blanc, gris, noir) garde l'accent exact et l'encre de son bouton. Sur un duo, le
+  léger dégradé de la bulle va vers l'autre bout du duo dans sa nuance où le blanc se lit
+  à 4.5:1 (`bubbleDrift`), jamais vers sa couleur brute. Une seule
+  fonction décide : `userBubble` dans `src/lib/bubble-colors.ts` (bureau, web, salon,
+  bulle colorée), `BubbleColors.user` dans `ios/Sources/CompanionCore/BubbleColors.swift`
+  (téléphone, mêmes valeurs). Tests : `src/lib/bubble-colors.test.ts`,
+  `ios/Tests/CompanionCoreTests/BubbleColorsTests.swift`.
 - Séparateur de date : petit texte gris centré, sans filet.
 - Nouveaux messages hors de vue : une pastille flottante en haut, couleur du bot, flèche
   vers le haut, compte, ×.

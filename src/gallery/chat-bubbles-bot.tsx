@@ -2,13 +2,14 @@
  * (2026-10-28): on a skin whose accent is a neutral (Studio: Midnight dark,
  * Daylight light) my bubble in a 1:1 takes the bot's colour, the bot's reply
  * stays grey; a room takes the brand's accent. Not shipped in the app.
- * ?skin=<id>&mode=after|before (before: the skin's bubble everywhere) */
+ * ?skin=<id>&lang=<code>&mode=after|before (before: the skin's bubble everywhere)
+ * &colors=all: one column per colour of the mascot palette (#4096, white ink). */
 import { StrictMode, type CSSProperties } from "react";
 import { createRoot } from "react-dom/client";
 import { ChatMarkdown } from "../components/ChatMarkdown";
 import { botBubbleVars } from "../lib/bubble-colors";
-import { loadLocale } from "../lib/i18n";
-import { MAUS_COLORS, type MausColor } from "../lib/mascot";
+import { loadLocale, t } from "../lib/i18n";
+import { MAUS_COLORS, MAUS_COLOR_NAMES, type MausColor } from "../lib/mascot";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import "../styles.css";
 
@@ -16,7 +17,7 @@ const params = new URLSearchParams(location.search);
 const skinParam = params.get("skin") as SkinId | null;
 const skin: SkinId = skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin();
 applySkin(skin);
-await loadLocale("en");
+await loadLocale(params.get("lang") ?? "en");
 const before = params.get("mode") === "before";
 
 const answer = "Done: **3 tickets** updated. See [the report](https://example.com) and `ticket.close`.";
@@ -32,6 +33,7 @@ function Column({ label, color, room }: { label: string; color?: MausColor; room
       <div className="flex flex-col items-end">
         <div className="chat-text w-fit max-w-[92%] rounded-[18px] bg-bubble-user px-3 py-[7px] text-[13px] leading-5 text-ink" data-chat-bubble data-who="user">
           Close #1042, see <a className="text-accent-text underline" href="https://example.com">the doc</a> and <code className="rounded bg-inset px-1 font-mono text-[12px]">ticket.close</code>.
+          <div className="mt-1 text-[11px] text-ink-tertiary">{t("chat.sentMidTurn")}</div>
         </div>
       </div>
       <div className="flex flex-col items-start">
@@ -43,7 +45,8 @@ function Column({ label, color, room }: { label: string; color?: MausColor; room
   );
 }
 
-const COLUMNS: Array<{ label: string; color?: MausColor; room?: boolean }> = [
+const ALL = params.get("colors") === "all";
+const COLUMNS: Array<{ label: string; color?: MausColor; room?: boolean }> = ALL ? MAUS_COLOR_NAMES.map((color) => ({ label: color, color })) : [
   { label: "Bot: orange", color: "orange" },
   { label: "Bot: red", color: "red" },
   { label: "Bot: green", color: "green" },

@@ -462,7 +462,9 @@
 :is([data-skin-tint="aurore"], [data-skin-tint="ocean"], [data-skin-tint="neon"], [data-skin-tint="foret"], [data-skin-tint="cyberpunk"], [data-skin-tint="sunset"], [data-skin-tint="nordic"], [data-skin-tint="candy"]) .bg-sidebar-selected {
   background-image: linear-gradient(90deg, color-mix(in srgb, var(--accent-to) 14%, transparent), transparent 85%);
 }
-/* the person's own bubble: its colour, drifting a little toward the far end */
+/* the person's own bubble: its colour, drifting a little toward the far end,
+   in the far end's hue white text still reads on (--color-bubble-user-to,
+   skin-bubble.css: generated from bubble-colors.ts, bubbleDrift) */
 :is([data-skin-tint="aurore"], [data-skin-tint="ocean"], [data-skin-tint="neon"], [data-skin-tint="foret"], [data-skin-tint="cyberpunk"], [data-skin-tint="sunset"], [data-skin-tint="nordic"], [data-skin-tint="candy"]) .bg-bubble-user {
-  background-image: linear-gradient(135deg, transparent 35%, color-mix(in srgb, var(--accent-to) 16%, transparent));
+  background-image: linear-gradient(135deg, transparent 35%, color-mix(in srgb, var(--color-bubble-user-to, var(--color-bubble-user)) 16%, transparent));
 }

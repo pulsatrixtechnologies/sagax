@@ -8,7 +8,8 @@
 // opaque, so the skin behind it does not change the ratios.
 
 import type { CSSProperties } from "react";
-import { contrastRatio, mixSrgb, toneForSurface } from "./color-contrast";
+import { whiteInkFill } from "./bubble-colors";
+import { contrastRatio, mixSrgb } from "./color-contrast";
 import { MAUS_COLORS, type MausColor } from "./mascot";
 
 const WHITE = "#ffffff";
@@ -96,7 +97,8 @@ function darkInkOn(fill: string): string {
 
 export function userBubbleTone(color: MausColor): UserBubbleTone {
   const palette = MAUS_COLORS[color];
-  const background = toneForSurface(palette, WHITE, BUBBLE_TEXT_MIN);
+  // the same fill as the person's bubble (bubble-colors.ts): white reads on it
+  const background = whiteInkFill(palette);
   const secondary = quietWhite(background, Math.min(6.2, Math.max(BUBBLE_TEXT_MIN, contrastRatio(WHITE, background) - 0.6)));
   let tertiary = quietWhite(background, BUBBLE_TEXT_MIN);
   if (contrastRatio(tertiary, background) > contrastRatio(secondary, background)) tertiary = secondary;

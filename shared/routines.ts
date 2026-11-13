@@ -220,6 +220,11 @@ export interface Routine {
   effort?: EffortLevel;
   /** #2696: the goal its runs pursue, with its progress. */
   goal?: RoutineGoal;
+  /** #4098: what of this routine waits on the person now, as the server
+   * reads it from the facts the chat's row gate reads (server/routines/
+   * routine-needs-person.ts): null when nothing does, or for someone else's
+   * routine seen through a wider scope. Absent on an older server. */
+  needsPerson?: RoutineNeedsPerson | null;
   nextRunAt: number | null;
   /** Scheduled slot a flexible routine advances from. Absent for exact timing. */
   nominalRunAt?: number;
@@ -239,6 +244,24 @@ export interface Routine {
   /** Someone else's routine seen through a wider scope: its instructions,
    * attachments and threads are withheld. */
   redacted?: true;
+}
+
+/** #4098: what of a routine waits on the person, once, with the run it
+ * comes from: a question or approval card still open, items only they can
+ * do not yet settled, a problem the chat told them and no good run since,
+ * a pause after failures, a goal past its deadline or stalled. `text` is
+ * the bot's own sentence (empty: the app says it in its own words). */
+export interface RoutineNeedsPerson {
+  kind: "question" | "items" | "problem" | "paused" | "goal";
+  text: string;
+  runId?: string;
+  since: number;
+  /** `paused`: the failures in a row that paused the routine. */
+  failures?: number;
+  /** `goal`: why the goal needs the person. */
+  goal?: "expired" | "stalled";
+  /** `goal` stalled: the checks in a row with the same progress. */
+  checks?: number;
 }
 
 /** Slice 6: why an organization routine is paused by the server. A routine

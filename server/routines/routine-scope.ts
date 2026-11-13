@@ -153,6 +153,8 @@ function redactRoutine<W extends object>(routine: W): W {
   const out = { ...routine } as Record<string, unknown>;
   for (const key of REDACTED_ROUTINE_FIELDS) delete out[key];
   out.prompt = "";
+  // #4098: what waits on its person is theirs, never shown to a wider scope
+  if ("needsPerson" in out) out.needsPerson = null;
   return out as W;
 }
 

@@ -779,12 +779,13 @@ import { redactSecretsInText } from "./redact.ts";
 import { routineRunCard, routineRunFallbackText } from "./routines/routine-run-card.ts";
 
 import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
+import { openRunItems, routineNeedMayMove, routineNeedsPerson, RoutineNeedsWatch, type RoutineOpenRow, type RoutineRunItems } from "./routines/routine-needs-person.ts";
 import { createHeadlessTaskRunner } from "./headless-task-runner.ts";
 import * as vps from "./computer/vps-computer.ts";
 import { runAsRefusal } from "./routines/routine-run-as.ts";
 import { recordRoutineChange, recordRoutineToggle, routineToggleForViewer } from "./routines/routine-chat-events.ts";
 import { botReplyQuoteId } from "./turns/reply-to-turn.ts";
-import { isTriggerSchedule } from "../shared/routines.ts";
+import { isTriggerSchedule, type RoutineNeedsPerson } from "../shared/routines.ts";
 import { routineRunPostsResult } from "../shared/routine-repeat.ts";
 import { routineTurnEffort } from "../shared/routine-effort.ts";
 import { routineTurnModel } from "../shared/routine-model.ts";
@@ -6671,6 +6672,7 @@ bindLeafHost({
   get showWaitingOnPersonChip() { return showWaitingOnPersonChip; },
   get settleWaitingOnPersonChips() { return settleWaitingOnPersonChips; },
   get routineOnWire() { return routineOnWire; },
+  get routineNeedsPersonOf() { return routineNeedsPersonOf; },
   get principalMayRunRoutine() { return principalMayRunRoutine; },
   get routineAdmission() { return routineAdmission; },
   get routineSuspended() { return routineSuspended; },
@@ -7850,6 +7852,19 @@ const delegatorOf = createDelegatorOf(getLeafHost);
 const showWaitingOnPersonChip = createShowWaitingOnPersonChip(getLeafHost);
 const settleWaitingOnPersonChips = createSettleWaitingOnPersonChips(getLeafHost);
 const routineOnWire = createRoutineOnWire(getLeafHost);
+/** #4098: open items of routine runs, read once per burst (openRoutineRunItems). */
+let routineRunItemsNow: RoutineRunItems | undefined;
+/** #4098: each routine's need on the live frames as fresh as the chat. */
+const routineNeedsWatch = new RoutineNeedsWatch({
+  routines: () => routines?.listRoutines() ?? [],
+  need: (routine) => routineNeedsPersonOf(routine),
+  emit: (routine) => {
+    const wire = routineOnWire(routine);
+    routineNeedsWatch.noteSent(routine.id, wire.needsPerson);
+    broadcast({ kind: "routine", routine: wire });
+  },
+  later: (pass) => { setTimeout(pass, 250).unref?.(); },
+});
 const principalMayRunRoutine = createPrincipalMayRunRoutine(getLeafHost);
 const routineAdmission = createRoutineAdmission(getLeafHost);
 const routineSuspended = createRoutineSuspended(getLeafHost);
@@ -14610,9 +14625,11 @@ store.onChange((change) => {
     // Live frames never carry screenshot pixels; clients load them by URL.
     case "message":
       broadcast({ kind: "message", threadId: change.threadId, message: slimMessage(change.message) });
+      if (routineNeedMayMove(change.message)) routineNeedsWatch.touch();
       break;
     case "message.patch": {
       broadcast({ kind: "message.patch", threadId: change.threadId, message: slimMessage(change.message) });
+      if (routineNeedMayMove(change.message)) routineNeedsWatch.touch();
       // an answered card: its banner leaves the desktop, the phone and the watch
       const settledRequest = settledCardRequest(change.message);
       if (settledRequest) {
@@ -14624,6 +14641,7 @@ store.onChange((change) => {
     }
     case "message.removed":
       broadcast({ kind: "message.removed", threadId: change.threadId, messageId: change.messageId });
+      routineNeedsWatch.touch();
       break;
     case "thread":
       broadcast({ kind: "thread", threadId: change.threadId, activeLeafId: change.activeLeafId });
@@ -19376,6 +19394,30 @@ function routineRunNeedsPerson(run: RoutineRun): boolean {
   return Boolean(run.threadId && openCardIn(store.messagesFor(run.threadId)));
 }
 
+/** #4098: the items of routine runs still open, read once for a burst of
+ * reads (a listing, a pass of the watch) from the store's index of open
+ * waiting rows, never from a transcript. */
+function openRoutineRunItems(): RoutineRunItems {
+  if (!routineRunItemsNow) {
+    routineRunItemsNow = openRunItems(openWaitingRowCandidates() as RoutineOpenRow[], personWroteAfter);
+    setImmediate(() => { routineRunItemsNow = undefined; });
+  }
+  return routineRunItemsNow;
+}
+
+/** #4098: what of this routine waits on the person (Routine.needsPerson),
+ * from the facts the chat's row gate reads. */
+function routineNeedsPersonOf(routine: Routine): RoutineNeedsPerson | null {
+  if (!routines) return null;
+  const manager = routines;
+  return routineNeedsPerson(routine, {
+    runsOf: (routineId) => manager.runsOfRoutineAsStored(routineId),
+    cardOpen: (run) => routineRunNeedsPerson(run),
+    problemToldAt: (target) => manager.problemToldAt({ routineId: target.id }),
+    now: () => Date.now(),
+  }, openRoutineRunItems());
+}
+
 /** Whether this run's routine posts its completed results in the conversation
  * (2026-10-22): the routine's own choice, else the installation default
  * (features.routinesInConversation). #3990: the one rule is
@@ -19739,9 +19781,13 @@ routines = new RoutineManager({
   emit: (payload) => {
     // 2026-11-04: a dispatch pass refreshes its KPI dashboard, no model turn
     if (payload.kind === "routine.run" && payload.run && typeof payload.run === "object") refreshDispatchKpiAfterRun(payload.run as RoutineRun);
-    broadcast(payload.kind === "routine" && payload.routine && typeof payload.routine === "object"
-      ? { ...payload, routine: routineOnWire(payload.routine as Routine) }
-      : payload);
+    if (payload.kind === "routine" && payload.routine && typeof payload.routine === "object") {
+      const wire = routineOnWire(payload.routine as Routine);
+      routineNeedsWatch.noteSent(wire.id, wire.needsPerson);
+      broadcast({ ...payload, routine: wire });
+    } else broadcast(payload);
+    // #4098: a run that moved may move what its routine needs of the person
+    if (payload.kind === "routine.run" || payload.kind === "routine.deleted") routineNeedsWatch.touch();
   },
   ...(IDENTITY.kind === "perspicax" ? {
     admit: routineAdmission,

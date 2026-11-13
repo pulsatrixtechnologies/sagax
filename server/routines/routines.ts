@@ -2134,6 +2134,12 @@ export class RoutineManager {
     return this.runList.filter(run => run.routineId === routineId);
   }
 
+  /** #4098: one routine's runs as stored, for what waits on the person
+   * (server/routines/routine-needs-person.ts): read only, never kept. */
+  runsOfRoutineAsStored(routineId: string): readonly RoutineRun[] {
+    return this.runsOfRoutine(routineId);
+  }
+
   /** Clear the destination v0.1.98 to v0.1.107 saved on routines as if a
    * person had chosen it (RoutineManagerOptions.frozenResultsThread), once:
    * a later pick of that same thread is a person's. Called once it is

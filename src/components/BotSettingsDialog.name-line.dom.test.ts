@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
-// the owner 2026-11-06 (asked twice): in the bot panel the title sits under the
-// name, on its own line, smaller and secondary; never "Name · Title" on one
-// line. Both stay editable in place.
+// #4151 (the owner, 2026-11-13, side by side with the reference): the bot
+// panel's head writes "Name · Title" on ONE line, the joined form of the chat
+// header pill (PillName), the whole text in a tooltip, both still editable in
+// place. Before, the title sat on a second line under the name.
 import { act, createElement, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -67,8 +68,8 @@ afterEach(() => {
   host.remove();
 });
 
-describe("bot panel header: title stacked under the name", () => {
-  it("draws the name and the title as two separate lines, with no middle dot", async () => {
+describe("bot panel header: Name · Title on one line", () => {
+  it("draws the name and the title on one line with the pill's middle dot and a tooltip", async () => {
     host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
@@ -80,23 +81,24 @@ describe("bot panel header: title stacked under the name", () => {
     const nameEl = host.querySelector<HTMLElement>("#bot-settings-title");
     expect(nameEl?.textContent).toBe(name);
     const block = nameEl?.closest<HTMLElement>("[data-bot-name-title]");
-    expect(block, "name and title share one stacked block").toBeTruthy();
-    expect(block!.className).toContain("flex-col");
+    expect(block, "the name line").toBeTruthy();
+    expect(block!.className).not.toContain("flex-col");
+    expect(block!.querySelector("[data-bot-title-line]")).toBeNull();
 
-    const titleLine = block!.querySelector<HTMLElement>("[data-bot-title-line]");
-    expect(titleLine?.textContent).toBe(title);
-    // a line of its own, after the name, not inside the name's element
-    expect(nameEl!.contains(titleLine)).toBe(false);
-    expect(nameEl!.compareDocumentPosition(titleLine!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // smaller and secondary, no permanent background
-    const titleButton = titleLine!.querySelector<HTMLElement>("[data-inline-edit]");
-    expect(titleButton?.className).toContain("text-ink-secondary");
-    expect(titleButton?.className).toContain("text-[12.5px]");
-    expect(titleButton?.className).not.toMatch(/(^|\s)bg-/);
-    // still editable in place
+    // the chat pill's joined form: name, dot, title, one line, cut with an ellipsis
+    const line = block!.querySelector<HTMLElement>("[data-bot-header-text]");
+    expect(line?.className).toContain("whitespace-nowrap");
+    expect(line?.className).toContain("text-[17px]");
+    expect(line?.textContent).toBe(`${name}·${title}`);
+    expect(line?.getAttribute("title")).toBe(`${name}\n${title}`);
+    const label = line!.querySelector<HTMLElement>("[data-bot-header-label]");
+    expect(label?.className).toContain("truncate");
+
+    // both still edited where they show, the whole text on hover
+    expect(nameEl!.tagName).toBe("BUTTON");
+    expect(nameEl!.getAttribute("title")).toBe(`${name}\n${title}`);
+    const titleButton = label!.querySelector<HTMLElement>("[data-inline-edit]");
     expect(titleButton?.tagName).toBe("BUTTON");
-
-    expect(block!.textContent).not.toContain("·");
-    expect(host.textContent).not.toContain(`${name} · ${title}`);
+    expect(titleButton?.textContent).toBe(title);
   });
 });

@@ -1,6 +1,6 @@
 import { Clock, Loader2, MoreHorizontal, Repeat2 } from "lucide-react";
 import { useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { t } from "@/lib/i18n";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import type { RoutineSuspendReason } from "../../../shared/routines";
@@ -45,6 +45,30 @@ export function routinePanelTitle(routine: Pick<Routine, "name" | "folder">): st
   const name = routine.name.trimStart();
   if (name.startsWith(`${prefix} `) || name === prefix) return routine.name;
   return `${prefix} ${routine.name}`;
+}
+
+/** The bot panel's routine rows (#4151, as the reference): the clock before
+ * the name tells how the last run went by its colour, from the run's own
+ * tone (routineRunTone): red when it failed, orange when it ended with
+ * problems or waits on something, grey when it went fine or never ran. */
+export function routineClockTone(run: RoutineRun | undefined): "danger" | "warning" | "neutral" {
+  if (!run) return "neutral";
+  const tone = routineRunTone(run);
+  return tone === "text-danger" ? "danger" : tone === "text-warning" ? "warning" : "neutral";
+}
+
+const CLOCK_TONES = { danger: "text-danger", warning: "text-warning", neutral: "text-ink-tertiary" } as const;
+
+/** The words the clock carries in its tooltip and accessible name: the
+ * line the row used to show under the schedule (result, how long ago, the
+ * short detail). The run log keeps them too. */
+export function routineClockLabel(run: RoutineRun): string {
+  return t("routines.latestRun", { status: [routineRunLabel(run), routineRunAgo(routineRunTime(run)), lastRunPreview(run)].filter(Boolean).join(" · ") });
+}
+
+/** A last run's first line, never for a hidden or quiet run. */
+function lastRunPreview(run: RoutineRun): string {
+  return !run.redacted && !run.quiet ? routineRunPreview(run) : "";
 }
 
 
@@ -146,13 +170,22 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
           // 2026-11-02 (JC): a live run takes the last-run line's place
           // ("Running · 2 min ago"); the old result never shows beside it.
           const lastRun = upcoming || runningRun ? undefined : runs.filter((run) => run.routineId === routine.id && run.status !== "queued" && run !== runningRun).sort((a, b) => routineRunTime(b) - routineRunTime(a))[0];
-          const lastPreview = lastRun && !lastRun.redacted && !lastRun.quiet ? routineRunPreview(lastRun) : "";
+          const lastPreview = lastRun ? lastRunPreview(lastRun) : "";
           const nextRun = !upcoming && routine.enabled && routine.nextRunAt != null ? routineNextRunPhrase(routine.nextRunAt) : undefined;
           // The bot panel's Upcoming (#2125): the line is only the schedule,
           // as the reference design; the next run moves to the tooltip.
           const nextLine = leadingClock ? undefined : nextRun;
           const whenTitle = [pausedOnly ? scheduleLine : null, leadingClock && nextRun ? t("routines.list.next", { when: nextRun }) : null, pausedWithSwitch ? routineWhenLabel(routine) : when, fullWhen !== when ? fullWhen : null].filter(Boolean).join("\n");
           const title = leadingClock ? routinePanelTitle(routine) : routine.name;
+          // #4151: the panel's rows have two lines, as the reference's; the last
+          // run is the clock's colour, its words the clock's tooltip and name.
+          const clockLabel = leadingClock && lastRun ? routineClockLabel(lastRun) : undefined;
+          const clock = leadingClock && (
+            <span data-routine-clock={routineClockTone(lastRun)} role={clockLabel ? "img" : undefined} aria-label={clockLabel} aria-hidden={clockLabel ? undefined : true} title={clockLabel}
+              className="flex size-5 shrink-0 items-center justify-center">
+              <Clock size={16} strokeWidth={1.5} aria-hidden="true" className={CLOCK_TONES[routineClockTone(lastRun)]} />
+            </span>
+          );
           return (
             <div key={routine.id} data-routine-row data-routine-id={routine.id}
               onPointerDown={onRowDragStart && !readOnly ? (event) => {
@@ -161,16 +194,17 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
                 onRowDragStart(routine, event);
               } : undefined}
               onContextMenu={onRowMenu && !readOnly ? (event) => { event.preventDefault(); openMenu(routine, event.currentTarget, { x: event.clientX, y: event.clientY }); } : undefined}
-              className={cn("group/routine", onRowDragStart && !readOnly && "cursor-grab select-none", leadingClock ? cn("flex items-center gap-2.5 hover:bg-hover", PANEL_ROW) : grouped ? cn("flex items-center gap-2 hover:bg-hover", GROUPED_ROW, "py-1.5") : "flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-hover")}>
-              {leadingClock && <Clock size={16} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-ink-tertiary" />}
-              {renamingId === routine.id && onRenameSave ? <RoutineNameInput initial={routine.name} onSave={(name) => onRenameSave(routine, name)} onCancel={() => onRenameCancel?.()} /> : <button type="button" onClick={() => onOpen(routine)}
+              className={cn("group/routine", onRowDragStart && !readOnly && "cursor-grab select-none", leadingClock ? cn("flex items-center gap-2 hover:bg-hover", PANEL_ROW) : grouped ? cn("flex items-center gap-2 hover:bg-hover", GROUPED_ROW, "py-1.5") : "flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-hover")}>
+              {renamingId === routine.id && onRenameSave ? <>{clock}<RoutineNameInput initial={routine.name} onSave={(name) => onRenameSave(routine, name)} onCancel={() => onRenameCancel?.()} /></> : <button type="button" onClick={() => onOpen(routine)}
                 onKeyDown={(onRowMenu || onRowStep || onRenameStart) && !readOnly ? (event: ReactKeyboardEvent<HTMLButtonElement>) => {
                   if (onRenameStart && event.key === "F2") { event.preventDefault(); onRenameStart(routine); }
                   else if (onRowMenu && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); openMenu(routine, event.currentTarget); }
                   else if (onRowStep && event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) { event.preventDefault(); onRowStep(routine, event.key === "ArrowUp" ? -1 : 1); }
                 } : undefined}
                 aria-keyshortcuts={onRowMenu && !readOnly ? (onRowStep ? "Shift+F10 Alt+ArrowUp Alt+ArrowDown" : "Shift+F10") : undefined}
-                className="min-w-0 flex-1 text-left">
+                className={leadingClock ? "flex min-w-0 flex-1 items-center gap-2 text-left" : "min-w-0 flex-1 text-left"}>
+                {clock}
+                <TextColumn wrap={leadingClock}>
                 {state && state.tone !== "neutral" ? (
                   <span className="flex min-w-0 items-center gap-2">
                     <span data-routine-title className="min-w-0 flex-1 truncate text-[13px] leading-[18px] text-ink">{title}</span>
@@ -193,7 +227,7 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
                     <span className="shrink-0">{routineRunAgo(runningRun.startedAt || routineRunTime(runningRun))}</span>
                   </span>
                 )}
-                {lastRun && (
+                {lastRun && !leadingClock && (
                   <span data-routine-last-run={lastRun.status} title={lastPreview || undefined} className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] leading-4 text-ink-secondary">
                     <ActivityStatusIcon status={runActivityStatus(lastRun)} size={12} />
                     <span className={cn("shrink-0", routineRunTone(lastRun))}>{routineRunLabel(lastRun)}</span>
@@ -212,6 +246,7 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
                 )}
                 {/* 2026-10-26: runs only when something changes (shared/routine-watch.ts). */}
                 {routine.precheck?.kind === "watch" && <span className="mt-0.5 flex"><span data-routine-watch className="truncate rounded-md bg-inset px-1.5 text-[12px] leading-[18px] text-ink-secondary">{t("routineWatch.badge")}</span></span>}
+                </TextColumn>
               </button>}
               {onRowMenu && !readOnly && <button type="button" data-routine-row-menu aria-label={t("routineFolders.rowMenu", { name: routine.name })} title={t("routineFolders.rowMenu", { name: routine.name })}
                 onClick={(event) => openMenu(routine, event.currentTarget)}
@@ -236,4 +271,10 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
       </div>
     )}
   </div>;
+}
+
+/** The text of a row: a column of its own beside the panel's clock, else
+ * the button's own content as before. */
+function TextColumn({ wrap, children }: { wrap: boolean; children: ReactNode }) {
+  return wrap ? <span className="min-w-0 flex-1">{children}</span> : <>{children}</>;
 }

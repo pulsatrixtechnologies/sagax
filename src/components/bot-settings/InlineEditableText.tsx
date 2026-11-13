@@ -28,6 +28,7 @@ export function InlineEditableText({
   inputClassName,
   muted = false,
   editRequest = 0,
+  tooltip,
 }: {
   value: string;
   /** Absent: shown read-only. */
@@ -45,6 +46,9 @@ export function InlineEditableText({
   /** Counts up each time something else asks for the field (the mascot
    * menu's Rename the bot): each new value opens it. */
   editRequest?: number;
+  /** The hover text when it is not the edit label (the bot panel's one
+   * line "Name · Title" shows the whole text there, #4151). */
+  tooltip?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const editable = onSave !== undefined;
@@ -60,7 +64,7 @@ export function InlineEditableText({
 
   const shown = value.trim();
   if (!onSave) {
-    return shown ? <span id={id} className={cn("max-w-full truncate", className)}>{shown}</span> : null;
+    return shown ? <span id={id} title={tooltip} className={cn("max-w-full truncate", className)}>{shown}</span> : null;
   }
 
   const commit = () => {
@@ -108,7 +112,7 @@ export function InlineEditableText({
       id={id}
       aria-label={ariaLabel}
       data-inline-edit="text"
-      title={ariaLabel}
+      title={tooltip ?? ariaLabel}
       onClick={() => setEditing(true)}
       className={cn(
         "group/inline relative inline-flex max-w-full items-center justify-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",

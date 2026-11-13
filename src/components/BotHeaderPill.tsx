@@ -91,15 +91,31 @@ export function WindowHeaderPill({ children, label }: { children: ReactNode; lab
  * The title gives way first: it ends in its own ellipsis, then the name
  * does. The whole name and title show on hover, one per line.
  */
-export function PillName({ name, label }: { name: string; label?: string }) {
+export function PillName({ name, label, className = cn("text-left", CHAT_PILL_TEXT_CLASS), nameSlot, labelSlot }: {
+  name: string;
+  label?: string;
+  /** The line's type, ink and alignment (the bot panel's head: 17/24,
+   * centred, #4151); the chat pill's by default. */
+  className?: string;
+  /** What stands for the name and the title when they are edited in place
+   * (the bot panel's head); the line, its dot and its cuts stay the pill's. */
+  nameSlot?: ReactNode;
+  labelSlot?: ReactNode;
+}) {
   const tag = label?.trim();
   return (
-    <span data-bot-header-text="" title={tag ? `${name}\n${tag}` : name} className={cn("flex min-w-0 items-baseline gap-1 whitespace-nowrap text-left", CHAT_PILL_TEXT_CLASS)}>
-      <span data-bot-header-name="" className="block min-w-0 max-w-full shrink truncate">{name}</span>
+    <span data-bot-header-text="" title={pillNameTooltip(name, tag)} className={cn("flex min-w-0 items-baseline gap-1 whitespace-nowrap", className)}>
+      <span data-bot-header-name="" className="block min-w-0 max-w-full shrink truncate">{nameSlot ?? name}</span>
       {tag && <span aria-hidden="true" className="shrink-0">·</span>}
-      {tag && <span data-bot-header-label="" className="block min-w-0 shrink-[2] truncate">{tag}</span>}
+      {tag && <span data-bot-header-label="" className="block min-w-0 shrink-[2] truncate">{labelSlot ?? tag}</span>}
     </span>
   );
+}
+
+/** The whole name and title on hover, one per line. */
+export function pillNameTooltip(name: string, label?: string): string {
+  const tag = label?.trim();
+  return tag ? `${name}\n${tag}` : name;
 }
 
 /**

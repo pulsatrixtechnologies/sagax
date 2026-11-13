@@ -1,6 +1,6 @@
 /** Isolated gallery for headless screenshots of the card pinned over the
  * composer with what the bot waits on (#3214). Not shipped in the app.
- * ?lang=<code>&skin=<id>&case=question|two|collapsed|approval|read|write|room-skill&width=1440|390
+ * ?lang=<code>&skin=<id>&case=question|two|collapsed|approval|read|write|room-skill|routine-before|routine-after&width=1440|390
  * A short transcript above (a bubble, the original question card), then the
  * pinned card and a composer-like box, the way the chat stacks them.
  * Every answer is recorded in window.__decisions. */
@@ -96,7 +96,21 @@ const skillMessage = {
 } as unknown as Message;
 const roomSkill: Pending = { message: skillMessage, requestId: "skill-sk1", tool: "stage_skill", detail: skillGist };
 
-const cases: Record<string, { approvals: Pending[]; questions: Message[]; collapsed?: boolean; room?: boolean }> = {
+// #4205: a routine that leaves nine time entries to decide. Before: one
+// generic card whose question the server cut at 500 characters. After: one
+// card per entry with its own choices and its whole text.
+const entry = (n: number) => fr
+  ? `${n}. Billet #${1000 + n} : 1,5 h saisie le lundi pour la migration du serveur de fichiers.\nNote : le technicien a travaillé pendant ces heures sur la copie des dossiers partagés, puis sur la vérification des droits d'accès de chaque équipe et le nettoyage des anciens partages.\nApprouver, Refuser, Corriger ou Toujours permettre ?`
+  : `${n}. Ticket #${1000 + n}: 1.5 h logged on Monday for the file server migration.\nNote: during those hours the technician copied the shared folders, then checked each team's access rights and cleaned up the old shares.\nApprove, Refuse, Correct or Always allow?`;
+const entryChoices = fr ? ["Approuver", "Refuser", "Corriger", "Toujours permettre"] : ["Approve", "Refuse", "Correct", "Always allow"];
+const routineWhole = Array.from({ length: 9 }, (_, index) => entry(index + 1));
+const routineFlat = routineWhole.join(" ").replace(/\s+/g, " ");
+const routineBefore = ask("rb", 30, `${routineFlat.slice(0, 499).trimEnd()}\u2026`, fr ? ["Continuer", "Arrêter ici"] : ["Continue", "Stop here"]);
+const routineAfter = routineWhole.map((question, index) => ask(`ra${index + 1}`, 30 + index, question, entryChoices));
+
+const cases: Record<string, { approvals: Pending[]; questions: Message[]; collapsed?: boolean; room?: boolean; inline?: Message }> = {
+  "routine-before": { approvals: [], questions: [routineBefore], inline: routineBefore },
+  "routine-after": { approvals: [], questions: routineAfter, inline: routineAfter[0] },
   question: { approvals: [], questions: [q1] },
   two: { approvals: [], questions: [q1, q2] },
   collapsed: { approvals: [], questions: [q1], collapsed: true },
@@ -126,8 +140,8 @@ function Gallery() {
     <div data-shot="chat" className="flex flex-col bg-canvas text-ink" style={{ width, minHeight: narrow ? 640 : 560 }}>
       <div className={`mx-auto flex w-full flex-1 flex-col justify-end gap-3 ${narrow ? "px-3 pt-4" : "max-w-[760px] px-6 pt-6"}`}>
         <Bubble>{fr ? "Orla : j'ai préparé la migration, il reste une décision avant de lancer." : "Orla: the migration is ready, one decision is left before I start."}</Bubble>
-        <div className={CHAT_BUBBLE_WIDTH_CLASS.fit}><QuestionCard threadId="thread-main" bot={{ id: bot.id, name: bot.name }} message={q1} /></div>
-        {chosen.questions.length > 1 && <Bubble>{fr ? "Orla : et pour la suite de la semaine, trois projets attendent." : "Orla: and for the rest of the week, three projects wait."}</Bubble>}
+        <div className={CHAT_BUBBLE_WIDTH_CLASS.fit}><QuestionCard threadId="thread-main" bot={{ id: bot.id, name: bot.name }} message={chosen.inline ?? q1} /></div>
+        {chosen.questions.length > 1 && !chosen.inline && <Bubble>{fr ? "Orla : et pour la suite de la semaine, trois projets attendent." : "Orla: and for the rest of the week, three projects wait."}</Bubble>}
         <div className="h-16" />
       </div>
       <div data-composer-dock className={`mx-auto w-full ${narrow ? "px-3 pb-3" : "max-w-[760px] px-6 pb-6"}`}>

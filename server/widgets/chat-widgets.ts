@@ -34,6 +34,8 @@ import {
   type PageTargetIntent,
 } from "../../shared/page-targets.ts";
 import type { AskQuestionOption } from "../../shared/ask-question.ts";
+import type { Message } from "../store.ts";
+import { closedAskCard, pendingKeyedCard, replacedAskCard } from "./ask-choice-keys.ts";
 
 export type { AgentCardResult, AgentCardStore } from "./chat-card-types.ts";
 
@@ -168,6 +170,17 @@ export function createAgentCard(args: {
     questionOptions?: AskQuestionOption[];
     pageTargetChoice?: PageTargetChoiceCardData;
   }): { messageId: string } | null;
+  /** #4205: ask_choice keys. `find`: the pending card raised with a key in
+   * the bot's conversations with the same person (ask-choice-keys.ts
+   * AskKeyIndex, which reads only the conversation holding it);
+   * `remember`: a keyed card was drawn; `retire`: close one pending card (a
+   * question card is retired with its request). Absent: this conversation
+   * only, closed by a store patch. */
+  askKeys?: {
+    find(key: string): { threadId: string; message: Message } | null;
+    remember(key: string, threadId: string, messageId: string): void;
+    retire(threadId: string, message: Message): void;
+  };
   /** #2048: availability and remembered default for choose_page_target. */
   pageTargetContext?: {
     defaultId?: string | null;
@@ -217,25 +230,66 @@ export function createAgentCard(args: {
  * verifier?") is the person's own answer already (full-access-gate.ts
  * fullAccessChoiceAnswer): the card is drawn settled on the recommended
  * option, the first one, and the tool result tells the model to go on. A
- * real decision, or a fact only the person can supply, keeps its card. */
+ * real decision, or a fact only the person can supply, keeps its card.
+ * #4205: a decision (decision true, or a key) is never answered for the
+ * person; a key replaces its pending card in place or retires it; wait
+ * false raises a card that holds no turn and no routine run. */
 function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Record<string, unknown>): AgentCardResult {
   const parsed = parseAskChoiceInput(input);
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
+  // the key's card where the index puts it, else in this conversation (a
+  // card drawn in the chat before a restart)
+  const findKeyed = (key: string) => args.askKeys?.find(key)
+    ?? pendingKeyedCard(args.threadId, args.store.messagesFor(args.threadId), key);
+  const closeCard = (threadId: string, message: Message) => {
+    if (args.askKeys) args.askKeys.retire(threadId, message);
+    else args.store.patchMessage(threadId, message.id, { card: closedAskCard(message.card!) });
+  };
+  if ("retire" in parsed) {
+    const found = findKeyed(parsed.retire.key);
+    if (!found) return { ok: true, messageId: "", retired: 0 };
+    closeCard(found.threadId, found.message);
+    return { ok: true, messageId: "", retired: 1 };
+  }
+  const value = parsed.value;
+  const holds = value.wait !== false;
   // #2901: Yes/No on "A, or B?" answers neither path; offer the two paths.
-  const given = parsed.value.options;
-  parsed.value.options = choiceOptionsFor(parsed.value.subtitle, given);
+  const given = value.options;
+  value.options = choiceOptionsFor(value.subtitle, given);
   // #2911: two paths are a real decision, never a may-I, so Full access
   // keeps the card instead of taking the first path for the person.
-  const twoPaths = parsed.value.options !== given;
+  // #4205: so is a question raised as a decision or with a key.
+  const decision = value.options !== given || value.decision === true || value.key !== undefined;
   const from = args.store.groupByThread(args.threadId) ? { from: { botId: args.bot.id, name: args.bot.name, color: args.bot.color } } : {};
+  const keyed = { ...(value.key ? { askKey: value.key } : {}), ...(holds ? {} : { noHold: true as const }) };
+  // #2909: an option's detail (ask_choice {label, detail}) rides as its
+  // description, so the notification and the card say what each answer does
+  const details = value.details;
+  const questionOptions = details?.some(Boolean)
+    ? value.options.map((label, index) => (details[index] ? { label, description: details[index] } : { label }))
+    : undefined;
+  // #4205: the same key again replaces its pending card in place
+  if (value.key && !from.from) {
+    const found = findKeyed(value.key);
+    if (found) {
+      const card = replacedAskCard(found.message.card!, { question: value.subtitle, options: value.options, noHold: !holds, ...(questionOptions ? { questionOptions } : {}) });
+      const patched = args.store.patchMessage(found.threadId, found.message.id, { card });
+      if (patched) {
+        args.authored?.(patched.id);
+        const waits = Boolean(card.requestId) && found.threadId === args.threadId;
+        return { ok: true, messageId: patched.id, replaced: true, ...(waits ? { waitsForPerson: true as const } : {}), ...(holds ? {} : { holds: false as const }) };
+      }
+    }
+  }
   // QA 0.8.77: a card drawn in the conversation (passive or settled) shows
   // its title as is, so the default one is worded in the conversation's
   // language, like a raised question card (#3158). The raised path keeps the
   // English default: raiseHarnessQuestion tells it apart from a given title.
+  const { key: _key, wait: _wait, decision: _decision, ...cardValue } = value;
   const shownCard = input.title === undefined
-    ? { ...parsed.value, title: questionCardTitle(turnLanguage(lastPersonText(args.store.messagesFor(args.threadId)), args.personLanguage)) || parsed.value.title }
-    : parsed.value;
-  const answered = twoPaths ? null : fullAccessChoiceAnswer(args.approvalLevel, { title: parsed.value.title, question: parsed.value.subtitle, options: parsed.value.options });
+    ? { ...cardValue, title: questionCardTitle(turnLanguage(lastPersonText(args.store.messagesFor(args.threadId)), args.personLanguage)) || cardValue.title }
+    : cardValue;
+  const answered = decision ? null : fullAccessChoiceAnswer(args.approvalLevel, { title: value.title, question: value.subtitle, options: value.options });
   if (answered) {
     // full-access: ask-choice
     const settled = args.store.appendMessage(args.threadId, {
@@ -243,33 +297,35 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
       ...from,
     });
     args.authored?.(settled.id);
-    return { ok: true, messageId: settled.id, answered: { choice: answered.choice, question: parsed.value.subtitle } };
+    return { ok: true, messageId: settled.id, answered: { choice: answered.choice, question: value.subtitle } };
   }
   if (args.raiseQuestion && !from.from) {
-    // #2909: an option's detail (ask_choice {label, detail}) rides as its
-    // description, so the notification and the card say what each answer does
-    const details = parsed.value.details;
     const raised = args.raiseQuestion({
-      title: parsed.value.title,
-      question: parsed.value.subtitle,
-      options: parsed.value.options,
-      ...(details?.some(Boolean)
-        ? { questionOptions: parsed.value.options.map((label, index) => (details[index] ? { label, description: details[index] } : { label })) }
-        : {}),
+      title: value.title,
+      question: value.subtitle,
+      options: value.options,
+      ...(questionOptions ? { questionOptions } : {}),
     });
     // Never a passive card here: nobody would see it, and the bot would say it showed one.
     if (!raised) return { ok: false, status: 409, error: QUESTION_NOT_RAISED };
+    // #4205: the card carries its key and whether it holds the run
+    if (keyed.askKey || keyed.noHold) {
+      const row = args.store.messagesFor(args.threadId).find((message) => message.id === raised.messageId);
+      if (row?.card) args.store.patchMessage(args.threadId, row.id, { card: { ...row.card, ...keyed } });
+      if (keyed.askKey) args.askKeys?.remember(keyed.askKey, args.threadId, raised.messageId);
+    }
     args.authored?.(raised.messageId);
-    return { ok: true, messageId: raised.messageId, waitsForPerson: true };
+    return { ok: true, messageId: raised.messageId, waitsForPerson: true, ...(holds ? {} : { holds: false as const }) };
   }
   // a direct thread replays a bot row that carries `from` as another bot's line
   // full-access: ask-choice
   const message = args.store.appendMessage(args.threadId, {
-    role: "bot", kind: "options", card: shownCard,
+    role: "bot", kind: "options", card: { ...shownCard, ...keyed },
     ...from,
   });
+  if (keyed.askKey) args.askKeys?.remember(keyed.askKey, args.threadId, message.id);
   args.authored?.(message.id);
-  return { ok: true, messageId: message.id };
+  return { ok: true, messageId: message.id, ...(holds ? {} : { holds: false as const }) };
 }
 
 /** #2048: choose which surface hosts a new page or artifact. One available

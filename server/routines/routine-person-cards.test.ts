@@ -203,7 +203,8 @@ describe("a routine run's question card reaches its person", () => {
     const summary = "Résumé:\n- Ticket 1234 fermé\n- Ticket 5678 en attente\n- Facture 99 envoyée\nJ'ai affiché une carte pour confirmer l'envoi.";
     expect(routineClaimedCardChoice(summary)).toEqual({
       title: "Your bot has a question",
-      question: "Résumé: - Ticket 1234 fermé - Ticket 5678 en attente - Facture 99 envoyée J'ai affiché une carte pour confirmer l'envoi.",
+      // #4205: the question keeps its lines (the card draws them)
+      question: "Résumé:\n- Ticket 1234 fermé\n- Ticket 5678 en attente\n- Facture 99 envoyée\nJ'ai affiché une carte pour confirmer l'envoi.",
       options: ["Continuer", "Arrêter ici"],
     });
     // the choices offered after the account still win

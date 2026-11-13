@@ -64,12 +64,31 @@ export async function callCardTool(name: string, args: Json, context: ToolCallCo
     if (answered) {
       return { text: `Full access answered this for the person: ${answered}. The person already authorized this work; continue in this same turn without waiting for a click, and do not ask again.` };
     }
+    const body = (result && typeof result === "object" ? result : {}) as { waitsForPerson?: unknown; holds?: unknown; replaced?: unknown; retired?: unknown; turnEnds?: unknown };
+    const key = typeof args?.key === "string" ? args.key.trim() : "";
+    // #4205: a retire closes the keyed card; nothing waits on it any more
+    if (args?.retire === true) {
+      return { text: body.retired ? `The card with key "${key}" is closed; an answer to it starts nothing.` : `No pending card has the key "${key}"; nothing to close.` };
+    }
+    const named = key ? ` (key "${key}"; the answer reaches you with this key and the chosen option)` : "";
+    const placed = body.replaced === true ? `Your pending card${named} now asks this, in its place.` : `The question card${named} is waiting for the person.`;
+    // #4205: wait false holds nothing: the turn and the run go on
+    if (body.holds === false) {
+      return { text: `${placed} It holds nothing: ask any other separate item with its own ask_choice call now, then finish your work and end normally; each answer arrives later as its own turn in this conversation.` };
+    }
+    // #4205: on an engine that cannot take the answer live, a card that holds
+    // ends this turn at the end of this call (card-turn-handoff.ts): no
+    // further call runs, so the result never offers one
+    if (body.turnEnds === true) {
+      return { text: `${placed} It is on the person's screen with your options. This card holds your turn, and on this engine the turn ends with this call: no further tool call runs in it. Their click, or the answer they type under Other, arrives as their next message. To ask several separate items in one turn here, raise each with wait false.` };
+    }
+    const more = "If another separate item needs a decision, call ask_choice for it now (one card per item); then end your turn with no further text";
     // 2026-11-03: raised where the person is not watching (a routine run): the
     // card waits for them in Approvals and a notification, and the run with it.
-    if (result && typeof result === "object" && (result as { waitsForPerson?: unknown }).waitsForPerson === true) {
-      return { text: "The question card is waiting for the person (their notification, Approvals and this run's status). End your turn now with no further text: this run waits, and their answer arrives as their next message." };
+    if (body.waitsForPerson === true) {
+      return { text: `${placed} It shows in their notification, Approvals and this run's status. ${more}: this run waits, and their answer arrives as their next message.` };
     }
-    return { text: "The question card is on the person's screen with your options. End your turn now with no further text: their click, or the answer they type under Other, arrives as their next message." };
+    return { text: `${placed} It is on the person's screen with your options. ${more}: their click, or the answer they type under Other, arrives as their next message.` };
   }
   if (name === "create_options_card") {
     if (context.botId !== WATCHER_OPTIONS_CARD_BOT_ID) {

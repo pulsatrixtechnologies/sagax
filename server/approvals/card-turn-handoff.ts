@@ -29,14 +29,18 @@ export interface PostedCardResult {
   messageId?: string;
   answered?: unknown;
   auto?: unknown;
+  /** #4205: false for an ask_choice raised with wait false. */
+  holds?: false;
 }
 
 /** Whether `result` is a card now waiting on the person: drawn, not settled
- * by Full access, not a publish target resolved without a card. */
+ * by Full access, not a publish target resolved without a card. #4205: a
+ * card raised with wait false holds no turn, so the turn is never cut after
+ * it and goes on to ask its next item (several cards in one turn). */
 export function postedCardWaits(tool: unknown, result: PostedCardResult): boolean {
   if (typeof tool !== "string" || !WAITING_CARD_TOOLS.has(tool)) return false;
   return result.ok === true && typeof result.messageId === "string" && result.messageId.length > 0
-    && !result.answered && !result.auto;
+    && !result.answered && !result.auto && result.holds !== false;
 }
 
 /** The turn that posted each thread's waiting cards. A thread runs one turn

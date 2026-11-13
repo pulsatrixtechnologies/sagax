@@ -722,8 +722,15 @@ export interface RoutineManagerOptions {
   /** 2026-11-08 (QA 0.8.66 F4): the bot said it showed a card and none was
    * drawn. The host draws it for real (a question card in the run's thread
    * that carries the bot's words) and answers the run's waiting line, or null
-   * when no card could be drawn (the run then fails as before). */
+   * when no card could be drawn (the run then fails as before). #4205: the
+   * same for final words that leave several items to decide as text: one
+   * card per item (routineClaimedCardChoices). */
   raiseClaimedCard?: (threadId: string, claim: string) => string | null;
+  /** #4205: a run cancelled or superseded leaves none of its own question
+   * cards open: each card drawn in its conversation since `since` (the
+   * run's start) is closed (an answer to it starts nothing). A card drawn
+   * before the run, in a conversation the run joined, stays. */
+  closeRunCards?: (threadId: string, since: number) => void;
   /** The job runtime still holds this run thread's teammate work and goes
    * on with it after a restart (docs/runtime-contract.md §5): a run waiting
    * on it stays waiting, and that work's resume completes it. */
@@ -919,15 +926,113 @@ export function routineClaimedCardChoice(claim: string): { title: string; questi
     i = j;
   }
   const rest = lines.filter((_, index) => !taken.has(index));
-  const french = /\b(?:carte|je|tu|vous|veux|choix|affich\w*|voici)\b/i.test(text);
-  const options = listed.length >= 2 ? listed : french ? ["Continuer", "Arrêter ici"] : ["Continue", "Stop here"];
-  const body = (listed.length >= 2 ? rest.join("\n") : text).replace(/\s+/g, " ").trim();
-  const question = (body.length > 500 ? `${body.slice(0, 499).trimEnd()}\u2026` : body) || (french ? "Comment veux-tu continuer?" : "How should I go on?");
+  const french = routineWordsAreFrench(text);
+  const asks = listed.length >= 2 ? [] : routineAsksInText(text);
+  // #4205: one ask with its choices in words ("Approuver ou refuser ?")
+  // offers those choices, never a generic go on or stop.
+  const options = listed.length >= 2 ? listed : asks.length === 1 ? asks[0]!.options : french ? ["Continuer", "Arrêter ici"] : ["Continue", "Stop here"];
+  // #4205: the whole question, its lines kept; the card folds a long one
+  // behind its own "show full question", nothing is cut here.
+  const question = routineQuestionText(listed.length >= 2 ? rest.join("\n") : text) || (french ? "Comment veux-tu continuer?" : "How should I go on?");
   return { title: "Your bot has a question", question, options };
 }
-/** The run's waiting line for that card (as awaitsPerson words it). */
-export const routineClaimedCardWaiting = (choice: { question: string }) =>
-  `Waiting for your answer: ${choice.question.slice(0, 300)}`;
+
+/** #4205: the cards drawn for a run's final words: one per separate ask
+ * the words hold (each item ending on its choices in words), else the one
+ * card of routineClaimedCardChoice. */
+export function routineClaimedCardChoices(claim: string): Array<{ title: string; question: string; options: string[] }> {
+  const asks = routineAsksInText(claim);
+  if (asks.length >= 2) return asks.map((ask) => ({ title: "Your bot has a question", ...ask }));
+  return [routineClaimedCardChoice(claim)];
+}
+
+/** The run's waiting line for those cards (as awaitsPerson words it). */
+export const routineClaimedCardWaiting = (choice: { question: string } | ReadonlyArray<{ question: string }>) => {
+  const choices: ReadonlyArray<{ question: string }> = Array.isArray(choice) ? choice : [choice as { question: string }];
+  const first = (choices[0]?.question ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+  return choices.length > 1 ? `Waiting for your answers to ${choices.length} questions: ${first}` : `Waiting for your answer: ${first}`;
+};
+
+const routineWordsAreFrench = (text: string) => /\b(?:carte|je|tu|vous|veux|choix|affich\w*|voici)\b/i.test(text);
+
+/** A question's text for its card: whole, spaces tidied, its lines and
+ * paragraphs kept (the card draws them), bold markers dropped. */
+function routineQuestionText(text: string): string {
+  return text.normalize("NFC").replace(/\r\n?/g, "\n").replace(/\*\*/g, "")
+    .split("\n").map((line) => line.replace(/(\S)[ \t\u00a0]+/g, "$1 ").trimEnd()).join("\n")
+    .replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/** A list item or a heading opens an item of the bot's words. */
+const ASK_ITEM_START = /^\s*(?:[-*\u2022]|\d{1,3}[.)]|#{1,6})\s+/;
+/** The first words of a question that is not a list of choices ("Do I
+ * approve or refuse?", "Veux-tu A ou B ?"): that ask keeps no choices. */
+const ASK_NOT_CHOICES = /^(?:should|shall|do|does|did|can|could|would|will|is|are|may|which|what|how|dois|doit|veux|voulez|peux|pouvez|est-ce|faut|quel\w*|comment)\b/i;
+/** Where the words before a line's choices end. */
+const ASK_CHOICES_LEAD = [". ", "! ", "? ", ": ", "; ", "(", "[", " \u2014 ", " \u2013 ", " - ", "\u00a0: "];
+
+/** The choices a line ends on, in words: "Approuver, Refuser, Corriger ou
+ * Toujours permettre ?", "(Approve, Refuse or Correct?)". Two to six short
+ * answers joined by commas and a last "or" / "ou"; else null. */
+function routineChoicesOfLine(line: string): string[] | null {
+  const plain = line.replace(/\*\*|__|`/g, "").replace(/[\s)\]*_]+$/, "").trimEnd();
+  if (!plain.endsWith("?")) return null;
+  const body = plain.replace(/[\s\u00a0]*\?$/, "");
+  const cut = Math.max(0, ...ASK_CHOICES_LEAD.map((mark) => {
+    const at = body.lastIndexOf(mark);
+    return at < 0 ? -1 : at + mark.length;
+  }));
+  const tail = body.slice(cut).replace(ASK_ITEM_START, "").trim();
+  if (!/\s(?:or|ou)\s/i.test(tail)) return null;
+  const options = tail.split(/\s*,\s*|\s+(?:or|ou)\s+/i).map((option) => option.trim().replace(/[.\s]+$/, "")).filter(Boolean);
+  if (options.length < 2 || options.length > 6 || new Set(options.map((option) => option.toLowerCase())).size !== options.length) return null;
+  if (ASK_NOT_CHOICES.test(options[0]!)) return null;
+  if (options.some((option) => option.length > 40 || option.split(/\s+/).length > 4)) return null;
+  return options.map((option) => option.charAt(0).toUpperCase() + option.slice(1));
+}
+
+/** #4205: the separate asks of a bot's words. A routine that leaves several
+ * items to decide, each ending on its choices in words, gets one card per
+ * item with its own choices, never one long text to answer by typing.
+ * Each ask's question is its item whole (from the item's first line to the
+ * line with its choices); words before the first item and after the last
+ * stay in the run's report. */
+export function routineAsksInText(text: string): Array<{ question: string; options: string[] }> {
+  const lines = text.normalize("NFC").replace(/\r\n?/g, "\n").split("\n");
+  const ends = lines.flatMap((line, index) => {
+    const options = routineChoicesOfLine(line);
+    return options ? [{ index, options }] : [];
+  });
+  if (!ends.length) return [];
+  const firstNonBlank = (from: number) => {
+    let at = from;
+    while (at < lines.length && !lines[at]!.trim()) at++;
+    return at;
+  };
+  // The first item starts the way the second does: on its list item or
+  // heading when the items are such, else at its own paragraph.
+  const first = ends[0]!.index;
+  const second = ends.length > 1 ? firstNonBlank(first + 1) : -1;
+  let start = first;
+  if (second >= 0 && ASK_ITEM_START.test(lines[second]!)) {
+    while (start > 0 && !ASK_ITEM_START.test(lines[start]!)) start--;
+    if (!ASK_ITEM_START.test(lines[start]!)) start = first;
+  }
+  if (!ASK_ITEM_START.test(lines[start]!)) {
+    while (start > 0 && lines[start - 1]!.trim()) {
+      start--;
+      if (ASK_ITEM_START.test(lines[start]!)) break;
+    }
+  }
+  const asks: Array<{ question: string; options: string[] }> = [];
+  let from = start;
+  for (const end of ends) {
+    const question = routineQuestionText(lines.slice(from, end.index + 1).join("\n"));
+    if (question) asks.push({ question, options: end.options });
+    from = firstNonBlank(end.index + 1);
+  }
+  return asks;
+}
 
 /** #2635: the run's final words announce what the bot would do ("I'll pull
  * the overdue invoices now", "Je vais vérifier…") and report nothing done.
@@ -1781,6 +1886,10 @@ export class RoutineManager {
    * a restart reruns the turn and sees again): tool calls that failed and
    * never succeeded after, and engine errors the turn went on past. */
   private readonly runTrouble = new Map<string, RunTrouble>();
+  /** #4205: the bot's last words whole, by run id, while the run is active:
+   * the stored record keeps 2000 characters (run.output), the cards drawn
+   * from those words carry them whole. */
+  private readonly finalWords = new Map<string, string>();
   /** 2026-11-01: when a running run last had an event (in memory: after a
    * restart its start counts), for the lost-turn check. */
   private readonly lastRunEvent = new Map<string, number>();
@@ -4344,7 +4453,9 @@ export class RoutineManager {
       }
     } else if (event.type === "item.completed" && event.itemType === "assistant_text") {
       // #3515: the record keeps whole sentences, never a word cut in two
-      run.output = clipReadable(redactSecretsInText(event.text).trim(), 2_000);
+      const words = redactSecretsInText(event.text).trim();
+      run.output = clipReadable(words, 2_000);
+      this.finalWords.set(run.id, words);
       const trouble = this.runTrouble.get(run.id);
       if (trouble && run.output) {
         delete trouble.failedAfterText;
@@ -4439,7 +4550,9 @@ export class RoutineManager {
         continue;
       }
       if (root?.result.trim()) {
-        run.output = clipReadable(redactSecretsInText(root.result).trim(), 2_000);
+        const words = redactSecretsInText(root.result).trim();
+        run.output = clipReadable(words, 2_000);
+        this.finalWords.set(run.id, words);
         // the teammates' result is the run's final message (#3009)
         const trouble = this.runTrouble.get(run.id);
         if (trouble) delete trouble.failedAfterText;
@@ -4451,6 +4564,9 @@ export class RoutineManager {
     }
     for (const id of this.runTrouble.keys()) {
       if (!this.runs.some((run) => run.id === id && ACTIVE_RUN_STATUSES.has(run.status))) this.runTrouble.delete(id);
+    }
+    for (const id of this.finalWords.keys()) {
+      if (!this.runs.some((run) => run.id === id && ACTIVE_RUN_STATUSES.has(run.status))) this.finalWords.delete(id);
     }
   }
 
@@ -4578,6 +4694,15 @@ export class RoutineManager {
       && !this.options.cardRaisedSince(run.threadId, this.claimWindowStart(run as RoutineRun & { startedAt: number })));
   }
 
+  /** #4205: the bot's final words leave several separate items to decide,
+   * each ending on its choices in words, and no card was drawn for them:
+   * each becomes its own card, as a claimed card would. */
+  private endsOnUndrawnAsks(run: RoutineRun, words: string | undefined): boolean {
+    return Boolean(run.threadId && run.startedAt !== undefined && this.options.cardRaisedSince && words
+      && routineAsksInText(words).length >= 2
+      && !this.options.cardRaisedSince(run.threadId, this.claimWindowStart(run as RoutineRun & { startedAt: number })));
+  }
+
   /** #3065: Grok refuses use_tool aimed at one of its native tools and a
    * Grok turn cannot be steered, so a turn that ended with such a refusal
    * never settled goes on once in the run's own thread, told to call the
@@ -4630,16 +4755,21 @@ export class RoutineManager {
     // so the turn that really ends the run settles them once, with the
     // trouble of every turn. A run that declared it failed or that Flow
     // refused ends as such, below.
-    if (this.claimsUndrawnCard(run) && this.options.raiseClaimedCard
+    // #4205: so are the separate asks the bot wrote as text, one card each.
+    // The cards carry the bot's words whole, never the record's 2000 characters.
+    const whole = noFinalMessage ? undefined : this.finalWords.get(run.id);
+    const words = whole !== undefined && clipReadable(whole, 2_000) === run.output ? whole : run.output;
+    if ((this.claimsUndrawnCard(run) || this.endsOnUndrawnAsks(run, words)) && this.options.raiseClaimedCard
       && routineReportOutcome(run.output).declared?.status !== "failed"
       && !this.runTrouble.get(run.id)?.flowBlocked && !flowRunBlockedReason(run.output)) {
       // The card and the waiting run show the bot's words, never the
       // goal lines (GOAL_STATUS / NEXT_CHECK) or the report markers: the
       // turn that ends the run carries its own and settles the goal.
-      const said = readGoalReport(routineReportOutcome(run.output).report, this.now()).report;
+      const said = readGoalReport(routineReportOutcome(words).report, this.now()).report;
       const waiting = this.options.raiseClaimedCard(run.threadId!, said);
       if (waiting) {
-        run.output = said || undefined;
+        this.finalWords.delete(run.id);
+        run.output = said ? clipReadable(said, 2_000) : undefined;
         run.claimCardAt = this.now();
         this.wait(run, waiting);
         run.error = undefined;
@@ -4650,6 +4780,7 @@ export class RoutineManager {
     const outcome = this.settleReport(run);
     const trouble = this.runTrouble.get(run.id);
     this.runTrouble.delete(run.id);
+    this.finalWords.delete(run.id);
     run.attention = undefined;
     delete run.waitingOn;
     if (outcome.declared?.status === "failed") {
@@ -4785,6 +4916,7 @@ export class RoutineManager {
     }
     this.failureFacts.delete(run.id);
     this.runTrouble.delete(run.id);
+    this.finalWords.delete(run.id);
     delete run.waitingOn;
     const refusal = classifyRoutineFailure(failure, facts);
     const engine = this.readinessEngines.get(run.id) ?? this.options.engineForRun?.(run);
@@ -5119,6 +5251,7 @@ export class RoutineManager {
 
   private failRun(run: RoutineRun, message: string, alert?: RoutineAlert | null) {
     this.runTrouble.delete(run.id);
+    this.finalWords.delete(run.id);
     delete run.waitingOn;
     run.status = "failed";
     run.attention = undefined;
@@ -5148,6 +5281,7 @@ export class RoutineManager {
    * person (onRunNotice): nothing stays invisible. */
   private blockRun(run: RoutineRun, message: string, alert: RoutineAlert | null = null, preflight = false) {
     this.runTrouble.delete(run.id);
+    this.finalWords.delete(run.id);
     delete run.waitingOn;
     run.status = "blocked";
     run.attention = undefined;
@@ -5707,6 +5841,10 @@ export class RoutineManager {
   }
 
   private emitRun(run: RoutineRun) {
+    // #4205: a cancelled or superseded run's cards die with it
+    if (run.status === "cancelled" && run.threadId && run.startedAt !== undefined && run.target !== "room-goal") {
+      try { this.options.closeRunCards?.(run.threadId, run.startedAt); } catch (error) { reportBackgroundError(error); }
+    }
     this.options.emit?.({ kind: "routine.run", run: cloneRun(run) });
     if (run.status !== "queued") this.precheckPassed.delete(run.id);
     if (!ACTIVE_RUN_STATUSES.has(run.status)) { this.readinessEngines.delete(run.id); this.readinessSettled.delete(run.id); }

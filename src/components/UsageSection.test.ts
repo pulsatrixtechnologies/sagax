@@ -168,6 +168,13 @@ describe("My plan", () => {
     expect(html).not.toMatch(/[\u2013\u2014]/);
   });
 
+  it("draws the page headline on the Settings type scale, the large figures alone at 22/28 (#4123)", () => {
+    const html = renderToStaticMarkup(createElement(UsagePlan, { usage: usage(12, 10), error: null, now: NOW.getTime() }));
+    const label = /data-settings-row="renewal"[\s\S]*?<div id="[^"]+" class="([^"]+)">Renews Nov/.exec(html)?.[1] ?? "";
+    for (const cls of ["text-[13px]", "font-normal", "leading-[18px]", "tabular-nums", "text-ink"]) expect(label.split(" "), cls).toContain(cls);
+    expect(html).not.toMatch(/text-\[22px\]|font-semibold/);
+  });
+
   it("writes the renewal day the Quebec way", () => {
     setLocale("fr");
     expect(renewalDay(NOW)).toMatch(/^1er\u00a0nov/);

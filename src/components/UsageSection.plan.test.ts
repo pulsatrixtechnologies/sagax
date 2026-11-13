@@ -4,8 +4,8 @@
 // loaded, after a failed read and when no provider answered, so any of those
 // erased it. It is now always drawn under Cost, with the 5-hour session and
 // the week each on their own gauge, for an admin and a member, in an
-// organization and solo. Since #2080 (2026-11-05) it is a folded row of
-// Detail, under the headline.
+// organization and solo. Since #4095 it is the page's Usage limits group,
+// under My plan.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,6 +17,7 @@ const scene = vi.hoisted(() => ({
   org: null as unknown,
   plan: null as unknown,
   planFails: false,
+  cap: null as unknown,
 }));
 
 vi.mock("@/state/store", async (importOriginal) => ({
@@ -25,6 +26,10 @@ vi.mock("@/state/store", async (importOriginal) => ({
     if (path.startsWith("/api/plan-usage")) {
       if (scene.planFails) throw new Error("forbidden");
       return scene.plan;
+    }
+    if (path.startsWith("/api/me/spend-cap")) {
+      if (scene.cap) return scene.cap;
+      throw new Error("not found");
     }
     return { groups: [], total: { key: "total", label: "Total", turns: 4, costUsd: 12 } };
   }),
@@ -65,6 +70,7 @@ beforeEach(() => {
   setLocale("fr");
   scene.plan = report;
   scene.planFails = false;
+  scene.cap = null;
 });
 afterEach(() => {
   act(() => root?.unmount());
@@ -78,7 +84,7 @@ const roles = [
   { name: "admin solo", org: null, config: { viewer: { role: "owner" } } },
 ];
 
-describe("Réglages > Utilisation : Forfait dans Détail, sous la carte de tête", () => {
+describe("Réglages > Utilisation : Limites d'utilisation, sous Mon forfait", () => {
   for (const role of roles) {
     it(`${role.name} : Forfait avec la session de 5 heures et la semaine`, async () => {
       scene.org = role.org;
@@ -86,15 +92,15 @@ describe("Réglages > Utilisation : Forfait dans Détail, sous la carte de tête
       const page = await mount();
       const html = page.innerHTML;
       const head = html.indexOf('data-settings-card="usage.headline"');
-      const plan = html.indexOf('data-settings-card="usage.planDetail"');
+      const plan = html.indexOf('data-settings-card="usage.plan"');
       expect(head).toBeGreaterThanOrEqual(0);
       expect(plan).toBeGreaterThan(head);
-      expect(page.querySelector("[data-usage-cost]")?.textContent).toContain("12,00");
-      const card = page.querySelector('[data-settings-card="usage.planDetail"]')!;
-      expect(card.textContent).toContain("Forfait");
+      expect(page.querySelector("[data-usage-cycle-cost]")?.textContent).toContain("12,00");
+      const card = page.querySelector('[data-settings-card="usage.plan"]')!;
+      expect(card.textContent).toContain("Limites d'utilisation");
       expect(card.querySelector('[data-plan-row="claude"]')).not.toBeNull();
       expect(card.querySelector('[data-plan-window-kind="fiveHour"]')?.textContent).toContain("Session de 5 heures");
-      expect(card.querySelector('[data-plan-window-kind="weekly"]')?.textContent).toContain("Semaine · se renouvelle ");
+      expect(card.querySelector('[data-plan-window-kind="weekly"]')?.textContent).toContain("Se renouvelle le ");
       expect(card.textContent).toContain("27 % utilisé");
       expect(card.textContent).toContain("73 % restant");
       expect(card.textContent).toContain("40 % utilisé");
@@ -150,5 +156,25 @@ describe("Réglages > Utilisation : Forfait dans Détail, sous la carte de tête
     expect(row!.querySelector('[data-plan-state="error"]')?.textContent).toMatch(/429/);
     expect(row!.textContent).toContain("Réessayer");
     expect(page.querySelector('[data-plan-status]')).toBeNull();
+  });
+});
+
+// #4095 review: the page said the month's cost twice (My plan and the head
+// of the bots' usage) and the renewal twice (My plan and under the spending
+// limit). Each is now said once: the cost as the bots' usage large figure,
+// the renewal in My plan.
+describe("Réglages > Utilisation : chaque état dit une seule fois (#4095)", () => {
+  it("le coût du mois et le renouvellement n'apparaissent qu'une fois, limite de dépenses comprise", async () => {
+    scene.org = null;
+    scene.config = { viewer: { role: "owner" } };
+    scene.cap = { supported: true, minUsd: 1, cap: { month: "2026-10", monthlyUsd: 50, spentUsd: 12, percent: 24, warn: false, exceeded: false } };
+    const page = await mount();
+    expect(page.querySelector('[data-usage-bar="cap"]')).not.toBeNull();
+    expect(page.querySelectorAll("[data-usage-cost], [data-usage-cycle-cost]")).toHaveLength(1);
+    const text = page.textContent ?? "";
+    expect(text.match(/Se renouvelle le 1er/g)).toHaveLength(1);
+    const plan = page.querySelector('[data-settings-card="usage.headline"]')!;
+    expect(plan.textContent).toContain("Se renouvelle le 1er");
+    expect(plan.textContent).not.toContain("12,00");
   });
 });

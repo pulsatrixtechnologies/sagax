@@ -132,7 +132,7 @@ describe("Plan usage rows", () => {
     expect(html).toContain('data-plan-state="error"');
     expect(html).toContain("Could not reach Grok: the sign-in token expired and renews on the next turn; refresh after it");
     expect(html).toContain("Try again");
-    expect(html).toContain("16% used");
+    expect(html).toContain(">16%</span>");
     expect(html).not.toContain('data-plan-status=');
   });
 

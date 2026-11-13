@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Headless screenshots of the plan usage history gallery (#2757, Playwright,
- * no window): Settings > Usage with the Plan fold and the history fold open,
+ * no window): Settings > Usage with its limits and the history fold open,
  * dark and light, English and French, plus the second "Claude" account.
  * Mocked periods only; no server.
  * Usage: node scripts/capture/plan-usage-history.mjs [--out DIR] [--port N]
@@ -62,7 +62,7 @@ try {
   for (const { skin, label, lang, account } of shots) {
     await page.goto(`${base}?skin=${skin}&lang=${lang}${account ? `&account=${account}` : ""}`, { waitUntil: "networkidle" });
     await page.waitForSelector("[data-plan-history]", { state: "attached", timeout: 60_000 });
-    for (const card of ["usage.planDetail", "usage.planHistory"]) {
+    for (const card of ["usage.planHistory"]) {
       const fold = page.locator(`[data-settings-card="${card}"]`);
       if ((await fold.getAttribute("data-open")) !== "true") await fold.locator("button[aria-controls]").first().click();
     }

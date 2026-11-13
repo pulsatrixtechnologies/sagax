@@ -1,9 +1,11 @@
-// Settings > Usage (#2080, 2026-11-05): read in three seconds. One headline
-// card (this month's cost, its renewal, one thin bar for the spending limit
-// or the plan's tightest window, the spending limit row), then
-// a Detail group whose rows fold: the breakdown by bot and by model with the
-// cycle and the 30-day line, the full plan windows, and the per-job traces
-// on a sub-page. With nothing to show it says so once, with Try again.
+// Settings > Usage (#2080, 2026-11-05; the reference's layout since #4095):
+// group titles over one card each. My plan: this month's cost and its
+// renewal. Usage limits (refresh in its title row): the spending limit and
+// each engine's windows, a large percent with its bar and renewal line each.
+// The bots' usage: the cycle's cost, a segmented control (by source, by bot,
+// by model), the coloured share bar with its legend, the daily cost chart.
+// Detail: the plan history and the per-job traces on a sub-page. With
+// nothing to show it says so once, with Try again.
 // Every figure comes from GET /api/me/usage (or, on a 0.5.3 server,
 // GET /api/usage?mine=1), which keeps only the requester's turns
 // (server/routes/usage.ts) and is open to every member (2026-10-15).
@@ -15,7 +17,9 @@ import { t, activeLocale } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { canViewUsage } from "@/lib/viewer";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
-import { formatResetDistance, planRows } from "@/lib/plan-usage";
+import { planRows } from "@/lib/plan-usage";
+import { formatMoneyCompact } from "@/lib/usage";
+import type { LocaleKey } from "@/locales";
 import {
   costOf,
   costTrend,
@@ -31,12 +35,13 @@ import {
   type PersonalUsageGroup,
   type PersonalUsageSummary,
 } from "@/lib/usage-personal";
-import { headlineMeter, PlanUsageView, usePlanUsage, type PlanMeter } from "./PlanUsage";
+import { LimitMeter, PlanUsageView, usePlanUsage } from "./PlanUsage";
 import { PlanUsageHistoryView, usePlanHistory } from "./PlanUsageHistory";
 import { SettingsSubPageRow } from "./SettingsSubPage";
-import { ConfirmPill, DescribedRow, FIELD, FoldRow, PILL, PillSelect, PRIMARY_PILL, SettingsGroup } from "./SettingsPrimitives";
+import { ConfirmPill, DescribedRow, FIELD, FoldRow, PILL, PRIMARY_PILL, SettingsGroup } from "./SettingsPrimitives";
+import { PageSegment } from "./content-page";
+import { formatTileShare, seriesColor, UsageChartCard } from "./usage-chart/UsageChartCard";
 import { readableError } from "@/lib/plain-error";
-import type { PlanRow } from "@/lib/plan-usage";
 
 export interface PersonalUsage {
   month: PersonalUsageSummary;
@@ -179,25 +184,20 @@ export function UsageSection() {
   const plan = usePlanUsage(planShown);
   // #2757: the history follows each reading of the windows above.
   const planHistory = usePlanHistory(planShown, plan.report?.fetchedAt ? Date.parse(plan.report.fetchedAt) || 0 : 0);
+  const hasPlan = !plan.unavailable && planRows(plan.report).length > 0;
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <UsageHeadline
+      <UsagePlan
         usage={usage}
         error={error}
-        plan={headlineMeter(plan.report, plan.favorite?.id ?? null)}
+        hasPlan={hasPlan}
         planLoading={plan.loading}
         now={plan.now}
-        cap={cap}
-        onCapChange={setCap}
         onRetry={() => { setReload((count) => count + 1); plan.onRefresh(); }}
       />
+      <PlanUsageView {...plan} leading={cap?.supported ? <SpendCapRow data={cap} onChange={setCap} /> : null} />
+      {usage && <UsageBreakdown usage={usage} cycle={cycle} onCycle={setCycle} detail={detail?.cycle === cycle ? detail.data : null} />}
       <UsageDetail
-        usage={usage}
-        cycle={cycle}
-        onCycle={setCycle}
-        detail={detail?.cycle === cycle ? detail.data : null}
-        planCount={plan.unavailable ? 0 : planRows(plan.report).length}
-        plan={<PlanUsageView {...plan} bare />}
         planHistory={planShown && !plan.unavailable ? <PlanUsageHistoryView history={planHistory.history} failed={planHistory.failed} now={plan.now} /> : null}
         onOpenTraces={() => dispatch({ type: "toggleAppSettings", open: true, section: "usage", subPage: "usage.traces" })}
       />
@@ -211,7 +211,7 @@ export function renewalDay(now = new Date()): string {
   try {
     const parts = new Intl.DateTimeFormat(usageLocale(), { day: "numeric", month: "short", timeZone: "UTC" }).formatToParts(at);
     const french = activeLocale().startsWith("fr");
-    return parts.map((part) => (french && part.type === "day" && part.value === "1" ? "1er" : part.value)).join("").replace(/ /g, "\u00a0");
+    return parts.map((part) => (french && part.type === "day" && part.value === "1" ? "1er" : part.value)).join("").replace(/ /g, " ");
   } catch {
     return at.toISOString().slice(0, 10);
   }
@@ -223,45 +223,26 @@ function barTone(percent: number, warn: boolean, exceeded: boolean): string {
   return "bg-accent";
 }
 
-function Bar({ kind, percent, tone, label, caption }: { kind: "cap" | "plan"; percent: number; tone: string; label: string; caption: React.ReactNode }) {
-  const shown = Math.round(Math.min(100, Math.max(0, percent)));
-  return (
-    <div className="flex flex-col gap-1.5" data-usage-bar={kind}>
-      <div className="h-1 overflow-hidden rounded-full bg-inset" role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={shown}>
-        <div className={cn("h-full rounded-full", tone)} style={{ width: `${shown}%` }} />
-      </div>
-      <p className="text-[12px] tabular-nums text-ink-secondary">{caption}</p>
-    </div>
-  );
-}
-
-/** The headline card: one figure, one date, one bar, then the spending
- * limit. With neither a cost nor a plan window, one grey
- * line with Try again instead of a card per missing figure. */
-export function UsageHeadline({ usage, error, plan = null, planLoading = false, now = Date.now(), cap = null, onCapChange, writeCap = writeSpendCap, onRetry }: {
+/** My plan (#4095, the reference's first group): the day the month renews,
+ * as a row of one card. The month's cost is said once, as the large figure
+ * of the bots' usage group, and the renewal once, here (not again under the
+ * spending limit). With neither a cost nor a plan
+ * window, one quiet line with Try again instead of a card per missing
+ * figure; while the first answer is on its way, one loading line. */
+export function UsagePlan({ usage, error, hasPlan = false, planLoading = false, now = Date.now(), onRetry }: {
   usage: PersonalUsage | null;
   error: PersonalUsageError | null;
-  plan?: { provider: PlanRow; meter: PlanMeter } | null;
+  /** An engine reports its plan windows (the limits group then speaks for the page). */
+  hasPlan?: boolean;
   planLoading?: boolean;
   now?: number;
-  cap?: PersonalSpendCap | null;
-  onCapChange?: (next: PersonalSpendCap) => void;
-  writeCap?: (monthlyUsd: number | null) => Promise<PersonalSpendCap>;
   onRetry?: () => void;
 }) {
-  const nothing = error !== null && !plan && !planLoading;
-  const loading = !nothing && !usage && !plan;
-  const limit = cap?.supported ? cap.cap : null;
-  const resets = plan ? formatResetDistance(plan.meter.resetsAt, now) : null;
-  const planCaption = plan && (
-    <>
-      {t("planUsage.used", { used: Math.round(plan.meter.usedPercent) })} · {plan.provider.name} · {plan.meter.label}
-      {resets && <> · {t("planUsage.resetsIn", { when: resets })}</>}
-    </>
-  );
+  const nothing = error !== null && !hasPlan && !planLoading;
+  const loading = !nothing && !usage && error === null;
   return (
-    <div data-settings-card="usage.headline">
-      <SettingsGroup groupId="headline">
+    <div data-settings-card="usage.headline" className="contents">
+      <SettingsGroup title={t("usage.group.plan")} groupId="usage-plan">
         {nothing ? (
           <div role="status" className="flex flex-wrap items-center gap-3 px-3.5 py-2.5" data-usage-unavailable={error ?? ""}>
             <p className="min-w-0 flex-1 text-[13px] text-ink-secondary">{t("usage.headline.unavailable")}</p>
@@ -269,37 +250,17 @@ export function UsageHeadline({ usage, error, plan = null, planLoading = false, 
           </div>
         ) : loading ? (
           <p role="status" className="px-3.5 py-2.5 text-[13px] text-ink-secondary">{t("planUsage.loading")}</p>
-        ) : (
-          <div className="flex flex-col gap-3 px-3.5 pb-3 pt-2" data-usage-headline>
-            <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <span className="text-[13px] font-normal leading-[18px] tabular-nums text-ink" data-usage-cost>
-                {usage ? t("usage.headline.thisMonth", { cost: formatCost(costOf(usage.month)) }) : plan ? `${plan.provider.name} · ${plan.meter.label}` : null}
-              </span>
-              <span className="text-[13px] leading-[18px] text-ink-secondary" data-usage-renews>
-                {usage ? t("usage.headline.renews", { date: renewalDay(new Date(now)) }) : resets ? t("planUsage.resetsIn", { when: resets }) : null}
-              </span>
-            </div>
-            {limit ? (
-              <Bar
-                kind="cap"
-                percent={limit.percent}
-                tone={barTone(limit.percent, limit.warn, limit.exceeded)}
-                label={t("usage.cap.title")}
-                caption={t("usage.cap.spent", { spent: formatCost(limit.spentUsd), cap: formatCost(limit.monthlyUsd), percent: limit.percent })}
-              />
-            ) : plan ? (
-              <Bar kind="plan" percent={plan.meter.usedPercent} tone={barTone(plan.meter.usedPercent, false, false)} label={`${plan.provider.name} · ${plan.meter.label}`} caption={planCaption} />
-            ) : null}
-          </div>
-        )}
-        {cap?.supported && <SpendCapRow data={cap} write={writeCap} onChange={onCapChange} />}
+        ) : usage ? (
+          <DescribedRow label={t("usage.headline.renews", { date: renewalDay(new Date(now)) })} rowId="renewal" />
+        ) : null}
       </SettingsGroup>
     </div>
   );
 }
 
-/** Limite de dépenses: the person's own monthly limit, a row of the
- * headline. A reached limit stops new turns (the server answers 409
+/** Limite de dépenses: the person's own monthly limit, the first row of
+ * Usage limits. A set limit shows in the shared limit form under its row
+ * (#4095). A reached limit stops new turns (the server answers 409
  * spend_cap) until it is raised here. Edit opens the field in place. */
 export function SpendCapRow({ data, write = writeSpendCap, onChange, defaultEditing = false }: {
   data: PersonalSpendCap;
@@ -332,35 +293,51 @@ export function SpendCapRow({ data, write = writeSpendCap, onChange, defaultEdit
       {cap.exceeded ? t("usage.cap.reached") : t("usage.cap.nearing")}
     </span>
   ) : cap ? <span className="sr-only" data-cap-status="within">{t("usage.cap.within")}</span> : null;
+  const meter = cap ? (
+    <div className="mt-3">
+      <LimitMeter
+        data-usage-bar="cap"
+        percent={cap.percent}
+        tone={barTone(cap.percent, cap.warn, cap.exceeded)}
+        ariaLabel={t("usage.cap.title")}
+        end={t("usage.cap.spent", { spent: formatCost(cap.spentUsd), cap: formatCost(cap.monthlyUsd), percent: cap.percent })}
+      />
+    </div>
+  ) : null;
   return (
     <DescribedRow
       label={t("usage.cap.title")}
       rowId="cap-state"
       description={<>{cap ? t("usage.cap.perMonth", { cap: formatCost(cap.monthlyUsd) }) : t("usage.cap.noneShort")}{status}</>}
-      below={editing ? (
-        <div className="mt-2 flex flex-col gap-2" data-settings-row="cap-edit">
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="text"
-              inputMode="decimal"
-              className={cn(FIELD, "w-40")}
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              placeholder={cap ? t("usage.cap.raisePlaceholder") : t("usage.cap.placeholder")}
-              aria-label={t("usage.cap.monthly")}
-              aria-invalid={text !== "" && parsed === null}
-              data-cap-input
-            />
-            <button type="button" className={PRIMARY_PILL} disabled={busy || parsed === null} onClick={() => parsed !== null && void save(parsed)} data-cap-save>
-              {cap ? t("usage.cap.raise") : t("usage.cap.set")}
-            </button>
-            {cap && <ConfirmPill label={t("usage.cap.remove")} confirmLabel={t("usage.cap.removeConfirm")} onConfirm={() => void save(null)} disabled={busy} />}
-            <button type="button" className={PILL} onClick={() => { setEditing(false); setText(""); setFailed(null); }} data-cap-cancel>{t("common.cancel")}</button>
-          </div>
-          {text !== "" && parsed === null && <p role="alert" className="text-[12px] text-danger">{t("usage.cap.invalid", { min: formatCost(data.minUsd) })}</p>}
-          {failed && <p role="alert" className="text-[12px] text-danger">{failed}</p>}
-          <p className="text-[12px] leading-4 text-ink-secondary">{t("usage.cap.hint")}</p>
-        </div>
+      below={meter || editing ? (
+        <>
+          {meter}
+          {editing && (
+            <div className="mt-2 flex flex-col gap-2" data-settings-row="cap-edit">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className={cn(FIELD, "w-40")}
+                  value={text}
+                  onChange={(event) => setText(event.target.value)}
+                  placeholder={cap ? t("usage.cap.raisePlaceholder") : t("usage.cap.placeholder")}
+                  aria-label={t("usage.cap.monthly")}
+                  aria-invalid={text !== "" && parsed === null}
+                  data-cap-input
+                />
+                <button type="button" className={PRIMARY_PILL} disabled={busy || parsed === null} onClick={() => parsed !== null && void save(parsed)} data-cap-save>
+                  {cap ? t("usage.cap.raise") : t("usage.cap.set")}
+                </button>
+                {cap && <ConfirmPill label={t("usage.cap.remove")} confirmLabel={t("usage.cap.removeConfirm")} onConfirm={() => void save(null)} disabled={busy} />}
+                <button type="button" className={PILL} onClick={() => { setEditing(false); setText(""); setFailed(null); }} data-cap-cancel>{t("common.cancel")}</button>
+              </div>
+              {text !== "" && parsed === null && <p role="alert" className="text-[12px] text-danger">{t("usage.cap.invalid", { min: formatCost(data.minUsd) })}</p>}
+              {failed && <p role="alert" className="text-[12px] text-danger">{failed}</p>}
+              <p className="text-[12px] leading-4 text-ink-secondary">{t("usage.cap.hint")}</p>
+            </div>
+          )}
+        </>
       ) : undefined}
     >
       {!editing && <button type="button" className={PILL} onClick={() => setEditing(true)} data-cap-edit>{t("usage.cap.edit")}</button>}
@@ -368,30 +345,152 @@ export function SpendCapRow({ data, write = writeSpendCap, onChange, defaultEdit
   );
 }
 
-/** Detail: every row folds. The breakdown (cycle, this month's figure and
- * trend, the 30-day line, by bot, by model, by source), the plan's every
- * window, and the per-job traces on their own sub-page. */
-export function UsageDetail({ usage, cycle = "current", onCycle, detail = null, plan = null, planCount = 0, planHistory = null, onOpenTraces }: {
-  usage: PersonalUsage | null;
+export type UsageSegment = "source" | "bot" | "model";
+
+const SEGMENT_LABEL: Record<UsageSegment, LocaleKey> = {
+  source: "usage.personal.bySource",
+  bot: "usage.personal.byBot",
+  model: "usage.personal.byModel",
+};
+
+/** "Nov 12", "12 nov.": a day of the chart, the same in any zone. */
+function chartDay(key: string, withYear = false): string {
+  try {
+    return new Intl.DateTimeFormat(usageLocale(), { month: "short", day: "numeric", ...(withYear ? { year: "numeric" } : {}), timeZone: "UTC" }).format(new Date(`${key}T12:00:00Z`));
+  } catch {
+    return key;
+  }
+}
+
+function rangeDays(range: { from: string; to: string }): string[] {
+  const days: string[] = [];
+  for (let at = Date.parse(`${range.from}T00:00:00Z`); at <= Date.parse(`${range.to}T00:00:00Z`); at += 86_400_000) days.push(new Date(at).toISOString().slice(0, 10));
+  return days;
+}
+
+/** The reference's "<app> usage" group (#4095): one card. Its head is the
+ * shown cycle's cost in large figures with the turns and the trend under it,
+ * and the segmented control at the right (by source, by bot, by model); then
+ * the coloured share bar, its legend (each group's cost, share and turns),
+ * and the daily cost chart, whose arrows step between this cycle and the
+ * previous one. Figures and lists are the ones the page always read. */
+export function UsageBreakdown({ usage, cycle = "current", onCycle, detail = null, initialSegment = "source" }: {
+  usage: PersonalUsage;
   cycle?: UsageCycle;
   onCycle?: (next: UsageCycle) => void;
   /** The shown cycle's breakdowns once loaded; the previous cycle's totals come from here. */
   detail?: CycleDetail | null;
-  plan?: React.ReactNode;
-  planCount?: number;
+  initialSegment?: UsageSegment;
+}) {
+  const [segment, setSegment] = useState<UsageSegment>(initialSegment);
+  const previousCycle = cycle === "previous";
+  const shownTotal = previousCycle ? detail?.total : usage.month;
+  const current = costOf(shownTotal);
+  const trend = !previousCycle ? costTrend(current, costOf(usage.previous)) : null;
+  const estimated = (shownTotal?.total.estimatedUsd ?? 0) > 0;
+  const sources = detail?.byEngine ? rankedGroups(detail.byEngine) : null;
+  const waiting = previousCycle && !detail;
+  const lists: Record<UsageSegment, PersonalUsageGroup[] | null> = {
+    source: sources,
+    bot: rankedGroups(previousCycle ? detail?.byBot : usage.byBot),
+    model: rankedGroups(previousCycle ? detail?.byModel : usage.byModel),
+  };
+  const offered = (["source", "bot", "model"] as const).filter((id) => lists[id] !== null);
+  const active: UsageSegment = lists[segment] ? segment : "bot";
+  const groups = lists[active] ?? [];
+  const range = previousCycle ? previousCyclePeriod() : personalUsagePeriods().days30;
+  const values = dailyCosts(previousCycle ? detail?.total : usage.days30, range);
+  const days = rangeDays(range);
+  const rangeLabel = days.length > 0 ? t("botProfile.usage.chart.rangeTo", { from: chartDay(days[0]!), to: chartDay(days[days.length - 1]!, true) }) : "";
+  const groupCost = (group: PersonalUsageGroup) => (typeof group.costUsd === "number" && Number.isFinite(group.costUsd) ? group.costUsd : 0);
+  const sum = groups.reduce((total, group) => total + groupCost(group), 0);
+  const color = (index: number) => seriesColor(index);
+  return (
+    <div data-settings-card="usage.breakdown" className="contents">
+      <SettingsGroup title={t("usage.group.breakdown")} groupId="usage-breakdown">
+        <div className="usage-chart flex min-w-0 flex-col gap-5 px-3.5 pb-2 pt-2" data-usage-breakdown={active}>
+          <div className="flex min-w-0 flex-wrap items-start justify-between gap-3" data-settings-row="month">
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <span className="text-[22px] leading-7 tabular-nums text-ink" data-usage-cycle-cost="">{formatCost(current)}</span>
+              <span className="text-[12px] leading-4 text-ink-tertiary">
+                {previousCycle ? previousCycleLabel() : t("usage.personal.breakdownSummary")}
+                {" · "}
+                {shownTotal ? t("usage.personal.turns", { turns: shownTotal.total.turns }) : t("planUsage.loading")}
+                {trend !== null && (
+                  <> · <span data-usage-trend={trend} className={cn(trend > 0 ? "text-warning" : "text-success")}>
+                    {t(trend > 0 ? "usage.personal.trendUp" : trend < 0 ? "usage.personal.trendDown" : "usage.personal.trendSame", { percent: Math.abs(trend) })}
+                  </span></>
+                )}
+              </span>
+              {estimated && <span className="text-[12px] leading-4 text-ink-tertiary">{t("usage.personal.estimated")}</span>}
+            </div>
+            <div data-usage-segments={active} className="shrink-0">
+              <PageSegment<UsageSegment>
+                label={t("usage.breakdown.segmentAria")}
+                value={active}
+                options={offered.map((id) => ({ value: id, label: t(SEGMENT_LABEL[id]) }))}
+                onChange={setSegment}
+              />
+            </div>
+          </div>
+          {waiting ? <p role="status" className="text-[13px] text-ink-secondary">{t("planUsage.loading")}</p> : (
+            <div className="flex min-w-0 flex-col gap-3">
+              <div aria-hidden="true" data-usage-share-bar="" className="flex h-2 min-w-0 gap-0.5 overflow-clip rounded-[4px] bg-inset">
+                {groups.map((group, index) => groupCost(group) > 0 && (
+                  <span key={group.key} className="block h-full min-w-[2px]" style={{ flexGrow: groupCost(group), flexBasis: 0, backgroundColor: color(index) }} />
+                ))}
+              </div>
+              {groups.length === 0 ? (
+                <p className="text-[13px] text-ink-secondary">{t("usage.personal.none")}</p>
+              ) : (
+                <ul data-usage-list={active} className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(136px,1fr))] gap-x-4 gap-y-3 p-0">
+                  {groups.map((group, index) => (
+                    <li key={group.key} className="flex min-w-0 flex-col gap-0.5" data-usage-group={group.key}>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color(index) }} />
+                        <span className="min-w-0 truncate text-[12px] leading-4 text-ink-secondary" title={group.label}>{group.label}</span>
+                      </span>
+                      <span className="text-[12px] leading-4 tabular-nums text-ink">
+                        {typeof group.costUsd === "number" ? formatCost(group.costUsd) : "·"}
+                        {sum > 0 && <> · {formatTileShare(groupCost(group) / sum)}</>}
+                      </span>
+                      <span className="text-[11px] leading-4 tabular-nums text-ink-tertiary">{t("usage.personal.turns", { turns: group.turns })}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          {!waiting && (
+            <UsageChartCard
+              className="rounded-none bg-transparent px-0 pb-0 pt-0"
+              rangeLabel={previousCycle ? previousCycleLabel() : rangeLabel}
+              onPrev={onCycle && !previousCycle ? () => onCycle("previous") : undefined}
+              onNext={onCycle && previousCycle ? () => onCycle("current") : undefined}
+              days={days.map((key) => ({ key, label: chartDay(key) }))}
+              series={[{ id: "cost", label: t("botProfile.usage.cost"), share: 1, values, color: color(0) }]}
+              formatValue={formatCost}
+              formatAxis={(value) => formatMoneyCompact(value, null, usageLocale())}
+              legend="none"
+              chartLabel={t("usage.breakdown.chartAria")}
+              empty={t("usage.personal.none")}
+            />
+          )}
+        </div>
+      </SettingsGroup>
+    </div>
+  );
+}
+
+/** Detail: the plan windows' history and the per-job traces on their own sub-page. */
+export function UsageDetail({ planHistory = null, onOpenTraces }: {
   /** #2757: past plan windows, "% of limit used" per period. */
   planHistory?: React.ReactNode;
   onOpenTraces?: () => void;
 }) {
   return (
-    <div data-settings-card="usage.detail">
+    <div data-settings-card="usage.detail" className="contents">
       <SettingsGroup title={t("usage.detail.title")} groupId="detail">
-        {usage && <Breakdown usage={usage} cycle={cycle} onCycle={onCycle} detail={detail} />}
-        {plan && (
-          <FoldRow cardId="usage.planDetail" label={t("usage.plan.title")} count={planCount || undefined}>
-            {plan}
-          </FoldRow>
-        )}
         {planHistory && (
           <FoldRow cardId="usage.planHistory" label={t("planHistory.title")} description={t("planHistory.summary")}>
             {planHistory}
@@ -408,106 +507,6 @@ export function UsageDetail({ usage, cycle = "current", onCycle, detail = null, 
           />
         )}
       </SettingsGroup>
-    </div>
-  );
-}
-
-function Breakdown({ usage, cycle, onCycle, detail }: { usage: PersonalUsage; cycle: UsageCycle; onCycle?: (next: UsageCycle) => void; detail: CycleDetail | null }) {
-  const periods = personalUsagePeriods();
-  const previousCycle = cycle === "previous";
-  const shownTotal = previousCycle ? detail?.total : usage.month;
-  const current = costOf(shownTotal);
-  const trend = !previousCycle ? costTrend(current, costOf(usage.previous)) : null;
-  const estimated = (shownTotal?.total.estimatedUsd ?? 0) > 0;
-  const bots = rankedGroups(previousCycle ? detail?.byBot : usage.byBot);
-  const models = rankedGroups(previousCycle ? detail?.byModel : usage.byModel);
-  const sources = detail?.byEngine ? rankedGroups(detail.byEngine) : null;
-  return (
-    <FoldRow cardId="usage.breakdown" label={t("usage.personal.breakdown")} count={bots.length} toggleLabel={t("usage.personal.breakdown")}>
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1" data-settings-row="month">
-          {onCycle && (
-            <PillSelect<UsageCycle>
-              value={cycle}
-              ariaLabel={t("usage.personal.cycle")}
-              onChange={onCycle}
-              options={[
-                { value: "current", label: t("usage.personal.cycleCurrent") },
-                { value: "previous", label: t("usage.personal.cyclePrevious") },
-              ]}
-            />
-          )}
-          <span className="text-[13px] text-ink">{previousCycle ? previousCycleLabel() : t("usage.personal.breakdownSummary")}</span>
-          <span className="text-[13px] font-semibold tabular-nums text-ink" data-usage-cycle-cost>{formatCost(current)}</span>
-          <span className="text-[12px] text-ink-secondary">
-            {shownTotal ? t("usage.personal.turns", { turns: shownTotal.total.turns }) : t("planUsage.loading")}
-            {trend !== null && (
-              <> · <span data-usage-trend={trend} className={cn(trend > 0 ? "text-warning" : "text-success")}>
-                {t(trend > 0 ? "usage.personal.trendUp" : trend < 0 ? "usage.personal.trendDown" : "usage.personal.trendSame", { percent: Math.abs(trend) })}
-              </span></>
-            )}
-          </span>
-          {estimated && <span className="block w-full text-[12px] text-ink-secondary">{t("usage.personal.estimated")}</span>}
-        </div>
-        {!previousCycle && (
-          <div className="flex items-center gap-3" data-settings-row="days30">
-            <span className="text-[12px] text-ink-secondary">{t("usage.personal.last30")}</span>
-            <Sparkline values={dailyCosts(usage.days30, periods.days30)} />
-          </div>
-        )}
-        {previousCycle && !detail ? <p role="status" className="text-[13px] text-ink-secondary">{t("planUsage.loading")}</p> : (
-          <>
-            <GroupList kind="bot" title={t("usage.personal.byBot")} groups={bots} />
-            <GroupList kind="model" title={t("usage.personal.byModel")} groups={models} />
-            {sources && <GroupList kind="source" title={t("usage.personal.bySource")} groups={sources} />}
-          </>
-        )}
-      </div>
-    </FoldRow>
-  );
-}
-
-/** A tiny line of the last 30 days' cost, oldest at the left. */
-export function Sparkline({ values }: { values: number[] }) {
-  const width = 120;
-  const height = 28;
-  const max = Math.max(...values, 0);
-  if (values.length < 2 || max <= 0) return <span aria-hidden="true" className="block h-7 w-[120px] border-b border-hairline/50" />;
-  const step = width / (values.length - 1);
-  const points = values.map((value, index) => `${(index * step).toFixed(1)},${(height - 2 - (value / max) * (height - 4)).toFixed(1)}`).join(" ");
-  return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true" data-usage-sparkline className="text-accent">
-      <polyline points={points} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-const TOP = 5;
-
-function GroupList({ title, groups, kind }: { title: string; groups: PersonalUsageGroup[]; kind: "bot" | "model" | "source" }) {
-  const [all, setAll] = useState(false);
-  const shown = all ? groups : groups.slice(0, TOP);
-  return (
-    <div data-usage-list={kind}>
-      <div className="text-[12px] text-ink-secondary">{title}</div>
-      {groups.length === 0 ? (
-        <p className="mt-1 text-[13px] text-ink-secondary">{t("usage.personal.none")}</p>
-      ) : (
-        <ul className="mt-1 flex flex-col">
-          {shown.map((group) => (
-            <li key={group.key} className="flex min-h-[30px] items-center gap-3 text-[13px]">
-              <span className="min-w-0 flex-1 truncate text-ink" title={group.label}>{group.label}</span>
-              <span className="shrink-0 text-[12px] tabular-nums text-ink-secondary">{t("usage.personal.turns", { turns: group.turns })}</span>
-              <span className="w-20 shrink-0 text-right tabular-nums text-ink">{typeof group.costUsd === "number" ? formatCost(group.costUsd) : "·"}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {groups.length > TOP && (
-        <button type="button" onClick={() => setAll((open) => !open)} aria-expanded={all} className="mt-1 min-h-[44px] rounded-md text-[12.5px] text-accent-text hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 md:min-h-0">
-          {all ? t("usage.personal.showLess") : t("usage.personal.showAll", { count: groups.length })}
-        </button>
-      )}
     </div>
   );
 }

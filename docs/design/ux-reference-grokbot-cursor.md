@@ -683,6 +683,47 @@ menu du compte (bureau) et sur la rangée Utilisation des réglages (iPhone) : c
 lien vers cette page, pas un second réglage. Sagax ajoute ses coûts par moteur et ses
 traces sous divulgation progressive.
 
+**Page Utilisation et facturation, mesurée (#4095, 2026-11-12, lecture des valeurs de
+mise en page de l'app de référence installée, sans son code).** Le titre de la page,
+puis trois groupes, chacun un petit titre gris au-dessus d'une seule carte :
+
+- Mon forfait : le nom du forfait, puis une rangée Facturation (ligne d'aide grise,
+  bouton pilule gris à droite). Sagax : une rangée « Se renouvelle le 1er déc. » ; le
+  coût du mois n'est dit qu'une fois, en grand chiffre du groupe Utilisation, et le
+  renouvellement qu'une fois, ici (pas sous la limite de dépenses).
+- Limites d'utilisation : une carte par limite à la référence (Sagax : une carte, un
+  bloc par limite). Bloc : marges 16 en haut et en bas, 14 sur les côtés ; le nom de la
+  limite en corps 13/18 encre ; 12 plus bas le grand pourcentage, chiffre en 22/28
+  (régulier, chiffres tabulaires) suivi de « utilisé » en 13/18 encre tertiaire, sur
+  la ligne de base ; 10 plus bas une barre de 4 px, rayon plein, piste en surface
+  secondaire, remplissage à l'accent ; 6 plus bas une ligne en 12/16 encre secondaire,
+  la remise à zéro à gauche et le second chiffre à droite, alignés sur la ligne de base
+  avec 10 entre eux. Sagax : la limite de dépenses (sa rangée Modifier au-dessus, sous
+  la barre le dépensé sur la limite seulement), puis
+  chaque moteur (nom et forfait, étoile du menu) avec ses fenêtres de 5 heures et de
+  semaine côte à côte quand la carte est large ; un moteur illisible est une ligne
+  grise avec Réessayer, jamais une phrase rouge ; le bouton Actualiser est dans la
+  rangée du titre du groupe, à droite.
+- Utilisation de l'app (Sagax : « Utilisation de tes bots ») : la tête de la carte à
+  14 du haut et 14 des côtés, le grand chiffre en 22/28 et, 2 dessous, son libellé en
+  12/16 encre tertiaire (la période) ; à droite un contrôle segmenté petit (24 de haut,
+  piste grise, 2 de marge, le choisi un ton plus clair) : Par source, Par bot (Sagax
+  ajoute Par modèle). Dessous, 20 entre les blocs : une barre de parts de 8 px, rayon
+  4, 2 entre les segments, une couleur par série ; la légende en grille
+  (colonnes d'au moins 136 px, 16 entre les colonnes, 12 entre les lignes), chaque
+  entrée un point de couleur et son nom, puis le chiffre et la part en 12/16 encre ;
+  puis le graphique quotidien (152 de haut à la référence, une aire ; Sagax garde son
+  histogramme partagé `UsageChartCard`, ses flèches passent du cycle courant au
+  précédent).
+- Sagax garde en plus un groupe Détail : l'historique des limites et les traces par job.
+
+iPhone (à suivre, pas encore fait) : les mêmes trois groupes et le même ordre ; le
+grand pourcentage, la barre et la ligne de remise pour chaque limite ; le contrôle
+segmenté sous le grand chiffre quand la largeur manque ; la légende en deux colonnes ;
+le moteur en erreur en ligne grise avec Réessayer ; Actualiser dans la rangée du titre.
+Code : `src/components/UsageSection.tsx`, `src/components/PlanUsage.tsx` (`LimitMeter`),
+captures `scripts/capture/usage-page.mjs`.
+
 ### 2.12 Pages publiées
 
 Une page ouverte couvre la conversation (le fil reste monté dessous) : × « Retour au

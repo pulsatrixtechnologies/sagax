@@ -88,4 +88,9 @@ describe("lifecycle hooks stay off the server", () => {
     expect(line).toContain("/tmp/sagax-hooks");
     expect(line).not.toContain("SAGAX_");
   });
+
+  it("writes only the plugin root variable as the staged folder, never a longer name (#4082)", () => {
+    const line = commandWithFiles("echo ${CLAUDE_PLUGIN_ROOT} $CLAUDE_PLUGIN_ROOT $CLAUDE_PLUGIN_ROOTS", {}, "{}");
+    expect(line).toContain("echo /tmp/sagax-hooks /tmp/sagax-hooks $CLAUDE_PLUGIN_ROOTS");
+  });
 });

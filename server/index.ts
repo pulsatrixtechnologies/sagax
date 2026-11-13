@@ -1911,6 +1911,7 @@ import { createSyncHeadlessTeam } from "./index-leaves/syncHeadlessTeam.ts";
 import { createStopDirectThreadByPerson } from "./index-leaves/stopDirectThreadByPerson.ts";
 import { createSettleBotActCard } from "./index-leaves/settleBotActCard.ts";
 import { createScopedPluginFolders } from "./index-leaves/scopedPluginFolders.ts";
+import { createTurnPluginFolders } from "./index-leaves/turnPluginFolders.ts";
 import { createRoutineFullReport } from "./index-leaves/routineFullReport.ts";
 import { createRefusePlacedBots } from "./index-leaves/refusePlacedBots.ts";
 import { createRefreshUnsetModelSelectionsFrom } from "./index-leaves/refreshUnsetModelSelectionsFrom.ts";
@@ -6304,6 +6305,7 @@ bindLeafHost({
   get publishedPageOptions() { return publishedPageOptions; },
   get addPersonalMcpServer() { return addPersonalMcpServer; },
   get scopedPluginFolders() { return scopedPluginFolders; },
+  get turnPluginFolders() { return turnPluginFolders; },
   get scopedPluginMcp() { return scopedPluginMcp; },
   get pluginFolderCapability() { return pluginFolderCapability; },
   get scopedSkillInventory() { return scopedSkillInventory; },
@@ -7669,6 +7671,7 @@ const pagesSeparation = createPagesSeparation(getLeafHost);
 const publishedPageOptions = createPublishedPageOptions(getLeafHost);
 const addPersonalMcpServer = createAddPersonalMcpServer(getLeafHost);
 const scopedPluginFolders = createScopedPluginFolders(getLeafHost);
+const turnPluginFolders = createTurnPluginFolders(getLeafHost);
 const scopedPluginMcp = createScopedPluginMcp(getLeafHost);
 const pluginFolderCapability = createPluginFolderCapability(getLeafHost);
 const scopedSkillInventory = createScopedSkillInventory(getLeafHost);
@@ -23174,6 +23177,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       return skill?.file ? { name: skill.name, file: skill.file } : null;
     },
     scopedPluginFolders,
+    turnPluginFolders,
     personalSkillsRoot: (person) => personalSkills.root(person),
     readWorkspaceText: (botId, path, offset, plugins, personalRoot, librarySkills) =>
       readWorkspaceText(botId, path, offset, plugins as Parameters<typeof readWorkspaceText>[3], personalRoot, librarySkills),

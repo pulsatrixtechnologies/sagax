@@ -54,6 +54,7 @@ function deps(over: Partial<InternalMemoryDeps> = {}): InternalMemoryDeps {
     personalSkillInputs: () => [],
     resolvedLibrarySkill: () => null,
     scopedPluginFolders: () => [],
+    turnPluginFolders: () => [],
     personalSkillsRoot: () => undefined,
     readWorkspaceText: () => ({ path: "RULES.md", text: "hi", bytes: 2, offset: 0, nextOffset: null }),
     updateGroupMemory: () => ({ ok: true as const }),
@@ -266,6 +267,22 @@ describe("createInternalMemoryRoutes", () => {
     await run();
     expect(sent[0]?.status).toBe(200);
     expect(markWorkspaceUse).toHaveBeenCalledOnce();
+  });
+
+  it("GET /api/internal/workspace/read reads the plugin folders of the turn (#4082)", async () => {
+    const turnPlugins = [{ name: "helper", dir: "/copy/helper", scope: "organization" }];
+    const turnPluginFolders = vi.fn(() => turnPlugins);
+    const readWorkspaceText = vi.fn((_botId: string, path: string, _offset: number, _plugins: unknown) => ({ path, text: "ok", bytes: 2, offset: 0, nextOffset: null }));
+    const route = createInternalMemoryRoutes(deps({ readWorkspaceText, turnPluginFolders }));
+    const { sent, run } = call(route, {
+      path: "/api/internal/workspace/read",
+      method: "GET",
+      url: new URL("http://local/api/internal/workspace/read?path=/workspace/sagax-plugins/helper/skills/tidy/SKILL.md"),
+    });
+    await run();
+    expect(sent[0]?.status).toBe(200);
+    expect(turnPluginFolders).toHaveBeenCalledWith(expect.objectContaining({ id: expect.any(String) }), expect.anything(), expect.any(String));
+    expect(readWorkspaceText.mock.calls[0]?.[3]).toBe(turnPlugins);
   });
 
   it("GET /api/internal/workspace/search needs a query", async () => {

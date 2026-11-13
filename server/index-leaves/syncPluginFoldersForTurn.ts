@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** syncPluginFoldersForTurn (#1388). Pure move from server/index.ts. */
-import { pluginCopyFailures, SANDBOX_CAPABILITY_SKILLS_DIR, SANDBOX_PLUGINS_DIR, sandboxPluginPresence, syncPluginRootsToSandbox } from "../sandbox/sandbox-plugins.ts";
+import { pluginCopyFailures, SANDBOX_CAPABILITY_SKILLS_DIR, SANDBOX_PLUGIN_DATA_DIR, SANDBOX_PLUGINS_DIR, sandboxPluginPresence, syncPluginRootsToSandbox } from "../sandbox/sandbox-plugins.ts";
 
 export type Host = Record<string, any>;
 
@@ -35,7 +35,8 @@ async function syncPluginFoldersForTurn(principalId: string, botId: string, limi
   try {
     report(await syncPluginRootsToSandbox([
       ...(skills.length ? [{ root: SANDBOX_CAPABILITY_SKILLS_DIR, plugins: skills }] : []),
-      { root: SANDBOX_PLUGINS_DIR, plugins },
+      // #4082: their text names their paths in this environment
+      { root: SANDBOX_PLUGINS_DIR, dataRoot: SANDBOX_PLUGIN_DATA_DIR, plugins },
     ], target, options));
   } catch (error) {
     console.warn(`[plugins] server environment not updated: ${error instanceof Error ? error.message : String(error)}`);

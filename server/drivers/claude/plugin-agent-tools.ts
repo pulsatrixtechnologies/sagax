@@ -15,9 +15,16 @@
 // built-ins, load the plugin folder as installed.
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, join, relative, resolve, sep } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 
 import { parse as parseYaml } from "yaml";
+
+import { pluginTextFiles, sandboxPluginPaths, withEnvironmentPluginPaths, type PluginEnvironmentPaths } from "../../sandbox/sandbox-plugins.ts";
+
+/** Where a turn's plugin copies live under the server's data folder. */
+export function pluginTurnCopiesDir(dataDir: string): string {
+  return join(dataDir, "engine-policies", "plugin-agents");
+}
 
 /** What a turn offers of Claude Code's built-ins: `offered` is the `--tools`
  * allowlist (null: every built-in), `denied` the `--disallowedTools` names. */
@@ -87,30 +94,6 @@ export function rewriteAgentForTurn(text: string, builtins: ClaudeTurnBuiltins):
   return `${match[1]}${kept.join("\n")}${match[3]}\n${roleNote(missing)}\n\n${body.replace(/^\r?\n/, "")}`;
 }
 
-/** The plugin's role files: `agents/` and the `agents` paths of its manifest,
- * inside the plugin's folder only. */
-function agentFiles(dir: string): string[] {
-  const roots = [join(dir, "agents")];
-  try {
-    const manifest = JSON.parse(readFileSync(join(dir, ".claude-plugin", "plugin.json"), "utf8")) as { agents?: unknown };
-    for (const entry of declaredAgentTools(manifest.agents)) {
-      const path = resolve(dir, entry);
-      if (path === dir || path.startsWith(dir + sep)) roots.push(path);
-    }
-  } catch { /* no manifest, or none readable: agents/ only */ }
-  const out = new Set<string>();
-  const walk = (path: string, depth: number) => {
-    let stat;
-    try { stat = lstatSync(path); } catch { return; }
-    if (stat.isSymbolicLink()) return;
-    if (stat.isFile()) { if (path.endsWith(".md")) out.add(path); return; }
-    if (!stat.isDirectory() || depth > 4) return;
-    for (const name of readdirSync(path)) walk(join(path, name), depth + 1);
-  };
-  for (const root of roots) walk(root, 0);
-  return [...out].sort();
-}
-
 /** Size and change time of every file of the plugin: a copy is rebuilt when
  * the installed folder changes (an update, configuration values). */
 function fingerprint(dir: string): string {
@@ -129,22 +112,29 @@ function fingerprint(dir: string): string {
 }
 
 /** One plugin folder for this turn: the installed one, or a copy under
- * `root` whose roles start (see the top of this file). */
-export function pluginDirForTurn(installed: string, builtins: ClaudeTurnBuiltins, root: string): string {
-  if (!narrowsBuiltins(builtins)) return installed;
+ * `root` whose roles start (see the top of this file) and, when the turn's
+ * commands run in the person's environment (`environment`: the plugin's
+ * paths there), whose skill, command and agent text names those paths
+ * instead of `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_DATA}` (#4082):
+ * the CLI would put this server's folder there, which the environment's
+ * commands cannot reach. */
+export function pluginDirForTurn(installed: string, builtins: ClaudeTurnBuiltins, root: string, environment?: PluginEnvironmentPaths): string {
+  if (!narrowsBuiltins(builtins) && !environment) return installed;
   const dir = resolve(installed);
   try {
     if (!statSync(dir).isDirectory()) return installed;
   } catch { return installed; }
   const rewrites = new Map<string, string>();
-  for (const file of agentFiles(dir)) {
+  const agents = new Set(narrowsBuiltins(builtins) ? pluginTextFiles(dir, ["agents"]) : []);
+  for (const file of new Set([...agents, ...(environment ? pluginTextFiles(dir) : [])])) {
     let text: string;
     try { text = readFileSync(file, "utf8"); } catch { continue; }
-    const next = rewriteAgentForTurn(text, builtins);
-    if (next !== null) rewrites.set(relative(dir, file), next);
+    let next = agents.has(file) ? rewriteAgentForTurn(text, builtins) ?? text : text;
+    if (environment) next = withEnvironmentPluginPaths(next, environment);
+    if (next !== text) rewrites.set(relative(dir, file), next);
   }
   if (!rewrites.size) return installed;
-  const signature = JSON.stringify([resolve(dir), builtins.offered === null ? null : [...builtins.offered].map(canonical).sort(), [...builtins.denied].map(canonical).sort()]);
+  const signature = JSON.stringify([resolve(dir), builtins.offered === null ? null : [...builtins.offered].map(canonical).sort(), [...builtins.denied].map(canonical).sort(), environment ?? null]);
   const slot = join(root, createHash("sha256").update(signature).digest("hex").slice(0, 16));
   const stamp = fingerprint(dir);
   const target = join(slot, stamp, basename(dir));
@@ -176,7 +166,18 @@ export function pluginDirForTurn(installed: string, builtins: ClaudeTurnBuiltins
   return target;
 }
 
-/** Every plugin folder of a turn (`--plugin-dir`), for its built-ins. */
-export function pluginDirsForTurn(dirs: readonly string[], builtins: ClaudeTurnBuiltins, root: string): string[] {
-  return dirs.map((dir) => pluginDirForTurn(dir, builtins, root));
+/** Every plugin folder of a turn (`--plugin-dir`), for its built-ins and,
+ * when its commands run in the person's environment, each plugin's paths
+ * there (#4082). */
+export function pluginDirsForTurn(dirs: readonly string[], builtins: ClaudeTurnBuiltins, root: string, environment?: (dir: string) => PluginEnvironmentPaths): string[] {
+  return dirs.map((dir) => pluginDirForTurn(dir, builtins, root, environment?.(dir)));
+}
+
+/** #4082: the plugin folders an engine reads on this server for a turn whose
+ * commands run in the person's environment (workspace_read, whole skills in
+ * the prompt, the native skill links of file engines): each one the copy
+ * whose text names its paths in the environment, the same copy Claude loads
+ * with `--plugin-dir`. */
+export function pluginFoldersInEnvironment<T extends { name: string; dir: string }>(plugins: readonly T[], root: string): T[] {
+  return plugins.map((plugin) => ({ ...plugin, dir: pluginDirForTurn(plugin.dir, { offered: null, denied: [] }, root, sandboxPluginPaths(plugin.name)) }));
 }

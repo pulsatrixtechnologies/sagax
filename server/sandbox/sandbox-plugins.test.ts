@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { syncPluginsToSandbox, type SandboxPluginExec } from "./sandbox-plugins.ts";
+import { syncPluginsToSandbox, withEnvironmentPluginPaths, type SandboxPluginExec } from "./sandbox-plugins.ts";
 
 const dirs: string[] = [];
 const scratch = () => { const dir = mkdtempSync(join(tmpdir(), "sbx-plugins-")); dirs.push(dir); return dir; };
@@ -93,5 +93,40 @@ describe("syncPluginsToSandbox", () => {
     const failing: SandboxPluginExec = { exec: (input) => /tar -xzf/.test(input.argv.join(" ")) ? Promise.resolve({ exitCode: 2, stdout: "", stderr: "tar: Unexpected EOF in archive\n" }) : env.exec(input) };
     const result = await syncPluginsToSandbox([{ name: "pulsatrix-flow", dir: source }], failing, root);
     expect(result.skipped).toEqual([{ name: "pulsatrix-flow", reason: "unpack failed: tar: Unexpected EOF in archive" }]);
+  });
+});
+
+// #4082: a plugin skill naming ${CLAUDE_PLUGIN_ROOT} or ${CLAUDE_PLUGIN_DATA}
+// is read by the engine on the Sagax server, which put the server's folder
+// there; the bot runs the command in its environment, where the copy lives.
+describe("plugin text in the environment names the environment's paths (#4082)", () => {
+  it("rewrites braced and bare names, and leaves longer names alone", () => {
+    const paths = { root: "/workspace/sagax-plugins/flow", data: "/workspace/sagax-plugin-data/flow" };
+    expect(withEnvironmentPluginPaths("sh ${CLAUDE_PLUGIN_ROOT}/run.sh --out \"$CLAUDE_PLUGIN_DATA/x\" $CLAUDE_PLUGIN_ROOTS ${CLAUDE_PLUGIN_DATA}", paths))
+      .toBe("sh /workspace/sagax-plugins/flow/run.sh --out \"/workspace/sagax-plugin-data/flow/x\" $CLAUDE_PLUGIN_ROOTS /workspace/sagax-plugin-data/flow");
+  });
+
+  it("copies a skill whose command runs there with the environment's paths, and makes its data folder", async () => {
+    const source = plugin();
+    const skill = "---\nname: flow\ndescription: d\n---\nRun `sh ${CLAUDE_PLUGIN_ROOT}/skills/flow/scripts/px_flow.sh --state ${CLAUDE_PLUGIN_DATA}/state`.\n";
+    writeFileSync(join(source, "skills", "flow", "SKILL.md"), skill);
+    const workspace = scratch();
+    const root = join(workspace, "sagax-plugins");
+    const dataRoot = join(workspace, "sagax-plugin-data");
+    const env = localEnvironment();
+    // a copy made before the rewrite (same content, plain marker) is replaced
+    await syncPluginsToSandbox([{ name: "pulsatrix-flow", dir: source }], env, root);
+    expect(readFileSync(join(root, "pulsatrix-flow", "skills", "flow", "SKILL.md"), "utf8")).toBe(skill);
+    expect((await syncPluginsToSandbox([{ name: "pulsatrix-flow", dir: source }], env, root, { dataRoot })).copied).toEqual(["pulsatrix-flow"]);
+    const copied = readFileSync(join(root, "pulsatrix-flow", "skills", "flow", "SKILL.md"), "utf8");
+    expect(copied).not.toContain("CLAUDE_PLUGIN");
+    const command = /`(sh [^`]+)`/.exec(copied)![1]!;
+    expect(command).toBe(`sh ${join(root, "pulsatrix-flow")}/skills/flow/scripts/px_flow.sh --state ${join(dataRoot, "pulsatrix-flow")}/state`);
+    const run = await env.exec({ argv: ["sh", "-c", command] });
+    expect(run.stdout.trim()).toBe(`DRY-RUN-OK --state ${join(dataRoot, "pulsatrix-flow")}/state`);
+    expect(existsSync(join(dataRoot, "pulsatrix-flow"))).toBe(true);
+    // the installed folder is never changed, and the next turn copies nothing
+    expect(readFileSync(join(source, "skills", "flow", "SKILL.md"), "utf8")).toBe(skill);
+    expect(await syncPluginsToSandbox([{ name: "pulsatrix-flow", dir: source }], env, root, { dataRoot })).toEqual({ copied: [], unchanged: ["pulsatrix-flow"], skipped: [] });
   });
 });

@@ -144,6 +144,17 @@ old connections. Keep the existing file/AAD compatibility tests.
   (`/workspace/sagax-plugins/<name>` and `/workspace/sagax-capability-skills/me`);
   only these exact mounts have absolute aliases in `workspace_read`. An
   unselected mount cannot fall back to a stale workspace copy.
+- #4082: a plugin's skill, command and agent text that names
+  `${CLAUDE_PLUGIN_ROOT}` or `${CLAUDE_PLUGIN_DATA}` names the environment's
+  paths when the turn's commands run there (`/workspace/sagax-plugins/<name>`
+  and `/workspace/sagax-plugin-data/<name>`). Every engine reads plugin text
+  on the server, from a turn copy so rewritten (`plugin-agent-tools.ts`):
+  Claude loads it with `--plugin-dir`, and `turnPluginFolders.ts` hands it to
+  `workspace_read`, to the whole skills an engine without files receives and
+  to the native skill links of file engines. The copy synced into the
+  environment carries the same text, so a command that reads a skill file
+  there sees the same paths (`sandbox-plugins.ts`, which also makes the data
+  folder). Hook commands use the same rewrite (`lifecycle-hooks.ts`).
 - MCP declarations are private execution data, stripped from native plugin
   folders and public lists/packages, then mounted separately. Commands
   cross `sagax-stdio` into the turn person's environment on org servers;

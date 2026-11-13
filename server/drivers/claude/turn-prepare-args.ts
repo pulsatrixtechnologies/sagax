@@ -1,11 +1,13 @@
 /** Claude turn prepare: validation and CLI args (#1383). */
-import { join } from "node:path";
+import { basename } from "node:path";
 
 import { newId } from "../../contracts.ts";
 import { assertToolScopeSupported } from "../../../shared/tool-scope-support.ts";
 import { DATA_DIR } from "../../config.ts";
 import { claudeDisallowedTools, claudeOrgTools } from "../host-tools.ts";
-import { pluginDirsForTurn } from "./plugin-agent-tools.ts";
+import { pluginDirsForTurn, pluginTurnCopiesDir } from "./plugin-agent-tools.ts";
+import { sandboxPluginPaths } from "../../sandbox/sandbox-plugins.ts";
+import { USER_SANDBOX_MCP_NAME } from "../../sandbox/user-sandbox-routing.ts";
 import { versionAtLeast } from "../acp/core.ts";
 import { killCliTree } from "../../procs.ts";
 import { CLAUDE_REPLAY_FLOOR, DRIVER_KIND, NO_ANTHROPIC_KEY } from "./config.ts";
@@ -238,7 +240,11 @@ if (isolated) {
 if (!turn.guestConfined && claudeCliSupports(cliVersion, "--plugin-dir")) {
   const offered = orgTools ?? (config.tools !== undefined ? config.tools.join(",") : null);
   const builtins = { offered: offered === null ? null : offered.split(",").filter(Boolean), denied: disallowedTools };
-  for (const dir of pluginDirsForTurn(turn.pluginDirs ?? [], builtins, join(DATA_DIR, "engine-policies", "plugin-agents"))) args.push("--plugin-dir", dir);
+  // #4082: the turn's commands run in the person's server environment, where
+  // each plugin's copy lives under its name (syncPluginFoldersForTurn): the
+  // skill text names those paths, never this server's folder.
+  const inEnvironment = Boolean(turn.integrations?.custom?.[USER_SANDBOX_MCP_NAME]);
+  for (const dir of pluginDirsForTurn(turn.pluginDirs ?? [], builtins, pluginTurnCopiesDir(DATA_DIR), inEnvironment ? (dir) => sandboxPluginPaths(basename(dir)) : undefined)) args.push("--plugin-dir", dir);
 }
 const compactWindow = autoCompactWindow(turnEnvironment);
 // Recorded where the flag is added: only a launch that passed it can

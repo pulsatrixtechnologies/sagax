@@ -42,8 +42,8 @@ export const BOT_FOLDER_RESERVED: readonly string[] = ["tmp"];
  * (HOME is /workspace: .config, .ssh, .gitconfig, .sagax...). One list:
  * the tidy script receives it as is. Checked 2026-11-03 against what the
  * sandbox image and Sagax write at the root: bots, shared, _unsorted (this
- * layout), attachments (attachment-staging.ts), sagax-plugins
- * (sandbox-plugins.ts), sagax-capability-skills (personal-skills.ts),
+ * layout), attachments (attachment-staging.ts), sagax-plugins and
+ * sagax-plugin-data (sandbox-plugins.ts), sagax-capability-skills (personal-skills.ts),
  * Desktop and Downloads (HOME=/workspace: the desktop session and
  * Chromium's default download folder), lost+found (the volume), skills and
  * marketplaces (older layouts), and tmp (a bot folder's reserved name). */
@@ -54,6 +54,7 @@ export const SANDBOX_ROOT_KEEP: readonly string[] = [
   "lost+found",
   "attachments",
   "sagax-plugins",
+  "sagax-plugin-data",
   "sagax-capability-skills",
   "skills",
   "marketplaces",

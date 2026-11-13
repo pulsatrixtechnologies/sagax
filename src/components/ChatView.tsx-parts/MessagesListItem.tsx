@@ -47,6 +47,7 @@ import { CompactionChip, DigestChip } from "../DigestChip";
 import { ScreenFrame } from "../ScreenFrame";
 import { VideoPlayerWidget } from "../video/VideoPlayerWidget";
 import { showToolCallsEnabled } from "@/lib/feature-flags";
+import { activityRowShown } from "@/lib/tool-activity-rows";
 import { isStatusActivity, isTurnStoppedNotice } from "@/lib/activity-runs";
 import { foldsLiveTurn } from "@/lib/tool-liveness";
 import { LiveTurnsContext } from "@/hooks/use-live-tool-ids";
@@ -195,7 +196,6 @@ export function MessagesListItem({
             group={item}
             bots={bots}
             groups={storeGroups}
-            showToolCalls={showToolCalls}
             focusedId={focusedId}
             onSelect={(target: GotoTarget) => {
               if (target.kind === "thread") {
@@ -253,7 +253,6 @@ export function MessagesListItem({
         <BotExchangeChip
           run={item.run}
           bots={bots}
-          showToolCalls={showToolCalls}
           forceOpen={item.run.messages.some((message) => message.id === focusedId)}
           onGo={() => {
             // Another bot would leave this 1:1. False keeps the sheet.
@@ -491,8 +490,8 @@ export function MessagesListItem({
         // the threads toggle), a Data receipt and an input request stay.
         // A comm chip stays on Apple mobile web (the only trace there a
         // teammate was consulted) and whenever the send failed.
-        const keepComm = Boolean(m.comm) && (appleMobileWeb || m.tool?.ok === false);
-        if (!showToolCalls && !m.threadRef && !m.dataResult && !m.inputRequest && !keepComm && !isFailedTeammateStep(m)) return null;
+        // One rule for every transcript (activityRowShown, #4171).
+        if (!activityRowShown(m, showToolCalls, appleMobileWeb)) return null;
         return <ActivityChip message={m} place={place} />;
       }
       case "digest":

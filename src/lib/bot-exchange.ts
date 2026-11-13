@@ -5,6 +5,7 @@
 // request of its own, so this never scans backward past requestMessageId.
 import type { Message } from "@/state/store";
 import { isStatusActivity } from "@/lib/activity-runs";
+import { activityRowShown } from "@/lib/tool-activity-rows";
 import { peerLine } from "@/lib/peer-message";
 import { t } from "@/lib/i18n";
 import { localDay } from "@/lib/transcript-derivations";
@@ -294,10 +295,11 @@ export function exchangeSubject(subject: string | undefined, firstLine: string |
 }
 
 /** How the open sheet draws one stored row: a line (speaker, bubble), a
- * tool chip (only with Settings > Tool calls on, like the chat itself), or
- * nothing (screen frames, digests, and tool steps with Tool calls off). */
-export function exchangeSheetRow(message: Message, showToolCalls: boolean): "line" | "tool" | null {
-  if (message.kind === "activity") return showToolCalls && message.tool ? "tool" : null;
+ * tool chip (Settings > Tool calls, by the chat's own rule,
+ * activityRowShown, #4171), or nothing (screen frames, digests, and the
+ * steps that rule hides). */
+export function exchangeSheetRow(message: Message, showToolCalls: boolean, appleMobileWeb?: boolean): "line" | "tool" | null {
+  if (message.kind === "activity") return message.tool && activityRowShown(message, showToolCalls, appleMobileWeb) ? "tool" : null;
   return quietRow(message) ? null : "line";
 }
 

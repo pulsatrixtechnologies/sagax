@@ -148,7 +148,6 @@ export const IncomingLine = memo(function IncomingLine({ line, self, bots, mid }
       <ExchangeSheet
         run={{ id: `incoming:${openParty.key}`, messages: storedExchange(stored, who, me), party: { id: who.id, name: who.name, color: who.color }, ends: [{ id: who.id, name: who.name, color: who.color }, ...(me.id ? [{ id: me.id, name: me.name, color: me.color }] : [])] }}
         bots={bots}
-        showToolCalls={false}
         footer={footer}
         testId="incoming-exchange-sheet"
         onClose={close}

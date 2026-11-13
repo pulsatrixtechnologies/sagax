@@ -18558,7 +18558,8 @@
       "outcomes.needs.goalStalled": "4ffc2b472054787767b2e97e87ff8e2151d5d41afe8a674012eb1d14fc89309b",
       "botPanel.skills.needsReview": "07297fa94a997d0f807bd37c61993a8821ca406b5e4498e4f0759e50ab154dd4",
       "botPanel.skills.detailShared": "e3c4b39d6d5013477c98cd58236fed455f37aa7017b7168ce1980a449aaf438a",
-      "botPanel.skills.detailPrivate": "99aeb45c7f2a72793df99f468807a8f8b395fc52dff3269501b68f268b4eae5b"
+      "botPanel.skills.detailPrivate": "99aeb45c7f2a72793df99f468807a8f8b395fc52dff3269501b68f268b4eae5b",
+      "settings.toolCalls.description": "fe6e2b4794633e49a3bff12a475e2c747eb0e01e51368ea6fc8b6e2ed5712eff"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

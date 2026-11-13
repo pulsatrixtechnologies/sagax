@@ -55,7 +55,7 @@ export function ChatViewShell(m: Record<string, any>) {
     scrollRef, transcriptRef, topSentinelRef, transcriptKey, following, followRef,
     windowedMessages, hiddenCount, laterCount, olderPending, showLater, jumpToLatest, scrollHandlers,
     runOverlayRef, runCardOpen, lastBotTextId, unreadDivider,
-    mentionPeers, showToolCalls, rows, place, liveTools, liveTurns, busy,
+    mentionPeers, rows, place, liveTools, liveTurns, busy,
     currentTask, streamOn, streamHasEarlier, askedFresh, resumeTopic, newTopicBack, backFromNewTopic, streamReach, clearStreamReach,
     quoteEarlier, streamEngine, streamDrawn, earlierConversations, conversationsOpen, toggleConversations,
     editingId, setEditingId, startEdit, cancelEdit, submitEdit,
@@ -174,7 +174,7 @@ export function ChatViewShell(m: Record<string, any>) {
             <>
           {newTopicBack && <FreshTopicDivider onResume={backFromNewTopic} />}
           {earlierConversations.length > 0 && <PreviousTopicsLine open={conversationsOpen} onToggle={toggleConversations} />}
-          {conversationsOpen && earlierConversations.length > 0 && <EarlierConversationList self={bot} rows={earlierConversations} bots={storeBots} showToolCalls={showToolCalls} />}
+          {conversationsOpen && earlierConversations.length > 0 && <EarlierConversationList self={bot} rows={earlierConversations} bots={storeBots} />}
           {streamDrawn && (
             <>
               <StreamEarlierTopics bot={bot} rows={rows} place={place} engine={streamEngine} scrollRef={scrollRef} followRef={followRef} reach={streamReach} onReached={clearStreamReach} onQuote={quoteEarlier} />

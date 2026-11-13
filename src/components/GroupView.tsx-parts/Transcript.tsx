@@ -316,7 +316,6 @@ export const Transcript = memo(function Transcript({
                   group={item}
                   bots={state.bots}
                   groups={state.groups}
-                  showToolCalls={showToolCalls}
                   focusedId={focusedId}
                   // A room's exchange is read in this column, as its lone line is.
                   onSelect={(target) =>
@@ -334,7 +333,6 @@ export const Transcript = memo(function Transcript({
               <BotExchangeChip
                 run={item.run}
                 bots={members}
-                showToolCalls={showToolCalls}
                 forceOpen={item.run.messages.some((message) => message.id === focusedId)}
                 onGo={() => false}
               />

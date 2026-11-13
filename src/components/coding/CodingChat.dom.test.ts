@@ -33,6 +33,9 @@ vi.mock("@/state/store", async (importOriginal) => {
     ...original,
     api: (...args: unknown[]) => apiMock(...args),
     useStore: () => ({ state: { ...original.initialState, bots: [bot], groups: [], config: { viewer: { principalId: "person-1" } } }, dispatch: dispatchMock }),
+    // The steps are this file's subject: Settings > Tool calls on (#4171,
+    // tool-calls-everywhere.dom.test.ts covers it off).
+    useStoreOptional: () => ({ state: { ...original.initialState, config: { features: { showToolCalls: true } } }, dispatch: dispatchMock }),
   };
 });
 vi.mock("@/lib/live-events", () => ({ listenLiveFrames: () => () => {} }));

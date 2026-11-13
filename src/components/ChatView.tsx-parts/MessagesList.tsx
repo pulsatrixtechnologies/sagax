@@ -248,13 +248,12 @@ export const MessagesList = memo(function MessagesList({
           group={group}
           bots={storeBots}
           groups={storeGroups}
-          showToolCalls={showToolCalls}
           onSelect={() => false}
         />
       );
     }
     return rows.map((row) => (
-      <BotConversationLine key={`conversation:${row.threadId}`} self={selfBot} row={row} bots={storeBots} showToolCalls={showToolCalls} />
+      <BotConversationLine key={`conversation:${row.threadId}`} self={selfBot} row={row} bots={storeBots} />
     ));
   };
   // Every row is wrapped the same way, keyed by its first message, so a card

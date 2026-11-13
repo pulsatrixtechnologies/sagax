@@ -45,7 +45,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { createPortal } from "react-dom";
 import { ArrowUp, ChevronDown, ChevronLeft, ChevronUp, GitCommitHorizontal, GitPullRequest, Loader2, Square } from "lucide-react";
 
-import { api, useStore, type Bot, type Message } from "@/state/store";
+import { api, useStore, useStoreOptional, type Bot, type Message } from "@/state/store";
+import { activityRowShown, showToolCallRows } from "@/lib/tool-activity-rows";
 import {
   activityStatusActive,
   activityStatusLabel,
@@ -334,6 +335,14 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
   const rows = useMemo(() => codingRows(messages, root), [messages, root]);
   const files = useMemo(() => changedFiles(rows), [rows]);
   const tests = useMemo(() => latestTests(rows), [rows]);
+  // #4171: Settings > Tool calls, by the chat's own rule (activityRowShown):
+  // off, a plain step is not drawn; the Changes band still counts it, and
+  // the step a file of the band jumps to is drawn when asked.
+  const showToolCalls = showToolCallRows(useStoreOptional()?.state.config);
+  const keptSteps = useMemo(
+    () => new Set(messages.filter((message) => activityRowShown(message, showToolCalls)).map((message) => message.id)),
+    [messages, showToolCalls],
+  );
   const place = codingPlace(detail ?? item, root);
   const party = avatarBot({ id: bot?.id ?? shown.botId, name: bot?.name ?? shown.botName ?? t("codingChat.bot"), color: bot?.color }, bots);
   const [reveal, setReveal] = useState<Reveal | undefined>();
@@ -506,7 +515,8 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
           ) : rows.length === 0 ? (
             <p role="status" data-coding-empty className="py-8 text-center text-[13px] text-ink-secondary">{live ? t("codingChat.starting") : t("codingChat.empty")}</p>
           ) : null}
-          {rows.map((row) => <Row key={row.id} row={row} bot={party} bots={bots} reveal={reveal} live={live} />)}
+          {rows.filter((row) => row.kind === "line" || keptSteps.has(row.id) || row.id === reveal?.rowId)
+            .map((row) => <Row key={row.id} row={row} bot={party} bots={bots} reveal={reveal} live={live} />)}
         </div>
       </div>
       </div>

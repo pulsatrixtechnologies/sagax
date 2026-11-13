@@ -101,7 +101,7 @@ function PageChatShell({ pageOpen, surface = "beside", children }: { pageOpen: b
           children,
         ),
         sheetOpen
-          ? createElement(ExchangeSheet, { run, showToolCalls: false, onClose: () => setSheetOpen(false) })
+          ? createElement(ExchangeSheet, { run, onClose: () => setSheetOpen(false) })
           : null,
       ),
       pageOpen

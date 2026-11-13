@@ -256,6 +256,7 @@ export function ToolCallsRow() {
   return (
     <DescribedRow
       label={t("settings.toolCalls.title")}
+      description={t("settings.toolCalls.description")}
       rowId="toolCalls"
       below={error ? <p role="alert" className="mt-1 text-[12px] text-danger">{error}</p>
         : missing ? <p role="note" data-needs-server-update="" className="mt-1 text-[12px] text-ink-secondary">{t("serverRoute.needsUpdate")}</p> : null}

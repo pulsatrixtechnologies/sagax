@@ -4,7 +4,8 @@
 // honours Settings > Tool calls.
 
 import type { Message } from "@/state/store";
-import { isStatusActivity } from "@/lib/activity-runs";
+import { isHiddenStatusActivity, isStatusActivity } from "@/lib/activity-runs";
+import { isFailedTeammateStep } from "@/lib/step-label";
 import { showToolCallsEnabled, type FeatureFlagConfig } from "@/lib/feature-flags";
 import { failedTurnCause } from "../../shared/failed-turn";
 
@@ -59,4 +60,28 @@ export function showToolCallRows(
   env: AppleMobileWebEnv = readAppleMobileWebEnv(),
 ): boolean {
   return showToolCallsEnabled(config) && !isAppleMobileWebClient(env);
+}
+
+/** Settings > Tool calls, in every transcript (#4171): whether an activity
+ * row is drawn. One rule for the bot's chat (MessagesListItem) and every
+ * window drawn over it: a routine run, a bot-to-bot exchange, a teammate's
+ * or a text message's request (ExchangeSheet), a coding task (CodingChat).
+ * With the setting on, every row. Off, a plain tool step goes and what the
+ * person must see stays, as the chat keeps it: a Data receipt, an opened-
+ * thread receipt, a question or approval waiting on them, a status line, a
+ * failed turn, a parallel task card, a failed hand-off or send, and a
+ * bot-to-bot chip on Apple mobile web or when its send failed. */
+export function activityRowShown(
+  message: Message,
+  showToolCalls: boolean,
+  appleMobileWeb: boolean = isAppleMobileWebClient(),
+): boolean {
+  if (message.kind !== "activity" || showToolCalls) return true;
+  if (message.dataResult || message.threadRef || message.inputRequest) return true;
+  if (message.parallelTask?.role === "card") return true;
+  if (isStatusActivity(message) && !isHiddenStatusActivity(message)) return true;
+  const tool = message.tool;
+  if (tool && failedTurnCause(tool.name) !== null) return true;
+  if (message.comm && (appleMobileWeb || tool?.ok === false)) return true;
+  return isFailedTeammateStep(message);
 }

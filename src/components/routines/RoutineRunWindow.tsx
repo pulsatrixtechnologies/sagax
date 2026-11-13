@@ -112,7 +112,6 @@ function RoutineRunWindowSheet({ run: listed, cardReport, asked, routine, bot, b
       run={exchange}
       pinned={pinned}
       bots={[...bots]}
-      showToolCalls
       onClose={onClose}
       loadError={detailError && !detail}
       onRetry={() => { void reload(); }}
@@ -176,7 +175,6 @@ export function RoutineRunWindow({ target, bots, onClose, onStop }: {
         chrome="window"
         run={routineRunToExchange({ run: kept, routine, bot })}
         bots={[...bots]}
-        showToolCalls
         onClose={onClose}
         testId="routine-run-window"
         ariaLabel={routine?.name}
@@ -190,7 +188,6 @@ export function RoutineRunWindow({ target, bots, onClose, onStop }: {
         chrome="window"
         run={routineRunPendingExchange({ routineName: routine?.name ?? "", bot })}
         bots={[...bots]}
-        showToolCalls
         onClose={onClose}
         loadError={missing === "gone"}
         onRetry={() => setAttempt((was) => was + 1)}

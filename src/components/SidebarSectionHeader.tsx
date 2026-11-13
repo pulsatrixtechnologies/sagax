@@ -1,9 +1,9 @@
 import { ChevronRight } from "lucide-react";
-import type { DragEvent, FocusEvent, KeyboardEvent, MouseEvent } from "react";
+import type { DragEvent, KeyboardEvent, MouseEvent } from "react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { lastInputWasPointer, trackInputModality } from "@/lib/input-modality";
+import { trackInputModality } from "@/lib/input-modality";
 import {
   sidebarAttentionLabel,
   type SidebarSectionAttention,
@@ -39,14 +39,9 @@ export function SidebarSectionHeader({
 }) {
   const attentionLabel = attention ? sidebarAttentionLabel(attention) : "";
   // a click must not draw the focus frame on the header; Tab or an arrow
-  // key does (2026-10-15, src/lib/input-modality.ts)
+  // key does (2026-10-15): the app's one rule, src/lib/input-modality.ts
   trackInputModality();
-  const onHeaderFocus = (event: FocusEvent<HTMLButtonElement>) => {
-    if (lastInputWasPointer()) event.currentTarget.dataset.pointerFocus = "";
-    else delete event.currentTarget.dataset.pointerFocus;
-  };
   const onHeaderKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === "Tab" || event.key.startsWith("Arrow")) delete event.currentTarget.dataset.pointerFocus;
     if (!reorderable || !event.altKey) return;
     if (event.key === "ArrowUp") {
       event.preventDefault();
@@ -104,7 +99,6 @@ export function SidebarSectionHeader({
         <button
           type="button"
           onClick={onToggle}
-          onFocus={onHeaderFocus}
           onKeyDown={onHeaderKeyDown}
           data-sidebar-section-header=""
           aria-expanded={!collapsed}

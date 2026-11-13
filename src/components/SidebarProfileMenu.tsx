@@ -805,7 +805,8 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
           data-menu-opened={open || undefined}
           className={cn(
             "flex h-[var(--foot-tile-h,2.25rem)] w-full min-w-0 items-center gap-2 rounded-full py-0.5 pl-0.5 pr-1 text-left transition-colors [button:focus-visible:not([data-pointer-focus])>&]:ring-2 [button:focus-visible:not([data-pointer-focus])>&]:ring-focus",
-            open ? "ring-2 ring-accent/60" : "hover:bg-sidebar-hover",
+            // #4156: open, the reference's soft fill only, never an outline
+            open ? "bg-sidebar-hover" : "hover:bg-sidebar-hover",
           )}
         >
           <span className="relative flex shrink-0">
@@ -853,7 +854,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
           className={cn(
             // the rail's avatar: the keyboard ring the wide pill has
             "relative flex size-9 items-center justify-center rounded-full transition-[filter] [button:focus-visible:not([data-pointer-focus])>&]:ring-2 [button:focus-visible:not([data-pointer-focus])>&]:ring-focus",
-            open ? "ring-2 ring-accent/60" : "hover:brightness-90",
+            open ? "brightness-90" : "hover:brightness-90",
           )}
         >
           {avatar(36)}

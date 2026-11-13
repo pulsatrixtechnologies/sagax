@@ -1,10 +1,13 @@
 // @vitest-environment happy-dom
-// A mouse click on the account menu button leaves it focused; the next key
-// (an arrow, Escape) would make that focus :focus-visible and draw a white
-// ring round the footer tile. A pointer mark (data-pointer-focus) keeps the
-// ring off until blur or Tab; keyboard focus never carries the mark, so the
-// ring stays for it. The CSS is checked as text (happy-dom has no
-// :focus-visible), the real thing by the gallery capture.
+// #4156: the account button shows no outline while its menu is open nor
+// after a mouse click, only the reference's soft fill; the focus ring is for
+// keyboard focus. A click leaves the button focused, and a key pressed
+// afterwards (Escape) would make that focus :focus-visible: the app's one
+// rule (src/lib/input-modality.ts) marks a focus that follows a pointer
+// press (data-pointer-focus) until the keyboard moves, and styles.css (the
+// global ring and the redefined `focus-visible:` variant) skips the mark.
+// The CSS is checked as text (happy-dom has no :focus-visible), the real
+// thing by the gallery capture.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { readFileSync } from "node:fs";
@@ -42,33 +45,50 @@ afterEach(() => {
 const button = () => container.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!;
 const css = readFileSync("src/styles.css", "utf8");
 
+const pill = () => container.querySelector("[data-sidebar-account-pill]")!;
+const press = () => act(() => {
+  button().dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+  button().focus();
+});
+
 describe("the account menu button's focus ring", () => {
-  it("is marked as pointer focus on a mouse press, so no ring shows", () => {
-    act(() => { button().dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); });
+  it("marks a focus that follows a mouse press, so no ring shows", () => {
+    press();
+    expect(button().hasAttribute("data-pointer-focus")).toBe(true);
+    // Escape does not move the keyboard focus: still no ring
+    act(() => { button().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
     expect(button().hasAttribute("data-pointer-focus")).toBe(true);
   });
 
   it("clears the mark on Tab and on blur, so keyboard focus shows the ring", () => {
-    act(() => { button().dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); });
-    act(() => { button().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
-    expect(button().hasAttribute("data-pointer-focus")).toBe(true);
+    press();
     act(() => { button().dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })); });
     expect(button().hasAttribute("data-pointer-focus")).toBe(false);
-    act(() => { button().dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); });
-    act(() => { button().focus(); button().blur(); });
+    press();
+    act(() => { button().blur(); });
     expect(button().hasAttribute("data-pointer-focus")).toBe(false);
   });
 
   it("never carries the mark when focused by keyboard alone", () => {
+    act(() => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })); });
     act(() => { button().focus(); });
     expect(button().hasAttribute("data-pointer-focus")).toBe(false);
   });
 
-  it("draws the pill ring only without the mark, and keeps a focus-visible style", () => {
-    expect(container.querySelector("[data-sidebar-account-pill]")!.getAttribute("class")).toContain("[button:focus-visible:not([data-pointer-focus])>&]:ring-2");
-    expect(css).toMatch(/\[data-pointer-focus\]:focus-visible,[^{]*\{\s*outline: none;/);
-    expect(css).toMatch(/\[data-sidebar-connect-apps\]\[data-pointer-focus\]:focus-visible \{\s*box-shadow: none;/);
-    // the global ring for keyboard focus is still there
-    expect(css).toMatch(/\n:focus-visible \{\s*outline: 2px solid var\(--color-focus\);/);
+  it("shows the soft fill, never an outline, while the menu is open", () => {
+    act(() => { button().click(); });
+    expect(button().getAttribute("aria-expanded")).toBe("true");
+    const open = pill().getAttribute("class")!.split(/\s+/);
+    expect(open).toContain("bg-sidebar-hover");
+    for (const ring of open) expect(ring).not.toMatch(/^ring-/);
+  });
+
+  it("draws the ring for keyboard focus only, in one shared rule", () => {
+    expect(pill().getAttribute("class")).toContain("[button:focus-visible:not([data-pointer-focus])>&]:ring-2");
+    // the global ring and every focus-visible: utility skip a click's focus
+    expect(css).toMatch(/\n:focus-visible:not\(\[data-pointer-focus\]\) \{\s*outline: 2px solid var\(--color-focus\);/);
+    expect(css).toMatch(/@custom-variant focus-visible \(&:focus-visible:not\(\[data-pointer-focus\]\)\);/);
+    // no per-button patch left behind
+    expect(css).not.toMatch(/\[data-sidebar-connect-apps\]\[data-pointer-focus\]/);
   });
 });

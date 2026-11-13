@@ -1757,7 +1757,13 @@ Rules that hold at every width:
   reference's override is on its root, so every menu should take these
   values; the header's conversation menu (`ThreadMenu`) and the rows'
   three-dots menus still draw their own surface and rows until #4183 moves
-  them onto the same classes. A waiting update is its first
+  them onto the same classes. The account button, open or after a mouse
+  click, shows the reference's soft fill only, never an outline (#4156); the
+  focus ring is for keyboard focus, for every control of the app through one
+  rule (`src/lib/input-modality.ts` marks a focus that follows a click, and
+  the global ring and the `focus-visible:` variant skip it). A text field,
+  a text area, a select and an editable region are never marked: they keep
+  their ring on a click, as the browser treats them. A waiting update is its first
   row: "Update available" in the accent, in the menu's 14/20 regular, on a
   10px card (10px by 12px padding), then Install at 13/18. Then the usage
   line with its percent (its side card, the same menu values, at least

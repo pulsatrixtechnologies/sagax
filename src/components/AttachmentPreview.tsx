@@ -42,6 +42,7 @@ import { useConversationGallery } from "./conversation-gallery-context";
 import { isInlineRasterDataUrl } from "@/lib/rich-blocks";
 import { TableFileButton } from "./TableFilePreview";
 import { ImageLoading } from "./ImageLoading";
+import { useOnScreen } from "@/lib/on-screen";
 
 import {
   canonicalDownloadFilename,
@@ -572,6 +573,16 @@ export function AttachmentPreviewDialog({
   );
 }
 
+/** How long a picture on screen may stay loading before its tile shows the
+ * broken state with Retry (#4205): the last fallback, so no tile spins for
+ * ever. On the desktop app the bundled-UI handler (electron/bundled-ui.cjs)
+ * is never told that the page dropped a request, so it bounds each
+ * attachment read itself: no response head by its deadline, it aborts the
+ * upstream request and answers 504, and the tile fails at once. This timer
+ * covers the rest (a browser, a response that stalls mid-body). A picture
+ * that is only slow lands here too. */
+export const THUMBNAIL_LOAD_DEADLINE_MS = 20_000;
+
 export function AttachmentThumbnail({
   image,
   onPreview,
@@ -612,6 +623,17 @@ export function AttachmentThumbnail({
   const preview = () => {
     if (!gallery?.open(galleryId)) onPreview();
   };
+  // The deadline runs only once the tile has been on screen (or was asked
+  // for at once): a lazy picture below the fold has not started loading.
+  const onScreen = useOnScreen(frameRef);
+  const [shown, setShown] = useState(eager);
+  if (onScreen && !shown) setShown(true);
+  useEffect(() => {
+    if (!shown || state !== "loading") return;
+    // failing shows the broken state with Retry instead of a spinner
+    const timer = setTimeout(() => setState("failed"), THUMBNAIL_LOAD_DEADLINE_MS);
+    return () => clearTimeout(timer);
+  }, [shown, state, attempt]);
 
   return (
     <span

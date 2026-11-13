@@ -221,6 +221,49 @@ function passThroughHeaders(request, bundled, options = {}) {
 
 const BUNDLE_HEADERS = { "cache-control": "no-store", "x-content-type-options": "nosniff" };
 
+/** How long an attachment read passed through to the organization server
+ * may wait for its response head (#4205). Electron's protocol.handle hands
+ * the handler a Request with no abort signal: when the page drops an <img>
+ * (scrolled away, replaced, Retry), nothing tells the handler, and the
+ * upstream net.fetch kept waiting and kept its slot in the session's
+ * connection pool. A message with hundreds of pictures left that many
+ * upstream requests queued or stalled, so every later picture waited behind
+ * them and its tile spun for ever. Each attachment read now has its own
+ * abort controller, aborted when no head came by this deadline; the page
+ * then gets a 504 and the tile shows its broken state with Retry. Only the
+ * wait for the head is bounded: a body that is streaming is never cut. */
+const ATTACHMENT_HEAD_DEADLINE_MS = 20_000;
+
+/** A read of an attachment (GET/HEAD under /api/attachments/). Pure. */
+function attachmentRead(request) {
+  if (request.method !== "GET" && request.method !== "HEAD") return false;
+  try {
+    return new URL(request.url).pathname.startsWith("/api/attachments/");
+  } catch {
+    return false;
+  }
+}
+
+/** deps.fetch with its own abort controller, aborted when no response head
+ * came within `deadlineMs`; the caller then gets a 504. The response that
+ * does come is returned untouched, so protocol.handle still relays its body
+ * natively. */
+async function fetchWithHeadDeadline(fetch, url, init, deadlineMs) {
+  const upstream = new AbortController();
+  let timer;
+  const late = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      resolve(new Response(null, { status: 504, statusText: "Gateway Timeout", headers: BUNDLE_HEADERS }));
+      upstream.abort(new Error(`no response head within ${deadlineMs} ms`));
+    }, deadlineMs);
+  });
+  try {
+    return await Promise.race([fetch(url, { ...init, signal: upstream.signal }), late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** The bundled origin a request is for: the one of `bundled` (one origin,
  * a list of them, or null) that is the request's own origin, else null.
  * Each organization server's page keeps its own origin: a request carries
@@ -247,6 +290,7 @@ function bundledOriginFor(bundled, url) {
  *   readFile: (file: string) => Promise<Uint8Array>,
  *   pageFrames?: { take: (url: string) => boolean },  the page frames a window loads as an iframe (createPageFrameLoads)
  *   log?: (line: string) => void,
+ *   attachmentHeadDeadlineMs?: number,        how long an attachment read waits for its head (ATTACHMENT_HEAD_DEADLINE_MS)
  * }} deps
  */
 function createBundledUiHandler(deps) {
@@ -275,7 +319,8 @@ function createBundledUiHandler(deps) {
         init.body = request.body;
         init.duplex = "half";
       }
-      return deps.fetch(request.url, init);
+      if (!attachmentRead(request)) return deps.fetch(request.url, init);
+      return fetchWithHeadDeadline(deps.fetch, request.url, init, deps.attachmentHeadDeadlineMs ?? ATTACHMENT_HEAD_DEADLINE_MS);
     }
     if (route.kind === "redirect") {
       return new Response(null, { status: 302, headers: { location: route.location, "cache-control": "no-store" } });
@@ -319,6 +364,7 @@ function createDetachedUiHandler(deps) {
 }
 
 module.exports = {
+  ATTACHMENT_HEAD_DEADLINE_MS,
   DETACHED_UI_ORIGIN,
   bundledOriginFor,
   bundleFile,

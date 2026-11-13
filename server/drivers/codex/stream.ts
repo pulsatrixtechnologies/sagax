@@ -207,7 +207,7 @@ s.handleNotification = (msg: any) => {
         // photos a phone sent go to the model only, never into the chat (phone_tool)
         if (item.type === "mcpToolCall" && !isPhoneToolCallName(typeof item.tool === "string" ? item.tool : undefined)) {
           for (const img of extractMcpImages(item.result)) {
-            s.emit({ ...s.base(s.threadId, s.turnId), type: "item.completed", itemType: "assistant_image", data: img.data });
+            s.emit({ ...s.base(s.threadId, s.turnId), type: "item.completed", itemType: "assistant_image", data: img.data, fromTool: true });
           }
         }
       } else if (item.type === "reasoning") {

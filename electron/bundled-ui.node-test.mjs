@@ -368,3 +368,77 @@ test("main draws the bundle for the organization server on screen only, and trus
   assert.match(main, /const own = isMainWindowPage\(event\.sender\) \? pageContexts\?\.originOf\(event\.sender\) : null;/);
   assert.match(main, /bundled = Boolean\(own && bundledOriginsNow\.includes\(own\) && event\.senderFrame === event\.sender\.mainFrame &&/);
 });
+
+/** The Request Electron's protocol.handle builds for the handler
+ * (lib/browser/api/protocol.ts): headers, method, referrer, body; no signal,
+ * so nothing aborts it when the page drops the request. */
+function electronRequest(url, { referrer = `${ORG}/`, method = "GET" } = {}) {
+  return new Request(url, { headers: new Headers(), method, referrer });
+}
+
+/** An upstream that never answers until it is aborted. */
+function stalledUpstream(seen) {
+  return (input, init) => new Promise((_resolve, reject) => {
+    const signal = init?.signal;
+    seen.push({ url: typeof input === "string" ? input : input.url, signal });
+    signal?.addEventListener("abort", () => reject(signal.reason));
+  });
+}
+
+async function settleWithin(promise, ms) {
+  let timer;
+  const stalled = new Promise((resolve) => { timer = setTimeout(() => resolve("stalled"), ms); });
+  try {
+    return await Promise.race([promise, stalled]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+test("a stalled attachment read is aborted upstream and answered 504 when no head comes by the deadline (#4205)", async () => {
+  assert.equal(ui.ATTACHMENT_HEAD_DEADLINE_MS, 20_000);
+  const seen = [];
+  const handle = ui.createBundledUiHandler({
+    origin: () => ORG,
+    staticDir: () => null,
+    fetch: stalledUpstream(seen),
+    readFile: async () => { throw new Error("no file"); },
+    attachmentHeadDeadlineMs: 50,
+  });
+  const req = electronRequest(`${ORG}/api/attachments/thread/1/2/0`);
+  assert.equal(req.signal.aborted, false);
+  const response = await settleWithin(handle(req), 1_000);
+  assert.notEqual(response, "stalled", "the handler waited on a stalled upstream for ever");
+  assert.equal(response.status, 504);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].signal?.aborted, true, "the upstream fetch was aborted, so it frees its connection");
+});
+
+test("an attachment read that answers in time is returned untouched and never aborted later; other API calls get no deadline", async () => {
+  const seen = [];
+  const answer = new Response("png", { status: 200, headers: { "content-type": "image/png" } });
+  const handle = ui.createBundledUiHandler({
+    origin: () => ORG,
+    staticDir: () => null,
+    fetch: (input, init) => {
+      seen.push(init?.signal);
+      return Promise.resolve(answer);
+    },
+    readFile: async () => { throw new Error("no file"); },
+    attachmentHeadDeadlineMs: 20,
+  });
+  assert.equal(await handle(electronRequest(`${ORG}/api/attachments/a.png`)), answer);
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(seen[0]?.aborted, false, "a response that came is not cut once the deadline passes");
+
+  const slow = [];
+  const other = ui.createBundledUiHandler({
+    origin: () => ORG,
+    staticDir: () => null,
+    fetch: stalledUpstream(slow),
+    readFile: async () => { throw new Error("no file"); },
+    attachmentHeadDeadlineMs: 20,
+  });
+  assert.equal(await settleWithin(other(electronRequest(`${ORG}/api/bots`)), 120), "stalled");
+  assert.equal(slow[0].signal, undefined);
+});

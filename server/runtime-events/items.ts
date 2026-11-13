@@ -18,6 +18,11 @@ export function handleItemEvents(event: any, ctx: any, host: any): void {
         // just that something ended. A client abort stores no reply text.
         pushAssistantText(event.text, event.turnId);
       } else if (event.itemType === "assistant_image") {
+        // #4205: a picture a tool returned to the model is what the bot read
+        // (a ticket's scanned page, a screenshot it checked), not what it shows:
+        // a pass over hundreds of tickets ended with hundreds of tiles. The bot
+        // shows a picture with attach_file; its own generated ones stay.
+        if (event.fromTool) break;
         try {
           const decoded = host.decodeGeneratedImage(event.data);
           const saved = saveImage(decoded.bytes, decoded.mime);

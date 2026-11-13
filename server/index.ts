@@ -179,6 +179,7 @@ import { commandReceipt, dropCommandReceipt, expireCommandReceipts, setCommandRe
 import { expireApprovalsAfterRestart } from "./approvals/approval-restart.ts";
 import { pendingApprovalExpiresAt } from "./approvals/pending-approval-expiry.ts";
 import { retireOpenQuestions } from "./approvals/retire-open-questions.ts";
+import { AskKeyIndex, closedAskCard } from "./widgets/ask-choice-keys.ts";
 import { appendDecision, bindConfidentialDecisions, bindDecisionRetention, decisionRetentionDays, flushDecisionLog, pruneDecisions, readDecisionRange, readSealedChain, scrubThreadDecisions, withDecisionActor } from "./decision-log.ts";
 import { appendStep, stepFromToolEvent } from "./step-journal.ts";
 import { validateBotCwd, validateBotCwdFor } from "./bots/bot-cwd.ts";
@@ -533,7 +534,7 @@ import { BUILT_IN_DRIVERS } from "./drivers/builtIn.ts";
 import { orgWithholdHostTools } from "./org/org-engine-admission.ts";
 import { openCodeProviderKeysAllowed, setOpenCodeProviderKeyPolicy } from "./drivers/acp/opencode-go.ts";
 import { getOrCreateChannel, mirrorActivity, mirrorReply, type CommsBus } from "./comms-visibility.ts";
-import { accessCardMessages, openApprovalCardMessages, openPendingInboxCards, openWaitingRowCandidates, openRequestCardRows, askRowsBetween, personWroteAfter, readOneMessage, hasUnprojectedSealedRows, reprojectSealedRows, readCommandReceipt, putCommandReceipt, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, threadsReferencingAsync, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./messages/message-db.ts";
+import { accessCardMessages, onMessageChange, openApprovalCardMessages, openPendingInboxCards, openWaitingRowCandidates, openRequestCardRows, askRowsBetween, personWroteAfter, readOneMessage, hasUnprojectedSealedRows, reprojectSealedRows, readCommandReceipt, putCommandReceipt, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, threadsReferencingAsync, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./messages/message-db.ts";
 import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
 import { contentEncryptionFromEnv } from "./encryption/content-encryption-env.ts";
 import { briefCrossingLabel, claimRecallCrossings } from "./recall/recall-disclosure.ts";
@@ -790,7 +791,7 @@ import { isTriggerSchedule, type RoutineNeedsPerson } from "../shared/routines.t
 import { routineRunPostsResult } from "../shared/routine-repeat.ts";
 import { routineTurnEffort } from "../shared/routine-effort.ts";
 import { routineTurnModel } from "../shared/routine-model.ts";
-import { nextOccurrence, PREWARM_ENGINE_LEAD_MS, ROUTINE_RESTARTED, RoutineManager, routineClaimedCardChoice, routineClaimedCardWaiting, routineRerunStartedBy, setRoutineTimeZone, type Routine, type RoutineRun, type RoutineRunOn, type RoutineRunTrigger } from "./routines/routines.ts";
+import { nextOccurrence, PREWARM_ENGINE_LEAD_MS, ROUTINE_RESTARTED, RoutineManager, routineClaimedCardChoices, routineClaimedCardWaiting, routineRerunStartedBy, setRoutineTimeZone, type Routine, type RoutineRun, type RoutineRunOn, type RoutineRunTrigger } from "./routines/routines.ts";
 import { RoutineConsents, routineRenewMs, type RoutineConsentEnd } from "./org/org-routine-consent.ts";
 import { CalendarCallManager } from "./calendar/calendar-calls.ts";
 import {
@@ -16411,6 +16412,39 @@ function harnessQuestionThread(threadId: string): boolean {
     || lastPersonMessage(threadId)?.aiClient === true;
 }
 
+/** #2608, #4205: retire a conversation's open question cards (or the one
+ * card `messageId`, a keyed ask_choice the bot retired): expired, its
+ * notice withdrawn, and an answer to it starts nothing. A passive card in
+ * the chat (no request) is put away. */
+function retireThreadQuestions(threadId: string, only: { messageId?: string; since?: number } = {}): string[] {
+  const { messageId } = only;
+  if (messageId) {
+    const row = store.messagesFor(threadId).find((message) => message.id === messageId);
+    if (row?.card && !row.card.requestId) {
+      store.patchMessage(threadId, row.id, { card: closedAskCard(row.card) });
+      return [];
+    }
+  }
+  return retireOpenQuestions({
+    messagesFor: (id) => store.messagesFor(id),
+    isPersistentQuestionCard,
+    isApprovalCardMessage,
+    patch: (id, rowId, card) => { store.patchMessage(id, rowId, { card }); },
+    forget: (id, requestId) => { askMessageByRequest.delete(`${id}:${requestId}`); },
+  }, threadId, only);
+}
+
+/** #4205: where each pending keyed ask_choice card is, so a keyed call
+ * reads only the conversation holding its card (ask-choice-keys.ts). */
+const askKeyIndex = new AskKeyIndex({
+  seed: () => openRequestCardRows(),
+  messagesFor: (threadId) => store.messagesFor(threadId),
+});
+onMessageChange((threadId, messageId) => {
+  // after the write's own caller has updated the cached transcript
+  if (askKeyIndex.size()) queueMicrotask(() => askKeyIndex.changed(threadId, messageId));
+});
+
 /** The bot's ask_choice as a question request: the same path as an engine's
  * own question tool (request.opened), so the card carries a requestId and
  * reaches the person in the chat, the Approvals inbox, the member API, a
@@ -19828,9 +19862,12 @@ routines = new RoutineManager({
   },
   cardRaisedSince: (threadId, since) => store.messagesFor(threadId).some((message) => message.kind === "options" && message.at >= since && Boolean(message.card)),
   // 2026-11-08 (QA 0.8.66 F4): the card the bot announced is drawn for real
+  // #4205: a cancelled or superseded run's question cards are closed
+  closeRunCards: (threadId, since) => { retireThreadQuestions(threadId, { since }); },
   raiseClaimedCard: (threadId, claim) => {
-    const choice = routineClaimedCardChoice(redactSecretsInText(claim));
-    return raiseHarnessQuestion(threadId, choice, "output") ? routineClaimedCardWaiting(choice) : null;
+    // #4205: one card per separate ask, each with its own choices (the pinned card pages them)
+    const raised = routineClaimedCardChoices(redactSecretsInText(claim)).filter((choice) => raiseHarnessQuestion(threadId, choice, "output"));
+    return raised.length ? routineClaimedCardWaiting(raised) : null;
   },
   hasPendingDelegations: (threadId) => coordinator.awaitsTeammates(threadId) ||
     [...delegationWatch.values()].some((watch) => watch.sourceThreadId === threadId) ||
@@ -23178,6 +23215,23 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
         personLanguage: languageOfPerson(person ?? undefined),
         // 2026-11-03: where nobody watches, a real question card (raiseHarnessQuestion)
         ...(harnessQuestionThread(threadId) ? { raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(threadId, choice) } : {}),
+        // #4205: an ask_choice key spans this bot's conversations with the
+        // same person (a routine's every run), never another person's
+        askKeys: {
+          find: (key) => {
+            const group = Boolean(store.groupByThread(threadId));
+            const botOwner = effectiveBotOwner(owning);
+            const whose = pageOwnerFor(store.taskByThread(owning.id, threadId), botOwner);
+            return askKeyIndex.find(key, (cardThreadId) => {
+              if (cardThreadId === threadId) return true;
+              if (group) return false;
+              const task = store.taskByThread(owning.id, cardThreadId);
+              return Boolean(task) && pageOwnerFor(task, botOwner) === whose;
+            });
+          },
+          remember: (key, cardThreadId, messageId) => askKeyIndex.remember(key, cardThreadId, messageId),
+          retire: (cardThreadId, message) => { retireThreadQuestions(cardThreadId, { messageId: message.id }); },
+        },
         // #2048: publish-target availability for this bot, engine and person
         pageTargetContext: {
           defaultId,
@@ -23195,7 +23249,10 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       });
       // #3514: the turn that posted a waiting card ends at its safe point
       // when its engine cannot take the answer live
-      if (postedCardWaits(body && typeof body === "object" ? (body as { tool?: unknown }).tool : undefined, posted) && posted.ok) cardPosted(cardTurnHandoffDeps(), owning.id, threadId, posted.messageId);
+      // #4205: the tool result then says this turn ends here (no other card
+      // can follow in it unless raised with wait false)
+      if (postedCardWaits(body && typeof body === "object" ? (body as { tool?: unknown }).tool : undefined, posted) && posted.ok
+        && cardPosted(cardTurnHandoffDeps(), owning.id, threadId, posted.messageId) === "cut") return { ...posted, turnEnds: true as const };
       return posted;
     },
     authored: (threadId, generation, messageId) => handoffs.authored(threadId, generation, messageId),
@@ -32325,13 +32382,7 @@ const agentApi = createAgentApi({
     await interruptDirectThread(agentId, threadId);
   },
   retireQuestions(_agentId, threadId) {
-    retireOpenQuestions({
-      messagesFor: (id) => store.messagesFor(id),
-      isPersistentQuestionCard,
-      isApprovalCardMessage,
-      patch: (id, messageId, card) => { store.patchMessage(id, messageId, { card }); },
-      forget: (id, requestId) => { askMessageByRequest.delete(`${id}:${requestId}`); },
-    }, threadId);
+    retireThreadQuestions(threadId);
   },
   collected(agentId, threadId) {
     // Only an AI client's own conversation (openedBy kind "agent"), never a

@@ -15,10 +15,14 @@ export interface RetireQuestionsDeps {
   forget?(threadId: string, requestId: string): void;
 }
 
-/** Retire every open persistent question card of a thread. Returns the retired request ids. */
-export function retireOpenQuestions(deps: RetireQuestionsDeps, threadId: string): string[] {
+/** Retire every open persistent question card of a thread (#4205: or only
+ * the card of row `messageId`, or only the cards drawn at or after `since`,
+ * a routine run's own). Returns the retired request ids. */
+export function retireOpenQuestions(deps: RetireQuestionsDeps, threadId: string, only: { messageId?: string; since?: number } = {}): string[] {
   const retired: string[] = [];
   for (const message of deps.messagesFor(threadId)) {
+    if (only.messageId !== undefined && message.id !== only.messageId) continue;
+    if (only.since !== undefined && message.at < only.since) continue;
     const card = message.card;
     if (!card?.requestId || card.answered || card.dismissed || card.expired) continue;
     if (!deps.isPersistentQuestionCard(card)) continue;

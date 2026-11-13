@@ -1452,6 +1452,14 @@ export interface OptionCardData extends WaitCardField {
   skillRequest?: SkillRequestCardData;
   /** A provider's structured question set. */
   questionRequest?: QuestionRequestCardData;
+  /** #4205: the bot's own key for its ask_choice card: asking the same key
+   * again replaces this card in place, retiring it closes it, and the answer
+   * reaches the bot with the key verbatim. */
+  askKey?: string;
+  /** #4205: ask_choice with wait false: the card stays pending for the
+   * person but holds no turn and no routine run; its answer arrives later
+   * as its own turn. */
+  noHold?: true;
   /** #2048: publish-target choice (Sagax page / artifact / Claude / …).
    * Same question card family; enables "Always use this choice". */
   pageTargetChoice?: import("./page-targets.ts").PageTargetChoiceCardData;

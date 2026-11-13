@@ -71,6 +71,9 @@ async function deliverLateQuestionAnswer(
     if (!latestCard || latestCard.answered || latestCard.dismissed) {
       throw Object.assign(new Error("this question has already been answered"), { status: 409 });
     }
+    // #4205: a closed card (its run cancelled or superseded, its key
+    // retired) starts nothing
+    if (latestCard.expired) throw Object.assign(new Error("this question is closed"), { status: 409 });
     assertWithinBudget(host.cfg, DATA_DIR);
     const sender = host.messageSender(auth);
     const trigger = host.usageTriggerFor(auth);

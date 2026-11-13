@@ -31,6 +31,16 @@ export type AgentCardResult =
       changedBy?: PageSourceChange[];
       answered?: { choice: string; question: string };
       waitsForPerson?: true;
+      /** #4205: ask_choice with a key that had a pending card: replaced in
+       * place. `retired`: how many cards a retire closed (0 or 1). `holds`
+       * false: the card was raised with wait false and holds nothing. */
+      replaced?: true;
+      retired?: number;
+      holds?: false;
+      /** #4205: the card holds this turn and the engine cannot take the
+       * answer live, so the turn ends at the end of this call
+       * (approvals/card-turn-handoff.ts cardPosted): no further call runs. */
+      turnEnds?: true;
       auto?: { id: string; tool: string; name: string; description: string; icon?: string; reason: "single" | "default" };
       targets?: Array<{ id: string; tool: string; name: string; description: string; available: boolean; icon?: string; reason?: string }>;
     }

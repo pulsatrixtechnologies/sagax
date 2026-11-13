@@ -180,7 +180,7 @@ const scope = (node: HTMLElement, view: View) =>
   node.querySelector<HTMLElement>("tab" in view ? `[data-bot-profile-panel="${view.tab}"]` : `[data-bot-profile-subpage="${view.page}"]`)!;
 
 /** The mascot editor (preview, moves, character grid, Reset/Randomize),
- * now the Appearance tab, keeps its own chips and fields (the editor's
+ * now the Appearance sub-page (#4147), keeps its own chips and fields (the editor's
  * scope, fix/bot-appearance-scope); HelpTip and menu popovers are closed
  * surfaces, not cards of the column. Before/after captures of the
  * profile (tabs, bare mascot, condensed bar):
@@ -216,7 +216,8 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
         const sub = node.querySelector<HTMLElement>(`[data-bot-profile-subpage="${id}"]`);
         expect(sub, `sub-page ${id}`).not.toBeNull();
         expect(sub!.querySelector("[data-bot-profile-subpage-title]")?.textContent).toBe(t(`botProfile.v6.page.${id}.title` as never));
-        expect(node.querySelector("[role='tablist']"), `no tabs on ${id}`).toBeNull();
+        // the page's tab row is gone (the mascot editor keeps its own tabs, #4147)
+        expect(node.querySelector("[data-bot-profile-tabs]"), `no tabs on ${id}`).toBeNull();
         // #3398: the link back names the tab it returns to, and has the focus;
         // #4078: it is in the top bar beside the close button, not in the column
         expect(sub!.querySelector("[data-bot-profile-back]"), `no back in the column of ${id}`).toBeNull();
@@ -233,7 +234,8 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
     // General: the rows that open a page (the channels and the accounts are
     // cards in place, #3398; Shared with is under More), Knowledge its work.
     expect(Array.from((await home("general")).querySelectorAll("[data-bot-profile-subpage-open]")).map((row) => row.getAttribute("data-bot-profile-subpage-open"))).toEqual(
-      ["personality", "model", "beforeActing", "sharing", "rules", "actsAlone", "voice", "advanced", "versions"],
+      // #4147: Appearance is a row of Settings, right after Personality and Model
+      ["personality", "model", "appearance", "beforeActing", "sharing", "rules", "actsAlone", "voice", "advanced", "versions"],
     );
     expect(Array.from((await home("knowledge")).querySelectorAll("[data-bot-profile-subpage-open]")).map((row) => row.getAttribute("data-bot-profile-subpage-open"))).toEqual(["routines", "folder"]);
   });
@@ -276,7 +278,7 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
         seen.add(id);
       }
     }
-    expect([...seen].sort()).toEqual(["access", "files", "history", "model", "permissions", "rules", "sharing", "skills", "soul", "summary", "usage", "voice", "worksOn"]);
+    expect([...seen].sort()).toEqual(["access", "appearance", "files", "history", "model", "permissions", "rules", "sharing", "skills", "soul", "summary", "usage", "voice", "worksOn"]);
   });
 
   it("names every section and sub-page in French too", async () => {

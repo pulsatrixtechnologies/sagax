@@ -124,7 +124,7 @@ async function frame() {
 
 beforeEach(() => {
   setLocale("en");
-  fixture.section = "appearance";
+  fixture.section = "overview";
   fixture.listeners.clear();
   actions.length = 0;
   fixture.dispatch = (action) => {
@@ -149,10 +149,17 @@ afterEach(() => {
 
 describe("bot profile settings search", () => {
   it("opens from the magnifier beside the tabs, under them, and dims no tab while empty", () => {
-    // a link to Appearance lands on its own tab (#2969: General | Appearance | Knowledge | Stats)
-    expect(selectedTab()).toBe("appearance");
-    expect(shownTab()).toBe("appearance");
+    // #4147: no Appearance tab; a link to Appearance lands on its sub-page of
+    // General, and Back returns to General, where the magnifier sits beside the tabs
+    expect(shownTab()).toBe("general");
+    expect(host.querySelector('[data-bot-profile-tab="appearance"]')).toBeNull();
+    act(() => fixture.dispatch({ type: "personaEditorSection", section: "appearance" }));
+    expect(selectedTab()).toBe("general");
+    expect(host.querySelector("[data-persona-modal]")!.getAttribute("data-bot-profile-subpage-current")).toBe("appearance");
     expect(opened()).toContain("appearance");
+    act(() => host.querySelector<HTMLElement>("[data-bot-profile-back]")!.click());
+    expect(shownTab()).toBe("general");
+    expect(host.querySelector('[data-bot-profile-tab="appearance"]')).toBeNull();
     expect(host.querySelector("[data-persona-search]")).toBeNull();
     expect(toggle().getAttribute("aria-expanded")).toBe("false");
     act(() => toggle().click());
@@ -167,11 +174,12 @@ describe("bot profile settings search", () => {
   it("shows the tab that holds a word, in English and in French, and marks the tabs that do", () => {
     act(() => toggle().click());
     type("mascot");
-    // the mascot is on the Appearance tab (#2969): that tab is the match, General dims
-    expect(selectedTab()).toBe("appearance");
-    expect(matching()).toEqual(["appearance"]);
+    // the mascot is on General's Appearance sub-page (#4147): General is the match, opened on it
+    expect(selectedTab()).toBe("general");
+    expect(matching()).toEqual(["general"]);
     expect(opened()).toContain("appearance");
-    expect(host.querySelector('[data-bot-profile-tab="general"]')!.classList.contains("opacity-40")).toBe(true);
+    expect(host.querySelector("[data-persona-modal]")!.getAttribute("data-bot-profile-subpage-current")).toBe("appearance");
+    expect(host.querySelector('[data-bot-profile-tab="knowledge"]')!.classList.contains("opacity-40")).toBe(true);
     type("effort");
     // V6 (#2612): the Model sub-page sits on General, opened by the search
     expect(selectedTab()).toBe("general");
@@ -198,7 +206,7 @@ describe("bot profile settings search", () => {
     act(() => toggle().click());
     type("zzzxq");
     expect(matching()).toEqual([]);
-    expect(selectedTab()).toBe("appearance");
+    expect(selectedTab()).toBe("general");
     expect(host.querySelector("[data-persona-no-match]")!.textContent).toBe("Nothing matches “zzzxq”");
   });
   it("opens the field with a slash or Command-F from any tab, but not while typing", async () => {

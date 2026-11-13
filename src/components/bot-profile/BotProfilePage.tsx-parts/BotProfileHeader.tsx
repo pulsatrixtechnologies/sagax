@@ -3,7 +3,7 @@
 // card around it (Grok Bot, the owner 2026-11-09), the bot's name with its label
 // under it, who sees it, who owns it and its description edited in place,
 // all aligned left and tight. The mascot editor
-// itself is the Appearance tab.
+// itself is the Appearance sub-page (General > Settings, #4147).
 import { lazy, Suspense, useCallback, useState, type ReactNode } from "react";
 import { Lock, Star, UserRound, Users } from "lucide-react";
 
@@ -36,7 +36,7 @@ type Derived = ReturnType<typeof useBotSectionContent>["derived"];
 const MascotLookEditor = lazy(() => import("../../floating-bots/MascotLookEditor"));
 
 /** The header's hero: the mascot, small and bare over the banner, with the
- * name and label stacked under it. The Appearance tab's editor draws it
+ * name and label stacked under it. The Appearance sub-page's editor draws it
  * into this slot (so a character picked in its grid previews here), the
  * page draws it for the bot's own look otherwise. A picture dropped on it
  * or pasted becomes the bot's. */

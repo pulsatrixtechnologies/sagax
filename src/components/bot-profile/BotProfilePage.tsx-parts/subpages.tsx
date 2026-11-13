@@ -11,6 +11,7 @@ import {
   Cpu,
   FolderOpen,
   History,
+  Palette,
   Repeat,
   ScrollText,
   ShieldCheck,
@@ -35,6 +36,7 @@ const meta = (icon: ReactNode, title: LocaleKey, desc: LocaleKey, intro: LocaleK
 export const SUBPAGE_META: Record<BotProfileSubPage, Meta> = {
   personality: meta(<UserRound />, "botProfile.v6.page.personality.title", "botProfile.v6.page.personality.desc", "botProfile.v6.page.personality.intro"),
   model: meta(<Cpu />, "botProfile.v6.page.model.title", "botProfile.v6.page.model.desc", "botProfile.v6.page.model.intro"),
+  appearance: meta(<Palette />, "botProfile.v6.page.appearance.title", "botProfile.v6.page.appearance.desc", "botProfile.v6.page.appearance.intro"),
   beforeActing: meta(<ShieldCheck />, "botProfile.v6.page.beforeActing.title", "botProfile.v6.page.beforeActing.desc", "botProfile.v6.page.beforeActing.intro"),
   sharing: meta(<Users />, "botProfile.v6.page.sharing.title", "botProfile.v6.page.sharing.desc", "botProfile.v6.page.sharing.intro"),
   rules: meta(<ScrollText />, "botProfile.v6.page.rules.title", "botProfile.v6.page.rules.desc", "botProfile.v6.page.rules.intro"),

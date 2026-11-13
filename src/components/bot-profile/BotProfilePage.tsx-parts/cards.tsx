@@ -41,11 +41,11 @@ export function sectionLabel(id: BotSettingsSection): string {
   return entry.labelKey ? t(entry.labelKey) : entry.label;
 }
 
-/** The tabs' names (V6, #2612; Appearance its own tab, JC 2026-11-08). */
+/** The tabs' names (V6, #2612; Appearance is a row of General > Settings,
+ * no tab any more, #4147). */
 export const TAB_LABEL: Record<BotProfileTab, LocaleKey> = {
   general: "botProfile.tab.general",
   outcomes: "botProfile.tab.outcomes",
-  appearance: "botProfile.tab.appearance",
   knowledge: "botProfile.tab.knowledge",
   stats: "botProfile.tab.stats",
 };

@@ -32,7 +32,8 @@ describe("search lands on the option's sub-page (#2623)", () => {
   it("keeps the section's own sub-page otherwise", () => {
     expect(personaSubPageForQuery("permissions", "approbation")).toBe("beforeActing");
     expect(personaSubPageForQuery("model", "moteur")).toBe("model");
-    expect(personaSubPageForQuery("appearance", "mascotte")).toBeNull();
+    // #4147: Appearance is a sub-page of General > Settings, no tab of its own
+    expect(personaSubPageForQuery("appearance", "mascotte")).toBe("appearance");
   });
 });
 

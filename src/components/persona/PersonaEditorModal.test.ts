@@ -133,8 +133,9 @@ const selectedTab = (html: string) => /data-bot-profile-tab-current="(\w+)"/.exe
 const tabsOf = (html: string) => [...html.matchAll(/data-bot-profile-tab="(\w+)"/g)].map((match) => match[1]);
 
 // #4098: Outcomes is the second tab, read from the routines (no Updates tab).
-const TABS_ALL = ["general", "outcomes", "appearance", "knowledge", "stats"];
-const TABS_SIMPLE = ["general", "outcomes", "appearance", "knowledge"];
+// #4147: Appearance is a row of General > Settings, no tab any more.
+const TABS_ALL = ["general", "outcomes", "knowledge", "stats"];
+const TABS_SIMPLE = ["general", "outcomes", "knowledge"];
 // The V6 page (#2612): the sub-page a link opens, and the rows of a tab.
 const subPageOf = (html: string) => /data-bot-profile-subpage-current="(\w+)"/.exec(html)?.[1];
 const rowsOf = (html: string) => [...html.matchAll(/data-bot-profile-subpage-open="(\w+)"/g)].map((match) => match[1]);
@@ -161,7 +162,7 @@ describe("bot profile page shell", () => {
     // #3398: General is section cards with their controls in place; a row
     // opens a sub-page only for a long setting; no Settings fold, no identity card of facts
     expect(html).not.toContain("data-bot-profile-settings-toggle");
-    expect(rowsOf(html)).toEqual(["personality", "model", "beforeActing", "sharing", "rules", "actsAlone", "voice", "advanced", "versions"]);
+    expect(rowsOf(html)).toEqual(["personality", "model", "appearance", "beforeActing", "sharing", "rules", "actsAlone", "voice", "advanced", "versions"]);
     for (const label of [">Settings<", ">Channels<", ">Access<", ">More<"]) expect(html).toContain(label);
     expect(html).not.toContain(">Identity<");
     expect(selectedTab(html)).toBe("general");
@@ -203,22 +204,30 @@ describe("bot profile page shell", () => {
     expect(html).not.toContain("overflow-x-auto whitespace-nowrap");
   });
 
-  it("regression (2026-11-08): Appearance is its own tab, after General and Outcomes (#4098), never a dropdown under the header", () => {
+  it("regression #4147 (the owner 2026-11-13): Appearance is a row of General > Settings right after Personality and Model, opening its sub-page; no Appearance tab", () => {
     const rest = render("overview");
     expect(tabsOf(rest)).toEqual(TABS_ALL);
-    expect(tabsOf(rest).indexOf("outcomes")).toBe(1);
-    expect(tabsOf(rest).indexOf("appearance")).toBe(2);
+    expect(tabsOf(rest)).not.toContain("appearance");
+    expect(rest).not.toContain('id="bot-profile-panel-appearance"');
     expect(rest).not.toContain("data-bot-profile-appearance-toggle");
     expect(rest).not.toContain('data-section-body="appearance"');
-    // a link to the appearance opens its tab, the whole editor in the tab's panel
+    // the row: in the Settings card, after Model and before Before it acts, with its name, grey line, value and chevron
+    const card = rest.slice(at(rest, 'data-settings-group="bot-profile-group-settings"'), at(rest, 'data-settings-group="bot-profile-channels"'));
+    expect(rowsOf(card)).toEqual(["personality", "model", "appearance", "beforeActing"]);
+    const row = card.slice(at(card, 'data-bot-profile-row="page-appearance"'), at(card, 'data-bot-profile-row="page-beforeActing"'));
+    expect(row).toContain(">Appearance<");
+    expect(row).toContain(">Mascot, shape, color, skin<");
+    expect(row).toMatch(/data-bot-profile-value=""[^>]*>Owl</);
+    expect(row).toContain("lucide-chevron-right");
+    // a link to the appearance opens General's Appearance sub-page, the whole editor in it
     const html = render("appearance");
-    expect(selectedTab(html)).toBe("appearance");
-    expect(subPageOf(html)).toBeUndefined();
+    expect(selectedTab(html)).toBe("general");
+    expect(subPageOf(html)).toBe("appearance");
+    expect(html).not.toContain('role="tablist"');
+    expect(html).toMatch(/data-bot-profile-back=""[^>]*>[\s\S]*?General<\/button>/);
     expect(sectionHtml(html, "appearance").open).toBe(true);
     expect(bodiesOf(sectionHtml(html, "appearance").html)).toEqual(["appearance"]);
-    const panel = at(html, 'id="bot-profile-panel-appearance"');
-    expect(panel).toBeGreaterThan(at(html, 'data-bot-profile-tabs=""'));
-    expect(at(html, 'data-bot-profile-section="appearance"')).toBeGreaterThan(panel);
+    expect(at(html, 'data-bot-profile-section="appearance"')).toBeGreaterThan(at(html, 'data-bot-profile-subpage="appearance"'));
     expect(html).not.toContain("data-bot-profile-appearance-toggle");
   });
 
@@ -228,7 +237,7 @@ describe("bot profile page shell", () => {
       expect(html).not.toContain(marker);
     }
     for (const word of [">Generate<", ">Upload<", ">Reset<", ">Randomize<"]) expect(html).not.toContain(word);
-    // straight from the description to the General / Appearance / Knowledge / Stats tabs
+    // straight from the description to the General / Outcomes / Knowledge / Analytics tabs
     const description = at(html, 'data-bot-profile-description=""');
     const tabs = at(html, 'data-bot-profile-tabs=""');
     expect(description).toBeGreaterThan(0);
@@ -276,7 +285,7 @@ describe("bot profile page shell", () => {
     expect(title).toBeLessThan(label);
     expect(label).toBeLessThan(audience);
     expect(html).toMatch(/<h2 id="bot-profile-title" data-bot-profile-title="" class="[^"]*justify-start text-left text-\[28px\]/);
-    // no button row nor summary in the header: they head the Appearance tab
+    // no button row nor summary in the header: they head the Appearance sub-page
     for (const marker of ["data-mascot-play", "data-mascot-randomize", "data-mascot-summary", "data-mascot-action", "data-bot-profile-appearance-toggle"]) expect(heroHtml).not.toContain(marker);
     // nothing lost under it: who sees it, the description, left-aligned
     expect(html.slice(audience - 200, audience)).toContain("justify-start");
@@ -355,7 +364,8 @@ describe("bot profile page shell", () => {
 
   it("opens a link on the sub-page that holds its section, shown in place (V6, #2612)", () => {
     expect(botProfileTabFor("overview")).toBe("general");
-    expect(botProfileTabFor("appearance")).toBe("appearance");
+    expect(botProfileTabFor("appearance")).toBe("general");
+    expect(botProfileSubPageFor("appearance")).toBe("appearance");
     expect(botProfileTabFor("slack")).toBe("general");
     expect(botProfileTabFor("summary")).toBe("general");
     expect(botProfileTabFor("soul")).toBe("general");
@@ -497,7 +507,7 @@ describe("General cards and sub-pages", () => {
   it("each row carries its name, description and value; the permissions and access pieces each live in one sub-page", () => {
     fixture.state = {};
     const html = render("overview");
-    for (const id of ["personality", "model", "beforeActing", "sharing", "actsAlone"]) expect(html).toContain(`data-bot-profile-row="page-${id}"`);
+    for (const id of ["personality", "model", "appearance", "beforeActing", "sharing", "actsAlone"]) expect(html).toContain(`data-bot-profile-row="page-${id}"`);
     expect(html).toContain(">Before it acts<");
     expect(html).toContain(">What it does alone, what it asks<");
     expect(html).toContain("data-bot-profile-value");

@@ -98,6 +98,16 @@ describe("the Data routes", () => {
     expect(database.calls).toEqual([]);
   });
 
+  // #3539: unavailable() finds the binding without loading it, so a binding
+  // that is found but fails to load is said at the first open, the same way.
+  it("answers 503 engine_unavailable when the binding is found but fails to load", async () => {
+    const reason = "DuckDB did not load: broken";
+    const { call } = await serve({ engine: { unavailable: () => null, forBot: async () => { throw new DataFailure({ code: "engine_unavailable", message: reason }); } } });
+    const reply = await call("GET", "/api/bots/bot-1/data");
+    expect(reply.status).toBe(503);
+    expect(reply.body).toEqual({ error: { code: "engine_unavailable", message: reason } });
+  });
+
   it("turns the person's SQL into a card on the panel's connection, then edits, pages and deletes it", async () => {
     const { call, database, sheets, frames } = await serve();
     database.next = { columns: [{ name: "id", type: "INTEGER" }], rows: [[1], [2]], rowCount: 2 };

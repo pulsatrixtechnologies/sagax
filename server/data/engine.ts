@@ -141,6 +141,16 @@ function loadBinding(directory: string | null): Binding {
   return nativeRequire(directory)("@duckdb/node-api") as Binding;
 }
 
+/** Why the binding cannot be used, in one line, with what to do. */
+function notLoadedReason(directory: string | null, error: unknown): string {
+  const detail = (error instanceof Error ? error.message : String(error)).split("\n")[0].trim();
+  const where = directory ? `from ${directory}` : "from the server's node_modules";
+  const action = directory
+    ? "Reinstall Sagax, or point SAGAX_DUCKDB_DIR at a folder holding node_modules/@duckdb."
+    : "Run pnpm install, or set SAGAX_DUCKDB_DIR to a folder holding node_modules/@duckdb.";
+  return `DuckDB did not load ${where}: ${detail}. ${action}`;
+}
+
 /** DuckDB's defaults assume it owns the machine (80 % of RAM, every core).
  * It shares this one with bots, Electron and the engines, and a native OOM
  * takes the whole server down, so the limits are explicit and conservative. */
@@ -838,6 +848,8 @@ FROM ${from}, omb_range WHERE ${id} IS NOT NULL GROUP BY bin ORDER BY bin`;
 class Engine implements DataEngine {
   private readonly databases = new Map<string, BotDb>();
   private loaded: { binding: Binding } | { reason: string } | null = null;
+  /** The binding's package was found (unavailable()); not loaded yet. */
+  private located = false;
   readonly env: NodeJS.ProcessEnv;
   readonly dataDir: string;
   readonly idleMs: number;
@@ -868,12 +880,7 @@ class Engine implements DataEngine {
     try {
       this.loaded = { binding: loadBinding(directory) };
     } catch (error) {
-      const detail = (error instanceof Error ? error.message : String(error)).split("\n")[0].trim();
-      const where = directory ? `from ${directory}` : "from the server's node_modules";
-      const action = directory
-        ? "Reinstall Sagax, or point SAGAX_DUCKDB_DIR at a folder holding node_modules/@duckdb."
-        : "Run pnpm install, or set SAGAX_DUCKDB_DIR to a folder holding node_modules/@duckdb.";
-      this.loaded = { reason: `DuckDB did not load ${where}: ${detail}. ${action}` };
+      this.loaded = { reason: notLoadedReason(directory, error) };
     }
     return this.loaded;
   }
@@ -884,9 +891,23 @@ class Engine implements DataEngine {
     throw new DataFailure({ code: "engine_unavailable", message: loaded.reason });
   }
 
+  /** #3539: answered without loading the binding. Every turn asks it to
+   * offer the Data tools, and loading DuckDB's native library (over 100 MB)
+   * held the loop for the first turn after a start; the binding loads at
+   * the first Data call (forBot). A binding that is found but then fails to
+   * load is said by that call, and by this from then on. */
   unavailable(): string | null {
-    const loaded = this.load();
-    return "reason" in loaded ? loaded.reason : null;
+    if (this.loaded) return "reason" in this.loaded ? this.loaded.reason : null;
+    if (this.located) return null;
+    const directory = duckdbDirectory(this.env);
+    try {
+      nativeRequire(directory).resolve("@duckdb/node-api");
+      this.located = true;
+      return null;
+    } catch (error) {
+      this.loaded = { reason: notLoadedReason(directory, error) };
+      return this.loaded.reason;
+    }
   }
 
   async forBot(botId: string): Promise<BotDatabase> {

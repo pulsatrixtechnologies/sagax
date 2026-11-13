@@ -96,7 +96,8 @@ export interface BotDatabase {
 }
 
 export interface DataEngine {
-  /** Why DuckDB cannot run here, or null when it can (the binding loaded). */
+  /** Why DuckDB cannot run here, or null when its binding is found. Never
+   * loads the binding (a turn asks it): the first Data call does. */
   unavailable(): string | null;
   forBot(botId: string): Promise<BotDatabase>;
   /** Closes the bot's database and deletes its files. */

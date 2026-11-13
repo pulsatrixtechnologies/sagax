@@ -10980,7 +10980,10 @@ const dataSheets = new DataSheetRegistry({
   broadcast: (frame, scopeKey) => broadcast({ ...frame, ...dataFrameAudience(scopeKey) }),
   dropResult: async (scopeKey, name) => {
     if (dataEngine.unavailable() !== null) return;
-    await (await dataEngine.forBot(scopeKey)).dropResult(name);
+    // a binding found but failing to load (#3539) drops nothing, as a missing one
+    let database;
+    try { database = await dataEngine.forBot(scopeKey); } catch (error) { if (error instanceof DataFailure) return; throw error; }
+    await database.dropResult(name);
   }
 });
 /** Who a scope's "data" frames reach (dataFrameAllowed in sseFrameFor): on
@@ -35298,6 +35301,9 @@ const onListening = async () => {
   // #3643: the marketplaces' offered revisions are read in slices now, ahead
   // of the first listing, never in one stretch on a request
   void pluginMarketplaces.warmRevisions().then(() => orgCapabilityMarkets.warmRevisions()).catch(() => undefined);
+  // #3599: plugin copies kept at start from another build are made again
+  // now, asynchronously, never on the start path
+  void installationPlugins.refreshStale().catch(() => undefined);
   // Words queued before the restart start first, ahead of anything sent from
   // now on. Their turns wait for the engines read at start like every turn.
   followupsReady = true;

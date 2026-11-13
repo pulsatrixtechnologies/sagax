@@ -68,6 +68,7 @@ function harness(
   // Most cases here exercise a live routine, the default; "routines.newPaused"
   // below covers the setting.
   newPaused = false,
+  personTurn?: (threadId: string) => boolean,
 ) {
   const clock = { now: start };
   const dir = mkdtempSync(join(tmpdir(), "omb-routine-request-"));
@@ -90,6 +91,7 @@ function harness(
     canPersist,
     autoApply,
     newPaused: () => newPaused,
+    ...(personTurn ? { personTurn } : {}),
   });
   return { clock, routines, service, store };
 }
@@ -267,6 +269,20 @@ describe("RoutineRequestService", () => {
     expect(appended.slice(1).every((card) => card.dismissed && card.options.length === 0)).toBe(true);
     expect(store.messagesFor("full-thread").every((message) => message.card?.answered === "allow")).toBe(true);
     expect(autoApply).toHaveBeenLastCalledWith("bot-a", "full-thread", "bot-a");
+  });
+
+  it("#4201: a run_now that applies on its own in a turn the person did not start is no person's run", async () => {
+    const autoApply = vi.fn(() => "full-access" as const);
+    // "hop-thread": a teammate's request, the bot's own routine or a wake
+    const { service, routines } = harness(undefined, undefined, undefined, autoApply, false, (threadId) => threadId !== "hop-thread");
+    const created = await service.submit({ botId: "bot-a", threadId: "own-thread", proposal: createProposal() });
+    const routineId = created.result!.resultId;
+    const background = await service.submit({ botId: "bot-a", threadId: "hop-thread", proposal: { action: "run_now", routineId } });
+    expect(background).toMatchObject({ state: "applied", result: { action: "run_now" } });
+    expect(routines.listRuns().find((run) => run.id === background.result!.resultId)?.startedBy).toBeUndefined();
+    // the person's own words in their conversation: their run
+    const mine = await service.submit({ botId: "bot-a", threadId: "own-thread", proposal: { action: "run_now", routineId } });
+    expect(routines.listRuns().find((run) => run.id === mine.result!.resultId)?.startedBy).toBe("person");
   });
 
   it("2026-11-08: a refused quote never brings the card back under Full access; outside Full it keeps the card", async () => {

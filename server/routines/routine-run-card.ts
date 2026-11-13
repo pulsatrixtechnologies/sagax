@@ -107,7 +107,9 @@ export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullRepor
   if (run.autoPaused) card.autoPausedAfter = run.autoPaused.failures;
   if (run.status === "completed" && run.problems) card.problems = readableRoutineProblems(redactSecretsInText(run.problems)).slice(0, 1_000);
   // #3479: a lasting problem's count, and the first success after it.
-  if (run.status === "completed" && run.problems && run.problemRepeat) {
+  // #4201: the count is the streak's one card's to tell; a run the person
+  // started is their own result, never "N runs with problems since".
+  if (run.status === "completed" && run.problems && run.problemRepeat && run.startedBy !== "person") {
     card.repeat = { ...run.problemRepeat, lastAt: run.finishedAt ?? run.problemRepeat.since };
   }
   if (run.status === "completed" && !run.problems && run.recovered) card.recovered = { afterRuns: run.recovered.afterRuns, since: run.recovered.since };

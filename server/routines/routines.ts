@@ -3049,8 +3049,10 @@ export class RoutineManager {
   }
 
   /** `startedBy` (2026-11-01): a person asked for this run (Run now, or
-   * run_routine from their conversation): its card shows from the start. */
-  runNow(id: string, request?: RoutineRequestCommitFor<"run_now">, startedBy?: "person"): RoutineRun | null {
+   * run_routine from their conversation): its card shows from the start.
+   * A request's run is the person's unless `startedBy` is null (#4201: a
+   * run_now that applied on its own in a turn the person did not start). */
+  runNow(id: string, request?: RoutineRequestCommitFor<"run_now">, startedBy?: "person" | null): RoutineRun | null {
     if (request) {
       const receipt = this.matchingRoutineRequestReceipt(request);
       if (receipt) {
@@ -3068,7 +3070,7 @@ export class RoutineManager {
       // Preserve the invoking chat as provenance/fallback for this run.
       // The routine's results destination continues to win.
       if (request) run.sourceThreadId = request.threadId;
-      if (startedBy || request) run.startedBy = "person";
+      if (startedBy === "person" || (request && startedBy !== null)) run.startedBy = "person";
       if (request) this.rememberRoutineRequest(request, run.id, this.now());
     }, () => this.discardResultsThreads(allocations));
     if (routine.resultsThreadId !== previousDestination) this.emitRoutine(routine);

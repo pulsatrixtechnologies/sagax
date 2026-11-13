@@ -88,7 +88,12 @@ export const IncomingLine = memo(function IncomingLine({ line, self, bots, mid }
 }) {
   "use memo";
   const [open, setOpen] = useState<{ key: string; index: number } | null>(null);
-  const parties = incomingParties(line.entries);
+  // #4201: a row stored with a bot's name alone is that bot, one name on the line
+  const parties = incomingParties(line.entries.map((entry) => {
+    if (entry.botId || entry.agent || entry.phone || !entry.name) return entry;
+    const bot = bots.find((candidate) => candidate.name === entry.name);
+    return bot ? { ...entry, botId: bot.id } : entry;
+  }));
   const tail = incomingTail(line.entries, parties.length);
   const me: Party = self ?? { id: "", name: "" };
   const shown: LineParty[] = parties.map((party) => {

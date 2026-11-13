@@ -60,12 +60,13 @@ public enum LiveTextPlace: String, Hashable, Sendable {
     /// turn's receipts and the rows the chat never draws (desktop
     /// `lastNonReceipt`).
     public static func lastDrawn(_ messages: [Message]) -> Message? {
-        messages.last { message in
+        let counted = RoutineRunRows.counted(messages)
+        return messages.last { message in
             switch message.kind {
             case .digest, .compaction, .unknown: return false
             case .screen, .video: return message.requested == true
             default:
-                return !isHiddenStatusNotice(message) && !isHiddenReceipt(message) && !RoutineRunRows.outOfChat(message)
+                return !isHiddenStatusNotice(message) && !isHiddenReceipt(message) && !RoutineRunRows.outOfChat(message, counted: counted)
             }
         }
     }

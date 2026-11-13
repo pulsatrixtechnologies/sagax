@@ -40,6 +40,19 @@ public struct IncomingAsker: Hashable, Sendable {
         self.agent = agent
         self.phone = phone
     }
+
+    /// #4201: whether two askers are the same party (the desktop's
+    /// `sameIncomingParty`, src/lib/incoming-line.ts). A bot is one asker by
+    /// its id, else by its name: a row stored with the name alone is the same
+    /// bot as the row with its id and that name. An AI client and a phone
+    /// line match by key only.
+    public func isSameParty(as other: IncomingAsker) -> Bool {
+        if key == other.key { return true }
+        if agent || other.agent || phone != nil || other.phone != nil { return false }
+        if let mine = botId, let theirs = other.botId { return mine == theirs }
+        let folded = { (name: String) in name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        return !folded(name).isEmpty && folded(name) == folded(other.name)
+    }
 }
 
 /// One request the line folds, with what came back.
@@ -64,10 +77,21 @@ public struct IncomingLine: Hashable, Sendable {
 
     public var id: String { "incoming.\(messages[0].id)" }
 
-    /// One name per asker, in the order they first asked.
+    /// One name per asker, in the order they first asked (the same bot by
+    /// id or by name is one asker, with its id for its face, #4201).
     public var askers: [IncomingAsker] {
-        var seen = Set<String>()
-        return exchanges.map(\.asker).filter { seen.insert($0.key).inserted }
+        var out: [IncomingAsker] = []
+        for asker in exchanges.map(\.asker) {
+            if let index = out.firstIndex(where: { $0.isSameParty(as: asker) }) {
+                if out[index].botId == nil, let id = asker.botId {
+                    out[index].botId = id
+                    if out[index].name.isEmpty { out[index].name = asker.name }
+                }
+                continue
+            }
+            out.append(asker)
+        }
+        return out
     }
 
     /// The count said after the names when there are more requests than names.
@@ -83,7 +107,7 @@ public struct IncomingLine: Hashable, Sendable {
 
     /// The exchanges of one asker, newest first.
     public func exchanges(of asker: IncomingAsker) -> [IncomingExchange] {
-        exchanges.filter { $0.asker.key == asker.key }.reversed()
+        exchanges.filter { $0.asker.isSameParty(as: asker) }.reversed()
     }
 }
 

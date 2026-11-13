@@ -1,6 +1,6 @@
 import { isQuietWorkspaceLine } from "../../shared/workspace-line";
 import { isTechnicalNoticeName } from "../../shared/chat-notices";
-import { routineRunRowOutOfChat } from "../../shared/routine-repeat";
+import { routineRunRowOutOfChat, routineRunsCounted } from "../../shared/routine-repeat";
 
 // The harness's receipts about a turn (Phase 0): the work digest written
 // after every settled turn, and a compaction record. A finished Live call's
@@ -49,11 +49,11 @@ type PreviewableRun = { kind: string; routineRun?: { summary?: string; status?: 
  * line a person would read as the bot's last words (#2081: "Routine ...
  * failed" was the sidebar's preview). A finished run with a report is the
  * bot's message, so it is one. */
-function isSilentRunReceipt(message: PreviewableRun): boolean {
+function isSilentRunReceipt(message: PreviewableRun, counted: ReadonlySet<string>): boolean {
   if (message.kind !== "routine.run") return false;
   const run = message.routineRun;
   // #3990: a row the chat no longer draws is no preview either
-  return !(run && run.status === "completed" && run.summary?.trim()) || routineRunRowOutOfChat(message);
+  return !(run && run.status === "completed" && run.summary?.trim()) || routineRunRowOutOfChat(message, counted);
 }
 
 /** What a bot's conversation reads as the bot's last words, for a preview
@@ -61,9 +61,11 @@ function isSilentRunReceipt(message: PreviewableRun): boolean {
  * run receipts. */
 export function lastSpokenLine<T extends PreviewableRun>(messages: readonly T[] | undefined): T | undefined {
   if (!messages) return undefined;
+  // #4201: the first run a stored count names leaves with the count
+  const counted = routineRunsCounted(messages);
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i]!;
-    if (isReceipt(message) || isStoppedNotice(message) || isHiddenWorkspaceLine(message) || isSilentRunReceipt(message)) continue;
+    if (isReceipt(message) || isStoppedNotice(message) || isHiddenWorkspaceLine(message) || isSilentRunReceipt(message, counted)) continue;
     return message;
   }
   return undefined;

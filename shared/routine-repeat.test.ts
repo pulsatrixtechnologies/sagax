@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ROUTINE_PROBLEM_STREAK_TOLD, routinePostsEachResult, routineProblemToldAt, routineReportsByStreak, routineRepeatsWithinDay, routineRunPostsResult, routineRunRowInEveryChat, routineRunRowOutOfChat, routineRunsSeveralTimesADay } from "./routine-repeat.ts";
+import { ROUTINE_PROBLEM_STREAK_TOLD, routinePostsEachResult, routineProblemToldAt, routineReportsByStreak, routineRepeatsWithinDay, routineRunPostsResult, routineRunRowInEveryChat, routineRunRowOutOfChat, routineRunsCounted, routineRunsSeveralTimesADay } from "./routine-repeat.ts";
 
 const at = Date.parse("2026-11-11T12:00:00Z");
 
@@ -132,6 +132,9 @@ describe("one rule for every routine, whatever starts it (#3990)", () => {
       row({ status: "completed", summary: "Messages from teammates:\n- Bot B: ticket closed", wakeTopic: "peer" }),
       row({ status: "completed", summary: "The suggestion you accepted.", wakeTopic: "suggestion" }),
       row({ status: "completed", summary: "Your watch found a new ticket.", wakeTopic: "watch" }),
+      // #4201: a run another bot asked for, stored as the person's: its
+      // "2 runs with problems since" card is a streak count, not the summary
+      row({ status: "completed", problems: "x", startedBy: "person", repeat: { firstRunId: "a", count: 2, since: 1, lastAt: 2 } }),
     ];
     for (const message of out) expect(routineRunRowOutOfChat(message), JSON.stringify(message)).toBe(true);
     const kept = [
@@ -144,6 +147,7 @@ describe("one rule for every routine, whatever starts it (#3990)", () => {
       row({ status: "completed", problems: "x", repeat: { firstRunId: "a", count: 3, since: 1, lastAt: 2, streak: true } }),
       row({ status: "completed", recovered: { afterRuns: 4, since: 1, streak: true } }),
       row({ status: "completed", problems: "x", startedBy: "person" }),
+      row({ status: "completed", problems: "x", startedBy: "person", repeat: { firstRunId: "a", count: 3, since: 1, lastAt: 2, streak: true } }),
       row({ status: "completed", problems: "x" }, { attention: { items: [{ text: "decide" }] } }),
       row({ status: "waiting", attention: "Publish?" }),
       row({ status: "running" }),
@@ -153,6 +157,37 @@ describe("one rule for every routine, whatever starts it (#3990)", () => {
       { kind: "text", text: "hello" },
     ];
     for (const message of kept) expect(routineRunRowOutOfChat(message), JSON.stringify(message)).toBe(false);
+  });
+});
+
+describe("#4201: the two cards of a teammate's run_routine hop leave the chat together", () => {
+  const row = (routineRun: Record<string, unknown>) => ({ kind: "routine.run", routineRun: { routineId: "x", routineName: "X", ...routineRun } });
+  it("the first pass with problems leaves with the count that names it, a lone first card stays", () => {
+    // the owner's capture: "Completed with problems", then "2 runs with problems since"
+    const first = row({ runId: "r1", status: "completed", problems: "x", startedBy: "person" });
+    const second = row({ runId: "r2", status: "completed", problems: "x", startedBy: "person", repeat: { firstRunId: "r1", count: 2, since: 1, lastAt: 2 } });
+    const transcript = [first, second];
+    const counted = routineRunsCounted(transcript);
+    expect(transcript.filter((message) => !routineRunRowOutOfChat(message, counted))).toEqual([]);
+    // a run the person started that no count names is theirs and stays
+    const own = row({ runId: "r3", status: "completed", problems: "x", startedBy: "person" });
+    expect(routineRunRowOutOfChat(own, routineRunsCounted([own, second]))).toBe(false);
+    // the streak's one summary names its first run too; that run is not left out for it
+    const summary = row({ runId: "r4", status: "completed", problems: "x", repeat: { firstRunId: "r3", count: 3, since: 1, lastAt: 2, streak: true } });
+    expect(routineRunRowOutOfChat(own, routineRunsCounted([own, summary]))).toBe(false);
+  });
+  it("a person's Run now stays when a later pass with items for them names it in its count", () => {
+    // Run now ended with problems; the next scheduled pass has problems and items for the person
+    const mine = row({ runId: "r1", status: "completed", problems: "x", startedBy: "person" });
+    const itemsRow = {
+      kind: "routine.run",
+      attention: { kind: "human", items: [{ text: "decide" }] },
+      routineRun: { routineId: "x", routineName: "X", runId: "r2", status: "completed", problems: "x", repeat: { firstRunId: "r1", count: 2, since: 1, lastAt: 2 } },
+    };
+    const transcript = [mine, itemsRow];
+    const counted = routineRunsCounted(transcript);
+    expect(counted.has("r1")).toBe(false);
+    expect(transcript.filter((message) => !routineRunRowOutOfChat(message, counted))).toEqual(transcript);
   });
 });
 

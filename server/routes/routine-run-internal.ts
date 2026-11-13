@@ -48,7 +48,12 @@ export interface RoutineRunInternalDeps<R extends { id: string; botId: string },
   /** The run of this routine that is queued, running or waiting, if any:
    * run_routine answers with it instead of refusing (one pass at a time). */
   inFlightRun?(routineId: string): Run | undefined;
-  /** `startedBy` "person": a person this turn speaks for asked for it. */
+  /** #4201: whether the person started this turn with their own words
+   * (custom-rules turnStartOf "person"): not a teammate's hop, a routine's
+   * run, a wake or any other automation, all of which still speak for the
+   * person (`speaker`) without the person asking for this run. */
+  personTurn(threadId: string): boolean;
+  /** `startedBy` "person": the person asked for it in this turn. */
   runNow(routineId: string, startedBy?: "person"): Run | null | undefined;
   /** Where the run stands (its place in its bot's queue, why it waits). */
   standing?(runId: string): RoutineRunStandingLike | null;
@@ -76,6 +81,9 @@ export function routineRunReceipt(input: {
   reportsTo?: string;
   standing?: RoutineRunStandingLike | null;
   alreadyRunning?: boolean;
+  /** #4201: a run no person asked for reports by its routine's streak: no
+   * card in the conversation, the run log only. */
+  background?: boolean;
 }): string {
   const who = input.botName ? ` on ${input.botName}` : "";
   const head = input.alreadyRunning
@@ -91,7 +99,9 @@ export function routineRunReceipt(input: {
   } else if (standing?.status === "running") state = " Status: running now.";
   else if (standing?.status === "waiting") state = ` Status: waiting${standing.reason ? `: ${standing.reason}` : ""}.`;
   else if (standing) state = ` Status: ${standing.status}.`;
-  const follow = ` Follow it in ${input.reportsTo ?? "the bot's conversation"}, where its card shows its state and its result, or in Automations > Logs.`;
+  const follow = input.background
+    ? " Follow it in Automations > Logs: a run nobody asked for in person posts nothing in the conversation unless it needs the person or keeps having problems."
+    : ` Follow it in ${input.reportsTo ?? "the bot's conversation"}, where its card shows its state and its result, or in Automations > Logs.`;
   return `${head}${state}${follow}`.replace(/\.\./g, ".");
 }
 
@@ -137,13 +147,18 @@ export function createRoutineRunInternalRoutes<R extends { id: string; botId: st
         ...(standing ? { standing } : {}),
         message: routineRunReceipt({ routineName: routineNameOf(target), runId: current.id, ...facts, standing, alreadyRunning: true }) });
     }
-    const run = deps.runNow(target.id, speaker ? "person" : undefined);
+    // #4201: a run is the person's (its card in the chat from the start,
+    // its problems told at once) only when the person asked in this turn.
+    // A teammate that asked this bot, the bot's own routine or a wake speaks
+    // for the person too, but its run reports by its routine's streak.
+    const byPerson = deps.personTurn(capability.threadId);
+    const run = deps.runNow(target.id, byPerson ? "person" : undefined);
     if (!run) return json(res, 404, { error: "no such routine on this bot" });
     deps.audit(target, run, speaker);
     const facts = deps.describe?.(target, run);
     const standing = deps.standing?.(run.id) ?? null;
     return json(res, 201, { runId: run.id, routineName: routineNameOf(target), ...(standing ? { standing } : {}),
-      message: routineRunReceipt({ routineName: routineNameOf(target), runId: run.id, ...facts, standing }) });
+      message: routineRunReceipt({ routineName: routineNameOf(target), runId: run.id, ...facts, standing, ...(byPerson ? {} : { background: true }) }) });
   };
 }
 

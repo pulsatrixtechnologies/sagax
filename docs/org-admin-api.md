@@ -1233,6 +1233,7 @@ assertion. Code: `server/org/org-link-routes.ts`.
 | Method and path | Credential | What |
 |---|---|---|
 | `POST /api/org/link/directory-refresh` | link token | read the directory now |
+| `POST /api/org/link/grok-sign-in` | link token | a person's Grok sign-in for one live call |
 
 ### `POST /api/org/link/directory-refresh`
 
@@ -1267,6 +1268,43 @@ Sagax fetches the directory at once. Call it once per change; no body.
 Perspicax holds the link token only where it writes the link file itself
 (the server of `pulsabot_origin` with `PXC_PULSABOT_LINK_FILE`); a server
 linked from the console keeps the poll and the refresh at each sign-in.
+
+### `POST /api/org/link/grok-sign-in`
+
+```http
+POST /api/org/link/grok-sign-in
+Authorization: Bearer pxat1.<link token>
+Content-Type: application/json
+
+{"sub": "<Perspicax user id>"}
+```
+
+The organization's voice service opens a live call on the Grok
+subscription of the person who owns the line. Sagax answers the current
+access value of that person's own Grok sign-in (the engine's login file in
+their own folder, their first working Grok account), renewed first through
+the engine's own path (the person's Grok CLI on their own home, which
+rewrites that one file) when it expires within 10 minutes or the provider
+refused it before. It is the reverse of how a person's model key travels
+(`POST /api/v1/pulsabot/provider-keys/resolve`). Ask once per call.
+
+- The person is the one `sub` names, of this organization, known here,
+  active in the directory and not turned off. Only their own sign-in is
+  read, never another person's.
+- `200 {"provider": "xai", "access_token": "...", "expires_at": "<RFC 3339>"}`;
+  `expires_at` is `null` when neither the login file nor the value says.
+- `400 {"error": "invalid_request"}`: the body is not `{"sub": "<id>"}` (at
+  most 2 KiB).
+- `404 {"error": "unknown_person"}`: no such person here.
+- `409 {"error": "user_inactive"}`: turned off, or not active in the
+  directory.
+- `404 {"error": "no_sign_in"}`: the person has no Grok sign-in here.
+- `409 {"error": "sign_in_refused"}`: the provider refused it and the engine
+  could not renew it.
+- `401`, `429` (failed authentications only), `404 not_found` and `405` as
+  for `directory-refresh`. `Cache-Control: no-store` on every answer.
+- The value is never logged, stored or cached by Sagax: the log line says
+  the outcome code only.
 
 ## Not offered yet
 

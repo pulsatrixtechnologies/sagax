@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ProviderAuthenticationStatus } from "../contracts.ts";
 import { grokAccountReach } from "../drivers/acp/grok-tool-catalog.ts";
+import { createSignInRecheck } from "./sign-in-recheck.ts";
 import { LOGIN_MARKER, loginCliFor, PrincipalEngineLogins, readGrokAccountIdentity, type ConnectorAccountChange, type LoginController } from "./principal-engine-logins.ts";
 
 const A = "pr_00000000-0000-4000-8000-00000000000a";
@@ -445,5 +446,124 @@ describe("#2384: person-level reads see every account", () => {
     await made[0]!.finish();
     expect(logins.accountInstances(A, "claudeAgent")).toEqual([undefined]);
     expect(logins.signedInAny(A, "claudeAgent")).toBe(false);
+  });
+});
+
+describe("#4192: a person's Grok sign-in for one live call", () => {
+  // made-up values, never a real credential
+  const FRESH_A = `fake-grok-access-a-${"1".repeat(24)}`;
+  const RENEWED_A = `fake-grok-access-a-${"2".repeat(24)}`;
+  const FRESH_B = `fake-grok-access-b-${"3".repeat(24)}`;
+  const HOUR = 3_600_000;
+
+  function live(renew?: (cli: string, env: Record<string, string | undefined>) => Promise<boolean>) {
+    const dataDir = mkdtempSync(join(tmpdir(), "grok-live-"));
+    const clock = { now: 1_800_000_000_000 };
+    const renewals: Array<{ cli: string; home: string | undefined }> = [];
+    const logins = new PrincipalEngineLogins({
+      dataDir,
+      now: () => clock.now,
+      instance: (id) => (id === "grok" ? { driver: "grokAgent", cli: "grok", environment: { XAI_API_KEY: "xai-made-up" } } : null),
+      renewGrok: async (cli, env) => {
+        renewals.push({ cli, home: env.HOME });
+        return renew ? renew(cli, env) : false;
+      },
+    });
+    // the server's wiring: Grok renews through the sign-in recheck's single
+    // flight, which restores a refused sign-in once the renewal works
+    const restoredPeople: string[] = [];
+    const recheck = createSignInRecheck({
+      renew: (principalId, driver, instanceId) => (driver === "grokAgent" && instanceId ? logins.renewGrokAccount(principalId, instanceId) : Promise.resolve(false)),
+      markExpired: (principalId, driver, slot, instanceId) => logins.markExpired(principalId, driver, slot, instanceId),
+      clearExpired: (principalId, driver, slot, instanceId) => logins.clearExpired(principalId, driver, slot, instanceId),
+      expired: (principalId, driver, slot, instanceId) => logins.expired(principalId, driver, slot, instanceId),
+      onRestored: (principalId) => { restoredPeople.push(principalId); },
+      now: () => clock.now,
+    });
+    const access = (person: string) => logins.grokLiveAccess(person, "grok", (principalId, driver, instanceId) => recheck.restore(principalId, driver, instanceId));
+    const signIn = (person: string, value: string, expiresAt: number | null) => {
+      const home = logins.loginDir(person, "grokAgent");
+      mkdirSync(join(home, ".grok"), { recursive: true });
+      writeFileSync(join(home, LOGIN_MARKER), JSON.stringify({ at: 1 }));
+      writeGrokAccess(home, value, expiresAt);
+      return home;
+    };
+    return { logins, clock, renewals, signIn, access, restoredPeople };
+  }
+
+  function writeGrokAccess(home: string, value: string, expiresAt: number | null): void {
+    const record: Record<string, unknown> = { principal_type: "Team", auth_mode: "oidc", key: value, refresh_token: "fake-refresh-never-handed" };
+    if (expiresAt !== null) record.expires_at = new Date(expiresAt).toISOString();
+    writeFileSync(join(home, ".grok", "auth.json"), JSON.stringify({ "https://auth.example.test::p-1": record }));
+  }
+
+  it("answers the fresh access value of the person's own sign-in, with its expiry, without renewing", async () => {
+    const h = live();
+    h.signIn(A, FRESH_A, h.clock.now + HOUR);
+    expect(await h.access(A)).toEqual({ ok: true, accessToken: FRESH_A, expiresAt: h.clock.now + HOUR });
+    expect(h.renewals).toEqual([]);
+  });
+
+  it("renews through the person's own CLI on their own home when it is about to expire", async () => {
+    const h = live(async (_cli, env) => {
+      writeGrokAccess(env.HOME!, RENEWED_A, h.clock.now + HOUR);
+      return true;
+    });
+    const home = h.signIn(A, FRESH_A, h.clock.now + 60_000);
+    expect(await h.access(A)).toEqual({ ok: true, accessToken: RENEWED_A, expiresAt: h.clock.now + HOUR });
+    expect(h.renewals).toEqual([{ cli: "grok", home }]);
+  });
+
+  it("runs one renewal for two calls at once", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((done) => { release = done; });
+    const h = live(async (_cli, env) => {
+      await gate;
+      writeGrokAccess(env.HOME!, RENEWED_A, h.clock.now + HOUR);
+      return true;
+    });
+    h.signIn(A, FRESH_A, h.clock.now - 1);
+    const both = Promise.all([h.access(A), h.access(A)]);
+    await new Promise((done) => setTimeout(done, 5));
+    release();
+    const [first, second] = await both;
+    expect(first).toMatchObject({ ok: true, accessToken: RENEWED_A });
+    expect(second).toMatchObject({ ok: true, accessToken: RENEWED_A });
+    expect(h.renewals).toHaveLength(1);
+  });
+
+  it("answers no_sign_in without one, and sign_in_refused when the engine cannot renew it", async () => {
+    const h = live(async () => false);
+    expect(await h.access(A)).toEqual({ ok: false, error: "no_sign_in" });
+    h.signIn(A, FRESH_A, h.clock.now - 1);
+    expect(await h.access(A)).toEqual({ ok: false, error: "sign_in_refused" });
+    // a sign-in the provider refused before counts again only once the CLI took it
+    h.signIn(B, FRESH_B, h.clock.now + HOUR);
+    h.logins.markExpired(B, "grokAgent");
+    expect(await h.access(B)).toEqual({ ok: false, error: "sign_in_refused" });
+  });
+
+  it("restores a refused sign-in the CLI renews: ok, and no longer marked refused", async () => {
+    const h = live(async (_cli, env) => {
+      writeGrokAccess(env.HOME!, RENEWED_A, h.clock.now + HOUR);
+      return true;
+    });
+    h.signIn(A, FRESH_A, h.clock.now + HOUR);
+    h.logins.markExpired(A, "grokAgent", "primary", "grok");
+    expect(await h.access(A)).toEqual({ ok: true, accessToken: RENEWED_A, expiresAt: h.clock.now + HOUR });
+    expect(h.logins.expired(A, "grokAgent", "primary", "grok")).toBe(false);
+    expect(h.restoredPeople).toEqual([A]);
+    // the next call reads the restored sign-in without starting the CLI again
+    expect(await h.access(A)).toMatchObject({ ok: true, accessToken: RENEWED_A });
+    expect(h.renewals).toHaveLength(1);
+  });
+
+  it("never gives another person's sign-in", async () => {
+    const h = live();
+    h.signIn(B, FRESH_B, h.clock.now + HOUR);
+    expect(await h.access(A)).toEqual({ ok: false, error: "no_sign_in" });
+    h.signIn(A, FRESH_A, h.clock.now + HOUR);
+    expect(await h.access(A)).toMatchObject({ ok: true, accessToken: FRESH_A });
+    expect(await h.access(B)).toMatchObject({ ok: true, accessToken: FRESH_B });
   });
 });

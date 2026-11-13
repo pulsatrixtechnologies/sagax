@@ -27,13 +27,47 @@
 //     and in GET /api/org/admin/overview like a poll's;
 //   - a solo server, or an organization server without a link file, answers
 //     404 `{error: "not_found"}`.
+//
+//   POST /api/org/link/grok-sign-in        Bearer <link token>
+//
+// #4192: the organization's voice service opens a live call on the Grok
+// subscription of the person who owns the line. Perspicax names that person
+// and this server answers the current access value of THEIR Grok sign-in
+// (the engine's auth file in their own login folder), renewed first through
+// the engine's own path when it expires within GROK_LIVE_FRESH_MS
+// (server/engines/principal-engine-logins.ts grokLiveAccess). The reverse of
+// how a person's model key travels (perspicax-link.ts resolveProviderKey:
+// link token, `{sub, provider}`, 404 no key, 409 inactive).
+//
+//   - same caller check as above: the link token only, the same failure
+//     limiter; no accepted-call cap (the answer is per person, per call);
+//   - request: JSON `{"sub": "<Perspicax user id>"}` (at most
+//     GROK_SIGN_IN_BODY_MAX bytes); anything else is 400
+//     `{error: "invalid_request"}`;
+//   - the person is the one `sub` names, of this organization (its issuer),
+//     known here, active in the directory and not turned off; only their own
+//     sign-in is ever read, never another person's;
+//   - 200 `{provider: "xai", access_token, expires_at}` (`expires_at` RFC 3339,
+//     or null when neither the file nor the value says);
+//   - 404 `{error: "unknown_person"}`: no such person here;
+//     409 `{error: "user_inactive"}`: turned off, or not active in the
+//     directory; 404 `{error: "no_sign_in"}`: no Grok sign-in here;
+//     409 `{error: "sign_in_refused"}`: the provider refused it and the
+//     engine could not renew it;
+//   - the value is never logged, stored or cached here: the log line says the
+//     outcome code only. `cache-control: no-store` on every answer.
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { AuthFailureLimiter } from "../triggers/webhook-ingress.ts";
 import { reportBackgroundError } from "../background-error.ts";
+import { readBody } from "../harness/http.ts";
+import type { GrokLiveAccess } from "../engines/principal-engine-logins.ts";
 
 export const ORG_LINK_PREFIX = "/api/org/link/";
 export const DIRECTORY_REFRESH_PATH = "/api/org/link/directory-refresh";
+/** #4192: a person's Grok sign-in for one live call. */
+export const GROK_SIGN_IN_PATH = "/api/org/link/grok-sign-in";
+export const GROK_SIGN_IN_BODY_MAX = 2 * 1024;
 /** Two fetches never start closer than this. */
 export const DIRECTORY_REFRESH_MIN_INTERVAL_MS = 2_000;
 /** Accepted calls per rolling minute before 429. */
@@ -143,6 +177,12 @@ export interface OrgLinkRoutesOptions {
    * file when it does not match the cached one: a rotation). */
   linkTokenMatches: (token: string) => boolean;
   scheduler: Pick<DirectoryRefreshScheduler, "request">;
+  /** #4192: the person a Perspicax user id names on this server, or null
+   * when unknown here. `active`: not turned off, and active in the
+   * directory. */
+  person?: (sub: string) => { principalId: string; active: boolean } | null;
+  /** #4192: that person's own Grok sign-in for a live call. */
+  grokSignIn?: (principalId: string) => Promise<GrokLiveAccess>;
   limiter?: AuthFailureLimiter;
   now?: () => number;
   log?: (line: string) => void;
@@ -162,15 +202,40 @@ function bearer(req: IncomingMessage): string {
   return token.length <= MAX_TOKEN_CHARS ? token : "";
 }
 
+/** A Perspicax user id as the directory carries it: printable, one line. */
+const SUB = /^[\x21-\x7e]{1,255}$/;
+
 /** The handler: true when it answered the request. */
 export function createOrgLinkRoutes(options: OrgLinkRoutesOptions) {
   const limiter = options.limiter ?? new AuthFailureLimiter();
   const now = options.now ?? Date.now;
   const log = options.log ?? ((line: string) => console.log(line));
   let accepted: number[] = [];
+  const grokSignIn = async (req: IncomingMessage, res: ServerResponse): Promise<true> => {
+    const body: unknown = await readBody(req, GROK_SIGN_IN_BODY_MAX).catch(() => null);
+    const sub = body && typeof body === "object" && !Array.isArray(body) ? (body as { sub?: unknown }).sub : undefined;
+    if (typeof sub !== "string" || !SUB.test(sub)) return send(res, 400, { error: "invalid_request" });
+    const person = options.person!(sub);
+    if (!person) return send(res, 404, { error: "unknown_person" });
+    if (!person.active) return send(res, 409, { error: "user_inactive" });
+    let access: GrokLiveAccess;
+    try {
+      access = await options.grokSignIn!(person.principalId);
+    } catch {
+      access = { ok: false, error: "sign_in_refused" };
+    }
+    log(`org link: Grok sign-in for a live call (${access.ok ? "ok" : access.error})`);
+    if (!access.ok) return send(res, access.error === "no_sign_in" ? 404 : 409, { error: access.error });
+    return send(res, 200, {
+      provider: "xai",
+      access_token: access.accessToken,
+      expires_at: access.expiresAt === null ? null : new Date(access.expiresAt).toISOString(),
+    });
+  };
   return async (req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> => {
     if (!url.pathname.startsWith(ORG_LINK_PREFIX)) return false;
-    if (url.pathname !== DIRECTORY_REFRESH_PATH || !options.linked()) return send(res, 404, { error: "not_found" });
+    const grok = url.pathname === GROK_SIGN_IN_PATH && Boolean(options.person && options.grokSignIn);
+    if ((url.pathname !== DIRECTORY_REFRESH_PATH && !grok) || !options.linked()) return send(res, 404, { error: "not_found" });
     if (req.method !== "POST") return send(res, 405, { error: "method_not_allowed" }, { allow: "POST" });
     const source = req.socket.remoteAddress ?? "unknown";
     if (limiter.blocked(source)) return send(res, 429, { error: "rate_limited" }, { "retry-after": "60" });
@@ -178,6 +243,7 @@ export function createOrgLinkRoutes(options: OrgLinkRoutesOptions) {
       limiter.fail(source);
       return send(res, 401, { error: "unauthorized" });
     }
+    if (grok) return grokSignIn(req, res);
     const cutoff = now() - 60_000;
     accepted = accepted.filter((at) => at > cutoff);
     if (accepted.length >= DIRECTORY_REFRESH_MAX_PER_MINUTE) return send(res, 429, { error: "rate_limited" }, { "retry-after": "60" });

@@ -445,36 +445,42 @@ export async function probeGrokModels(
 
 /** How long a reach probe waits for Grok's managed gateway to settle. */
 const REACH_PROBE_TIMEOUT_MS = 45_000;
+/** How long a sign-in renewal waits for the CLI to authenticate. */
+export const GROK_RENEW_TIMEOUT_MS = 20_000;
 
-/** What a Grok sign-in brings through grok.com, read without a turn
- * (2026-10-29): a standalone `grok agent stdio` on that sign-in's home with
- * the managed gateway on (grokCloudConnectorEnv's own-account setting),
- * initialize, authenticate on the cached token, session/new with no MCP
- * server of Sagax's, then `_x.ai/mcp/list` until it settles
- * (grokMcpSettled). Resolves to the list's result (noteGrokAccountReach
- * reads it), or null. No prompt is sent; the process is killed after.
- * Measured on grok 1.0.70: about one second for 488 gateway tools. */
-export async function probeGrokReach(cli: string, env: Record<string, string | undefined>): Promise<unknown> {
-  // both variables, as an own-account turn sets them (grokCloudConnectorEnv):
-  // the gateway one alone brings no managed server since 2026-10-30
-  const probeEnv: Record<string, string | undefined> = { ...env, GROK_AGENT: "grok-build", ...grokCloudConnectorEnv(undefined, true), SAGAX_GROK_REACH_PROBE: "1" };
-  delete probeEnv.XAI_API_KEY;
-  const home = grokHome(probeEnv);
-  if (!existsSync(join(home, "auth.json"))) return null;
-  return engineStartGate.run("probe", `${cli} agent (reach)`, () => new Promise<unknown>((done) => {
+type GrokAcpReply = { result?: unknown; error?: unknown };
+type GrokAcpSend = (method: string, params: unknown) => Promise<GrokAcpReply>;
+
+/** A standalone `grok agent stdio` on a sign-in's home: initialize, then
+ * authenticate on the cached token (the CLI's own load, which renews a
+ * token about to expire and writes it back to that home's auth.json), then
+ * `after` with the open connection. Resolves to `after`'s value, or null when
+ * the CLI cannot start, refuses the sign-in or runs past `timeoutMs`. No
+ * prompt is sent; the process is killed after. Nothing of its output is
+ * kept or logged. */
+function runGrokSignedIn<T>(
+  cli: string,
+  env: Record<string, string | undefined>,
+  label: string,
+  timeoutMs: number,
+  after: (send: GrokAcpSend, home: string, settled: () => boolean) => Promise<T | null>,
+): Promise<T | null> {
+  const home = grokHome(env);
+  if (!existsSync(join(home, "auth.json"))) return Promise.resolve(null);
+  return engineStartGate.run("probe", `${cli} agent (${label})`, () => new Promise<T | null>((done) => {
     let settled = false;
     let child: ChildProcess;
-    const finish = (value: unknown) => {
+    const finish = (value: T | null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       try { child?.kill(); } catch { /* already gone */ }
       done(value);
     };
-    const timer = setTimeout(() => finish(null), REACH_PROBE_TIMEOUT_MS);
+    const timer = setTimeout(() => finish(null), timeoutMs);
     try {
-      const resolved = resolveCli(cli, ["agent", "--no-leader", "stdio"], probeEnv as NodeJS.ProcessEnv);
-      child = spawnChild(resolved.command, resolved.args, { env: probeEnv as NodeJS.ProcessEnv, cwd: dirname(home), stdio: ["pipe", "pipe", "ignore"], windowsHide: true });
+      const resolved = resolveCli(cli, ["agent", "--no-leader", "stdio"], env as NodeJS.ProcessEnv);
+      child = spawnChild(resolved.command, resolved.args, { env: env as NodeJS.ProcessEnv, cwd: dirname(home), stdio: ["pipe", "pipe", "ignore"], windowsHide: true });
     } catch {
       finish(null);
       return;
@@ -482,8 +488,8 @@ export async function probeGrokReach(cli: string, env: Record<string, string | u
     child.on("error", () => finish(null));
     child.on("exit", () => finish(null));
     let nextId = 0;
-    const pending = new Map<number, (message: { result?: unknown; error?: unknown }) => void>();
-    const send = (method: string, params: unknown): Promise<{ result?: unknown; error?: unknown }> => new Promise((resolve) => {
+    const pending = new Map<number, (message: GrokAcpReply) => void>();
+    const send: GrokAcpSend = (method, params) => new Promise((resolve) => {
       const id = ++nextId;
       pending.set(id, resolve);
       child.stdin?.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
@@ -514,20 +520,49 @@ export async function probeGrokReach(cli: string, env: Record<string, string | u
       if (init.error || !methodId) return finish(null);
       const auth = await send("authenticate", { methodId });
       if (auth.error) return finish(null);
-      const created = await send("session/new", { cwd: dirname(home), mcpServers: [] });
-      const sessionId = (created.result as { sessionId?: unknown } | undefined)?.sessionId;
-      if (created.error || typeof sessionId !== "string") return finish(null);
-      let last: unknown = null;
-      for (;;) {
-        if (settled) return;
-        const reply = await send("_x.ai/mcp/list", { sessionId, cache: true });
-        if (reply.error) return finish(last);
-        last = (reply.result as { result?: unknown } | undefined)?.result ?? null;
-        if (grokMcpSettled(last)) return finish(last);
-        await delay(150);
-      }
+      finish(await after(send, home, () => settled));
     })().catch(() => finish(null));
   }));
+}
+
+/** What a Grok sign-in brings through grok.com, read without a turn
+ * (2026-10-29): a standalone `grok agent stdio` on that sign-in's home with
+ * the managed gateway on (grokCloudConnectorEnv's own-account setting),
+ * initialize, authenticate on the cached token, session/new with no MCP
+ * server of Sagax's, then `_x.ai/mcp/list` until it settles
+ * (grokMcpSettled). Resolves to the list's result (noteGrokAccountReach
+ * reads it), or null. No prompt is sent; the process is killed after.
+ * Measured on grok 1.0.70: about one second for 488 gateway tools. */
+export async function probeGrokReach(cli: string, env: Record<string, string | undefined>): Promise<unknown> {
+  // both variables, as an own-account turn sets them (grokCloudConnectorEnv):
+  // the gateway one alone brings no managed server since 2026-10-30
+  const probeEnv: Record<string, string | undefined> = { ...env, GROK_AGENT: "grok-build", ...grokCloudConnectorEnv(undefined, true), SAGAX_GROK_REACH_PROBE: "1" };
+  delete probeEnv.XAI_API_KEY;
+  return runGrokSignedIn<unknown>(cli, probeEnv, "reach", REACH_PROBE_TIMEOUT_MS, async (send, home, settled) => {
+    const created = await send("session/new", { cwd: dirname(home), mcpServers: [] });
+    const sessionId = (created.result as { sessionId?: unknown } | undefined)?.sessionId;
+    if (created.error || typeof sessionId !== "string") return null;
+    let last: unknown = null;
+    for (;;) {
+      if (settled()) return last;
+      const reply = await send("_x.ai/mcp/list", { sessionId, cache: true });
+      if (reply.error) return last;
+      last = (reply.result as { result?: unknown } | undefined)?.result ?? null;
+      if (grokMcpSettled(last)) return last;
+      await delay(150);
+    }
+  });
+}
+
+/** #4192: renew a person's Grok sign-in through the engine's own path: the
+ * person's CLI on their home authenticates on its cached token, which
+ * refreshes it in place (auth.json, the one copy). True when the CLI
+ * accepted the sign-in; the caller reads the file again. Never a second
+ * copy of the sign-in, never its output kept. */
+export async function renewGrokSignIn(cli: string, env: Record<string, string | undefined>, timeoutMs = GROK_RENEW_TIMEOUT_MS): Promise<boolean> {
+  const renewEnv: Record<string, string | undefined> = { ...env };
+  delete renewEnv.XAI_API_KEY;
+  return (await runGrokSignedIn<boolean>(cli, renewEnv, "renew", timeoutMs, async () => true)) === true;
 }
 
 

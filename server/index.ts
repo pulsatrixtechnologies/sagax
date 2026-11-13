@@ -1337,7 +1337,7 @@ import { RevocationQueue } from "./auth/idp-revocations.ts";
 import { IDP_SWEEP_INTERVAL_MS, IdpGrantVault, IdpSessionManager, refreshAfterMs, resolveIdpVaultKey, settledWithin } from "./auth/idp-session.ts";
 import { acceptOpenInvitesForEmail, createPublicInviteRoutes, createSoloOrgRoutes, inviteMailMessage, type OrgState } from "./org/org-routes.ts";
 import { createDirectGrantRoutes } from "./auth/direct-grants.ts";
-import { directoryIntervalMs, PerspicaxDirectory, type ModelProvider } from "./perspicax/perspicax-link.ts";
+import { directoryIntervalMs, directoryListsActive, PerspicaxDirectory, type ModelProvider } from "./perspicax/perspicax-link.ts";
 import { duplicateNote, PerspicaxMemory } from "./memory/perspicax-memory.ts";
 import { knownAgentToolName, PERSPICAX_TOOL_NAMES } from "./drivers/agents-catalog.ts";
 import { measureContextBuckets, toolDefinitionBytes } from "./context/context-buckets.ts";
@@ -25702,6 +25702,8 @@ if (engineLogins) {
 const signInRecheck = engineLogins
   ? createSignInRecheck({
     renew: async (principalId, driver, instanceId) => {
+      // #4192: a Grok sign-in renews through the person's own CLI
+      if (driver === "grokAgent") return instanceId ? engineLogins.renewGrokAccount(principalId, instanceId) : false;
       const engine: RunEngine | null = driver === "claudeAgent" ? "claude-code" : driver === "codex" ? "codex" : null;
       const cli = engine ? subscriptionCli(engine) : null;
       if (!engine || !cli || !engineLogins) return false;
@@ -25719,7 +25721,7 @@ const signInRecheck = engineLogins
     expired: (principalId, driver, slot, instanceId) => engineLogins.expired(principalId, driver, slot, instanceId),
     accounts: (principalId, driver) => engineLogins.accountInstances(principalId, driver),
     onRestored: (principalId, driver, instanceId) => {
-      resumeEngineReconnectForPerson(principalId, driver === "codex" ? "Codex" : "Claude");
+      resumeEngineReconnectForPerson(principalId, LOGIN_ENGINE_LABEL[driver as LoginDriver] ?? driver);
       // #3551: the sign-in works again: its open cards close on every bot
       signInCards.signedIn(principalId, instanceId ? { instanceId } : { driverKind: driver });
     }
@@ -31337,7 +31339,26 @@ const directoryRefresh = new DirectoryRefreshScheduler(() => perspicaxDirectory?
 const orgLink = createOrgLinkRoutes({
   linked: () => IDENTITY.kind === "perspicax" && perspicaxDirectory !== null,
   linkTokenMatches: (token) => perspicaxDirectory?.linkTokenMatches(token) ?? false,
-  scheduler: directoryRefresh
+  scheduler: directoryRefresh,
+  // #4192: the voice service's live call on the line owner's own Grok
+  // sign-in; the person is the one Perspicax names, by this organization's
+  // issuer, with the same activity rule as bot email and the bot phone
+  person: (sub) => {
+    if (IDENTITY.kind !== "perspicax") return null;
+    const person = principals.bySubject(IDENTITY.issuer, sub);
+    if (!person) return null;
+    const listedActive = directoryListsActive(perspicaxDirectory?.directory(), sub);
+    return { principalId: person.id, active: listedActive && person.disabledAt === undefined && !person.consoleDisabled };
+  },
+  grokSignIn: async (principalId) => {
+    if (!engineLogins) return { ok: false, error: "no_sign_in" };
+    // #2384: the person's first working Grok account, as a person-level use
+    const instanceId = folderInstance("grokAgent", engineLogins.preferredAccount(principalId, "grokAgent") ?? DEFAULT_ACCOUNT);
+    // #4192: a renewal goes through the sign-in recheck, so a refused
+    // sign-in it renews is restored there (marker, held runs, cards)
+    const restore = (person: string, driver: LoginDriver, instance: string) => signInRecheck?.restore(person, driver, instance) ?? Promise.resolve(false);
+    return instanceId ? engineLogins.grokLiveAccess(principalId, instanceId, restore) : { ok: false, error: "no_sign_in" };
+  }
 });
 /** Lot C.3: the words each bot is writing now, for the member API's
  * streamed turn (server/people/member-live-text.ts). */

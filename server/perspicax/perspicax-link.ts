@@ -266,6 +266,16 @@ export type DirectoryPerson = z.infer<typeof personSchema>;
 export type DirectoryTeam = z.infer<typeof teamSchema>;
 export type Directory = z.infer<typeof directorySchema>;
 
+/** Whether the directory lists `sub` as an active person (never a service
+ * account). Before the first directory answer nothing is known: true. Bot
+ * email and the bot phone (index-leaves/botMailOwner.ts) and the Grok
+ * sign-in route of the organization link (#4192) read it. */
+export function directoryListsActive(listed: Directory | null | undefined, sub: string | null): boolean {
+  if (!listed) return true;
+  const entry = sub ? listed.people.find((candidate) => candidate.sub === sub) : undefined;
+  return Boolean(entry && entry.status === "active" && entry.kind !== "service" && entry.type !== "service");
+}
+
 export interface DirectoryState {
   state: "missing" | "ok" | "error";
   /** When the directory last answered (200 or 304), ms since the epoch. */

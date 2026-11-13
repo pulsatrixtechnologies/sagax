@@ -42,6 +42,11 @@ export interface SignInRecheck {
   renewable(principalId: string, driver: string, slot?: LoginSlot, instanceId?: string): boolean;
   /** At start: one renew for each person whose sign-in is marked expired. */
   heal(people: readonly string[]): Promise<number>;
+  /** #4192: one renew of this sign-in on demand (any engine `renew` knows,
+   * Grok included), in the same single flight; when it works, the same
+   * restore as a refusal's renew (marker cleared, held runs resumed, open
+   * sign-in cards closed). A failure marks nothing. */
+  restore(principalId: string, driver: string, instanceId?: string): Promise<boolean>;
 }
 
 export function createSignInRecheck(deps: SignInRecheckDeps): SignInRecheck {
@@ -80,6 +85,7 @@ export function createSignInRecheck(deps: SignInRecheckDeps): SignInRecheck {
 
   return {
     renewable,
+    restore: renewOnce,
     async refused(principalId, driver, slot = "primary", instanceId) {
       if (!renewable(principalId, driver, slot, instanceId)) {
         deps.markExpired(principalId, driver, slot, instanceId);

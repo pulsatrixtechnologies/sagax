@@ -142,6 +142,15 @@ export function messagedLineNames<T>(parties: readonly T[], expanded: boolean, f
   return { shown: parties.slice(0, count), others: parties.length - count };
 }
 
+/** Whether the line's tail (a count, a state) takes a line of its own under
+ * the names: even one name whole and the count of the others leave it no
+ * room on theirs (#4112, a phone line's number on a phone-width row).
+ * `available` is the room for the names once the tail is set aside. */
+export function tailOnOwnLine(count: number, fit: NamesFit | undefined, hasTail: boolean): boolean {
+  if (!hasTail || !fit || !(fit.available > 0) || count === 0) return false;
+  return (fit.widths[0] ?? 0) + (count > 1 ? fit.others(count - 1) : 0) > fit.available;
+}
+
 /** The locale's list ("A, B and C", "A, B et C") as element and literal
  * pieces, so each element can be drawn as a name with its face. */
 export function conjunctionParts(count: number, locale: string): Array<{ type: "element"; index: number } | { type: "literal"; value: string }> {

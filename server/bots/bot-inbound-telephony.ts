@@ -242,6 +242,13 @@ export function telephonySenderLabel(event: Pick<TelephonyEvent, "from" | "perso
   return event.from;
 }
 
+/** #4112: the label of a line the owner sent on their own phone line, the
+ * number it came from: the person is always the owner, so their name tells
+ * the chat nothing, and the number tells their phones apart. */
+export function ownLineLabel(event: Pick<TelephonyEvent, "from" | "person">): string {
+  return E164.test(event.from) ? formatPhone(event.from) : telephonySenderLabel(event);
+}
+
 /** Closed wording for the SMS sender kind, or null when absent (voice, or
  * an older Perspicax). */
 export function telephonySenderKindLabel(kind: TelephonySenderKind | undefined): string | null {
@@ -522,7 +529,7 @@ export function createBotInboundTelephonyRoute(deps: TelephonyRouteDeps): (req: 
         botId: bot.id,
         from: event.from,
         text: event.content!.text.trim(),
-        label: telephonySenderLabel(event),
+        label: ownLineLabel(event),
         via: ownLineVia(event.event),
       });
       if (started) {

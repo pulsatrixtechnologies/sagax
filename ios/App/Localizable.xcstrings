@@ -116533,6 +116533,40 @@
         }
       }
     },
+    "chat.incoming.phoneCall": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Phone call"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appel téléphonique"
+          }
+        }
+      }
+    },
+    "chat.incoming.phoneCallFrom": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Phone call (%@)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appel téléphonique (%@)"
+          }
+        }
+      }
+    },
     "chat.incoming.requests": {
       "extractionState": "manual",
       "localizations": {
@@ -116546,6 +116580,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld demandes"
+          }
+        }
+      }
+    },
+    "chat.incoming.textMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text Message"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Texto"
+          }
+        }
+      }
+    },
+    "chat.incoming.textMessageFrom": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text Message (%@)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Texto (%@)"
           }
         }
       }

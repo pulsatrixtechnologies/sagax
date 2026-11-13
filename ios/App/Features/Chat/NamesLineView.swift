@@ -17,6 +17,8 @@ struct NamesLineParty: Identifiable {
     var name: String
     /// An AI client: the neutral agent icon in place of a face.
     var agent = false
+    /// #4112: the person's phone line ("sms" or "call"): a phone glyph.
+    var phone: String? = nil
     var open: (() -> Void)? = nil
 }
 
@@ -163,7 +165,12 @@ struct NamesLineView: View {
 
     @ViewBuilder
     private func face(_ party: NamesLineParty, ink: ApprovalInk) -> some View {
-        if party.agent {
+        if let phone = party.phone {
+            Image(systemName: phone == "call" ? "phone" : "iphone")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(ink.tertiary)
+                .frame(width: 16, height: 16)
+        } else if party.agent {
             Image(systemName: "cpu")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(ink.tertiary)
@@ -192,8 +199,9 @@ struct IncomingLineView: View {
             parties: line.askers.map { asker in
                 NamesLineParty(
                     id: asker.key, botId: asker.botId,
-                    name: asker.name.isEmpty ? (asker.agent ? String(localized: "AI client") : String(localized: "a teammate")) : asker.name,
+                    name: IncomingAskerName.of(asker),
                     agent: asker.agent,
+                    phone: asker.phone,
                     open: { opened = asker }
                 )
             },
@@ -205,6 +213,24 @@ struct IncomingLineView: View {
         .sheet(item: $opened) { asker in
             IncomingExchangeSheet(asker: asker, exchanges: line.exchanges(of: asker))
         }
+    }
+}
+
+/// How the line names an asker: a bot's name, "AI client", or the phone
+/// line with its caller label, "Text Message (514 555-0142)" (#4112).
+enum IncomingAskerName {
+    static func of(_ asker: IncomingAsker) -> String {
+        if let phone = asker.phone {
+            let call = phone == "call"
+            if asker.name.isEmpty {
+                return call ? String(localized: "chat.incoming.phoneCall", defaultValue: "Phone call") : String(localized: "chat.incoming.textMessage", defaultValue: "Text Message")
+            }
+            return call
+                ? String(localized: "chat.incoming.phoneCallFrom", defaultValue: "Phone call (\(asker.name))")
+                : String(localized: "chat.incoming.textMessageFrom", defaultValue: "Text Message (\(asker.name))")
+        }
+        if asker.name.isEmpty { return asker.agent ? String(localized: "AI client") : String(localized: "a teammate") }
+        return asker.name
     }
 }
 
@@ -256,7 +282,7 @@ struct IncomingExchangeSheet: View {
                 }
                 .padding(16)
             }
-            .navigationTitle(asker.name.isEmpty ? (asker.agent ? String(localized: "AI client") : String(localized: "a teammate")) : asker.name)
+            .navigationTitle(IncomingAskerName.of(asker))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

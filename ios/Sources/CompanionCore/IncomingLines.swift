@@ -9,6 +9,14 @@
 //
 // Rows stored before the change and after it draw the same way (amendment 1:
 // the server keeps writing an AI client's row in its shape of today).
+//
+// #4112: a line the person sent on their phone line (`via` "sms", or "call"
+// without a Live call's id) is the same line and the same fold, named by the
+// caller label the server stamps (`sender.name`): "Asked by [phone] Text
+// Message (555 010-0142)". As a teammate's answer is read behind its name,
+// the bot's answer to the line (its words, the ones texted back, and the
+// steps of that turn) is that exchange's reply: text, answer, text, answer
+// folds into one line.
 import Foundation
 
 /// One asker named on the line.
@@ -18,13 +26,19 @@ public struct IncomingAsker: Hashable, Sendable {
     public var name: String
     /// An AI client (the neutral agent icon), not a bot.
     public var agent: Bool
+    /// The person's phone line, "sms" or "call" (a phone glyph), not a bot.
+    public var phone: String?
 
-    public var key: String { botId.map { "bot.\($0)" } ?? "agent.\(name)" }
+    public var key: String {
+        if let phone { return "phone.\(phone).\(name)" }
+        return botId.map { "bot.\($0)" } ?? "agent.\(name)"
+    }
 
-    public init(botId: String?, name: String, agent: Bool) {
+    public init(botId: String?, name: String, agent: Bool, phone: String? = nil) {
         self.botId = botId
         self.name = name
         self.agent = agent
+        self.phone = phone
     }
 }
 
@@ -87,14 +101,49 @@ public enum IncomingLines {
         return message.kind == .text || (message.kind == .activity && message.relayTrace != nil)
     }
 
+    /// #4112: how a person's line came in on their phone line ("sms" or
+    /// "call"), or nil. A Live call's spoken request keeps its call's id and
+    /// stays the person's own line.
+    public static func phoneSource(_ message: Message) -> String? {
+        guard message.role == .user, message.kind == .text else { return nil }
+        if message.via == "sms" { return "sms" }
+        if message.via == "call", message.callId == nil, message.voiceCall == nil { return "call" }
+        return nil
+    }
+
+    /// #4112: a row of the bot's own turn on the phone-line request `lineId`:
+    /// its words (what the server texts back: a bot text, never another
+    /// bot's line nor a relayed card) or a step of that turn. A card, a
+    /// question, a failure and a row another line's turn wrote are not.
+    public static func answersPhoneLine(_ message: Message, line lineId: String) -> Bool {
+        guard message.role == .bot, message.from == nil, message.attention == nil, message.relayVia == nil,
+              message.threadRef == nil, message.inputRequest == nil, message.state == nil else { return false }
+        if let request = message.requestMessageId, request != lineId { return false }
+        return message.kind == .text || message.kind == .digest || isToolActivityRow(message)
+    }
+
     public static func isIncoming(_ message: Message) -> Bool {
-        isHandoffReceipt(message) || isRelayCopy(message)
+        isHandoffReceipt(message) || isRelayCopy(message) || phoneSource(message) != nil
     }
 
     /// Who the exchange behind a received row was for (ChatRelevance): an
-    /// AI client's conversation, else a thread another bot opened.
+    /// AI client's conversation or the phone line, else a thread another bot opened.
     public static func origin(_ message: Message) -> ChatRelevance.Origin {
-        message.relayVia == "mcp" ? .agent : .bot
+        message.relayVia == "mcp" || phoneSource(message) != nil ? .agent : .bot
+    }
+
+    /// What the server stamps as the sender when it knows no caller label.
+    static let unlabelled: Set<String> = ["via text message", "via call"]
+
+    /// "514 555-0142": a North American number as a person reads it on a
+    /// line (shared/outbound-call.ts readablePhone); anything else as it is.
+    public static func readablePhone(_ label: String) -> String {
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        let digits = trimmed.filter(\.isNumber)
+        let shaped = trimmed.allSatisfy { $0.isNumber || $0 == " " || $0 == "+" }
+        guard trimmed.hasPrefix("+1"), shaped, digits.count == 11 else { return trimmed }
+        let local = Array(digits.dropFirst())
+        return "\(String(local[0..<3])) \(String(local[3..<6]))-\(String(local[6..<10]))"
     }
 
     /// Where the rule puts a received row: the work another bot or an AI
@@ -118,6 +167,13 @@ public enum IncomingLines {
 
     /// The exchange one row stands for.
     public static func exchange(_ message: Message, replies: [String: Message]) -> IncomingExchange {
+        if let phone = phoneSource(message) {
+            let stamped = message.sender?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let label = stamped.isEmpty || unlabelled.contains(stamped) ? "" : readablePhone(stamped)
+            let asker = IncomingAsker(botId: nil, name: label, agent: false, phone: phone)
+            let text = message.text?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return IncomingExchange(id: message.id, asker: asker, at: message.at, request: text?.isEmpty == false ? text : nil, reply: nil, trace: nil)
+        }
         if isHandoffReceipt(message) {
             let asker = IncomingAsker(botId: message.from?.botId, name: message.from?.name ?? "", agent: false)
             let reply = message.tool?.handoffId.flatMap { replies[$0] }

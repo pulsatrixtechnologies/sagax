@@ -12,13 +12,28 @@
 // - a notice another bot's thread surfaced here ("Message from <bot>: #...");
 // - a stored copy of a background reply (relayVia teammate or mcp): an AI
 //   client's request, or a teammate's from before the copies stopped. A
-//   failed, stopped or silent turn is said on the line's tail.
+//   failed, stopped or silent turn is said on the line's tail;
+// - #4112: a line that came in on the person's phone line, by text
+//   (`via: "sms"`) or by a call request (`via: "call"` without a Live call's
+//   id), named by the caller label the server stamps on it (`sender.name`):
+//   "Asked by [phone] Text Message (555 010-0142)". Never the person's bubble.
+//   As a teammate's answer lives in its request's row (the result joined to
+//   its receipt, the copy right under it), the bot's answer to the line (its
+//   words, the ones texted back, and the steps of that turn) is the entry's
+//   reply, shown when the row opens; so text, answer, text, answer folds.
 import type { Message } from "@/state/store";
 import { AGENT_OPENER_PREFIX } from "../../shared/agent-conversation";
+import { readablePhone } from "../../shared/outbound-call";
 import { handoffReceiptIn, handoffResultId, handoffResultIn, handoffRequestId, isHandoff } from "./handoff-row";
+import { isToolStep } from "./activity-runs";
 
 export type IncomingVerb = "askedBy" | "messageFrom" | "answerFrom";
 export type IncomingTrace = "failed" | "stopped" | "silent";
+/** How a line came in on the person's phone line. */
+export type PhoneLineSource = "sms" | "call";
+
+/** The key prefix of a phone-line party: `phone:<sms|call>:<label>`. */
+export const PHONE_PARTY_PREFIX = "phone:";
 
 export interface IncomingEntry {
   verb: IncomingVerb;
@@ -30,6 +45,8 @@ export interface IncomingEntry {
   color?: string;
   /** An AI client asked, not a bot. */
   agent?: boolean;
+  /** A line that came in on the person's phone line, not from a bot (#4112). */
+  phone?: PhoneLineSource;
   /** The exchange's own thread, when it has one (a hand-off, a notice). */
   threadId?: string;
   /** What was asked, as stored. */
@@ -54,6 +71,34 @@ export interface IncomingLineItem {
 
 const NOTICE = /^Message from /;
 const TRACES = new Set<string>(["failed", "stopped", "silent"]);
+/** What the server stamps as the sender when it knows no caller label. */
+const UNLABELLED = new Set<string>(["via text message", "via call"]);
+
+/** How a person's line came in on their phone line, or null for any other
+ * row. A Live call's spoken request carries its call's id and stays the
+ * person's own line (VoiceCallCard). */
+export function phoneLineSource(message: Message): PhoneLineSource | null {
+  if (message.role !== "user" || message.kind !== "text") return null;
+  if (message.via === "sms") return "sms";
+  if (message.via === "call" && !message.callId && !message.voiceCall) return "call";
+  return null;
+}
+
+/** The phone-line request a row stands for, or null for any other row. */
+function phoneLineEntry(message: Message): IncomingEntry | null {
+  const phone = phoneLineSource(message);
+  if (!phone) return null;
+  const stamped = message.sender?.name?.trim() ?? "";
+  const label = stamped && !UNLABELLED.has(stamped) ? readablePhone(stamped) : undefined;
+  return {
+    verb: "askedBy",
+    key: `${PHONE_PARTY_PREFIX}${phone}:${label ?? ""}`,
+    ...(label ? { name: label } : {}),
+    phone,
+    ...(message.text?.trim() ? { request: message.text.trim() } : {}),
+    message,
+  };
+}
 
 /** The incoming trace a row stands for, or null for any other row. */
 export function incomingEntry(message: Message, selfBotId: string, lookup: readonly Message[]): IncomingEntry | null {
@@ -105,6 +150,8 @@ export function incomingEntry(message: Message, selfBotId: string, lookup: reado
       message,
     };
   }
+  const phone = phoneLineEntry(message);
+  if (phone) return phone;
   if (message.role === "bot" && message.kind === "text") {
     const asked = relayAskEntry(message);
     if (!asked) return null;
@@ -146,6 +193,28 @@ type AnyItem = { kind: string; message?: Message; messages?: readonly Message[] 
 function rowsOf(item: AnyItem): Message[] {
   if (item.message) return [item.message];
   return item.messages ? [...item.messages] : [];
+}
+
+/** #4112: a row of the bot's own turn on a phone-line request: its words
+ * (what the server texts back, smsReplyAfter: a bot text, never another
+ * bot's line nor a relayed card) or a step of that turn. A card, a question,
+ * a failure and a row another line's turn wrote are not. */
+function phoneLineAnswerRow(row: Message, line: Message): boolean {
+  if (row.role !== "bot" || row.from || row.attention || row.relayVia || row.threadRef || row.inputRequest || row.state) return false;
+  if (row.requestMessageId && row.requestMessageId !== line.id) return false;
+  return row.kind === "text" || row.kind === "digest" || isToolStep(row);
+}
+
+/** The answer an item gives to the phone-line request right before it, as
+ * the reply its entry keeps (answersReceipt's for a teammate's copy), or
+ * null when the item is not that answer. */
+function answersPhoneLine(item: AnyItem, previous: IncomingEntry | undefined): { reply?: string } | null {
+  if (!previous?.phone) return null;
+  const rows = rowsOf(item);
+  if (!rows.length || !rows.every((row) => phoneLineAnswerRow(row, previous.message))) return null;
+  const words = rows.filter((row) => row.kind === "text").map((row) => row.text?.trim() ?? "").filter(Boolean);
+  const reply = [previous.reply, ...words].filter(Boolean).join("\n\n");
+  return reply ? { reply } : {};
 }
 
 /** Fold every run of consecutive incoming traces of one verb into one line.
@@ -195,6 +264,15 @@ export function collapseIncomingLines<T extends AnyItem>(
         cursor += 1;
         continue;
       }
+      // the bot's answer to a phone-line request is that entry's reply, as
+      // a teammate's copy is its receipt's
+      const phoneAnswer = entry ? null : answersPhoneLine(candidate, entries.at(-1));
+      if (phoneAnswer) {
+        entries[entries.length - 1] = { ...entries.at(-1)!, ...phoneAnswer };
+        last = cursor;
+        cursor += 1;
+        continue;
+      }
       if (!entry && (silent(candidate) || joinedAnswer(candidate))) {
         cursor += 1;
         continue;
@@ -214,6 +292,7 @@ export interface IncomingParty {
   name?: string;
   color?: string;
   agent?: boolean;
+  phone?: PhoneLineSource;
   /** This party's requests on the line, newest first. */
   entries: IncomingEntry[];
 }
@@ -235,6 +314,7 @@ export function incomingParties(entries: readonly IncomingEntry[]): IncomingPart
       ...(entry.name ? { name: entry.name } : {}),
       ...(entry.color ? { color: entry.color } : {}),
       ...(entry.agent ? { agent: true } : {}),
+      ...(entry.phone ? { phone: entry.phone } : {}),
       entries: [entry],
     });
   }

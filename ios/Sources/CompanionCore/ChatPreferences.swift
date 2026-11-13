@@ -530,6 +530,18 @@ public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showTh
         // name; the request itself joins its burst's names line, whatever
         // the threads setting (it is the trace that the bot worked for a teammate)
         if foldedReplies.contains(message.id) { continue }
+        // #4112: the bot's answer to a phone-line request is that exchange's
+        // reply, read behind the number as a teammate's answer is
+        if run.isEmpty, case var .incoming(line)? = rows.last, let last = line.exchanges.last, last.asker.phone != nil,
+           IncomingLines.answersPhoneLine(message, line: last.id) {
+            let words = message.kind == .text ? message.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "" : ""
+            if !words.isEmpty {
+                line.exchanges[line.exchanges.count - 1].reply = [last.reply, words].compactMap { $0 }.joined(separator: "\n\n")
+            }
+            line.messages.append(message)
+            rows[rows.count - 1] = .incoming(line)
+            continue
+        }
         // the place is the one rule's (ChatRelevance): a trace
         if IncomingLines.place(message) == .trace {
             let exchange = IncomingLines.exchange(message, replies: incomingReplies)

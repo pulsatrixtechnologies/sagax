@@ -802,8 +802,12 @@ public struct Message: Codable, Hashable, Identifiable, Sendable {
     public var steered: Bool? = nil
     /// A peer bot's aside folded into a running turn, never a new request.
     public var aside: Bool? = nil
-    /// "api" when a user line arrived through the server's HTTP API.
+    /// "api" when a user line arrived through the server's HTTP API, "sms"
+    /// or "call" when it came in on the person's phone line (#4112).
     public var via: String? = nil
+    /// A Live call's id on a request spoken in the app's call; absent on a
+    /// call request that came in on the phone line.
+    public var callId: String? = nil
     /// Words said on a voice call. The thread draws one card per callId.
     public var voiceCall: VoiceCallMeta? = nil
     /// Which signed-in person sent a user line on a shared workspace.

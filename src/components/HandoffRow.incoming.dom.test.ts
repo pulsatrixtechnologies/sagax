@@ -65,6 +65,47 @@ describe("IncomingLine", () => {
     expect(words.indexOf("Second request")).toBeLessThan(words.indexOf("First request"));
   });
 
+  it("opens a number's texts and the bot's answers, newest first, as a teammate's request opens (#4112)", async () => {
+    const entries: IncomingEntry[] = [
+      { verb: "askedBy", key: "phone:sms:555 010-0142", name: "555 010-0142", phone: "sms", request: "First text", reply: "First answer", message: row("t1", 1_000) },
+      { verb: "askedBy", key: "phone:sms:555 010-0142", name: "555 010-0142", phone: "sms", request: "Second text", reply: "Second answer", message: row("t2", 2_000) },
+    ];
+    act(() => root.render(createElement(IncomingLine, { line: { verb: "askedBy", entries }, self, bots })));
+    const line = host.querySelector('[data-testid="incoming-line"]')!;
+    expect(line.textContent).toContain("Text Message");
+    expect(line.textContent).toContain("(555 010-0142)");
+    expect(line.textContent).toContain("2 requests");
+    expect(line.textContent).not.toContain("answer");
+    act(() => (host.querySelector('[data-testid="incoming-line-recipient"]') as HTMLButtonElement).click());
+    await settle(() => document.querySelector('[data-testid="incoming-exchange-sheet"]') !== null);
+    const words = document.querySelector('[data-testid="incoming-exchange-sheet"]')!.textContent ?? "";
+    for (const said of ["First text", "First answer", "Second text", "Second answer"]) expect(words).toContain(said);
+    expect(words.indexOf("Second text")).toBeLessThan(words.indexOf("Second answer"));
+    expect(words.indexOf("Second answer")).toBeLessThan(words.indexOf("First text"));
+  });
+
+  it("keeps a phone line's number and the count whole on a narrow row: only the source word gives way (#4112)", () => {
+    const entries: IncomingEntry[] = [
+      { verb: "askedBy", key: "phone:sms:555 010-0142", name: "555 010-0142", phone: "sms", request: "First text", message: row("s1", 1_000) },
+      { verb: "askedBy", key: "phone:sms:555 010-0199", name: "555 010-0199", phone: "sms", request: "Second text", message: row("s2", 2_000) },
+      { verb: "askedBy", key: "phone:sms:555 010-0142", name: "555 010-0142", phone: "sms", request: "Third text", message: row("s3", 3_000) },
+    ];
+    act(() => root.render(createElement(IncomingLine, { line: { verb: "askedBy", entries }, self, bots })));
+    const name = host.querySelector('[data-testid="incoming-line-recipient"]')!;
+    expect(name.getAttribute("title")).toBe("Text Message (555 010-0142)");
+    const detail = name.querySelector("[data-line-detail]")!;
+    // the number is its own element that never shrinks; the source word before it truncates
+    expect(detail.textContent).toBe("(555 010-0142)");
+    expect(detail.className).toContain("shrink-0");
+    const lead = detail.previousElementSibling!;
+    expect(lead.textContent).toBe("Text Message");
+    expect(lead.className).toContain("truncate");
+    // the count gives way only after the names (a near-zero shrink)
+    const tail = host.querySelector("[data-line-tail]")!;
+    expect(tail.textContent).toBe("3 requests");
+    expect(tail.className).toContain("shrink-[0.01]");
+  });
+
   it("says a stored request that left no answer with the line's own words", async () => {
     const entries: IncomingEntry[] = [
       { verb: "askedBy", key: "agent:Client", name: "Client", agent: true, request: "Only request", trace: "stopped", message: row("c1", 1_000) },

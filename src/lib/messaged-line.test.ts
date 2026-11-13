@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Message } from "@/state/store";
-import { collapseMessagedLines, conjunctionParts, messagedLineNames, type MessagedLineItem } from "./messaged-line";
+import { collapseMessagedLines, conjunctionParts, messagedLineNames, tailOnOwnLine, type MessagedLineItem } from "./messaged-line";
 import { setLocale, t } from "./i18n";
 
 setLocale("en");
@@ -44,6 +44,20 @@ describe("collapseMessagedLines (#3270)", () => {
     expect(messagedLineNames(recipients, false)).toMatchObject({ others: 2 });
     expect(messagedLineNames(recipients, false).shown).toHaveLength(3);
     expect(messagedLineNames(recipients, true)).toMatchObject({ others: 0 });
+  });
+
+  it("gives the tail a line of its own when one whole name and the others' count leave it no room (#4112)", () => {
+    // a phone line's name, "Text Message (555 010-0142)", 190 px; "and 1 other" 60 px
+    const fit = { widths: [190, 190], others: () => 60, available: 230 };
+    expect(tailOnOwnLine(2, fit, true)).toBe(true);
+    // room for the name and the count: the tail stays on the line
+    expect(tailOnOwnLine(2, { ...fit, available: 250 }, true)).toBe(false);
+    // one sender: no "others" count to fit
+    expect(tailOnOwnLine(1, { ...fit, available: 200 }, true)).toBe(false);
+    expect(tailOnOwnLine(1, { ...fit, available: 180 }, true)).toBe(true);
+    // no tail, or nothing measured (no layout): never
+    expect(tailOnOwnLine(2, fit, false)).toBe(false);
+    expect(tailOnOwnLine(2, undefined, true)).toBe(false);
   });
 
   it("never cuts a name: a narrow line draws fewer whole names and a larger count (#3581)", () => {

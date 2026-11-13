@@ -129,7 +129,15 @@ export function createDataRoutes(deps: DataRouteDeps): RouteHandler {
     const scopeKey = deps.scope ? deps.scope(ctx.auth, bot, thread) : bot.id;
     // A thread that is not the viewer's answers like a bot with no Data at all.
     if (scopeKey === null) return replyError(ctx, { code: "source_not_found", message: "no such bot" });
-    const database = await deps.engine.forBot(scopeKey);
+    // unavailable() finds the binding without loading it (#3539): a binding
+    // that is found but fails to load is said here, like a missing one.
+    let database;
+    try {
+      database = await deps.engine.forBot(scopeKey);
+    } catch (error) {
+      if (error instanceof DataFailure) return replyError(ctx, error.error);
+      throw error;
+    }
     const sheet = deps.sheets.for(scopeKey);
     const context: DataContext = {
       database, sheet, compileChart: deps.compileChart, validateVegaLite: deps.validateVegaLite, renderer: deps.renderer,

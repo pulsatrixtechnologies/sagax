@@ -443,9 +443,29 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
       }
       const abort = new AbortController();
       res.once("close", () => { if (!res.writableEnded) abort.abort(); });
-      let database;
+      requireActiveInternalCapability();
+      let result;
       try {
-        database = await host.dataEngine.forBot(scopeKey);
+        // #3539: the database (and DuckDB's native library) opens at the
+        // first tools/call, never for the tools/list every turn sends.
+        result = await host.dataRpc(body, {
+          openDatabase: () => host.dataEngine.forBot(scopeKey), sheet: host.dataSheets.for(scopeKey),
+          compileChart: host.compileChart, validateVegaLite: host.validateVegaLite, renderer: host.chartRenderer,
+          exportRoots: () => host.dataExportRoots(internalSender, scopeKey),
+          confinedRoots: () => host.dataConfinedRoots(scopeKey),
+          downloadDir: () => host.dataDownloadDir(scopeKey),
+          signal: abort.signal, assertActive: requireActiveInternalCapability,
+          onShow: (card) => {
+            // The receipt names the tool that ran; the card's title lives in
+            // dataResult, where no consumer mistakes it for a status or error.
+            host.store.appendMessage(internalCapability.threadId, {
+              role: "bot", kind: "activity", tool: { name: "data_show", ok: true },
+              dataResult: { botId: internalSender.id, cardId: card.id, title: card.title, kind: card.kind, sql: card.sql },
+              ...(host.store.groupByThread(internalCapability.threadId)
+                ? { from: { botId: internalSender.id, name: internalSender.name, color: internalSender.color } } : {})
+            });
+          }
+        });
       } catch (error) {
         if (error instanceof host.DataFailure) {
           json(res, 503, { error: error.message });
@@ -453,25 +473,7 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
         }
         throw error;
       }
-      requireActiveInternalCapability();
-      json(res, 200, { result: await host.dataRpc(body, {
-        database, sheet: host.dataSheets.for(scopeKey),
-        compileChart: host.compileChart, validateVegaLite: host.validateVegaLite, renderer: host.chartRenderer,
-        exportRoots: () => host.dataExportRoots(internalSender, scopeKey),
-        confinedRoots: () => host.dataConfinedRoots(scopeKey),
-        downloadDir: () => host.dataDownloadDir(scopeKey),
-        signal: abort.signal, assertActive: requireActiveInternalCapability,
-        onShow: (card) => {
-          // The receipt names the tool that ran; the card's title lives in
-          // dataResult, where no consumer mistakes it for a status or error.
-          host.store.appendMessage(internalCapability.threadId, {
-            role: "bot", kind: "activity", tool: { name: "data_show", ok: true },
-            dataResult: { botId: internalSender.id, cardId: card.id, title: card.title, kind: card.kind, sql: card.sql },
-            ...(host.store.groupByThread(internalCapability.threadId)
-              ? { from: { botId: internalSender.id, name: internalSender.name, color: internalSender.color } } : {})
-          });
-        }
-      }) });
+      json(res, 200, { result });
       return true;
     }
     if (await host.dispatchInternalRoutes(host.INTERNAL_ROUTES, { res, path, method, json, capability: internalCapability, readBody: readInternalBody, url, headers: req.headers })) return true;

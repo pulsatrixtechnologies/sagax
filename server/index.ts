@@ -10980,7 +10980,10 @@ const dataSheets = new DataSheetRegistry({
   broadcast: (frame, scopeKey) => broadcast({ ...frame, ...dataFrameAudience(scopeKey) }),
   dropResult: async (scopeKey, name) => {
     if (dataEngine.unavailable() !== null) return;
-    await (await dataEngine.forBot(scopeKey)).dropResult(name);
+    // a binding found but failing to load (#3539) drops nothing, as a missing one
+    let database;
+    try { database = await dataEngine.forBot(scopeKey); } catch (error) { if (error instanceof DataFailure) return; throw error; }
+    await database.dropResult(name);
   }
 });
 /** Who a scope's "data" frames reach (dataFrameAllowed in sseFrameFor): on

@@ -24,7 +24,7 @@ function harness(signal = new AbortController().signal) {
   const database = new FakeDataDatabase();
   let checks = 0;
   const deps: DataRpcDeps = {
-    database,
+    openDatabase: async () => database,
     sheet: new DataSheetStore({ botId: "bot-1", dir }),
     compileChart: () => { throw new DataFailure({ code: "spec_invalid", message: "not in this test" }); },
     validateVegaLite: async () => ({}),
@@ -131,7 +131,7 @@ describe("dataRpc", () => {
     const pending = call({ id: "c_1", sql: "SELECT 2" });
     await started;
     expect(deps.sheet.card("c_1")?.sql).toBe("SELECT 2");
-    await showCard({ ...deps, by: "person", connection: "panel" }, { id: "c_1", sql: "SELECT 3", live: true });
+    await showCard({ ...deps, database, by: "person", connection: "panel" }, { id: "c_1", sql: "SELECT 3", live: true });
     finishCleanup();
     const result = await pending;
     expect(result).toMatchObject({ structuredContent: { id: "c_1" } });

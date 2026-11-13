@@ -111,6 +111,23 @@ describe("loading the binding", () => {
     expect(loaded.some((file) => file.endsWith("duckdb.node"))).toBe(true);
   });
 
+  // #3539: every turn asks unavailable() to offer the Data tools, and
+  // loading DuckDB's library there held the loop at the first turn after a
+  // start. It finds the package without loading it; the first Data call
+  // loads it.
+  it("finds the binding without loading it, and the first use loads it", async () => {
+    const fresh = join(root, "not-loaded-yet");
+    cpSync(nodeApi, join(fresh, "node_modules", "@duckdb", "node-api"), { recursive: true, dereference: true });
+    const loaded = () => Object.keys(createRequire(import.meta.url).cache).filter((file) => file.startsWith(realpathSync(fresh)));
+    const e = engine({ env: { ...process.env, SAGAX_DUCKDB_DIR: fresh, SAGAX_RESOURCES_PATH: undefined } });
+    expect(e.unavailable()).toBeNull();
+    expect(loaded()).toEqual([]);
+    const db = await e.forBot("first-use");
+    expect(loaded().length).toBeGreaterThan(0);
+    expect((await db.run("SELECT 1 AS one", bot)).rows).toEqual([[1]]);
+    expect(e.unavailable()).toBeNull();
+  });
+
   it("names the directory and an action when the binding is missing, in one line, without throwing", async () => {
     const missing = join(root, "no-binding-here");
     const e = engine({ env: { ...process.env, SAGAX_DUCKDB_DIR: missing } });

@@ -6,11 +6,16 @@
 import { DATA_INSTRUCTIONS } from "./instructions.ts";
 import type { DataCard } from "../../shared/data-surface.ts";
 import { DATA_TOOLS, dataErrorResult, dataToolCallProblem, runDataTool, type DataContext, type DataToolResult } from "./tools.ts";
+import type { BotDatabase } from "./types.ts";
 
 /** Where harness-mcp-proxy data posts: `/api/internal/${kind}/mcp`. */
 export const DATA_INTERNAL_MCP_PATH = "/api/internal/data/mcp";
 
-export interface DataRpcDeps extends Omit<DataContext, "connection" | "by"> {
+export interface DataRpcDeps extends Omit<DataContext, "connection" | "by" | "database"> {
+  /** The bot's database, opened by a tools/call only (#3539): every turn
+   * that mounts the Data tools lists them, and opening the database there
+   * loaded DuckDB's native library on the first turn after a start. */
+  openDatabase(): Promise<BotDatabase>;
   /** Throws when the turn's capability is no longer live. */
   assertActive(): void;
   /** Persist a navigation receipt in this call's originating conversation. */
@@ -32,8 +37,9 @@ export async function dataRpc(
   const args = params.arguments ?? {};
   const problem = dataToolCallProblem(params.name, args);
   if (problem) return dataErrorResult({ code: "invalid_input", message: problem });
-  deps.assertActive();
-  const { assertActive, ...context } = deps;
+  const { assertActive, openDatabase, ...rest } = deps;
+  const context = { ...rest, database: await openDatabase() };
+  assertActive();
   let shown: DataCard | undefined;
   const result = await runDataTool({ ...context, connection: "bot", by: "bot" }, params.name as string, args as Record<string, unknown>, (card) => { shown = card; });
   assertActive();

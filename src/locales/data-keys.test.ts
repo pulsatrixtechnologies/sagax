@@ -15,6 +15,8 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const sharedRoot = fileURLToPath(new URL("../../shared", import.meta.url));
 // The server also translates keys, including Perspicax identity failures.
 const serverRoot = fileURLToPath(new URL("../../server", import.meta.url));
+// The iPad shell's labels name the desktop keys they copy.
+const iosWordingMap = fileURLToPath(new URL("../../ios/parity/desktop-wording.json", import.meta.url));
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
@@ -37,6 +39,11 @@ const read = (() => {
       for (const match of code.matchAll(/["'`](?=([\w][\w.-]{0,199})["'`])/g)) literals.add(match[1]!);
       for (const match of code.matchAll(/`([\w.-]+\.)\$\{/g)) prefixes.add(match[1]!);
     }
+    // The iPad shell copies desktop labels by key (ios-desktop-wording.test.ts
+    // checks each one): a key named there is read, even when no desktop
+    // surface shows it.
+    const ipadWording = JSON.parse(readFileSync(iosWordingMap, "utf8")) as Record<string, string>;
+    for (const [label, key] of Object.entries(ipadWording)) if (label !== "//") literals.add(key);
     cached = { literals, prefixes };
     return cached;
   };

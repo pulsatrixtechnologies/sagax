@@ -61,7 +61,9 @@ describe("voice call card", () => {
   it("leaves a Live via-call line as its own bubble", () => {
     const markup = renderToStaticMarkup(createElement(ChatView, {
       bot: bot([
-        message("live", "spoken on live", { via: "call" }),
+        // a Live call stamps its call id on each spoken line; a "call" line
+        // without one is a phone-line request, the Asked by row (#4112)
+        message("live", "spoken on live", { via: "call", callId: "live-1" }),
         message("u", "hello there", { voiceCall: { callId: "call-1" } }),
         message("b", "hi back", { role: "bot", at: at + 34_000 }),
       ]),

@@ -15,7 +15,7 @@
 #              tree (staged, unstaged, untracked)
 #   --jobs     checks at once (default $FAST_GATE_JOBS, else 4; capped at 4)
 #   --only     a comma list of check names (typecheck, lint, terms, tests,
-#              rust-fmt, rust, py, extra-<name>)
+#              related, rust-fmt, rust, py, extra-<name>)
 #   --list     print the touched files and the checks, run nothing
 #   --dry-run  print each check's command, run nothing
 #
@@ -24,7 +24,9 @@
 #                  tsconfig.json exists), lint (oxlint, else eslint, on the
 #                  touched files), terms (script "check:terms"), tests
 #                  (vitest on the touched tests and, for a touched source,
-#                  the tests of its stem and every test importing it)
+#                  the tests of its stem and every test importing it),
+#                  related (vitest on the tests that import a touched source
+#                  through other files, nearest first, bounded)
 #   Cargo.toml     rust-fmt (cargo fmt --check on the touched crates), rust
 #                  (cargo clippy -D warnings then cargo test, on the touched
 #                  crates, one job so they do not wait on the build lock)
@@ -106,11 +108,11 @@ touched_match() { grep -E "$1" "$TOUCHED" || true; }
 # --- check registry ----------------------------------------------------------
 
 NAMES=""
+# Whether --only keeps a check (every check without --only).
+wanted() { [ -z "$ONLY" ] && return 0; case ",$ONLY," in *",$1,"*) return 0 ;; esac; return 1; }
 add_check() { # name command
   local name="$1" cmd="$2"
-  if [ -n "$ONLY" ]; then
-    case ",$ONLY," in *",$name,"*) ;; *) return 0 ;; esac
-  fi
+  wanted "$name" || return 0
   NAMES="$NAMES $name"
   printf '%s\n' "$cmd" > "$LOG_DIR/$name.cmd"
 }
@@ -145,29 +147,46 @@ if [ -f package.json ]; then
     # brings only the tests of its own name, and the gate prints its count.
     # An import through a path alias of tsconfig.json or of a folder's index
     # counts like a relative one.
+    #
+    # related (#4138): the tests that reach a touched source through other
+    # files of the import graph (a test of the chat that renders a row that
+    # renders the touched pill), as vitest's related mode finds them, run as
+    # their own check. Lots that ran only the tests beside their files left
+    # four of these red on main. The whole graph of a UI file is about 500
+    # test files (ten minutes), so the gate walks it breadth first, at most
+    # $FAST_GATE_RELATED_DEPTH files away (default 3), and runs at most
+    # $FAST_GATE_RELATED_MAX of them (default 120), the nearest first and,
+    # at one distance, those in the touched files' folders first; it prints
+    # how many it left to the run after the merge. A type-only import is no
+    # dependency. A test in the repository's known failures list
+    # (scripts/testing/known-failures.json) is not related work.
     TESTS="$LOG_DIR/tests.txt"
+    RELATED="$LOG_DIR/related.txt"
     : > "$TESTS"
-    FAST_GATE_TOUCHED_JS="$JS" node -e '
+    : > "$RELATED"
+    # (the import graph is read only when one of the two checks runs)
+    if wanted tests || wanted related; then FAST_GATE_TOUCHED_JS="$JS" FAST_GATE_RELATED_OUT="$RELATED" node -e '
       const fs = require("fs"), path = require("path").posix;
       const { execFileSync } = require("child_process");
       const isTest = (f) => /\.(test|spec)\.[^/]+$/.test(f);
-      const noExt = (f) => f.replace(/\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|vue|svelte)$/, "");
+      const CODE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|vue|svelte)$/;
+      const noExt = (f) => f.replace(CODE, "");
       const touched = process.env.FAST_GATE_TOUCHED_JS.split("\n").filter(Boolean);
-      const all = execFileSync("git", ["ls-files", "-co", "--exclude-standard"], { encoding: "utf8", maxBuffer: 1 << 28 })
-        .split("\n").filter((f) => isTest(f) && !/(^|\/)node_modules\//.test(f) && fs.existsSync(f));
+      const files = execFileSync("git", ["ls-files", "-co", "--exclude-standard"], { encoding: "utf8", maxBuffer: 1 << 28 })
+        .split("\n").filter((f) => CODE.test(f) && !/\.d\.[mc]?ts$/.test(f) && !/(^|\/)node_modules\//.test(f) && fs.existsSync(f));
+      const all = files.filter(isTest);
       const out = new Set();
-      const sources = new Map();
+      const sources = [];
       for (const f of touched) {
         if (isTest(f)) { out.add(f); continue; }
         const stem = noExt(f) + ".";
         for (const t of all) if (t.startsWith(stem)) out.add(t);
-        sources.set(noExt(f), f);
+        sources.push(f);
       }
-      if (sources.size) {
-        // an index file is imported by its folder name
-        const names = [...new Set([...sources.keys()].map((s) => path.basename(s) === "index" ? path.basename(path.dirname(s)) : path.basename(s)))];
-        const spec = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|\bvi\.(?:mock|doMock|importActual)\s*(?:<[^>]*>)?\s*\(\s*)["\x27]([^"\x27]+)["\x27]/g;
-        // The path aliases of tsconfig.json ("@/*" to "./src/*"): a test that
+      if (sources.length) {
+        // The import graph of the repository, read once: who imports each file.
+        const byStem = new Map(files.map((f) => [noExt(f), f]));
+        // The path aliases of tsconfig.json ("@/*" to "./src/*"): a file that
         // imports a touched source through one imports it all the same.
         const aliases = [];
         try {
@@ -177,38 +196,69 @@ if [ -f package.json ]; then
           }
         } catch { /* no tsconfig, or no aliases in it */ }
         const resolve = (from, to) => {
-          if (to.startsWith("./") || to.startsWith("../")) return path.normalize(path.join(path.dirname(from), to));
-          for (const [prefix, base] of aliases) if (to.startsWith(prefix)) return path.normalize(path.join(base, to.slice(prefix.length)));
-          return null;
+          let target = null;
+          if (to.startsWith("./") || to.startsWith("../")) target = path.normalize(path.join(path.dirname(from), to));
+          else for (const [prefix, base] of aliases) if (to.startsWith(prefix)) { target = path.normalize(path.join(base, to.slice(prefix.length))); break; }
+          // an index file is imported by its folder name
+          return target === null ? null : byStem.get(noExt(target)) ?? byStem.get(path.join(target, "index")) ?? null;
         };
+        const typeOnly = /\b(?:import|export)\s+type\s+[^;]*?\bfrom\s*["\x27][^"\x27]+["\x27]/g;
+        const spec = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|\bvi\.(?:mock|doMock|importActual)\s*(?:<[^>]*>)?\s*\(\s*)["\x27]([^"\x27]+)["\x27]/g;
         const importers = new Map();
-        for (const t of all) {
-          if (out.has(t)) continue;
+        for (const f of files) {
           let text;
-          try { text = fs.readFileSync(t, "utf8"); } catch { continue; }
-          if (!names.some((n) => text.includes(n))) continue;
-          for (const m of text.matchAll(spec)) {
-            const target = resolve(t, m[1]);
-            if (!target) continue;
-            const key = sources.has(noExt(target)) ? noExt(target) : sources.has(path.join(target, "index")) ? path.join(target, "index") : null;
-            if (!key) continue;
-            if (!importers.has(key)) importers.set(key, new Set());
-            importers.get(key).add(t);
+          try { text = fs.readFileSync(f, "utf8"); } catch { continue; }
+          for (const m of text.replace(typeOnly, "").matchAll(spec)) {
+            const target = resolve(f, m[1]);
+            if (!target || target === f) continue;
+            if (!importers.has(target)) importers.set(target, new Set());
+            importers.get(target).add(f);
           }
         }
         // A source that a large part of the suite imports (a store, a test
         // helper) would bring hundreds of files: past the bound its importers
         // wait for the run after the merge, and the gate says so.
         const most = 25;
-        for (const [key, tests] of importers) {
-          if (tests.size <= most) { for (const t of tests) out.add(t); continue; }
-          console.error(`fast-gate: ${sources.get(key)} is imported by ${tests.size} test files: only the tests of its own name run here, the others run after the merge`);
+        for (const source of sources) {
+          const tests = [...(importers.get(source) ?? [])].filter(isTest);
+          if (tests.length <= most) { for (const t of tests) out.add(t); continue; }
+          console.error(`fast-gate: ${source} is imported by ${tests.length} test files: only the tests of its own name run here, the others run after the merge`);
         }
+        // related: breadth first through the files that import a touched
+        // source, nearest first.
+        const depthMax = Math.max(1, Number(process.env.FAST_GATE_RELATED_DEPTH) || 3);
+        const cap = Math.max(0, Number(process.env.FAST_GATE_RELATED_MAX ?? 120) || 0);
+        let known = new Set();
+        try { known = new Set(JSON.parse(fs.readFileSync("scripts/testing/known-failures.json", "utf8")).tests.map((t) => t.file)); } catch { /* no list */ }
+        const dirs = [...new Set(sources.map((s) => path.dirname(s)))];
+        const nearness = (t) => Math.max(...dirs.map((d) => (t.startsWith(d + "/") ? d.split("/").length : 0)));
+        const seen = new Set(sources);
+        const related = [];
+        let left = 0, frontier = sources;
+        for (let depth = 1; depth <= depthMax && frontier.length; depth++) {
+          const next = [], level = [];
+          for (const f of frontier) for (const importer of importers.get(f) ?? []) {
+            if (seen.has(importer)) continue;
+            seen.add(importer);
+            if (!isTest(importer)) next.push(importer);
+            else if (!out.has(importer) && !known.has(importer)) level.push(importer);
+          }
+          level.sort((a, b) => nearness(b) - nearness(a) || (a < b ? -1 : 1));
+          const room = Math.max(0, cap - related.length);
+          related.push(...level.slice(0, room));
+          left += Math.max(0, level.length - room);
+          frontier = next;
+        }
+        if (related.length || left) console.error(`fast-gate: related: ${related.length} test file(s) reach the touched sources through imports${left ? `, ${left} more wait for the run after the merge` : ""}`);
+        fs.writeFileSync(process.env.FAST_GATE_RELATED_OUT, related.sort().map((f) => f + "\n").join(""));
       }
       process.stdout.write([...out].sort().map((f) => f + "\n").join(""));
-    ' > "$TESTS"
+    ' > "$TESTS"; fi
     if [ -s "$TESTS" ] && [ -x "$BIN/vitest" ]; then
       add_check tests "$(q "$BIN/vitest") run --reporter=dot$(qlist < "$TESTS")"
+    fi
+    if [ -s "$RELATED" ] && [ -x "$BIN/vitest" ]; then
+      add_check related "$(q "$BIN/vitest") run --reporter=dot --passWithNoTests$(qlist < "$RELATED")"
     fi
   fi
 fi

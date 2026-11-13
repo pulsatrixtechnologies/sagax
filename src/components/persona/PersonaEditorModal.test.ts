@@ -132,8 +132,9 @@ const bodiesOf = (html: string) => [...html.matchAll(/data-section-body="(\w+)"/
 const selectedTab = (html: string) => /data-bot-profile-tab-current="(\w+)"/.exec(html)?.[1];
 const tabsOf = (html: string) => [...html.matchAll(/data-bot-profile-tab="(\w+)"/g)].map((match) => match[1]);
 
-const TABS_ALL = ["general", "appearance", "knowledge", "stats"];
-const TABS_SIMPLE = ["general", "appearance", "knowledge"];
+// #4098: Outcomes is the second tab, read from the routines (no Updates tab).
+const TABS_ALL = ["general", "outcomes", "appearance", "knowledge", "stats"];
+const TABS_SIMPLE = ["general", "outcomes", "appearance", "knowledge"];
 // The V6 page (#2612): the sub-page a link opens, and the rows of a tab.
 const subPageOf = (html: string) => /data-bot-profile-subpage-current="(\w+)"/.exec(html)?.[1];
 const rowsOf = (html: string) => [...html.matchAll(/data-bot-profile-subpage-open="(\w+)"/g)].map((match) => match[1]);
@@ -156,7 +157,7 @@ describe("bot profile page shell", () => {
     expect(tabsOf(html)).toEqual(TABS_ALL);
     expect(BOT_PROFILE_TABS).toEqual(TABS_ALL);
     expect(html).toContain('role="tablist"');
-    for (const label of [">General<", ">Knowledge<", ">Analytics<", ">Appearance"]) expect(html).toContain(label);
+    for (const label of [">General<", ">Outcomes<", ">Knowledge<", ">Analytics<", ">Appearance"]) expect(html).toContain(label);
     // #3398: General is section cards with their controls in place; a row
     // opens a sub-page only for a long setting; no Settings fold, no identity card of facts
     expect(html).not.toContain("data-bot-profile-settings-toggle");
@@ -202,10 +203,11 @@ describe("bot profile page shell", () => {
     expect(html).not.toContain("overflow-x-auto whitespace-nowrap");
   });
 
-  it("regression (2026-11-08): Appearance is its own tab, after General, never a dropdown under the header", () => {
+  it("regression (2026-11-08): Appearance is its own tab, after General and Outcomes (#4098), never a dropdown under the header", () => {
     const rest = render("overview");
     expect(tabsOf(rest)).toEqual(TABS_ALL);
-    expect(tabsOf(rest).indexOf("appearance")).toBe(1);
+    expect(tabsOf(rest).indexOf("outcomes")).toBe(1);
+    expect(tabsOf(rest).indexOf("appearance")).toBe(2);
     expect(rest).not.toContain("data-bot-profile-appearance-toggle");
     expect(rest).not.toContain('data-section-body="appearance"');
     // a link to the appearance opens its tab, the whole editor in the tab's panel

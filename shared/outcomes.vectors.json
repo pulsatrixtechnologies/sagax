@@ -1,0 +1,1402 @@
+{
+  "now": 1800000000000,
+  "cases": [
+    {
+      "name": "no routine: no outcome",
+      "routines": [],
+      "runs": [],
+      "outcomes": []
+    },
+    {
+      "name": "a routine without a goal is its own outcome, named by its name, on track",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001
+        }
+      ],
+      "runs": [],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Routine r1",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "on-track",
+          "recentRuns": []
+        }
+      ]
+    },
+    {
+      "name": "a routine with a goal is named by its goal",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001,
+          "goal": {
+            "text": "Keep the briefing board current",
+            "status": "active",
+            "checks": 2
+          }
+        }
+      ],
+      "runs": [],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Keep the briefing board current",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "on-track",
+          "recentRuns": []
+        }
+      ]
+    },
+    {
+      "name": "a run waiting on the person needs them, with its attention sentence",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001
+        }
+      ],
+      "runs": [
+        {
+          "id": "x1",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "waiting",
+          "scheduledFor": 1799996400000,
+          "createdAt": 1799996400000,
+          "startedAt": 1799996400000,
+          "attention": "Which deck should get the new chart?"
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Routine r1",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "needs-you",
+          "needsPerson": {
+            "kind": "question",
+            "text": "Which deck should get the new chart?",
+            "runId": "x1",
+            "since": 1799996400000
+          },
+          "recentRuns": [
+            {
+              "runId": "x1",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "waiting",
+              "word": "status",
+              "at": 1799996400000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a run waiting on teammates does not need the person",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001
+        }
+      ],
+      "runs": [
+        {
+          "id": "x1",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "waiting",
+          "scheduledFor": 1799996400000,
+          "createdAt": 1799996400000,
+          "startedAt": 1799996400000,
+          "waitingOn": "teammates",
+          "attention": "Waiting for a teammate"
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Routine r1",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "on-track",
+          "recentRuns": [
+            {
+              "runId": "x1",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "waiting",
+              "word": "status",
+              "at": 1799996400000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a routine paused after failures needs the person",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": false,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001,
+          "autoPaused": {
+            "at": 1799913600000,
+            "failures": 5,
+            "runId": "x5"
+          },
+          "failureStreak": 5
+        }
+      ],
+      "runs": [
+        {
+          "id": "x5",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "failed",
+          "scheduledFor": 1799913600000,
+          "createdAt": 1799913600000,
+          "startedAt": 1799913600000,
+          "finishedAt": 1799913660000,
+          "error": "The mail account is signed out."
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Routine r1",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "needs-you",
+          "needsPerson": {
+            "kind": "paused",
+            "text": "",
+            "failures": 5,
+            "since": 1799913600000,
+            "runId": "x5"
+          },
+          "recentRuns": [
+            {
+              "runId": "x5",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "failed",
+              "word": "status",
+              "at": 1799913660000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a routine that runs at most once a day: problem runs in a row need the person with the failure line",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001,
+          "failureStreak": 2
+        }
+      ],
+      "runs": [
+        {
+          "id": "x1",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "failed",
+          "scheduledFor": 1799827200000,
+          "createdAt": 1799827200000,
+          "startedAt": 1799827200000,
+          "finishedAt": 1799827260000,
+          "error": "Timeout"
+        },
+        {
+          "id": "x2",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "failed",
+          "scheduledFor": 1799913600000,
+          "createdAt": 1799913600000,
+          "startedAt": 1799913600000,
+          "finishedAt": 1799913660000,
+          "error": "The calendar refused the request."
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Routine r1",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "needs-you",
+          "needsPerson": {
+            "kind": "problem",
+            "text": "The calendar refused the request.",
+            "runId": "x2",
+            "since": 1799913660000
+          },
+          "recentRuns": [
+            {
+              "runId": "x2",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "failed",
+              "word": "status",
+              "at": 1799913660000
+            },
+            {
+              "runId": "x1",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "failed",
+              "word": "status",
+              "at": 1799827260000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a routine that runs at most once a day needs the person at its first problem run, as the chat tells it (routineProblemToldAt)",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001,
+          "failureStreak": 1
+        }
+      ],
+      "runs": [
+        {
+          "id": "x1",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "failed",
+          "scheduledFor": 1799913600000,
+          "createdAt": 1799913600000,
+          "startedAt": 1799913600000,
+          "finishedAt": 1799913660000,
+          "error": "Timeout"
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Routine r1",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "needs-you",
+          "needsPerson": {
+            "kind": "problem",
+            "text": "Timeout",
+            "runId": "x1",
+            "since": 1799913660000
+          },
+          "recentRuns": [
+            {
+              "runId": "x1",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "failed",
+              "word": "status",
+              "at": 1799913660000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a routine that runs several times a day stays on track after two problem runs: the chat has not told the person yet",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "interval",
+            "everyMinutes": 60,
+            "anchorAt": 1799992800000
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001,
+          "failureStreak": 2
+        }
+      ],
+      "runs": [
+        {
+          "id": "x1",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "failed",
+          "scheduledFor": 1799989200000,
+          "createdAt": 1799989200000,
+          "startedAt": 1799989200000,
+          "finishedAt": 1799989260000,
+          "error": "Timeout"
+        },
+        {
+          "id": "x2",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "failed",
+          "scheduledFor": 1799992800000,
+          "createdAt": 1799992800000,
+          "startedAt": 1799992800000,
+          "finishedAt": 1799992860000,
+          "error": "The calendar refused the request."
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Routine r1",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "on-track",
+          "recentRuns": [
+            {
+              "runId": "x2",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "failed",
+              "word": "status",
+              "at": 1799992860000
+            },
+            {
+              "runId": "x1",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "failed",
+              "word": "status",
+              "at": 1799989260000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a routine that runs several times a day needs the person at its third problem run in a row, as the chat tells it (routineProblemToldAt)",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "interval",
+            "everyMinutes": 60,
+            "anchorAt": 1799992800000
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001,
+          "failureStreak": 3
+        }
+      ],
+      "runs": [
+        {
+          "id": "x1",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "failed",
+          "scheduledFor": 1799985600000,
+          "createdAt": 1799985600000,
+          "startedAt": 1799985600000,
+          "finishedAt": 1799985660000,
+          "error": "Timeout"
+        },
+        {
+          "id": "x2",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "failed",
+          "scheduledFor": 1799989200000,
+          "createdAt": 1799989200000,
+          "startedAt": 1799989200000,
+          "finishedAt": 1799989260000,
+          "error": "Timeout"
+        },
+        {
+          "id": "x3",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "failed",
+          "scheduledFor": 1799992800000,
+          "createdAt": 1799992800000,
+          "startedAt": 1799992800000,
+          "finishedAt": 1799992860000,
+          "error": "The calendar refused the request."
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Routine r1",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "needs-you",
+          "needsPerson": {
+            "kind": "problem",
+            "text": "The calendar refused the request.",
+            "runId": "x3",
+            "since": 1799992860000
+          },
+          "recentRuns": [
+            {
+              "runId": "x3",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "failed",
+              "word": "status",
+              "at": 1799992860000
+            },
+            {
+              "runId": "x2",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "failed",
+              "word": "status",
+              "at": 1799989260000
+            },
+            {
+              "runId": "x1",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "failed",
+              "word": "status",
+              "at": 1799985660000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a good run after problems is on track again",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001,
+          "failureStreak": 0
+        }
+      ],
+      "runs": [
+        {
+          "id": "x1",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "failed",
+          "scheduledFor": 1799827200000,
+          "createdAt": 1799827200000,
+          "startedAt": 1799827200000,
+          "finishedAt": 1799827260000,
+          "error": "Timeout"
+        },
+        {
+          "id": "x2",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "completed",
+          "scheduledFor": 1799913600000,
+          "createdAt": 1799913600000,
+          "startedAt": 1799913600000,
+          "finishedAt": 1799913660000,
+          "output": "All three sources were read. The digest is in the folder."
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Routine r1",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "on-track",
+          "result": {
+            "text": "All three sources were read. The digest is in the folder.",
+            "at": 1799913660000,
+            "runId": "x2"
+          },
+          "recentRuns": [
+            {
+              "runId": "x2",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "completed",
+              "word": "done",
+              "at": 1799913660000
+            },
+            {
+              "runId": "x1",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "failed",
+              "word": "status",
+              "at": 1799827260000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a goal past its deadline needs the person",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": false,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": null,
+          "createdAt": 1001,
+          "goal": {
+            "text": "Get the vendor list signed",
+            "status": "expired",
+            "expiredAt": 1799913600000,
+            "progress": "Two of three vendors signed."
+          }
+        }
+      ],
+      "runs": [],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Get the vendor list signed",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "needs-you",
+          "needsPerson": {
+            "kind": "goal",
+            "goal": "expired",
+            "text": "Two of three vendors signed.",
+            "since": 1799913600000
+          },
+          "result": {
+            "text": "Two of three vendors signed."
+          },
+          "recentRuns": []
+        }
+      ]
+    },
+    {
+      "name": "a stalled goal needs the person",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001,
+          "goal": {
+            "text": "Close the open invoices",
+            "status": "active",
+            "stalled": 2,
+            "progress": "4 invoices still open.",
+            "lastCheckedAt": 1799996400000
+          }
+        }
+      ],
+      "runs": [],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Close the open invoices",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "needs-you",
+          "needsPerson": {
+            "kind": "goal",
+            "goal": "stalled",
+            "checks": 3,
+            "text": "4 invoices still open.",
+            "since": 1799996400000
+          },
+          "result": {
+            "text": "4 invoices still open.",
+            "at": 1799996400000
+          },
+          "recentRuns": []
+        }
+      ]
+    },
+    {
+      "name": "a reached goal reads Reached, no pill",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": false,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": null,
+          "createdAt": 1001,
+          "goal": {
+            "text": "Ship the guide",
+            "status": "achieved",
+            "achievedAt": 1799740800000,
+            "progress": "The guide is published."
+          }
+        }
+      ],
+      "runs": [],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Ship the guide",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "reached",
+          "reachedAt": 1799740800000,
+          "result": {
+            "text": "The guide is published."
+          },
+          "recentRuns": []
+        }
+      ]
+    },
+    {
+      "name": "a paused routine reads Paused",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": false,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": null,
+          "createdAt": 1001
+        }
+      ],
+      "runs": [],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Routine r1",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "paused",
+          "recentRuns": []
+        }
+      ]
+    },
+    {
+      "name": "a finished one-time routine reads finished",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "once",
+            "at": 1799913600000
+          },
+          "nextRunAt": null,
+          "createdAt": 1001
+        }
+      ],
+      "runs": [],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Routine r1",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "finished",
+          "recentRuns": []
+        }
+      ]
+    },
+    {
+      "name": "results: the goal's progress note first",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001,
+          "goal": {
+            "text": "Keep the board current",
+            "status": "active",
+            "progress": "Board updated with Q4 numbers.",
+            "lastCheckedAt": 1799996400000
+          }
+        }
+      ],
+      "runs": [
+        {
+          "id": "x1",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "completed",
+          "scheduledFor": 1799996400000,
+          "createdAt": 1799996400000,
+          "startedAt": 1799996400000,
+          "finishedAt": 1799996460000,
+          "output": "Something else entirely."
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Keep the board current",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "on-track",
+          "result": {
+            "text": "Board updated with Q4 numbers.",
+            "at": 1799996400000
+          },
+          "recentRuns": [
+            {
+              "runId": "x1",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "completed",
+              "word": "done",
+              "at": 1799996460000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "results: else the brief of the latest run with something to say, skipping quiet runs",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001
+        }
+      ],
+      "runs": [
+        {
+          "id": "x1",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "completed",
+          "scheduledFor": 1799827200000,
+          "createdAt": 1799827200000,
+          "startedAt": 1799827200000,
+          "finishedAt": 1799827260000,
+          "output": "Read 12 emails. Two need a reply today."
+        },
+        {
+          "id": "x2",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "completed",
+          "scheduledFor": 1799913600000,
+          "createdAt": 1799913600000,
+          "startedAt": 1799913600000,
+          "finishedAt": 1799913660000,
+          "quiet": true,
+          "output": "NOTHING_TO_REPORT"
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Routine r1",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "on-track",
+          "result": {
+            "text": "Read 12 emails. Two need a reply today.",
+            "at": 1799827260000,
+            "runId": "x1"
+          },
+          "recentRuns": [
+            {
+              "runId": "x2",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "completed",
+              "word": "nothing",
+              "at": 1799913660000
+            },
+            {
+              "runId": "x1",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "completed",
+              "word": "done",
+              "at": 1799827260000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "recent runs: newest first, queued left out, Done, Nothing to do or the status (its latest run had problems: a routine that runs at most once a day needs the person)",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001
+        }
+      ],
+      "runs": [
+        {
+          "id": "x1",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "completed",
+          "scheduledFor": 1799654400000,
+          "createdAt": 1799654400000,
+          "startedAt": 1799654400000,
+          "finishedAt": 1799654460000,
+          "output": "Done."
+        },
+        {
+          "id": "x2",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "nothing_to_report",
+          "scheduledFor": 1799740800000,
+          "createdAt": 1799740800000,
+          "startedAt": 1799740800000,
+          "finishedAt": 1799740860000
+        },
+        {
+          "id": "x3",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "completed",
+          "scheduledFor": 1799827200000,
+          "createdAt": 1799827200000,
+          "startedAt": 1799827200000,
+          "finishedAt": 1799827260000,
+          "quiet": true
+        },
+        {
+          "id": "x4",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "completed",
+          "scheduledFor": 1799913600000,
+          "createdAt": 1799913600000,
+          "startedAt": 1799913600000,
+          "finishedAt": 1799913660000,
+          "problems": "One source was down."
+        },
+        {
+          "id": "x5",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "queued",
+          "scheduledFor": 1800003600000,
+          "createdAt": 1800003600000,
+          "startedAt": 1800003600000
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Routine r1",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "needs-you",
+          "needsPerson": {
+            "kind": "problem",
+            "text": "One source was down.",
+            "runId": "x4",
+            "since": 1799913660000
+          },
+          "result": {
+            "text": "Done.",
+            "at": 1799654460000,
+            "runId": "x1"
+          },
+          "recentRuns": [
+            {
+              "runId": "x4",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "completed",
+              "word": "status",
+              "at": 1799913660000
+            },
+            {
+              "runId": "x3",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "completed",
+              "word": "nothing",
+              "at": 1799827260000
+            },
+            {
+              "runId": "x2",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "nothing_to_report",
+              "word": "nothing",
+              "at": 1799740860000
+            },
+            {
+              "runId": "x1",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "completed",
+              "word": "done",
+              "at": 1799654460000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "outcomes that need the person come first, the others in the order they were made",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001
+        },
+        {
+          "id": "r2",
+          "name": "Routine r2",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1002
+        },
+        {
+          "id": "r3",
+          "name": "Routine r3",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1003
+        }
+      ],
+      "runs": [
+        {
+          "id": "x1",
+          "routineId": "r3",
+          "routineName": "Routine r3",
+          "status": "waiting",
+          "scheduledFor": 1799996400000,
+          "createdAt": 1799996400000,
+          "startedAt": 1799996400000,
+          "attention": "Approve the send?"
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "routine:r3",
+          "name": "Routine r3",
+          "routineIds": [
+            "r3"
+          ],
+          "status": "needs-you",
+          "needsPerson": {
+            "kind": "question",
+            "text": "Approve the send?",
+            "runId": "x1",
+            "since": 1799996400000
+          },
+          "recentRuns": [
+            {
+              "runId": "x1",
+              "routineId": "r3",
+              "name": "Routine r3",
+              "status": "waiting",
+              "word": "status",
+              "at": 1799996400000
+            }
+          ]
+        },
+        {
+          "id": "routine:r1",
+          "name": "Routine r1",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "on-track",
+          "recentRuns": []
+        },
+        {
+          "id": "routine:r2",
+          "name": "Routine r2",
+          "routineIds": [
+            "r2"
+          ],
+          "status": "on-track",
+          "recentRuns": []
+        }
+      ]
+    },
+    {
+      "name": "a redacted run gives no sentence",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001,
+          "failureStreak": 3
+        }
+      ],
+      "runs": [
+        {
+          "id": "x1",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "failed",
+          "scheduledFor": 1799827200000,
+          "createdAt": 1799827200000,
+          "startedAt": 1799827200000,
+          "finishedAt": 1799827260000,
+          "redacted": true
+        },
+        {
+          "id": "x2",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "failed",
+          "scheduledFor": 1799913600000,
+          "createdAt": 1799913600000,
+          "startedAt": 1799913600000,
+          "finishedAt": 1799913660000,
+          "redacted": true
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Routine r1",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "needs-you",
+          "needsPerson": {
+            "kind": "problem",
+            "text": "",
+            "runId": "x2",
+            "since": 1799913660000
+          },
+          "recentRuns": [
+            {
+              "runId": "x2",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "failed",
+              "word": "status",
+              "at": 1799913660000
+            },
+            {
+              "runId": "x1",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "failed",
+              "word": "status",
+              "at": 1799827260000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a stored outcome groups its routines (a later lot feeds it)",
+      "records": [
+        {
+          "id": "o1",
+          "name": "Inbox at zero",
+          "createdAt": 1,
+          "updatedAt": 1
+        }
+      ],
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001,
+          "outcome": "o1"
+        },
+        {
+          "id": "r2",
+          "name": "Routine r2",
+          "enabled": false,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1002,
+          "outcome": "o1"
+        },
+        {
+          "id": "r3",
+          "name": "Routine r3",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1003
+        }
+      ],
+      "runs": [
+        {
+          "id": "x1",
+          "routineId": "r2",
+          "routineName": "Routine r2",
+          "status": "completed",
+          "scheduledFor": 1799913600000,
+          "createdAt": 1799913600000,
+          "startedAt": 1799913600000,
+          "finishedAt": 1799913660000,
+          "output": "The inbox is at zero."
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "o1",
+          "name": "Inbox at zero",
+          "routineIds": [
+            "r1",
+            "r2"
+          ],
+          "status": "on-track",
+          "result": {
+            "text": "The inbox is at zero.",
+            "at": 1799913660000,
+            "runId": "x1"
+          },
+          "recentRuns": [
+            {
+              "runId": "x1",
+              "routineId": "r2",
+              "name": "Routine r2",
+              "status": "completed",
+              "word": "done",
+              "at": 1799913660000
+            }
+          ]
+        },
+        {
+          "id": "routine:r3",
+          "name": "Routine r3",
+          "routineIds": [
+            "r3"
+          ],
+          "status": "on-track",
+          "recentRuns": []
+        }
+      ]
+    },
+    {
+      "name": "needsPerson from the server is taken as is",
+      "routines": [
+        {
+          "id": "r1",
+          "name": "Routine r1",
+          "enabled": true,
+          "schedule": {
+            "type": "cron",
+            "expression": "0 7 * * 1-5",
+            "timeZone": "America/Toronto"
+          },
+          "nextRunAt": 1800003600000,
+          "createdAt": 1001,
+          "needsPerson": {
+            "kind": "items",
+            "text": "Two tickets need your call.",
+            "runId": "x1",
+            "since": 1799996400000
+          }
+        }
+      ],
+      "runs": [
+        {
+          "id": "x1",
+          "routineId": "r1",
+          "routineName": "Routine r1",
+          "status": "completed",
+          "scheduledFor": 1799996400000,
+          "createdAt": 1799996400000,
+          "startedAt": 1799996400000,
+          "finishedAt": 1799996460000,
+          "output": "Two tickets need your call."
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "routine:r1",
+          "name": "Routine r1",
+          "routineIds": [
+            "r1"
+          ],
+          "status": "needs-you",
+          "needsPerson": {
+            "kind": "items",
+            "text": "Two tickets need your call.",
+            "runId": "x1",
+            "since": 1799996400000
+          },
+          "result": {
+            "text": "Two tickets need your call.",
+            "at": 1799996460000,
+            "runId": "x1"
+          },
+          "recentRuns": [
+            {
+              "runId": "x1",
+              "routineId": "r1",
+              "name": "Routine r1",
+              "status": "completed",
+              "word": "done",
+              "at": 1799996460000
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

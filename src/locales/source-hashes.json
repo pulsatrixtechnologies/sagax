@@ -18546,7 +18546,19 @@
       "vault.manage.label": "b2226bf6e7dccb492c7b1f75fafd37a0439fd6c6ed24266f31d2c822eba8b170",
       "vault.done": "11a6767d5674c7e45f7e00dc525762275b3a48491ad6045427d2609cc496c516",
       "vault.field.totpPlaceholder": "4ca58777f3390f9119dbc01a6ef151b9ca81c2ba227d55c3315b7b1b940e3389",
-      "vault.field.notesHint": "ade888faaa865a92f337194c8e8128dc976e8b82165ac6f723a726c2b3399617"
+      "vault.field.notesHint": "ade888faaa865a92f337194c8e8128dc976e8b82165ac6f723a726c2b3399617",
+      "botProfile.tab.outcomes": "912d8e962acfe5e9c1890650b957936925de057b1d30be2e4bf926461a905d59",
+      "outcomes.onTrack": "eb54d22db02bf083bd3a82c6e6b31d3c4f078da35685093b5633d0fdaaf1f504",
+      "outcomes.replyInChat": "7824e53cb3c7f7d7aff2552a3d62aa754d8d18419070e5a8bc4bb21d0801bd25",
+      "outcomes.results": "219c4a6c86a716e99d5dc9611b61e584deb11b57e972d87d4b773387ebc3cadd",
+      "outcomes.recentRuns": "237112b89b77be8e2772378d1a09a3bc2dcb7d907698757cc2170107ee3026eb",
+      "outcomes.reachedOn": "85e6cd3d944b2fc920ccf9823db781356c9825116a899d36ef79cc54de7a803a",
+      "outcomes.routineCount": "55cf322eaf09a705044f499aad0ad813749259bac78845d049e6804340e288f1",
+      "outcomes.noResult": "8d6421cbb549f4f865de593e484ee2019fbda3c5faecec37da1e306594b400db",
+      "outcomes.needs.question": "9a084db207bba7ad8cc4799da28972e96e9f8d80afbf51ffc9b1b1fc08e63bdf",
+      "outcomes.needs.problem": "bf684e3a7697581e4574a52187f2648108be9409df0e4afed63d39bd8ce68c92",
+      "outcomes.needs.goalExpired": "a4bac64a6698b282cb5b41fbbdc460ee7eb0e985709273dcaee718f0eac7b06d",
+      "outcomes.needs.goalStalled": "4ffc2b472054787767b2e97e87ff8e2151d5d41afe8a674012eb1d14fc89309b"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

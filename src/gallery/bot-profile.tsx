@@ -240,6 +240,45 @@ const runs = routines.slice(0, 4).flatMap((r, i) => [0, 1, 2].map((k) => ({
   scheduledFor: NOW - (k + 1) * DAY + i * HOUR, startedAt: NOW - (k + 1) * DAY + i * HOUR, finishedAt: NOW - (k + 1) * DAY + i * HOUR + 4 * MIN, threadId: `t-run-${i}-${k}`,
 })));
 
+// ?outcomes=none|one|eight (#4098): the Outcomes tab with no routine, one
+// routine with its goal, or eight routines with and without a goal, one of
+// them waiting on the person, one paused and one goal reached. Absent: the
+// six routines above.
+const OUTCOMES = ((value) => (value === "none" || value === "one" || value === "eight" ? value : null))(params.get("outcomes"));
+const OUTCOME_ROUTINES = [
+  ["o1", "Briefing board", "Keep the quarterly briefing board current", "1-5", true],
+  ["o2", "Inbox triage", null, "1-5", true],
+  ["o3", "Vendor follow-up", "Get every vendor contract signed", "1", true],
+  ["o4", "Weekly project report", null, "5", true],
+  ["o5", "Source watch", "Track new papers on the research topic", "*", true],
+  ["o6", "Invoice reminders", null, "2", false],
+  ["o7", "Meeting notes review", null, "1-5", true],
+  ["o8", "Guide publishing", "Publish the onboarding guide", "3", false],
+] as const;
+const outcomeRoutines = OUTCOME_ROUTINES.slice(0, OUTCOMES === "one" ? 1 : OUTCOMES === "eight" ? 8 : 0).map(([id, name, goal, days, enabled], index) => ({
+  id, botId: BOT_ID, name, prompt: name, enabled, target: "bot",
+  schedule: { type: "cron", expression: `0 ${7 + index} * * ${days}`, timeZone: "America/Toronto" },
+  nextRunAt: enabled ? NOW + (index + 1) * HOUR : null, createdAt: 10 + index, updatedAt: 10 + index,
+  ...(goal ? { goal: id === "o8"
+    ? { text: goal, status: "achieved", achievedAt: NOW - 3 * DAY, progress: "The guide is live and linked from the welcome page.", lastCheckedAt: NOW - 3 * DAY }
+    : { text: goal, status: "active", checks: 4, progress: id === "o1" ? "Q4 numbers are on the board; the hiring slide is still missing." : "Two of three vendors signed; the last one asked for a change.", lastCheckedAt: NOW - 2 * HOUR } } : {}),
+}));
+const outcomeRun = (id: string, routineId: string, status: string, at: number, extra: Record<string, unknown> = {}) => ({
+  id, routineId, routineName: OUTCOME_ROUTINES.find((entry) => entry[0] === routineId)![1], botId: BOT_ID, target: "bot", runOn: "maus", manual: false, status,
+  scheduledFor: at, createdAt: at, startedAt: at, ...(status === "waiting" ? {} : { finishedAt: at + 4 * MIN }), threadId: `t-${id}`, ...extra,
+});
+const outcomeRuns = [
+  outcomeRun("ro1", "o1", "completed", NOW - DAY, { output: "Updated the board with the Q4 numbers. The hiring slide still waits on the new count." }),
+  outcomeRun("ro2", "o1", "completed", NOW - 2 * DAY, { quiet: true }),
+  outcomeRun("ro3", "o1", "nothing_to_report", NOW - 3 * DAY),
+  outcomeRun("ro4", "o2", "completed", NOW - 5 * HOUR, { output: "Sorted 23 emails. Three need a reply today." }),
+  outcomeRun("ro5", "o3", "waiting", NOW - 40 * MIN, { attention: "The last vendor wants a 60 day payment term. Should I accept it?" }),
+  outcomeRun("ro6", "o3", "completed", NOW - DAY, { output: "Two of three contracts are signed." }),
+  outcomeRun("ro7", "o4", "completed", NOW - 6 * DAY, { output: "The report went out with four projects on track." }),
+  outcomeRun("ro8", "o5", "completed", NOW - 3 * HOUR, { quiet: true }),
+];
+const routinesAnswer = OUTCOMES ? { routines: outcomeRoutines, runs: outcomeRuns.filter((run) => outcomeRoutines.some((routine) => routine.id === run.routineId)) } : { routines, runs };
+
 const overview = {
   who: { name: "Scout", title: "Research", blurb: "Finds sources and summarizes them.", soulLead: "You are Scout, a research assistant for Northwind Studio." },
   does: ["Daily at 4:03 AM: Morning summary of important emails.", "Daily at 5:03 AM: Watch the sources on cybersecurity.", "Weekly: Weekly report of the projects."],
@@ -443,7 +482,7 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
     { instanceId: "openai", displayName: "OpenAI", driverKind: "codex", access: "key", snapshot: { state: "available", authenticated: true }, models: { default: "gpt-5", options: [{ id: "gpt-5", label: "GPT-5" }] } },
     { instanceId: "local", displayName: "Local oMLX", driverKind: "local", access: "local", snapshot: { state: "available", authenticated: true }, models: { default: "ornith-35b", options: [{ id: "ornith-35b", label: "Ornith 35B" }] } },
   ] });
-  if (path === "/api/routines") return json({ routines, runs, folders: [] });
+  if (path === "/api/routines") return json({ ...routinesAnswer, folders: [] });
   if (path === "/api/webhooks") return json({ webhooks: [], attempts: [], ingress: null, graphConnectors: [] });
   if (path === "/api/live/call") return json({});
   if (path === "/api/mcp/servers" && ACCOUNTS) return json({ servers: [] });

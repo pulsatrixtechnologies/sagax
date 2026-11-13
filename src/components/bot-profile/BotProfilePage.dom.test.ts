@@ -65,9 +65,12 @@ const { StoreProvider, useStore } = await import("@/state/store");
 const { PersonaEditorModal } = await import("../persona/PersonaEditorModal");
 
 let dispatch: (action: Action) => void;
+/** The store as the page last rendered it (#4098: where a pointer led). */
+let latest: { personaEditor: unknown; routineRunWindow: { runId: string } | null; routineFocus: unknown };
 function Shell() {
-  const { dispatch: dispatchNow } = useStore();
+  const { state, dispatch: dispatchNow } = useStore();
   dispatch = dispatchNow;
+  latest = state as never;
   const { bot, neighbours, routines } = fixture;
   useEffect(() => {
     dispatch({ type: "hydrate", bots: [bot, ...neighbours], groups: [], sections: [], computerControl: {} } as never);
@@ -815,6 +818,106 @@ describe("bot profile page: type scale, marks and words (#3402)", () => {
       expect(t(key, { value: "x" }), `fr ${key}`).not.toMatch(/robot/i);
     }
     expect(t("botProfile.usage.intro")).toMatch(/^Qui utilise quoi/);
+    setLocale("en");
+  });
+});
+
+describe("the Outcomes tab (#4098, first lot: read from the routines that exist)", () => {
+  const NOW = Date.now();
+  const waitingRun = { id: "run-w", routineId: "r2", routineName: "Veille", botId: "scout", target: "bot", runOn: "maus", manual: false, status: "waiting", scheduledFor: NOW - 3_600_000, createdAt: NOW - 3_600_000, startedAt: NOW - 3_600_000, attention: "Which source should replace the one that closed?" };
+  const doneRun = { id: "run-d", routineId: "r1", routineName: "Résumé", botId: "scout", target: "bot", runOn: "maus", manual: false, status: "completed", scheduledFor: NOW - 7_200_000, createdAt: NOW - 7_200_000, startedAt: NOW - 7_200_000, finishedAt: NOW - 7_000_000, output: "Twelve emails read. Two need a reply today." };
+
+  async function openOutcomes(runs: unknown[]) {
+    await act(async () => { dispatch({ type: "routinesHydrated", routines: fixture.routines, runs } as never); });
+    await settle();
+    return home("outcomes");
+  }
+
+  it("is the second tab; each routine is an outcome of its own; the dot shows while one needs the person", async () => {
+    await mount("en");
+    await home("general");
+    const tabs = Array.from(host.querySelectorAll("[data-bot-profile-tab]")).map((node) => node.getAttribute("data-bot-profile-tab"));
+    expect(tabs.slice(0, 2)).toEqual(["general", "outcomes"]);
+    expect(host.querySelector('[data-bot-profile-tab="outcomes"]')!.textContent).toContain("Outcomes");
+    expect(host.querySelector("[data-bot-profile-tab-dot]")).toBeNull();
+    const node = await openOutcomes([waitingRun, doneRun]);
+    expect(host.querySelector('[data-bot-profile-tab="outcomes"] [data-bot-profile-tab-dot]')).not.toBeNull();
+    const panel = node.querySelector<HTMLElement>('[data-bot-profile-panel="outcomes"]')!;
+    expect(panel.querySelector("[data-settings-group='bot-profile-outcomes'] h3")!.textContent).toBe("Outcomes");
+    const rows = Array.from(panel.querySelectorAll<HTMLElement>("[data-outcome-row]"));
+    // the one that needs the person first, then five in all before the fold
+    expect(rows[0]!.getAttribute("data-outcome-row")).toBe("routine:r2");
+    expect(rows[0]!.querySelector("[data-outcome-pill]")!.textContent).toBe("Needs you");
+    expect(rows.length).toBe(5);
+    expect(panel.querySelector("[data-outcomes-fold='more']")!.textContent).toBe("Show 1 more");
+    const paused = rows.find((row) => row.getAttribute("data-outcome-row") === "routine:r3")!;
+    expect(paused.querySelector("[data-outcome-pill]")).toBeNull();
+    expect(paused.querySelector("[data-outcome-line]")!.textContent).toMatch(/Paused$/);
+    expect(rows.find((row) => row.getAttribute("data-outcome-row") === "routine:r1")!.querySelector("[data-outcome-pill]")!.textContent).toBe("On track");
+  });
+
+  it("a row opens in place: the needs-you card with Reply in chat, then Results, Routines and Recent runs", async () => {
+    await mount("en");
+    const node = await openOutcomes([waitingRun, doneRun]);
+    await click(node.querySelector<HTMLElement>('[data-outcome-row="routine:r1"] button[aria-expanded]'), "row r1");
+    const open = node.querySelector<HTMLElement>('[data-outcome-row="routine:r1"] [data-outcome-open]')!;
+    expect(open.querySelector("[data-outcome-reply]")).toBeNull();
+    expect(open.querySelector("[data-outcome-results]")!.textContent).toContain("Two need a reply today.");
+    expect(open.querySelector("[data-outcome-routines]")!.textContent).toContain("On");
+    expect(open.querySelector('[data-outcome-run="run-d"]')!.getAttribute("data-outcome-run-word")).toBe("done");
+    // a routine line opens the routine's page
+    await click(open.querySelector<HTMLElement>('[data-outcome-routine="r1"]'), "routine line");
+    expect(host.querySelector("[data-persona-modal]")!.getAttribute("data-bot-profile-subpage-current")).toBe("routines");
+
+    const again = await openOutcomes([waitingRun, doneRun]);
+    await click(again.querySelector<HTMLElement>('[data-outcome-row="routine:r2"] button[aria-expanded]'), "row r2");
+    const card = again.querySelector<HTMLElement>('[data-outcome-row="routine:r2"] [data-outcome-open] [data-ask-card]')!;
+    expect(card.textContent).toContain("Which source should replace the one that closed?");
+    expect(card.querySelector("[data-outcome-needs]")!.textContent).toBe("Needs you");
+    // nothing is answered here: Reply in chat leaves the page for the run in the chat
+    await click(card.querySelector<HTMLElement>("[data-outcome-reply]"), "Reply in chat");
+    expect(latest.personaEditor).toBeNull();
+    expect(latest.routineRunWindow?.runId).toBe("run-w");
+  });
+
+  it("a reached outcome's line gives the day it was reached, never a relative time; a done run says the run card's word", async () => {
+    const achievedAt = NOW - 3 * 86_400_000;
+    for (const locale of ["en", "fr"] as const) {
+      if (locale === "fr") {
+        act(() => root.unmount());
+        host.remove();
+      }
+      await mount(locale);
+      const reached = { ...fixture.routines[0]!, id: "rg", enabled: false, goal: { text: "Publish the onboarding guide", status: "achieved", achievedAt } };
+      await act(async () => { dispatch({ type: "routinesHydrated", routines: [reached], runs: [{ ...doneRun, routineId: "rg" }] } as never); });
+      await settle();
+      const node = await home("outcomes");
+      const row = node.querySelector<HTMLElement>('[data-outcome-row="routine:rg"]')!;
+      const day = new Date(achievedAt).toLocaleDateString(locale, { month: "short", day: "numeric" });
+      expect(row.querySelector("[data-outcome-line]")!.textContent).toContain(t("outcomes.reachedOn", { date: day }));
+      expect(row.querySelector("[data-outcome-line]")!.textContent).not.toMatch(/ago|il y a|hier|yesterday/i);
+      await click(row.querySelector<HTMLElement>("button[aria-expanded]"), "row rg");
+      const run = node.querySelector<HTMLElement>('[data-outcome-row="routine:rg"] [data-outcome-run="run-d"]')!;
+      expect(run.textContent).toContain(t("routineRun.card.done"));
+    }
+    setLocale("en");
+  });
+
+  it("no routine: the routines' own quiet line, its Ask it in chat, in English and French", async () => {
+    for (const locale of ["en", "fr"] as const) {
+      if (locale === "fr") {
+        act(() => root.unmount());
+        host.remove();
+      }
+      await mount(locale);
+      await act(async () => { dispatch({ type: "routinesHydrated", routines: [], runs: [] } as never); });
+      await settle();
+      const node = await home("outcomes");
+      const panel = node.querySelector<HTMLElement>('[data-bot-profile-panel="outcomes"]')!;
+      expect(panel.querySelector("[data-outcome-row]")).toBeNull();
+      expect(panel.querySelector("[data-routines-hint] [data-routines-ask]")!.textContent).toBe(t("botPanel.routines.hintAsk"));
+      expect(panel.querySelector("h3")!.textContent).toBe(t("botProfile.tab.outcomes"));
+    }
     setLocale("en");
   });
 });

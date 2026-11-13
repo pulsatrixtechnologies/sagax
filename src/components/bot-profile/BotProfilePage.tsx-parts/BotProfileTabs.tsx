@@ -116,17 +116,21 @@ export function useBotProfileSearch({ rootRef, pages, tabOf, view, onOpenCategor
 export type BotProfileSearch = ReturnType<typeof useBotProfileSearch>;
 
 /** The pill tabs, wrapping when the window is narrow, and the search behind
- * the magnifier. */
-export function BotProfileTabBar({ tabs, tab, onTab, search }: {
+ * the magnifier. Measured on the reference (docs/design, 2.4 ter, #4098):
+ * 13 px labels on an 18 px line, 4 px by 8 px of padding (26 px high), 2 px
+ * between tabs. A tab in `attention` carries the attention dot beside its
+ * label (Outcomes while one of them needs the person). */
+export function BotProfileTabBar({ tabs, tab, onTab, search, attention }: {
   tabs: readonly BotProfileTab[];
   tab: BotProfileTab;
   onTab: (tab: BotProfileTab) => void;
   search: BotProfileSearch;
+  attention?: ReadonlySet<BotProfileTab>;
 }) {
   const { searchRef, searching, query, q, results, matching, changeQuery, openSearch, closeSearch, onSearchKey } = search;
   return (
     <>
-      <div className="mt-4 flex items-start gap-1">
+      <div className="mt-4 flex items-start gap-1 px-1">
         <div
           role="tablist"
           data-bot-profile-tabs=""
@@ -139,7 +143,7 @@ export function BotProfileTabBar({ tabs, tab, onTab, search }: {
             onTab(next);
             event.currentTarget.querySelector<HTMLElement>(`[data-bot-profile-tab="${next}"]`)?.focus();
           }}
-          className="flex min-w-0 flex-1 flex-wrap items-center gap-1"
+          className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5"
         >
           <TabIndicatorGroup>
           {tabs.map((id) => (
@@ -155,13 +159,19 @@ export function BotProfileTabBar({ tabs, tab, onTab, search }: {
               tabIndex={tab === id ? 0 : -1}
               onClick={() => onTab(id)}
               className={cn(
-                "relative inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[14px] leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+                "relative inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 text-[13px] leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
                 tab === id ? "text-ink" : "text-ink-secondary hover:text-ink",
                 q && !matching.has(id) && "opacity-40",
               )}
             >
               {tab === id && <TabIndicator />}
               <span className="relative">{t(TAB_LABEL[id])}</span>
+              {attention?.has(id) && (
+                <>
+                  <span data-bot-profile-tab-dot="" aria-hidden="true" className="relative size-1.5 shrink-0 rounded-full bg-warning" />
+                  <span className="sr-only">{t("botTasks.waiting")}</span>
+                </>
+              )}
             </button>
           ))}
           </TabIndicatorGroup>

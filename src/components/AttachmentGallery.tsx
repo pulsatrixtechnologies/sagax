@@ -537,8 +537,30 @@ type GalleryItem = { key: string } & (
   | { kind: "video" | "audio" | "pdf" | "file"; file: GalleryFile }
 );
 
-/** How many items the group under a reply shows before "+N more". */
-const BENEATH_LIMIT = 6;
+/** How many slots a message's first set of pictures takes: the reference's
+ * first set (#4205). When more follow, the last slot is the "+N more" tile,
+ * so the set and its tile stay on one row; the rest opens in place. */
+export const ATTACHMENT_FIRST_SET = 4;
+
+/** How many pills a list of plain files under a reply shows before "+N more". */
+const BENEATH_FILES_LIMIT = 6;
+
+/** The "+N more" tile closing a message's first set of pictures, the size of
+ * a picture beside it; it opens the rest in place (the gallery's own show
+ * more, #4205). */
+function MoreTile({ count, onClick, className }: { count: number; onClick: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={false}
+      aria-label={t("attach.showMore", { count })}
+      className={cn("flex aspect-[4/3] min-w-0 items-center justify-center rounded-2xl bg-inset px-2 text-[13px] font-semibold text-ink-secondary transition-colors hover:bg-ink/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus", className)}
+    >
+      {t("attach.moreCount", { count })}
+    </button>
+  );
+}
 
 export function AttachmentGallery({ images = [], files = [], message, eager = false, beneath = false, align = "start", className }: {
   images?: Array<string | TranscriptImageAttachment>;
@@ -596,8 +618,21 @@ export function AttachmentGallery({ images = [], files = [], message, eager = fa
     return result;
   }, [images, files, message]);
   if (!items.length) return null;
-  const limit = beneath ? BENEATH_LIMIT : 4;
-  const shown = expanded ? items : items.slice(0, limit);
+  const pictured = items.some((item) => item.kind === "image" || item.kind === "video");
+  const limit = beneath && !pictured ? BENEATH_FILES_LIMIT : ATTACHMENT_FIRST_SET;
+  // With pictures and more to come, the "+N more" tile closes the pictures'
+  // row. When the set's last slot is a picture, the tile takes that slot, so
+  // the row never grows a fifth slot that wraps onto a line of its own.
+  const tileKinds = beneath ? ["image"] : ["image", "video"];
+  const tiled = items.length > limit && items.slice(0, limit).some((item) => tileKinds.includes(item.kind));
+  const visible = tiled && tileKinds.includes(items[limit - 1]!.kind) ? limit - 1 : limit;
+  const shown = expanded ? items : items.slice(0, visible);
+  // Only the first set may load at once (the newest message asks for it
+  // eagerly); every picture past it loads when it comes on screen (#4205).
+  const firstSet = new Set(items.slice(0, visible).map((item) => item.key));
+  const hidden = items.length - visible;
+  const moreTile = !expanded && tiled;
+  const showMore = () => setExpanded(true);
   const media = shown.filter((item) => item.kind === "image" || item.kind === "video");
   const documents = shown.filter((item) => item.kind === "file" || item.kind === "audio" || item.kind === "pdf");
   const previews = items.flatMap((item) => item.kind === "image" ? [item.image] : []);
@@ -611,10 +646,17 @@ export function AttachmentGallery({ images = [], files = [], message, eager = fa
     const videos = shown.filter((item) => item.kind === "video");
     // a PDF under a reply is a compact pill like any other file
     const rest = shown.filter((item) => item.kind === "file" || item.kind === "audio" || item.kind === "pdf");
+    // the "+N more" is a tile closing the pictures' row when there are any,
+    // else the chip at the end of the files: one control, never both. With the
+    // tile, the row is one line of equal slots that narrow with the bubble.
+    const slot = moreTile ? "h-24 w-full" : "h-24 w-auto max-w-48";
     return (
       <section aria-label={label} className={cn("mt-2.5 flex max-w-full flex-col gap-2 text-start whitespace-normal", align === "end" ? "items-end" : "items-start", className)}>
         {thumbs.length > 0 && (
-          <div className={cn("flex max-w-full flex-wrap gap-2", align === "end" && "justify-end")}>
+          <div
+            className={cn(moreTile ? "grid max-w-full gap-2" : "flex max-w-full flex-wrap gap-2", align === "end" && "justify-end")}
+            style={moreTile ? { gridTemplateColumns: `repeat(${thumbs.length + 1}, minmax(0, 8rem))` } : undefined}
+          >
             {thumbs.map((item) => item.kind === "image" && (
               <div key={item.key} className="min-w-0" title={item.image.name}>
                 {item.memeAttribution ? (
@@ -626,10 +668,11 @@ export function AttachmentGallery({ images = [], files = [], message, eager = fa
                     onClick={() => setSelected(item.image)}
                   />
                 ) : (
-                  <AttachmentThumbnail key={item.image.src} image={item.image} eager={eager} onPreview={() => setSelected(item.image)} className="h-24 w-auto max-w-48 rounded-2xl border-0" />
+                  <AttachmentThumbnail key={item.image.src} image={item.image} eager={eager && firstSet.has(item.key)} onPreview={() => setSelected(item.image)} className={cn(slot, "rounded-2xl border-0")} />
                 )}
               </div>
             ))}
+            {moreTile && <MoreTile count={hidden} onClick={showMore} className="h-24 w-full" />}
           </div>
         )}
         {videos.length > 0 && message && (
@@ -639,14 +682,14 @@ export function AttachmentGallery({ images = [], files = [], message, eager = fa
             ))}
           </div>
         )}
-        {(rest.length > 0 || items.length > limit) && (
+        {(rest.length > 0 || (hidden > 0 && !moreTile)) && (
           <div className={cn("flex max-w-full flex-wrap items-start gap-1.5", align === "end" && "justify-end")}>
             {rest.map((item) => item.kind === "audio" && message
               ? <AudioAttachment key={`${message.threadId}:${message.messageId}:${item.key}`} file={item.file} message={message} />
               : (item.kind === "file" || item.kind === "pdf") && <AttachedFileChip key={item.key} file={item.file} linked={item.file.linked} message={message} compact />)}
-            {items.length > limit && (
+            {hidden > 0 && !moreTile && (
               <button type="button" onClick={() => setExpanded(!expanded)} aria-expanded={expanded} className="inline-flex h-7 items-center rounded-full px-2.5 text-[13px] leading-none text-ink-secondary transition-colors hover:bg-ink/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
-                {expanded ? t("attach.showLess") : t("attach.moreCount", { count: items.length - limit })}
+                {expanded ? t("attach.showLess") : t("attach.moreCount", { count: hidden })}
               </button>
             )}
           </div>
@@ -659,7 +702,7 @@ export function AttachmentGallery({ images = [], files = [], message, eager = fa
   return (
     <section aria-label={label} className={cn("mb-1.5 w-[min(34rem,70vw)] max-w-full space-y-1.5 text-left whitespace-normal", className)}>
       {media.length > 0 && (
-        <div className={cn("grid gap-2", media.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
+        <div className={cn("grid gap-2", media.length === 1 && !moreTile ? "grid-cols-1" : "grid-cols-2")}>
           {media.map((item) => item.kind === "image" ? (
             <div key={item.key} className="min-w-0" title={item.image.name}>
               {item.memeAttribution ? (
@@ -673,12 +716,13 @@ export function AttachmentGallery({ images = [], files = [], message, eager = fa
               ) : (
                 // one picture (a generated or edited image, #2954) shows large;
                 // several share the grid at the usual height
-                <AttachmentThumbnail key={item.image.src} image={item.image} eager={eager} onPreview={() => setSelected(item.image)} className={cn("rounded-2xl border-0 bg-transparent", media.length === 1 ? "max-h-[26rem]" : "max-h-72")} />
+                <AttachmentThumbnail key={item.image.src} image={item.image} eager={eager && firstSet.has(item.key)} onPreview={() => setSelected(item.image)} className={cn("rounded-2xl border-0 bg-transparent", media.length === 1 && !moreTile ? "max-h-[26rem]" : "max-h-72")} />
               )}
             </div>
           ) : item.kind === "video" && message ? (
             <VideoAttachment key={`${message.threadId}:${message.messageId}:${item.key}`} file={item.file} message={message} />
           ) : null)}
+          {moreTile && <MoreTile count={hidden} onClick={showMore} className="max-h-72 w-full" />}
         </div>
       )}
       {documents.length > 0 && (
@@ -690,10 +734,10 @@ export function AttachmentGallery({ images = [], files = [], message, eager = fa
               : (item.kind === "file" || item.kind === "pdf") && <AttachedFileChip key={item.key} file={item.file} linked={item.file.linked} message={message} className="max-w-none rounded-xl border-hairline/25 bg-transparent" />)}
         </div>
       )}
-      {items.length > limit && (
+      {hidden > 0 && !moreTile && (
         <button type="button" onClick={() => setExpanded(!expanded)} aria-expanded={expanded} className="flex min-h-8 items-center gap-1 rounded-lg px-1 py-1 text-[11px] text-ink-secondary transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
           {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-          {expanded ? t("attach.showLess") : t("attach.showMore", { count: items.length - limit })}
+          {expanded ? t("attach.showLess") : t("attach.showMore", { count: hidden })}
         </button>
       )}
       {dialog}

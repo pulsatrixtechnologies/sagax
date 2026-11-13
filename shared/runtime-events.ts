@@ -160,8 +160,12 @@ export type RuntimeEvent = RuntimeEventBase &
     /** Provider-generated raster bytes. This event is folded into the
      * private attachment store and is never forwarded to renderer SSE: a
      * multi-megabyte base64 result belongs in one durable message URL, not
-     * duplicated through every connected window. */
-    | { type: "item.completed"; itemType: "assistant_image"; data: string; alt?: string }
+     * duplicated through every connected window. `fromTool` marks a picture a
+     * tool returned to the model as reading material (an image block in a tool
+     * result): it is not attached to the reply (#4205). A picture the model
+     * produced has no mark; one the bot chooses to show goes through
+     * attach_file, make_image or send_meme, which attach it themselves. */
+    | { type: "item.completed"; itemType: "assistant_image"; data: string; alt?: string; fromTool?: true }
     | { type: "content.delta"; streamKind: "assistant_text" | "reasoning_text"; delta: string }
     | {
         type: "request.opened";

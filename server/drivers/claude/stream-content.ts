@@ -289,7 +289,7 @@ case "user": {
       });
       // photos a phone sent go to the model only, never into the chat (phone_tool)
       for (const img of isPhoneToolCallName(toolName) ? [] : extractMcpImages(b.content)) {
-        emit({ ...base(threadId, currentTurnId()), type: "item.completed", itemType: "assistant_image", data: img.data });
+        emit({ ...base(threadId, currentTurnId()), type: "item.completed", itemType: "assistant_image", data: img.data, fromTool: true });
       }
       // 2026-11-05: an artifact of another claude.ai account. The CLI's
       // "who made this" consent never reaches the permission tool, so the

@@ -7,7 +7,7 @@ import { readUseToolCall } from "../../../shared/mcp-gateway-call.ts";
 
 export type AcpToolEndEvent = { type: "item.completed" } & (
   | { itemType: "tool"; itemId: string | undefined; ok: boolean; output?: string; [field: string]: unknown }
-  | { itemType: "assistant_image"; data: string }
+  | { itemType: "assistant_image"; data: string; fromTool: true }
 );
 
 /**
@@ -60,7 +60,7 @@ export function acpToolEndEvents(
     { type: "item.completed", itemType: "tool", itemId, ok: !failed,
       ...(output !== undefined ? { output } : {}), ...toolFields },
     ...extractMcpImages(update.content ?? update.rawOutput).map((img): AcpToolEndEvent =>
-      ({ type: "item.completed", itemType: "assistant_image", data: img.data })),
+      ({ type: "item.completed", itemType: "assistant_image", data: img.data, fromTool: true })),
   ];
 }
 

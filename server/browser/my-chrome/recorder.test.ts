@@ -3,9 +3,19 @@
 // earlier), notes, and the page script's own refusals.
 import { createHash } from "node:crypto";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { MyChromeRecording, recorderPageScript, RECORDER_BINDING } from "./recorder.ts";
+
+// #4164: a step id is a random UUID, hex digits that held "4321" (the PIN
+// below) about once in five hundred runs and turned the secret check red on a
+// runner. Every id here holds those digits, so the check must read what the
+// page reported, never the ids, and stays the same on every run.
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  let next = 0;
+  return { ...actual, randomUUID: () => `00004321-4321-4321-8321-${String(++next).padStart(12, "0")}` as `${string}-${string}-${string}-${string}-${string}` };
+});
 
 const target = (name: string, extra: Record<string, unknown> = {}) => ({ role: "textbox", name, tag: "input", ...extra });
 const send = (recording: MyChromeRecording, message: Record<string, unknown>) => recording.fromPage(JSON.stringify(message));
@@ -27,7 +37,8 @@ describe("MyChromeRecording", () => {
     expect(steps.map((step) => [step.target?.name, step.text ?? null, step.secret ?? false])).toEqual([
       ["Name", "Alice", false], ["Password", null, true], ["PIN", null, true], ["Notes", null, true], ["Comment", null, true],
     ]);
-    expect(JSON.stringify(steps)).not.toMatch(/4321|ghp_|correct horse/);
+    expect(steps.every((step) => step.id.includes("4321"))).toBe(true);
+    expect(JSON.stringify(steps.map(({ id: _id, ...step }) => step))).not.toMatch(/4321|ghp_|correct horse/);
   });
 
   it("records clicks and Enter or Escape only, strips credentials from addresses, and stops from the tab", async () => {

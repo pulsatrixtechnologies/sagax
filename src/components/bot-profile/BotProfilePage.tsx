@@ -20,6 +20,9 @@
 //   declined in place) and Skills in place, then Its work (Routines, Folder
 //   and memory).
 // - Stats: the bot's usage over 7, 30 or 90 days.
+// - Outcomes (#4098), the second tab: each result the person wants kept
+//   true, read from the bot's routines; a row opens in place and points to
+//   the chat for what needs the person (BotProfilePage.tsx-parts/Outcomes).
 //
 // A row opens its own sub-page in the same column, only for a setting too
 // long for a card: a link back named after the tab in the top bar beside
@@ -41,7 +44,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Bell, Brain, ChevronRight, Repeat, Users } from "lucide-react";
 
-import { openNotificationTarget, useStore, type Bot, type BotSettingsSection } from "@/state/store";
+import { openNotificationTarget, openRoutineRun, useStore, type Bot, type BotSettingsSection } from "@/state/store";
+import { shallowEqual, useStoreSelector } from "@/state/store-selector";
+import { botRoutineRuns } from "@/state/view-slices";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
@@ -90,6 +95,7 @@ import { GROUP_LABEL, SUBPAGE_META, SubPage, SubPageRow } from "./BotProfilePage
 import { useBotRowValues } from "./BotProfilePage.tsx-parts/rowValues";
 import { SETTINGS_SWITCH_SEARCH_WORDS, personaSubPageForQuery, settingsSwitchForQuery, type BotProfileSettingsSwitch } from "@/lib/persona-search";
 import { BotUsageBreakdownSection } from "../bot-settings/BotUsageBreakdown";
+import { OutcomesCard, useOutcomes } from "./BotProfilePage.tsx-parts/Outcomes";
 
 /** General's Settings card (its two switches lead it, #3398). */
 const SETTINGS_CARD_SELECTOR = '[data-settings-group="bot-profile-group-settings"]';
@@ -144,7 +150,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
   // A tab with nothing to show this viewer (Stats in Simple mode) is not
   // listed; a link to it lands on General.
   const tabShown = (id: BotProfileTab) =>
-    id === "stats" ? shown("usage") : id === "appearance" ? shown("appearance") : botProfileTabPages(id).some(subPageShown);
+    id === "outcomes" ? true : id === "stats" ? shown("usage") : id === "appearance" ? shown("appearance") : botProfileTabPages(id).some(subPageShown);
   const resolveTab = (next: BotProfileTab): BotProfileTab => (tabShown(next) ? next : "general");
   const tabOf = (id: PersonaCategory): BotProfileTab => resolveTab(botProfileTabOf(resolve(id)) ?? "general");
   const pageOf = (id: PersonaCategory): BotProfileSubPage | null => resolvePage(botProfileSubPageOf(resolve(id)));
@@ -506,6 +512,40 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
 
   const tabs: readonly BotProfileTab[] = BOT_PROFILE_TABS.filter(tabShown);
 
+  // Outcomes (#4098): the routines and runs this viewer already has for
+  // the bot, read once; the tab carries the attention dot while one of
+  // them needs the person.
+  const outcomeRuns = useStoreSelector((current) => botRoutineRuns(current, bot.id), shallowEqual);
+  const routinesLoadState = useStoreSelector((current) => current.routinesLoadState);
+  const outcomes = useOutcomes(derived.botRoutines, outcomeRuns);
+  const tabAttention = useMemo<ReadonlySet<BotProfileTab>>(() => new Set(outcomes.some((outcome) => outcome.needsPerson) ? ["outcomes"] : []), [outcomes]);
+  const outcomesBody = (
+    <OutcomesCard
+      outcomes={outcomes}
+      routines={derived.botRoutines}
+      runs={outcomeRuns}
+      loadState={routinesLoadState}
+      actions={{
+        // "Reply in chat": the run in the bot's chat, where it is answered
+        // as today; a need with no run opens the bot's chat.
+        onReply: (need) => {
+          onClose();
+          if (need.runId) openRoutineRun(dispatch, { runId: need.runId, botId: bot.id });
+          else dispatch({ type: "select", id: bot.id });
+        },
+        onOpenRoutine: (routine) => dispatch({ type: "openRoutine", botId: bot.id, routineId: routine.id }),
+        onOpenRun: (runId) => {
+          onClose();
+          openRoutineRun(dispatch, { runId, botId: bot.id });
+        },
+        onAsk: () => {
+          onClose();
+          dispatch({ type: "select", id: bot.id });
+        },
+      }}
+    />
+  );
+
   // The page fills the main panel (#2136): focus moves in when it opens and
   // back to the opener when it closes; Escape closes it (empty search).
   const onCloseRef = useRef(onClose);
@@ -609,7 +649,7 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
         <div data-bot-profile-column="" className="mx-auto flex w-full max-w-[760px] flex-col px-4 pb-10 sm:px-6">
           <BotProfileHeader bot={bot} derived={derived} hero={hero} />
 
-          {(!page || search.searching) && <BotProfileTabBar tabs={tabs} tab={tab} onTab={openTab} search={search} />}
+          {(!page || search.searching) && <BotProfileTabBar tabs={tabs} tab={tab} onTab={openTab} search={search} attention={tabAttention} />}
 
           {page ? (
             <SubPage key={page} page={page}>
@@ -622,9 +662,11 @@ export function BotProfilePage({ bot: propBot, section, onClose }: BotProfilePag
               role="tabpanel"
               aria-labelledby={`bot-profile-tab-${tab}`}
               data-bot-profile-panel={tab}
-              className="mt-5 flex min-w-0 flex-col gap-6"
+              className="mt-[26px] flex min-w-0 flex-col gap-6"
             >
-              {tab === "stats"
+              {tab === "outcomes"
+                ? outcomesBody
+                : tab === "stats"
                 ? (
                     <>
                       {/* #3401: the reference block first, our cost breakdown after it */}

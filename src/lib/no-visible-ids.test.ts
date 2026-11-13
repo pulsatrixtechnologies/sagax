@@ -44,6 +44,8 @@ const { ModeChoice } = await import("@/components/bot-wizard/BotWizard");
 const { newWizardDraft } = await import("../../shared/bot-wizard");
 const { ApprovalsJournal } = await import("@/components/approvals/ApprovalsJournal");
 const { RuleTestResults } = await import("@/components/approvals/RuleTest");
+const { OutcomesCard } = await import("@/components/bot-profile/BotProfilePage.tsx-parts/Outcomes");
+const { outcomesOf } = await import("../../shared/outcomes");
 
 const BOT_ID = "5752d21c-e77c-4a83-84f0-66048216a5df";
 const THREAD_ID = "d4eb1f10-ceef-428a-afdd-d53d1194c2e7";
@@ -213,7 +215,8 @@ describe("no UUID on screen", () => {
   });
 
   it("the bot email address row and the trigger's address line show the address, never the bot's id (B21)", () => {
-    const mail = { available: true, address: "nimbus@bots.example.org", enabled: false };
+    // an address shows once it receives mail (#3294, #3371: a disabled one is hidden)
+    const mail = { available: true, address: "nimbus@bots.example.org", enabled: true };
     for (const element of [createElement(BotEmailAddressCard, { mail }), createElement(BotMailAddressLine, { mail })]) {
       const text = visibleText(element);
       expectNoUuid(text);
@@ -263,5 +266,22 @@ describe("no UUID on screen", () => {
       days: 7, scanned: 2, matched: 1, counts: { allowed: 0, asked: 0, denied: 1, cardStays: 0, changed: 1 },
       hits: [{ key: THREAD_ID, at: "2026-10-26T12:00:00.000Z", botName: "Quasar", tool: "Bash", summary: `cat /srv/${BOT_ID}`, actual: "allowed", would: "denied", changed: true }],
     } })));
+  });
+
+  it("the Outcomes tab names each outcome, routine and run by its words, never an id (#4098)", () => {
+    const routines = [
+      { id: THREAD_ID, botId: BOT_ID, name: "Morning digest", prompt: "", target: "bot", runOn: "maus", enabled: true, durationMinutes: 10, schedule: { type: "cron", expression: "0 7 * * 1-5", timeZone: "UTC" }, nextRunAt: null, createdAt: 1, updatedAt: 1 },
+      { id: BOT_ID, botId: BOT_ID, name: "Vendor follow-up", prompt: "", target: "bot", runOn: "maus", enabled: false, durationMinutes: 10, schedule: { type: "cron", expression: "0 9 * * 1", timeZone: "UTC" }, nextRunAt: null, createdAt: 2, updatedAt: 2, autoPaused: { at: 5, failures: 5, runId: PERSON_ID } },
+    ] as never[];
+    const runs = [
+      { id: PERSON_ID, routineId: BOT_ID, routineName: "Vendor follow-up", botId: BOT_ID, target: "bot", runOn: "maus", manual: false, status: "failed", scheduledFor: 4, createdAt: 4, finishedAt: 5, error: "The mail account is signed out." },
+      { id: ACCOUNT_ID, routineId: THREAD_ID, routineName: "Morning digest", botId: BOT_ID, target: "bot", runOn: "maus", manual: false, status: "completed", scheduledFor: 3, createdAt: 3, finishedAt: 3, output: "Twelve emails read." },
+    ] as never[];
+    const outcomes = outcomesOf(routines, runs, [], 10);
+    const actions = { onReply: () => {}, onOpenRoutine: () => {}, onOpenRun: () => {}, onAsk: () => {} };
+    const text = visibleText(createElement(OutcomesCard, { outcomes, routines, runs, loadState: "ready", actions, defaultOpen: outcomes.map((outcome) => outcome.id) }));
+    expectNoUuid(text);
+    expect(text).toContain("Morning digest");
+    expect(text).toContain("Vendor follow-up");
   });
 });

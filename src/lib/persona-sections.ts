@@ -94,9 +94,13 @@ export function personaGroupSections(group: PersonaGroup): readonly PersonaCateg
  * - Knowledge (#3400): To review and Skills in place (the learnings that
  *   wait, decided in place; the skills with their "+ Add"), then Its work
  *   (Routines, Folder and memory).
- * - Stats: the usage over 7, 30 or 90 days. */
-export type BotProfileTab = "general" | "appearance" | "knowledge" | "stats";
-export const BOT_PROFILE_TABS = ["general", "appearance", "knowledge", "stats"] as const satisfies readonly BotProfileTab[];
+ * - Stats: the usage over 7, 30 or 90 days.
+ * - Outcomes (#4098), the second tab: each result the person wants kept
+ *   true, read from the bot's routines (shared/outcomes.ts); it holds no
+ *   section of its own. No Updates tab: what a bot reports is told once,
+ *   in its one conversation. */
+export type BotProfileTab = "general" | "outcomes" | "appearance" | "knowledge" | "stats";
+export const BOT_PROFILE_TABS = ["general", "outcomes", "appearance", "knowledge", "stats"] as const satisfies readonly BotProfileTab[];
 
 /** The sub-pages a row of a tab opens. */
 export const BOT_PROFILE_SUBPAGES = [
@@ -163,6 +167,7 @@ export const BOT_PROFILE_TAB_GROUPS: Readonly<Record<BotProfileTab, ReadonlyArra
     { id: "accounts", pages: [], card: "accounts" },
     { id: "more", pages: ["sharing", "rules", "actsAlone", "voice", "advanced", "versions"] },
   ],
+  outcomes: [],
   appearance: [],
   knowledge: [
     { id: "skills", pages: [], card: "skills" },
@@ -192,6 +197,7 @@ export const BOT_PROFILE_TAB_SECTIONS: Readonly<Record<BotProfileTab, readonly P
     ...botProfileTabPages("general").flatMap((page) => BOT_PROFILE_SUBPAGE_SECTIONS[page]),
     ...botProfileTabCards("general").flatMap((card) => BOT_PROFILE_CARD_SECTIONS[card]),
   ],
+  outcomes: [],
   appearance: ["appearance"],
   knowledge: [
     ...botProfileTabCards("knowledge").flatMap((card) => BOT_PROFILE_CARD_SECTIONS[card]),

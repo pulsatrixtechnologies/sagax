@@ -374,6 +374,58 @@ avec l'app de référence : #3388 ; ce patron : #3398.
 - Un lien ou une recherche vers un canal ou un compte ouvre Général et défile jusqu'à
   sa carte.
 
+#### 2.4 ter Onglet Objectifs (Outcomes, #4098)
+
+Mesuré le 2026-11-12 sur l'app de référence installée (valeurs de mise en page
+seulement, lues dans une copie hors du dépôt ; ni code ni dessin repris). L'onglet
+Objectifs de la référence n'est pas encore dans sa version installée : on mesure
+sa barre d'onglets et ses rangées de liste, qui le porteront.
+
+- Barre d'onglets de la page du bot (taille « sm ») : une rangée flex, 2 px entre
+  les onglets, 26 px de haut ; chaque onglet 4 px en haut et en bas, 8 px à gauche
+  et à droite, texte 13 px sur une ligne de 18 px, pilule entièrement arrondie ;
+  l'onglet choisi en encre principale sur un fond secondaire discret, les autres
+  en encre secondaire. Le conteneur : 4 px de retrait horizontal, 16 px au-dessus,
+  10 px dessous, puis 16 px avant le panneau (26 px de la barre au contenu).
+- Section : une étiquette grise de 13 px sur 18 px (encre secondaire) dans un
+  en-tête de 24 px au moins, 12 px de retrait à gauche, son action à droite ;
+  10 px entre l'en-tête et la carte ; 22 px entre deux sections.
+- Carte de liste : rayon 12 px, 4 px de retrait intérieur, fond surélevé.
+- Rangée : 6 px en haut et en bas, 8 px à gauche et à droite, 8 px entre ses
+  éléments, rayon 8 px, fond secondaire au survol ; titre 13 px sur 18 px en
+  encre principale ; ligne grise 12 px sur 16 px en encre tertiaire ; chevron
+  tertiaire à droite (vers le bas une fois ouverte).
+
+Chez nous (`BotProfilePage.tsx-parts/Outcomes.tsx`, `BotProfileTabs.tsx`) :
+
+- Onglets : Général, Objectifs, Apparence, Connaissances, Analytique. Pas
+  d'onglet Mises à jour : ce qu'un bot rapporte se dit une fois, dans sa
+  conversation. La barre prend les mesures ci-dessus (13 px, 26 px de haut, 2 px
+  entre les onglets) ; Objectifs porte le point d'attention (le même point orange
+  que la navigation de la mémoire) tant qu'un objectif attend la personne.
+- Une étiquette grise « Objectifs » sur une carte de rangées. Chaque routine est
+  un objectif à elle seule, nommée par son objectif quand elle en a un
+  (`shared/outcomes.ts`, ses cas dans `shared/outcomes.vectors.json`). Rangée : le
+  nom, une pastille à droite du nom (drapeau et « T'attend » dans la couleur
+  d'avertissement de l'habillage, crochet et « En bonne voie » dans sa couleur de
+  succès), une ligne grise (son horaire ; « En pause », « Horaire terminé » ou
+  « Atteint le ... » sans pastille), un chevron. Ceux qui attendent la personne
+  d'abord, puis l'ordre de création ; cinq rangées, puis le pli partagé
+  « Afficher N de plus » (`ShowMoreFold`), qui ne cache jamais un objectif qui
+  attend.
+- Une rangée s'ouvre sur place : s'il attend la personne, la carte compacte du
+  chat (`AskCard`) avec la phrase, « T'attend » dessous et « Répondre dans le
+  chat » à droite, qui ouvre l'exécution dans le chat (rien ne se répond ici) ;
+  puis trois rangées `PanelRow` : Résultats (la note de progrès de l'objectif,
+  sinon le résumé de la dernière exécution qui avait quelque chose à dire),
+  Routines (nom, horaire, Activé ; ouvre la page de la routine), Exécutions
+  récentes (crochet ou tiret, nom, Fait ou « Rien à signaler », date ; cinq puis
+  le pli ; une ligne ouvre l'exécution dans le chat).
+- Aucune routine : la ligne discrète des routines et son « Demande-le dans le
+  chat » (`RoutinesAskHint`), la même que la carte Routines. « Nouvel objectif »,
+  le regroupement et ce que le serveur dira de ce qui attend viennent aux lots
+  suivants.
+
 ### 2.5 Réglages
 
 **Bureau.** Une colonne de sections à gauche (icône monochrome et libellé, la choisie en

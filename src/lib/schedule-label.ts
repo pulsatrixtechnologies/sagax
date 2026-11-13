@@ -53,13 +53,18 @@ export function niceDate(at: number): string {
   return cachedDateFormat(DATE_OPTIONS).format(new Date(at));
 }
 
+/** A day of the year, month and day only ("Nov 9", "9 nov."). */
+export function shortDate(at: number): string {
+  return new Date(at).toLocaleDateString(activeLocale(), { month: "short", day: "numeric" });
+}
+
 /** A change's timestamp for a list row: the time alone if it happened
  * today, else the date — one rule shared by the Overview's recent-changes
  * card and the History section so the same row never reads two ways. */
 export function whenLabel(at: number): string {
   const date = new Date(at);
   const sameDay = new Date().toDateString() === date.toDateString();
-  return sameDay ? niceTime(at) : date.toLocaleDateString(activeLocale(), { month: "short", day: "numeric" });
+  return sameDay ? niceTime(at) : shortDate(at);
 }
 
 export function durationLabel(minutes: number): string {

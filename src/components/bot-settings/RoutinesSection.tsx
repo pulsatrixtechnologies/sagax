@@ -116,7 +116,6 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
 
   const createButton = <button type="button" onClick={() => { setNewFolder(undefined); setEditing("new"); }} aria-label={t("computer.routines.create")} title={t("computer.routines.create")} className="ui-icon-button"><Plus size={15} /></button>;
   if (plain && !upcoming) {
-    const [before, after] = t("botPanel.routines.hint", { ask: "\u0000" }).split("\u0000");
     return <section data-routines-group="" aria-label={t("computer.tab.routines")} className="relative flex min-w-0 flex-col gap-2">
       {/* no routine: no label and no + (the owner, 2026-10-27), the quiet line as the card's row */}
       {!empty && <div className="flex min-h-6 items-center gap-1.5 px-1">
@@ -128,13 +127,7 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
       </div>}
       <div data-routines-card="" className="flex flex-col rounded-2xl bg-card px-1 py-1">
         {empty ? (
-          <p data-routines-hint className="flex min-h-[44px] items-center px-3 py-2 text-[12px] leading-4 text-ink-secondary">
-            <span>
-              {before}
-              <button type="button" data-routines-ask onClick={() => { dispatch({ type: "toggleSettings", open: false }); dispatch({ type: "toggleComputer", open: false }); }} className="rounded hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">{t("botPanel.routines.hintAsk")}</button>
-              {after}
-            </span>
-          </p>
+          <RoutinesAskHint onAsk={() => { dispatch({ type: "toggleSettings", open: false }); dispatch({ type: "toggleComputer", open: false }); }} />
         ) : (
           <RoutineFolderList controlRef={folderControl} bot={bot} routines={routines} viewerPrincipalId={state.viewerPrincipalId} runs={runs} loading={state.routinesLoadState === "loading" && routines.length === 0} error={state.routinesLoadState === "error"} onOpen={(routine) => setDetailId(routine.id)} grouped={grouped}
             onCreateIn={(folder) => { setNewFolder(folder); setEditing("new"); }}
@@ -163,6 +156,22 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
       onDuplicate={(routine) => setEditing({ copyOf: routine })} />
     {editorLayer}
   </div>;
+}
+
+/** No routine yet, as a card's one row: what routines are, and "Ask it in
+ * chat", the way in (the bot page's Routines card and its Outcomes tab,
+ * #4098: one sentence for one state). */
+export function RoutinesAskHint({ onAsk }: { onAsk: () => void }) {
+  const [before, after] = t("botPanel.routines.hint", { ask: "\u0000" }).split("\u0000");
+  return (
+    <p data-routines-hint className="flex min-h-[44px] items-center px-3 py-2 text-[12px] leading-4 text-ink-secondary">
+      <span>
+        {before}
+        <button type="button" data-routines-ask onClick={onAsk} className="rounded hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">{t("botPanel.routines.hintAsk")}</button>
+        {after}
+      </span>
+    </p>
+  );
 }
 
 export { RoutinePanelActions } from "./RoutinePanelPage";

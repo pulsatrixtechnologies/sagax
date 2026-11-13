@@ -103,23 +103,50 @@ export function useFocusMessage(threadId: string, ready: boolean) {
     let scrollFrame: number | null = null;
     let target: HTMLElement | null = null;
     let highlight: Highlight | null = null;
-    const attempt = () => {
-      if (cancelled) return;
+    let observer: MutationObserver | null = null;
+    const locate = () => {
       const wrapper = document.querySelector<HTMLElement>(`[data-mid="${CSS.escape(focus.messageId)}"]`);
       const row = wrapper?.lastElementChild as HTMLElement | null;
-      target = focus.matchText ? row?.querySelector<HTMLElement>("[data-chat-bubble]") ?? row : row;
+      return focus.matchText ? row?.querySelector<HTMLElement>("[data-chat-bubble]") ?? row : row;
+    };
+    const markMatch = (root: HTMLElement) => {
+      const textRoots = root.querySelectorAll<HTMLElement>(".chat-md, .chat-text");
+      const range = matchRange(textRoots.item(textRoots.length - 1) ?? root, focus.matchText ?? "");
+      if (!range) return null;
+      if (highlight && CSS.highlights.get("search-result-text") === highlight) CSS.highlights.delete("search-result-text");
+      highlight = new Highlight(range);
+      CSS.highlights.set("search-result-text", highlight);
+      return range;
+    };
+    // A re-render of the message (a streamed chunk, a store update right after
+    // the switch) replaces the text nodes the range points into, and a range
+    // into removed nodes collapses: the highlight stays set but empty. Rebuild
+    // it on the message as it is now, for as long as this focus lasts.
+    const keepMarked = (range: Range) => {
+      let marked = range;
+      let shown = marked.toString();
+      observer = new MutationObserver(() => {
+        if (marked.startContainer.isConnected && marked.endContainer.isConnected && marked.toString() === shown) return;
+        const root = locate();
+        const fresh = root ? markMatch(root) : null;
+        if (!fresh) return;
+        marked = fresh;
+        shown = fresh.toString();
+      });
+      observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    };
+    const attempt = () => {
+      if (cancelled) return;
+      target = locate() ?? null;
       if (!target) {
         if (tries++ < 20) retryTimer = setTimeout(attempt, 100);
         return;
       }
       target.scrollIntoView({ block: "center", behavior: scrollMotion() });
       target.classList.add(...FLASH_CLASSES);
-      const textRoots = target.querySelectorAll<HTMLElement>(".chat-md, .chat-text");
-      const textRoot = textRoots.item(textRoots.length - 1) ?? target;
-      const range = matchRange(textRoot, focus.matchText ?? "");
-      if (range && CSS.highlights) {
-        highlight = new Highlight(range);
-        CSS.highlights.set("search-result-text", highlight);
+      const range = CSS.highlights ? markMatch(target) : null;
+      if (range) {
+        if (typeof MutationObserver !== "undefined") keepMarked(range);
         scrollFrame = requestAnimationFrame(() => {
           const scroller = target?.closest<HTMLElement>(".overflow-y-auto");
           if (!scroller) return;
@@ -140,6 +167,7 @@ export function useFocusMessage(threadId: string, ready: boolean) {
       if (retryTimer) clearTimeout(retryTimer);
       if (flashTimer) clearTimeout(flashTimer);
       if (scrollFrame !== null) cancelAnimationFrame(scrollFrame);
+      observer?.disconnect();
       target?.classList.remove(...FLASH_CLASSES);
       if (highlight && CSS.highlights.get("search-result-text") === highlight) CSS.highlights.delete("search-result-text");
     };

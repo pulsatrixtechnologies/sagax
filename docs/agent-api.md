@@ -19,7 +19,7 @@ names, parameters and limits as the reference design's agent tools, plus `get_ag
 | `list_agents` | read | `agents.read` | every agent the caller can reach, with status `running`/`idle` |
 | `find_agents` | read | `agents.read` | `query`, optional `status` (`running`/`idle`), `limit` ≤ 64 (default 8) |
 | `get_agent` | read | `agents.read` | `agent_id`: the full profile for an audit (see below) |
-| `create_agent` | admin | `agents.create` | one temporary agent per call (see below), `name` (≤ 80 chars, one line), optional `description` and `idle_hours` (1 to 720, default 24); it greets the person itself. Only on the person's explicit ask |
+| `create_agent` | admin | `agents.create` | one agent per call; it greets the person itself. Only on the person's explicit ask. `kind` `temporary` (default when absent): a temporary agent (see below), `name` (≤ 80 chars, one line), optional `description`, `idle_hours` (1 to 720, default 24) and `workspace`. `kind` `lasting`: the person's own bot (see Lasting bots), `name`, optional `description`, `title`, `soul`, `instance_id`, `model`, `effort`, `auto`, `workspace`, `section` |
 | `delete_agent` | admin | `agents.create` | `agent_id` of a temporary agent: archives it (see below). A lasting agent answers 409 `not_temporary` |
 | `send_prompt` | write | `agents.send` | `agent_id`, `prompt` (≤ 32,000 chars), `mode` `fire_and_forget` (default) / `blocking` / `async`, `timeout_ms` (1 s to 10 min, default 120 s; the live blocking wait is capped at 55 s so the handle returns as `still_working`), `on_busy` `queue` (default since 2026-10-17: waits its turn) / `reject` (409 `busy`, `retryable: true`, with `details.turn_state` and options) / `supersede` (stops the running turn this caller started and the approval it waits on; never the person's own turn or another caller's), optional `priority` `now` or `normal` (default `normal`), up to 8 `files` (workspace-relative, 25 MiB each), optional `thread_id` (one of the caller's own conversations, 404 `unknown_thread` otherwise). A bot's send lands in the agent's single chat with the person the caller works for (#1170); a person's AI client's send lands in its own conversation with the agent (2026-10-29, see Guarantees); `thread_id` continues one of the caller's conversations instead. Answers a `handle`, its lifetime (`ttl_ms`, `expires_at` in unix ms and `expires_at_iso`) and a short `label` (the agent's name and the prompt's first words). `now` wakes an idle agent at once or moves the prompt to the front of its queue, and never interrupts a running turn. Past 10 `now` sends an hour the answer is `priority: "normal"` with `downgraded: true` and `priority_note`. Refusals keep the unified envelope and set `retryable` |
 | `await_turn` | read | `agents.read` | `agent_id`, `handle`, `timeout_ms` (0 to 55 s, default 15 s), optional `cursor` (a prior `wait_cursor`). The handle is the one `send_prompt` returned, or the `{threadId, handle}` a one-way `send_to_bot` included (copy it exactly). Never send the prompt again: wait again with the same handle. When the wait ends and the turn is not done, the answer is `still_working` (HTTP 200) with `thread_id`, `progress.summary`, `progress.steps`, `wait_cursor` and `recommended_wait_ms`; pass `wait_cursor` as `cursor` on the next call so steps are not repeated. Without a handle, waits the in-flight turn of your conversation, else its last message. An expired handle, or one of another session, on a conversation the caller reads answers that turn (`handle: null`, `recovered_from`). Else a 400 `handle_expired`, `handle_session_mismatch`, `handle_agent_mismatch` or `bad_handle` (altered), `details.reason` and `details.family: bad_handle`, and a `hint` to read `read_latest_page` with the `thread_id` `send_prompt` returned (see Handle lifecycle) |
@@ -29,7 +29,7 @@ names, parameters and limits as the reference design's agent tools, plus `get_ag
 | `read_latest_page_with_threads` | read | `agents.read` | the newest page and the conversations it spans, with their status; optional `thread_id` like `read_latest_page` |
 | `read_transcript_cold` | read | `agents.read` | the stored transcript only: pages of 50 by `cursor`; never reads live state, never wakes a computer or sandbox |
 | `read_transcript_attachment` | read | `agents.read` | `agent_id`, `attachment` (an entry's `images[].ref`, or the path of its `<attached-image>` tag), optional `thread_id`, optional `save`. Answers the image (`mime`, `bytes`, `image_base64`, fitted for a model; MCP callers get it as image content) when it is attached in a conversation the caller may read with that agent, else 404 `not_found`: a bot of the same person reads that person's images, never another person's (#3203). `save` true (bot callers) also copies the original into the caller's workspace and answers `saved_to` |
-| `list_agent_models` | read | `agents.read` | `agent_id`: engines and models the caller may pick as that agent's default, plus `current` (#1944) |
+| `list_agent_models` | read | `agents.read` | `agent_id`: engines and models the caller may pick as that agent's default, plus `current` (#1944). Without `agent_id`: what the person may pick for a new bot (`create_agent` kind `lasting`), `agent_id` and `current` null |
 | `update_agent_model` | write | `agents.send` | `agent_id`, `instance_id` (or `instance` / `engine`), `model`, optional `effort`, or `auto` true. Same rights and validation as `PATCH /api/bots/:id` `{ modelSelection }` (owner, granted editor, admin). Exact `instance_id` first; a short engine name must resolve to one engine, else the answer lists the candidates. An invalid model is refused with a plain hint of valid choices. Person AI clients only; a bot uses `propose_team_setup` |
 | `update_agent_settings` | write | `agents.send` | `agent_id` plus a partial patch of every Edit bot field the UI can change through `PATCH /api/bots/:id` (identity, look, permission-gated fields such as approval level, tools, computer, visibility, section, cwd, voice notes, …), plus runtime settings (`maxConcurrentThreads` and the rest via `PATCH /api/bots/:id/runtime-settings`) and `primary` true/false (Primary Bot switch). Derived from `MEMBER_BOT_FIELDS` + `BOT_FIELD_PERMISSIONS` so the allowlist cannot drift; the same server checks decide per field. Answers `changed` and `refused` (each with a plain reason, no permission keys). Model changes use `update_agent_model` |
 | `update_routine` | write | `agents.send` | `routine_id`, then `enabled` / `name` / `instructions` / `schedule`. Same as member `PATCH /api/org/member/routines/{id}` (own routines). Person AI clients only; a bot uses `propose_routine_action` |
@@ -55,9 +55,40 @@ person who can edit the bot; a bot reads the profile of a temporary agent it
 created. `temporary` is null for a lasting agent, else `created_at`,
 `idle_hours`, `expires_at` (null while pinned) and `pinned`.
 
+## Lasting bots
+
+`create_agent` with `kind: "lasting"` makes the person's own bot through the
+app's own creation (`POST /api/bots` as that person, no temporary mark): it
+is theirs, shown in their Sagax app, announced like any new bot, and judged
+by that route's own checks (the `bots.create` permission and the
+per-field permissions, the organization's approval rules for members, the
+person's own folders, the hosted model list, the server's bot cap). A
+refusal of the route passes through with its code, its sentence and its
+permission. None of the temporary rules apply (quota, idle expiry, hidden
+from the app, depth), and a person's call has no rate limit of this API.
+
+- **Fields**: `name` (one line, up to the app's limit), `description`,
+  `title`, `soul` (the standing instructions), `section`, `workspace`
+  (`this_computer`, `browser`, `cloud`, `local_vm`; left out: Auto), and the
+  model: `instance_id` (exact id first, else a short engine name that must
+  match one engine), `model`, `effort`, `auto`, as in `update_agent_model`.
+  Left out, the bot starts on the person's own default model, as in the app;
+  an engine named without a model starts on that engine's default.
+  `idle_hours` is refused (a lasting bot has no expiry). Everything else
+  (look, approval level, tools, visibility, Primary Bot, runtime) is set
+  after creation with `update_agent_settings`.
+- **Same name**: no refusal. The answer lists the other reachable agents with
+  that name in `same_name` (`[{id, name}]`).
+- **Answer**: `{agent, kind: "lasting", greeted: true, same_name?, note}`.
+  The note says to archive it with `update_agent_settings` `hidden: true`
+  (`delete_agent` archives temporary agents only).
+- **Bot callers**: a bot makes a lasting bot with `create_bot`; `kind:
+  "lasting"` from a bot answers 409 `use_create_bot`.
+- **Audit**: `agents.create_agent` records `kind` and `temporary: false`.
+
 ## Temporary agents
 
-Every agent `create_agent` makes is temporary (`server/temporary-agents.ts`,
+Without `kind`, or with `kind: "temporary"`, every agent `create_agent` makes is temporary (`server/temporary-agents.ts`,
 the decisions of 2026-10-14). The mark (`BotRecord.temporary`) never goes on
 the wire and is never exported.
 
@@ -85,7 +116,12 @@ the wire and is never exported.
 - **Rights**: only its owner or an organization admin deletes it; a bot only
   an agent it created itself, for the same owner. Anyone else gets 403
   `forbidden_owner`.
-- **Audit**: `agents.create_agent` records `temporary` and `idleHours`,
+- **Refusals say why**: every refusal carries a sentence an assistant can act
+  on, never an empty one: the quota (`temporary_quota`), the depth
+  (`too_deep`), a name in use (`agent_exists`), a creation pass that expired
+  before the route used it (`create_pass_expired`, retry with the same
+  arguments), and any refusal of the creation route itself.
+- **Audit**: `agents.create_agent` records `kind`, `temporary` and `idleHours`,
   `agents.delete_agent` records `archived` and `purgeAt`; the server adds
   `agents.temporary.expired`, `agents.temporary.purged`,
   `agents.temporary.pinned` and `agents.temporary.unpinned`.
@@ -282,7 +318,7 @@ reply text is never a substitute for a card.
   |---|---|
   | reads (including `list_agent_models`) | 240 per minute |
   | `send_prompt`, `update_agent_model`, `update_agent_settings`, `update_routine` | 30 per minute |
-  | `create_agent` | 5 per hour |
+  | `create_agent` (bot callers only; a person's call has none) | 5 per hour |
   | `delete_agent` | 30 per hour |
 
   Going over answers 429 with `retry_after_ms`. A separate cap of 10
@@ -293,6 +329,8 @@ reply text is never a substitute for a card.
   agent and the mode, but never the prompt, the reply or a file.
 - **Deleting**: `delete_agent` archives temporary agents only; a lasting
   agent is deleted by its owner in Sagax.
+- **No empty refusal**: a refusal whose source gave no sentence still
+  answers one that names its code and what to do next.
 
 ## Files
 

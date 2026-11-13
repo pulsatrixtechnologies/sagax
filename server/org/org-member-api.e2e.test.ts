@@ -586,6 +586,35 @@ posixOnly("Perspicax AI clients: the Sagax member API", () => {
     expect(rows.some((row) => row.action === "agents.temporary.pinned")).toBe(true);
   }, 90_000);
 
+  it("M11: create_agent kind lasting: the person's own bot through the app's creation, shown in the app, no rate of this API", async () => {
+    const models = await member("POST", "agents/list_agent_models", ALICE, {});
+    expect(models.status, models.text).toBe(200);
+    expect(models.body).toMatchObject({ agent_id: null, current: null });
+    expect(Array.isArray(models.body.models)).toBe(true);
+
+    const made = await member("POST", "agents/create_agent", ALICE, { kind: "lasting", name: "Ledger M11", title: "Bookkeeper", description: "Keeps the books", soul: "Be exact with numbers." });
+    expect(made.status, made.text).toBe(200);
+    expect(made.body).toMatchObject({ kind: "lasting", greeted: true, agent: { name: "Ledger M11", temporary: false } });
+    const id = made.body.agent.id as string;
+    // the app lists it to its owner, never to another person
+    expect(((await api("GET", "/api/bots?messages=0", alice)).body.bots as Array<any>).find((bot) => bot.id === id)).toMatchObject({ name: "Ledger M11", title: "Bookkeeper" });
+    expect(((await member("POST", "agents/list_agents", BOB, {})).body.agents as Array<any>).some((agent) => agent.id === id)).toBe(false);
+    const stored = (JSON.parse(readFileSync(join(home, ".sagax", "bots.json"), "utf8")) as Array<any>).find((bot) => bot.id === id);
+    expect(stored.ownerUserId).toBe(ids.alice);
+    expect(stored.temporary).toBeUndefined();
+    expect(stored.soul).toContain("Be exact with numbers.");
+
+    // a name in use is no refusal, and a person's calls are not held to 5 an hour
+    for (let i = 0; i < 5; i++) {
+      const again = await member("POST", "agents/create_agent", ALICE, { kind: "lasting", name: "Ledger M11" });
+      expect(again.status, again.text).toBe(200);
+      expect((again.body.same_name as Array<any>).some((agent) => agent.id === id)).toBe(true);
+    }
+
+    const audit = await api("GET", "/api/org/admin/audit?category=client", { bearer: idp.consoleAssertion({ sub: ALICE.sub, aud: BASE, role: "admin" }) });
+    expect((audit.body.rows as Array<any>).find((row) => row.action === "agents.create_agent" && row.after?.kind === "lasting")?.after).toMatchObject({ outcome: "ok", temporary: false });
+  }, 90_000);
+
   it("M10: bot email (contract v2): only the inbound mail route takes perspicax-mail; body signed; owner checked; a confined run, once", async () => {
     const sha = (text: string) => createHash("sha256").update(text).digest("hex");
     const mailAssertion = (user: FakeOidcUser, body: unknown, actor = "perspicax-mail") => ({

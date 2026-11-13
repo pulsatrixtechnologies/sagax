@@ -72,6 +72,7 @@ import { parseMemoryPath } from "../memory/memory-store.ts";
 import type { ConsoleAssertion } from "../auth/oidc-rp.ts";
 import { AssertionReplayCache } from "./org-admin-routes.ts";
 import { compileRoutes, matchRoutes } from "./org-admin-console.ts";
+import { readRouteRefusal } from "../route-refusal.ts";
 
 export const ORG_MEMBER_PREFIX = "/api/org/member/";
 /** The `act.sub` values the member API accepts: never `perspicax-mail` nor
@@ -284,17 +285,11 @@ function fail(status: number, code: string, message: string, extra: Record<strin
   return { status, body: { code, message, reason: message, error: message, ...extra } };
 }
 
-/** A Sagax route's refusal, passed through: its status, its code when it
- * has one, its sentence and its permission when it names one. */
+/** A Sagax route's refusal, passed through: read by the one reader the
+ * agent API shares (status, code, sentence, permission, field, run). */
 function passThrough(reply: MemberReply, fallback: string): Answer {
-  const body = reply.body && typeof reply.body === "object" && !Array.isArray(reply.body) ? reply.body as Record<string, unknown> : {};
-  const message = typeof body.message === "string" && body.message ? body.message : typeof body.error === "string" && body.error ? body.error : fallback;
-  const permission = typeof body.permission === "string" ? body.permission : undefined;
-  // A start refused because a run is under way names that run (2026-11-01).
-  const runId = typeof body.runId === "string" ? body.runId : undefined;
-  const code = permission ? "forbidden_permission" : typeof body.code === "string" ? body.code : reply.status === 404 ? "not_found" : reply.status === 403 ? "forbidden" : reply.status === 409 ? "conflict" : reply.status >= 500 ? "server_error" : "refused";
-  const status = reply.status >= 400 && reply.status < 600 ? reply.status : 502;
-  return fail(status, code, message.slice(0, 500), { ...(permission ? { permission } : {}), ...(runId ? { runId } : {}) });
+  const { status, code, message, ...extra } = readRouteRefusal(reply, fallback);
+  return fail(status, code, message, extra);
 }
 
 const okStatus = (reply: MemberReply) => reply.status >= 200 && reply.status < 300;

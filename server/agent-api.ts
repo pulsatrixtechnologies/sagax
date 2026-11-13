@@ -25,7 +25,8 @@ import type { EffortLevel } from "../shared/model-selection.ts";
 //   list_agent_models, update_agent_model, update_agent_settings, update_routine
 //
 // create_agent makes a temporary agent and delete_agent archives one
-// (server/temporary-agents.ts, Perspicax #321). Fleet writes (#1944) reuse the
+// (server/temporary-agents.ts, Perspicax #321); with kind lasting it makes
+// the person's own bot through the app's own creation. Fleet writes (#1944) reuse the
 // same PATCH routes the Edit bot window and Automations editor call.
 //
 // This file is the core only: validation, the turn handle, waiting for a
@@ -49,6 +50,8 @@ import { join } from "node:path";
 import { parseWakePriority, planPriorityWake, releasePriorityNow, wakeSenderId, type PriorityDelivery } from "./proactive/priority-wake.ts";
 import { TEMP_AGENT_IDLE_HOURS_MAX } from "./temporary-agents.ts";
 import { AGENT_SETTINGS_FIELDS } from "./fleet-agent-settings.ts";
+import { readRouteRefusal } from "./route-refusal.ts";
+import { BOT_PROFILE_LIMITS } from "../shared/bot-profile.ts";
 
 export {
   AGENT_PRIMARY_FIELD,
@@ -206,6 +209,26 @@ export type AgentWorkspace = "this_computer" | "browser" | "cloud" | "local_vm";
 const AGENT_WORKSPACES: readonly AgentWorkspace[] = ["this_computer", "browser", "cloud", "local_vm"];
 /** create_agent's idle_hours (server/temporary-agents.ts). */
 export const IDLE_HOURS_MAX = TEMP_AGENT_IDLE_HOURS_MAX;
+/** create_agent's kind: a lasting bot of the person's own (the app's own
+ * creation), or a temporary agent for a one-off task (the default). */
+export type AgentKind = "lasting" | "temporary";
+/** The fields only a lasting bot takes at creation. */
+const LASTING_ONLY_FIELDS = ["title", "soul", "instance_id", "model", "effort", "auto", "section"] as const;
+/** What create_agent hands the server: a temporary agent, or a lasting bot
+ * with the fields the app's own creation offers. */
+export type CreateAgentInput =
+  | { kind?: "temporary"; name: string; description: string; idleHours?: number; workspace?: AgentWorkspace }
+  | {
+    kind: "lasting";
+    name: string;
+    description: string;
+    title?: string;
+    soul?: string;
+    workspace?: AgentWorkspace;
+    section?: string;
+    /** The engine and model; absent, the person's own default, as in the app. */
+    selection?: { instanceId?: string; model?: string; effort?: string; auto?: boolean };
+  };
 /** How long a turn handle stays valid. */
 export const HANDLE_TTL_MS = 7 * 24 * 3_600_000;
 const POLL_MS = 400;
@@ -431,6 +454,13 @@ export const isRefusal = (value: unknown): value is Refusal =>
 /** Whether a refusal's code is worth retrying (busy, rate limit, transient). */
 export const isRetryableRefusal = (code: string): boolean => RETRYABLE_REFUSAL_CODES.has(code);
 
+/** The words a refusal says when whatever refused gave none: every answer
+ * leaves through asAnswer, which never sends an empty message (an assistant
+ * cannot act on one). */
+const emptyRefusalWords = (status: number, code: string): string => status >= 500
+  ? `The server could not do this (${code}); its log has the details. Try again in a minute.`
+  : `The server refused this call (${code}) without saying why. Check the arguments, then try again.`;
+
 export const refuse = (status: number, code: string, message: string, extra?: Record<string, unknown>): Refusal => {
   const retryable = typeof extra?.retryable === "boolean" ? extra.retryable : isRetryableRefusal(code);
   return {
@@ -440,6 +470,13 @@ export const refuse = (status: number, code: string, message: string, extra?: Re
     extra: { ...extra, retryable },
   };
 };
+
+/** A refusal from one of the app's own routes, run as the person
+ * (performAsMember), read by the one reader the member API shares. */
+export function routeRefusal(reply: { status: number; body: unknown }, fallback: string): Refusal {
+  const { status, code, message, ...extra } = readRouteRefusal(reply, fallback);
+  return refuse(status, code, message, extra);
+}
 
 export interface AuditEntry {
   tool: AgentToolName | string;
@@ -453,15 +490,18 @@ export interface AuditEntry {
 export interface AgentApiDeps {
   /** Every agent the caller may reach (tenant/org isolation is applied here). */
   agents(caller: AgentCaller): AgentSummary[] | Promise<AgentSummary[]>;
-  /** Create one temporary agent for the caller; it greets the user itself.
-   * idleHours is the caller's expiry, else the server's default. */
-  createAgent(caller: AgentCaller, input: { name: string; description: string; idleHours?: number; workspace?: AgentWorkspace }): Promise<AgentSummary | Refusal>;
+  /** Create one agent for the caller; it greets the user itself. A
+   * temporary one (kind absent): idleHours is the caller's expiry, else the
+   * server's default. A lasting one: the person's own bot, made by the app's
+   * own creation route as that person. */
+  createAgent(caller: AgentCaller, input: CreateAgentInput): Promise<AgentSummary | Refusal>;
   /** The full profile of a reachable agent, as this caller may read it. */
   profile(caller: AgentCaller, agentId: string): AgentProfile | Refusal | Promise<AgentProfile | Refusal>;
   /** Archive a temporary agent (its conversations are kept for a while). */
   deleteAgent(caller: AgentCaller, agentId: string): Promise<{ archived_at: number; purge_at: number } | Refusal>;
-  /** Engines and models the caller may pick for this agent (#1944). */
-  listModels?(caller: AgentCaller, agentId: string): Promise<{ models: AgentModelChoice[]; current: AgentModelSummary | null } | Refusal>;
+  /** Engines and models the caller may pick for this agent (#1944), or for
+   * a new bot when agentId is null (current is then null). */
+  listModels?(caller: AgentCaller, agentId: string | null): Promise<{ models: AgentModelChoice[]; current: AgentModelSummary | null } | Refusal>;
   /** Change the agent's default model/engine (same checks as PATCH /api/bots/:id). */
   updateModel?(caller: AgentCaller, agentId: string, selection: {
     instanceId?: string;
@@ -649,6 +689,13 @@ const objectArgs = (value: unknown): Args | null =>
 function onlyKeys(args: Args, allowed: readonly string[]): Refusal | null {
   const extra = Object.keys(args).filter((key) => !allowed.includes(key) && args[key] !== undefined && args[key] !== null);
   return extra.length ? refuse(400, "bad_request", `Unknown parameter: ${extra[0]}. Allowed: ${allowed.join(", ") || "none"}.`) : null;
+}
+
+/** create_agent's workspace argument: where its Auto turns start. */
+function workspaceArg(args: Args): AgentWorkspace | undefined | Refusal {
+  if (args.workspace === undefined || args.workspace === null) return undefined;
+  const workspace = AGENT_WORKSPACES.find((value) => value === args.workspace);
+  return workspace ?? refuse(400, "bad_request", `workspace is one of ${AGENT_WORKSPACES.join(", ")}.`);
 }
 
 function agentIdArg(args: Args): string | Refusal {
@@ -1215,6 +1262,58 @@ function createAgentApiHandlers(env: {
   "read_transcript" | "read_transcript_page" | "read_latest_page" | "read_latest_page_with_threads" | "read_transcript_cold" | "read_transcript_attachment"
 > {
   const { deps, now, startedBy, sendReceipts, sendsInFlight, ownsRunningTurn, ok, reachable, waitTurn, resultBody, latest } = env;
+  /** create_agent kind lasting: the person's own bot through the app's own
+   * creation, judged by that route's checks (permissions, caps, models).
+   * Nothing is checked twice here: only the shape of each argument. A name
+   * other agents already carry is no refusal; the answer names them. */
+  const createLasting = async (caller: AgentCaller, args: Args): Promise<AgentApiAnswer | Refusal> => {
+    if (args.idle_hours !== undefined && args.idle_hours !== null) {
+      return refuse(400, "bad_request", "idle_hours is for kind temporary: a lasting bot has no idle expiry. Leave it out, or pass kind temporary for a one-off agent.");
+    }
+    const bad = onlyKeys(args, ["kind", "name", "description", "workspace", ...LASTING_ONLY_FIELDS]);
+    if (bad) return bad;
+    const name = typeof args.name === "string" ? args.name.trim() : "";
+    if (!name || name.length > BOT_PROFILE_LIMITS.name || /[\r\n]/.test(name)) return refuse(400, "bad_request", `name is the display name: one line, 1 to ${BOT_PROFILE_LIMITS.name} characters.`);
+    const text: Record<"description" | "title" | "soul" | "section" | "model" | "effort", string | undefined> = { description: undefined, title: undefined, soul: undefined, section: undefined, model: undefined, effort: undefined };
+    for (const key of Object.keys(text) as Array<keyof typeof text>) {
+      const value = args[key];
+      if (value === undefined || value === null) continue;
+      if (typeof value !== "string") return refuse(400, "bad_request", `${key} is text.`);
+      text[key] = key === "soul" ? value : value.trim();
+    }
+    if (args.instance_id !== undefined && args.instance_id !== null && typeof args.instance_id !== "string") return refuse(400, "bad_request", "instance_id is an engine id from list_agent_models.");
+    const rawInstance = typeof args.instance_id === "string" && args.instance_id.trim() ? args.instance_id : undefined;
+    if (args.auto !== undefined && args.auto !== null && typeof args.auto !== "boolean") return refuse(400, "bad_request", "auto is true (pick Auto) or false.");
+    const workspace = workspaceArg(args);
+    if (isRefusal(workspace)) return workspace;
+    const selection = {
+      ...(typeof rawInstance === "string" ? { instanceId: rawInstance.trim() } : {}),
+      ...(text.model ? { model: text.model } : {}),
+      ...(text.effort ? { effort: text.effort } : {}),
+      ...(typeof args.auto === "boolean" ? { auto: args.auto } : {}),
+    };
+    const sameName = (await deps.agents(caller))
+      .filter((agent) => agent.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase())
+      .map((agent) => ({ id: agent.id, name: agent.name }));
+    const created = await deps.createAgent(caller, {
+      kind: "lasting",
+      name,
+      description: text.description ?? "",
+      ...(text.title ? { title: text.title } : {}),
+      ...(text.soul !== undefined && text.soul.trim() ? { soul: text.soul } : {}),
+      ...(workspace ? { workspace } : {}),
+      ...(text.section ? { section: text.section } : {}),
+      ...(Object.keys(selection).length ? { selection } : {}),
+    });
+    if (isRefusal(created)) return created;
+    return ok({
+      agent: wireSummary(created),
+      kind: "lasting",
+      greeted: true,
+      ...(sameName.length ? { same_name: sameName } : {}),
+      note: "The new agent is the person's own bot, shown in their Sagax app. Change it with update_agent_settings and update_agent_model; archive it with update_agent_settings hidden true. It greets the person itself: send it no first prompt unless asked, and never quote its id.",
+    });
+  };
   return {
     async list_agents(caller, args) {
       const bad = onlyKeys(args, []);
@@ -1282,7 +1381,16 @@ function createAgentApiHandlers(env: {
     },
 
     async create_agent(caller, args) {
-      const bad = onlyKeys(args, ["name", "description", "idle_hours", "workspace"]);
+      const kind = args.kind === undefined || args.kind === null ? "temporary" : args.kind;
+      if (kind !== "lasting" && kind !== "temporary") {
+        return refuse(400, "bad_request", "kind is lasting (the person's own bot, shown in their Sagax app) or temporary (a one-off agent, archived when idle).");
+      }
+      if (kind === "lasting") return createLasting(caller, args);
+      const lastingOnly = LASTING_ONLY_FIELDS.find((key) => args[key] !== undefined && args[key] !== null);
+      if (lastingOnly) {
+        return refuse(400, "bad_request", `${lastingOnly} is for kind lasting. A temporary agent takes name, description, idle_hours and workspace; pass kind lasting to make the person's own bot.`);
+      }
+      const bad = onlyKeys(args, ["kind", "name", "description", "idle_hours", "workspace"]);
       if (bad) return bad;
       const name = typeof args.name === "string" ? args.name.trim() : "";
       if (!name || name.length > AGENT_NAME_MAX || /[\r\n]/.test(name)) return refuse(400, "bad_request", `name is the display name: one line, 1 to ${AGENT_NAME_MAX} characters.`);
@@ -1291,8 +1399,8 @@ function createAgentApiHandlers(env: {
       if (description.length > AGENT_DESCRIPTION_MAX) return refuse(400, "bad_request", `description is at most ${AGENT_DESCRIPTION_MAX} characters.`);
       const idleHours = intArg(args, "idle_hours", 1, IDLE_HOURS_MAX, undefined);
       if (isRefusal(idleHours)) return idleHours;
-      const workspace = args.workspace === undefined || args.workspace === null ? undefined : AGENT_WORKSPACES.find((value) => value === args.workspace);
-      if (args.workspace !== undefined && args.workspace !== null && !workspace) return refuse(400, "bad_request", `workspace is one of ${AGENT_WORKSPACES.join(", ")}.`);
+      const workspace = workspaceArg(args);
+      if (isRefusal(workspace)) return workspace;
       const existing = (await deps.agents(caller)).find((agent) => agent.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase());
       if (existing) return refuse(409, "agent_exists", `An agent named ${existing.name} already exists (id ${existing.id}). Use it instead of creating another${existing.temporary ? ", or delete it first with delete_agent" : ""}.`);
       const created = await deps.createAgent(caller, { name, description, ...(idleHours !== undefined ? { idleHours } : {}), ...(workspace ? { workspace } : {}) });
@@ -1768,16 +1876,21 @@ function createAgentApiConfigHandlers(env: {
     async list_agent_models(caller, args) {
       const bad = onlyKeys(args, ["agent_id"]);
       if (bad) return bad;
-      const agentId = agentIdArg(args);
+      // Without agent_id: what the person may pick for a new bot
+      // (create_agent kind lasting), before any bot exists.
+      const forNew = args.agent_id === undefined || args.agent_id === null || args.agent_id === "";
+      const agentId = forNew ? null : agentIdArg(args);
       if (isRefusal(agentId)) return agentId;
-      const agent = await reachable(caller, agentId);
-      if (isRefusal(agent)) return agent;
+      if (agentId !== null) {
+        const agent = await reachable(caller, agentId);
+        if (isRefusal(agent)) return agent;
+      }
       if (!deps.listModels) {
         return refuse(501, "not_supported", "This server does not list models for agents yet.");
       }
       const listed = await deps.listModels(caller, agentId);
       if (isRefusal(listed)) return listed;
-      return ok({ agent_id: agentId, current: listed.current, models: listed.models });
+      return ok({ agent_id: agentId, current: agentId === null ? null : listed.current, models: listed.models });
     },
 
     async update_agent_model(caller, args) {
@@ -1954,7 +2067,8 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
   // details} on every refusal, details.status the HTTP status; the extra
   // fields a refusal carried before stay at the top level too, and `error`
   // repeats the message for older clients.
-  const asAnswer = (refusal: Refusal): AgentApiAnswer => {
+  const asAnswer = (given: Refusal): AgentApiAnswer => {
+    const refusal = typeof given.message === "string" && given.message.trim() ? given : { ...given, message: emptyRefusalWords(given.status, given.code) };
     const { hint, details, ...rest } = refusal.extra ?? {};
     const retryable = typeof rest.retryable === "boolean" ? rest.retryable : isRetryableRefusal(refusal.code);
     const detailObj = details && typeof details === "object" ? details as Record<string, unknown> : {};
@@ -2253,7 +2367,9 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
           return finish(asAnswer(refuse(403, "not_granted", `${tool} needs a ${guardPolicy.scope} grant${guarded.reason === "speaker_not_granted" ? " for the person this turn speaks for" : ""}; ask the owner in Settings.`, { scope: guardPolicy.scope })));
         }
       }
-      const wait = limiter.admit(caller, tool, now());
+      // A person creates bots under the app's own caps, never a tighter rate
+      // of this API; a bot caller keeps create_agent's rate.
+      const wait = tool === "create_agent" && caller.kind === "person" ? null : limiter.admit(caller, tool, now());
       if (wait !== null) {
         return finish(asAnswer(refuse(429, "rate_limited", `Too many ${tool} calls; try again in ${Math.ceil(wait / 1000)} s.`, {
           retry_after_ms: wait,
@@ -2274,7 +2390,8 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         }
         if (tool === "create_agent" && shaped.status < 400) {
           detail.created = (shaped.body.agent as { id?: string } | undefined)?.id ?? null;
-          detail.temporary = true;
+          detail.temporary = args.kind !== "lasting";
+          detail.kind = args.kind === "lasting" ? "lasting" : "temporary";
           if (typeof args.idle_hours === "number") detail.idleHours = args.idle_hours;
           if (typeof args.workspace === "string") detail.workspace = args.workspace;
         }

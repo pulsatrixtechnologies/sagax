@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import type { ConsoleAssertion } from "../auth/oidc-rp.ts";
 import { MCP_CREDENTIALS_REFUSED } from "../../shared/connector-refusal.ts";
 import { serverApprovalWords } from "../approvals/approval-words.ts";
+import { routeRefusal } from "../agent-api.ts";
 import { createOrgMemberRoutes, describeMemberApproval, planAnswer, MEMBER_PROGRESS_MIN_MS, QUESTION_DECLINED_MESSAGE, readThreadPage, replyAfter, summarizeTurn, type MemberPerson, type MemberRequest, type OrgMemberRouteDeps, type ThreadStatus } from "./org-member-routes.ts";
 
 const ISS = "https://perspicax.example";
@@ -443,6 +444,17 @@ describe("threads, approvals and nudges", () => {
     const got = await call("POST", "routines/r1/run", token("bob"), {});
     expect(got.status).toBe(403);
     expect(got.body).toMatchObject({ code: "forbidden_permission", permission: "routines.runNowAny", message: "Only the bot's owner can run it now." });
+  });
+
+  it("passes a route refusal on with the same code, sentence and field the agent API gives it", async () => {
+    people.get("bob")!.permissions.push("clients.routinesRun");
+    const body = { error: "org_bots_read_only", message: "Your administrator lets you use shared bots only.", field: "cwd" };
+    respond = () => ({ status: 403, body });
+    const got = await call("POST", "routines/r1/run", token("bob"), {});
+    const agent = routeRefusal({ status: 403, body }, "fallback");
+    expect(got.status).toBe(agent.status);
+    expect(got.body).toMatchObject({ code: "org_bots_read_only", message: agent.message, field: "cwd" });
+    expect(got.body.code).toBe(agent.code);
   });
 
   // the owner 2026-11-01: "when I invoke routines they start but it is unclear what

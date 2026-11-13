@@ -130,15 +130,17 @@ export interface UsageChartCardProps {
   /** Absent hides nothing: the arrow stays, disabled. */
   onPrev?: () => void;
   onNext?: () => void;
-  totalLabel: string;
-  total: string;
+  /** The figure above the chart; both absent where the card's own header says it (Settings > Usage, #4095). */
+  totalLabel?: string;
+  total?: string;
   days: readonly ChartDay[];
   series: readonly ChartSeries[];
   /** A figure of the chart in the shown unit ("$1.20", "3.4M"). */
   formatValue: (value: number) => string;
   /** The axis figure; defaults to a short number. */
   formatAxis?: (value: number) => string;
-  legend?: "tiles" | "dots";
+  /** "none": the caller draws its own legend (Settings > Usage, #4095). */
+  legend?: "tiles" | "dots" | "none";
   chartLabel: string;
   /** One color for every bar (a single series, no legend). */
   empty?: ReactNode;
@@ -196,8 +198,8 @@ export function UsageChartCard({ rangeLabel, onPrev, onNext, totalLabel, total, 
           </button>
         </span>
       </div>
-      <div className="mt-2 text-[13px] leading-[18px] text-ink-secondary">{totalLabel}</div>
-      <div data-usage-chart-total="" className="tabular-nums text-[28px] leading-8 text-ink">{total}</div>
+      {totalLabel !== undefined && <div className="mt-2 text-[13px] leading-[18px] text-ink-secondary">{totalLabel}</div>}
+      {total !== undefined && <div data-usage-chart-total="" className="tabular-nums text-[28px] leading-8 text-ink">{total}</div>}
 
       {nothing && empty ? (
         <div data-usage-chart-empty="" className="flex min-h-[120px] items-center text-[13px] leading-[18px] text-ink-secondary">{empty}</div>

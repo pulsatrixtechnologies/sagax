@@ -1102,7 +1102,6 @@
   "Set limit": "usage.cap.set",
   "Enter an amount of %@ or more, like 25 or 25.50.": "usage.cap.invalid",
   "Counts every bot turn and voice request on this computer this month (voice is estimated). The limit stops the next turn; a turn already running can finish and go past it. You are notified at 80% and at the limit.": "usage.cap.hint",
-  "Plan": "usage.plan.title",
   "Plan unavailable for this account.": "usage.plan.unavailable",
   "Connect a subscription (Claude, ChatGPT, Grok) to see its 5-hour and weekly limits.": "usage.plan.none",
   "Checking plan usage…": "planUsage.loading",

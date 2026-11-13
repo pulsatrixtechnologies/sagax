@@ -7,7 +7,8 @@
 // last used engine shows). Since 2026-10-16 the card is always drawn: with
 // no provider, a failed read or no access, it says so in one line instead
 // of vanishing. On an organization server the card ends with the link to
-// the person's keys in Perspicax.
+// the person's keys in Perspicax. #4095: it is the page's "Usage limits"
+// group, each window in the reference's large-percent form (LimitMeter).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, RefreshCw, Star } from "lucide-react";
 import { api, useStore } from "@/state/store";
@@ -140,9 +141,8 @@ export interface PlanUsageViewProps {
   /** The starred plan (its percent is the one the account menu's Usage row
    * shows) and how a star is toggled; absent: no stars. */
   favorite?: { id: string | null; onToggle: (planId: string) => void };
-  /** Inside Usage's Detail fold (#2080): the rows alone, no heading or card
-   * of their own, the refresh at the top. */
-  bare?: boolean;
+  /** What opens the card before the engines (#4095: the spending limit). */
+  leading?: React.ReactNode;
 }
 
 /** A plan's star: on hover or focus, and always while it is on. Offered on
@@ -235,44 +235,82 @@ export function renewalDate(resetsAt: string | null, locale = usageLocale(), tim
   }
 }
 
-/** One window: a 4 px gauge, a short line of figures (used on the left, left
- * on the right), then a grey line naming the window and its renewal (#556). */
-function Meter({ provider, meter }: { provider: PlanRow; meter: PlanMeter }) {
-  const used = Math.round(Math.min(100, Math.max(0, meter.usedPercent)));
-  const renews = renewalDate(meter.resetsAt);
+/** "34%", "34 %": a limit's share in the reader's way of writing it. */
+export function limitFigure(percent: number): string {
+  return t("usage.limits.figure", { percent: Math.round(Math.min(100, Math.max(0, percent))) });
+}
+
+/** One limit as the reference's usage page draws it (#4095): its name, a
+ * large percent with "used" beside it, a 4 px bar, then the renewal at the
+ * left and a second figure at the right. Every limit of Settings > Usage
+ * goes through it: each engine's windows and the spending limit. */
+export function LimitMeter({ title, percent, tone, ariaLabel, start, end, ...data }: {
+  /** Absent where the row above names the limit (the spending limit). */
+  title?: React.ReactNode;
+  percent: number;
+  tone: string;
+  ariaLabel: string;
+  start?: React.ReactNode;
+  end?: React.ReactNode;
+} & { [key: `data-${string}`]: string | undefined }) {
+  const shown = Math.round(Math.min(100, Math.max(0, percent)));
   return (
-    <div className="flex flex-col gap-1.5" data-plan-window-kind={meter.kind}>
-      <div
-        className="h-1 overflow-hidden rounded-full bg-inset"
-        role="meter"
-        aria-label={`${t("usage.plan.meter", { name: provider.name })} · ${meter.label}`}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={used}
-      >
-        <div className={cn("h-full rounded-full", usageTone(used))} style={{ width: `${used}%` }} />
+    <div {...data} data-limit-meter="" className="flex min-w-0 flex-col gap-2.5">
+      <div className="flex min-w-0 flex-col gap-3">
+        {title && <div className="truncate text-[13px] leading-[18px] text-ink">{title}</div>}
+        <div className="flex min-w-0 items-baseline gap-1.5" data-limit-figure="">
+          <span className="text-[22px] leading-7 tabular-nums text-ink">{limitFigure(shown)}</span>
+          {" "}
+          <span className="text-[13px] leading-[18px] text-ink-tertiary">{t("usage.limits.used")}</span>
+        </div>
       </div>
-      <div className="flex items-baseline justify-between gap-3 text-[13px] tabular-nums" data-plan-figures>
-        <span className="text-ink">{t("planUsage.used", { used })}</span>
-        <span className="text-ink-secondary">{t("planUsage.left", { remaining: 100 - used })}</span>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="h-1 overflow-hidden rounded-full bg-inset" role="meter" aria-label={ariaLabel} aria-valuemin={0} aria-valuemax={100} aria-valuenow={shown}>
+          <div className={cn("h-full rounded-full", tone)} style={{ width: `${shown}%` }} />
+        </div>
+        {(start || end) && (
+          <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-2.5 text-[12px] leading-4 tabular-nums text-ink-secondary" data-limit-footer="">
+            <span className="min-w-0">{start}</span>
+            <span className="shrink-0">{end}</span>
+          </div>
+        )}
       </div>
-      <p className="text-[12px] text-ink-secondary" data-plan-window>
-        {meter.label}
-        {renews && <> · {t("usage.plan.renewsShort", { date: renews })}</>}
-      </p>
     </div>
   );
 }
 
+/** One window of a plan: the shared limit form, its renewal date at the
+ * left and what is left at the right (#556, #4095). */
+function Meter({ provider, meter }: { provider: PlanRow; meter: PlanMeter }) {
+  const used = Math.round(Math.min(100, Math.max(0, meter.usedPercent)));
+  const renews = renewalDate(meter.resetsAt);
+  return (
+    <LimitMeter
+      data-plan-window-kind={meter.kind}
+      title={meter.label}
+      percent={used}
+      tone={usageTone(used)}
+      ariaLabel={`${t("usage.plan.meter", { name: provider.name })} · ${meter.label}`}
+      start={renews ? <span data-plan-window="">{t("usage.headline.renews", { date: renews })}</span> : null}
+      end={<span data-plan-left="">{t("planUsage.left", { remaining: 100 - used })}</span>}
+    />
+  );
+}
+
 /** Since 2026-10-16 every window shows at once: the 5-hour session and the
- * week each get their gauge ("on doit aussi voir les limites de 5 h et
- * par semaine"). Only the per-model detail folds under Details. */
+ * week each get their meter ("on doit aussi voir les limites de 5 h et
+ * par semaine"), side by side where the card is wide (#4095). Only the
+ * per-model detail folds under Details. */
 function PlanSummary({ provider, now }: { provider: PlanRow; now: number }) {
   const meters = planMeters(provider);
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       {meters.length === 0 && <p className="text-[12px] text-ink-secondary">{t("planUsage.notReported")}</p>}
-      {meters.map((meter, index) => <Meter key={`${meter.kind}-${meter.label}-${index}`} provider={provider} meter={meter} />)}
+      {meters.length > 0 && (
+        <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+          {meters.map((meter, index) => <Meter key={`${meter.kind}-${meter.label}-${index}`} provider={provider} meter={meter} />)}
+        </div>
+      )}
       {provider.models.length > 0 && (
         <details className="text-[12.5px]">
           <summary className="w-fit cursor-pointer rounded-md text-[12px] text-ink-secondary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70">{t("usage.plan.details")}</summary>
@@ -294,13 +332,17 @@ function planStatus({ report, loading, failed, unavailable }: Pick<PlanUsageView
   return { kind: "none", text: t("usage.plan.none") };
 }
 
-/** The card's body, without fetching: every state is drawn from props.
- * 2026-10-14: "Plan" on Settings > Usage, the person's own subscriptions.
- * 2026-10-16: the card is always drawn under Cost; with no row to show it
- * says why in one line (loading, unavailable, or connect a subscription).
+/** The Usage limits group, drawn from props (no fetching).
+ * 2026-10-14: the person's own subscriptions on Settings > Usage.
+ * 2026-10-16: always drawn; with no row to show it says why in one line
+ * (loading, unavailable, or connect a subscription).
  * 2026-10-30 (#1774): signed-out and error rows stay listed with Connect
- * or Try again (an expired token must not vanish). */
-export function PlanUsageView({ report, loading, now, onRefresh, myEngines, issuer, onOpenEngines, failed = false, unavailable = false, favorite, bare = false }: PlanUsageViewProps) {
+ * or Try again (an expired token must not vanish).
+ * #4095: the reference's "Usage limits" group: a grey title with the refresh
+ * at the right of its row, one card, a block per engine whose windows take
+ * the large-percent form; an engine that could not be read is a quiet line
+ * with Try again. `leading` (the spending limit) opens the card. */
+export function PlanUsageView({ report, loading, now, onRefresh, myEngines, issuer, onOpenEngines, failed = false, unavailable = false, favorite, leading }: PlanUsageViewProps) {
   const rows = unavailable ? [] : planRows(report);
   const status = rows.length === 0 ? planStatus({ report, loading, failed, unavailable }) : null;
   const refresh = unavailable ? undefined : (
@@ -317,89 +359,54 @@ export function PlanUsageView({ report, loading, now, onRefresh, myEngines, issu
       {loading ? <Loader2 size={13} className="animate-spin" data-plan-spinner /> : <RefreshCw size={13} />}
     </button>
   );
-  const pad = bare ? "py-2" : "px-3.5 py-2.5";
-  const body = (
-    <>
-      {status && (
-        <div className={pad} data-plan-status={status.kind} role="status">
-          <p className="text-[13px] text-ink-secondary">{status.text}</p>
-        </div>
-      )}
-      {rows.map((provider) => (
-        <div key={provider.id} data-plan-row={provider.id} className={cn("group/plan", pad)}>
-          <div className="mb-2 flex min-w-0 items-baseline gap-2">
-            <span className="truncate text-[13px] leading-[18px] text-ink">{provider.name}</span>
-            {provider.plan && <span className="truncate text-[12px] text-ink-secondary">{provider.plan}</span>}
-            {favorite && <FavoriteStar provider={provider} favorite={favorite} />}
-          </div>
-          {provider.state === "windows" && <PlanSummary provider={provider} now={now} />}
-          {provider.state === "no-windows" && (
-            <p data-plan-state="no-windows" className="text-[12px] text-ink-secondary">
-              {provider.access === "api-key" ? t("planUsage.apiKeyNoWindows") : t("planUsage.noWindows")}
-            </p>
-          )}
-          {provider.state === "signed-out" && (
-            <SignedOut provider={provider} myEngines={myEngines} issuer={issuer} onOpenEngines={onOpenEngines} onRefresh={onRefresh} />
-          )}
-          {provider.state === "error" && (
-            <div data-plan-state="error" className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <p className="text-[12px] text-danger">{provider.message}</p>
-              <button
-                type="button"
-                onClick={onRefresh}
-                disabled={loading}
-                className="rounded-md px-2 py-0.5 text-[12px] text-ink-secondary hover:bg-control hover:text-ink disabled:opacity-50"
-              >
-                {t("planUsage.tryAgain")}
-              </button>
-            </div>
-          )}
-        </div>
-      ))}
-      {issuer && !bare && (
-        <CompactRow label={t("modelsVoice.keys.title")} rowId="keys">
-          <ExternalLinkPill href={perspicaxKeysUrl(issuer)}>
-            <span data-plan-keys-link>{t("myEngines.manageKeys")}</span>
-          </ExternalLinkPill>
-        </CompactRow>
-      )}
-    </>
-  );
-  if (bare) {
-    return (
-      <div data-settings-card="usage.plan" data-plan-bare="" className="flex flex-col">
-        {refresh && <div className="flex">{refresh}</div>}
-        {body}
-      </div>
-    );
-  }
-  // 0.5.6: the reference design's usage meters, a grey heading outside one rounded card,
-  // one block per plan (name, a 4 px gauge per window, its two lines).
   return (
-    <div data-settings-card="usage.plan">
-      <SettingsGroup title={t("usage.plan.title")} groupId="plan" accessory={refresh}>
-        {body}
+    <div data-settings-card="usage.plan" className="contents">
+      <SettingsGroup title={t("usage.limits.title")} groupId="usage-limits" accessory={refresh}>
+        {leading}
+        {status && (
+          <div className="px-3.5 py-2.5" data-plan-status={status.kind} role="status">
+            <p className="text-[13px] text-ink-secondary">{status.text}</p>
+          </div>
+        )}
+        {rows.map((provider) => (
+          <div key={provider.id} data-plan-row={provider.id} className="group/plan flex min-w-0 flex-col gap-3 px-3.5 py-4">
+            <div className="flex min-w-0 items-baseline gap-2">
+              <span className="truncate text-[13px] leading-[18px] text-ink">{provider.name}</span>
+              {provider.plan && <span className="truncate text-[12px] text-ink-secondary">{provider.plan}</span>}
+              {favorite && <FavoriteStar provider={provider} favorite={favorite} />}
+            </div>
+            {provider.state === "windows" && <PlanSummary provider={provider} now={now} />}
+            {provider.state === "no-windows" && (
+              <p data-plan-state="no-windows" className="text-[12px] text-ink-secondary">
+                {provider.access === "api-key" ? t("planUsage.apiKeyNoWindows") : t("planUsage.noWindows")}
+              </p>
+            )}
+            {provider.state === "signed-out" && (
+              <SignedOut provider={provider} myEngines={myEngines} issuer={issuer} onOpenEngines={onOpenEngines} onRefresh={onRefresh} />
+            )}
+            {provider.state === "error" && (
+              <div data-plan-state="error" className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                <p className="min-w-0 flex-1 text-[12px] leading-4 text-ink-secondary">{provider.message}</p>
+                <button type="button" onClick={onRefresh} disabled={loading} className={PILL} data-plan-retry="">
+                  {t("planUsage.tryAgain")}
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+        {issuer && (
+          <CompactRow label={t("modelsVoice.keys.title")} rowId="keys">
+            <ExternalLinkPill href={perspicaxKeysUrl(issuer)}>
+              <span data-plan-keys-link>{t("myEngines.manageKeys")}</span>
+            </ExternalLinkPill>
+          </CompactRow>
+        )}
       </SettingsGroup>
     </div>
   );
 }
 
-/** The window the Usage headline shows: the starred plan's (else any plan
- * reporting windows) most used one, the limit that binds first. */
-export function headlineMeter(report: PlanUsageReport | null, favoriteId: string | null = null): { provider: PlanRow; meter: PlanMeter } | null {
-  const rows = planRows(report).filter((row) => row.state === "windows");
-  const ordered = [...rows.filter((row) => row.id === favoriteId), ...rows.filter((row) => row.id !== favoriteId)];
-  for (const provider of ordered) {
-    const meters = planMeters(provider);
-    if (meters.length === 0) continue;
-    const meter = meters.reduce((top, next) => (next.usedPercent > top.usedPercent ? next : top));
-    return { provider, meter };
-  }
-  return null;
-}
-
-/** The plan windows' state and loader, shared by the card and Usage's
- * headline (#2080), which read one report. */
+/** The plan windows' state and loader of Settings > Usage. */
 export function usePlanUsage(enabled = true): PlanUsageViewProps {
   const { dispatch } = useStore();
   const org = usePerspicaxOrg();

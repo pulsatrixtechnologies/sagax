@@ -7,6 +7,7 @@
  * &providers=1: several engines, keys, a named server and a local server
  * &org=1: an organization server, the viewer an admin (with providers=1)
  * &keys=unreadable (#3320): the desktop could not read its saved keys, so Vault and Providers offer Reset saved keys
+ * &usage=one|three|error (#4095): Settings > Usage with one engine, three, or three with one in error
  * ?picker=1: the models window (ModelManager); ?picker=bar: the composer's chip and menu
  * scripts/capture/settings-pages.mjs shoots each page in light and dark. */
 import { StrictMode, useEffect } from "react";
@@ -17,6 +18,7 @@ import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider, useStore, type AppSettingsSection } from "../state/store";
 import { settingsPagesApi } from "./settings-pages-api";
+import { usagePageAnswer } from "./usage-page-api";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -69,7 +71,7 @@ const realFetch = window.fetch.bind(window);
 window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.href);
   if (!url.pathname.startsWith("/api/")) return realFetch(input, init);
-  const body = API[url.pathname];
+  const body = usagePageAnswer(url, params) ?? API[url.pathname];
   if (body !== undefined) return json(body);
   return json({ error: "not in this gallery" }, 404);
 }) as typeof window.fetch;

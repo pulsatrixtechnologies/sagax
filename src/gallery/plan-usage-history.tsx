@@ -1,5 +1,5 @@
 /** Isolated gallery for headless screenshots of the plan usage history
- * (#2757): Settings > Usage, its Plan fold beside the new "Plan usage
+ * (#2757): Settings > Usage, its Usage limits group above the "Plan usage
  * history" fold, one week open with its 5-hour sessions. Mocked periods
  * only (12 weeks, three accounts, two of them "Claude"); no server.
  * Not shipped in the app.
@@ -95,12 +95,12 @@ function Gallery() {
   return (
     <div className="min-h-screen bg-app p-8 text-ink">
       <div data-gallery-sample="usage" className="w-[680px]">
-        <UsageDetail
-          usage={null}
-          plan={<PlanUsageView bare report={report} loading={false} now={NOW} onRefresh={() => {}} myEngines={null} issuer="" onOpenEngines={() => {}} />}
-          planCount={3}
-          planHistory={<PlanUsageHistoryView history={history} now={NOW} initialAccount={params.get("account") ?? undefined} initialOpen={[openWeek]} />}
-        />
+        <div className="flex flex-col gap-6">
+          <PlanUsageView report={report} loading={false} now={NOW} onRefresh={() => {}} myEngines={null} issuer="" onOpenEngines={() => {}} />
+          <UsageDetail
+            planHistory={<PlanUsageHistoryView history={history} now={NOW} initialAccount={params.get("account") ?? undefined} initialOpen={[openWeek]} />}
+          />
+        </div>
       </div>
     </div>
   );

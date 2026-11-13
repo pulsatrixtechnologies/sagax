@@ -19,7 +19,9 @@
 // always the device flow (built-in OAuth App, owner 2026-11-08), a token only
 // under Advanced.
 // It is shown on the GitHub plugin's page (PluginsPanel, `openGithub`), not
-// in Providers (owner, 2026-10-29).
+// in Providers (owner, 2026-10-29). It draws no box of its own: it sits in the
+// card of the place that shows it (the plugin's Accounts card, the GitHub
+// page's card), one container (#4154).
 import { useState, type ReactNode } from "react";
 import { ChevronRight, GitBranch } from "lucide-react";
 
@@ -44,7 +46,7 @@ export function GithubAccountSection({ connection }: {
   // server without the person's connection has only the tokens: open.
   const [advanced, setAdvanced] = useState(!connection);
   return (
-    <section className="rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] px-4 py-4 sm:px-5" data-accounts-github>
+    <section className="py-2" data-accounts-github>
       <div className="mb-1 flex items-center gap-2">
         <GitBranch size={16} aria-hidden="true" className="text-ink" />
         <h3 className="text-[13px] font-semibold text-ink">{t("myConnections.github.title")}</h3>
@@ -120,14 +122,14 @@ function GithubCredentialList() {
       </div>
       <p className="text-[12px] leading-relaxed text-ink-secondary">{t("sources.github.credentialsHint")}</p>
       {view.credentials.length === 0 && !adding && (
-        <p className="rounded-lg bg-inset px-3 py-2 text-[12px] text-ink-secondary" data-github-credentials-empty>{t("sources.github.empty")}</p>
+        <p className="py-1 text-[12px] text-ink-secondary" data-github-credentials-empty>{t("sources.github.empty")}</p>
       )}
       {view.credentials.length > 0 && (
-        <ul className="flex flex-col divide-y divide-hairline/60 rounded-xl border border-border">
+        <ul className="flex flex-col divide-y divide-ink/10">
           {view.credentials.map((entry) => {
             const open = editing?.id === entry.id ? editing.mode : null;
             return (
-              <li key={entry.id} className="flex flex-col gap-2 px-3 py-2.5" data-github-credential={entry.id} data-github-credential-owner={entry.owner}>
+              <li key={entry.id} className="flex flex-col gap-2 py-2.5" data-github-credential={entry.id} data-github-credential-owner={entry.owner}>
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{entry.label}</span>
                   {entry.owner === "org" && <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[11px] text-accent" data-github-credential-org>{t("sources.github.orgBadge")}</span>}
@@ -176,7 +178,7 @@ function GithubCredentialList() {
         </ul>
       )}
       {adding && (
-        <form className="flex flex-col gap-2 rounded-xl bg-inset p-3" data-github-credential-add onSubmit={(event) => {
+        <form className="flex flex-col gap-2 border-t-[0.5px] border-ink/10 pt-3" data-github-credential-add onSubmit={(event) => {
           event.preventDefault();
           const token = addSecret.trim();
           setAddSecret("");

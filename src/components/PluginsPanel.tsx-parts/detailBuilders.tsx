@@ -57,7 +57,13 @@ export function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccoun
   const others = remote ? (server.accounts ?? []).filter((entry) => entry.id !== "default") : [];
   // An account the person names, after the first one (MAX_MCP_ACCOUNTS).
   const canAddAccount = remote && server.auth === "connected" && !server.managedBy && others.length < 9;
-  let account: DetailAccount;
+  const keys = remote ? server.headerKeys : server.envKeys;
+  // #4154: a server with no sign-in, no key and no other account has no
+  // account to show (a refused key asks for one again): its Accounts section
+  // is not drawn. Its policy note, when it has one, stays.
+  const noAccount = !server.github && !(remote && server.auth && server.auth !== "none") && keys.length === 0
+    && others.length === 0 && !refusedKeys(server, probe);
+  let account: DetailAccount | null;
   let accountAction: ReactNode = null;
   if (server.github) {
     // the GitHub plugin's server reads the person's GitHub account: its
@@ -79,17 +85,18 @@ export function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccoun
   } else if (remote && (server.auth === "required" || server.auth === "expired" || server.auth === "error")) {
     account = { id: "oauth", label: issuer, detail: server.authError, status: "needs_auth" };
     accountAction = <SignInButton label={t(server.auth === "expired" ? "mcp.oauth.signInAgain" : "mcp.oauth.signIn")} busy={signingIn} disabled={mcp.busy !== null || Boolean(server.managedBy)} onClick={() => void mcp.signIn(server)} />;
+  } else if (noAccount) {
+    account = null;
   } else {
-    const keys = remote ? server.headerKeys : server.envKeys;
     account = {
       id: "default",
       label: t("connectApps.detail.defaultAccount"),
-      detail: keys.length ? t(remote ? "mcp.headersSaved" : "mcp.secretsSaved", { keys: keys.join(", ") }) : t("connectApps.detail.noSignIn"),
+      detail: keys.length ? t(remote ? "mcp.headersSaved" : "mcp.secretsSaved", { keys: keys.join(", ") }) : undefined,
       status: server.enabled ? "connected" : "off",
     };
   }
   const oauthError = mcp.oauthError[name];
-  const count = toolList ? t("connectApps.detail.toolsEnabled", { enabled: toolList.filter((tool) => tool.enabled).length, total: toolList.length })
+  const count = toolList?.length === 0 ? null : toolList ? t("connectApps.detail.toolsEnabled", { enabled: toolList.filter((tool) => tool.enabled).length, total: toolList.length })
     : disabled.size ? t("connectApps.detail.toolsOff", { count: disabled.size }) : t("connectApps.detail.toolsAll");
   return {
     item,
@@ -100,7 +107,7 @@ export function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccoun
     onTest: () => void mcp.test(server),
     testing: mcp.busy === `test:${name}`,
     enabled: { value: server.enabled, onToggle: () => void mcp.toggle(server), label: t("mcp.toggleAria", { name, state: t(server.enabled ? "mcp.state.off" : "mcp.state.on") }) },
-    accounts: [account, ...others.map((other, index): DetailAccount => {
+    accounts: [...(account ? [account] : []), ...others.map((other, index): DetailAccount => {
       const label = readableOr(other.label ?? other.id, t("ids.accountN", { n: index + 2 }));
       return {
         id: other.id,
@@ -126,7 +133,7 @@ export function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccoun
       };
     })],
     accountAction,
-    accountExtra: (
+    accountExtra: noAccount ? (server.managedBy ? <p className="py-1.5 text-[11.5px] text-ink-secondary">{t("policy.mcpBlocked", { organization: server.managedBy })}</p> : undefined) : (
       <>
         {mcpAccountDraft?.server === name && (
           <form
@@ -157,12 +164,13 @@ export function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccoun
         {remote && server.auth && server.auth !== "none" && server.auth !== "connected" && <McpAuthLine server={server} />}
         <McpKeysRefused mcp={mcp} server={server} />
         {mcp.waiting[name] && (
-          <div role="status" className="mt-2 flex items-center gap-2 rounded-lg bg-raised/60 px-3 py-2 text-[12px] text-ink-secondary">
+          <div role="status" className="flex min-h-[38px] items-center gap-2 py-1.5 text-[12px] text-ink-secondary">
             <Loader2 size={13} className="shrink-0 animate-spin" /> {t("mcp.oauth.waiting")}
           </div>
         )}
         {mcp.clientDraft[name] && (
           <McpClientForm
+            inCard
             draft={mcp.clientDraft[name]!}
             disabled={mcp.busy !== null}
             onChange={(next) => mcp.setClientDraft((current) => ({ ...current, [name]: next }))}
@@ -196,7 +204,7 @@ export function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccoun
       { label: t("connectApps.detail.source"), value: pluginSourceLabel(item.source) },
       { label: t("connectApps.detail.transport"), value: remote ? (server.type === "sse" ? "SSE" : "HTTP") : "stdio" },
       { label: remote ? t("connectApps.detail.url") : t("connectApps.detail.command"), value: remote ? server.url : [server.command, ...server.args].join(" "), mono: true },
-      { label: t("connectApps.detail.tools"), value: count },
+      ...(count ? [{ label: t("connectApps.detail.tools"), value: count }] : []),
     ],
     children: (
       <>
@@ -286,8 +294,8 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
     ),
   }));
   const githubAccount = !github && children.some((child) => child.githubAccount) ? (
-    <div className="mt-1 flex flex-wrap items-center gap-2 rounded-lg bg-inset px-3 py-2" data-plugin-github-account={children.some((child) => child.githubAccount === "missing") ? "missing" : "connected"}>
-      <span className="min-w-0 flex-1 text-[12px] text-ink-secondary">
+    <div className="flex min-h-[38px] flex-wrap items-center gap-2 py-1.5" data-plugin-github-account={children.some((child) => child.githubAccount === "missing") ? "missing" : "connected"}>
+      <span className="min-w-0 flex-1 text-[13px] leading-5 text-ink-secondary">
         {children.some((child) => child.githubAccount === "missing") ? t("connectApps.detail.githubMissing") : t("connectApps.detail.githubConnected")}
       </span>
       <button type="button" className="ui-button text-[12px]" onClick={openGithub}>{t("connectApps.detail.openGithub")}</button>
@@ -306,9 +314,10 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
     subtitle,
     busy: installing !== null,
     accounts,
-    accountsEmpty: github || githubAccount ? undefined : t("connectApps.detail.noAccounts"),
-    accountExtra: <>{github}{githubAccount}</>,
-    tools: { list: toolRows, loading: false, note: children.length === 0 ? t("connectApps.plugin.bringsNothing") : undefined },
+    // #4154: no connector and no GitHub connection: no Accounts section; no
+    // part at all: no Tools section (the view hides an empty list)
+    accountExtra: github || githubAccount ? <>{github}{githubAccount}</> : undefined,
+    tools: { list: toolRows, loading: false },
   };
   // For a bot the page is that bot's install: the card says what it brings,
   // and its Update installs the marketplace's files again in place.

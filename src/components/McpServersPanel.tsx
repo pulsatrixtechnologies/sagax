@@ -440,8 +440,11 @@ export function McpAuthLine({ server }: { server: RemoteMcpListing & { managedBy
 }
 
 /** For a provider without dynamic registration: the client the user made
- * there, and the redirect URI they must give it. */
-export function McpClientForm({ draft, disabled, onChange, onCancel, onSubmit }: {
+ * there, and the redirect URI they must give it. `inCard`: it sits in a
+ * section's card already (a plugin's Accounts), so it draws no box of its own
+ * (#4154: one container). */
+export function McpClientForm({ draft, disabled, onChange, onCancel, onSubmit, inCard }: {
+  inCard?: boolean;
   draft: ClientDraft;
   disabled: boolean;
   onChange: (next: ClientDraft) => void;
@@ -449,7 +452,7 @@ export function McpClientForm({ draft, disabled, onChange, onCancel, onSubmit }:
   onSubmit: () => void;
 }) {
   return (
-    <div className="mt-3 rounded-xl border border-hairline/60 bg-raised/35 p-3.5">
+    <div className={inCard ? "border-t-[0.5px] border-ink/10 py-3" : "mt-3 rounded-xl border border-hairline/60 bg-raised/35 p-3.5"} data-mcp-client-form>
       <div className="text-[12.5px] font-medium text-ink">{t("mcp.oauth.clientTitle")}</div>
       <p className="mt-1 text-[11.5px] leading-relaxed text-ink-secondary">{t("mcp.oauth.clientHint")}</p>
       <label className="mt-3 block">

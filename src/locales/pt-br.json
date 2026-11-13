@@ -966,7 +966,6 @@
   "connectApps.detail.enabled": "Ativado",
   "connectApps.detail.loadTools": "Listar as ferramentas",
   "connectApps.detail.noAccountNeeded": "Nenhuma conta necessária",
-  "connectApps.detail.noSignIn": "Nenhum login necessário",
   "connectApps.detail.signedIn": "Conectado",
   "connectApps.detail.source": "Origem",
   "connectApps.detail.toolOffAria": "Desativar {name}",

@@ -653,40 +653,22 @@ struct HomeAppsMenu: View {
     static let width: CGFloat = 268
     static let row: CGFloat = 44
 
-    private var surface: Color { Theme.parity(Color(hex: 0x323232), Theme.menuGlass) }
-    private var ink: Color { Theme.parity(Color(hex: 0xF9F9F9), Theme.textPrimary) }
-
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            // the home under the card, dimmed so it never reads through
-            Theme.dim
-                .ignoresSafeArea()
-                .contentShape(Rectangle())
-                .onTapGesture(perform: dismiss)
-                .accessibilityElement()
-                .accessibilityLabel(Text("Close"))
-                .accessibilityAddTraits(.isButton)
-                .accessibilityAction { dismiss() }
-                .accessibilityIdentifier("home-apps.dismiss")
+        HomeMenuCard(
+            alignment: .bottomLeading,
+            cornerRadius: 24,
+            // above the apps button, which stays in its place under the dim
+            insets: EdgeInsets(top: 8, leading: HomeMetrics.bottomInset - 8, bottom: HomeMetrics.bottomControl + 14, trailing: 0),
+            scale: 0.6,
+            id: "home-apps",
+            dismiss: dismiss
+        ) {
             ViewThatFits(in: .vertical) {
                 entries
                 ScrollView { entries }
             }
             .frame(width: Self.width)
-            .background(surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Theme.hairline, lineWidth: 0.5))
-            .shadow(color: .black.opacity(0.35), radius: 24, y: 10)
-            .padding(.leading, HomeMetrics.bottomInset - 8)
-            .padding(.top, 8)
-            // above the apps button, which stays in its place under the dim
-            .padding(.bottom, HomeMetrics.bottomControl + 14)
-            .transition(.scale(scale: 0.6, anchor: .bottomLeading).combined(with: .opacity))
-            .accessibilityElement(children: .contain)
-            .accessibilityAddTraits(.isModal)
-            .accessibilityIdentifier("home-apps-menu")
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-        .accessibilityAction(.escape) { dismiss() }
     }
 
     private var entries: some View {
@@ -695,7 +677,7 @@ struct HomeAppsMenu: View {
             // entry nearest the button, so the groups read bottom up
             let groups = HomeAccountMenuItems.groups(session: session, achievements: achievements).reversed().map { Array($0.reversed()) }
             ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
-                if index > 0 { divider }
+                if index > 0 { HomeMenuDivider() }
                 ForEach(group, id: \.self) { item in
                     let title = item == .automations && routines.activeRoutines > 0
                         ? HomeAccountMenuItems.title(item) + " (\(routines.activeRoutines))"
@@ -703,7 +685,7 @@ struct HomeAppsMenu: View {
                     row(title, symbol: HomeAccountMenuItems.symbol(item), id: "account-menu.\(item.rawValue)") { select(item) }
                 }
             }
-            if !groups.isEmpty { divider }
+            if !groups.isEmpty { HomeMenuDivider() }
             row(String(localized: "Templates"), symbol: "square.on.square", id: "home-apps.templates") { openApp(.templates) }
             row(String(localized: "Plugins"), symbol: "puzzlepiece.extension", id: "home-apps.connectApps") { openApp(.connectApps) }
             let count = session.state.updates.count
@@ -712,14 +694,6 @@ struct HomeAppsMenu: View {
             }
         }
         .padding(.vertical, 8)
-    }
-
-    private var divider: some View {
-        Rectangle()
-            .fill(ink.opacity(0.14))
-            .frame(height: 0.5)
-            .padding(.horizontal, 20)
-            .frame(height: 9)
     }
 
     private func row(_ title: String, symbol: String, id: String, action: @escaping () -> Void) -> some View {
@@ -736,13 +710,75 @@ struct HomeAppsMenu: View {
                     .lineLimit(1)
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(ink)
+            .foregroundStyle(HomeMenuStyle.ink)
             .padding(.horizontal, 20)
             .frame(height: Self.row)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(id)
+    }
+}
+
+/// The colours both home menus draw with (#4066).
+enum HomeMenuStyle {
+    static var surface: Color { Theme.parity(Color(hex: 0x323232), Theme.menuGlass) }
+    static var ink: Color { Theme.parity(Color(hex: 0xF9F9F9), Theme.textPrimary) }
+}
+
+/// The hairline between two groups of a home menu.
+struct HomeMenuDivider: View {
+    @Environment(\.themePalette) var themePalette
+
+    var body: some View {
+        Rectangle()
+            .fill(HomeMenuStyle.ink.opacity(0.14))
+            .frame(height: 0.5)
+            .padding(.horizontal, 20)
+            .frame(height: 9)
+    }
+}
+
+/// The one card both home menus open in (#4041, #4066): an opaque card over
+/// a dimmed home, so nothing of the list reads through it. A tap on the
+/// dim closes it.
+struct HomeMenuCard<Content: View>: View {
+    @Environment(\.themePalette) var themePalette
+    let alignment: Alignment
+    let cornerRadius: CGFloat
+    let insets: EdgeInsets
+    /// How small the card grows from, toward its button.
+    let scale: CGFloat
+    let id: String
+    let dismiss: () -> Void
+    @ViewBuilder let content: Content
+
+    private var anchor: UnitPoint { alignment == .bottomLeading ? .bottomLeading : .topTrailing }
+
+    var body: some View {
+        ZStack(alignment: alignment) {
+            // the home under the card, dimmed so it never reads through
+            Theme.dim
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture(perform: dismiss)
+                .accessibilityElement()
+                .accessibilityLabel(Text("Close"))
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { dismiss() }
+                .accessibilityIdentifier("\(id).dismiss")
+            content
+                .background(HomeMenuStyle.surface, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).strokeBorder(Theme.hairline, lineWidth: 0.5))
+                .shadow(color: .black.opacity(0.35), radius: 24, y: 10)
+                .padding(insets)
+                .transition(.scale(scale: scale, anchor: anchor).combined(with: .opacity))
+                .accessibilityElement(children: .contain)
+                .accessibilityAddTraits(.isModal)
+                .accessibilityIdentifier("\(id)-menu")
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+        .accessibilityAction(.escape) { dismiss() }
     }
 }
 
@@ -772,15 +808,18 @@ struct AppsGridGlyph: View {
 
 // MARK: - "+" popover
 
-/// The glass popover that grows out of the "+" button: New, the desktop's
-/// compose-to picker (Create new Bot, Create group chat, then every bot and
-/// the organization's people), 14 pt rows on a 35.8 pt pitch with about
-/// 10 pt of padding. A long list scrolls inside the glass.
+/// The card that grows out of the "+" button: New, the desktop's compose-to
+/// picker (Create new Bot, Create group chat, then every bot and the
+/// organization's people), 14 pt rows on a 35.8 pt pitch with about 10 pt
+/// of padding. The same opaque card over the dimmed home as the apps menu
+/// (#4066): the list never reads through it. A long list scrolls inside.
 struct HomePlusMenu: View {
     @Environment(\.themePalette) var themePalette
     let groups: [[NewMenuItem]]
     let title: (NewMenuItem) -> String
     let select: (NewMenuItem) -> Void
+    /// How far down the card opens, under the "+" button.
+    var topInset: CGFloat = 0
     let dismiss: () -> Void
 
     private static let row: CGFloat = 35.83
@@ -793,20 +832,18 @@ struct HomePlusMenu: View {
     }
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Color.black.opacity(0.001)
-                .ignoresSafeArea()
-                .onTapGesture(perform: dismiss)
+        HomeMenuCard(
+            alignment: .topTrailing,
+            cornerRadius: Theme.continuous(31.5),
+            insets: EdgeInsets(top: topInset, leading: 0, bottom: 0, trailing: 7.7),
+            scale: 0.4,
+            id: "home-plus",
+            dismiss: dismiss
+        ) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
-                        if index > 0 {
-                            Rectangle()
-                                .fill(Theme.parity(Color(hex: 0xF9F9F9), Theme.textPrimary).opacity(0.14))
-                                .frame(height: 0.5)
-                                .padding(.horizontal, 20)
-                                .frame(height: Self.divider)
-                        }
+                        if index > 0 { HomeMenuDivider() }
                         ForEach(group, id: \.self) { entry in
                             item(Text(verbatim: title(entry))) { select(entry) }
                                 .accessibilityIdentifier(NewMenuLabels.identifier(entry))
@@ -820,28 +857,7 @@ struct HomePlusMenu: View {
             }
             .scrollDisabled(contentHeight <= 440)
             .frame(width: 250.67, height: min(contentHeight, 440), alignment: .topLeading)
-            .background(alignment: .topLeading) { searchUnderGlass }
-            .themeGlass(RoundedRectangle(cornerRadius: Theme.continuous(31.5), style: .continuous), fill: Theme.parity(Color(hex: 0x323232), Theme.menuGlass), interactive: false)
-            .padding(.trailing, 7.7)
-            .transition(.scale(scale: 0.4, anchor: .topTrailing).combined(with: .opacity))
         }
-    }
-
-    /// The search button stays visible under the glass, softened, as in the
-    /// reference: it sits 166 pt into the popover, 28 pt down.
-    private var searchUnderGlass: some View {
-        ZStack {
-            Circle().fill(Theme.textPrimary.opacity(0.11)).frame(width: 46, height: 46).blur(radius: 4)
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 19, weight: .medium))
-                .foregroundStyle(Theme.textPrimary.opacity(0.17))
-                .blur(radius: 1.4)
-        }
-        .frame(width: 44, height: 44)
-        // the glyph peaks 1.6 pt higher than the circle's centre in the reference
-        .offset(x: 166.3 - 22, y: 28 - 22 - 1.6)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 
     private func item(_ title: Text, action: @escaping () -> Void) -> some View {
@@ -851,7 +867,7 @@ struct HomePlusMenu: View {
         } label: {
             title
                 .font(Theme.Font.body)
-                .foregroundStyle(Theme.parity(Color(hex: 0xF9F9F9), Theme.textPrimary))
+                .foregroundStyle(HomeMenuStyle.ink)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, 28.4)

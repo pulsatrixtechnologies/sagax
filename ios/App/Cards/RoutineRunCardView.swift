@@ -60,14 +60,19 @@ struct RoutineRunCardView: View {
     }
 
     /// The brief, for a result or a team goal's outcome only.
+    /// #3695: a streak's summary whose run failed or was blocked carries the
+    /// streak's own failure words: they are its brief.
     private var brief: String {
-        RoutineResultStack.isResult(card) || card.goalStatus != nil ? card.briefText : ""
+        if RoutineResultStack.isResult(card) || card.goalStatus != nil { return card.briefText }
+        guard card.isFailedStreak else { return "" }
+        let why = ReportBrief.of(card.error ?? card.summary, from: .start)
+        return why.isEmpty && card.status == "blocked" ? blockedLine : why
     }
 
     private var withProblems: Bool { card.hasProblems && card.status == "completed" }
 
     private var warns: Bool {
-        withProblems || card.status == "blocked" || (card.goalStatus.map { $0 != "completed" } ?? false)
+        withProblems || card.isFailedStreak || card.status == "blocked" || (card.goalStatus.map { $0 != "completed" } ?? false)
             || (attention.map { !$0.items.isEmpty && $0.handledAt == nil } ?? false)
     }
 
@@ -186,20 +191,33 @@ struct RoutineRunCardView: View {
     /// One state line, only when there is something to say: a finished
     /// result without problems has no state word.
     private var stateLine: (text: String, success: Bool)? {
+        // #3695, #4066: the failure words are the brief; the state line says
+        // how many runs in a row and since when, like a result with problems
+        if card.isFailedStreak {
+            return (card.stateLabel + repeatText, false)
+        }
         if card.status == "blocked", card.goalStatus == nil {
             return (blockedLine, false)
         }
         if withProblems || (card.goalStatus.map { $0 != "completed" } ?? false) {
-            var text = card.stateLabel
-            if withProblems, let lasting = card.`repeat`, lasting.count > 1 {
-                text += " · " + String(localized: "Same problem since \(Self.dateTime(lasting.since)), \(lasting.count) runs in a row")
-            }
-            return (text, false)
+            return (card.stateLabel + (withProblems ? repeatText : ""), false)
         }
         if let recovered = card.recovered {
             return (String(localized: "Works again (problems since \(Self.dateTime(recovered.since)))"), true)
         }
         return nil
+    }
+
+    /// #3479, #4066: " · " and the runs the state line counts (the desktop's
+    /// `routineRepeatText`): a streak of runs with problems, whatever they
+    /// said, is no "same problem". Empty when it counts nothing.
+    private var repeatText: String {
+        guard let lasting = card.countedRepeat else { return "" }
+        let since = Self.dateTime(lasting.since)
+        switch lasting.wording {
+        case .problemStreak: return " · " + String(localized: "\(lasting.count) runs with problems since \(since)")
+        case .sameProblem: return " · " + String(localized: "Same problem since \(since), \(lasting.count) runs in a row")
+        }
     }
 
     private var blockedLine: String {

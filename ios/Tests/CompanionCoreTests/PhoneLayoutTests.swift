@@ -97,8 +97,60 @@ final class PhoneLayoutTests: XCTestCase {
         XCTAssertTrue(menu.contains("String(localized: \"Plugins\")"))
         XCTAssertFalse(menu.contains("\"Connect apps\""))
         XCTAssertFalse(home.contains("Label(String(localized: \"Connect apps\")"))
-        // a dimmed home under an opaque card
-        XCTAssertTrue(menu.contains("Theme.dim"))
-        XCTAssertTrue(menu.contains(".background(surface, in:"))
+        // a dimmed home under an opaque card: the one card both menus share
+        XCTAssertTrue(menu.contains("HomeMenuCard("))
+        let card = try declaration(home, from: "struct HomeMenuCard<Content: View>: View {")
+        XCTAssertTrue(card.contains("Theme.dim"))
+        XCTAssertTrue(card.contains(".background(HomeMenuStyle.surface, in:"))
+    }
+
+    // #4066: the "+" menu drew over a nearly transparent layer, so the list
+    // read through it, and the apps menu carried its own copy of the card.
+    func testThePlusMenuIsTheSameOpaqueCardOverTheDimmedHome() throws {
+        let home = try source("App/HomeRoster.swift")
+        let plus = try declaration(home, from: "struct HomePlusMenu: View {")
+        XCTAssertTrue(plus.contains("HomeMenuCard("))
+        XCTAssertFalse(plus.contains("Color.black.opacity(0.001)"))
+        XCTAssertFalse(plus.contains(".themeGlass("))
+        let apps = try declaration(home, from: "struct HomeAppsMenu: View {")
+        // one card, one divider: neither menu draws its own
+        for menu in [plus, apps] {
+            XCTAssertFalse(menu.contains("Theme.dim"))
+            XCTAssertFalse(menu.contains("RoundedRectangle(cornerRadius: 24"))
+            XCTAssertFalse(menu.contains("Rectangle()\n"))
+            XCTAssertTrue(menu.contains("HomeMenuDivider()"))
+        }
+    }
+
+    // #4066: the pane's width began at 0, so an iPad drew the phone layout
+    // for one frame: before it is measured, the size class decides.
+    func testTheAppearancePaneStartsFromTheWindowsSizeClass() throws {
+        let pane = try source("App/Desktop/PersonaAppearancePane.swift")
+        XCTAssertFalse(pane.contains("@State private var paneWidth: CGFloat = 0"))
+        XCTAssertTrue(pane.contains("@State private var paneWidth: CGFloat?"))
+        XCTAssertTrue(pane.contains("@Environment(\\.horizontalSizeClass)"))
+    }
+
+    // #4066: the bot's note on the working line is never cut (at most
+    // `LiveTextPlace.lineTextMax` units, so it wraps as the desktop's does).
+    func testTheWorkingNoteIsNeverCut() throws {
+        let chat = try source("App/ChatView.swift")
+        let note = try XCTUnwrap(chat.range(of: "private func noteText(_ words: String) -> some View {"))
+        let body = chat[note.upperBound...].prefix(400)
+        XCTAssertFalse(body.contains(".lineLimit(2)"))
+        XCTAssertTrue(body.contains(".lineLimit(nil)"))
+    }
+
+    // #4066: the answer being written was flat text on the background until
+    // it landed in the grey bubble of the settled reply: it grows in that
+    // same bubble now, with the same fill, padding and ink.
+    func testTheStreamingAnswerGrowsInTheSettledReplysBubble() throws {
+        let live = try source("App/Features/Chat/StreamingBubble.swift")
+        let settled = try source("App/Features/Chat/TextBubble.swift")
+        XCTAssertTrue(live.contains(".fill(BubbleColor.theirs(desktop: desktop))"))
+        XCTAssertTrue(settled.contains("return BubbleColor.theirs(desktop: desktop)"))
+        XCTAssertTrue(live.contains("Theme.Chat.bubblePaddingH"))
+        XCTAssertTrue(live.contains("BubbleColor.theirsText"))
+        XCTAssertFalse(live.contains("Theme.textPrimary)"))
     }
 }

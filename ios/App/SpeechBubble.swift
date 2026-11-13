@@ -99,6 +99,13 @@ enum BubbleColor {
     /// is on. Read from the skin, never from the phone's light or dark.
     static var theirs: Color { BotBubblePaint.current?.fill ?? Theme.bubbleAssistant }
     static var theirsText: Color { BotBubblePaint.current?.ink ?? Theme.bubbleAssistantText }
+
+    /// A bot's reply bubble on the phone, or in the iPad desktop shell (its
+    /// `bubbleBot`): the settled reply and the one being written share it,
+    /// so the answer never changes look when it lands (#4066).
+    static func theirs(desktop: DesktopTheme?) -> Color {
+        BotBubblePaint.current?.fill ?? desktop?.bubbleBot ?? Theme.bubbleAssistant
+    }
 }
 
 /// The open 1:1 bot's bubble paint, when the person asked for it.

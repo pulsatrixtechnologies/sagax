@@ -82,6 +82,10 @@ public enum RoutineResultStack {
 
     /// The form a run takes in the chat.
     public static func form(_ run: RoutineRunCard, attention: PersonAttentionCard?, folded: Bool) -> Form {
+        // #3695, #4066: a repeating routine's one summary card is the one
+        // thing its runs say in the chat: a card whatever its run's status,
+        // so its count, since when and what is wrong are read whole
+        if run.isProblemStreak { return .card }
         if folded { return .row }
         if needsPerson(run, attention: attention) { return .card }
         if !isResult(run) { return .row }

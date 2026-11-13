@@ -200,13 +200,19 @@ struct PersonaAppearancePane: View {
     @StateObject private var stageHandle = OwlMascotHandle()
     /// The width the pane is given: under `compactBelow` (a phone, or a
     /// narrow iPad window) its rows stack or scroll inside themselves
-    /// instead of widening the page past the screen (#4041).
-    @State private var paneWidth: CGFloat = 0
+    /// instead of widening the page past the screen (#4041). Nil until
+    /// measured: the window's size class decides until then, so an iPad
+    /// opens on its wide layout instead of the phone's for one frame (#4066).
+    @State private var paneWidth: CGFloat?
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     /// The desktop's side by side preview needs the stage (170), the name
     /// and the two buttons beside it: below this width they stack.
     static let compactBelow: CGFloat = 560
-    private var compact: Bool { paneWidth < Self.compactBelow }
+    private var compact: Bool {
+        guard let paneWidth else { return sizeClass == .compact }
+        return paneWidth < Self.compactBelow
+    }
 
     private var worn: CharacterDraft { CharacterDraft(bot: bot) }
     private var wornCharacter: MascotCharacter { worn.character }
@@ -230,7 +236,8 @@ struct PersonaAppearancePane: View {
             }
         }
         .onPreferenceChange(PersonaPaneWidthKey.self) { width in
-            if abs(width - paneWidth) > 0.5 { paneWidth = width }
+            guard width > 0 else { return }
+            if paneWidth.map({ abs(width - $0) > 0.5 }) ?? true { paneWidth = width }
         }
         .onAppear { draft = worn }
         .onValueChange(of: CharacterDraft(bot: bot)) { server in draft = server }

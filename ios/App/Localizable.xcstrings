@@ -4214,6 +4214,23 @@
         }
       }
     },
+    "%lld runs with problems since %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld runs with problems since %2$@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld exécutions avec des problèmes depuis %2$@"
+          }
+        }
+      }
+    },
     "%lld saved": {
       "localizations": {
         "en": {

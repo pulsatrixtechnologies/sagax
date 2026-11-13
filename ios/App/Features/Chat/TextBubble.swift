@@ -316,9 +316,9 @@ struct TextBubble: View {
         _ = bubblePrefs.botBubble
         _ = openBot.openBotColor
         if mine, let botPaint { return botPaint.fill.color }
-        if !mine, let paint = BotBubblePaint.current { return paint.fill }
-        if let desktop { return mine ? desktop.bubbleUser : (message.webhookContent == nil ? desktop.bubbleBot : desktop.card) }
-        return mine ? BubbleColor.mine : BubbleColor.theirs
+        if mine { return desktop?.bubbleUser ?? BubbleColor.mine }
+        if let desktop, message.webhookContent != nil, BotBubblePaint.current == nil { return desktop.card }
+        return BubbleColor.theirs(desktop: desktop)
     }
 
     /// The desktop's cap: the wide one for tables and rich fences.

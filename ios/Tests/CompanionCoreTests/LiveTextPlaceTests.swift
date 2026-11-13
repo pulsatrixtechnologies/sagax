@@ -139,4 +139,36 @@ final class LiveTextPlaceTests: XCTestCase {
         let digest = Message(id: "d", role: .bot, kind: .digest, at: 3)
         XCTAssertEqual(LiveTextPlace.lastDrawn([short, digest])?.id, short.id)
     }
+
+    // #4066: what the chat's live tail draws (ChatLiveTail). The note the
+    // transcript leaves to the working line stays on screen while the
+    // reasoning streams (Tool calls on): before, the reasoning took the tail
+    // and the note was drawn nowhere.
+    func testTheNoteStaysOnScreenWhileTheReasoningStreams() {
+        XCTAssertEqual(
+            LiveTail.of(text: nil, reasoning: "Reading 1040 first.", note: "Checking the notes.", streams: true, onCall: false, showsReasoning: true, busy: true),
+            .reasoning("Reading 1040 first.", note: "Checking the notes.")
+        )
+        // no note: the reasoning alone
+        XCTAssertEqual(
+            LiveTail.of(text: nil, reasoning: "Reading.", note: nil, streams: true, onCall: false, showsReasoning: true, busy: true),
+            .reasoning("Reading.", note: nil)
+        )
+        // Tool calls off: the working line keeps the note
+        XCTAssertEqual(
+            LiveTail.of(text: nil, reasoning: "Reading.", note: "Checking.", streams: true, onCall: false, showsReasoning: false, busy: true),
+            .working(note: "Checking.")
+        )
+    }
+
+    func testTheLiveTailOrder() {
+        let long = String(repeating: "word ", count: 30)
+        XCTAssertEqual(LiveTail.of(text: long, reasoning: "r", note: "n", streams: true, onCall: false, showsReasoning: true, busy: true), .bubble(long))
+        XCTAssertEqual(LiveTail.of(text: "**Yes**, on it.", reasoning: "r", note: nil, streams: true, onCall: false, showsReasoning: true, busy: true), .line("Yes, on it."))
+        // on a call, or with streaming off, the text waits for its message
+        XCTAssertEqual(LiveTail.of(text: long, reasoning: nil, note: nil, streams: false, onCall: false, showsReasoning: true, busy: true), .working(note: nil))
+        XCTAssertEqual(LiveTail.of(text: long, reasoning: "r", note: nil, streams: true, onCall: true, showsReasoning: true, busy: true), .working(note: nil))
+        XCTAssertEqual(LiveTail.of(text: nil, reasoning: nil, note: nil, streams: true, onCall: false, showsReasoning: true, busy: false), LiveTail.nothing)
+        XCTAssertEqual(LiveTail.of(text: "", reasoning: "", note: nil, streams: true, onCall: false, showsReasoning: true, busy: false), LiveTail.nothing)
+    }
 }

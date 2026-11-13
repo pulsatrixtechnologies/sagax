@@ -58,21 +58,63 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
     public var startedAt: Double?
     /// The items only the person can do, as the report wrote them.
     public var attention: String?
+    /// #3990: "person" when the person started this run (Run now): its card
+    /// is theirs, and the chat draws it.
+    public var startedBy: String?
+    /// #3990: a wake's report the bot wrote for the person (it did not end
+    /// with the nothing-to-report line); a wake's row without it leaves the
+    /// chat (`RoutineRunRows.outOfChat`).
+    public var forPerson: Bool
 
-    /// The same problem, run after run.
+    /// The same problem, run after run, or (#3695, #3910) runs in a row that
+    /// ended with problems, whatever they said.
     public struct Repeat: Codable, Hashable, Sendable {
         public var count: Int
         public var since: Double
-        public init(count: Int, since: Double) {
+        /// #3695: the one summary card of a routine's streak of problems.
+        public var streak: Bool
+        /// #3910: the runs in a row had problems, not one same problem.
+        public var anyProblem: Bool
+
+        /// How the card says it (the desktop's `routineRepeatText`).
+        public enum Wording: Sendable { case sameProblem, problemStreak }
+        public var wording: Wording { streak || anyProblem ? .problemStreak : .sameProblem }
+
+        public init(count: Int, since: Double, streak: Bool = false, anyProblem: Bool = false) {
             self.count = count
             self.since = since
+            self.streak = streak
+            self.anyProblem = anyProblem
+        }
+
+        private enum CodingKeys: String, CodingKey { case count, since, streak, anyProblem }
+
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            count = try c.decode(Int.self, forKey: .count)
+            since = try c.decode(Double.self, forKey: .since)
+            streak = (try? c.decodeIfPresent(Bool.self, forKey: .streak)).flatMap { $0 } ?? false
+            anyProblem = (try? c.decodeIfPresent(Bool.self, forKey: .anyProblem)).flatMap { $0 } ?? false
         }
     }
 
     /// Works again after problems.
     public struct Recovered: Codable, Hashable, Sendable {
         public var since: Double
-        public init(since: Double) { self.since = since }
+        /// #3990: the streak's own summary card, turned to works again.
+        public var streak: Bool
+        public init(since: Double, streak: Bool = false) {
+            self.since = since
+            self.streak = streak
+        }
+
+        private enum CodingKeys: String, CodingKey { case since, streak }
+
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            since = try c.decode(Double.self, forKey: .since)
+            streak = (try? c.decodeIfPresent(Bool.self, forKey: .streak)).flatMap { $0 } ?? false
+        }
     }
 
     /// One watch an alert reported.
@@ -105,7 +147,8 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         executionThreadId: String? = nil, summary: String? = nil, error: String? = nil,
         autoPausedAfter: Int? = nil, problems: String? = nil, handedTo: [Handoff] = [],
         wakeTopic: String? = nil, watches: [WatchRef] = [], brief: String? = nil,
-        repeat: Repeat? = nil, recovered: Recovered? = nil, startedAt: Double? = nil
+        repeat: Repeat? = nil, recovered: Recovered? = nil, startedAt: Double? = nil,
+        startedBy: String? = nil, forPerson: Bool = false
     ) {
         self.runId = runId
         self.routineId = routineId
@@ -126,12 +169,14 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         self.repeat = `repeat`
         self.recovered = recovered
         self.startedAt = startedAt
+        self.startedBy = startedBy
+        self.forPerson = forPerson
     }
 
     private enum CodingKeys: String, CodingKey {
         case runId, routineId, routineName, scheduledFor, status, deferredAt
         case goalStatus, executionThreadId, summary, error, autoPausedAfter, problems, handedTo
-        case wakeTopic, watches, brief, `repeat`, recovered, startedAt, attention
+        case wakeTopic, watches, brief, `repeat`, recovered, startedAt, attention, startedBy, forPerson
     }
 
     /// Field by field and forgiving: a card is a decoration on a message the
@@ -161,6 +206,8 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         recovered = (try? c.decodeIfPresent(Recovered.self, forKey: .recovered)).flatMap { $0 }
         startedAt = (try? c.decodeIfPresent(Double.self, forKey: .startedAt)).flatMap { $0 }
         attention = (try? c.decodeIfPresent(String.self, forKey: .attention)).flatMap { $0 }
+        startedBy = (try? c.decodeIfPresent(String.self, forKey: .startedBy)).flatMap { $0 }
+        forPerson = (try? c.decodeIfPresent(Bool.self, forKey: .forPerson)).flatMap { $0 } ?? false
     }
 
     /// #3581: the card's one or two lines: the server's brief, or the same
@@ -177,6 +224,24 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
 
     /// Completed, but not all of it went right (desktop WITH_PROBLEMS).
     public var hasProblems: Bool { problems != nil }
+
+    /// #3695: a repeating routine's one summary card of its streak of runs
+    /// with problems (desktop `isProblemStreakCard`).
+    public var isProblemStreak: Bool { `repeat`?.streak == true }
+
+    /// #3695, #4066: a summary card whose latest run failed or was blocked
+    /// (desktop `streakFailed`): its failure words are its brief, and its
+    /// state line counts the runs in a row.
+    public var isFailedStreak: Bool { isProblemStreak && goalStatus == nil && status != "completed" }
+
+    /// #3479, #3695: the repeat a card's state line counts (desktop `repeat`
+    /// of RoutineRunCard.tsx): a lasting problem of a completed run, or the
+    /// streak's summary whatever its run said. Nil: the line counts nothing.
+    public var countedRepeat: Repeat? {
+        guard let lasting = `repeat`, lasting.count > 1,
+              (status == "completed" && hasProblems) || lasting.streak else { return nil }
+        return lasting
+    }
 
     /// Still moving: the card will be patched again.
     public var isInFlight: Bool {

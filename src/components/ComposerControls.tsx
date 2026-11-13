@@ -1,5 +1,5 @@
-// The composer's round controls, measured on the reference design's prompt bar (0.71):
-// 28 px circles 8 px apart, a quiet "secondary" circle (+, mic) and a filled
+// The composer's round controls, measured on the reference design's prompt bar (0.71,
+// re-measured for #4152): 28 px circles 8 px apart, 16 px glyphs, a quiet "secondary" circle (+, mic) and a filled
 // call to action (Voice, or Send once something is typed) whose glyphs
 // cross-fade (opacity and scale .5 -> 1, 200 ms, ease-out-quint).
 // While dictating, the mic and the CTA give way to a pill: a 10 px stop
@@ -21,11 +21,16 @@ import { ultracodeFromSelection } from "@/lib/ultracode-chrome";
 import { useStoreSelector } from "@/state/store-selector";
 import type { Bot } from "@/state/store";
 
-/** The quiet circle: a translucent ink wash, a 0.5 px inner hairline, tertiary ink brightening on hover. */
+/** The quiet circle, the reference's (#4152): its secondary fill, a 0.5 px
+ * inner hairline in its faint tertiary border (never the field border's
+ * stronger line), the glyph in tertiary ink, brightening on hover. The inks
+ * are the message bar's own (styles.css, `--composer-control-*`). */
 export const SECONDARY_CIRCLE = cn(
   CTA_CIRCLE,
-  "bg-ink/[0.06] text-ink-tertiary shadow-[inset_0_0_0_0.5px_var(--color-border)] hover:bg-ink/[0.1] hover:text-ink disabled:cursor-not-allowed disabled:opacity-40",
+  "bg-[var(--composer-control-fill)] text-[var(--composer-control-ink)] shadow-[inset_0_0_0_0.5px_var(--composer-control-ring)] hover:bg-[var(--composer-control-fill-hover)] hover:text-ink disabled:cursor-not-allowed disabled:opacity-40",
 );
+/** The quiet circle's glyph: 16 px, the reference's glyph box. */
+export const SECONDARY_GLYPH = 16;
 
 /** The reference design's glyph cross-fade. */
 const GLYPH = "absolute inset-0 m-auto transition-[opacity,transform] duration-moderate ease-out-quint motion-reduce:transition-none";
@@ -156,7 +161,7 @@ export function ComposerPlusMenu({
         }}
         className={SECONDARY_CIRCLE}
       >
-        <Plus size={15} strokeWidth={2.25} aria-hidden="true" />
+        <Plus size={SECONDARY_GLYPH} strokeWidth={2} aria-hidden="true" />
       </button>
       {motion.shown && (
         <div
@@ -302,7 +307,7 @@ export function ComposerMicButton({ onClick, onPress, onRelease, hidden = false,
   return (
     // The slot's width snaps (an animated width would re-wrap the draft on
     // every frame); the button itself fades and scales in, compositor only.
-    <span className={cn("flex shrink-0 overflow-hidden", hidden ? "me-0 w-0" : "w-7")}>
+    <span className={cn("flex shrink-0 overflow-hidden", hidden ? "-me-2 w-0" : "w-7")}>
       <button
         type="button"
         onClick={onClick}
@@ -316,7 +321,7 @@ export function ComposerMicButton({ onClick, onPress, onRelease, hidden = false,
         aria-hidden={hidden || undefined}
         className={cn(SECONDARY_CIRCLE, "transition-[color,background-color,opacity,scale] duration-moderate ease-out-quint motion-reduce:transition-none", hidden && "invisible scale-50 opacity-0")}
       >
-        <Mic size={15} strokeWidth={2.25} aria-hidden="true" />
+        <Mic size={SECONDARY_GLYPH} strokeWidth={2} aria-hidden="true" />
       </button>
     </span>
   );
@@ -486,7 +491,7 @@ export function VoiceNoteChip({ seconds, bars, sending, onCancel, onSend, sendTo
         className={SECONDARY_CIRCLE}
         data-voice-note-cancel=""
       >
-        <X size={15} strokeWidth={2.25} aria-hidden="true" />
+        <X size={SECONDARY_GLYPH} strokeWidth={2} aria-hidden="true" />
       </button>
       <span
         role="timer"

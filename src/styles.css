@@ -89,22 +89,49 @@
   color: var(--color-ink);
 }
 /* The text a person types into a chat: the composer, its mention mirror and
-   the inline editor of a sent bubble. 13 px on a 20 px line, the Perspicax v3
-   body step. On a phone the field goes to 16 px, the size under which iOS
-   Safari zooms the page when a field takes focus (Perspicax fields are
-   `text-base md:text-sm` for the same reason). The mirror is in the same rule
-   so it can never drift from the textarea it paints over. */
+   the inline editor of a sent bubble. 14 px on a 20 px line, the reference's
+   prompt field in the owner's configuration (its body step, the same for the
+   placeholder and the typed text, #4152). On a touch screen the field goes to
+   16 px, the size under which iOS Safari zooms the page when a field takes
+   focus (Perspicax fields are `text-base md:text-sm` for the same reason); a
+   narrow desktop window keeps 14 px, as the reference does at 640 and 768
+   (#4152). The
+   mirror is in the same rule so it can never drift from the textarea it
+   paints over. */
 .chat-input-text,
 .mention-editor-mirror {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 20px;
 }
-@media (pointer: coarse), (max-width: 767px) {
+@media (pointer: coarse) {
   .chat-input-text,
   .mention-editor-mirror {
     font-size: 16px;
     line-height: 24px;
   }
+}
+/* The message bar's own inks, measured on the reference's prompt bar
+   (#4152): the placeholder in its quaternary text (40% of the ink in light,
+   38% in dark), the + and mic circles a secondary fill (6% / 4%) with a
+   0.5 px inner hairline in its tertiary translucent border (8% / 6%) and the
+   glyph in tertiary text (56% / 54%), the fill 10% / 8% on hover. Mixed from
+   each skin's own ink, so every skin keeps its hue. */
+:root,
+[data-skin] {
+  --composer-placeholder: color-mix(in srgb, var(--color-ink) 38%, transparent);
+  --composer-control-fill: color-mix(in srgb, var(--color-ink) 4%, transparent);
+  --composer-control-fill-hover: color-mix(in srgb, var(--color-ink) 8%, transparent);
+  --composer-control-ring: color-mix(in srgb, var(--color-ink) 6%, transparent);
+  --composer-control-ink: color-mix(in srgb, var(--color-ink) 54%, transparent);
+}
+/* :is() so no line reads as a skin's own block to the tools that look one up */
+:is([data-skin="pulsatrix-light"], [data-skin="atelier"], [data-skin="lagoon"], [data-skin="linen"],
+  [data-skin="daylight"], [data-skin="retro98"], [data-skin="meadow"]) {
+  --composer-placeholder: color-mix(in srgb, var(--color-ink) 40%, transparent);
+  --composer-control-fill: color-mix(in srgb, var(--color-ink) 6%, transparent);
+  --composer-control-fill-hover: color-mix(in srgb, var(--color-ink) 10%, transparent);
+  --composer-control-ring: color-mix(in srgb, var(--color-ink) 8%, transparent);
+  --composer-control-ink: color-mix(in srgb, var(--color-ink) 56%, transparent);
 }
 /* The composer's button groups (+ on the left; model, emoji, mic, Voice on
    the right) sit in a band as tall as the field's first line with its
@@ -116,7 +143,7 @@
 .composer-band {
   min-height: 32px;
 }
-@media (pointer: coarse), (max-width: 767px) {
+@media (pointer: coarse) {
   .composer-band {
     min-height: 36px;
   }
@@ -139,13 +166,15 @@
    hint broke mid-word ("Messag / e Pepper"). While the field is empty the
    mirror paints the hint on one line ending in an ellipsis (Chrome does not
    ellipsize a textarea's own placeholder), and the native one keeps to one
-   line, unseen, so the field stays one line tall. Typed text wraps as before. */
+   line, unseen, so the field stays one line tall. Typed text wraps as before.
+   The hint is drawn in the message bar's placeholder ink (#4152), so
+   "Message Name · Role" reads in the reference's quaternary text. */
 .mention-editor-placeholder {
   display: block;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  color: var(--color-ink-secondary);
+  color: var(--composer-placeholder);
 }
 .mention-editor > textarea:placeholder-shown {
   white-space: nowrap;

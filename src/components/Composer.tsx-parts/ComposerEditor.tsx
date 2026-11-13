@@ -150,12 +150,14 @@ export function ComposerEditor({
     {/* One row while it fits: chips, editor, mic. Below the container
         width where the chips and the placeholder cannot share a line,
         the editor takes a full line of its own above the chips.
-        The same row in Simple and Advanced mode. */}
+        The same row in Simple and Advanced mode. One line is 44 px tall,
+        the reference's bar (#4152): the 32 px band, 5 px above and below,
+        the hairline. */}
     <div
       data-tour="composer"
       data-ultracode={bot && ultracodeFromSelection(bot.modelSelection) ? "" : undefined}
       className={cn(
-        "@container/composer relative z-[1] min-h-11 rounded-[22px] border-[0.5px] border-border bg-composer px-2 py-1.5 shadow-[0_2px_8px_-1px_#0000000d,0_1px_2px_#00000008,0_0_0_1px_#e4e4e40a] transition-colors hover:border-border-strong focus-within:border-border-strong",
+        "@container/composer relative z-[1] min-h-11 rounded-[22px] border-[0.5px] border-border bg-composer px-2 py-[5px] shadow-[0_2px_8px_-1px_#0000000d,0_1px_2px_#00000008,0_0_0_1px_#e4e4e40a] transition-colors hover:border-border-strong focus-within:border-border-strong",
         bot && ultracodeFromSelection(bot.modelSelection) && "ultracode-chrome",
       )}
     >
@@ -263,9 +265,10 @@ export function ComposerEditor({
         goalMode: channelMode === "goal",
         groupHint: () => groupComposerHint(group!, members ?? [], { jevOn: jevRoomRoutingOn(config) }),
         botName: bot?.name ?? "",
+        botTitle: bot?.title,
       })}
       aria-label={composerAria}
-        className="block max-h-[7.5rem] min-h-6 w-full resize-none overflow-y-auto bg-transparent chat-input-text px-1 py-1.5 placeholder:text-ink-secondary focus:outline-none"
+        className="block max-h-[7.5rem] min-h-6 w-full resize-none overflow-y-auto bg-transparent chat-input-text px-1 py-1.5 focus:outline-none"
       />
       {children}
     </div>

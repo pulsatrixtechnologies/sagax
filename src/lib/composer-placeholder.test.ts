@@ -13,6 +13,16 @@ describe("composerPlaceholder", () => {
     expect(composerPlaceholder({ ...base, busy: true })).not.toContain("working");
   });
 
+  it("names the bot with its role, the sidebar's and the header pill's form (#4152)", () => {
+    expect(composerPlaceholder({ ...base, botTitle: "Service Desk Ops" })).toBe("Message Scout · Service Desk Ops");
+    expect(composerPlaceholder({ ...base, botTitle: "  " })).toBe("Message Scout");
+    expect(composerPlaceholder({ ...base, botTitle: undefined })).toBe("Message Scout");
+    // a room keeps its own line
+    expect(composerPlaceholder({ ...base, botTitle: "Ops", groupName: "Launch", busy: true })).toBe("Write a message…");
+    setLocale("fr");
+    expect(composerPlaceholder({ ...base, botTitle: "Chef de cabinet" })).toBe("Écrire un message à Scout · Chef de cabinet");
+  });
+
   it("falls back to the plain line without a name", () => {
     expect(composerPlaceholder({ ...base, botName: "" })).toBe("Write a message…");
   });
@@ -27,10 +37,10 @@ describe("composerPlaceholder", () => {
     expect(composerPlaceholder({ ...base, busy: true, groupName: "Launch" })).toBe("Écris un message…");
   });
 
-  it("invites an answer to a waiting question, and says it stays open", () => {
-    expect(composerPlaceholder({ ...base, question: true })).toBe("Answer the question above, or write something else: it stays open");
+  it("invites an answer to the pinned question (#3214)", () => {
+    expect(composerPlaceholder({ ...base, question: true })).toBe("Type your answer to the pinned question, or pick an option above");
     setLocale("fr");
-    expect(composerPlaceholder({ ...base, question: true, busy: true })).toBe("Réponds à la question ci-dessus, ou écris autre chose : elle reste ouverte");
+    expect(composerPlaceholder({ ...base, question: true, busy: true })).toBe("Écris ta réponse à la question épinglée, ou choisis une option ci-dessus");
     // an approval still wins: it takes the composer over
     expect(composerPlaceholder({ ...base, question: true, approval: true })).toBe(t("composer.placeholder.approval"));
   });

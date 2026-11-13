@@ -41,3 +41,12 @@ guard-tests: G="$(node scripts/verify/release/guard-tests.mjs)"; if [ -n "$G" ];
 # too (shared/, server/testing/), so they run on every lot, whatever it
 # touches: about 15 s together (45 s on a busy machine).
 electron-unit: node --test "electron/*.node-test.mjs"
+
+# shared-cycles (#4164): the import cycle ceiling of shared/
+# (scripts/testing/madge-cycles.guard.test.ts, at zero) went red on main
+# unseen: two lots each added a type import that closed a cycle in shared/
+# (#3541, #4149), and only a lot that touched the guard itself ran it. Only a
+# change in shared/ can add a cycle there, so a lot that touches a TypeScript
+# file of shared/ runs that one case: about 10 s on a busy machine. The src
+# and server cases wait on the cycles they still hold (known failures).
+shared-cycles: if printf '%s\n' "$FAST_GATE_FILES" | grep -qE '^shared/[^[:space:]]*\.tsx?$'; then ./node_modules/.bin/vitest run --reporter=dot scripts/testing/madge-cycles.guard.test.ts -t 'shared stays at its ceiling'; fi

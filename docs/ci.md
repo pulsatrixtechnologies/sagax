@@ -285,12 +285,18 @@ How a run decides (`scripts/testing/known-failures.mjs`):
    the sightings of a named green run on main and closes those the rail
    would close, with the run as evidence. A test seen failing on one
    platform closes only from a run that covers that platform. It lists them
-   by default and closes them with `--close`.
+   by default and closes them with `--close`. A sighting recorded before the
+   sightings kept their runners gets them back from the runs of main at its
+   commits (`recoverFailedOn`, #4102). A test that is not in the run although
+   its file ran, and whose name is nowhere on `origin/main` (or whose file is
+   gone there), no longer exists: its issue closes with the commit that
+   removed or renamed it.
 5. Red Swift package tests on main (`Swift package tests` after a merge, the
    Swift step of the nightly's iOS job) open one `regression` issue at the
    first failure, or comment on the open one, with the commit, the failing
    test cases from the uploaded log and the run: a package that does not
    compile is not a flaky test. A Swift job that got no runner opens nothing.
+   A later run on main whose Swift step passes closes that issue (#4102).
 
 The Linux package smoke installs its tools with apt retries
 (`Acquire::Retries=3`), each attempt bounded by `timeout`, three attempts

@@ -8,18 +8,22 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   classify,
+  closingEvidence,
   coversEveryPlatform,
   EVERY_PLATFORM,
   extractResults,
   failingSwiftTests,
   filesRunOn,
   GROUP_ABOVE,
+  greenEvidence,
   jobsWithoutRunner,
   identityKey,
   listedGuardTests,
   onlyShrinks,
   openRegressionIssues,
   openSwiftRegressionIssue,
+  planRegressionUpdates,
+  recoverFailedOn,
   regressionMarker,
   RUN_MARKER,
   seedList,
@@ -532,9 +536,67 @@ describe("updateRegressionIssues (#4037)", () => {
     expect(await updateRegressionIssues([{ number: 12, body: regressionMarker(windowsOnly) }], options(github.fetch, results, EVERY_PLATFORM, sightings))).toEqual([{ issue: 12, ticked: 1, closed: true }]);
   });
 
-  it("leaves the Swift package tests' issue alone", async () => {
+  it("leaves the Swift package tests' issue alone on a run without its Swift step", async () => {
     const github = fakeGitHub();
     expect(await updateRegressionIssues([{ number: 9, body: regressionMarker(SWIFT_IDENTITY) }], options(github.fetch, [{ ...test(1), state: "pass" }], EVERY_PLATFORM))).toEqual([]);
+  });
+
+  it("closes the Swift package tests' issue on a run whose Swift step passed, and keeps it on a red one (#4102)", async () => {
+    const issue = { number: 9, body: regressionMarker(SWIFT_IDENTITY) };
+    const github = fakeGitHub();
+    expect(await updateRegressionIssues([issue], { ...options(github.fetch, [], ["ubuntu-latest"]), swift: "pass" })).toEqual([{ issue: 9, ticked: 1, closed: true }]);
+    expect(planRegressionUpdates([issue], { results: [], platforms: ["ubuntu-latest"], sightings: null, swift: "fail" })[0]).toMatchObject({ close: false, reason: "fail" });
+    expect(planRegressionUpdates([issue], { results: [], platforms: ["ubuntu-latest"], sightings: null, swift: "not-run" })[0]).toMatchObject({ close: false, reason: "not-green" });
+  });
+
+  it("closes an issue whose test no longer exists, with the commit that removed it, and never one whose test ran (#4102)", () => {
+    const removed = test(1);
+    const ran = test(2);
+    const gone = new Map([[regressionMarker(removed), "abc123"], [regressionMarker(ran), "def456"]]);
+    const results = [{ ...ran, state: "fail", os: "ubuntu-latest" }];
+    const plans = planRegressionUpdates([{ number: 1, body: regressionMarker(removed) }, { number: 2, body: regressionMarker(ran) }], { results, platforms: ["ubuntu-latest"], sightings: null, gone });
+    expect(plans[0]).toMatchObject({ close: true, gone: [{ test: identityKey(removed), commit: "abc123" }] });
+    expect(plans[1]).toMatchObject({ close: false, reason: "fail" });
+    expect(closingEvidence({ runUrl: "u", sha: "s", gone: plans[0]!.gone!, tests: 1 })).toContain(`\`${identityKey(removed)}\`: removed or renamed in commit abc123`);
+    expect(closingEvidence({ runUrl: "u", sha: "s", gone: [], tests: 1 })).toBe(greenEvidence({ runUrl: "u", sha: "s" }));
+  });
+});
+
+describe("recoverFailedOn (#4102)", () => {
+  const key = (test: string) => identityKey({ file: "a.test.ts", test });
+  const legacy = (test: string, firstSha: string, lastSha = firstSha, issue = 1) => ({ file: "a.test.ts", test, count: 2, firstSha, lastSha, issue });
+
+  it("gives a sighting recorded without its runners the runners of the runs that saw it", () => {
+    const sightings = { lastSha: "z", tests: {
+      [key("linux push")]: legacy("linux push", "p1", "p2"),
+      [key("nightly")]: legacy("nightly", "n1"),
+      [key("kept")]: { ...legacy("kept", "p1"), failedOn: ["windows-latest"] },
+      [key("no run")]: legacy("no run", "x1"),
+    } };
+    const runs: Record<string, { platforms: string[]; failing: Map<string, string[]> | null }[]> = {
+      p1: [{ platforms: ["ubuntu-latest"], failing: null }],
+      p2: [{ platforms: ["ubuntu-latest"], failing: null }],
+      n1: [{ platforms: EVERY_PLATFORM, failing: new Map([[key("nightly"), ["windows-latest"]]]) }],
+      x1: [{ platforms: EVERY_PLATFORM, failing: null }],
+    };
+    const recovered = recoverFailedOn(sightings, (sha: string) => runs[sha] ?? []);
+    expect(recovered.tests[key("linux push")].failedOn).toEqual(["ubuntu-latest"]);
+    expect(recovered.tests[key("nightly")].failedOn).toEqual(["windows-latest"]);
+    expect(recovered.tests[key("kept")].failedOn).toEqual(["windows-latest"]);
+    expect(recovered.tests[key("no run")].failedOn).toBeUndefined();
+  });
+
+  it("then closes its issue from a run on every platform whose macOS shards were cancelled", () => {
+    const sightings = { tests: { [key("seen on a push")]: legacy("seen on a push", "p1") } };
+    // macOS sent no result for this file: its shard was cancelled.
+    const results = [
+      ...["ubuntu-latest", "windows-latest"].map((os) => ({ file: "a.test.ts", test: "seen on a push", state: "pass", os })),
+      { file: "other.test.ts", test: "x", state: "pass", os: "macos-latest" },
+    ];
+    const issue = { number: 1, body: regressionMarker({ file: "a.test.ts", test: "seen on a push" }) };
+    expect(planRegressionUpdates([issue], { results, platforms: EVERY_PLATFORM, sightings })[0]).toMatchObject({ close: false, reason: "not-green" });
+    const recovered = recoverFailedOn(sightings, () => [{ platforms: ["ubuntu-latest"], failing: null }]);
+    expect(planRegressionUpdates([issue], { results, platforms: EVERY_PLATFORM, sightings: recovered })[0]).toMatchObject({ close: true });
   });
 });
 

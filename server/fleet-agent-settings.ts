@@ -43,6 +43,17 @@ const MODEL_ROUTE_FIELDS = new Set([
 /** Primary Bot switch (POST/DELETE /api/bots/:id/primary). */
 export const AGENT_PRIMARY_FIELD = "primary" as const;
 
+/** #4172: the bot page's own switches outside PATCH /api/bots/:id, each a
+ * map sent to the route the page calls: skills on or off (PATCH
+ * /api/bots/:id/skills/:name), plugins on or off (PATCH
+ * /api/bots/:id/plugins/:key), sharing with a person or group (PUT
+ * /api/bots/:id/grants, DELETE /api/bots/:id/grants/:target). */
+export const AGENT_SWITCH_FIELDS = ["skills", "plugins", "grants"] as const;
+export type AgentSwitchField = (typeof AGENT_SWITCH_FIELDS)[number];
+
+/** The sharing levels the bot page offers (PUT /api/bots/:id/grants). */
+export const AGENT_GRANT_LEVELS = ["use", "run", "edit", "manage"] as const;
+
 function uniqueSorted(fields: Iterable<string>): string[] {
   return [...new Set(fields)].sort();
 }
@@ -58,6 +69,7 @@ export const AGENT_SETTINGS_FIELDS: readonly string[] = uniqueSorted([
   ...RUNTIME_SETTINGS_FIELDS,
   ...PATCH_ACK_FIELDS,
   ...PATCH_EXTRA_FIELDS,
+  ...AGENT_SWITCH_FIELDS,
   AGENT_PRIMARY_FIELD,
 ]);
 
@@ -177,9 +189,16 @@ export function partitionAgentSettings(fields: Record<string, unknown>): {
   runtime: Record<string, unknown>;
   primary: boolean | undefined;
   primaryInvalid?: boolean;
+  /** #4172: name or key to on/off (skills, plugins), target to level or
+   * null (grants). */
+  switches: AgentSwitches;
+  /** Each switch field whose value is not a valid map, with why. */
+  switchesInvalid: Array<{ field: string; reason: string }>;
 } {
   const patch: Record<string, unknown> = {};
   const runtime: Record<string, unknown> = {};
+  const switches: AgentSwitches = {};
+  const switchesInvalid: Array<{ field: string; reason: string }> = [];
   let primary: boolean | undefined;
   let primaryInvalid = false;
   for (const [field, value] of Object.entries(fields)) {
@@ -188,8 +207,48 @@ export function partitionAgentSettings(fields: Record<string, unknown>): {
       else primaryInvalid = true;
       continue;
     }
+    if (isAgentSwitchField(field)) {
+      const parsed = parseSwitchMap(field, value);
+      if (typeof parsed === "string") switchesInvalid.push({ field, reason: parsed });
+      else if (field === "grants") switches.grants = parsed as Record<string, AgentGrantLevel | null>;
+      else switches[field] = parsed as Record<string, boolean>;
+      continue;
+    }
     if (isRuntimeSettingsField(field)) runtime[field] = value;
     else patch[field] = value;
   }
-  return { patch, runtime, primary, ...(primaryInvalid ? { primaryInvalid: true } : {}) };
+  return { patch, runtime, primary, ...(primaryInvalid ? { primaryInvalid: true } : {}), switches, switchesInvalid };
+}
+
+export type AgentGrantLevel = (typeof AGENT_GRANT_LEVELS)[number];
+export interface AgentSwitches {
+  skills?: Record<string, boolean>;
+  plugins?: Record<string, boolean>;
+  grants?: Record<string, AgentGrantLevel | null>;
+}
+
+export function isAgentSwitchField(field: string): field is AgentSwitchField {
+  return (AGENT_SWITCH_FIELDS as readonly string[]).includes(field);
+}
+
+/** A switch map as sent, or the sentence saying what it should be. */
+function parseSwitchMap(field: AgentSwitchField, value: unknown): Record<string, boolean | AgentGrantLevel | null> | string {
+  const shape = field === "grants"
+    ? "grants maps user:<person id> or team:<team id> to use, run, edit or manage (null stops sharing with them)"
+    : `${field} maps each ${field === "skills" ? "skill name" : "plugin key"} to true (on) or false (off)`;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return `${shape}.`;
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (!entries.length) return `${shape}.`;
+  const out: Record<string, boolean | AgentGrantLevel | null> = {};
+  for (const [key, entry] of entries) {
+    if (!key.trim()) return `${shape}.`;
+    if (field === "grants") {
+      if (entry !== null && !(AGENT_GRANT_LEVELS as readonly unknown[]).includes(entry)) return `${shape}; ${key} has ${JSON.stringify(entry)}.`;
+      out[key] = entry as AgentGrantLevel | null;
+    } else {
+      if (typeof entry !== "boolean") return `${shape}; ${key} has ${JSON.stringify(entry)}.`;
+      out[key] = entry;
+    }
+  }
+  return out;
 }

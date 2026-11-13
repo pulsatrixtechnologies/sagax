@@ -12,7 +12,7 @@ const everything: CatalogProfile = {
 
 // These Agent API entries run only for a person's AI client. A bot caller is
 // refused by the server and uses its native setup/routine tools below.
-const PERSON_CLIENT_TOOLS = new Set(["update_agent_model", "update_agent_settings", "update_routine"]);
+const PERSON_CLIENT_TOOLS = new Set(["update_agent_model", "update_agent_settings", "update_routine", "create_routine", "delete_routine"]);
 
 /** Every tool the agents catalog can show, across the profiles that change it. */
 function catalogNames(): string[] {

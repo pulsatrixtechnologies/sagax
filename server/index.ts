@@ -153,6 +153,7 @@ import { attentionCard, mirrorBackgroundReply, mirrorLateRunReply, openCardIn, r
 import { personAttention } from "../shared/person-attention.ts";
 import { createApprovalModeSupport } from "./capabilities/harness-capabilities.ts";
 import { threadRefUrl } from "../src/lib/thread-refs.ts";
+import { skillEditorApiPath } from "../src/lib/skills-ui.ts";
 import { markDeadThreadChip } from "./threads/dead-thread-chips.ts";
 import { credentialIsConfigured } from "../shared/credential-request.ts";
 import { VAULT_LOGIN_TARGET, ONE_PASSWORD_WAITING } from "../shared/credential-vault.ts";
@@ -1326,7 +1327,7 @@ import { isInternalVoiceCallEnd } from "./routes/voice-call-internal.ts";
 import { activeCount as temporaryActiveCount, archiveMark, capInstructions, defaultIdleHours, mayDelete as mayDeleteTemporary, profileSections, quotaKey as temporaryQuotaKey, TEMP_AGENT_QUOTA, TEMP_AGENT_SWEEP_MS, temporaryOwner, type TemporaryAgent, type TemporaryCreator } from "./temporary-agents.ts";
 import { createTemporaryAgentRoutes } from "./routes/temporary-agents.ts";
 import { botCreationOffered } from "./bots/bot-creation.ts";
-import { agentPromptWithFiles, createAgentApi, formatEngineCandidates, isRefusal as isAgentRefusal, partitionAgentSettings, plainFieldRefusalReason, refuse as agentRefuse, resolveEngineInstance, routeRefusal as agentRouteRefusal, SEND_RECEIPT_TTL_MS, type AgentCaller, type AgentWorkspace, type CreateAgentInput, type Refusal as AgentRefusal, type SendReceipt } from "./agent-api.ts";
+import { agentPromptWithFiles, createAgentApi, formatEngineCandidates, isRefusal as isAgentRefusal, partitionAgentSettings, plainFieldRefusalReason, refuse as agentRefuse, resolveEngineInstance, routeRefusal as agentRouteRefusal, SEND_RECEIPT_TTL_MS, type AgentCaller, type AgentRoutinePatch, type AgentWorkspace, type CreateAgentInput, type Refusal as AgentRefusal, type SendReceipt } from "./agent-api.ts";
 import { parseHideList, planHiddenAgentThreads, planHiddenBotThreads } from "./threads/agent-threads.ts";
 import { backgroundIdleMs, planBackgroundSweep, RESERVED_RUN_PREFIX } from "./threads/background-sweep.ts";
 import { MemberLiveText } from "./people/member-live-text.ts";
@@ -31623,6 +31624,22 @@ async function lastingAgentSelection(principalId: string, wanted: NonNullable<Ex
   return { instanceId: engine, model, ...(wanted.effort ? { effort: wanted.effort } : {}), ...(wanted.auto === true ? { auto: true } : {}) };
 }
 
+/** An agent API routine patch as the Automations editor's body (PATCH and
+ * POST /api/routines). requires is replaced wholesale by the route, so a
+ * change of the computer need keeps the routine's skills and MCP needs. */
+function agentRoutineBody(patch: AgentRoutinePatch, requires: Parameters<typeof withRequiredComputer>[0]): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (patch.enabled !== undefined) body.enabled = patch.enabled;
+  if (patch.name !== undefined) body.name = patch.name;
+  if (patch.instructions !== undefined) body.prompt = patch.instructions;
+  if (patch.schedule !== undefined) body.schedule = patch.schedule;
+  if (patch.requiresComputer !== undefined) body.requires = withRequiredComputer(requires, patch.requiresComputer);
+  if (patch.model !== undefined) body.model = patch.model;
+  if (patch.subagentModel !== undefined) body.subagentModel = patch.subagentModel;
+  if (patch.effort !== undefined) body.effort = patch.effort;
+  if (patch.goal !== undefined) body.goal = patch.goal;
+  return body;
+}
 const agentApi = createAgentApi({
   guardMode: toolGuardMode(process.env.SAGAX_TOOL_GUARD),
   guard: (caller, policy, target) => guardDecision(policy, { kind: caller.kind === "bot" ? "bot" : "user", id: caller.id },
@@ -31653,19 +31670,32 @@ const agentApi = createAgentApi({
     }),
   secret: agentApiSecret(),
   audit: agentApiAudit,
-  async agents(caller) {
+  async agents(caller, options) {
     const from = agentApiCallerBot(caller);
-    if (caller.kind === "bot") return from ? agentPeersOf(from).map(agentSummary) : [];
+    // #4172: archived ones on request, marked archived (GET /api/bots lists
+    // the person's archived bots too, as the app's archive does).
+    const withArchived = options?.archived === true;
+    if (caller.kind === "bot") {
+      if (!from) return [];
+      // A bot reaches the archived temporary agents it created, to restore
+      // or delete them for good (delete_agent offers both to it).
+      const archivedOwn = withArchived
+        ? store.bots.filter((bot) => bot.temporary?.archived && bot.temporary.createdBy.kind === "bot" && bot.temporary.createdBy.botId === from.id)
+          .map((bot) => ({ ...agentSummary(bot), archived: true }))
+        : [];
+      return [...agentPeersOf(from).map(agentSummary), ...archivedOwn];
+    }
     const listed = await performAsMember(memberForAgentCaller(caller), { method: "GET", path: "/api/bots", query: { messages: "0" } });
     if (listed.status < 200 || listed.status >= 300) return [];
     const ids = new Set(((listed.body as { bots?: Array<{ id?: unknown }> })?.bots ?? []).map((bot) => String(bot.id ?? "")));
     // The app does not list temporary agents (GET /api/bots leaves them
     // out): a person reaches their own, those a bot they reach created, and
-    // an organization admin every one. Never an archived one.
+    // an organization admin every one. An archived one only on request.
     const person = caller.id.trim().toLowerCase();
-    const reachesTemporary = (temporary: TemporaryAgent) => !temporary.archived && (caller.admin === true || temporary.ownerPrincipalId === person ||
+    const reachesTemporary = (temporary: TemporaryAgent) => (withArchived || !temporary.archived) && (caller.admin === true || temporary.ownerPrincipalId === person ||
       (temporary.createdBy.kind === "bot" && ids.has(temporary.createdBy.botId)));
-    return store.bots.filter((bot) => !bot.hidden && (bot.temporary ? reachesTemporary(bot.temporary) : ids.has(bot.id))).map(agentSummary);
+    return store.bots.filter((bot) => (withArchived || !bot.hidden) && (bot.temporary ? reachesTemporary(bot.temporary) : ids.has(bot.id)))
+      .map((bot) => (bot.hidden || bot.temporary?.archived ? { ...agentSummary(bot), archived: true } : agentSummary(bot)));
   },
   async createAgent(caller, input) {
     const now = Date.now();
@@ -31778,10 +31808,30 @@ const agentApi = createAgentApi({
       model: agentModelSummary(bot),
     };
   },
-  async deleteAgent(caller, agentId) {
+  async deleteAgent(caller, agentId, mode) {
     const bot = store.bot(agentId);
-    const temporary = bot?.temporary;
-    if (!bot || !temporary || temporary.archived) return agentRefuse(404, "unknown_agent", "No such agent.");
+    if (!bot) return agentRefuse(404, "unknown_agent", "No such agent.");
+    const temporary = bot.temporary;
+    if (!temporary) {
+      // #4172: a lasting bot through the app's own routes, as the person:
+      // the bot page's archive (hidden) and its delete, with their checks.
+      // A bot has its own tools for these, with the person's approval.
+      if (caller.kind !== "person") {
+        return agentRefuse(409, "use_archive_bot", "A bot archives or restores a lasting bot with archive_bot, and asks for its deletion with propose_bot_deletion.");
+      }
+      const member = memberForAgentCaller(caller);
+      const path = `/api/bots/${encodeURIComponent(agentId)}`;
+      if (mode === "permanent") {
+        const deleted = await performAsMember(member, { method: "DELETE", path });
+        if (deleted.status >= 300) return agentRouteRefusal(deleted, "The bot could not be deleted.");
+        return { deleted: true as const };
+      }
+      const hidden = mode === "archive";
+      const patched = await performAsMember(member, { method: "PATCH", path, body: { hidden } });
+      if (patched.status >= 300) return agentRouteRefusal(patched, hidden ? "The bot could not be archived." : "The bot could not be restored.");
+      return hidden ? { archived_at: Date.now(), purge_at: null } : { restored: true as const };
+    }
+    if (mode === "archive" && temporary.archived) return agentRefuse(404, "unknown_agent", "No such agent.");
     const actor = caller.kind === "person"
       ? { kind: "person" as const, principalId: caller.id.trim().toLowerCase(), admin: caller.admin === true }
       : { kind: "bot" as const, botId: caller.id, ownerPrincipalId: temporaryOwner(
@@ -31790,8 +31840,26 @@ const agentApi = createAgentApi({
     if (!mayDeleteTemporary(temporary, actor)) {
       return agentRefuse(403, "forbidden_owner", "Only this agent's owner or an organization admin can delete it.");
     }
+    if (mode === "restore") {
+      // #4172: back to active, its idle clock restarted, before its purge.
+      if (temporary.archived) {
+        const { archived: _archived, ...active } = temporary;
+        store.setBotTemporary(bot.id, { ...active, lastActiveAt: Date.now() });
+      }
+      return { restored: true as const };
+    }
     if (bot.busy || store.tasks(bot.id).some((task) => threadBusy(bot.id, task.threadId))) {
       for (const task of store.tasks(bot.id)) if (threadBusy(bot.id, task.threadId)) await interruptDirectThread(bot.id, task.threadId).catch(() => undefined);
+    }
+    if (mode === "permanent") {
+      // #4172: the purge the retention sweep runs, now.
+      const result = await deleteBotWithLifecycle(bot.id);
+      if (result.status !== 200) {
+        const body = (result.body ?? {}) as { error?: unknown; code?: unknown };
+        return agentRefuse(result.status >= 400 ? result.status : 502, typeof body.code === "string" ? body.code : "not_deleted", typeof body.error === "string" && body.error.trim() ? body.error : "The agent could not be deleted.");
+      }
+      // The agent API's own audit row (agents.delete_agent, mode permanent) records it.
+      return { deleted: true as const };
     }
     const archived = archiveMark(actor.kind === "person" ? { kind: "person", principalId: actor.principalId } : { kind: "bot", botId: actor.botId }, "deleted", Date.now());
     store.setBotTemporary(bot.id, { ...temporary, archived });
@@ -31914,9 +31982,9 @@ const agentApi = createAgentApi({
     if (caller.kind !== "person") {
       return agentRefuse(403, "forbidden_caller", "update_agent_settings is for a person's AI client. A bot uses propose_team_setup or asks the person in Sagax.");
     }
-    const { patch, runtime, primary, primaryInvalid } = partitionAgentSettings(fields);
+    const { patch, runtime, primary, primaryInvalid, switches, switchesInvalid } = partitionAgentSettings(fields);
     const changed: string[] = [];
-    const refused: Array<{ field: string; reason: string }> = [];
+    const refused: Array<{ field: string; reason: string }> = [...switchesInvalid];
     const member = memberForAgentCaller(caller);
     const refuseOne = (field: string, body: unknown) => {
       const record = body && typeof body === "object" ? body as { error?: unknown; message?: unknown; permission?: unknown } : {};
@@ -31975,6 +32043,35 @@ const agentApi = createAgentApi({
       }
     }
 
+    // #4172: the bot page's skill and plugin switches and its sharing, each
+    // through the route the page calls, one entry at a time.
+    const botPath = `/api/bots/${encodeURIComponent(agentId)}`;
+    const switchOne = async (field: string, request: Parameters<typeof performAsMember>[1]) => {
+      const done = await performAsMember(member, request);
+      if (done.status >= 200 && done.status < 300) changed.push(field);
+      else refuseOne(field, done.body);
+    };
+    if (switches.skills) {
+      // A skill from a shared library (the installation's or the person's
+      // own) switches there, as the page does (skillEditorApiPath).
+      const listed = await performAsMember(member, { method: "GET", path: `${botPath}/skills` });
+      const origins = new Map(((listed.body as { skills?: Array<{ name?: unknown; origin?: unknown }> } | null)?.skills ?? [])
+        .map((skill) => [String(skill.name ?? ""), String(skill.origin ?? "")]));
+      for (const [name, enabled] of Object.entries(switches.skills)) {
+        const origin = origins.get(name);
+        const path = skillEditorApiPath(agentId, name, origin === "library" || origin === "me" ? origin : undefined);
+        await switchOne(`skills.${name}`, { method: "PATCH", path, body: { enabled } });
+      }
+    }
+    for (const [key, enabled] of Object.entries(switches.plugins ?? {})) {
+      await switchOne(`plugins.${key}`, { method: "PATCH", path: `${botPath}/plugins/${encodeURIComponent(key)}`, body: { enabled } });
+    }
+    for (const [target, level] of Object.entries(switches.grants ?? {})) {
+      await switchOne(`grants.${target}`, level === null
+        ? { method: "DELETE", path: `${botPath}/grants/${encodeURIComponent(target)}` }
+        : { method: "PUT", path: `${botPath}/grants`, body: { target, level } });
+    }
+
     if (!changed.length && !refused.length) {
       return agentRefuse(400, "bad_request", "Pass at least one Edit bot field.");
     }
@@ -31990,35 +32087,39 @@ const agentApi = createAgentApi({
     if (caller.kind !== "person") {
       return agentRefuse(403, "forbidden_caller", "update_routine is for a person's AI client. A bot uses propose_routine_action.");
     }
-    const body: Record<string, unknown> = {};
-    if (patch.enabled !== undefined) body.enabled = patch.enabled;
-    if (patch.name !== undefined) body.name = patch.name;
-    if (patch.instructions !== undefined) body.prompt = patch.instructions;
-    if (patch.schedule !== undefined) body.schedule = patch.schedule;
-    if (patch.requiresComputer !== undefined) {
-      // PATCH replaces requires wholesale: keep the routine's skills and MCP needs.
-      const current = routines?.listRoutines().find((candidate) => candidate.id === routineId);
-      body.requires = withRequiredComputer(current?.requires, patch.requiresComputer);
-    }
-    if (patch.model !== undefined) body.model = patch.model;
-    if (patch.subagentModel !== undefined) body.subagentModel = patch.subagentModel;
-    if (patch.effort !== undefined) body.effort = patch.effort;
-    if (patch.goal !== undefined) body.goal = patch.goal;
+    const current = patch.requiresComputer !== undefined ? routines?.listRoutines().find((candidate) => candidate.id === routineId) : undefined;
+    const body = agentRoutineBody(patch, current?.requires);
     const patched = await performAsMember(memberForAgentCaller(caller), {
       method: "PATCH",
       path: `/api/routines/${encodeURIComponent(routineId)}`,
       body,
     });
-    if (patched.status >= 300) {
-      return agentRefuse(patched.status >= 400 ? patched.status : 502, "routine_refused", String(
-        (patched.body as { error?: unknown; message?: unknown })?.error
-        ?? (patched.body as { message?: unknown })?.message
-        ?? "The routine could not be updated.",
-      ));
-    }
+    if (patched.status >= 300) return agentRouteRefusal(patched, "The routine could not be updated.");
     const routine = (patched.body as { routine?: Record<string, unknown> })?.routine
       ?? (patched.body as Record<string, unknown>);
     return { routine: routine && typeof routine === "object" ? routine : { id: routineId, ...body } };
+  },
+  // #4172: the Automations editor's own creation and deletion, as the person.
+  async createRoutine(caller, agentId, input) {
+    if (caller.kind !== "person") {
+      return agentRefuse(403, "forbidden_caller", "create_routine is for a person's AI client. A bot uses propose_routine.");
+    }
+    const made = await performAsMember(memberForAgentCaller(caller), {
+      method: "POST",
+      path: "/api/routines",
+      body: { botId: agentId, ...agentRoutineBody(input, undefined) },
+    });
+    if (made.status >= 300) return agentRouteRefusal(made, "The routine could not be created.");
+    const routine = (made.body as { routine?: Record<string, unknown> } | null)?.routine;
+    return { routine: routine && typeof routine === "object" ? routine : {} };
+  },
+  async deleteRoutine(caller, routineId) {
+    if (caller.kind !== "person") {
+      return agentRefuse(403, "forbidden_caller", "delete_routine is for a person's AI client. A bot uses propose_routine_action.");
+    }
+    const deleted = await performAsMember(memberForAgentCaller(caller), { method: "DELETE", path: `/api/routines/${encodeURIComponent(routineId)}` });
+    if (deleted.status >= 300) return agentRouteRefusal(deleted, "The routine could not be deleted.");
+    return { deleted: true as const };
   },
   threads(caller, agentId) {
     const agent = store.bot(agentId);

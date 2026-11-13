@@ -15,11 +15,26 @@ const AGENT_CURSOR = { type: "string", description: "next_cursor of the previous
  * (AGENT_SETTINGS_FIELDS in fleet-agent-settings.ts). Enumerating all 61 keys
  * with repeated descriptions blew the agents soft ceiling by ~8 KB; the server
  * still validates each key. */
+/** The routine fields update_routine and create_routine take. */
+const ROUTINE_TOOL_FIELDS = {
+  enabled: { type: "boolean", description: "true resumes it; false pauses it." },
+  name: { type: "string", minLength: 1, maxLength: 120 },
+  instructions: { type: "string", minLength: 1, maxLength: 32000 },
+  schedule: { type: "object", description: "cron, daily, interval, once, webhook or event schedule object." },
+  requires_computer: ROUTINE_FIELDS_SCHEMA.requires_computer,
+  model: ROUTINE_FIELDS_SCHEMA.model,
+  subagent_model: ROUTINE_FIELDS_SCHEMA.subagent_model,
+  effort: ROUTINE_FIELDS_SCHEMA.effort,
+  goal: ROUTINE_FIELDS_SCHEMA.goal,
+} as const;
+
 export const AGENT_API_TOOLS = [
   {
     name: "list_agents",
-    description: "List the Sagax agents (bots) you may reach: id, name, description, status (running or idle), temporary, owner ({principal_id, name} or null), and model (instance_id, model, effort, auto) when known. Its ids are the only valid agent_id values. Pass owner.principal_id to sagax_nudge to reach that agent's owner.",
-    inputSchema: { type: "object", additionalProperties: false, properties: {} },
+    description: "List the Sagax agents (bots) you may reach: id, name, description, status (running or idle), temporary, owner ({principal_id, name} or null), and model (instance_id, model, effort, auto) when known. Its ids are the only valid agent_id values. Pass owner.principal_id to sagax_nudge to reach that agent's owner. archived true lists only the archived ones instead.",
+    inputSchema: { type: "object", additionalProperties: false, properties: {
+      archived: { type: "boolean" },
+    } },
   },
   {
     name: "find_agents",
@@ -47,8 +62,12 @@ export const AGENT_API_TOOLS = [
   },
   {
     name: "delete_agent",
-    description: "Delete a temporary agent you created once its task is done: it is archived (no longer listed, no longer answers) and its conversations are kept 30 days.",
-    inputSchema: { type: "object", additionalProperties: false, properties: { agent_id: AGENT_ID }, required: ["agent_id"] },
+    description: "Archive an agent (unlisted, silent; a temporary one's conversations kept 30 days). permanent true deletes it for good; restore true brings it back. A bot: only temporary agents it created; archive_bot or propose_bot_deletion for a lasting bot.",
+    inputSchema: { type: "object", additionalProperties: false, properties: {
+      agent_id: AGENT_ID,
+      permanent: { type: "boolean" },
+      restore: { type: "boolean" },
+    }, required: ["agent_id"] },
   },
   {
     name: "send_prompt",
@@ -144,7 +163,7 @@ export const AGENT_API_TOOLS = [
   },
   {
     name: "update_agent_settings",
-    description: "Partial patch of an agent's Edit bot fields (identity, look, approval, tools, computer, workspace, visibility, section, cwd, voice notes, runtime, primary). Same rights as Edit bot. Returns changed and refused. Model changes use update_agent_model.",
+    description: "Partial patch of an agent's Edit bot fields (identity, soul, look, approval, tools, computer, workspace, visibility, section, cwd, voice notes, runtime, primary), skills {name: bool}, plugins {key: bool}, grants {user:<id> or team:<id>: use|run|edit|manage|null}. Same rights as Edit bot. Returns changed and refused. Model: update_agent_model.",
     inputSchema: {
       type: "object",
       additionalProperties: true,
@@ -162,16 +181,40 @@ export const AGENT_API_TOOLS = [
       additionalProperties: false,
       properties: {
         routine_id: { type: "string", minLength: 1, description: "Routine id from sagax_routines or list_routines." },
-        enabled: { type: "boolean", description: "true resumes it; false pauses it." },
-        name: { type: "string", minLength: 1, maxLength: 120 },
-        instructions: { type: "string", minLength: 1, maxLength: 32000 },
-        schedule: { type: "object", description: "cron, daily, interval, once, webhook or event schedule object." },
-        requires_computer: ROUTINE_FIELDS_SCHEMA.requires_computer,
-        model: ROUTINE_FIELDS_SCHEMA.model,
-        subagent_model: ROUTINE_FIELDS_SCHEMA.subagent_model,
-        effort: ROUTINE_FIELDS_SCHEMA.effort,
-        goal: ROUTINE_FIELDS_SCHEMA.goal,
+        ...ROUTINE_TOOL_FIELDS,
       },
+      required: ["routine_id"],
+    },
+  },
+  {
+    name: "create_routine",
+    description: "Create a routine on an agent of yours (Automations editor's New routine, without a proposal card); optional fields as update_routine. Returns routine_id.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      // #4172: the optional fields mean what update_routine's descriptions say.
+      properties: {
+        agent_id: AGENT_ID,
+        name: ROUTINE_TOOL_FIELDS.name,
+        instructions: ROUTINE_TOOL_FIELDS.instructions,
+        schedule: ROUTINE_TOOL_FIELDS.schedule,
+        enabled: { type: "boolean" },
+        requires_computer: { type: "boolean" },
+        model: { type: ["string", "null"], maxLength: 200 },
+        subagent_model: { type: ["string", "null"], maxLength: 200 },
+        effort: { type: ["string", "null"], enum: ROUTINE_FIELDS_SCHEMA.effort.enum },
+        goal: { type: ["string", "object", "null"] },
+      },
+      required: ["agent_id", "name", "instructions", "schedule"],
+    },
+  },
+  {
+    name: "delete_routine",
+    description: "Delete a routine you may change (Automations editor's Delete). Pass routine_id from sagax_routines or list_routines.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: { routine_id: { type: "string", minLength: 1, description: "Routine id from sagax_routines or list_routines." } },
       required: ["routine_id"],
     },
   },

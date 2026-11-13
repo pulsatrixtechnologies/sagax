@@ -16,11 +16,11 @@ names, parameters and limits as the reference design's agent tools, plus `get_ag
 
 | Tool | Kind | Scope | What |
 |---|---|---|---|
-| `list_agents` | read | `agents.read` | every agent the caller can reach, with status `running`/`idle` |
+| `list_agents` | read | `agents.read` | every agent the caller can reach, with status `running`/`idle`; `archived` true lists only the archived ones instead of the active ones, each with `archived: true` (a bot: the archived temporary agents it created) (#4172) |
 | `find_agents` | read | `agents.read` | `query`, optional `status` (`running`/`idle`), `limit` ≤ 64 (default 8) |
 | `get_agent` | read | `agents.read` | `agent_id`: the full profile for an audit (see below) |
 | `create_agent` | admin | `agents.create` | one agent per call; it greets the person itself. Only on the person's explicit ask. `kind` `temporary` (default when absent): a temporary agent (see below), `name` (≤ 80 chars, one line), optional `description`, `idle_hours` (1 to 720, default 24) and `workspace`. `kind` `lasting`: the person's own bot (see Lasting bots), `name`, optional `description`, `title`, `soul`, `instance_id`, `model`, `effort`, `auto`, `workspace`, `section` |
-| `delete_agent` | admin | `agents.create` | `agent_id` of a temporary agent: archives it (see below). A lasting agent answers 409 `not_temporary` |
+| `delete_agent` | admin | `agents.create` | `agent_id` of any agent of the caller, lasting ones included: archives it (default), `permanent` true deletes it for good, `restore` true brings an archived one back (see Managing a person's bots) |
 | `send_prompt` | write | `agents.send` | `agent_id`, `prompt` (≤ 32,000 chars), `mode` `fire_and_forget` (default) / `blocking` / `async`, `timeout_ms` (1 s to 10 min, default 120 s; the live blocking wait is capped at 55 s so the handle returns as `still_working`), `on_busy` `queue` (default since 2026-10-17: waits its turn) / `reject` (409 `busy`, `retryable: true`, with `details.turn_state` and options) / `supersede` (stops the running turn this caller started and the approval it waits on; never the person's own turn or another caller's), optional `priority` `now` or `normal` (default `normal`), up to 8 `files` (workspace-relative, 25 MiB each), optional `thread_id` (one of the caller's own conversations, 404 `unknown_thread` otherwise). A bot's send lands in the agent's single chat with the person the caller works for (#1170); a person's AI client's send lands in its own conversation with the agent (2026-10-29, see Guarantees); `thread_id` continues one of the caller's conversations instead. Answers a `handle`, its lifetime (`ttl_ms`, `expires_at` in unix ms and `expires_at_iso`) and a short `label` (the agent's name and the prompt's first words). `now` wakes an idle agent at once or moves the prompt to the front of its queue, and never interrupts a running turn. Past 10 `now` sends an hour the answer is `priority: "normal"` with `downgraded: true` and `priority_note`. Refusals keep the unified envelope and set `retryable` |
 | `await_turn` | read | `agents.read` | `agent_id`, `handle`, `timeout_ms` (0 to 55 s, default 15 s), optional `cursor` (a prior `wait_cursor`). The handle is the one `send_prompt` returned, or the `{threadId, handle}` a one-way `send_to_bot` included (copy it exactly). Never send the prompt again: wait again with the same handle. When the wait ends and the turn is not done, the answer is `still_working` (HTTP 200) with `thread_id`, `progress.summary`, `progress.steps`, `wait_cursor` and `recommended_wait_ms`; pass `wait_cursor` as `cursor` on the next call so steps are not repeated. Without a handle, waits the in-flight turn of your conversation, else its last message. An expired handle, or one of another session, on a conversation the caller reads answers that turn (`handle: null`, `recovered_from`). Else a 400 `handle_expired`, `handle_session_mismatch`, `handle_agent_mismatch` or `bad_handle` (altered), `details.reason` and `details.family: bad_handle`, and a `hint` to read `read_latest_page` with the `thread_id` `send_prompt` returned (see Handle lifecycle) |
 | `read_transcript` | read | `agents.read` | the whole transcript (the newest 2,000 entries; `truncated` says when there were more) |
@@ -31,8 +31,10 @@ names, parameters and limits as the reference design's agent tools, plus `get_ag
 | `read_transcript_attachment` | read | `agents.read` | `agent_id`, `attachment` (an entry's `images[].ref`, or the path of its `<attached-image>` tag), optional `thread_id`, optional `save`. Answers the image (`mime`, `bytes`, `image_base64`, fitted for a model; MCP callers get it as image content) when it is attached in a conversation the caller may read with that agent, else 404 `not_found`: a bot of the same person reads that person's images, never another person's (#3203). `save` true (bot callers) also copies the original into the caller's workspace and answers `saved_to` |
 | `list_agent_models` | read | `agents.read` | `agent_id`: engines and models the caller may pick as that agent's default, plus `current` (#1944). Without `agent_id`: what the person may pick for a new bot (`create_agent` kind `lasting`), `agent_id` and `current` null |
 | `update_agent_model` | write | `agents.send` | `agent_id`, `instance_id` (or `instance` / `engine`), `model`, optional `effort`, or `auto` true. Same rights and validation as `PATCH /api/bots/:id` `{ modelSelection }` (owner, granted editor, admin). Exact `instance_id` first; a short engine name must resolve to one engine, else the answer lists the candidates. An invalid model is refused with a plain hint of valid choices. Person AI clients only; a bot uses `propose_team_setup` |
-| `update_agent_settings` | write | `agents.send` | `agent_id` plus a partial patch of every Edit bot field the UI can change through `PATCH /api/bots/:id` (identity, look, permission-gated fields such as approval level, tools, computer, visibility, section, cwd, voice notes, …), plus runtime settings (`maxConcurrentThreads` and the rest via `PATCH /api/bots/:id/runtime-settings`) and `primary` true/false (Primary Bot switch). Derived from `MEMBER_BOT_FIELDS` + `BOT_FIELD_PERMISSIONS` so the allowlist cannot drift; the same server checks decide per field. Answers `changed` and `refused` (each with a plain reason, no permission keys). Model changes use `update_agent_model` |
-| `update_routine` | write | `agents.send` | `routine_id`, then `enabled` / `name` / `instructions` / `schedule`. Same as member `PATCH /api/org/member/routines/{id}` (own routines). Person AI clients only; a bot uses `propose_routine_action` |
+| `update_agent_settings` | write | `agents.send` | `agent_id` plus a partial patch of every Edit bot field the UI can change through `PATCH /api/bots/:id` (identity, look, permission-gated fields such as approval level, tools, computer, visibility, section, cwd, voice notes, …), plus runtime settings (`maxConcurrentThreads` and the rest via `PATCH /api/bots/:id/runtime-settings`) and `primary` true/false (Primary Bot switch). Derived from `MEMBER_BOT_FIELDS` + `BOT_FIELD_PERMISSIONS` so the allowlist cannot drift; the same server checks decide per field. Also `skills` `{name: true/false}`, `plugins` `{key: true/false}` and `grants` `{"user:<person id>" or "team:<team id>": use/run/edit/manage, null stops sharing}`, each through the route the bot page calls (#4172). Answers `changed` and `refused` (each with a plain reason, no permission keys; a switch is named `skills.<name>`, `plugins.<key>`, `grants.<target>`). Model changes use `update_agent_model`; archive and restore use `delete_agent`. An archived bot is reached too, so its fields can be edited |
+| `update_routine` | write | `agents.send` | `routine_id`, then `enabled` / `name` / `instructions` / `schedule` / `requires_computer` / `model` / `subagent_model` / `effort` / `goal` (`PATCH /api/routines/:id`, the Automations editor's own route, as the person: own routines). Person AI clients only; a bot uses `propose_routine_action` |
+| `create_routine` | write | `agents.send` | `agent_id`, `name` (1 to 120), `instructions` (1 to 32,000), `schedule` (the editor's schedule object), optional `enabled` (default true), `requires_computer`, `model`, `subagent_model`, `effort`, `goal`, the same keys as `update_routine`. `POST /api/routines` (the editor's New routine) as the person. Answers `routine_id` and `routine` (#4172). Person AI clients only; a bot uses `propose_routine` |
+| `delete_routine` | write | `agents.send` | `routine_id` only. `DELETE /api/routines/:id` (the editor's Delete) as the person. Answers `{deleted: true, routine_id}` (#4172). Person AI clients only; a bot uses `propose_routine_action` |
 
 `list_agents`, `find_agents` and `create_agent` answer each agent as `{id,
 name, description, status, temporary, owner, model?}`. `owner` is
@@ -80,11 +82,73 @@ from the app, depth), and a person's call has no rate limit of this API.
 - **Same name**: no refusal. The answer lists the other reachable agents with
   that name in `same_name` (`[{id, name}]`).
 - **Answer**: `{agent, kind: "lasting", greeted: true, same_name?, note}`.
-  The note says to archive it with `update_agent_settings` `hidden: true`
-  (`delete_agent` archives temporary agents only).
+  The note says to archive it with `delete_agent` (`permanent` true deletes
+  it for good, `restore` true brings it back).
 - **Bot callers**: a bot makes a lasting bot with `create_bot`; `kind:
   "lasting"` from a bot answers 409 `use_create_bot`.
 - **Audit**: `agents.create_agent` records `kind` and `temporary: false`.
+
+## Managing a person's bots
+
+Decision of 2026-11-13 (#4172): a person's AI client manages every bot of
+that person, lasting ones made in the app included, with the same reach as
+the app's bot page. Each action calls the route the page calls, as the
+person, so the app's own checks decide (ownership, grants, the
+organization's Refuse and Ask-first rules); nothing is added or taken away.
+Another person's bot is never reached: it answers 404 `unknown_agent` (not
+listed) or the route's own 403.
+
+- **Archive** (`delete_agent`): a lasting bot through `PATCH /api/bots/:id`
+  `{hidden: true}` (the page's archive); it leaves `list_agents` and is kept
+  until it is restored or deleted (`purge_at: null`). A temporary agent is
+  archived as below.
+- **List archived** (`list_agents` `archived: true`): only the person's
+  archived bots, instead of the active ones (`GET /api/bots` lists them to
+  their owner), and archived temporary agents not yet purged, each marked
+  `archived: true`. A bot caller lists the archived temporary agents it
+  created, so it can restore them or delete them for good.
+- **Restore** (`delete_agent` `restore: true`): `PATCH /api/bots/:id`
+  `{hidden: false}` for a lasting bot.
+- **Delete for good** (`delete_agent` `permanent: true`): `DELETE
+  /api/bots/:id` (the page's delete, its lifecycle hooks included) for a
+  lasting bot; archived or not.
+- **Bot callers**: a bot uses its own tools for a lasting bot: `archive_bot`
+  (with `restore: true`) and `propose_bot_deletion`; `delete_agent` on a
+  lasting bot from a bot answers 409 `use_archive_bot`. Settings and routines
+  stay `propose_team_setup` and `propose_routine_action`.
+
+What the bot page does, and what does it for an AI client:
+
+| Bot page action | Agent tool | Route it calls |
+|---|---|---|
+| Create a bot | `create_agent` `kind: "lasting"` | `POST /api/bots` |
+| Name, description, role or title, personality (soul), notifications | `update_agent_settings` | `PATCH /api/bots/:id` |
+| Mascot, colour, avatar (appearance) | `update_agent_settings` (`mascot*`, `color`, `avatarUrl`, `avatar*`) | `PATCH /api/bots/:id` |
+| Engine and model, effort, Auto | `update_agent_model` | `PATCH /api/bots/:id` `{modelSelection}` |
+| Where it runs (computer, browser, cloud backend, working folder) | `update_agent_settings` (`computer`, `browser`, `cloudBackend`, `cwd`, ...) | `PATCH /api/bots/:id` |
+| Level before it acts (approval mode, auto approve, Always allow) | `update_agent_settings` (`approvalMode`, `autoApprove`, `alwaysAllow`, ...) | `PATCH /api/bots/:id` |
+| Behaviour switches (memory, built-in plugins, voice notes, ...) | `update_agent_settings` | `PATCH /api/bots/:id` |
+| Tools and connectors | `update_agent_settings` (`toolScope`, `mcpServers`, `mcpAccounts`, `peers`, ...) | `PATCH /api/bots/:id` |
+| Runtime (parallel conversations, recovery, payer, limits) | `update_agent_settings` | `PATCH /api/bots/:id/runtime-settings` |
+| Primary Bot | `update_agent_settings` `primary` | `POST`/`DELETE /api/bots/:id/primary` |
+| A skill on or off | `update_agent_settings` `skills` | `PATCH /api/bots/:id/skills/:name` for a skill imported on the bot, `PATCH /api/skills-library/:name` for a skill of the organization's library, `PATCH /api/me/skills-library/:name` for a skill of the person's library (the page's choice) |
+| A plugin on or off | `update_agent_settings` `plugins` | `PATCH /api/bots/:id/plugins/:key` |
+| Sharing: visibility and section | `update_agent_settings` (`visibility`, `section`) | `PATCH /api/bots/:id` |
+| Sharing: a person or group | `update_agent_settings` `grants` | `PUT /api/bots/:id/grants`, `DELETE /api/bots/:id/grants/:target` |
+| Routine: create | `create_routine` | `POST /api/routines` |
+| Routine: change, pause, resume | `update_routine` | `PATCH /api/routines/:id` |
+| Routine: delete | `delete_routine` | `DELETE /api/routines/:id` |
+| Archive, restore | `delete_agent`, `delete_agent` `restore: true` | `PATCH /api/bots/:id` `{hidden}` |
+| Delete for good | `delete_agent` `permanent: true` | `DELETE /api/bots/:id` |
+| List bots, or the archived ones | `list_agents`, `archived: true` | `GET /api/bots` |
+
+Not in these tools, each with its reason: installing a plugin from a
+marketplace and importing a skill from a source (a new install, outside the
+on and off switches this decision names; the bot writes and manages its own
+skills with `skill_manage` when asked through `send_prompt`); uploading a
+file or an avatar image (bytes the page sends from the person's device);
+the computer's live controls, screen and terminal (a live session held by
+the open page).
 
 ## Temporary agents
 
@@ -113,6 +177,9 @@ the wire and is never exported.
   404 `unknown_agent`, and every write to it or its conversations is 410
   `agent_archived`. Its conversations stay on disk for 30 days (`purge_at`);
   then the bot and its data are deleted like any deleted bot.
+- **Restore and delete for good** (#4172): `delete_agent` `restore` true
+  takes an archived one back before its purge (its idle clock restarts);
+  `permanent` true runs its purge now, archived or not.
 - **Rights**: only its owner or an organization admin deletes it; a bot only
   an agent it created itself, for the same owner. Anyone else gets 403
   `forbidden_owner`.
@@ -122,7 +189,8 @@ the wire and is never exported.
   before the route used it (`create_pass_expired`, retry with the same
   arguments), and any refusal of the creation route itself.
 - **Audit**: `agents.create_agent` records `kind`, `temporary` and `idleHours`,
-  `agents.delete_agent` records `archived` and `purgeAt`; the server adds
+  `agents.delete_agent` records `mode` (`archive`, `restore`, `permanent`),
+  `archived` and `purgeAt`; the server adds
   `agents.temporary.expired`, `agents.temporary.purged`,
   `agents.temporary.pinned` and `agents.temporary.unpinned`.
 
@@ -327,8 +395,8 @@ reply text is never a substitute for a card.
 - **Audit**: every call is written to the admin activity log (`category:
   client`, action `agents.<tool>`). Each entry records the outcome, the
   agent and the mode, but never the prompt, the reply or a file.
-- **Deleting**: `delete_agent` archives temporary agents only; a lasting
-  agent is deleted by its owner in Sagax.
+- **Deleting**: `delete_agent` archives, restores or deletes for good any
+  agent of the caller (see Managing a person's bots).
 - **No empty refusal**: a refusal whose source gave no sentence still
   answers one that names its code and what to do next.
 

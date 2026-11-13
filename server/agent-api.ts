@@ -22,7 +22,8 @@ import type { EffortLevel } from "../shared/model-selection.ts";
 //   list_agents, find_agents, get_agent, create_agent, delete_agent,
 //   send_prompt, await_turn, read_transcript, read_transcript_page,
 //   read_latest_page, read_latest_page_with_threads, read_transcript_cold,
-//   list_agent_models, update_agent_model, update_agent_settings, update_routine
+//   list_agent_models, update_agent_model, update_agent_settings, update_routine,
+//   create_routine, delete_routine
 //
 // create_agent makes a temporary agent and delete_agent archives one
 // (server/temporary-agents.ts, Perspicax #321); with kind lasting it makes
@@ -86,6 +87,9 @@ export const AGENT_TOOL_NAMES = [
   "update_agent_model",
   "update_agent_settings",
   "update_routine",
+  // #4172: the Automations editor's New routine and Delete, as the person.
+  "create_routine",
+  "delete_routine",
 ] as const;
 export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
 
@@ -121,7 +125,8 @@ export const AGENT_TOOL_POLICY: Record<AgentToolName, AgentToolPolicy> = {
   find_agents: { scope: "agents.read", access: "read", readOnly: true, rate: 240 },
   get_agent: { scope: "agents.read", access: "read", readOnly: true, rate: 240 },
   create_agent: { scope: "agents.create", access: "admin", readOnly: false, rate: 5 },
-  // Archives a temporary agent: the same scope as creating one.
+  // #4172: archives, restores or deletes for good an agent of the caller:
+  // the same scope as creating one.
   delete_agent: { scope: "agents.create", access: "admin", readOnly: false, rate: 30 },
   send_prompt: { scope: "agents.send", access: "write", readOnly: false, rate: 30 },
   // await_turn waits on a turn the caller already started: a read.
@@ -138,6 +143,8 @@ export const AGENT_TOOL_POLICY: Record<AgentToolName, AgentToolPolicy> = {
   update_agent_model: { scope: "agents.send", access: "write", readOnly: false, rate: 30 },
   update_agent_settings: { scope: "agents.send", access: "write", readOnly: false, rate: 30 },
   update_routine: { scope: "agents.send", access: "write", readOnly: false, rate: 30 },
+  create_routine: { scope: "agents.send", access: "write", readOnly: false, rate: 30 },
+  delete_routine: { scope: "agents.send", access: "write", readOnly: false, rate: 30 },
 };
 
 // Limits, the reference's where it names one.
@@ -297,6 +304,9 @@ export interface AgentSummary {
   status: AgentStatus;
   /** A temporary agent (create_agent): it expires when idle and can be deleted. */
   temporary?: boolean;
+  /** #4172: archived (listed only when list_agents asks for archived ones);
+   * delete_agent restore brings it back. */
+  archived?: boolean;
   /** The person who owns this agent, as get_agent answers it. Null when none
    * is known to the caller. `principal_id` is the value to pass to sagax_nudge. */
   owner: { principal_id: string; name: string } | null;
@@ -366,6 +376,17 @@ export interface AgentRoutinePatch {
   /** true: the pre-run check waits for the bot's computer; false clears that need. Skills and MCP needs stay. */
   requiresComputer?: boolean;
 }
+
+/** #4172: what delete_agent does to an agent of the caller: archive it (the
+ * default), delete it for good, or bring an archived one back. */
+export type AgentDeleteMode = "archive" | "permanent" | "restore";
+
+/** What deleteAgent answers for each mode. purge_at is null for a lasting
+ * bot: it stays archived until it is restored or deleted for good. */
+export type AgentDeleteResult =
+  | { archived_at: number; purge_at: number | null }
+  | { deleted: true }
+  | { restored: true };
 
 export interface TranscriptThread {
   threadId: string;
@@ -488,8 +509,10 @@ export interface AuditEntry {
 }
 
 export interface AgentApiDeps {
-  /** Every agent the caller may reach (tenant/org isolation is applied here). */
-  agents(caller: AgentCaller): AgentSummary[] | Promise<AgentSummary[]>;
+  /** Every agent the caller may reach (tenant/org isolation is applied here);
+   * archived true adds the archived ones, each marked archived (list_agents
+   * keeps only those); a bot reaches the archived temporary agents it created. */
+  agents(caller: AgentCaller, options?: { archived?: boolean }): AgentSummary[] | Promise<AgentSummary[]>;
   /** Create one agent for the caller; it greets the user itself. A
    * temporary one (kind absent): idleHours is the caller's expiry, else the
    * server's default. A lasting one: the person's own bot, made by the app's
@@ -497,8 +520,9 @@ export interface AgentApiDeps {
   createAgent(caller: AgentCaller, input: CreateAgentInput): Promise<AgentSummary | Refusal>;
   /** The full profile of a reachable agent, as this caller may read it. */
   profile(caller: AgentCaller, agentId: string): AgentProfile | Refusal | Promise<AgentProfile | Refusal>;
-  /** Archive a temporary agent (its conversations are kept for a while). */
-  deleteAgent(caller: AgentCaller, agentId: string): Promise<{ archived_at: number; purge_at: number } | Refusal>;
+  /** #4172: archive, delete for good or restore any agent of the caller,
+   * lasting ones through the app's own routes as the person. */
+  deleteAgent(caller: AgentCaller, agentId: string, mode: AgentDeleteMode): Promise<AgentDeleteResult | Refusal>;
   /** Engines and models the caller may pick for this agent (#1944), or for
    * a new bot when agentId is null (current is then null). */
   listModels?(caller: AgentCaller, agentId: string | null): Promise<{ models: AgentModelChoice[]; current: AgentModelSummary | null } | Refusal>;
@@ -513,6 +537,11 @@ export interface AgentApiDeps {
   updateSettings?(caller: AgentCaller, agentId: string, fields: Record<string, unknown>): Promise<AgentSettingsResult | Refusal>;
   /** Enable/disable or edit a routine the caller may edit (same as member PATCH routines/{id}). */
   updateRoutine?(caller: AgentCaller, routineId: string, patch: AgentRoutinePatch): Promise<{ routine: Record<string, unknown> } | Refusal>;
+  /** #4172: a new routine on one of the caller's agents (the Automations
+   * editor's own creation route, as the person). */
+  createRoutine?(caller: AgentCaller, agentId: string, input: AgentRoutinePatch & { name: string; instructions: string; schedule: Record<string, unknown> }): Promise<{ routine: Record<string, unknown> } | Refusal>;
+  /** #4172: delete a routine the caller may change (the editor's own route). */
+  deleteRoutine?(caller: AgentCaller, routineId: string): Promise<{ deleted: true } | Refusal>;
   /** The conversations with this agent the caller may read. */
   threads(caller: AgentCaller, agentId: string): TranscriptThread[];
   /** A conversation's stored messages, oldest first. Never wakes anything. */
@@ -984,6 +1013,7 @@ const wireSummary = (agent: AgentSummary) => ({
   description: agent.description,
   status: agent.status,
   temporary: agent.temporary === true,
+  ...(agent.archived ? { archived: true } : {}),
   owner: agent.owner ?? null,
   ...(agent.model ? { model: agent.model } : {}),
 });
@@ -1253,7 +1283,7 @@ function createAgentApiHandlers(env: {
   sendsInFlight: Map<string, Promise<unknown>>;
   ownsRunningTurn: (caller: AgentCaller, threadId: string) => boolean;
   ok: (body: Record<string, unknown>) => AgentApiAnswer;
-  reachable: (caller: AgentCaller, agentId: string) => Promise<AgentSummary | Refusal>;
+  reachable: (caller: AgentCaller, agentId: string, options?: { archived?: boolean }) => Promise<AgentSummary | Refusal>;
   waitTurn: (body: HandleBody, handle: string, timeoutMs: number, signal?: AbortSignal, after?: CursorKey | null, caller?: AgentCaller) => Promise<TurnResult>;
   resultBody: (result: TurnResult) => Record<string, unknown>;
   latest: (caller: AgentCaller, args: Args, withThreads: boolean) => Promise<AgentApiAnswer | Refusal>;
@@ -1311,13 +1341,22 @@ function createAgentApiHandlers(env: {
       kind: "lasting",
       greeted: true,
       ...(sameName.length ? { same_name: sameName } : {}),
-      note: "The new agent is the person's own bot, shown in their Sagax app. Change it with update_agent_settings and update_agent_model; archive it with update_agent_settings hidden true. It greets the person itself: send it no first prompt unless asked, and never quote its id.",
+      note: "The new agent is the person's own bot, shown in their Sagax app. Change it with update_agent_settings and update_agent_model; archive it with delete_agent (permanent true deletes it for good, restore true brings it back). It greets the person itself: send it no first prompt unless asked, and never quote its id.",
     });
   };
   return {
     async list_agents(caller, args) {
-      const bad = onlyKeys(args, []);
+      const bad = onlyKeys(args, ["archived"]);
       if (bad) return bad;
+      if (args.archived !== undefined && args.archived !== null && typeof args.archived !== "boolean") {
+        return refuse(400, "bad_request", "archived is true (list only the archived agents) or false.");
+      }
+      // #4172: archived true lists the archived agents instead of the active
+      // ones, each marked archived.
+      if (args.archived === true) {
+        const all = await deps.agents(caller, { archived: true });
+        return ok({ agents: all.filter((agent) => agent.archived === true).map(wireSummary) });
+      }
       const agents = await deps.agents(caller);
       return ok({ agents: agents.map(wireSummary) });
     },
@@ -1365,18 +1404,34 @@ function createAgentApiHandlers(env: {
     },
 
     async delete_agent(caller, args) {
-      const bad = onlyKeys(args, ["agent_id"]);
+      const bad = onlyKeys(args, ["agent_id", "permanent", "restore"]);
       if (bad) return bad;
       const agentId = agentIdArg(args);
       if (isRefusal(agentId)) return agentId;
-      const agent = await reachable(caller, agentId);
+      for (const key of ["permanent", "restore"] as const) {
+        if (args[key] !== undefined && args[key] !== null && typeof args[key] !== "boolean") return refuse(400, "bad_request", `${key} is true or false.`);
+      }
+      if (args.permanent === true && args.restore === true) {
+        return refuse(400, "bad_request", "Pass permanent true (delete it for good) or restore true (bring an archived agent back), not both.");
+      }
+      // #4172: any agent of the caller, lasting ones included. Archive is the
+      // default; an archived one is reached to restore or delete it for good.
+      const mode: AgentDeleteMode = args.restore === true ? "restore" : args.permanent === true ? "permanent" : "archive";
+      const agent = await reachable(caller, agentId, mode === "archive" ? undefined : { archived: true });
       if (isRefusal(agent)) return agent;
-      if (!agent.temporary) return refuse(409, "not_temporary", `${agent.name} was not created with create_agent: only its owner deletes it, in the Sagax app.`);
-      const archived = await deps.deleteAgent(caller, agentId);
-      if (isRefusal(archived)) return archived;
+      const done = await deps.deleteAgent(caller, agentId, mode);
+      if (isRefusal(done)) return done;
+      if ("deleted" in done) {
+        return ok({ agent_id: agentId, deleted: true, note: `${agent.name} is deleted for good, with its conversations. It cannot be restored.` });
+      }
+      if ("restored" in done) {
+        return ok({ agent_id: agentId, archived: false, restored: true, agent: wireSummary({ ...agent, archived: false }), note: `${agent.name} is back: it answers and appears in list_agents again.` });
+      }
       return ok({
-        agent_id: agentId, archived: true, ...archived,
-        note: "The agent is archived: it no longer answers or appears in list_agents. Its conversations are kept until purge_at, then deleted with it.",
+        agent_id: agentId, archived: true, ...done,
+        note: done.purge_at === null
+          ? `${agent.name} is archived: it no longer answers or appears in list_agents. It is kept until it is restored (delete_agent restore true) or deleted for good (delete_agent permanent true); list_agents archived true lists it.`
+          : "The agent is archived: it no longer answers or appears in list_agents. Its conversations are kept until purge_at, then deleted with it. delete_agent restore true brings it back before then; list_agents archived true lists it.",
       });
     },
 
@@ -1867,9 +1922,9 @@ function createAgentApiHandlers(env: {
 function createAgentApiConfigHandlers(env: {
   deps: AgentApiDeps;
   ok: (body: Record<string, unknown>) => AgentApiAnswer;
-  reachable: (caller: AgentCaller, agentId: string) => Promise<AgentSummary | Refusal>;
+  reachable: (caller: AgentCaller, agentId: string, options?: { archived?: boolean }) => Promise<AgentSummary | Refusal>;
 }): Pick<Record<AgentToolName, (caller: AgentCaller, args: Args, signal?: AbortSignal) => Promise<AgentApiAnswer | Refusal>>,
-  "list_agent_models" | "update_agent_model" | "update_agent_settings" | "update_routine"
+  "list_agent_models" | "update_agent_model" | "update_agent_settings" | "update_routine" | "create_routine" | "delete_routine"
 > {
   const { deps, ok, reachable } = env;
   return {
@@ -1943,7 +1998,10 @@ function createAgentApiConfigHandlers(env: {
       }
       const agentId = agentIdArg(args);
       if (isRefusal(agentId)) return agentId;
-      const agent = await reachable(caller, agentId);
+      // #4172: an archived agent is reached too, so its fields can be edited
+      // (the bot page edits an archived bot the same way). Archive and restore
+      // are delete_agent's.
+      const agent = await reachable(caller, agentId, { archived: true });
       if (isRefusal(agent)) return agent;
       if (!deps.updateSettings) {
         return refuse(501, "not_supported", "This server does not change agent settings yet.");
@@ -1966,62 +2024,15 @@ function createAgentApiConfigHandlers(env: {
     },
 
     async update_routine(caller, args) {
-      const bad = onlyKeys(args, ["routine_id", "enabled", "name", "instructions", "schedule", "requires_computer", "model", "subagent_model", "effort", "goal"]);
+      const bad = onlyKeys(args, ["routine_id", ...ROUTINE_FIELD_KEYS]);
       if (bad) return bad;
-      const routineId = typeof args.routine_id === "string" ? args.routine_id.trim() : "";
-      if (!routineId || !ID.test(routineId)) {
-        return refuse(400, "bad_request", "routine_id is required: an id from sagax_routines or list_routines.");
-      }
+      const routineId = routineIdArg(args);
+      if (isRefusal(routineId)) return routineId;
       if (!deps.updateRoutine) {
         return refuse(501, "not_supported", "This server does not update routines through the agent API yet.");
       }
-      const patch: AgentRoutinePatch = {};
-      if (Object.hasOwn(args, "enabled")) {
-        if (typeof args.enabled !== "boolean") return refuse(400, "bad_request", "enabled is true or false.");
-        patch.enabled = args.enabled;
-      }
-      if (Object.hasOwn(args, "name")) {
-        if (typeof args.name !== "string") return refuse(400, "bad_request", "name is a string.");
-        const name = args.name.trim();
-        if (!name || name.length > 120) return refuse(400, "bad_request", "name is 1 to 120 characters.");
-        patch.name = name;
-      }
-      if (Object.hasOwn(args, "instructions")) {
-        if (typeof args.instructions !== "string") return refuse(400, "bad_request", "instructions is a string.");
-        const instructions = args.instructions.trim();
-        if (!instructions || instructions.length > 32_000) return refuse(400, "bad_request", "instructions is 1 to 32000 characters.");
-        patch.instructions = instructions;
-      }
-      if (Object.hasOwn(args, "schedule")) {
-        if (!args.schedule || typeof args.schedule !== "object" || Array.isArray(args.schedule)) {
-          return refuse(400, "bad_request", "schedule is an object (cron, daily, interval, once, webhook or event).");
-        }
-        patch.schedule = args.schedule as Record<string, unknown>;
-      }
-      if (Object.hasOwn(args, "requires_computer")) {
-        if (typeof args.requires_computer !== "boolean") return refuse(400, "bad_request", "requires_computer is true or false.");
-        patch.requiresComputer = args.requires_computer;
-      }
-      if (Object.hasOwn(args, "model")) {
-        const parsed = parseRoutineModel(args.model);
-        if (!parsed.ok) return refuse(400, "bad_request", parsed.error);
-        patch.model = parsed.model ?? null;
-      }
-      if (Object.hasOwn(args, "subagent_model")) {
-        const parsed = parseRoutineModel(args.subagent_model);
-        if (!parsed.ok) return refuse(400, "bad_request", parsed.error);
-        patch.subagentModel = parsed.model ?? null;
-      }
-      if (Object.hasOwn(args, "effort")) {
-        const parsed = parseRoutineEffort(args.effort);
-        if (!parsed.ok) return refuse(400, "bad_request", parsed.error);
-        patch.effort = parsed.effort ?? null;
-      }
-      if (Object.hasOwn(args, "goal")) {
-        const parsed = parseRoutineGoal(args.goal);
-        if (!parsed.ok) return refuse(400, "bad_request", parsed.error);
-        patch.goal = parsed.goal ? { text: parsed.goal.text, ...(parsed.goal.deadline ? { deadline: parsed.goal.deadline } : {}) } : null;
-      }
+      const patch = routineFieldsArg(args);
+      if (isRefusal(patch)) return patch;
       if (!Object.keys(patch).length) {
         return refuse(400, "bad_request", "Pass at least one of enabled, name, instructions, schedule, requires_computer, model, subagent_model, effort, goal.");
       }
@@ -2029,7 +2040,108 @@ function createAgentApiConfigHandlers(env: {
       if (isRefusal(updated)) return updated;
       return ok({ routine_id: routineId, routine: updated.routine });
     },
+
+    // #4172: a new routine on one of the caller's agents, as the Automations
+    // editor's New routine makes it.
+    async create_routine(caller, args) {
+      const bad = onlyKeys(args, ["agent_id", ...ROUTINE_FIELD_KEYS]);
+      if (bad) return bad;
+      const agentId = agentIdArg(args);
+      if (isRefusal(agentId)) return agentId;
+      const fields = routineFieldsArg(args);
+      if (isRefusal(fields)) return fields;
+      const { name, instructions, schedule } = fields;
+      if (name === undefined || instructions === undefined || schedule === undefined) {
+        return refuse(400, "bad_request", "A new routine needs name, instructions and schedule (cron, daily, interval, once, webhook or event).");
+      }
+      const agent = await reachable(caller, agentId);
+      if (isRefusal(agent)) return agent;
+      if (!deps.createRoutine) {
+        return refuse(501, "not_supported", "This server does not create routines through the agent API yet.");
+      }
+      const made = await deps.createRoutine(caller, agentId, { ...fields, name, instructions, schedule });
+      if (isRefusal(made)) return made;
+      const madeId = typeof made.routine.id === "string" ? made.routine.id : null;
+      return ok({ routine_id: madeId, routine: made.routine });
+    },
+
+    // #4172: the Automations editor's Delete, as the person.
+    async delete_routine(caller, args) {
+      const bad = onlyKeys(args, ["routine_id"]);
+      if (bad) return bad;
+      const routineId = routineIdArg(args);
+      if (isRefusal(routineId)) return routineId;
+      if (!deps.deleteRoutine) {
+        return refuse(501, "not_supported", "This server does not delete routines through the agent API yet.");
+      }
+      const deleted = await deps.deleteRoutine(caller, routineId);
+      if (isRefusal(deleted)) return deleted;
+      return ok({ deleted: true, routine_id: routineId });
+    },
   };
+}
+
+/** The routine fields update_routine and create_routine take (snake_case on the wire). */
+const ROUTINE_FIELD_KEYS = ["enabled", "name", "instructions", "schedule", "requires_computer", "model", "subagent_model", "effort", "goal"] as const;
+
+function routineIdArg(args: Args): string | Refusal {
+  const routineId = typeof args.routine_id === "string" ? args.routine_id.trim() : "";
+  if (!routineId || !ID.test(routineId)) {
+    return refuse(400, "bad_request", "routine_id is required: an id from sagax_routines or list_routines.");
+  }
+  return routineId;
+}
+
+/** The routine fields present in args, checked as the Automations editor checks them. */
+function routineFieldsArg(args: Args): AgentRoutinePatch | Refusal {
+  const patch: AgentRoutinePatch = {};
+  if (Object.hasOwn(args, "enabled")) {
+    if (typeof args.enabled !== "boolean") return refuse(400, "bad_request", "enabled is true or false.");
+    patch.enabled = args.enabled;
+  }
+  if (Object.hasOwn(args, "name")) {
+    if (typeof args.name !== "string") return refuse(400, "bad_request", "name is a string.");
+    const name = args.name.trim();
+    if (!name || name.length > 120) return refuse(400, "bad_request", "name is 1 to 120 characters.");
+    patch.name = name;
+  }
+  if (Object.hasOwn(args, "instructions")) {
+    if (typeof args.instructions !== "string") return refuse(400, "bad_request", "instructions is a string.");
+    const instructions = args.instructions.trim();
+    if (!instructions || instructions.length > 32_000) return refuse(400, "bad_request", "instructions is 1 to 32000 characters.");
+    patch.instructions = instructions;
+  }
+  if (Object.hasOwn(args, "schedule")) {
+    if (!args.schedule || typeof args.schedule !== "object" || Array.isArray(args.schedule)) {
+      return refuse(400, "bad_request", "schedule is an object (cron, daily, interval, once, webhook or event).");
+    }
+    patch.schedule = args.schedule as Record<string, unknown>;
+  }
+  if (Object.hasOwn(args, "requires_computer")) {
+    if (typeof args.requires_computer !== "boolean") return refuse(400, "bad_request", "requires_computer is true or false.");
+    patch.requiresComputer = args.requires_computer;
+  }
+  if (Object.hasOwn(args, "model")) {
+    const parsed = parseRoutineModel(args.model);
+    if (!parsed.ok) return refuse(400, "bad_request", parsed.error);
+    patch.model = parsed.model ?? null;
+  }
+  if (Object.hasOwn(args, "subagent_model")) {
+    const parsed = parseRoutineModel(args.subagent_model);
+    if (!parsed.ok) return refuse(400, "bad_request", parsed.error);
+    patch.subagentModel = parsed.model ?? null;
+  }
+  if (Object.hasOwn(args, "effort")) {
+    const parsed = parseRoutineEffort(args.effort);
+    if (!parsed.ok) return refuse(400, "bad_request", parsed.error);
+    patch.effort = parsed.effort ?? null;
+  }
+  if (Object.hasOwn(args, "goal")) {
+    const parsed = parseRoutineGoal(args.goal);
+    if (!parsed.ok) return refuse(400, "bad_request", parsed.error);
+    patch.goal = parsed.goal ? { text: parsed.goal.text, ...(parsed.goal.deadline ? { deadline: parsed.goal.deadline } : {}) } : null;
+  }
+  return patch;
 }
 
 export function createAgentApi(deps: AgentApiDeps): AgentApi {
@@ -2085,8 +2197,8 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
   };
 
   /** The agent, when the caller may reach it; one answer for "no such agent" and "not yours". */
-  const reachable = async (caller: AgentCaller, agentId: string): Promise<AgentSummary | Refusal> => {
-    const agent = (await deps.agents(caller)).find((candidate) => candidate.id === agentId);
+  const reachable = async (caller: AgentCaller, agentId: string, options?: { archived?: boolean }): Promise<AgentSummary | Refusal> => {
+    const agent = (await deps.agents(caller, options)).find((candidate) => candidate.id === agentId);
     return agent ?? refuse(404, "unknown_agent", "No agent with that id is reachable. Its id must come from list_agents or find_agents.");
   };
 
@@ -2396,8 +2508,10 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
           if (typeof args.workspace === "string") detail.workspace = args.workspace;
         }
         if (tool === "delete_agent" && shaped.status < 400) {
-          detail.archived = true;
-          detail.purgeAt = shaped.body.purge_at ?? null;
+          // #4172: which of archive, permanent and restore was done
+          detail.mode = shaped.body.deleted === true ? "permanent" : shaped.body.restored === true ? "restore" : "archive";
+          detail.archived = shaped.body.archived === true;
+          if (shaped.body.archived === true) detail.purgeAt = shaped.body.purge_at ?? null;
         }
         return finish(shaped, detail);
       } catch (error) {

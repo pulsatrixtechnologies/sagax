@@ -98,10 +98,14 @@ function world(options: {
   const key = (caller: AgentCaller) => `${caller.kind}:${caller.id}`;
   const owners = new Map<string, string>();
   const archived: string[] = [];
+  const deleteModes: string[] = [];
+  const routineCreates: Array<{ agentId: string; input: Record<string, unknown> }> = [];
   const created: Array<{ name: string; idleHours?: number; workspace?: string }> = [];
   const lasting: Array<Extract<CreateAgentInput, { kind: "lasting" }>> = [];
   const deps: AgentApiDeps = {
-    agents: (caller) => agents.filter((agent) => !archived.includes(agent.id) && (options.reachable ? options.reachable(caller, agent) : true)),
+    agents: (caller, listing) => agents
+      .filter((agent) => (listing?.archived === true || !archived.includes(agent.id)) && (options.reachable ? options.reachable(caller, agent) : true))
+      .map((agent) => (archived.includes(agent.id) ? { ...agent, archived: true } : agent)),
     async createAgent(caller, input) {
       const owner = { principal_id: key(caller), name: "Owner" };
       if (input.kind === "lasting") {
@@ -287,10 +291,33 @@ function world(options: {
       if (patch.requiresComputer !== undefined) (routine as Record<string, unknown>).requiresComputer = patch.requiresComputer;
       return { routine: { ...routine } };
     },
-    async deleteAgent(caller, agentId) {
+    async deleteAgent(caller, agentId, mode) {
       if (caller.admin !== true && owners.get(agentId) !== key(caller)) return { status: 403, code: "forbidden_owner", message: "Only this agent's owner or an organization admin can delete it." };
+      deleteModes.push(mode);
+      if (mode === "restore") {
+        archived.splice(archived.indexOf(agentId), 1);
+        return { restored: true };
+      }
+      if (mode === "permanent") {
+        agents.splice(agents.findIndex((agent) => agent.id === agentId), 1);
+        return { deleted: true };
+      }
       archived.push(agentId);
-      return { archived_at: clock, purge_at: clock + 30 * 86_400_000 };
+      const temporary = agents.find((agent) => agent.id === agentId)?.temporary === true;
+      return { archived_at: clock, purge_at: temporary ? clock + 30 * 86_400_000 : null };
+    },
+    async createRoutine(caller, agentId, input) {
+      if (caller.kind !== "person") return { status: 403, code: "forbidden_caller", message: "update_routine is for a person's AI client." };
+      const id = `r-${++ids}`;
+      routines.set(id, { id, name: input.name, enabled: input.enabled ?? true, instructions: input.instructions, owner: key(caller) });
+      routineCreates.push({ agentId, input: { ...input } });
+      return { routine: { id, name: input.name, botId: agentId } };
+    },
+    async deleteRoutine(caller, routineId) {
+      const routine = routines.get(routineId);
+      if (!routine || routine.owner !== key(caller)) return { status: 404, code: "not_found", message: "No such routine." };
+      routines.delete(routineId);
+      return { deleted: true };
     },
     threads: (caller, agentId) => [...threads].filter(([, t]) => t.agentId === agentId && t.owner === key(caller)).map(([threadId, t]) => ({ threadId, title: t.title, hidden: t.hidden })),
     messages: (threadId) => messages.get(threadId) ?? [],
@@ -337,7 +364,7 @@ function world(options: {
     },
   };
   return {
-    routinePatches, deps, api: createAgentApi(deps), agents, owners, archived, created, lasting, threads, messages, state, audits, notified, interrupted, turnStateCalls, posted,
+    routinePatches, routineCreates, routines, deleteModes, deps, api: createAgentApi(deps), agents, owners, archived, created, lasting, threads, messages, state, audits, notified, interrupted, turnStateCalls, posted,
     heldPermissions, runtimeByBot, primaryByOwner, settingsByBot,
     add, advance: (ms: number) => { clock += ms; }, settle: async () => { for (let i = 0; i < 50; i++) await deps.sleep!(400); },
   };
@@ -360,7 +387,7 @@ describe("send_prompt file prompt (#1169)", () => {
 
 describe("agent API policy", () => {
   it("declares the agent tools, each with a scope, an access level and a read-only flag", () => {
-    expect(AGENT_TOOL_NAMES).toHaveLength(17);
+    expect(AGENT_TOOL_NAMES).toHaveLength(19);
     for (const name of AGENT_TOOL_NAMES) {
       const policy = AGENT_TOOL_POLICY[name];
       expect(policy.readOnly).toBe(policy.access === "read");
@@ -491,9 +518,8 @@ describe("create_agent kind lasting", () => {
     expect(r.body).toMatchObject({ kind: "lasting", greeted: true, agent: { name: "Ledger", description: "Keeps the books" } });
     expect((r.body.agent as Record<string, unknown>).temporary).toBe(false);
     expect(String(r.body.note)).toContain("shown in their Sagax app");
-    // delete_agent archives temporary agents only: the note names what archives a lasting bot
-    expect(String(r.body.note)).toContain("update_agent_settings hidden true");
-    expect(String(r.body.note)).not.toContain("delete_agent");
+    // #4172: delete_agent archives a lasting bot too
+    expect(String(r.body.note)).toContain("archive it with delete_agent");
     expect(String(r.body.note)).not.toContain("temporary");
     expect(w.lasting.at(-1)).toEqual({
       kind: "lasting", name: "Ledger", description: "Keeps the books", title: "Bookkeeper", soul: "Be exact.",
@@ -710,12 +736,45 @@ describe("get_agent / delete_agent", () => {
     expect(w.archived).toEqual([id]);
   });
 
-  it("delete_agent never touches a lasting agent", async () => {
+  it("#4172: delete_agent archives a lasting bot of the person, lists it on request, restores it and deletes it for good", async () => {
     const w = world();
-    const r = await w.api.call(admin("pr_9"), "delete_agent", { agent_id: "bot-a" });
-    expect(r.status).toBe(409);
-    expect(r.body.code).toBe("not_temporary");
+    const id = ((await w.api.call(person("pr_1"), "create_agent", { kind: "lasting", name: "Ledger" })).body.agent as { id: string }).id;
+    const archived = await w.api.call(person("pr_1"), "delete_agent", { agent_id: id });
+    expect(archived.status, JSON.stringify(archived.body)).toBe(200);
+    expect(archived.body).toMatchObject({ agent_id: id, archived: true, purge_at: null });
+    expect(String(archived.body.note)).toContain("restore true");
+    expect(w.deleteModes).toEqual(["archive"]);
+    // gone from the default list, listed with archived true and marked
+    expect(((await w.api.call(person("pr_1"), "list_agents", {})).body.agents as AgentSummary[]).map((a) => a.id)).not.toContain(id);
+    const listed = (await w.api.call(person("pr_1"), "list_agents", { archived: true })).body.agents as Array<AgentSummary & { archived?: boolean }>;
+    expect(listed.find((a) => a.id === id)).toMatchObject({ archived: true });
+    // archived true lists the archived ones instead of the active ones
+    expect(listed.some((a) => a.id === "bot-a")).toBe(false);
+    // an archived one is not sent work
+    expect((await w.api.call(person("pr_1"), "send_prompt", { agent_id: id, prompt: "hi" })).status).toBe(404);
+    // restore brings it back
+    const restored = await w.api.call(person("pr_1"), "delete_agent", { agent_id: id, restore: true });
+    expect(restored.body).toMatchObject({ agent_id: id, archived: false, restored: true });
+    expect(((await w.api.call(person("pr_1"), "list_agents", {})).body.agents as AgentSummary[]).map((a) => a.id)).toContain(id);
+    // permanent deletes it for good, archived or not
+    const deleted = await w.api.call(person("pr_1"), "delete_agent", { agent_id: id, permanent: true });
+    expect(deleted.body).toMatchObject({ agent_id: id, deleted: true });
+    expect(w.deleteModes).toEqual(["archive", "restore", "permanent"]);
+    expect(w.agents.some((a) => a.id === id)).toBe(false);
+    expect(w.audits.filter((row) => row.entry.tool === "delete_agent" && row.entry.outcome === "ok").map((row) => row.entry.detail!.mode)).toEqual(["archive", "restore", "permanent"]);
+    // never another person's bot
+    const mine = ((await w.api.call(person("pr_1"), "create_agent", { kind: "lasting", name: "Mine" })).body.agent as { id: string }).id;
+    expect((await w.api.call(person("pr_2"), "delete_agent", { agent_id: mine, permanent: true })).body.code).toBe("forbidden_owner");
+    expect((await w.api.call(person("pr_1"), "delete_agent", { agent_id: mine, permanent: true, restore: true })).body.code).toBe("bad_request");
+  });
+
+  it("#4172: a temporary agent is deleted for good, or restored from its archive", async () => {
+    const w = world();
+    const id = ((await w.api.call(person("pr_1"), "create_agent", { name: "Scratch" })).body.agent as { id: string }).id;
+    await w.api.call(person("pr_1"), "delete_agent", { agent_id: id });
+    expect((await w.api.call(person("pr_1"), "delete_agent", { agent_id: id, restore: true })).body).toMatchObject({ restored: true });
     expect(w.archived).toEqual([]);
+    expect((await w.api.call(person("pr_1"), "delete_agent", { agent_id: id, permanent: true })).body).toMatchObject({ deleted: true });
   });
 
   it("another organization's agent does not exist for the caller", async () => {
@@ -1810,6 +1869,59 @@ describe("fleet tools (#1944)", () => {
     expect((await w.api.call(person("pr_1"), "update_routine", {
       routine_id: "r-other", enabled: false,
     })).status).toBe(404);
+  });
+
+  it("#4172: create_routine makes a routine on an agent; delete_routine deletes one (the connector's wire contract)", async () => {
+    const w = world();
+    const made = await w.api.call(person("pr_1"), "create_routine", {
+      agent_id: "bot-a", name: "Evening digest", instructions: "Sum up the day.", schedule: { type: "daily", time: "18:00" }, enabled: false,
+      requires_computer: false, model: null, subagent_model: null, effort: null, goal: null,
+    });
+    expect(made.status, JSON.stringify(made.body)).toBe(200);
+    expect(made.body).toMatchObject({ routine_id: expect.any(String), routine: { name: "Evening digest", botId: "bot-a" } });
+    expect(w.routineCreates.at(-1)).toMatchObject({ agentId: "bot-a", input: { name: "Evening digest", instructions: "Sum up the day.", enabled: false, schedule: { type: "daily" } } });
+    const id = made.body.routine_id as string;
+    // a new routine needs its agent, name, instructions and schedule
+    expect((await w.api.call(person("pr_1"), "create_routine", { agent_id: "bot-a", name: "Half" })).body.code).toBe("bad_request");
+    expect((await w.api.call(person("pr_1"), "create_routine", { name: "N", instructions: "I", schedule: { type: "daily", time: "08:00" } })).body.code).toBe("bad_request");
+    // never on another person's agent
+    expect((await w.api.call(person("pr_1"), "create_routine", { agent_id: "nope", name: "N", instructions: "I", schedule: { type: "daily", time: "08:00" } })).body.code).toBe("unknown_agent");
+    // delete_routine takes routine_id only
+    expect((await w.api.call(person("pr_1"), "delete_routine", { routine_id: id, name: "x" })).body.code).toBe("bad_request");
+    const deleted = await w.api.call(person("pr_1"), "delete_routine", { routine_id: id });
+    expect(deleted.status, JSON.stringify(deleted.body)).toBe(200);
+    expect(deleted.body).toEqual({ deleted: true, routine_id: id });
+    expect(w.routines.has(id)).toBe(false);
+    // never another person's routine
+    expect((await w.api.call(person("pr_1"), "delete_routine", { routine_id: "r-other" })).status).toBe(404);
+    // one way to do each job: update_routine only changes a routine
+    expect((await w.api.call(person("pr_1"), "update_routine", { agent_id: "bot-a", name: "N", instructions: "I", schedule: { type: "daily", time: "08:00" } })).body.code).toBe("bad_request");
+    expect((await w.api.call(person("pr_1"), "update_routine", { routine_id: "r-own", delete: true })).body.code).toBe("bad_request");
+    expect(w.audits.filter((row) => row.entry.outcome === "ok").map((row) => row.entry.tool)).toEqual(expect.arrayContaining(["create_routine", "delete_routine"]));
+  });
+
+  it("#4172: list_agents archived true lists only the archived agents", async () => {
+    const w = world();
+    const lasting = await w.api.call(person("pr_1"), "create_agent", { kind: "lasting", name: "Shelf" });
+    const id = (lasting.body.agent as { id: string }).id;
+    expect((await w.api.call(person("pr_1"), "delete_agent", { agent_id: id })).status).toBe(200);
+    const listed = (await w.api.call(person("pr_1"), "list_agents", { archived: true })).body.agents as Array<AgentSummary & { archived?: boolean }>;
+    expect(listed.map((a) => a.id)).toEqual([id]);
+    expect(listed[0]!.archived).toBe(true);
+  });
+
+  it("#4172: update_agent_settings passes skills, plugins and grants", async () => {
+    const w = world();
+    let seen: Record<string, unknown> | undefined;
+    const inner = w.deps.updateSettings!;
+    w.deps.updateSettings = async (caller, agentId, fields) => {
+      seen = fields;
+      return inner(caller, agentId, fields);
+    };
+    const api = createAgentApi(w.deps);
+    const r = await api.call(person("pr_1"), "update_agent_settings", { agent_id: "bot-a", skills: { "tidy-notes": false }, plugins: { "docs@market": true }, grants: { "user:pr_2": "use" } });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(seen).toEqual({ skills: { "tidy-notes": false }, plugins: { "docs@market": true }, grants: { "user:pr_2": "use" } });
   });
 
   it("update_routine sets and clears \"Needs its computer\" (#1996)", async () => {

@@ -49,7 +49,7 @@ Code: `server/org/org-member-routes.ts`, wired in `server/index.ts`
 | `clients.routinesWrite` | on (always) | enable, disable, rename, and edit schedule or instructions of routines they own |
 | `clients.approvalsAnswer` | off (the bot's owner holds it for their own bots) | allow or deny a card |
 | `clients.peopleNudge` | off | nudge a person |
-| `clients.agentsCreate` | off | create a temporary agent with `agents/create_agent`, delete one with `agents/delete_agent` |
+| `clients.agentsCreate` | off | create a bot with `agents/create_agent`; archive, restore or delete one for good with `agents/delete_agent` |
 
 Keys have two segments (`group.name`): Perspicax refuses a catalogue with
 any other shape, so the plan's `clients.bots.read` is written

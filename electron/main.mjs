@@ -2737,7 +2737,7 @@ function desktopBridge() {
     macApp: async (toolName, args, signal) => {
       const appId = macAppOfTool(toolName);
       if (!appId || !macAppEnabled(app.getPath("userData"), appId)) {
-        return { content: [{ type: "text", text: `${appId ?? "This app"} is off on this Mac. The person turns it on in Plugins > This Mac.` }], isError: true };
+        return { content: [{ type: "text", text: `${appId ?? "This app"} is off on this Mac. The person turns it on in Connect Apps > This Mac.` }], isError: true };
       }
       return runMacAppCall(toolName, args, { signal });
     },

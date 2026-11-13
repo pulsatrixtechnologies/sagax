@@ -478,7 +478,7 @@ describe("the Templates section (the old Templates library)", () => {
   });
 
   it("says what an import added", () => {
-    expect(teamImportedText({ name: "Sales desk", members: 3, connections: 1 })).toBe("3 bots added · existing bots and chats kept · Connections to finish in Plugins > Installed: 1");
+    expect(teamImportedText({ name: "Sales desk", members: 3, connections: 1 })).toBe("3 bots added · existing bots and chats kept · Connections to finish in Connect Apps > Installed: 1");
     expect(teamImportedText({ name: "Presets", members: 0, presets: 2 })).toBe("Preset bots added to New bot: 2");
   });
 });

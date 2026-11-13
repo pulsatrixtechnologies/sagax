@@ -192,7 +192,7 @@ export function paletteCommands(context: PaletteContext): PaletteItem[] {
     items.push({
       id: "cmd:connectApps",
       group: "navigation",
-      label: t("palette.cmd.connectApps"),
+      label: t("connectApps.title"),
       words: [nav, "plugins", "apps", "mcp", "applications", "connect"],
       action: { kind: "connectApps" },
     });

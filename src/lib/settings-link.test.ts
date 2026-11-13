@@ -26,7 +26,7 @@ describe("settings links", () => {
     // Security and Vault are pages again (2026-10-28); Published pages are in Capabilities
     expect(settingsSectionLabel("security")).toBe("Security");
     expect(settingsSectionLabel("credentials")).toBe("Vault");
-    expect(settingsSectionLabel("pages")).toBe("Plugins");
+    expect(settingsSectionLabel("pages")).toBe("Connect Apps");
     expect(settingsSectionLabel("experimental")).toBe("Developer");
     // #2090: Updates is its own page. 2026-11-06: the App page splits into
     // General and About (the owner 2026-11-07, was Help and about); Import lands on Backups and storage

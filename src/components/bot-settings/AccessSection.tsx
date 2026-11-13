@@ -138,7 +138,7 @@ function ManageInConnectApps({ surface }: { surface: "apps" | "mcp" }) {
       }}
       className={plain ? cn(PILL, "shrink-0 gap-1") : "flex items-center gap-1 rounded-lg px-1 py-1.5 text-[12.5px] font-medium text-accent-text hover:underline"}
     >
-      {t("botAccess.manageInConnectApps")} <ArrowUpRight size={13} aria-hidden="true" />
+      {t("botPanel.skills.manageInConnectApps")} <ArrowUpRight size={13} aria-hidden="true" />
     </button>
   );
 }

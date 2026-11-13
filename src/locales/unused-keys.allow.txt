@@ -623,7 +623,6 @@ sidebar.menu.getPhoneApp
 sidebar.menu.help
 sidebar.menu.support
 sidebar.menu.yourPhone
-sidebar.nav.apps
 sidebar.nav.routines
 sidebar.nav.triggers
 sidebar.newChannel.context

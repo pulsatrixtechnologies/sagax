@@ -48,7 +48,7 @@ The CLI only wrote `Skipping MCP tool` to its own log; the bot saw nothing.
   unregistrable an `ERROR` on the gate's stderr; each gate writes
   `DATA_DIR/mcp-tool-names/<server>.json` (`advertised`, `registered`,
   `renamed`, `unregistrable`, `parity`, `status: ok|renamed|mismatch`),
-  served at `GET /api/mcp/tool-names`. Settings > Plugins > a server > Test
+  served at `GET /api/mcp/tool-names`. Connect Apps > a server > Test
   shows each renamed or unregistrable tool on its row. A URL server the ACP
   driver cannot mount is logged instead of skipped silently.
 - **Parity check.** `toolNameParity` asserts a bijection between advertised

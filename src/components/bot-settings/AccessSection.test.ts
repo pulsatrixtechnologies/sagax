@@ -214,6 +214,6 @@ describe("AccessSection on the profile page (plain surface)", () => {
   it("offers Manage in Plugins exactly once", () => {
     fixture.servers = [{ name: "notes", enabled: true }];
     const markup = renderPlain(makeBot({ mcpServers: ["notes"] }));
-    expect(markup.match(/Manage in Plugins/g)).toHaveLength(1);
+    expect(markup.match(/Manage in Connect Apps/g)).toHaveLength(1);
   });
 });

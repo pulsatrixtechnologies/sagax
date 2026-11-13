@@ -265,7 +265,7 @@ function macAppTools(deps: MessagesMcpDeps) {
 async function macAppCall(deps: MessagesMcpDeps, name: string, args: Record<string, unknown>): Promise<ToolResult> {
   const app = macAppOfTool(name)!;
   if (!deps.macApps || !macAppsReachable(deps)) return text("The Apple apps run only on the Mac where this Sagax app runs.", true);
-  if (!macAppOn(deps, app)) return text(`${app[0]!.toUpperCase()}${app.slice(1)} is off in Plugins > This Mac. Nothing was done.`, true);
+  if (!macAppOn(deps, app)) return text(`${app[0]!.toUpperCase()}${app.slice(1)} is off in Connect Apps > This Mac. Nothing was done.`, true);
   const relay = deps.macApps.relay;
   // The Messages send keeps its recipient list and card (send above). Through
   // the relay, a listed recipient goes unasked; anyone else gets the card.

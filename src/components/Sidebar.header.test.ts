@@ -177,7 +177,7 @@ describe("sidebar header", () => {
   it("keeps one Plugins icon on the collapsed rail", () => {
     fixture.density = "icons";
     const html = render();
-    expect((html.match(/<button[^>]*data-sidebar-connect-apps[^>]*>/g) ?? [])[0]).toContain('aria-label="Plugins"');
+    expect((html.match(/<button[^>]*data-sidebar-connect-apps[^>]*>/g) ?? [])[0]).toContain('aria-label="Connect Apps"');
     // one entry for apps and bots: Browse Bots opens from Plugins
     expect(html).not.toContain('aria-label="Browse Bots"');
     expect(html).not.toContain('data-place-anim="grid"');

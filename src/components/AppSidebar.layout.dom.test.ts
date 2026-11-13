@@ -180,7 +180,7 @@ describe("the sidebar at 700 px (the automatic rail)", () => {
     expect(account!.querySelector("[title]")?.getAttribute("title")).toBe("Sample Person");
     const apps = container.querySelector<HTMLButtonElement>("[data-sidebar-rail-foot] [data-sidebar-connect-apps]");
     expect(apps).not.toBeNull();
-    expect(apps!.getAttribute("aria-label")).toBe("Plugins");
+    expect(apps!.getAttribute("aria-label")).toBe("Connect Apps");
     expect(apps!.querySelector("[data-apps-grid-icon]")).not.toBeNull();
     expect(classes(apps)).toEqual(expect.arrayContaining(["rounded-full", "size-9"]));
     // the apps grid comes before the avatar, like the wide row's pair

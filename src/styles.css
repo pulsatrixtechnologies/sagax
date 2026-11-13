@@ -3878,27 +3878,31 @@ html[data-animations-paused] *::after {
   color: var(--color-success-ink);
 }
 /* The person's own bubble is filled with the accent (src/styles/skin-bubble.css:
-   the accent at a lightness that carries its text at 4.5:1, in every skin,
-   colour, duo-tone and mood), so the ink inside it is the bubble's ink and not
+   white text as the reference, on the accent or the same hue a step deeper
+   where white would not read at 4.5:1, in every skin, colour, duo-tone and
+   mood; src/lib/bubble-colors.ts), so the ink inside it is the bubble's ink and not
    the page's: the `text-ink` the composer and the thread hardcode would be
    dark on a dark accent. Everything a bubble holds (a link, inline code, a
    quote, a reference chip, the inline editor, an attachment control) reads its
-   tokens from here, cut from the bubble's own two colours, so each keeps
-   4.5:1 whatever the accent. A nested skin (a picker preview) keeps its own
-   palette: its blocks set these tokens on the nested element itself. */
+   tokens from here, cut from the bubble's own colours, so each keeps 4.5:1
+   whatever the accent: its inner surfaces mix toward the bubble's well
+   (--color-bubble-user-well, black under white ink on a coloured accent), so
+   a code span or a chip never lightens under its white text. A nested skin
+   (a picker preview) keeps its own palette: its blocks set these tokens on
+   the nested element itself. */
 .bg-bubble-user {
   color: var(--color-bubble-user-ink);
   --color-ink: var(--color-bubble-user-ink);
   /* no faded ink here: a fade of the bubble's ink is under 4.5:1 on the accent */
   --color-ink-secondary: var(--color-bubble-user-ink);
   --color-ink-tertiary: var(--color-bubble-user-ink);
-  --color-panel: color-mix(in srgb, var(--color-bubble-user-ink) 8%, var(--color-bubble-user));
+  --color-panel: color-mix(in srgb, var(--color-bubble-user-well, var(--color-bubble-user-ink)) 8%, var(--color-bubble-user));
   /* a table's sticky header (RichTable) in a bot's line drawn on this side */
-  --color-card: color-mix(in srgb, var(--color-bubble-user-ink) 8%, var(--color-bubble-user));
-  --color-inset: color-mix(in srgb, var(--color-bubble-user-ink) 12%, var(--color-bubble-user));
-  --color-raised: color-mix(in srgb, var(--color-bubble-user-ink) 16%, var(--color-bubble-user));
-  --color-raised-hover: color-mix(in srgb, var(--color-bubble-user-ink) 24%, var(--color-bubble-user));
-  --color-control: color-mix(in srgb, var(--color-bubble-user-ink) 16%, var(--color-bubble-user));
+  --color-card: color-mix(in srgb, var(--color-bubble-user-well, var(--color-bubble-user-ink)) 8%, var(--color-bubble-user));
+  --color-inset: color-mix(in srgb, var(--color-bubble-user-well, var(--color-bubble-user-ink)) 12%, var(--color-bubble-user));
+  --color-raised: color-mix(in srgb, var(--color-bubble-user-well, var(--color-bubble-user-ink)) 16%, var(--color-bubble-user));
+  --color-raised-hover: color-mix(in srgb, var(--color-bubble-user-well, var(--color-bubble-user-ink)) 24%, var(--color-bubble-user));
+  --color-control: color-mix(in srgb, var(--color-bubble-user-well, var(--color-bubble-user-ink)) 16%, var(--color-bubble-user));
   --color-hairline: color-mix(in srgb, var(--color-bubble-user-ink) 55%, var(--color-bubble-user));
   --color-accent: var(--color-bubble-user-ink);
   --color-accent-text: var(--color-bubble-user-ink);

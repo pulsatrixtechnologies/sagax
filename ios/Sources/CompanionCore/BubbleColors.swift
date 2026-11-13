@@ -1,15 +1,16 @@
 import Foundation
 
-/// The colours of the conversation bubbles (2026-10-28, exact accent
-/// 2026-10-29), the same rule as the desktop's `src/lib/bubble-colors.ts`:
-/// the person's own message is filled with the accent itself, the value an
-/// accent button is filled with, and a bot's reply is a neutral grey a step
-/// off the page.
+/// The colours of the conversation bubbles (2026-10-28; white ink as the
+/// reference, #4096), the same rule as the desktop's `src/lib/bubble-colors.ts`:
+/// the person's own message is filled with the accent, and a bot's reply is a
+/// neutral grey a step off the page.
 ///
-/// - the text on the accent bubble is the accent button's ink (`accentInk`):
-///   white on a dark accent, near black on a light or bright one, black
-///   where neither reaches 4.5:1. A skin keeps its own button ink when it
-///   reads at 4.5:1 on the accent, so bubble and button match;
+/// - on a coloured accent the text is white, as the reference writes every
+///   accent bubble; the fill is the accent itself where white reads on it at
+///   4.5:1, else the same hue a step deeper until it does (`whiteInkFill`);
+/// - a neutral accent (white, grey, black) keeps the accent exactly with the
+///   accent button's ink (`accentInk`), or the skin's own button ink when it
+///   reads at 4.5:1;
 /// - the grey is neutral in every skin, lighter than a dark page and darker
 ///   than a light one.
 public enum BubbleColors {
@@ -28,13 +29,48 @@ public enum BubbleColors {
         return max(light, dark) >= minimumContrast ? best : blackInk
     }
 
-    /// The person's bubble and the text on it, for an accent: the accent
-    /// exactly, and `buttonInk` (the skin's accent button ink) when it reads
+    /// The person's bubble and the text on it, for an accent. A coloured
+    /// accent: white text, on the accent where white reads, else on the same
+    /// hue a step deeper (`whiteInkFill`). A neutral accent: the accent
+    /// exactly, with `buttonInk` (the skin's accent button ink) when it reads
     /// at 4.5:1 on it, else `accentInk`.
     public static func user(accent: SkinColor, buttonInk: SkinColor? = nil) -> (fill: SkinColor, ink: SkinColor) {
         let fill = SkinColor(accent.hex)
+        if !isNeutral(fill) { return (whiteInkFill(fill), lightInk) }
         if let buttonInk, buttonInk.contrast(on: fill) >= minimumContrast { return (fill, SkinColor(buttonInk.hex)) }
         return (fill, accentInk(on: fill))
+    }
+
+    /// How far from grey (max minus min channel, 0 to 1) an accent must be to
+    /// count as a colour, as `isNeutralAccent` on the desktop.
+    private static let neutralChroma = 0.1
+
+    /// Whether an accent is a neutral (white, grey, black) rather than a colour.
+    public static func isNeutral(_ accent: SkinColor) -> Bool {
+        let (r, g, b) = (accent.red, accent.green, accent.blue)
+        return max(r, g, b) - min(r, g, b) < neutralChroma
+    }
+
+    /// The fill of an accent bubble that carries white text: the accent
+    /// itself where white reads on it at 4.5:1, else the same hue a step
+    /// deeper until it does (`toneForSurface` on the desktop).
+    public static func whiteInkFill(_ accent: SkinColor) -> SkinColor {
+        let fill = SkinColor(accent.hex)
+        if lightInk.contrast(on: fill) >= minimumContrast { return fill }
+        let (h, s, l) = hsl(fill)
+        var lo = 0.0, hi = l, best = fill
+        for _ in 0..<28 {
+            let mid = (lo + hi) / 2
+            let candidate = fromHSL(h, s, mid)
+            if lightInk.contrast(on: candidate) >= minimumContrast { best = candidate; lo = mid } else { hi = mid }
+        }
+        // a near grey still short at the hue's extreme: step toward black
+        var nudged = best
+        for _ in 0..<24 where lightInk.contrast(on: nudged) < minimumContrast {
+            func dim(_ c: Double) -> UInt32 { UInt32(min(255, max(0, (c * 255 * 0.92).rounded()))) }
+            nudged = SkinColor(dim(nudged.red) << 16 | dim(nudged.green) << 8 | dim(nudged.blue))
+        }
+        return nudged
     }
 
     /// Black, the default skin, is the Grok look (2026-11-01): the person's
@@ -43,7 +79,7 @@ public enum BubbleColors {
     public static func keepsNeutralBubbles(_ skin: SkinID) -> Bool { skin == .black }
 
     /// The person's bubble in a bot's colour (a 1:1 with that bot, 2026-10-28):
-    /// the bot's colour exactly, with the accent button's ink, so a skin with a neutral accent
+    /// the bot's colour in white text (`user(accent:)`), so a skin with a neutral accent
     /// (Midnight's near white) no longer leaves it white. Nil for a name that
     /// is not a bot colour: the skin's bubble then stays.
     public static func user(botColor name: String?) -> (fill: SkinColor, ink: SkinColor)? {

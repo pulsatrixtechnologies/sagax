@@ -12,7 +12,7 @@ import { SentCitations } from "../components/CitationUI";
 import { PageRefChip } from "../components/PageComposerParts";
 import { ReplyQuote } from "../components/ReplyQuote";
 import { MentionText } from "../components/MentionText";
-import { loadLocale } from "../lib/i18n";
+import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import type { SkinTintId } from "../lib/skin-families";
 import type { Message } from "../state/store";
@@ -65,7 +65,7 @@ function Column({ label, tint, orange }: { label: string; tint?: SkinTintId; ora
           <button type="button" className="inline break-words text-start text-accent underline decoration-accent/40">#Q3 review</button>,{" "}
           see <a className="text-accent-text underline" href="https://example.com">the doc</a> and <code className="rounded bg-inset px-1 font-mono text-[12px]">ticket.close</code>.
           <SentCitations citations={[citation]} onNavigate={async () => true} />
-          <div className="mt-1 text-[11px] text-ink-tertiary">taken into account</div>
+          <div className="mt-1 text-[11px] text-ink-tertiary">{t("chat.sentMidTurn")}</div>
         </div>
       </div>
       <div className="flex flex-col items-start">
@@ -98,10 +98,13 @@ const COLUMNS: Array<{ label: string; tint?: SkinTintId; orange?: boolean }> = [
   { label: "ocean", tint: "ocean" },
 ];
 
+// ?tints=duo: every duo-tone, whose bubble drifts toward the duo's far end (skin-duo.css)
+const DUO_COLUMNS: Array<{ label: string; tint?: SkinTintId }> = (["aurore", "ocean", "neon", "foret", "cyberpunk", "sunset", "nordic", "candy"] as SkinTintId[]).map((tint) => ({ label: tint, tint }));
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <div className="flex flex-wrap items-start gap-0 bg-app" data-gallery>
-      {COLUMNS.map((c) => <Column key={c.label} {...c} />)}
+      {(params.get("tints") === "duo" ? DUO_COLUMNS : COLUMNS).map((c) => <Column key={c.label} {...c} />)}
     </div>
   </StrictMode>,
 );

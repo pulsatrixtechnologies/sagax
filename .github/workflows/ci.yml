@@ -429,10 +429,11 @@ jobs:
           expected="$(node -e 'console.log(JSON.parse(process.env.VITEST_OS).length * 20)')"
           seed=""
           if [ "$SEED" = "true" ]; then seed="--seed"; fi
-          # --platforms: only a run on every platform (schedule, dispatch)
-          # drops a listed test that passed; a push runs Linux only.
+          # Each entry names the runners it fails on (#3569): a listed test
+          # leaves a runner once it passes there, so a push on Linux only
+          # shrinks the Linux runner and nothing else.
           node scripts/testing/known-failures.mjs report --results "$RUNNER_TEMP/vitest-results" --expect "$expected" \
-            --platforms "$VITEST_OS" --jobs "$RUNNER_TEMP/vitest-jobs.jsonl" --out "$RUNNER_TEMP/known-failures" --run-url "$RUN_URL" $seed
+            --jobs "$RUNNER_TEMP/vitest-jobs.jsonl" --out "$RUNNER_TEMP/known-failures" --run-url "$RUN_URL" $seed
       - name: Upload the list as this run leaves it
         # The shrunk list (or, with fill_known_failures, the first fill):
         # commit it as scripts/testing/known-failures.json.

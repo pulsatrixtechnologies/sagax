@@ -204,8 +204,14 @@ reserves failed with `listen EACCES 127.0.0.1:497xx`.
 
 `scripts/testing/known-failures.json` lists the tests that fail on main
 today, in the shape of `ci-retry-list.json` (file, full test name with
-describe blocks joined by ` > `, owner, reason, date). A run is green when
-every failure it sees is in that list.
+describe blocks joined by ` > `, owner, reason, date), plus `platforms`: the
+runners the test fails on, taken from the run that saw it (#3569). A run is
+green when every failure it sees is in that list for the runner it failed
+on: a test listed because it fails on Windows that breaks on Linux is a new
+failure. No test of `server/safety/` and no file of the guard tests list is
+ever listed (`listedGuardTests`): a safety test passes where its case exists
+and skips, naming the reason, where it cannot (a Windows host for the Linux
+environment's link and hard link cases).
 
 How a run decides (`scripts/testing/known-failures.mjs`):
 
@@ -225,16 +231,15 @@ How a run decides (`scripts/testing/known-failures.mjs`):
    reads the unstarted job itself as not passed. Each unlisted failure is an
    error annotation and a row of the job summary. The `CI` gate requires
    this job.
-3. Only a run on every platform (the nightly schedule or a manual dispatch;
-   `report --platforms`) shrinks the list: a listed test that passed there
-   leaves it, the job uploads the shrunk file as the `known-failures`
-   artifact and names the entries in its summary. Commit that file. A listed
-   test whose file did not run on one of the platforms (its job got no
-   runner) stays, and the summary counts it. A push
-   runs Linux only, so a listed test that passes on a push stays listed (the
-   summary says so): it may still fail on Windows or macOS. The list can only shrink: on a
-   push, `check-shrink` compares the list at the commit before the push and
-   turns the run red if an entry was added by hand.
+3. The list shrinks runner by runner: a listed test that passed on one of
+   its runners, and failed on none of them, leaves that runner, and its
+   entry leaves the list once no runner is left. The job uploads the shrunk
+   file as the `known-failures` artifact and names the entries in its
+   summary. Commit that file. A runner the run did not reach (a push runs
+   Linux only, a job got no runner) sent no row, so it stays on its entries.
+   The list can only shrink: on a push, `check-shrink` compares the list at
+   the commit before the push and turns the run red if an entry was added,
+   or gained a runner, by hand.
 4. On main (pushes and the nightly run), a failure not in the list is
    remembered from run to run (the `known-failures-sightings` artifact). The
    second run that sees it opens one issue per test with the label
@@ -252,7 +257,7 @@ How a run decides (`scripts/testing/known-failures.mjs`):
    on the same commit (a nightly run on a day with no merge, a re-run) does
    not add to the count, so it does not confirm a failure a push saw; the
    next merge's run does. A test that passes again is forgotten only by a run
-   on every platform (`open-issues --platforms`, the same rule as the list):
+   on every platform (`open-issues --platforms`):
    a push runs Linux only, so a test that fails only on Windows or macOS
    keeps its count through it, and so does a test whose file did not run on
    one platform of a nightly run. Nothing here blocks a merge.

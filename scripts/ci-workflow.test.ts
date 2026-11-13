@@ -358,8 +358,8 @@ describe("known failures after each merge (#3482)", () => {
     expect(verdict.if).toBe("${{ !cancelled() }}");
     const download = job.steps.find((step) => step.with?.pattern === "vitest-results-*")!;
     expect(download.if).toBe("${{ !cancelled() }}");
-    // Only a run on every platform shrinks the list.
-    expect(verdict.run).toContain('--platforms "$VITEST_OS"');
+    // The list shrinks runner by runner, from the rows each runner sent (#3569).
+    expect(verdict.run).not.toContain("--platforms");
     expect(verdict.env?.VITEST_OS).toBe("${{ needs.static.outputs.vitest_os }}");
     expect(verdict.env?.SEED).toBe("${{ inputs.fill_known_failures == true }}");
     expect(workflow.jobs.gate.needs).toContain("known-failures");

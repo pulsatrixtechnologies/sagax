@@ -40,7 +40,10 @@ const REGRESSION_LABEL = "regression";
 /** `os` is the runner of the job that saw it (report adds it from the job's results file name). */
 /** `message` is the first lines of a failure's first error, for the issue. */
 /** @typedef {Identity & { state: "pass" | "fail", os?: string, message?: string }} Result */
-/** @typedef {Identity & { owner: string, reason: string, since: string }} Entry */
+/** `platforms` are the runners the test fails on (#3569): a failure on a
+ * runner it does not name is a new failure. An entry without it (a list from
+ * before #3569) fails on every platform. */
+/** @typedef {Identity & { platforms?: string[], owner: string, reason: string, since: string }} Entry */
 /** @typedef {{ $comment?: string, seeded?: string, tests: Entry[] }} List */
 
 /** @param {Identity} identity */
@@ -87,21 +90,46 @@ function failureMessage(state, text) {
   return { message: message.length > 300 ? `${message.slice(0, 300)}...` : message };
 }
 
-/** A test that failed in any job is failing; one that only passed is fixed.
+/** The runners an entry is listed for: its own, or every platform for an
+ * entry from before #3569. @param {Entry} entry @returns {string[]} */
+export const entryPlatforms = (entry) => (Array.isArray(entry.platforms) && entry.platforms.length ? entry.platforms : EVERY_PLATFORM);
+
+/** Whether `entry` lists its test as failing on runner `os`: an entry from
+ * before #3569, or a row without a runner, matches any. */
+const listedOn = (entry, os) => !os || !Array.isArray(entry.platforms) || !entry.platforms.length || entry.platforms.includes(os);
+
+/** A run against the list, runner by runner (#3569). A failure is listed only
+ * on a runner its entry names: the same test failing on another runner is a
+ * new failure. A listed test that passed on one of its runners, and failed on
+ * none of them in this run, is fixed there: `fixed` holds those entries, each
+ * with `passedOn`, the runners it leaves (shrink). A row without `os` stands
+ * for each runner of the entry.
  * @param {Entry[]} list @param {Result[]} results */
 export function classify(list, results) {
-  const failing = new Map();
-  const passing = new Set();
+  const byKey = new Map(list.map((entry) => [identityKey(entry), entry]));
+  const failedOn = new Map();
+  const passedOn = new Map();
+  const newFailures = new Map();
+  const stillFailing = new Set();
+  const add = (map, key, runners) => map.set(key, new Set([...(map.get(key) ?? []), ...runners]));
   for (const result of results) {
     const key = identityKey(result);
-    if (result.state === "fail") failing.set(key, strip(result));
-    else passing.add(key);
+    const entry = byKey.get(key);
+    const runners = result.os ? [result.os] : entry ? entryPlatforms(entry) : [];
+    if (result.state === "fail") {
+      add(failedOn, key, runners);
+      if (entry && listedOn(entry, result.os)) stillFailing.add(key);
+      else newFailures.set(key, strip(result));
+    } else add(passedOn, key, runners);
   }
-  const listed = new Set(list.map(identityKey));
   return {
-    newFailures: [...failing.entries()].filter(([key]) => !listed.has(key)).map(([, identity]) => identity),
-    listedFailing: list.filter((entry) => failing.has(identityKey(entry))),
-    fixed: list.filter((entry) => passing.has(identityKey(entry)) && !failing.has(identityKey(entry))),
+    newFailures: [...newFailures.values()],
+    listedFailing: list.filter((entry) => stillFailing.has(identityKey(entry))),
+    fixed: list.flatMap((entry) => {
+      const key = identityKey(entry);
+      const left = entryPlatforms(entry).filter((os) => passedOn.get(key)?.has(os) && !failedOn.get(key)?.has(os));
+      return left.length ? [{ ...entry, passedOn: left }] : [];
+    }),
   };
 }
 
@@ -147,20 +175,37 @@ export function jobsWithoutRunner(jobs, sent) {
   }).sort((a, b) => a.os.localeCompare(b.os) || a.shard - b.shard);
 }
 
-/** The list without the entries that passed. @param {List} list @param {Entry[]} fixed @returns {List} */
+/** The list without the runners each fixed entry passed on (classify's
+ * `passedOn`, every runner of the entry when absent); an entry left with no
+ * runner leaves the list. @param {List} list @param {(Entry & { passedOn?: string[] })[]} fixed @returns {List} */
 export function shrink(list, fixed) {
-  const gone = new Set(fixed.map(identityKey));
-  return { ...list, tests: list.tests.filter((entry) => !gone.has(identityKey(entry))) };
+  const passed = new Map(fixed.map((entry) => [identityKey(entry), new Set(entry.passedOn ?? entryPlatforms(entry))]));
+  return {
+    ...list,
+    tests: list.tests.flatMap((entry) => {
+      const gone = passed.get(identityKey(entry));
+      if (!gone) return [entry];
+      const platforms = entryPlatforms(entry).filter((os) => !gone.has(os));
+      return platforms.length ? [{ ...entry, platforms }] : [];
+    }),
+  };
 }
 
-/** The first fill: every failure of one run, once. @param {List} list @param {Identity[]} failures */
+/** The first fill: every failure of one run, once, with the runners it
+ * failed on (a row without `os` fails on every platform).
+ * @param {List} list @param {(Identity & { os?: string })[]} failures */
 export function seedList(list, failures, { runUrl, since }) {
   const seen = new Map();
-  for (const failure of failures) seen.set(identityKey(failure), failure);
+  for (const failure of failures) {
+    const key = identityKey(failure);
+    const runners = seen.get(key)?.runners ?? new Set();
+    for (const os of failure.os ? [failure.os] : EVERY_PLATFORM) runners.add(os);
+    seen.set(key, { file: failure.file, test: failure.test, runners });
+  }
   return {
     ...list,
     seeded: runUrl,
-    tests: [...seen.values()].map(({ file, test }) => ({ file, test, owner: "unassigned", reason: `Failing when the list was first filled by ${runUrl}.`, since })),
+    tests: [...seen.values()].map(({ file, test, runners }) => ({ file, test, platforms: [...runners].sort(), owner: "unassigned", reason: `Failing when the list was first filled by ${runUrl}.`, since })),
   };
 }
 
@@ -171,17 +216,30 @@ export function onlyShrinks(base, head) {
   if (!head) return [`${LIST_PATH} was removed`];
   if (!base) return [];
   if (!base.seeded && head.seeded) return [];
-  const known = new Set(base.tests.map(identityKey));
-  return head.tests.filter((entry) => !known.has(identityKey(entry))).map((entry) => `${identityKey(entry)} was added to ${LIST_PATH}; the list can only shrink`);
+  const known = new Map(base.tests.map((entry) => [identityKey(entry), new Set(entryPlatforms(entry))]));
+  return head.tests.flatMap((entry) => {
+    const was = known.get(identityKey(entry));
+    if (!was) return [`${identityKey(entry)} was added to ${LIST_PATH}; the list can only shrink`];
+    // A runner added to an entry hides a failure there: growth too (#3569).
+    const added = entryPlatforms(entry).filter((os) => !was.has(os));
+    return added.length ? [`${identityKey(entry)} gained ${added.join(", ")} in ${LIST_PATH}; the list can only shrink`] : [];
+  });
 }
 
+/** The folders whose every test keeps a guard rail (#3569): the safety
+ * checks (sensitive paths, moderation) pass where their case exists and say
+ * where it cannot with a skip that names the reason. */
+export const GUARD_FOLDERS = ["server/safety/"];
+
 /** Errors for each entry naming a file of the guard tests list
- * (scripts/verify/release/guard-tests.mjs, #3558): a guard test keeps a rule
- * on every platform, so it is fixed, never listed.
- * @param {List} list @param {readonly string[]} guards */
-export function listedGuardTests(list, guards = GUARD_TESTS) {
+ * (scripts/verify/release/guard-tests.mjs, #3558) or a file under
+ * GUARD_FOLDERS: a guard test keeps a rule on every platform, so it is fixed,
+ * never listed.
+ * @param {List} list @param {readonly string[]} guards @param {readonly string[]} folders */
+export function listedGuardTests(list, guards = GUARD_TESTS, folders = GUARD_FOLDERS) {
   const guard = new Set(guards);
-  return list.tests.filter((entry) => guard.has(entry.file)).map((entry) => `${identityKey(entry)} is a guard test: fix it, never list it in ${LIST_PATH}`);
+  const guarded = (file) => guard.has(file) || folders.some((folder) => file.startsWith(folder));
+  return list.tests.filter((entry) => guarded(entry.file)).map((entry) => `${identityKey(entry)} is a guard test: fix it, never list it in ${LIST_PATH}`);
 }
 
 /** Sightings of unlisted failures across main's runs. A failure is due for an
@@ -706,17 +764,23 @@ function report(options) {
   const noRunner = missingCount ? jobsWithoutRunner(readJsonLines(options.jobs), files.map((name) => basename(name, ".json"))) : [];
   const crashed = Math.max(0, missingCount - noRunner.length);
   const seed = options.seed === true || options.seed === "true";
-  const { newFailures, listedFailing, fixed: passed } = classify(list.tests, results);
-  // Only a run on every platform shrinks the list; on fewer, a listed test
-  // that passed may still fail on a platform this run did not cover. A test
-  // whose file did not run on one of them (a job with no runner) stays too.
-  const platforms = readPlatforms(options.platforms);
-  const complete = coversEveryPlatform(platforms);
-  const ranEverywhere = filesRunOn(results, platforms);
-  const fixed = complete ? passed.filter((entry) => ranEverywhere.has(entry.file)) : [];
-  const notRunEverywhere = complete ? passed.filter((entry) => !ranEverywhere.has(entry.file)) : [];
+  const { newFailures, listedFailing, fixed } = classify(list.tests, results);
+  // The list shrinks runner by runner (#3569): a listed test that passed on
+  // one of its runners leaves that runner, whatever the run covered. A runner
+  // the run did not reach (a push on Linux only, a job with no runner) sent
+  // no row for it, so its runners stay.
   const out = String(options.out);
-  const next = seed ? seedList(list, [...newFailures, ...listedFailing], { runUrl: options["run-url"] ?? "a manual run", since: new Date().toISOString().slice(0, 10) }) : shrink(list, fixed);
+  const next = seed ? seedList(list, results.filter((result) => result.state === "fail"), { runUrl: options["run-url"] ?? "a manual run", since: new Date().toISOString().slice(0, 10) }) : shrink(list, fixed);
+  const leaving = fixed.filter((entry) => entry.passedOn.length === entryPlatforms(entry).length);
+  const narrowed = fixed.filter((entry) => entry.passedOn.length < entryPlatforms(entry).length);
+  // The runners each new failure failed on that its entry, if any, does not name.
+  const byKey = new Map(list.tests.map((entry) => [identityKey(entry), entry]));
+  const newOn = new Map();
+  for (const result of results) {
+    const entry = byKey.get(identityKey(result));
+    if (result.state !== "fail" || !result.os || (entry && listedOn(entry, result.os))) continue;
+    newOn.set(identityKey(result), [...new Set([...(newOn.get(identityKey(result)) ?? []), result.os])].sort());
+  }
   writeJson(join(out, "known-failures.json"), next);
   writeJson(join(out, "new-failures.json"), newFailures);
   writeJson(join(out, "results.json"), results);
@@ -730,26 +794,25 @@ function report(options) {
   if (crashed) lines.push(`${crashed} test job(s) crashed or timed out before writing their results, so this run is red.`, "");
   if (seed) lines.push(`Seed mode: ${next.tests.length} failing test(s) written to the \`known-failures\` artifact. Commit that file as \`${LIST_PATH}\`.`, "");
   else if (newFailures.length) {
-    lines.push(`${newFailures.length} failure(s) not in \`${LIST_PATH}\`: this run is red. Seen twice on main, each opens a \`regression\` issue.`, "", "| Test |", "|---|");
-    for (const failure of newFailures) lines.push(`| \`${cell(failure.file)}\` > ${cell(failure.test)} |`);
+    lines.push(`${newFailures.length} failure(s) not in \`${LIST_PATH}\` for the runner they failed on: this run is red. Seen twice on main, each opens a \`regression\` issue.`, "", "| Test | Runners |", "|---|---|");
+    for (const failure of newFailures) lines.push(`| \`${cell(failure.file)}\` > ${cell(failure.test)} | ${cell((newOn.get(identityKey(failure)) ?? []).join(", "))} |`);
     lines.push("");
   } else lines.push("Every failure of this run is in the list.", "");
   if (!seed && listedFailing.length) lines.push(`${listedFailing.length} listed test(s) still fail.`, "");
-  if (!seed && fixed.length) {
-    lines.push(`${fixed.length} listed test(s) passed and leave the list. The \`known-failures\` artifact holds the shrunk file; commit it as \`${LIST_PATH}\`:`, "");
-    for (const entry of fixed) lines.push(`- \`${cell(entry.file)}\` > ${cell(entry.test)}`);
+  if (!seed && leaving.length) {
+    lines.push(`${leaving.length} listed test(s) passed on every runner they were listed for and leave the list. The \`known-failures\` artifact holds the shrunk file; commit it as \`${LIST_PATH}\`:`, "");
+    for (const entry of leaving) lines.push(`- \`${cell(entry.file)}\` > ${cell(entry.test)}`);
     lines.push("");
   }
-  if (!seed && notRunEverywhere.length) {
-    lines.push(`${notRunEverywhere.length} listed test(s) passed but did not run on every platform (a job got no runner); they stay in the list.`, "");
-  }
-  if (!seed && !complete && passed.length) {
-    lines.push(`${passed.length} listed test(s) passed on ${platforms.length ? platforms.join(", ") : "the platforms of this run"} only; they stay in the list until a run on every platform (the nightly schedule or a manual dispatch) passes them.`, "");
+  if (!seed && narrowed.length) {
+    lines.push(`${narrowed.length} listed test(s) passed on some of their runners; those runners leave their entry, and the others stay until a run there passes them:`, "");
+    for (const entry of narrowed) lines.push(`- \`${cell(entry.file)}\` > ${cell(entry.test)}: passed on ${entry.passedOn.join(", ")}, still listed for ${entryPlatforms(entry).filter((os) => !entry.passedOn.includes(os)).join(", ")}`);
+    lines.push("");
   }
   const summary = lines.join("\n");
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
   if (!seed) for (const failure of newFailures) console.log(`::error file=${escapeProperty(failure.file)},title=${escapeProperty("Failure not in the known-failures list")}::${escapeData(failure.test)}`);
-  for (const entry of fixed) console.log(`::notice file=${escapeProperty(entry.file)},title=${escapeProperty("Known failure passed")}::${escapeData(`${entry.test} passed; it leaves ${LIST_PATH}.`)}`);
+  for (const entry of leaving) console.log(`::notice file=${escapeProperty(entry.file)},title=${escapeProperty("Known failure passed")}::${escapeData(`${entry.test} passed; it leaves ${LIST_PATH}.`)}`);
   console.log(summary);
   return crashed || (!seed && newFailures.length) ? 1 : 0;
 }

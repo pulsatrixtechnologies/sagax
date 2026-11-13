@@ -80,7 +80,9 @@ describe("moderation store", () => {
     expect(store.acceptTerms("pr_alex", TERMS_VERSION)).toEqual({ version: TERMS_VERSION, acceptedAt: 10 });
     store.block("pr_alex", { id: "pr_sam", name: "Sam" });
     const file = join(data, "moderation.json");
-    expect(statSync(file).mode & 0o777).toBe(0o600);
+    // Windows keeps no POSIX mode bits (it reports 0o666 for any writable
+    // file): the owner-only mode is checked where it exists (#3569).
+    if (process.platform !== "win32") expect(statSync(file).mode & 0o777).toBe(0o600);
     const again = createModerationStore(data, { now: () => 30 });
     expect(again.terms("pr_alex")).toEqual({ version: TERMS_VERSION, acceptedAt: 10 });
     expect(again.blocks("pr_alex")).toHaveLength(1);

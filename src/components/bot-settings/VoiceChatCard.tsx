@@ -26,11 +26,16 @@ export function voiceLanguageOptions(): Array<PillOption<string>> {
   }));
 }
 
+// A row's label is never cut before its control (#4194): the label keeps its
+// whole word and the select gives way, its text ending with an ellipsis (the
+// whole value stays in its tooltip). Every box between the row and the pill's
+// text may shrink, so the rule holds in every language and at the panel's
+// narrowest width, for the three rows.
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div role="group" aria-label={label} className={cn("flex items-center justify-between gap-3 px-3 py-1.5")}>
-      <span className="min-w-0 truncate text-[14px] leading-5 text-ink">{label}</span>
-      <span className="flex min-w-0 shrink-0 items-center justify-end">{children}</span>
+    <div role="group" aria-label={label} data-voice-chat-row="" className={cn("flex items-center justify-between gap-3 px-3 py-1.5")}>
+      <span data-voice-chat-label="" className="shrink-0 whitespace-nowrap text-[14px] leading-5 text-ink">{label}</span>
+      <span className="flex min-w-0 flex-1 items-center justify-end">{children}</span>
     </div>
   );
 }

@@ -73,7 +73,18 @@ server keeps it only for the sender's own page of that bot (`ownPageContext`
 in server/index.ts) and gives the model a `<page-context>` envelope with the
 page's current source (cut at 96 KB, data never instructions). The bot
 revises it with propose_page and page_id, from any topic of the same bot and
-person. An older card that a newer version replaced says "Updated below"
+person. A message about a selected passage (#4099) also carries
+`dataContext.page.selection`, the annotation anchor (`PageQuote`, cut by
+`THREAD_LIMITS`, 400 when it points at nothing), kept and dropped with the
+page; the envelope then gives `selection` (quote, prefix, suffix, path) and
+`PAGE_SELECTION_HINT`. The app's preview frame (never a reading link) runs
+`SELECTION_BRIDGE_SOURCE`: it posts `sagax-page-selection` to `window.top`
+(the app, past the preview wrapper, like the other preview scripts) with the
+anchor and its box in the frame's viewport on a selection, on scroll and on
+resize, and a clear when it goes; the app posts the same message to the
+inner frame to follow a passage in a new version or to drop it, and the
+frame hears only `window.top` (shared/page-selection.ts,
+`server/pages/page-selection-bridge.test.ts`). An older card that a newer version replaced says "Updated below"
 (also when the thread already names a newer version than the mounted card)
 and opens the latest page. Tests: `shared/data-context.test.ts`,
 `server/data-context.test.ts`, `src/components/PageComposerParts.test.ts`,

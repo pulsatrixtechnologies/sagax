@@ -765,6 +765,8 @@ function serveFrame(options: PublicPageOptions, req: IncomingMessage, res: Serve
     nonce,
     ...(keepScroll !== undefined ? { keepScroll } : {}),
     ...(reportSize ? { reportSize: true } : {}),
+    // #4099: the app's preview tells the app where the person's selection is
+    ...(preview ? { selection: true } : {}),
     // #3413: the capabilities this version declares (null: today's frame)
     capabilities: pages.capabilities(target.page.id, target.version.n),
     ...(theme ? { theme } : {}),

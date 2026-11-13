@@ -202,7 +202,7 @@ describe("Plugins, driven like the owner does", () => {
     paneProps = null;
     await open();
     expect(selected()).toBe("discover");
-    expect(title()).toBe("Plugins");
+    expect(title()).toBe("Connect Apps");
     expect($('[role="tablist"]')).toBeNull();
     expect($("[data-plugins-search]")).not.toBeNull();
     expect($("[data-plugins-bot-templates]")).not.toBeNull();
@@ -214,7 +214,7 @@ describe("Plugins, driven like the owner does", () => {
       await go(view);
       expect(selected(), view).toBe(view);
       expect($(`[data-plugins-manage="${view}"]`), view).not.toBeNull();
-      expect($("[data-plugins-home]")?.textContent, view).toBe("Plugins");
+      expect($("[data-plugins-home]")?.textContent, view).toBe("Connect Apps");
     }
     await click($("[data-plugins-home]"));
     expect(selected()).toBe("discover");

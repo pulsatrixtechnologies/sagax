@@ -103,7 +103,7 @@ export function RetroTop({ onNewBot }: { onNewBot?: () => void }) {
           { id: "s1", separator: true },
           { id: "routines", label: t("sidebar.nav.automations"), run: () => dispatch({ type: "showRoutines" }) },
           { id: "teamMap", label: t("sidebar.nav.teamMap"), run: () => dispatch({ type: "showTeamMap" }) },
-          { id: "apps", label: t("sidebar.nav.connectedApps"), run: () => dispatch({ type: "togglePlugins", open: true }) },
+          { id: "apps", label: t("connectApps.title"), run: () => dispatch({ type: "togglePlugins", open: true }) },
           { id: "s2", separator: true },
           { id: "appearance", label: t("retro.cmd.appearance"), run: () => dispatch({ type: "toggleAppSettings", open: true, section: "appearance" }) },
         ],

@@ -251,7 +251,7 @@ describe("Coding branches: the card", () => {
   });
 
   it("words a refusal by its code, else the server's message", () => {
-    expect(branchErrorText(new ApiError("x", 403, { code: "github_not_connected" }))).toBe("Connect your own GitHub account on the GitHub plugin's page (Plugins > Sources > GitHub connection)");
+    expect(branchErrorText(new ApiError("x", 403, { code: "github_not_connected" }))).toBe("Connect your own GitHub account on the GitHub plugin's page (Connect Apps > Sources > GitHub connection)");
     expect(branchErrorText(new ApiError("x", 409, { code: "rejected" }))).toContain("nothing is forced");
     expect(branchErrorText(new ApiError("Something else", 500, { code: "odd" }))).toBe("Something else");
     // the computer is there but busy, in plain words; no "bot's computer" for the person's own

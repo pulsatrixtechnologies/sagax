@@ -149,7 +149,7 @@ describe("foot", () => {
     expect(foot.indexOf("data-test-account")).toBeLessThan(foot.indexOf("data-sidebar-connect-apps"));
     // the full name's pill, then the small Plugins pill (its words show
     // only when the profile is the avatar alone: SidebarFoot.test.ts)
-    expect(foot).toContain('aria-label="Plugins"');
+    expect(foot).toContain('aria-label="Connecter des apps"');
     expect(foot).not.toContain("data-sidebar-place=");
     expect(fixture.places.map((place) => place.key)).toEqual([]);
   });

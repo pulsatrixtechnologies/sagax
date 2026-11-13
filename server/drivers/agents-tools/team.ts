@@ -98,7 +98,7 @@ export const DEF_PROPOSE_TEAM_SETUP = {
 
 export const DEF_IMPORT_PLUGIN_TEAM = {
     name: "import_plugin_team",
-    description: "Primary Bot only: import an installed plugin's agents as a new team for the person (one bot per agent, each on the model its frontmatter names, tools restricted where the engine allows). Pass the marketplace and plugin names as the person sees them in Plugins; team is the new team's name (default: the plugin's). The person reviews one card listing every bot, model and tool limit." + PROPOSAL_OUTCOME,
+    description: "Primary Bot only: import an installed plugin's agents as a new team for the person (one bot per agent, each on the model its frontmatter names, tools restricted where the engine allows). Pass the marketplace and plugin names as the person sees them in Connect Apps; team is the new team's name (default: the plugin's). The person reviews one card listing every bot, model and tool limit." + PROPOSAL_OUTCOME,
     inputSchema: {
       type: "object", additionalProperties: false,
       properties: {

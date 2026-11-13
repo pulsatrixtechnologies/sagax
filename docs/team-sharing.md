@@ -90,7 +90,7 @@ you already have.
   empty values, named after the connection (`crm`, or `crm-2` when `crm` is
   already taken, so it can never pick up credentials you already have). Your
   organization's MCP policy still applies; a refused connection is listed and
-  the rest of the team is added. Finish connections in **Plugins → MCP
+  the rest of the team is added. Finish connections in **Connect Apps → MCP
   servers**.
 - Starter notes are written once, through the normal memory writer.
 - Preset bots in a file appear in **New bot** under **Imported presets**; a

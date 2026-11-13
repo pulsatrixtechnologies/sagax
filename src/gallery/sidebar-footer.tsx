@@ -108,7 +108,7 @@ if (params.get("view") === "foot") {
 }
 
 const places: SidebarPlace[] = [
-  { key: "plugins", tourId: "nav-apps", label: t("sidebar.nav.connectedApps"), icon: Puzzle, animation: "puzzle", onSelect: () => {} },
+  { key: "plugins", tourId: "nav-apps", label: t("connectApps.title"), icon: Puzzle, animation: "puzzle", onSelect: () => {} },
   { key: "browse-bots", label: t("sidebar.browseBots"), icon: LayoutGrid, animation: "grid", onSelect: () => {} },
 ];
 

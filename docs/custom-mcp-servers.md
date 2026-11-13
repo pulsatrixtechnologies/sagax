@@ -1,6 +1,6 @@
 # Bring your own MCP servers
 
-Open **Plugins → MCP servers → Add server** to give your bots tools from an
+Open **Connect Apps → MCP servers → Add server** to give your bots tools from an
 MCP server you trust. A server is one of two things:
 
 - **Run a command** — a local stdio server. Add the executable, put each
@@ -208,7 +208,7 @@ engine allows (the connector adds no deadline of its own, except for the
 tool search used by bots that cannot search tools themselves, two minutes).
 An HTTP 401 tells the bot to send the message again (a sign-in is refreshed
 when a message starts) and, if that fails, to sign in again or check the
-server's header values in Plugins → MCP servers.
+server's header values in Connect Apps → MCP servers.
 
 ## What a Claude bot sees, and the "Also use my Claude Code MCP servers" switch
 
@@ -222,7 +222,7 @@ measured desktop added 407 tools, ~10k tokens per model call). Codex bots, by co
 MCP servers in `~/.codex/config.toml`, which is why the two engines looked
 different.
 
-The switch **Also use my Claude Code MCP servers** at the top of Plugins → MCP
+The switch **Also use my Claude Code MCP servers** at the top of Connect Apps → MCP
 servers lets Claude bots see your own Claude Code MCP servers too. Since
 2026-10-27 (#1098) it is **on by default on your own computer** (a solo
 server) and **off by default on an organization's shared server**, whose

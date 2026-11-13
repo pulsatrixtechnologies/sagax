@@ -76,7 +76,7 @@ export function AppsGridIcon({ size = 18 }: { size?: number }) {
 /** The foot's round Connect apps button: the apps grid on a quiet dark
  * circle. The connected apps are the tooltip's list and a small dot. */
 export function FootConnectApps({ apps, onOpen }: { apps: readonly PluginItem[]; onOpen: () => void }) {
-  const label = t("chat.connectApps.pill");
+  const label = t("connectApps.title");
   const title = apps.length > 0 ? `${label} (${apps.map((app) => app.name).join(", ")})` : label;
   return (
     <button

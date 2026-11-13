@@ -14,7 +14,7 @@ function turnReachPrompt(bot: BotRecord, instance: Parameters<typeof withholdHos
     ...(computer ? ["a computer"] : []),
     ...(integrations.data ? ["Data"] : []),
     ...(integrations.phone ? ["the phone"] : []),
-    ...(integrations.messages ? ["messages and the Apple apps On in Plugins > This Mac (mac_* tools)"] : []),
+    ...(integrations.messages ? ["messages and the Apple apps On in Connect Apps > This Mac (mac_* tools)"] : []),
   ];
   // Solo server: the operator at this computer owns its bots and pays (the
   // machine's own logins). Organization server: the speaker and the payer

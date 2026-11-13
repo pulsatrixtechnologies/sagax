@@ -70,7 +70,12 @@ describe("Plugins tabs", () => {
       tab: "discover", onTab: noop, refreshing: false, onRefresh: noop,
       connected: { count: 6, icons: items.slice(0, 2) }, search: createElement("input", { "data-plugins-search": "" }), discover: "D",
     }));
-    expect(html).toMatch(/id="plugins-title"[^>]*>Plugins</);
+    expect(html).toMatch(/id="plugins-title"[^>]*>Connect Apps</);
+    // the title is never cut (French at phone width, #4153): the head wraps "N connected" under it instead
+    const head = html.match(/<header [^>]*data-plugins-head=""[^>]*>/)?.[0] ?? "";
+    expect(head).toMatch(/\bflex-wrap\b/);
+    const title = html.match(/<h2 [^>]*id="plugins-title"[^>]*>/)?.[0] ?? "";
+    expect(title).not.toMatch(/\btruncate\b|\bline-clamp|\bwhitespace-nowrap\b/);
     expect(html).toMatch(/data-plugins-connected="6"[\s\S]*?6 connected</);
     expect(html).toMatch(/data-plugins-search-row[\s\S]*?data-plugins-search-slot[\s\S]*?data-plugins-bot-templates[^>]*>[\s\S]*?Bot templates/);
     // no tab row: Manage and the other views open from the home
@@ -81,9 +86,9 @@ describe("Plugins tabs", () => {
     expect(none).toMatch(/data-plugins-connected="0"[\s\S]*?<span>Manage<\/span>/);
   });
 
-  it("Manage: \"< Plugins\" back to the home, the big title, the scope and + Add in its row, links to Pages and Sources (#2104)", () => {
+  it("Manage: \"< Connect Apps\" back to the home, the big title, the scope and + Add in its row, links to Pages and Sources (#2104)", () => {
     const html = shell("installed");
-    expect(html).toMatch(/data-plugins-home=""[^>]*>[\s\S]*?Plugins<\/button>/);
+    expect(html).toMatch(/data-plugins-home=""[^>]*>[\s\S]*?Connect Apps<\/button>/);
     expect(html).toMatch(/id="plugins-title"[^>]*>Manage plugins and skills</);
     expect(html).toMatch(/data-plugins-view-link="pages"[\s\S]*?data-plugins-view-link="sources"/);
     expect(html).not.toContain('data-plugins-view-link="bots"');
@@ -530,18 +535,40 @@ describe("Engine accounts and Sources: one list, GitHub nowhere in the accounts"
 
 });
 
-describe("Plugins (once Capabilities), the engine accounts (once Providers) and Pages: names and old links", () => {
-  it("the window is Plugins, in both languages; Pages keeps its name", () => {
+describe("Connect Apps (once Capabilities, then Plugins), the engine accounts (once Providers) and Pages: names and old links", () => {
+  it("the window is Connect Apps, in both languages; Pages keeps its name (#4153)", () => {
     expect(CONNECT_APPS_TABS).toEqual(["installed", "discover", "bots", "pages", "sources"]);
     expect(SCOPELESS_TABS).toEqual(["bots", "pages"]);
-    expect(t("connectApps.title")).toBe("Plugins");
+    expect(t("connectApps.title")).toBe("Connect Apps");
+    expect(t("connectApps.search.short")).toBe("Search across apps and skills");
     expect(connectAppsTabLabel("pages")).toBe("Pages");
     setLocale("fr");
     try {
-      expect(t("connectApps.title")).toBe("Plugins");
+      expect(t("connectApps.title")).toBe("Connecter des apps");
+      expect(t("connectApps.search.short")).toBe("Rechercher dans les apps et skills");
       expect(connectAppsTabLabel("pages")).toBe("Pages");
     } finally {
       setLocale("en");
+    }
+  });
+
+  it("every entry and sentence that names the window says Connect Apps, from one key (#4153)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const src = join(__dirname, "..", "..");
+    const read = (path: string) => readFileSync(join(src, path), "utf8");
+    // the foot's round button and its tooltip, the retro shell's menu and the command palette read the title key
+    for (const file of ["components/SidebarFoot.tsx", "components/retro98/RetroChrome.tsx", "lib/palette-commands.ts"]) {
+      expect(read(file), file).toContain(`t("connectApps.title")`);
+    }
+    // no second key for the same name
+    for (const lang of ["en", "fr"]) {
+      const catalog = JSON.parse(read(`locales/${lang}.json`)) as Record<string, string>;
+      for (const key of ["sidebar.nav.apps", "sidebar.nav.connectedApps", "palette.cmd.connectApps"]) expect(catalog[key], `${lang} ${key}`).toBeUndefined();
+      // a sentence that sends the person to the window names it; the phone's own keys (#4103) are the only exception
+      const phone = new Set(["chat.connectApps.pill", "botAccess.manageInConnectApps"]);
+      const stale = Object.entries(catalog).filter(([key, value]) => !phone.has(key) && /(\bin|\bdans|\bOpen|\bOuvrir|\brouvre|\breopen)\s*Plugins\b|\bPlugins\s*(>|:|shows|indique)|Plugins pill|pilule Plugins|bot’s Plugins|Plugins du bot/.test(value));
+      expect(stale, lang).toEqual([]);
     }
   });
 

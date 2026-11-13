@@ -295,7 +295,7 @@ export function reservedMcpServers(raw: Record<string, unknown> | undefined): Re
 
 /** The log line for a stored server skipped because its name is reserved. */
 export function reservedMcpServerLog(name: string): string {
-  return `MCP server ${JSON.stringify(name)} is not mounted: its name is reserved by Sagax. Rename or remove it in Settings > Plugins > MCP servers.`;
+  return `MCP server ${JSON.stringify(name)} is not mounted: its name is reserved by Sagax. Rename or remove it in Connect Apps > MCP servers.`;
 }
 
 export type McpServerRename =

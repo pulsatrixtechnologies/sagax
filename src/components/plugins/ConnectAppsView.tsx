@@ -223,9 +223,10 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
           data-plugins-manage="discover"
           data-plugins-results={results ? "" : undefined}
         >
-          <header className={cn(PLUGINS.gutter, "flex items-center gap-3 pb-[9px] pt-[50px] pr-14")}>
+          {/* the title is never cut: when it and "N connected" do not fit on one line (French at phone width), "N connected" goes under it */}
+          <header className={cn(PLUGINS.gutter, "flex flex-wrap items-center gap-x-3 gap-y-1 pb-[9px] pt-[50px] pr-14")} data-plugins-head="">
             {onBack && <BackButton onBack={onBack} data={{ "data-apps-back": "" }} />}
-            <h2 id="plugins-title" className={cn(PLUGINS.title, "min-w-0 flex-1 truncate")}>{t("connectApps.title")}</h2>
+            <h2 id="plugins-title" className={cn(PLUGINS.title, "max-w-full flex-[1_0_auto] break-words")}>{t("connectApps.title")}</h2>
             {/* with nothing connected it still leads to Manage (scope, pages, sources) */}
             {connected && (
               <button

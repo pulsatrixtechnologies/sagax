@@ -1,34 +1,31 @@
 // Which live frames become pushes, and for whom. The server already
 // broadcasts everything a person should hear about (server/index.ts
-// broadcast): a `notify` frame (a person's direct message, a bot that
-// finished, a bot waiting on an answer, an approval, a takeover, a turn
-// that could not start, a routine that failed or waited too long, an
-// incident), a `nudge` frame and an `achievements` frame. This reads them
+// broadcast): a `notify` frame the one rule of server/notify.ts let
+// interrupt (an ask, or the answer to the person's own line, #3719), a
+// `nudge` frame and an `achievements` frame. This reads them
 // and returns the PushMessage of each person concerned; ./hub.ts decides when.
+import type { NotifyKind } from "../../shared/notification.ts";
+import { NOTIFY_KIND_INTERRUPTS } from "../notify.ts";
 import { pushAvatarUrl, type PushKind, type PushMessage, type PushSenderLook } from "./payload.ts";
 
-/** The `notify` kinds a phone hears about, as the push kind it carries.
- * Takeover is `approval` so it wakes at once (priority 10) and skips the
- * rate limit: the bot is blocked on the person. It carries no `prompt` and
- * no `requestId`, so the banner has no Allow or Deny. */
-export const NOTIFY_PUSH_KINDS: Readonly<Record<string, PushKind>> = Object.freeze({
-  message: "message",
-  done: "message",
-  question: "approval",
-  approval: "approval",
-  takeover: "approval",
-  // a proactive or routine report with something for the person (#2697):
-  // wakes the phone at once, like an ask, without Allow / Deny
-  "needs-you": "approval",
-  // a proactive proposal card (#2697): a card-level push, so the person's
-  // daily budget and quiet hours (#2695) decide; Do it / Not now on the banner
-  proposal: "message",
-  wait: "message",
-  "turn-failed": "message",
-  incident: "message",
-  "routine-failed": "routine",
-  "routine-deferred": "routine",
-});
+/** The kinds where a bot is blocked on the person's own hands: they push as
+ * `approval`, so they wake at once (priority 10) and skip the rate limit.
+ * Only `approval` and `question` carry a `prompt`; a takeover, a needs-you
+ * (#2697) or a sign-in has no `requestId`, so the banner has no Allow or Deny. */
+const BLOCKED_ON_PERSON: ReadonlySet<string> = new Set<NotifyKind>(["approval", "question", "takeover", "needs-you", "sign-in"]);
+
+/** #3719: the push kind a `notify` kind carries, or null when it never
+ * reaches a phone. Which kinds may interrupt is the one rule of
+ * server/notify.ts (NOTIFY_KIND_INTERRUPTS), never a second list here: a
+ * quiet kind never pushes, and an ask or an answer pushes when the rule left
+ * its frame `notify` (ruleNotifyFrame runs before the push sees it). A
+ * proactive proposal (#2697) is a `message`: the person's daily budget and
+ * quiet hours (#2695) decide. */
+export function notifyPushKind(kind: string): PushKind | null {
+  const rule = (NOTIFY_KIND_INTERRUPTS as Readonly<Record<string, string>>)[kind];
+  if (!rule || rule === "quiet") return null;
+  return BLOCKED_ON_PERSON.has(kind) ? "approval" : "message";
+}
 
 export interface NotifyNote {
   kind: string;
@@ -76,7 +73,7 @@ export function pushesForFrame(payload: Record<string, unknown>, deps: FramePush
   const at = deps.now();
   if (payload.kind === "notify" && payload.notification && typeof payload.notification === "object") {
     const raw = payload.notification as Record<string, unknown>;
-    const kind = NOTIFY_PUSH_KINDS[text(raw.kind)];
+    const kind = notifyPushKind(text(raw.kind));
     if (!kind) return [];
     const avatarUrl = pushAvatarUrl(raw.avatarUrl);
     const note: NotifyNote = {

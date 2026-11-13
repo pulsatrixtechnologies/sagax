@@ -8,19 +8,26 @@ production VM) therefore sends real APNs pushes.
 
 ## What gets pushed
 
+A phone hears exactly what the desktop may interrupt for: the one rule of
+`server/notify.ts` (`NOTIFY_KIND_INTERRUPTS`, #3719) decides, and
+`server/push/frames.ts` keeps no list of its own. A frame the rule made
+silent (`notify: false`) never pushes.
+
 | Event | Push kind | When |
 | --- | --- | --- |
-| A person writes to you directly, a bot finishes a turn in your thread | `message` | Nobody saw it (below) |
+| A person writes to you directly, a bot answers a line you wrote in that conversation | `message` | Nobody saw it (below) |
 | Someone nudges you | `nudge` | Always, at once, priority 10, the nudge sound |
 | An approval, or a bot waiting on your answer | `approval` | Nobody saw it |
-| A bot asks you to take over its computer | `approval` | Nobody saw it. Priority 10 like an approval; the banner has no Allow or Deny (no `requestId`). |
+| A bot asks you to take over its computer, or to sign in to a website yourself | `approval` | Nobody saw it. Priority 10 like an approval; the banner has no Allow or Deny (no `requestId`). |
 | A proactive wake or a routine report with something only you can do (`needs-you`) | `approval` | Nobody saw it. Priority 10 like an approval, no Allow or Deny (#2697) |
-| A bot's wait finished (`wait`) | `message` | Nobody saw it |
-| A turn that could not start (expired OAuth, missing access) | `message` | Nobody saw it |
-| An incident the person has to look at | `message` | Nobody saw it |
-| A routine of yours finished | `message` | Nobody saw it. The banner names the routine (`Open routine %@`) and opens its report. A bot-to-bot turn stays quiet: the chip in both threads is the notice. |
-| A routine of yours failed, or waited half an hour behind a busy bot | `routine` | Nobody saw it |
+| A bot's wait finished (`wait`), a proposal within your daily budget | `message` | Nobody saw it |
+| A turn you started that could not start (expired OAuth, missing access) | `message` | Nobody saw it |
+| An admin stopped your bot, a comment on your page, a report for the admins | `message` | Nobody saw it. A frame for the admins reaches the admins' phones only. |
 | An achievement unlocked | `achievement` | No client of yours is connected, and you turned on system notifications for achievements |
+
+A turn you did not start that ends, fails or is cut, a routine run that
+failed or waits, an incident, a settled delegation, a notice and a spend
+line never push: they stay in the conversation, Today and the badge.
 
 "Nobody saw it" is the desktop's own rule (`src/lib/attention.ts`,
 `messageAttention`): notify unless you are looking at that conversation in a

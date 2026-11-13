@@ -2799,8 +2799,10 @@ body {
 
 /* The bot profile page takes focus as a whole when it opens (so Escape and
    Tab start inside it); a ring around the entire main panel says nothing,
-   its controls keep their own rings (#2136). */
-[data-bot-profile-page]:focus-visible {
+   its controls keep their own rings (#2136). The keyboard shortcuts sheet's
+   list takes focus the same way, so the arrows scroll it (#4097). */
+[data-bot-profile-page]:focus-visible,
+[data-shortcut-columns]:focus-visible {
   outline: none;
 }
 

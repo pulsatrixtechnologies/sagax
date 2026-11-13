@@ -20,8 +20,12 @@ describe("MacAppsInstalledSection", () => {
     });
     const list = host.querySelector("[data-plugins-mac] ul");
     expect(list?.className.split(" ")).toEqual(expect.arrayContaining(PLUGINS.grid.split(" ")));
-    // a grid of cards that fills the width: 1 column when narrow, 2 or 3 when wide (#2948)
-    expect(list?.className).toContain("auto-fill");
+    // the reference's two columns of rows, one when the list is under 560px (#4097)
+    expect(list?.className).toContain("grid-cols-2");
+    expect(list?.className).not.toContain("auto-fill");
+    // a row's grey line wraps on whole words, never cut by an ellipsis mid-word (#4097)
+    expect(PLUGINS.rowSub).not.toContain("truncate");
+    expect(PLUGINS.rowSub).toContain("line-clamp-2");
     // each row keeps its chevron and fills its card
     expect(host.querySelector("[data-mac-app] svg.lucide-chevron-right, [data-mac-app] svg:last-child")).toBeTruthy();
     expect(host.querySelector("[data-mac-app]")?.className).toContain("w-[calc(100%+24px)]");

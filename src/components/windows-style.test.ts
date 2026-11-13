@@ -42,13 +42,14 @@ describe("ConfirmDialog", () => {
 });
 
 describe("AboutDialog", () => {
-  it("shows the Pulsatrix mark, Sagax, the version and the links as rows", () => {
+  it("shows the Pulsatrix mark, Sagax, the version and the links as quiet text links (#4097)", () => {
     vi.stubGlobal("window", {});
     const html = renderToStaticMarkup(createElement(AboutDialog, { open: true, onClose: () => {} }));
     expect(html).toContain("data-about-mark");
     expect(html).toContain(">Sagax</h2>");
     expect(html).toMatch(/>Version [^<]+</);
-    expect(html.match(/data-link-row=/g)).toHaveLength(4);
+    expect(html).toContain("data-about-links");
+    for (const label of ["Release notes", "GitHub", "Documentation", "License"]) expect(html).toContain(`>${label}</button>`);
     expect(html.indexOf(">Release notes<")).toBeLessThan(html.indexOf(">GitHub<"));
     expect(html).toContain("© 2026 Pulsatrix Technologies inc.");
     setLocale("fr");
@@ -82,14 +83,14 @@ describe("release notes", () => {
 });
 
 describe("KeyboardShortcutsModal", () => {
-  it("shows the sheet in French, with categories as grey headings over cards", () => {
+  it("shows the sheet in French, in the reference's groups and two columns (#4097)", () => {
     setLocale("fr");
     const html = renderToStaticMarkup(createElement(KeyboardShortcutsModal, { open: true, onClose: () => {} }));
     expect(html).toContain(">Raccourcis clavier</h2>");
     expect(html).toContain('aria-label="Fermer les raccourcis clavier"');
-    expect(html).toContain(">Envoyer le message</span>");
-    expect(html).toMatch(/data-settings-group="shortcuts\.Navigation"/);
-    expect(html).toContain(">Terminé</button>");
-    expect(html).not.toContain("Send message");
+    expect(html).toContain(">Envoyer</span>");
+    expect(html).toContain(">L’essentiel</h3>");
+    expect(html).toContain('data-shortcut-group="navigation"');
+    expect(html).not.toContain(">Send</span>");
   });
 });

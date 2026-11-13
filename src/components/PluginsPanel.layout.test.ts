@@ -86,7 +86,9 @@ describe("Plugins panel views", () => {
     expect(html).toContain("data-plugins-more-chips");
     expect(html).toContain('data-plugins-section="recommended"');
     expect(html).toContain("Recommended for you");
-    expect(html).toContain("grid-cols-[repeat(auto-fill,minmax(min(100%,264px),1fr))]");
+    // two columns of borderless rows, one when the list is narrow (#4097)
+    expect(html).toContain("@container grid grid-cols-2");
+    expect(html).not.toContain("auto-fill");
     expect(html).toMatch(/data-plugin-row="featured:linear"[\s\S]*?>Connect</);
     expect(html).not.toContain("data-plugins-browse-bots");
     expect(html).not.toMatch(/Browse bots/i);

@@ -14,19 +14,24 @@ export const PLUGINS = {
   title: "text-[18px] font-normal leading-7 tracking-[-0.005em] text-ink",
   /** "Manage plugins and skills": the big title of a view under the back row */
   bigTitle: "text-[18px] font-normal leading-7 tracking-[-0.005em] text-ink",
-  /** "From Sagax", "Recommended for you" */
-  sectionTitle: "text-[14.5px] font-normal leading-5 text-ink",
-  sectionLink: "text-[12px] text-ink-secondary hover:text-ink",
+  /** "From Sagax", "Recommended for you": the reference's group title
+   * (#4097, measured): 14px medium, 8px over, 6px under, in line with the rows' text */
+  sectionTitle: "pb-1.5 pl-3 pt-2 text-[14px] font-medium leading-5 text-ink",
+  /** "View all", "Manage on ...": a quiet 12px pill at the group title's right */
+  sectionLink: "mr-1 rounded-full px-2 py-0.5 text-[12px] leading-4 text-ink-secondary transition-colors hover:bg-ink/[0.05] hover:text-ink motion-reduce:transition-none",
   /** "Installed", "Accounts", "Tools": gray labels over a list or a card */
   label: "text-[12px] leading-5 text-ink-secondary",
-  /** a grid of cards that fills the width (JC 2026-11-08, #2948: "ca devrait etre sur tout column"):
-   * one column when narrow, two or three as the window widens (by the list's
-   * own width, not the screen's). Each child is a card with the same subtle
-   * border as PLUGINS.card; rows keep their icon, name, line, status, chevron
-   * and menu. Replaces #2682's single column. */
-  grid: "grid grid-cols-[repeat(auto-fill,minmax(min(100%,264px),1fr))] gap-2 *:min-w-0 *:rounded-[14px] *:border-[0.5px] *:border-ink/[0.08] *:bg-ink/[0.015] *:px-3",
-  rowName: "block truncate text-[13.5px] leading-5 text-ink",
-  rowSub: "block truncate text-[12.5px] leading-5 text-ink-secondary",
+  /** the reference's list of rows (#4097, measured on the reference app:
+   * see docs/design/ux-reference-grokbot-cursor.md 2.8): TWO columns, one when
+   * the list itself is under 560px wide (a container query on the list, not
+   * the screen); borderless rows, 16px corners, 12px side padding, 8px
+   * between the columns, 2px between the rows, a 5% wash on hover. Replaces
+   * #2948's auto-filled cards (three columns at 1280). */
+  grid: "@container grid grid-cols-2 gap-x-2 gap-y-0.5 *:min-w-0 *:rounded-2xl *:px-3 *:transition-colors *:hover:bg-ink/[0.05] *:@max-[560px]:col-span-full motion-reduce:*:transition-none",
+  /** the name: 13px medium, one line */
+  rowName: "block truncate text-[13px] font-medium leading-[18px] text-ink",
+  /** the grey line under the name: 13px, whole words, at most two lines (#4097: never cut mid-word) */
+  rowSub: "mt-px line-clamp-2 break-normal text-[13px] leading-[18px] text-ink-secondary",
   /** a card with a subtle border on the window's own background */
   card: "rounded-[14px] border-[0.5px] border-ink/[0.08] bg-ink/[0.015]",
   cardRow: "flex min-h-[52px] items-center gap-3 px-4 py-3",

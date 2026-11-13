@@ -5,7 +5,7 @@
 // (a plugin, a skill, a custom connector) takes the whole pane under its own
 // bar. The shared row parts (pills, section titles, PluginRow) live here too.
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowUpRight, Bot, Check, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { ArrowUpRight, Bot, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -20,7 +20,9 @@ import {
   type PluginTypeFilter,
 } from "@/lib/plugins-model";
 import { BackButton } from "../Breadcrumb";
-import { PluginIcon, PluginStatusLabel } from "./PluginParts";
+import { ConnectedMark, PluginIcon, PluginStatusLabel } from "./PluginParts";
+
+export { ConnectedMark };
 import { PLUGINS } from "./plugins-style";
 
 /** The pills: All, then each category in the section order (only those with
@@ -351,23 +353,12 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
   );
 }
 
-/** "✓ Installed" on Discover / app-store rows: gray check and gray words
- * (Grok Bot Connect Apps; Accounts keep a green Connected elsewhere). */
-export function ConnectedMark() {
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1 text-[13px] text-ink-secondary" data-plugin-status="installed">
-      <Check size={15} className="text-ink-secondary" aria-hidden="true" />
-      {t("connectApps.status.installed")}
-    </span>
-  );
-}
-
 /** One row: icon, name, one line, and Connect or the status. An installed
  * row opens its page. */
 export function PluginRow({ item, onOpen, action, below, meta }: { item: PluginItem; onOpen: (item: PluginItem) => void; action: ReactNode; below?: ReactNode; meta?: ReactNode }) {
   const opens = item.installed;
   return (
-    <div data-plugin-row={item.key} className="py-[13px]">
+    <div data-plugin-row={item.key} className="py-3">
       <div className="flex items-center gap-3">
         <button
           type="button"
@@ -379,9 +370,9 @@ export function PluginRow({ item, onOpen, action, below, meta }: { item: PluginI
           <PluginIcon item={item} className="size-10 rounded-[10px]" />
           <span className="min-w-0 flex-1">
             <span className={PLUGINS.rowName}>{item.name}</span>
-            <span className={cn(PLUGINS.rowSub, "flex items-center gap-1.5")} title={item.description}>
-              {meta}
-              <span className="truncate">{item.description}</span>
+            <span className={PLUGINS.rowSub} title={item.description}>
+              {meta && <span className="mr-1.5 inline-flex align-middle">{meta}</span>}
+              {item.description}
             </span>
           </span>
         </button>

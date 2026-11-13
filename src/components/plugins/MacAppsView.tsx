@@ -53,7 +53,7 @@ export function MacAppsInstalledSection({
                 data-mac-app={app}
                 data-mac-app-enabled={enabled ? "true" : "false"}
                 onClick={() => onOpen(app)}
-                className="-mx-3 flex w-[calc(100%+24px)] items-center gap-3 rounded-[14px] px-3 py-[11px] text-left hover:bg-hover"
+                className="-mx-3 flex w-[calc(100%+24px)] items-center gap-3 rounded-2xl px-3 py-3 text-left"
               >
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] text-white" style={{ background: look.tile }}>
                   <Icon size={18} aria-hidden="true" />

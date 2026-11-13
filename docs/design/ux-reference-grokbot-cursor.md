@@ -2226,3 +2226,102 @@ Copier. On desktop, web, iOS and Android:
 - Guard: `src/lib/no-visible-ids.test.ts` renders key cards and labels
   with UUID fixtures and fails when a UUID reaches visible text. Add a
   case there for any new screen that names records.
+
+### 8.9 Connect Apps rows, About and Keyboard shortcuts (measured, #4097)
+
+Values read on the installed reference app's layout (2026-11-12), values
+only. Sagax follows them in `src/components/plugins/plugins-style.ts`,
+`src/components/AboutDialog.tsx` and `src/components/KeyboardShortcutsModal.tsx`.
+
+#### Connect Apps: two columns of rows
+
+- The list is a grid of **two** equal columns (`repeat(2, minmax(0, 1fr))`),
+  8px between the columns, 2px between the rows. Under **560px of list
+  width** (a container query on the list, not the screen) each row spans
+  the whole width: one column. Never three columns.
+- A row has no border and no fill at rest: 16px corners, 12px padding on
+  every side, 12px between the icon and the text, a 5% ink wash on hover.
+  The icon is 40px, rounded. Row height comes to 64px.
+- The name: 13px, medium weight, 18px line, one line with an ellipsis.
+  The grey line under it: 13px, 18px line, the secondary ink, 1px under
+  the name. The reference cuts it with an ellipsis; Sagax lets it wrap on
+  whole words to two lines (the owner: never cut mid-word), and it says the
+  kind and the source in full ("Plugin · claude-plugins-official", "Connector
+  · Claude account"), never a parenthesis.
+- The state at the right: "Connected" is a 12px green check, then 12px
+  words in the tertiary ink, 5px apart (Sagax: "Installed" on the home,
+  "Connected" in Manage). "Connect" is a small secondary pill (Sagax:
+  "Connect", "Sign in", "Reconnect" keep that pill).
+- A group title: 14px, medium, 20px line, 8px over it, 6px under it, 12px
+  from the left so it lines up with the rows' text; its action ("View
+  all", Sagax's "Manage on ...") is a 12px pill in the secondary ink, 2px
+  by 8px of padding, 4px from the right edge.
+- A shelf shows at most 6 rows (three lines of two) before "View all".
+
+#### About
+
+- A small dialog: 320px wide (or the window minus 32px), 14px corners,
+  a close button at the top right.
+- The content is centred, one column, 12px between the lines, 32px of
+  padding over it and 16px on the sides and under it.
+- In order: the app icon at **64px**; the name at **22px**, semibold, 28px
+  line; then "Version x.y.z" and "Built <medium date>" in 12px, 16px line,
+  the secondary ink, 2px apart; the copyright line in 12px, the tertiary
+  ink; then one pill, **"Copy version info"** (it becomes "Copied"), 8px
+  over it. The copied text: version, build date, release track and
+  platform, one per line.
+- Sagax keeps under the pill, as quiet 12px text links in the secondary
+  ink, Release notes (opens the notes in the app), GitHub, Documentation
+  and License, then "Based on OpenMausBot x.y.z" in 11px tertiary ink. Its
+  copy: version, build date, platform, upstream base.
+
+#### Keyboard shortcuts
+
+- A wide dialog: **900px** (or the window minus 32px), the app's dialog
+  corners. The title "Keyboard shortcuts" at 15px semibold, 22px line,
+  16px over it, 8px under it, 32px from the left; the close button at the
+  right of the title row.
+- No search field, no footer, no Done button. The list scrolls when it is
+  longer than the window, and takes the focus so the arrows scroll it.
+- **Two columns** of groups, 64px apart, 32px of side padding, 8px over
+  and 16px under; 20px between two groups of a column. The groups fill
+  the first column until it holds at least half of the rows, the rest go
+  to the second. Sagax shows one column when the window is narrow.
+- A group title: 13px, medium, primary ink, 4px under it.
+- A row: borderless, at least 34px high, 12px between the label and the
+  keys, a 0.5px hairline under it in the translucent tertiary border (none
+  under the last row of a group). The label at 14px, 20px line; the grey
+  hint beside it at 13px in the tertiary ink, 8px from the label, cut with
+  an ellipsis when it runs out of room.
+- The keys at the right, 4px apart: each a separate cap, 20px high, at
+  least 20px wide, 1px by 4px of padding, 4px corners, a 0.5px border in
+  the quaternary translucent border, the secondary background, 11px
+  secondary ink, tabular figures. Between two alternatives, "or" or "/"
+  in 11px tertiary ink.
+- Groups and order: **Essentials** (Search, New Bot, Send with "⇧↵ for new
+  line", Go to Bot, Compact sidebar, Settings, Keyboard shortcuts), Chat
+  (Focus chat, Find in chat, Dictate "Hold to talk", Add selection),
+  Navigation (Previous / next Bot, Back / forward, Switch Bots "Hold ⌃"),
+  Panels (Details, Bot settings, Skills, Connect Apps), Pages, Window
+  (Zoom, Full screen). Sagax keeps every shortcut of its one registry
+  (`src/lib/keyboard-shortcuts.ts`): Essentials (with Settings, the macOS
+  app menu's ⌘,, shown on macOS only), Chat, Navigation, Panels and Window
+  (Zoom "In or out" ⌘ + / −, Full screen ⌃⌘F or F11: the View menu's
+  roles) where both apps have the group, then its own Calls and "Sidebar &
+  groups"; the new-line row is Send's grey hint. On a narrow window a hint
+  wraps under its label instead of being cut.
+
+#### The phone must follow
+
+- Plugins on iPhone and iPad: the rows' second line in the "Plugin ·
+  source" words and the green-check state; one column as on a narrow window.
+- About on iPhone and iPad: the 64px icon, Version and Build lines, the
+  copyright, "Copy version info", then the links as quiet text links.
+- Keyboard shortcuts on iPad (`ios/App/Desktop/DesktopShortcuts.swift`):
+  the groups, their order, the short labels and the grey hints already
+  follow (the `shortcuts.*` keys, copied by `ios/parity/desktop-wording.json`;
+  the iPad's own sidebar button and menu items keep their full sentences
+  under their own keys); the sheet still has its search field, its footer
+  and Done and one column of cards: it moves to the wide dialog, the two
+  columns and the borderless rows above. Settings and Window stay out (the
+  iPad has neither chord).

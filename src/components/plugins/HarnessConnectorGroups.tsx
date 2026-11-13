@@ -293,7 +293,7 @@ export function AccountNoticeRow({ group, refreshing, onRefresh, onSetUp, manage
   const action = noticeAction(notice);
   const text = noticeText(group);
   return (
-    <div className={cn("col-span-full flex flex-wrap items-center gap-x-3 gap-y-2 py-[13px]", className)} data-harness-notice={notice.kind === "unavailable" ? notice.reason : notice.kind}
+    <div className={cn("col-span-full flex flex-wrap items-center gap-x-3 gap-y-2 py-3", className)} data-harness-notice={notice.kind === "unavailable" ? notice.reason : notice.kind}
       role={notice.kind === "loading" ? "status" : undefined}>
       <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary">
         {notice.kind === "loading" ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <EngineMark id={group.id} />}

@@ -13,29 +13,41 @@ export { isMacPlatform };
 export interface ShortcutItem {
   /** Stable identifier for the shortcut. */
   id: string;
-  /** Human-readable explanation of what the shortcut does. */
+  /** What it does, in a few words (#4097: the reference's short labels). */
   description: string;
+  /** The grey words beside the label, when a few words need a precision. */
+  hint?: string;
   /** Keys displayed on macOS (e.g. ["⌘", "K"]). */
   macKeys: string[];
-  /** Keys displayed on Windows and Linux (e.g. ["Ctrl", "K"]). */
+  /** Keys displayed on Windows and Linux (e.g. ["Ctrl", "K"]); empty when
+   * the shortcut exists on macOS only (the row is then not shown there). */
   winKeys: string[];
 }
 
 /** Group of related shortcuts displayed under a section heading. */
 export interface ShortcutGroup {
+  /** Stable identifier of the group. */
+  id?: ShortcutGroupId;
   /** Category display name (e.g. "Navigation"). */
   category: string;
   /** List of shortcuts belonging to this group. */
   items: ShortcutItem[];
 }
 
+/** The groups in the reference's order (#4097): Essentials and Chat first,
+ * then Navigation, Panels and Window, then this app's own Calls and Groups. */
+export type ShortcutGroupId = "essentials" | "chat" | "navigation" | "panels" | "window" | "calls" | "management";
+
+const camel = (id: string) => (id === "shortcuts-cheat-sheet" ? "cheatSheet" : id.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase()));
+
 /** A row whose description follows the interface language: read through a
  * getter, so the catalog is one constant and every read is in the language
  * chosen now (src/locales, `shortcuts.item.<camelCase id>`, the keys the
- * shortcuts window uses too). */
-function row(id: string, macKeys: string[], winKeys: string[]): ShortcutItem {
-  const key = `shortcuts.item.${id === "shortcuts-cheat-sheet" ? "cheatSheet" : id.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())}` as LocaleKey;
-  return {
+ * shortcuts window uses too). `hint`: the row has `shortcuts.hint.<id>`. */
+function row(id: string, macKeys: string[], winKeys: string[], hint = false): ShortcutItem {
+  const key = `shortcuts.item.${camel(id)}` as LocaleKey;
+  const hintKey = `shortcuts.hint.${camel(id)}` as LocaleKey;
+  const item: ShortcutItem = {
     id,
     get description() {
       return t(key);
@@ -43,10 +55,14 @@ function row(id: string, macKeys: string[], winKeys: string[]): ShortcutItem {
     macKeys,
     winKeys,
   };
+  // a getter too (a spread would read it once, before the language loads)
+  if (hint) Object.defineProperty(item, "hint", { get: () => t(hintKey), enumerable: true });
+  return item;
 }
 
-function group(id: "navigation" | "chat" | "calls" | "management", items: ShortcutItem[]): ShortcutGroup {
+function group(id: ShortcutGroupId, items: ShortcutItem[]): ShortcutGroup {
   return {
+    id,
     get category() {
       return t(`shortcuts.group.${id}` as LocaleKey);
     },
@@ -55,37 +71,50 @@ function group(id: "navigation" | "chat" | "calls" | "management", items: Shortc
 }
 
 /**
- * Complete catalog of keyboard shortcuts available in Sagax,
- * organized logically into categories for quick reference.
+ * Complete catalog of keyboard shortcuts available in Sagax, in the
+ * reference's groups (#4097). The new-line row is shown as the Send row's
+ * grey hint by the shortcuts window; it stays here so its keys follow the
+ * send key setting like Send's.
  */
 export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
-  group("navigation", [
-    row("command-palette", ["⌘", "K"], ["Ctrl", "K"]),
+  group("essentials", [
+    row("command-palette", ["⌘", "K"], ["Ctrl", "K"], true),
     row("search-everything", ["⌘", "⇧", "F"], ["Ctrl", "Shift", "F"]),
-    row("new-bot", ["⌘", "N"], ["Ctrl", "N"]),
-    row("new-group", ["⌘", "⇧", "N"], ["Ctrl", "Shift", "N"]),
+    row("new-bot", ["⌘", "N"], ["Ctrl", "N"], true),
+    row("send-message", ["Return"], ["Enter"]),
     row("jump-bot", ["⌘", "1–9"], ["Ctrl", "1–9"]),
-    row("switch-bot", ["⌘", "⇧", "[ / ]"], ["Ctrl", "Shift", "[ / ]"]),
-    row("toggle-sidebar", ["⌘", "B"], ["Ctrl", "B"]),
-    row("find-conversation", ["⌘", "F"], ["Ctrl", "F"]),
+    row("toggle-sidebar", ["⌘", "B"], ["Ctrl", "B"], true),
+    // the macOS app menu's Settings item (electron/menu.mjs); no chord elsewhere
+    row("settings", ["⌘", ","], []),
+    row("shortcuts-cheat-sheet", ["⌘", "/"], ["Ctrl", "/"], true),
   ]),
   group("chat", [
-    row("send-message", ["Return"], ["Enter"]),
     row("focus-composer", ["⌘", "I"], ["Ctrl", "I"]),
+    row("find-conversation", ["⌘", "F"], ["Ctrl", "F"]),
+    row("dictate", ["⌘", "D"], ["Ctrl", "D"], true),
     row("quote-selection", ["⌘", "L"], ["Ctrl", "L"]),
-    row("dictate", ["⌘", "D"], ["Ctrl", "D"]),
     row("new-line", ["⇧", "Return"], ["Shift", "Enter"]),
-    row("edit-last-message", ["↑"], ["↑"]),
-    row("close-panel", ["Esc"], ["Esc"]),
-    row("shortcuts-cheat-sheet", ["⌘", "/"], ["Ctrl", "/"]),
+    row("edit-last-message", ["↑"], ["↑"], true),
+  ]),
+  group("navigation", [
+    row("switch-bot", ["⌘", "⇧", "[ / ]"], ["Ctrl", "Shift", "[ / ]"]),
+    row("new-group", ["⌘", "⇧", "N"], ["Ctrl", "Shift", "N"]),
+  ]),
+  group("panels", [
+    row("close-panel", ["Esc"], ["Esc"], true),
+  ]),
+  // the View menu's roles (electron/menu.mjs `viewMenu`)
+  group("window", [
+    row("zoom", ["⌘", "+ / −"], ["Ctrl", "+ / −"], true),
+    row("full-screen", ["⌃", "⌘", "F"], ["F11"]),
   ]),
   group("calls", [
     row("live-call-mute", ["⌘", "⇧", "M"], ["Ctrl", "Shift", "M"]),
     row("live-call-hang-up", ["⌘", "⇧", "H"], ["Ctrl", "Shift", "H"]),
   ]),
   group("management", [
-    row("save-bulletin", ["⌘", "Return"], ["Ctrl", "Enter"]),
-    row("reorder-section", ["⌥", "↑ / ↓"], ["Alt", "↑ / ↓"]),
+    row("save-bulletin", ["⌘", "Return"], ["Ctrl", "Enter"], true),
+    row("reorder-section", ["⌥", "↑ / ↓"], ["Alt", "↑ / ↓"], true),
   ]),
 ];
 
@@ -159,30 +188,4 @@ export function shortcutKeysForPlatform(
   isMac: boolean = isMacPlatform(),
 ): string[] {
   return isMac ? item.macKeys : item.winKeys;
-}
-
-/**
- * Filter shortcut groups by query matching item descriptions or keys.
- */
-export function filterShortcutGroups(
-  groups: readonly ShortcutGroup[],
-  query: string,
-  isMac: boolean = isMacPlatform(),
-): ShortcutGroup[] {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) return [...groups];
-
-  return groups
-    .map((group) => {
-      const filteredItems = group.items.filter((item) => {
-        const keys = shortcutKeysForPlatform(item, isMac).join(" ").toLowerCase();
-        return (
-          item.description.toLowerCase().includes(normalized) ||
-          group.category.toLowerCase().includes(normalized) ||
-          keys.includes(normalized)
-        );
-      });
-      return { ...group, items: filteredItems };
-    })
-    .filter((group) => group.items.length > 0);
 }

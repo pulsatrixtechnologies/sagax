@@ -19,7 +19,7 @@ import { BotEditorStore } from "../state/store";
 import "../styles.css";
 
 // The build stamps these; the gallery names a real release.
-Object.assign(globalThis, { __APP_VERSION__: "0.5.7", __BASE_VERSION__: "0.26.0" });
+Object.assign(globalThis, { __APP_VERSION__: "0.5.7", __BASE_VERSION__: "0.26.0", __BUILD_DATE__: "2026-11-12" });
 
 const params = new URLSearchParams(location.search);
 const skinParam = params.get("skin") as SkinId | null;

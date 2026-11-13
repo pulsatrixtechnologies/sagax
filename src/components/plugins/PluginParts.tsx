@@ -1,7 +1,7 @@
 // Small pieces the three Plugins views share: the icon, the status word and
 // the page header with its back arrow.
 import { useState, type ReactNode } from "react";
-import { BookOpen, ChevronLeft, Puzzle, ServerCog } from "lucide-react";
+import { BookOpen, Check, ChevronLeft, Puzzle, ServerCog } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -92,13 +92,27 @@ const STATUS_KEY: Record<PluginStatus, LocaleKey> = {
   available: "connectApps.status.available",
 };
 
+/** "✓ Installed" at a row's right, in the reference's "Connected" shape
+ * (#4097, measured): a 12px green check, then 12px words in the tertiary ink,
+ * 5px apart. Installed rows pass "Connected" with their own status. */
+export function ConnectedMark({ label, status = "installed" }: { label?: string; status?: string } = {}) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-[5px] py-0.5 text-[12px] leading-4 whitespace-nowrap text-ink-tertiary" data-plugin-status={status}>
+      <Check size={12} strokeWidth={2.5} className="text-success" aria-hidden="true" />
+      {label ?? t("connectApps.status.installed")}
+    </span>
+  );
+}
+
 export function PluginStatusLabel({ status, className }: { status: PluginStatus; className?: string }) {
+  // connected: the reference's "Connected" shape, the one way every row says it (#4097)
+  if (status === "connected") return <ConnectedMark status="connected" label={t(STATUS_KEY.connected)} />;
   return (
     <span
       data-plugin-status={status}
       className={cn(
         "shrink-0 text-[12px] font-medium",
-        status === "connected" ? "text-success" : status === "needs_auth" || status === "pending" ? "text-warning" : "text-ink-secondary",
+        status === "needs_auth" || status === "pending" ? "text-warning" : "text-ink-secondary",
         className,
       )}
     >

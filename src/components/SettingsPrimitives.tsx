@@ -870,10 +870,14 @@ export const DIALOG = {
   backdrop: "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 transition-opacity duration-base ease-out-quint starting:opacity-0 sm:p-6",
   frame: "relative flex max-h-[calc(100dvh-48px)] w-full flex-col overflow-hidden rounded-[14px] border border-border bg-app text-ink outline-none transition-[opacity,scale] duration-base ease-out-quint starting:scale-98 starting:opacity-0",
   width: {
+    /** the reference's small dialog (About, #4097) */
+    xs: "max-w-[320px]",
     sm: "max-w-[400px]",
     md: "max-w-[440px]",
     lg: "max-w-[560px]",
     xl: "max-w-[700px]",
+    /** the reference's wide sheet (Keyboard shortcuts, #4097) */
+    xxl: "max-w-[900px]",
   },
   header: "shrink-0 px-5 pb-1 pr-12 pt-5",
   headerWide: "shrink-0 px-5 pb-1 pr-12 pt-6 sm:px-8",

@@ -31,3 +31,43 @@ describe("iPad desktop shell wording", () => {
     });
   }
 });
+
+// #4097: the desktop's shortcut labels became short words with a grey hint.
+// The iPad sheet shows both (no precision lost), and the iPad's own buttons
+// and menu items that once borrowed the long sentences keep their full
+// action wording under their own keys.
+describe("iPad keyboard shortcuts sheet (#4097)", () => {
+  const sheet = readFileSync(join(root, "ios", "App", "Desktop", "DesktopShortcuts.swift"), "utf8");
+
+  it("gives every row the desktop's grey hint when the desktop has one", async () => {
+    const { SHORTCUT_GROUPS } = await import("@/lib/keyboard-shortcuts");
+    const hinted = new Set([...sheet.matchAll(/hinted\("([\w-]+)"/g)].map((match) => match[1]));
+    const desktopHinted = SHORTCUT_GROUPS.flatMap((group) => group.items)
+      .filter((item) => item.hint !== undefined && !["settings", "zoom", "full-screen"].includes(item.id))
+      .map((item) => item.id);
+    expect(desktopHinted.length).toBeGreaterThan(0);
+    for (const id of desktopHinted) expect(hinted.has(id), `${id} has its hint on the iPad`).toBe(true);
+    // the new-line chord is the Send row's hint there too
+    expect(sheet).toContain('text("shortcuts.hint.sendNewLine")');
+    for (const key of ["shortcuts.hint.dictate", "shortcuts.hint.closePanel", "shortcuts.hint.sendNewLine"]) {
+      expect(map[key], `${key} is copied to the iPad`).toBe(key);
+    }
+  });
+
+  it("keeps the full wording of the iPad's own sidebar button, menu items and find button", () => {
+    for (const [label, fr] of [
+      ["Collapse or expand the sidebar", "Replier ou déplier la barre latérale"],
+      ["Go to the message field", "Aller au champ du message"],
+      ["Find in conversation", "Chercher dans la conversation"],
+      ["Search conversations and messages", "Rechercher dans les conversations et les messages"],
+      ["Create a group chat", "Créer une discussion de groupe"],
+      ["Quote the selected text in the message", "Citer le texte sélectionné dans le message"],
+      ["Dictate into the message field (again to stop)", "Dicter dans le champ du message (encore une fois pour arrêter)"],
+    ] as const) {
+      expect(map[label], `${label} is not tied to a short shortcut label`).toBeUndefined();
+      const entry = catalog.strings[label];
+      expect(entry?.localizations?.en?.stringUnit?.value ?? label, `${label} (en)`).toBe(label);
+      expect(entry?.localizations?.fr?.stringUnit?.value, `${label} (fr)`).toBe(fr);
+    }
+  });
+});

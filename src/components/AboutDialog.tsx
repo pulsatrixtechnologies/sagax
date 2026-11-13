@@ -2,8 +2,11 @@
 // modal over the app (Settings > About under App, the profile menu, and the
 // app menu). Same card the gallery and window tests draw.
 //
-// 2026-10-16: the Pulsatrix mark, "Sagax", the version, then the links as
-// rows of one card (release notes first), the copyright in grey at the bottom.
+// #4097 (the reference's About, measured on the reference app: a 320px
+// dialog, 32px over the content, 12px between its lines): the mark at 64px,
+// the name at 22px, "Version x.y.z" and "Built <date>" in 12px grey, the
+// copyright, one pill "Copy version info"; this app's links stay under it as
+// quiet text links (release notes first), then the upstream line in grey.
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -13,48 +16,82 @@ import {
   LICENSE_URL,
   appVersion,
   baseVersion,
+  buildDate,
   openExternalLink,
   platformLabel,
 } from "@/lib/app-links";
 import { subscribeAbout } from "@/lib/about-ui";
-import { t } from "@/lib/i18n";
+import { useCopyFeedback } from "@/lib/copy-text";
+import { activeLocale, t } from "@/lib/i18n";
 import { requestReleaseNotes } from "@/lib/release-notes-ui";
 import { useCategoryModalKeyboard } from "./category-modal";
 import { PulsatrixOwlMark } from "./PulsatrixOwlMark";
-import { DIALOG, DialogCloseButton, DialogLayer, GROUP_CARD, LinkRow } from "./SettingsPrimitives";
+import { DIALOG, DialogCloseButton, DialogLayer, PILL } from "./SettingsPrimitives";
 
-/** Body of About: owl, name, version, link rows, footer. */
+/** "Nov 12, 2026" in the app language, or null when the build has no date. */
+function builtLabel(date: string | null): string | null {
+  if (!date) return null;
+  try {
+    return new Intl.DateTimeFormat(activeLocale(), { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`));
+  } catch {
+    return date;
+  }
+}
+
+/** What "Copy version info" puts on the clipboard: version, build date,
+ * platform and the upstream base, one per line. */
+export function versionInfoText(platform: string | null): string {
+  const built = builtLabel(buildDate());
+  return [
+    t("about.version", { version: appVersion() }),
+    built ? t("about.built", { date: built }) : null,
+    platform,
+    t("about.basedOn", { version: baseVersion() }),
+  ].filter(Boolean).join("\n");
+}
+
+const QUIET_LINK = "rounded px-1 text-[12px] leading-4 text-ink-secondary transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none";
+
+/** Body of About: mark, name, version and build lines, copyright, Copy
+ * version info, the links, the upstream line. */
 export function AboutCard({ onOpenReleaseNotes }: { onOpenReleaseNotes?: () => void }) {
   const platform = typeof window !== "undefined" ? platformLabel(window.ogb?.platform) : null;
+  const built = builtLabel(buildDate());
+  const { state, copy } = useCopyFeedback(versionInfoText(platform));
   return (
-    <section aria-labelledby="about-dialog-title" data-about-section="" className="flex flex-col gap-3">
-      <div className="flex flex-col items-center text-center">
-        <span className="text-ink" data-about-mark="">
-          <PulsatrixOwlMark width={56} height={50} />
-        </span>
-        <h2 id="about-dialog-title" className={`${DIALOG.title} mt-3`}>
-          {APP_NAME}
-        </h2>
-        <p className="mt-0.5 text-[13px] leading-[18px] text-ink-secondary">
-          {t("about.version", { version: appVersion() })}
-          {platform ? ` · ${platform}` : ""}
-        </p>
+    <section aria-labelledby="about-dialog-title" data-about-section="" className="flex flex-col items-center gap-3 text-center">
+      <span className="text-ink" data-about-mark="">
+        <PulsatrixOwlMark width={72} height={64} />
+      </span>
+      <h2 id="about-dialog-title" className="text-[22px] font-semibold leading-7 tracking-[-0.012em] text-ink">
+        {APP_NAME}
+      </h2>
+      <div className="flex min-w-0 flex-col items-center gap-0.5 text-[12px] leading-4 text-ink-secondary" data-about-lines="">
+        <p dir="ltr" data-about-version="">{t("about.version", { version: appVersion() })}</p>
+        {built && <p data-about-built="">{t("about.built", { date: built })}</p>}
       </div>
-      <div className={GROUP_CARD}>
-        <LinkRow
-          label={t("releaseNotes.menu")}
+      <p className="text-[12px] leading-4 text-ink-tertiary" data-about-copyright="">{t("about.copyright")}</p>
+      <div className="flex justify-center pt-2">
+        <button type="button" onClick={copy} className={PILL} data-about-copy="">
+          {state === "copied" ? t("about.copied") : state === "failed" ? t("common.copyFailed") : t("about.copyInfo")}
+        </button>
+      </div>
+      <nav aria-label={APP_NAME} className="flex flex-wrap items-center justify-center gap-x-1 gap-y-1" data-about-links="">
+        <button
+          type="button"
+          className={QUIET_LINK}
           onClick={() => {
             onOpenReleaseNotes?.();
             requestReleaseNotes("browse");
           }}
-        />
+        >
+          {t("releaseNotes.menu")}
+        </button>
         <AboutLink href={APP_REPOSITORY} label="GitHub" />
         <AboutLink href={DOCS_URL} label={t("about.docs")} />
         <AboutLink href={LICENSE_URL} label={t("about.license")} />
-      </div>
-      <p className="px-1 text-center text-[12px] leading-4 text-ink-secondary">
-        {t("about.copyright")}
-        <br />
+      </nav>
+      <p className="text-[11px] leading-4 text-ink-tertiary" data-about-based-on="">
         {t("about.basedOn", { version: baseVersion() })}
       </p>
     </section>
@@ -88,10 +125,10 @@ function AboutWindow({ onClose }: { onClose: () => void }) {
         aria-labelledby="about-dialog-title"
         tabIndex={-1}
         data-about-dialog=""
-        className={`${DIALOG.frame} ${DIALOG.width.sm}`}
+        className={`${DIALOG.frame} ${DIALOG.width.xs}`}
       >
         <DialogCloseButton label={t("common.close")} onClick={onClose} />
-        <div className={`${DIALOG.body} pt-7`}>
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4 pt-8">
           <AboutCard onOpenReleaseNotes={onClose} />
         </div>
       </div>
@@ -100,5 +137,9 @@ function AboutWindow({ onClose }: { onClose: () => void }) {
 }
 
 function AboutLink({ href, label }: { href: string; label: string }) {
-  return <LinkRow external label={label} onClick={() => void openExternalLink(href)} />;
+  return (
+    <button type="button" className={QUIET_LINK} onClick={() => void openExternalLink(href)}>
+      {label}
+    </button>
+  );
 }

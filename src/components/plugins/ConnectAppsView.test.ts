@@ -125,14 +125,20 @@ describe("Plugins tabs", () => {
     }
   });
 
-  it("Installed, the private skills and This Mac are a responsive grid of cards that fills the width, nothing dropped (#2948)", () => {
+  it("Installed, the private skills and This Mac are the reference's two columns of borderless rows, nothing dropped (#4097)", () => {
     const html = renderToStaticMarkup(createElement(InstalledView, props()));
     const lists = [...html.matchAll(/<ul class="([^"]+)"/g)].map((match) => match[1]!);
     expect(lists.length).toBeGreaterThanOrEqual(2);
     for (const list of lists) {
-      expect(list).toContain("grid-cols-[repeat(auto-fill,minmax(min(100%,264px),1fr))]");
-      expect(list).toContain("*:rounded-[14px]");
-      expect(list).toContain("*:border-[0.5px]");
+      // two columns, one when the list itself is under 560px (a container query)
+      expect(list).toContain("@container");
+      expect(list).toContain("grid-cols-2");
+      expect(list).toContain("*:@max-[560px]:col-span-full");
+      // borderless rows: 16px corners, 12px sides, a wash on hover, no card border
+      expect(list).toContain("*:rounded-2xl");
+      expect(list).toContain("*:px-3");
+      expect(list).not.toContain("border");
+      expect(list).not.toContain("auto-fill");
     }
     // each card keeps its name, what it brings and its "..." menu
     expect(html).toContain("data-installed-brings");
@@ -175,10 +181,10 @@ describe("Plugins tabs", () => {
 
   it("Installed: GitHub once, named for people, saying what it brings, then the private skills", () => {
     const html = renderToStaticMarkup(createElement(ManageView, props()));
-    const names = [...html.matchAll(/data-installed-entry="[^"]+"[\s\S]*?block truncate text-\[13.5px\] leading-5 text-ink"[^>]*>([^<]+)</g)].map((match) => match[1]);
+    const names = [...html.matchAll(/data-installed-entry="[^"]+"[\s\S]*?block truncate text-\[13px\] font-medium leading-\[18px\] text-ink"[^>]*>([^<]+)</g)].map((match) => match[1]);
     expect(names).toEqual(["GitHub", "Twilio Docs"]);
     expect(html).not.toContain(">github-github<");
-    expect(html).toMatch(/GitHub<\/span><span[^>]*data-installed-brings[^>]*>plugin \(claude-plugins-official\) · 1 connector</);
+    expect(html).toMatch(/GitHub<\/span><span[^>]*data-installed-brings[^>]*>Plugin · claude-plugins-official · 1 connector</);
     expect(html).toMatch(/data-plugins-installed[\s\S]*data-plugins-skills[\s\S]*Private skills[\s\S]*weekly-summary/);
   });
 
@@ -215,7 +221,9 @@ describe("Plugins tabs", () => {
 
   it("brings: app + connectors, plugin · skills", () => {
     expect(bringsLabel({ app: true, plugin: null, connectors: 2, skills: 0 })).toBe("app + 2 connectors");
-    expect(bringsLabel({ app: false, plugin: "example-tools", connectors: 0, skills: 3 })).toBe("plugin (example-tools) · 3 skills");
+    expect(bringsLabel({ app: false, plugin: "example-tools", connectors: 0, skills: 3 })).toBe("Plugin · example-tools · 3 skills");
+    // #4097: the kind and the source in full, never a cut parenthesis
+    expect(bringsLabel({ app: false, plugin: "example-tools", connectors: 0, skills: 3 })).not.toContain("(");
     expect(bringsLabel({ app: false, plugin: null, connectors: 1, skills: 0 })).toBe("1 connector");
     setLocale("fr");
     expect(bringsLabel({ app: true, plugin: null, connectors: 2, skills: 0 })).toBe("app + 2 connecteurs");
@@ -297,8 +305,8 @@ describe("The engine accounts' connectors as plugin rows (#2306)", () => {
     expect(html).toContain("gstatic.com/images/branding/product/2x/drive_2020q4_48dp.png");
     expect(html.match(/data-harness-manage="/g)).toHaveLength(2);
     // the sub-line says where it comes from; a Grok row keeps "Not verifiable" there
-    expect(html).toMatch(/data-harness-connector="claude:Gmail"[\s\S]*?connector \(Claude account\)/);
-    expect(html).toMatch(/data-harness-connector="grok:X"[\s\S]*?data-harness-status="managed"[^>]*>connector \(Grok account\) · Not verifiable: Grok catalog</);
+    expect(html).toMatch(/data-harness-connector="claude:Gmail"[\s\S]*?Connector · Claude account/);
+    expect(html).toMatch(/data-harness-connector="grok:X"[\s\S]*?data-harness-status="managed"[^>]*>Connector · Grok account · Not verifiable: Grok catalog</);
     expect(html).toMatch(/data-harness-connector="grok:Outlook \(Exchange\)"[\s\S]*?data-connector-capabilities[^>]*>Email · Calendar</);
     expect(html).toContain("data-harness-grok-note");
     // the right side: Installed when connected, Sign in as a button when not
@@ -333,7 +341,7 @@ describe("The engine accounts' connectors as plugin rows (#2306)", () => {
     const groups = connectorGroups({ claude, grok: null });
     const html = renderToStaticMarkup(createElement(InstalledView, props({ entries: [], accounts: { sections: sections(groups), onSetUp: noop } })));
     expect(html).not.toContain("Connectors of your");
-    expect(html).toMatch(/data-plugins-installed[\s\S]*data-installed-entry="account:claude:Gmail"[\s\S]*connector \(Claude account\)[\s\S]*Connected/);
+    expect(html).toMatch(/data-plugins-installed[\s\S]*data-installed-entry="account:claude:Gmail"[\s\S]*Connector · Claude account[\s\S]*Connected/);
     expect(html).toContain('aria-label="More for Gmail"');
     // not connected: its way to connect stays in the row
     expect(html).toMatch(/data-installed-entry="account:claude:Canva"[\s\S]*?data-harness-signin="claude:Canva"[^>]*>Sign in</);
@@ -418,7 +426,7 @@ describe("The engine accounts' connectors as plugin rows (#2306)", () => {
       const html = discover(groups);
       expect(html).not.toContain('data-harness-connector="grok:X"');
       expect(html).not.toContain("Not verifiable");
-      expect(html).toMatch(/data-harness-connector="grok:Outlook \(Exchange\)"[\s\S]*?data-harness-status="connected"[^>]*>connector \(Grok account\)</);
+      expect(html).toMatch(/data-harness-connector="grok:Outlook \(Exchange\)"[\s\S]*?data-harness-status="connected"[^>]*>Connector · Grok account</);
       expect(html).toMatch(/data-harness-connector="grok:Outlook \(Exchange\)"[\s\S]*?Installed/);
       expect(html).toMatch(/data-harness-connector="grok:Gmail"[\s\S]*?<button[^>]*data-harness-signin="grok:Gmail"[^>]*data-harness-status="failed"[^>]*>Reconnect</);
       // the connected Grok rows count in "N connected"

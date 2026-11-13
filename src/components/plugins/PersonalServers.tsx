@@ -77,7 +77,7 @@ export function usePersonalMcp(active: boolean, initial?: MyConnections): Person
     return {
       key: server.name,
       node: (
-        <div className="group flex items-center gap-2 py-[11px]" data-installed-entry={`personal:${server.name}`} data-personal-server={server.name}>
+        <div className="group flex items-center gap-2 py-3" data-installed-entry={`personal:${server.name}`} data-personal-server={server.name}>
           <button type="button" onClick={() => setForm({ kind: "edit", name: server.name })} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left"
             aria-label={t("connectApps.openAria", { name: server.name })}>
             <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary"><Server size={18} aria-hidden="true" /></span>

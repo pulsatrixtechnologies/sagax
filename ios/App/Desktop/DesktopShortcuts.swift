@@ -3,21 +3,27 @@
 // a 560 pt dialog (rounded 14, `bg-app`, the border, over a 50 % scrim),
 // the title "Keyboard shortcuts" 17 semibold and the round close button,
 // the search field under it, then each category as a grey 13 pt heading
-// over one card of 36 pt rows (what the shortcut does, its keycaps 22 pt
-// in `bg-inset`), and the foot: "Press ? outside a text field to open this
-// window." and the Done pill.
+// over one card of 36 pt rows (the short label, its grey hint, its keycaps
+// 22 pt in `bg-inset`), and the foot: "Press ? outside a text field to open
+// this window." and the Done pill.
 //
-// The rows are the desktop's catalog, every one of them. On the iPad a
-// hardware keyboard answers them in the shell (DesktopKeyCommands), the
-// composer (Return, ⇧Return, ↑, ⌘D), the find bar (⌘F) and the open
-// windows (Esc); Live call and group instructions answer where those
-// screens are open.
+// The rows are the desktop's catalog in its groups and order (#4097:
+// Essentials, Chat, Navigation, Panels, Calls, Sidebar & groups), each with
+// the desktop's short label and grey hint (the `shortcuts.*` keys of
+// src/locales, copied by ios/parity/desktop-wording.json); the new-line row
+// is the Send row's hint, as on the desktop. Settings (macOS's ⌘,) and the
+// Window group (the macOS View menu's zoom and full screen) are the
+// desktop's only rows the iPad does not have. On the iPad a hardware
+// keyboard answers them in the shell (DesktopKeyCommands), the composer
+// (Return, ⇧Return, ↑, ⌘D), the find bar (⌘F) and the open windows (Esc);
+// Live call and group instructions answer where those screens are open.
 import SwiftUI
 import CompanionCore
 
 struct DesktopShortcut: Identifiable {
     let id: String
     let description: String
+    let hint: String?
     let keys: [String]
 }
 
@@ -28,42 +34,54 @@ struct DesktopShortcutGroup: Identifiable {
 
     /// `SHORTCUT_GROUPS`, in its order, with its macOS keys.
     static var all: [DesktopShortcutGroup] {
-        let row = { (id: String, text: String, keys: [String]) in
-            DesktopShortcut(id: id, description: AppStrings.localized(text), keys: keys)
+        let text = { (key: String) in AppStrings.localized(key) }
+        let row = { (id: String, name: String, keys: [String], hint: String?) in
+            DesktopShortcut(id: id, description: text("shortcuts.item.\(name)"), hint: hint, keys: keys)
         }
+        let hinted = { (id: String, name: String, keys: [String]) in
+            row(id, name, keys, text("shortcuts.hint.\(name)"))
+        }
+        let group = { (name: String, items: [DesktopShortcut]) in
+            DesktopShortcutGroup(category: text("shortcuts.group.\(name)"), items: items)
+        }
+        // the new-line chord, said in the Send row's hint ("⇧ Return for new line")
+        let sendHint = String(format: text("shortcuts.hint.sendNewLine"), "⇧ Return")
         return [
-            DesktopShortcutGroup(category: AppStrings.localized("Navigation"), items: [
-                row("command-palette", "Open command palette (switcher & transcript search)", ["⌘", "K"]),
-                row("search-everything", "Search conversations and messages", ["⌘", "⇧", "F"]),
-                row("new-bot", "Search or create a bot", ["⌘", "N"]),
-                row("new-group", "Create a group chat", ["⌘", "⇧", "N"]),
-                row("jump-bot", "Jump to bot 1 to 9 in the roster", ["⌘", "1–9"]),
-                row("switch-bot", "Switch to previous / next bot", ["⌘", "⇧", "[ / ]"]),
-                row("toggle-sidebar", "Collapse or expand the sidebar", ["⌘", "B"]),
-                row("find-conversation", "Find in conversation", ["⌘", "F"]),
+            group("essentials", [
+                hinted("command-palette", "commandPalette", ["⌘", "K"]),
+                row("search-everything", "searchEverything", ["⌘", "⇧", "F"], nil),
+                hinted("new-bot", "newBot", ["⌘", "N"]),
+                row("send-message", "sendMessage", ["Return"], sendHint),
+                row("jump-bot", "jumpBot", ["⌘", "1–9"], nil),
+                hinted("toggle-sidebar", "toggleSidebar", ["⌘", "B"]),
+                hinted("shortcuts-cheat-sheet", "cheatSheet", ["⌘", "/"]),
             ]),
-            DesktopShortcutGroup(category: AppStrings.localized("Chat & Composer"), items: [
-                row("send-message", "Send message", ["Return"]),
-                row("focus-composer", "Go to the message field", ["⌘", "I"]),
-                row("quote-selection", "Quote the selected text in the message", ["⌘", "L"]),
-                row("dictate", "Dictate into the message field (again to stop)", ["⌘", "D"]),
-                row("new-line", "Insert new line without sending", ["⇧", "Return"]),
-                row("edit-last-message", "Edit last message (when composer is empty)", ["↑"]),
-                row("close-panel", "Close active drawer, modal, or find bar", ["Esc"]),
-                row("shortcuts-cheat-sheet", "Show keyboard shortcuts cheat sheet", ["⌘", "/"]),
+            group("chat", [
+                row("focus-composer", "focusComposer", ["⌘", "I"], nil),
+                row("find-conversation", "findConversation", ["⌘", "F"], nil),
+                hinted("dictate", "dictate", ["⌘", "D"]),
+                row("quote-selection", "quoteSelection", ["⌘", "L"], nil),
+                hinted("edit-last-message", "editLastMessage", ["↑"]),
             ]),
-            DesktopShortcutGroup(category: AppStrings.localized("Calls"), items: [
-                row("live-call-mute", "Mute or unmute a Live call", ["⌘", "⇧", "M"]),
-                row("live-call-hang-up", "Hang up a Live call", ["⌘", "⇧", "H"]),
+            group("navigation", [
+                row("switch-bot", "switchBot", ["⌘", "⇧", "[ / ]"], nil),
+                row("new-group", "newGroup", ["⌘", "⇧", "N"], nil),
             ]),
-            DesktopShortcutGroup(category: AppStrings.localized("Management & Groups"), items: [
-                row("save-bulletin", "Save group instruction changes", ["⌘", "Return"]),
-                row("reorder-section", "Reorder sidebar sections (focus a section heading)", ["⌥", "↑ / ↓"]),
+            group("panels", [
+                hinted("close-panel", "closePanel", ["Esc"]),
+            ]),
+            group("calls", [
+                row("live-call-mute", "liveCallMute", ["⌘", "⇧", "M"], nil),
+                row("live-call-hang-up", "liveCallHangUp", ["⌘", "⇧", "H"], nil),
+            ]),
+            group("management", [
+                hinted("save-bulletin", "saveBulletin", ["⌘", "Return"]),
+                hinted("reorder-section", "reorderSection", ["⌥", "↑ / ↓"]),
             ]),
         ]
     }
 
-    /// `filterShortcutGroups`: the rows whose description or keys contain
+    /// `filterShortcutGroups`: the rows whose label, hint or keys contain
     /// the query; a category that matches keeps all its rows.
     static func filtered(_ query: String) -> [DesktopShortcutGroup] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -71,7 +89,9 @@ struct DesktopShortcutGroup: Identifiable {
         return all.compactMap { group in
             if group.category.lowercased().contains(q) { return group }
             let items = group.items.filter { item in
-                item.description.lowercased().contains(q) || item.keys.joined(separator: " ").lowercased().contains(q)
+                item.description.lowercased().contains(q)
+                    || (item.hint?.lowercased().contains(q) ?? false)
+                    || item.keys.joined(separator: " ").lowercased().contains(q)
             }
             return items.isEmpty ? nil : DesktopShortcutGroup(category: group.category, items: items)
         }
@@ -186,12 +206,19 @@ struct DesktopShortcutsModal: View {
         }
     }
 
-    /// ShortcutRow: min-h-[36px] px-3.5 py-1.5, 13/18 at the left, the
+    /// ShortcutRow: min-h-[36px] px-3.5 py-1.5, 13/18 at the left with its grey hint, the
     /// keycaps (22 pt, rounded 6, `bg-inset`, 12 pt ink-secondary) 4 apart.
     private func row(_ item: DesktopShortcut) -> some View {
         HStack(spacing: 16) {
-            DesktopText(Text(verbatim: item.description), size: 13, line: 18)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            // the short label, then its grey hint (13 tertiary), as the desktop's row
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                DesktopText(Text(verbatim: item.description), size: 13, line: 18)
+                    .fixedSize()
+                if let hint = item.hint {
+                    DesktopText(Text(verbatim: hint), size: 13, line: 18, color: \.inkTertiary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 4) {
                 ForEach(Array(item.keys.enumerated()), id: \.offset) { _, key in keycap(key, height: 22, size: 12) }
             }

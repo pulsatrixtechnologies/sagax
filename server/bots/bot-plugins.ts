@@ -39,6 +39,7 @@ export { BotPluginError, type GitSource, parseGitSource, type MarketplacePolicy,
 //     plugin's skills, commands, agents and output styles stay. The MCP
 //     servers it declared mount separately in the person's environment.
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
+import { cp, lstat, mkdir, rm } from "node:fs/promises";
 import { basename, dirname, join, sep } from "node:path";
 import { z } from "zod";
 
@@ -166,28 +167,52 @@ function measure(dir: string): { bytes: number; files: number } {
   return { bytes, files };
 }
 
+type SanitizedPlugin = { removed: string[]; declaredMcpServers: string[]; mcpServers: Record<string, McpServerSpec>; hooks: LifecycleHook[]; hookFiles: Record<string, string> };
+
 /** Copy one plugin without links, then take out what would run on the
  * server host. Returns what was removed and the MCP servers it declared. */
-export function copySanitizedPlugin(from: string, to: string, marketplaceEntry?: Record<string, unknown>, executionRoot = to): { removed: string[]; declaredMcpServers: string[]; mcpServers: Record<string, McpServerSpec>; hooks: LifecycleHook[]; hookFiles: Record<string, string> } {
-  if (!existsSync(from) || !statSync(from).isDirectory()) throw new BotPluginError("The plugin's folder is missing from its repository.", "invalid_plugin", 422);
-  const captured = capturePluginHooks(from);
+export function copySanitizedPlugin(from: string, to: string, marketplaceEntry?: Record<string, unknown>, executionRoot = to): SanitizedPlugin {
+  const captured = pluginHooksToCopy(from);
   rmSync(to, { recursive: true, force: true });
   // #3619: the turn's plugin copy computes this folder's digest again
   notePluginFolderChanged(to);
   mkdirSync(join(to, ".."), { recursive: true });
-  cpSync(from, to, {
-    recursive: true,
-    dereference: false,
-    filter: (path) => {
-      // #3063: macOS metadata (`._*`, `.DS_Store`) never reaches an engine
-      if (!withoutMacMetadata(path)) return false;
-      const stat = lstatSync(path);
-      return !stat.isSymbolicLink() && !path.split(sep).includes(".git");
-    },
-  });
+  cpSync(from, to, { recursive: true, dereference: false, filter: (path) => copiedPluginPath(path, lstatSync(path)) });
+  return { ...sanitizeCopiedPlugin(to, executionRoot, marketplaceEntry), hooks: captured.hooks, hookFiles: captured.files };
+}
+
+/** copySanitizedPlugin, copying the tree without holding the loop (#3599):
+ * a copy redone after a start gives the loop back between files. */
+export async function copySanitizedPluginAsync(from: string, to: string, marketplaceEntry?: Record<string, unknown>, executionRoot = to): Promise<SanitizedPlugin> {
+  const captured = pluginHooksToCopy(from);
+  await rm(to, { recursive: true, force: true });
+  notePluginFolderChanged(to);
+  await mkdir(join(to, ".."), { recursive: true });
+  await cp(from, to, { recursive: true, dereference: false, filter: async (path) => copiedPluginPath(path, await lstat(path)) });
+  return { ...sanitizeCopiedPlugin(to, executionRoot, marketplaceEntry), hooks: captured.hooks, hookFiles: captured.files };
+}
+
+function pluginHooksToCopy(from: string): ReturnType<typeof capturePluginHooks> {
+  if (!existsSync(from) || !statSync(from).isDirectory()) throw new BotPluginError("The plugin's folder is missing from its repository.", "invalid_plugin", 422);
+  return capturePluginHooks(from);
+}
+
+function copiedPluginPath(path: string, stat: { isSymbolicLink(): boolean }): boolean {
+  // #3063: macOS metadata (`._*`, `.DS_Store`) never reaches an engine
+  if (!withoutMacMetadata(path)) return false;
+  return !stat.isSymbolicLink() && !path.split(sep).includes(".git");
+}
+
+function readJsonObject(file: string): Record<string, unknown> | null {
+  try { const value = JSON.parse(readFileSync(file, "utf8")) as unknown; return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null; } catch { return null; }
+}
+
+/** The MCP servers a plugin folder declares, as its sanitized copy keeps
+ * them: read from the copy, or from the original for a copy kept as it is. */
+export function pluginMcpDeclarations(dir: string, executionRoot = dir, marketplaceEntry?: Record<string, unknown>): { removed: string[]; declaredMcpServers: string[]; mcpServers: Record<string, McpServerSpec> } {
   const removed: string[] = [];
   const declared = new Set<string>();
-  const declarations = readPluginMcpServers(to, executionRoot, marketplaceEntry);
+  const declarations = readPluginMcpServers(dir, executionRoot, marketplaceEntry);
   const mcpServers: Record<string, McpServerSpec> = {};
   for (const { name, entry } of declarations.servers) {
     declared.add(name);
@@ -201,12 +226,16 @@ export function copySanitizedPlugin(from: string, to: string, marketplaceEntry?:
       : { command: server.command, args: server.args, env: server.env };
   }
   removed.push(...declarations.skipped);
-  const readJson = (file: string): Record<string, unknown> | null => {
-    try { const value = JSON.parse(readFileSync(file, "utf8")) as unknown; return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null; } catch { return null; }
-  };
-  const mcpJson = readJson(join(to, ".mcp.json"));
+  const mcpJson = readJsonObject(join(dir, ".mcp.json"));
   const mcpBlock = mcpJson && typeof mcpJson.mcpServers === "object" && mcpJson.mcpServers ? mcpJson.mcpServers as Record<string, unknown> : mcpJson;
   for (const name of Object.keys(mcpBlock ?? {})) declared.add(name);
+  const manifest = readJsonObject(join(dir, ".claude-plugin", "plugin.json")) ?? marketplaceEntry;
+  if (manifest?.mcpServers && typeof manifest.mcpServers === "object") for (const name of Object.keys(manifest.mcpServers)) declared.add(name);
+  return { removed, declaredMcpServers: [...declared].filter((name) => NAME.test(name)), mcpServers };
+}
+
+function sanitizeCopiedPlugin(to: string, executionRoot: string, marketplaceEntry?: Record<string, unknown>): { removed: string[]; declaredMcpServers: string[]; mcpServers: Record<string, McpServerSpec> } {
+  const { removed, declaredMcpServers, mcpServers } = pluginMcpDeclarations(to, executionRoot, marketplaceEntry);
   for (const path of STRIPPED_PATHS) {
     const target = join(to, path);
     if (existsSync(target)) {
@@ -215,12 +244,11 @@ export function copySanitizedPlugin(from: string, to: string, marketplaceEntry?:
     }
   }
   const manifestPath = join(to, ".claude-plugin", "plugin.json");
-  const manifest = readJson(manifestPath) ?? (marketplaceEntry ? { ...marketplaceEntry } : null);
+  const manifest = readJsonObject(manifestPath) ?? (marketplaceEntry ? { ...marketplaceEntry } : null);
   if (manifest) {
     delete manifest.source;
     for (const key of STRIPPED_MANIFEST_KEYS) {
       if (key in manifest) {
-        if (key === "mcpServers" && manifest.mcpServers && typeof manifest.mcpServers === "object") for (const name of Object.keys(manifest.mcpServers)) declared.add(name);
         delete manifest[key];
         removed.push(`plugin.json ${key}`);
       }
@@ -228,7 +256,7 @@ export function copySanitizedPlugin(from: string, to: string, marketplaceEntry?:
     mkdirSync(join(to, ".claude-plugin"), { recursive: true });
     writeFileAtomic(manifestPath, JSON.stringify(manifest, null, 2));
   }
-  return { removed, declaredMcpServers: [...declared].filter((name) => NAME.test(name)), mcpServers, hooks: captured.hooks, hookFiles: captured.files };
+  return { removed, declaredMcpServers, mcpServers };
 }
 
 // ── the store ────────────────────────────────────────────────────────────

@@ -16,7 +16,7 @@ import { api, useStore, type Bot } from "@/state/store";
 import type { RoutineRunCardReport } from "@/state/store/model";
 import { ExchangeSheet } from "../BotExchangeChip";
 import { RunActivityState } from "./RunActivityState";
-import { WaitingOnYou } from "../task/WaitingOnYou";
+import { useWaitingNotPinned, WaitingOnYou } from "../task/WaitingOnYou";
 import type { WaitingItem } from "@/lib/use-waiting-cards";
 
 /** #3581: `report` is the chat card's own report (its message's summary),
@@ -95,7 +95,9 @@ function RoutineRunWindowSheet({ run: listed, cardReport, asked, routine, bot, b
     </span>
   );
   // What the run waits on, answerable here as in the conversation.
-  const items = run.redacted ? [] : waiting;
+  // #4204: the chat's composer stays under this window; what its pinned
+  // card holds is drawn there only
+  const items = useWaitingNotPinned(run.redacted ? [] : waiting);
   const pinned = items.length > 0 ? (
     <div data-run-waiting>
       <WaitingOnYou

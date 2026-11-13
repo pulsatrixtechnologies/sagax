@@ -41,7 +41,7 @@ import { cn } from "@/lib/cn";
 import { activityChip, useElementWidth } from "./ActivityWindow";
 import { PanelPage } from "./PanelPage";
 import { activityJobStage, TaskStatusHeader } from "../task/TaskStatusHeader";
-import { WaitingOnYou, waitingKind, type WaitingNote } from "../task/WaitingOnYou";
+import { useWaitingNotPinned, WaitingOnYou, waitingKind, type WaitingNote } from "../task/WaitingOnYou";
 import { StepBoundary, stepFallbackText } from "../MessageBoundary";
 import { ActivityStepGroups } from "../task/ActivityStepGroups";
 import { SubagentList } from "../task/SubagentList";
@@ -156,6 +156,7 @@ export function ActivityDetailBody({ item, detail, error, now, engineName, onSto
   ) : undefined;
 
   const waitingFor = waitingKind(waitingItems);
+  const waitingShown = useWaitingNotPinned(waitingItems);
   const header = (
     <TaskStatusHeader
       title={activityTitle(shown)}
@@ -179,9 +180,10 @@ export function ActivityDetailBody({ item, detail, error, now, engineName, onSto
 
   // At the head, before anything else; never more than half the sheet, so
   // the sub-agents and the steps stay in reach (it scrolls on its own).
-  const waitingBlock = waitingItems.length > 0 ? (
+  // #4204: an ask the pinned card beside it holds is drawn there only
+  const waitingBlock = waitingShown.length > 0 ? (
     <div className="max-h-[50%] shrink-0 overflow-y-auto overscroll-contain px-5 pb-3">
-      <WaitingOnYou items={waitingItems} threadId={threadId ?? shown.threadId ?? ""} botFor={botFor} onCancel={onStop} onOpenThread={onOpenThread} />
+      <WaitingOnYou items={waitingShown} threadId={threadId ?? shown.threadId ?? ""} botFor={botFor} onCancel={onStop} onOpenThread={onOpenThread} />
     </div>
   ) : null;
 

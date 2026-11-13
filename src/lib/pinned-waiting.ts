@@ -193,14 +193,32 @@ export interface PinnedHold {
 
 const NOTHING_HELD: ReadonlySet<string> = new Set();
 
+// #4204: what the pinned cards on screen hold, all views together. A surface
+// beside the chat with no pinned card of its own (the bot panel's task
+// page, its "Waiting on you" head) reads it: the card pinned over the box
+// next to it is the one copy.
+const heldOnScreen = new Map<PinnedHold, ReadonlySet<string>>();
+let onScreen: ReadonlySet<string> = NOTHING_HELD;
+const onScreenListeners = new Set<() => void>();
+
+function showHeld(hold: PinnedHold, ids: ReadonlySet<string>): void {
+  if (ids.size) heldOnScreen.set(hold, ids);
+  else heldOnScreen.delete(hold);
+  const all = new Set<string>();
+  for (const held of heldOnScreen.values()) for (const id of held) all.add(id);
+  onScreen = all.size ? all : NOTHING_HELD;
+  for (const listener of onScreenListeners) listener();
+}
+
 export function createPinnedHold(): PinnedHold {
   let held = NOTHING_HELD;
   const listeners = new Set<() => void>();
-  return {
+  const hold: PinnedHold = {
     get: () => held,
     set: (ids) => {
       if (ids.size === held.size && [...ids].every((id) => held.has(id))) return;
       held = ids.size ? ids : NOTHING_HELD;
+      showHeld(hold, held);
       for (const listener of listeners) listener();
     },
     subscribe: (listener) => {
@@ -208,17 +226,39 @@ export function createPinnedHold(): PinnedHold {
       return () => listeners.delete(listener);
     },
   };
+  return hold;
 }
 
+/** One per view with a composer (the chat, a room, a task's coding window
+ * over the chat, #4204): a window nested in the chat that brings its own
+ * composer provides its own, so it never writes into the chat's hold. */
 export const PinnedHoldContext = createContext<PinnedHold | null>(null);
 
 const noSubscribe = () => () => undefined;
 const nothingHeld = () => NOTHING_HELD;
+const subscribeOnScreen = (listener: () => void) => {
+  onScreenListeners.add(listener);
+  return () => onScreenListeners.delete(listener);
+};
+const getOnScreen = () => onScreen;
 
 /** The messages this view's pinned card holds right now (empty without one). */
 export function usePinnedHeld(): ReadonlySet<string> {
   const hold = use(PinnedHoldContext);
   return useSyncExternalStore(hold?.subscribe ?? noSubscribe, hold?.get ?? nothingHeld, hold?.get ?? nothingHeld);
+}
+
+/** #4204: what a "Waiting on you" head leaves to a pinned card. Inside a
+ * view (a window over the chat, whose composer and pinned card stay below
+ * it, or a window with its own composer), the view's own hold; beside the
+ * chat with no view of its own (the bot panel), every pinned card on
+ * screen. The same set the conversation reads (pinnedHeldIds), never a
+ * second rule. */
+export function usePinnedHeldNearby(): ReadonlySet<string> {
+  const hold = use(PinnedHoldContext);
+  const own = usePinnedHeld();
+  const anywhere = useSyncExternalStore(subscribeOnScreen, getOnScreen, getOnScreen);
+  return hold ? own : anywhere;
 }
 
 /** The composer tells its view what its pinned card holds; nothing once it

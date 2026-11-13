@@ -91,7 +91,8 @@ import { CHAT_UNDER_BAR_PAD, ChatBottomEdge, ChatHeaderBar } from "../ChatHeader
 import { ChatMarkdown } from "../ChatMarkdown";
 import { MessageBoundary } from "../MessageBoundary";
 import { PartyAvatar } from "../PartyAvatar";
-import { WaitingOnYou } from "../task/WaitingOnYou";
+import { useWaitingNotPinned, WaitingOnYou } from "../task/WaitingOnYou";
+import { createPinnedHold, PinnedHoldContext } from "@/lib/pinned-waiting";
 import { ActivityStatusIcon } from "../bot-settings/ActivityCard";
 import { DottedSpinner } from "../bot-settings/CodingSessionRow";
 import { prefersWideBubble } from "@/lib/rich-blocks";
@@ -583,8 +584,16 @@ function ThreadTranscript({ threadId, onGrow, children }: { threadId: string; on
   return <>{children(transcript)}</>;
 }
 
+/** The window over the chat with its own composer, so its own pinned card
+ * (#4204): what that card holds, the window's "Waiting on you" head leaves
+ * out, and the chat's pinned card under the window keeps its own hold. */
+export function CodingChat(props: { target: CodingChatTarget; onClose: () => void }) {
+  const [pinnedHold] = useState(createPinnedHold);
+  return <PinnedHoldContext value={pinnedHold}><CodingChatWindow {...props} /></PinnedHoldContext>;
+}
+
 /** Fetching, polling, Stop and the follow-up around the sheet. */
-export function CodingChat({ target, onClose }: { target: CodingChatTarget; onClose: () => void }) {
+function CodingChatWindow({ target, onClose }: { target: CodingChatTarget; onClose: () => void }) {
   const { state, dispatch } = useStore();
   const [detail, setDetail] = useState<BotActivityDetail | null>(null);
   const [error, setError] = useState(false);
@@ -638,8 +647,10 @@ export function CodingChat({ target, onClose }: { target: CodingChatTarget; onCl
     void load();
   } : undefined;
 
-  const waiting = waitingCards.length > 0 && threadId
-    ? <WaitingOnYou items={waitingCards} threadId={threadId} botFor={botFor} onCancel={stop} />
+  // #4204: what the window's pinned card holds is drawn there only
+  const waitingShown = useWaitingNotPinned(waitingCards);
+  const waiting = waitingShown.length > 0 && threadId
+    ? <WaitingOnYou items={waitingShown} threadId={threadId} botFor={botFor} onCancel={stop} />
     : undefined;
 
   const follow = useCallback(() => setFollowUntil(Date.now() + FOLLOW_MS), []);

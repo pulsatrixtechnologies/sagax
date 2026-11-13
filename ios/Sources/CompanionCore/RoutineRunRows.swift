@@ -14,9 +14,10 @@ import Foundation
 
 public enum RoutineRunRows {
     /// Whether the chat leaves this row out.
-    public static func outOfChat(_ message: Message) -> Bool {
+    /// `counted` (#4201, `counted(_:)`): the first runs a stored count names.
+    public static func outOfChat(_ message: Message, counted: Set<String> = []) -> Bool {
         guard message.kind == .routineRun, let run = message.routineRun, !run.status.isEmpty,
-              !alwaysDrawn(message, run) else { return false }
+              !alwaysDrawn(message, run, counted) else { return false }
         switch run.status {
         case "queued", "running", "waiting", "failed", "missed":
             return false
@@ -30,9 +31,34 @@ public enum RoutineRunRows {
     }
 
     /// A row every filter draws, whatever else it says.
-    private static func alwaysDrawn(_ message: Message, _ run: RoutineRunCard) -> Bool {
-        message.attention != nil || run.goalStatus != nil || run.startedBy == "person"
+    private static func alwaysDrawn(_ message: Message, _ run: RoutineRunCard, _ counted: Set<String>) -> Bool {
+        message.attention != nil || run.goalStatus != nil || startedByPerson(run, counted)
             || run.repeat?.streak == true || run.recovered?.streak == true
             || (run.autoPausedAfter ?? 0) > 0
+    }
+
+    /// #4201: a run the person started. A row with a streak's count that is
+    /// not its summary was stored for a run another bot, the bot's own
+    /// routine or a wake asked for, which older servers took for the person's.
+    /// Nor is the first run such a count names (`counted`).
+    private static func startedByPerson(_ run: RoutineRunCard, _ counted: Set<String>) -> Bool {
+        guard run.startedBy == "person" else { return false }
+        guard let repeatCount = run.repeat else { return run.runId.isEmpty || !counted.contains(run.runId) }
+        return repeatCount.streak
+    }
+
+    /// #4201: the first runs a stored count that is not the streak's summary
+    /// names (`repeat.firstRunId`), taken only from a row stored as the
+    /// person's: a count on a row of another starter can name a run the
+    /// person really started, which stays. The chat leaves them out with
+    /// the count (the desktop's `routineRunsCounted`).
+    public static func counted(_ messages: [Message]) -> Set<String> {
+        var firstRuns = Set<String>()
+        for message in messages where message.kind == .routineRun {
+            if let run = message.routineRun, run.startedBy == "person", let count = run.repeat, !count.streak, let first = count.firstRunId, !first.isEmpty {
+                firstRuns.insert(first)
+            }
+        }
+        return firstRuns
     }
 }

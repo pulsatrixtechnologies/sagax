@@ -20760,6 +20760,9 @@ const routineRequests = new RoutineRequestService({
     return languageOfPerson(bot ? recordedBotOwner(bot) ?? undefined : undefined);
   },
   autoApply: appliesDirectly,
+  // #4201: a run_now applied on its own in a turn the person did not start
+  // (a teammate's hop, the bot's own routine, a wake) is no person's run
+  personTurn: (threadId) => turnStartFor(threadId) === "person",
   cloudReady: cloudRoutineReadiness,
   canPersist: proposalPersistence,
   newPaused: () => newRoutinesPaused(cfg),
@@ -22965,6 +22968,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     },
     inFlight: routineRunInFlight,
     inFlightRun: routineInFlightRun,
+    // #4201: only a turn the person started with their own words
+    personTurn: (threadId) => turnStartFor(threadId) === "person",
     runNow: (routineId, startedBy) => routines?.runNow(routineId, undefined, startedBy),
     standing: (runId) => routines?.runStanding(runId) ?? null,
     describe: (routine, run) => routineRunReceiptFacts(routine, run),

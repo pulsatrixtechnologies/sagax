@@ -11,7 +11,7 @@ const ADMIN = "pr_admin";
 const STRANGER = "pr_stranger";
 
 /** An organization server whose rule is the one POST /api/routines/:id/run applies. */
-function setup(speaker: string | undefined, over: { organization?: boolean; inFlight?: boolean; missingPaths?: () => Array<{ code: string; path: string; line: number; message: string }> } = {}) {
+function setup(speaker: string | undefined, over: { organization?: boolean; inFlight?: boolean; personTurn?: boolean; missingPaths?: () => Array<{ code: string; path: string; line: number; message: string }> } = {}) {
   const runs: string[] = [];
   const startedBy: Array<string | undefined> = [];
   const audits: Array<{ routine: string; run: string; by: string | undefined }> = [];
@@ -20,6 +20,7 @@ function setup(speaker: string | undefined, over: { organization?: boolean; inFl
     ownsThread: (botId, threadId) => botId === "bot-1" && threadId === "t-1",
     routines: () => routines,
     speaker: () => speaker,
+    personTurn: () => over.personTurn ?? true,
     mayRunNow: (principalId, routine) => routineRunNowAllowed({
       organization: over.organization ?? true,
       person: true,
@@ -100,6 +101,18 @@ describe("POST /api/internal/routine-run", () => {
       // A person asked: its card shows in the conversation from the start.
       expect(t.startedBy).toEqual(["person"]);
     }
+  });
+
+  it("#4201: a run another bot, the bot's own routine or a wake asked for is no person's run", async () => {
+    // the turn speaks for the owner, but the owner did not ask for this run
+    const t = setup(OWNER, { personTurn: false });
+    const { sent } = await t.call({ routineId: "r1" });
+    expect(sent[0]?.status).toBe(201);
+    expect(t.startedBy).toEqual([undefined]);
+    expect(t.audits).toEqual([{ routine: "r1", run: "run-r1", by: OWNER }]);
+    // its receipt does not promise a card in the conversation
+    expect(sent[0]?.body.message).toContain("Follow it in Automations > Logs");
+    expect(sent[0]?.body.message).not.toContain("where its card shows");
   });
 
   it("keeps the bot-level rule on a solo server", async () => {

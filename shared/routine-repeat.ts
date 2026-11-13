@@ -179,10 +179,11 @@ type RunRowFacts = {
     wakeTopic?: string | null;
     forPerson?: true | null;
     goalStatus?: string | null;
+    runId?: string;
     startedBy?: string | null;
     problems?: unknown;
     recovered?: { streak?: true | null } | null;
-    repeat?: { streak?: true | null } | null;
+    repeat?: { firstRunId?: string; streak?: true | null } | null;
     autoPausedAfter?: number | null;
   } | null;
 };
@@ -201,9 +202,9 @@ type RunRowFacts = {
  * (and its works again), a team goal's card, and a failure (a passing
  * banner, shared/transient-notices.ts). Every run stays in its routine's
  * run log (Automations). */
-export function routineRunRowOutOfChat(message: RunRowFacts): boolean {
+export function routineRunRowOutOfChat(message: RunRowFacts, counted?: ReadonlySet<string>): boolean {
   const run = message.kind === "routine.run" ? message.routineRun : null;
-  if (!run?.status || alwaysDrawn(message)) return false;
+  if (!run?.status || alwaysDrawn(message, counted)) return false;
   switch (run.status) {
     case "queued":
     case "running":
@@ -221,10 +222,40 @@ export function routineRunRowOutOfChat(message: RunRowFacts): boolean {
 /** A row every filter draws, whatever else it says: items for the person,
  * a team goal's card, a run the person started, the streak's one summary
  * (and its works again), a routine that paused itself. */
-function alwaysDrawn(message: RunRowFacts): boolean {
+function alwaysDrawn(message: RunRowFacts, counted?: ReadonlySet<string>): boolean {
   const run = message.routineRun;
-  return Boolean(message.attention || run?.goalStatus || run?.startedBy === "person" || run?.repeat?.streak || run?.recovered?.streak
+  return Boolean(message.attention || run?.goalStatus || startedByPerson(run, counted) || run?.repeat?.streak || run?.recovered?.streak
     || (run?.autoPausedAfter ?? 0) > 0);
+}
+
+/** #4201: a run the person started. A row that carries a streak's count
+ * without being its summary ("N runs with problems since") is not one: the
+ * server stopped writing that count on a run the person started, and such a
+ * row was stored for a run a teammate, the bot's own routine or a wake asked
+ * for, which servers before took for the person's. Nor is the first run
+ * such a count names (`counted`, routineRunsCounted): that count is how a
+ * later run of the same streak told it. */
+function startedByPerson(run: RunRowFacts["routineRun"], counted?: ReadonlySet<string>): boolean {
+  if (run?.startedBy !== "person") return false;
+  if (run.repeat) return Boolean(run.repeat.streak);
+  return !(run.runId && counted?.has(run.runId));
+}
+
+/** #4201: the first runs that a stored count which is not the streak's
+ * summary names (repeat.firstRunId), taken only from a row stored as the
+ * person's (startedBy "person"): the shape older servers gave a run another
+ * bot, the bot's own routine or a wake asked for. A count on a row of
+ * another starter (one with items for the person) can name a run the
+ * person really started, which stays. The chat leaves those first runs out
+ * with the count (routineRunRowOutOfChat's `counted`). */
+export function routineRunsCounted(messages: readonly RunRowFacts[]): Set<string> {
+  const counted = new Set<string>();
+  for (const message of messages) {
+    const run = message.kind === "routine.run" ? message.routineRun : null;
+    const repeat = run?.startedBy === "person" ? run.repeat : null;
+    if (repeat?.firstRunId && !repeat.streak) counted.add(repeat.firstRunId);
+  }
+  return counted;
 }
 
 /** The wake topics whose result the desktop released through 0.8.92 draws:

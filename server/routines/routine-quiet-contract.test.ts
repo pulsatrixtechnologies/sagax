@@ -357,12 +357,11 @@ describe("a routine that repeats more than once a day reports by its streak (#36
     expect(summary.text).toContain("4 runs with problems since");
     // the person's own run shows its result on its own card
     expect(routineCards(chat.rows).map((row) => row.routineRun.runId)).toEqual([p3.id, byHand.id]);
-    // #3910: in the streak's words, never the #3479 same-problem wording; the
-    // summary stays the one card with the streak flag
+    // #3910, #4201: the count is said once, by the summary card with the
+    // streak flag; the person's own card is their run's result
     const own = chat.rows.find((row) => row.routineRun?.runId === byHand.id)!;
-    expect(own.routineRun.repeat).toMatchObject({ count: 4, anyProblem: true });
-    expect(own.routineRun.repeat.streak).toBeUndefined();
-    expect(own.text).toContain("4 runs with problems since");
+    expect(own.routineRun.repeat).toBeUndefined();
+    expect(own.text).not.toContain("runs with problems since");
     expect(own.text).not.toContain("Same problem");
     // the next good run turns the summary card to works again
     const fixed = await run(routine.id, OK);
@@ -1199,4 +1198,52 @@ describe("#4051: a wake's answer rings only where every desktop in use draws its
       expect(ringsDone(done, h.routines)).toBe(releasedDraws);
     });
   }
+});
+
+describe("#4201: a watch another bot runs reports by its streak, like any routine", () => {
+  const cards = (rows: Row[]) => rows.filter((row) => row.kind === "routine.run");
+  const WATCH = { type: "interval" as const, everyMinutes: 35, anchorAt: start };
+  const BOARD = "RUN_STATUS: partial: the board did not load";
+
+  it("problems once, then twice: nothing; the third in a row: one summary; a good pass resets the count", async () => {
+    const h = manager(start);
+    const routine = h.routines.create({ name: "Board watch", prompt: "Watch the board", botId: "maus-1", enabled: false, schedule: WATCH });
+    const chat = conversation({ routines: h.routines });
+    // a run a teammate asked for (run_routine from a hop): no person behind it
+    const first = await h.run(routine.id, `${BOARD}\nThe board did not load.`);
+    chat.sync(first);
+    const second = await h.run(routine.id, `${BOARD}\nStill no board.`);
+    chat.sync(second);
+    // 'Completed with problems' counts as a problem pass, the same as a failure
+    expect(second.problemRepeat).toMatchObject({ count: 2 });
+    expect(cards(chat.rows)).toHaveLength(0);
+    expect(chat.rang).toEqual([]);
+    const third = await h.run(routine.id, `${BOARD}\nThe board has not loaded for three passes.`);
+    chat.sync(third);
+    expect(cards(chat.rows)).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: third.id, repeat: { count: 3, streak: true } });
+    // works again: the same card says so, nothing new
+    const good = await h.run(routine.id, "The board loads again.");
+    chat.sync(good);
+    expect(cards(chat.rows)).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun.recovered).toMatchObject({ streak: true });
+    // the count starts over: one and two problem passes say nothing again
+    chat.sync(await h.run(routine.id, `${BOARD}\nThe board did not load.`));
+    chat.sync(await h.run(routine.id, `${BOARD}\nStill no board.`));
+    expect(cards(chat.rows)).toHaveLength(1);
+  });
+
+  it("a run the person started keeps its own card, without a streak's count", async () => {
+    const h = manager(start);
+    const routine = h.routines.create({ name: "Board watch", prompt: "Watch the board", botId: "maus-1", enabled: false, schedule: WATCH });
+    const chat = conversation({ routines: h.routines });
+    chat.sync(await h.run(routine.id, `${BOARD}\nThe board did not load.`));
+    const mine = await h.run(routine.id, `${BOARD}\nStill no board.`, "person");
+    chat.sync(mine);
+    expect(mine.problemRepeat).toMatchObject({ count: 2 });
+    expect(cards(chat.rows)).toHaveLength(1);
+    expect(chat.rows[0]!.routineRun).toMatchObject({ runId: mine.id, startedBy: "person" });
+    expect(chat.rows[0]!.routineRun.repeat).toBeUndefined();
+    expect(routineRunRowOutOfChat({ kind: "routine.run", routineRun: chat.rows[0]!.routineRun })).toBe(false);
+  });
 });

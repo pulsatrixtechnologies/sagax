@@ -75,19 +75,22 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         public var streak: Bool
         /// #3910: the runs in a row had problems, not one same problem.
         public var anyProblem: Bool
+        /// #4201: the run the count started from (the desktop's `firstRunId`).
+        public var firstRunId: String?
 
         /// How the card says it (the desktop's `routineRepeatText`).
         public enum Wording: Sendable { case sameProblem, problemStreak }
         public var wording: Wording { streak || anyProblem ? .problemStreak : .sameProblem }
 
-        public init(count: Int, since: Double, streak: Bool = false, anyProblem: Bool = false) {
+        public init(count: Int, since: Double, streak: Bool = false, anyProblem: Bool = false, firstRunId: String? = nil) {
             self.count = count
             self.since = since
             self.streak = streak
             self.anyProblem = anyProblem
+            self.firstRunId = firstRunId
         }
 
-        private enum CodingKeys: String, CodingKey { case count, since, streak, anyProblem }
+        private enum CodingKeys: String, CodingKey { case count, since, streak, anyProblem, firstRunId }
 
         public init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -95,6 +98,7 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
             since = try c.decode(Double.self, forKey: .since)
             streak = (try? c.decodeIfPresent(Bool.self, forKey: .streak)).flatMap { $0 } ?? false
             anyProblem = (try? c.decodeIfPresent(Bool.self, forKey: .anyProblem)).flatMap { $0 } ?? false
+            firstRunId = (try? c.decodeIfPresent(String.self, forKey: .firstRunId)).flatMap { $0 }
         }
     }
 

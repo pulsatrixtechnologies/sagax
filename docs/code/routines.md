@@ -202,6 +202,21 @@ The chat (desktop `MessagesList`, a group's `Transcript`, receipts) leaves
 out the rows of runs stored before (`routineRunRowOutOfChat`); they stay in
 the routine's run log.
 
+A run the person started (#4201): only a turn the person started with their
+own words (`turnStartOf` "person") makes a run theirs. A `run_routine` call
+or a manage-routine `run_now` that applies on its own in a turn a teammate,
+the bot's own routine or a wake started speaks for the person but is no
+person's run: it reports by its routine's streak like a scheduled one
+(`personTurn` in `server/routes/routine-run-internal.ts` and
+`RoutineRequestService`). A completed run with problems counts in the streak
+exactly like a failed one. The person's own card never carries the streak's
+count ("N runs with problems since"): the count is said once, by the streak's
+summary card. A row stored with that count and no streak flag was a run
+another bot asked for that older servers took for the person's, and is left
+out of the chat, with the first run that count names (`repeat.firstRunId`,
+`routineRunsCounted`; iOS `RoutineRunRows.counted`). The "Asked by" line names a bot once, whether a row keeps its
+id or its name alone (`sameIncomingParty` in `src/lib/incoming-line.ts`).
+
 One row gate (#3990): every writer of a run's row asks
 `routineRunMayWriteRow` (`server/routines/routine-report.ts`) whether the
 run may put a row in the conversation now, or keep the one it has: the run's

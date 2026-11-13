@@ -500,6 +500,12 @@ export interface RoutineRequestServiceOptions {
   /** Whether a submitted change applies without a person, and why
    * (server/direct-apply.ts). Server-owned, never request input. */
   autoApply?: DirectApplyCheck;
+  /** #4201: whether the person started this conversation's turn with their
+   * own words (custom-rules turnStartOf "person"). A run_now that applies on
+   * its own in a turn a teammate, the bot's own routine or a wake started is
+   * no person's run: it reports by its routine's streak. A run_now the
+   * person confirms on its card is theirs. Absent: every turn is the person's. */
+  personTurn?: (threadId: string) => boolean;
   /** Harness-owned readiness check for proposals that would execute in cloud. */
   cloudReady?: (botId: string) => Promise<{ ready: boolean; reason?: string }>;
   /** Revalidates conversation ownership and capacity synchronously, directly
@@ -1848,6 +1854,7 @@ export class RoutineRequestService {
   private readonly canPersist?: RoutineRequestServiceOptions["canPersist"];
   private readonly validateTarget?: RoutineRequestServiceOptions["validateTarget"];
   private readonly autoApply?: RoutineRequestServiceOptions["autoApply"];
+  private readonly personTurn?: RoutineRequestServiceOptions["personTurn"];
   private readonly newPaused: () => boolean;
   private readonly bindTrigger?: RoutineRequestServiceOptions["bindTrigger"];
   private readonly rotateTrigger?: RoutineRequestServiceOptions["rotateTrigger"];
@@ -1863,6 +1870,7 @@ export class RoutineRequestService {
     this.canPersist = options.canPersist;
     this.validateTarget = options.validateTarget;
     this.autoApply = options.autoApply;
+    this.personTurn = options.personTurn;
     // Same default as config.ts DEFAULT_NEW_ROUTINES_PAUSED.
     this.newPaused = options.newPaused ?? (() => false);
     this.bindTrigger = options.bindTrigger;
@@ -1968,7 +1976,8 @@ export class RoutineRequestService {
     // idempotent commit path without exposing a pending confirmation.
     let result: ResolveRoutineRequestResult;
     try {
-      result = this.resolve({ botId, threadId, requestId, behavior: "allow" });
+      const background = this.personTurn ? !this.personTurn(threadId) : false;
+      result = this.resolve({ botId, threadId, requestId, behavior: "allow", ...(background ? { background } : {}) });
     } catch (error) {
       result = { claimed: true, state: "invalid", error: error instanceof Error ? error.message : String(error), status: error instanceof RoutineRequestError ? error.status : 400 };
     }
@@ -2171,6 +2180,8 @@ export class RoutineRequestService {
     behavior: string | undefined;
     /** Slice 6: the principal who answered the card (runAs of what it writes). */
     actorPrincipalId?: string;
+    /** #4201: applied on its own in a turn the person did not start. */
+    background?: boolean;
   }): ResolveRoutineRequestResult {
     const message = this.store
       .messagesFor(args.threadId)
@@ -2273,7 +2284,7 @@ export class RoutineRequestService {
         const refusal = this.validateTarget(payload.botId, payload.operation.forBot);
         if (refusal) throw new RoutineRequestError(refusal, 404, { terminal: true });
       }
-      const resultId = this.apply(payload, message.id, fingerprint, args.actorPrincipalId);
+      const resultId = this.apply(payload, message.id, fingerprint, args.actorPrincipalId, args.background === true);
       return this.settleApplied(args.threadId, message.id, card, payload, resultId);
     } catch (error) {
       const status = error instanceof RoutineRequestError ? error.status : 400;
@@ -2372,7 +2383,7 @@ export class RoutineRequestService {
     }
   }
 
-  private apply(payload: RoutineRequestCardData, messageId: string, fingerprint: string, actorPrincipalId?: string): string {
+  private apply(payload: RoutineRequestCardData, messageId: string, fingerprint: string, actorPrincipalId?: string, background = false): string {
     const meta = actorPrincipalId ? { actorPrincipalId } : undefined;
     const operation = payload.operation;
     const confirmationAt = this.now();
@@ -2439,7 +2450,7 @@ export class RoutineRequestService {
           action: "run_now",
           fingerprintVersion: ROUTINE_REQUEST_FINGERPRINT_VERSION,
           fingerprint,
-        });
+        }, background ? null : "person");
         if (!run) throw new RoutineRequestError("That routine no longer exists", 404);
         return run.id;
       }

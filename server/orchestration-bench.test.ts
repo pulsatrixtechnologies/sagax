@@ -154,7 +154,7 @@ describe("orchestration bench (cause C)", () => {
     });
     await scenario("S10b run_routine while a run is in flight", async () => {
       const route = createRoutineRunInternalRoutes({
-        ownsThread: () => true, routines: () => [{ id: "r1", botId: "dispatcher" }], speaker: () => undefined, mayRunNow: () => true,
+        ownsThread: () => true, routines: () => [{ id: "r1", botId: "dispatcher" }], speaker: () => undefined, personTurn: () => true, mayRunNow: () => true,
         inFlight: () => true, inFlightRun: () => ({ id: "run-1" }), runNow: () => ({ id: "run-2" }), audit: () => {},
       } as Parameters<typeof createRoutineRunInternalRoutes>[0]);
       let status = 0; let body: Record<string, unknown> = {};

@@ -16,7 +16,7 @@ import { collapseBotExchanges } from "@/lib/bot-exchange";
 import { foldCollapsedEntry, voiceCallPlan } from "@/lib/voice-call-transcript";
 import { withoutDeadThreadChips } from "@/lib/dead-thread-chips";
 import { isTransientChatNotice } from "../../../shared/transient-notices";
-import { routineRunRowOutOfChat } from "../../../shared/routine-repeat";
+import { routineRunRowOutOfChat, routineRunsCounted } from "../../../shared/routine-repeat";
 import { BotConversationLine, conversationAnchors, splitLeadingConversations, visibleConversationRows } from "../BotConversations";
 import { GotoGroupChip } from "../GotoGroupChip";
 import { collapseGotoLines, gotoGroupFromConversations, gotoTargetOf, silentChatItem, unifiedGotoTargetOf } from "@/lib/goto-lines";
@@ -134,6 +134,8 @@ export const MessagesList = memo(function MessagesList({
     // #3438: one card per request: a hand-off's question card and the parked
     // work's input request ask the same thing; the card is the one drawn
     const drawnElsewhere = inputRequestsDrawnElsewhere(transcript);
+    // #4201: the first run a stored count names leaves with the count
+    const counted = routineRunsCounted(transcript);
     const shown = withoutDeadThreadChips(messages, owners).filter((message) =>
       !repeats.has(message.id) && !drawnElsewhere.has(message.id) && !held.has(message.id) && !isTurnStoppedNotice(message) && !isHiddenStatusActivity(message)
       // a failed routine run and a routine's access card pass as a banner
@@ -142,7 +144,7 @@ export const MessagesList = memo(function MessagesList({
       // #3990: a routine run's row that only says how it went (with
       // problems, works again, nothing to report), stored ones included,
       // stays in the routine's run log, never the chat
-      && !routineRunRowOutOfChat(message));
+      && !routineRunRowOutOfChat(message, counted));
     const collapsed = collapseBotExchanges(shown, {
       selfBotId: botId,
       self: { id: botId, name: botName, color: selfColor },

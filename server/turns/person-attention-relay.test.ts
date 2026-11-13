@@ -13,7 +13,7 @@ import { createRoutineRunLateRow } from "../index-leaves/syncRoutineRunToSource.
 import { personAttention } from "../../shared/person-attention.ts";
 import { withoutRunMarkersIn } from "../../shared/routine-result.ts";
 import { routineRunRowOutOfChat } from "../../shared/routine-repeat.ts";
-import { askedWords, mirrorBackgroundReply, mirrorLateRunReply, RELAY_GROUP_MS, RELAY_RECENT_ROWS, RELAY_TEXT_MAX, relayPersonAttention, type AttentionBot, type AttentionRelayDeps } from "./person-attention-relay.ts";
+import { askedWords, mirrorBackgroundReply, mirrorLateRunReply, RELAY_GROUP_MS, RELAY_RECENT_ROWS, RELAY_TEXT_MAX, relayPersonAttention, turnAsk, type AttentionBot, type AttentionRelayDeps } from "./person-attention-relay.ts";
 
 const ATLAS: AttentionBot = { id: "bot-atlas", name: "Atlas" };
 const REPORT = "- [HUMAIN] **100201** (board 1) : decide which client it belongs to.\n- [HUMAIN] **100202** : set it to Completed by hand.\n\nNo writes.";
@@ -627,5 +627,25 @@ describe("#3503: what two bots of the same person say to each other stays in the
     w.say("client", "Le lot est prêt.");
     expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "client", turnId: "turn-1", ok: true }, w.deps)).toBe(true);
     expect(w.threads.get("main")!.at(-1)).toMatchObject({ relayVia: "mcp", text: "Le lot est prêt." });
+  });
+});
+
+describe("turnAsk (#4201: a bot that asked is named by its id)", () => {
+  const opener = { botId: "bot-nova", name: "Nova" };
+  const row = (extra: Partial<WireMessage>) => ({ id: "ask", at: 1, role: "user", kind: "text", text: "Your part?", ...extra }) as WireMessage;
+
+  it("writes the opening bot's id when the request carries its name alone", () => {
+    expect(turnAsk([row({ sender: { name: "Nova" } })], undefined, opener)).toEqual({ text: "Your part?", by: "Nova", botId: "bot-nova" });
+    expect(turnAsk([row({ role: "bot", from: { botId: "", name: "Nova", color: "" } })], undefined, opener)).toEqual({ text: "Your part?", by: "Nova", botId: "bot-nova" });
+  });
+
+  it("keeps a person or an AI client that asked in a bot's thread as a name", () => {
+    expect(turnAsk([row({ sender: { name: "Claude Code" } })], undefined, opener)).toEqual({ text: "Your part?", by: "Claude Code" });
+    expect(turnAsk([row({ sender: { name: "Claude Code" } })], undefined, { botId: "agent:claude-code", name: "Claude Code" })).toEqual({ text: "Your part?", by: "Claude Code" });
+  });
+
+  it("keeps the id a bot's own row carries and the opener's when no one is named", () => {
+    expect(turnAsk([row({ role: "bot", from: { botId: "orion", name: "Orion", color: "" } })], undefined, opener)).toEqual({ text: "Your part?", by: "Orion", botId: "orion" });
+    expect(turnAsk([row({})], undefined, opener)).toEqual({ text: "Your part?", by: "Nova", botId: "bot-nova" });
   });
 });

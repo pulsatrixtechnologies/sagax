@@ -177,7 +177,12 @@ export function turnAsk(messages: readonly WireMessage[], turnId: string | undef
     const text = asked && typeof message.text === "string" ? askedWords(message.text).replace(/\s+/g, " ").trim() : "";
     if (!text) continue;
     const by = (message.from?.name || message.sender?.name || opener?.name || "").trim();
-    const botId = message.from?.botId || (message.from || message.sender ? undefined : opener?.botId);
+    // #4201: a bot that asked is written by its id, so a client never names
+    // it twice (once by id, once by name): the row's own id, else the id of
+    // the bot that opened this thread when the asker is that bot by name
+    const openerBot = opener?.botId && !opener.botId.startsWith("agent:") ? opener.botId : undefined;
+    const sameAsOpener = Boolean(by && opener?.name && by.toLocaleLowerCase() === opener.name.trim().toLocaleLowerCase());
+    const botId = message.from?.botId || (message.from || message.sender ? (sameAsOpener ? openerBot : undefined) : opener?.botId);
     return { text: text.length > RELAY_ASK_MAX ? `${text.slice(0, RELAY_ASK_MAX - 1).trimEnd()}…` : text, ...(by ? { by } : {}), ...(botId ? { botId } : {}) };
   }
   return undefined;

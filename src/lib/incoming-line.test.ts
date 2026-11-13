@@ -100,6 +100,22 @@ describe("collapseIncomingLines", () => {
     expect(line.entries[0]!.reply).toBe("Three duplicates.");
   });
 
+  it("#4201: never names the same bot twice, by its id on one row and its name alone on another", () => {
+    // the copy of the reply kept only who asked by name: it is that request's answer
+    const rows = [receipt(0, "b"), copy("c0", { by: "B" }, "teammate")];
+    const line = fold(rows)[0] as { kind: string; entries: Parameters<typeof incomingParties>[0] };
+    expect(line.kind).toBe("incomingLine");
+    expect(line.entries).toHaveLength(1);
+    // two requests of one bot, by id then by name: one name on the line
+    const two = fold([copy("c1", { botId: "b", by: "B" }, "teammate"), copy("c2", { by: "B" }, "teammate")])[0] as { entries: Parameters<typeof incomingParties>[0] };
+    const parties = incomingParties(two.entries);
+    expect(parties.map((party) => party.botId)).toEqual(["b"]);
+    expect(incomingTail(two.entries, parties.length)).toEqual({ count: 2 });
+    // two bots that share no id stay two names
+    const others = fold([copy("c3", { botId: "b", by: "B" }, "teammate"), copy("c4", { botId: "c", by: "C" }, "teammate")])[0] as { entries: Parameters<typeof incomingParties>[0] };
+    expect(incomingParties(others.entries)).toHaveLength(2);
+  });
+
   it("passes over an answer drawn in its receipt's line, and breaks on the person's words", () => {
     const answer = { id: "a0", role: "bot", kind: "activity", at, roomRequest: { id: "h0", phase: "result" }, tool: { name: "replied", ok: true }, threadRef: { botId: SELF, threadId: "w0", title: "Work" } } as Message;
     const person = { id: "u", role: "user", kind: "text", at, text: "Hi" } as Message;

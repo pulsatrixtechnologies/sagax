@@ -34,7 +34,7 @@ import { ClusterLabel } from "../ClusterLabel";
 import { isCancelledTranscriptRow } from "../../../shared/client-cancel";
 import { roomRetryRequest } from "@/lib/room-retry";
 import { isTransientChatNotice } from "../../../shared/transient-notices";
-import { routineRunRowOutOfChat } from "../../../shared/routine-repeat";
+import { routineRunRowOutOfChat, routineRunsCounted } from "../../../shared/routine-repeat";
 import { unreadMessageIds } from "@/lib/unread-divider";
 import { NewMessagesDivider } from "../NewMessagesDivider";
 import { showToolCallsEnabled } from "@/lib/feature-flags";
@@ -119,12 +119,14 @@ export const Transcript = memo(function Transcript({
     // A digest that draws nothing is no row either, so the reply after it
     // still opens its speaker's cluster and carries the name.
     const repeats = repeatedFailureIds(messages);
+    // #4201: the first run a stored count names leaves with the count
+    const counted = routineRunsCounted(transcript);
     const visible = withoutDeadThreadChips(messages, owners).filter((message) =>
       !repeats.has(message.id) &&
       !held.has(message.id) &&
       !isTransientChatNotice(message) &&
       // #3990: a run's row that only says how it went stays in the run log
-      !routineRunRowOutOfChat(message) &&
+      !routineRunRowOutOfChat(message, counted) &&
       !folds.hiddenIds.has(message.id) &&
       (message.kind !== "digest" || showDigests) &&
       // one conversation (#2081): with threads off an opened thread's receipt

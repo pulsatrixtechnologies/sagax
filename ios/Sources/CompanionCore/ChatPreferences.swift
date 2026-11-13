@@ -478,6 +478,8 @@ public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showTh
     // #3581: requests received, folded per burst into one names line
     let incomingReplies = IncomingLines.replies(messages)
     let foldedReplies = Set(incomingReplies.values.map(\.id))
+    // #4201: the first run a stored count names leaves with the count
+    let countedRuns = RoutineRunRows.counted(messages)
 
     var rows: [TranscriptRow] = []
     var run: [Message] = []
@@ -525,7 +527,7 @@ public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showTh
         }
         if isHiddenStatusNotice(message) || isHiddenReceipt(message) { continue }
         // #4066: the routine run rows the desktop chat leaves out
-        if RoutineRunRows.outOfChat(message) { continue }
+        if RoutineRunRows.outOfChat(message, counted: countedRuns) { continue }
         // #3581: a reply to a request received is read behind the asker's
         // name; the request itself joins its burst's names line, whatever
         // the threads setting (it is the trace that the bot worked for a teammate)

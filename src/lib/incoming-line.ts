@@ -180,12 +180,28 @@ export function relayAskEntry(message: Message): IncomingEntry | null {
   };
 }
 
+/** #4201: whether two entries name the same party. A bot is keyed by its
+ * id, else by its name: a row stored with the name alone (a copy whose
+ * request kept only who asked) is the same bot as the row with its id and
+ * that name, never a second name on the line. An AI client and a phone
+ * line match by key only. */
+export function sameIncomingParty(
+  a: Pick<IncomingEntry, "key" | "botId" | "name" | "agent" | "phone">,
+  b: Pick<IncomingEntry, "key" | "botId" | "name" | "agent" | "phone">,
+): boolean {
+  if (a.key === b.key) return true;
+  if (a.agent || b.agent || a.phone || b.phone) return false;
+  if (a.botId && b.botId) return a.botId === b.botId;
+  const name = (party: Pick<IncomingEntry, "name">) => party.name?.trim().toLocaleLowerCase() ?? "";
+  return Boolean(name(a) && name(a) === name(b));
+}
+
 /** A teammate's copy right under the receipt of the very request it answers
  * is that request's answer, not a second request. */
 function answersReceipt(entry: IncomingEntry, previous: IncomingEntry | undefined): boolean {
   return Boolean(previous && previous.threadId && previous.reply === undefined && !previous.trace
     && previous.verb === "askedBy" && entry.verb === "askedBy" && !entry.agent && !entry.threadId
-    && previous.key === entry.key);
+    && sameIncomingParty(previous, entry));
 }
 
 type AnyItem = { kind: string; message?: Message; messages?: readonly Message[] };
@@ -297,15 +313,18 @@ export interface IncomingParty {
   entries: IncomingEntry[];
 }
 
-/** One name per party, in the order they first asked. */
+/** One name per party, in the order they first asked (the same bot by id
+ * or by name is one party, #4201). */
 export function incomingParties(entries: readonly IncomingEntry[]): IncomingParty[] {
   const parties: IncomingParty[] = [];
   for (const entry of entries) {
-    const known = parties.find((party) => party.key === entry.key);
+    const known = parties.find((party) => sameIncomingParty(party, entry));
     if (known) {
       known.entries.unshift(entry);
       known.name ??= entry.name;
       known.color ??= entry.color;
+      // #4201: the bot's id, when this row is the one that has it
+      if (!known.botId && entry.botId) known.botId = entry.botId;
       continue;
     }
     parties.push({

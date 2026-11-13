@@ -1510,9 +1510,7 @@
       "file": "src/components/ios-desktop-wording.test.ts",
       "test": "iPad desktop shell wording > Answer the approval above, or write something else: it stays open = composer.placeholder.approval",
       "platforms": [
-        "macos-latest",
-        "ubuntu-latest",
-        "windows-latest"
+        "macos-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
@@ -3716,16 +3714,6 @@
         "macos-latest",
         "ubuntu-latest",
         "windows-latest"
-      ],
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "server/org/org-member-api.e2e.test.ts",
-      "test": "Perspicax AI clients: the Sagax member API > M5: the admin API refuses an AI client's assertion; the audit names the client and never the text",
-      "platforms": [
-        "ubuntu-latest"
       ],
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",

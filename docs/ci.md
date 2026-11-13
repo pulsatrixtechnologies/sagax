@@ -303,10 +303,13 @@ How a run decides (`scripts/testing/known-failures.mjs`):
    compile is not a flaky test. A Swift job that got no runner opens nothing.
    A later run on main whose Swift step passes closes that issue (#4102).
 
-The Linux package smoke installs its tools with apt retries
+Every Linux package job (the package smoke here, `package-linux.yml` and
+the release's Linux package) installs its tools through
+`scripts/ci/install-linux-smoke-tools.sh`: apt retries
 (`Acquire::Retries=3`), each attempt bounded by `timeout`, three attempts
-with a pause, and a 13 minute cap on the step: a resolver that stops
-answering cannot take the job's 25 minutes (#3672).
+with a pause, and a 13 minute cap on the step: one failed fetch does not end
+the job, and a resolver that stops answering cannot take the job's 25
+minutes (#3672).
 
 A red quick check does not hide the tests (#3493). The vitest jobs and the
 `known failures` job need `static` only for its selection: they run whenever

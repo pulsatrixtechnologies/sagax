@@ -112,13 +112,27 @@ describe("CI concurrency", () => {
     expect(workflow.jobs["swift-package"].if).toContain("needs.static.outputs.swift == 'true'");
   });
 
-  it("retries the package smoke's tool install and bounds it (#3672)", () => {
-    const install = workflow.jobs["package-linux"].steps.find((step: { name?: string }) => step.name === "Install package validation and native smoke tools");
-    expect(install["timeout-minutes"]).toBeLessThan(workflow.jobs["package-linux"]["timeout-minutes"]);
-    expect(install.run).toContain("Acquire::Retries=3");
-    expect(install.run).toContain("for attempt in 1 2 3; do");
-    expect(install.run).toMatch(/timeout \d+ sudo apt-get "\$\{apt\[@\]\}" update/);
-    expect(install.run).toMatch(/timeout \d+ sudo apt-get "\$\{apt\[@\]\}" install -y/);
+  it("retries the package smoke's tool install and bounds it, in every Linux package job (#3672)", () => {
+    const script = readFileSync(new URL("./ci/install-linux-smoke-tools.sh", import.meta.url), "utf8");
+    expect(script).toContain("Acquire::Retries=3");
+    expect(script).toContain("for attempt in 1 2 3; do");
+    expect(script).toMatch(/timeout \d+ sudo apt-get "\$\{apt\[@\]\}" update/);
+    expect(script).toMatch(/timeout \d+ sudo apt-get "\$\{apt\[@\]\}" install -y/);
+    // A release or a manual package build fetches the same packages: one
+    // failed fetch must not end those jobs either.
+    let jobs = 0;
+    for (const name of ["ci.yml", "package-linux.yml", "release.yml"]) {
+      const flow = parse(readFileSync(new URL(`../.github/workflows/${name}`, import.meta.url), "utf8"));
+      for (const [id, job] of Object.entries(flow.jobs as Record<string, { "timeout-minutes"?: number; steps?: { name?: string; run?: string; "timeout-minutes"?: number }[] }>)) {
+        for (const step of job.steps ?? []) {
+          if (!/\bapt-get\b[\s\S]*\bxdotool\b/.test(step.run ?? "") && step.name !== "Install package validation and native smoke tools") continue;
+          jobs += 1;
+          expect(step.run, `${name} ${id}`).toBe("bash scripts/ci/install-linux-smoke-tools.sh");
+          expect(step["timeout-minutes"], `${name} ${id}`).toBeLessThan(job["timeout-minutes"] ?? 360);
+        }
+      }
+    }
+    expect(jobs).toBe(3);
   });
 
   it("keeps each PR to one macOS job unless native code changed", () => {

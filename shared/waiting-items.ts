@@ -20,13 +20,7 @@
 //
 // Pure: no store, no clock (the age is computed from `now`).
 import type { InboxApproval } from "./approvals-inbox.ts";
-
-/** What waits: a permission card, a question card, a question in words
- * (answered with the person's own words), a proposal or offer card. */
-export type WaitingKind = "approval" | "question" | "request" | "proposal";
-
-/** How it is answered: allow or deny, one of its options, or words. */
-export type WaitingAnswerWith = "decision" | "option" | "text";
+import type { ServedWaitingItem, WaitingItem } from "./waiting-item.ts";
 
 /** The id prefix of a question in words (a "needs you" card or an input
  * request row): `attention:<messageId>`, as Today addresses it. */
@@ -34,47 +28,7 @@ export const REQUEST_ID_PREFIX = "attention:";
 /** The id prefix of a proactive offer: `proactive:<proposalId>`. */
 export const OFFER_ID_PREFIX = "proactive:";
 
-export interface WaitingItem {
-  /** What answers it: a card's request id, `attention:<messageId>` for a
-   * question in words, `proactive:<proposalId>` for an offer. */
-  id: string;
-  kind: WaitingKind;
-  /** The bot whose conversation holds it. */
-  botId: string;
-  botName: string;
-  /** The conversation (thread) it sits in. */
-  threadId: string;
-  messageId?: string;
-  /** When it was raised (ms). */
-  at: number;
-  /** How long it has waited (ms), at the time the list was read. */
-  ageMs: number;
-  /** One line naming it. */
-  title: string;
-  /** Its full text, every question and line it carries. */
-  text: string;
-  /** The options it offers, in order (empty when it takes words only). */
-  options: string[];
-  answerWith: WaitingAnswerWith;
-  /** It also takes the person's own words. */
-  freeText: boolean;
-  /** Every item can be skipped: closed without an answer. */
-  skippable: true;
-  /** A question in words: the thread and bot the answer goes to. */
-  workThreadId?: string;
-  workBotId?: string;
-  /** An offer: its proposal id (POST /api/bots/:botId/proactive/:id). */
-  proactiveId?: string;
-  /** The conversation's own title, when it has one. */
-  threadTitle?: string;
-  confidential?: boolean;
-}
-
-/** #3543: an item as the pinned row receives it (GET /api/approvals?waiting=1):
- * the item with its message exactly as the conversation shows it, so the
- * pinned row draws the server's own items with the conversation's card
- * components, even in a conversation the app has not loaded. */
-export type ServedWaitingItem = WaitingItem & { message?: unknown };
+export type { ServedWaitingItem, WaitingAnswerWith, WaitingItem, WaitingKind } from "./waiting-item.ts";
 
 /** The served items: each with the message of the Today row it was read
  * from, when the viewer may decide it. */

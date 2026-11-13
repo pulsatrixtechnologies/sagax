@@ -9,7 +9,7 @@
 // Never an id on screen: `key`, `threadId` and `requestId` route answers
 // and selection, nothing more.
 import type { ApprovalRisk } from "./approval-describe.ts";
-import type { ServedWaitingItem } from "./waiting-items.ts";
+import type { ServedWaitingItem } from "./waiting-item.ts";
 
 /** Whose card it is, from the viewer's side. */
 export type InboxScope = "mine" | "org" | "team";

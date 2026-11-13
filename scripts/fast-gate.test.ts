@@ -316,6 +316,27 @@ describe("fast-gate.sh", () => {
     expect(touches("server/drivers/agents-catalog-goldens/x.json")).toBe(false);
   });
 
+  // #4164: two type imports closed cycles in shared/ and its cycle ceiling
+  // went red on main unseen; a lot that touches shared/ runs that case.
+  it("runs the cycle ceiling of shared/ when a file of shared/ changes", () => {
+    write(".fast-gate", readFileSync(resolve(__dirname, "..", ".fast-gate"), "utf8"));
+    const touches = (path: string) => {
+      git("checkout", "-q", "--", ".");
+      git("clean", "-qfd", "--", "server", "src", "shared");
+      write(path, "export {};\n");
+      rmSync(join(fakeBin, "calls"), { force: true });
+      const { code, out } = gate("--base", "main", "--only", "extra-shared-cycles");
+      expect(code, out).toBe(0);
+      let calls = "";
+      try { calls = readFileSync(join(fakeBin, "calls"), "utf8"); } catch { /* no call */ }
+      return calls.includes("vitest run --reporter=dot scripts/testing/madge-cycles.guard.test.ts -t shared stays at its ceiling");
+    };
+    expect(touches("shared/waiting-item.ts")).toBe(true);
+    expect(touches("shared/sub/page.tsx")).toBe(true);
+    expect(touches("src/b.ts")).toBe(false);
+    expect(touches("server/x.ts")).toBe(false);
+  });
+
   // #3509: the guard tests ran only in verify:merge, which authors skipped,
   // so a route without a policy row and three unread locale keys kept main
   // red. The fast gate runs every guard test on every lot.

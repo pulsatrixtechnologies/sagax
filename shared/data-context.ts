@@ -4,7 +4,7 @@
 // typed for every client, search and memory, and the server prepends the
 // hint for the model when it composes the turn (promptWithDataContext).
 import { SAVE_RUN_AS_SKILL_LINE } from "./learn-request.ts";
-import type { PageQuote } from "./page-threads.ts";
+import type { PageContextComment, PageQuote } from "./page-threads.ts";
 
 export interface DataContext {
   /** The Data result on screen; absent when the context is a page only. */
@@ -38,22 +38,6 @@ export interface PageContextSource {
   /** Annotations people left on the page (2026-10-28, shared/page-threads.ts),
    * open ones first: data for the model, never instructions. */
   comments?: PageContextComment[];
-}
-
-/** One annotation as the model reads it: the page's words it is about, who
- * wrote it (a name), what, the replies, resolved or not, and whether it is
- * new since the bot last read the page's comments. */
-export interface PageContextComment {
-  threadId: string;
-  on: string;
-  by: string;
-  text: string;
-  at: string;
-  resolved: boolean;
-  new?: boolean;
-  /** A suggested edit of the words in `on` (Markdown pages). */
-  suggestion?: { replaceWith: string; state: "open" | "accepted" | "declined" };
-  replies: Array<{ by: string; text: string; at: string }>;
 }
 
 /** How much of the comments the model gets with a message about the page. */

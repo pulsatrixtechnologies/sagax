@@ -1,4 +1,7 @@
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+
+import { DATA_DIR } from "../config.ts";
 
 import { customServerGate, gateQueryTools, gateServer, hasOwnResultBudget, mcpStdioServer, resultBudget, serverResultBudget } from "./mcp-gate-config.ts";
 
@@ -22,6 +25,15 @@ describe("MCP scope configuration", () => {
     expect(() => gateServer({ ...input, server: {}, toolScope: { allow: [] } })).toThrow(/MCP server/i);
   });
 
+  it("starts every gate on the server's compile cache, outside its private record (#3561)", () => {
+    const cache = join(DATA_DIR, "cache", "node-compile");
+    expect(gateServer({ ...input, toolScope: { allow: [] } })!.env.NODE_COMPILE_CACHE).toBe(cache);
+    const record = `SAGAX_GATE_CONFIG_${"b".repeat(64)}`;
+    const shared = gateServer({ ...input, toolScope: { allow: [] }, configEnvName: record })!;
+    expect(shared.env.NODE_COMPILE_CACHE).toBe(cache);
+    expect(JSON.parse(shared.env[record]!).NODE_COMPILE_CACHE).toBeUndefined();
+  });
+
   it("mounts a withhold list for agents-preferred names without adding __ (#2189)", () => {
     const gated = gateServer({ ...input, withhold: ["send_prompt", "api_search", "send_prompt", "cw__x"] });
     expect(gated).not.toBeNull();
@@ -35,7 +47,7 @@ describe("tool directory configuration", () => {
     const record = `SAGAX_GATE_CONFIG_${"a".repeat(64)}`;
     const searched = gateServer({ ...input, search: { pinned: ["identity_switch"] }, configEnvName: record })!;
     expect(searched.args.slice(1)).toEqual(["--config-env", record]);
-    expect(Object.keys(searched.env)).toEqual([record]);
+    expect(Object.keys(searched.env).sort()).toEqual(["NODE_COMPILE_CACHE", record]);
     const settings = JSON.parse(searched.env[record]!);
     expect(JSON.parse(settings.SAGAX_GATE_SEARCH).pinned).toEqual(["identity_switch"]);
     expect(JSON.parse(settings.SAGAX_GATE_UPSTREAM)).toEqual(server);

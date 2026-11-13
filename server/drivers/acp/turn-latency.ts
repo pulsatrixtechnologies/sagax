@@ -48,6 +48,10 @@
 // the first request any of Sagax's endpoints got: the engine starting its
 // tool server processes) and after (the last tool list answered, by an
 // endpoint or as the engine saw a mount ready, to the engine saying resolved).
+// With a gap, busy says how long the server's own main thread was busy during
+// the wait, when over 250 ms: near the gap, the time is Sagax's (other turns,
+// a spawn, the collector), so its endpoints answered and its polls read late;
+// near zero, it is the engine's and its tool server processes'.
 
 export type TurnLatencyPath = "pooled" | "load" | "spawn";
 
@@ -89,6 +93,9 @@ export interface TurnToolWait {
   /** Sagax's own endpoints during the wait, in order of arrival: the mount,
    * its first request (ms from the wait's start) and its tool list answer */
   served?: Array<[label: string, inMs: number, outMs?: number, parts?: Array<[part: string, ms: number]>]>;
+  /** how long the server's own main thread was busy during the wait, ms
+   * (event loop utilization): the share of the gap that is Sagax's */
+  busyMs?: number;
 }
 
 /** A tool list that took longer than this from its first request names its
@@ -130,8 +137,8 @@ export function turnToolsSlow(wait: TurnToolWait | undefined): string | undefine
     .join(";");
 }
 
-/** The toolsGap field: `first:2510,after:2800`, each part only when it is
- * over TOOLS_SLOW_MS; nothing when neither is. */
+/** The toolsGap field: `first:2510,after:2800,busy:2300`, each part only when
+ * it is over TOOLS_SLOW_MS; nothing when neither first nor after is. */
 export function turnToolsGap(wait: TurnToolWait | undefined): string | undefined {
   if (!wait || wait.waitedMs < 50) return undefined;
   const out: string[] = [];
@@ -151,6 +158,7 @@ export function turnToolsGap(wait: TurnToolWait | undefined): string | undefined
       if (after > TOOLS_SLOW_MS) out.push(`after:${Math.round(after)}`);
     }
   }
+  if (out.length && wait.busyMs !== undefined && wait.busyMs > TOOLS_SLOW_MS) out.push(`busy:${Math.round(wait.busyMs)}`);
   return out.length ? out.join(",") : undefined;
 }
 

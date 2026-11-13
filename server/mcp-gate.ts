@@ -373,7 +373,7 @@ for (const key of Object.keys(childEnv)) if (key.startsWith("SAGAX_GATE_")) dele
 // #3623: Sagax's own relays run as a thread of this process, anything else
 // as its own process, spawned exactly as the CLI used to (gate-upstream.ts);
 // a thread that does not answer its first request in time becomes a process.
-const child = startGateUpstream({ command: spec.command, args: spec.args ?? [], env: childEnv, ownDir: GATE_DIR, name: NAME });
+const child = startGateUpstream({ command: spec.command, args: spec.args ?? [], env: childEnv, serverEnv: spec.env, ownDir: GATE_DIR, name: NAME });
 
 // The gate owns its upstream. If the gate is killed rather than closed (the
 // CLI reaping its MCP servers at the end of a turn), the real server must not

@@ -172,6 +172,11 @@ describe("turn latency line", () => {
     trace.promptAt = 5_000;
     trace.toolWait = late;
     expect(turnLatencyLine("grok", "800b207c-0000", trace, 9_000, "ok")).toContain(" toolsGap=first:2510,after:590 ok");
+    // the server's own main thread busy through the gap: Sagax's share of it
+    expect(turnToolsGap({ ...late, busyMs: 2_300 })).toBe("first:2510,after:590,busy:2300");
+    expect(turnToolsGap({ ...late, busyMs: 120 })).toBe("first:2510,after:590");
+    // a busy thread without a gap says nothing
+    expect(turnToolsGap({ waitedMs: 400, mounts: [], resolvedMs: 390, served: [["data", 120, 300]], busyMs: 380 })).toBeUndefined();
     // a quick wait prints nothing
     trace.toolWait = { waitedMs: 400, mounts: [], resolvedMs: 390, served: [["data", 120, 300]] };
     expect(turnLatencyLine("grok", "800b207c-0000", trace, 9_000, "ok")).not.toContain("toolsGap");

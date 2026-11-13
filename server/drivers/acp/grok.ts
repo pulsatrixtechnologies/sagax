@@ -33,7 +33,7 @@ import { grokGatewayOnTurn } from "../../connectors/turn-plan.ts";
 import { narrowsNativeTools } from "../../../shared/tool-scope.ts";
 import { grokToolScopeProfile, grokInheritedProfile } from "./grok-tool-scope.ts";
 import { turnTrace } from "../../turns/turn-trace.ts";
-import { grokMcpServerWaiting, grokMcpWaitClock } from "./grok-mcp-wait-parts.ts";
+import { grokMcpServerWaiting, grokMcpWaitClock, grokMountedServer } from "./grok-mcp-wait-parts.ts";
 export { grokToolScopeProfile, grokInheritedProfile, allowsRegisteredTool } from "./grok-tool-scope.ts";
 import {
   MAX_QUESTIONS, parseProtocolAskQuestions, pickedOptionLabels, questionAnswersById, repeatsQuestionText,
@@ -1029,54 +1029,38 @@ const support: AcpSupport = {
   // -m on argv is necessary but not sufficient: session/new still starts on
   // [models].default. Pin the slug over the wire, same as Hermes/Droid.
   async configureSession({ request, sessionId, turn, currentModelId, sessionModels, notice, reused, mcpServerNames, noteToolWait }) {
-    if (turn.toolScope !== undefined) {
-      // #3623: each poll also times the servers for the latency line (toolsBy)
-      const clock = grokMcpWaitClock(mcpServerNames ?? [], Date.now(), turn.threadId);
-      const deadline = Date.now() + 10_000;
-      let limitHit = false;
-      for (;;) {
-        const reply = await request("_x.ai/mcp/list", { sessionId, cache: true }, 10_000);
-        const catalog = reply?.result;
-        if (!Array.isArray(catalog?.servers)) break;
-        clock.note(catalog);
-        // The person's own native Grok MCP connections outside the bot's
-        // selection never block a turn (2026-11-06: a dispatch run was
-        // refused on this). Wait for the catalog, bounded, then send.
-        if (catalog.sessionMcpResolved === true) {
-          rememberGrokCatalog(sessionId, catalog);
-          break;
-        }
-        if (Date.now() >= deadline) { limitHit = true; break; }
-        await delay(50);
-      }
-      noteToolWait?.(clock.result(Date.now(), limitHit));
+    // 2026-10-16 (hotfix 0.5.10): the prompt left while Grok still
+    // handshook its MCP servers; Grok then told the model "MCP servers
+    // currently connecting, do not use them yet" and the bot answered that
+    // ConnectWise was not reachable. Wait, bounded and best effort, until
+    // Grok resolved its servers and none that blocks is still starting; on a
+    // timeout, a stalled start or an unreadable list the prompt goes anyway.
+    // #3623: one wait for every turn. With a tool selection, only the servers
+    // Sagax mounted block: the person's own native Grok MCP connections
+    // outside the bot's selection never do (2026-11-06: a dispatch run was
+    // refused on this), and the bound is 10 s.
+    // What the person's own xAI account brought (its grok.com connectors),
+    // kept by their sign-in folder: only on a turn that loads the gateway
+    // (grokCloudConnectorEnv), where an empty gateway means none.
+    // A later turn on the same live session that already settled skips the
+    // poll. A session/new or session/load (reused false) forgets the flag
+    // so a reconnect still waits once.
+    const selection = turn.toolScope !== undefined;
+    const reachHome = !selection && turn.grokCloudConnectors === true && turn.withholdHostTools === true ? turn.access?.engineHome : undefined;
+    if (reused !== true) forgetGrokMcpSettled(sessionId);
+    // #3561: a tool-selection turn too, which polled again at every pooled turn
+    if (reused === true && grokMcpAlreadySettled(sessionId)) {
+      /* MCP mounts of this live session already settled on an earlier turn */
     } else {
-      // 2026-10-16 (hotfix 0.5.10): without a tool selection the prompt
-      // left while Grok still handshook its MCP servers; Grok then told the
-      // model "MCP servers currently connecting, do not use them yet" and
-      // the bot answered that ConnectWise was not reachable. Wait, bounded
-      // and best effort, until Grok resolved its servers and none is still
-      // pending; on a timeout or an unreadable list the prompt goes anyway.
-      // What the person's own xAI account brought (its grok.com connectors),
-      // kept by their sign-in folder: only on a turn that loads the gateway
-      // (grokCloudConnectorEnv), where an empty gateway means none.
-      // A later turn on the same live session that already settled skips the
-      // poll. A session/new or session/load (reused false) forgets the flag
-      // so a reconnect still waits once.
-      const reachHome = turn.grokCloudConnectors === true && turn.withholdHostTools === true ? turn.access?.engineHome : undefined;
-      if (reused !== true) forgetGrokMcpSettled(sessionId);
-      if (reused === true && grokMcpAlreadySettled(sessionId)) {
-        /* MCP mounts of this live session already settled on an earlier turn */
-      } else {
-        const clock = grokMcpWaitClock(mcpServerNames ?? [], Date.now(), turn.threadId);
-        const settled = await waitForGrokMcpSettled(request, sessionId, GROK_MCP_SETTLE_MS, (catalog) => {
-          clock.note(catalog);
-          rememberGrokCatalog(sessionId, catalog);
-          noteGrokAccountReach(reachHome, catalog);
-        }, () => clock.stalled());
-        if (settled) rememberGrokMcpSettled(sessionId);
-        noteToolWait?.(clock.result(Date.now(), !settled));
-      }
+      // each poll also times the servers for the latency line (toolsBy)
+      const clock = grokMcpWaitClock(mcpServerNames ?? [], Date.now(), turn.threadId);
+      const settled = await waitForGrokMcpSettled(request, sessionId, selection ? GROK_MCP_SELECTION_SETTLE_MS : GROK_MCP_SETTLE_MS, (catalog) => {
+        clock.note(catalog);
+        rememberGrokCatalog(sessionId, catalog);
+        noteGrokAccountReach(reachHome, catalog);
+      }, () => clock.stalled(), selection ? grokMountedServer(mcpServerNames ?? []) : undefined);
+      if (settled) rememberGrokMcpSettled(sessionId);
+      noteToolWait?.(clock.result(Date.now(), !settled));
     }
     // the latency line's setupBy tools part ends here (turn-latency.ts)
     turnTrace(turn.threadId, "acp-mcp-settled");
@@ -1205,17 +1189,22 @@ const support: AcpSupport = {
 
 /** How long a turn without a tool selection waits for Grok's MCP servers. */
 export const GROK_MCP_SETTLE_MS = 20_000;
+/** How long a turn with a tool selection waits for the servers Sagax mounted. */
+export const GROK_MCP_SELECTION_SETTLE_MS = 10_000;
 
 /** Whether Grok's `_x.ai/mcp/list` answer says every MCP server finished
- * connecting: the session resolved its servers and none is still pending. */
-export function grokMcpSettled(catalog: unknown): boolean {
+ * connecting: the session resolved its servers and none is still pending.
+ * `blocks`: only the servers it names count (a tool selection's mounts). */
+export function grokMcpSettled(catalog: unknown, blocks?: (name: string) => boolean): boolean {
   const value = catalog as { sessionMcpResolved?: unknown; servers?: unknown } | null | undefined;
   if (!value || value.sessionMcpResolved !== true || !Array.isArray(value.servers)) return false;
-  return !value.servers.some(grokMcpServerWaiting);
+  return !value.servers.some((server: Parameters<typeof grokMcpServerWaiting>[0]) =>
+    grokMcpServerWaiting(server) && (!blocks || blocks(typeof server?.name === "string" ? server.name : "")));
 }
 
 /** Best effort: polls `_x.ai/mcp/list` until grokMcpSettled or `budgetMs`
- * runs out. Never throws: a Grok that cannot answer still gets its prompt. */
+ * runs out. Never throws: a Grok that cannot answer, or answers without a
+ * list of servers, still gets its prompt. */
 export async function waitForGrokMcpSettled(
   request: (method: string, params: unknown, timeoutMs: number) => Promise<{ result?: unknown } | undefined>,
   sessionId: string,
@@ -1224,6 +1213,8 @@ export async function waitForGrokMcpSettled(
   onCatalog?: (catalog: unknown) => void,
   /** true when waiting longer cannot help (grokMcpWaitClock's stalled) */
   stalled?: () => boolean,
+  /** the servers that hold the prompt (grokMcpSettled); all when unset */
+  blocks?: (name: string) => boolean,
 ): Promise<boolean> {
   const deadline = Date.now() + budgetMs;
   for (;;) {
@@ -1231,15 +1222,17 @@ export async function waitForGrokMcpSettled(
     if (left <= 0) return false;
     try {
       const reply = await request("_x.ai/mcp/list", { sessionId, cache: true }, Math.min(10_000, left));
-      if (onCatalog && reply?.result) {
-        try { onCatalog(reply.result); } catch { /* bookkeeping only */ }
+      const catalog = reply?.result as { servers?: unknown } | undefined;
+      if (!Array.isArray(catalog?.servers)) return false;
+      if (onCatalog) {
+        try { onCatalog(catalog); } catch { /* bookkeeping only */ }
       }
-      if (grokMcpSettled(reply?.result)) return true;
+      if (grokMcpSettled(catalog, blocks)) return true;
     } catch {
       return false;
     }
     if (stalled?.()) return false;
-    await delay(100);
+    await delay(50);
   }
 }
 

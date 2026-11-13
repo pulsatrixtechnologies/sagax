@@ -24,6 +24,7 @@ function answer(message) {
   const gateKeys = Object.keys(process.env).filter((key) => key.startsWith("SAGAX_GATE_"));
   process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, result: {
     pid: process.pid, mainThread: isMainThread, own: process.env.FIXTURE_OWN ?? null, gateKeys, argv: process.argv.slice(2),
+    compileCache: process.env.NODE_COMPILE_CACHE ?? null,
   } })}\n`);
   if (process.env.FIXTURE_THROW_AFTER) setTimeout(() => { throw new Error("fixture failed while it ran"); }, 20);
 }

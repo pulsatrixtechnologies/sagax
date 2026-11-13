@@ -1,5 +1,5 @@
 // #3623: the latency line names the tool servers the engine's setup waited for.
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { grokConfigureSessionForTest, grokMcpSettled } from "./grok.ts";
 import { grokMcpWaitClock, grokMountLabel } from "./grok-mcp-wait-parts.ts";
@@ -55,6 +55,16 @@ const lineWith = (wait: TurnToolWait | undefined) => {
   if (wait) trace.toolWait = wait;
   return turnLatencyLine("grok", "t1", trace, 5_000, "ok");
 };
+
+/** The server's main thread busy `activeMs` between the wait's start and its
+ * result (performance.eventLoopUtilization, read twice by the clock). */
+const mainThreadBusy = (activeMs: number) =>
+  vi.spyOn(performance, "eventLoopUtilization").mockImplementation(((since?: unknown) =>
+    since ? { idle: 0, active: activeMs, utilization: 1 } : { idle: 0, active: 0, utilization: 0 }) as never);
+
+beforeEach(() => {
+  mainThreadBusy(0);
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -176,6 +186,43 @@ describe("toolsBy on the latency line (#3623)", () => {
     expect(lineWith(wait)).toContain(" toolsBy=agents:600,resolved:600 ok");
   });
 
+  it("holds a tool-selection prompt until Sagax's own mounts are ready, even once the engine says resolved", async () => {
+    const { request, calls } = scripted([
+      catalog({ agents: "initializing", "Team Wiki": "pending" }, true),
+      catalog({ agents: "initializing", "Team Wiki": "pending" }, true),
+      catalog({ agents: "ready", "Team Wiki": "pending" }, true),
+    ], 300);
+    const wait = await configure(request, { toolScope: { tools: ["agents"] }, mounted: ["agents"] });
+    // the person's own connection still pending never holds it (2026-11-06)
+    expect(calls()).toBe(3);
+    expect(wait).toMatchObject({ waitedMs: 900, mounts: [["agents", 900]] });
+    expect(wait?.pending).toBeUndefined();
+  });
+
+  it("sends a tool-selection prompt after 10 s when one of Sagax's mounts never leaves its start", async () => {
+    const { request, calls } = scripted([catalog({ agents: "initializing" }, true)], 1_000);
+    const wait = await configure(request, { toolScope: { tools: ["agents"] }, mounted: ["agents"] });
+    expect(calls()).toBe(10);
+    expect(wait).toMatchObject({ waitedMs: 10_000, pending: 1 });
+  });
+
+  it("ends the wait at once on an answer without a list of servers", async () => {
+    const { request, calls } = scripted([{ unexpected: true } as never], 300);
+    await configure(request, { mounted: ["agents"] });
+    expect(calls()).toBe(1);
+  });
+
+  it("skips the wait on a pooled tool-selection turn whose session already settled (#3561)", async () => {
+    const first = scripted([catalog({ agents: "initializing" }, false), catalog({ agents: "ready" }, true)], 300);
+    await configure(first.request, { toolScope: { tools: ["agents"] }, mounted: ["agents"] });
+    expect(first.calls()).toBe(2);
+    vi.restoreAllMocks();
+    const pooled = scripted([catalog({ agents: "ready" })], 300);
+    const wait = await configure(pooled.request, { reused: true, toolScope: { tools: ["agents"] }, mounted: ["agents"] });
+    expect(pooled.calls()).toBe(0);
+    expect(wait).toBeUndefined();
+  });
+
   it("prints nothing for a reused session that skips the wait", async () => {
     rememberGrokMcpSettled("s1");
     const { request, calls } = scripted([catalog({ agents: "ready" })], 300);
@@ -269,6 +316,28 @@ describe("toolsBy on the latency line (#3623)", () => {
     // the wait is over: a later request is not noted
     noteTurnServed("t1", "agents", "in");
     expect(wait?.served).toHaveLength(2);
+  });
+
+  it("says how long the server's own main thread was busy during a wait with a gap (#3623)", async () => {
+    // a production shape: the first list is asked late, the thread busy 2.3 s
+    const { request } = scripted([
+      catalog({ data: undefined }, false),
+      catalog({ data: "initializing" }, false),
+      catalog({ data: "ready" }, true),
+    ], 1_300, (poll, now) => {
+      if (poll === 2) { noteTurnServed("t1", "data", "in", now + 10); noteTurnServed("t1", "data", "out", now + 20); }
+    });
+    mainThreadBusy(2_310);
+    const wait = await configure(request, { mounted: ["data"] });
+    expect(wait?.busyMs).toBe(2_310);
+    expect(lineWith(wait)).toContain(" toolsServed=data:2610-2620 toolsGap=first:2610,busy:2310 ok");
+    // a thread that was free leaves the gap to the engine: nothing more
+    vi.restoreAllMocks();
+    const free = scripted([catalog({ data: undefined }, false), catalog({ data: "initializing" }, false), catalog({ data: "ready" }, true)], 1_300, (poll, now) => {
+      if (poll === 2) { noteTurnServed("t1", "data", "in", now + 10); noteTurnServed("t1", "data", "out", now + 20); }
+    });
+    mainThreadBusy(40);
+    expect(lineWith(await configure(free.request, { mounted: ["data"] }))).toContain(" toolsGap=first:2610 ok");
   });
 
   it("prints neither toolsBy nor toolsServed for a reused session", async () => {

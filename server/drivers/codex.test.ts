@@ -269,7 +269,7 @@ describe("CodexDriver turns (fake app-server)", () => {
       expect(seen.argv).toContain("features.shell_snapshot=false");
       const thread = seen.calls.find((call: { method: string }) => call.method === (resumeCursor ? "thread/resume" : "thread/start"));
       // the gate record, and the switch the gate's mount sets, stay out of the shell
-      expect(thread.params.config["shell_environment_policy.exclude"]).toEqual([...policy.exclude, "SAGAX_GATE_CONFIG_*", "ELECTRON_RUN_AS_NODE"]);
+      expect(thread.params.config["shell_environment_policy.exclude"]).toEqual([...policy.exclude, "SAGAX_GATE_CONFIG_*", "ELECTRON_RUN_AS_NODE", "NODE_COMPILE_CACHE"]);
       expect(thread.params.config).not.toHaveProperty("shell_environment_policy");
       expect(Object.keys(seen.env).some(name => name.startsWith("SAGAX_GATE_CONFIG_"))).toBe(true);
       expect(JSON.stringify({ argv: seen.argv, calls: seen.calls })).not.toContain("synthetic-fixture-credential");
@@ -320,7 +320,7 @@ describe("CodexDriver turns (fake app-server)", () => {
       expect(completed).toMatchObject({ ok: true });
       const seen = JSON.parse(readFileSync(dump, "utf8"));
       const config = seen.calls.find((call: { method: string }) => call.method === (resumeCursor ? "thread/resume" : "thread/start")).params.config;
-      expect(config["shell_environment_policy.exclude"]).toEqual(["SAGAX_GATE_CONFIG_*", "ELECTRON_RUN_AS_NODE"]);
+      expect(config["shell_environment_policy.exclude"]).toEqual(["SAGAX_GATE_CONFIG_*", "ELECTRON_RUN_AS_NODE", "NODE_COMPILE_CACHE"]);
       expect(Object.keys(config).filter(key => key.startsWith("shell_environment_policy"))).toEqual(["shell_environment_policy.exclude"]);
     }
   });
@@ -343,7 +343,7 @@ describe("CodexDriver turns (fake app-server)", () => {
       const config = seen.calls.find((call: { method: string }) => call.method === (resumeCursor ? "thread/resume" : "thread/start")).params.config;
       // Codex matches (and rejects duplicate) filter patterns ignoring case:
       // the gate pattern replaces a case variant rather than sitting beside it.
-      expect(config["shell_environment_policy.filters"]).toEqual({ "USER_SECRET_*": "exclude", "KEEP_*": "include", "SAGAX_GATE_CONFIG_*": "exclude", ELECTRON_RUN_AS_NODE: "exclude" });
+      expect(config["shell_environment_policy.filters"]).toEqual({ "USER_SECRET_*": "exclude", "KEEP_*": "include", "SAGAX_GATE_CONFIG_*": "exclude", ELECTRON_RUN_AS_NODE: "exclude", NODE_COMPILE_CACHE: "exclude" });
       expect(Object.keys(config).filter(key => key.startsWith("shell_environment_policy"))).toEqual(["shell_environment_policy.filters"]);
     }
   });
@@ -1551,7 +1551,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     // SAGAX_GATE_CONFIG_* records and never appear as separate shell exclusions.
     expect(seen.calls.find((call: { method: string }) => call.method === "thread/start").params.config["shell_environment_policy.exclude"]).toEqual([
       "USER_SECRET_*", "SAGAX_GATE_CONFIG_*",
-      "ELECTRON_RUN_AS_NODE", "SAGAX_COMMS_TOKEN", "SAGAX_COMMS_TOKEN_FILE",
+      "ELECTRON_RUN_AS_NODE", "NODE_COMPILE_CACHE", "SAGAX_COMMS_TOKEN", "SAGAX_COMMS_TOKEN_FILE",
       // the agents mount asks for the tools merged by family (#1604)
       "SAGAX_MERGED_TOOLS", "SAGAX_PHONE_TOKEN",
     ]);

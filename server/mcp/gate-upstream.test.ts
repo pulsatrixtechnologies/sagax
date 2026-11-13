@@ -6,7 +6,7 @@ import { createInterface } from "node:readline";
 import { Worker } from "node:worker_threads";
 import { describe, expect, it } from "vitest";
 
-import { startGateUpstream, threadScript } from "./gate-upstream.ts";
+import { processUpstreamEnv, startGateUpstream, threadScript } from "./gate-upstream.ts";
 
 const NODE = "/opt/node/bin/node";
 const OWN = "/app/dist-server";
@@ -32,6 +32,19 @@ describe("threadScript", () => {
     expect(threadScript(NODE, [join(OWN, "tool")], NODE, OWN)).toBeUndefined();
     expect(threadScript(NODE, ["relative.js"], NODE, OWN)).toBeUndefined();
     expect(threadScript(NODE, [], NODE, OWN)).toBeUndefined();
+  });
+});
+
+describe("processUpstreamEnv (#3561)", () => {
+  it("keeps the gate's compile cache from a server that is not one of Sagax's relays", () => {
+    const env = { PATH: "/bin", NODE_COMPILE_CACHE: "/data/cache/node-compile", TOKEN: "t" };
+    expect(processUpstreamEnv(env, { TOKEN: "t" })).toEqual({ PATH: "/bin", TOKEN: "t" });
+    expect(processUpstreamEnv(env)).toEqual({ PATH: "/bin", TOKEN: "t" });
+    // the server's own settings name one: it is the server's
+    expect(processUpstreamEnv({ ...env, NODE_COMPILE_CACHE: "/home/me/cache" }, { NODE_COMPILE_CACHE: "/home/me/cache" }).NODE_COMPILE_CACHE).toBe("/home/me/cache");
+    // nothing to take away
+    const plain = { PATH: "/bin" };
+    expect(processUpstreamEnv(plain)).toBe(plain);
   });
 });
 

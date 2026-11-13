@@ -77,7 +77,29 @@ Every ACP turn logs one line when it settles (server/drivers/acp/turn-latency.ts
   the first request any of Sagax's endpoints got, the engine starting its tool server
   processes) and `after:<ms>` (the last tool list answered, by an endpoint or as the engine
   saw a mount ready in toolsBy, to `resolved`). Example of a turn whose first list was asked
-  late: `toolsGap=first:2510`.
+  late: `toolsGap=first:2510`. With either part, `busy:<ms>` (over 250 ms) is how long
+  Sagax's own main thread was busy during the wait (the event loop's active time): near the
+  gap, the time is Sagax's (other turns, a spawn, the collector: its endpoints answered and
+  its polls read late); absent or small, it is the engine's and its tool server processes'.
+
+  Where the gap comes from, measured with the installed engine (1.0.77) and fake mounts that
+  answer at once, so only the engine and the processes count: the engine starts its first
+  mount 250 to 290 ms after session/new and says resolved 20 to 40 ms after the last tool
+  list, so `after` stays near zero on an idle machine. On a turn that loads the account's own
+  connectors, the engine first reads their list over the network and starts the first mount
+  830 to 1,100 ms after session/new. Each mount is one Node process with Sagax's relay as a
+  thread, about 0.17 s of processor each (eight mounts: 1.4 s), so on a four core server
+  that is already busy the starts queue up behind each other: that is the `first` of 2.5 to
+  3.3 s read in production before the gates ran their relays as threads, and `busy` says
+  when Sagax's own thread is part of it.
+
+  The compile cache (#3561): the gate and Sagax's relay threads read Node's on-disk compile
+  cache, the server's own directory (`cache/node-compile` under the data directory), so the
+  gates of an engine start stop compiling the same bundles again. Eight gates with the agents
+  relay started at once: every tool list answered 470 to 513 ms after the start without the
+  cache, 250 to 380 ms with it; with the installed engine and those eight gates, resolved
+  587 to 682 ms after session/new without it, 506 to 586 ms with it. A person's own server
+  started by a gate never gets the variable.
 
   One process per mount (#3623): every mount is a gate process (server/mcp-gate.ts) the
   engine starts, and each gate used to start its upstream as a second Node process, so a turn

@@ -139,7 +139,7 @@ export function BotHeaderPill({ name, label, panelOpen, onToggle, avatar, group 
         aria-hidden="true"
         className={cn(
           "-ml-2 w-0 shrink-0 text-ink-tertiary opacity-0 transition-[width,margin,opacity] duration-[160ms] ease-out motion-reduce:transition-none",
-          !panelOpen && "group-hover/pill:ml-0 group-hover/pill:w-3 group-hover/pill:opacity-100 group-focus-visible/pill:ml-0 group-focus-visible/pill:w-3 group-focus-visible/pill:opacity-100",
+          !panelOpen && "touch:ml-0 touch:w-3 touch:opacity-100 group-hover/pill:ml-0 group-hover/pill:w-3 group-hover/pill:opacity-100 group-focus-visible/pill:ml-0 group-focus-visible/pill:w-3 group-focus-visible/pill:opacity-100",
         )}
       />
     </button>

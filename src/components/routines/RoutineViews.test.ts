@@ -73,7 +73,10 @@ describe("routine list", () => {
   it("never advertises a stale next timestamp for a paused routine", () => {
     expect(routineNextLabel({ ...routine, enabled: false })).toBe("Paused");
     const paused = list({ routines: [{ ...routine, enabled: false }] });
-    expect(paused).toContain("Every hour · Paused");
+    // #4202: one line, Paused; the schedule is its tooltip
+    expect(paused).toContain('data-routine-when="Paused"');
+    expect(paused).toMatch(/data-routine-when="Paused"[^>]*title="Every hour"/);
+    expect(paused).not.toContain("Every hour · Paused");
     expect(paused).not.toContain("Next Jan");
   });
 
@@ -178,10 +181,10 @@ describe("central routine logs", () => {
 });
 
 describe("a routine that paused itself (2026-10-26)", () => {
-  it("keeps its schedule on the row and says it paused after N failures", () => {
+  it("says it paused after N failures on the one line, its schedule in the tooltip", () => {
     const paused = { ...routine, enabled: false, nextRunAt: null, failureStreak: 5, autoPaused: { at: 100, failures: 5, runId: "run" } };
     const markup = list({ routines: [paused] });
-    expect(markup).toContain('data-routine-when="Every hour"');
+    expect(markup).toMatch(/data-routine-when="Paused after 5 failures in a row"[^>]*title="Every hour"/);
     expect(markup).toContain('data-routine-auto-paused="5"');
     expect(markup).toContain("Paused after 5 failures in a row");
     expect(markup).toContain('aria-label="Resume"');

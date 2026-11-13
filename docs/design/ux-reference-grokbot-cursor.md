@@ -257,7 +257,16 @@ changement de surface. En haut à droite : partager (export) et fermer, boutons 
   terminée avec des problèmes ou attend quelque chose. Les mots de l'ancienne
   troisième ligne (résultat, il y a combien de temps, le court détail) sont
   l'infobulle et le nom accessible de l'horloge ; un toucher ou Entrée sur la
-  rangée ouvre la routine et son journal, où ils restent. Une seule composante
+  rangée ouvre la routine et son journal, où ils restent. La ligne sous le nom
+  est UNE seule ligne (#4202) : « En pause » quand la routine est arrêtée (ou
+  « En pause après N échecs », ou la raison d'une pause du serveur), sinon
+  l'horaire ou le déclencheur en mots (« Selon les changements » pour un
+  changement), jamais les deux, dans toutes les listes ; l'horaire et le
+  déclencheur restent dans l'infobulle et sur la page de la routine. Pendant
+  une exécution, aucune ligne « En cours · à l'instant » : l'horloge devient la
+  roue de chargement de l'app (16 px dans la même case de 20 px, arrêtée si le
+  mouvement est réduit), « En cours » et depuis quand dans son infobulle et son
+  nom accessible ; l'horloge revient avec sa couleur de résultat à la fin. Une seule composante
   (`RoutineList` avec `leadingClock`) dessine la liste « À venir » et la liste
   complète du panneau ; la page Routines garde sa ligne du dernier résultat.
   Captures : `node scripts/capture/bot-panel-head.mjs` (galerie

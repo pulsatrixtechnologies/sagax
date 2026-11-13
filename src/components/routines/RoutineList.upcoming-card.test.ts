@@ -35,7 +35,7 @@ describe("Upcoming card in the bot panel", () => {
   it("says Paused under a paused routine, with its switch off, and keeps the schedule in the tooltip", () => {
     const html = render([routine("a", false)]);
     expect(html).toContain('data-routine-when="Paused"');
-    expect(html).toMatch(/data-routine-when="Paused" title="[^"]*4:03/);
+    expect(html).toMatch(/data-routine-when="Paused"[^>]*title="[^"]*4:03/);
     expect(html).toContain('aria-checked="false"');
     // one "Paused", never a second line under it
     expect(html.match(/>Paused</g)).toHaveLength(1);

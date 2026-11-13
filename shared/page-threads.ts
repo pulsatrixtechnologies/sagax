@@ -9,7 +9,6 @@
 // scripts could forge: every field is plain text, checked and cut here. The
 // frame only ever receives anchors back (the page's own words and an id),
 // never a comment, a name or anything else a reader wrote.
-import type { PageContextComment } from "./data-context.ts";
 
 /** Where an annotation points: a piece of text (its words and a little of
  * what comes before and after, to find it again), or a part of the page
@@ -104,6 +103,23 @@ export function parseThreadText(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const text = value.trim();
   return text && text.length <= THREAD_LIMITS.textChars ? text : null;
+}
+
+/** One annotation as the model reads it (commentsForModel, carried by
+ * shared/data-context.ts PageContextSource): the page's words it is about, who
+ * wrote it (a name), what, the replies, resolved or not, and whether it is
+ * new since the bot last read the page's comments. */
+export interface PageContextComment {
+  threadId: string;
+  on: string;
+  by: string;
+  text: string;
+  at: string;
+  resolved: boolean;
+  new?: boolean;
+  /** A suggested edit of the words in `on` (Markdown pages). */
+  suggestion?: { replaceWith: string; state: "open" | "accepted" | "declined" };
+  replies: Array<{ by: string; text: string; at: string }>;
 }
 
 /** The threads as the page's bot reads them (its page context and

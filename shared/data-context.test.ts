@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { DATA_CONTEXT_HINT, dataContextFor, dataContextPrompt, fitComments, PAGE_CONTEXT_HINT, PAGE_CONTEXT_MAX_CHARS, PAGE_SELECTION_HINT, promptWithDataContext, setPageContextSource, withPageContext, type PageContextComment } from "./data-context.ts";
+import { DATA_CONTEXT_HINT, dataContextFor, dataContextPrompt, fitComments, PAGE_CONTEXT_HINT, PAGE_CONTEXT_MAX_CHARS, PAGE_SELECTION_HINT, promptWithDataContext, setPageContextSource, withPageContext } from "./data-context.ts";
 import { SAVE_RUN_AS_SKILL_LINE } from "./learn-request.ts";
+import type { PageContextComment } from "./page-threads.ts";
 
 describe("dataContextFor", () => {
   const view = { botId: "pepper", threadId: "task", cardId: "c_1" };

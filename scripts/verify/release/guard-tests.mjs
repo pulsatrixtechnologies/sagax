@@ -9,6 +9,26 @@ import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+/** The UI guards that scan the whole of src or the shared stylesheet: motion
+ * tokens, touch and keyboard reveal of hover actions, window drag regions,
+ * settings placement and contract, theme colour tokens, faded and focused
+ * text, the guided tour, modal use, the model picker's one menu and the
+ * mascots drawn in every surface (#4131). */
+export const UI_GUARD_TESTS = [
+  "src/lib/motion.test.ts",
+  "src/components/touch-actions.test.ts",
+  "src/components/window-drag.layout.test.ts",
+  "src/components/settings/settingsPlacement.test.ts",
+  "src/components/settings/settings-contract.test.ts",
+  "src/components/ModelPicker.single-menu.test.ts",
+  "src/components/floating-bots/mascots.test.ts",
+  "src/lib/color-utilities.test.ts",
+  "src/lib/faded-text.test.ts",
+  "src/lib/field-focus.test.ts",
+  "src/lib/guided-tour.test.ts",
+  "src/lib/modal-usage.guard.test.ts",
+];
+
 /** Tests that hold main to a line: a key nothing reads, a route without a
  * policy row, a golden or a budget. They fail for the PR that merged last,
  * so every PR runs them. */
@@ -51,6 +71,11 @@ export const GUARD_TESTS = [
   // with the reach rule of 2026-11-09 (#3264). About 15 s together.
   "server/turns/start-turn-prepare-admit.test.ts",
   "server/agent-api.e2e.test.ts",
+  // #4131: the UI guards that read the whole of src (or the shared
+  // stylesheet) rather than one component went red on main after three UI
+  // lots, each of which ran only the tests beside its own files. Static
+  // scans, about 2 s each and some 25 s together on a busy machine.
+  ...UI_GUARD_TESTS,
 ];
 
 /** The guard tests present under `root` (a lot may predate one of them). */

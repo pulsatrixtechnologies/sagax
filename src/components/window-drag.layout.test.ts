@@ -33,7 +33,14 @@ describe("window drag regions", () => {
 
   it("the sidebar head row is a drag region with its control groups opted out", () => {
     expect(sidebar).toMatch(/<div data-sidebar-head className="window-drag shrink-0">/);
-    expect(sidebar.match(/window-no-drag/g)?.length).toBeGreaterThanOrEqual(2);
+    // The head's one control group (search and New) sits in a no-drag span.
+    // The icons rail keeps none at its top since #4093 (they ride in its foot,
+    // outside the drag region), so the head holds exactly that group (#4131).
+    const head = sidebar.slice(sidebar.indexOf("<div data-sidebar-head"), sidebar.indexOf("<SidebarUnreadPillAbove"));
+    const groups = head.match(/\{headButtons\}/g) ?? [];
+    expect(groups.length).toBeGreaterThanOrEqual(1);
+    expect(head.match(/className="[^"]*\bwindow-no-drag\b[^"]*">\s*\{headButtons\}/g)?.length).toBe(groups.length);
+    expect(head).not.toMatch(/<button\b/);
     expect(sidebar).not.toContain("windowDragStyle");
   });
 

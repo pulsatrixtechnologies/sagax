@@ -40,7 +40,7 @@ function Pair({ label, look }: { label: string; look: MascotLook }) {
   // what the companion window receives: the snapshot crosses Electron main
   const desktop = mainMascotLook(JSON.parse(JSON.stringify(look))) ?? undefined;
   return (
-    <figure data-pair={label} className="flex flex-col items-center gap-2 rounded-xl border border-line bg-panel p-3">
+    <figure data-pair={label} className="flex flex-col items-center gap-2 rounded-xl border border-hairline bg-panel p-3">
       <div className="flex items-end gap-4">
         <div data-side="list" className="flex flex-col items-center gap-1">
           <BotAvatar bot={bot} size={72} />

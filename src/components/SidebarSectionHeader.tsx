@@ -124,14 +124,15 @@ export function SidebarSectionHeader({
           // row's end one 16px seat: the count of rows while folded (so a
           // folded group never reads as empty, #1664), the chevron in its
           // place on hover or keyboard focus (pointing down while open),
-          // then this app's attention marks.
+          // then this app's attention marks. A touch screen has no hover:
+          // there the chevron always shows the fold state (#4131).
           className="group/section flex h-[30px] w-full min-w-0 items-center gap-1.5 rounded-md px-2 pb-1.5 pt-2 text-left text-sidebar-ink-secondary transition-colors hover:bg-sidebar-hover hover:text-sidebar-ink"
         >
           <span className="sidebar-section-label min-w-0 flex-1 truncate text-[13px] font-normal leading-[18px]">{name}</span>
           {marks}
           <span className="relative flex h-4 min-w-4 shrink-0 items-center justify-center">
             {collapsed && count !== undefined && count > 0 && (
-              <span data-section-count="" aria-hidden="true" className="text-[13px] leading-[18px] tabular-nums transition-opacity duration-fast group-hover/section:opacity-0 group-focus-visible/section:opacity-0">
+              <span data-section-count="" aria-hidden="true" className="text-[13px] leading-[18px] tabular-nums transition-opacity duration-fast group-hover/section:opacity-0 group-focus-visible/section:opacity-0 touch:opacity-0">
                 {count}
               </span>
             )}
@@ -140,7 +141,7 @@ export function SidebarSectionHeader({
               aria-hidden="true"
               data-section-chevron=""
               className={cn(
-                "absolute -mr-px opacity-0 transition-[opacity,transform] duration-fast group-hover/section:opacity-100 group-focus-visible/section:opacity-100",
+                "absolute -mr-px opacity-0 transition-[opacity,transform] duration-fast group-hover/section:opacity-100 group-focus-visible/section:opacity-100 touch:opacity-100",
                 !collapsed && "rotate-90",
               )}
             />

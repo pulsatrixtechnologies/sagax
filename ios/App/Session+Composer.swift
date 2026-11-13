@@ -77,14 +77,22 @@ extension Session {
         return answer
     }
 
-    /// What the engines can do and whether skill authoring is on, read once
-    /// per "/" menu (`/learn`, `/setup`, live steer). Nil when unreadable.
-    func composerAbilities() async -> (engines: [String: EngineAbilities], skillAuthoring: Bool)? {
+    /// What the engines can do, whether skill authoring is on and whether
+    /// Teach a task is offered, read once per "/" menu (`/learn`, `/setup`,
+    /// live steer). Nil when unreadable.
+    func composerAbilities() async -> (engines: [String: EngineAbilities], skillAuthoring: Bool, teachTask: Bool)? {
         var engines: [String: EngineAbilities]?
-        var skillAuthoring = true
+        var features = (skillAuthoring: true, teachTask: false)
         await perform(quietly: true) { engines = try await $0.engineAbilities() }
-        await perform(quietly: true) { skillAuthoring = try await $0.skillAuthoringEnabled() }
-        return engines.map { ($0, skillAuthoring) }
+        await perform(quietly: true) { features = try await $0.composerFeatures() }
+        return engines.map { ($0, features.skillAuthoring, features.teachTask) }
+    }
+
+    /// Teach a task and `/learn` are offered on this server (#4209).
+    func teachTaskOffered() async -> Bool {
+        var offered = false
+        await perform(quietly: true) { offered = try await $0.composerFeatures().teachTask }
+        return offered
     }
 
     /// Visible threads, as "#" completes and a send links them.

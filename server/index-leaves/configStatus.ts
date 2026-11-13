@@ -12,6 +12,7 @@ import { compatServers } from "../openai-compat-servers.ts";
 import { savedStepsEnabled } from "../saved-steps/saved-steps.ts";
 import * as tts from "../tts/index.ts";
 import { claudeUserSkillsEnabled } from "../turn-settings.ts";
+import { TEACH_TASK_OFFERED } from "../../shared/teach-task.ts";
 export type Host = Record<string, any>;
 
 export function createConfigStatus(getHost: () => Host): any {
@@ -129,7 +130,10 @@ function configStatus() {
       // hand-edited config.json only; the thread menu offers Regenerate title from it
       llmThreadTitles: llmThreadTitlesEnabled(host.cfg),
       savedSteps: savedStepsEnabled(host.cfg),
-      savedStepsHere: host.savedSteps.here()
+      savedStepsHere: host.savedSteps.here(),
+      // not a setting: Teach a task and /learn are offered (shared/teach-task.ts,
+      // #4209), read by the phone app, which cannot import the switch
+      teachTask: TEACH_TASK_OFFERED
     },
     ...(() => {
       const guard = loopGuardSettings(host.cfg);

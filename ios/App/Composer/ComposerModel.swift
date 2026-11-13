@@ -33,6 +33,8 @@ final class ComposerModel: ObservableObject {
     /// skill authoring is on. Nil until read.
     @Published private(set) var engines: [String: EngineAbilities]?
     @Published private(set) var skillAuthoring = true
+    /// Teach a task and `/learn` are offered (`features.teachTask`, #4209).
+    @Published private(set) var teachTask = false
     /// Each bot's enabled skills (`useSlashSkills`), read again each time the
     /// menu opens so a skill switched on or off in settings shows the right way.
     @Published private(set) var skillLists: [String: [SlashSkill]] = [:]
@@ -92,6 +94,7 @@ final class ComposerModel: ObservableObject {
         if needsEngines, let abilities = await session.composerAbilities() {
             engines = abilities.engines
             skillAuthoring = abilities.skillAuthoring
+            teachTask = abilities.teachTask
         }
         for botId in wanted {
             let answer = await session.harnessCommands(botId: botId, threadId: threadId, groupId: groupId, refresh: refresh)

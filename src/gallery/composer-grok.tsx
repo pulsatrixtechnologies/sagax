@@ -14,6 +14,7 @@ import { cn } from "../lib/cn";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { botCtaColors, CTA_CIRCLE, CTA_DEFAULT, CTA_TONED, ctaStyle } from "../lib/voice-cta";
+import { TEACH_TASK_OFFERED } from "../../shared/teach-task";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -88,7 +89,7 @@ function After() {
             initialOpen={state === "menu"}
             items={[
               { id: "attach", label: t("composer.plus.attach"), icon: ATTACH_ICON, onSelect: () => {} },
-              { id: "teach", label: t("composer.plus.teach"), icon: <RecordMark />, onSelect: () => {} },
+              ...(TEACH_TASK_OFFERED ? [{ id: "teach", label: t("composer.plus.teach"), icon: <RecordMark />, onSelect: () => {} }] : []),
             ]}
           />
         </div>

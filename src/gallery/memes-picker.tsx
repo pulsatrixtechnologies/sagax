@@ -8,6 +8,7 @@ import { MemeImage } from "../components/MemeImage";
 import { MemePicker } from "../components/MemePicker";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin } from "../lib/skins";
+import { TEACH_TASK_OFFERED } from "../../shared/teach-task";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -77,14 +78,14 @@ function Gallery() {
   return (
     <main className="min-h-screen bg-app p-8 text-ink" data-gallery-sample="memes-picker">
       <div className="mx-auto flex max-w-xl flex-col gap-6">
-        {/* The + alone in the bar: GIF is a row of its menu, between Attach files and Teach a task */}
+        {/* The + alone in the bar: GIF is a row of its menu, after Attach files (then Teach a task while offered, #4209) */}
         <section className="rounded-2xl border border-border bg-panel p-4 pt-36 shadow-sm" data-gallery-panel="composer-bar">
           <div className="flex min-h-11 items-end gap-1 rounded-[22px] border-[0.5px] border-border bg-composer px-2 py-1.5">
             <div className="composer-band flex flex-wrap items-center gap-2">
               <ComposerPlusMenu initialOpen items={[
                 { id: "attach", group: "add", label: t("composer.plus.attach"), icon: ATTACH_ICON, onSelect: () => undefined },
                 { id: "gif", group: "add", label: t("composer.plus.gif"), icon: <ImagePlay size={16} aria-hidden="true" />, onSelect: () => undefined },
-                { id: "teach", group: "add", label: t("composer.plus.teach"), icon: <RecordMark />, hint: "/learn", onSelect: () => undefined },
+                ...(TEACH_TASK_OFFERED ? [{ id: "teach", group: "add" as const, label: t("composer.plus.teach"), icon: <RecordMark />, hint: "/learn", onSelect: () => undefined }] : []),
               ]} />
             </div>
             <span className="self-center px-1 text-[15px] text-ink-tertiary">Message…</span>

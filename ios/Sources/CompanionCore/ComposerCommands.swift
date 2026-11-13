@@ -211,15 +211,16 @@ public enum SagaxSlashCommand: String, CaseIterable, Hashable, Sendable {
     public var runsAtOnce: Bool { self == .loopStatus || self == .loopStop }
 
     /// The commands the desktop offers here (`commandCandidates`): `/goal`
-    /// in a 1:1 or a room (not a DM); `/learn` while skill authoring is on
-    /// and an engine that would answer mounts the agents tools; `/setup`
+    /// in a 1:1 or a room (not a DM); `/learn` while the server offers Teach
+    /// a task (`teachTask`, #4209), skill authoring is on and an engine that
+    /// would answer mounts the agents tools; `/setup`
     /// for one bot whose engine mounts them; `/loop` and its subcommands
     /// in a 1:1 or a room (not a DM).
-    public static func offered(isRoom: Bool, isDM: Bool, skillAuthoring: Bool, supportsAgents: Bool) -> [SagaxSlashCommand] {
+    public static func offered(isRoom: Bool, isDM: Bool, skillAuthoring: Bool, teachTask: Bool, supportsAgents: Bool) -> [SagaxSlashCommand] {
         var out: [SagaxSlashCommand] = []
         let conversation = !isRoom || !isDM
         if conversation { out.append(.goal) }
-        if skillAuthoring && supportsAgents { out.append(.learn) }
+        if teachTask && skillAuthoring && supportsAgents { out.append(.learn) }
         if !isRoom && supportsAgents { out.append(.setup) }
         if conversation { out += [.loop, .loopStatus, .loopStop] }
         return out

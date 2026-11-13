@@ -49,7 +49,7 @@ extension ChatView {
         switch current {
         case let .bot(bot):
             let sagax = SagaxSlashCommand.offered(
-                isRoom: false, isDM: false, skillAuthoring: power.skillAuthoring,
+                isRoom: false, isDM: false, skillAuthoring: power.skillAuthoring, teachTask: power.teachTask,
                 supportsAgents: supportsAgents(session.state.bot(bot.id) ?? bot)
             )
             let engine = session.surfaceGate.allows(.engineCommands)
@@ -65,7 +65,7 @@ extension ChatView {
         case let .room(room):
             let members = room.memberIds.compactMap { session.state.bot($0) }
             let sagax = SagaxSlashCommand.offered(
-                isRoom: true, isDM: room.dm == true, skillAuthoring: power.skillAuthoring,
+                isRoom: true, isDM: room.dm == true, skillAuthoring: power.skillAuthoring, teachTask: power.teachTask,
                 supportsAgents: members.contains { supportsAgents($0) }
             )
             let sets = commandTargets.map { target in

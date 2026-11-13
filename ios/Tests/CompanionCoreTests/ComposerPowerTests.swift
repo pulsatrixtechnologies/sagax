@@ -58,11 +58,14 @@ final class ComposerCommandsTests: XCTestCase {
 
     func testSagaxCommandsOfferedAsTheDesktopDoes() {
         let loops: [SagaxSlashCommand] = [.loop, .loopStatus, .loopStop]
-        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: false, isDM: false, skillAuthoring: true, supportsAgents: true), [.goal, .learn, .setup] + loops)
-        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: false, isDM: false, skillAuthoring: false, supportsAgents: true), [.goal, .setup] + loops)
-        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: false, isDM: false, skillAuthoring: true, supportsAgents: false), [.goal] + loops)
-        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: true, isDM: false, skillAuthoring: true, supportsAgents: true), [.goal, .learn] + loops)
-        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: true, isDM: true, skillAuthoring: true, supportsAgents: false), [])
+        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: false, isDM: false, skillAuthoring: true, teachTask: true, supportsAgents: true), [.goal, .learn, .setup] + loops)
+        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: false, isDM: false, skillAuthoring: false, teachTask: true, supportsAgents: true), [.goal, .setup] + loops)
+        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: false, isDM: false, skillAuthoring: true, teachTask: true, supportsAgents: false), [.goal] + loops)
+        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: true, isDM: false, skillAuthoring: true, teachTask: true, supportsAgents: true), [.goal, .learn] + loops)
+        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: true, isDM: true, skillAuthoring: true, teachTask: true, supportsAgents: false), [])
+        // #4209: Teach a task hidden on the server, no /learn; nothing else moves
+        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: false, isDM: false, skillAuthoring: true, teachTask: false, supportsAgents: true), [.goal, .setup] + loops)
+        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: true, isDM: false, skillAuthoring: true, teachTask: false, supportsAgents: true), [.goal] + loops)
         XCTAssertEqual(SagaxSlashCommand.learn.insertion, "/learn ")
         XCTAssertEqual(SagaxSlashCommand.setup.insertion, "/setup ")
         XCTAssertEqual(SagaxSlashCommand.loop.insertion, "/loop ")

@@ -2,7 +2,7 @@ import XCTest
 
 /// iPad 1:1 sweep (2026-11-03): the desktop chat column against the parity
 /// fixture. The composer's "/" menu (Goal, /loop, Esc to close), the +
-/// menu (Attach files and Teach a task only), the mic beside a draft, the
+/// menu (Attach files only while Teach a task is hidden, #4209), the mic beside a draft, the
 /// More menu's Split right / Split down, the thread picker's confidential
 /// thread, the folded approval command, find's outlined hit and Jump to
 /// latest, the message bar beside a reply, a group's banners and composer
@@ -75,8 +75,8 @@ final class DesktopChatSweepUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Start dictation"].exists, "the mic beside the draft")
     }
 
-    /// The + menu holds Attach files and Teach a task, no Model row; Attach
-    /// files offers the photo library and Files.
+    /// The + menu holds Attach files, no Model row, and no Teach a task while
+    /// the server hides it (#4209); Attach files offers the photo library and Files.
     @MainActor
     func testPlusMenuIsAttachAndTeach() throws {
         // chat-model-picker opens the model menu now (ModelPicker windowOnly):
@@ -87,7 +87,7 @@ final class DesktopChatSweepUITests: XCTestCase {
         plus.tap()
         let attach = element(app, "desktop-composer-attach")
         XCTAssertTrue(attach.waitForExistence(timeout: 20), "Attach files")
-        XCTAssertTrue(element(app, "desktop-composer-teach").exists, "Teach a task")
+        XCTAssertFalse(element(app, "desktop-composer-teach").exists, "no Teach a task (#4209)")
         XCTAssertFalse(element(app, "desktop-composer-model").exists, "no Model row")
         attach.tap()
         XCTAssertTrue(app.buttons["Photo library"].waitForExistence(timeout: 5), "the photo library")

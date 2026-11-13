@@ -58,6 +58,8 @@ struct DesktopComposerPill: View {
     @State private var roomSpeechConfigured = false
     /// The model menu (#477, #478, #518), as the desktop chip opens it.
     @State private var modelMenuOpen = false
+    /// Teach a task is offered on this server (`features.teachTask`, #4209).
+    @State private var teachTask = false
     @State private var menu: DesktopComposerMenu? = DesktopComposerPill.parityMenu
 
     #if DEBUG
@@ -122,6 +124,7 @@ struct DesktopComposerPill: View {
                 .onValueChange(of: proxy.size.width) { pillWidth = $0 }
         })
         .task(id: bot?.currentTaskModelSelection) { await loadModelLabel() }
+        .task { teachTask = await session.teachTaskOffered() }
         .onValueChange(of: hasText) { _ in menu = nil }
     }
 
@@ -210,7 +213,8 @@ struct DesktopComposerPill: View {
     }
 
     /// `ComposerPlusMenu` (useComposerVoice.ts plusItems): min 220 wide,
-    /// 6 in, rows 30 tall; Attach files and Teach a task, nothing else (the
+    /// 6 in, rows 30 tall; Attach files and Teach a task (while the server
+    /// offers it, #4209), nothing else (the
     /// model and the approval level live in the bot's settings, Loop and
     /// Goal in the "/" menu). The desktop's Attach files opens the file
     /// picker; on the iPad it offers its two sources, the photo library and
@@ -242,7 +246,7 @@ struct DesktopComposerPill: View {
             .buttonStyle(.plain)
             .hoverEffect(.highlight)
             .accessibilityIdentifier("desktop-composer-attach")
-            if bot != nil {
+            if bot != nil && teachTask {
                 // Teach a task: the same as picking /learn in the "/" menu
                 Button {
                     menu = nil

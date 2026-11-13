@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { collapseBotExchanges } from "@/lib/bot-exchange";
 import { setLocale } from "@/lib/i18n";
-import type { Message } from "@/state/store";
+import { BotEditorStore, initialState, type AppState, type Message, type useStore } from "@/state/store";
 import { BotExchangeChip } from "./BotExchangeChip";
 
 // These lines exist only with threads on; the unified chat (the default)
@@ -74,6 +74,11 @@ describe("BotExchangeChip", () => {
   });
 
   it("never draws a tool call as a line, and shows it as a chip only with Tool calls on", () => {
+    // #4171: the sheet reads the person's setting from the store, as the chat does.
+    const withToolCalls = (node: ReturnType<typeof createElement>) => createElement(BotEditorStore, {
+      value: { state: { ...initialState, config: { features: { showToolCalls: true } } as AppState["config"] }, dispatch: () => {} } as unknown as ReturnType<typeof useStore>,
+      children: node,
+    });
     const now = Date.now();
     const steps = [
       { id: "t1", role: "bot", kind: "activity", at: now + 100, requestMessageId: "p", tool: { name: "search_tool", ok: true } },
@@ -83,7 +88,7 @@ describe("BotExchangeChip", () => {
     expect(hidden).toContain("pour info");
     expect(hidden).not.toContain("search_tool");
     expect(hidden).not.toContain("use_tool");
-    const shown = renderToStaticMarkup(createElement(BotExchangeChip, { run: run(steps), forceOpen: true, showToolCalls: true }));
+    const shown = renderToStaticMarkup(withToolCalls(createElement(BotExchangeChip, { run: run(steps), forceOpen: true })));
     expect(shown).toContain('data-testid="tool-activity"');
     expect(shown).toContain("Looked for a tool");
     expect(shown).not.toContain("Used search tool");

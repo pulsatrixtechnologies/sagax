@@ -85,17 +85,17 @@ export function dedupeConversations(rows: readonly BotConversationRow[]): BotCon
 }
 
 /** The compact list inside the unfolded "Earlier topics". */
-export function EarlierConversationList({ self, rows, bots, showToolCalls = false }: { self: Pick<Bot, "id" | "name" | "color">; rows: readonly BotConversationRow[]; bots: readonly Bot[]; showToolCalls?: boolean }) {
+export function EarlierConversationList({ self, rows, bots }: { self: Pick<Bot, "id" | "name" | "color">; rows: readonly BotConversationRow[]; bots: readonly Bot[] }) {
   const list = dedupeConversations(rows);
   if (!list.length) return null;
   return (
     <div className="flex flex-col items-start px-1 py-1" data-earlier-conversations>
-      {list.map((row) => <BotConversationLine key={`earlier:${row.threadId}`} self={self} row={row} bots={bots} showToolCalls={showToolCalls} compact />)}
+      {list.map((row) => <BotConversationLine key={`earlier:${row.threadId}`} self={self} row={row} bots={bots} compact />)}
     </div>
   );
 }
 
-export function BotConversationLine({ self, row, bots, showToolCalls = false, compact = false }: { self: Pick<Bot, "id" | "name" | "color">; row: BotConversationRow; bots: readonly Bot[]; showToolCalls?: boolean; compact?: boolean }) {
+export function BotConversationLine({ self, row, bots, compact = false }: { self: Pick<Bot, "id" | "name" | "color">; row: BotConversationRow; bots: readonly Bot[]; compact?: boolean }) {
   const [run, setRun] = useState<ExchangeRun | null>(null);
   // a failed read says so in the sheet, never a blank sheet (#1502)
   const [loadError, setLoadError] = useState(false);
@@ -127,7 +127,7 @@ export function BotConversationLine({ self, row, bots, showToolCalls = false, co
       compact={compact}
       onClick={open}
     >
-      {run && <ExchangeSheet run={run} bots={bots} showToolCalls={showToolCalls} loadError={loadError} onRetry={open} onClose={() => setRun(null)} />}
+      {run && <ExchangeSheet run={run} bots={bots} loadError={loadError} onRetry={open} onClose={() => setRun(null)} />}
     </ConversationLink>
   );
 }

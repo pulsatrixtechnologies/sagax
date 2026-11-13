@@ -41,7 +41,6 @@ export default function TeammateExchangeSheet({ owner, teammate, threadId, task,
     <ExchangeSheet
       run={run}
       bots={bots}
-      showToolCalls={false}
       loadError={transcript.failed && transcript.messages.length === 0}
       subject={task}
       footer={footer}

@@ -18,17 +18,20 @@ describe("roomActivityVisible", () => {
     expect(roomActivityVisible(chip({}), true)).toBe(true);
   });
 
-  // an engine running another model than the saved one says so; with tool
-  // calls off (the default) that notice used to vanish with the tool steps
-  it("always shows a stopped turn, a model notice and a recovery row", () => {
+  // a stopped turn's status line stays; a technical notice or recovery line
+  // is a hidden status line the chat and the room both leave out (#4171)
+  it("always shows a stopped turn and leaves hidden status lines out, as the chat does", () => {
     expect(roomActivityVisible(chip({ tool: { name: "stopped: Stopped", ok: true } }), false)).toBe(true);
-    expect(roomActivityVisible(chip({ tool: { name: "notice: OpenCode no longer offers a, so this conversation uses b.", ok: true } }), false)).toBe(true);
-    expect(roomActivityVisible(chip({ tool: { name: "recovery: Automatic recovery: trying a backup once.", ok: true } }), false)).toBe(true);
+    expect(roomActivityVisible(chip({ tool: { name: "notice: OpenCode no longer offers a, so this conversation uses b.", ok: true } }), false)).toBe(false);
+    expect(roomActivityVisible(chip({ tool: { name: "recovery: Automatic recovery: trying a backup once.", ok: true } }), false)).toBe(false);
   });
 
-  it("always shows a failure", () => {
-    expect(roomActivityVisible(chip({ tool: { name: "Ran a command", ok: false } }), false)).toBe(true);
+  // #4171: one rule with the chat (activityRowShown): a failed turn stays,
+  // a plain failed step goes with the other steps when tool calls are off
+  it("always shows a failed turn and hides a plain failed step with tool calls off", () => {
     expect(roomActivityVisible(chip({ tool: { name: "error: engine missing" } }), false)).toBe(true);
+    expect(roomActivityVisible(chip({ tool: { name: "Ran a command", ok: false } }), false)).toBe(false);
+    expect(roomActivityVisible(chip({ tool: { name: "Ran a command", ok: false } }), true)).toBe(true);
   });
 
   it("leaves a stopped turn out of the chat", () => {
@@ -71,17 +74,18 @@ describe("roomActivityVisible", () => {
     expect(roomActivityVisible(chip({ kind: "text", text: "hi", tool: undefined }), true)).toBe(false);
   });
 
+  // iPhone / iPad web reads tool calls as off (showToolCallRows)
   it("hides every tool receipt on iOS, including Error badges, and keeps the rest", () => {
     const ios = true;
-    expect(roomActivityVisible(chip({ tool: { name: "Read", ok: true } }), true, ios)).toBe(false);
-    expect(roomActivityVisible(chip({ tool: { name: "Bash" } }), true, ios)).toBe(false);
-    expect(roomActivityVisible(chip({ tool: { name: "Write", ok: false } }), true, ios)).toBe(false);
-    expect(roomActivityVisible(chip({ tool: { name: "notice: waiting", ok: true } }), true, ios)).toBe(true);
-    expect(roomActivityVisible(chip({ tool: { name: "error: boom", ok: false } }), true, ios)).toBe(true);
+    expect(roomActivityVisible(chip({ tool: { name: "Read", ok: true } }), false, ios)).toBe(false);
+    expect(roomActivityVisible(chip({ tool: { name: "Bash" } }), false, ios)).toBe(false);
+    expect(roomActivityVisible(chip({ tool: { name: "Write", ok: false } }), false, ios)).toBe(false);
+    expect(roomActivityVisible(chip({ tool: { name: "stopped: Stopped", ok: true } }), false, ios)).toBe(true);
+    expect(roomActivityVisible(chip({ tool: { name: "error: boom", ok: false } }), false, ios)).toBe(true);
     expect(roomActivityVisible(chip({
       tool: { name: "Parallel task" },
       parallelTask: { threadId: "p", title: "T", requestMessageId: "r", role: "card" },
-    }), true, ios)).toBe(true);
+    }), false, ios)).toBe(true);
     expect(roomActivityVisible(chip({
       tool: { name: "Messaged @Ada" },
       comm: { groupId: "g", withBotId: "ada", withName: "Ada", withColor: "teal" },

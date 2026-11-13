@@ -7012,6 +7012,7 @@
   "settings.threadsLocation.title": "Threads location",
   "settings.title": "Settings",
   "settings.toolCalls.aria": "Show tool calls in chat",
+  "settings.toolCalls.description": "Everywhere a conversation shows: the chat, groups, routine runs, bot-to-bot exchanges, requests and coding tasks.",
   "settings.toolCalls.error": "Could not save the tool-call setting.",
   "settings.toolCalls.show": "Show tool calls",
   "settings.toolCalls.title": "Tool calls",

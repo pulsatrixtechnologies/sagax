@@ -47,13 +47,11 @@ function faceOf(bot: { id?: string; name: string; color?: string }, bots: readon
 function SingleLine({
   target,
   owners,
-  showToolCalls,
   forceOpen,
   onSelect,
 }: {
   target: GotoTarget;
   owners: Owners;
-  showToolCalls: boolean;
   forceOpen: boolean;
   onSelect: (target: GotoTarget) => boolean;
 }) {
@@ -62,7 +60,6 @@ function SingleLine({
       <BotExchangeChip
         run={target.run}
         bots={owners.bots}
-        showToolCalls={showToolCalls}
         forceOpen={forceOpen}
         onGo={() => onSelect(target)}
       />
@@ -74,7 +71,6 @@ function SingleLine({
         self={target.self}
         row={target.row}
         bots={owners.bots}
-        showToolCalls={showToolCalls}
       />
     );
   }
@@ -107,14 +103,12 @@ function GotoGroupChipBody({
   group,
   bots,
   groups,
-  showToolCalls = false,
   focusedId,
   onSelect,
 }: {
   group: GotoGroup;
   bots: readonly Bot[];
   groups?: readonly { id: string; name: string }[];
-  showToolCalls?: boolean;
   /** A search hit inside one of the exchanges opens its sheet. */
   focusedId?: string | null;
   /** Does what the target's own line does. False: nowhere to go, the exchange sheet opens here. */
@@ -157,7 +151,6 @@ function GotoGroupChipBody({
       <SingleLine
         target={group.targets[0]!}
         owners={owners}
-        showToolCalls={showToolCalls}
         forceOpen={Boolean(forcedKey)}
         onSelect={onSelect}
       />
@@ -336,7 +329,6 @@ function GotoGroupChipBody({
         <ExchangeSheet
           run={sheetTarget.run}
           bots={bots}
-          showToolCalls={showToolCalls}
           onClose={() => {
             setSheetKey(null);
             setHeld(true);
@@ -347,7 +339,6 @@ function GotoGroupChipBody({
         <ExchangeSheet
           run={conversationRun}
           bots={bots}
-          showToolCalls={showToolCalls}
           loadError={conversationError}
           onRetry={() => {
             const target = group.targets.find((entry) => entry.kind === "conversation" && entry.key === conversationKey);

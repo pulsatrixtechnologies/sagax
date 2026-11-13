@@ -4,7 +4,8 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeftRight } from "lucide-react";
-import { formatTime, type Bot } from "@/state/store";
+import { formatTime, useStoreOptional, type Bot } from "@/state/store";
+import { showToolCallRows } from "@/lib/tool-activity-rows";
 import { ConversationLink } from "./ConversationLink";
 import { PartyAvatar } from "./PartyAvatar";
 import { activeLocale, t } from "@/lib/i18n";
@@ -105,7 +106,6 @@ export function TranscriptDate({ at }: { at: number }) {
 export function ExchangeSheet({
   run,
   bots,
-  showToolCalls,
   onClose,
   loadError = false,
   onRetry,
@@ -120,7 +120,6 @@ export function ExchangeSheet({
 }: {
   run: ExchangeRun;
   bots?: readonly Bot[];
-  showToolCalls: boolean;
   onClose: () => void;
   loadError?: boolean;
   onRetry?: () => void;
@@ -176,8 +175,12 @@ export function ExchangeSheet({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [onClose]);
   const fallback = run.ends[0];
-  // A tool step is never a line with a speaker: it is a chip with Tool
-  // calls on, and nothing at all otherwise.
+  // #4171: the person's Settings > Tool calls, read where the main chat
+  // reads it, for every window drawn here (a routine run, a bot-to-bot
+  // exchange, a teammate's or a text message's request).
+  const showToolCalls = showToolCallRows(useStoreOptional()?.state.config);
+  // A tool step is never a line with a speaker: it is a chip, by the
+  // chat's own rule (activityRowShown), or nothing at all.
   const rows = run.messages.flatMap((message) => {
     const shape = exchangeSheetRow(message, showToolCalls);
     return shape ? [{ message, shape }] : [];
@@ -448,13 +451,10 @@ export function BotExchangeChip({
   run,
   bots,
   forceOpen = false,
-  showToolCalls = false,
   onGo,
 }: {
   run: ExchangeRun;
   bots?: readonly Bot[];
-  /** Settings > Tool calls: tool steps inside the run show as chips. */
-  showToolCalls?: boolean;
   /** A search hit inside the run opens the sheet, the same way a folded tool run does. */
   forceOpen?: boolean;
   /** Opens that bot's conversation. False when there is no conversation to open, and the sheet stays. */
@@ -485,7 +485,6 @@ export function BotExchangeChip({
         <ExchangeSheet
           run={run}
           bots={bots}
-          showToolCalls={showToolCalls}
           onClose={() => {
             setOpen(false);
             setHeld(true);

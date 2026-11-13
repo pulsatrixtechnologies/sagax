@@ -5135,6 +5135,7 @@
   "settings.threadsLocation.title": "Emplacement des fils",
   "settings.title": "Réglages",
   "settings.toolCalls.aria": "Afficher les appels d'outils dans la conversation",
+  "settings.toolCalls.description": "Partout où une conversation s'affiche : la conversation du bot, les groupes, les exécutions de routines, les échanges entre bots, les demandes et les tâches de code.",
   "settings.toolCalls.error": "Impossible d'enregistrer le réglage des appels d'outils.",
   "settings.toolCalls.show": "Afficher les appels d'outils",
   "settings.toolCalls.title": "Appels d'outils",

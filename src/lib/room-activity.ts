@@ -1,30 +1,19 @@
 import type { Message } from "@/state/store";
-import { isStatusActivity, isTurnStoppedNotice } from "@/lib/activity-runs";
-import { isAppleMobileWebClient, isToolActivityRow } from "@/lib/tool-activity-rows";
-import { failedTurnCause } from "../../shared/failed-turn";
+import { isTurnStoppedNotice } from "@/lib/activity-runs";
+import { activityRowShown, isAppleMobileWebClient } from "@/lib/tool-activity-rows";
 
-/** Whether a room shows this activity chip with tool calls hidden (the
- * default). Failures always show. A bot⇄bot comm chip ("Messaged @Ada") is
- * verbose detail: with tool calls (the details toggle) off it goes with the
- * other steps, matching Grok Bot's clean low-detail chat (2026-10-22); a
- * failed send still shows as a failure. An opened-thread chip stays its own
- * decision: it reads as true here so the room still lays out its row, and
- * ThreadChip hides it when threads are off (src/components/ThreadChip.tsx).
- * iPhone / iPad web matches the native companion: error receipts are tool
- * rows, not failures to always show. */
+/** Whether a room draws this step's chip. Settings > Tool calls is the
+ * chat's one rule (activityRowShown, #4171); this only adds the room's
+ * layout: a room draws a chip for a step (a row with a tool), and a stopped
+ * turn's notice stays out of it as it stays out of the chat's list. An
+ * opened-thread chip reads as shown here; ThreadChip then gates it on the
+ * threads toggle (src/components/ThreadChip.tsx). */
 export function roomActivityVisible(
   message: Message,
   showToolCalls: boolean,
-  hideToolReceipts: boolean = isAppleMobileWebClient(),
+  appleMobileWeb: boolean = isAppleMobileWebClient(),
 ): boolean {
-  const tool = message.tool;
-  if (message.kind !== "activity" || !tool) return false;
+  if (message.kind !== "activity" || !message.tool) return false;
   if (isTurnStoppedNotice(message)) return false;
-  // a Data receipt is a person's own result, never a tool receipt to hide
-  if (message.dataResult) return true;
-  if (hideToolReceipts) return !isToolActivityRow(message);
-  // An opened-thread receipt reads as visible here (ThreadChip then gates it
-  // on the threads toggle); a comm chip follows the details toggle below.
-  if (message.threadRef || isStatusActivity(message)) return true;
-  return tool.ok === false || failedTurnCause(tool.name) !== null || showToolCalls;
+  return activityRowShown(message, showToolCalls, appleMobileWeb);
 }

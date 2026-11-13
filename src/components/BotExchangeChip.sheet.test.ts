@@ -134,7 +134,7 @@ describe("BotExchangeChip sheet", () => {
     const onClose = vi.fn();
     const render = (sentKey?: string) => root.render(createElement(ChatWindowProvider, {
       value: { panelOpen: true, onTogglePanel, composerInset: 96, sentKey },
-      children: createElement(ExchangeSheet, { run: run(), showToolCalls: false, onClose, chrome: "window" }),
+      children: createElement(ExchangeSheet, { run: run(), onClose, chrome: "window" }),
     }));
     await act(async () => render("u1"));
     const sheet = host.querySelector<HTMLElement>("[data-testid=bot-exchange-sheet]")!;

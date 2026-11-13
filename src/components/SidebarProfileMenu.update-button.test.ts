@@ -1,6 +1,7 @@
-// A downloaded update puts a round cloud button at the right of the footer
-// row; it opens the "Update ready" dialog. While the updater checks,
-// downloads or fails, the row keeps its small badge and shows no button.
+// #4093: a downloaded update is told once, as the account menu's first row
+// ("Update available", Install), the reference's menu. The foot shows no
+// second ready button (not beside the name, not on the rail), and the
+// avatar wears the reference's update dot so the closed menu points at it.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,14 +24,17 @@ vi.mock("@/state/store", async (importOriginal) => {
   };
 });
 
-import { showsUpdateButton, SidebarProfileMenu } from "./SidebarProfileMenu";
+import { SidebarProfileMenu } from "./SidebarProfileMenu";
+import { SidebarUpdatePill } from "./SidebarUpdatePill";
 
-const button = (html: string) => /<button[^>]*data-sidebar-update=""[^>]*>/.exec(html)?.[0] ?? "";
+const updateButtons = (html: string) => html.match(/<button[^>]*data-sidebar-update(-pill)?=[^>]*>/g) ?? [];
+const dot = (html: string) => /<span[^>]*class="absolute -right-0\.5 -top-0\.5[^"]*"/.exec(html)?.[0] ?? "";
 
-function render(updater: UpdaterState | null, avatarOnly = false) {
+function render(updater: UpdaterState | null, avatarOnly = false, withName = false) {
   fixture.updater = updater;
   vi.stubGlobal("window", { ogb: { updater: { check: vi.fn(), install: vi.fn(), onState: vi.fn() } } });
-  return renderToStaticMarkup(createElement(SidebarProfileMenu, { avatarOnly }));
+  return renderToStaticMarkup(createElement(SidebarProfileMenu, { avatarOnly, withName }))
+    + renderToStaticMarkup(createElement(SidebarUpdatePill));
 }
 
 beforeEach(() => resetAchievementsForTests());
@@ -39,40 +43,28 @@ afterEach(() => {
   resetAchievementsForTests();
 });
 
-describe("footer update button", () => {
-  it("is shown for a downloaded update only", () => {
-    expect(showsUpdateButton("downloaded")).toBe(true);
-    for (const phase of ["idle", "checking", "downloading", "preparing", "installing", "error", "handed-off", "up-to-date"] as const) {
-      expect(showsUpdateButton(phase)).toBe(false);
+describe("a downloaded update, told once (#4093)", () => {
+  it("puts no ready button in the foot: not beside the name, not in the wide foot, not on the rail", () => {
+    const ready: UpdaterState = { status: "downloaded", version: "0.4.19" };
+    for (const [avatarOnly, withName] of [[false, false], [true, true], [true, false]] as const) {
+      const html = render(ready, avatarOnly, withName);
+      expect(updateButtons(html), `avatarOnly=${avatarOnly} withName=${withName}`).toEqual([]);
+      expect(html).not.toContain("lucide-cloud-download");
     }
-    expect(showsUpdateButton(undefined)).toBe(false);
   });
 
-  it("puts a round cloud button beside the name, labelled with the version", () => {
+  it("dots the avatar for a waiting update and a failed one, the foot's progress button covering the rest", () => {
+    expect(dot(render({ status: "downloaded", version: "0.5.21" }, true))).toContain("bg-accent");
+    expect(dot(render({ status: "error", message: "offline" }, true))).toContain("bg-danger");
+    const downloading = render({ status: "downloading", version: "0.5.21", percent: 40 }, true);
+    expect(dot(downloading)).toBe("");
+    expect(updateButtons(downloading)).toHaveLength(1);
+    expect(downloading).toContain('data-sidebar-update-pill="progress"');
+  });
+
+  it("keeps the name beside the avatar in the wide row", () => {
     const html = render({ status: "downloaded", version: "0.4.19" });
-    const tag = button(html);
-    expect(tag).toContain('aria-label="Version 0.4.19 ready · Restart"');
-    expect(tag).toContain("rounded-full");
-    expect(tag).toContain("flex-basis:2.75rem");
-    expect(tag).not.toContain("data-wide");
-    expect(html).toContain("lucide-cloud-download");
-    // the name stays while the button is round, and the row's badge gives way
     expect(html).toContain(">Alex Martin</span>");
     expect(html).toContain("max-w-[240px]");
-    expect(html.match(/lucide-arrow-down-to-line/g)).toBeNull();
-  });
-
-  it("leaves the avatar's dot to a failed update beside Connect apps", () => {
-    const dot = (html: string) => /<span[^>]*class="absolute -right-0\.5 -top-0\.5[^"]*"/.exec(html)?.[0] ?? "";
-    // the foot's own update button (SidebarUpdatePill) shows these
-    expect(dot(render({ status: "downloaded", version: "0.5.21" }, true))).toBe("");
-    expect(dot(render({ status: "downloading", version: "0.5.21", percent: 40 }, true))).toBe("");
-    expect(dot(render({ status: "error", message: "offline" }, true))).toContain("bg-danger");
-  });
-
-  it("is absent while an update downloads, and on the collapsed rail", () => {
-    expect(button(render({ status: "downloading", version: "0.4.19", percent: 40 }))).toBe("");
-    expect(button(render({ status: "idle" }))).toBe("");
-    expect(button(render({ status: "downloaded", version: "0.4.19" }, true))).toBe("");
   });
 });

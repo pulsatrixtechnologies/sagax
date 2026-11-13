@@ -42,9 +42,13 @@ describe("sidebar head buttons", () => {
 
   it("are what the head's search and New buttons wear, at every density", () => {
     expect(sidebar).toMatch(/const SIDEBAR_HEAD_BUTTON = cn\(\s*SIDEBAR_CIRCLE_BUTTON,/);
+    // one pair, drawn in the head at full width and in the rail's foot (#4093)
+    const buttons = sidebar.slice(sidebar.indexOf("const headButtons = ("), sidebar.indexOf("</>", sidebar.indexOf("const headButtons = (")));
+    expect(buttons.match(/className=\{SIDEBAR_HEAD_BUTTON\}/g)).toHaveLength(2);
+    expect(buttons).not.toMatch(/CIRCLE_BUTTON\b(?!_)/);
     const head = sidebar.slice(sidebar.indexOf("<div data-sidebar-head"), sidebar.indexOf("{/* Bot list."));
-    expect(head.match(/className=\{SIDEBAR_HEAD_BUTTON\}/g)).toHaveLength(4);
-    expect(head).not.toMatch(/CIRCLE_BUTTON\b(?!_)/);
+    expect(head.match(/\{headButtons\}/g)).toHaveLength(1);
+    expect(sidebar.slice(sidebar.indexOf("<SidebarRailFoot ")).split("\n")[0]).toContain("controls={headButtons}");
   });
 
   it("have rail tokens that equal the frame's on every skin but Pulsatrix Light, Pulsatrix and Midnight", () => {

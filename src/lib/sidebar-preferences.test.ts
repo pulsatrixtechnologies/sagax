@@ -252,7 +252,7 @@ describe("sidebar edge drag", () => {
     // A drag from the rail starts at its 80px; the pointer's travel adds to it.
     expect(sidebarDragTarget(SIDEBAR_RAIL_WIDTH + 60, bounds)).toEqual({ collapsed: true });
     expect(sidebarDragTarget(SIDEBAR_RAIL_WIDTH + 100, bounds)).toEqual({ collapsed: false, width: 240 });
-    expect(sidebarDragTarget(SIDEBAR_RAIL_WIDTH + 250, bounds)).toEqual({ collapsed: false, width: 330 });
+    expect(sidebarDragTarget(SIDEBAR_RAIL_WIDTH + 250, bounds)).toEqual({ collapsed: false, width: SIDEBAR_RAIL_WIDTH + 250 });
   });
 
   it("takes another snap width", () => {
@@ -261,13 +261,14 @@ describe("sidebar edge drag", () => {
 });
 
 describe("the sidebar by window width (the reference app's narrow window, 2026-11-01)", () => {
-  it("is a drawer on a phone, the rail from sm to md, the person's own above", () => {
-    expect([SIDEBAR_DRAWER_BELOW, SIDEBAR_AUTO_RAIL_BELOW]).toEqual([640, 768]);
+  it("is a drawer on a phone, the rail up to the sidebar plus 424px, the person's own above (#4093)", () => {
+    expect([SIDEBAR_DRAWER_BELOW, SIDEBAR_AUTO_RAIL_BELOW]).toEqual([640, 704]);
     expect(sidebarViewportFor(390)).toBe("phone");
     expect(sidebarViewportFor(639)).toBe("phone");
     expect(sidebarViewportFor(640)).toBe("medium");
     expect(sidebarViewportFor(700)).toBe("medium");
-    expect(sidebarViewportFor(767)).toBe("medium");
+    expect(sidebarViewportFor(703)).toBe("medium");
+    expect(sidebarViewportFor(704)).toBe("wide");
     expect(sidebarViewportFor(768)).toBe("wide");
     expect(sidebarViewportFor(1338)).toBe("wide");
   });

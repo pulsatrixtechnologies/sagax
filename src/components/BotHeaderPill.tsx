@@ -39,11 +39,11 @@ export function useChatWindow(): ChatWindowContextValue | null {
   return useContext(ChatWindowContext);
 }
 
-/** The one chat pill (JC 2026-11-06, hotfix 0.8.57): 40px, hairline border,
- * mascot then the name with the title stacked under it. The bot chat, a group, a split
+/** The one chat pill (JC 2026-11-06, hotfix 0.8.57; #4093): 36px, hairline
+ * border, mascot then "Name · Title" on one line, as the reference. The bot chat, a group, a split
  * pane, a coding chat, a bot-to-bot conversation and a routine run all draw
  * it with this class, centered in ChatHeaderBar. */
-export const CHAT_PILL_CLASS = "flex h-10 min-w-0 items-center gap-2 rounded-full border-[0.5px] border-hairline-weak bg-elevated pl-2 pr-3.5";
+export const CHAT_PILL_CLASS = "flex h-9 min-w-0 items-center gap-2 rounded-full border-[0.5px] border-hairline-weak bg-elevated pl-2 pr-3.5";
 const CHAT_PILL_HOVER = "transition-colors duration-[120ms] hover:bg-elevated-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60";
 
 /** The pill in a window's header (CodingChat, ExchangeSheet): the same pill
@@ -70,17 +70,20 @@ export function WindowHeaderPill({ children, label }: { children: ReactNode; lab
 }
 
 /**
- * The pill's text (JC rule, 2026-11-06): the name on its own line in the ink
- * color, the title UNDER it, smaller and in secondary grey. Never
- * "Name · Title" on one line. Each line ends in its own ellipsis when too
- * long; the whole name and title show on hover, one per line.
+ * The pill's text, as the reference app draws it (#4093, the owner's side
+ * by side of 2026-11-12, which replaces the stacked lines of 2026-11-06 for
+ * the chat header's pill): "Name · Title" on ONE line, 14px, the name in the
+ * ink colour, the dot and the title in secondary grey. The title gives way
+ * first: it ends in its own ellipsis, then the name does. The whole name and
+ * title show on hover, one per line.
  */
 export function PillName({ name, label, weight }: { name: string; label?: string; weight: string }) {
   const tag = label?.trim();
   return (
-    <span data-bot-header-text="" title={tag ? `${name}\n${tag}` : name} className="flex min-w-0 flex-col items-start text-left">
-      <span data-bot-header-name="" className={cn("block max-w-full truncate whitespace-nowrap text-[15px] text-ink", tag ? "leading-[18px]" : "leading-5", weight)}>{name}</span>
-      {tag && <span data-bot-header-label="" className="block max-w-full truncate whitespace-nowrap text-[12px] font-normal leading-[15px] text-ink-secondary">{tag}</span>}
+    <span data-bot-header-text="" title={tag ? `${name}\n${tag}` : name} className="flex min-w-0 items-baseline gap-1 whitespace-nowrap text-left text-[14px] leading-5">
+      <span data-bot-header-name="" className={cn("block min-w-0 max-w-full shrink truncate text-ink", weight)}>{name}</span>
+      {tag && <span aria-hidden="true" className="shrink-0 text-ink-secondary">·</span>}
+      {tag && <span data-bot-header-label="" className="block min-w-0 shrink-[2] truncate font-normal text-ink-secondary">{tag}</span>}
     </span>
   );
 }
@@ -109,7 +112,7 @@ export function BotHeaderPill({ name, label, panelOpen, onToggle, avatar }: {
       aria-expanded={panelOpen}
     >
       {avatar}
-      <PillName name={name} label={label} weight="font-medium" />
+      <PillName name={name} label={label} weight="font-normal" />
       <ChevronRight
         data-bot-header-chevron=""
         size={14}
@@ -125,9 +128,8 @@ export function BotHeaderPill({ name, label, panelOpen, onToggle, avatar }: {
 }
 
 /**
- * The bot chat's header, like Grok Bot (#2141): the name pill alone, 40px
- * high (mascot about 22px, then the name with the title stacked under it in
- * smaller secondary grey, JC 2026-11-06), which opens and closes
+ * The bot chat's header, like Grok Bot (#2141): the name pill alone, 36px
+ * high (mascot about 20px, then "Name · Title" on one line, #4093), which opens and closes
  * the bot panel. No sharing pill and no gear above the chat (JC 2026-11-06):
  * sharing lives in the bot panel, the pill already toggles it.
  */

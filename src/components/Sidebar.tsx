@@ -397,7 +397,7 @@ export function GroupListItem({
       }}
       className={cn(
         "relative flex w-full items-center text-left outline-none transition-colors duration-fast ease-out-quint focus-visible:ring-1 focus-visible:ring-accent/60",
-        density === "icons" ? "justify-center rounded-lg px-1 py-1.5" : density === "compact" ? "gap-2 rounded-lg py-1.5 pr-9" : "h-[54px] gap-2 rounded-[10px] py-2 pr-2",
+        density === "icons" ? "justify-center rounded-lg px-1 py-1.5" : density === "compact" ? "gap-2 rounded-lg py-1.5 pr-9" : "h-[54px] gap-2.5 rounded-[12px] py-2 pr-2",
         // The same box and inset as BotListItem (Grok Bot's 54px row), so
         // every row's avatar and name line up: a room or a person moves like
         // a bot row (#152), only in the sidebar location, where its chevron
@@ -412,7 +412,7 @@ export function GroupListItem({
       {peer
         ? <span data-sidebar-row-avatar className={cn("flex shrink-0 items-center justify-center", density === "icons" ? "size-12" : density === "compact" ? "size-7" : "size-9")}><PersonAvatar avatarUrl={peer.avatarUrl} initials={peer.initials} size={density === "icons" ? 44 : density === "compact" ? 28 : 36} presenceId={peer.id} presenceRing="border-sidebar" /></span>
         : <span data-sidebar-row-avatar className="flex shrink-0"><StackedMauses members={members} density={density} viewerId={viewerActorId(state.config)} /></span>}
-      <div data-sidebar-row-name className={cn("min-w-0 flex-1", density === "icons" && "hidden")}>
+      <div data-sidebar-row-name className={cn("flex min-w-0 flex-1 flex-col gap-px", density === "icons" && "hidden")}>
         <div className="flex items-baseline justify-between gap-2">
           <span className={cn("flex min-w-0 grow items-center gap-1.5 text-[14px] leading-5 text-sidebar-ink", (selected && !expanded) || group.unread ? "font-semibold" : "font-medium")}>
             <span className="min-w-0 truncate">{rowName}</span>
@@ -438,7 +438,7 @@ export function GroupListItem({
     {/* one conversation: no thread is made or opened from the row */}
     {!group.dm && !group.peopleDm && density !== "icons" && threadsMode !== "one" && <button type="button" disabled={roomBusy} aria-label={t("task.newShort")} title={t(roomBusy ? "task.newBusy" : "task.newShort")}
       onClick={() => { setThreadsOpen(true); dispatch({ type: "newGroupTask", groupId: group.id }); }}
-      className="pointer-events-none absolute right-1 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded text-sidebar-ink-secondary opacity-0 hover:bg-sidebar-hover hover:text-sidebar-ink disabled:opacity-40 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 max-md:pointer-events-auto max-md:opacity-70 touch:pointer-events-auto touch:opacity-70 touch:disabled:opacity-40"><Plus size={14} /></button>}
+      className="pointer-events-none absolute right-1 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded text-sidebar-ink-secondary opacity-0 hover:bg-sidebar-hover hover:text-sidebar-ink disabled:opacity-40 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 max-sm:pointer-events-auto max-sm:opacity-70 touch:pointer-events-auto touch:opacity-70 touch:disabled:opacity-40"><Plus size={14} /></button>}
     </div>
     {expanded && <div className={threadListIndent(density)}>{group.peopleDm
       ? <PersonThreadList group={group} name={rowName} selected={selected} density={density} query={rowName.toLowerCase().includes(query.toLowerCase()) ? "" : query} />
@@ -1900,15 +1900,18 @@ export function BotListItem({
   const rowClass = cn(
     "flex items-center text-left outline-none transition-colors duration-fast ease-out-quint focus-visible:ring-1 focus-visible:ring-accent/60",
     iconOnly
-      // Grok Bot's rail: a 54px square, 9px around the 36px portrait
-      ? "mx-auto h-[54px] w-[54px] shrink-0 justify-center rounded-[10px] p-[9px]"
+      // Grok Bot's rail: a 54px square, 9px around the 36px portrait,
+      // 12px corners (the owner's configuration, #4093)
+      ? "mx-auto h-[54px] w-[54px] shrink-0 justify-center rounded-[12px] p-[9px]"
+      // the row: 10px from the portrait to the text, 12px corners
       : cn("w-full", comfortable
-        ? "h-[54px] gap-2 rounded-[10px] py-2 pl-2 pr-2"
+        ? "h-[54px] gap-2.5 rounded-[12px] py-2 pl-2 pr-2"
         : "gap-2 rounded-lg py-1.5 pl-2 pr-9",
         // room for the chevron, at the inset a room's row has there
         inSidebar && "pl-6"),
-    // room for New thread and the "..." while they show (hover, focus, touch)
-    !iconOnly && !selection?.active && "group-hover:pr-[64px] group-focus-within:pr-[64px] max-md:pr-[64px] touch:pr-[64px]",
+    // room for New thread and the "..." while they show (hover, focus, touch,
+    // and the drawer below `sm`: the full sidebar starts at 704px now, #4093)
+    !iconOnly && !selection?.active && "group-hover:pr-[64px] group-focus-within:pr-[64px] max-sm:pr-[64px] touch:pr-[64px]",
     // room for the selection check
     !iconOnly && selection?.active && "pr-9",
     // The Primary Bot is called out by the star on its avatar, not by
@@ -1976,8 +1979,8 @@ export function BotListItem({
         {teammateWait && <StatusDot tone="accent" testId="teammate-wait-dot" role="status" label={teammateWaitLine(bot)} className={cn("absolute -right-0.5", dotCorner)} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
         {!teammateWait && !waiting && !working && queued && <StatusDot tone="queued" testId="queued-dot" role="status" label={t("task.queued")} className={cn("absolute -right-0.5", dotCorner)} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
       </span>
-      <div data-sidebar-row-name className={cn("flex min-w-0 flex-1 flex-col", iconOnly && "hidden", trailingDot && "mr-4 group-hover:mr-0 group-focus-within:mr-0 max-md:mr-0 touch:mr-0")}>
-        <div data-sidebar-bot-title className="flex min-w-0 items-center gap-1.5">
+      <div data-sidebar-row-name className={cn("flex min-w-0 flex-1 flex-col gap-px", iconOnly && "hidden", trailingDot && "mr-4 group-hover:mr-0 group-focus-within:mr-0 max-sm:mr-0 touch:mr-0")}>
+        <div data-sidebar-bot-title className="flex min-w-0 items-center gap-1">
           <span className="flex min-w-0 shrink items-center gap-1 text-[14px] font-medium leading-5 text-sidebar-ink">
             {bot.pinned && <Pin size={12} className="shrink-0 text-sidebar-ink-secondary" />}
             <RenameTitle
@@ -2091,7 +2094,7 @@ export function BotListItem({
         {body}
       </div>
       {trailingDot && (
-        <span data-sidebar-unread-dot aria-hidden="true" className="absolute right-2 top-1/2 size-2 -translate-y-1/2 rounded-full bg-unread pointer-events-none transition-opacity group-hover:opacity-0 group-focus-within:opacity-0 max-md:opacity-0 touch:opacity-0" />
+        <span data-sidebar-unread-dot aria-hidden="true" className="absolute right-2 top-1/2 size-2 -translate-y-1/2 rounded-full bg-unread pointer-events-none transition-opacity group-hover:opacity-0 group-focus-within:opacity-0 max-sm:opacity-0 touch:opacity-0" />
       )}
       {selection?.active && !renaming && (
         <span data-sidebar-select-mark aria-hidden="true" className={cn("pointer-events-none absolute top-1/2 flex size-[18px] -translate-y-1/2 items-center justify-center rounded-full border", iconOnly ? "right-1 top-3" : "right-3", selection.selected ? "border-accent bg-accent text-accent-ink" : "border-sidebar-ink-secondary/60")}>
@@ -2105,9 +2108,9 @@ export function BotListItem({
         {/* direct New thread, beside the "..." (2026-10-15) */}
         {showThreads && <button type="button" data-sidebar-bot-new-thread={bot.id} aria-label={t("task.newShort")} title={t("task.newShort")}
           onClick={() => { if (inSidebar) setThreadsOpen(true); dispatch({ type: "newTask", botId: bot.id }); }}
-          className="pointer-events-none absolute right-8 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded text-sidebar-ink-secondary opacity-0 hover:bg-sidebar-hover hover:text-sidebar-ink group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 max-md:pointer-events-auto max-md:opacity-70 touch:pointer-events-auto touch:opacity-70"><Plus size={14} /></button>}
+          className="pointer-events-none absolute right-8 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded text-sidebar-ink-secondary opacity-0 hover:bg-sidebar-hover hover:text-sidebar-ink group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 max-sm:pointer-events-auto max-sm:opacity-70 touch:pointer-events-auto touch:opacity-70"><Plus size={14} /></button>}
         <button type="button" aria-label={t("sidebar.bot.actions", { name: bot.name })} title={t("sidebar.bot.actions", { name: bot.name })} aria-haspopup="menu" onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); onMenu({ botId: bot.id, x: rect.left, y: rect.bottom }); }}
-          className="pointer-events-none absolute right-1 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded text-sidebar-ink-secondary opacity-0 hover:bg-sidebar-hover hover:text-sidebar-ink group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 max-md:pointer-events-auto max-md:opacity-70 touch:pointer-events-auto touch:opacity-70"><MoreHorizontal size={15} /></button>
+          className="pointer-events-none absolute right-1 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded text-sidebar-ink-secondary opacity-0 hover:bg-sidebar-hover hover:text-sidebar-ink group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 max-sm:pointer-events-auto max-sm:opacity-70 touch:pointer-events-auto touch:opacity-70"><MoreHorizontal size={15} /></button>
       </>}
       {deleting && iconOnly && (
         <span className="pointer-events-none absolute bottom-1 right-1 rounded-full bg-card p-1 text-ink-secondary">
@@ -2491,6 +2494,34 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
   // Search and New ride in the title bar when there is one and no brand row.
   const titleBarHead = (macInset || browser) && !showLogo;
   const { accountPlaces, archivedBots } = roster;
+  // Search and New: in the head's row at full width, in the rail's foot
+  // (#4093, the reference's rail keeps its controls at the bottom).
+  const headButtons = (
+    <>
+      <button
+        type="button"
+        data-sidebar-search
+        onClick={openCommandPalette}
+        aria-label={t("sidebar.searchAria")}
+        aria-keyshortcuts={isMacPlatform() ? "Meta+K" : "Control+K"}
+        title={searchTitle}
+        className={SIDEBAR_HEAD_BUTTON}
+      >
+        <Search size={16} strokeWidth={1.75} aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        onClick={() => onCompose?.()}
+        aria-expanded={composeOpen}
+        aria-label={t("sidebar.new")}
+        title={t("sidebar.new")}
+        data-sidebar-new
+        className={SIDEBAR_HEAD_BUTTON}
+      >
+        <Plus size={18} strokeWidth={1.75} aria-hidden="true" />
+      </button>
+    </>
+  );
 
   return (
     <SidebarMascotProvider rootRef={sidebarRef}>
@@ -2543,30 +2574,9 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
           </div>
         )}
         {density === "icons" ? (
-          <div className="flex flex-col items-center gap-2 px-2 pb-2 pt-1 window-no-drag">
-            <button
-              type="button"
-              data-sidebar-search
-              onClick={openCommandPalette}
-              aria-label={t("sidebar.searchAria")}
-              aria-keyshortcuts={isMacPlatform() ? "Meta+K" : "Control+K"}
-              title={searchTitle}
-              className={SIDEBAR_HEAD_BUTTON}
-            >
-              <Search size={16} strokeWidth={1.75} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onCompose?.()}
-              aria-expanded={composeOpen}
-              aria-label={t("sidebar.new")}
-              title={t("sidebar.new")}
-              data-sidebar-new
-              className={SIDEBAR_HEAD_BUTTON}
-            >
-              <Plus size={18} strokeWidth={1.75} aria-hidden="true" />
-            </button>
-          </div>
+          // #4093: the reference's rail holds no control at its top; search
+          // and New ride in the rail's foot, above the apps grid and the avatar.
+          <div className="h-2" aria-hidden="true" />
         ) : (
           <>
             <div className={titleBarHead ? SIDEBAR_TITLE_ROW : SIDEBAR_HEAD_ROW} data-sidebar-title-row={titleBarHead ? "" : undefined}>
@@ -2584,28 +2594,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
                 </span>
               )}
               <span className="ml-auto flex shrink-0 items-center gap-2 window-no-drag">
-                <button
-                  type="button"
-                  data-sidebar-search
-                  onClick={openCommandPalette}
-                  aria-label={t("sidebar.searchAria")}
-                  aria-keyshortcuts={isMacPlatform() ? "Meta+K" : "Control+K"}
-                  title={searchTitle}
-                  className={SIDEBAR_HEAD_BUTTON}
-                >
-                  <Search size={16} strokeWidth={1.75} aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onCompose?.()}
-                  aria-expanded={composeOpen}
-                  aria-label={t("sidebar.new")}
-                  title={t("sidebar.new")}
-                  data-sidebar-new
-                  className={SIDEBAR_HEAD_BUTTON}
-                >
-                  <Plus size={18} strokeWidth={1.75} aria-hidden="true" />
-                </button>
+                {headButtons}
               </span>
             </div>
           </>
@@ -2719,7 +2708,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
         {density === "icons" ? (
           <>
             {/* the wide foot's row, stacked: the avatar and the apps grid */}
-            <SidebarRailFoot places={accountPlaces} onOpenApps={() => dispatch({ type: "togglePlugins", open: true })} />
+            <SidebarRailFoot places={accountPlaces} onOpenApps={() => dispatch({ type: "togglePlugins", open: true })} controls={headButtons} />
           </>
         ) : (
           // The foot (reference design): the account pill, your avatar and

@@ -9,6 +9,7 @@ import type { Bot, Message } from "@/state/store";
 import { ComposerAttachments } from "../ComposerAttachments";
 import { ComposerCommandMenu } from "../ComposerCommandMenu";
 import { ComposerSendBlock } from "../ComposerSendBlock";
+import { ComposerFoldedModelRow } from "../ComposerControls";
 import { QueuedComposerMessages } from "../ComposerQueuedMessages";
 import { WorkplaceNotice } from "../WorkplaceNotice";
 import { ComposerNotices } from "./ComposerNotices";
@@ -225,6 +226,9 @@ export function ComposerShell({
           onPickFiles={(files) => { void pickFiles(files); }}
           onSendMeme={locked ? undefined : sendMeme}
           plusItems={plusItems}
+          plusRows={bot && !group && !remoteClient
+            ? (close) => <ComposerFoldedModelRow bot={bot} modelMenu={modelMenu} close={close} />
+            : undefined}
           teachChooser={teachChooser}
           setTeachChooser={setTeachChooser}
           browserTeach={browserTeach}

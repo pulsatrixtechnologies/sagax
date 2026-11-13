@@ -5,10 +5,12 @@
 //   - to the right, a separate round button with the apps grid icon, which
 //     opens Connect apps. The apps that are connected are only a discreet
 //     dot on it and the list in its tooltip (no overlapping logos);
-//   - a waiting update is the same kind of round button beside it.
+//   - an update in progress (downloading, staged, installing) is the same
+//     kind of round button beside it; a downloaded one is the account menu's
+//     first row, and a dot on the avatar (#4093, the reference's menu).
 // No hover animation and no stacked state: the name is cut only when the row
 // really has no room left for it.
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { t } from "@/lib/i18n";
 import { api } from "@/state/store";
 import { useStoreSelector } from "@/state/store-selector";
@@ -100,7 +102,7 @@ export function SidebarFoot({ places, onOpenApps }: { places?: SidebarMenuItem[]
   return (
     <div data-sidebar-account-row className="-mx-1.5 flex items-center gap-1.5">
       <SidebarProfileMenu avatarOnly withName places={places} />
-      {/* a waiting update: the same kind of round button, beside the grid */}
+      {/* an update in progress: the same kind of round button, beside the grid */}
       <SidebarUpdatePill layout="compact" />
       <FootConnectApps apps={apps} onOpen={onOpenApps} />
       <SidebarRoutinesBadge />
@@ -109,21 +111,23 @@ export function SidebarFoot({ places, onOpenApps }: { places?: SidebarMenuItem[]
 }
 
 /** The rail's foot (icons density, chosen or automatic at medium widths):
- * the wide foot's row stacked in the 80px column. The same pieces, so
- * nothing the wide foot reaches is lost: a waiting update and the active
- * routines (each only when there is one), the round apps-grid button, then
- * the avatar (its menu holds Settings, Approvals, Code and the rest). The
- * name has no room; it is the avatar's accessible name and tooltip. */
-export function SidebarRailFoot({ places, onOpenApps }: { places?: SidebarMenuItem[]; onOpenApps: () => void }) {
+ * the reference's rail keeps its controls at the bottom (#4093): search and
+ * New (`controls`, the head's own buttons at full width), an update in
+ * progress and the active routines (each only when there is one), the round
+ * apps-grid button, then the avatar (its menu holds Settings, Approvals,
+ * Code and the rest). The name has no room; it is the avatar's accessible
+ * name and tooltip. */
+export function SidebarRailFoot({ places, onOpenApps, controls }: { places?: SidebarMenuItem[]; onOpenApps: () => void; controls?: ReactNode }) {
   const apps = useConnectedApps();
   return (
     <>
       <div data-sidebar-rail-foot="" className="flex flex-col items-center gap-2 pt-1">
+        {controls}
         <SidebarUpdatePill layout="compact" />
         <SidebarRoutinesBadge />
         <FootConnectApps apps={apps} onOpen={onOpenApps} />
       </div>
-      <div data-sidebar-account-rail="" className="flex h-10 items-center justify-center">
+      <div data-sidebar-account-rail="" className="flex h-12 items-center justify-center">
         <SidebarProfileMenu avatarOnly places={places} />
       </div>
     </>

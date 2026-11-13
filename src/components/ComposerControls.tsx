@@ -15,7 +15,11 @@ import { formatDictationTime } from "@/lib/composer-dictation";
 import { focusFirstMenuItem, moveMenuFocus } from "@/lib/menu-keys";
 import { CTA_CIRCLE, CTA_DEFAULT, CTA_TONED, ctaStyle, type BotCtaColors } from "@/lib/voice-cta";
 import { useMenuMotion } from "./MenuMotion";
-import type { ComposerModelChip } from "./ModelPicker";
+import type { ComposerModelChip, ComposerModelMenuControl } from "./ModelPicker";
+import { composerModelLabel } from "./ModelPicker.tsx-parts/helpers";
+import { ultracodeFromSelection } from "@/lib/ultracode-chrome";
+import { useStoreSelector } from "@/state/store-selector";
+import type { Bot } from "@/state/store";
 
 /** The quiet circle: a translucent ink wash, a 0.5 px inner hairline, tertiary ink brightening on hover. */
 export const SECONDARY_CIRCLE = cn(
@@ -58,9 +62,20 @@ export interface PlusMenuItem {
  * task), modes (Goal, Setup), then the conversation's own settings as rows
  * that open beside it (`rows`, rendered by their owners: the model and the
  * approval level). */
+/** The composer's width under which the capsule folds its model chip away
+ * (#4093): the reference keeps no model picker in a narrow capsule; the + menu's
+ * Model row reaches the same menu there. One place, read by the chip and the
+ * row: 35rem (560px, the reference header's own narrow break). Tailwind
+ * container classes are full literals. */
+/** Shown only while the capsule is narrow (the + menu's folded rows). */
+export const COMPOSER_NARROW_ONLY = "hidden @max-[35rem]/composer:contents";
+/** Hidden while the capsule is narrow (the chip the + menu then holds). */
+export const COMPOSER_WIDE_ONLY = "contents @max-[35rem]/composer:hidden";
+
 export function ComposerPlusMenu({
   items,
   rows,
+  rowsClassName = "contents",
   disabled = false,
   initialOpen = false,
   onOpenChange,
@@ -68,6 +83,9 @@ export function ComposerPlusMenu({
   items: PlusMenuItem[];
   /** Rows that own a menu of their own; each gets `close` to call once picked. */
   rows?: (close: () => void) => ReactNode;
+  /** Where the rows (and the hairline above them) show: always, or only in
+   * a narrow capsule (`COMPOSER_NARROW_ONLY`, #4093). */
+  rowsClassName?: string;
   disabled?: boolean;
   /** Tests and the gallery: render with the menu open. */
   initialOpen?: boolean;
@@ -187,10 +205,10 @@ export function ComposerPlusMenu({
           {rows && (() => {
             const content = rows(() => close(true));
             return content ? (
-              <>
+              <div data-composer-plus-rows="" className={rowsClassName}>
                 <div role="separator" className="mx-2 my-1 h-[0.5px] bg-border" />
                 {content}
-              </>
+              </div>
             ) : null;
           })()}
         </div>
@@ -201,7 +219,8 @@ export function ComposerPlusMenu({
 
 /** The + menu's Model row (2026-10-18): the model in use at its end,
  * the model menu (search, Auto, the bot's model, favorites, Provider ›,
- * Effort, Edit…) beside it. The composer has no model chip any more. */
+ * Effort, Edit…) beside it. Shown while the capsule is too narrow for its
+ * model chip (#4093), so the model stays one click away at every width. */
 export function ComposerModelRow({ chip, onOpen }: {
   chip: ComposerModelChip;
   /** Opens (or closes) the model menu beside this row. */
@@ -233,6 +252,29 @@ export function ComposerModelRow({ chip, onOpen }: {
       <span data-composer-model-value className={cn("max-w-[140px] shrink truncate text-ink-tertiary", chip.ultracode && "ultracode-effort-chip")}>{chip.label}</span>
       <ChevronRight size={14} className="shrink-0 text-ink-tertiary" aria-hidden="true" />
     </button>
+  );
+}
+
+/** The Model row of a narrow capsule (#4093): the bot's model, and the chip's
+ * own menu (`modelMenu`, the folded chip still serves it) beside the row. */
+export function ComposerFoldedModelRow({ bot, modelMenu, close }: {
+  bot: Bot;
+  modelMenu: { current: ComposerModelMenuControl | null };
+  /** Closes the + menu once a pick or Edit… closes the model menu. */
+  close: () => void;
+}) {
+  const instances = useStoreSelector((state) => state.instances);
+  const [open, setOpen] = useState(false);
+  const label = composerModelLabel(instances, bot.modelSelection);
+  return (
+    <ComposerModelRow
+      // a running turn: the model menu itself says what can change (BusyModelMenu)
+      chip={{ label, title: label, busy: false, ultracode: ultracodeFromSelection(bot.modelSelection), open }}
+      onOpen={(row) => {
+        setOpen((value) => !value);
+        modelMenu.current?.toggle(row, () => { setOpen(false); close(); });
+      }}
+    />
   );
 }
 

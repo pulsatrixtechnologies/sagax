@@ -279,7 +279,7 @@ export function ExchangeSheet({
            own, the pill centered; the lines scroll below it, never under it. */
         <div
           data-exchange-header=""
-          className="relative flex shrink-0 flex-col items-center gap-1.5 bg-app px-5 pb-3 pt-3"
+          className="relative flex shrink-0 flex-col items-center gap-1.5 bg-app px-4 pb-3 pt-3"
           onClick={(event) => event.stopPropagation()}
         >
           <div className="flex min-w-0 max-w-full justify-center">{pill}</div>
@@ -293,7 +293,7 @@ export function ExchangeSheet({
           ends above the opaque footer band; no message text sits under it. */}
       <div
         ref={scrollRef}
-        className={cn("min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-5", windowed && CHAT_UNDER_BAR_PAD)}
+        className={cn("min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-4", windowed && CHAT_UNDER_BAR_PAD)}
         data-testid="bot-exchange-scroll"
         onScroll={(event) => {
           const el = event.currentTarget;
@@ -390,7 +390,7 @@ export function ExchangeSheet({
            fade over the transcript's end, with or without a row. */
         <ChatBottomEdge onClick={(event) => event.stopPropagation()}>
           {pinned && (
-            <div data-exchange-pinned className="max-h-[50vh] overflow-y-auto overscroll-y-contain bg-app px-5 pb-2">
+            <div data-exchange-pinned className="max-h-[50vh] overflow-y-auto overscroll-y-contain bg-app px-4 pb-2">
               <div className={chatColumnClassName}>{pinned}</div>
             </div>
           )}
@@ -406,7 +406,7 @@ export function ExchangeSheet({
       ) : (
         <>
           {pinned && (
-            <div data-exchange-pinned className="max-h-[50%] shrink-0 overflow-y-auto overscroll-y-contain bg-app px-5 pb-2" onClick={(event) => event.stopPropagation()}>
+            <div data-exchange-pinned className="max-h-[50%] shrink-0 overflow-y-auto overscroll-y-contain bg-app px-4 pb-2" onClick={(event) => event.stopPropagation()}>
               <div className={chatColumnClassName}>{pinned}</div>
             </div>
           )}

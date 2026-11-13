@@ -122,7 +122,7 @@ export function GroupRoomTranscriptPane({
     <div className="relative min-h-0 flex-1">
       <div
         ref={scrollRef}
-        className="h-full overflow-x-hidden overflow-y-auto px-5 [overflow-anchor:none]"
+        className="h-full overflow-x-hidden overflow-y-auto px-4 [overflow-anchor:none]"
         {...scrollHandlers}
       >
         <div
@@ -223,7 +223,7 @@ export function GroupRoomTranscriptPane({
       <ChatEdgeFade edge="bottom" />
       {/* JC 2026-11-06: the working line sits just above the composer, on the
           message column, whatever the scroll (as in ChatView). */}
-      <div data-turn-presence-slot="" className="px-5 [&:not(:has(.turn-presence))]:hidden">
+      <div data-turn-presence-slot="" className="px-4 [&:not(:has(.turn-presence))]:hidden">
         <div className={cn(chatColumnClassName, "pb-1.5")}>
           {(speaker || presenceVisible) && (
             <TurnPresence

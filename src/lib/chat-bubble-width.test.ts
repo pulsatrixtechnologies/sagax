@@ -44,11 +44,11 @@ describe("chat width mapping (#2004)", () => {
 
     expect(chatComposerShellClass("reading")).toContain("100%-960px");
     expect(chatComposerShellClass("wide")).toContain("100%-1280px");
-    expect(chatComposerShellClass("full")).toContain("px-5");
-    // the dock's gutter is the transcript pane's (px-5): a pinned card and
+    expect(chatComposerShellClass("full")).toContain("px-4");
+    // the dock's gutter is the transcript pane's (px-4, 16px, #4093): a pinned card and
     // the cards of the chat share one width on a narrow screen (#3581)
-    expect(chatComposerShellClass("reading")).toContain("max(20px,");
-    expect(chatComposerShellClass("wide")).toContain("max(20px,");
+    expect(chatComposerShellClass("reading")).toContain("max(16px,");
+    expect(chatComposerShellClass("wide")).toContain("max(16px,");
     expect(chatComposerShellClass("full")).not.toContain("960px");
 
     const reading = chatBubbleWidthClasses("reading");

@@ -22,12 +22,15 @@ describe("SidebarSectionHeader", () => {
     expect(html).toContain('aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"');
     expect(html).not.toContain('role="button"');
     expect(html).not.toContain("Delete Work section");
-    // sentence case (as upstream), a 12px regular label, chevron for fold state
+    // sentence case (as upstream), a 13/18 regular label (the reference's
+    // size with 15px chat prose, the owner's configuration, #4093), chevron
+    // for fold state
     expect(html).toContain(">Work</span>");
-    expect(html).toContain("text-[12px] font-normal");
+    expect(html).toContain("text-[13px] font-normal leading-[18px]");
+    expect(html).not.toContain("text-[12px]");
     expect(html).toContain("h-[30px]");
-    expect(html).toContain("leading-4");
-    expect(html).toContain("lucide-chevron-down");
+    expect(html).toContain("lucide-chevron-right");
+    expect(html).toContain("rotate-90");
     expect(html).toContain('data-section-chevron=""');
     expect(html).not.toContain("uppercase");
   });
@@ -49,7 +52,8 @@ describe("SidebarSectionHeader", () => {
     expect(html).not.toContain("Delete Work section");
     expect(html).not.toContain("lucide-trash");
     expect(html).toContain(`aria-expanded="${!collapsed}"`);
-    expect(html).toContain(collapsed ? "lucide-chevron-right" : "lucide-chevron-down");
+    expect(html).toContain("lucide-chevron-right");
+    expect(html.includes("rotate-90")).toBe(!collapsed);
     expect(html.match(/<button\b/g)).toHaveLength(1);
   });
 
@@ -67,25 +71,31 @@ describe("SidebarSectionHeader", () => {
 
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain("lucide-chevron-right");
+    expect(html).not.toContain("rotate-90");
     expect(html).toContain("1 waiting for you");
     expect(html).toContain("2 unread");
     expect(html).toContain("1 working");
   });
 
-  it("shows a fold chevron and the group's name, never a count (My Team keeps no count)", () => {
+  // #4093: the reference's group title: the name first, then one seat at
+  // the row's end holding the folded group's count, the chevron there on
+  // hover or keyboard focus.
+  it("puts the name first, the folded group's count and the hover chevron at the end", () => {
     const header = (collapsed: boolean) => renderToStaticMarkup(
-      createElement(SidebarSectionHeader, { name: "Mon équipe", collapsed, onToggle: () => {}, reorderable: false, dragging: false }),
+      createElement(SidebarSectionHeader, { name: "Mon équipe", count: 4, collapsed, onToggle: () => {}, reorderable: false, dragging: false }),
     );
     const folded = header(true);
     const open = header(false);
-    expect(folded).toContain("lucide-chevron-right");
-    expect(open).toContain("lucide-chevron-down");
+    expect(folded.replace(/<[^>]+>/g, "")).toBe("Mon équipe4");
+    expect(folded).toContain('data-section-count=""');
+    expect(open.replace(/<[^>]+>/g, "")).toBe("Mon équipe");
+    expect(open).not.toContain("data-section-count");
     for (const html of [folded, open]) {
-      expect(html).toContain('data-section-chevron=""');
+      expect(html.indexOf(">Mon équipe</span>")).toBeLessThan(html.indexOf("data-section-chevron"));
+      const chevron = /<svg[^>]*data-section-chevron=""[^>]*>/.exec(html)?.[0] ?? "";
+      expect(chevron).toContain("opacity-0");
+      expect(chevron).toContain("group-hover/section:opacity-100");
       expect(html).toContain('aria-expanded=');
-      expect(html).not.toContain("data-section-count");
-      expect(html).not.toContain("tabular-nums");
-      expect(html.replace(/<[^>]+>/g, "")).toBe("Mon équipe");
     }
   });
 

@@ -6,11 +6,14 @@
 // caps together: reading (960 / 560 / 780, the default), wide (1280 / 747 /
 // 1040) and full (fills the pane; fit up to 960, wide uncapped inside the
 // gutter). Classes are full string literals so Tailwind keeps them.
+// The column's side gutter is 16px and a bubble's text 15/22, the reference
+// app's transcript at every window width (#4093, the table "Shell by window
+// width" in docs/design/ux-reference-grokbot-cursor.md).
 import { useChatWidth, type ChatWidth } from "./chat-width-preference";
 
 /** The transcript column of a conversation: a 1:1 (ChatView), a room
  * (GroupView) and an open bot-to-bot conversation (BotExchangeChip) share it,
- * inside a scroll pane with a px-5 gutter. */
+ * inside a scroll pane with a px-4 gutter (16px, the reference's). */
 export function chatColumnClass(width: ChatWidth = "reading"): string {
   switch (width) {
     case "wide":
@@ -37,19 +40,26 @@ export function chatColumnMaxPx(width: ChatWidth): number | null {
   }
 }
 
-/** Composer dock gutter: mirrors the transcript column (its px-5 pane) so
+/** Composer dock gutter: mirrors the transcript column (its px-4 pane) so
  * the field and a card pinned over it line up with the cards of the chat:
  * one card width at every size (#3581). */
 export function chatComposerShellClass(width: ChatWidth = "reading"): string {
   switch (width) {
     case "wide":
-      return "pointer-events-none relative overflow-x-clip px-[max(20px,calc((100%-1280px)/2))] pb-4";
+      return "pointer-events-none relative overflow-x-clip px-[max(16px,calc((100%-1280px)/2))] pb-4";
     case "full":
-      return "pointer-events-none relative overflow-x-clip px-5 pb-4";
+      return "pointer-events-none relative overflow-x-clip px-4 pb-4";
     default:
-      return "pointer-events-none relative overflow-x-clip px-[max(20px,calc((100%-960px)/2))] pb-4";
+      return "pointer-events-none relative overflow-x-clip px-[max(16px,calc((100%-960px)/2))] pb-4";
   }
 }
+
+/** A chat bubble's text (a bot's reply, the person's message, a room's
+ * line): the reference's transcript prose, 15px on a 22px line (#4093). The
+ * prose blocks inside (1.75 elsewhere) keep the 22px line too, through
+ * `.chat-bubble-type` in styles.css: a CSS rule, so the bubble's own class
+ * list never names the prose class its child carries. */
+export const CHAT_BUBBLE_TEXT_CLASS = "chat-bubble-type text-[15px] leading-[22px]";
 
 export type ChatBubbleWidth = "fit" | "wide" | "column";
 

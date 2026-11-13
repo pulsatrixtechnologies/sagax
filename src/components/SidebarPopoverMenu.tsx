@@ -109,8 +109,12 @@ export function SidebarPopoverMenu({
   openOnHover = false,
   menuClassName = "left-0 right-0",
   placement = "above",
+  banner,
   renderTrigger,
 }: {
+  /** A notice at the top of the menu, above its rows (the account menu's
+   * waiting update, #4093); it gets `close` for its own button. */
+  banner?: (close: () => void) => React.ReactNode;
   /** "above" stretches over the trigger's width and opens upward (the
    * sidebar's bottom menus); "below" hangs a fixed-width sheet under the
    * trigger's right edge (a header icon). */
@@ -256,11 +260,15 @@ export function SidebarPopoverMenu({
           aria-label={ariaLabel}
           {...motion.exitProps}
           className={cn(
-            "absolute z-40 flex min-w-[200px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]",
+            // the reference's menu in the configuration the owner compares
+            // (its typeface with 15px chat prose, #4093): 16px corners,
+            // 32px rows 6px apart, 14/20 type, 10px row corners
+            "absolute z-40 flex min-w-[200px] flex-col gap-1.5 rounded-2xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[14px] leading-5",
             placement === "below" ? "top-full right-0 mt-1 w-72 max-w-[calc(100vw-2rem)]" : cn("bottom-full mb-1", menuClassName),
             motion.className,
           )}
         >
+          {banner?.(close)}
           {items.map((item) => (
             <div
               key={item.key}
@@ -294,7 +302,7 @@ export function SidebarPopoverMenu({
                   if (!item.keepOpen) close();
                 }}
                 className={cn(
-                  "flex h-[30px] w-full items-center gap-2 rounded-md px-2 text-left text-[13px] leading-[18px] disabled:opacity-60",
+                  "flex h-8 w-full items-center gap-2 rounded-[10px] px-2 text-left text-[14px] leading-5 disabled:opacity-60",
                   (item.subtitle || item.note) && "h-auto py-1.5",
                   item.active || (item.submenu && sub === item.key) ? "bg-selected text-ink" : "text-ink hover:bg-hover",
                 )}
@@ -318,7 +326,7 @@ export function SidebarPopoverMenu({
                 ) : (
                   <span className="flex-1 truncate">{item.label}</span>
                 )}
-                {item.value && <span data-menu-value="" className="shrink-0 text-[13px] tabular-nums text-ink-tertiary">{item.value}</span>}
+                {item.value && <span data-menu-value="" className="shrink-0 tabular-nums text-ink-tertiary">{item.value}</span>}
                 {item.trailing}
                 {item.attention && (
                   <span
@@ -345,7 +353,7 @@ export function SidebarPopoverMenu({
                   }}
                   data-sidebar
                   style={{ minWidth: item.submenuWidth ?? 180, ...subAt }}
-                  className="fixed z-[70] flex w-max max-w-[320px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]"
+                  className="fixed z-[70] flex w-max max-w-[320px] flex-col gap-1.5 rounded-2xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[14px] leading-5"
                 >
                   {item.submenu.map((entry) => (
                     <div key={entry.key}>
@@ -382,7 +390,7 @@ export function SidebarPopoverMenu({
                       ) : entry.rename?.edit ? (
                         <form
                           data-rename-inline={entry.key}
-                          className="flex items-center gap-1.5 rounded-md bg-selected px-2 py-1"
+                          className="flex items-center gap-1.5 rounded-[10px] bg-selected px-2 py-1"
                           onSubmit={(event) => {
                             event.preventDefault();
                             entry.rename?.edit?.onSave();
@@ -419,8 +427,8 @@ export function SidebarPopoverMenu({
                             close();
                           }}
                           className={cn(
-                            "flex w-full items-center gap-2 rounded-md px-2 text-left disabled:opacity-60",
-                            entry.subtitle ? "min-h-[30px] py-1" : "h-[30px]",
+                            "flex w-full items-center gap-2 rounded-[10px] px-2 text-left disabled:opacity-60",
+                            entry.subtitle ? "min-h-8 py-1" : "h-8",
                             entry.rename && "pr-14",
                             entry.active ? "bg-selected text-ink" : "text-ink hover:bg-hover",
                           )}

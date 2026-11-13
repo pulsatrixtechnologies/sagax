@@ -7237,8 +7237,6 @@
   "sidebar.update.handedOff": "Finish the update in your terminal",
   "sidebar.update.installing": "Restarting to update…",
   "sidebar.update.openingTerminal": "Opening a terminal…",
-  "sidebar.update.pill": "Update",
-  "sidebar.update.pillAria": "Update {app} to version {version}",
   "sidebar.update.preparing": "Preparing update…",
   "sidebar.update.ready": "Version {version} ready · Restart",
   "sidebar.update.readyInstall": "Version {version} ready · Install",

@@ -4,6 +4,7 @@ import { t, activeLocale } from "@/lib/i18n";
 import { formatTime, useStore, type Bot, type Group, type Message } from "@/state/store";
 import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import { cn } from "@/lib/cn";
+import { CHAT_BUBBLE_TEXT_CLASS } from "@/lib/chat-bubble-width";
 import { MESSAGE_ROW, MessageActions, messageActionClass } from "../MessageActions";
 import { personModerationMenu, useBotMessageMenu, userMessageMenu, type PinAction } from "../message-menu";
 import { blockPerson, isBlockedId, personLineAuthor, unblockPerson, useBlockedPeople } from "@/lib/moderation";
@@ -214,7 +215,7 @@ export function RoomTextMessage({
         <div
           data-chat-bubble
           className={cn(
-            "text-[13px] leading-5",
+            CHAT_BUBBLE_TEXT_CLASS,
             !user && emerging && "turn-answer",
             !user
               // A bot's reply is a quiet grey bubble (--color-bubble-bot); its name

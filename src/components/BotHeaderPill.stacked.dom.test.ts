@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
-// The bot's title sits UNDER its name, never "Name · Title" on one line (the owner
-// rule 2026-11-06, every surface): the chat pill, the window pill, a person's
-// shared bots and a template's suggested team, mounted in a real DOM.
+// The chat header's pill writes "Name · Title" on one line, as the reference app
+// (#4093, the owner's side by side of 2026-11-12, replacing the stacked lines
+// of 2026-11-06 for this pill): the chat pill and the window pill, mounted in
+// a real DOM.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
@@ -29,25 +30,27 @@ afterEach(() => {
 
 const avatar = createElement("span", { "data-test-avatar": "" });
 
-describe("bot name and title, stacked (the owner 2026-11-06)", () => {
+describe("bot name and title on one line in the header pill (#4093)", () => {
   for (const [label, render] of [
     ["chat header", () => createElement(BotChatHeader, { name: "Ara", label: "Admin", panelOpen: false, onToggle: () => {}, avatar })],
     ["window pill", () => createElement(BotHeaderPill, { name: "Ara", label: "Admin", panelOpen: false, onToggle: () => {}, avatar })],
   ] as const) {
-    it(`${label}: the name and the title are two separate lines`, () => {
+    it(`${label}: the name, a dot and the title on one line`, () => {
       const el = mount(render());
       const text = el.querySelector<HTMLElement>("[data-bot-header-text]")!;
       const name = text.querySelector<HTMLElement>("[data-bot-header-name]")!;
       const title = text.querySelector<HTMLElement>("[data-bot-header-label]")!;
-      expect(text.className).toContain("flex-col");
-      expect([...text.children]).toEqual([name, title]);
+      expect(text.className).not.toContain("flex-col");
+      expect(text.className).toContain("whitespace-nowrap");
+      expect(text.children).toHaveLength(3);
+      expect(text.children[0]).toBe(name);
+      expect(text.children[2]).toBe(title);
+      expect(text.children[1]!.textContent).toBe("·");
+      expect(text.children[1]!.getAttribute("aria-hidden")).toBe("true");
       expect(name.textContent).toBe("Ara");
       expect(title.textContent).toBe("Admin");
       expect(title.className).toContain("text-ink-secondary");
-      expect(name.className).toContain("block");
-      expect(title.className).toContain("block");
-      expect(el.textContent).not.toContain("Ara · Admin");
-      expect(el.textContent).not.toContain("·");
+      expect(text.textContent).toBe("Ara·Admin");
       expect(text.getAttribute("title")).toBe("Ara\nAdmin");
     });
   }

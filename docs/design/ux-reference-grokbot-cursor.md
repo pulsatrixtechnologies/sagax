@@ -110,10 +110,11 @@ bot quand il est ouvert.
   menu du compte en popover, au-dessus du pied : forfait et pourcentage utilisé (avec
   chevron vers Utilisation), app mobile, soutien (sous-menu), Réglages, un filet, ajouter
   un compte, se déconnecter.
-- Largeur : sous 640 px la barre est un tiroir ; de 640 à 767 px elle passe seule en
-  rail d'icônes (mascottes seules ; au pied : replier, nouveau, grille d'apps, avatar) ;
-  dès 768 px, la densité choisie par la personne. La référence passe au rail vers
-  700 px.
+- Largeur (#4093, mesuré) : sous 640 px la barre est un tiroir ; de 640 à 703 px elle
+  passe seule en rail d'icônes de 88 px (mascottes seules séparées d'un filet ; au
+  pied : recherche, nouveau, grille d'apps, avatar) ; dès 704 px (280 px de barre plus
+  424 px de conversation au minimum, la règle de la référence), la densité choisie par
+  la personne. Le tableau « Shell by window width » (section 8.1) donne chaque mesure.
 
 **iPhone (402 x 874 pt mesuré).** Avatar rond en haut à gauche, bouton rond + en haut à
 droite, tous deux en verre. Le bot principal centré, grand (encre mesurée d'environ
@@ -127,8 +128,9 @@ d'apps, puis une capsule de recherche large. Rien d'autre à l'écran.
 
 **Bureau.**
 
-- En-tête (Grok Bot, #2141) : une rangée centrée au-dessus du fil avec la pilule du
-  nom (mascotte d'environ 20 px, puis « Nom · Étiquette » en 14 regular), une pilule
+- En-tête (Grok Bot, #2141, #4093) : une rangée centrée au-dessus du fil avec la pilule du
+  nom (36 px de haut, mascotte d'environ 20 px, puis « Nom · Étiquette » sur une ligne
+  en 14 regular, le titre en gris secondaire), une pilule
   qui dit qui voit le bot (« Privé » ou le libellé de partage, icône cadenas ou
   personnes), puis un bouton rond engrenage. La pilule et l'engrenage ouvrent et
   ferment le panneau du bot. Le fil défile dessous, l'en-tête n'a pas de bande opaque.
@@ -208,8 +210,11 @@ d'apps, puis une capsule de recherche large. Rien d'autre à l'écran.
 - Compositeur : une capsule flottante, détachée du bas, largeur de la colonne. À gauche
   un bouton +, au centre « Message » suivi du nom du bot, à droite le micro (dictée)
   puis un bouton rond plein à la couleur du bot (mode voix). Le + ouvre un petit menu
-  court (joindre des fichiers, montrer une tâche) ; Sagax y ajoute ses entrées (modèle,
-  niveau d'approbation, note vocale) sous un filet, sans puce dans la barre elle-même.
+  court (joindre des fichiers, montrer une tâche) ; Sagax y ajoute ses entrées (note
+  vocale) sous un filet. La puce du modèle reste dans la capsule tant que la capsule a
+  au moins 560 px (35rem) ; plus étroite, la puce se replie et la rangée Modèle du +
+  ouvre le même menu (#4093, `COMPOSER_NARROW_ONLY` et `COMPOSER_WIDE_ONLY` dans
+  `src/components/ComposerControls.tsx`).
 
 **iPhone.** En-tête : bouton rond retour (avec pastille de non-lus), pastille centrée du
 bot, bouton rond « … ». Le + du compositeur ouvre un menu flottant (photothèque, photo,
@@ -1320,21 +1325,31 @@ porte UX (section 6).
 ### 8.0 Titre du bot
 
 - Partout où le nom d'un bot paraît avec son titre (accueil du chat neuf,
-  pastille d'en-tête, panneau du bot, groupe, Coding, profil, routines, barre
-  latérale, tuiles épinglées, rangées) : le nom, puis le titre dessous, plus
-  petit, en gris secondaire, en texte simple. Jamais « Nom · Titre » sur une
-  ligne, jamais de pastille, d'étiquette ni de contour (décision du
-  propriétaire, 2026-11-06, confirmée le 2026-11-07).
+  panneau du bot, groupe, Coding, profil, routines, barre latérale, tuiles
+  épinglées, rangées) : le nom, puis le titre dessous, plus petit, en gris
+  secondaire, en texte simple. Jamais de pastille, d'étiquette ni de contour
+  (décision du propriétaire, 2026-11-06, confirmée le 2026-11-07).
+- Exception, la pilule de l'en-tête du chat (`PillName`, chat d'un bot, salon,
+  fenêtre de Coding ou d'échange) et la rangée d'un bot dans la barre latérale
+  (`BotRoleTag`) : « Nom · Titre » sur une ligne, comme la référence côte à côte
+  (#4093, le propriétaire 2026-11-12), le titre en 14 regular gris secondaire,
+  sans contour ni fond, coupé le premier ; l'aperçu du dernier message reste
+  dessous. Sous une tuile épinglée, le titre reste dessous, en texte simple.
 - Un correctif de cet élément balaye toutes les surfaces qui le dessinent, pas
   seulement celle de la capture.
 
 ### 8.0 bis Pied de la barre latérale
 
-- Le pied est la même rangée que la rangée de profil du haut : avatar rond, nom
-  complet en poids normal, sans pastille de fond ; à droite, un bouton rond
+- Le pied est la même rangée que la rangée de profil du haut : avatar rond de
+  36px (les initiales en 14px medium quand il n'y a pas de photo), nom
+  complet en 14/20 medium, sans pastille de fond ; à droite, un bouton rond
   séparé avec l'icône grille d'apps, qui ouvre Connect apps ; une mise à jour
-  en attente est un bouton rond du même genre. Pas d'animation au survol, pas
-  de logos qui se chevauchent (décision du propriétaire, 2026-10-27).
+  qui se télécharge, se prépare ou s'installe est un bouton rond du même
+  genre. Une mise à jour téléchargée n'est plus dans le pied : elle est la
+  première rangée du menu du compte, et un point sur l'avatar (#4093, la
+  référence). Pas d'animation au survol, pas de logos qui se chevauchent
+  (décision du propriétaire, 2026-10-27 ; poids medium mesuré sur la
+  référence, #4093).
 - Le badge des routines actives est au bord droit de la rangée, centré, jamais
   sous le nom.
 
@@ -1361,11 +1376,15 @@ and `sidebar-logo-preferences.test.ts`:
   (Settings > Appearance > Sidebar logo) is off unless turned on (`"1"`);
   with it on, or without a title bar, the brand row under the inset strip
   holds them as before (`SIDEBAR_HEAD_ROW`, the chat header's 56px).
-- Pinned tiles (the Primary Bot among them when pinned): 95 x 115, 4px
-  apart and centred as a group, 12px under the head; a 64px mascot, the
+- Pinned tiles (the Primary Bot among them when pinned): 95px wide, their
+  height set by what they hold (6px over a 60px portrait, 6px to the name
+  12/16, 4px to the role 12/16, 4px under: 112px with a role, 92px
+  without), 4px apart and centred as a group, 12px under the head; the
   name 12px in the primary ink, the bot's title as
-  plain secondary-grey text under the name, never a tag, a pill or an outline (the owner's rule of 2026-11-06; see "Titre du bot" in docs/design/ux-reference-grokbot-cursor.md). The
-  selected tile is a 16px card in `--color-sidebar-card` (7% of the rail's
+  plain secondary-grey text under the name on one centred line cut with an
+  ellipsis, never a tag, a pill or an outline (the owner's rule of 2026-11-06; see "Titre du bot" in docs/design/ux-reference-grokbot-cursor.md). The
+  tile's corners are 12px (owner's configuration; default 10); the
+  selected tile is a card in `--color-sidebar-card` (7% of the rail's
   ink over the rail: #222222 on Midnight). Sagax's wording stays: Primary
   Bot, and the bot's own title.
 - The Primary Bot star (`PrimaryBotBadge`): a quarter of the avatar (16 on a
@@ -1374,19 +1393,25 @@ and `sidebar-logo-preferences.test.ts`:
   (`--color-primary-badge`, a deeper orange on the light rails, its disc
   held to 3:1 on the rail in `scripts/check-skin-contrast.mjs`), never the
   skin accent (#188 had made it grey or navy in some skins).
-- Section headers: the name in sentence case, 12px regular in the secondary
-  ink, 30px tall, a small chevron for fold state (`ChevronRight` folded,
-  `ChevronDown` open, `data-section-chevron`), then the attention marks; a
-  click folds and `aria-expanded` says which way. No item count (the My
-  Team reference keeps the name only; #1664 restored the chevron so a
-  folded section is not mistaken for an empty open one). The small
-  capitals rule (`.sidebar-section-label` uppercase) is gone; the class
-  stays as Hibou 98's hook.
-- Rows (comfortable): a 44px portrait at `pl-1`, 6px before the name, 56px
-  tall; the name 14px medium, the bot's title as
-  plain secondary-grey text under the name, never a tag, a pill or an outline (the owner's rule of 2026-11-06; see "Titre du bot" in docs/design/ux-reference-grokbot-cursor.md),
-  then the last message 13px. Group and people rows
-  share the inset and the 44px box (a room's stacked mascots fit inside
+- Section headers (group titles, #4093, measured on the reference in the
+  owner's configuration, see "Shell by window width"): the name
+  first, in sentence case, 13/18 regular in the secondary ink, 30px tall (8px
+  over, 6px under, 8px aside, 6px corners), then the attention marks, then
+  one 16px seat at the row's end: the folded group's row count (so a folded
+  group is never mistaken for an empty open one, #1664), and in its place on
+  hover or keyboard focus a chevron (`ChevronRight`, turned down while open,
+  `data-section-chevron`); a click folds and `aria-expanded` says which way.
+  The small capitals rule (`.sidebar-section-label` uppercase) is gone; the
+  class stays as Hibou 98's hook.
+- Rows (comfortable): 54px tall, 8px padding, 12px corners, a 36px portrait
+  10px before the text (#4093, the owner's configuration); the name 14px
+  medium, then " · Title" on the same line, 14px regular
+  in the secondary ink, never a tag, a pill or an outline (#4093, the owner's
+  side by side of 2026-11-12; see "Titre du bot"), then 1px lower the last
+  message 13/18 under it on every row (a question card with no title reads as its
+  first question, #4093). Compact density (quiet rows) is this app's own
+  choice and keeps only the name and what happens now. Group and people rows
+  share the inset and the 36px box (a room's stacked mascots fit inside
   it), so every row's avatar and name start at one x in every density;
   people rows keep their custom label (a Sagax feature upstream does not
   have). A room is one conversation like a bot: no thread list under its
@@ -1399,19 +1424,147 @@ and `sidebar-logo-preferences.test.ts`:
   section headers still show the folded item count (web uses the chevron
   instead, #1664).
 
-#### Sidebar by window width (2026-11-01)
+#### Sidebar by window width (2026-11-01, measured again for #4093)
 
 Below 640px (`sm`) the sidebar is a drawer (`AppSidebar.tsx`: menu button,
-scrim; drawer classes are `max-sm:` only). From 640 to 767px it is the icons
-rail automatically; from 768px (`md`) the person's density. The automatic rail
+scrim; drawer classes are `max-sm:` only). From 640 to 703px it is the icons
+rail automatically; from 704px (the reference's rule: a 280px sidebar beside
+a conversation of at least 424px, `SIDEBAR_DEFAULT_WIDTH +
+SIDEBAR_CHAT_MIN_WIDTH`) the person's density. The automatic rail
 is drawn by `effectiveSidebarDensity` and never saved: no edge, no "full
-sidebar" toggle, ⌘B inert there; widening restores the saved density. Keep JS
-breakpoints (`SIDEBAR_DRAWER_BELOW`, `SIDEBAR_AUTO_RAIL_BELOW`) equal to the
-Tailwind ones, and room for the drawer button with `sm:` (not `md:`). The rail
-foot (`SidebarRailFoot`) is the wide foot stacked: update, routines, round
-apps grid, avatar. Tests: `src/components/AppSidebar.layout.dom.test.ts`;
-captures `node scripts/capture/sidebar-rail.mjs` (gallery
-`src/gallery/app-shell-sidebar.html`).
+sidebar" toggle, ⌘B inert there; widening restores the saved density. The
+breakpoints live in one place (`src/lib/sidebar-preferences.ts`:
+`SIDEBAR_DRAWER_BELOW`, `SIDEBAR_AUTO_RAIL_BELOW`, `SIDEBAR_RAIL_WIDTH`,
+`SIDEBAR_DEFAULT_WIDTH`, `SIDEBAR_CHAT_MIN_WIDTH`); the drawer's equals
+Tailwind's `sm`, and room for the drawer button stays `sm:` (not `md:`). The rail
+foot (`SidebarRailFoot`) holds the rail's controls, as the reference's rail
+does at its bottom: search and New (the head's own buttons at full width),
+an update in progress, routines, round apps grid, avatar (a downloaded
+update is the account menu's first row and a dot on the avatar). The rail's
+top holds no control.
+Tests: `src/components/AppSidebar.layout.dom.test.ts`,
+`src/lib/shell-parity.test.ts`; captures `node scripts/capture/sidebar-rail.mjs`
+(gallery `src/gallery/app-shell-sidebar.html`, `?parity=1&update=1` for the
+shell compared with the reference).
+
+#### Shell by window width (#4093, measured 2026-11-12)
+
+The owner put this app beside the reference app and asked for the same
+reaction to resizing: the sidebar, the conversation, the composer, and the
+account menu. The values below were read from the reference app's own layout
+constants and stylesheet (values only), then this app was set to them. The
+reference's window stops at 512px; below 640px this app keeps its drawer, the
+phone layout.
+
+One configuration for every value (re-measured 2026-11-12): the one the
+owner's side by side screenshots were taken in, the reference with its own
+typeface and its 15px chat prose both on. Its theme builder then adds two
+root overrides on top of the default stylesheet. With the typeface: the
+sidebar row's 10px from the portrait to the text (default 8), 1px between
+its two lines (default 0), 12px row and tile corners (default 10), the
+prose's 22px line and 18px bubble corners, 32px menu rows 6px apart (default
+30 and 4). With the typeface and 15px prose together: the menu's type at the
+base size, 14/20 (default 13/18), 16px menu corners (default 12) and 10px
+row corners (default 6). The 15px prose flag alone sets the bubbles' 15px
+text and the group titles' 13/18 (default 12/16). Widths (sidebar, rail,
+column, bubble cap, the composer's fold) do not depend on either flag. The
+typeface's letter spacing (+0.01em) belongs to that typeface: this app keeps
+its own typeface and its tracking. In the table and the rules below a value
+reads "(owner's configuration)" where it differs from the reference's
+default.
+
+Rules that hold at every width:
+
+- Sidebar: 280px until the person drags it (240 to 400). The icons rail is
+  88px; it replaces the sidebar while the window is narrower than the
+  sidebar plus 424px (the narrowest conversation kept beside it), so 704px at
+  the default width.
+- Rail: each item a 54px square with 12px corners (owner's configuration),
+  9px around a 36px portrait, a 32px hairline
+  between two items; no control at the top; at the bottom search, New, an
+  update in progress (downloading, staged, installing), the routines count,
+  the apps grid, then the avatar; a downloaded update is not there (it is the
+  account menu's first row, and the avatar's dot).
+- Header: a 36px pill, the mascot about 20px, "Name · Title" on one line,
+  14px regular, the title in secondary grey and cut first.
+- Reading column: the transcript, the cards and the composer share one
+  column, centred, at most 960px of content inside a 16px gutter on each
+  side (Settings > Appearance > Chat width "Wide" and "Full" stay the
+  person's own choice).
+- Bubbles: 15px text on a 22px line (owner's configuration; default 14/20),
+  7px by 12px padding, 18px corners; a
+  bubble of text is at most min(80%, 560px, column minus 82px), the person's
+  and the bot's alike; tables, charts and cards take the wide cap
+  (min(94%, 780px)).
+- Composer: one capsule on the column's edges; the model chip shows while
+  the capsule is at least 560px wide (35rem) and folds into the + menu's
+  Model row below that.
+- Account menu (owner's configuration): opens above the avatar, aligned on
+  its start edge, at least 228px wide; 16px corners, 6px padding, 32px rows
+  6px apart, 14/20 type, 18px icons in a 20px slot, 10px row corners (the
+  reference's default is 12px corners, 30px rows 4px apart, 13/18, 6px row
+  corners; this app had that before). The reference's override is on its
+  root, so every menu takes these values: `SidebarPopoverMenu` draws every
+  sidebar menu with them. A waiting update is its first
+  row: "Update available" in the accent, in the menu's 14/20 regular, on a
+  10px card (10px by 12px padding), then Install at 13/18. Then the usage
+  line with its percent (its side card, the same menu values, opens to the
+  right, 12px off the menu, its first row level with the
+  trigger row, at least 228px wide: one line per engine window with its reset
+  and percent, the month's cost, a hairline, View usage), the mobile app
+  (shown once a public store link exists, `SAGAX_MOBILE_URL`; an option that
+  cannot work stays hidden), Help (the reference's Support), Settings, Tools,
+  a hairline, Switch account (the reference's Add account), Sign out (Log
+  out). Tools, the per engine lines, the month's cost and Switch account's
+  list are this app's own rows the reference does not have; they keep the
+  reference's look. The waiting update is told there only: the foot shows
+  no ready button (wide or rail), the avatar wears the reference's update
+  dot, and Help > Check for updates steps aside while it waits.
+
+| Window | Reference: sidebar | Reference: column (content) | Reference: bubble cap | Reference: model chip in capsule | This app before #4093 | This app after #4093 |
+|---|---|---|---|---|---|---|
+| 480 | below its 512px minimum | 448 | 358 | folded | drawer, column 440 (20px gutter), chip shown, text 13/20 | drawer, column 448, chip folded into +, text 15/22 |
+| 640 | rail 88 | 520 | 416 | folded | rail 80 (search and New on top), column 520, chip shown | rail 88 (controls at the bottom, dividers), column 520, chip folded |
+| 768 | full 280 | 456 | 365 | folded | full, column 428 (300px sidebar), chip shown, pill on two lines | full 280, column 456, chip folded, pill on one line |
+| 900 | full 280 | 588 | 470 | shown | column 560, chip shown | column 588, chip shown |
+| 1024 | full 280 | 712 | 560 | shown | column 684 | column 712 |
+| 1280 | full 280 | 960 | 560 | shown | column 940 | column 960 |
+| 1440 | full 280 | 960 | 560 | shown | column 960 | column 960 |
+| 1800 | full 280 | 960 | 560 | shown | column 960 | column 960 |
+
+Account menu at 900, 1280 and 1800 (the same at every width: the menu
+follows the sidebar's foot, not the window), owner's configuration: at least
+228px wide, 16px corners, rows 32px 6px apart with 10px corners, 14/20, the
+side card the same and at least 228px. Before #4093 the menu was 12px
+corners, rows 30px 2px apart with 6px corners, 13/18, and a waiting
+update was told by the foot's round button (and a second one beside the
+name) and Help > Check for updates; after, it is the menu's first row, the
+foot keeps only a download in progress and the avatar's dot, and Help no
+longer repeats it.
+
+The expanded sidebar (#4093, the owner's third example), measured on the
+reference; the same at every width where the full sidebar shows (704px and
+up), the rail and the drawer drawing the same rows:
+
+| Part | Reference | This app before #4093 | This app after #4093 |
+|---|---|---|---|
+| Top block | the pinned bot as a 95px tile: 6px over a 60px portrait, 6px to the name (12/16, primary), the role 4px under it in secondary grey, each on one centred line cut with an ellipsis (never wrapped: a long role such as "Chef de cabinet" reads "Chef de cabi..." in the reference too), 4px under, 12px corners (owner's configuration; default 10), selected on the card colour | the same tile with 10px corners; the role under the name was a small outlined chip | the same tile with 12px corners, the role plain secondary text on one line under the name, cut with an ellipsis |
+| Group titles | the name first (13/18 regular, secondary, owner's configuration; default 12/16), the count in the same type, 30px tall, 8px over, 6px under, 8px aside, 6px corners; one 16px seat at the end: the row count while folded, a chevron on hover (down while open) | a chevron always shown before the name, no count, 12/16 | the reference's: name first at 13/18, count while folded, chevron on hover or keyboard focus; this app's attention marks before the seat; groups still fold |
+| Bot rows | 54px, 8px padding, 12px corners, a 36px portrait 10px from the text (owner's configuration; default 10px corners, 8px), "Name · Role" on one line (14/20, the name medium, the role regular secondary), 1px lower the last message (13/18 secondary) on every row that has one | 44px portrait, the role as a small chip beside the name, the second line empty for a question card without a title | 54px rows, 12px corners, 36px portrait 10px from the text, 1px between the lines, "Name · Role" on one line, the last message on every row (an untitled question card reads as its first question); compact density (this app's own) keeps its quiet rows |
+| Bottom row | the account's 36px circle (its photo, else the initials 14px medium in secondary grey), the full name 14/20 medium, uncut while it fits, the round apps control; an update dot on the circle while one waits | the photo or initials (13.7px), the name in the regular weight, cut beside a round ready-update button | 36px circle (initials 14px medium), the name 14/20 medium and whole, the apps control; a waiting update is the dot on the circle and the menu's first row, never a foot button |
+
+Captures (headless, French and English, light and dark, before and after
+side by side): `shell-w<width>-*` at the eight widths, `groups-w1280-*` (a
+folded group with its count, the chevron on hover), `menu-w<width>-*` at
+900, 1280 and 1800 (the update row, usage and its side card, Help,
+Settings, Tools, a hairline, Switch account, Sign out).
+
+What the phone and tablet app must follow (not in this change): the header
+pill on one line, bubbles 15/22 with the 560px cap, the 16px column gutter,
+the update offered at the top of the account menu (and nowhere else), the
+model folded into the + menu on a narrow composer, the group titles (name
+first, count while folded), "Name · Role" rows with the last message under
+every one, and the account row's 14/20 medium name.
 
 #### Sidebar sections are personal
 
@@ -1511,7 +1664,8 @@ Connect apps' "Browse Bots" row and install links open the catalogue on its
 Templates section through `src/lib/templates-entry.ts`. Browse Bots is not in
 the composer To: menu, the mascot menu or the sidebar section menu. Your phone and Help Center are not in the menu.
 The phone stays in Settings and on the collapsed rail. Docs stay on About.
-The row is the avatar and the full name in normal weight with no background
+The row is the avatar and the full name (14/20 medium, as the reference's,
+#4093) with no background
 pill, the same row as the head's profile row (the owner, 2026-10-27). The
 active routines badge sits at the right edge of the row, centred, never
 under the name (`SidebarRoutinesBadge`): the routines icon (`CalendarClock`,

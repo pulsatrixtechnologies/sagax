@@ -62,14 +62,15 @@ afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("bot-first sidebar", () => {
   it.each([
-    // The reference design's comfortable row: a 36px portrait, 54px tall, 8px padding;
-    // its rail: a 54px square, 9px around the portrait
-    { enabled: true, density: "comfortable", size: 36, spacing: ["h-[54px]", "gap-2", "py-2", "pl-2", "rounded-[10px]"] },
+    // The reference design's comfortable row in the owner's configuration
+    // (#4093): a 36px portrait 10px from the text, 54px tall, 8px padding,
+    // 12px corners; its rail: a 54px square, 9px around the portrait
+    { enabled: true, density: "comfortable", size: 36, spacing: ["h-[54px]", "gap-2.5", "py-2", "pl-2", "rounded-[12px]"] },
     { enabled: true, density: "compact", size: 28, spacing: ["gap-2", "py-1.5", "pl-2"] },
-    { enabled: true, density: "icons", size: 36, spacing: ["h-[54px]", "w-[54px]", "justify-center", "p-[9px]", "rounded-[10px]"] },
-    { enabled: false, density: "comfortable", size: 36, spacing: ["h-[54px]", "gap-2", "py-2", "pl-2", "rounded-[10px]"] },
+    { enabled: true, density: "icons", size: 36, spacing: ["h-[54px]", "w-[54px]", "justify-center", "p-[9px]", "rounded-[12px]"] },
+    { enabled: false, density: "comfortable", size: 36, spacing: ["h-[54px]", "gap-2.5", "py-2", "pl-2", "rounded-[12px]"] },
     { enabled: false, density: "compact", size: 28, spacing: ["gap-2", "py-1.5", "pl-2"] },
-    { enabled: false, density: "icons", size: 36, spacing: ["h-[54px]", "w-[54px]", "justify-center", "p-[9px]", "rounded-[10px]"] },
+    { enabled: false, density: "icons", size: 36, spacing: ["h-[54px]", "w-[54px]", "justify-center", "p-[9px]", "rounded-[12px]"] },
   ] as const)("sizes bot portraits and row spacing in $density density with threads $enabled", ({ enabled, density, size, spacing }) => {
     fixture.showThreads = enabled;
     for (const avatar of [{}, { avatarUrl: "/api/attachments/portrait.png", avatarCrop: "circle" as const }]) {

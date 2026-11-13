@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import type { DragEvent, FocusEvent, KeyboardEvent, MouseEvent } from "react";
 
 import { cn } from "@/lib/cn";
@@ -11,6 +11,7 @@ import {
 
 export function SidebarSectionHeader({
   name,
+  count,
   collapsed,
   attention,
   alert,
@@ -23,6 +24,8 @@ export function SidebarSectionHeader({
   onContextMenu,
 }: {
   name: string;
+  /** how many rows the group holds: shown while it is folded (#4093) */
+  count?: number;
   collapsed: boolean;
   attention?: SidebarSectionAttention;
   alert?: boolean;
@@ -34,7 +37,6 @@ export function SidebarSectionHeader({
   onMove?: (direction: -1 | 1) => void;
   onContextMenu?: (event: MouseEvent<HTMLDivElement>) => void;
 }) {
-  const Chevron = collapsed ? ChevronRight : ChevronDown;
   const attentionLabel = attention ? sidebarAttentionLabel(attention) : "";
   // a click must not draw the focus frame on the header; Tab or an arrow
   // key does (2026-10-15, src/lib/input-modality.ts)
@@ -116,19 +118,37 @@ export function SidebarSectionHeader({
                 ? t("sidebar.section.expand", { name })
                 : t("sidebar.section.collapse", { name })
           }
-          // Sentence-case 12px name in secondary ink, a small chevron for fold
-          // state (› folded, ⌄ open; same pair as pinned/attention panels),
-          // then attention marks. No item count (#1664; count stays off after
-          // the My Team reference pass).
+          // The reference's group title (#4093): the name, sentence case,
+          // 13/18 regular in the secondary ink (its size with 15px chat
+          // prose, the owner's configuration), 30px tall, then at the
+          // row's end one 16px seat: the count of rows while folded (so a
+          // folded group never reads as empty, #1664), the chevron in its
+          // place on hover or keyboard focus (pointing down while open),
+          // then this app's attention marks.
           className="group/section flex h-[30px] w-full min-w-0 items-center gap-1.5 rounded-md px-2 pb-1.5 pt-2 text-left text-sidebar-ink-secondary transition-colors hover:bg-sidebar-hover hover:text-sidebar-ink"
         >
-          <Chevron size={12} aria-hidden="true" data-section-chevron="" className="shrink-0 opacity-80" />
-          <span className="sidebar-section-label truncate text-[12px] font-normal leading-4">{name}</span>
+          <span className="sidebar-section-label min-w-0 flex-1 truncate text-[13px] font-normal leading-[18px]">{name}</span>
           {marks}
+          <span className="relative flex h-4 min-w-4 shrink-0 items-center justify-center">
+            {collapsed && count !== undefined && count > 0 && (
+              <span data-section-count="" aria-hidden="true" className="text-[13px] leading-[18px] tabular-nums transition-opacity duration-fast group-hover/section:opacity-0 group-focus-visible/section:opacity-0">
+                {count}
+              </span>
+            )}
+            <ChevronRight
+              size={14}
+              aria-hidden="true"
+              data-section-chevron=""
+              className={cn(
+                "absolute -mr-px opacity-0 transition-[opacity,transform] duration-fast group-hover/section:opacity-100 group-focus-visible/section:opacity-100",
+                !collapsed && "rotate-90",
+              )}
+            />
+          </span>
         </button>
       ) : (
         <div className="flex h-[30px] min-w-0 items-center gap-2 px-2 pb-1.5 pt-2">
-          <span className="sidebar-section-label truncate text-[12px] font-normal leading-4 text-sidebar-ink-secondary">{name}</span>
+          <span className="sidebar-section-label min-w-0 flex-1 truncate text-[13px] font-normal leading-[18px] text-sidebar-ink-secondary">{name}</span>
           {marks}
         </div>
       )}

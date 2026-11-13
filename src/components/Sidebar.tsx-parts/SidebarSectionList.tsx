@@ -185,6 +185,7 @@ export function SidebarSectionList({
             ) : density !== "icons" && !(id === GENERAL_SECTION_ID && loneGeneral) && (
               <SidebarSectionHeader
                 name={sectionDisplayName}
+                count={sectionChiefItems.length + sectionBotItems.length + sectionGroupItems.length}
                 onContextMenu={orgMode && layoutInteractive && !isAutomaticSidebarSection(id) ? (event) => openOrgMenu(event, team?.key || null, id) : !remoteClient && layoutInteractive && sectionName ? (event) => {
                   event.preventDefault();
                   teamMenuReturn.current = event.currentTarget.querySelector<HTMLElement>("button") ?? event.currentTarget;
@@ -271,6 +272,7 @@ export function SidebarSectionList({
             {density !== "icons" && (
               <SidebarSectionHeader
                 name={sectionLabel(BUILT_IN_SECTION_ID)}
+                count={builtInBots.length}
                 collapsed={collapsed}
                 reorderable={false}
                 dragging={false}

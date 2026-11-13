@@ -7,6 +7,7 @@ import { ModelPicker, type ComposerModelMenuControl } from "../ModelPicker";
 import { CallButton } from "../CallView";
 import { NudgeButton } from "../NudgeButton";
 import {
+  COMPOSER_WIDE_ONLY,
   ComposerCtaSeat,
   ComposerMicButton,
   ComposerSendButton,
@@ -102,9 +103,13 @@ export function ComposerActionBar({
     {bot && !group && !remoteClient && (
       // #2106: compact model + effort chip in the chat bar; picking writes
       // the bot's model for every thread. menuControl still serves the + menu.
-      <ModelPicker inComposer key={bot.threadId} bot={bot} threadId={threadId}
-        menuControl={modelMenu}
-        fallbackAnchor={() => composerRowRef.current?.querySelector<HTMLElement>("[data-composer-plus]") ?? null} />
+      // #4093: a narrow capsule folds the chip away (the reference keeps no
+      // model picker there); the + menu's Model row opens the same menu.
+      <span data-composer-model-chip="" className={COMPOSER_WIDE_ONLY}>
+        <ModelPicker inComposer key={bot.threadId} bot={bot} threadId={threadId}
+          menuControl={modelMenu}
+          fallbackAnchor={() => composerRowRef.current?.querySelector<HTMLElement>("[data-composer-plus]") ?? null} />
+      </span>
     )}
     {/* Stop while the turn runs. Escape in an empty field, or a message that
         only says "stop" / "arrête", still ends it the same way (#2042). */}

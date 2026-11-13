@@ -104,8 +104,9 @@ describe("sidebar header", () => {
       const html = render();
       const handle = (html.match(/<div[^>]*role="separator"[^>]*aria-label="Resize sidebar"[^>]*>/g) ?? [])[0] ?? "";
       expect(handle).toContain("app-resize-handle");
-      expect(handle).toContain('aria-valuemin="80"');
-      expect(handle).toContain(density === "icons" ? 'aria-valuenow="80"' : 'aria-valuenow="280"');
+      // the reference's 88px rail (#4093)
+      expect(handle).toContain('aria-valuemin="88"');
+      expect(handle).toContain(density === "icons" ? 'aria-valuenow="88"' : 'aria-valuenow="280"');
       expect(handle).not.toMatch(/bg-accent|w-3\b/);
     },
   );

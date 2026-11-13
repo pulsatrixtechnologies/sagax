@@ -1,8 +1,9 @@
 // Update prompt. Updates download by themselves (upstream #2342), so nothing
 // shows while a background check runs or downloads. A downloaded update
 // opens a small "Update ready" dialog (Later, Restart to install) whose
-// release notes unfold under "What's new"; "Later" leaves the sidebar's
-// update button, which opens it again (openUpdatePrompt). Errors and the
+// release notes unfold under "What's new"; "Later" leaves the account
+// menu's first row, "Update available" and Install, which opens it again
+// (openUpdatePrompt, #4093). Errors and the
 // Linux package hand-off stay on the small bottom-left card, including a
 // failure of the person's own check (Try again, or Quit and reopen).
 //

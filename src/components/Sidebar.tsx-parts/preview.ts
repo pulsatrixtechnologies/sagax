@@ -43,8 +43,12 @@ export function preview(bot: Bot, visible: Message[], instances: InstanceInfo[])
   if (last.attention?.items.length) return plainPreviewText(last.attention.items[0]!.text);
   // a settled approval card says what happened, as the card itself does;
   // its title is the question it asked, which nobody is waiting on now
+  // #4093: a question card with no title reads as its first question, so
+  // the row keeps its second line as the reference's rows do
   if (last.kind === "options" && last.card) {
-    return (last.card.requestId && last.card.tool && !last.card.questionRequest && approvalCardOutcome(last.card)) || questionCardTitle(last.card);
+    return (last.card.requestId && last.card.tool && !last.card.questionRequest && approvalCardOutcome(last.card))
+      || questionCardTitle(last.card)
+      || plainPreviewText(last.card.questionRequest?.questions[0]?.question ?? last.card.subtitle ?? "");
   }
   // a failed turn reads as the chat row says it, never "error: …"
   if (last.kind === "activity" && last.tool) return activityPreview(last.tool, botEngine(bot, instances), last.dataResult);

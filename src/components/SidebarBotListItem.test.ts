@@ -215,21 +215,36 @@ describe("BotListItem", () => {
 
   // The reference design's row (owner, 2026-10-15): the role (Bot settings > Title) is a
   // pill right after the name, in the same line.
-  it("draws the role as a pill right after the name", () => {
+  it("writes the role after the name on its line, \"Name · Role\", as the reference (#4093)", () => {
     const markup = renderRow(bot({ title: "ConnectWise Ops & MS 365" }));
-    const pill = markup.match(/<span data-bot-role-tag=""[^>]*>[\s\S]*?<\/span><\/span>/)?.[0] ?? "";
-    expect(pill).toContain(">ConnectWise Ops &amp; MS 365<");
-    for (const token of ["rounded-[4px]", "border-[0.5px]", "text-[11px]", "leading-[14px]", "px-1.5", "py-0.5", "justify-center", "self-center", "max-w-fit", "text-sidebar-ink-secondary"]) {
-      expect(pill.split(/[\s"]/)).toContain(token);
+    const role = markup.match(/<span data-bot-role-tag=""[^>]*>[\s\S]*?<\/span><\/span>/)?.[0] ?? "";
+    expect(role).toContain(">ConnectWise Ops &amp; MS 365<");
+    expect(role).toMatch(/<span aria-hidden="true" class="shrink-0">·<\/span>/);
+    const tokens = role.split(/[\s"]/);
+    for (const token of ["text-[14px]", "font-normal", "leading-5", "text-sidebar-ink-secondary", "max-w-fit"]) {
+      expect(tokens).toContain(token);
     }
+    for (const token of ["rounded-[4px]", "border-[0.5px]", "text-[11px]"]) expect(tokens).not.toContain(token);
     expect(markup.indexOf("data-bot-role-tag")).toBeGreaterThan(markup.indexOf(">Atlas<"));
-    // #2470: the title sits under the name, never "Name · Title".
     expect(markup).toContain('title="Atlas\nConnectWise Ops &amp; MS 365"');
     expect(renderRow(bot())).not.toContain("data-bot-role-tag");
     expect(renderRow(bot({ title: "  " }))).not.toContain("data-bot-role-tag");
   });
 
-  it("lets the name give way before the role pill shrinks under 2em", () => {
+  it("draws the row at the reference's measures in the owner's configuration (#4093)", () => {
+    const markup = renderRow(bot({ title: "Service desk" }));
+    const row = markup.match(/class="([^"]*h-\[54px\][^"]*)"/)?.[1].split(/\s+/) ?? [];
+    // 10px from the portrait to the text, 12px corners
+    expect(row).toEqual(expect.arrayContaining(["gap-2.5", "rounded-[12px]"]));
+    expect(row).not.toContain("rounded-[10px]");
+    // 1px between the name line and the last message's line
+    expect(markup).toMatch(/data-sidebar-row-name="[^"]*" class="flex min-w-0 flex-1 flex-col gap-px/);
+    // the rail's square takes the same 12px corners
+    const rail = renderRow(bot(), false, "icons").match(/class="([^"]*w-\[54px\][^"]*)"/)?.[1].split(/\s+/) ?? [];
+    expect(rail).toContain("rounded-[12px]");
+  });
+
+  it("lets the name give way before the role shrinks under 2em", () => {
     const longTitle = "Meta-Agent, opensource team maintainer";
     const markup = renderRow(bot({ name: "Team Maintainer", title: longTitle }));
     expect(markup).toContain(">Team Maintainer<");

@@ -38,13 +38,33 @@ await loadLocale(lang);
 const fr = lang === "fr";
 try {
   localStorage.setItem("sagax.interfaceMode.v1", "advanced");
-  localStorage.setItem("omb-sidebar-width-v2", "300");
+  // the reference's sidebar width (SIDEBAR_DEFAULT_WIDTH, #4093)
+  localStorage.setItem("omb-sidebar-width-v2", "280");
   const density = params.get("density");
   if (density === "comfortable" || density === "compact" || density === "icons") localStorage.setItem("openmausbot.sidebarDensity", density);
 } catch {
   // the defaults still render
 }
 
+// #4093 ?parity=1: the shell the reference is compared with at each window
+// width (a table, a question card, the account menu's usage list), on an
+// organization server's page so the menu shows every item it can hold
+// (Switch account with Personal, Sign out); &update=1 adds a downloaded
+// update waiting in the desktop bridge. Get the app on mobile stays out
+// until a public link exists (SAGAX_MOBILE_URL), as in the app.
+const parity = params.get("parity") === "1";
+if (parity) {
+  const ready = { status: "downloaded", version: "9.9.9" };
+  const server = { active: true, id: "org-example", name: "Example org", origin: "https://bots.example.com" };
+  (window as unknown as { ogb?: Record<string, unknown> }).ogb = {
+    ...(window as unknown as { ogb?: Record<string, unknown> }).ogb,
+    serverMode: { state: async () => server, leave: async () => {}, setName: async () => {} },
+    accounts: { openPersonal: async () => {} },
+    ...(params.get("update") === "1"
+      ? { updater: { onState: (cb: (state: typeof ready) => void) => { cb(ready); return () => {}; }, check: async () => ready, install: async () => ready } }
+      : {}),
+  };
+}
 const limitResetsAt = Date.now() + 95 * 60_000;
 const reply = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
 const realFetch = window.fetch.bind(window);
@@ -63,6 +83,13 @@ window.fetch = async (input, init) => {
       limit: credits ? { cause: "credits" } : { cause: "usage_limit", resetsAt: limitResetsAt } } });
   }
   if (scene && url.pathname.endsWith("/team-work")) return reply(sceneTeamWork("atlas", fr, Date.now()));
+  // #4093: the account menu's Usage › (a made-up plan, this month's cost)
+  if (parity && url.pathname === "/api/plan-usage") return reply({ providers: [{
+    id: "claude", name: "Claude", driver: "claude", plan: "Max", ok: true, error: null, state: "windows", access: "subscription",
+    weekly: { available: true, usedPercent: 64, remainingPercent: 36, resetsAt: new Date(Date.now() + 2.2 * 86_400_000).toISOString() },
+    fiveHour: { available: true, usedPercent: 18, remainingPercent: 82, resetsAt: new Date(Date.now() + 3 * 3_600_000).toISOString() },
+  }] });
+  if (parity && url.pathname === "/api/me/usage") return reply({ groups: [], total: { key: "total", label: "Total", turns: 212, costUsd: 48.27 } });
   if (url.pathname.startsWith("/api/")) return reply({});
   return realFetch(input, init);
 };
@@ -92,6 +119,20 @@ const conversation: Message[] = scene ? longConversation(fr, at, 40) : Array.fro
   line(`u${i}`, "user", fr ? `Question de suivi ${i + 1} sur la file des billets.` : `Follow-up ${i + 1} on the ticket queue.`, i * 2, i === 0 ? undefined : `b${i - 1}`),
   line(`b${i}`, "bot", fr ? `Réponse ${i + 1} : ${i + 3} billets fermés depuis ce matin.` : `Answer ${i + 1}: ${i + 3} tickets closed since this morning.`, i * 2 + 1, `u${i}`),
 ]).flat();
+if (parity) {
+  const last = conversation.at(-1)!;
+  conversation.push(
+    line("u-table", "user", fr ? "Montre le plan de migration en tableau." : "Show the migration plan as a table.", 13, last.id),
+    line("b-table", "bot", fr
+      ? "Voici le plan.\n\n| Étape | Durée | Risque |\n|---|---|---|\n| Copie des données | 2 h | Faible |\n| Bascule | 30 min | Moyen |\n| Vérification | 1 h | Faible |"
+      : "Here is the plan.\n\n| Step | Time | Risk |\n|---|---|---|\n| Copy the data | 2 h | Low |\n| Switch over | 30 min | Medium |\n| Check | 1 h | Low |", 14, "u-table"),
+    { id: "q-site", role: "bot", kind: "options", at: at + 15 * 60_000, text: "", parentId: "b-table",
+      card: {
+        title: "", subtitle: "", options: [], requestId: "req-site", requestType: "question",
+        questionRequest: { version: 1, questions: [{ question: fr ? "Quel site je migre en premier ?" : "Which site do I migrate first?", options: (fr ? ["Le siège", "L'entrepôt"] : ["The head office", "The warehouse"]).map((label) => ({ label })) }] },
+      } } as unknown as Message,
+  );
+}
 // ?limit=1: the person's last message waits for the reset, and the
 // conversation's one line says so (what the server writes, shared/limit-failover.ts);
 // ?limit=credits: the engine is out of credit and nothing is held.

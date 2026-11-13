@@ -11,7 +11,7 @@ import { effortForModel } from "../../../shared/model-capabilities";
 export type ModelOption = InstanceInfo["models"]["options"][number];
 
 export function modelLabel(instance: InstanceInfo | undefined, model: string): string {
-  return instance?.models.options.find((option) => option.id === model)?.label ?? model;
+  return instance?.models?.options.find((option) => option.id === model)?.label ?? model;
 }
 
 /** Asked by the desktop mascot's balloon (FloatingBots.tsx): `detail.botId`'s composer chip opens its picker. */

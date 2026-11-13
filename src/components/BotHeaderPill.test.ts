@@ -150,14 +150,14 @@ describe("bot chat header, like the reference app (#2141)", () => {
     expect(html).not.toContain("data-bot-header-chevron");
   });
 
-  it("stacks the title UNDER the name, smaller and grey, never \"Name · Title\" (the owner 2026-11-06)", () => {
+  it("writes \"Name · Title\" on one line, 14px, the title in secondary grey, as the reference (#4093)", () => {
     const html = header();
-    expect(html).toMatch(/<span data-bot-header-text="" title="Pepper\nResearch" class="[^"]*flex-col[^"]*"><span data-bot-header-name="" class="[^"]*text-\[15px\][^"]*text-ink[^"]*">Pepper<\/span><span data-bot-header-label="" class="[^"]*text-\[12px\][^"]*text-ink-secondary[^"]*">Research<\/span><\/span>/);
-    expect(html).not.toContain("·");
-    expect(html).toContain("h-10");
+    expect(html).toMatch(/<span data-bot-header-text="" title="Pepper\nResearch" class="[^"]*text-\[14px\][^"]*"><span data-bot-header-name="" class="[^"]*text-ink[^"]*">Pepper<\/span><span aria-hidden="true" class="[^"]*text-ink-secondary[^"]*">·<\/span><span data-bot-header-label="" class="[^"]*text-ink-secondary[^"]*">Research<\/span><\/span>/);
+    expect(html).not.toContain("flex-col");
+    expect(html).toContain("h-9");
   });
 
-  it("the window pill (Coding, split view) stacks the title under the name too", () => {
+  it("the window pill (Coding, split view) writes them on one line too", () => {
     const html = renderToStaticMarkup(createElement(BotHeaderPill, {
       name: "Pepper",
       label: "Research",
@@ -165,9 +165,8 @@ describe("bot chat header, like the reference app (#2141)", () => {
       onToggle: () => {},
       avatar: createElement("span", { "data-test-avatar": "" }),
     }));
-    expect(html).toMatch(/>Pepper<\/span><span data-bot-header-label="" class="[^"]*text-ink-secondary[^"]*">Research<\/span>/);
-    expect(html).toContain("flex-col");
-    expect(html).not.toContain("·");
+    expect(html).toMatch(/>Pepper<\/span><span aria-hidden="true"[^>]*>·<\/span><span data-bot-header-label="" class="[^"]*text-ink-secondary[^"]*">Research<\/span>/);
+    expect(html).not.toContain("flex-col");
   });
 
   it("a long group name ends in an ellipsis on one line, the chevron stays, the full name on hover (the owner 2026-11-06)", () => {
@@ -179,7 +178,8 @@ describe("bot chat header, like the reference app (#2141)", () => {
       avatar: createElement("span", { "data-test-avatar": "" }),
     }));
     expect(html).toMatch(new RegExp(`<span data-bot-header-text="" title="${name}" class="[^"]*min-w-0`));
-    expect(html).toMatch(/<span data-bot-header-name="" class="[^"]*truncate[^"]*whitespace-nowrap/);
+    expect(html).toMatch(/<span data-bot-header-name="" class="[^"]*truncate/);
+    expect(html).toMatch(/data-bot-header-text="" [^>]*class="[^"]*whitespace-nowrap/);
     expect(html).toMatch(/data-bot-header-pill="" class="[^"]*min-w-0/);
     expect(/<svg[^>]*data-bot-header-chevron[^>]*>/.exec(html)?.[0]).toContain("shrink-0");
   });

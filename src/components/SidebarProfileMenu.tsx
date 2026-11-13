@@ -21,13 +21,13 @@
 //
 // The update entry is the one item that reports progress in place, so it
 // keeps the menu open and re-labels itself as it works. Once an update has
-// downloaded, a round cloud button sits at the right of the row; it widens
-// into a pill on hover or focus (and for a few seconds when the update
-// lands) while the name folds away to the avatar, and it opens the
-// "Update ready" dialog (UpdateBanner, openUpdatePrompt). That button needs
-// the name beside it, so the reference design's foot (avatar only, then Connect apps)
-// carries its own instead, SidebarUpdatePill. The Automations
-// item in the menu carries no dot (2026-10-18): a failed run not seen
+// downloaded it is told once (#4093, the reference's menu): the account
+// menu's first row, "Update available" and Install, which opens the
+// "Update ready" dialog (UpdateBanner, openUpdatePrompt); the avatar wears
+// the reference's update dot so the closed menu still points at it, and
+// Help > Check for updates steps aside while it waits. The foot's own
+// button (SidebarUpdatePill) only shows a download in progress. The Automations
+// // item in the menu carries no dot (2026-10-18): a failed run not seen
 // yet shows on the Automations page (the problem runs pill in its header,
 // a dot on the run in Logs) and in the routines count's label.
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -39,7 +39,6 @@ import {
   Building2,
   CalendarClock,
   Check,
-  CloudDownload,
   CalendarDays,
   Gauge,
   Info,
@@ -241,39 +240,12 @@ export function useUpdateItem(): UpdateEntry | null {
   };
 }
 
-/** The phases the foot's update button (SidebarUpdatePill, beside Connect
- * apps) shows itself, so the avatar adds no dot for them. */
+/** The phases the foot's update progress (SidebarUpdatePill, beside
+ * Connect apps) shows itself, so the avatar adds no dot for them. A
+ * downloaded update is not one: the menu's first row offers it and the
+ * avatar wears the dot. */
 export function footPillCovers(phase: UpdatePhase): boolean {
-  return phase === "downloading" || phase === "preparing" || phase === "downloaded" || phase === "installing";
-}
-
-/** How long the update button stays wide after an update lands. */
-export const UPDATE_BUTTON_ANNOUNCE_MS = 5000;
-
-/** The footer's update button is shown for a downloaded update only; while
- * one checks, downloads or fails, the row's small badge speaks instead. */
-export function showsUpdateButton(phase: UpdatePhase | undefined): boolean {
-  return phase === "downloaded";
-}
-
-/** Wide while hovered or focused, and for a moment after the update lands
- * (once per version), then the round button. */
-function useUpdateButtonWide(version: string | null): [boolean, (on: boolean) => void] {
-  const [pointer, setPointer] = useState(false);
-  const [announcing, setAnnouncing] = useState(false);
-  const announced = useRef<string | null>(null);
-  useEffect(() => {
-    if (version === null) {
-      setAnnouncing(false);
-      return;
-    }
-    if (announced.current === version) return;
-    announced.current = version;
-    setAnnouncing(true);
-    const timer = setTimeout(() => setAnnouncing(false), UPDATE_BUTTON_ANNOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [version]);
-  return [pointer || announcing, setPointer];
+  return phase === "downloading" || phase === "preparing" || phase === "installing";
 }
 
 /** The footer menu: the profile items with the account-level places
@@ -708,6 +680,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
     if (lockedServer) void Promise.resolve(leaveBridge?.setName?.({ label })).then(done, () => {});
     else void Promise.resolve(window.ogb?.environments?.setName?.(id, { label })).then(done, () => {});
   };
+  const updateWaits = update?.phase === "downloaded";
   const profileItems = profileMenuItems({
     usagePercent: account.percent,
     usageName: account.percentName,
@@ -723,7 +696,9 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
     remoteSessionsActive: state.activeView === "remote-sessions",
     remoteSessions: perspicaxOrg !== null,
     shortcutsTrailing: <ShortcutHint id="shortcuts-cheat-sheet" />,
-    updateItem: update ? { ...update.item, label: t("sidebar.update.check") } : null,
+    // #4093: a downloaded update is offered at the top of the menu (the
+    // banner below), so Help does not tell it a second time.
+    updateItem: update && !updateWaits ? { ...update.item, label: t("sidebar.update.check") } : null,
     switchTargets: business ? [] : account.targets,
     accounts,
     canAddOrganization: !business && Boolean(window.ogb?.environments),
@@ -767,15 +742,12 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
     },
   });
   const items = footerMenuItems(places, profileItems);
-  const updateButton = !avatarOnly && update !== null && showsUpdateButton(update.phase);
-  const [wide, setWide] = useUpdateButtonWide(updateButton ? (update?.label ?? "") : null);
-  // the round button speaks for a downloaded update, so the row's badge
-  // stays for the other phases
-  // Beside Connect apps (avatarOnly, the reference design's foot) the foot's own update
-  // button (SidebarUpdatePill) shows a download, a ready update and its
-  // install, so the avatar's dot is left for a failed one.
+  // Beside Connect apps (avatarOnly, the reference design's foot) the foot's
+  // own button (SidebarUpdatePill) shows a download and its install, so the
+  // avatar's dot is left for a waiting update (the reference's dot: the
+  // menu's first row offers it) and a failed one.
   const footPill = avatarOnly && update !== null && footPillCovers(update.phase);
-  const noteworthy = update && updateNoteworthy(update.phase, update.pending) && !updateButton && !footPill ? update : null;
+  const noteworthy = update && updateNoteworthy(update.phase, update.pending) && !footPill ? update : null;
   // a place in the menu asking for attention while the menu is folded away
   const placeAttention = places.some((item) => item.attention);
 
@@ -786,7 +758,8 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
       {profile?.avatarUrl ? (
         <img src={profile.avatarUrl} alt="" style={{ width: size, height: size }} className="rounded-full object-cover" />
       ) : (
-        <InitialsAvatar initials={initials} size={size} />
+        // the reference's monogram: 14px medium from 36px up, 12px below
+        <InitialsAvatar initials={initials} size={size} fontSize={size >= 36 ? 14 : 12} />
       )}
     </span>
   );
@@ -822,10 +795,12 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
     <SidebarPopoverMenu
       items={items}
       ariaLabel={name}
+      banner={updateWaits ? (close) => <AccountMenuUpdateBanner onInstall={() => { close(); openUpdatePrompt(); }} /> : undefined}
       menuClassName={avatarOnly ? "left-0 w-max min-w-[228px] max-w-[300px]" : undefined}
       renderTrigger={({ open }) => avatarOnly && withName ? (
         // The foot's profile (reference design): the avatar and the full
-        // name, normal weight, no background pill; the update dot on the avatar.
+        // name, 14/20 medium as the reference's (#4093), no background pill;
+        // the update dot on the avatar.
         <span
           ref={triggerRef}
           title={name}
@@ -855,7 +830,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
             // as the account row); the row's custom property grows both foot
             // tiles to fit it (styles.css, --foot-tile-h)
             <span data-account-pill-line="" className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
-              <span data-account-pill-name="" className="min-w-0 truncate text-[14px] font-normal leading-[18px] text-sidebar-ink">{name}</span>
+              <span data-account-pill-name="" className="min-w-0 truncate text-[14px] font-medium leading-[18px] text-sidebar-ink">{name}</span>
               <span data-member-line="" className="flex min-w-0 items-center gap-1.5 text-[12px] leading-[16px] text-sidebar-ink-secondary">
                 {titleName && <span data-member-title="" className="min-w-0 truncate">{titleName}</span>}
                 {pointsText && (
@@ -867,7 +842,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
               </span>
             </span>
           ) : (
-            <span data-account-pill-name="" className="min-w-0 flex-1 truncate text-[14px] font-normal leading-5 text-sidebar-ink">{name}</span>
+            <span data-account-pill-name="" className="min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-sidebar-ink">{name}</span>
           )}
           {placeAttention && !open && (
             <span data-testid="footer-attention" aria-hidden="true" className="size-2 shrink-0 rounded-full bg-danger" />
@@ -914,8 +889,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
           <span
             data-account-name=""
             className={cn(
-              "flex min-w-0 flex-col justify-center overflow-hidden transition-[max-width,opacity] duration-200 ease-out",
-              updateButton && wide ? "max-w-0 flex-none opacity-0" : "max-w-[240px] flex-1 opacity-100",
+              "flex min-w-0 max-w-[240px] flex-1 flex-col justify-center overflow-hidden",
             )}
           >
             <span title={name} className="min-w-0 truncate text-[14px] font-medium leading-[18px] text-sidebar-ink">{name}</span>
@@ -982,14 +956,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
         <div className="flex items-center gap-2">
           <div
             data-sidebar-account-row=""
-            // flex-1 throughout, so the update button stays pinned to the
-            // right edge and widens leftward under the pointer; while it is
-            // wide the row keeps just what it cannot lose (the avatar and
-            // the badges), the name having folded away
-            className={cn(
-              "flex-1 rounded-lg px-2 py-1.5 transition-colors hover:bg-sidebar-hover has-[[aria-expanded=true]]:bg-sidebar-hover",
-              updateButton && wide ? "min-w-fit" : "min-w-0",
-            )}
+            className="min-w-0 flex-1 rounded-lg px-2 py-1.5 transition-colors hover:bg-sidebar-hover has-[[aria-expanded=true]]:bg-sidebar-hover"
           >
             <div className="flex items-center gap-1">
               <div className="relative min-w-0 flex-1">{accountRow}{approvalsDot}</div>
@@ -997,48 +964,30 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
               {routinesBadge}
             </div>
           </div>
-          {updateButton && update && (
-            <SidebarUpdateRoundButton
-              label={update.label}
-              wide={wide}
-              setWide={setWide}
-              onClick={openUpdatePrompt}
-            />
-          )}
         </div>
       )}
     </div>
   );
 }
 
-function SidebarUpdateRoundButton({
-  label,
-  wide,
-  setWide,
-  onClick,
-}: {
-  label: string;
-  wide: boolean;
-  setWide: (on: boolean) => void;
-  onClick: () => void;
-}) {
+/** The account menu's first row while a downloaded update waits (#4093, the
+ * reference's banner): "Update available" in the accent, then Install,
+ * which opens the "Update ready" dialog (its notes, then Restart to
+ * install), the same path as the foot's update button. */
+export function AccountMenuUpdateBanner({ onInstall }: { onInstall: () => void }) {
   return (
-    <button
-      type="button"
-      data-sidebar-update=""
-      data-wide={wide ? "" : undefined}
-      title={label}
-      aria-label={label}
-      onClick={onClick}
-      onMouseEnter={() => setWide(true)}
-      onMouseLeave={() => setWide(false)}
-      onFocus={() => setWide(true)}
-      onBlur={() => setWide(false)}
-      style={{ flexBasis: wide ? "100%" : "2.75rem" }}
-      className="flex h-11 min-w-11 shrink grow-0 items-center justify-center rounded-full bg-ink text-app shadow-sm transition-[flex-basis,filter] duration-200 ease-out hover:brightness-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
-    >
-      <CloudDownload size={20} strokeWidth={2} aria-hidden="true" />
-    </button>
+    <div data-account-update-banner="" className="flex items-center justify-between gap-4 rounded-[10px] bg-accent/15 py-2.5 pl-3 pr-2.5 text-accent">
+      <span className="min-w-0 truncate">{t("update.card.title")}</span>
+      <button
+        type="button"
+        role="menuitem"
+        data-account-update-install=""
+        onClick={onInstall}
+        className="shrink-0 rounded-full bg-accent px-3 py-1 text-[13px] font-medium leading-[18px] text-accent-ink hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      >
+        {t("settings.updates.install")}
+      </button>
+    </div>
   );
 }
 

@@ -134,9 +134,13 @@ describe("composer controls (the reference app's prompt bar)", () => {
     ]);
     const labels = items.map((item) => item.querySelector(".truncate")?.textContent);
     expect(labels).toEqual(["Attach files", "GIF", "Teach a task"]);
-    // no voice note, setup, model or approval rows, and no separators
-    expect(menu.querySelectorAll('[role="separator"]').length).toBe(0);
-    expect(menu.querySelector("[data-composer-plus-row]")).toBeNull();
+    // no voice note, setup or approval rows; the Model row (and its hairline)
+    // is there only for a narrow capsule, which folds the chip into it (#4093)
+    const folded = menu.querySelector<HTMLElement>("[data-composer-plus-rows]")!;
+    expect(folded.className).toBe("hidden @max-[35rem]/composer:contents");
+    expect([...menu.querySelectorAll("[data-composer-plus-row]")].map((row) => row.getAttribute("data-composer-plus-row"))).toEqual(["model"]);
+    expect(folded.contains(menu.querySelector("[data-composer-plus-row]"))).toBe(true);
+    expect([...menu.querySelectorAll('[role="separator"]')].every((line) => folded.contains(line))).toBe(true);
     click(menu.querySelector('[data-composer-plus-item="teach"]'));
     expect(textarea().value).toBe("/learn ");
     expect($("[data-composer-plus]")!.getAttribute("aria-expanded")).toBe("false");

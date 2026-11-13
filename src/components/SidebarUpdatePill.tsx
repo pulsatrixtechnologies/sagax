@@ -1,36 +1,24 @@
-// The update button of the reference design's foot (avatar, Connect apps, this). Since
-// the foot became the avatar alone beside the Connect apps pill (#575), the
-// account row's round cloud button never showed (it is drawn only beside a
-// full name), so a waiting update left the foot silent (2026-10-18).
-//
-// It is a 36px round button on the skin's accent, the avatar's size, at the
-// right of the pill, shown while an update downloads, is staged, is ready or
-// installs. On hover or keyboard focus it widens to show its word ("Update",
-// or the download's progress) and the pill gives way; it also widens for a
-// few seconds when an update lands, once per version. With reduced motion
-// it does not animate: the word simply shows on hover or focus. A click on a
-// ready update opens the "Update ready" dialog (UpdateBanner,
-// openUpdatePrompt), the same as the old button: its release notes, then
-// Update, which installs through the existing updater.
-import { useEffect, useRef, useState } from "react";
-import { CloudDownload, Loader2 } from "lucide-react";
+// The foot's update progress (avatar, Connect apps, this): a 36px round
+// button on the skin's accent, the avatar's size, shown while an update
+// downloads, is staged or installs. A downloaded update is not here: it is
+// told once, as the account menu's first row with Install (#4093, the
+// reference's menu), and the avatar wears the reference's update dot. On
+// hover or keyboard focus a wide foot shows the word (the download's
+// progress); with reduced motion it does not animate. It takes no click:
+// the work is under way.
+import { Loader2 } from "lucide-react";
 import { useUpdaterState, type UpdaterState } from "@/lib/updater";
-import { openUpdatePrompt } from "@/lib/update-prompt";
-import { brand } from "@/lib/brand";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 
-/** How long the button stays wide after an update lands. */
-export const UPDATE_PILL_ANNOUNCE_MS = 5000;
-
 export type UpdatePillView =
   | { kind: "progress"; percent: number | null; text: string; aria: string }
-  | { kind: "busy"; text: string; aria: string }
-  | { kind: "ready"; text: string; aria: string; version: string | null };
+  | { kind: "busy"; text: string; aria: string };
 
 /** What the foot's update button shows for an updater state, or null when
  * it stays away (no bridge, idle, a check, an error: the error has its own
- * card, a handed-off install finishes in a terminal). */
+ * card, a handed-off install finishes in a terminal; a downloaded update:
+ * the account menu's first row offers it, #4093). */
 export function updatePillView(state: UpdaterState | null): UpdatePillView | null {
   if (!state) return null;
   switch (state.status) {
@@ -54,38 +42,9 @@ export function updatePillView(state: UpdaterState | null): UpdatePillView | nul
         aria: state.message || (handoff ? t("sidebar.update.openingTerminal") : t("sidebar.update.installing")),
       };
     }
-    case "downloaded": {
-      const version = state.version?.trim() || null;
-      return {
-        kind: "ready",
-        text: t("sidebar.update.pill"),
-        aria: version ? t("sidebar.update.pillAria", { app: brand().name, version }) : t("sidebar.update.pill"),
-        version,
-      };
-    }
     default:
       return null;
   }
-}
-
-/** Wide while hovered or focused, and for a moment after an update lands
- * (once per version). */
-function useAnnounce(version: string | null | undefined): boolean {
-  const [announcing, setAnnouncing] = useState(false);
-  const announced = useRef<string | null>(null);
-  useEffect(() => {
-    if (version === undefined) {
-      setAnnouncing(false);
-      return;
-    }
-    const key = version ?? "";
-    if (announced.current === key) return;
-    announced.current = key;
-    setAnnouncing(true);
-    const timer = setTimeout(() => setAnnouncing(false), UPDATE_PILL_ANNOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [version]);
-  return announcing;
 }
 
 const RING = 2 * Math.PI * 7;
@@ -111,24 +70,20 @@ function ProgressRing({ percent }: { percent: number | null }) {
   );
 }
 
-export function UpdatePillButton({ view, wide: forcedWide = false, layout, onOpen = openUpdatePrompt, onHot }: {
+export function UpdatePillButton({ view, layout, onHot }: {
   view: UpdatePillView;
   /** the foot's two states: "compact" stays the circle beside the profile
    * (never widens, so it cannot cut the name), "wide" always shows its word
    * (the profile is the avatar alone). Left out: it widens on hover. */
   layout?: "compact" | "wide";
-  /** the announcement after an update lands */
-  wide?: boolean;
-  onOpen?: () => void;
   /** pointer or keyboard on the button (the foot folds its profile then) */
   onHot?: (hot: boolean) => void;
 }) {
-  const ready = view.kind === "ready";
   return (
     <button
       type="button"
       data-sidebar-update-pill={view.kind}
-      data-wide={forcedWide || layout === "wide" ? "" : undefined}
+      data-wide={layout === "wide" ? "" : undefined}
       data-layout={layout}
       data-percent={view.kind === "progress" && view.percent !== null ? view.percent : undefined}
       aria-label={view.aria}
@@ -137,26 +92,20 @@ export function UpdatePillButton({ view, wide: forcedWide = false, layout, onOpe
       onMouseLeave={onHot ? () => onHot(false) : undefined}
       onFocus={onHot ? (event) => { if (event.currentTarget.matches(":focus-visible")) onHot(true); } : undefined}
       onBlur={onHot ? () => onHot(false) : undefined}
-      aria-disabled={ready ? undefined : true}
-      aria-busy={ready ? undefined : true}
-      onClick={(event) => {
-        event.stopPropagation();
-        if (ready) onOpen();
-      }}
+      aria-disabled
+      aria-busy
+      onClick={(event) => event.stopPropagation()}
       className={cn(
         // w-9 pins the resting circle: nothing in the row can squeeze it, and
         // it widens only to show its word (the foot rule below), pushing
         // Connect apps left instead of floating over it
-        "sidebar-update-pill group inline-flex h-9 w-9 shrink-0 items-center justify-start overflow-hidden rounded-full bg-accent text-accent-ink shadow-sm outline-none",
+        "sidebar-update-pill group inline-flex h-9 w-9 shrink-0 cursor-default items-center justify-start overflow-hidden rounded-full bg-accent text-accent-ink shadow-sm outline-none",
         "focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar",
         layout === "wide" && "min-w-9 shrink [&[data-layout=wide]]:w-auto",
-        ready ? "cursor-pointer hover:brightness-95" : "cursor-default",
       )}
     >
       <span className="flex size-9 shrink-0 items-center justify-center" data-update-icon="">
-        {view.kind === "progress" ? <ProgressRing percent={view.percent} />
-          : view.kind === "busy" ? <Loader2 size={18} className="animate-spin" aria-hidden="true" />
-          : <CloudDownload size={18} strokeWidth={2.2} aria-hidden="true" />}
+        {view.kind === "progress" ? <ProgressRing percent={view.percent} /> : <Loader2 size={18} className="animate-spin" aria-hidden="true" />}
       </span>
       <span data-update-text="" aria-hidden="true" className="block whitespace-nowrap text-[13px] font-medium leading-5 tabular-nums">
         {view.text}
@@ -169,7 +118,6 @@ export function UpdatePillButton({ view, wide: forcedWide = false, layout, onOpe
  * browser, in dev, or while there is nothing to say. */
 export function SidebarUpdatePill({ layout, onHot }: { layout?: "compact" | "wide"; onHot?: (hot: boolean) => void } = {}) {
   const view = updatePillView(useUpdaterState());
-  const announcing = useAnnounce(view?.kind === "ready" ? view.version : undefined);
   if (!view) return null;
-  return <UpdatePillButton view={view} wide={announcing && layout !== "compact"} layout={layout} onHot={onHot} />;
+  return <UpdatePillButton view={view} layout={layout} onHot={onHot} />;
 }

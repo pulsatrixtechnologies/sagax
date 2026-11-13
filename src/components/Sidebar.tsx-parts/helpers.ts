@@ -24,6 +24,7 @@ import {
   type SectionItemKind,
 } from "@/lib/personal-sections";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
+import { SIDEBAR_DEFAULT_WIDTH } from "@/lib/sidebar-preferences";
 import type { Bot, Group } from "@/state/store";
 
 export const GENERAL_SECTION_ID = "builtin:general";
@@ -32,7 +33,7 @@ export const ITEM_DRAG_TYPE = "application/x-sagax-sidebar-item";
 export const SIDEBAR_WIDTH_KEY = "omb-sidebar-width-v2";
 export const SIDEBAR_MIN_WIDTH = 240;
 export const SIDEBAR_MAX_WIDTH = 400;
-export const SIDEBAR_DEFAULT_WIDTH = 280;
+export { SIDEBAR_DEFAULT_WIDTH };
 
 export const COMPOSE_DISMISS = new Set([
   "select",

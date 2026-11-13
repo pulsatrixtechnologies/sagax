@@ -2420,6 +2420,11 @@
   line-height: 1.75;
   font-family: "omb-chat", var(--font-sans);
 }
+/* A chat bubble's prose keeps the bubble's 22px line (#4093, the
+   reference's transcript: 15px on 22px; CHAT_BUBBLE_TEXT_CLASS). */
+.chat-bubble-type :is(.chat-text, .chat-md) {
+  line-height: 22px;
+}
 
 html,
 body,
@@ -3273,6 +3278,21 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
   content-visibility: auto;
   contain-intrinsic-block-size: auto 32px;
   overflow-clip-margin: 2px;
+}
+
+/* The icons rail (#4093, the reference's rail): a thin divider between two
+   items, 32px wide and centred, in the gap above each row; none above the
+   rail's first item. */
+[data-sidebar-rail] [data-sidebar-item-drag]::before {
+  content: "";
+  display: block;
+  width: 32px;
+  height: 0.5px;
+  margin: 0 auto 4px;
+  background: var(--color-sidebar-hairline-weak);
+}
+[data-sidebar-rail] > :first-child > :first-child > [data-sidebar-nest] > [data-sidebar-item-drag]:first-child::before {
+  display: none;
 }
 
 /* View transitions (the onboarding steps, src/components/onboarding). The
@@ -4315,8 +4335,8 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
   --foot-tile-h: 2.875rem;
 }
 
-/* The foot's update button (SidebarUpdatePill): round, the avatar's size;
-   hovered, focused or just landed, it widens to show its word and the
+/* The foot's update progress (SidebarUpdatePill): round, the avatar's size;
+   hovered or focused, it widens to show its word and the
    Connect apps button beside it gives way. Reduced motion: no animation, the
    word simply shows. */
 .sidebar-update-pill [data-update-text] {
@@ -4343,14 +4363,6 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
   :root:not([data-reduced-motion="true"]) .sidebar-update-pill {
     transition: width 240ms var(--ease-out-quint), flex-grow var(--transition-duration-moderate) ease, margin var(--transition-duration-moderate) ease, opacity var(--transition-duration-moderate) ease, filter 150ms ease-out;
   }
-  :root:not([data-reduced-motion="true"]) .sidebar-update-pill[data-sidebar-update-pill="ready"]:is(:hover, :focus-visible) [data-update-icon] svg {
-    animation: sidebar-update-nudge 0.6s cubic-bezier(0.34, 1.4, 0.64, 1);
-  }
-}
-@keyframes sidebar-update-nudge {
-  0% { transform: none; }
-  40% { transform: translateY(2px); }
-  100% { transform: none; }
 }
 
 /* The Approvals screen (src/components/approvals/): a new card slides in

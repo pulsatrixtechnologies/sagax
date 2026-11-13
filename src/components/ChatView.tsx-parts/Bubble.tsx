@@ -32,7 +32,7 @@ import { PageRefChip } from "../PageComposerParts";
 import { ReplyQuote } from "../ReplyQuote";
 import { AttachmentGallery, collectMessageFiles, imagePathOf, replyAttachmentGroup, splitMessageAttachments } from "../AttachmentGallery";
 import { prefersWideBubble } from "@/lib/rich-blocks";
-import { chatBubbleWidth, useChatBubbleWidthClasses } from "@/lib/chat-bubble-width";
+import { CHAT_BUBBLE_TEXT_CLASS, chatBubbleWidth, useChatBubbleWidthClasses } from "@/lib/chat-bubble-width";
 import { SentCitations } from "../CitationUI";
 import { SpeakMenuItem } from "../SpeakButton";
 import { TurnRunLine } from "../TurnRunLine";
@@ -296,7 +296,7 @@ export const Bubble = memo(function Bubble({
         <div
           data-chat-bubble
           className={cn(
-            "text-[13px] leading-5",
+            CHAT_BUBBLE_TEXT_CLASS,
             emerging && "turn-answer",
             "rounded-[18px]",
             bubbleWidths[chatBubbleWidth({ terminal: columnCard, wide: wideBubble || remoteCard })],

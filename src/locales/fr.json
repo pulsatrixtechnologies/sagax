@@ -5320,8 +5320,6 @@
   "sidebar.update.handedOff": "Termine la mise à jour dans ton terminal",
   "sidebar.update.installing": "Redémarrage pour mettre à jour…",
   "sidebar.update.openingTerminal": "Ouverture d’un terminal…",
-  "sidebar.update.pill": "Mettre à jour",
-  "sidebar.update.pillAria": "Mettre à jour {app} vers la version {version}",
   "sidebar.update.preparing": "Préparation de la mise à jour…",
   "sidebar.update.ready": "Version {version} prête · Redémarrer",
   "sidebar.update.readyInstall": "Version {version} prête · Installer",

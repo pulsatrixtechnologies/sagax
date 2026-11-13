@@ -84,10 +84,14 @@ describe("Primary Bot at the top", () => {
     const grid = html.slice(0, html.indexOf("data-sidebar-section-id") > 0 ? html.indexOf("data-sidebar-section-id") : html.indexOf('data-sidebar-bot-row="atlas"'));
     expect(grid).toContain(">nova</span>");
     expect(grid).toContain('data-testid="primary-bot-badge"');
-    expect(grid).toMatch(/data-bot-role-tag=""[^>]*><span[^>]*>Chef de cabinet</);
-    // The reference design's pinned tile: 95px, 10px corners, 12px name
+    // the role under the tile's name, plain secondary text (#4093)
+    expect(grid).toMatch(/data-bot-role-tag="" class="[^"]*text-sidebar-ink-secondary[^"]*">Chef de cabinet</);
+    // The reference design's pinned tile in the owner's configuration
+    // (#4093): 95px, 12px corners, 12px name; the role on one line, cut
+    // with an ellipsis and centred, as the reference's tile caption
     expect(grid).toContain("w-[95px]");
-    expect(grid).toContain("rounded-[10px]");
+    expect(grid).toMatch(/w-\[95px\][^"]*rounded-\[12px\]/);
+    expect(grid).toMatch(/data-bot-role-tag="" class="[^"]*\btruncate\b[^"]*text-center/);
     expect(grid).toContain("text-[12px]");
     expect(grid).toContain('data-sidebar-tile-labels=""');
     expect(html).not.toContain('data-sidebar-bot-row="nova"');

@@ -30,8 +30,8 @@ export function SidebarPinnedGrid({
 }) {
   if (pinnedBots.length === 0) return null;
   return (
-    // The reference window's tiles: 95 x 115, 4px apart and centred as
-    // a group, the first 16px under the head's row.
+    // The reference window's tiles: 95px wide (112px tall with a role,
+    // 92px without), 4px apart and centred as a group, 12px under the head.
     <div className={cn("grid", density === "icons" ? "mb-2 grid-cols-1 gap-1 py-1.5" : "mb-4 grid-cols-[repeat(auto-fit,95px)] justify-center gap-x-1 gap-y-3 pb-1.5 pt-3")}>
       {pinnedBots.map((bot) => {
         const selected = state.activeView === "chat" && state.selectedId === bot.id;
@@ -52,10 +52,11 @@ export function SidebarPinnedGrid({
             className={cn(
               density === "icons"
                 ? "mx-auto flex w-full min-w-0 flex-col items-center gap-1.5 rounded-xl px-1 pb-1 pt-1.5"
-                // Grok Bot's pinned tile: 95px wide, 10px corners,
+                // Grok Bot's pinned tile: 95px wide, 12px corners (the
+                // owner's configuration, #4093),
                 // 6px over a 60px portrait, 6px to the name, 4px
                 // between name and role, 4px under, 8px aside
-                : "flex w-[95px] shrink-0 flex-col items-center gap-1.5 rounded-[10px] px-2 pb-1 pt-1.5",
+                : "flex w-[95px] shrink-0 flex-col items-center gap-1.5 rounded-[12px] px-2 pb-1 pt-1.5",
               density === "icons"
                 ? selected ? "bg-sidebar-selected" : "hover:bg-sidebar-hover"
                 : selected ? "bg-sidebar-card" : "hover:bg-sidebar-hover/60",

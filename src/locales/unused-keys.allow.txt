@@ -689,7 +689,6 @@ update.card.later
 update.card.progress
 update.card.restart
 update.card.restartNote
-update.card.title
 update.card.tryAgain
 update.card.whatsNew
 usage.bot.empty

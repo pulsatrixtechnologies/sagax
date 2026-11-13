@@ -29,7 +29,7 @@ export function PinnedBanner({
   const text = citationPreviewText(pinnedPeer?.body ?? pinned.text ?? "").replace(/\s+/g, " ").trim();
   if (!text) return null;
   return (
-    <div className="w-full px-5">
+    <div className="w-full px-4">
       <div className="mb-2 flex items-center gap-2 rounded-lg border border-accent/25 bg-accent/[0.07] px-3 py-1.5">
         <Pin size={12} className="shrink-0 text-accent" />
         <button

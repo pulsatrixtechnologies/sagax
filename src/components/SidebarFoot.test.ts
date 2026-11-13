@@ -71,13 +71,16 @@ describe("foot row", () => {
     expect(html).not.toContain("data-foot-hot");
   });
 
-  it("the name has no pill: no card, no border, normal weight, avatar and name side by side", () => {
+  // #4093: the reference's foot writes the name 14/20 in the medium weight
+  it("the name has no pill: no card, no border, medium weight, avatar and name side by side", () => {
     const html = render();
     const pill = /<span[^>]*data-sidebar-account-pill=""[^>]*>/.exec(html)?.[0] ?? "";
     expect(pill).not.toContain("bg-sidebar-card");
     expect(pill).not.toContain("border");
-    expect(html).toMatch(/data-account-pill-name="" class="[^"]*font-normal/);
-    expect(html).not.toMatch(/data-account-pill-name="" class="[^"]*font-medium/);
+    expect(html).toMatch(/data-account-pill-name="" class="[^"]*text-\[14px\] font-medium leading-5/);
+    expect(html).not.toMatch(/data-account-pill-name="" class="[^"]*font-normal/);
+    // the monogram: 14px from a 36px circle
+    expect(html).toMatch(/width:36px;height:36px;font-size:14px/);
   });
 
   it("keeps the name uncut while it fits: it takes the room, the buttons never shrink", () => {

@@ -11,7 +11,7 @@ import type { Bot, Group } from "@/state/store";
 import type { RoomMentionPerson } from "@/lib/person-mentions";
 import { MentionTextarea } from "../MentionTextarea";
 import { ComposerReplyStrip } from "../ReplyQuote";
-import { ComposerPlusMenu, type PlusMenuItem } from "../ComposerControls";
+import { COMPOSER_NARROW_ONLY, ComposerPlusMenu, type PlusMenuItem } from "../ComposerControls";
 import { MemePicker, type MemeAttachmentPick } from "../MemePicker";
 import { TeachChooserDialog, TeachStepsDialog } from "../TeachStepsDialog";
 import { MyChromeRecordDialog } from "../MyChromeRecordDialog";
@@ -65,6 +65,7 @@ export function ComposerEditor({
   config,
   composerAria,
   onSendMeme,
+  plusRows,
   children,
 }: {
   bot?: Bot;
@@ -113,6 +114,8 @@ export function ComposerEditor({
   composerAria: string;
   /** #2121: pick a meme and send it now. */
   onSendMeme?: (attachment: MemeAttachmentPick) => void;
+  /** The + menu's rows that a narrow capsule folds into it (#4093). */
+  plusRows?: (close: () => void) => ReactNode;
   children?: ReactNode;
 }) {
   const [memesOpen, setMemesOpen] = useState(false);
@@ -175,7 +178,7 @@ export function ComposerEditor({
               (goal, setup), then this conversation's model and approval
               level as rows that open beside it (2026-10-15/16; the
               model since 2026-10-18, no workspace row since #743). */}
-          <ComposerPlusMenu items={items} />
+          <ComposerPlusMenu items={items} rows={plusRows} rowsClassName={COMPOSER_NARROW_ONLY} />
           {onSendMeme && (
             <>
               <MemePicker

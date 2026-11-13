@@ -264,7 +264,7 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
 
       {/* An Auto room answers like lead mode while the decision model is off: say so, once. */}
       {!group.dm && !remoteClient && state.config && group.defaultResponder.kind === "auto" && !jevRoomRoutingOn(state.config) && (
-        <div className="w-full px-5">
+        <div className="w-full px-4">
           <p data-testid="room-jev-off" className="mb-1 px-2 text-[12px] text-ink-secondary">
             {t("room.responder.jevOffHint", { name: defaultResponderName(group, members) ?? t("room.responder.leadFallback") })}{" "}
             <button
@@ -289,7 +289,7 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
         if (!pinned || !text) return null;
         const sender = pinned.role === "user" ? t("chat.you") : (pinned.from?.name ?? t("room.aBot"));
         return (
-          <div className="w-full px-5">
+          <div className="w-full px-4">
             <div className="mb-2 flex items-center gap-2 rounded-lg border border-accent/25 bg-accent/[0.07] px-3 py-1.5">
               <Pin size={12} className="shrink-0 text-accent" />
               <button

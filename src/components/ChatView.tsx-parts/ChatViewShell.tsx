@@ -146,7 +146,7 @@ export function ChatViewShell(m: Record<string, any>) {
       <div
         ref={scrollRef}
         data-virtual-root=""
-        className={cn("h-full overflow-x-hidden overflow-y-auto overscroll-y-contain px-5 [overflow-anchor:none]", backgroundEffect && "relative")}
+        className={cn("h-full overflow-x-hidden overflow-y-auto overscroll-y-contain px-4 [overflow-anchor:none]", backgroundEffect && "relative")}
         {...scrollHandlers}
       >
         <div
@@ -303,7 +303,7 @@ export function ChatViewShell(m: Record<string, any>) {
           at the bottom of the chat, just above the composer, on the message
           column, whatever the scroll. Part of the dock, so the transcript pad
           (measured from the dock) keeps the last message clear of it. */}
-      <div data-turn-presence-slot="" className="px-5 [&:not(:has(.turn-presence))]:hidden">
+      <div data-turn-presence-slot="" className="px-4 [&:not(:has(.turn-presence))]:hidden">
         <div className={cn(chatColumnClassName, "pb-1.5")}>
           <TurnPresence
             ultracode={ultracodeFromSelection(bot.modelSelection)}

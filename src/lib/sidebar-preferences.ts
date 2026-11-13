@@ -79,8 +79,10 @@ export function toggleSidebarCollapsed(
   return next;
 }
 
-/** The collapsed sidebar (icons density) is this wide. */
-export const SIDEBAR_RAIL_WIDTH = 80;
+/** The collapsed sidebar (icons density) is this wide: the reference
+ * app's rail (#4093, docs/design/ux-reference-grokbot-cursor.md, "Shell by
+ * window width"). */
+export const SIDEBAR_RAIL_WIDTH = 88;
 /** Dragging the sidebar's edge narrower than this snaps it to the icons
  * rail; dragging the rail's edge past it expands the sidebar again. There is
  * no collapse button: the edge, its double-click and Settings > Appearance
@@ -156,19 +158,27 @@ export function useSidebarDensity(): SidebarDensity {
   return useSyncExternalStore(subscribeDensity, currentSidebarDensity, () => "comfortable");
 }
 
-// The window's width decides how the sidebar is laid out (2026-11-01, Grok
-// Bot's own behavior: its macOS window at 700 px collapses the sidebar to
-// icons, at 1338 px it is full):
+// The window's width decides how the sidebar is laid out. One set of
+// breakpoints, here, measured on the reference app (#4093; the table by
+// window width in docs/design/ux-reference-grokbot-cursor.md, "Shell by
+// window width"):
 //   - below SIDEBAR_DRAWER_BELOW (Tailwind's `sm`, 640px: the app's phone
 //     boundary, where sheets and page headers already switch) the sidebar is
-//     a drawer that slides over the chat;
-//   - from there up to SIDEBAR_AUTO_RAIL_BELOW (Tailwind's `md`, 768px, the
-//     old drawer boundary) it is the icons rail, automatically;
-//   - at and above `md` it follows the person's own density.
+//     a drawer that slides over the chat (the reference window stops at
+//     512px; the phone layout takes the rest);
+//   - from there up to SIDEBAR_AUTO_RAIL_BELOW it is the icons rail,
+//     automatically: the reference keeps the conversation at least
+//     SIDEBAR_CHAT_MIN_WIDTH wide beside a sidebar of SIDEBAR_DEFAULT_WIDTH,
+//     and folds the sidebar to its rail below the sum (704px);
+//   - from there it follows the person's own density.
 // The automatic rail is never saved: widening the window finds the person's
 // choice where they left it.
+/** The sidebar's width until the person drags its edge (the reference's). */
+export const SIDEBAR_DEFAULT_WIDTH = 280;
+/** The narrowest conversation the reference keeps beside its sidebar. */
+export const SIDEBAR_CHAT_MIN_WIDTH = 424;
 export const SIDEBAR_DRAWER_BELOW = 640;
-export const SIDEBAR_AUTO_RAIL_BELOW = 768;
+export const SIDEBAR_AUTO_RAIL_BELOW = SIDEBAR_DEFAULT_WIDTH + SIDEBAR_CHAT_MIN_WIDTH;
 
 /** phone: the drawer; medium: the automatic rail; wide: the person's density. */
 export type SidebarViewport = "phone" | "medium" | "wide";

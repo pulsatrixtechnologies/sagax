@@ -538,14 +538,17 @@ function BotAvatarImage({
 export function InitialsAvatar({
   initials,
   size = 32,
+  fontSize = size * 0.38,
 }: {
   initials: string;
   size?: number;
+  /** the letters' size; a share of the circle unless a surface sets its own */
+  fontSize?: number;
 }) {
   return (
     <div
       className="flex shrink-0 items-center justify-center rounded-full bg-raised text-ink-secondary font-medium"
-      style={{ width: size, height: size, fontSize: size * 0.38 }}
+      style={{ width: size, height: size, fontSize }}
     >
       {initials}
     </div>

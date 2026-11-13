@@ -95133,12 +95133,12 @@
         }
       }
     },
-    "What your bots can use for you. Encrypted on this computer.": {
+    "What your bots can use for you. Encrypted on this computer with the system keychain, or with the server's key.": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ce que tes bots peuvent utiliser pour toi. Chiffré sur cet ordinateur."
+            "value": "Ce que tes bots peuvent utiliser pour toi. Chiffré sur cet ordinateur avec le trousseau du système, ou avec la clé du serveur."
           }
         }
       }

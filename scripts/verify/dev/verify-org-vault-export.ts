@@ -3,7 +3,7 @@
 // the built app in a headless Chromium. Settings > Organization and Settings
 // > Credentials are shot, then the admin turns vault exports off through
 // the console API (the same POST /api/org/admin/settings Perspicax sends)
-// and both pages are shot again: the vault menu must leave Export out
+// and both pages are shot again: the Vault's New item menu must leave Export out
 // (#3294: never greyed with a reason), and the server must refuse the export. With --phase before (a build
 // without the setting), only the first shots are taken. Isolated:
 // temporary home and free ports, never ~/.sagax. Fake values only.
@@ -87,7 +87,7 @@ try {
   if (item.status !== 201) throw new Error(`vault item: ${item.text}`);
 
   const { chromium } = await import("playwright");
-  const browser = await chromium.launch(process.env.PLAYWRIGHT_CHROMIUM ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM } : {});
+  const browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHROMIUM ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM } : { channel: "chrome" }) });
   const shoot = async (label: string) => {
     const context = await browser.newContext({ viewport: { width: 1280, height: 860 }, deviceScaleFactor: 2, locale: "fr-CA" });
     await context.addCookies([{ name: cookie.split("=")[0]!, value: cookie.slice(cookie.indexOf("=") + 1), url: origin }]);
@@ -97,6 +97,9 @@ try {
     page.on("pageerror", (error) => errors.push(String(error)));
     await page.goto(`${origin}/`);
     await page.waitForTimeout(4_000);
+    // a fresh account is asked once for the terms of use; that window covers Settings
+    const terms = page.getByRole("button", { name: "J'accepte", exact: true });
+    if (await terms.count()) { await terms.first().click(); await page.waitForTimeout(600); }
     const open = async (query: string, ready: string) => {
       await page.keyboard.press(process.platform === "darwin" ? "Meta+k" : "Control+k");
       await page.waitForTimeout(400);
@@ -105,8 +108,8 @@ try {
       await page.waitForTimeout(500);
       await page.keyboard.press("Enter");
       await page.waitForTimeout(1_000);
-      await page.getByRole("button", { name: query, exact: true }).first().click({ timeout: 10_000 });
       try {
+        await page.getByRole("button", { name: query, exact: true }).first().click({ timeout: 10_000 });
         await page.waitForSelector(ready, { timeout: 15_000 });
       } catch (error) {
         await page.screenshot({ path: join(shotsDir, `${label}-failed-${query}.png`) });
@@ -122,16 +125,14 @@ try {
     console.log(`[verify] ${label}: Settings > Organization vault export switch: ${switchState ?? "absent"}`);
     await page.keyboard.press("Escape");
     await page.waitForTimeout(400);
-    await open("Identifiants", "[data-credentials-settings]");
+    await open("Coffre", "[data-credentials-settings]");
     await page.screenshot({ path: join(shotsDir, `${label}-credentials.png`) });
-    // #3294: Export sits in the vault's More menu and is left out, not
-    // greyed, once the organization turns exports off.
-    const menu = page.locator("[data-vault-menu]");
-    if (await menu.count()) {
-      await menu.first().click();
-      await page.waitForTimeout(300);
-    }
-    const listed = (await page.locator("[data-credentials-export]").count()) > 0;
+    // #3294, #4094: Export sits in the Vault's New item menu and is left
+    // out, not greyed, once the organization turns exports off. The menu
+    // must open (its Import is always there) or the check proves nothing.
+    await page.locator("[data-vault-new] button").first().click({ timeout: 10_000 });
+    await page.waitForSelector('[data-bot-profile-add-item="import"]', { timeout: 10_000 });
+    const listed = (await page.locator('[data-bot-profile-add-item="export"]').count()) > 0;
     await page.screenshot({ path: join(shotsDir, `${label}-credentials-menu.png`) });
     console.log(`[verify] ${label}: Export listed=${listed}`);
     await context.close();

@@ -2,6 +2,7 @@
 // (cards, then Shop Pay and Link as sibling rows), the default method,
 // one folded row per bot, then purchases. No group inside a group.
 import { Fragment, useState, type ReactNode } from "react";
+import { Wallet } from "lucide-react";
 
 import { formatMoney } from "@/components/OutboundCard";
 import { answerPurchase, chooseSingleUseWallet, parseDomains, patchPayments, type CredentialVaultState, type PaymentMethodListing, type PaymentMethodRef, type PaymentsSettings, type PurchaseListing, type VaultItemListing } from "@/lib/credential-vault";
@@ -30,23 +31,26 @@ export function botAllowanceSummary(row: { enabled?: boolean; perPurchaseLimit?:
   return row?.enabled === false ? `${t("settings.card.off")} · ${cap}` : cap;
 }
 
-export function PaymentsPanel({ data, bots, botName, addingCard, renderItem, renderNewCard, onAddCard, onChanged, onError }: {
+/** The Vault's Payments tab (#4094, the reference's way): "Bots use first"
+ * as the first row, then one list of the cards and the one-time wallets
+ * with their switches; which bots may pay and the purchases follow. A card
+ * is added from New item. */
+export function PaymentsPanel({ data, cards, bots, botName, renderItem, onChanged, onError }: {
   data: CredentialVaultState;
+  /** the cards shown (the tab's search applied) */
+  cards: readonly VaultItemListing[];
   bots: ReadonlyArray<{ id: string; name: string }>;
   botName: (id: string) => string;
-  addingCard: boolean;
   renderItem: (item: VaultItemListing) => ReactNode;
-  renderNewCard: () => ReactNode;
-  onAddCard: () => void;
   onChanged: () => Promise<void>;
   onError: (error: string | null) => void;
 }) {
-  const cards = data.items.filter((item) => item.kind === "card");
   const methods = data.methods ?? [];
   const pending = (data.purchases ?? []).filter((row) => row.status === "pending");
   const history = data.history ?? [];
   return (
-    <>
+    <div className="flex min-w-0 flex-col gap-3">
+      <DefaultMethodPicker data={data} methods={methods} onChanged={onChanged} onError={onError} />
       <div data-settings-card="credentials.payments.methods">
         <SettingsGroup title={t("vault.payments.methods")} groupId="credentials.payments.methods">
           <div className="flex items-start gap-1.5 px-3.5 py-2.5 text-[12px] leading-4 text-ink-secondary">
@@ -55,21 +59,11 @@ export function PaymentsPanel({ data, bots, botName, addingCard, renderItem, ren
           </div>
           {cards.map((item) => <Fragment key={item.id}>{renderItem(item)}</Fragment>)}
           <SingleUseWallets data={data} onChanged={onChanged} onError={onError} />
-          {addingCard
-            ? renderNewCard()
-            : (
-              <div className="flex justify-end px-3.5 py-2.5">
-                <button type="button" className={PRIMARY_PILL} disabled={Boolean(data.unavailable)} data-payments-add-card="" onClick={onAddCard}>
-                  {t("vault.payments.addCard")}
-                </button>
-              </div>
-            )}
         </SettingsGroup>
       </div>
-      <DefaultMethodPicker data={data} methods={methods} onChanged={onChanged} onError={onError} />
       <BotAllowances data={data} bots={bots} botName={botName} onChanged={onChanged} onError={onError} />
       <Purchases pending={pending} history={history} onChanged={onChanged} onError={onError} />
-    </>
+    </div>
   );
 }
 
@@ -108,6 +102,7 @@ function SingleUseWallets({ data, onChanged, onError }: {
               label={label}
               description={`${t("vault.singleUse.title")} · ${chosen ? t("settings.card.on") : t("settings.card.off")}`}
               help={<><p>{t("vault.singleUse.intro")}</p><p className="mt-1">{status}</p></>}
+              icon={<Wallet size={15} />}
               rowId={`wallet-${wallet}`}
             >
               <Switch

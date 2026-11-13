@@ -113,8 +113,19 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
       { id: "tg-1", subject: { kind: "bot", id: "bot-0" }, scope: "agents:write", grantedBy: "p-1", grantedAt: NOW - 5 * DAY, state: "active" },
       { id: "tg-2", subject: { kind: "bot", id: "bot-1" }, scope: "files:read", grantedBy: "p-1", grantedAt: NOW - 9 * DAY, expiresAt: NOW + 20 * DAY, state: "active" },
     ], adminOnlyAreas: [] },
-    "/api/me/credentials/list": {
+    // &vault=empty: nothing saved; &vault=full: an item of each kind, a
+    // pending purchase and the history (#4094's captures)
+    "/api/me/credentials/list": params.get("vault") === "empty" ? {
+      items: [],
+      wallets: { shop_pay: { chosen: false, ready: false, missing: "the Shop CLI" }, link: { chosen: false, ready: false, missing: "the Link CLI" } },
+      onePassword: { available: false, reason: "absent" },
+    } : {
       items: [
+        ...(params.get("vault") === "full" ? [
+          { id: "v-5", kind: "card", name: "Everyday card", domains: [], hasPassword: false, hasTotp: false, hasApiKey: false, hasNotes: false, source: "local", card: { brand: "visa", last4: "4242", expMonth: 12, expYear: 2030, holder: "Alex Example" }, grants: [], createdAt: NOW - 4 * DAY, updatedAt: NOW - 4 * DAY },
+          { id: "v-6", kind: "address", name: "Home", domains: [], hasPassword: false, hasTotp: false, hasApiKey: false, hasNotes: false, source: "local", address: { recipient: "Alex Example", line1: "1 Example Street", city: "Springfield", postal: "12345", country: "US" }, grants: [], createdAt: NOW - 3 * DAY, updatedAt: NOW - 3 * DAY },
+          { id: "v-7", kind: "contact", name: "Work contact", domains: [], hasPassword: false, hasTotp: false, hasApiKey: false, hasNotes: false, source: "local", contact: { fullName: "Alex Example", email: "alex@example.com", phone: "+1 555 0100" }, grants: [], createdAt: NOW - 2 * DAY, updatedAt: NOW - 2 * DAY },
+        ] : []),
         { id: "v-1", kind: "login", name: "Docs portal", username: "alex", domains: ["docs.example.com"], hasPassword: true, hasTotp: true, hasApiKey: false, hasNotes: false, source: "local", grants: [grant("bot-0")], createdAt: NOW - 20 * DAY, updatedAt: NOW - 20 * DAY, lastUsedAt: NOW - DAY, lastUsedBy: "bot-0" },
         { id: "v-2", kind: "apiKey", name: "Weather API", domains: ["api.example.com"], hasPassword: false, hasTotp: false, hasApiKey: true, hasNotes: false, source: "local", grants: [grant("bot-1")], createdAt: NOW - 12 * DAY, updatedAt: NOW - 12 * DAY },
         { id: "v-4", kind: "login", name: "Example signup", username: "alex@example.com", domains: ["accounts.example.com"], hasPassword: true, hasTotp: false, hasApiKey: false, hasNotes: false, source: "local", grants: [grant("bot-1")], createdAt: NOW - DAY, updatedAt: NOW - DAY },
@@ -122,6 +133,15 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
       ],
       wallets: { shop_pay: { chosen: true, ready: true, missing: "" }, link: { chosen: false, ready: false, missing: "the Link CLI" } },
       onePassword: { available: false, reason: "absent" },
+      ...(params.get("vault") === "full" ? {
+        payments: { defaultMethod: { type: "card", cardId: "v-5" }, bots: { "bot-0": { enabled: true, perPurchaseLimit: "100.00", perMonthLimit: "400.00" } } },
+        methods: [
+          { id: "card:v-5", type: "card", label: "Everyday card", detail: "visa ···· 4242", brand: "visa", last4: "4242", isDefault: true },
+          { id: "wallet:shop_pay", type: "wallet", label: "Shop Pay", detail: "Connected", brand: "wallet", wallet: "shop_pay", isDefault: false, ready: true },
+        ],
+        purchases: [{ id: "pay_aaaaaaaaaaaaaaaa", botId: "bot-0", threadId: "thread-0", merchant: "Example Shop", domain: "shop.example.com", amount: "45.20", currency: "USD", cardName: "Everyday card", cardLast4: "4242", cardBrand: "visa", title: "Pay $45.20 to Example Shop with visa ···· 4242?", line: "2 items. Card ending 4242 (visa).", status: "pending", createdAt: NOW - 60_000 }],
+        history: [{ id: "pay_bbbbbbbbbbbbbbbb", botId: "bot-0", threadId: "thread-0", merchant: "Example Books", domain: "books.example.com", amount: "28.00", currency: "USD", cardName: "Everyday card", cardLast4: "4242", cardBrand: "visa", title: "Pay $28.00 to Example Books?", line: "1 item.", status: "once", createdAt: NOW - DAY, doneAt: NOW - DAY, orderRef: "EX-1042" }],
+      } : {}),
       ...(params.get("keys") === "unreadable" ? { unavailable: true } : {}),
     },
     // Settings > Developer > Per bot (#2658): the first bot's technical cards

@@ -193,22 +193,76 @@ describe("Settings split: every moved setting at its new place", () => {
     expect(card("credentials.items")).toBeNull();
   });
 
-  it("Vault holds Your vault (Import, Export, Add an item) and the One-time card", async () => {
+  it("Vault holds the items (New item, Import, Export) and the One-time card", async () => {
     await settings("credentials");
     expect(pane().querySelector("h2")?.textContent).toBe("Vault");
-    expect(card("credentials.items")).not.toBeNull();
-    expect(pane().textContent).toContain("Your vault");
-    expect(pane().querySelector("[data-credentials-add]")).not.toBeNull();
-    expect(pane().querySelector("[data-credentials-import]")).toBeNull();
-    await act(async () => { pane().querySelector<HTMLButtonElement>("[data-vault-menu]")!.click(); });
-    expect(pane().querySelector("[data-credentials-import]")).not.toBeNull();
+    // #4094: New item sits in the page header, level with the title
+    const header = pane().querySelector("[data-settings-page-header]")!;
+    expect(header.querySelector("[data-settings-page-actions] [data-vault-new]")).not.toBeNull();
+    expect(pane().querySelector("[data-vault-empty]")?.textContent).toContain("Your vault is empty");
+    await act(async () => { header.querySelector<HTMLButtonElement>("[data-vault-new] button")!.click(); });
+    expect(document.querySelector('[data-bot-profile-add-item="import"]')).not.toBeNull();
     // #3294: an empty vault has nothing to export: Export is left out, never greyed
-    expect(pane().querySelector("[data-credentials-export]")).toBeNull();
+    expect(document.querySelector('[data-bot-profile-add-item="export"]')).toBeNull();
+    // the one-time wallets are rows of the Payments tab
+    await act(async () => { pane().querySelector<HTMLButtonElement>('[data-filter-chip="payments"]')!.click(); });
     expect(group("credentials.wallets")).toBeNull();
     expect(card("credentials.wallets")).not.toBeNull();
     expect(pane().textContent).toContain("One-time card");
     expect(card("credentials.onePassword")).not.toBeNull();
     expect(card("security")).toBeNull();
+  });
+
+  // #4094 review: the Vault's windows are portalled over Settings and keep
+  // the keys: a dropdown's Escape closes the dropdown only, Shift+Tab never
+  // jumps behind the veil, and Escape closes the window, not Settings.
+  const openNewApiKey = async () => {
+    await settings("credentials");
+    const header = pane().querySelector("[data-settings-page-header]")!;
+    await act(async () => { header.querySelector<HTMLButtonElement>("[data-vault-new] button")!.click(); });
+    await act(async () => { document.querySelector<HTMLButtonElement>('[data-bot-profile-add-item="apiKey"]')!.click(); });
+    const dialog = document.querySelector<HTMLElement>('[data-vault-dialog][data-credential-dialog="new"]')!;
+    expect(dialog).not.toBeNull();
+    return dialog;
+  };
+  const press = (target: Element, key: string, shiftKey = false) => {
+    const event = new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true });
+    act(() => { target.dispatchEvent(event); });
+    return event;
+  };
+  const closedSettings = () => fixture.dispatch.mock.calls.some(([action]) => action?.type === "toggleAppSettings" && action.open === false);
+
+  it("Vault window: Escape in an open dropdown closes the dropdown, never the window or Settings", async () => {
+    const dialog = await openNewApiKey();
+    const trigger = dialog.querySelector<HTMLButtonElement>("[data-pill-select]")!;
+    await act(async () => { trigger.click(); });
+    const option = document.querySelector<HTMLElement>('[role="listbox"] [role="option"]')!;
+    expect(option).not.toBeNull();
+    act(() => option.focus());
+    press(option, "Escape");
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    expect(document.querySelector('[data-vault-dialog][data-credential-dialog="new"]')).not.toBeNull();
+    expect(closedSettings()).toBe(false);
+    // a second Escape closes the window only
+    press(document.activeElement ?? dialog, "Escape");
+    await act(async () => { await Promise.resolve(); });
+    expect(document.querySelector("[data-vault-dialog]")).toBeNull();
+    expect(closedSettings()).toBe(false);
+  });
+
+  it("Vault window: Shift+Tab stays inside the window, never Settings behind it", async () => {
+    const dialog = await openNewApiKey();
+    const fields = [...dialog.querySelectorAll<HTMLElement>("input")];
+    const middle = fields[1]!;
+    act(() => middle.focus());
+    press(middle, "Tab", true);
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    // from the first control it wraps to the window's last one
+    const first = dialog.querySelector<HTMLElement>("button, input")!;
+    act(() => first.focus());
+    press(first, "Tab", true);
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).not.toBe(first);
   });
 
   it("Voice holds the microphone, the voice engine and Live calls; Models keeps the bot models and the Advanced fold, Providers the image generation", async () => {

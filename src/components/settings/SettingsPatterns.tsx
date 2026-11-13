@@ -1,7 +1,7 @@
 // #2080 (L0, 2026-11-05): the shared patterns of the Settings redesign
 // (ia.md sections 3 to 8). Every page draws these instead of its own links,
 // filters, bulk bars and empty states. SettingsPrimitives re-exports them.
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { ExternalLink } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -55,29 +55,65 @@ export type FilterChip<T extends string = string> = { id: T; label: string; coun
 /** The one filter of Settings, in a group's `accessory` beside the title it
  * filters. A chip with no item is not drawn, and a filter left with one
  * chip is not drawn at all. */
-export function FilterChips<T extends string>({ chips, value, onChange, label }: {
+export function FilterChips<T extends string>({ chips, value, onChange, label, tabs = false, controls }: {
   chips: Array<FilterChip<T>>;
   value: T;
   onChange: (id: T) => void;
   /** The toolbar's spoken name. */
   label: string;
+  /** The reference's tab row with counts (#4094, the Vault): every tab is
+   * drawn, an empty one too, as borderless pills, the chosen one filled, on
+   * one line that scrolls sideways when it is narrower than the tabs, the
+   * chosen tab always scrolled into view (a phone, a long French name). */
+  tabs?: boolean;
+  /** tabs: the id of the panel the tabs show */
+  controls?: string;
 }) {
-  const shown = chips.filter((chip) => chip.count > 0);
-  if (shown.length < 2) return null;
+  const rowRef = useRef<HTMLDivElement>(null);
+  // tabs: the chosen tab is read whole, the row scrolled sideways to it
+  useEffect(() => {
+    const row = rowRef.current;
+    const chip = tabs ? row?.querySelector<HTMLElement>(`[data-filter-chip="${value}"]`) : null;
+    if (!row || !chip) return;
+    const start = chip.offsetLeft - row.offsetLeft;
+    const end = start + chip.offsetWidth;
+    if (start < row.scrollLeft) row.scrollLeft = start;
+    else if (end > row.scrollLeft + row.clientWidth) row.scrollLeft = end - row.clientWidth;
+  }, [tabs, value]);
+  const shown = tabs ? chips : chips.filter((chip) => chip.count > 0);
+  if (!tabs && shown.length < 2) return null;
   return (
-    <div role="toolbar" aria-label={label} data-filter-chips="" className="ml-auto flex flex-wrap items-center gap-1.5">
+    <div
+      ref={rowRef}
+      role={tabs ? "tablist" : "toolbar"}
+      aria-label={label}
+      data-filter-chips=""
+      className={tabs ? "flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain" : "ml-auto flex flex-wrap items-center gap-1.5"}
+      onKeyDown={tabs ? (event) => {
+        const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+        if (!step) return;
+        event.preventDefault();
+        const next = shown[(shown.findIndex((chip) => chip.id === value) + step + shown.length) % shown.length]!;
+        onChange(next.id);
+        event.currentTarget.querySelector<HTMLElement>(`[data-filter-chip="${next.id}"]`)?.focus();
+      } : undefined}
+    >
       {shown.map((chip) => {
         const active = chip.id === value;
         return (
           <button
             key={chip.id}
             type="button"
-            aria-pressed={active}
+            {...(tabs ? { role: "tab", "aria-selected": active, "aria-controls": controls, tabIndex: active ? 0 : -1 } : { "aria-pressed": active })}
             data-filter-chip={chip.id}
             onClick={() => onChange(chip.id)}
             className={cn(
-              "inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-[12.5px] transition-colors motion-reduce:transition-none",
-              active ? "border-transparent bg-selected text-ink" : "border-border text-ink-secondary hover:bg-hover hover:text-ink",
+              tabs
+                ? "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-[5px] text-[13px] leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70 motion-reduce:transition-none"
+                : "inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-[12.5px] transition-colors motion-reduce:transition-none",
+              tabs
+                ? (active ? "bg-selected text-ink" : "text-ink-secondary hover:bg-hover")
+                : (active ? "border-transparent bg-selected text-ink" : "border-border text-ink-secondary hover:bg-hover hover:text-ink"),
             )}
           >
             {chip.label}

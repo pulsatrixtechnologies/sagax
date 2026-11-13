@@ -578,13 +578,13 @@ for (const section of ["account", "voice", "updates", "about", "providers", "sec
       if (section === "updates" && !(await ctx.exists('[data-settings-card="updates"]'))) {
         return { skip: "Updates card not drawn (updater bridge missing)" };
       }
-      // Vault: wait for the signed-in page (Add / filters), not the unavailable notice.
+      // Vault: wait for the signed-in page (New item / tabs and search), not the unavailable notice.
       if (section === "credentials") {
         await ctx.waitFor(
-          `Boolean(document.querySelector("[data-credentials-add],[data-vault-filters]"))`,
+          `Boolean(document.querySelector("[data-vault-new],[data-vault-toolbar]"))`,
           { timeoutMs: 8_000 },
         ).catch(() => {});
-        if (!(await ctx.exists("[data-credentials-add], [data-vault-filters]"))) {
+        if (!(await ctx.exists("[data-vault-new], [data-vault-toolbar]"))) {
           return { skip: "Vault signed out or unavailable" };
         }
       }

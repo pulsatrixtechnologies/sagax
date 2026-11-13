@@ -122,6 +122,19 @@ export function SettingsSurfaceProvider({ surface, children }: { surface: Settin
 export function useSettingsSurface(): SettingsSurface {
   return useContext(SettingsSurfaceContext);
 }
+/** The page header's action slot (#4094: the Vault's "New item" at the top
+ * right, level with the page title, as the reference places it). Settings
+ * hands its element down; a page renders its action with
+ * `SettingsPageActions`, which draws in place when there is no header (a
+ * gallery, a test). */
+const SettingsPageActionsContext = createContext<HTMLElement | null>(null);
+export function SettingsPageActionsProvider({ slot, children }: { slot: HTMLElement | null; children: React.ReactNode }) {
+  return <SettingsPageActionsContext.Provider value={slot}>{children}</SettingsPageActionsContext.Provider>;
+}
+export function SettingsPageActions({ children }: { children: React.ReactNode }) {
+  const slot = useContext(SettingsPageActionsContext);
+  return slot ? createPortal(children, slot) : <div data-settings-page-actions-inline="" className="flex justify-end">{children}</div>;
+}
 /** The plain surface: one filled rounded card, no border. */
 export const PLAIN_CARD = "flex flex-col rounded-2xl bg-card py-1";
 /** A text field inside a plain card: filled, no outline, a focus ring. */
@@ -1082,6 +1095,14 @@ export function EditorBox({ label, actions, onSubmit, className, children, ...da
  * left, the control at the right, stacked on a narrow window. A text field
  * row is the <label>; a menu row (`menu`, a PillSelect) is a group, so a
  * click on the words does not open the menu. */
+/** Fields stacked as the reference's dialogs draw them (#4094, the Vault's
+ * New login): the label above, the field under it at full width, its grey
+ * line under the field, 12 px between fields. Inside a dialog's body. */
+const EditorStackContext = createContext(false);
+export function EditorStack({ children }: { children: React.ReactNode }) {
+  return <EditorStackContext.Provider value={true}><div data-editor-stack="" className="flex min-w-0 flex-col gap-3">{children}</div></EditorStackContext.Provider>;
+}
+
 export function EditorField({ label, hint, menu, children }: {
   label: React.ReactNode;
   hint?: React.ReactNode;
@@ -1089,6 +1110,13 @@ export function EditorField({ label, hint, menu, children }: {
   children: React.ReactNode;
 }) {
   const labelId = useId();
+  if (useContext(EditorStackContext)) {
+    const top = <span id={labelId} className="text-[13px] font-medium leading-[18px] text-ink">{label}</span>;
+    const under = hint ? <span className="text-[12px] leading-4 text-ink-secondary">{hint}</span> : null;
+    return menu
+      ? <div role="group" aria-labelledby={labelId} data-editor-field="" className="flex min-w-0 flex-col items-start gap-1">{top}{children}{under}</div>
+      : <label data-editor-field="" className="flex min-w-0 flex-col gap-1">{top}<span className="flex min-w-0">{children}</span>{under}</label>;
+  }
   const words = (
     <span className="min-w-0">
       <span id={labelId} className="block text-[13px] leading-[18px] text-ink">{label}</span>

@@ -307,7 +307,6 @@ struct DesktopVaultSettings: View {
             }
             if filter != "payment" {
                 DesktopSettingsGroup(Text("Your vault"), identifier: "credentials.items") {
-                    DesktopSettingsTextRow(Text("Encrypted on this computer with the system keychain, or with the server's key."))
                     let items = list.items.filter { filter == "all" ? $0.kind != "card" : Self.kind($0.kind) == filter }
                     if items.isEmpty {
                         DesktopSettingsTextRow(Text("Your vault is empty. Add a login here, or save one when a bot asks."))

@@ -15,7 +15,6 @@ import { OrgVaultExportPolicy } from "../components/settings/OrgVaultExportPolic
 import { OrgGrokBridgePolicy } from "../components/settings/OrgGrokBridgePolicy";
 import { LinkedGrokBotSettings } from "../components/settings/LinkedGrokBotSettings";
 import { CredentialsSettings } from "../components/settings/CredentialsSettings";
-import { ExportPanel } from "../components/settings/CredentialsTransfer";
 import { ComputerCareSettings } from "../components/settings/ComputerCareSettings";
 import { PublishedPagesSettings } from "../components/PublishedPages";
 import { ConnectedWorkspacesSettings } from "../components/ConnectedWorkspacesSettings";
@@ -190,11 +189,6 @@ function Gallery() {
         <WebSearchSettings />
       </Sample>
       <Sample id="credentials"><CredentialsSettings /></Sample>
-      <Sample id="credentials-export">
-        <SettingsGroup title={t("vault.settings.itemsTitle")} groupId="credentials.items">
-          <ExportPanel onCancel={() => {}} />
-        </SettingsGroup>
-      </Sample>
       <Sample id="computer-care"><ComputerCareSettings /></Sample>
       <Sample id="pages"><PublishedPagesSettings /></Sample>
       <Sample id="environments"><ConnectedWorkspacesSettings /></Sample>

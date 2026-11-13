@@ -306,10 +306,30 @@ const skills = [
   { name: "competitor-watch", description: "Follows a list of competitors and flags what changed.", enabled: false, source: "taught", warnings: ["Uses the browser on every run"] },
   { name: "citation-format", description: "Formats every citation in one house style.", enabled: true, source: "imported", warnings: [] },
 ];
-/** ?skills=two|four|nine|blocked: a bot with that many skills on its Skills
- * card (#4104, the fold after four); "blocked" is nine with one changed after
- * its review in seventh place. Fictional names only. */
-const SKILLS = ((value) => (value === "two" || value === "four" || value === "nine" || value === "blocked" ? value : null))(params.get("skills"));
+/** ?skills=two|four|nine|blocked|mixed: a bot with that many skills on its
+ * Skills card (#4104, the fold after four); "blocked" is nine with one changed
+ * after its review in seventh place; "mixed" (#4148) has private and shared
+ * skills, one off, one blocked, one learned from the inbox. Fictional names only. */
+const SKILLS = ((value) => (value === "two" || value === "four" || value === "nine" || value === "blocked" || value === "mixed" ? value : null))(params.get("skills"));
+const MIXED_SKILLS = [
+  { name: "weekly-report", description: "Writes the weekly status report from the open tasks, then files it in the team folder with last week's numbers beside it.", enabled: true, source: "learn:inbox/thread-7", warnings: [], origin: "private" },
+  { name: "meeting-notes", description: "Turns a transcript into decisions and next steps.", enabled: true, source: "upload:meeting-notes.zip", warnings: [], origin: "me", assignedBots: [{ id: "bot_scout", name: "Scout" }, { id: "bot_atlas", name: "Atlas" }, { id: "bot_juniper", name: "Juniper" }] },
+  { name: "competitor-watch", description: "Follows a list of competitors and flags what changed.", enabled: false, source: "local-import", warnings: [], origin: "private" },
+  { name: "source-check", description: "Checks every claim against two sources before answering.", enabled: true, source: "github:example/skills/source-check", warnings: [], origin: "library", assignedBots: [{ id: "bot_scout", name: "Scout" }, { id: "bot_atlas", name: "Atlas" }] },
+  { name: "vendor-compare", description: "Compares two vendor quotes side by side.", enabled: false, source: "learn:task/run-3", warnings: ["stored SKILL.md changed after review - enablement is blocked"], origin: "private" },
+  { name: "glossary", description: "Keeps the team's words in one list.", enabled: true, source: "learn:task/run-9", warnings: [], origin: "private" },
+];
+/** The open skill (#4148): its SKILL.md as the editor reads it. */
+function skillText(name: string) {
+  const skill = MIXED_SKILLS.find((entry) => entry.name === name) ?? MIXED_SKILLS[0]!;
+  const blocked = skill.warnings.length > 0;
+  return {
+    name: skill.name, description: skill.description, source: skill.source, enabled: skill.enabled,
+    text: `---\nname: ${skill.name}\ndescription: ${skill.description}\n---\n\nFollow the steps in order and keep the answer short.\n`,
+    changedAfterReview: blocked, reviewedText: blocked ? `---\nname: ${skill.name}\ndescription: ${skill.description}\n---\n\nFollow the steps.\n` : null,
+    warnings: skill.warnings, files: [], editable: true, origin: skill.origin,
+  };
+}
 const MORE_SKILLS = [
   { name: "inbox-sort", description: "Sorts new mail into the right folders.", enabled: true, source: "taught", warnings: [] },
   { name: "agenda-prep", description: "Prepares the agenda from last week's notes.", enabled: true, source: "imported", warnings: [] },
@@ -320,6 +340,7 @@ const MORE_SKILLS = [
 ];
 function skillList() {
   const plain = [...skills.filter((skill) => skill.warnings.length === 0), ...MORE_SKILLS];
+  if (SKILLS === "mixed") return MIXED_SKILLS;
   if (SKILLS === "two") return plain.slice(0, 2);
   if (SKILLS === "four") return plain.slice(0, 4);
   if (SKILLS === "nine") return plain.slice(0, 9);
@@ -437,6 +458,8 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
     { installId: "ins2", packageName: "northwind-research", publisher: "Northwind Studio", release: "1.2.0", name: "vendor-brief", description: "One page brief on a vendor from public sources.", added: false },
     { installId: "ins3", packageName: "northwind-ops", publisher: "Northwind Studio", release: "0.9.1", name: "weekly-digest", description: "Digest of the week for the leadership team.", added: false },
   ] });
+  const skillPath = path.match(/^\/api\/(?:bots\/[^/]+\/skills|me\/skills-library|skills-library)\/([^/]+)$/);
+  if (skillPath) return json(skillText(decodeURIComponent(skillPath[1]!)));
   if (path === `${bots}/skills-library`) return json({ skills: [{ name: "invoice-review", description: "Reviews an invoice line by line." }] });
   if (path === `${bots}/system-prompt`) return json(systemPrompt);
   if (path === `${bots}/soul`) return json({ soul: SOUL, revision: HISTORY.length, bytes: SOUL.length, limit: 8000, file: "SOUL.md", drift: false });

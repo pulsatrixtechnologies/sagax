@@ -22,4 +22,6 @@ export interface SkillRowActions {
   share: (skill: ManagedSkill, target: "me") => unknown;
   unshare: (skill: ManagedSkill) => unknown;
   remove: (skill: ManagedSkill) => unknown;
+  /** Open the skill on its Review changes view (changed after its review). */
+  reviewSkill: (skill: ManagedSkill) => void;
 }

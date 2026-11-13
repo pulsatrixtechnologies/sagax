@@ -10,13 +10,13 @@ import { t } from "@/lib/i18n";
 import { skillImportLines } from "@/lib/skill-import";
 import type { SkillImportSummary } from "../../../shared/skill-import";
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, Library, Link, SquareSlash, Upload } from "lucide-react";
+import { BookOpen, GraduationCap, Library, Link, SquareSlash, Upload } from "lucide-react";
 
 import { useStore, type Bot } from "@/state/store";
 import { useBotEditor } from "./BotEditorContext";
 import { skillAuthoringEnabled, skillsLibraryEnabled } from "@/lib/feature-flags";
 import { viewerBotsReadOnly } from "@/lib/viewer";
-import { PILL, PLAIN_CARD, PLAIN_FIELD, PRIMARY_PILL, SwitchRow, useSettingsSurface } from "../SettingsPrimitives";
+import { DescribedRow, PILL, PLAIN_CARD, PLAIN_FIELD, PRIMARY_PILL, Switch, SwitchRow, useSettingsSurface } from "../SettingsPrimitives";
 import { cn } from "@/lib/cn";
 import { PaneEmpty, PaneSection } from "./PaneSection";
 import { OrgSkillsCard } from "./OrgSkillsCard";
@@ -25,7 +25,7 @@ import { WriteCommandCard } from "./WriteCommandCard";
 import { PanelPage } from "./PanelPage";
 import type { ManagedSkill, SkillRowActions } from "./SkillsSection.tsx-parts/types";
 import { removeSkill } from "./SkillsSection.tsx-parts/removeSkill";
-import { renderPlainSkillRow } from "./SkillsSection.tsx-parts/plainParts";
+import { renderPlainSkillRow, SkillDetailActions, SkillDetails } from "./SkillsSection.tsx-parts/plainParts";
 import { AddMenu, type AddMenuItem } from "../bot-profile/BotProfilePage.tsx-parts/AddMenu";
 import { ReviewCard, type ReviewEntry } from "../bot-profile/BotProfilePage.tsx-parts/ReviewCard";
 import { renderClassicSkillRow, renderClassicTop } from "./SkillsSection.tsx-parts/classicParts";
@@ -391,24 +391,57 @@ export function SkillsSection({ bot, review }: {
   // Learn from use (#2610): the bot revises a skill after a failure or a
   // correction and proposes a new one after a long task. The bot's own switch,
   // on unless turned off; shown only while bots may write skills at all.
+  const learningOn = bot.skillLearning !== false;
+  const setLearning = (skillLearning: boolean) => dispatch({ type: "updateBot", botId: bot.id, patch: { skillLearning } });
   const learning = featureEnabled ? (
-    <SwitchRow
-      label={t("botPanel.skills.learning")}
-      help={t("botPanel.skills.learningHelp")}
-      checked={bot.skillLearning !== false}
-      disabled={!skillWrites}
-      onChange={(skillLearning) => dispatch({ type: "updateBot", botId: bot.id, patch: { skillLearning } })}
-    />
+    plain ? (
+      // #4148: the page's switch row (the Settings card's DescribedRow),
+      // its glyph, its help mark; a person who may not change it reads
+      // its state instead of a switch that cannot work.
+      <DescribedRow
+        rowId="skillLearning"
+        icon={<GraduationCap strokeWidth={1.5} />}
+        label={t("botPanel.skills.learning")}
+        help={t("botPanel.skills.learningHelp")}
+        description={skillWrites ? undefined : t(learningOn ? "settings.card.on" : "settings.card.off")}
+      >
+        {skillWrites ? (
+          <Switch checked={learningOn} aria-label={t("botPanel.skills.learning")} onClick={() => setLearning(!learningOn)} />
+        ) : null}
+      </DescribedRow>
+    ) : (
+      <SwitchRow
+        label={t("botPanel.skills.learning")}
+        help={t("botPanel.skills.learningHelp")}
+        checked={learningOn}
+        disabled={!skillWrites}
+        onChange={setLearning}
+      />
+    )
   ) : null;
 
-  const remove = (skill: ManagedSkill) => removeSkill(
-    { botId: bot.id, confirm, api, assignmentBusy, setWorking, setError, putAssignments, unshare, refresh },
-    skill,
-  );
+  const remove = async (skill: ManagedSkill) => {
+    const removed = await removeSkill(
+      { botId: bot.id, confirm, api, assignmentBusy, setWorking, setError, putAssignments, unshare, refresh },
+      skill,
+    );
+    if (removed) setEditing((current) => (current?.name === skill.name ? null : current));
+  };
 
   const openSkill = (skill: ManagedSkill, startEditing = false) => {
     setEditing({ name: skill.name, origin: skill.origin, startEditing });
   };
+  const reviewSkill = (skill: ManagedSkill) => {
+    setEditing({ name: skill.name, origin: skill.origin, startReview: true });
+  };
+  // The opened skill follows the list: a share or a stop sharing moves it
+  // (its origin, so the page reads it from its new place), a remove closes it.
+  const editedSkill = editing ? skills.find((skill) => skill.name === editing.name) ?? null : null;
+  useEffect(() => {
+    if (editing && editedSkill?.origin && editedSkill.origin !== editing.origin) {
+      setEditing({ ...editing, origin: editedSkill.origin, startEditing: false, startReview: false });
+    }
+  }, [editing, editedSkill?.origin]);
 
   const importSkill = async () => {
     const trimmed = source.trim();
@@ -433,7 +466,7 @@ export function SkillsSection({ bot, review }: {
 
   const help = <>{featureEnabled ? t("skills.learned.hintOn") : t("skills.learned.hintOff")} {t("botPanel.skills.whenRelevant")}.</>;
 
-  const rowActions: SkillRowActions = { libraryOn, skillWrites, working, openSkill, toggle, share, unshare, remove };
+  const rowActions: SkillRowActions = { libraryOn, skillWrites, working, openSkill, toggle, share, unshare, remove, reviewSkill };
 
   const tail = (
     <>
@@ -441,6 +474,21 @@ export function SkillsSection({ bot, review }: {
 
       {skillWrites && <OrgSkillsCard bot={bot} onAdded={() => void refresh()} />}
 
+      {editing && (
+        <SkillEditorPage
+          botId={bot.id}
+          target={editing}
+          onClose={() => setEditing(null)}
+          onPanelClose={closePanel}
+          onSaved={() => void refresh()}
+          // #4148: on the profile page the row is compact; what it no longer
+          // shows, and its actions, are here.
+          details={plain && editedSkill ? <SkillDetails a={rowActions} skill={editedSkill} /> : undefined}
+          actions={plain && editedSkill ? <SkillDetailActions a={rowActions} skill={editedSkill} /> : undefined}
+        />
+      )}
+
+      {/* after the open skill, so Turn on from it shows its review on top */}
       {skillWrites && reviewing && (
         <SkillReviewDialog
           skill={reviewing.skill}
@@ -450,16 +498,6 @@ export function SkillsSection({ bot, review }: {
           onCancel={() => setReviewing(null)}
           onEnable={() => void enableReviewed()}
           onPanelClose={closePanel}
-        />
-      )}
-
-      {editing && (
-        <SkillEditorPage
-          botId={bot.id}
-          target={editing}
-          onClose={() => setEditing(null)}
-          onPanelClose={closePanel}
-          onSaved={() => void refresh()}
         />
       )}
     </>
@@ -515,7 +553,7 @@ export function SkillsSection({ bot, review }: {
         )}
         <PaneSection title={t("botSettings.nav.skills")} help={help} action={empty ? undefined : add("")} plain data-skills-section="">
           <div className={PLAIN_CARD} data-settings-surface="">
-            {learning && <div className="px-4 py-2.5" data-skill-learning="">{learning}</div>}
+            {learning && <div data-skill-learning="">{learning}</div>}
             {adding === "library" && skillWrites && libraryPool.length > 0 && (
               <div data-skills-library="" className="flex flex-col">
                 <div className="flex items-center gap-3 px-4 pb-1 pt-2.5">

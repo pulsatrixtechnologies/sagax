@@ -99,7 +99,7 @@ export function ComposerActionBar({
   nudgeGroup?: { id: string; name: string } | null;
 }) {
   return (
-    <div data-composer-actions className="composer-band flex items-center gap-1 @max-[30rem]/composer:ml-auto">
+    <div data-composer-actions className="composer-band flex items-center gap-2 @max-[30rem]/composer:ml-auto">
     {bot && !group && !remoteClient && (
       // #2106: compact model + effort chip in the chat bar; picking writes
       // the bot's model for every thread. menuControl still serves the + menu.

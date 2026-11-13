@@ -1684,6 +1684,29 @@ Rules that hold at every width:
 - Composer: one capsule on the column's edges; the model chip shows while
   the capsule is at least 560px wide (35rem) and folds into the + menu's
   Model row below that.
+- Message bar (#4152, measured 2026-11-13 in the owner's configuration;
+  neither flag changes these values): one line is 44px tall with a 0.5px
+  hairline; the field's type is the reference's body step, 14px on a 20px
+  line, regular, for the placeholder and the typed text alike (this app had
+  13/20; a phone keeps 16/24 so iOS does not zoom). The placeholder reads
+  "Message Name · Role" (the role left out when the bot has none), the
+  joined form of the sidebar's rows and the header pill, on one line cut
+  with an ellipsis, in the reference's quaternary text: the ink at 40% in
+  light, 38% in dark (this app had "Message Name" in secondary ink, 68% /
+  66%). The + at the start and the round controls at the end are 28px
+  circles 8px from the capsule's edge and 8px apart, each a 16px glyph:
+  the + and the mic on the reference's secondary fill (ink at 6% light, 4%
+  dark; 10% / 8% on hover) with a 0.5px inner hairline in its tertiary
+  translucent border (8% / 6%: this app drew the field border's 15%, a
+  visible ring), the glyph in tertiary text (56% / 54%); Voice, or Send
+  once something is typed, on the filled call to action. A longer draft grows
+  the bar: the field on top, the controls on the last line. This app's
+  model chip keeps its place before the mic and folds as above. The inks
+  are `--composer-*` in `src/styles.css`, mixed from each skin's own ink;
+  `SECONDARY_CIRCLE` in `src/components/ComposerControls.tsx` draws the
+  quiet circles. The bot chat, the group chat, the coding chat and the page
+  chat use the one `Composer`, so they follow. Test:
+  `src/components/ComposerControls.look.test.ts`.
 - Account menu (owner's configuration): opens above the avatar, aligned on
   its start edge, at least 228px wide; 16px corners, 6px padding, 32px rows
   6px apart, 14/20 type, 18px icons in a 20px slot, 10px row corners (the

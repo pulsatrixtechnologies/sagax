@@ -8,7 +8,7 @@ import { effectivePlace, placeLabelKey } from "@/lib/place";
 import { PersonAvatar } from "../MessageAuthor";
 import { PersonLabelTag } from "../LabelTag";
 import { GroupAvatarStack } from "../GroupPanel";
-import { BotHeaderPill } from "../BotHeaderPill";
+import { BotHeaderPill, CHAT_PILL_AVATAR_PX, CHAT_PILL_CLASS, CHAT_PILL_GROUP_CLASS, CHAT_PILL_HOVER, CHAT_PILL_TEXT_CLASS } from "../BotHeaderPill";
 import { normalizeState } from "@/lib/mascot";
 import { cn } from "@/lib/cn";
 import { peopleDmPeer } from "@/lib/people-dm";
@@ -96,18 +96,18 @@ export function groupRoomIdentity({
       type="button"
       data-open-person={peer.id}
       onClick={() => onOpenPerson(personPanelId === peer.id ? null : peer.id)}
-      className="flex min-w-0 items-center gap-2 rounded-full border-[0.5px] border-hairline-weak bg-elevated py-[7.5px] pl-[7.5px] pr-[13.5px] transition-colors duration-[120ms] hover:bg-elevated-hover"
+      className={cn(CHAT_PILL_CLASS, CHAT_PILL_HOVER)}
       title={t("personPanel.open", { name: peer.name })}
       aria-label={t("personPanel.open", { name: peer.name })}
     >
-      <PersonAvatar avatarUrl={peer.avatarUrl} initials={peer.initials} size={24} presenceId={peer.id} presenceRing="border-elevated" />
-      <span className="truncate text-[14px] font-medium leading-5 text-ink">{peer.name}</span>
+      <PersonAvatar avatarUrl={peer.avatarUrl} initials={peer.initials} size={CHAT_PILL_AVATAR_PX} presenceId={peer.id} presenceRing="border-circle" />
+      <span className={cn("truncate", CHAT_PILL_TEXT_CLASS)}>{peer.name}</span>
       <PersonLabelTag principalId={peer.id} tone="surface" className="max-w-[40%] shrink" />
     </button>
   ) : group.dm ? (
-    <span className="flex min-w-0 items-center gap-2 rounded-full border-[0.5px] border-hairline-weak bg-elevated py-[7.5px] pl-[7.5px] pr-[13.5px]">
-      <GroupAvatarStack members={members} size={24} />
-      <span title={group.name} className="min-w-0 truncate whitespace-nowrap text-[14px] font-medium leading-5 text-ink">{group.name}</span>
+    <span className={cn(CHAT_PILL_CLASS, CHAT_PILL_GROUP_CLASS)}>
+      <GroupAvatarStack members={members} size={CHAT_PILL_AVATAR_PX} />
+      <span title={group.name} className={cn("min-w-0 truncate whitespace-nowrap", CHAT_PILL_TEXT_CLASS)}>{group.name}</span>
     </span>
   ) : (
     // The bot chat's pill (member faces, name, chevron): it opens
@@ -116,7 +116,8 @@ export function groupRoomIdentity({
       name={group.name}
       panelOpen={panelOpen}
       onToggle={onTogglePanel}
-      avatar={<GroupAvatarStack members={members} size={24} />}
+      group
+      avatar={<GroupAvatarStack members={members} size={CHAT_PILL_AVATAR_PX} />}
     />
   ));
 

@@ -53,6 +53,10 @@ try {
 // update waiting in the desktop bridge. Get the app on mobile stays out
 // until a public link exists (SAGAX_MOBILE_URL), as in the app.
 const parity = params.get("parity") === "1";
+// #4163 ?pill=long: the chat header's pill with a long name and title;
+// ?select=<id> opens another bot's chat (nova for a short one).
+const longPill = params.get("pill") === "long";
+const selectParam = params.get("select");
 if (parity) {
   const ready = { status: "downloaded", version: "9.9.9" };
   const server = { active: true, id: "org-example", name: "Example org", origin: "https://bots.example.com" };
@@ -149,7 +153,7 @@ if (params.get("limit")) {
 }
 const team: Bot[] = [
   bot("nova", "Nova", { chiefOfStaff: true, title: fr ? "Chef de cabinet" : "Chief of staff", mascotBody: "squircle", pinned: true }, fr ? "Je coordonne la semaine." : "Coordinating the week.", 4),
-  { ...bot("atlas", "Atlas", { title: "Service Desk Ops", color: "pink", mascotBody: "squircle", section: "My team" }, "", 8), messages: conversation, activeLeafId: conversation.at(-1)?.id } as Bot,
+  { ...bot("atlas", longPill ? "Atlas Montgomery-Beauregard" : "Atlas", { title: longPill ? (fr ? "Responsable des opérations du centre de services" : "Head of service desk operations and escalations") : "Service Desk Ops", color: "pink", mascotBody: "squircle", section: "My team" }, "", 8), messages: conversation, activeLeafId: conversation.at(-1)?.id } as Bot,
   bot("iris", "Iris", { title: "Dev Ops", color: "orange", mascotBody: "drop", section: "My team", unread: true }, fr ? "Mémoire nettoyée." : "Memory tidied up.", 42),
   bot("milo", "Milo", { title: fr ? "Vérification" : "Review", color: "teal", mascotBody: "blob", section: "My team", busy: !scene }, fr ? "Je vérifie la règle." : "Checking the rule.", 70),
   bot("lina", "Lina", { title: fr ? "Juridique" : "Legal", color: "purple", mascotBody: "circle", section: "My team" }, fr ? "Aucune routine restante." : "No routine left.", 130),
@@ -169,7 +173,7 @@ const start: AppState = {
   ...initialState,
   connected: true,
   hydrated: true,
-  selectedId: "atlas",
+  selectedId: selectParam ?? "atlas",
   config: { profile: { name: "Alex Gagnon" } } as AppState["config"],
   bots: [...team, ...(scene ? moreBots(fr, at) : []), ...hiddenTeam],
   sections: scene ? ["My team", "Ops"] : ["My team"],

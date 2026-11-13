@@ -85,7 +85,7 @@ import { Composer } from "../Composer";
 import { TurnPresence } from "../TurnPresence";
 import { DevPodsPanel } from "../dev-pods/DevPods";
 
-import { BotChatHeader, useChatWindow } from "../BotHeaderPill";
+import { BotChatHeader, CHAT_PILL_AVATAR_PX, useChatWindow } from "../BotHeaderPill";
 import { CHAT_UNDER_BAR_PAD, ChatBottomEdge, ChatHeaderBar } from "../ChatHeaderBar";
 import { ChatMarkdown } from "../ChatMarkdown";
 import { MessageBoundary } from "../MessageBoundary";
@@ -455,7 +455,7 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
               label={bot?.title}
               panelOpen={chat?.panelOpen ?? false}
               onToggle={() => chat?.onTogglePanel()}
-              avatar={<PartyAvatar id={party.id} bot={party} size={22} />}
+              avatar={<PartyAvatar id={party.id} bot={party} size={CHAT_PILL_AVATAR_PX} />}
             />
           </div>
         )}

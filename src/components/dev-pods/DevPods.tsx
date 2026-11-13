@@ -342,7 +342,7 @@ export function DevPodsToggle({ bot }: { bot: Pick<Bot, "id" | "threadId"> }) {
       aria-label={label}
       title={label}
       onClick={toggle}
-      className={cn(CIRCLE_BUTTON, shown && "bg-elevated-hover")}
+      className={cn(CIRCLE_BUTTON, shown && "bg-circle-hover")}
     >
       <CodeXml size={18} strokeWidth={1.75} />
     </button>

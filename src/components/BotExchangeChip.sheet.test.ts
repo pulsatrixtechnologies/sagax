@@ -122,7 +122,7 @@ describe("BotExchangeChip sheet", () => {
     expect(header.className).toContain("shrink-0");
     expect(header.className).toContain("bg-app");
     expect(header.className).not.toMatch(/absolute/);
-    expect(header.querySelector("[data-chat-pill]")?.className).toMatch(/h-9/);
+    expect(header.querySelector("[data-chat-pill]")?.className).toMatch(/\bh-10\b/);
     // the transcript starts below the header, not 52px under a floating bar
     const scroll = sheet.querySelector<HTMLElement>("[data-testid=bot-exchange-scroll]")!;
     expect(scroll.className).not.toMatch(/pt-\[52px\]/);

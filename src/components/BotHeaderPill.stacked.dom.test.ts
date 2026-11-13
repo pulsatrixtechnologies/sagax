@@ -49,7 +49,9 @@ describe("bot name and title on one line in the header pill (#4093)", () => {
       expect(text.children[1]!.getAttribute("aria-hidden")).toBe("true");
       expect(name.textContent).toBe("Ara");
       expect(title.textContent).toBe("Admin");
-      expect(title.className).toContain("text-ink-secondary");
+      // one ink for the name and the title (#4163, the owner 2026-11-13)
+      expect(title.className).not.toContain("text-ink-secondary");
+      expect(text.className).toContain("text-ink");
       expect(text.textContent).toBe("Ara·Admin");
       expect(text.getAttribute("title")).toBe("Ara\nAdmin");
     });

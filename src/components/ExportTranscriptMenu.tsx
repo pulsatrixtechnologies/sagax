@@ -187,7 +187,7 @@ export function ExportTranscriptMenu({
         aria-expanded={open}
         data-conversation-menu=""
         {...(onClearChat ? { "data-clear-chat-menu": clearChatKey ?? "" } : {})}
-        className={cn(CIRCLE_BUTTON, open && "bg-elevated-hover", className)}
+        className={cn(CIRCLE_BUTTON, open && "bg-circle-hover", className)}
         title={t("chat.moreMenu.aria")}
       >
         <MoreHorizontal size={18} strokeWidth={1.75} />

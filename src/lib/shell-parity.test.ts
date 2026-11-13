@@ -50,12 +50,12 @@ describe("the shell by window width, as the reference (#4093)", () => {
     expect(chatBubbleWidthClasses("reading").fit).toContain("max-w-[min(80%,560px,calc(100%-82px))]");
   });
 
-  it("writes the header pill's name and title on one line, 14px, the title in secondary grey", () => {
-    const html = renderToStaticMarkup(createElement(PillName, { name: "Atlas", label: "Service desk", weight: "font-normal" }));
+  it("writes the header pill's name and title on one line, 14px medium, in one ink (#4163)", () => {
+    const html = renderToStaticMarkup(createElement(PillName, { name: "Atlas", label: "Service desk" }));
     expect(html).not.toContain("flex-col");
-    expect(html).toContain("text-[14px]");
+    expect(html).toContain("text-[14px] font-medium");
     expect(html.replace(/<[^>]+>/g, "")).toBe("Atlas·Service desk");
-    expect(html).toMatch(/data-bot-header-label="" class="[^"]*text-ink-secondary/);
+    expect(html).not.toContain("text-ink-secondary");
   });
 
   it("writes a sidebar row's role after the name on its line, and a pinned tile's under it, as plain text", () => {

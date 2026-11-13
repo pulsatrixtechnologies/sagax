@@ -254,7 +254,7 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data, trigger 
           const rect = event.currentTarget.getBoundingClientRect();
           onAnchor({ x: rect.right, y: rect.bottom + 4, alignRight: true });
         }}
-        className={cn(CIRCLE_BUTTON, anchor && "bg-elevated-hover")}
+        className={cn(CIRCLE_BUTTON, anchor && "bg-circle-hover")}
       >
         <MoreHorizontal size={18} strokeWidth={1.75} />
       </button>}

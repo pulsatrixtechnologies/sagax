@@ -14,7 +14,7 @@ import { chatBubbleWidth, useChatBubbleWidthClasses, useChatColumnClass } from "
 import { prefersWideBubble } from "@/lib/rich-blocks";
 import { runCorners } from "@/lib/room-authors";
 import { cn } from "@/lib/cn";
-import { useChatWindow, WindowHeaderPill } from "./BotHeaderPill";
+import { CHAT_PILL_AVATAR_PX, CHAT_PILL_TEXT_CLASS, useChatWindow, WindowHeaderPill } from "./BotHeaderPill";
 import { CHAT_UNDER_BAR_PAD, ChatBottomEdge, ChatHeaderBar } from "./ChatHeaderBar";
 import { WindowCloseButton } from "./WindowCloseButton";
 import { PILL } from "./SettingsPrimitives";
@@ -233,14 +233,16 @@ export function ExchangeSheet({
         return (
           <span key={`${party.id ?? party.name}:${index}`} className="flex min-w-0 items-center gap-1.5">
             {index > 0 && <ArrowLeftRight size={14} className="shrink-0 text-ink-tertiary" />}
-            <PartyAvatar id={party.id} bot={bot} size={22} />
+            <PartyAvatar id={party.id} bot={bot} size={CHAT_PILL_AVATAR_PX} />
+            {/* the pill's type (#4163): 14px medium in the primary ink, as the
+                reference's exchange row; the sheet keeps its title stacked */}
             {title ? (
               <span data-exchange-party="" className="flex min-w-0 flex-col items-start text-left">
-                <span className="block max-w-full truncate whitespace-nowrap text-[14px] font-normal leading-[17px]" style={{ color: mausInk(bot.color) }}>{party.name}</span>
+                <span className="block max-w-full truncate whitespace-nowrap text-[14px] font-medium leading-[17px] text-ink">{party.name}</span>
                 <span data-exchange-party-title="" className="block max-w-full truncate whitespace-nowrap text-[11.5px] font-normal leading-[14px] text-ink-secondary">{title}</span>
               </span>
             ) : (
-              <span data-exchange-party="" className="min-w-0 truncate whitespace-nowrap text-[15px] font-normal leading-5" style={{ color: mausInk(bot.color) }}>{party.name}</span>
+              <span data-exchange-party="" className={cn("min-w-0 truncate whitespace-nowrap", CHAT_PILL_TEXT_CLASS)}>{party.name}</span>
             )}
           </span>
         );

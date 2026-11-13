@@ -313,7 +313,8 @@ avec l'app de référence : #3388 ; ce patron : #3398.
     à droite de l'étiquette. Une longue liste montre ses trois premières rangées (le
     moteur d'abord), puis une ligne grise centrée « Afficher N de plus » qui déplie le
     reste sur place et devient « Afficher moins » ; trois rangées ou moins : aucune
-    ligne. Même ligne que Routines et Codage (`SHOW_MORE_ROW`, `src/lib/grouped-card.ts`).
+    ligne. Même ligne que Routines et Codage (`SHOW_MORE_ROW`, `src/lib/grouped-card.ts`),
+    dessinée par le pli partagé `ShowMoreFold` (`src/components/ShowMoreFold.tsx`).
     Chaque app, serveur ou connexion du coffre une seule fois, son contrôle dans sa
     rangée ; une personne que le serveur refuserait voit l'état sans interrupteur.
     Sans compte, une rangée vide porte Ajouter. Le menu Ajouter : Applications,
@@ -333,6 +334,10 @@ avec l'app de référence : #3388 ; ce patron : #3398.
     depuis un lien quand la bibliothèque est éteinte) ; « Apprendre à l'usage » une
     rangée à interrupteur de la carte ; chaque compétence une rangée avec son
     interrupteur et son menu. Sans compétence, une rangée vide porte « + Ajouter ».
+    Plus de quatre compétences : les quatre premières, puis le même pli que Accès
+    (« Afficher N de plus », « Afficher moins », #4104). Une compétence qui attend la
+    personne (bloquée avec « Relire les changements », un avertissement à lire) ou
+    qui vient d'être ajoutée n'est jamais cachée : elle passe en tête.
     « Déjà assignées » seulement quand la bibliothèque a des compétences et que toutes
     le sont. Les compétences de l'organisation et Écrire une commande suivent, chacune
     sous son étiquette grise. Plus de sous-page Compétences.

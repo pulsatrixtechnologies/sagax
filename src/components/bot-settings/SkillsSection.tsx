@@ -30,6 +30,15 @@ import { AddMenu, type AddMenuItem } from "../bot-profile/BotProfilePage.tsx-par
 import { ReviewCard, type ReviewEntry } from "../bot-profile/BotProfilePage.tsx-parts/ReviewCard";
 import { renderClassicSkillRow, renderClassicTop } from "./SkillsSection.tsx-parts/classicParts";
 import { SkillEditorPage, type SkillEditorTarget } from "./SkillEditorPage";
+import { ShowMoreFold } from "../ShowMoreFold";
+
+/** The profile's Skills card: rows shown before "Show N more" (#4104). */
+export const SKILLS_SHOWN = 4;
+
+/** A skill that needs the person (blocked, changed after its review, any
+ * warning to read) or that was just added: never behind the fold (#4104). */
+export const skillStaysInView = (skill: ManagedSkill, added: ReadonlySet<string>) =>
+  skill.warnings.length > 0 || added.has(skill.name);
 
 export type { ManagedSkill };
 /** Library entries this bot has not been assigned yet (flag on only). */
@@ -357,9 +366,27 @@ export function SkillsSection({ bot, review }: {
     dispatch({ type: "toggleComputer", open: false });
   };
 
+  // #4104: the skills that appear after the first load (added from the
+  // library, uploaded, written, imported) stay above the fold.
+  const seenSkills = useRef<Set<string> | null>(null);
+  const [addedSkills, setAddedSkills] = useState<ReadonlySet<string>>(() => new Set());
+
   useEffect(() => {
     setEditing(null);
+    seenSkills.current = null;
+    setAddedSkills(new Set());
   }, [bot.id]);
+
+  useEffect(() => {
+    if (loading) return;
+    const names = skills.map((skill) => skill.name);
+    const seen = seenSkills.current;
+    seenSkills.current = new Set(names);
+    // the first list (or the first after an empty or failed load) is the bot's own
+    if (!seen || seen.size === 0) return;
+    const fresh = names.filter((name) => !seen.has(name));
+    if (fresh.length > 0) setAddedSkills((prev) => new Set([...prev, ...fresh]));
+  }, [skills, loading]);
 
   // Learn from use (#2610): the bot revises a skill after a failure or a
   // correction and proposes a new one after a long task. The bot's own switch,
@@ -556,7 +583,13 @@ export function SkillsSection({ bot, review }: {
                 {add("shrink-0")}
               </div>
             ) : (
-              skills.map((skill) => renderPlainSkillRow(rowActions, skill))
+              <ShowMoreFold
+                items={skills}
+                shown={SKILLS_SHOWN}
+                keep={(skill) => skillStaysInView(skill, addedSkills)}
+                render={(skill) => renderPlainSkillRow(rowActions, skill)}
+                toggleAttr="data-skills-fold"
+              />
             )}
             {allAssigned && (
               <p className="px-4 py-2.5 text-[12px] leading-4 text-ink-secondary">{t("botPanel.skills.allAssigned")}</p>

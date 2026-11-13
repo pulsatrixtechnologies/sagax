@@ -17,7 +17,7 @@ applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? ski
 await loadLocale(params.get("lang") ?? "en");
 
 // ?level=mismatch (2026-10-28): the bot is on Full access while its open
-// conversation runs at Ask (an engine change asked again there), with
+// conversation runs at Ask (Full access waits for its confirmation), with
 // Proactive on
 const mismatch = params.get("level") === "mismatch";
 // ?direct=1 (#2691): Proactive on, mail narrowed by filters, texts off, the
@@ -29,7 +29,7 @@ const engineParam = params.get("engine");
 const part = (params.get("part") ?? "all") as Parameters<typeof PermissionsSection>[0]["part"];
 const bot = {
   id: "cryptic", name: "Cryptic", approvalMode: "ask", approvePeerComms: true, emailDrafts: true, allowedRecipients: [], threadId: "t1",
-  ...(mismatch ? { approvalSetting: "full", approvalApplied: { mode: "ask", reason: "engine" }, proactiveMode: "proactive" } : {}),
+  ...(mismatch ? { approvalSetting: "full", approvalApplied: { mode: "ask", reason: "consent" }, proactiveMode: "proactive" } : {}),
   ...(params.get("connectors") === "on" ? { grokAccountConnectors: true } : {}),
   ...(direct ? { proactiveMode: "proactive", directTriggers: { mail: { on: true, filters: "from:*@client.example, -infolettre" }, sms: { on: false } } } : {}),
 } as unknown as Bot;

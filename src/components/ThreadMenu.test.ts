@@ -2,7 +2,7 @@
 // header's All threads picker share it. One menu, no More (owner,
 // 2026-10-15), in the reference design's short sections (owner, 2026-10-16): Rename,
 // Regenerate title, Pin, Move › | Archive, Snooze › | Copy link, Remove
-// link | Refresh permissions | Delete.
+// link | Delete.
 import { createElement, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -17,7 +17,7 @@ const folders = [{ id: "work", name: "Research" }, { id: "home", name: "Home", e
 
 const allActions = (): ThreadMenuActions & Record<string, ReturnType<typeof vi.fn>> => ({
   onRename: vi.fn(), onDelete: vi.fn(), onPin: vi.fn(), onArchive: vi.fn(), onSnooze: vi.fn(), onMove: vi.fn(),
-  onCopyLink: vi.fn(), onRegenerateTitle: vi.fn(), onRemoveLink: vi.fn(), onRefreshPermissions: vi.fn(),
+  onCopyLink: vi.fn(), onRegenerateTitle: vi.fn(), onRemoveLink: vi.fn(),
 });
 
 type Props = Parameters<typeof ThreadMenuItems>[0];
@@ -46,9 +46,9 @@ function items(given: Props): Map<string, { onClick: () => void; disabled?: bool
 
 describe("the thread menu", () => {
   it("lists every action in one menu, Delete last, and no More", () => {
-    expect(ids(markup({ task: { ...task, link: "https://example.com/pr/1" } }))).toEqual(["rename", "regenerate", "pin", "move", "archive", "snooze", "copy-link", "remove-link", "refresh-permissions", "delete"]);
+    expect(ids(markup({ task: { ...task, link: "https://example.com/pr/1" } }))).toEqual(["rename", "regenerate", "pin", "move", "archive", "snooze", "copy-link", "remove-link", "delete"]);
     const html = markup();
-    for (const label of ["Rename thread", "Pin", "Archive", "Snooze", "Copy link", "Refresh permissions", "Delete thread"]) expect(html).toContain(label);
+    for (const label of ["Rename thread", "Pin", "Archive", "Snooze", "Copy link", "Delete thread"]) expect(html).toContain(label);
     expect(html).not.toContain(">More<");
     expect(ids(html)).not.toContain("more");
     // nothing about another thread or a new one
@@ -61,15 +61,15 @@ describe("the thread menu", () => {
     expect(ids(renderToStaticMarkup(createElement(ThreadMenuItems, given)))).toEqual(["rename", "delete"]);
   });
 
-  it("groups the usual sidebar thread: Rename, Pin | Archive, Snooze | Copy link | Refresh permissions | Delete in red", () => {
+  it("groups the usual sidebar thread: Rename, Pin | Archive, Snooze | Copy link | Delete in red", () => {
     const { onMove: _move, onRegenerateTitle: _regenerate, onRemoveLink: _remove, ...actions } = allActions();
     const html = markup({ actions, folders: [] });
-    expect(ids(html)).toEqual(["rename", "pin", "archive", "snooze", "copy-link", "refresh-permissions", "delete"]);
+    expect(ids(html)).toEqual(["rename", "pin", "archive", "snooze", "copy-link", "delete"]);
     expect(html).toMatch(/data-thread-menu-item="delete"[^>]*class="[^"]*text-danger/);
-    // a separator before Archive, Copy link, Refresh permissions and Delete
-    expect(html.match(/role="separator"/g)).toHaveLength(4);
+    // a separator before Archive, Copy link and Delete
+    expect(html.match(/role="separator"/g)).toHaveLength(3);
     const order = html.split('role="separator"').map((part) => ids(part));
-    expect(order).toEqual([["rename", "pin"], ["archive", "snooze"], ["copy-link"], ["refresh-permissions"], ["delete"]]);
+    expect(order).toEqual([["rename", "pin"], ["archive", "snooze"], ["copy-link"], ["delete"]]);
   });
 
   it("draws no divider around an empty section", () => {
@@ -77,8 +77,8 @@ describe("the thread menu", () => {
     expect(html.match(/role="separator"/g)).toHaveLength(1);
   });
 
-  it("keeps Refresh permissions for Advanced mode", () => {
-    expect(ids(markup({ advanced: false }))).not.toContain("refresh-permissions");
+  it("offers no Refresh permissions: a conversation runs at its bot's level (#4200)", () => {
+    expect(ids(markup({ advanced: true }))).not.toContain("refresh-permissions");
   });
 
   it("offers Remove link only on a linked thread", () => {
@@ -120,7 +120,6 @@ describe("the thread menu", () => {
     expect(markup({ task: { ...task, archivedAt: 0 } })).toContain("Unarchive");
     const busy = props({ task: { ...task, activity: "working" } });
     expect(items(busy).get("delete")!.disabled).toBe(true);
-    expect(items(busy).get("refresh-permissions")!.disabled).toBe(true);
   });
 
   it("shows Regenerating… while the title request runs", () => {
@@ -133,7 +132,6 @@ describe("the thread menu", () => {
     setLocale("fr");
     const html = markup();
     expect(html).toContain("Renommer le fil");
-    expect(html).toContain("Actualiser les autorisations");
     expect(html).toContain("Supprimer le fil");
     expect(html).not.toContain(">Plus<");
     expect(markup({ task: { ...task, link: "https://example.com" } })).toContain("Retirer le lien");
@@ -145,7 +143,7 @@ describe("the All threads picker's row menu", () => {
     const onDelete = vi.fn();
     const onPin = vi.fn();
     const onMove = vi.fn();
-    const threadActions = { onCopyLink: vi.fn(), onArchive: vi.fn(), onSnooze: vi.fn(), onRefreshPermissions: vi.fn() };
+    const threadActions = { onCopyLink: vi.fn(), onArchive: vi.fn(), onSnooze: vi.fn() };
     const actions = pickerRowActions(task, { onRename: vi.fn(), onDelete, onPin, onMove, threadActions });
     actions.onDelete();
     actions.onPin!(true);
@@ -160,7 +158,7 @@ describe("the All threads picker's row menu", () => {
     expect(threadActions.onSnooze).toHaveBeenCalledWith("t1", 0);
     expect(threadActions.onCopyLink).toHaveBeenCalledWith("t1");
     expect(actions.onRegenerateTitle).toBeUndefined();
-    expect(ids(renderToStaticMarkup(createElement(ThreadMenuItems, props({ actions }))))).toEqual(["rename", "pin", "move", "archive", "snooze", "copy-link", "refresh-permissions", "delete"]);
+    expect(ids(renderToStaticMarkup(createElement(ThreadMenuItems, props({ actions }))))).toEqual(["rename", "pin", "move", "archive", "snooze", "copy-link", "delete"]);
   });
 });
 

@@ -110,6 +110,10 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
       const plainWords = permission ? host.serverApprovalWords(host.languageOfPerson(cardAnswerer)) : undefined;
       const declaredProduct = permission ? host.declaredToolProduct(asker?.id, event.mcpTool ?? event.tool ?? "", event.input) : undefined;
       const plain = plainWords ? approvalPlain({ botName: asker?.name, tool: event.mcpTool ?? event.tool, toolInput: event.input, detail: event.summary, ...(declaredProduct ? { hints: declaredProduct } : {}) }, plainWords) : undefined;
+      // #4200: the held line follows the tool's own class (read, write, send)
+      const toolClass = !permission ? undefined : plain?.risk === "read" ? "read" as const
+        : event.outbound === true || host.isOutboundTool(event.mcpTool ?? event.tool) ? "send" as const : plain?.risk ? "write" as const : undefined;
+      const heldNoteContext = { ...heldContext, ...(toolClass ? { toolClass } : {}) };
       // An AI client's hidden conversation (#291) is not in anyone's sidebar:
       // its approval still reaches the person, and is declined when nobody
       // answers in time instead of holding the turn forever.
@@ -225,8 +229,8 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
           // clients that do not know the key yet.
           // An engine connector's call whose arguments the engine did not
           // send says so (review of #943).
-          held: permission && event.engineConnector === true && !event.input ? HELD_NOTE["approval.held.connectorNoDetails"] : approvalHeldReason(heldContext),
-          heldCode: permission && event.engineConnector === true && !event.input ? "approval.held.connectorNoDetails" : approvalHeldNote(heldContext),
+          held: permission && event.engineConnector === true && !event.input ? HELD_NOTE["approval.held.connectorNoDetails"] : approvalHeldReason(heldNoteContext),
+          heldCode: permission && event.engineConnector === true && !event.input ? "approval.held.connectorNoDetails" : approvalHeldNote(heldNoteContext),
           approvalScope: event.approvalScope,
           // action and locale: a phone words its own heading ("Nova wants
           // to {action}") when the card is in its reader's language (#426)

@@ -58,16 +58,16 @@ async function startParallelTask(input: {
   }
   const title = input.title?.trim() || parallelTaskTitle(input.text);
   const inherited = host.parentThreadModel(bot.id, input.threadId);
-  // #1169/#1170: it follows the bot's level like its conversation, unless
-  // that conversation holds an exception (a delegated Full), which it shares.
-  const parentOwnFull = parentTask.approvalOwn !== undefined && approvalModeFor(parentTask) === "full";
-  const childLevel = input.approvalMode ?? inherited.approvalMode ?? (parentOwnFull ? "full" : undefined);
+  // #4200: it follows the bot's level like its conversation, unless that
+  // conversation holds a Primary Bot's hand-off (a delegated Full), which it shares.
+  const parentOwnFull = parentTask.approvalOwn === "delegated" && approvalModeFor(parentTask) === "full";
+  const childLevel = parentOwnFull ? "full" : undefined;
   const child = host.store.createTask(bot.id, title, false, parentTask.projectId, undefined,
     childLevel,
     parentTask.ownerPrincipalId, inherited.modelSelection ?? parentTask.modelSelection,
     // a parallel task of a confidential conversation is confidential too, its owner's
     false, undefined, parentTask.confidential === true,
-    input.approvalMode ? "thread" : inherited.approvalMode ? "engine" : parentOwnFull ? parentTask.approvalOwn : undefined);
+    parentOwnFull ? "delegated" : undefined);
   if (!child) throw Object.assign(new Error("couldn't create the parallel task"), { status: 500 });
   // Where it works: a worktree of the conversation's repository, else the
   // same folder (the brief says it is shared), else its own task folder.

@@ -686,12 +686,9 @@ admin-activity row per person and bot a minute); clipboard reads and writes
 as byte counts. Through the companion these routes ride the per-phone desktop
 capability, like the viewer.
 
-**Auto-review default.** On: a conversation opened afterwards starts in the
-engine's own reviewer level (`auto`, for Codex, Claude, Cursor, Grok and Qwen)
-or, without a reviewer, Ask (Full and Auto tighten to Ask; Ask and Edits
-stay). It never changes an existing conversation, never leaves Custom, and
-never turns Auto on for a bot that works on this computer. Off: a new
-conversation takes its bot's level, as before (`server/bots/bot-settings.ts`).
+**Auto-review default.** Retired (#4200): a conversation always runs at its
+bot's level, so a saved `autoReviewDefault` is ignored and the setting is no
+longer listed (`server/bots/bot-settings.ts`).
 
 **Time zone.** Routines read daily times, interval windows and weekdays in
 the configured zone (the person's own on an organization server, else the

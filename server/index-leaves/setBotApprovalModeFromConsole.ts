@@ -30,12 +30,7 @@ function setBotApprovalModeFromConsole(botId: string, mode: "ask" | "auto", thre
   }
   if (before !== mode) host.store.patchBot(bot.id, { approvalMode: mode, autoApprove: mode === "auto" });
   const threadsMoved: string[] = [];
-  for (const task of tasks) {
-    if (task.threadId === bot.threadId || task.approvalMode !== "ask") continue;
-    if (!host.supportsApprovalMode(task.modelSelection ?? bot.modelSelection, "auto")) continue;
-    host.store.patchTask(bot.id, task.threadId, { approvalMode: "auto", autoApprove: true });
-    threadsMoved.push(task.threadId);
-  }
+  // #4200: every conversation follows its bot's level, so none moves on its own.
   const updated = host.store.bot(bot.id);
   if (updated && (before !== mode || threadsMoved.length)) host.broadcast({ kind: "bot", bot: host.wireBot(updated) });
   return { before, after: updated ? approvalModeFor(updated) : mode, threadsMoved };

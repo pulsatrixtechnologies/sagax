@@ -10,7 +10,7 @@ import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.
 import { waitForExit } from "./testing/cleanup.ts";
 import { readHandoffs } from "./testing/handoff-rows.ts";
 
-it("applies requested Full Access workflows through MCP without duplicate approvals, while exact Ask tasks still wait", async () => {
+it("applies requested Full Access workflows through MCP without duplicate approvals, and drops stored conversation levels at start (#4200)", async () => {
   const fixture = await launchVerificationServer({}, undefined, undefined, undefined, undefined, { scripted: true });
   const { url, dataDir, logPath } = fixture.info;
   const planPath = join(dataDir, "room-plan.json");
@@ -111,8 +111,9 @@ it("applies requested Full Access workflows through MCP without duplicate approv
     const savedBots = JSON.parse(readFileSync(join(dataDir, "bots.json"), "utf8"));
     const savedChief = savedBots.find((bot: any) => bot.id === chief.id);
     savedChief.approvalMode = "full"; savedChief.autoApprove = false;
-    // #1207: a thread keeps a level of its own only as a stated exception
-    // (approvalOwn); a bare copy is dropped on start and follows the bot.
+    // What older builds stored: a conversation level of its own (approvalOwn
+    // "thread"). #4200: the start drops it and the conversation runs at its
+    // bot's level, the one the person sees on the bot.
     for (const task of savedChief.tasks) {
       if (task.threadId === ask.threadId) Object.assign(task, { approvalMode: "ask", autoApprove: false, approvalOwn: "thread" });
       else { delete task.approvalMode; delete task.autoApprove; delete task.approvalOwn; }
@@ -131,7 +132,8 @@ it("applies requested Full Access workflows through MCP without duplicate approv
     const request = { threadId: chief.activeTaskId, text: "WRONG_MODE_MUST_NOT_RUN", sendId: randomUUID(),
       expectedActiveLeafId: (await api("GET", `/api/threads/${chief.activeTaskId}/messages?limit=1`)).activeLeafId };
     expect((await api("POST", `/api/bots/${chief.id}/messages/guarded`, request, 409)).code).toBe("guarded_permissions");
-    expect((await api("POST", `/api/bots/${chief.id}/messages/guarded`, { ...request, threadId: ask.threadId, expectedApprovalMode: "full", expectedActiveLeafId: null }, 409)).code).toBe("guarded_permissions");
+    // the stored Ask of this conversation is gone: it runs at the bot's Full
+    expect((await api("POST", `/api/bots/${chief.id}/messages/guarded`, { ...request, threadId: ask.threadId, expectedApprovalMode: "ask", expectedActiveLeafId: null }, 409)).code).toBe("guarded_permissions");
     await api("POST", `/api/bots/${chief.id}/tasks`, { title: "No operator grant", approvalMode: "full" }, 403);
     expect(providerTurns()).toHaveLength(0);
     evidence.push({ setup: "fixture-only persisted modes", restartedPid: restarted?.pid, modes: [
@@ -220,52 +222,26 @@ it("applies requested Full Access workflows through MCP without duplicate approv
     expect((await messages(peerTurn.threadId)).some(message => message.kind === "activity" && /^Full access — delegated by Clive, a Primary Bot on Full access$/.test(message.tool?.name ?? ""))).toBe(true);
     evidence.push({ delegatedFullAccess: { peerThreadId: peerTurn.threadId, permissionMode: peerTurn.permissionMode } });
 
-    // At Ask, the Chief's changes to itself apply at once, each shown as a
-    // one-line receipt with Undo; only the team setup waits for review.
-    const askTurn = await run(chief, ask.threadId, "Change my own profile, routine and named skill, and prepare a specialist for review in this Ask task.", [
-      step("propose_profile", { title: "Applied in Ask", reason: "The bot's own profile applies at any level" }),
-      step("propose_routine", { name: "Own Ask report", instructions: "Report from the Ask task.", schedule }),
-      step("skill_manage", { action: "create", skill_md: skill("own-ask-review", "Applies at once as the bot's own skill."), source: "conversation" }),
-      step("propose_team_setup", { reason: "Ask task specialist review", operations: [specialist("Pending specialist", "Operations")] }),
-    ], { pending: true, guarded: "ask" });
-    expect(askTurn.permissionMode).not.toBe("full");
-    const askCards = await unanswered(ask.threadId);
-    expect(askCards).toHaveLength(1);
-    expect(askCards[0].card.teamSetupRequest).toBeDefined();
-    expect((await bots()).find(bot => bot.id === chief.id).title).toBe("Applied in Ask");
-    expect((await bots()).some(bot => bot.name === "Pending specialist")).toBe(false);
-    expect((await api("GET", "/api/routines")).routines).toHaveLength(2);
-    expect((await api("GET", `/api/bots/${chief.id}/skills`)).skills.some((item: any) => item.name === "own-ask-review" && item.enabled)).toBe(true);
-    const receipts = (await messages(ask.threadId)).filter(message => message.card?.autoApplied);
-    expect(receipts.map(message => Boolean(message.card.profileRequest || message.card.routineRequest || message.card.skillRequest))).toEqual([true, true, true]);
-    // Undo on each receipt puts the change back, once.
-    for (const receipt of receipts) {
-      expect(await api("POST", `/api/threads/${ask.threadId}/undo`, { requestId: receipt.card.requestId })).toMatchObject({ ok: true, undone: true });
-      expect(await api("POST", `/api/threads/${ask.threadId}/undo`, { requestId: receipt.card.requestId })).toMatchObject({ alreadyUndone: true });
-    }
-    expect((await messages(ask.threadId)).filter(message => message.card?.autoApplied).every(message => message.card.undone)).toBe(true);
-    expect((await bots()).find(bot => bot.id === chief.id).title).toBe("Monthly reporting Chief");
-    expect((await api("GET", "/api/routines")).routines).toHaveLength(1);
-    expect((await api("GET", `/api/bots/${chief.id}/skills`)).skills.some((item: any) => item.name === "own-ask-review")).toBe(false);
-
-    const inverseTurn = await run(inverse, inverse.activeTaskId, "Apply my requested title in this Full Access task even though my bot default is Ask.", [
+    // its stored Full is gone too: the conversation runs at the bot's Ask, and
+    // the bot's own profile still applies at that level
+    const inverseTurn = await run(inverse, inverse.activeTaskId, "Apply my requested title in this task; my bot is on Ask.", [
       step("propose_profile", { title: "Applied from Full task", reason: "User requested this title" }),
-    ], { guarded: "full" });
-    expect(inverseTurn.permissionMode).toBe("full");
+    ], { guarded: "ask" });
+    expect(inverseTurn.permissionMode).not.toBe("full");
     expect((await bots()).find(bot => bot.id === inverse.id)).toMatchObject({ title: "Applied from Full task", approvalMode: "ask" });
     expect(await unanswered(chief.activeTaskId)).toHaveLength(0);
-    expect(providerTurns()).toHaveLength(7);
+    expect(providerTurns()).toHaveLength(6);
     const persisted = JSON.parse(readFileSync(join(dataDir, "bots.json"), "utf8"));
     expect(persisted.find((bot: any) => bot.id === chief.id)).toMatchObject({ title: "Monthly reporting Chief", approvalMode: "full" });
-    expect(persisted.find((bot: any) => bot.id === chief.id).tasks.find((task: any) => task.threadId === ask.threadId).approvalMode).toBe("ask");
+    expect(persisted.find((bot: any) => bot.id === chief.id).tasks.find((task: any) => task.threadId === ask.threadId)).not.toHaveProperty("approvalOwn");
     expect(persisted.find((bot: any) => bot.id === inverse.id)).toMatchObject({ title: "Applied from Full task", approvalMode: "ask" });
-    expect(persisted.find((bot: any) => bot.id === inverse.id).tasks.find((task: any) => task.threadId === inverse.activeTaskId).approvalMode).toBe("full");
+    expect(persisted.find((bot: any) => bot.id === inverse.id).tasks.find((task: any) => task.threadId === inverse.activeTaskId)).not.toHaveProperty("approvalOwn");
     // the delegated pair thread stays Full on disk; Ada's own default does not move
     expect(persisted.find((bot: any) => bot.id === peer.id).approvalMode).not.toBe("full");
     expect(persisted.find((bot: any) => bot.id === peer.id).tasks.find((task: any) => task.threadId === peerTurn.threadId)).toMatchObject({ approvalMode: "full", autoApprove: false, alwaysAllow: [] });
     expect(JSON.parse(readFileSync(join(dataDir, "routines.json"), "utf8")).routines[0]).toMatchObject({ enabled: false, schedule });
     evidence.push({ persistedBots: persisted, routines: await api("GET", "/api/routines"), handoffs,
-      fullMessages: await messages(chief.activeTaskId), askMessages: await messages(ask.threadId), inverseMessages: await messages(inverse.activeTaskId) });
+      fullMessages: await messages(chief.activeTaskId), inverseMessages: await messages(inverse.activeTaskId) });
 
     // A restart while the Chief awaits a teammate runs the teammate's cut
     // turn again once, told to check first, and resumes the Chief once, told

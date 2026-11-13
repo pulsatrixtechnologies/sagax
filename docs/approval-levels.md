@@ -34,9 +34,9 @@ Full access applies the moment you pick it: no confirmation dialog, no
 second step. It can be turned on from any client that can reach the app's
 API: the desktop app, a browser, a paired phone or web client, or a bot or
 script calling the local API where local calls count as you (development, the
-CLI, a self-hosted server). Picked in bot settings, it applies to the bot
-and every one of its existing threads at once; picked in the composer, to that
-thread; Refresh permissions copies it onto one thread. An engine that cannot
+CLI, a self-hosted server). A bot has one approval level: picked in bot
+settings or in a conversation's composer, it is the bot's level and applies to
+every one of its conversations at once (#4200). An engine that cannot
 run Full access still cannot be set to it. On a hosted company workspace, Full
 access still comes only from the operator's dedicated policy
 ([guarded messages](verification/guarded-messages.md)).
@@ -103,14 +103,18 @@ setting is the bot's, every thread always inherits"). Every thread, hidden or
 visible, started by a person, `send_prompt`, delegation or a routine, reads
 the bot's current level at the start of each turn: nothing is copied when a
 thread is made, and setting the bot's level reaches every thread at once.
-A thread keeps a level of its own only as a stated exception
-(`approvalOwn`): a level a person chose in that thread (`thread`), a
-Primary Bot's delegated level (`delegated`), Ask again after an engine
-change (`engine`), or a safety revocation (`safety`). The thread's chip
-shows it, Refresh permissions ends it, and any change of the bot's level
-ends every one. Threads saved before this version kept a copy of the bot's
-level from the day they were made; that copy is dropped on start, and they
-follow their bot. Ask, Auto, and Custom retain
+A conversation never keeps a level of its own (#4200, 2026-11-13: one
+level per bot). A level picked from a conversation sets the bot's level; a
+new conversation, a "New topic" in the unified chat, a model or engine
+change, and a hidden thread all run at the bot's level. The one exception is
+a Primary Bot's hand-off (`approvalOwn: "delegated"`), kept only while it is
+wider than the bot's level; any change of the bot's level ends it. At start,
+every stored conversation level that differs from its bot's (a level once
+chosen in a thread, Ask after an engine change, a safety revocation, a
+narrower hand-off) is dropped, and those conversations follow their bot. At
+Full access no turn shows an approval card, whatever started it (a person,
+a routine, an email, a webhook, another bot); only the organization's Refuse
+and Ask-first rules still hold a call. Ask, Auto, and Custom retain
 their existing OMB configuration review cards. Full actions return an applied
 result and leave a settled receipt, so the bot continues in the same turn.
 Invalid input, unavailable services, or failed writes return errors, not a
@@ -307,7 +311,7 @@ thread with `thread: "new"`) starts at the level of the Primary Bot
 conversation it came from: Auto-accept edits, Approve for me, or Full access.
 The teammate's thread is switched to that level, keeps it, and opens with a
 line saying so ("Approve for me — delegated by Clive, a Primary Bot on Approve
-for me"); you can still change it in that thread. Work a Primary Bot hands out
+for me"); a level picked there sets the teammate's own level. Work a Primary Bot hands out
 inside a room runs at its level for that turn. The level is computed once when
 the assignment is written and recorded on it (docs/runtime-contract.md §3);
 the turn runs with exactly that level.

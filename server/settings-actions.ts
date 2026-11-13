@@ -87,7 +87,7 @@ const RETIRED_QUIET_KEYS: ReadonlySet<string> = new Set(["bot.quietMode", "notif
 /** What a Primary Bot may change at once on the person's words (security
  * review 2026-10-20): turning cards off or back on, nothing else. */
 const PERSON_ASKED_KEYS: ReadonlySet<string> = new Set([
-  "bot.approvalMode", "thread.approvalMode",
+  "bot.approvalMode",
   "rules.custom", "rules.customUpdate", "rules.customDelete", "rules.owner", "rules.ownerDelete", "rules.commandAllow",
 ]);
 /** The words that name a level, so a quote says which one. */

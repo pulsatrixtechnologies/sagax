@@ -77,8 +77,10 @@ describe("iOS parity routes on a personal server", () => {
     expect(saved).toMatchObject({ scope: "server", effectiveTimeZone: "America/Toronto" });
     await api("PUT", "/api/settings/bot", { timeZone: "Nowhere/Land" }, 400);
     const after = (await api("POST", `/api/bots/${bot.id}/tasks`, { title: "After" }, 201)).task;
-    // auto-review is the person's choice: a visible exception on the thread
-    expect(after).toMatchObject({ approvalMode: "auto", approvalOwn: "thread" });
+    // #4200: a conversation runs at its bot's level; the auto-review
+    // default writes no level of its own on it
+    expect(after.approvalMode).toBeUndefined();
+    expect(after.approvalOwn).toBeUndefined();
     await api("PUT", "/api/settings/bot", { autoReviewDefault: false });
     expect(await api("GET", "/api/auto-review/rules")).toEqual({ rules: [], global: [], total: 0 });
   });

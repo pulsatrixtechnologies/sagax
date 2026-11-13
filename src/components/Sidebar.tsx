@@ -132,9 +132,7 @@ import {
 } from "@/lib/folder-order";
 import { folderUnreadThreadIds, markFolderRead, markGroupFolderRead } from "@/lib/folder-read";
 import { personPickerThreads } from "@/lib/person-threads";
-import { approvalModeFor, botApprovalSetting } from "../../shared/approval-mode";
 import { liveActivityLabel } from "@/lib/live-activity";
-import { LocalComputerAutoWarning } from "./LocalComputerAutoWarning";
 import {
   orderedThreadList,
   SidebarThreadRow,
@@ -1719,7 +1717,6 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
   const tasks = personThreads(bot.tasks ?? [{ threadId: bot.threadId, title: t("task.newShort"), createdAt: 0 }], bot.threadId)
     .map((task) => ({ ...task, queued: Boolean(pendingQueued[task.threadId]?.length) }));
   const background = backgroundThreads(bot.tasks ?? []);
-  const [permissionRefresh, setPermissionRefresh] = useState<{ threadId: string; kind: "local-auto" } | null>(null);
   // the same live verb the chat pane derives from the visible tail
   // ("Reading a file"), passed to the active thread's row while it works
   const activeActivityLabel = liveActivityLabel(visibleMessages(bot).at(-1));
@@ -1756,14 +1753,6 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
       // Open beside is a threads-shown way in; one conversation has no side column (#2081).
       onOpenAside: showThreads ? (task: Row) => openSideThread({ botId, threadId: task.threadId }) : undefined,
       onMakeConfidential: (task: Row) => dispatch({ type: "makeTaskConfidential", botId, threadId: task.threadId }),
-      onRefreshPermissions: (task: Row) => {
-        const current = latest.current;
-        const mode = botApprovalSetting(current);
-        const threadMode = approvalModeFor(currentTaskBot(current, task.threadId));
-        // Full applies at once with no confirmation (omb #2701).
-        if (mode === "auto" && current.computer === "local" && threadMode !== "auto") { setPermissionRefresh({ threadId: task.threadId, kind: "local-auto" }); return; }
-        dispatch({ type: "refreshTaskPermissions", botId, threadId: task.threadId });
-      },
     };
   }, [botId, dispatch, generatedTitles, prefetch]);
   const bulkActions = useBulkThreadActions();
@@ -1794,15 +1783,6 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
       {folderDialog && <NewTaskFolderDialog bot={bot} onClose={() => setFolderDialog(false)} onReturnFocus={() => {
         document.querySelector<HTMLElement>(`[data-sidebar-bot-row="${CSS.escape(bot.id)}"]`)?.focus();
       }} />}
-      <LocalComputerAutoWarning
-        open={permissionRefresh?.kind === "local-auto"}
-        onCancel={() => setPermissionRefresh(null)}
-        onConfirm={() => {
-          const threadId = permissionRefresh?.threadId;
-          setPermissionRefresh(null);
-          if (threadId) dispatch({ type: "refreshTaskPermissions", botId: bot.id, threadId, acknowledgeLocalAuto: true });
-        }}
-      />
     </ThreadTree>
   );
 }

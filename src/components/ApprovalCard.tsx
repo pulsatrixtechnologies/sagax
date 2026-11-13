@@ -18,6 +18,7 @@ import { approvalPlain, describeAllowRule, describeApproval, isTechnicalText, pa
 import { outboundSummary } from "@/lib/approval-summary";
 import { cronLocale, niceDate, niceTime, scheduleLabel } from "@/lib/schedule-label";
 import { cronIsDescribed, cronScheduleLabel } from "../../shared/cron-label";
+import { humanizeToolIds } from "../../shared/tool-display-name";
 import { PROFILE_REQUEST_FIELDS, type ProfileRequestField } from "../../shared/profile-request";
 import type { RoutineRequestSchedule } from "../../shared/routine-request";
 import { readableError } from "@/lib/plain-error";
@@ -129,14 +130,16 @@ export function approvalCardStaysInChat(
 }
 
 /** The status pill of a settled tool approval, as the reference design shows it. */
-export function approvalPill(card: Pick<OptionCardData, "answered" | "expired" | "undone" | "alwaysAllowed" | "ruleSaved" | "skipped">): { label: string; tone: "success" | "danger" | "neutral" } | undefined {
+export function approvalPill(card: Pick<OptionCardData, "answered" | "expired" | "undone" | "alwaysAllowed" | "ruleSaved" | "customRuleSaved" | "skipped">): { label: string; tone: "success" | "danger" | "neutral" } | undefined {
   if (card.expired === true) return { label: t("approval.pill.expired"), tone: "neutral" };
   if (card.skipped === true) return { label: t("approval.pill.skipped"), tone: "neutral" };
   if (!card.answered) return undefined;
   if (card.undone === true) return { label: t("approval.status.undone"), tone: "neutral" };
   if (card.answered === "allow" && card.ruleSaved?.behavior === "allow") return { label: t("approval.pill.alwaysAllowed"), tone: "success" };
   if (card.answered === "deny" && card.ruleSaved?.behavior === "deny") return { label: t("approval.pill.alwaysDenied"), tone: "danger" };
-  if (card.answered === "allow" && card.alwaysAllowed) return { label: t("approval.pill.alwaysAllowed"), tone: "success" };
+  // #4200: Always allow saved an Allow rule from this card (its body says
+  // "Added to your Allow rules"): the row says Always allowed, never Allowed once.
+  if (card.answered === "allow" && (card.alwaysAllowed || card.customRuleSaved)) return { label: t("approval.pill.alwaysAllowed"), tone: "success" };
   if (card.answered === "allow") return { label: t("approval.pill.allowedOnce"), tone: "success" };
   return { label: t("approval.pill.declined"), tone: "danger" };
 }
@@ -163,7 +166,7 @@ function productOf(hints: unknown): { product?: string; productId?: string } {
 /** The line a card held by a rule waits on: the rule, named. */
 export function heldByRuleLine(card: Pick<OptionCardData, "customRule" | "heldRule">): { label: string; target?: string } | undefined {
   if (card.customRule && (card.customRule.outcome === "held" || card.customRule.outcome === "risk")) {
-    return { label: customRuleNoticeLine(card.customRule), target: card.customRule.when ? `« ${card.customRule.when} »` : undefined };
+    return { label: customRuleNoticeLine(card.customRule), target: card.customRule.when ? `« ${humanizeToolIds(card.customRule.when)} »` : undefined };
   }
   if (card.heldRule?.description) return { label: t("customRules.notice.held"), target: `« ${card.heldRule.description} »` };
   return undefined;

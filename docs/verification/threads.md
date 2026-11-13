@@ -148,9 +148,9 @@ threads like a bot: the same picker in the chat header or the same tree under
 the person's row, by Settings > Appearance > Threads location (never both),
 the same row menu (rename, pin, copy link, archive, snooze, move to folder,
 delete), the same folders (new, icon, rename, order, mark read, delete keeping
-the threads) and the same keyboard handling. Two things a bot thread has are
+the threads) and the same keyboard handling. One thing a bot thread has is
 left out on purpose: Regenerate title (it would send the pair's words to a
-model) and Refresh permissions (there is no bot).
+model).
 
 Rules (server/people/people-dms.ts, covered by `server/people-threads.e2e.test.ts`):
 

@@ -404,9 +404,10 @@ describe("#1819 audit: the level a conversation runs at follows the bot's Full a
   it("setting the bot to Full ends the conversation's older Approve for me exception", () => {
     const store = new Store(selection);
     const bot = store.createBot({}, { seedMessages: false });
-    // the person picked Approve for me in the composer of this conversation
+    // a writer put Approve for me on this conversation: since #4200 no
+    // conversation keeps a level of its own
     store.patchTask(bot.id, bot.threadId, { approvalMode: "auto", autoApprove: true });
-    expect(store.taskByThread(bot.id, bot.threadId)).toMatchObject({ approvalOwn: "thread", approvalMode: "auto" });
+    expect(store.taskByThread(bot.id, bot.threadId)?.approvalOwn).toBeUndefined();
     // then Full access on the bot: every conversation follows it (#1169)
     store.patchBot(bot.id, { approvalMode: "full", autoApprove: false });
     expect(store.taskByThread(bot.id, bot.threadId)?.approvalOwn).toBeUndefined();

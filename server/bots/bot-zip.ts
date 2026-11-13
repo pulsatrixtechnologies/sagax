@@ -945,7 +945,6 @@ export async function importBotZip(host: BotZipHost, inspected: InspectedBotZip,
     if (!options.asMember && hostSettings.cwd && !(host.cwdUsable?.(hostSettings.cwd) ?? true)) warnings.push(`The working folder ${hostSettings.cwd} is not usable here: the bot works in its own folder.`);
     if (!options.asMember && hostSettings.browserProfile && !(host.browserProfileExists?.(hostSettings.browserProfile) ?? true)) warnings.push("The browser profile is not on this server: the bot uses its own browser session.");
     store.patchBot(id, patch);
-    store.patchTask(id, bot.threadId, { approvalMode: patch.approvalMode, autoApprove: patch.autoApprove === true });
     // the bot folder and the desk
     for (const entry of reader.under("bot-folder/")) {
       const rel = entry.slice("bot-folder/".length);

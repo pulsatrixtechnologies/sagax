@@ -21,7 +21,9 @@ public enum SettingsItem: String, CaseIterable, Hashable, Sendable {
     case helpCenter, sendFeedback, about
     case signOut
     // Bots
-    case autoReview, autoReviewRules, approvalRules, actionJournal, timeZoneAuto, timeZone, botComputer
+    // The Auto-review toggle (a reviewed level on new conversations) left with
+    // #4200: a conversation always runs at its bot's one level.
+    case autoReviewRules, approvalRules, actionJournal, timeZoneAuto, timeZone, botComputer
     /// "Reach me" (#1187): how each bot reaches the person outside the app.
     case reachMe
     /// "My engines" (#1098): the person's own subscription sign-in on each
@@ -117,7 +119,7 @@ public enum SettingsTree {
             ]
         case .bots:
             all = [
-                [(.autoReview, c.connected), (.autoReviewRules, c.connected), (.approvalRules, c.connected), (.actionJournal, c.connected)],
+                [(.autoReviewRules, c.connected), (.approvalRules, c.connected), (.actionJournal, c.connected)],
                 [(.reachMe, c.connected)],
                 [(.myEngines, c.connected && c.myEngines)],
                 [(.timeZoneAuto, c.connected), (.timeZone, c.connected)],

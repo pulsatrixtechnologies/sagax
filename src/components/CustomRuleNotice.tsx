@@ -14,6 +14,7 @@ import { Lock, ShieldCheck, ShieldX, ShieldAlert } from "lucide-react";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { useStore } from "@/state/store";
+import { humanizeToolIds } from "../../shared/tool-display-name";
 import { ruleTextDiff, type CustomRuleNotice as Notice, type RiskClass } from "../../shared/custom-rules";
 
 export const RISK_LABEL: Record<RiskClass, LocaleKey> = {
@@ -68,7 +69,7 @@ export function CustomRuleNoticeLine({ notice, botId, compact = false }: { notic
     >
       <Icon size={compact ? 12 : 14} aria-hidden="true" className={`shrink-0 ${tone}`} />
       <span className="font-medium text-ink">{customRuleNoticeLine(notice)}</span>
-      <span className="min-w-0 break-words">« {notice.when} »</span>
+      <span className="min-w-0 break-words">« {humanizeToolIds(notice.when)} »</span>
       {notice.org ? <OrgRuleBadge /> : <EditCustomRuleLink botId={notice.botId ?? botId} />}
       {notice.reason && <span data-custom-rule-reason="" className="basis-full min-w-0 break-words text-ink-secondary">{notice.reason}</span>}
     </div>
@@ -108,7 +109,7 @@ export function CustomRuleSavedInset({ rule, botId }: { rule: { id: string; when
   return (
     <div data-custom-rule-saved={rule.id} className="mt-2 rounded-lg bg-inset px-3 py-2 text-[12.5px] text-ink-secondary">
       <div className="font-medium text-ink">{t("customRules.saved")}</div>
-      <div className="mt-0.5 break-words">« {rule.when} »</div>
+      <div className="mt-0.5 break-words">« {humanizeToolIds(rule.when)} »</div>
       <EditCustomRuleLink botId={botId} />
     </div>
   );

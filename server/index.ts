@@ -120,7 +120,6 @@ import { approvalModeFor,
   isEmergencyApprovalDowngrade,
   liveApprovalChange,
   isApprovalMode,
-  staleThreadException,
   type ApprovalMode,
   setDefaultApprovalMode } from "../shared/approval-mode.ts";
 import { isProactiveMode, normalizeProactiveMode, proactiveModeFor } from "../shared/proactive-mode.ts";
@@ -1907,7 +1906,6 @@ import { createEnsureCalendarCallRoom } from "./index-leaves/ensureCalendarCallR
 import { createEngineConnectorsPromptFor } from "./index-leaves/engineConnectorsPromptFor.ts";
 import { createConsoleBotCapabilities } from "./index-leaves/consoleBotCapabilities.ts";
 import { createBackgroundBriefReads } from "./index-leaves/backgroundBriefReads.ts";
-import { createApplyAutoReviewDefault } from "./index-leaves/applyAutoReviewDefault.ts";
 import { createAgentApiBotScopes } from "./index-leaves/agentApiBotScopes.ts";
 import { createTurnSurfacePlan } from "./index-leaves/turnSurfacePlan.ts";
 import { createSyncHeadlessTeam } from "./index-leaves/syncHeadlessTeam.ts";
@@ -2238,6 +2236,7 @@ import { createCheckedMemberIds } from "./index-leaves/checkedMemberIds.ts";
 import { createAnswerRoleTransition } from "./index-leaves/answerRoleTransition.ts";
 import { createRoutineEffortForTurn } from "./index-leaves/routineEffortForTurn.ts";
 import { createRoutineOwnerAuthorizationFor } from "./index-leaves/routineOwnerAuthorizationFor.ts";
+import { turnApprovalLevel } from "./approvals/turn-level.ts";
 import { createApprovalLevelOf } from "./index-leaves/approvalLevelOf.ts";
 import { createActiveGroupTurnForBot } from "./index-leaves/activeGroupTurnForBot.ts";
 import { createMcpServerSummary } from "./index-leaves/mcpServerSummary.ts";
@@ -3604,7 +3603,6 @@ bindLeafHost({
   get createAntigravityLeftoverRoutes() { return createAntigravityLeftoverRoutes; },
   get createAppendSkillRequestCard() { return createAppendSkillRequestCard; },
   get createAppliesDirectly() { return createAppliesDirectly; },
-  get createApplyAutoReviewDefault() { return createApplyAutoReviewDefault; },
   get createApplyConfigHttpPatch() { return createApplyConfigHttpPatch; },
   get createApplyDesktopMutationTokenMessage() { return createApplyDesktopMutationTokenMessage; },
   get createApplyModelSwitches() { return createApplyModelSwitches; },
@@ -5595,7 +5593,6 @@ bindLeafHost({
   get stageTurnAttachments() { return stageTurnAttachments; },
   get stagedName() { return stagedName; },
   get staleSessionReason() { return staleSessionReason; },
-  get staleThreadException() { return staleThreadException; },
   get stallLimitMs() { return stallLimitMs; },
   get standingGrantsAllowed() { return standingGrantsAllowed; },
   get startAutoVmClaim() { return startAutoVmClaim; },
@@ -6003,7 +6000,6 @@ bindLeafHost({
   get cardAnswerRefusal() { return cardAnswerRefusal; },
   get teamMemoryMemberMayAnswer() { return teamMemoryMemberMayAnswer; },
   get viewerMayAnswerOnThread() { return viewerMayAnswerOnThread; },
-  get applyAutoReviewDefault() { return applyAutoReviewDefault; },
   get COMMAND_ALLOWLIST_ADD_REFUSAL() { return COMMAND_ALLOWLIST_ADD_REFUSAL; },
   get webhookDelegateRefusal() { return webhookDelegateRefusal; },
   get webhookSeenBy() { return webhookSeenBy; },
@@ -7528,7 +7524,6 @@ const parentThreadModel = createParentThreadModel(getLeafHost);
 const cardAnswerRefusal = createCardAnswerRefusal(getLeafHost);
 const teamMemoryMemberMayAnswer = createTeamMemoryMemberMayAnswer(getLeafHost);
 const viewerMayAnswerOnThread = createViewerMayAnswerOnThread(getLeafHost);
-const applyAutoReviewDefault = createApplyAutoReviewDefault(getLeafHost);
 const webhookDelegateRefusal = createWebhookDelegateRefusal(getLeafHost);
 const webhookSeenBy = createWebhookSeenBy(getLeafHost);
 const commandAllowlistResponse = createCommandAllowlistResponse(getLeafHost);
@@ -11636,26 +11631,6 @@ for (const pending of startupCatalogs) {
 // the first one that does says its untouched greeting again in it (#2803).
 let seedToLocalize: string | null = store.seedIfEmpty()?.id ?? (store.bots.length === 1 ? store.bots[0]!.id : null);
 hostedModels?.reconcile(store);
-// 2026-10-28 (one source of truth): a conversation that kept a level
-// nobody chose in it (an engine change that asked again, a grant that never
-// finished) while its bot's own setting is wider, on an engine that runs
-// that setting, follows its bot again: the selector showed the bot's
-// setting, the turns ran the conversation's. Never narrows a level; a
-// person's own choice in a conversation and a Primary Bot's handoff stay.
-for (const bot of store.bots) {
-  const setting = approvalModeFor({ approvalMode: bot.approvalMode, autoApprove: bot.autoApprove });
-  if (bot.approvalGrant) continue;
-  for (const task of bot.tasks ?? []) {
-    if (task.approvalOwn !== "engine" && task.approvalOwn !== "safety") continue;
-    const projected = store.projectBotForTask(bot.id, task.threadId);
-    if (!projected) continue;
-    const threadLevel = approvalModeFor({ approvalMode: projected.approvalMode, autoApprove: projected.autoApprove });
-    if (!staleThreadException({ exception: task.approvalOwn, threadLevel, setting, engineRunsSetting: supportsApprovalMode(projected.modelSelection, setting) })) continue;
-    if (store.patchTask(bot.id, task.threadId, { approvalOwn: undefined })) {
-      console.log(`[approval] bot ${bot.id}: a conversation follows its bot's level again (${threadLevel} -> ${setting})`);
-    }
-  }
-}
 // 2026-10-11, once per data directory: Full access on an organization
 // server is off until an admin turns it on. An organization that never saved
 // the setting and already runs bots on Full keeps it, as an explicit true.
@@ -13402,36 +13377,22 @@ const wireTrustedApprovalBot = (bot: NonNullable<ReturnType<typeof store.bot>>) 
  * Primary Bot covers the work the Primary Bot hands out. */
 const approvalModeForTurn = (bot: BotRecord, peerInitiated = false, threadId = bot.threadId): ApprovalMode => {
   // Organization server: Full runs as Full only while the organization
-  // allows it and the bot's current owner confirmed it (org-full-access.ts);
-  // otherwise Ask. Host tools stay withheld either way (withholdHostTools).
+  // allows it and the bot's current owner confirmed it (org-full-access.ts).
+  // A member's bot: Custom stays Ask, and Auto or Auto-accept edits only
+  // while the organization allows them (member-auto-approval.ts). A guest's
+  // turn on a Cloud home runs in Ask. Nothing else moves the bot's level,
+  // whatever starts the turn (#4200, server/approvals/turn-level.ts).
   const stored = approvalModeFor(bot);
-  if (stored === "full" && orgDeniesFull(bot)) return "ask";
-  // A member's bot on an organization server: Custom (a config.toml on the
-  // shared server) stays Ask. Its Auto and Auto-accept edits run as such
-  // unless an organization admin turned them off
-  // (organization.memberAutoApproval, allowed by default,
-  // member-auto-approval.ts); then Ask. When they run, every organization turn withholds the
-  // engines' own host tools (withholdHostToolsFor) and a person's shell and
-  // files go to their own environment, so what the provider leaves to Sagax
-  // is routed per tool (memberBotAdminApproval keeps host-level cards for an
-  // admin, always asked).
-  if (memberOwnedInOrg(bot)) {
-    if (stored === "custom") return "ask";
-    if (memberTurnLevel(stored, memberAutoApprovalAllowed(cfg.organization)) !== stored) return "ask";
-  }
-  // On a Cloud home a turn a guest drives runs in Ask, whatever the bot's
-  // own level. Judged by the conversation the turn runs in (a room's, for a
-  // room turn), never by whichever of the bot's conversations is active.
-  if (cloudGuestDriven(threadId)) return "ask";
-  // A mail-woken routine run (bot email, S2): Ask, whatever the bot's level.
-  if (botmailConfined(threadId)) return "ask";
-  // Proactive wakes (2026-11-01) run at the bot's ordinary approval level;
-  // dry runs are recorded on the wake, then writes follow this same path.
-  const mode = approvalModeForOrigin(approvalModeFor(bot), { peerInitiated });
-  if (!supportsApprovalMode(bot.modelSelection, mode)) {
-    return "ask";
-  }
-  return mode;
+  return turnApprovalLevel({
+    level: stored,
+    orgDeniesFull: stored === "full" && orgDeniesFull(bot),
+    memberOwned: memberOwnedInOrg(bot),
+    memberLevelAllowed: memberTurnLevel(stored, memberAutoApprovalAllowed(cfg.organization)) === stored,
+    guest: cloudGuestDriven(threadId),
+    mail: botmailConfined(threadId),
+    peerInitiated,
+    engineRuns: (mode) => supportsApprovalMode(bot.modelSelection, mode),
+  });
 };
 
 /** 2026-10-28 (one source of truth): the bot's own setting, and the level
@@ -31214,7 +31175,7 @@ function settleMemberAutoLevels(botIds: readonly string[]): MemberAutoReset {
   const bots = botIds.map((id) => store.bot(id)).filter((bot): bot is BotRecord => Boolean(bot));
   const reset = memberAutoSettle({ identity: IDENTITY.kind, organization: cfg.organization, bots, memberOwned: (bot) => memberOwnedInOrg(bot as BotRecord) });
   const ask = { approvalMode: "ask" as const, autoApprove: false };
-  for (const thread of reset.threads) store.patchTask(thread.botId, thread.threadId, { ...ask, approvalOwn: "safety" });
+  // #4200: conversations follow their bot's level, so the bot's reset reaches them.
   for (const botId of reset.bots) store.patchBot(botId, ask);
   return reset;
 }
@@ -33633,7 +33594,6 @@ ROUTES.push(createBotsCoreRoutes({
   scopedThreadViewer,
   conversationThreadFor,
   selectViewerThread,
-  applyAutoReviewDefault,
   noteStreamSend,
   refreshStreamDigests,
   actorKey,

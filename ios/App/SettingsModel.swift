@@ -76,13 +76,8 @@ final class SettingsModel: ObservableObject {
 
     // MARK: Bot settings
 
-    var autoReview: Bool { botSettings?.settings.autoReviewDefault ?? false }
     var timeZoneAuto: Bool { botSettings?.settings.timeZoneAuto ?? false }
     var timeZone: String? { botSettings?.displayTimeZone }
-
-    func setAutoReview(_ on: Bool) async {
-        await save(BotSettingsPatch(autoReviewDefault: on))
-    }
 
     func setTimeZoneAuto(_ on: Bool) async {
         await save(on

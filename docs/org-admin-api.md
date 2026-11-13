@@ -578,12 +578,9 @@ because those levels need the owner's own confirmation. Other refusals, per
 bot: `busy` (409, a turn is running or its level is being confirmed),
 `mode_not_supported` (400, its engine has no such mode), `not_found`.
 
-The level belongs to each conversation (docs/approval-levels.md): the bot's
-default reaches its main conversation and every conversation without a
-level of its own, and its future ones. A conversation that saved its own
-level keeps it, unless `threads: true`: then each conversation saved on Ask
-moves to Auto too. A conversation on any other level is never changed, so
-the action never lowers one. Each bot that changed writes one admin
+The level belongs to the bot (docs/approval-levels.md, #4200): it reaches
+every one of the bot's conversations, now and later; a conversation keeps no
+level of its own, so `threads` changes nothing more. Each bot that changed writes one admin
 activity row, category `approval`, action `approval.mode`, actor the console
 person, with the level before and after and how many conversations moved.
 

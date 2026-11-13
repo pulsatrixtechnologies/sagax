@@ -883,7 +883,7 @@ describe("Store", () => {
     expect(saved[2].turnSucceeded).toBe(false);
   });
 
-  it("creates explicitly scoped tasks atomically without inheriting remembered grants or changing siblings", () => {
+  it("creates tasks atomically at the bot's level, whatever level the caller names (#4200), without changing siblings", () => {
     const store = new Store(selection);
     const bot = store.createBot();
     store.patchBot(bot.id, { approvalMode: "full", autoApprove: false, alwaysAllow: ["old-tool"] });
@@ -892,9 +892,10 @@ describe("Store", () => {
     const save = vi.spyOn(store as unknown as { saveBots(): void }, "saveBots");
     const ask = store.createTask(bot.id, "Explicit Ask", true, undefined, undefined, "ask")!;
     expect(save).toHaveBeenCalledTimes(1);
-    expect(ask).toMatchObject({ approvalMode: "ask", autoApprove: false, alwaysAllow: [] });
-    const full = store.createTask(bot.id, "Authorized Full", true, undefined, undefined, "full")!;
-    expect(full).toMatchObject({ approvalMode: "full", autoApprove: false, alwaysAllow: [] });
+    expect(ask.approvalMode).toBeUndefined();
+    expect(store.projectBotForTask(bot.id, ask.threadId)?.approvalMode).toBe("full");
+    const handedDown = store.createTask(bot.id, "Hand-off", true, undefined, undefined, "full", undefined, undefined, false, undefined, false, "delegated")!;
+    expect(handedDown).toMatchObject({ approvalMode: "full", autoApprove: false, alwaysAllow: [], approvalOwn: "delegated" });
     expect(old).toEqual(before);
     expect(bot).toMatchObject({ approvalMode: "full", autoApprove: false, alwaysAllow: ["old-tool"] });
   });
@@ -1171,7 +1172,9 @@ describe("Store", () => {
     const reloaded = new Store(selection);
     expect(reloaded.bot(bot.id)?.approvalMode).toBe("full");
     expect(reloaded.bot(bot.id)?.approvalGrant).toBeUndefined();
-    expect(reloaded.projectBotForTask(bot.id, target.threadId)?.approvalMode).toBe("ask");
+    // #4200: no conversation holds a level of its own; the unfinished grant
+    // goes and both follow their bot
+    expect(reloaded.projectBotForTask(bot.id, target.threadId)?.approvalMode).toBe("full");
     expect(reloaded.projectBotForTask(bot.id, sibling.threadId)?.approvalMode).toBe("full");
   });
 

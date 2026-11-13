@@ -193,7 +193,6 @@ export interface BotsCoreRouteDeps {
   scopedThreadViewer(): string | undefined;
   conversationThreadFor(bot: BotRecord, personId?: string): string | undefined;
   selectViewerThread(botId: string, viewerId: string, threadId: string): void;
-  applyAutoReviewDefault(auth: RequestAuth, botId: string, threadId: string): void;
   noteStreamSend(botId: string, threadId: string, singleStream: boolean): void;
   refreshStreamDigests(botId: string, threadId: string): void;
   actorKey(auth: RequestAuth & { kind: "session" }): string;

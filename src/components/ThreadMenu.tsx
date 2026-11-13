@@ -36,7 +36,6 @@ export type ThreadMenuActions = {
   /** Present for a linked thread's owner: removes the link. */
   onRemoveLink?: () => void;
   /** Copy the bot's current approval level onto this thread. */
-  onRefreshPermissions?: () => void;
   /** Start a Team Bot from this conversation (TeamBotFromThreadDialog). */
   onCreateTeamBot?: () => void;
   /** Show the thread beside the main chat (src/lib/side-thread.ts). */
@@ -91,7 +90,7 @@ function Item({ icon, label, onClick, id, danger, disabled, title, busy, trailin
 
 /** The items of one page of the menu. Pure: the page, the busy title
  * request and the close live in ThreadMenu (and tests pass them in). */
-export function ThreadMenuItems({ task, actions, folders = [], page, onPage, onClose, regenerating, onRegenerate, advanced }: {
+export function ThreadMenuItems({ task, actions, folders = [], page, onPage, onClose, regenerating, onRegenerate }: {
   task: ThreadMenuTask;
   actions: ThreadMenuActions;
   folders?: readonly BotProject[];
@@ -101,7 +100,8 @@ export function ThreadMenuItems({ task, actions, folders = [], page, onPage, onC
   regenerating: boolean;
   onRegenerate: () => void;
   /** Advanced mode: the technical actions (Refresh permissions). */
-  advanced: boolean;
+  /** kept for callers; no item depends on it since #4200 */
+  advanced?: boolean;
 }) {
   const busy = working(task);
   const archived = archivedNow(task);
@@ -115,7 +115,6 @@ export function ThreadMenuItems({ task, actions, folders = [], page, onPage, onC
   );
   const sub = <ChevronRight size={12} aria-hidden="true" className="shrink-0 text-ink-tertiary" />;
   const canMove = Boolean(actions.onMove) && folders.length > 0;
-  const refresh = advanced ? actions.onRefreshPermissions : undefined;
 
   if (page === "snooze" && actions.onSnooze) {
     const snooze = actions.onSnooze;
@@ -174,9 +173,6 @@ export function ThreadMenuItems({ task, actions, folders = [], page, onPage, onC
       task.confidential === true
         ? <Item key="confidential" id="confidential-info" icon={<Lock size={12} />} label={t("confidential.menuIs")} title={t("confidential.menuIsHint")} disabled onClick={() => {}} />
         : actions.onMakeConfidential && <Item key="confidential" id="make-confidential" icon={<Lock size={12} />} label={t("confidential.make")} disabled={busy} onClick={run(actions.onMakeConfidential)} />,
-    ],
-    [
-      refresh && <Item key="refresh-permissions" id="refresh-permissions" icon={<RefreshCw size={12} />} label={t("task.refreshPermissions")} title={t("task.refreshPermissionsHint")} disabled={busy} onClick={run(refresh)} />,
     ],
     [
       <Item key="delete" id="delete" icon={<Trash2 size={12} />} label={t("task.deleteAria")} danger disabled={busy} onClick={run(actions.onDelete)} />,

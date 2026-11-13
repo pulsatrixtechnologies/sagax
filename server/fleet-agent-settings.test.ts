@@ -87,4 +87,21 @@ describe("fleet-agent-settings (#1944)", () => {
     expect(parts.runtime).toEqual({ maxConcurrentThreads: 2, turnPayer: "owner" });
     expect(parts.primary).toBe(true);
   });
+
+  it("#4172: skills, plugins and grants are switch maps beside the bot PATCH; hidden still archives through it", () => {
+    expect(AGENT_SETTINGS_FIELDS).toEqual(expect.arrayContaining(["skills", "plugins", "grants", "soul", "title", "approvalMode", "visibility", "mascotBody", "hidden"]));
+    const parts = partitionAgentSettings({
+      name: "Osprey",
+      skills: { "tidy-notes": true, "old-skill": false },
+      plugins: { "docs@market": false },
+      grants: { "user:pr_2": "edit", "team:t1": null },
+    });
+    expect(parts.patch).toEqual({ name: "Osprey" });
+    expect(parts.switches).toEqual({ skills: { "tidy-notes": true, "old-skill": false }, plugins: { "docs@market": false }, grants: { "user:pr_2": "edit", "team:t1": null } });
+    expect(parts.switchesInvalid).toEqual([]);
+    const bad = partitionAgentSettings({ skills: ["tidy-notes"], grants: { pr_2: "owner" } });
+    expect(bad.switches).toEqual({});
+    expect(bad.switchesInvalid.map((entry) => entry.field)).toEqual(["skills", "grants"]);
+    expect(bad.switchesInvalid[1]!.reason).toContain("use, run, edit or manage");
+  });
 });

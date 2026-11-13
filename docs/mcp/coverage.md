@@ -6,7 +6,7 @@ exposes to a bot or an AI client. The machine-readable form is the registry in
 `server/mcp/mcp-permissions.ts`; `server/mcp/mcp-permissions.test.ts` fails when a
 catalog tool has no permission.
 
-Totals: capabilities 181, covered 181, gaps 0.
+Totals: capabilities 183, covered 183, gaps 0.
 
 Sources read: the agents tool catalog, the internal routes it calls
 (`/api/internal/*`), the member API (`docs/org-member-api.md`), and the
@@ -189,6 +189,8 @@ Reading the table:
 | approvals:answer | sagax | `answer_approval` (Perspicax `sagax_approve`) | `approvals:answer` | covered |
 | routines:run | sagax | `run_routine` (Perspicax `sagax_routine_run`) | `routines:run` | covered |
 | routines:update | sagax | `update_routine` (agent API + Perspicax forward; member `PATCH routines/{id}`) | `routines:update` | covered |
+| routines:create | sagax | `create_routine` (agent API, #4172; `POST /api/routines` as the person) | `routines:create` | covered |
+| routines:delete | sagax | `delete_routine` (agent API, #4172; `DELETE /api/routines/:id` as the person) | `routines:delete` | covered |
 | agents:model | sagax | `update_agent_model`, `list_agent_models` (#1944) | `agents:model` | covered |
 | agents:settings | sagax | `update_agent_settings` (#1944) | `agents:settings` | covered |
 | people:nudge | sagax | `nudge_person` (Perspicax `sagax_nudge`) | `people:nudge` | covered |

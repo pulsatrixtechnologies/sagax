@@ -105,6 +105,14 @@ it("the Primary Bot sees every bot of its person, archives idempotently, and thr
     expect(await listed()).toContain("perf-test-061");
     expect((await agentApi("delete_agent", { agent_id: tempId })).status).toBeLessThan(300);
     expect(await listed()).not.toContain("perf-test-061");
+    // #4172: its creator lists it among the archived, restores it, archives it again
+    const archivedList = await agentApi("list_agents", { archived: true });
+    expect((archivedList.body.agents as any[]).find((agent) => agent.id === tempId), JSON.stringify(archivedList.body)).toMatchObject({ archived: true });
+    const restoredTemp = await agentApi("delete_agent", { agent_id: tempId, restore: true });
+    expect(restoredTemp.body, JSON.stringify(restoredTemp.body)).toMatchObject({ restored: true });
+    expect(await listed()).toContain("perf-test-061");
+    expect((await agentApi("delete_agent", { agent_id: tempId })).status).toBeLessThan(300);
+    expect(await listed()).not.toContain("perf-test-061");
     expect((await catalog()).bots.map((bot: any) => bot.name)).not.toContain("perf-test-061");
     const settings = (args: Record<string, unknown>) => call("POST", "/api/internal/settings", args, comms);
     const readBack = await settings({ action: "get", key: "bot.hidden", target: tempId });
@@ -121,6 +129,11 @@ it("the Primary Bot sees every bot of its person, archives idempotently, and thr
     expect(archivedTemp.status, JSON.stringify(archivedTemp.body)).toBe(200);
     expect(archivedTemp.body.text).toMatch(/^Done/);
     expect(await listed()).not.toContain("perf-test-062");
+    // #4172: its creator deletes an archived one for good
+    const purged = await agentApi("delete_agent", { agent_id: temp2Id, permanent: true });
+    expect(purged.body, JSON.stringify(purged.body)).toMatchObject({ agent_id: temp2Id, deleted: true });
+    expect((await bots()).some((bot) => bot.id === temp2Id)).toBe(false);
+    expect(((await agentApi("list_agents", { archived: true })).body.agents as any[]).some((agent) => agent.id === temp2Id)).toBe(false);
     await stop(quasar.id, quasar.threadId);
 
     // ── archive: an ordinary bot, twice ────────────────────────────────

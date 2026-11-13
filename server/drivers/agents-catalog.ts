@@ -398,7 +398,7 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "read_transcript", "read_transcript_cold", "read_transcript_page", "read_latest_page", "read_latest_page_with_threads", "read_transcript_attachment",
   "find_agents", "get_agent", "list_agents", "send_prompt", "await_turn", "create_agent", "delete_agent",
   // #2023 / #1944: fleet Edit-bot writes are occasional; keep them behind ToolSearch.
-  "list_agent_models", "update_agent_model", "update_agent_settings", "update_routine",
+  "list_agent_models", "update_agent_model", "update_agent_settings", "update_routine", "create_routine", "delete_routine",
   "workspace_read", "workspace_search", "session_read", "close_thread", "list_threads",
   "request_login", "request_sign_in", "place_phone_call", "phone_call_owner", "phone_line_contact", "place_call", "send_dtmf", "transfer", "hang_up",
   // The person's iPhone (agents-phone-tools.ts): rare, and long.

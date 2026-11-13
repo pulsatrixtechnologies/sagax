@@ -572,8 +572,8 @@ posixOnly("Perspicax AI clients: the Sagax member API", () => {
     const stored = (JSON.parse(readFileSync(join(home, ".sagax", "bots.json"), "utf8")) as Array<any>).find((bot) => bot.id === id);
     expect(stored.temporary).toMatchObject({ ownerPrincipalId: ids.alice, idleHours: 2, archived: { reason: "deleted", by: { kind: "person", principalId: ids.alice } } });
     expect((await api("POST", `/api/bots/${id}/messages`, alice, { text: "still there?" })).status).toBe(410);
-    // a lasting bot is never deleted from here
-    expect((await member("POST", "agents/delete_agent", ALICE, { agent_id: bots.atlas!.id })).body.code).toBe("not_temporary");
+    // #4172: never another person's bot
+    expect((await member("POST", "agents/delete_agent", BOB, { agent_id: bots.atlas!.id, permanent: true })).body.code).toBe("unknown_agent");
 
     await sleep(500);
     events.close();
@@ -613,6 +613,63 @@ posixOnly("Perspicax AI clients: the Sagax member API", () => {
 
     const audit = await api("GET", "/api/org/admin/audit?category=client", { bearer: idp.consoleAssertion({ sub: ALICE.sub, aud: BASE, role: "admin" }) });
     expect((audit.body.rows as Array<any>).find((row) => row.action === "agents.create_agent" && row.after?.kind === "lasting")?.after).toMatchObject({ outcome: "ok", temporary: false });
+  }, 90_000);
+
+  it("M12 (#4172): a person's AI client archives, lists, restores, changes and deletes for good a lasting bot, and makes and deletes its routine", async () => {
+    const made = await member("POST", "agents/create_agent", ALICE, { kind: "lasting", name: "Keeper M12" });
+    expect(made.status, made.text).toBe(200);
+    const id = made.body.agent.id as string;
+    const stored = () => (JSON.parse(readFileSync(join(home, ".sagax", "bots.json"), "utf8")) as Array<any>).find((bot) => bot.id === id);
+
+    // the bot page's own fields and sharing, through the app's routes
+    const changed = await member("POST", "agents/update_agent_settings", ALICE, { agent_id: id, soul: "Keep things tidy.", title: "Archivist", grants: { [`user:${ids.bob}`]: "use" } });
+    expect(changed.status, changed.text).toBe(200);
+    expect(changed.body.changed, changed.text).toEqual(expect.arrayContaining(["soul", "title", `grants.user:${ids.bob}`]));
+    expect(stored()).toMatchObject({ soul: expect.stringContaining("Keep things tidy."), title: "Archivist" });
+    // a skill of the organization's library switches where the bot page
+    // switches it (PATCH /api/skills-library/:name), not on the bot's imports
+    const shelf = await api("POST", "/api/skills-library", alice, { text: "---\nname: shelf-rules-m12\ndescription: Shelf rules\n---\nKeep the shelves tidy.\n" });
+    expect(shelf.status, shelf.text).toBe(201);
+    expect((await api("PUT", `/api/bots/${id}/skills-library`, alice, { skills: ["shelf-rules-m12"] })).status).toBe(200);
+    const shelfSkill = async () => ((await api("GET", `/api/bots/${id}/skills`, alice)).body.skills as Array<any>).find((skill) => skill.name === "shelf-rules-m12");
+    expect(await shelfSkill()).toMatchObject({ origin: "library", enabled: false });
+    const shelfOn = await member("POST", "agents/update_agent_settings", ALICE, { agent_id: id, skills: { "shelf-rules-m12": true } });
+    expect(shelfOn.body, shelfOn.text).toMatchObject({ changed: ["skills.shelf-rules-m12"], refused: [] });
+    expect(await shelfSkill()).toMatchObject({ origin: "library", enabled: true });
+    expect(((await member("POST", "agents/list_agents", BOB, {})).body.agents as Array<any>).some((agent) => agent.id === id)).toBe(true);
+    const unshared = await member("POST", "agents/update_agent_settings", ALICE, { agent_id: id, grants: { [`user:${ids.bob}`]: null } });
+    expect(unshared.body.changed, unshared.text).toEqual([`grants.user:${ids.bob}`]);
+    expect(((await member("POST", "agents/list_agents", BOB, {})).body.agents as Array<any>).some((agent) => agent.id === id)).toBe(false);
+
+    // a routine made and deleted on it, through the Automations editor's routes
+    const routine = await member("POST", "agents/create_routine", ALICE, { agent_id: id, name: "Tidy M12", instructions: "Tidy the notes.", schedule: { type: "daily", time: "08:00" }, enabled: false });
+    expect(routine.status, routine.text).toBe(200);
+    expect(routine.body).toMatchObject({ routine_id: expect.any(String) });
+    const routineId = routine.body.routine_id as string;
+    expect(((await api("GET", "/api/routines", alice)).body.routines as Array<any>).find((row) => row.id === routineId)).toMatchObject({ botId: id, name: "Tidy M12", enabled: false });
+    const gone = await member("POST", "agents/delete_routine", ALICE, { routine_id: routineId });
+    expect(gone.body, gone.text).toEqual({ deleted: true, routine_id: routineId });
+    expect(((await api("GET", "/api/routines", alice)).body.routines as Array<any>).some((row) => row.id === routineId)).toBe(false);
+
+    // archive (the app's own archive), listed on request, restored
+    const archived = await member("POST", "agents/delete_agent", ALICE, { agent_id: id });
+    expect(archived.status, archived.text).toBe(200);
+    expect(archived.body).toMatchObject({ agent_id: id, archived: true, purge_at: null });
+    expect(stored().hidden).toBe(true);
+    expect(((await member("POST", "agents/list_agents", ALICE, {})).body.agents as Array<any>).some((agent) => agent.id === id)).toBe(false);
+    const onlyArchived = (await member("POST", "agents/list_agents", ALICE, { archived: true })).body.agents as Array<any>;
+    expect(onlyArchived.find((agent) => agent.id === id)).toMatchObject({ archived: true });
+    expect(onlyArchived.every((agent) => agent.archived === true)).toBe(true);
+    expect(((await member("POST", "agents/list_agents", BOB, { archived: true })).body.agents as Array<any>).some((agent) => agent.id === id)).toBe(false);
+    const restored = await member("POST", "agents/delete_agent", ALICE, { agent_id: id, restore: true });
+    expect(restored.body, restored.text).toMatchObject({ restored: true });
+    expect(stored().hidden).toBeFalsy();
+
+    // another person never deletes it; its owner deletes it for good
+    expect((await member("POST", "agents/delete_agent", BOB, { agent_id: id, permanent: true })).status).toBeGreaterThanOrEqual(400);
+    const deleted = await member("POST", "agents/delete_agent", ALICE, { agent_id: id, permanent: true });
+    expect(deleted.body, deleted.text).toMatchObject({ agent_id: id, deleted: true });
+    expect(stored()).toBeUndefined();
   }, 90_000);
 
   it("M10: bot email (contract v2): only the inbound mail route takes perspicax-mail; body signed; owner checked; a confined run, once", async () => {

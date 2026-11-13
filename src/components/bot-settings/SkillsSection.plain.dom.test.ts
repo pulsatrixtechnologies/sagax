@@ -205,6 +205,84 @@ describe("Skills on the profile page (plain)", () => {
     expect(container.querySelector("[data-skills-section] [data-settings-surface]")!.textContent).toContain("already assigned");
   });
 
+  // #4104: the owner, "make sure to only show like 3 or 4 skill and add a show more".
+  const skill = (name: string, extra: Record<string, unknown> = {}) => ({ name, description: `Does ${name}.`, enabled: true, source: "", warnings: [], origin: "private", ...extra });
+  const many = (count: number) => Array.from({ length: count }, (_, index) => skill(`skill-${index + 1}`));
+  const skillsCard = () => container.querySelector<HTMLElement>("[data-skills-section] [data-settings-surface]")!;
+  const shownSkills = () => [...skillsCard().querySelectorAll("[data-skill-row]")].map((row) => row.getAttribute("data-skill-row"));
+
+  it("#4104: nine skills show the first four, then Show 5 more that opens in place and folds back", async () => {
+    skillsAnswer = { skills: many(9), staged: [], library: [], assignedSkills: [] };
+    await render();
+    expect(shownSkills()).toEqual(["skill-1", "skill-2", "skill-3", "skill-4"]);
+    // the Learn from use row stays at the top of the card
+    const card = skillsCard();
+    const more = card.querySelector<HTMLButtonElement>("[data-skills-fold]")!;
+    expect(more.tagName).toBe("BUTTON");
+    expect(more.textContent).toBe("Show 5 more");
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    expect(more.getAttribute("data-skills-fold")).toBe("more");
+    await act(async () => { more.click(); });
+    expect(shownSkills()).toHaveLength(9);
+    const less = card.querySelector<HTMLButtonElement>("[data-skills-fold]")!;
+    expect(less.textContent).toBe("Show less");
+    expect(less.getAttribute("aria-expanded")).toBe("true");
+    // the control follows the last skill
+    expect(card.querySelector('[data-skill-row="skill-9"]')!.compareDocumentPosition(less) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await act(async () => { less.click(); });
+    expect(shownSkills()).toHaveLength(4);
+    expect(container.querySelectorAll("[data-skills-section] [data-bot-profile-add]")).toHaveLength(1);
+  });
+
+  it("#4104: two or four skills show no control; French counts the hidden ones", async () => {
+    skillsAnswer = { skills: many(2), staged: [], library: [], assignedSkills: [] };
+    await render();
+    expect(shownSkills()).toHaveLength(2);
+    expect(skillsCard().querySelector("[data-skills-fold]")).toBeNull();
+
+    act(() => root.unmount());
+    root = createRoot(container);
+    skillsAnswer = { skills: many(4), staged: [], library: [], assignedSkills: [] };
+    await render();
+    expect(shownSkills()).toHaveLength(4);
+    expect(skillsCard().querySelector("[data-skills-fold]")).toBeNull();
+
+    act(() => root.unmount());
+    root = createRoot(container);
+    setLocale("fr");
+    skillsAnswer = { skills: many(6), staged: [], library: [], assignedSkills: [] };
+    await render();
+    expect(skillsCard().querySelector("[data-skills-fold]")?.textContent).toBe("Afficher 2 de plus");
+  });
+
+  it("#4104: a blocked skill beyond the fourth is never hidden: it comes first with its Review changes", async () => {
+    const skills = many(9);
+    skills[6] = skill("blocked-one", { enabled: false, warnings: ["changed after review"] });
+    skillsAnswer = { skills, staged: [], library: [], assignedSkills: [] };
+    await render();
+    expect(shownSkills()).toEqual(["blocked-one", "skill-1", "skill-2", "skill-3"]);
+    expect(skillsCard().querySelector('[data-skill-warning="blocked-one"] button')?.textContent).toBe("Review changes");
+    expect(skillsCard().querySelector("[data-skills-fold]")?.textContent).toBe("Show 5 more");
+  });
+
+  it("#4104: a skill just added stays in view though it lands beyond the fourth", async () => {
+    skillsAnswer = { skills: many(5), staged: [], library: [{ name: "invoice-check", description: "Checks an invoice." }], assignedSkills: [] };
+    await render();
+    expect(shownSkills()).toEqual(["skill-1", "skill-2", "skill-3", "skill-4"]);
+    const add = container.querySelector<HTMLButtonElement>("[data-skills-section] [data-bot-profile-add]")!;
+    await act(async () => { add.focus(); add.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
+    await flush();
+    await act(async () => { document.querySelector<HTMLElement>('[data-bot-profile-add-item="library"]')!.click(); });
+    await flush();
+    skillsAnswer = { skills: [...many(5), skill("invoice-check", { origin: "library" })], staged: [], library: [], assignedSkills: ["invoice-check"] };
+    await act(async () => { container.querySelector<HTMLElement>('[data-skills-add="invoice-check"]')!.click(); });
+    await flush();
+    await flush();
+    expect(shownSkills()).toContain("invoice-check");
+    expect(shownSkills()).toHaveLength(4);
+    expect(skillsCard().querySelector("[data-skills-fold]")?.textContent).toBe("Show 2 more");
+  });
+
   it("#3400: To review lists each proposal, decided in place on the chat's card, or one row when none waits", async () => {
     const opened: unknown[] = [];
     skillsAnswer = {

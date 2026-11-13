@@ -267,6 +267,30 @@ const skills = [
   { name: "competitor-watch", description: "Follows a list of competitors and flags what changed.", enabled: false, source: "taught", warnings: ["Uses the browser on every run"] },
   { name: "citation-format", description: "Formats every citation in one house style.", enabled: true, source: "imported", warnings: [] },
 ];
+/** ?skills=two|four|nine|blocked: a bot with that many skills on its Skills
+ * card (#4104, the fold after four); "blocked" is nine with one changed after
+ * its review in seventh place. Fictional names only. */
+const SKILLS = ((value) => (value === "two" || value === "four" || value === "nine" || value === "blocked" ? value : null))(params.get("skills"));
+const MORE_SKILLS = [
+  { name: "inbox-sort", description: "Sorts new mail into the right folders.", enabled: true, source: "taught", warnings: [] },
+  { name: "agenda-prep", description: "Prepares the agenda from last week's notes.", enabled: true, source: "imported", warnings: [] },
+  { name: "glossary", description: "Keeps the team's words in one list.", enabled: true, source: "taught", warnings: [] },
+  { name: "release-notes", description: "Drafts release notes from the merged changes.", enabled: true, source: "imported", warnings: [] },
+  { name: "travel-plan", description: "Plans a trip within the travel policy.", enabled: true, source: "taught", warnings: [] },
+  { name: "survey-digest", description: "Sums up survey answers in five lines.", enabled: true, source: "imported", warnings: [] },
+];
+function skillList() {
+  const plain = [...skills.filter((skill) => skill.warnings.length === 0), ...MORE_SKILLS];
+  if (SKILLS === "two") return plain.slice(0, 2);
+  if (SKILLS === "four") return plain.slice(0, 4);
+  if (SKILLS === "nine") return plain.slice(0, 9);
+  if (SKILLS === "blocked") {
+    const list = plain.slice(0, 9);
+    list[6] = { name: "vendor-compare", description: "Compares two vendor quotes side by side.", enabled: false, source: "taught", warnings: ["changed after review"] };
+    return list;
+  }
+  return skills;
+}
 const systemPrompt = {
   sections: [
     { id: "identity", label: "Identity", text: "You are Scout, Research. Finds sources and summarizes them.", bytes: 61 },
@@ -368,7 +392,7 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
   if (path === `${bots}/analytics` && search.get("view") === "breakdown") return json(breakdown(search.get("period") ?? "30", Number(search.get("offset") ?? "0")));
   if (path === `${bots}/proactive-metrics`) return json(proactiveMetrics([7, 30, 90].includes(Number(search.get("days"))) ? Number(search.get("days")) : 7));
   if (path === `${bots}/analytics`) return json(analytics([7, 30, 90].includes(Number(search.get("days"))) ? Number(search.get("days")) : 30));
-  if (path === `${bots}/skills`) return json({ skills, staged: [{ id: "st1", name: "pricing-check", gist: "Compares a quote with the last three prices.", action: "create", sha256: "a".repeat(64), card: { threadId: "th-gallery", requestId: "rq-gallery", messageId: "m-gallery" } }], library: [{ name: "invoice-review", description: "Reviews an invoice line by line." }, { name: "status-digest", description: "Digests a long thread into five lines." }], assignedSkills: ["meeting-notes"] });
+  if (path === `${bots}/skills`) return json({ skills: skillList(), staged: [{ id: "st1", name: "pricing-check", gist: "Compares a quote with the last three prices.", action: "create", sha256: "a".repeat(64), card: { threadId: "th-gallery", requestId: "rq-gallery", messageId: "m-gallery" } }], library: [{ name: "invoice-review", description: "Reviews an invoice line by line." }, { name: "status-digest", description: "Digests a long thread into five lines." }], assignedSkills: ["meeting-notes"] });
   if (path === "/api/org-library/skills") return json({ organization: { name: "Northwind Studio" }, skills: [
     { installId: "ins1", packageName: "northwind-research", publisher: "Northwind Studio", release: "1.2.0", name: "meeting-notes", description: "Turns a transcript into decisions and next steps.", added: true },
     { installId: "ins2", packageName: "northwind-research", publisher: "Northwind Studio", release: "1.2.0", name: "vendor-brief", description: "One page brief on a vendor from public sources.", added: false },

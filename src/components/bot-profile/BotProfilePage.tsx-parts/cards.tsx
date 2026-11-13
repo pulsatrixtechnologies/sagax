@@ -8,7 +8,6 @@ import { useStore, type Bot, type BotSettingsSection } from "@/state/store";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { cn } from "@/lib/cn";
-import { SHOW_MORE_ROW } from "@/lib/grouped-card";
 import { useBotInboundMailState } from "@/lib/bot-inbound-mail";
 import { useReachMe } from "@/lib/reach-me";
 import { loadMessagesSetup } from "@/lib/mac-messages-setup";
@@ -28,6 +27,7 @@ import { ProposalStatus } from "../../bot-settings/ProposalStatus";
 import { TeamVaultForm, teamVaultLine, useTeamBotVault } from "../../bot-settings/TeamBotVaultSection";
 import { BOT_SECTIONS } from "../../bot-settings/sections";
 import { SlackSection } from "../../bot-settings/SlackSection";
+import { ShowMoreFold } from "../../ShowMoreFold";
 import { BotEmailAddress } from "../../bot-settings/BotEmailAddress";
 import { BotReachMe } from "../../bot-settings/BotReachMe";
 import { AddMenu } from "./AddMenu";
@@ -298,7 +298,6 @@ export function AccountsCard({ bot, onEngine, derived, vault }: {
   const { servers, error: serversError, refresh } = useMcpServers();
   const logins = useTeamBotVault(bot.id, vault);
   const [adding, setAdding] = useState(false);
-  const [unfolded, setUnfolded] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (adding) firstFieldRef.current?.focus(); }, [adding]);
@@ -422,11 +421,6 @@ export function AccountsCard({ bot, onEngine, derived, vault }: {
     );
   }
   const empty = Boolean(data) && rows.length === 0 && !adding;
-  // #4075: a long list shows its first rows (the engine first), then one
-  // "Show N more" line that unfolds the rest in place and folds it back.
-  const total = rows.length + 1;
-  const foldable = total > ACCESS_ROWS_SHOWN;
-  const shownRows = foldable && !unfolded ? rows.slice(0, ACCESS_ROWS_SHOWN - 1) : rows;
 
   const add = (
     <AddMenu
@@ -467,18 +461,9 @@ export function AccountsCard({ bot, onEngine, derived, vault }: {
             state={t("botProfile.engine")}
             action={<button type="button" data-bot-profile-action="engine" onClick={onEngine} className={cn(PILL, "shrink-0")}>{t("botProfile.manage")}</button>}
           />
-          {shownRows}
-          {foldable && (
-            <button
-              type="button"
-              data-bot-profile-accounts-fold={unfolded ? "less" : "more"}
-              aria-expanded={unfolded}
-              onClick={() => setUnfolded((open) => !open)}
-              className={SHOW_MORE_ROW}
-            >
-              {unfolded ? t("botProfile.accounts.showLess") : t("botProfile.accounts.showMore", { count: total - ACCESS_ROWS_SHOWN })}
-            </button>
-          )}
+          {/* #4075: a long list shows its first rows (the engine first), then
+              the shared "Show N more" line that unfolds the rest in place. */}
+          <ShowMoreFold items={rows} shown={ACCESS_ROWS_SHOWN - 1} render={(row) => row} toggleAttr="data-bot-profile-accounts-fold" />
           {empty && (
             <div data-bot-profile-accounts-empty="">
               <CardRow rowId="accounts-empty" icon={<Plug />} label={t("botProfile.accounts.emptyTitle")} state={t("botProfile.accounts.emptyLine")} action={add} />

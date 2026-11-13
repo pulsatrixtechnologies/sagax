@@ -18508,8 +18508,8 @@
       "access.notice.failedMessage": "b37c4d9a677eccf6d1fc89fc12f0fcbb88cc44af6382053bc5cc368c8b9d02ff",
       "access.notice.resolved": "e88d993fe882c17154f5c6b004dc20e8ed006341d17289d5be6b570f364e09f9",
       "access.notice.failedMessages": "241c6848bf5a25166fda265986563fa80944d17eadc897e5aacc8ab256decfb2",
-      "botProfile.accounts.showMore": "e372f20a52883cff2eb03f97aba6383ccd70805457f928bba33da9129c405739",
-      "botProfile.accounts.showLess": "94ea9b1d33a02975ea6b71d6cf87d461a48de07869c047b5daeb1654e9d539f8"
+      "fold.showMore": "e372f20a52883cff2eb03f97aba6383ccd70805457f928bba33da9129c405739",
+      "fold.showLess": "94ea9b1d33a02975ea6b71d6cf87d461a48de07869c047b5daeb1654e9d539f8"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

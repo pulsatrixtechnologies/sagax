@@ -74,8 +74,8 @@ export interface UsageLine {
   value: string;
 }
 
-/** The second level's figures: one line per window of each plan (its name
- * and plan, the window, the percent used, when it resets). */
+/** The second level's figures: one row per window of each plan: its name and
+ * plan, then the window and when it resets, and the percent used. */
 export function usageLines(
   rows: readonly PlanRow[],
   labels: { weekly: string; fiveHour: string; used: (percent: number) => string; resetsIn: (when: string) => string },
@@ -88,12 +88,14 @@ export function usageLines(
     for (const [key, label, window] of [["weekly", labels.weekly, row.weekly], ["five-hour", labels.fiveHour, row.fiveHour]] as const) {
       if (!window.available || window.usedPercent == null) continue;
       const when = formatResetDistance(window.resetsAt, now);
+      // #4157: the engine and its plan on the first line, the window and
+      // its reset on the second; the window is never the part that is cut
       lines.push({
         key: `${row.id}:${key}`,
         planId: row.id,
         planName: name,
-        label: `${name} · ${label}`,
-        subtitle: when ? labels.resetsIn(when) : undefined,
+        label: name,
+        subtitle: when ? `${label} · ${labels.resetsIn(when)}` : label,
         value: labels.used(Math.round(Math.min(100, Math.max(0, window.usedPercent)))),
       });
     }

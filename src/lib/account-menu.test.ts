@@ -22,12 +22,12 @@ describe("the avatar menu's Usage", () => {
     expect(usagePercent([row({ state: "no-windows" })])).toBeNull();
   });
 
-  it("lists each window with its plan and its reset", () => {
+  it("lists each window under its plan, the window and its reset on the second line (#4157)", () => {
     const now = Date.parse("2026-10-16T00:00:00Z");
     const lines = usageLines([row({ weekly: open(42, "2026-10-18T03:00:00Z"), fiveHour: open(5) })], labels, now);
     expect(lines).toEqual([
-      { key: "claude:weekly", planId: "claude", planName: "Claude Max", label: "Claude Max · Weekly", subtitle: "resets in 2d 3h", value: "42% used" },
-      { key: "claude:five-hour", planId: "claude", planName: "Claude Max", label: "Claude Max · 5-hour", subtitle: undefined, value: "5% used" },
+      { key: "claude:weekly", planId: "claude", planName: "Claude Max", label: "Claude Max", subtitle: "Weekly · resets in 2d 3h", value: "42% used" },
+      { key: "claude:five-hour", planId: "claude", planName: "Claude Max", label: "Claude Max", subtitle: "5-hour", value: "5% used" },
     ]);
   });
 });

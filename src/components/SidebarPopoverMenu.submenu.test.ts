@@ -77,7 +77,7 @@ describe("a second level in the sidebar's popover menu", () => {
     const sub = document.querySelector<HTMLElement>('[data-submenu="tools"]')!;
     const automations = sub.querySelector<HTMLButtonElement>('[data-menu-key="routines"]')!;
     expect(automations.getAttribute("data-tour")).toBe("nav-automations");
-    expect(automations.className).toContain("bg-selected");
+    expect(automations.className).toContain("bg-menu-active");
   });
 
   it("opens with the right arrow and closes with the left arrow", () => {

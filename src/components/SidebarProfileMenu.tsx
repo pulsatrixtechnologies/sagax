@@ -346,7 +346,7 @@ export function profileMenuItems(input: {
         } : {}),
       };
     }),
-    ...(input.monthCost !== null ? [{ key: "month-cost", label: t("sidebar.account.monthCost"), value: input.monthCost, info: true }] : []),
+    ...(input.monthCost !== null ? [{ key: "month-cost", label: t("sidebar.account.monthCost"), value: input.monthCost, info: true, foot: true }] : []),
   ];
   const help: SidebarSubmenuEntry[] = [
     { key: "shortcuts", label: t("sidebar.menu.shortcuts"), icon: <Keyboard size={16} />, trailing: input.shortcutsTrailing, onSelect: input.handlers.onShortcuts },
@@ -410,7 +410,6 @@ export function profileMenuItems(input: {
           label: t("sidebar.account.switchAccount"),
           icon: <ArrowLeftRight size={18} />,
           submenu: accountEntries,
-          submenuAlign: "bottom" as const,
           submenuWidth: 228,
           onSelect: () => {},
         }] : [])
@@ -419,7 +418,6 @@ export function profileMenuItems(input: {
           label: t("sidebar.account.switchOrganization"),
           icon: <ArrowLeftRight size={18} />,
           submenu: switching,
-          submenuAlign: "bottom" as const,
           submenuWidth: 228,
           onSelect: () => {},
         }] : [])),
@@ -489,7 +487,7 @@ export function profileMenuItems(input: {
           : t("planUsage.used", { used: input.usagePercent }),
       submenu: [
         ...usage,
-        { key: "view-usage", label: t("sidebar.account.viewUsage"), separatorBefore: usage.length > 0, onSelect: input.handlers.onViewUsage },
+        { key: "view-usage", label: t("sidebar.account.viewUsage"), separatorBefore: usage.length > 0, foot: true, onSelect: input.handlers.onViewUsage },
       ],
       submenuWidth: 228,
       onSelect: () => {},
@@ -519,7 +517,6 @@ export function profileMenuItems(input: {
       icon: <Wrench size={18} />,
       active: tools.some((entry) => entry.active),
       submenu: tools,
-      submenuAlign: "bottom" as const,
       onSelect: () => {},
     }] : []),
     ...lower,

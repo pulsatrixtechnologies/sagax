@@ -17977,7 +17977,6 @@
       "pages.designSystem.intro": "8d89db616f49464c2377cfeb1c4c973badec335a8a0c04f5a50feb51c3eabf36",
       "pages.designSystem.own": "54b26f7d3d0ddc663e4c70e3b258a424af7930131b8c43384b0e9086f2a8b32a",
       "pages.designSystem.remove": "7bcbab6f4c593d65d2660c838acac84a545af6cfcb288f1ffb16cdff715765f3",
-      "pages.export": "ec24e6845724f062994d7b53ff4f5b911842f4ab6212e05f3ebe9b4d43d2445c",
       "pages.editor.designHint": "8f3052cc11a3d91b26a49ac6067623c8067454d59764c9df3acc830e293ed7f4",
       "connectApps.market.official.cursor": "c434154ed293e2fb140a231047046aab83877cd75de511e3f7b63784a41fa0cc",
       "connectApps.plugin.converted.title": "94cacca6f125e6e37539f751f6c95783c4e367bcdafc6bd81e8d88a2994e32ad",
@@ -18781,7 +18780,8 @@
       "pages.caps.askUse": "a43cad489abfbe919d565191509c070f1011209d4faa39dcdbac355f0c0c9669",
       "pages.caps.ownUse": "ff14b891f2e3478fd84fb6e2a544045d0f849fa1608159d33e5781afd6d63eaf",
       "pages.caps.titleDo": "33162b13cfc9906a05cbf2ef020f1c3f734bd9a5a96a5fd3412dce587e9ba653",
-      "pages.caps.does": "d5a5abac819d22866b473ce6e7a373adf331cb361e76bbd399be60514277a1a0"
+      "pages.caps.does": "d5a5abac819d22866b473ce6e7a373adf331cb361e76bbd399be60514277a1a0",
+      "pages.download": "d6eafe82359100423c93c5ce53c352c1b51ca1e699215fcec3f5c5dd9bf12d24"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

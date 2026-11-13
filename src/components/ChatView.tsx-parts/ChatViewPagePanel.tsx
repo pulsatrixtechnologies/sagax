@@ -1,5 +1,5 @@
 import type { Dispatch, RefObject } from "react";
-import { AppWindow, MessageSquare, PanelLeftClose } from "lucide-react";
+import { AppWindow } from "lucide-react";
 import { BotAvatar } from "../Avatar";
 import { Composer } from "../Composer";
 import { PageBotStatus, pageBotStatusLine } from "../PageComposerParts";
@@ -98,24 +98,17 @@ export function ChatViewPagePanel({
               if (!openPage.botId || !openPage.threadId) return;
               void openPageAt({ pageId: openPage.pageId, botId: openPage.botId, threadId: openPage.threadId, title: openPage.title ?? "" }, "window");
             }} />
-            {/* Sagax richer control: optional side transcript (Grok canvas
-                chat-pane analogue). Default remains measured stage. */}
-            {pageChatSurface === "stage" ? (
-              <MenuItem
-                icon={<MessageSquare size={14} />}
-                label={t("pages.showConversation")}
-                disabled={!pageChatWide}
-                onClick={() => { close(); setPageChatSurface("beside"); }}
-              />
-            ) : (
-              <MenuItem
-                icon={<PanelLeftClose size={14} />}
-                label={t("pages.hideConversation")}
-                onClick={() => { close(); setPageChatSurface("stage"); }}
-              />
-            )}
           </>
         )}
+        // The optional side transcript (the reference's canvas chat pane) is
+        // the top bar's chat toggle (#4099); the page still covers the chat
+        // by default, and on a narrow host it can only cover it, so the
+        // toggle is not drawn there (PageSurface hides it while disabled).
+        chat={{
+          open: pageChatSurface !== "stage",
+          disabled: !pageChatWide,
+          onToggle: () => setPageChatSurface(pageChatSurface === "stage" ? "beside" : "stage"),
+        }}
         footer={pageStage ? (
           <div
             ref={composerDockRef}

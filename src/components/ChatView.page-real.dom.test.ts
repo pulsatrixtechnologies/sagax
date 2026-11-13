@@ -248,17 +248,28 @@ describe("a page opened from its card in the real ChatView (stage default)", () 
   });
 });
 
+// the chat toggle of the page's top bar (#4099), no longer in « ⋯ »
+const chatToggle = () => container.querySelector<HTMLButtonElement>("[data-page-header] button[data-page-chat-toggle]");
+
 describe("the optional side conversation", () => {
   async function showConversation() {
-    await act(async () => { container.querySelector<HTMLButtonElement>("button[data-page-more]")!.click(); });
-    const item = [...document.querySelectorAll<HTMLElement>("[role=menuitem]")].find((node) => node.textContent?.includes(t("pages.showConversation")));
-    expect(item).toBeDefined();
-    await act(async () => { item!.click(); });
+    expect(chatToggle()?.getAttribute("aria-label")).toBe(t("pages.showConversation"));
+    await act(async () => { chatToggle()!.click(); });
   }
 
-  it("puts the transcript beside the page on a wide host, with the composer in it", async () => {
+  it("is in the top bar, not in « ⋯ »", async () => {
+    await openTheCard();
+    expect(chatToggle()).not.toBeNull();
+    await act(async () => { container.querySelector<HTMLButtonElement>("button[data-page-more]")!.click(); });
+    const items = [...document.querySelectorAll<HTMLElement>("[role=menuitem]")].map((node) => node.textContent ?? "");
+    expect(items.some((text) => text.includes(t("pages.showConversation")) || text.includes(t("pages.hideConversation")))).toBe(false);
+  });
+
+  it("puts the transcript beside the page on a wide host, with the composer in it, and the same button hides it", async () => {
     await openTheCard();
     await showConversation();
+    expect(chatToggle()?.getAttribute("aria-pressed")).toBe("true");
+    expect(chatToggle()?.getAttribute("aria-label")).toBe(t("pages.hideConversation"));
     expect(panel()?.getAttribute("data-page-surface-mode")).toBe("beside");
     expect(host().hasAttribute("data-page-beside")).toBe(true);
     expect(chatColumn().hasAttribute("inert")).toBe(false);
@@ -268,6 +279,9 @@ describe("the optional side conversation", () => {
     // the page itself is not covered by the column (siblings, page first)
     expect(panel()!.className).toContain("order-1");
     expect(chatColumn().className).toContain("order-2");
+    await act(async () => { chatToggle()!.click(); });
+    expect(panel()?.getAttribute("data-page-surface-mode")).toBe("stage");
+    expect(chatToggle()?.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("falls back to covering when this host (a split pane) gets narrow, then comes back", async () => {
@@ -281,13 +295,12 @@ describe("the optional side conversation", () => {
     expect(host().hasAttribute("data-page-beside")).toBe(true);
   });
 
-  it("is offered but disabled when the host is narrow (700 px window, 390 px phone)", async () => {
+  it("is not offered when the host is narrow (700 px window, 390 px phone): hidden, not greyed", async () => {
     for (const width of [700, 390]) {
       await resize(width);
       await openTheCard();
-      await act(async () => { container.querySelector<HTMLButtonElement>("button[data-page-more]")!.click(); });
-      const item = [...document.querySelectorAll<HTMLButtonElement>("[role=menuitem]")].find((node) => node.textContent?.includes(t("pages.showConversation")));
-      expect(item?.disabled).toBe(true);
+      expect(chatToggle()).toBeNull();
+      expect(document.querySelector("[data-page-download]")).not.toBeNull();
       expect(host().hasAttribute("data-page-cover")).toBe(true);
       await act(async () => { closePagePanel(); });
     }
@@ -342,9 +355,7 @@ describe("split views and live version cards", () => {
     };
     await draw();
     await openTheCard();
-    await act(async () => { container.querySelector<HTMLButtonElement>("button[data-page-more]")!.click(); });
-    const item = [...document.querySelectorAll<HTMLElement>("[role=menuitem]")].find((node) => node.textContent?.includes(t("pages.showConversation")));
-    await act(async () => { item!.click(); });
+    await act(async () => { chatToggle()!.click(); });
     const chip = container.querySelector<HTMLElement>('[data-testid="bot-exchange-chip"]');
     expect(chip).not.toBeNull();
     const opener = chip!.matches("button") ? chip! : chip!.querySelector<HTMLElement>("button")!;

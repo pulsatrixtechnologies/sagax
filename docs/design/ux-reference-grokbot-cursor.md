@@ -1033,12 +1033,32 @@ captures `scripts/capture/usage-page.mjs`.
 
 Une page ouverte couvre la conversation (le fil reste monté dessous) : × « Retour au
 fil » en haut à gauche, pastille de titre centrée avec l'icône du type (clic pour
-renommer), Partager en pilule à droite, « … » pour le reste. Le compositeur flottant se
+renommer), puis à droite, dans l'ordre : le bouton de conversation, Télécharger,
+« … » pour le reste, Plein écran et Partager en pilule. Le compositeur flottant se
 pose sur la page avec le même texte (« Message » et le nom du bot). Contenu par défaut :
 grand titre, un paragraphe d'état daté, onglets texte soulignés avec compte, grille de
 statistiques (grand chiffre, libellé, une ligne de couleur seulement pour un état),
 cartes de graphiques sans ombre. Voir `docs/code/pages.md` « Page view » et « Bot content has a
 default theme ».
+
+**Barre du haut, bouton de conversation et Télécharger (#4099, 2026-11-13).** La
+version installée de la référence (relevée en lecture seule, valeurs seulement) n'a
+pas encore ces deux boutons sur sa page : ses barres d'en-tête dessinent chaque action
+d'icône avec un seul bouton rond d'icône, au même style que la fermeture. On suit
+donc la capture de JC et la conception de #4099 : deux boutons ronds d'icône du style
+de la barre (36 px, bordure fine, fond surélevé, icône 17 px, 8 px entre deux
+boutons), à droite, avant « … », Plein écran et Partager. Le bouton de conversation
+met le fil à côté de la page et l'enlève (même geste qu'avant dans « … ») ; il dit
+son état (`aria-pressed`, « Afficher la conversation » ou « Masquer la conversation »)
+et n'est pas affiché quand l'hôte est trop étroit pour mettre le fil à côté (la page
+ne peut alors que couvrir : une option impossible est masquée, jamais grisée). Il
+n'existe que sur une page ouverte par-dessus sa conversation, jamais dans la fenêtre
+propre d'une page. Télécharger enregistre la version affichée (l'export existant, en HTML) ;
+il ne figure plus dans « … », sauf sur une barre étroite (moins de 34rem, un
+téléphone) : là il passe dans « … » pour laisser sa place à la pastille de titre, un
+seul endroit par largeur. La barre est une grille de trois colonnes : les côtés ne
+passent jamais sous leurs boutons et se partagent le reste, la pastille de titre reste
+centrée tant qu'elle peut et se coupe avant de passer sous un bouton (390 px compris).
 
 ### 2.13 Aperçu d'un fichier
 

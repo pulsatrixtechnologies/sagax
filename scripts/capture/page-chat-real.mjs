@@ -10,7 +10,7 @@
  * placeholder and accessible name, the context the send carried, the scroll
  * place and focus after closing) next to the PNGs.
  *
- *   node scripts/capture/page-chat-real.mjs [--tree DIR] [--prefix after] [--out DIR] [--port N]
+ *   node scripts/capture/page-chat-real.mjs [--tree DIR] [--prefix after] [--out DIR] [--port N] [--only NAME_PREFIX]
  *
  * --tree serves another checkout of the app (for example a worktree at the
  * lot's base commit, with this gallery copied in) to take "before" shots of
@@ -37,7 +37,8 @@ const PREVIEW = (dark, fr) => `<!doctype html><html lang="${fr ? "fr" : "en"}"><
 ${Array.from({ length: 6 }, (_, i) => `<h2>Section ${i + 1}</h2><p>${(fr ? "Chiffres et notes synthétiques. " : "Synthetic figures and notes. ").repeat(18)}</p>`).join("")}</body></html>`;
 
 // width x height: Grok's measured macOS window (1338 x 809), its 700 px
-// narrow state, and a 390 px phone.
+// narrow state, and a 390 px phone; then the top bar's matrix (#4099):
+// 1280 and 390, French and English, light and dark.
 const shots = [
   { name: "desktop-dark-chat", skin: "pulsatrix", width: 1338, height: 809, open: false },
   { name: "desktop-dark-stage", skin: "pulsatrix", width: 1338, height: 809, open: "stage", send: true, close: true },
@@ -47,7 +48,16 @@ const shots = [
   { name: "w700-dark-stage", skin: "pulsatrix", width: 700, height: 809, open: "stage", close: true },
   { name: "w390-light-stage", skin: "daylight", width: 390, height: 844, open: "stage", send: true, close: true },
   { name: "w390-dark-stage", skin: "pulsatrix", width: 390, height: 844, open: "stage" },
+  ...["en", "fr"].flatMap((lang) => ["daylight", "pulsatrix"].flatMap((skin) => {
+    const scheme = skin === "daylight" ? "light" : "dark";
+    return [
+      { name: `topbar-w1280-${scheme}-stage-${lang}`, skin, width: 1280, height: 800, open: "stage", lang },
+      { name: `topbar-w1280-${scheme}-beside-${lang}`, skin, width: 1280, height: 800, open: "beside", lang },
+      { name: `topbar-w390-${scheme}-stage-${lang}`, skin, width: 390, height: 844, open: "stage", lang },
+    ];
+  })),
 ];
+const only = arg("--only", "");
 
 async function waitForServer(url, ms = 120_000) {
   const start = Date.now();
@@ -74,12 +84,14 @@ try {
   const { chromium } = await import(process.env.SAGAX_VERIFY_PLAYWRIGHT || "playwright");
   await mkdir(outDir, { recursive: true });
   browser = await chromium.launch({ executablePath: chrome, headless: true });
-  for (const shot of shots) {
+  for (const shot of shots.filter((entry) => !only || entry.name.startsWith(only))) {
     const page = await browser.newPage({ viewport: { width: shot.width, height: shot.height }, deviceScaleFactor: 2 });
+    // a cold Vite on a busy machine takes a while to bundle the gallery
+    page.setDefaultTimeout(120_000);
     const errors = [];
     page.on("pageerror", (error) => errors.push(String(error.message ?? error)));
     await page.route("**/pages/preview/**", (route) => route.fulfill({ status: 200, contentType: "text/html", body: PREVIEW(shot.skin !== "daylight", shot.lang === "fr") }));
-    await page.goto(`${base}?skin=${shot.skin}&lang=${shot.lang ?? "en"}`, { waitUntil: "networkidle" });
+    await page.goto(`${base}?skin=${shot.skin}&lang=${shot.lang ?? "en"}`, { waitUntil: "networkidle", timeout: 180_000 });
     await page.waitForSelector("[data-gallery-page-chat-real] [data-composer-dock] textarea");
     // the first card is v1 (older trees have no data-page-card-version)
     await page.waitForSelector('[data-page-card] [data-page-open]:not([disabled])');
@@ -102,14 +114,22 @@ try {
       await page.waitForSelector("[data-page-panel] iframe");
       await page.waitForTimeout(400);
       if (shot.open === "beside") {
-        await page.click("[data-page-more] > button");
-        const item = page.getByRole("menuitem", { name: /Show conversation|Afficher la conversation/ });
-        note.besideOffered = (await item.count()) > 0;
-        if (note.besideOffered) {
-          await item.click();
+        // the top bar's chat toggle (#4099); an older tree has it in « ⋯ »
+        const toggle = page.locator("[data-page-header] [data-page-chat-toggle]:not([disabled])");
+        if (await toggle.count()) {
+          note.besideOffered = true;
+          await toggle.click();
           await page.waitForSelector("main[data-page-beside]");
         } else {
-          await page.keyboard.press("Escape");
+          await page.click("button[data-page-more]");
+          const item = page.getByRole("menuitem", { name: /Show conversation|Afficher la conversation/ });
+          note.besideOffered = (await item.count()) > 0;
+          if (note.besideOffered) {
+            await item.click();
+            await page.waitForSelector("main[data-page-beside]");
+          } else {
+            await page.keyboard.press("Escape");
+          }
         }
         await page.waitForTimeout(300);
       }
@@ -137,6 +157,10 @@ try {
           placeholder: input?.getAttribute("placeholder") ?? null,
           ariaLabel: input?.getAttribute("aria-label") ?? null,
           closeLabel: document.querySelector("[data-page-close]")?.getAttribute("aria-label") ?? null,
+          // the top bar, left to right: what each control is and where it sits
+          topBar: [...(document.querySelector("[data-page-header]")?.querySelectorAll("button, [data-page-title]") ?? [])]
+            .filter((node) => node.getClientRects().length > 0)
+            .map((node) => ({ label: node.getAttribute("aria-label") ?? node.textContent?.trim() ?? "", ...rect(node) })),
         };
       });
     }

@@ -36,6 +36,13 @@
   }
 }
 
+/* The keyboard focus ring only (#4156): an element focused by a mouse
+   click carries `data-pointer-focus` (src/lib/input-modality.ts, one rule
+   for the app) until the keyboard moves, so every `focus-visible:` utility
+   skips it. A button that opens a menu or a popover shows its soft pressed
+   fill after a click, never a ring; Tab and the arrow keys still draw it. */
+@custom-variant focus-visible (&:focus-visible:not([data-pointer-focus]));
+
 /* Inline mentions keep the surrounding font metrics, including in the
    textarea mirror. No padding/border/font-weight changes that shift the caret. */
 .mention-highlight {
@@ -452,6 +459,13 @@
   --color-sidebar-circle-hover: color-mix(in srgb, var(--color-sidebar-ink) 6%, var(--sidebar-circle-fill, var(--circle-fill, var(--color-raised))));
   --color-sidebar-circle-ring: var(--sidebar-circle-ring, var(--circle-ring, color-mix(in srgb, var(--color-sidebar-ink) 6%, transparent)));
   --color-sidebar-circle-glyph: var(--sidebar-circle-glyph, var(--circle-glyph, color-mix(in srgb, var(--color-sidebar-ink) 90%, transparent)));
+  /* The menu family's row fills (#4157), measured on the reference: a 6%
+     hovered row and an 8% open or current row of the skin's ink, set per
+     skin context below. As utilities (`hover:bg-menu-hover`,
+     `bg-menu-active`) whose rule reads `var(--menu-row-…)` where the row
+     sits; `bg-hover` and `bg-selected` compile to the generic grey. */
+  --color-menu-hover: var(--menu-row-hover);
+  --color-menu-active: var(--menu-row-active);
 }
 
 /* The text color that reads on the accent fill. It lives on :root (each skin
@@ -536,6 +550,25 @@
   --color-popover-accent: var(--color-accent-text);
   --color-popover-hairline: var(--color-hairline);
   --color-popover-panel: var(--color-panel);
+  /* The menu family (#4157): the reference's menu in its dark appearance,
+     measured in the owner's configuration and mixed from the skin's own
+     ink so every skin gets them: the raised fill, a 0.5px hairline at 10%
+     of the ink, glyphs at 64%, a 6% hovered row, an 8% open or current
+     row, no shadow. The light skins below take the light appearance. */
+  --menu-fill: var(--color-raised);
+  --menu-hairline: color-mix(in srgb, var(--color-ink) 10%, transparent);
+  --menu-glyph: color-mix(in srgb, var(--color-ink) 64%, transparent);
+  --menu-row-hover: color-mix(in srgb, var(--color-ink) 6%, transparent);
+  --menu-row-active: color-mix(in srgb, var(--color-ink) 8%, transparent);
+  --menu-shadow: none;
+}
+
+/* The reference's light appearance: a 12% hairline, glyphs at 66%, and its
+   popup shadow (three soft layers at 7% of the ink). */
+:is([data-skin="pulsatrix-light"], [data-skin="atelier"], [data-skin="lagoon"], [data-skin="linen"], [data-skin="daylight"], [data-skin="retro98"], [data-skin="meadow"]) {
+  --menu-hairline: color-mix(in srgb, var(--color-ink) 12%, transparent);
+  --menu-glyph: color-mix(in srgb, var(--color-ink) 66%, transparent);
+  --menu-shadow: 0 3px 8px 0 color-mix(in srgb, var(--color-ink) 7%, transparent), 0 2px 5px 0 color-mix(in srgb, var(--color-ink) 7%, transparent), 0 1px 1px 0 color-mix(in srgb, var(--color-ink) 7%, transparent);
 }
 
 /* Worn by every floating surface: popovers, menus, pickers, sheets. A band
@@ -559,6 +592,42 @@
     --color-raised: var(--color-popover-hover);
     --color-raised-hover: var(--color-popover-hover);
     color: var(--color-popover-ink);
+  }
+  /* The menu family's surface (SidebarPopoverMenu: the sidebar's menus, the
+     account menu and its side cards; the other menus join it in #4183), worn with
+     `popover-surface`: the reference's fill, hairline and shadow. Its rows
+     take the reference's fills through `bg-menu-hover` and `bg-menu-active`. */
+  .menu-surface {
+    background-color: var(--menu-fill);
+    border: 0.5px solid var(--menu-hairline);
+    box-shadow: var(--menu-shadow);
+  }
+  .menu-divider {
+    background-color: var(--menu-hairline);
+  }
+  /* A card's rows that scroll under a pinned foot (Usage ›, #4157): the
+     scrollbar is invisible at rest, so the fold cuts through a row (its top
+     part shows, SidebarPopoverMenu's submenuRowsFold) and that part fades
+     out while more rows wait below; a hairline parts them from the foot. */
+  .menu-scroll[data-more="below"] {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
+  }
+  /* A row's glyph: 16px in the reference's 18px slot, a 1.5 stroke, in the
+     glyph ink rather than the text's. */
+  .menu-glyph {
+    display: flex;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    color: var(--menu-glyph);
+  }
+  .menu-glyph > svg {
+    width: 16px;
+    height: 16px;
+    stroke-width: 1.5;
   }
 }
 
@@ -2855,8 +2924,10 @@ body {
 }
 
 /* Keep focus visible after components clear the browser outline. These
-   unlayered rules outrank Tailwind utilities without needing !important. */
-:focus-visible {
+   unlayered rules outrank Tailwind utilities without needing !important.
+   Keyboard focus only: a focus that follows a mouse click is marked
+   (src/lib/input-modality.ts, #4156) and draws no ring. */
+:focus-visible:not([data-pointer-focus]) {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
@@ -2899,22 +2970,10 @@ body {
 .bot-profile-banner-top[data-bot-profile-banner-palette="neutral"] {
   --bot-profile-banner-color: #8e949e;
 }
-/* A sidebar group header focused by a click, or handed focus back after its
-   right-click menu, shows no frame; Tab and arrow keys still draw it. */
-[data-sidebar-section-header][data-pointer-focus]:focus-visible {
-  outline: none;
-}
-
-/* The footer buttons (the account menu, Connect apps) follow the same rule:
-   a click leaves them focused, and the next key would draw the ring. Tab
-   clears the mark and draws it. The account button's own pill carries the
-   ring, so the square outline around it is always off. */
-[data-pointer-focus]:focus-visible,
+/* The account button's own pill carries the keyboard ring, so the square
+   outline around the button is always off. */
 button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
   outline: none;
-}
-[data-sidebar-connect-apps][data-pointer-focus]:focus-visible {
-  box-shadow: none;
 }
 
 /* A question card takes focus only so A, B, C answer it once clicked
@@ -4882,7 +4941,7 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
   --color-hairline: color-mix(in srgb, var(--color-ink) 55%, transparent);
   --color-hairline-weak: color-mix(in srgb, var(--color-ink) 30%, transparent);
 }
-:root[data-contrast="high"] :focus-visible { outline: 2px solid var(--color-ink); outline-offset: 2px; }
+:root[data-contrast="high"] :focus-visible:not([data-pointer-focus]) { outline: 2px solid var(--color-ink); outline-offset: 2px; }
 /* Text size: the whole interface scales, so fixed pixel sizes follow. The
    desktop app zooms the window itself (data-zoom-native); this is the
    browser's fallback. */

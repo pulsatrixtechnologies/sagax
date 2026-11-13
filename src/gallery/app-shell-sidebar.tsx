@@ -12,7 +12,8 @@
  * #3576: ?hidden=N adds N bots the person hid from the sidebar; the sidebar
  * draws nothing for them (Settings > Appearance lists them).
  * #3624: ?scene=idle|background|open is the idle cost measure's window
- * (app-shell-scene.ts, scripts/capture/idle-cost.mjs). */
+ * (app-shell-scene.ts, scripts/capture/idle-cost.mjs).
+ * #4157: &engines=2|5 (with ?parity=1) fills the usage side card. */
 import { memo, StrictMode, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -69,6 +70,21 @@ if (parity) {
       : {}),
   };
 }
+/** The usage side card's made-up engines (#4093, #4157): the first is the
+ * one the reference comparison uses; the others carry a long plan name. */
+function usageEngines(count: number) {
+  const span = (used: number, hours: number) => ({ available: true, usedPercent: used, remainingPercent: 100 - used, resetsAt: new Date(Date.now() + hours * 3_600_000).toISOString() });
+  const engines = [
+    { id: "claude", name: "Claude", plan: "Max", weekly: span(64, 53), fiveHour: span(18, 3) },
+    { id: "grok", name: "Grok", plan: "SuperGrok Heavy", weekly: span(87, 56), fiveHour: span(12, 2) },
+    { id: "codex", name: "Codex", plan: "Business Enterprise Annual", weekly: span(100, 71), fiveHour: span(41, 4) },
+    { id: "gemini", name: "Gemini", plan: "Ultra", weekly: span(23, 120), fiveHour: span(5, 1) },
+    { id: "cursor", name: "Cursor", plan: "Pro Plus", weekly: span(56, 90), fiveHour: span(30, 3) },
+  ];
+  return engines.slice(0, Math.max(1, Math.min(engines.length, count))).map((engine) => ({
+    ...engine, driver: engine.id, ok: true, error: null, state: "windows", access: "subscription",
+  }));
+}
 const limitResetsAt = Date.now() + 95 * 60_000;
 const reply = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
 const realFetch = window.fetch.bind(window);
@@ -87,12 +103,10 @@ window.fetch = async (input, init) => {
       limit: credits ? { cause: "credits" } : { cause: "usage_limit", resetsAt: limitResetsAt } } });
   }
   if (scene && url.pathname.endsWith("/team-work")) return reply(sceneTeamWork("atlas", fr, Date.now()));
-  // #4093: the account menu's Usage › (a made-up plan, this month's cost)
-  if (parity && url.pathname === "/api/plan-usage") return reply({ providers: [{
-    id: "claude", name: "Claude", driver: "claude", plan: "Max", ok: true, error: null, state: "windows", access: "subscription",
-    weekly: { available: true, usedPercent: 64, remainingPercent: 36, resetsAt: new Date(Date.now() + 2.2 * 86_400_000).toISOString() },
-    fiveHour: { available: true, usedPercent: 18, remainingPercent: 82, resetsAt: new Date(Date.now() + 3 * 3_600_000).toISOString() },
-  }] });
+  // #4093: the account menu's Usage › (a made-up plan, this month's cost);
+  // #4157 &engines=2|5 adds engines, one with a long plan name, so the side
+  // card is seen with many rows in a short window
+  if (parity && url.pathname === "/api/plan-usage") return reply({ providers: usageEngines(Number(params.get("engines")) || 1) });
   if (parity && url.pathname === "/api/me/usage") return reply({ groups: [], total: { key: "total", label: "Total", turns: 212, costUsd: 48.27 } });
   if (url.pathname.startsWith("/api/")) return reply({});
   return realFetch(input, init);

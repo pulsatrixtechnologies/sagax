@@ -101,7 +101,8 @@ describe("SidebarSectionHeader", () => {
 
   it("draws the focus frame only for keyboard focus, never after a click", () => {
     const css = readFileSync("src/styles.css", "utf8");
-    expect(css).toMatch(/\[data-sidebar-section-header\]\[data-pointer-focus\]:focus-visible \{\s*outline: none;/);
+    // the app's one rule (#4156): the ring skips a focus marked as a click's
+    expect(css).toMatch(/\n:focus-visible:not\(\[data-pointer-focus\]\) \{\s*outline: 2px solid var\(--color-focus\);/);
   });
 
   it("retains the accessible attention summary when the heading cannot collapse", () => {

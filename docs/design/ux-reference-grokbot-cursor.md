@@ -1671,8 +1671,10 @@ typeface and its 15px chat prose both on. Its theme builder then adds two
 root overrides on top of the default stylesheet. With the typeface: the
 sidebar row's 10px from the portrait to the text (default 8), 1px between
 its two lines (default 0), 12px row and tile corners (default 10), the
-prose's 22px line and 18px bubble corners, 32px menu rows 6px apart (default
-30 and 4). With the typeface and 15px prose together: the menu's type at the
+prose's 22px line and 18px bubble corners, 32px menu rows with 6px from a
+row's glyph to its text (default 30 and 4; re-measured 2026-11-13, #4157:
+the 6px is the glyph's gap inside a row, the rows themselves are 2px
+apart). With the typeface and 15px prose together: the menu's type at the
 base size, 14/20 (default 13/18), 16px menu corners (default 12) and 10px
 row corners (default 6). The 15px prose flag alone sets the bubbles' 15px
 text and the group titles' 13/18 (default 12/16). Widths (sidebar, rail,
@@ -1733,19 +1735,57 @@ Rules that hold at every width:
   quiet circles. The bot chat, the group chat, the coding chat and the page
   chat use the one `Composer`, so they follow. Test:
   `src/components/ComposerControls.look.test.ts`.
-- Account menu (owner's configuration): opens above the avatar, aligned on
-  its start edge, at least 228px wide; 16px corners, 6px padding, 32px rows
-  6px apart, 14/20 type, 18px icons in a 20px slot, 10px row corners (the
-  reference's default is 12px corners, 30px rows 4px apart, 13/18, 6px row
-  corners; this app had that before). The reference's override is on its
-  root, so every menu takes these values: `SidebarPopoverMenu` draws every
-  sidebar menu with them. A waiting update is its first
+- Account menu (owner's configuration, re-measured 2026-11-13, #4157):
+  opens above the avatar, aligned on its start edge, at least 228px wide;
+  16px corners, 6px padding, 32px rows 2px apart with 8px inside each side,
+  6px from the glyph to the text, 14/20 type, 10px row corners (the
+  reference's default is 12px corners, 30px rows, 4px glyph gap, 13/18, 6px
+  row corners). Its surface: the elevated fill (#1f1f1f dark, #fff light), a
+  0.5px hairline at 10% of the ink in dark (12% in light), no shadow in dark
+  and three soft layers in light (0 3px 8px, 0 2px 5px, 0 1px 1px, each at 7%
+  of the ink); the text in the primary ink (#f5f5f5 dark, never pure white);
+  the glyphs in an 18px slot, grey at 64% of the ink in dark (66% in light),
+  smaller and lighter than the text (this app: 16px, a 1.5 stroke); a hovered
+  row fills at 6% of the ink, an open or current row at 8%; a divider is the
+  same 0.5px hairline, 8px in from the sides and 4px above and below. Before
+  #4157 this app drew a 15% outline, white 18px glyphs on a 2px stroke, rows
+  6px apart and a 17% grey hover. The values live once, in `src/styles.css`:
+  the `--menu-*` tokens per skin, `.menu-surface`, `.menu-glyph`,
+  `.menu-divider` and the `bg-menu-hover` / `bg-menu-active` utilities.
+  `SidebarPopoverMenu` draws the sidebar's menus with them (the account
+  menu and its side cards, the sidebar's section and foot menus). The
+  reference's override is on its root, so every menu should take these
+  values; the header's conversation menu (`ThreadMenu`) and the rows'
+  three-dots menus still draw their own surface and rows until #4183 moves
+  them onto the same classes. The account button, open or after a mouse
+  click, shows the reference's soft fill only, never an outline (#4156); the
+  focus ring is for keyboard focus, for every control of the app through one
+  rule (`src/lib/input-modality.ts` marks a focus that follows a click, and
+  the global ring and the `focus-visible:` variant skip it). A text field,
+  a text area, a select and an editable region are never marked: they keep
+  their ring on a click, as the browser treats them. A waiting update is its first
   row: "Update available" in the accent, in the menu's 14/20 regular, on a
   10px card (10px by 12px padding), then Install at 13/18. Then the usage
-  line with its percent (its side card, the same menu values, opens to the
-  right, 12px off the menu, its first row level with the
-  trigger row, at least 228px wide: one line per engine window with its reset
-  and percent, the month's cost, a hairline, View usage), the mobile app
+  line with its percent (its side card, the same menu values, at least
+  228px wide: one row per engine window, the engine and its plan on the
+  first line, the window and its reset on the second, the percent and the
+  star on one right edge; as wide as its longest row up to 400px or the
+  window less 24px, past which a line wraps inside its column, so a French
+  reset line never runs under its percent and a long plan is never cut;
+  the month's cost, a hairline, View usage). Rows are hovered at 6% of the
+  ink and open or current at 8% (`bg-menu-hover`, `bg-menu-active`). Every
+  side card (Usage, Help, Tools, Switch account) is placed as the
+  reference's submenu: 4px over its row's trailing edge, so it sits a little
+  over the menu, its top on the row's top, 12px from the window's sides and
+  bottom and, at the top, under the window's top bar (56px, so it never
+  covers the top bar's controls): shifted up near the bottom, flipped to the
+  other side when the right is full. Past the window's height only the
+  engines' rows scroll: the month's cost and View usage stay pinned as the
+  card's foot, a hairline parts them from the rows, and the rows end through
+  a row (60% of it shows) under a 20px fade, so the card never looks
+  complete with rows hidden (before
+  #4157: 12px off the menu, lower than its row, and the usage card ran past
+  a short window's bottom); the mobile app
   (shown once a public store link exists, `SAGAX_MOBILE_URL`; an option that
   cannot work stays hidden), Help (the reference's Support), Settings, Tools,
   a hairline, Switch account (the reference's Add account), Sign out (Log
@@ -1768,7 +1808,7 @@ Rules that hold at every width:
 
 Account menu at 900, 1280 and 1800 (the same at every width: the menu
 follows the sidebar's foot, not the window), owner's configuration: at least
-228px wide, 16px corners, rows 32px 6px apart with 10px corners, 14/20, the
+228px wide, 16px corners, rows 32px 2px apart with 10px corners, 14/20, the
 side card the same and at least 228px. Before #4093 the menu was 12px
 corners, rows 30px 2px apart with 6px corners, 13/18, and a waiting
 update was told by the foot's round button (and a second one beside the

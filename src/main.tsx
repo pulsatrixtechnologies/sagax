@@ -22,6 +22,7 @@ import { startRoutineAwayBeat } from "./lib/routine-away-beat";
 import { installAnimationPause } from "./lib/animation-pause";
 import { installConsoleRing } from "./lib/console-ring";
 import { installOverlayScrollbars } from "./lib/overlay-scrollbars";
+import { trackInputModality } from "./lib/input-modality";
 import { syncDesktopAppearance } from "./lib/desktop-appearance-sync";
 import { JoinPage, takeInviteTokenFromLocation } from "./pair/JoinPage";
 import { PageBoundary } from "./components/PageBoundary";
@@ -46,6 +47,8 @@ installAnimationPause();
 installConsoleRing();
 // Scrollbars draw over the content and fade when unused (styles.css).
 installOverlayScrollbars();
+// a mouse click never draws the keyboard focus ring (#4156)
+trackInputModality();
 
 // Slice 7: an "Open in Sagax" link survives the sign-in (/pair, Perspicax).
 rememberOpenThreadHash();

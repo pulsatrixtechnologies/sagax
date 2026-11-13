@@ -346,7 +346,7 @@ export function profileMenuItems(input: {
         } : {}),
       };
     }),
-    ...(input.monthCost !== null ? [{ key: "month-cost", label: t("sidebar.account.monthCost"), value: input.monthCost, info: true }] : []),
+    ...(input.monthCost !== null ? [{ key: "month-cost", label: t("sidebar.account.monthCost"), value: input.monthCost, info: true, foot: true }] : []),
   ];
   const help: SidebarSubmenuEntry[] = [
     { key: "shortcuts", label: t("sidebar.menu.shortcuts"), icon: <Keyboard size={16} />, trailing: input.shortcutsTrailing, onSelect: input.handlers.onShortcuts },
@@ -410,7 +410,6 @@ export function profileMenuItems(input: {
           label: t("sidebar.account.switchAccount"),
           icon: <ArrowLeftRight size={18} />,
           submenu: accountEntries,
-          submenuAlign: "bottom" as const,
           submenuWidth: 228,
           onSelect: () => {},
         }] : [])
@@ -419,7 +418,6 @@ export function profileMenuItems(input: {
           label: t("sidebar.account.switchOrganization"),
           icon: <ArrowLeftRight size={18} />,
           submenu: switching,
-          submenuAlign: "bottom" as const,
           submenuWidth: 228,
           onSelect: () => {},
         }] : [])),
@@ -489,7 +487,7 @@ export function profileMenuItems(input: {
           : t("planUsage.used", { used: input.usagePercent }),
       submenu: [
         ...usage,
-        { key: "view-usage", label: t("sidebar.account.viewUsage"), separatorBefore: usage.length > 0, onSelect: input.handlers.onViewUsage },
+        { key: "view-usage", label: t("sidebar.account.viewUsage"), separatorBefore: usage.length > 0, foot: true, onSelect: input.handlers.onViewUsage },
       ],
       submenuWidth: 228,
       onSelect: () => {},
@@ -519,7 +517,6 @@ export function profileMenuItems(input: {
       icon: <Wrench size={18} />,
       active: tools.some((entry) => entry.active),
       submenu: tools,
-      submenuAlign: "bottom" as const,
       onSelect: () => {},
     }] : []),
     ...lower,
@@ -808,7 +805,8 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
           data-menu-opened={open || undefined}
           className={cn(
             "flex h-[var(--foot-tile-h,2.25rem)] w-full min-w-0 items-center gap-2 rounded-full py-0.5 pl-0.5 pr-1 text-left transition-colors [button:focus-visible:not([data-pointer-focus])>&]:ring-2 [button:focus-visible:not([data-pointer-focus])>&]:ring-focus",
-            open ? "ring-2 ring-accent/60" : "hover:bg-sidebar-hover",
+            // #4156: open, the reference's soft fill only, never an outline
+            open ? "bg-sidebar-hover" : "hover:bg-sidebar-hover",
           )}
         >
           <span className="relative flex shrink-0">
@@ -856,7 +854,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
           className={cn(
             // the rail's avatar: the keyboard ring the wide pill has
             "relative flex size-9 items-center justify-center rounded-full transition-[filter] [button:focus-visible:not([data-pointer-focus])>&]:ring-2 [button:focus-visible:not([data-pointer-focus])>&]:ring-focus",
-            open ? "ring-2 ring-accent/60" : "hover:brightness-90",
+            open ? "brightness-90" : "hover:brightness-90",
           )}
         >
           {avatar(36)}

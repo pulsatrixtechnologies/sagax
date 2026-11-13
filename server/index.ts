@@ -37,7 +37,7 @@ import { consumeRemoteExecApproval, grantRemoteExecApproval, noteRemoteExecReque
 import "../electron/legacy-env-boot.mjs";
 import { ENVIRONMENT_PATHS, HEALTH_IDENTITY } from "../electron/legacy-names.mjs";
 import { healthzBody, healthzUnreadyBody } from "./process/healthz.ts";
-import { drainHttpServers, isShuttingDown, markShuttingDown } from "./process/http-shutdown.ts";
+import { drainHttpServers, isShuttingDown, keepIdleConnectionsOpen, markShuttingDown } from "./process/http-shutdown.ts";
 import { citeAppFigures, noteAppRead, type AppPiece } from "./app-figure.ts";
 import { harnessMcpHttpKind, serveHarnessMcpHttp } from "./mcp/harness-mcp-http.ts";
 // Then the upstream/analytics network block (network-guard.ts).
@@ -22475,8 +22475,8 @@ const workspaceBackupAccess = {
       teamComputers.list().every(computer => !teamComputerInUse(computer)) &&
       store.bots.every((bot) => !botHasActiveTurn(bot.id) && !routines?.activeRunForBot(bot.id) && !botComputerControlSnapshot(bot.id).held) &&
       store.groups.every((group) => !groupIsWorking(group)),
-    pause: () => { botWaits.stop(); routines?.stop(); calendarCalls?.stop(); watchdog.stop(); memoryUpkeep.pause(); },
-    resume: () => { routines?.start(); botWaits.start(); calendarCalls?.start(); watchdog.start(); memoryUpkeep.resume(); },
+    pause: () => { botWaits.stop(); routines?.stop(); calendarCalls?.stop(); watchdog.stop(); memoryUpkeep.pause(); headlessTasks.pause(); },
+    resume: () => { routines?.start(); botWaits.start(); calendarCalls?.start(); watchdog.start(); memoryUpkeep.resume(); headlessTasks.resume(); },
     flush: async () => {
       await Promise.all([flushAllProfileHistory(), flushAllMemoryJournals(), flushUsageLedger(DATA_DIR), flushDecisionLog(DATA_DIR), flushAdminActivity(DATA_DIR)]);
       // With writers gated and work idle, release our WAL connection for the
@@ -35033,7 +35033,7 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
 // The packaged desktop opened the port before this module loaded and has
 // answered the page from it meanwhile (server/early-listener.ts): take it over.
 const earlyListener = (globalThis as { __sagaxEarlyListener?: EarlyListener | null }).__sagaxEarlyListener ?? null;
-const server = earlyListener?.server ?? createServer(handleRequest);
+const server = keepIdleConnectionsOpen(earlyListener?.server ?? createServer(handleRequest));
 desktopViewer.attach(server, handleRequest);
 /** The desktop bridge's network tunnel (organization mode): the WebSocket a
  * person's desktop app opens, checked against their live session and the
@@ -35554,7 +35554,7 @@ if (earlyListener) {
 // A second listener for `openmausbot serve --tunnel` (server/tunnel.ts): the
 if (TUNNEL_SOCKET) {
   if (process.platform !== "win32") rmSync(TUNNEL_SOCKET, { force: true });
-  tunnelListener = createServer(gzipTunnelReplies(handleRequest));
+  tunnelListener = keepIdleConnectionsOpen(createServer(gzipTunnelReplies(handleRequest)));
   desktopViewer.attach(tunnelListener, handleRequest);
   attachDesktopTunnel(tunnelListener, desktopTunnelDeps);
   attachDesktopTerminal(tunnelListener, { ...desktopTunnelDeps, terminals: desktopTerminals });

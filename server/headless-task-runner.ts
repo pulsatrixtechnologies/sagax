@@ -82,7 +82,11 @@ export function createHeadlessTaskRunner(deps: HeadlessTaskRunnerDeps) {
   let teamStamp: number | null | undefined;
   let ticking: Promise<void> | null = null;
   let timer: ReturnType<typeof setInterval> | undefined;
+  let tickEvery = 1_000;
   let stopped = false;
+  /** A workspace backup holds the data folder quiet (pause/resume below). */
+  let paused = false;
+  let ticksWhenResumed = false;
 
   function beat(): void {
     try {
@@ -128,9 +132,10 @@ export function createHeadlessTaskRunner(deps: HeadlessTaskRunnerDeps) {
   }
 
   async function tickOnce(): Promise<void> {
+    if (paused) return;
     beat();
     await syncTeamIfChanged();
-    if (stopped) return;
+    if (stopped || paused) return;
     let taken: HeadlessTask[];
     try {
       taken = claimHeadlessTasks(deps.dir, deps.bootId, now(), deps.maxAttempts);
@@ -152,6 +157,8 @@ export function createHeadlessTaskRunner(deps: HeadlessTaskRunnerDeps) {
     },
     start(intervalMs = 1_000): void {
       stopped = false;
+      tickEvery = intervalMs;
+      if (timer) clearInterval(timer);
       void Promise.resolve(this.tick()).catch(reportBackgroundError);
       timer = setInterval(() => { void Promise.resolve(this.tick()).catch(reportBackgroundError); }, intervalMs);
       timer.unref?.();
@@ -161,6 +168,24 @@ export function createHeadlessTaskRunner(deps: HeadlessTaskRunnerDeps) {
       if (timer) clearInterval(timer);
       timer = undefined;
       try { unlinkSync(runnerPath(deps.dir)); } catch { /* never written */ }
+    },
+    /** While a workspace backup copies the data folder (#4128): no beat and
+     * no queue write, which replace their files every second and failed the
+     * copy ("changed during backup", or a temporary file gone before it was
+     * read). A tick already under way stops before it takes anything. The
+     * beat file stays, so `task wait` still sees a server for a short backup;
+     * a task already running settles when its turn ends. */
+    pause(): void {
+      if (paused) return;
+      paused = true;
+      ticksWhenResumed = timer !== undefined;
+      if (timer) clearInterval(timer);
+      timer = undefined;
+    },
+    resume(): void {
+      if (!paused) return;
+      paused = false;
+      if (ticksWhenResumed && !stopped) this.start(tickEvery);
     },
     /** Resolves once every task taken so far is settled. */
     async idle(): Promise<void> {

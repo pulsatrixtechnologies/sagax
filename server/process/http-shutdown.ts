@@ -4,6 +4,31 @@
 // new sockets, and wait for in-flight HTTP to finish within a deadline.
 import type { Server } from "node:http";
 
+// How long the server keeps an idle kept-alive connection open (#4128).
+//
+// HTTP/1.1 lets the client reuse a connection, but either side may close it
+// once it is idle. When the server closes first, a request the client writes
+// at that moment is lost without an answer ("other side closed", a 502 from a
+// proxy for a POST it may not retry). Node closes after 5 s by default, which
+// is shorter than the idle window of the proxies in front of the server (a
+// reverse proxy's upstream pool keeps a connection up to 2 minutes) and of a
+// client whose event loop is busy for a few seconds between two calls.
+//
+// So the server is the side that waits longest: past every such window, the
+// client or the proxy always closes an idle connection first, and the server
+// only ever closes one nobody can still be writing to. The reply's
+// `Keep-Alive: timeout=` header tells clients the same figure. A drain below
+// still closes idle connections at once.
+
+/** Above a reverse proxy's 2 minute upstream idle timeout. */
+export const HTTP_KEEP_ALIVE_MS = 125_000;
+
+/** Applies the server's kept-alive idle timeout to a listener. */
+export function keepIdleConnectionsOpen<T extends Server>(server: T): T {
+  server.keepAliveTimeout = HTTP_KEEP_ALIVE_MS;
+  return server;
+}
+
 let shuttingDown = false;
 
 /** True once graceful shutdown has begun. Health probes return 503. */

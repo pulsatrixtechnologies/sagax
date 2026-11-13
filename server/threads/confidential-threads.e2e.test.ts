@@ -397,6 +397,16 @@ posixOnly("confidential thread of a person on a team bot someone else owns", () 
     for (const root of ["bots", "data-scopes", "task-workspaces"]) expect(filesText(join(target, root))).not.toContain(`${SECRET}-SHEET`);
   }, 180_000);
 
+  // #4128: CT-16 once lost a request with "other side closed": its client
+  // was busy past the server's 5 s idle close, then reused the connection.
+  it("answers a request on a kept-alive connection its client reuses after a busy pause", async () => {
+    expect((await api("GET", "/api/health")).status).toBe(200);
+    const until = Date.now() + 6_000;
+    while (Date.now() < until) { /* the client's event loop is held, as by a long synchronous step */ }
+    const after = await api("GET", "/api/health");
+    expect(after.status, after.text).toBe(200);
+  }, 30_000);
+
   it("CT-16: no engine transcript of a confidential thread in the backup, after it turns confidential, or after its deletion", async () => {
     currentBot = botId;
     // a confidential thread and an ordinary one, each with a turn of its own
@@ -720,8 +730,10 @@ posixOnly("confidential thread of a person on a team bot someone else owns", () 
     const quiet = (await messagesOf(ana, anaSecret2)).length;
     expect((await api("POST", `/api/bots/${botId}/messages`, ana, { text: `${SECRET}-GAMMA`, threadId: anaSecret2 })).status).toBe(202);
     await waitFor(async () => replied(await messagesOf(ana, anaSecret2), quiet), 60_000);
-    await sleep(800);
-    const notices = anaStream.text().split("\n").filter((line) => line.includes('"kind":"notify"') && line.includes(anaSecret2));
+    // the notice goes out when the turn settles, after its reply is stored
+    // (#4128: a fixed pause once read the stream before it)
+    const noticesNow = () => anaStream.text().split("\n").filter((line) => line.includes('"kind":"notify"') && line.includes(anaSecret2));
+    const notices = await waitFor(async () => noticesNow().length > 0 && noticesNow()).catch(() => noticesNow());
     expect(notices.length, anaStream.text().slice(-1500)).toBeGreaterThan(0);
     for (const line of notices) {
       expect(line).toContain("Fil confidentiel");

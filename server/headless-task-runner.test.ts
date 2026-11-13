@@ -1,7 +1,7 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { applyTeam, giveTask, readQueue, runnerPath, settleTask, waitTask, type HeadlessBot, type HeadlessTask } from "./cli/headless-cli.ts";
 import { claimHeadlessTasks, createHeadlessTaskRunner, type HeadlessRunOutcome } from "./headless-task-runner.ts";
@@ -141,6 +141,44 @@ describe("headless task runner", () => {
     applyTeam(dir, [{ name: "Ada" }, { name: "Cy", title: "Writer" }]);
     await runner.tick();
     expect(synced).toEqual([["Ada"], ["Ada", "Cy"]]);
+    runner.stop();
+  });
+
+  // #4128: a workspace backup copies the data folder while the server runs;
+  // the beat and the queue, rewritten every second, failed the copy
+  it("writes nothing while a backup holds it paused, and picks up again on resume", async () => {
+    const dir = folder();
+    const team = deferred<void>();
+    const runs: string[] = [];
+    const runner = createHeadlessTaskRunner({ dir, bootId: "boot-1", syncTeam: () => team.promise, run: async (task) => { runs.push(task.id); return { ok: true, text: "done" }; } });
+    // a tick under way when the backup starts takes nothing once it pauses
+    const queued = giveTask(dir, "Ada", "Draft the summary");
+    const underWay = runner.tick();
+    runner.pause();
+    team.resolve();
+    await underWay;
+    expect(readQueue(dir)[0]).toMatchObject({ id: queued.id, state: "queued" });
+    runner.resume();
+    // beating on its timer, it takes the task
+    runner.start(5);
+    await vi.waitFor(() => expect(runs).toEqual([queued.id]));
+    await runner.idle();
+    // paused: no beat and no queue write, on its timer or when a tick is asked for
+    runner.pause();
+    const later = giveTask(dir, "Bea", "Check the totals");
+    const beatBefore = readFileSync(runnerPath(dir), "utf8");
+    const queueBefore = readFileSync(join(dir, "headless-tasks.json"), "utf8");
+    await runner.tick();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(readFileSync(runnerPath(dir), "utf8")).toBe(beatBefore);
+    expect(readFileSync(join(dir, "headless-tasks.json"), "utf8")).toBe(queueBefore);
+    expect(runs).toEqual([queued.id]);
+    // the beat file stays, so a short backup never reads as "no server"
+    expect(existsSync(runnerPath(dir))).toBe(true);
+    runner.resume();
+    await vi.waitFor(() => expect(runs).toEqual([queued.id, later.id]));
+    await runner.idle();
+    expect(readQueue(dir).map((task) => task.state)).toEqual(["done", "done"]);
     runner.stop();
   });
 });

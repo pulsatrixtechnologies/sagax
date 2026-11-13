@@ -53,7 +53,13 @@ describe("payment vault", () => {
     expect(store.reveal(LOCAL_VAULT_PRINCIPAL, created.id, "cvv")).toBe(CVV);
     const raw = readFileSync(join(dirs[0]!, "credential-vault.enc"), "utf8");
     expect(raw).not.toContain(PAN);
-    expect(raw).not.toContain(CVV);
+    // the file is the sealed envelope alone. A three-digit code can appear
+    // by chance inside its random base64 (#4128), so the code is looked for
+    // outside the payload and, as the stored field, inside its bytes.
+    const sealed = JSON.parse(raw) as Record<string, string>;
+    expect(Object.keys(sealed).sort()).toEqual(["data", "iv", "tag", "v"]);
+    expect(JSON.stringify({ ...sealed, iv: "", tag: "", data: "" })).not.toContain(CVV);
+    expect(Buffer.from(sealed.data!, "base64").toString("latin1")).not.toContain(`"cvv":"${CVV}"`);
   });
 
   it("fills a card only after the person allows the purchase, and only on that site", async () => {

@@ -34,7 +34,7 @@
 // POSIX-gated like the other CLI e2es (the fakes are shebang scripts).
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,6 +43,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { BUILT_IN_DRIVERS } from "../drivers/builtIn.ts";
 import { isHeldRequestId } from "../harness/held-requests.ts";
 import { CALL_CONNECTOR_INTERNAL_PATH, createCallConnectorInternalRoute } from "../routes/internal-connectors.ts";
+import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { freePortBlock } from "../testing/ports.ts";
 import { createConnectorHub } from "./hub.ts";
 import { createConnectorPlanForTurn } from "./turn-plan.ts";
@@ -277,12 +278,9 @@ posixOnly("connector matrix, engine rows on the test host (#3354)", () => {
   const stop = async () => {
     const running = child;
     child = undefined;
-    if (!running || running.exitCode !== null) return;
-    running.kill("SIGTERM");
-    await new Promise<void>((resolve) => {
-      running.on("close", () => resolve());
-      setTimeout(() => (running.kill("SIGKILL"), resolve()), 5_000).unref?.();
-    });
+    // until it is gone, even after a SIGKILL: a home removed under a server
+    // still writing fails with EACCES on Linux (#4128)
+    await waitForExit(running, { signal: "SIGTERM" });
   };
 
   beforeAll(async () => {
@@ -302,6 +300,12 @@ posixOnly("connector matrix, engine rows on the test host (#3354)", () => {
         instances.claude = {
           driver: row.kind,
           environment: {
+            // each turn ends on its words, as a real CLI turn does: one that
+            // ends on a tool call is continued once 500 ms later
+            // (server/turns/unfinished-turn.ts), and the row's next message
+            // would be steered into that continuation instead of running
+            // its own turn (#4128)
+            FAKE_CLAUDE_TOOL_CALLS: "[]",
             FAKE_CLAUDE_MCP_ROWS: "1",
             FAKE_CLAUDE_MCP_CALLS: JSON.stringify([
               claudeCall("MATRIX_LIST", {}, "connectors"),
@@ -366,8 +370,7 @@ posixOnly("connector matrix, engine rows on the test host (#3354)", () => {
   afterAll(async () => {
     await stop();
     await new Promise<void>((resolve) => (stub ? stub.server.close(() => resolve()) : resolve()));
-    // the stopped server's last writes may still be landing
-    if (home) rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    if (home) await removeTempDir(home);
   });
 
   describe.each(MATRIX_ROWS.map((row) => [row.kind, row] as const))("row %s", (_kind, row) => {
@@ -404,6 +407,9 @@ posixOnly("connector matrix, engine rows on the test host (#3354)", () => {
       const full = await turn(bot, row, "MATRIX_SEND a note");
       expect(full.cards).toEqual([]);
       expect(sends(row.kind)).toHaveLength(2);
+      // #4128: every turn ended on its words, so no automatic continuation
+      // raced the row's next message
+      expect(stderr).not.toContain("[unfinished-turn]");
     }, 120_000);
   });
 
@@ -633,7 +639,7 @@ posixOnly("connector matrix, provider columns on the real hosts (#3354)", () => 
   }, 60_000);
   afterAll(async () => {
     await hub?.close();
-    if (root) rmSync(root, { recursive: true, force: true });
+    if (root) await removeTempDir(root);
   });
 
   /** One call_connector through the real route, allowed by the person's

@@ -9,7 +9,7 @@ import type { SkillsLibrarySkillWire } from "../../../shared/wire";
 import { TailscaleConnectView } from "../plugins/TailscaleConnectView";
 import type { Crumb } from "../Breadcrumb";
 import { connectAppsTabLabel, type ConnectAppsTab } from "../plugins/ConnectAppsView";
-import { PluginPageHeader } from "../plugins/PluginParts";
+import { PluginCard, PluginPageHeader } from "../plugins/PluginParts";
 import { PluginDetailView } from "../plugins/PluginDetailView";
 import { SkillPage } from "../plugins/SkillPage";
 import { BotsForView } from "../plugins/BotsForView";
@@ -117,7 +117,7 @@ export function PluginsPanelSubpage({
       <>
         <PluginPageHeader title={t("myConnections.github.title")} trail={trail} onBack={back} />
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-7 pt-3 sm:px-8" data-plugins-github-page>
-          {githubSection ?? <p className="rounded-xl bg-inset px-4 py-3 text-[12.5px] text-ink-secondary">{t("connectApps.manage.accountsEmpty")}</p>}
+          {githubSection ? <PluginCard>{githubSection}</PluginCard> : <p className="rounded-xl bg-inset px-4 py-3 text-[12.5px] text-ink-secondary">{t("connectApps.manage.accountsEmpty")}</p>}
         </div>
       </>
     );

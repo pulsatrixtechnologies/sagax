@@ -78,9 +78,9 @@ export interface PluginDetailProps {
   accounts?: DetailAccount[];
   /** "+ Add another account" (connected apps), or a sign-in (MCP) */
   accountAction?: ReactNode;
+  /** under the accounts: a sign-in in flight, a form, a note; absent (not
+   * an empty fragment) when there is none, so an empty section stays hidden */
   accountExtra?: ReactNode;
-  /** the Accounts card's text when it holds no account */
-  accountsEmpty?: string;
   tools?: {
     list: DetailTool[] | null;
     loading: boolean;
@@ -104,7 +104,7 @@ export interface PluginDetailProps {
 }
 
 export function PluginDetailView(props: PluginDetailProps) {
-  const { item, displayName, icon, subtitle, installState, primaryAction, onBack, trail, busy, onUninstall, onUpdate, updating, onEdit, onTest, testing, enabled, accounts, accountAction, accountExtra, tools, details, link, children, notice, accountsEmpty, more } = props;
+  const { item, displayName, icon, subtitle, installState, primaryAction, onBack, trail, busy, onUninstall, onUpdate, updating, onEdit, onTest, testing, enabled, accounts, accountAction, accountExtra, tools, details, link, children, notice, more } = props;
   const name = displayName ?? item.name;
   // the technical name, when people read another one
   const technical = name !== item.name ? item.name : null;
@@ -112,6 +112,12 @@ export function PluginDetailView(props: PluginDetailProps) {
   const [toolsOpen, setToolsOpen] = useState(false);
   const toolList = tools?.list ?? null;
   const enabledCount = toolList?.filter((tool) => tool.enabled).length ?? 0;
+  // #4154 (owner: "if it has no account or no tools, dont show the section"):
+  // what does not apply is not drawn. Accounts needs an account, its action or
+  // its extra lines; Tools hides once the list is known to be empty (unknown
+  // until a connector is asked: it stays, to list them).
+  const showAccounts = Boolean(accounts && (accounts.length > 0 || accountAction != null || accountExtra != null));
+  const showTools = Boolean(tools && toolList?.length !== 0);
   useEffect(() => {
     if (toolsOpen && toolList === null && !tools?.loading) tools?.onLoad?.();
     // load once when opened
@@ -158,7 +164,7 @@ export function PluginDetailView(props: PluginDetailProps) {
 
         {children}
 
-        {accounts && (
+        {showAccounts && accounts && (
           <PluginCard title={t("connectApps.detail.accounts")}>
             <ul data-plugin-accounts>
               {accounts.map((account) => (
@@ -178,13 +184,12 @@ export function PluginDetailView(props: PluginDetailProps) {
                 </li>
               ))}
             </ul>
-            {accounts.length === 0 && accountsEmpty && <p className="py-2 text-[13px] leading-5 text-ink-secondary" data-plugin-accounts-empty>{accountsEmpty}</p>}
             {accountAction}
             {accountExtra}
           </PluginCard>
         )}
 
-        {tools && (
+        {showTools && tools && (
           <PluginCard title={t("connectApps.detail.tools")}>
             <button
               type="button"
@@ -205,7 +210,6 @@ export function PluginDetailView(props: PluginDetailProps) {
                 {tools.loading && !toolList && (
                   <div className="flex items-center gap-2 py-2 text-[12px] text-ink-secondary"><Loader2 size={13} className="animate-spin" /> {t("connectApps.detail.toolsLoading")}</div>
                 )}
-                {toolList && toolList.length === 0 && <p className="py-1 text-[12px] text-ink-secondary">{t("mcp.probe.noTools")}</p>}
                 {toolList && toolList.length > 0 && (
                   <ul data-plugin-tools>
                     {toolList.map((tool) => tool.onOpen ? (

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { THREAD_LIMITS } from "../shared/page-threads.ts";
 import { DATA_CONTEXT_DRAFT_MAX_BYTES, parseDataContext } from "./data-context.ts";
 
 const refused = (value: unknown): number | undefined => {
@@ -47,6 +48,29 @@ describe("parseDataContext: the page open over the conversation (2026-10-28)", (
       { draftSql: "select 1", page: { pageId: "abcdefgh12345678", title: "x" } },
     ]) {
       expect(refused(bad)).toBe(400);
+    }
+  });
+});
+
+describe("parseDataContext: a selected passage of the page (#4099)", () => {
+  const ref = { pageId: "abcdefgh12345678", title: "Bilan" };
+  const selection = { kind: "text", quote: "Le volume", prefix: "Septembre. ", suffix: " a augmenté.", path: "body > p", tag: "p" };
+
+  it("accepts the annotation anchor with the page, cut by its limits", () => {
+    expect(parseDataContext({ page: { ...ref, version: 2, selection } })).toEqual({ page: { ...ref, version: 2, selection } });
+    const long = parseDataContext({ page: { ...ref, selection: { ...selection, quote: "x".repeat(THREAD_LIMITS.quoteChars + 50), prefix: "p".repeat(200), suffix: "line\none", tag: "P" } } });
+    expect(long!.page!.selection).toEqual({ kind: "text", quote: "x".repeat(THREAD_LIMITS.quoteChars), prefix: "p".repeat(THREAD_LIMITS.contextChars), suffix: "line one", path: "body > p", tag: "p" });
+  });
+
+  it("refuses an anchor that points at nothing, or a selection without its page", () => {
+    for (const bad of [
+      { page: { ...ref, selection: { ...selection, quote: "   " } } },
+      { page: { ...ref, selection: { ...selection, kind: "range" } } },
+      { page: { ...ref, selection: { ...selection, tag: "<script>" } } },
+      { page: { ...ref, selection: "Le volume" } },
+      { cardId: "c_1", selection },
+    ]) {
+      expect(refused(bad), JSON.stringify(bad).slice(0, 80)).toBe(400);
     }
   });
 });

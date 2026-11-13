@@ -18,6 +18,7 @@ import { READER_ACTIONS_ID, READER_BOOT_ID, READER_MASCOT_ID, readerByline, type
 import { readerBarThemeCss, type PageLook } from "../../src/lib/page-look.ts";
 import { STATE_ASK_MESSAGE, STATE_MESSAGE, STATE_RESULT_MESSAGE, STATE_SET_MESSAGE } from "../../shared/page-state.ts";
 import { CAP_EVENT_MESSAGE, CAP_HELLO_MESSAGE, CAP_MESSAGE, CAP_READY_MESSAGE, CAP_RESULT_MESSAGE, CAP_TAKEN_MESSAGE, CAP_WAIT_MS, PAGE_CAP_LEGACY_CARD_CALLS, pageCapabilitiesAny, type PageCapabilities } from "../../shared/page-capabilities.ts";
+import { PAGE_SELECTION_MESSAGE } from "../../shared/page-selection.ts";
 import { ANNOTATE_FOCUS_MESSAGE, ANNOTATE_FOUND_MESSAGE, ANNOTATE_MARKS_MESSAGE, ANNOTATE_MODE_MESSAGE, ANNOTATE_SELECT_MESSAGE, THREAD_LIMITS } from "../../shared/page-threads.ts";
 import { PAGE_ANNOTATION_MESSAGE, PAGE_BANNER_NAME_MAX, PAGE_HEIGHT_MAX, PAGE_LIMITS, PAGE_OPEN_MESSAGE, PAGE_SCROLL_MAX, PAGE_SCROLL_MESSAGE, PAGE_SIZE_ASK, PAGE_SIZE_MESSAGE, pageCsp, pageFrameSandbox, pageIsHtml, type PageKind, type PageTheme, type ReaderComment } from "../../shared/published-pages.ts";
 
@@ -161,6 +162,24 @@ export const WRAPPER_OPEN_SOURCE = String.raw`(function(){"use strict";
 addEventListener("message",function(e){var f=document.querySelector("iframe");if(!f||e.source!==f.contentWindow)return;var d=e.data;if(!d||d.type!=="${PAGE_OPEN_MESSAGE}"||typeof d.url!=="string")return;try{var u=new URL(d.url);if(u.username||u.password)return;if(u.protocol!=="https:"&&u.protocol!=="http:"&&u.protocol!=="mailto:")return;if((u.protocol==="https:"||u.protocol==="http:")&&!u.hostname)return;window.open(u.href,"_blank","noopener,noreferrer")}catch(x){}});
 })();`;
 
+/** The anchor of a selection, shared by the frame's bridges (#4099): a
+ * CSS-like path, the page's text, the selection as an anchor (selected),
+ * and an anchor found again in this version (find), the right occurrence by
+ * what comes before and after. Needs D (document) and W (window) in scope. */
+const ANCHOR_SOURCE = String.raw`function path(el){var p=[],e=el;while(e&&e.nodeType===1&&p.length<8){var t=e.localName,i=1,s=e;if(t==="body"){p.unshift("body");break}while((s=s.previousElementSibling))if(s.localName===t)i++;p.unshift(i>1?t+":nth-of-type("+i+")":t);e=e.parentElement}return p.join(" > ")}
+function texts(){var b=D.body,out=[],pos=0;if(!b)return{list:out,text:""};var w=D.createTreeWalker(b,4,null),n;while((n=w.nextNode())){out.push({n:n,s:pos});pos+=n.data.length}return{list:out,text:out.map(function(x){return x.n.data}).join("")}}
+function at(node,off){var r=D.createRange();r.setStart(D.body,0);try{r.setEnd(node,off)}catch(e){return -1}return r.toString().length}
+function locate(t,pos,end){var l=t.list;for(var i=0;i<l.length;i++){var e=l[i],n=e.n.data.length;if(pos>=e.s&&(pos<e.s+n||(end&&pos===e.s+n)))return{n:e.n,o:pos-e.s}}var last=l[l.length-1];return last?{n:last.n,o:last.n.data.length}:null}
+function selected(){var sel=W.getSelection();if(!sel||sel.isCollapsed||!sel.rangeCount||!D.body)return null;var r=sel.getRangeAt(0);if(!D.body.contains(r.commonAncestorContainer))return null;
+var t=texts(),a=at(r.startContainer,r.startOffset),b=at(r.endContainer,r.endOffset);if(a<0||b<=a)return null;b=Math.min(b,a+${THREAD_LIMITS.quoteChars});var q=t.text.slice(a,b);if(!q.trim())return null;
+var el=r.commonAncestorContainer;if(el.nodeType!==1)el=el.parentElement;if(!el)return null;
+return{kind:"text",quote:q,prefix:t.text.slice(Math.max(0,a-${THREAD_LIMITS.contextChars}),a),suffix:t.text.slice(b,b+${THREAD_LIMITS.contextChars}),path:path(el),tag:el.localName}}
+function tail(a,b){var n=Math.min(a.length,b.length,24);return n>0&&a.slice(a.length-n)===b.slice(b.length-n)}
+function head(a,b){var n=Math.min(a.length,b.length,24);return n>0&&a.slice(0,n)===b.slice(0,n)}
+function find(a,t){if(!a)return null;if(a.kind==="element"){var el=null;try{el=D.querySelector(a.path)}catch(e){}return el&&el.localName===a.tag?{el:el}:null}
+var q=a.quote,txt=t.text,best=-1,score=-1,i=txt.indexOf(q);while(i>=0){var s=0;if(a.prefix&&tail(txt.slice(Math.max(0,i-a.prefix.length),i),a.prefix))s+=1;if(a.suffix&&head(txt.slice(i+q.length,i+q.length+a.suffix.length),a.suffix))s+=1;if(s>score){score=s;best=i}if(score>=2)break;i=txt.indexOf(q,i+1)}
+if(best<0)return null;var x=locate(t,best,false),y=locate(t,best+q.length,true);if(!x||!y)return null;var r=D.createRange();try{r.setStart(x.n,x.o);r.setEnd(y.n,y.o)}catch(e){return null}return{range:r}}`;
+
 /** A reading frame's side of Annotate (2026-10-28, shared/page-threads.ts):
  * dormant until the wrapper (its parent, never the page) turns annotation
  * mode on. Then a text selection, or a click on a part of the page, is
@@ -179,20 +198,8 @@ st.textContent="::highlight(sagax-note){background-color:rgba(255,196,0,.38)}::h
 +"html.sagax-annotating [data-sagax-hover]{outline:2px dashed #2f6feb!important;outline-offset:2px!important;cursor:crosshair!important}";
 (D.head||D.documentElement).appendChild(st);
 function post(m){try{W.parent.postMessage(m,"*")}catch(e){}}
-function path(el){var p=[],e=el;while(e&&e.nodeType===1&&p.length<8){var t=e.localName,i=1,s=e;if(t==="body"){p.unshift("body");break}while((s=s.previousElementSibling))if(s.localName===t)i++;p.unshift(i>1?t+":nth-of-type("+i+")":t);e=e.parentElement}return p.join(" > ")}
-function texts(){var b=D.body,out=[],pos=0;if(!b)return{list:out,text:""};var w=D.createTreeWalker(b,4,null),n;while((n=w.nextNode())){out.push({n:n,s:pos});pos+=n.data.length}return{list:out,text:out.map(function(x){return x.n.data}).join("")}}
-function at(node,off){var r=D.createRange();r.setStart(D.body,0);try{r.setEnd(node,off)}catch(e){return -1}return r.toString().length}
-function locate(t,pos,end){var l=t.list;for(var i=0;i<l.length;i++){var e=l[i],n=e.n.data.length;if(pos>=e.s&&(pos<e.s+n||(end&&pos===e.s+n)))return{n:e.n,o:pos-e.s}}var last=l[l.length-1];return last?{n:last.n,o:last.n.data.length}:null}
-function selected(){var sel=W.getSelection();if(!sel||sel.isCollapsed||!sel.rangeCount||!D.body)return null;var r=sel.getRangeAt(0);if(!D.body.contains(r.commonAncestorContainer))return null;
-var t=texts(),a=at(r.startContainer,r.startOffset),b=at(r.endContainer,r.endOffset);if(a<0||b<=a)return null;b=Math.min(b,a+${THREAD_LIMITS.quoteChars});var q=t.text.slice(a,b);if(!q.trim())return null;
-var el=r.commonAncestorContainer;if(el.nodeType!==1)el=el.parentElement;if(!el)return null;
-return{kind:"text",quote:q,prefix:t.text.slice(Math.max(0,a-${THREAD_LIMITS.contextChars}),a),suffix:t.text.slice(b,b+${THREAD_LIMITS.contextChars}),path:path(el),tag:el.localName}}
+${ANCHOR_SOURCE}
 function element(el){var s=String(el.innerText||el.textContent||"").replace(/\s+/g," ").trim();return{kind:"element",quote:s.slice(0,160),prefix:"",suffix:"",path:path(el),tag:el.localName}}
-function tail(a,b){var n=Math.min(a.length,b.length,24);return n>0&&a.slice(a.length-n)===b.slice(b.length-n)}
-function head(a,b){var n=Math.min(a.length,b.length,24);return n>0&&a.slice(0,n)===b.slice(0,n)}
-function find(a,t){if(!a)return null;if(a.kind==="element"){var el=null;try{el=D.querySelector(a.path)}catch(e){}return el&&el.localName===a.tag?{el:el}:null}
-var q=a.quote,txt=t.text,best=-1,score=-1,i=txt.indexOf(q);while(i>=0){var s=0;if(a.prefix&&tail(txt.slice(Math.max(0,i-a.prefix.length),i),a.prefix))s+=1;if(a.suffix&&head(txt.slice(i+q.length,i+q.length+a.suffix.length),a.suffix))s+=1;if(s>score){score=s;best=i}if(score>=2)break;i=txt.indexOf(q,i+1)}
-if(best<0)return null;var x=locate(t,best,false),y=locate(t,best+q.length,true);if(!x||!y)return null;var r=D.createRange();try{r.setStart(x.n,x.o);r.setEnd(y.n,y.o)}catch(e){return null}return{range:r}}
 function clear(){if(H){H.delete("sagax-note");H.delete("sagax-note-active");H.delete("sagax-note-done")}var l=D.querySelectorAll("[data-sagax-mark]");for(var i=0;i<l.length;i++)l[i].removeAttribute("data-sagax-mark")}
 function draw(scroll){clear();hits=[];var t=texts(),open=[],act=[],done=[],found=[];
 marks.forEach(function(m){var f=find(m.anchor,t);if(!f)return;var box;if(f.range){(m.active?act:m.resolved?done:open).push(f.range);box=f.range.getBoundingClientRect()}else{f.el.setAttribute("data-sagax-mark",m.active?"active":m.resolved?"done":"open");box=f.el.getBoundingClientRect()}
@@ -211,6 +218,34 @@ D.addEventListener("click",function(e){var id=hitAt(e);if(id){post({type:"${ANNO
 if(!on)return;var sel=W.getSelection();if(sel&&!sel.isCollapsed)return;var el=e.target;if(!el||el.nodeType!==1||el===D.documentElement)return;if(el===D.body)return;e.preventDefault();e.stopPropagation();
 post({type:"${ANNOTATE_SELECT_MESSAGE}",v:1,anchor:element(el)})},true);
 var redraw=0;W.addEventListener("resize",function(){clearTimeout(redraw);redraw=setTimeout(function(){if(marks.length)draw(null)},200)});
+})();`;
+
+/** The app's own preview frame (#4099, shared/page-selection.ts), never a
+ * reading link: where the person's text selection is, as the anchor
+ * annotations use and its box in the frame's viewport, posted to the app
+ * on a selection and again when the page scrolls or resizes; a clear when
+ * the selection goes. The app may name a passage to follow in the version
+ * just drawn (found again by its words, else a clear) or drop it. The
+ * page's content is never changed: the app draws the outline. Like the
+ * other preview scripts it talks to window.top, the app, past the preview
+ * wrapper (which relays only capability messages), and hears only the app.
+ * No network: messages to the app only. */
+export const SELECTION_BRIDGE_SOURCE = String.raw`(function(){"use strict";
+var D=document,W=window,A=W.top,cur=null,raf=0;
+function post(m){try{A.postMessage(m,"*")}catch(e){}}
+${ANCHOR_SOURCE}
+function box(r){var b;try{b=r.getBoundingClientRect()}catch(e){return null}if(!b||(!b.width&&!b.height))return null;return{x:Math.round(b.left),y:Math.round(b.top),w:Math.round(b.width),h:Math.round(b.height)}}
+function send(){if(!cur)return;var b=box(cur.r);if(!b){cur=null;post({type:"${PAGE_SELECTION_MESSAGE}",v:1,anchor:null});return}post({type:"${PAGE_SELECTION_MESSAGE}",v:1,anchor:cur.a,rect:b})}
+function drop(){if(!cur)return;cur=null;post({type:"${PAGE_SELECTION_MESSAGE}",v:1,anchor:null})}
+function pick(){var a=selected(),s=W.getSelection();if(a&&s&&s.rangeCount){cur={a:a,r:s.getRangeAt(0).cloneRange(),live:true};send()}else drop()}
+function soon(){if(!cur||raf)return;raf=(W.requestAnimationFrame||function(f){return setTimeout(f,16)})(function(){raf=0;send()})}
+D.addEventListener("mouseup",function(){setTimeout(pick,0)},true);
+D.addEventListener("keyup",function(e){if(e.shiftKey||e.key==="Shift")pick()},true);
+D.addEventListener("selectionchange",function(){var s=W.getSelection();if(cur&&cur.live&&(!s||s.isCollapsed))drop()});
+W.addEventListener("scroll",soon,{passive:true});W.addEventListener("resize",soon);
+W.addEventListener("message",function(e){if(e.source!==A||!e.data||e.data.v!==1||e.data.type!=="${PAGE_SELECTION_MESSAGE}")return;var a=e.data.anchor;
+if(a===null){cur=null;try{W.getSelection().removeAllRanges()}catch(x){}return}
+if(!a||typeof a!=="object"||typeof a.quote!=="string")return;var f=find(a,texts());if(!f){cur=null;post({type:"${PAGE_SELECTION_MESSAGE}",v:1,anchor:null});return}cur={a:a,r:f.range||f.el};send()});
 })();`;
 
 /** A reading frame's shared state (#1544, shared/page-state.ts), run first
@@ -503,7 +538,7 @@ export function markdownToHtml(markdown: string): string {
  * the page's person's own look when the server has it, `schemes`), and
  * the Geist face (`font`, an @font-face rule). An HTML page's own styles win
  * over it; a Markdown page or a presentation follows it entirely. Pure. */
-export function pageDocument(input: { kind: PageKind; title: string; content: string; lang?: string }, options: { meta?: boolean; annotateNonce?: string; keepScroll?: number; nonce?: string; theme?: PageTheme; skin?: WidgetThemeTokens; schemes?: Partial<Record<PageTheme, WidgetThemeTokens>>; font?: string; reportSize?: boolean; capabilities?: PageCapabilities | null } = {}): string {
+export function pageDocument(input: { kind: PageKind; title: string; content: string; lang?: string }, options: { meta?: boolean; annotateNonce?: string; keepScroll?: number; nonce?: string; theme?: PageTheme; skin?: WidgetThemeTokens; schemes?: Partial<Record<PageTheme, WidgetThemeTokens>>; font?: string; reportSize?: boolean; selection?: boolean; capabilities?: PageCapabilities | null } = {}): string {
   const meta = options.meta ? `<meta http-equiv="Content-Security-Policy" content="${escapeHtml(pageCsp(input.kind, { meta: true }))}">` : "";
   // Our own scripts: open-link bridge on every served frame (#1799);
   // annotation and place-keeping on the app's preview only. Markdown and
@@ -514,7 +549,9 @@ export function pageDocument(input: { kind: PageKind; title: string; content: st
   const openBridge = own(OPEN_BRIDGE_SOURCE);
   const annotate = options.annotateNonce === undefined ? "" : own(ANNOTATE_SOURCE);
   const keep = (options.keepScroll === undefined ? "" : own(keepScrollSource(options.keepScroll)))
-    + (options.reportSize ? own(REPORT_SIZE_SOURCE) + own(ANNOTATE_BRIDGE_SOURCE) : "");
+    + (options.reportSize ? own(REPORT_SIZE_SOURCE) + own(ANNOTATE_BRIDGE_SOURCE) : "")
+    // where the person's selection is, for the app's own preview (#4099)
+    + (options.selection ? own(SELECTION_BRIDGE_SOURCE) : "");
   const scheme = `<meta name="color-scheme" content="${options.theme ?? "light dark"}">`;
   const theme = pageThemeStyle({ kind: input.kind, ...(options.theme ? { scheme: options.theme } : {}), ...(options.theme && options.skin ? { tokens: options.skin } : {}), ...(!options.theme && options.schemes ? { schemes: options.schemes } : {}), font: options.font ?? "",
     ...(input.kind === "presentation" ? { extra: `@media print{html{scroll-snap-type:none}.slide{height:${SLIDE_PRINT_MM}mm;border:0;break-after:page}.nav{display:none}}` } : {}) });

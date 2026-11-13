@@ -14,7 +14,7 @@ import { createAgentCard, type AgentCardStore } from "../widgets/chat-widgets.ts
 import { json, readBody } from "../harness/http.ts";
 import { pageOwnerFor, PublishedPages } from "./published-pages.ts";
 import { PageLive } from "./page-live.ts";
-import { bannerName, escapeHtml, FRAME_PRELUDE, jsonBlock, markdownToHtml, OPEN_BRIDGE_SOURCE, pageDocument, parseReaderAssets, REPORT_SIZE_SOURCE, SLIDE_PRINT_MM, STATE_BRIDGE_SOURCE, WRAPPER_OPEN_SOURCE, wrapperBanner, ANNOTATE_BRIDGE_SOURCE } from "./published-pages-render.ts";
+import { bannerName, escapeHtml, FRAME_PRELUDE, jsonBlock, markdownToHtml, OPEN_BRIDGE_SOURCE, pageDocument, parseReaderAssets, REPORT_SIZE_SOURCE, SLIDE_PRINT_MM, STATE_BRIDGE_SOURCE, WRAPPER_OPEN_SOURCE, wrapperBanner, ANNOTATE_BRIDGE_SOURCE, SELECTION_BRIDGE_SOURCE } from "./published-pages-render.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import {
   createPublishedPageRoutes,
@@ -1054,6 +1054,27 @@ describe("Download PDF (2026-10-28)", () => {
     const frame = await hit(options(pages, { principalId: "pr_owner", computerOwner: false }), frameSrc(wrapper.body), { "sec-fetch-dest": "iframe" });
     expect(frame.body).not.toContain("sagax-page-size");
     expect(wrapper.body).not.toContain("@media print");
+  });
+
+  it("the app's preview tells the app where the person's selection is (#4099); a reading link never does", async () => {
+    const { pages } = store();
+    const { page } = proposed(pages, "pr_owner");
+    pages.edit(page.id, { kind: "markdown", content: "# Bilan\n\nTexte", by: "pr_owner" });
+    const viewer = options(pages, { principalId: "pr_owner", computerOwner: false });
+    const wrapper = await hit(viewer, `/pages/preview/${page.id}/2`);
+    const frame = await hit(viewer, frameSrc(wrapper.body), { "sec-fetch-dest": "iframe" });
+    const csp = String(frame.headers["content-security-policy"]);
+    const nonce = /script-src 'nonce-([^']+)'/.exec(csp)?.[1];
+    expect(nonce).toBeTruthy();
+    expect(frame.body).toContain(`<script nonce="${nonce}">${SELECTION_BRIDGE_SOURCE}</script>`);
+    // sandbox and policy unchanged: no network, no inline script
+    expect(csp).toContain("connect-src 'none'");
+    expect(csp).not.toMatch(/script-src[^;]*unsafe-inline/);
+    expect(frame.body).not.toContain(ANNOTATE_BRIDGE_SOURCE);
+    pages.publish(page.id, { version: 2, access: "link", expiresAt: null });
+    const reading = await read(pages, pages.path(pages.get(page.id)!.linkId!), null);
+    expect(reading.frame!.body).not.toContain("sagax-page-selection");
+    expect(reading.wrapper.body).toContain('sandbox="allow-scripts"');
   });
 
   it("a presentation prints one slide per sheet", async () => {

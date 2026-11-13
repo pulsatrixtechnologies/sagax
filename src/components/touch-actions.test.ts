@@ -77,8 +77,10 @@ function missingTouchCounterparts(literal: Literal): string[] {
   return missing;
 }
 
+// Keyboard focus on the control itself, inside it, or on its named group
+// (a heading button that is its own group, #4131).
 function revealsOnFocus(text: string): boolean {
-  return /(^|\s)(focus-visible|focus-within|group-focus-within(?:\/[\w-]+)?):opacity-100(\s|$)/.test(text);
+  return /(^|\s)(focus-visible|focus-within|group-focus-(?:within|visible)(?:\/[\w-]+)?):opacity-100(\s|$)/.test(text);
 }
 
 function isNotAction(literal: Literal): boolean {

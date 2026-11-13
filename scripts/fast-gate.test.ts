@@ -1,7 +1,7 @@
 // scripts/fast-gate.sh on a throwaway repository: what counts as touched,
 // which checks it picks per language, the 4-at-a-time cap and the exit code.
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -282,6 +282,21 @@ describe("fast-gate.sh", () => {
   it("lists the admission and agent API files among the tests every lot runs", async () => {
     const { GUARD_TESTS } = await import("./verify/release/guard-tests.mjs");
     expect(GUARD_TESTS).toEqual(expect.arrayContaining(["server/turns/start-turn-prepare-admit.test.ts", "server/agent-api.e2e.test.ts"]));
+  });
+
+  // #4131: the UI guards that scan the whole of src (motion tokens, touch
+  // actions, window drag, settings placement and the like) went red on main
+  // unseen after three UI lots; every lot runs them now, from the one list.
+  it("lists the repository-wide UI guards among the tests every lot runs", async () => {
+    const { GUARD_TESTS, UI_GUARD_TESTS } = await import("./verify/release/guard-tests.mjs");
+    expect(UI_GUARD_TESTS).toEqual(expect.arrayContaining([
+      "src/lib/motion.test.ts",
+      "src/components/touch-actions.test.ts",
+      "src/components/window-drag.layout.test.ts",
+      "src/components/settings/settingsPlacement.test.ts",
+    ]));
+    expect(GUARD_TESTS).toEqual(expect.arrayContaining(UI_GUARD_TESTS));
+    for (const file of UI_GUARD_TESTS) expect(existsSync(resolve(__dirname, "..", file)), file).toBe(true);
   });
 
   it("has nothing to check on a clean branch", () => {

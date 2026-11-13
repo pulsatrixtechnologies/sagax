@@ -34,10 +34,10 @@ describe("motion tokens", () => {
   it("the app's own curves are tokens, not ad hoc cubic-beziers", () => {
     const start = css.indexOf("@theme static {");
     const rest = css.slice(0, start) + css.slice(css.indexOf("}", start));
-    // The update pill's nudge is the one curve that stays outside the tokens.
-    expect(rest.match(/cubic-bezier\([^)]*\)/g) ?? []).toEqual([
-      "cubic-bezier(0.34, 1.4, 0.64, 1)",
-    ]);
+    // None outside the tokens: the one exception, the update pill's ready
+    // nudge, went with the pill's ready state (#4093, the account menu offers
+    // a downloaded update now; #4131).
+    expect(rest.match(/cubic-bezier\([^)]*\)/g) ?? []).toEqual([]);
   });
 });
 

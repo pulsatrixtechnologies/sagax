@@ -2109,13 +2109,6 @@
       "since": "2026-11-11"
     },
     {
-      "file": "src/lib/color-utilities.test.ts",
-      "test": "colour utilities > only names colour tokens the theme defines",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
       "file": "server/turns/plugin-turn.test.ts",
       "test": "plugin skills and commands on a turn > counts every discovered file in the capability's visible prompt budget",
       "owner": "unassigned",
@@ -2293,27 +2286,6 @@
     {
       "file": "server/telemetry/settings-store.test.ts",
       "test": "telemetry settings store > seals the headers, shows only their names, and an empty value keeps the saved one",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "src/components/ModelPicker.single-menu.test.ts",
-      "test": "single model menu > every surface renders the one ModelPicker",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "src/components/ModelPicker.single-menu.test.ts",
-      "test": "single model menu > no surface keeps a native <select> or a free-text field for a model",
-      "owner": "unassigned",
-      "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
-      "since": "2026-11-11"
-    },
-    {
-      "file": "src/components/ModelPicker.single-menu.test.ts",
-      "test": "single model menu > only ModelPicker builds a model menu",
       "owner": "unassigned",
       "reason": "Failing when the list was first filled by https://github.com/pulsatrixtechnologies/sagax/actions/runs/42945073607.",
       "since": "2026-11-11"

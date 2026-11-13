@@ -2,6 +2,7 @@
 // Per-bot settings (persona, model, computer) live in BotSettingsDialog: this
 // is the stuff shared by every bot: who you are, your keys, and the
 // machine your bots can borrow.
+import { useState } from "react";
 import { FileText, Search, X } from "lucide-react";
 import { useStore, type AppSettingsSection } from "@/state/store";
 import { localeChoices } from "@/locales";
@@ -11,7 +12,7 @@ import { brand } from "@/lib/brand";
 import { useUpdaterState } from "@/lib/updater";
 import { openUpdatePrompt, requestUpdateCheck } from "@/lib/update-prompt";
 import { generalAdvancedShown, isSoloDesktop } from "./settings/AdvancedSettings";
-import { CompactRow, PillSelect, type PillOption, SettingRow, SettingsAdvancedScope, SettingsGroup, Switch } from "./SettingsPrimitives";
+import { CompactRow, PillSelect, type PillOption, SettingRow, SettingsAdvancedScope, SettingsGroup, SettingsPageActionsProvider, Switch } from "./SettingsPrimitives";
 import { TimeZoneRows } from "./settings/TimeZoneSettings";
 import { AboutPage, GeneralPage } from "./settings/AppPage";
 import { DeveloperLink } from "./settings/DeveloperLink";
@@ -204,6 +205,8 @@ export function SettingsModal() {
     pagesHit, sectionLabelKey, sectionIntroKey, subPageId, subPage, openSubPage, closeSubPage,
     editConfig,
   } = useSettingsModal();
+  // #4094: the header's action slot (the Vault's New item, top right)
+  const [pageActions, setPageActions] = useState<HTMLDivElement | null>(null);
 
   return (
     <div
@@ -362,13 +365,16 @@ export function SettingsModal() {
           <div ref={paneRef} data-settings-pane="" className="flex flex-1 flex-col overflow-y-auto">
             {/* #2080: the page title at 20px and, under it, the page's one
                 sentence (introKey), on every page; the pages draw no intro. */}
-            <div data-settings-page-header="" className="px-4 pt-2 sm:px-8 sm:pt-6">
-              <h2 className="hidden text-[20px] font-semibold leading-7 tracking-[-0.012em] text-ink sm:block">
-                {sectionLabelKey ? t(sectionLabelKey) : null}
-              </h2>
-              {sectionIntroKey && (
-                <p data-settings-intro="" className="mt-0.5 text-[13px] leading-[18px] text-ink-secondary">{t(sectionIntroKey)}</p>
-              )}
+            <div data-settings-page-header="" className="flex items-start gap-3 px-4 pt-2 sm:px-8 sm:pt-6">
+              <div className="min-w-0 flex-1">
+                <h2 className="hidden text-[20px] font-semibold leading-7 tracking-[-0.012em] text-ink sm:block">
+                  {sectionLabelKey ? t(sectionLabelKey) : null}
+                </h2>
+                {sectionIntroKey && (
+                  <p data-settings-intro="" className="mt-0.5 text-[13px] leading-[18px] text-ink-secondary">{t(sectionIntroKey)}</p>
+                )}
+              </div>
+              <div ref={setPageActions} data-settings-page-actions="" className="flex shrink-0 items-center gap-2 empty:hidden sm:me-6" />
             </div>
             <div className="flex flex-col gap-3 px-4 pb-6 pt-4 sm:px-8">
             {/* Developer is the technical page (#2636): nothing folds there, in Simple mode too */}
@@ -424,12 +430,15 @@ export function SettingsModal() {
               </div>
             )}
 
-            {/* Vault (2026-10-28, out of Account): logins, API keys and notes
-                bots use without seeing them, Import, Export, Add an item,
-                the one-time card, purchases and 1Password. */}
+            {/* Vault (2026-10-28, out of Account; #4094 the reference's
+                way): the New item menu (each kind, Import, Export), the
+                tabs with counts and the search, one list with Manage, the
+                one-time card, purchases and 1Password. */}
             {section === "credentials" && (
               <div className="flex min-w-0 flex-col gap-3" data-vault-page="">
-                <CredentialsSettings />
+                <SettingsPageActionsProvider slot={pageActions}>
+                  <CredentialsSettings />
+                </SettingsPageActionsProvider>
               </div>
             )}
 

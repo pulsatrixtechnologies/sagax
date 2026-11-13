@@ -50,10 +50,8 @@ describe("Payments panel", () => {
         data,
         bots: [{ id: "scout", name: "Scout" }, { id: "relay", name: "Relay" }],
         botName: (id: string) => (id === "scout" ? "Scout" : "Relay"),
-        addingCard: false,
+        cards: [],
         renderItem: () => null,
-        renderNewCard: () => null,
-        onAddCard: () => {},
         onChanged: async () => {},
         onError: () => {},
       }));

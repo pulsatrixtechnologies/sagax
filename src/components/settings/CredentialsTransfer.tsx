@@ -1,4 +1,5 @@
-// Settings > Credentials: Import and Export of the vault
+// Settings > Vault: Import and Export of the vault, each in the Vault's
+// centered window (#4094)
 // (shared/credential-vault-transfer.ts). An import reads the file in
 // memory only (never copied to disk, never sent to the server as a file),
 // shows a preview (what is imported, duplicates, what is left out and why,
@@ -22,7 +23,8 @@ import {
   type VaultDuplicateMode,
   type VaultExportFormat,
 } from "../../../shared/credential-vault-transfer";
-import { EditorBox, EditorField, FIELD, PILL, PillSelect, PRIMARY_PILL, SwitchRow } from "../SettingsPrimitives";
+import { EditorField, EditorStack, FIELD, PILL, PillSelect, PRIMARY_PILL, SwitchRow } from "../SettingsPrimitives";
+import { VaultDialog } from "./VaultDialog";
 import { readableError } from "@/lib/plain-error";
 
 const message = (error: unknown) => (readableError(error));
@@ -86,10 +88,23 @@ export function ImportPanel({ existing, onDone, onCancel }: {
   } : null;
   const dropped = parsed ? DROPPED.filter((field) => (parsed.dropped[field] ?? 0) > 0) : [];
   const total = plan ? plan.create.length + plan.merge.length : 0;
+  const cancel = () => { clear(); onCancel(); };
   return (
-    <div className="flex flex-col gap-2.5 px-3.5 py-2.5 text-[13px]" data-credential-import>
-      <div className="text-ink">{t("vault.transfer.importTitle")}</div>
-      <p className="text-[12px] leading-relaxed text-ink-secondary">{t("vault.transfer.importHint")}</p>
+    <VaultDialog
+      title={t("vault.transfer.importTitle")}
+      onClose={cancel}
+      data-credential-import=""
+      footer={(
+        <>
+          <button type="button" className={PILL} disabled={busy} onClick={cancel}>{t("vault.settings.cancel")}</button>
+          {parsed
+            ? <button type="button" className={PRIMARY_PILL} disabled={busy || total === 0} onClick={() => void run()} data-credential-import-run="">{t("vault.transfer.importRun", { count: total })}</button>
+            : <button type="button" className={PRIMARY_PILL} disabled={busy} onClick={() => input.current?.click()} data-credential-import-choose="">{t("vault.transfer.chooseFile")}</button>}
+        </>
+      )}
+    >
+      <div className="flex flex-col gap-2.5 text-[13px]">
+      <p className="text-[13px] leading-[18px] text-ink-secondary">{t("vault.transfer.importHint")}</p>
       <input
         ref={input}
         type="file"
@@ -98,7 +113,8 @@ export function ImportPanel({ existing, onDone, onCancel }: {
         disabled={busy}
         data-credential-import-file=""
         onChange={(event) => void choose(event.target.files?.[0])}
-        className={`${FIELD} file:mr-3 file:rounded-full file:border-0 file:bg-control file:px-2.5 file:py-1 file:text-ink`}
+        className="sr-only"
+        tabIndex={-1}
       />
       {parsed && plan && kinds && (
         <div className="flex flex-col gap-2" data-credential-import-preview>
@@ -149,11 +165,8 @@ export function ImportPanel({ existing, onDone, onCancel }: {
         </div>
       )}
       {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
-      <div className="flex flex-wrap justify-end gap-2">
-        {parsed && <button type="button" className={PRIMARY_PILL} disabled={busy || total === 0} onClick={() => void run()} data-credential-import-run="">{t("vault.transfer.importRun", { count: total })}</button>}
-        <button type="button" className={PILL} disabled={busy} onClick={() => { clear(); onCancel(); }}>{t("vault.settings.cancel")}</button>
       </div>
-    </div>
+    </VaultDialog>
   );
 }
 
@@ -197,11 +210,11 @@ export function ExportPanel({ onCancel }: { onCancel: () => void }) {
     }
   };
   return (
-    <EditorBox
-      label={t("vault.transfer.exportTitle")}
-      className="mx-3.5 my-1.5"
+    <VaultDialog
+      title={t("vault.transfer.exportTitle")}
+      onClose={onCancel}
       data-credential-export=""
-      actions={(
+      footer={(
         <>
           {reauth?.path && <button type="button" className={PILL} onClick={() => { rememberSettingsReturn("credentials"); location.assign(reauth.path!); }} data-credential-export-sign-in="">{t("security.reauth.button")}</button>}
           <button type="button" className={PILL} disabled={busy} onClick={onCancel}>{done ? t("vault.transfer.close") : t("vault.settings.cancel")}</button>
@@ -209,7 +222,7 @@ export function ExportPanel({ onCancel }: { onCancel: () => void }) {
         </>
       )}
     >
-      <p className="px-3 py-1.5 text-[13px] leading-[18px] text-ink">{t("vault.transfer.exportTitle")}</p>
+      <EditorStack>
       <EditorField label={t("vault.transfer.exportFormat")} hint={t(format === "chrome-csv" ? "vault.transfer.exportChromeHint" : "vault.transfer.exportBitwardenHint")} menu>
         <PillSelect<VaultExportFormat>
           value={format}
@@ -223,15 +236,16 @@ export function ExportPanel({ onCancel }: { onCancel: () => void }) {
           ]}
         />
       </EditorField>
-      <p role="note" className="px-3 py-1.5 text-[12px] leading-4 text-danger" data-credential-export-warning>{t("vault.transfer.exportWarning")}</p>
-      <SwitchRow className="px-3 py-1.5" label={t("vault.transfer.exportUnderstand")} checked={understood} disabled={busy} onChange={setUnderstood} />
+      <p role="note" className="text-[12px] leading-4 text-danger" data-credential-export-warning>{t("vault.transfer.exportWarning")}</p>
+      <SwitchRow label={t("vault.transfer.exportUnderstand")} checked={understood} disabled={busy} onChange={setUnderstood} />
       <EditorField label={t("vault.transfer.exportType", { word })} hint={t("vault.transfer.exportStepUp")}>
         <input className={inputClass} value={typed} disabled={busy} autoComplete="off" spellCheck={false} onChange={(event) => setTyped(event.target.value)} aria-label={t("vault.transfer.exportType", { word })} />
       </EditorField>
-      {error && <p role="alert" className="px-3 py-1.5 text-[12px] text-danger">{error}</p>}
-      {reauth && <p role="alert" className="px-3 py-1.5 text-[12px] text-danger" data-credential-export-reauth="">{reauth.path ? t("vault.transfer.reauthPulsatrix") : t("vault.transfer.reauthUnavailable")}</p>}
-      {done && <p role="status" className="px-3 py-1.5 text-[12px] text-ink-secondary">{done}</p>}
-    </EditorBox>
+      {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
+      {reauth && <p role="alert" className="text-[12px] text-danger" data-credential-export-reauth="">{reauth.path ? t("vault.transfer.reauthPulsatrix") : t("vault.transfer.reauthUnavailable")}</p>}
+      {done && <p role="status" className="text-[12px] text-ink-secondary">{done}</p>}
+      </EditorStack>
+    </VaultDialog>
   );
 }
 

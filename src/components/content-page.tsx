@@ -173,14 +173,18 @@ export function PageSegment<T extends string | number>({ label, value, options, 
 }
 
 /** A search field of the header row, as tall as its buttons. */
-export function PageSearch({ value, onChange, placeholder, label, ...rest }: {
+export function PageSearch({ value, onChange, placeholder, label, compact = false, ...rest }: {
   value: string;
   onChange: (next: string) => void;
   placeholder: string;
   label: string;
+  /** the reference's search beside a tab row (#4094, the Vault): 32 px
+   * tall, 220 px wide so a French placeholder is read whole; on its own
+   * full line under the tabs on a phone */
+  compact?: boolean;
 } & DataAttributes) {
   return (
-    <label className="flex h-9 min-w-0 max-w-[260px] flex-1 items-center gap-1.5 rounded-full border border-hairline/50 bg-panel px-2.5 text-ink focus-within:ring-2 focus-within:ring-accent/60">
+    <label className={cn("flex min-w-0 items-center gap-1.5 rounded-full border border-hairline/50 bg-panel px-2.5 text-ink focus-within:ring-2 focus-within:ring-accent/60", compact ? "h-8 shrink-0 grow-0 basis-[220px] max-sm:basis-full" : "h-9 max-w-[260px] flex-1")}>
       <Search size={14} aria-hidden="true" className="shrink-0 text-ink-secondary" />
       <input {...rest} type="search" value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} aria-label={label}
         className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-tertiary" />

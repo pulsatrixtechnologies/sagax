@@ -204,6 +204,10 @@ export function useSettingsModal() {
       // A child editor owns Escape and its focus trap, including while saving.
       if (event.defaultPrevented || (dialog && [...dialog.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]')]
         .some(child => child.getClientRects().length))) return;
+      // A window over Settings in the shared dialog layer (portalled to the
+      // body, so not inside Settings) owns the keys typed inside it: the
+      // Vault's New item, Manage, Edit, Import and Export (#4094).
+      if (event.target instanceof Element && event.target.closest("[data-dialog-layer]")) return;
       if (event.key === "Escape") {
         event.preventDefault();
         navigate(() => dispatch({ type: "toggleAppSettings", open: false }), "back", "page", dialogRef.current);

@@ -1,22 +1,26 @@
-// Settings > Vault (Coffre). One page of SettingsGroup cards. A closed row
-// is a label, a grey line and one action. Reveal, notes, bots, edit and
-// delete live in the unfolded detail.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Ellipsis, Plus } from "lucide-react";
+// Settings > Vault (Coffre), the reference's way (#4094): the New item menu,
+// tabs with counts and the search, one list of items. A row is an icon, a
+// label, a grey line and Manage; reveal, notes, bots, edit and delete live
+// in the item's centered window.
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { Contact, CreditCard, FileDown, FileUp, KeyRound, KeySquare, LockKeyhole, MapPin, StickyNote } from "lucide-react";
 
 import { allowBotAlways, deleteCredential, importOnePasswordItem, loadCredentials, loadOnePasswordItems, revealCredential, revealCredentialNotes, revokeBot, type CredentialVaultState, type OnePasswordItem, type VaultItemListing } from "@/lib/credential-vault";
 import { copyText } from "@/lib/copy-text";
 import { botLabel } from "@/lib/human-label";
 import { activeLocale, t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
-import { filterVaultItems, resolveVaultFilterTab, vaultTabCounts, type VaultFilterTab } from "@/lib/vault-filter";
-import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
+import { filterVaultItems, resolveVaultFilterTab, vaultTabCounts, VAULT_FILTER_TABS, type VaultFilterTab } from "@/lib/vault-filter";
 import type { LocaleKey } from "@/locales";
 import { useStore } from "@/state/store";
-import { DANGER_PILL, DescribedRow, PILL, PillSelect, PRIMARY_PILL, SettingsGroup, SettingsNotice, SettingsTextRow, peekRequestedSettingsCard } from "../SettingsPrimitives";
+import type { VaultItemKind } from "../../../shared/credential-vault";
+import { PageSearch } from "../content-page";
+import { AddMenu, type AddMenuItem } from "../bot-profile/BotProfilePage.tsx-parts/AddMenu";
+import { DANGER_PILL, DescribedRow, PILL, PillSelect, PRIMARY_PILL, SettingsGroup, SettingsNotice, SettingsPageActions, SettingsTextRow, peekRequestedSettingsCard } from "../SettingsPrimitives";
 import { DisclosurePill } from "./AppearanceSettings";
 import { ExportPanel, ImportPanel, importOutcomeText } from "./CredentialsTransfer";
 import { FilterChips, StatusText } from "./SettingsPatterns";
+import { VaultDialog } from "./VaultDialog";
 import { ItemForm, injectionLabel } from "./VaultItemForm";
 import { PaymentsPanel } from "./VaultPayments";
 import { SavedKeysResetButton, useSavedKeysUnreadable } from "../SavedKeysReset";
@@ -38,17 +42,43 @@ const TAB_LABEL: Record<VaultFilterTab, LocaleKey> = {
   contacts: "vault.tab.contacts",
 };
 
+const NEW_KINDS: readonly VaultItemKind[] = ["login", "apiKey", "note", "card", "address", "contact"];
+const KIND_ICON: Record<VaultItemKind, typeof KeyRound> = {
+  login: KeyRound, apiKey: KeySquare, note: StickyNote, card: CreditCard, address: MapPin, contact: Contact,
+};
+
+/** The items a search keeps: their name, sites, user name, card or contact words. */
+export function searchVaultItems(items: readonly VaultItemListing[], query: string): VaultItemListing[] {
+  const q = query.trim().toLocaleLowerCase();
+  if (!q) return [...items];
+  return items.filter((item) => [
+    item.name, ...item.domains, item.username, item.card?.brand, item.card?.last4,
+    item.contact?.fullName, item.contact?.email, item.address?.city, item.address?.recipient,
+  ].some((word) => word?.toLocaleLowerCase().includes(q)));
+}
+
+const EMPTY_LINE: Record<VaultFilterTab, LocaleKey> = {
+  all: "vault.settings.empty",
+  logins: "vault.empty.logins",
+  payments: "vault.empty.payments",
+  contacts: "vault.empty.contacts",
+};
+
+/** Settings > Vault the reference's way (#4094): one New item menu at the
+ * top right, the tabs with their counts and the search on one row, one list
+ * of items (each with Manage), the grey sentence under it. New item, Manage,
+ * Import and Export open centered windows. */
 export function CredentialsSettings() {
   const { state } = useStore();
   // Unreadable saved keys hold the vault key: restarting never opens it, "Reset saved keys" starts it empty.
   const keysUnreadable = useSavedKeysUnreadable();
   const [data, setData] = useState<CredentialVaultState | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
-  const [addingCard, setAddingCard] = useState(false);
+  const [adding, setAdding] = useState<VaultItemKind | null>(null);
   const [transfer, setTransfer] = useState<"import" | "export" | null>(null);
   const [imported, setImported] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const listId = useId();
   const [tab, setTab] = useState<VaultFilterTab>(() => resolveVaultFilterTab({
     search: typeof location !== "undefined" ? location.search : "",
     hash: typeof location !== "undefined" ? location.hash : "",
@@ -86,49 +116,89 @@ export function CredentialsSettings() {
     wallets: data.wallets,
     methods: data.methods,
   });
-  const showItems = tab !== "payments";
-  const showPayments = tab === "all" || tab === "payments";
-  const listed = (showPayments ? filterVaultItems(data.items, tab).filter((item) => item.kind !== "card") : filterVaultItems(data.items, tab));
-  const add = () => {
-    setImported(null);
-    setTransfer(null);
-    if (tab === "payments") {
-      setAdding(false);
-      setAddingCard(true);
-      return;
-    }
-    setAddingCard(false);
-    setAdding(true);
-  };
-  const renderItem = (item: VaultItemListing) => (editing === item.id
-    ? <ItemForm item={item} onDone={async () => { setEditing(null); await refresh(); }} />
-    : <ItemRow item={item} botName={botName} bots={state.bots} onEdit={() => setEditing(item.id)} onChanged={refresh} onError={setError} />);
+  const listed = searchVaultItems(filterVaultItems(data.items, tab), query);
+  const transfers = vaultMenuActions({ unavailable: Boolean(data.unavailable), exportBlocked: data.exportBlocked === true, empty: data.items.length === 0 });
+  const menu: AddMenuItem[] = [
+    ...NEW_KINDS.map((kind) => {
+      const Icon = KIND_ICON[kind];
+      return { id: kind, icon: <Icon />, title: t(`vault.kind.${kind}`), onChoose: () => { setImported(null); setAdding(kind); } };
+    }),
+    ...transfers.map((action, index) => ({
+      id: action,
+      icon: action === "import" ? <FileUp /> : <FileDown />,
+      title: t(action === "import" ? "vault.menu.import" : "vault.menu.export"),
+      separatorBefore: index === 0,
+      onChoose: () => { setImported(null); setTransfer(action); },
+    })),
+  ];
+  const renderItem = (item: VaultItemListing) => <ItemRow item={item} botName={botName} bots={state.bots} onChanged={refresh} />;
+  const searching = query.trim().length > 0;
 
   return (
-    <div className="flex min-w-0 flex-col gap-3" data-credentials-settings data-vault-tab={tab}>
+    <div className="flex min-w-0 flex-col gap-6" data-credentials-settings data-vault-tab={tab}>
+      <SettingsPageActions>
+        <div data-vault-new="">
+          <AddMenu items={menu} label={t("vault.new")} primary />
+        </div>
+      </SettingsPageActions>
       {data.unavailable && (keysUnreadable
         ? <SettingsNotice tone="danger" action={<SavedKeysResetButton />}>{t("savedKeys.unreadable")}</SettingsNotice>
         : <SettingsNotice tone="danger">{t("vault.settings.unavailable")}</SettingsNotice>)}
       {error && <SettingsNotice tone="danger">{error}</SettingsNotice>}
-      <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
-        <FilterChips
-          label={t("vault.payments.title")}
-          value={tab}
-          onChange={setTab}
-          chips={(["all", "logins", "payments", "contacts"] as const).map((id) => ({ id, label: t(TAB_LABEL[id]), count: counts[id] }))}
-        />
-        <button type="button" className={`${PRIMARY_PILL} inline-flex items-center gap-1`} onClick={add} data-credentials-add="">
-          <Plus size={14} aria-hidden="true" />
-          {t("vault.settings.add")}
-        </button>
-        <VaultMenu
-          unavailable={Boolean(data.unavailable)}
-          exportBlocked={data.exportBlocked === true}
-          empty={data.items.length === 0}
-          onImport={() => { setImported(null); setTransfer("import"); }}
-          onExport={() => { setImported(null); setTransfer("export"); }}
-        />
+      {imported && <SettingsTextRow live><span data-credential-import-result>{imported}</span></SettingsTextRow>}
+      <div className="flex min-w-0 flex-wrap items-center gap-3" data-vault-toolbar="">
+        <div className="min-w-0 flex-[1_1_260px]">
+          <FilterChips
+            tabs
+            controls={listId}
+            label={t("vault.payments.title")}
+            value={tab}
+            onChange={setTab}
+            chips={VAULT_FILTER_TABS.map((id) => ({ id, label: t(TAB_LABEL[id]), count: counts[id] }))}
+          />
+        </div>
+        <PageSearch compact value={query} onChange={setQuery} placeholder={t("vault.search")} label={t("vault.search")} data-vault-search="" />
       </div>
+      <div id={listId} role="tabpanel" className="flex min-w-0 flex-col gap-1.5">
+        {tab === "payments"
+          ? (
+            <PaymentsPanel
+              data={data}
+              cards={listed}
+              bots={state.bots}
+              botName={botName}
+              renderItem={renderItem}
+              onChanged={refresh}
+              onError={setError}
+            />
+          )
+          : listed.length > 0
+            ? (
+              <div data-settings-card="credentials.items">
+                <SettingsGroup groupId="credentials.items">
+                  {listed.map((item) => <div key={item.id}>{renderItem(item)}</div>)}
+                </SettingsGroup>
+              </div>
+            )
+            : (
+              <p data-vault-empty="" className="flex min-h-[110px] items-center justify-center px-4 text-center text-[13px] leading-[18px] text-ink-secondary">
+                {searching ? t("vault.search.none", { query: query.trim() }) : t(EMPTY_LINE[tab])}
+              </p>
+            )}
+        {/* Payments says it in its own sentence above its cards; the
+            encryption is the page's intro: each once (#4094). */}
+        {tab !== "payments" && (
+          <p data-vault-footer="" className="ps-2 pe-1 text-[12px] leading-4 text-ink-tertiary">{t("vault.footer")}</p>
+        )}
+      </div>
+      <OnePasswordCard data={data} onImported={refresh} />
+      {adding && (
+        <ItemForm
+          key={adding}
+          start={{ kind: adding }}
+          onDone={async () => { setAdding(null); await refresh(); }}
+        />
+      )}
       {transfer === "import" && (
         <ImportPanel
           existing={data.items}
@@ -137,87 +207,16 @@ export function CredentialsSettings() {
         />
       )}
       {transfer === "export" && <ExportPanel onCancel={() => setTransfer(null)} />}
-      {imported && !transfer && <SettingsTextRow live><span data-credential-import-result>{imported}</span></SettingsTextRow>}
-      {showItems && (
-        <div data-settings-card="credentials.items">
-          <SettingsGroup title={t("vault.settings.itemsTitle")} groupId="credentials.items">
-            <SettingsTextRow>{t("vault.settings.itemsSubtitle")}</SettingsTextRow>
-            {listed.length === 0 && !adding && <SettingsTextRow>{t("vault.settings.empty")}</SettingsTextRow>}
-            {listed.map((item) => <div key={item.id}>{renderItem(item)}</div>)}
-            {adding && (
-              <ItemForm
-                onDone={async () => { setAdding(false); await refresh(); }}
-                start={tab === "contacts" ? { kind: "address" } : tab === "logins" ? { kind: "login" } : undefined}
-              />
-            )}
-          </SettingsGroup>
-        </div>
-      )}
-      {showPayments && (
-        <PaymentsPanel
-          data={data}
-          bots={state.bots}
-          botName={botName}
-          addingCard={addingCard}
-          renderItem={renderItem}
-          renderNewCard={() => <ItemForm start={{ kind: "card" }} onDone={async () => { setAddingCard(false); await refresh(); }} />}
-          onAddCard={() => setAddingCard(true)}
-          onChanged={refresh}
-          onError={setError}
-        />
-      )}
-      <OnePasswordCard data={data} onImported={refresh} />
     </div>
   );
 }
 
-/** The vault's ... menu. #3294: an action that cannot apply here (the vault
- * unreachable, nothing to export, export turned off by the organization) is
- * left out, never shown greyed; with none left the menu itself is hidden. */
+/** The New item menu's Import and Export. #3294: an action that cannot
+ * apply here (the vault unreachable, nothing to export, export turned off by
+ * the organization) is left out, never shown greyed. */
 export function vaultMenuActions(input: { unavailable: boolean; exportBlocked: boolean; empty: boolean }): Array<"import" | "export"> {
   if (input.unavailable) return [];
   return input.empty || input.exportBlocked ? ["import"] : ["import", "export"];
-}
-
-function VaultMenu({ unavailable, exportBlocked, empty, onImport, onExport }: {
-  unavailable: boolean;
-  exportBlocked: boolean;
-  empty: boolean;
-  onImport: () => void;
-  onExport: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  usePopoverDismiss(open, rootRef, () => setOpen(false));
-  const actions = vaultMenuActions({ unavailable, exportBlocked, empty });
-  if (actions.length === 0) return null;
-  const choose = (action: () => void) => {
-    setOpen(false);
-    action();
-  };
-  return (
-    <div className="relative" ref={rootRef}>
-      <button
-        type="button"
-        className={`${PILL} inline-flex items-center`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={t("pages.more")}
-        data-vault-menu=""
-        onClick={() => setOpen((current) => !current)}
-      >
-        <Ellipsis size={16} aria-hidden="true" />
-      </button>
-      {open && (
-        <div role="menu" className="absolute end-0 z-20 mt-1 flex min-w-40 flex-col rounded-lg border border-border bg-elevated py-1">
-          <button type="button" role="menuitem" className="px-3 py-2 text-left text-[13px] text-ink hover:bg-hover" data-credentials-import="" onClick={() => choose(onImport)}>{t("vault.menu.import")}</button>
-          {actions.includes("export") && (
-            <button type="button" role="menuitem" className="px-3 py-2 text-left text-[13px] text-ink hover:bg-hover" data-credentials-export="" onClick={() => choose(onExport)}>{t("vault.menu.export")}</button>
-          )}
-        </div>
-      )}
-    </div>
-  );
 }
 
 function itemGreyLine(item: VaultItemListing): string {
@@ -231,44 +230,55 @@ function itemGreyLine(item: VaultItemListing): string {
   return [site, who].filter(Boolean).join(" · ");
 }
 
-export function ItemRow({ item, botName, bots, onEdit, onChanged, onError }: {
+/** One row of the list: the kind's icon, the name, the account line and
+ * Manage, which opens the item in the Vault's window (reveal, note, bots,
+ * Edit, Delete); Edit turns that window into the item's form. */
+export function ItemRow({ item, botName, bots, onChanged }: {
   item: VaultItemListing;
   botName: (id: string) => string;
   bots: ReadonlyArray<{ id: string; name: string }>;
-  onEdit: () => void;
   onChanged: () => Promise<void>;
-  onError: (error: string | null) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState<"detail" | "edit" | null>(null);
   const used = item.lastUsedAt
     ? t("vault.settings.lastUsed", { when: when(item.lastUsedAt), bot: botName(item.lastUsedBy ?? "") })
     : t("vault.settings.neverUsed");
   const grey = itemGreyLine(item);
+  const Icon = KIND_ICON[item.kind];
   return (
     <div data-credential-item={item.id}>
-      <DescribedRow
-        label={item.name}
-        description={grey ? `${grey} · ${used}` : used}
-        rowId={`credential-${item.id}`}
-        below={open ? <VaultItemDetail item={item} botName={botName} bots={bots} onEdit={onEdit} onChanged={onChanged} onError={onError} /> : undefined}
-      >
-        <DisclosurePill open={open} onToggle={() => setOpen((current) => !current)} label={t("vault.item.manage")}>
+      <DescribedRow label={item.name} description={grey ? `${grey} · ${used}` : used} icon={<Icon size={15} />} rowId={`credential-${item.id}`}>
+        <button type="button" className={PILL} data-vault-manage="" aria-label={t("vault.manage.label", { name: item.name })} onClick={() => setOpen("detail")}>
           {t("vault.item.manage")}
-        </DisclosurePill>
+        </button>
       </DescribedRow>
+      {open === "detail" && (
+        <VaultDialog
+          title={item.name}
+          subtitle={grey || t(`vault.kind.${item.kind}`)}
+          onClose={() => setOpen(null)}
+          data-credential-manage={item.id}
+        >
+          <VaultItemDetail item={item} botName={botName} bots={bots} onEdit={() => setOpen("edit")} onDone={() => setOpen(null)} onChanged={onChanged} />
+        </VaultDialog>
+      )}
+      {open === "edit" && <ItemForm item={item} onDone={async () => { setOpen(null); await onChanged(); }} />}
     </div>
   );
 }
 
-function VaultItemDetail({ item, botName, bots, onEdit, onChanged, onError }: {
+function VaultItemDetail({ item, botName, bots, onEdit, onDone, onChanged }: {
   item: VaultItemListing;
   botName: (id: string) => string;
   bots: ReadonlyArray<{ id: string; name: string }>;
   onEdit: () => void;
+  onDone: () => void;
   onChanged: () => Promise<void>;
-  onError: (error: string | null) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  // said once, in the window where the person is looking, never also as
+  // the page's notice behind it (#4094)
+  const [failed, onError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [notes, setNotes] = useState<string | null>(null);
   const [pan, setPan] = useState<string | null>(null);
@@ -307,7 +317,7 @@ function VaultItemDetail({ item, botName, bots, onEdit, onChanged, onError }: {
     item.contact?.email ?? "",
   ].filter(Boolean).join(" · ");
   return (
-    <div className="mt-2 flex flex-col gap-2" data-credential-detail="">
+    <div className="flex flex-col gap-3" data-credential-detail="">
       <p className="text-[12px] text-ink-secondary">{t(`vault.kind.${item.kind}`)}{item.source === "1password" ? " · 1Password" : ""}{saved ? ` · ${saved}` : ""}</p>
       {local && item.hasPassword && (
         <SecretField label={t("vault.field.password")} value={secretValue} busy={busy} reveal onToggle={() => void reveal("password", secretValue, setSecretValue)} showLabel={t("vault.settings.showPassword")} hideLabel={t("vault.settings.hideSecret")} />
@@ -359,13 +369,15 @@ function VaultItemDetail({ item, botName, bots, onEdit, onChanged, onError }: {
           {allow && <button type="button" className={PILL} disabled={busy} onClick={() => void run(async () => { await allowBotAlways(item.id, allow); setAllow(""); })}>{t("vault.settings.allow")}</button>}
         </div>
       )}
-      <div className="flex flex-wrap justify-end gap-2">
-        <button type="button" className={PILL} disabled={busy} onClick={onEdit}>{t("vault.settings.edit")}</button>
-      </div>
-      <div className="flex justify-end">
-        {confirming
-          ? <button type="button" className={DANGER_PILL} disabled={busy} onClick={() => void run(() => deleteCredential(item.id))}>{t("vault.settings.confirmDelete")}</button>
-          : <button type="button" className={DANGER_PILL} disabled={busy} onClick={() => setConfirming(true)}>{t("vault.settings.delete")}</button>}
+      {failed && <p role="alert" className="text-[12px] text-danger">{failed}</p>}
+      <div className="mt-2 flex flex-wrap items-center justify-end gap-2" data-credential-detail-actions="">
+        <span className="me-auto">
+          {confirming
+            ? <button type="button" className={DANGER_PILL} disabled={busy} onClick={() => void run(async () => { await deleteCredential(item.id); onDone(); })}>{t("vault.settings.confirmDelete")}</button>
+            : <button type="button" className={`${PILL} text-danger`} disabled={busy} onClick={() => setConfirming(true)}>{t("vault.settings.delete")}</button>}
+        </span>
+        <button type="button" className={PILL} disabled={busy} data-vault-edit="" onClick={onEdit}>{t("vault.settings.edit")}</button>
+        <button type="button" className={PRIMARY_PILL} disabled={busy} onClick={onDone}>{t("vault.done")}</button>
       </div>
     </div>
   );
@@ -444,6 +456,7 @@ function OnePasswordCard({ data, onImported }: { data: CredentialVaultState; onI
       <SettingsGroup groupId="credentials.onePassword">
         <DescribedRow
           label="1Password"
+          icon={<LockKeyhole size={15} />}
           description={<StatusText tone={connected ? "success" : "neutral"}>{t(connected ? "settings.card.connected" : "settings.card.notConnected")}</StatusText>}
           rowId="onepassword"
           below={open ? (

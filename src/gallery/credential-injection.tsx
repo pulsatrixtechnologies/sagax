@@ -1,7 +1,8 @@
 /** Isolated gallery for headless screenshots of an API key's two uses in
  * Settings > Credentials (2026-10-26): how Sagax sends it on a bot's request,
  * and the command variable the person may turn on. No server: the buttons do
- * nothing here. Not shipped in the app. ?skin=<id>&lang=<code>&only=<sample> */
+ * nothing here. Not shipped in the app. ?skin=<id>&lang=<code>&only=<sample>
+ * (#4094: a form is the Vault's centered window; shoot one at a time with only=) */
 import { StrictMode, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -34,8 +35,8 @@ const samples: Array<{ id: string; width: number; render: () => ReactElement }> 
   {
     id: "rows", width: 720, render: () => (
       <SettingsGroup title="Identifiants" groupId="gallery.rows">
-        <ItemRow item={base} botName={botName} bots={bots} onEdit={() => {}} onChanged={noop} onError={() => {}} />
-        <ItemRow item={withVariable} botName={botName} bots={bots} onEdit={() => {}} onChanged={noop} onError={() => {}} />
+        <ItemRow item={base} botName={botName} bots={bots} onChanged={noop} />
+        <ItemRow item={withVariable} botName={botName} bots={bots} onChanged={noop} />
       </SettingsGroup>
     ),
   },
@@ -56,7 +57,7 @@ const samples: Array<{ id: string; width: number; render: () => ReactElement }> 
   {
     id: "narrow", width: 360, render: () => (
       <SettingsGroup title="Identifiants" groupId="gallery.narrow">
-        <ItemRow item={withVariable} botName={botName} bots={bots} onEdit={() => {}} onChanged={noop} onError={() => {}} />
+        <ItemRow item={withVariable} botName={botName} bots={bots} onChanged={noop} />
       </SettingsGroup>
     ),
   },

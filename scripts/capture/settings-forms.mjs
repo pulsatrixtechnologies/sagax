@@ -31,7 +31,11 @@ const skins = [
  * found wins, so the same list works on the old and the new drawing. */
 const opened = [
   { name: "org-bots-add-secret", sample: "org-bots", click: ["[data-org-secret-add]"] },
-  { name: "credentials-add", sample: "credentials", click: ["[data-credentials-add]", "text=Ajouter un élément"] },
+  // #4094: New item opens a menu, its New login opens a centered window
+  // over the page (portalled to the body), which is the one shot.
+  { name: "credentials-add", sample: "credentials", click: ["[data-vault-new] button"], next: ['[data-bot-profile-add-item="login"]'], shot: "[data-vault-dialog]" },
+  // its Export, the same way (an always-open window would cover every other sample)
+  { name: "credentials-export", sample: "credentials", click: ["[data-vault-new] button"], next: ['[data-bot-profile-add-item="export"]'], shot: "[data-vault-dialog]" },
   { name: "computer-care-disk", sample: "computer-care", click: ["text=Analyser"], wait: "[data-disk-saver-preview]" },
   { name: "environments-forget", sample: "environments", click: ['button[aria-label^="Forget "]'] },
 ];
@@ -62,7 +66,7 @@ try {
   await waitForServer(base);
   const { chromium } = await import(process.env.SAGAX_VERIFY_PLAYWRIGHT || "playwright");
   await mkdir(outDir, { recursive: true });
-  browser = await chromium.launch(process.env.SAGAX_CHROMIUM ? { executablePath: process.env.SAGAX_CHROMIUM } : {});
+  browser = await chromium.launch({ headless: true, ...(process.env.SAGAX_CHROMIUM ? { executablePath: process.env.SAGAX_CHROMIUM } : { channel: "chrome" }) });
   const page = await browser.newPage({ viewport: { width: 1000, height: 1000 }, deviceScaleFactor: 2 });
   page.on("pageerror", (error) => console.error("page error:", error.stack));
   for (const { id, label } of skins) {
@@ -82,9 +86,13 @@ try {
         if (await target.count()) { await target.click(); clicked = true; break; }
       }
       if (!clicked) { console.log("skip", step.name, "(nothing to click)"); continue; }
+      // a menu or window the sample opens may live outside it, at the page's root
+      for (const selector of step.next ?? []) await page.locator(selector).first().click({ timeout: 10_000 });
       if (step.wait) await sample.locator(step.wait).first().waitFor({ timeout: 10_000 });
       await page.waitForTimeout(300);
-      await sample.screenshot({ path: file(step.name, label) });
+      const shot = step.shot ? page.locator(step.shot).first() : sample;
+      await shot.screenshot({ path: file(step.name, label) });
+      if (step.shot) { await page.keyboard.press("Escape"); await page.waitForTimeout(200); }
       console.log("shot", file(step.name, label));
     }
   }

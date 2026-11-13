@@ -647,6 +647,82 @@ natifs ; historique en liste native. Pas de numéro complet ni de CVC à l'écra
 restent dans Connecter des apps. Les envois d'argent via un outil MCP suivent les
 cartes d'envoi ordinaires, pas cet onglet.
 
+### 2.9.2 Coffre : page et fenêtres, mesures de la référence (#4094)
+
+Ajouté le 2026-11-12. Valeurs relevées sur la référence installée (mise en page
+seulement : aucun code, nom de classe, image ni texte recopié).
+
+**Page.** Titre « Coffre », un seul bouton « Nouvel élément » en haut à droite, au
+niveau du titre : pilule pleine (primaire) de 30 px, les mots puis un chevron bas.
+Colonne de la page : 28 px entre l'en-tête et le contenu, 24 px entre la rangée
+d'onglets et la liste, 6 px entre la liste et la phrase grise.
+
+- **Menu Nouvel élément.** Ouvert sous le bouton, aligné à droite. Une section des
+  sortes (icône 16 px et libellé) puis, après un trait, Importer (et Exporter chez
+  Sagax, quand il s'applique). Sagax garde ses six sortes : identifiant, clé API,
+  note sécurisée, carte, adresse, contact.
+- **Onglets et recherche, une rangée.** 12 px entre les onglets et la recherche,
+  centrés en hauteur. Onglets : pilules sans bordure, 5 px de haut et 10 px de côté,
+  6 px entre le libellé et le compte (chiffres tabulaires, gris tertiaire), 4 px entre
+  deux onglets ; choisi = fond gris secondaire et encre primaire, les autres
+  transparents en gris secondaire, survol gris. Tous les onglets sont dessinés, même à
+  zéro. Recherche : pilule de 32 px, base de 180 px, bordure de 1 px, loupe 16 px,
+  6 px entre la loupe et le champ, texte « Chercher dans le coffre ». Sagax lui donne
+  220 px, pour que ce texte français se lise en entier. Les onglets restent sur une
+  ligne : trop étroite, la rangée défile de côté ; sur un téléphone, la recherche passe
+  seule sur la ligne sous les onglets, pleine largeur.
+- **Liste.** Une carte : bordure 0,5 px, rayon 12 px, fond surélevé. Rangée : icône
+  dans une tuile, nom, ligne grise (site ou carte, compte), bouton « Gérer » à droite.
+  Sagax dessine ses rangées avec `DescribedRow` et la tuile d'icône partagée.
+- **Vide.** Pas de carte : une phrase grise centrée, 110 px de haut au moins, propre
+  à l'onglet (et « Rien ne correspond à … » pendant une recherche).
+- **Phrase sous la liste.** 12 px, gris tertiaire, 8 px de retrait à gauche : ce que
+  les bots ne voient jamais. Le chiffrement est dit une fois, dans la phrase sous le
+  titre de la page ; l'onglet Paiements n'a pas cette phrase, puisque la sienne, au-dessus
+  des cartes, dit déjà que le bot ne voit jamais un numéro de carte complet.
+- **Paiements.** « Les bots utilisent d'abord » en première rangée, puis les cartes et
+  les portefeuilles à usage unique (interrupteurs) dans une même liste ; Sagax garde
+  ensuite quels bots peuvent payer, les achats en attente et l'historique.
+
+**Fenêtres (Nouvel élément, Gérer, Modifier, Importer, Exporter).** Centrées sur la
+page voilée, largeur 560 px (min avec la fenêtre moins 32 px), le cadre partagé
+`DialogLayer` et `DialogFrame` (`width="lg"`), titre en haut à gauche et × rond en
+haut à droite, Échap ne ferme que la fenêtre. Champs empilés (`EditorStack`) :
+libellé au-dessus, champ pleine largeur, aide grise dessous, 12 px entre deux champs,
+4 px entre un libellé et son champ ; deux champs courts côte à côte (mois et année,
+ville et région) avec 20 px entre eux. « (Facultatif) » en gris après le libellé, dit
+une fois : jamais repris dans le texte indicatif du champ.
+
+- **Nouvel identifiant.** Ordre : Site web (puis « Ajouter un site web », lien bleu
+  qui ajoute un champ ; l'aide des jokers et des ports dessous), Nom (facultatif,
+  repris du premier site s'il est vide), Nom d'utilisateur ou courriel (facultatif),
+  Mot de passe, Clé de code à usage unique (facultatif ; texte indicatif « Clé ou lien
+  otpauth:// »), Note (facultative ; « Jamais montrée aux bots » en aide grise), puis une ligne grise « Les bots que tu autorises peuvent utiliser
+  cet identifiant pour se connecter pour toi ». Un seul bouton en bas à droite,
+  « Enregistrer l'identifiant », grisé tant que l'élément ne peut pas être enregistré
+  (un nom ou un site ; la clé d'une nouvelle clé API ; le numéro d'une nouvelle carte).
+- **Gérer.** Titre = nom de l'élément, sous-titre = sa ligne grise. Révéler, note,
+  bots permis ; en bas : Supprimer à gauche (en deux temps), Modifier, Terminé.
+  Modifier remplace la fenêtre par le formulaire de l'élément.
+- **Clavier.** Le crochet partagé `useModalDialog` : Tab et Maj+Tab restent dans la
+  fenêtre, Échap la ferme sauf si une liste ouverte dedans l'a déjà pris (elle se ferme
+  seule), le focus revient à ce qui l'a ouverte. Réglages laisse les touches à une
+  fenêtre de la couche de dialogue tant qu'elle est ouverte.
+- **Importer.** Titre, le paragraphe des formats, Annuler et « Choisir un fichier
+  d'export » ; une fois le fichier lu, l'aperçu dans la même fenêtre et « Importer N ».
+
+Code : `src/components/settings/CredentialsSettings.tsx`, `VaultItemForm.tsx`,
+`CredentialsTransfer.tsx`, `VaultPayments.tsx`, `VaultDialog.tsx`. Captures :
+`scripts/capture/vault-page.mjs` (galerie `settings-pages.html?section=credentials&vault=empty|full`).
+
+**Téléphone (à suivre dans son lot).** Mêmes onglets comptés et même recherche ;
+un seul « + » pour Nouvel élément avec les six sortes, Importer et Exporter ; une
+liste avec Gérer ; la phrase grise sous la liste ; Nouvel identifiant en feuille aux
+champs empilés dans le même ordre (Site web avec Ajouter un site web, Nom
+facultatif, Nom d'utilisateur, Mot de passe, code à usage unique, Note) et
+Enregistrer grisé tant qu'il manque le minimum ; Paiements avec « Les bots utilisent
+d'abord » en tête puis cartes et portefeuilles dans une liste.
+
 ### 2.10 Permissions et cartes d'approbation
 
 - **Page Permissions** : une carte avec l'interrupteur d'examen automatique et sa phrase.

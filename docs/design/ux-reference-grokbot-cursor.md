@@ -226,7 +226,7 @@ reste au-dessus du clavier, coins pleins.
 **Bureau.** Panneau à droite, même fond que la conversation, séparé par un simple
 changement de surface. En haut à droite : partager (export) et fermer, boutons ronds.
 
-- En tête : grande mascotte centrée, nom dessous en titre, puis trois onglets texte
+- En tête : mascotte centrée, « Nom · Titre » dessous sur une ligne, puis les onglets texte
   (Détails, Bibliothèque, Ordinateur). L'onglet choisi est une pilule remplie discrète ;
   les autres sont du texte gris. Pas de quatrième onglet ni de « … » dans l'en-tête :
   le menu du bot est un clic droit sur la mascotte ou le nom, l'édition passe par le
@@ -241,6 +241,27 @@ changement de surface. En haut à droite : partager (export) et fermer, boutons 
   chez Sagax ; une section vide n'est pas dessinée. Les hôtes non surveillés
   (unattended) n'apparaissent pas ici : ils vivent dans le sélecteur de lieu de
   l'onglet Ordinateur.
+- **Mesures de l'en-tête et des rangées (#4151, mesurées le 2026-11-13 sur la
+  référence, police de la référence et prose du chat à 15 px, valeurs seulement)** :
+  mascotte de 64 px dessinée aussi grande que sa boîte (`fillBox`), 8 px sous la
+  barre du haut (engrenage et X) ; « Nom · Titre » sur UNE ligne, 16 px sous la
+  mascotte, 17/24 medium, nom, point et titre dans la même encre primaire, le
+  titre coupé le premier avec des points de suspension, le texte entier en
+  infobulle (la forme jointe de la pilule du chat, `PillName`, voir 8.0) ; le sélecteur Activité / Bibliothèque
+  16 px sous le nom et 10 px au-dessus du contenu. Rangée de routine sur deux
+  lignes (nom en 13/18, horaire en mots en 12/16 gris), horloge de 16 px trait
+  1,5 à gauche dans une case de 20 px. Le dernier résultat se dit par la couleur
+  de l'horloge, avec les jetons d'état existants : gris (`ink-tertiary`) quand la
+  dernière exécution s'est bien passée ou qu'il n'y en a pas, rouge (`danger`)
+  quand elle a échoué ou a été manquée, orange (`warning`) quand elle s'est
+  terminée avec des problèmes ou attend quelque chose. Les mots de l'ancienne
+  troisième ligne (résultat, il y a combien de temps, le court détail) sont
+  l'infobulle et le nom accessible de l'horloge ; un toucher ou Entrée sur la
+  rangée ouvre la routine et son journal, où ils restent. Une seule composante
+  (`RoutineList` avec `leadingClock`) dessine la liste « À venir » et la liste
+  complète du panneau ; la page Routines garde sa ligne du dernier résultat.
+  Captures : `node scripts/capture/bot-panel-head.mjs` (galerie
+  `src/gallery/bot-panel-head.html`).
 - **Bibliothèque** : groupes datés (Épinglés, Cette semaine, Plus ancien), chaque groupe
   une carte de rangées fines (icône de type, nom du fichier ou de la page). Vide : une
   icône de dossier et une phrase qui dit ce qui apparaîtra ici.
@@ -1502,7 +1523,7 @@ porte UX (section 6).
 ### 8.0 Titre du bot
 
 - Partout où le nom d'un bot paraît avec son titre (accueil du chat neuf,
-  panneau du bot, groupe, Coding, profil, routines, barre latérale, tuiles
+  groupe, Coding, profil, routines, barre latérale, tuiles
   épinglées, rangées) : le nom, puis le titre dessous, plus petit, en gris
   secondaire, en texte simple. Jamais de pastille, d'étiquette ni de contour
   (décision du propriétaire, 2026-11-06, confirmée le 2026-11-07).
@@ -1515,6 +1536,11 @@ porte UX (section 6).
   encre (14/20 medium, encre primaire : #4163, le propriétaire 2026-11-13,
   mesuré sur la référence) ; dans la rangée de la barre latérale, le titre
   reste en 14 regular gris secondaire. Sous une tuile épinglée, le titre reste dessous, en texte simple.
+- L'en-tête du panneau du bot suit la même forme jointe que la pilule
+  (`PillName`, #4151, le propriétaire 2026-11-13, côte à côte avec la
+  référence) : « Nom · Titre » sur une ligne, en 17/24 medium, encre primaire,
+  centré, le titre coupé le premier, les deux restent modifiables sur place
+  (voir 2.3).
 - Un correctif de cet élément balaye toutes les surfaces qui le dessinent, pas
   seulement celle de la capture.
 

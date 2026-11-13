@@ -1,7 +1,7 @@
 // The bot panel, as the reference design draws it (#2125): a round gear at
 // the top left (the bot's profile page) and a round X at the top right, a
-// mascot sized to Grok Bot (#2196), the name with the label under it, then two
-// tabs, Activity and Library. Once the body scrolls past the tabs, the head
+// mascot at the reference's measure (#4151: a 64px mark that fills its box),
+// "Name · Title" on one line, then two tabs, Activity and Library. Once the body scrolls past the tabs, the head
 // compacts into one row: gear, tabs centered, X. The bot's menu (archive,
 // primary, export, copy link, float) opens on a right click on the mascot or
 // the name, and the profile page holds the same actions. Every section lives
@@ -51,11 +51,11 @@ import { PanelPageHostProvider } from "./bot-settings/PanelPage";
 const panelScroll = new Map<string, number>();
 
 /**
- * Bot panel mascot box size (#2196). A shape's painted body fills ~65% of its
- * box (30×28 in a 46 box); 92 yields a ~60px visible form, matching Grok Bot.
- * Locked by BotSettingsDialog.mascot-size.test.ts — do not shrink.
+ * Bot panel mascot size (#4151, measured on the reference): a 64px mark drawn
+ * as large as its box (fillBox), 8px under the top bar, 16px over the name.
+ * Locked by BotSettingsDialog.mascot-size.test.ts.
  */
-export const BOT_PANEL_AVATAR_SIZE = 92;
+export const BOT_PANEL_AVATAR_SIZE = 64;
 
 export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   bot: Bot;
@@ -322,21 +322,26 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
             </div>
           ) : (
             <>
-              {/* Who this is: it scrolls away, the tabs stay */}
-              <div className="flex shrink-0 flex-col items-center px-4 pb-1">
+              {/* Who this is: it scrolls away, the tabs stay. -mt-1 takes the
+                  card's 12px jump room to the reference's 8px under the top
+                  bar (#4151); a jump (8% of 64px) still fits. */}
+              <div data-bot-panel-head="" className="-mt-1 flex shrink-0 flex-col items-center px-4">
                 <BotProfileAvatarCard
                   bot={bot}
                   size={BOT_PANEL_AVATAR_SIZE}
+                  fillBox
                   activeState={derived.activeState}
                   mascotMotion={derived.mascotMotion}
                   onPatch={derived.patch}
                   onContextMenu={openActionsAt}
                 />
-                {/* The name on its line, the title under it, smaller and
-                    secondary (JC: never "Name · Title" on one line); both
-                    edited where they show. Spacing matches Grok Bot's panel
-                    header (#2196). */}
+                {/* "Name · Title" on one line, as the reference (#4151): the
+                    title cut first, the whole text on hover; both edited
+                    where they show. 16px under the mascot's box (the card's
+                    button keeps 7px of line under the box). */}
                 <BotNameTitleStack
+                  oneLine
+                  className="mt-[9px]"
                   name={bot.name}
                   title={bot.title}
                   onSaveName={canEditBotField(state.config, bot, "name") ? (name) => derived.patch({ name }) : undefined}
@@ -346,8 +351,9 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                 />
               </div>
               {/* The tabs; once scrolled to the top they move into the top bar.
-                  pt-10 keeps ~40px under the title, as on Grok Bot (#2196). */}
-              <div ref={tabsRef} data-bot-panel-tabs="" className={cn("flex justify-center px-4 pb-4 pt-10", showCompact && "invisible")}>
+                  16px under the name and 10px over the content, as the
+                  reference's panel (#4151). */}
+              <div ref={tabsRef} data-bot-panel-tabs="" className={cn("flex justify-center px-4 pb-2.5 pt-4", showCompact && "invisible")}>
                 {tabList(false)}
               </div>
 

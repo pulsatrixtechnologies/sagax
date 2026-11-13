@@ -30,6 +30,7 @@ export function BotProfileAvatarCard({
   onContextMenu,
   size = 144,
   onOpen,
+  fillBox = false,
 }: {
   bot: Bot;
   activeState: MausState;
@@ -45,6 +46,9 @@ export function BotProfileAvatarCard({
   /** What a click does instead of opening the profile page (the profile
    * page goes to its Appearance section). */
   onOpen?: () => void;
+  /** Draw the mascot as large as its box, as the reference does in its
+   * panel (#4151: a 64px mark that fills its box, BotAvatar fillBox). */
+  fillBox?: boolean;
 }) {
   const dispatch = useStoreDispatch();
   const { draft } = useBotEditor();
@@ -100,6 +104,7 @@ export function BotProfileAvatarCard({
             bot={bot}
             state={activeState}
             size={size}
+            fillBox={fillBox}
             motion={mascotMotion?.kind ?? "none"}
             motionKey={mascotMotion?.nonce ?? 0}
           />

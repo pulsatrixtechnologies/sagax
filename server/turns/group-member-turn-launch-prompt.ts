@@ -296,7 +296,7 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
     })() },
     // readyBot was captured before awaited setup work; an assignment PUT in
     // that window must still reach this turn's prompt.
-    { id: "skills", label: "Skills index", text: scopedSkillsPrompt(bot, instance, roomPrincipal ?? "", { managedTools: skillDiscoveryAvailable(Boolean(integrations.agents), roomToolScope), fileAccess: Boolean(workspace), syncNative: true, nativeWorkspace: workspace ? ensureTaskWorkspace(bot.id, threadId) : undefined })?.text ?? "" },
+    { id: "skills", label: "Skills index", text: scopedSkillsPrompt(bot, instance, roomPrincipal ?? "", { managedTools: skillDiscoveryAvailable(Boolean(integrations.agents), roomToolScope), fileAccess: Boolean(workspace), syncNative: true, nativeWorkspace: workspace ? ensureTaskWorkspace(bot.id, threadId) : undefined, threadId })?.text ?? "" },
     { id: "skill-instructions", label: "Skill instructions", text: renderSkillInstructions(selectedSkills, { includeRoot: Boolean(workspace) && roomServerFiles }) },
     { id: "playbooks", label: "Playbooks", text: installedPlaybookInstructions(text, bot.playbooks) },
   ];

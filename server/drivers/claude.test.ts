@@ -1680,6 +1680,33 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(seen.argv[seen.argv.indexOf("--plugin-dir") + 1]).toBe(plugin);
   });
 
+  // #4082: the CLI reads the skill on this server and fills in its folder;
+  // the bot runs the command in its environment, where the copy lives.
+  it("loads a plugin skill naming ${CLAUDE_PLUGIN_ROOT} with the environment's paths when the turn's commands run there", async () => {
+    await create();
+    const plugin = join(scratch, "plugins", "dispatch");
+    mkdirSync(join(plugin, "skills", "plan"), { recursive: true });
+    mkdirSync(join(plugin, ".claude-plugin"), { recursive: true });
+    writeFileSync(join(plugin, ".claude-plugin", "plugin.json"), JSON.stringify({ name: "dispatch" }));
+    const skill = "---\nname: plan\ndescription: Plans.\n---\nRun `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/plan.py --cache ${CLAUDE_PLUGIN_DATA}/cache`.\n";
+    writeFileSync(join(plugin, "skills", "plan", "SKILL.md"), skill);
+    const dump = join(scratch, "org-plugin-environment.json");
+    process.env.FAKE_CLAUDE_DUMP = dump;
+    const environment = { "sagax-environment": { type: "http" as const, url: "http://127.0.0.1:9/api/internal/sandbox/mcp", headers: {} } };
+    const org = await instance.adapter.sendTurn({ threadId: "t-org-plugin-environment", text: "hello", withholdHostTools: true, pluginDirs: [plugin], integrations: { custom: environment } });
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === org.turnId);
+    let seen = JSON.parse(readFileSync(dump, "utf8"));
+    const loaded = String(seen.argv[seen.argv.indexOf("--plugin-dir") + 1]);
+    expect(readFileSync(join(loaded, "skills", "plan", "SKILL.md"), "utf8"))
+      .toContain("Run `python3 /workspace/sagax-plugins/dispatch/scripts/plan.py --cache /workspace/sagax-plugin-data/dispatch/cache`.");
+    expect(readFileSync(join(plugin, "skills", "plan", "SKILL.md"), "utf8")).toBe(skill);
+    // a solo turn runs its commands on this machine: the installed folder
+    const solo = await instance.adapter.sendTurn({ threadId: "t-solo-plugin-environment", text: "hello", pluginDirs: [plugin] });
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === solo.turnId);
+    seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.argv[seen.argv.indexOf("--plugin-dir") + 1]).toBe(plugin);
+  });
+
   it("keeps only the allowlisted built-ins of an owner's selection on an organization server, and the selection as is on a solo one", async () => {
     await create(undefined, {}, { tools: ["Bash", "WebSearch", "Agent", "SomeFutureTool"] });
     const dump = join(scratch, "org-selected.json");

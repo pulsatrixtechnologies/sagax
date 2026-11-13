@@ -5,7 +5,7 @@ import { syncSkillLinks } from "../skills/skills.ts";
 export type Host = Record<string, any>;
 
 export function createScopedSkillsPrompt(getHost: () => Host): any {
-function scopedSkillsPrompt(bot: BotRecord, instance: { driverKind: string } | null | undefined, principal: string | undefined, options: { managedTools: boolean; fileAccess: boolean; syncNative?: boolean; nativeWorkspace?: string; indexOnly?: boolean }) {
+function scopedSkillsPrompt(bot: BotRecord, instance: { driverKind: string } | null | undefined, principal: string | undefined, options: { managedTools: boolean; fileAccess: boolean; syncNative?: boolean; nativeWorkspace?: string; indexOnly?: boolean; threadId?: string }) {
   const host = getHost();
   const { DATA_DIR, resolvedSkillFiles, skillsLibraryEnabled, workspaceDir } = host;
   const kind = instance?.driverKind ?? "";
@@ -27,7 +27,9 @@ function scopedSkillsPrompt(bot: BotRecord, instance: { driverKind: string } | n
     return flowNote ? { text: flowNote, byCapability: {}, index: { bytes: Buffer.byteLength(flowNote, "utf8"), maxBytes: 0, skills: 0, maxSkills: 0, omitted: 0, parts: { skills: 0, commands: 0, agents: 0 } } } : undefined;
   }
   const inventory = host.scopedSkillInventory(bot, instance, principal);
-  const plugins = host.scopedPluginFolders(bot, person);
+  // #4082: a turn whose commands run in the person's environment reads the
+  // plugin copies whose text names the plugin's paths there.
+  const plugins = host.turnPluginFolders(bot, person, options.threadId);
   const personalRoot = skillsLibraryEnabled(host.cfg) && person ? host.personalSkills.root(person) : undefined;
   const assigned = skillsLibraryEnabled(host.cfg) ? (host.store.bot(bot.id)?.assignedSkills ?? bot.assignedSkills) : undefined;
   if (options.syncNative && options.nativeWorkspace && host.engineWorksInFiles(kind)) {

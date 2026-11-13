@@ -122,6 +122,9 @@ export interface InternalMemoryDeps {
   personalSkillInputs(bot: InternalMemoryBot, person: string): Array<{ enabled?: boolean; shadowed?: boolean; name: string }>;
   resolvedLibrarySkill(bot: InternalMemoryBot, name: string): { name: string; file: string } | null;
   scopedPluginFolders(bot: InternalMemoryBot, person: string): Array<{ name: string; dir: string; scope: string }>;
+  /** #4082: the plugin folders the turn of `threadId` reads: in the person's
+   * environment, the copies whose text names the plugin's paths there. */
+  turnPluginFolders(bot: InternalMemoryBot, person: string, threadId: string): Array<{ name: string; dir: string; scope: string }>;
   personalSkillsRoot(person: string): string | undefined;
   readWorkspaceText(
     botId: string,
@@ -427,7 +430,7 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
           sender.id,
           asked,
           Number(url?.searchParams.get("offset") ?? 0),
-          deps.scopedPluginFolders(sender, person),
+          deps.turnPluginFolders(sender, person, capability.threadId),
           deps.skillsLibraryEnabled() && person ? deps.personalSkillsRoot(person) : undefined,
           librarySkills,
         );

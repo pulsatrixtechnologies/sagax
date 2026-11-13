@@ -239,7 +239,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       { id: "docs", label: "Documents index", text: docsIndexPrompt(state.bot.id, { tools: state.integrations.agents ? "agents" : state.worksInWorkspace && serverFiles ? "files" : "none" }) },
       // liveBot was captured before awaited setup work; an assignment PUT
       // in that window must still reach this turn's prompt.
-      { id: "skills", label: "Skills index", text: scopedSkillsPrompt(state.bot, state.instance, orgSpeakerPrincipal(state.bot, state.speaker), { managedTools: skillDiscoveryAvailable(Boolean(state.integrations.agents), state.toolScope), fileAccess: Boolean(state.privateWorkspace), syncNative: true, nativeWorkspace: state.privateWorkspace, indexOnly: state.coldPrompt })?.text ?? "" },
+      { id: "skills", label: "Skills index", text: scopedSkillsPrompt(state.bot, state.instance, orgSpeakerPrincipal(state.bot, state.speaker), { managedTools: skillDiscoveryAvailable(Boolean(state.integrations.agents), state.toolScope), fileAccess: Boolean(state.privateWorkspace), syncNative: true, nativeWorkspace: state.privateWorkspace, indexOnly: state.coldPrompt, threadId: state.threadId })?.text ?? "" },
       { id: "skill-instructions", label: "Skill instructions", text: state.coldPrompt ? "" : serverFiles ? state.skillInstructions : renderSkillInstructions(state.selectedSkills, { includeRoot: false }) },
       { id: "playbooks", label: "Playbooks", text: state.coldPrompt ? "" : state.packagePlaybooks },
       { id: "webhook", label: "Webhook provenance", text: state.opts?.automationSource === "webhook" ? WEBHOOK_PROMPT : "" },

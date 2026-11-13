@@ -73,4 +73,27 @@ describe("plugin agent roles on a bot turn (#3384)", () => {
     expect(next).not.toBe(copy);
     expect(readFileSync(join(next, "agents", "px-triage.md"), "utf8")).toContain("Sorts work.");
   });
+
+  // #4082: the turn's commands run in the person's environment
+  it("loads a copy whose skill, command and role text names the environment's paths", () => {
+    const { dir, root } = plugin();
+    const skill = "---\nname: triage\ndescription: d\n---\nRun `python3 ${CLAUDE_PLUGIN_ROOT}/bin/t.py --db $CLAUDE_PLUGIN_DATA/db`.\n";
+    writeFileSync(join(dir, "skills", "triage", "SKILL.md"), skill);
+    mkdirSync(join(dir, "commands"), { recursive: true });
+    writeFileSync(join(dir, "commands", "go.md"), "Run ${CLAUDE_PLUGIN_ROOT}/bin/go.sh\n");
+    writeFileSync(join(dir, "agents", "px-triage.md"), ROLE.replace("You are px-triage.", "You are px-triage. Read ${CLAUDE_PLUGIN_ROOT}/README.md."));
+    const environment = { root: "/workspace/sagax-plugins/pulsatrix-dev", data: "/workspace/sagax-plugin-data/pulsatrix-dev" };
+    // even a turn that keeps every built-in
+    const copy = pluginDirForTurn(dir, { offered: null, denied: [] }, root, environment);
+    expect(copy).not.toBe(dir);
+    expect(readFileSync(join(copy, "skills", "triage", "SKILL.md"), "utf8")).toContain("Run `python3 /workspace/sagax-plugins/pulsatrix-dev/bin/t.py --db /workspace/sagax-plugin-data/pulsatrix-dev/db`.");
+    expect(readFileSync(join(copy, "commands", "go.md"), "utf8")).toBe("Run /workspace/sagax-plugins/pulsatrix-dev/bin/go.sh\n");
+    // an organization turn: the role starts with the turn's tools and names the paths
+    const org = readFileSync(join(pluginDirForTurn(dir, ORG, root, environment), "agents", "px-triage.md"), "utf8");
+    expect(frontmatter(org).tools).toBeUndefined();
+    expect(org).toContain("Read /workspace/sagax-plugins/pulsatrix-dev/README.md.");
+    expect(readFileSync(join(dir, "skills", "triage", "SKILL.md"), "utf8")).toBe(skill);
+    // without an environment, the paths stay the engine's to fill
+    expect(pluginDirForTurn(dir, { offered: null, denied: [] }, root)).toBe(dir);
+  });
 });

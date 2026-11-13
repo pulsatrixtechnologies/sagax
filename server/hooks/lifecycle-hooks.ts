@@ -7,6 +7,8 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
+import { withEnvironmentPluginPaths } from "../sandbox/sandbox-plugins.ts";
+
 export const LIFECYCLE_EVENTS = [
   "pre_compact",
   "subagent_start",
@@ -184,7 +186,7 @@ export function commandWithFiles(command: string, files: Record<string, string>,
     const b64 = Buffer.from(body, "utf8").toString("base64");
     writes.push(`printf %s ${shSingle(b64)} | base64 -d > ${shSingle(`${root}/${name}`)}`);
   }
-  const rewritten = command.replaceAll("${CLAUDE_PLUGIN_ROOT}", root).replaceAll("$CLAUDE_PLUGIN_ROOT", root);
+  const rewritten = withEnvironmentPluginPaths(command, { root });
   const b64 = Buffer.from(stdin, "utf8").toString("base64");
   return `${writes.join(" && ")} && printf %s ${shSingle(b64)} | base64 -d | /bin/sh -c ${shSingle(rewritten)}`;
 }

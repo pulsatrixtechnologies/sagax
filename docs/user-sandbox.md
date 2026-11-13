@@ -175,8 +175,8 @@ in its tool descriptions and in a `<workplace>` note of each message.
 **Tidy at start.** At the first bot call after the environment starts (the
 marker is in `/tmp`, a tmpfs), every entry of the `/workspace` root that is
 not a dot entry nor in `SANDBOX_ROOT_KEEP` (`bots`, `shared`, `_unsorted`,
-`lost+found`, `attachments`, `sagax-plugins`, `sagax-capability-skills`,
-`skills`, `marketplaces`, `Desktop`) is moved: into the folder of the one bot
+`lost+found`, `attachments`, `sagax-plugins`, `sagax-plugin-data`,
+`sagax-capability-skills`, `skills`, `marketplaces`, `Desktop`) is moved: into the folder of the one bot
 whose conversations name `/workspace/<entry>` (or the bare name when it is
 distinctive), else into `_unsorted/<date>/`. A name already taken there gets
 ` (2)`. Nothing is deleted. Each move is a row of

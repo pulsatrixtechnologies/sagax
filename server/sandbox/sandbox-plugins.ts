@@ -22,7 +22,10 @@
 //     stages and unpacks under its own name, and the swap that loses a race
 //     to an identical copy counts as copied.
 import { execChild } from "../process/spawn-helper.ts";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import { cpSync, lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative, resolve, sep } from "node:path";
 
 import type { SandboxExecInput } from "./sandboxd-core.ts";
 import { manifestDigest, pluginFolderDigests, type PluginFolderDigests } from "./sandbox-plugin-digests.ts";
@@ -32,6 +35,85 @@ import { workspaceManifest } from "./sandbox-workspace-copy.ts";
 export const SANDBOX_PLUGINS_DIR = "/workspace/sagax-plugins";
 /** Where the person's own skills land (syncPluginFoldersForTurn). */
 export const SANDBOX_CAPABILITY_SKILLS_DIR = "/workspace/sagax-capability-skills";
+/** #4082: each plugin's data folder in the environment, the place its text
+ * names as `${CLAUDE_PLUGIN_DATA}`. Kept apart from the plugin folder, which
+ * a copy replaces whole, so what a plugin stores survives its updates. */
+export const SANDBOX_PLUGIN_DATA_DIR = "/workspace/sagax-plugin-data";
+
+/** #4082: the paths a plugin's text names, in the environment. Without
+ * `data`, `${CLAUDE_PLUGIN_DATA}` stays as written. */
+export interface PluginEnvironmentPaths { root: string; data?: string }
+
+/** One plugin's folder and data folder in the person's environment. */
+export function sandboxPluginPaths(name: string, root = SANDBOX_PLUGINS_DIR, dataRoot = SANDBOX_PLUGIN_DATA_DIR): Required<PluginEnvironmentPaths> {
+  return { root: `${root}/${name}`, data: `${dataRoot}/${name}` };
+}
+
+const PLUGIN_PATH_VARIABLE = /\$\{CLAUDE_PLUGIN_(ROOT|DATA)\}|\$CLAUDE_PLUGIN_(ROOT|DATA)(?![A-Za-z0-9_])/g;
+
+/** #4082: a plugin's skill, command or agent text with `${CLAUDE_PLUGIN_ROOT}`
+ * and `${CLAUDE_PLUGIN_DATA}` (braced or bare) written as the environment's
+ * paths. The engine reads that text on the Sagax server and would put the
+ * server's folder there, while the bot runs the commands in its environment,
+ * where the plugin's copy lives. */
+export function withEnvironmentPluginPaths(text: string, paths: PluginEnvironmentPaths): string {
+  return text.replace(PLUGIN_PATH_VARIABLE, (match: string, braced?: string, bare?: string) => ((braced ?? bare) === "ROOT" ? paths.root : paths.data ?? match));
+}
+
+/** The text files (`.md`) a plugin's engine reads as skills, commands and
+ * agents: these folders and the same keys of its manifest, inside the plugin
+ * only, links never followed. */
+export function pluginTextFiles(dir: string, keys: ReadonlyArray<"skills" | "commands" | "agents"> = ["skills", "commands", "agents"]): string[] {
+  const base = resolve(dir);
+  const roots = keys.map((key) => join(base, key));
+  try {
+    const manifest = JSON.parse(readFileSync(join(base, ".claude-plugin", "plugin.json"), "utf8")) as Record<string, unknown>;
+    for (const key of keys) {
+      const value = manifest[key];
+      const entries = typeof value === "string" ? value.split(",") : Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+      for (const entry of entries.map((item) => item.trim()).filter(Boolean)) {
+        const path = resolve(base, entry);
+        if (path === base || path.startsWith(base + sep)) roots.push(path);
+      }
+    }
+  } catch { /* no manifest, or none readable: the folders only */ }
+  const out = new Set<string>();
+  const walk = (path: string, depth: number) => {
+    let stat;
+    try { stat = lstatSync(path); } catch { return; }
+    if (stat.isSymbolicLink()) return;
+    if (stat.isFile()) { if (path.endsWith(".md")) out.add(path); return; }
+    if (!stat.isDirectory() || depth > 4) return;
+    for (const name of readdirSync(path)) walk(join(path, name), depth + 1);
+  };
+  for (const root of roots) walk(root, 0);
+  return [...out].sort();
+}
+
+/** #4082: the plugin's text files that name its paths, rewritten for the
+ * environment (relative path to new text). Empty when none does. */
+export function environmentPluginRewrites(dir: string, paths: PluginEnvironmentPaths): Map<string, string> {
+  const rewrites = new Map<string, string>();
+  for (const file of pluginTextFiles(dir)) {
+    let text: string;
+    try { text = readFileSync(file, "utf8"); } catch { continue; }
+    const next = withEnvironmentPluginPaths(text, paths);
+    if (next !== text) rewrites.set(relative(resolve(dir), file), next);
+  }
+  return rewrites;
+}
+
+/** Whether a plugin content names its paths, by its digest: read once. */
+const namesPluginPaths = new Map<string, boolean>();
+function contentNamesPluginPaths(dir: string, digest: string): boolean {
+  let known = namesPluginPaths.get(digest);
+  if (known === undefined) {
+    known = environmentPluginRewrites(dir, { root: "/", data: "/" }).size > 0;
+    namesPluginPaths.set(digest, known);
+    if (namesPluginPaths.size > 2_000) namesPluginPaths.delete(namesPluginPaths.keys().next().value!);
+  }
+  return known;
+}
 /** A plugin larger than this (compressed) is not copied. */
 export const MAX_PLUGIN_ARCHIVE_BYTES = 16 * 1024 * 1024;
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -48,11 +130,33 @@ export function pluginDigest(dir: string): string {
   return manifestDigest(workspaceManifest(dir));
 }
 
-function pluginArchive(dir: string): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
+function tarFolder(dir: string): Promise<Buffer> {
+  return new Promise((done, reject) => {
     execChild("tar", ["-czf", "-", "-C", dir, "."], { encoding: "buffer", maxBuffer: MAX_PLUGIN_ARCHIVE_BYTES + 1, env: { PATH: process.env.PATH ?? "/usr/bin:/bin", COPYFILE_DISABLE: "1" } },
-      (error, stdout) => (error ? reject(error) : resolve(stdout as unknown as Buffer)));
+      (error, stdout) => (error ? reject(error) : done(stdout as unknown as Buffer)));
   });
+}
+
+/** The plugin's archive; with `paths`, its text names the environment's
+ * paths (#4082), from a staged copy (the installed folder is never changed). */
+async function pluginArchive(dir: string, paths?: PluginEnvironmentPaths): Promise<Buffer> {
+  const rewrites = paths ? environmentPluginRewrites(dir, paths) : new Map<string, string>();
+  if (!rewrites.size) return tarFolder(dir);
+  const staging = mkdtempSync(join(tmpdir(), "sagax-plugin-"));
+  try {
+    const copy = join(staging, "plugin");
+    cpSync(dir, copy, { recursive: true, dereference: false });
+    for (const [path, text] of rewrites) writeFileSync(join(copy, path), text);
+    return await tarFolder(copy);
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
+}
+
+/** #4082: the marker of a copy whose text names the environment's paths:
+ * a copy made before that rewrite (same content) is replaced once. */
+function environmentDigest(digest: string, paths: PluginEnvironmentPaths): string {
+  return createHash("sha256").update(`environment-paths-1\0${digest}\0${paths.root}\0${paths.data}`).digest("hex");
 }
 
 export interface PluginSyncResult {
@@ -221,15 +325,18 @@ export function syncPluginsToSandbox(
   plugins: ReadonlyArray<{ name: string; dir: string }>,
   target: SandboxPluginExec,
   root = SANDBOX_PLUGINS_DIR,
-  options: PluginSyncOptions = {},
+  options: PluginSyncOptions & { dataRoot?: string } = {},
 ): Promise<PluginSyncResult> {
-  return syncPluginRootsToSandbox([{ root, plugins }], target, options);
+  return syncPluginRootsToSandbox([{ root, plugins, ...(options.dataRoot ? { dataRoot: options.dataRoot } : {}) }], target, options);
 }
 
 /** {@link syncPluginsToSandbox} for several roots at once: with an
- * environment memory, the markers of every root are read in one command. */
+ * environment memory, the markers of every root are read in one command.
+ * #4082: a root with a `dataRoot` holds plugins an engine reads: their text
+ * that names `${CLAUDE_PLUGIN_ROOT}` or `${CLAUDE_PLUGIN_DATA}` lands with
+ * the environment's paths, and their data folder is made there. */
 export async function syncPluginRootsToSandbox(
-  groups: ReadonlyArray<{ root: string; plugins: ReadonlyArray<{ name: string; dir: string }> }>,
+  groups: ReadonlyArray<{ root: string; dataRoot?: string; plugins: ReadonlyArray<{ name: string; dir: string }> }>,
   target: SandboxPluginExec,
   options: PluginSyncOptions = {},
 ): Promise<PluginSyncResult> {
@@ -238,19 +345,20 @@ export async function syncPluginRootsToSandbox(
   const digests = options.digests ?? pluginFolderDigests;
   const presence = options.presence && options.environment !== undefined ? { memory: options.presence, environment: options.environment } : null;
   const epoch = presence ? presence.memory.epoch(presence.environment) : 0;
-  const pending: Array<{ plugin: { name: string; dir: string }; root: string; digest: string; scope: string; known?: string }> = [];
-  const rows = groups.flatMap(({ root, plugins }) => plugins.map((plugin) => ({ root, plugin })));
+  const pending: Array<{ plugin: { name: string; dir: string }; root: string; digest: string; scope: string; known?: string; paths?: PluginEnvironmentPaths }> = [];
+  const rows = groups.flatMap(({ root, dataRoot, plugins }) => plugins.map((plugin) => ({ root, dataRoot, plugin })));
   // the folders' digests at once: each is its signature alone while the
   // folder did not change (sandbox-plugin-digests.ts)
   const computed = await Promise.allSettled(rows.map(({ plugin }) => (NAME.test(plugin.name) ? digests.digest(plugin.dir) : Promise.reject(new Error("invalid name")))));
-  rows.forEach(({ root, plugin }, index) => {
+  rows.forEach(({ root, dataRoot, plugin }, index) => {
     const scope = `${options.scope ?? ""}\n${root}`;
     const result = computed[index]!;
     if (result.status === "rejected") {
       out.skipped.push({ name: plugin.name, reason: result.reason instanceof Error ? result.reason.message : String(result.reason) });
       return;
     }
-    const digest = result.value;
+    const paths = dataRoot !== undefined && contentNamesPluginPaths(plugin.dir, result.value) ? sandboxPluginPaths(plugin.name, root, dataRoot) : undefined;
+    const digest = paths ? environmentDigest(result.value, paths) : result.value;
     const held = failures?.pending(scope, plugin.name, digest);
     if (held) { (out.deferred ??= []).push({ name: plugin.name, ...held }); return; }
     const known = presence?.memory.confirmed(presence.environment, root, plugin.name);
@@ -260,7 +368,7 @@ export async function syncPluginRootsToSandbox(
     }
     // a changed plugin whose old content was confirmed there is copied
     // without reading its marker again
-    pending.push({ plugin, root, digest, scope, ...(known !== undefined ? { known } : {}) });
+    pending.push({ plugin, root, digest, scope, ...(known !== undefined ? { known } : {}), ...(paths ? { paths } : {}) });
   });
   if (!pending.length) return out;
   // #3619: the environment's markers, all in one command, when this call
@@ -273,7 +381,7 @@ export async function syncPluginRootsToSandbox(
       unread = `copy failed: ${errorText(error)}`;
     }
   }
-  for (const { plugin, root, digest, scope, known } of pending) {
+  for (const { plugin, root, digest, scope, known, paths } of pending) {
     const fail = (reason: string) => {
       presence?.memory.forget(presence.environment, root, plugin.name);
       const next = failures?.failed(scope, plugin.name, digest, reason);
@@ -283,7 +391,7 @@ export async function syncPluginRootsToSandbox(
     // reason is kept, and the next plugin is still tried
     if (unread && known === undefined) { fail(unread); continue; }
     try {
-      const outcome = await copyOne(plugin, digest, target, root, known ?? (markers ? markers.get(`${root}/${plugin.name}`) ?? "" : undefined));
+      const outcome = await copyOne(plugin, digest, target, root, known ?? (markers ? markers.get(`${root}/${plugin.name}`) ?? "" : undefined), paths);
       if (outcome === "unchanged") out.unchanged.push(plugin.name);
       else if (outcome === "copied") out.copied.push(plugin.name);
       else if (outcome.permanent) {
@@ -318,13 +426,14 @@ async function readMarkers(dests: readonly string[], target: SandboxPluginExec):
 
 type CopyOutcome = "copied" | "unchanged" | { reason: string; permanent: boolean };
 
-/** `known`: the marker already read for this call (readMarkers). */
-async function copyOne(plugin: { name: string; dir: string }, digest: string, target: SandboxPluginExec, root: string, known?: string): Promise<CopyOutcome> {
+/** `known`: the marker already read for this call (readMarkers). `paths`:
+ * the plugin's text names them (#4082). */
+async function copyOne(plugin: { name: string; dir: string }, digest: string, target: SandboxPluginExec, root: string, known?: string, paths?: PluginEnvironmentPaths): Promise<CopyOutcome> {
   const dest = `${root}/${plugin.name}`;
   const marker = known ?? (await target.exec({ argv: ["sh", "-c", 'cat -- "$SAGAX_DEST/.sagax-digest" 2>/dev/null || true'], env: { SAGAX_DEST: dest }, timeoutSec: 30, maxOutputBytes: 256 })).stdout.trim();
   if (marker === digest) return "unchanged";
   let archive: Buffer;
-  try { archive = await pluginArchive(plugin.dir); } catch (error) {
+  try { archive = await pluginArchive(plugin.dir, paths); } catch (error) {
     return { reason: error instanceof Error ? error.message : String(error), permanent: true };
   }
   if (archive.length > MAX_PLUGIN_ARCHIVE_BYTES) return { reason: "too large", permanent: true };
@@ -365,6 +474,8 @@ async function copyOne(plugin: { name: string; dir: string }, digest: string, ta
       'if printf "%s\\n" "$list" | grep -qv "^[d-]"; then echo "the archive holds a link or a device" >&2; exit 3; fi',
       'tar -xzf "$SAGAX_PATH" -C "$tmp" --no-same-owner --no-same-permissions',
       'printf %s "$SAGAX_DIGEST" > "$tmp/.sagax-digest"',
+      // the data folder its text names (#4082)
+      'if [ -n "${SAGAX_DATA:-}" ]; then mkdir -p -- "$SAGAX_DATA"; fi',
       // the swap holds a lock (mkdir is atomic); a lock left by a copy
       // that died is older than two minutes and is taken over
       'lock="$SAGAX_DEST.lock"',
@@ -378,7 +489,7 @@ async function copyOne(plugin: { name: string; dir: string }, digest: string, ta
       // an identical copy that landed while this one unpacked is kept
       'if [ "$(cat -- "$SAGAX_DEST/.sagax-digest" 2>/dev/null)" != "$SAGAX_DIGEST" ]; then rm -rf -- "$SAGAX_DEST"; mv -- "$tmp" "$SAGAX_DEST"; fi',
     ].join("\n")],
-    env: { SAGAX_DEST: dest, SAGAX_PATH: staged, SAGAX_ROOT: root, SAGAX_NONCE: nonce, SAGAX_DIGEST: digest }, timeoutSec: 120,
+    env: { SAGAX_DEST: dest, SAGAX_PATH: staged, SAGAX_ROOT: root, SAGAX_NONCE: nonce, SAGAX_DIGEST: digest, ...(paths ? { SAGAX_DATA: paths.data } : {}) }, timeoutSec: 120,
   });
   if (installed.exitCode !== 0) {
     const why = installed.stderr.trim().split("\n").filter(Boolean).slice(-1)[0]?.slice(0, 200);

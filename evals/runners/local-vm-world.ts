@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { removeTempDir, waitForExit } from "../../server/testing/cleanup.ts";
 import { freePortBlock } from "../../server/testing/ports.ts";
+import { writeFileAtomic } from "../../server/atomic.ts";
 import type { Scenario, Step } from "../types.ts";
 import { buildScriptedPlan } from "../providers/mock/scripted-plan.ts";
 import { BaseWorld, type WorldContext } from "./base-world.ts";
@@ -112,8 +113,12 @@ export class LocalVmWorld extends BaseWorld {
     writeFileSync(this.planPath, JSON.stringify(plan));
   }
 
+  /** The server reads this file synchronously from its own timers (the
+   * turn watchdog, the lease clock) with no guard, so a torn read throws
+   * out of a timer and kills it: write a whole new file and rename it over
+   * the old one, as the e2e suites do (issue #4090). */
   private vmState(state: Record<string, unknown>): void {
-    writeFileSync(this.stateFile, JSON.stringify(state));
+    writeFileAtomic(this.stateFile, JSON.stringify(state), { durable: false });
   }
 
   /** The fake engine dumps once per process; reads must tolerate a torn

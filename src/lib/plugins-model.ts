@@ -43,8 +43,6 @@ export interface PluginItem {
   updateAvailable?: boolean;
   /** the version installed, when the marketplace offers another */
   installedVersion?: string;
-  /** in the reviewed catalog: shown under Recommended for you */
-  recommended?: boolean;
   /** the rows of other sources folded into this one (same app) */
   merged?: string[];
   /** an MCP server that reads the person's GitHub account (the GitHub
@@ -263,7 +261,6 @@ export function buildPluginItems(sources: PluginSources): PluginItem[] {
       description: sources.whop.description,
       domain: "whop.com",
       category: "sales",
-      recommended: true,
       installed: sources.whop.connected,
       status: sources.whop.connected ? "connected" : "available",
       action: sources.whop.connected ? null : "connect",
@@ -279,7 +276,6 @@ export function buildPluginItems(sources: PluginSources): PluginItem[] {
       description: sources.tailscale.description,
       domain: "tailscale.com",
       category: "other",
-      recommended: true,
       installed: sources.tailscale.connected || Boolean(sources.tailscale.pending),
       status: sources.tailscale.connected
         ? "connected"
@@ -340,7 +336,6 @@ export function buildPluginItems(sources: PluginSources): PluginItem[] {
       domain: listing.site ?? listing.domain,
       logo: listing.iconUrl ?? null,
       category: categoryFromTags([listing.category]),
-      recommended: true,
       installed: false,
       status: "available",
       action: listing.auth === "oauth" ? "connect" : "add",
@@ -396,7 +391,7 @@ const mergeable = (item: PluginItem) => !item.parent && !isGrokConnector(item) &
 /** One row per app. What is installed always shows; otherwise the row
  * offers the best way to connect it, preferring a featured listing over its
  * MCP server. The row keeps the best logo, site and category any of its
- * sources has, and stays recommended when one of them was. */
+ * sources has. */
 export function mergeSameApps(items: readonly PluginItem[]): PluginItem[] {
   const groups = new Map<string, PluginItem[]>();
   for (const item of items) {
@@ -412,7 +407,6 @@ export function mergeSameApps(items: readonly PluginItem[]): PluginItem[] {
     const logo = listedLogo ?? group.find((item) => item.logo)?.logo ?? null;
     const domain = group.find((item) => item.kind !== "mcp" && item.domain)?.domain ?? group.find((item) => item.domain)?.domain ?? null;
     const category = group.find((item) => item.category !== "other")?.category ?? "other";
-    const recommended = group.some((item) => item.recommended);
     const installed = group.filter((item) => item.installed);
     const rank = (item: PluginItem) => item.kind === "app" ? 0 : item.kind === "featured" ? 1 : 3;
     const keep = installed.length ? installed : [[...group].sort((a, b) => rank(a) - rank(b))[0]!];
@@ -427,7 +421,6 @@ export function mergeSameApps(items: readonly PluginItem[]): PluginItem[] {
         logo: listedLogo ?? item.logo ?? logo,
         domain: domain ?? item.domain,
         category: item.category !== "other" ? item.category : category,
-        ...(recommended ? { recommended: true } : {}),
         ...(merged.length ? { merged } : {}),
       });
     }
@@ -457,7 +450,8 @@ export function matchesType(item: PluginItem, type: PluginTypeFilter): boolean {
   if (type === "apps") return item.kind === "app" || item.key === WHOP_KEY || item.key === TAILSCALE_KEY;
   if (type === "mcp") return item.kind === "mcp" || (item.kind === "featured" && item.key !== WHOP_KEY && item.key !== TAILSCALE_KEY);
   if (type === "skills") return item.kind === "skill";
-  if (type === "recommended") return Boolean(item.recommended) && !item.installed;
+  // the curated picks (recommended-picks.ts): the view lists them itself
+  if (type === "recommended") return false;
   return item.source === type.slice("source:".length) && !item.parent;
 }
 
@@ -483,8 +477,11 @@ export const SECTION_PREVIEW = 6;
 const catalogued = (item: PluginItem) => item.kind === "app" || item.kind === "featured" || (item.kind === "mcp" && Boolean(item.merged));
 
 /** The main view's sections. With a search, a chip or a type, one list of
- * matches; otherwise a short preview per category, each with View all. */
-export function mainSections(items: readonly PluginItem[], query: string, filter: PluginFilter, type: PluginTypeFilter = "any", extraSources: readonly string[] = [], focus: readonly string[] = []): PluginSection[] {
+ * matches; otherwise a short preview per category, each with View all.
+ * Recommended for you is not one of them (#4207): the view draws it first
+ * from the curated picks (recommended-picks.ts) and passes the rows it
+ * shows as `skip`. */
+export function mainSections(items: readonly PluginItem[], query: string, filter: PluginFilter, type: PluginTypeFilter = "any", extraSources: readonly string[] = [], focus: readonly string[] = [], skip: readonly string[] = []): PluginSection[] {
   const visible = items.filter((item) => matchesQuery(item, query) && matchesFilter(item, filter) && matchesType(item, type));
   if (query.trim()) {
     const sorted = [...visible].sort(byInstalledThenName);
@@ -495,15 +492,14 @@ export function mainSections(items: readonly PluginItem[], query: string, filter
     return [{ id: filter !== "all" ? filter : type, filter: null, items: sorted, total: sorted.length }];
   }
   const sections: PluginSection[] = [];
-  // #3047 (QA 2026-11-08): a row an earlier section already previews
-  // (Recommended) is not repeated further down (Tailscale sat in both); the
-  // total still counts it, so View all opens the whole category.
-  const shown = new Set<string>();
+  // #3047 (QA 2026-11-08): a row Recommended for you already previews is
+  // not repeated further down; the total still counts it, so View all opens
+  // the whole category.
+  const shown = new Set<string>(skip);
   const preview = (id: string, sectionFilter: PluginSection["filter"], list: PluginItem[]) => {
     const fresh = list.filter((item) => !shown.has(item.key)).slice(0, SECTION_PREVIEW);
     if (!fresh.length) return;
     sections.push({ id, filter: sectionFilter, items: fresh, total: list.length });
-    if (id === "recommended") for (const item of fresh) shown.add(item.key);
   };
   // 2026-10-15: the apps a conversation needs (its Connect apps pill), in
   // the order it named them, ahead of everything else.
@@ -512,7 +508,6 @@ export function mainSections(items: readonly PluginItem[], query: string, filter
     const needed = wanted.flatMap((slug) => visible.filter((item) => item.kind === "app" && item.id.toLowerCase() === slug));
     if (needed.length) sections.push({ id: "needed", filter: null, items: needed, total: needed.length });
   }
-  preview("recommended", { type: "recommended" }, visible.filter((item) => item.recommended && !item.installed));
   for (const source of extraSources) {
     preview(`source:${source}`, { type: `source:${source}` }, visible.filter((item) => item.source === source && !item.parent).sort(byInstalledThenName));
   }

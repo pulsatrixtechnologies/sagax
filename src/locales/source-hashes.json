@@ -18560,7 +18560,21 @@
       "botProfile.v6.page.appearance.title": "3907fa7f80722a6fc58cd8c1bd30abf7638095d6774f183b6e831b7093957d1b",
       "botProfile.v6.page.appearance.desc": "c9fe54a6cc4c22a2b6f73fdae4053e7ed43ca2e1ffc40d7823ee487175e86c27",
       "botProfile.v6.page.appearance.intro": "0c63d747bb42643648f5934b55784ccf81af7a5d43a3ac29d8d5d3546dfa2a90",
-      "botProfile.v6.value.picture": "9a1c54f55e7cfb1cc2cdad2991525037bc475a509fa37262e123c44e958d2d36"
+      "botProfile.v6.value.picture": "9a1c54f55e7cfb1cc2cdad2991525037bc475a509fa37262e123c44e958d2d36",
+      "connectApps.recommended.why.mail": "ffdedb7ac146bd435cb990fb2143cd8dc196c981b7595235b38922182e552494",
+      "connectApps.recommended.why.calendar": "b48a81618ab9dfc9bbc4b9dd8f1b67df1b8d1afe391e8843a1008f044e8e1c93",
+      "connectApps.recommended.why.files": "343a729546682837f7e48eba3caa09b4df734df6e2a1f5ef23397f88f47d574e",
+      "connectApps.recommended.why.chat": "0bae7bb8e0e953f20a1f3c25f3fafd55ac01210dbda35386427298e62f3078f6",
+      "connectApps.recommended.why.code": "a9183ebe4c6a6fc4d6418792773a5d2b7cd74f204d92577f9c06b355124b9b9d",
+      "connectApps.recommended.why.browser": "bcf6b6744159c3318f6b7dd74bfcfc3156ba7942601e150b80da5c5e4342ded8",
+      "connectApps.recommended.why.tickets": "5ab699c5d6887b19285e37c1e8f8b2c4f6b29a4a3a2a590d9ebc22d0b886a1fb",
+      "connectApps.recommended.why.crm": "ad1cb65f2bd3289ed96cdbd2762b0c28dbbd886f6fc49f4868195d76c4dffbaa",
+      "connectApps.recommended.why.notes": "162f7bf58abd7e91ec64d7ecd3592b3b75773d2da568c66e635917a9cf21d3ee",
+      "connectApps.recommended.why.tasks": "71ec67575a6287092ae0a53beaa183fc0eeceaf73468ae22ab2b21afe2c9fb1a",
+      "connectApps.recommended.why.docs": "25b9fd2c073e12ce9beb6630d86ccccab897b5ddb65b7ccd19be017d4c7f5939",
+      "connectApps.recommended.why.design": "2956abae49671ac5ad63798ea61e0921553adea2f6ca8f747591a187a37c0826",
+      "connectApps.recommended.why.errors": "cb5d3efb80b5abed091438b655b131777d4288e4519341cb73f1ea5c0628f846",
+      "connectApps.recommended.why.payments": "98e81d39a74365847bb1e5f76d75c57918b2d2d79893dab4b1fceaae2c278d61"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

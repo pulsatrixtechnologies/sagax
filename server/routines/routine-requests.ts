@@ -18,7 +18,7 @@ import { cleanRoutineFolder, ROUTINE_FOLDER_MAX } from "../../shared/routine-fol
 import { EFFORT_LEVELS } from "../../shared/model-selection.ts";
 import { parseRoutineModel } from "../../shared/routine-model.ts";
 import { parseRoutineActAs } from "../../shared/routine-act-as.ts";
-import { parseRoutineGoal, ROUTINE_GOAL_MAX_CHARS, type RoutineGoal } from "../../shared/routine-goal.ts";
+import { parseRoutineGoal, readRoutineGoalLines, ROUTINE_GOAL_MAX_CHARS, type RoutineGoal } from "../../shared/routine-goal.ts";
 import { withRequiredComputer, type RoutineRequirements } from "../../shared/routine-readiness.ts";
 import { describeCondition } from "./routine-watch.ts";
 import { parseJson, schemaIssue, type JsonObject, type JsonValue } from "../schema.ts";
@@ -134,6 +134,20 @@ const routineGoalSchema = z.union([
 /** The card's view of a goal: what the person wrote, not its runtime state. */
 function goalOf(goal: RoutineGoal): { text: string; deadline?: number } {
   return { text: goal.text, ...(goal.deadline ? { deadline: goal.deadline } : {}) };
+}
+
+/** #4098: a definition's goal and instructions as the routine will hold
+ * them: the `goal` field when given, else the instructions' `/goal` line,
+ * which then leaves the instructions so the card says the goal once. */
+function goalView(definition: Pick<RoutineRequestDefinition, "instructions" | "goal">): { instructions: string; goal?: { text: string; deadline?: number } } {
+  const lines = readRoutineGoalLines(definition.instructions);
+  if (definition.goal) return { instructions: lines.instructions, goal: definition.goal };
+  const parsed = parseRoutineGoal(lines.goal);
+  return { instructions: lines.instructions, ...(parsed.ok && parsed.goal ? { goal: goalOf(parsed.goal) } : {}) };
+}
+
+function saysGoal(instructions: string): boolean {
+  return readRoutineGoalLines(instructions).goal !== undefined;
 }
 
 /** Fields a create or an update may name. The XOR of schedule and trigger
@@ -1335,6 +1349,8 @@ function effectiveDefinition(operation: RoutineRequestOperation, manager: Routin
   else if (effort !== undefined) merged.effort = effort;
   if (goal === null) delete merged.goal;
   else if (goal !== undefined) merged.goal = goal;
+  // New instructions with their own `/goal` line say the goal themselves.
+  else if (changes.instructions !== undefined && saysGoal(changes.instructions)) delete merged.goal;
   // Becoming a one-time routine drops it, as the routine itself does.
   if (merged.schedule.type === "once") delete merged.runOnStartup;
   return merged;
@@ -1461,7 +1477,8 @@ function cardCopy(
   // Existing routines may predate nested-card redaction. The approval still
   // shows every instruction, but credential-shaped values never travel back
   // through the bot's MCP response or into the transcript.
-  const visibleInstructions = redactSecretsInText(definition.instructions);
+  const goalOnCard = goalView(definition);
+  const visibleInstructions = redactSecretsInText(goalOnCard.instructions);
   const runLimit = definition.timeoutMinutes === undefined
     ? "no run limit"
     : `${definition.timeoutMinutes} min limit`;
@@ -1489,7 +1506,7 @@ function cardCopy(
       ...(definition.actAs !== undefined ? [`Agit en tant que : ${definition.actAs ? redactSecretsInText(definition.actAs) : "l’accès de la personne"} (rôle Perspicax)`] : []),
       ...(definition.requiresComputer ? ["Besoin de son ordinateur : oui (la vérification avant l’exécution attend que l’ordinateur du bot soit en ligne)"] : []),
       ...(definition.effort ? [`Effort : ${definition.effort} (le clavardage garde l’effort du bot)`] : []),
-      ...(definition.goal ? [`Objectif : ${redactSecretsInText(definition.goal.text)}${definition.goal.deadline ? ` (d’ici le ${new Date(definition.goal.deadline).toISOString()})` : ""}; le bot choisit quand vérifier et la routine s’arrête une fois l’objectif atteint`] : []),
+      ...(goalOnCard.goal ? [`Objectif : ${redactSecretsInText(goalOnCard.goal.text)}${goalOnCard.goal.deadline ? ` (d’ici le ${new Date(goalOnCard.goal.deadline).toISOString()})` : ""}; le bot choisit quand vérifier et la routine s’arrête une fois l’objectif atteint`] : []),
       ...(definition.runOnStartup || (operation.action === "update" && operation.changes.runOnStartup !== undefined)
         ? [`Au démarrage : ${definition.runOnStartup ? "S’exécute aussi une fois à chaque démarrage de Sagax" : "S’exécute seulement selon son horaire"}`]
         : []),
@@ -1521,7 +1538,7 @@ function cardCopy(
       ...(definition.actAs !== undefined ? [`Acts as: ${definition.actAs ? redactSecretsInText(definition.actAs) : "the person's own access"} (Perspicax role)`] : []),
       ...(definition.requiresComputer ? ["Needs its computer: yes (the pre-run check waits for the bot's computer to be online)"] : []),
       ...(definition.effort ? [`Effort: ${definition.effort} (chat keeps the bot's effort)`] : []),
-      ...(definition.goal ? [`Goal: ${redactSecretsInText(definition.goal.text)}${definition.goal.deadline ? ` (by ${new Date(definition.goal.deadline).toISOString()})` : ""}; the bot picks when to check and the routine stops once it is reached`] : []),
+      ...(goalOnCard.goal ? [`Goal: ${redactSecretsInText(goalOnCard.goal.text)}${goalOnCard.goal.deadline ? ` (by ${new Date(goalOnCard.goal.deadline).toISOString()})` : ""}; the bot picks when to check and the routine stops once it is reached`] : []),
       ...(definition.runOnStartup || (operation.action === "update" && operation.changes.runOnStartup !== undefined)
         ? [`On startup: ${definition.runOnStartup ? "Also runs once each time Sagax starts" : "Runs only on its schedule"}`]
         : []),
@@ -1571,6 +1588,7 @@ function updateFromChanges(
   now: number,
   currentSchedule: RoutineSchedule,
   currentRequires?: RoutineRequirements,
+  currentGoal?: RoutineGoal,
 ): Partial<RoutineInput> {
   const patch: Partial<RoutineInput> = {};
   if (changes.name !== undefined) patch.name = changes.name;
@@ -1590,6 +1608,9 @@ function updateFromChanges(
   if (changes.requiresComputer !== undefined) patch.requires = withRequiredComputer(currentRequires, changes.requiresComputer);
   if (changes.effort !== undefined) patch.effort = changes.effort;
   if (changes.goal !== undefined) patch.goal = changes.goal;
+  // #4098: new instructions without a `/goal` line keep the goal (the card
+  // said it kept); a line in them is the goal.
+  else if (changes.instructions !== undefined && currentGoal && !saysGoal(changes.instructions)) patch.goal = goalOf(currentGoal);
   if (changes.runOnStartup !== undefined) patch.runOnStartup = changes.runOnStartup;
   return patch;
 }
@@ -1662,9 +1683,10 @@ function revalidateOperation(operation: RoutineRequestOperation, manager: Routin
     const includePaused = operation.paused === true;
     const owner = operation.forBot?.botId ?? botId;
     const schedule = asSchedule(definition.schedule, now);
+    const asked = goalView(definition);
     const duplicate = manager.listRoutines().find((routine) => {
       if ((!routine.enabled && !includePaused) || routine.target !== "bot" || routine.botId !== owner
-        || routine.runOn !== definition.runOn || routine.prompt !== definition.instructions
+        || routine.runOn !== definition.runOn || readRoutineGoalLines(routine.prompt).instructions !== asked.instructions
         || routine.durationMinutes !== definition.durationMinutes
         || routine.timeoutMinutes !== definition.timeoutMinutes
         || Boolean(routine.continuity) !== Boolean(definition.continuity)
@@ -1675,7 +1697,7 @@ function revalidateOperation(operation: RoutineRequestOperation, manager: Routin
         || routine.actAs !== definition.actAs
         || Boolean(routine.requires?.computer) !== Boolean(definition.requiresComputer)
         || routine.effort !== definition.effort
-        || !isDeepStrictEqual(routine.goal ? goalOf(routine.goal) : undefined, definition.goal)
+        || !isDeepStrictEqual(routine.goal ? goalOf(routine.goal) : undefined, asked.goal)
         || !isDeepStrictEqual(routine.precheck?.kind === "watch" ? routine.precheck : undefined, definition.watch)
         || Boolean(routine.runOnStartup) !== Boolean(definition.runOnStartup)
         || (routine.attachments?.length ?? 0) > 0) return false;
@@ -2377,7 +2399,7 @@ export class RoutineRequestService {
         const current = verifyManageSnapshot(operation, this.routines, operation.forBot?.botId ?? payload.botId);
         const updated = this.routines.update(
           operation.routineId,
-          updateFromChanges(operation.changes, confirmationAt, current.schedule, current.requires),
+          updateFromChanges(operation.changes, confirmationAt, current.schedule, current.requires, current.goal),
           {
             requestId: payload.requestId,
             messageId,

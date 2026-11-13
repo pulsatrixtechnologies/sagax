@@ -11,8 +11,13 @@ import {
   parseNextCheck,
   parseRoutineGoal,
   readGoalReport,
+  readRoutineGoalLines,
   routineGoalBlock,
+  routineGoalLinesSay,
+  routineGoalOfLines,
+  routineRunInstructions,
   stepGoal,
+  writeRoutineGoalLines,
   type RoutineGoal,
 } from "./routine-goal";
 
@@ -178,5 +183,43 @@ describe("routineGoalBlock", () => {
     expect(block).toContain("NEXT_CHECK:");
     expect(block).toContain("Checks so far: 2.");
     expect(block).toContain("NOTHING_TO_REPORT");
+  });
+});
+
+describe("the /goal line (#4098)", () => {
+  it("reads the goal and its deadline line from the instructions and leaves them out of what the run reads", () => {
+    const prompt = "Watch the backup job.\n\n/goal Backup job at 100%\n/deadline 2026-11-20T17:00:00Z\n\nReport the percentage.";
+    expect(readRoutineGoalLines(prompt)).toEqual({
+      goal: { text: "Backup job at 100%", deadline: "2026-11-20T17:00:00Z" },
+      instructions: "Watch the backup job.\n\nReport the percentage.",
+    });
+    const read = routineGoalOfLines(prompt);
+    expect(read.ok && read.goal).toEqual({ text: "Backup job at 100%", status: "active", deadline: Date.parse("2026-11-20T17:00:00Z") });
+    expect(routineRunInstructions(prompt)).toBe("Watch the backup job.\n\nReport the percentage.");
+    // No line, no goal: the instructions stay as written.
+    expect(readRoutineGoalLines("Say hi.\n/goals are nice")).toEqual({ instructions: "Say hi.\n/goals are nice" });
+  });
+
+  it("refuses a deadline line that is not a date, as the goal input does", () => {
+    expect(routineGoalOfLines("/goal Reach 100%\n/deadline someday").ok).toBe(false);
+  });
+
+  it("writes a goal as its first lines, once, and removes them on none", () => {
+    const deadline = Date.parse("2026-11-20T17:00:00Z");
+    const written = writeRoutineGoalLines("Watch the backup job.", { text: "Backup\njob at 100%", deadline });
+    expect(written).toBe("/goal Backup job at 100%\n/deadline 2026-11-20T17:00:00.000Z\n\nWatch the backup job.");
+    expect(writeRoutineGoalLines(written, { text: "Backup job at 100%", deadline })).toBe(written);
+    expect(routineGoalLinesSay(written, { text: "Backup job at 100%", deadline })).toBe(true);
+    // The person's own place and date format are kept when they say the same goal.
+    const own = "Watch.\n/goal Reach 100%\n/deadline 2026-11-20T17:00:00Z";
+    expect(writeRoutineGoalLines(own, { text: "Reach 100%", deadline })).toBe(own);
+    expect(writeRoutineGoalLines(written, undefined)).toBe("Watch the backup job.");
+    expect(writeRoutineGoalLines("/goal Only this", { text: "Other" })).toBe("/goal Other");
+  });
+
+  it("keeps the goal's progress when only the line's place changes", () => {
+    const previous: RoutineGoal = { text: "Reach 100%", status: "active", checks: 4, progress: "78.95%", stalled: 2 };
+    const moved = routineGoalOfLines("Check the job.\n\n/goal Reach 100%", previous);
+    expect(moved.ok && moved.goal).toEqual(previous);
   });
 });

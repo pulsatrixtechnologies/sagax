@@ -41,7 +41,7 @@ import {
 import { ROUTINE_WATCH_LIMITS, type RoutineWatchPrecheck } from "../../shared/routine-watch.ts";
 import { parseMailAlias } from "../../shared/routine-mail-alias.ts";
 import { loadRoutineEffort, parseRoutineEffort } from "../../shared/routine-effort.ts";
-import { defaultNextCheck, expireGoal, goalPastDeadline, loadRoutineGoal, parseRoutineGoal, readGoalReport, routineGoalBlock, stepGoal, type RoutineGoal, type RoutineGoalInput } from "../../shared/routine-goal.ts";
+import { defaultNextCheck, expireGoal, goalPastDeadline, loadRoutineGoal, parseRoutineGoal, readGoalReport, routineGoalBlock, routineGoalLinesSay, routineGoalOfLines, routineRunInstructions, stepGoal, writeRoutineGoalLines, type RoutineGoal, type RoutineGoalInput } from "../../shared/routine-goal.ts";
 import { loadRoutineModel, parseRoutineModel } from "../../shared/routine-model.ts";
 import { loadRoutineActAs, parseRoutineActAs } from "../../shared/routine-act-as.ts";
 import { watchNoteBlock } from "./routine-watch.ts";
@@ -1193,6 +1193,14 @@ function goalPatch(value: RoutineInput["goal"], previous: RoutineGoal | undefine
   return parsed.goal ?? null;
 }
 
+/** New instructions' goal: the same line keeps the stored progress, wherever
+ * the line sits (#4098). */
+function goalOfLines(prompt: string, previous: RoutineGoal | undefined): RoutineGoal | null {
+  const parsed = routineGoalOfLines(prompt, previous);
+  if (!parsed.ok) throw new RoutineInputError(parsed.error);
+  return parsed.goal ?? null;
+}
+
 /** The run's prompt, then the organization memory's note when it has one. */
 export function withMemoryNote(prompt: string, note: string): string {
   return note.trim() ? `${prompt}\n\n${note.trim()}` : prompt;
@@ -1665,15 +1673,10 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
   if (!actAs.ok) throw new RoutineInputError(actAs.error);
   if (actAs.actAs !== undefined && target === "room-goal") throw new RoutineInputError("A room goal's bots act with their own roles: choose \"Au nom de\" on a bot routine");
   if (input.access != null && input.access !== "read-and-draft") throw new Error("Choose read-and-draft access or none");
-  // A stored goal (it has a status) keeps its progress; anything else is new input.
-  const goal = input.goal && typeof input.goal === "object" && "status" in input.goal
-    ? { ok: true as const, goal: loadRoutineGoal(input.goal) }
-    : parseRoutineGoal(input.goal);
-  if (!goal.ok) throw new RoutineInputError(goal.error);
-  if (goal.goal && target === "room-goal") throw new RoutineInputError("A room goal already has its goal: set a goal on a bot routine");
+  const goal = goalOfInput(input.goal, prompt, target);
   return {
     name,
-    prompt,
+    prompt: goal.prompt,
     target,
     botId,
     groupId: target === "room-goal" ? groupId : undefined,
@@ -1703,6 +1706,27 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
     ...(effort.effort ? { effort: effort.effort } : {}),
     ...(goal.goal ? { goal: goal.goal } : {}),
   };
+}
+
+/**
+ * #4098: a bot routine's goal is its `/goal` line (with its `/deadline` line)
+ * in the instructions. A `goal` input (released apps, the phone, the bots'
+ * tools, an update that kept its stored goal) lands as that line; without
+ * one, the line is read. A stored goal (it has a status) keeps its progress.
+ */
+function goalOfInput(value: RoutineInput["goal"], prompt: string, target: Routine["target"]): { prompt: string; goal?: RoutineGoal } {
+  if (value === undefined && target === "bot") {
+    const read = routineGoalOfLines(prompt);
+    if (!read.ok) throw new RoutineInputError(read.error);
+    return { prompt, ...(read.goal ? { goal: read.goal } : {}) };
+  }
+  const goal = value && typeof value === "object" && "status" in value
+    ? { ok: true as const, goal: loadRoutineGoal(value) }
+    : parseRoutineGoal(value);
+  if (!goal.ok) throw new RoutineInputError(goal.error);
+  if (goal.goal && target === "room-goal") throw new RoutineInputError("A room goal already has its goal: set a goal on a bot routine");
+  if (target !== "bot") return { prompt };
+  return { prompt: writeRoutineGoalLines(prompt, goal.goal), ...(goal.goal ? { goal: goal.goal } : {}) };
 }
 
 /** The answer of a folder action: the bot's folders in order, the routines
@@ -1808,6 +1832,7 @@ export class RoutineManager {
       for (const key of ["routines", "runs", "routineRequestReceipts", "webhookRunReceipts"] as const) {
         if (key in disk && !Array.isArray(disk[key])) throw new Error(`Invalid routines file: ${key} is not a list`);
       }
+      let goalLinesWritten = false;
       this.routines = Array.isArray(disk.routines)
         ? disk.routines.flatMap((routine) => {
             const schedule = loadSchedule(routine.schedule, this.now());
@@ -1853,6 +1878,12 @@ export class RoutineManager {
               goal: loadRoutineGoal(routine.goal),
             };
             if (loaded.goal === undefined) delete loaded.goal;
+            // #4098: a stored goal is written once into its `/goal` line, its
+            // progress kept (the line says the same words and deadline).
+            else if (target === "bot" && typeof loaded.prompt === "string" && !routineGoalLinesSay(loaded.prompt, loaded.goal)) {
+              loaded.prompt = writeRoutineGoalLines(loaded.prompt, loaded.goal);
+              goalLinesWritten = true;
+            }
             if (loaded.model === undefined) delete loaded.model;
             if (loaded.subagentModel === undefined) delete loaded.subagentModel;
             if (loaded.actAs === undefined) delete loaded.actAs;
@@ -1966,6 +1997,7 @@ export class RoutineManager {
         this.postResultsPending = false;
         this.saveLater();
       }
+      if (goalLinesWritten) this.saveLater();
     } catch (error) {
       this.routines = [];
       this.unloadedRoutines = [];
@@ -2710,8 +2742,11 @@ export class RoutineManager {
       // null clears the choice, "" is "Moi"; omission keeps it.
       actAs: Object.hasOwn(patch, "actAs") ? patch.actAs : routine.actAs,
       effort: Object.hasOwn(patch, "effort") ? patch.effort : routine.effort,
-      // Same words and deadline keep the goal's progress; new words start it over.
-      goal: Object.hasOwn(patch, "goal") ? goalPatch(patch.goal, routine.goal) : routine.goal,
+      // Same words and deadline keep the goal's progress; new words start it
+      // over. New instructions say the goal by their `/goal` line (#4098).
+      goal: Object.hasOwn(patch, "goal") ? goalPatch(patch.goal, routine.goal)
+        : patch.prompt !== undefined && (patch.target ?? routine.target) === "bot" ? goalOfLines(patch.prompt, routine.goal)
+          : routine.goal,
     }, now);
     if (this.targetState(clean) === "missing") throw new RoutineInputError(this.missingTargetMessage(clean.target));
     // Checked when it is chosen or the bot changes; a kept model whose
@@ -4020,11 +4055,13 @@ export class RoutineManager {
         this.emitRun(run);
         turnTrace(task.threadId, "routine-run", true);
         try {
-          const prompt = run.prompt ?? this.routines.find((r) => r.id === run.routineId)?.prompt;
-          if (!prompt) {
+          const stored = run.prompt ?? this.routines.find((r) => r.id === run.routineId)?.prompt;
+          if (!stored) {
             this.failThread(task.threadId, "The routine was deleted before it could start");
             continue;
           }
+          // #4098: the goal lines leave the instructions; the goal block says the goal.
+          const prompt = run.target === "bot" ? routineRunInstructions(stored) : stored;
           if (run.target === "bot" && this.options.prepareTurn) {
             await this.options.prepareTurn(cloneRun(run));
             if (run.status !== "running") continue;

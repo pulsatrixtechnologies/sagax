@@ -29,7 +29,7 @@ import { computerStartLine } from "@/lib/computer-start";
 import { useReplyDraft } from "@/lib/drafts";
 import { useDataWindowItem } from "../DataWindowButton";
 import { isRoutineAutoPausedNotice } from "../../../shared/transient-notices";
-import { routineAutoPauseSettled } from "@/lib/transient-notice";
+import { autoPausedRoutineToResume, routineAutoPauseSettled } from "@/lib/transient-notice";
 import { useThreadRoutineRun } from "@/state/older-routine-runs";
 import type { SideChat } from "./sideChat";
 
@@ -78,8 +78,8 @@ export function useChatViewSession(stored: Bot, side?: SideChat) {
   const routinesNow = useStoreSelector((current) => current.routines.filter((routine) => routineIds.has(routine.id)), shallowEqual);
   const autoPauseSettled = useCallback((m: Message) => routineAutoPauseSettled(m, routinesNow), [routinesNow]);
   const resumeAutoPaused = (m: Message, close: () => void) => {
-    const routine = isRoutineAutoPausedNotice(m) ? routinesNow.find((candidate) => candidate.id === m.routineRun?.routineId) : undefined;
-    if (!routine || routine.enabled || routine.canEdit === false) return undefined;
+    const routine = isRoutineAutoPausedNotice(m) ? autoPausedRoutineToResume(m, routinesNow) : undefined;
+    if (!routine) return undefined;
     return () => { close(); dispatch({ type: "updateRoutine", routineId: routine.id, patch: { enabled: true } }); };
   };
   // Without a native title bar (macOS inset lights, frameless Windows) this

@@ -16,9 +16,12 @@
  * the bot's words there is nothing for the person, among the person's
  * messages and the teammates' notices, as the released app draws what the
  * server wrote (state=before); the server writes none now (state=after).
+ * case=streak-failed (#4058): the one summary of a streak whose run failed
+ * and paused its routine, just written: a row the chat keeps, with Resume
+ * (state=before: the released rule drew it as a passing banner only).
  * Neutral fictional bots and routines; a mocked fetch answers
  * /api, nothing reaches a server. Not shipped in the app.
- * ?lang=fr|en&skin=<id>&case=chat|streak|streak-again|daily-first|proactive|watch-wake&state=before|after */
+ * ?lang=fr|en&skin=<id>&case=chat|streak|streak-again|streak-failed|daily-first|proactive|watch-wake&state=before|after */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { loadLocale } from "../lib/i18n";
@@ -86,6 +89,13 @@ const STREAK: Message[] = [
       repeat: { firstRunId: "run-first", count: 3, since: at + 12 * M, lastAt: at + 30 * M, streak: true } }),
 ];
 const before = params.get("state") === "before";
+const FAILED_WORDS = say("The mailbox refused to sign in three times in a row.\nThe routine is paused until you sign in again.", "La boîte a refusé la connexion trois fois de suite.\nLa routine est en pause jusqu'à ce que tu te reconnectes.");
+/** #4058: written a few seconds ago, so the released rule still showed its banner. */
+const STREAK_FAILED: Message[] = [
+  ...STREAK.slice(0, 2),
+  { ...run("streak-failed", 0, { routineName: MAIL, routineId: "routine-mail", status: "failed", error: FAILED_WORDS, autoPausedAfter: 3,
+    repeat: { firstRunId: "run-first", count: 3, since: at + 12 * M, lastAt: Date.now() - 5000, streak: true } }), at: Date.now() - 5000 } as Message,
+];
 const OPENING = STREAK.slice(0, 2);
 const BACKUP = say("Backup check", "Vérification des sauvegardes");
 const BACKUP_WORDS = say("The backup host did not answer this morning: check that it is on.", "L'hôte de sauvegarde n'a pas répondu ce matin : vérifie qu'il est allumé.");
@@ -127,7 +137,7 @@ const WATCH_WAKE: Message[] = [
   }).flat(),
   person("u3", 70, say("Thanks, that is all for today.", "Merci, c'est tout pour aujourd'hui.")),
 ];
-const messages = which === "chat" ? CHAT : which === "daily-first" ? DAILY_FIRST : which === "proactive" ? PROACTIVE : which === "watch-wake" ? WATCH_WAKE : STREAK;
+const messages = which === "chat" ? CHAT : which === "streak-failed" ? STREAK_FAILED : which === "daily-first" ? DAILY_FIRST : which === "proactive" ? PROACTIVE : which === "watch-wake" ? WATCH_WAKE : STREAK;
 
 const realFetch = window.fetch.bind(window);
 window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -137,6 +147,8 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   if (parsed.pathname === "/api/bots") return json({ bots: [{ ...atlas, messages }, iris], groups: [], sections: [], computerControl: {} });
   if (parsed.pathname === "/api/approvals") return json({ waiting: [] });
+  // the routine the failed streak paused (case=streak-failed: Resume on its row)
+  if (parsed.pathname === "/api/routines") return json({ routines: which === "streak-failed" ? [{ id: "routine-mail", botId: "atlas", name: MAIL, enabled: false, prompt: "", schedule: { type: "interval", everyMinutes: 10 } }] : [], runs: [] });
   if (parsed.pathname === "/api/config") return json({ profile: { name: "Alex", email: "alex@example.test" }, viewer: { principalId: "pr_me", role: "member" } });
   return json({ error: "gallery" }, 404);
 }) as typeof window.fetch;

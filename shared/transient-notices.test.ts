@@ -36,6 +36,26 @@ describe("transient notices", () => {
     expect(routineAccessSettled(access, [{ ...goalPaused, at: 2000, from: { botId: "b1" } }])).toBe(false);
   });
 
+  // #4058: the one summary of a routine's streak of problems is a row the
+  // chat keeps until the routine works again (the same row then says so),
+  // never a passing banner, even when its run failed or paused the routine.
+  it("keeps a streak's summary as a row, a failed or pausing run included", () => {
+    for (const id of ["streak-failed", "streak-auto-paused"]) {
+      const summary = fixture.rows.find((message) => message.id === id)!;
+      expect(summary, id).toBeDefined();
+      expect(isTransientChatNotice(summary), id).toBe(false);
+      expect(isRoutineAutoPausedNotice(summary), id).toBe(false);
+    }
+  });
+
+  it("does not let a streak's failed summary settle an access notice", () => {
+    const access = fixture.transient.find((message) => message.id === "access")! as FixtureMessage & { access: { botId: string } };
+    for (const id of ["streak-failed", "streak-auto-paused"]) {
+      const summary = fixture.rows.find((message) => message.id === id)!;
+      expect(routineAccessSettled(access, [{ ...summary, at: 2000, from: { botId: "b1" } }]), id).toBe(false);
+    }
+  });
+
   it("settles a routine access notice once the same bot's routine has run since", () => {
     const access = fixture.transient.find((message) => message.id === "access")! as FixtureMessage & { access: { botId: string } };
     const done = { ...fixture.rows[0]!, at: 2000, from: { botId: "b1" } };

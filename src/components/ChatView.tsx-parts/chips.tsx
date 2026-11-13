@@ -25,6 +25,7 @@ import { WakeFeedback, useOwnsBot } from "../WakeFeedback";
 import { WatchAlertExits, watchAlertOf } from "../WatchAlertExits";
 import { useChatRows } from "./types";
 import { routineResultFolded } from "@/lib/routine-result-stack";
+import { autoPausedRoutineToResume } from "@/lib/transient-notice";
 
 export function PeerLabel({ peer, autoModel }: { peer: PeerLine; autoModel?: Message["autoModel"] }) {
   "use memo";
@@ -158,6 +159,10 @@ export function RoutineRunRow({ message, botId, threadId, onResume }: { message:
   }, shallowEqual);
   const owner = bots.find((candidate) => candidate.id === ownerId);
   const instances = useStoreSelector((state) => state.instances);
+  // #4058: a streak's summary that paused its routine is a row, not a
+  // passing banner: the row itself offers Resume (the banner's own reading)
+  const paused = useStoreSelector((state) => onResume ? undefined : autoPausedRoutineToResume(message, state.routines));
+  const resume = onResume ?? (paused ? () => dispatch({ type: "updateRoutine", routineId: paused.id, patch: { enabled: true } }) : undefined);
   // #3581: a result a newer one follows folds to its row (one card per stack)
   const folded = useStoreSelector((state) => {
     const owner = state.bots.find((candidate) => candidate.id === botId) ?? state.groups.find((group) => group.id === botId);
@@ -178,7 +183,7 @@ export function RoutineRunRow({ message, botId, threadId, onResume }: { message:
       bot={owner}
       folded={folded}
       botOf={(id) => bots.find((candidate) => candidate.id === id)}
-      onResume={onResume}
+      onResume={resume}
       onOpen={run?.runId ? () => openRoutineRun(dispatch, { runId: run.runId, routineId: run.routineId, ...(message.from?.botId ? { botId: message.from.botId } : {}), report: { text: run.summary ?? "", at: message.at } }) : undefined}
       // 2026-11-05 (#2096): Stop on the run itself while it is live.
       onStop={run?.runId ? () => dispatch({ type: "cancelRoutineRun", runId: run.runId }) : undefined}

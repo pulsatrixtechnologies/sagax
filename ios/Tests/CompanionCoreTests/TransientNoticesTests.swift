@@ -69,6 +69,20 @@ final class TransientNoticesTests: XCTestCase {
         XCTAssertFalse(TransientNotices.accessSettled(access, later: [goal][...]))
     }
 
+    /// #4058: a streak's summary stays a row, a failed or pausing run
+    /// included, and never settles an access notice.
+    func testStreakSummaryIsARow() throws {
+        let list = try fixture()
+        let access = try XCTUnwrap(list.transient.first { $0.id == "access" })
+        for id in ["streak-failed", "streak-auto-paused"] {
+            var summary = try XCTUnwrap(list.rows.first { $0.id == id })
+            XCTAssertFalse(TransientNotices.isTransient(summary), id)
+            XCTAssertFalse(TransientNotices.isRoutineAutoPaused(summary), id)
+            summary.at = access.at + 1000; summary.from = Sender(botId: "b1", name: "Ada", color: "teal")
+            XCTAssertFalse(TransientNotices.accessSettled(access, later: [summary][...]), id)
+        }
+    }
+
     func testMemoryKeepsShownIds() throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: "transient-notices-test"))
         defaults.removePersistentDomain(forName: "transient-notices-test")

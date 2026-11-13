@@ -18,6 +18,14 @@
 // still serves one mount of one turn: the thread lives and dies with it and
 // sees only the environment the process would have seen.
 //
+// #3561: the gate and Sagax's relay threads read Node's on-disk compile
+// cache (NODE_COMPILE_CACHE, the server's own cache directory), so a turn's
+// gates stop compiling the same bundles again at every engine start (the
+// gate's 0.5 MB and a relay's up to 1.5 MB). Eight gates with the agents
+// relay, all started at once: every tool list answered 470 to 513 ms after
+// the start without it, 250 to 380 ms with it. An upstream that is not one
+// of Sagax's relays never gets that variable from the gate.
+//
 // A relay thread that has not answered the first request written to it
 // within THREAD_FIRST_ANSWER_MS, or that fails or ends before answering, gets
 // the same relay started beside it as its own process, given every line
@@ -79,6 +87,8 @@ interface StartInput {
   command: string;
   args: readonly string[];
   env: NodeJS.ProcessEnv;
+  /** the server's own variables (the upstream spec's env), inside `env` */
+  serverEnv?: Readonly<Record<string, string>>;
   ownDir: string;
   execPath?: string;
   /** the mount's name, for the gate's log */
@@ -91,9 +101,24 @@ interface StartInput {
   startThread?: (script: string, options: { argv: string[]; env: NodeJS.ProcessEnv }) => Worker;
 }
 
+/** Node's on-disk compile cache, set on every gate by the server
+ * (mcp-gate-config.ts gateServer). */
+export const COMPILE_CACHE_ENV = "NODE_COMPILE_CACHE";
+
+/** The environment of an upstream that runs as its own process and is not
+ * one of Sagax's relays (a person's own server, a wrapper): without the
+ * compile cache the gate was given for Sagax's own code, unless the server's
+ * own settings (`serverEnv`) name one. */
+export function processUpstreamEnv(env: NodeJS.ProcessEnv, serverEnv?: Readonly<Record<string, string>>): NodeJS.ProcessEnv {
+  if (serverEnv?.[COMPILE_CACHE_ENV] !== undefined || env[COMPILE_CACHE_ENV] === undefined) return env;
+  const out = { ...env };
+  delete out[COMPILE_CACHE_ENV];
+  return out;
+}
+
 export function startGateUpstream(input: StartInput): GateUpstream {
   const script = threadScript(input.command, input.args, input.execPath ?? process.execPath, input.ownDir);
-  return script ? startThreadUpstream(script, input) : startProcessUpstream(input);
+  return script ? startThreadUpstream(script, input) : startProcessUpstream({ ...input, env: processUpstreamEnv(input.env, input.serverEnv) });
 }
 
 function startProcessUpstream(input: StartInput): GateUpstream {

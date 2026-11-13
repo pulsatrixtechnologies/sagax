@@ -673,16 +673,17 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 
   describe("Sagax's own relay as the upstream (#3623)", () => {
     const FIXTURE = join(HERE, "testing", "gate-upstream-fixture.mjs");
-    const startRelay = (extraEnv: Record<string, string> = {}) => {
+    const startRelay = (extraEnv: Record<string, string> = {}, gateEnv: Record<string, string> = {}, script = FIXTURE) => {
       gate = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", GATE], {
         stdio: ["pipe", "pipe", "pipe"],
         env: {
           ...process.env,
+          ...gateEnv,
           SAGAX_GATE_NAME: "data",
           SAGAX_GATE_SPILL_DIR: join(scratch, "spill"),
           SAGAX_GATE_UPSTREAM: JSON.stringify({
             command: process.execPath,
-            args: [FIXTURE, "data"],
+            args: [script, "data"],
             env: { FIXTURE_OWN: "mine", FIXTURE_CLOSED: join(scratch, "closed"), ...extraEnv },
           }),
         },
@@ -705,6 +706,24 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       expect(result.pid).toBe(gate!.pid);
       expect(result.mainThread).toBe(false);
       expect(result).toMatchObject({ own: "mine", gateKeys: [], argv: ["data"] });
+    });
+
+    it("gives the gate's compile cache to Sagax's own relay and never to another server (#3561)", async () => {
+      const cache = join(scratch, "node-compile");
+      startRelay({}, { NODE_COMPILE_CACHE: cache });
+      send({ jsonrpc: "2.0", id: 1, method: "peek" });
+      expect(JSON.parse(await nextLine()).result).toMatchObject({ mainThread: false, compileCache: cache });
+      const closed = once(gate!, "close");
+      gate!.kill();
+      await closed;
+      // the same script outside the gate's directory is someone else's server
+      const elsewhere = join(scratch, "server.mjs");
+      writeFileSync(elsewhere, readFileSync(FIXTURE));
+      startRelay({}, { NODE_COMPILE_CACHE: cache }, elsewhere);
+      send({ jsonrpc: "2.0", id: 1, method: "peek" });
+      const other = JSON.parse(await nextLine()).result;
+      expect(other.pid).not.toBe(gate!.pid);
+      expect(other).toMatchObject({ mainThread: true, own: "mine", compileCache: null });
     });
 
     it("lets the relay shut down on its own when the engine ends the gate", async () => {

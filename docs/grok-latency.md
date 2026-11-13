@@ -93,6 +93,14 @@ Every ACP turn logs one line when it settles (server/drivers/acp/turn-latency.ts
   3.3 s read in production before the gates ran their relays as threads, and `busy` says
   when Sagax's own thread is part of it.
 
+  The compile cache (#3561): the gate and Sagax's relay threads read Node's on-disk compile
+  cache, the server's own directory (`cache/node-compile` under the data directory), so the
+  gates of an engine start stop compiling the same bundles again. Eight gates with the agents
+  relay started at once: every tool list answered 470 to 513 ms after the start without the
+  cache, 250 to 380 ms with it; with the installed engine and those eight gates, resolved
+  587 to 682 ms after session/new without it, 506 to 586 ms with it. A person's own server
+  started by a gate never gets the variable.
+
   One process per mount (#3623): every mount is a gate process (server/mcp-gate.ts) the
   engine starts, and each gate used to start its upstream as a second Node process, so a turn
   with eight mounts started sixteen Node processes before the engine could ask any of them

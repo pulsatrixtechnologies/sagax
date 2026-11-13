@@ -212,6 +212,17 @@ describe("toolsBy on the latency line (#3623)", () => {
     expect(calls()).toBe(1);
   });
 
+  it("skips the wait on a pooled tool-selection turn whose session already settled (#3561)", async () => {
+    const first = scripted([catalog({ agents: "initializing" }, false), catalog({ agents: "ready" }, true)], 300);
+    await configure(first.request, { toolScope: { tools: ["agents"] }, mounted: ["agents"] });
+    expect(first.calls()).toBe(2);
+    vi.restoreAllMocks();
+    const pooled = scripted([catalog({ agents: "ready" })], 300);
+    const wait = await configure(pooled.request, { reused: true, toolScope: { tools: ["agents"] }, mounted: ["agents"] });
+    expect(pooled.calls()).toBe(0);
+    expect(wait).toBeUndefined();
+  });
+
   it("prints nothing for a reused session that skips the wait", async () => {
     rememberGrokMcpSettled("s1");
     const { request, calls } = scripted([catalog({ agents: "ready" })], 300);

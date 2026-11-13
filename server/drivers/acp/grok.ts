@@ -1048,7 +1048,8 @@ const support: AcpSupport = {
     const selection = turn.toolScope !== undefined;
     const reachHome = !selection && turn.grokCloudConnectors === true && turn.withholdHostTools === true ? turn.access?.engineHome : undefined;
     if (reused !== true) forgetGrokMcpSettled(sessionId);
-    if (!selection && reused === true && grokMcpAlreadySettled(sessionId)) {
+    // #3561: a tool-selection turn too, which polled again at every pooled turn
+    if (reused === true && grokMcpAlreadySettled(sessionId)) {
       /* MCP mounts of this live session already settled on an earlier turn */
     } else {
       // each poll also times the servers for the latency line (toolsBy)

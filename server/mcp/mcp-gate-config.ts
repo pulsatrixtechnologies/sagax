@@ -11,6 +11,7 @@ import { DEFAULT_RESULT_BUDGET, QUERY_TOOL_NAME } from "./mcp-trim.ts";
 import { gateSearchEnv } from "./mcp-gate-search.ts";
 import { REMOTE_MCP_CONFIG_ENV, remoteMcpSpec } from "./mcp-http.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
+import { COMPILE_CACHE_ENV } from "./gate-upstream.ts";
 import { TOOL_SCHEMA_PROFILE_ENV, type ToolSchemaProfileId } from "../tool-schema-profile.ts";
 
 /** Characters of a single tool result allowed into context, or 0 to mount
@@ -73,6 +74,14 @@ export function spillDir(threadId: string): string {
  * registered, renames, failures), read by GET /api/mcp/tool-names. */
 export function toolNameReportDir(): string {
   return join(DATA_DIR, "mcp-tool-names");
+}
+
+/** #3561: Node's on-disk compile cache of the gates and Sagax's relay
+ * threads, the server's own one (server-launcher.ts): each engine start of a
+ * turn starts one gate per mount, and the cache spares each of them compiling
+ * the same bundles again. A directory a gate cannot write only turns it off. */
+export function gateCompileCacheDir(): string {
+  return join(DATA_DIR, "cache", "node-compile");
 }
 
 export interface StdioServer {
@@ -276,6 +285,7 @@ export function gateServer(input: {
     args: [SPAWNED_PROXIES.mcpGate, ...(input.configEnvName ? ["--config-env", input.configEnvName] : [])],
     env: {
       ...input.nodeEnv,
+      [COMPILE_CACHE_ENV]: gateCompileCacheDir(),
       ...(schemaProfile ? { [TOOL_SCHEMA_PROFILE_ENV]: schemaProfile } : {}),
       ...(input.configEnvName ? { [input.configEnvName]: JSON.stringify(env) } : env),
     },

@@ -1,7 +1,7 @@
 import { useBotUnread } from "../unread-notice";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch } from "react";
 import { BotAvatar } from "../Avatar";
-import { BotChatHeader, BotHeaderPill, botPillActions, type ChatWindowContextValue } from "../BotHeaderPill";
+import { BotChatHeader, BotHeaderPill, botPillActions, CHAT_PILL_AVATAR_PX, type ChatWindowContextValue } from "../BotHeaderPill";
 import { isViewersPrimaryBot } from "@/lib/primary-bot";
 import { viewerActorId } from "@/lib/viewer";
 import { MAUS_COLORS, stateForBot } from "@/lib/mascot";
@@ -195,9 +195,9 @@ export function useChatViewPresence({
         <BotAvatar
           bot={bot}
           primary={isViewersPrimaryBot(bot, viewerActorId(state.config))}
-          primaryRingClassName="ring-elevated"
+          primaryRingClassName="ring-circle"
           state={stateForBot({ ...bot, messages })}
-          size={22}
+          size={CHAT_PILL_AVATAR_PX}
           motion={(mascotMotion?.kind as never) ?? "none"}
           motionKey={mascotMotion?.nonce ?? 0}
           animated={mascotRowAnimated(bot, pendingQueued as Record<string, unknown[]>, mascotMotion?.kind as never, noticing)}
@@ -220,9 +220,9 @@ export function useChatViewPresence({
         <BotAvatar
           bot={bot}
           primary={isViewersPrimaryBot(bot, viewerActorId(state.config))}
-          primaryRingClassName="ring-elevated"
+          primaryRingClassName="ring-circle"
           state={stateForBot({ ...bot, messages })}
-          size={22}
+          size={CHAT_PILL_AVATAR_PX}
           motion={(mascotMotion?.kind as never) ?? "none"}
           motionKey={mascotMotion?.nonce ?? 0}
           animated={mascotRowAnimated(bot, pendingQueued as Record<string, unknown[]>, mascotMotion?.kind as never, noticing)}

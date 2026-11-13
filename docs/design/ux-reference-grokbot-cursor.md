@@ -1460,9 +1460,12 @@ porte UX (section 6).
 - Exception, la pilule de l'en-tête du chat (`PillName`, chat d'un bot, salon,
   fenêtre de Coding ou d'échange) et la rangée d'un bot dans la barre latérale
   (`BotRoleTag`) : « Nom · Titre » sur une ligne, comme la référence côte à côte
-  (#4093, le propriétaire 2026-11-12), le titre en 14 regular gris secondaire,
-  sans contour ni fond, coupé le premier ; l'aperçu du dernier message reste
-  dessous. Sous une tuile épinglée, le titre reste dessous, en texte simple.
+  (#4093, le propriétaire 2026-11-12), sans contour ni fond, le titre coupé
+  le premier ; l'aperçu du dernier message reste dessous. Dans la pilule, le
+  nom, le point et le titre ont la même taille, la même graisse et la même
+  encre (14/20 medium, encre primaire : #4163, le propriétaire 2026-11-13,
+  mesuré sur la référence) ; dans la rangée de la barre latérale, le titre
+  reste en 14 regular gris secondaire. Sous une tuile épinglée, le titre reste dessous, en texte simple.
 - Un correctif de cet élément balaye toutes les surfaces qui le dessinent, pas
   seulement celle de la capture.
 
@@ -1496,7 +1499,10 @@ these, covered by `Sidebar.header.test.ts`, `Sidebar.head.layout.test.ts`,
 `SidebarBotListItem.test.ts`, `PersonLabel.test.ts`, `PrimaryBot.test.ts`
 and `sidebar-logo-preferences.test.ts`:
 
-- Head: the round search and New (`Plus`) buttons, 36px circles 8px apart.
+- Head: the round search and New (`Plus`) buttons, 36px circles 8px apart,
+  drawn like every round control of the top bar (see "Round controls and
+  the chat pill" below, #4163): the reference's elevated fill, a faint ring,
+  the glyph in the primary ink, never a dimmer grey on the rail.
   New still opens the compose-to picker (which holds Create new Bot). With a
   title bar (macOS inset lights, or the browser's stand-in dots) and no
   logo, they sit in the title bar's own 48px row (`SIDEBAR_TITLE_ROW`,
@@ -1613,8 +1619,10 @@ Rules that hold at every width:
   update in progress (downloading, staged, installing), the routines count,
   the apps grid, then the avatar; a downloaded update is not there (it is the
   account menu's first row, and the avatar's dot).
-- Header: a 36px pill, the mascot about 20px, "Name · Title" on one line,
-  14px regular, the title in secondary grey and cut first.
+- Header: a 40px pill, the mascot 24px, "Name · Title" on one line, 14/20
+  medium, the name, the dot and the title in the primary ink, the title cut
+  first (#4163 corrected the 36px, 20px, regular and grey title #4093 wrote:
+  see "Round controls and the chat pill").
 - Reading column: the transcript, the cards and the composer share one
   column, centred, at most 960px of content inside a 16px gutter on each
   side (Settings > Appearance > Chat width "Wide" and "Full" stay the
@@ -1693,6 +1701,77 @@ the update offered at the top of the account menu (and nowhere else), the
 model folded into the + menu on a narrow composer, the group titles (name
 first, count while folded), "Name · Role" rows with the last message under
 every one, and the account row's 14/20 medium name.
+
+#### Round controls and the chat pill (#4163, measured 2026-11-13)
+
+The owner put the two top bars one above the other (this app, then the
+reference) and a close-up of the two pills: the search and New buttons had
+another fill and a visible ring, their glyphs were smaller and dimmer, and
+the pill was shorter, narrower, its type smaller and its title grey. The
+values below were read again from the reference app's own stylesheet and
+components (values only), in the owner's configuration (its own typeface
+with 15px chat prose; neither flag changes these values: the pill's type is
+the body size, 14/20, in both). #4093 had measured the pill at 36px with a
+20px mascot and a regular, grey title: that was the stacked default of an
+older layout; the reference draws its bot pill as the title chip below.
+
+Every round control of the top bar, the sidebar's head and the panels'
+heads (search, New, "...", the conversation list, gear, close, back) is one
+control: `CIRCLE_BUTTON` (`SIDEBAR_CIRCLE_BUTTON` on the rail, the same
+values from the rail's ink), glyphs at `CIRCLE_ICON`.
+
+- Size: a 36px circle, in both themes.
+- Fill: the reference's elevated layer, #1f1f1f dark, #ffffff light
+  (`--color-circle`: a skin's `raised`, or its `--circle-fill` where `raised`
+  means something else: Daylight, Meadow; Pulsatrix Light's navy band and
+  rail take a 7% step of the rail's ink over the navy).
+- Ring: 1px, the ink at 6% dark, 8% light (`--color-circle-ring`). It reads
+  as no ring on the dark rail, a hairline on the light one. Before: 10% of
+  the ink, a visible ring.
+- Glyph: the reference's 16px glyphs fill about 13 to 14px with a stroke of
+  about 1.3px; this app's 24-unit glyphs at 18px with a 1.75 stroke draw the
+  same (`CIRCLE_ICON`). Ink: 90% of the ink dark, 92% light
+  (`--color-circle-glyph`). Before: search 16px, the rail's glyphs in the
+  secondary grey (66%).
+- Hover: a 6% wash of the ink over the fill (#2c2c2c dark, #f1f1f1 light).
+  Pressed has no state of its own; a button whose menu is open keeps the
+  hover wash, as the reference's open menus do.
+- Keyboard focus: the shared accent ring (unchanged here).
+
+The chat pill (`CHAT_PILL_CLASS`, `PillName`, `CHAT_PILL_AVATAR_PX`; the bot
+chat, a group, a person, a split pane, a coding chat, a bot-to-bot sheet and
+a routine run window):
+
+- Height 40px: a 24px mascot (a group's faces 24px), 7.5px above and below
+  it, a 0.5px ring. Before: 36px with a 22px mascot.
+- Inline: 7.5px before the mascot (9.5px before a group's faces), 8px to
+  the text, 13.5px after it; the width follows the text up to a 420px
+  maximum (the reference's title chip), also cut by the header's centre
+  column when that is narrower (the title gives way first, then the name).
+  Before: 8px and 14px, no maximum.
+- Ring and fill: the round controls' fill, a 0.5px ring at 6% (dark) or 8%
+  (light) of the ink; no shadow. The reference's resting chip sets its
+  shadow to none and draws one only once the transcript has scrolled under
+  its header; this app's header has no such state, so the pill draws none.
+- Type: 14/20 medium for the name, the dot and the title, in the primary
+  ink. Before: the name 14 regular, the dot and title 14 regular in the
+  secondary grey.
+- Chevron (a pill that toggles a panel): 12px in the tertiary ink, folded at
+  rest and while the panel is open, unfolded on hover or keyboard focus, so
+  the pill at rest is as wide as its text. Before: a 14px chevron always
+  shown, turned while open.
+- Hover: the round controls' 6% wash.
+
+The bar around them keeps its height (56px with its round controls); the
+pill is centred in it.
+
+Tests: `src/lib/topbar-parity.test.ts`, `src/components/Sidebar.head.layout.test.ts`,
+`src/components/BotHeaderPill.test.ts`, `src/components/coding/CodingChat.dom.test.ts`,
+`src/components/routines/RoutineRunWindow.dom.test.ts`. Captures (headless,
+French and English, light and dark, before and after side by side): the top
+bar at 900, 1280 and 1800, the sidebar's head expanded and as a rail, the
+pill with a short and a long name and title (gallery
+`src/gallery/app-shell-sidebar.html`, `?select=nova` and `?pill=long`).
 
 #### Sidebar sections are personal
 

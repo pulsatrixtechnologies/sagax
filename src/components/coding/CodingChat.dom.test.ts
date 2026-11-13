@@ -130,11 +130,12 @@ describe("CodingChatSheet", () => {
     const header = sheet.querySelector<HTMLElement>("[data-coding-header]")!;
     expect(header).not.toBeNull();
     // the same bar as the bot chat (ChatHeaderBar): floating, the top fade, the one
-    // chat pill centered (36px since the reference's measure, #4093/#4119)
+    // chat pill centered: 40px, the reference's measure in the owner's
+    // configuration (a 24px mascot, 7.5px around it, a 0.5px ring; #4163)
     expect(header.hasAttribute("data-chat-header-bar")).toBe(true);
     expect(header.className).toMatch(/absolute inset-x-0 top-0/);
     expect(header.querySelector('[data-chat-edge-fade="top"]')).not.toBeNull();
-    expect(header.querySelector("[data-chat-header-center] [data-coding-bot] [data-chat-pill]")?.className).toMatch(/\bh-9\b/);
+    expect(header.querySelector("[data-chat-header-center] [data-coding-bot] [data-chat-pill]")?.className).toMatch(/\bh-10\b/);
     expect(header.querySelector("[data-bot-header-chevron]")).toBeNull();
     expect(header.querySelector("[data-chat-header-start] [data-coding-back]")).not.toBeNull();
     expect(header.querySelector("[data-chat-header-start] [data-coding-title]")).not.toBeNull();

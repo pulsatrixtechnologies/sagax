@@ -291,6 +291,10 @@ const PAIRS = [
   ["--color-sidebar-ink", "--color-sidebar-selected", 4.5, "--color-sidebar"],
   ["--color-sidebar-ink-secondary", "--color-sidebar-selected", 4.5, "--color-sidebar"],
   ["--color-sidebar-ink", "--color-sidebar-elevated", 4.5],
+  // The round controls' glyph on their fill (#4163), on the rail and in the
+  // frame: an icon, 3:1 (WCAG 1.4.11).
+  ["--color-sidebar-circle-glyph", "--color-sidebar-circle", 3, "--color-sidebar"],
+  ["--color-circle-glyph", "--color-circle", 3, "--color-app"],
   ["--color-sidebar-hairline", "--color-sidebar", 1.5],
   // The focus ring sits outside the control (outline-offset: 2px), so it
   // lands on whatever surface is behind it. WCAG 1.4.11 asks 3:1 of a

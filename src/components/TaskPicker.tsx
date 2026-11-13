@@ -355,7 +355,7 @@ function ConversationTaskPicker({
         title={switchTitle}
         aria-label={t("task.switch")}
         aria-expanded={open}
-        className={cn(CIRCLE_BUTTON, "relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60", open && "bg-elevated-hover")}
+        className={cn(CIRCLE_BUTTON, "relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60", open && "bg-circle-hover")}
       >
         <MessagesSquare size={18} strokeWidth={1.75} aria-hidden="true" />
         {workingElsewhere > 0 && (

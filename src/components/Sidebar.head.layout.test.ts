@@ -26,10 +26,10 @@ const px = (token: string) => {
 describe("sidebar head buttons", () => {
   it("paint from the rail's tokens, not the content frame's", () => {
     const list = classes(SIDEBAR_CIRCLE_BUTTON);
-    for (const token of ["bg-sidebar-elevated", "hover:bg-sidebar-elevated-hover", "border-sidebar-hairline-weak", "text-sidebar-ink-secondary", "hover:text-sidebar-ink"]) {
+    for (const token of ["bg-sidebar-circle", "hover:bg-sidebar-circle-hover", "border-sidebar-circle-ring", "text-sidebar-circle-glyph"]) {
       expect(list).toContain(token);
     }
-    for (const frameToken of ["bg-elevated", "hover:bg-elevated-hover", "border-hairline-weak", "text-ink", "text-ink-secondary", "hover:text-ink"]) {
+    for (const frameToken of ["bg-circle", "hover:bg-circle-hover", "border-circle-ring", "text-circle-glyph", "text-ink", "text-ink-secondary", "hover:text-ink"]) {
       expect(list).not.toContain(frameToken);
     }
   });
@@ -57,6 +57,11 @@ describe("sidebar head buttons", () => {
     expect(theme).toContain("--color-elevated: color-mix(in srgb, var(--color-ink) 3%, var(--color-panel));");
     expect(theme).toContain("--color-sidebar-elevated-hover: color-mix(in srgb, #777777 20%, var(--color-sidebar-elevated));");
     expect(theme).toContain("--color-sidebar-hairline-weak: color-mix(in srgb, var(--color-sidebar-ink) 10%, transparent);");
+    // the round controls on the rail (#4163): the frame's fill unless the
+    // skin gives the rail its own, the ring and glyph from the rail's ink
+    expect(theme).toContain("--color-sidebar-circle: var(--sidebar-circle-fill, var(--circle-fill, var(--color-raised)));");
+    expect(theme).toContain("--color-sidebar-circle-ring: var(--sidebar-circle-ring, var(--circle-ring, color-mix(in srgb, var(--color-sidebar-ink) 6%, transparent)));");
+    expect(theme).toContain("--color-sidebar-circle-glyph: var(--sidebar-circle-glyph, var(--circle-glyph, color-mix(in srgb, var(--color-sidebar-ink) 90%, transparent)));");
     for (const block of styles.matchAll(/\[data-skin="([\w-]+)"\] \{([\s\S]*?)\n\}/g)) {
       const [, skin, body] = block;
       const token = (name: string) => body!.match(new RegExp(`--color-${name}:\\s*([^;]+);`))?.[1];

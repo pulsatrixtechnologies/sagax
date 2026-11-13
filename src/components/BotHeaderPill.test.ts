@@ -40,15 +40,15 @@ describe("chat header bot pill", () => {
     expect(html).toMatch(/<svg[^>]*aria-hidden="true"[^>]*data-bot-header-chevron|<svg[^>]*data-bot-header-chevron[^>]*aria-hidden="true"/);
   });
 
-  it("says whether the panel is open and turns the chevron", () => {
+  it("says whether the panel is open; the chevron unfolds on hover only while it is closed (#4163, the reference)", () => {
     const closed = pill(false);
     expect(closed).toContain('aria-expanded="false"');
     expect(closed).toContain(`aria-label="Open Pepper&#x27;s panel"`);
-    expect(closed).not.toContain("rotate-90");
+    expect(closed).toMatch(/data-bot-header-chevron[^>]*group-hover\/pill:w-3|group-hover\/pill:w-3[^>]*data-bot-header-chevron/);
     const open = pill(true);
     expect(open).toContain('aria-expanded="true"');
     expect(open).toContain(`aria-label="Close Pepper&#x27;s panel"`);
-    expect(open).toContain("rotate-90");
+    expect(open).not.toContain("group-hover/pill:w-3");
   });
 
   it("opens the bot panel, then closes it on the next click", () => {
@@ -146,15 +146,17 @@ describe("bot chat header, like the reference app (#2141)", () => {
     expect(html).toContain("Pepper");
     expect(html).toContain(">Research<");
     expect(html).not.toContain(" · Research");
-    expect(html).toContain("font-normal");
+    expect(html).toContain("font-medium");
+    expect(html).not.toContain("font-normal");
     expect(html).not.toContain("data-bot-header-chevron");
   });
 
-  it("writes \"Name · Title\" on one line, 14px, the title in secondary grey, as the reference (#4093)", () => {
+  it("writes \"Name · Title\" on one line, 14px medium, the title in the name's ink, as the reference (#4093, #4163)", () => {
     const html = header();
-    expect(html).toMatch(/<span data-bot-header-text="" title="Pepper\nResearch" class="[^"]*text-\[14px\][^"]*"><span data-bot-header-name="" class="[^"]*text-ink[^"]*">Pepper<\/span><span aria-hidden="true" class="[^"]*text-ink-secondary[^"]*">·<\/span><span data-bot-header-label="" class="[^"]*text-ink-secondary[^"]*">Research<\/span><\/span>/);
+    expect(html).toMatch(/<span data-bot-header-text="" title="Pepper\nResearch" class="[^"]*text-\[14px\] font-medium leading-5 text-ink[^"]*"><span data-bot-header-name="" class="[^"]*">Pepper<\/span><span aria-hidden="true" class="[^"]*">·<\/span><span data-bot-header-label="" class="[^"]*">Research<\/span><\/span>/);
+    expect(html).not.toContain("text-ink-secondary");
     expect(html).not.toContain("flex-col");
-    expect(html).toContain("h-9");
+    expect(html).toContain("h-10");
   });
 
   it("the window pill (Coding, split view) writes them on one line too", () => {
@@ -165,7 +167,8 @@ describe("bot chat header, like the reference app (#2141)", () => {
       onToggle: () => {},
       avatar: createElement("span", { "data-test-avatar": "" }),
     }));
-    expect(html).toMatch(/>Pepper<\/span><span aria-hidden="true"[^>]*>·<\/span><span data-bot-header-label="" class="[^"]*text-ink-secondary[^"]*">Research<\/span>/);
+    expect(html).toMatch(/>Pepper<\/span><span aria-hidden="true"[^>]*>·<\/span><span data-bot-header-label="" class="[^"]*">Research<\/span>/);
+    expect(html).not.toContain("text-ink-secondary");
     expect(html).not.toContain("flex-col");
   });
 

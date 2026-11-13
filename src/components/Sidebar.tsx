@@ -75,7 +75,7 @@ import { mascotRowAnimated } from "@/lib/mascot-animate";
 import { useBotUnread } from "./unread-notice";
 import { cn } from "@/lib/cn";
 import { VirtualRow } from "./VirtualRow";
-import { SIDEBAR_CIRCLE_BUTTON } from "@/lib/circle-button";
+import { CIRCLE_ICON, SIDEBAR_CIRCLE_BUTTON } from "@/lib/circle-button";
 import { searchMatchesThreads, useSearchDisclosure } from "@/lib/search-disclosure";
 import { useHeldMenuMotion } from "./MenuMotion";
 import { navigate } from "@/lib/view-transitions";
@@ -198,9 +198,10 @@ import { routineRunsWaiting } from "./parallel-approvals";
 export type { MenuState, BotConfirmKind };
 export { parseItemDrag, currentArchivableBot, botConfirmCopy, roomDeleteCopy, sidebarListedBots, TeamMenuItems };
 
-/** The head's round buttons (search, New): the header's 36px circle (share,
- * panel), painted from the sidebar's own tokens (surface, hairline, ink), with
- * the same focus ring as its neighbours. There is no collapse button: dragging
+/** The head's round buttons (search, New): the header's 36px circle ("...",
+ * gear, close), painted from the sidebar's own tokens (fill, ring, glyph), the
+ * glyph at CIRCLE_ICON like every round control (#4163), with the same focus
+ * ring as its neighbours. There is no collapse button: dragging
  * the sidebar's edge narrower than the snap width collapses it (see
  * `sidebarDragTarget`). */
 export const SIDEBAR_HEAD_BUTTON = cn(
@@ -2507,7 +2508,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
         title={searchTitle}
         className={SIDEBAR_HEAD_BUTTON}
       >
-        <Search size={16} strokeWidth={1.75} aria-hidden="true" />
+        <Search {...CIRCLE_ICON} aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -2518,7 +2519,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
         data-sidebar-new
         className={SIDEBAR_HEAD_BUTTON}
       >
-        <Plus size={18} strokeWidth={1.75} aria-hidden="true" />
+        <Plus {...CIRCLE_ICON} aria-hidden="true" />
       </button>
     </>
   );

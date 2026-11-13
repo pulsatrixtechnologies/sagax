@@ -405,6 +405,24 @@
   --color-sidebar-card: color-mix(in srgb, var(--color-sidebar-ink) 7%, var(--color-sidebar));
   --color-sidebar-elevated-hover: color-mix(in srgb, #777777 20%, var(--color-sidebar-elevated));
   --color-sidebar-hairline-weak: color-mix(in srgb, var(--color-sidebar-ink) 10%, transparent);
+  /* The round controls (search, New, "...", gear, close: CIRCLE_BUTTON,
+     SIDEBAR_CIRCLE_BUTTON) and the chat header's pill, measured on the
+     reference in the owner's configuration (#4163): its "elevated" layer
+     (#1f1f1f dark, #ffffff light: a skin's `raised`, or `--circle-fill`
+     where `raised` means something else), a 6% wash of the ink over it on
+     hover, a 1px ring of the ink at 6% (dark) or 8% (light), the glyph in
+     the ink at 90% (dark) or 92% (light). The light values and the light
+     pill's shadow sit in the skin-family block below. */
+  --color-circle: var(--circle-fill, var(--color-raised));
+  --color-circle-hover: color-mix(in srgb, var(--color-ink) 6%, var(--circle-fill, var(--color-raised)));
+  --color-circle-ring: var(--circle-ring, color-mix(in srgb, var(--color-ink) 6%, transparent));
+  --color-circle-glyph: var(--circle-glyph, color-mix(in srgb, var(--color-ink) 90%, transparent));
+  /* The same control on the rail, from the rail's own ink (Pulsatrix
+     Light's navy rail sets the `--sidebar-circle-*` values). */
+  --color-sidebar-circle: var(--sidebar-circle-fill, var(--circle-fill, var(--color-raised)));
+  --color-sidebar-circle-hover: color-mix(in srgb, var(--color-sidebar-ink) 6%, var(--sidebar-circle-fill, var(--circle-fill, var(--color-raised))));
+  --color-sidebar-circle-ring: var(--sidebar-circle-ring, var(--circle-ring, color-mix(in srgb, var(--color-sidebar-ink) 6%, transparent)));
+  --color-sidebar-circle-glyph: var(--sidebar-circle-glyph, var(--circle-glyph, color-mix(in srgb, var(--color-sidebar-ink) 90%, transparent)));
 }
 
 /* The text color that reads on the accent fill. It lives on :root (each skin
@@ -705,6 +723,12 @@
   --color-sidebar-hover: #eef2fb12;       /* v3's --sidebar-accent, rgb(238 242 251 / 7%) */
   --color-sidebar-selected: #6b9bff38;    /* v3's --sidebar-accent-active, rgb(107 155 255 / 22%) */
   --color-sidebar-hairline: #41526f;      /* v3's .px-chrome --border */
+  /* the rail's round controls (#4163): the reference's elevated step over
+     the navy rail (as #1f1f1f sits over the dark rail), the rail's light ink
+     for the ring and the glyph */
+  --sidebar-circle-fill: color-mix(in srgb, var(--color-sidebar-ink) 7%, var(--color-sidebar));
+  --sidebar-circle-ring: color-mix(in srgb, var(--color-sidebar-ink) 8%, transparent);
+  --sidebar-circle-glyph: color-mix(in srgb, var(--color-sidebar-ink) 92%, transparent);
   --sidebar-mark-on-dark: inline-block;
   --sidebar-mark-on-light: none;
 
@@ -1743,6 +1767,7 @@
   --color-panel: #f7f7f7;         /* sidebar, one step down from the thread */
   --color-raised: #e1e1e1;
   --color-raised-hover: #d7d7d7;  /* the selected row */
+  --circle-fill: #ffffff;         /* the round controls and the pill: the reference's elevated white (#4163) */
   --color-card: #eeeeee;          /* what a bot says */
   --color-inset: #e6e6e6;         /* the search field */
   --color-control: #dedede;       /* a chip on a card */
@@ -2018,6 +2043,7 @@
   --sidebar-mark-on-light: inline-block; /* a light rail: the navy-bar mark */
   --color-raised: #e9eeea;
   --color-raised-hover: #d6efdf;  /* the selected row, mint */
+  --circle-fill: #ffffff;         /* the round controls and the pill: the reference's elevated white (#4163) */
   --color-card: #f1f5f2;          /* what a bot says */
   --color-inset: #e7ece8;         /* the search field */
   --color-control: #dce3de;       /* a chip on a card */
@@ -2304,6 +2330,10 @@
   --color-hairline: var(--color-sidebar-hairline);
   --color-raised: var(--color-sidebar-hover);
   --color-raised-hover: var(--color-sidebar-selected);
+  /* the round controls and the pill on the navy band (#4163) */
+  --circle-fill: var(--sidebar-circle-fill);
+  --circle-ring: var(--sidebar-circle-ring);
+  --circle-glyph: var(--sidebar-circle-glyph);
 }
 /* The chat header's top fade (ChatEdgeFade) belongs to skins where the
    header floats over the transcript. Here the header is the flat navy band,
@@ -4953,6 +4983,14 @@ svg[data-owl-motion][data-owl-offscreen] :is([data-part="nearWing"], [data-part=
   --bot-panel-bg: #161616;
   --bot-panel-card: #1f1f1f;
   --bot-panel-pill-border: #3a3a3a;
+}
+
+/* The round controls and the chat pill on the light skins (#4163): the
+   reference's light ring (8% of the ink) and glyph (92%). One block per skin family, as
+   below (no light-dark()). */
+:is([data-skin="pulsatrix-light"], [data-skin="atelier"], [data-skin="lagoon"], [data-skin="linen"], [data-skin="daylight"], [data-skin="retro98"], [data-skin="meadow"]) {
+  --circle-ring: color-mix(in srgb, var(--color-ink) 8%, transparent);
+  --circle-glyph: color-mix(in srgb, var(--color-ink) 92%, transparent);
 }
 
 /* Usage charts (v2): the validated categorical palette of the dataviz kit,

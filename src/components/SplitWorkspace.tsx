@@ -51,7 +51,7 @@ import {
 import { useSideTranscript } from "@/lib/use-side-transcript";
 import { groupMemberBots } from "@/lib/group-members";
 import { BotAvatar } from "./Avatar";
-import { BotHeaderPill, botPillActions } from "./BotHeaderPill";
+import { BotHeaderPill, botPillActions, CHAT_PILL_AVATAR_PX } from "./BotHeaderPill";
 import { ChatHeaderBar } from "./ChatHeaderBar";
 import { ChatView } from "./ChatView";
 import { GroupView } from "./GroupView";
@@ -468,7 +468,7 @@ function BotPane({ leafId, bot, threadId, target, onClose }: { leafId: string; b
     />
   );
   // Until the thread loads, the same pill with a still mascot.
-  const loadingPill = <BotHeaderPill name={bot.name} label={(bot.title ?? "")} panelOpen={panel.open} onToggle={panel.onToggle} avatar={<BotAvatar bot={bot} state="idle" size={22} animated={false} />} />;
+  const loadingPill = <BotHeaderPill name={bot.name} label={(bot.title ?? "")} panelOpen={panel.open} onToggle={panel.onToggle} avatar={<BotAvatar bot={bot} state="idle" size={CHAT_PILL_AVATAR_PX} animated={false} />} />;
   return (
     <section aria-label={label} data-split-pane={`bot:${bot.id}`} className="relative flex h-full min-h-0 w-full min-w-0 flex-col bg-app">
       {transcript.loaded ? <ChatView bot={paneBot} side={{ header, label, panel, loadOlder: transcript.loadOlder, loadingOlder: transcript.loadingOlder }} /> : <PaneLoading header={header(loadingPill)} failed={transcript.failed} />}
@@ -515,7 +515,7 @@ function GroupPane({ leafId, group, threadId, target, onClose }: { leafId: strin
   );
   // Until the thread loads, the same pill. A one-to-one room (dm) has no
   // panel: its pill is the plain chip, as in the main chat.
-  const loadingPill = group.dm ? null : <BotHeaderPill name={group.name} panelOpen={panel.open} onToggle={panel.onToggle} avatar={<GroupAvatarStack members={members} size={24} />} />;
+  const loadingPill = group.dm ? null : <BotHeaderPill name={group.name} panelOpen={panel.open} onToggle={panel.onToggle} group avatar={<GroupAvatarStack members={members} size={CHAT_PILL_AVATAR_PX} />} />;
   return (
     <section aria-label={label} data-split-pane={`group:${group.id}`} className="relative flex h-full min-h-0 w-full min-w-0 flex-col bg-app">
       {transcript.loaded ? <GroupView group={paneGroup} pane={{ header, label, panel, loadOlder: transcript.loadOlder, loadingOlder: transcript.loadingOlder }} /> : <PaneLoading header={header(loadingPill)} failed={transcript.failed} />}

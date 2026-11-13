@@ -22,7 +22,7 @@ final class BotAdvancedUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        // the phone's panel (profile-name, panel-gear) and its profile page; the iPad's gear opens the
+        // the phone's panel (profile-name, panel-edit) and its profile page; the iPad's gear opens the
         // persona window instead, covered by the DesktopPersona* suites
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the phone's bot panel and profile page; the iPad opens the persona window (DesktopPersona* suites)")
         let env = ProcessInfo.processInfo.environment
@@ -112,10 +112,10 @@ final class BotAdvancedUITests: XCTestCase {
             app.launch()
         }
         XCTAssertTrue(name.waitForExistence(timeout: 60))
-        // the panel's gear opens the bot profile on its Settings (#2157)
-        let gear = element("panel-gear", in: app)
-        XCTAssertTrue(gear.waitForExistence(timeout: 15))
-        gear.tap()
+        // the panel's Edit pill opens the bot profile on its Settings (#2157, #4101)
+        let edit = element("panel-edit", in: app)
+        XCTAssertTrue(edit.waitForExistence(timeout: 15))
+        edit.tap()
         XCTAssertTrue(element("bot-profile-page", in: app).waitForExistence(timeout: 15))
         return app
     }
@@ -436,9 +436,9 @@ final class BotAdvancedUITests: XCTestCase {
         defer { _ = try? api("PATCH", "/api/bots/\(id)/profile", ["name": "Ara"]) }
         let app = launchAdvanced()
         app.navigationBars.buttons.firstMatch.tap()
-        let gear = element("panel-gear", in: app)
-        XCTAssertTrue(gear.waitForExistence(timeout: 10))
-        gear.press(forDuration: 1.0)
+        let more = element("panel-more", in: app)
+        XCTAssertTrue(more.waitForExistence(timeout: 10))
+        more.tap()
         XCTAssertTrue(element("profile-menu.copy-markdown", in: app).waitForExistence(timeout: 10))
         XCTAssertFalse(element("profile-menu.duplicate", in: app).exists)
         attach("Bot menu", app)

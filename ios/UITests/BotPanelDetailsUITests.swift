@@ -120,12 +120,12 @@ final class BotPanelDetailsUITests: XCTestCase {
         app.descendants(matching: .any).matching(identifier: id).firstMatch
     }
 
-    /// The panel's gear opens the bot profile on its Settings (the edit
-    /// tree), as the desktop's gear does (#2157).
+    /// The panel's Edit pill opens the bot profile on its Settings (the
+    /// edit tree), as the desktop's gear does (#2157, #4101).
     private func openSettings(in app: XCUIApplication) {
-        let gear = element("panel-gear", in: app)
-        XCTAssertTrue(gear.waitForExistence(timeout: 15))
-        gear.tap()
+        let edit = element("panel-edit", in: app)
+        XCTAssertTrue(edit.waitForExistence(timeout: 15))
+        edit.tap()
     }
 
     /// Edit avatar from the mascot's menu (#2157): the character row.
@@ -240,10 +240,9 @@ final class BotPanelDetailsUITests: XCTestCase {
         let routineId = try XCTUnwrap(((created?["routine"] as? [String: Any]) ?? created)?["id"] as? String)
         defer { _ = try? api("DELETE", "/api/routines/\(routineId)", allowFailure: true) }
         let app = launchProfile()
-        // Activity > Upcoming lists the bot's routines; a row opens its page (#2157)
-        let row = element("panel-upcoming.Routine WP7 a supprimer", in: app)
-        let more = element("panel-upcoming-show-more", in: app)
-        if !row.waitForExistence(timeout: 15), more.exists { more.tap() }
+        // the Routines row's page lists the bot's routines; a row opens its page (#2157, #4101)
+        element("panel-row.routines", in: app).tap()
+        let row = element("profile-routine.Routine WP7 a supprimer", in: app)
         XCTAssertTrue(row.waitForExistence(timeout: 15))
         for _ in 0..<6 where !row.isHittable { app.swipeUp() }
         row.tap()
@@ -279,7 +278,7 @@ final class BotPanelDetailsUITests: XCTestCase {
             throw XCTSkip("the fixture seeds no file in Ara's thread")
         }
         let app = launchProfile()
-        element("panel-tab.library", in: app).tap()
+        element("panel-row.library", in: app).tap()
         XCTAssertTrue(element("thread-files", in: app).waitForExistence(timeout: 15))
         for file in files.prefix(3) {
             let fileName = try XCTUnwrap(file["name"] as? String)
@@ -292,10 +291,11 @@ final class BotPanelDetailsUITests: XCTestCase {
             (file["name"] as? String) == name && file["available"] as? Bool == true
                 && ((file["localPath"] as? String ?? file["path"] as? String ?? "").hasPrefix("/"))
         }
-        let actions = element("library-actions.\(name)", in: app)
+        // the row's long press holds its actions (#4101: the reference row has no menu button)
+        let actions = element("thread-file.\(name)", in: app)
         XCTAssertTrue(actions.waitForExistence(timeout: 10))
         if copyable != nil {
-            actions.tap()
+            actions.press(forDuration: 1.0)
             let copy = app.buttons["Copy path"].firstMatch
             XCTAssertTrue(copy.waitForExistence(timeout: 10))
             RunLoop.current.run(until: Date().addingTimeInterval(0.8))
@@ -308,7 +308,7 @@ final class BotPanelDetailsUITests: XCTestCase {
 
         // Show in chat closes the panel over the chat
         RunLoop.current.run(until: Date().addingTimeInterval(2.6))
-        actions.tap()
+        actions.press(forDuration: 1.0)
         let show = app.buttons["Show in chat"].firstMatch
         XCTAssertTrue(show.waitForExistence(timeout: 10))
         RunLoop.current.run(until: Date().addingTimeInterval(0.8))
@@ -370,8 +370,8 @@ final class BotPanelDetailsUITests: XCTestCase {
             try api("POST", "/api/bots/\(other)/primary")
         }
         let app = launchProfile()
-        // a long press on the gear opens the bot menu (#2157)
-        element("panel-gear", in: app).press(forDuration: 1.0)
+        // the more control opens the bot menu (#2157, #4101)
+        element("panel-more", in: app).tap()
         let make = element("profile-menu.make-primary", in: app)
         XCTAssertTrue(make.waitForExistence(timeout: 10))
         make.tap()

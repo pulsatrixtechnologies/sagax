@@ -1,132 +1,10 @@
-// Activity tab cards for the bot panel (reference app parity, #2127):
-// Upcoming (routines with toggle, Show more after 5), Computer
-// ("Bot's computer · Awake" with vignette), Voice chat (Voice, Speed, Language).
+// Bot panel cards (reference app parity, #2127): Computer ("Bot's computer
+// · Awake" with vignette, the desktop and group panels) and Voice chat
+// (Voice, Speed, Language; its own page on the phone, #4101). The phone's
+// upcoming routines live on its Routines page.
 import CompanionCore
 import SwiftUI
 import UIKit
-
-// MARK: - Upcoming
-
-/// Upcoming: routines of this bot with an Active toggle; five rows then Show more.
-struct BotPanelUpcomingCard: View {
-    @Environment(\.themePalette) var themePalette
-    let bot: Bot
-    let routines: [Routine]
-    let loaded: Bool
-    var onOpen: (Routine) -> Void
-    var onToggle: (Routine, Bool) -> Void
-    var onAdd: () -> Void
-    /// The bot's full routines page (add, sort, run logs).
-    var onAll: (() -> Void)? = nil
-
-    @State private var expanded = false
-
-    private var mine: [Routine] { DesktopRoutineList.of(botId: bot.id, in: routines) }
-    private var shown: [Routine] {
-        if expanded || mine.count <= PanelRoutinePreview.limit { return mine }
-        return Array(mine.prefix(PanelRoutinePreview.limit))
-    }
-    private var needsMore: Bool { !expanded && mine.count > PanelRoutinePreview.limit }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text("Upcoming")
-                    .font(Theme.Font.label)
-                    .foregroundStyle(Theme.textTertiary)
-                Spacer(minLength: 0)
-                if loaded, !mine.isEmpty, let onAll {
-                    Button {
-                        Haptics.selection()
-                        onAll()
-                    } label: {
-                        Text("All routines")
-                            .font(Theme.Font.label)
-                            .foregroundStyle(Theme.accentText)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("panel-upcoming-all")
-                }
-            }
-            .padding(.horizontal, 4)
-            ProfileCard {
-                if !loaded {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text("Loading routines…")
-                            .font(Theme.Profile.labelFont)
-                            .foregroundStyle(Theme.textSecondary)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: Theme.Profile.row)
-                    .padding(.horizontal, Theme.Profile.textInset)
-                } else if mine.isEmpty {
-                    Button(action: onAdd) {
-                        ProfileRow(
-                            icon: ProfileRowIcon(systemImage: "plus", size: 16, color: Theme.blue),
-                            title: Text("Add a routine"),
-                            titleColor: Theme.accentText,
-                            height: Theme.Profile.row
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("panel-upcoming-add")
-                } else {
-                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, routine in
-                        if index > 0 { ProfileDivider(leading: Theme.Profile.iconColumn) }
-                        upcomingRow(routine)
-                    }
-                }
-            }
-            if needsMore {
-                ShowMoreButton(loading: false) {
-                    Haptics.selection()
-                    expanded = true
-                }
-                .accessibilityIdentifier("panel-upcoming-show-more")
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("panel-upcoming")
-    }
-
-    private func upcomingRow(_ routine: Routine) -> some View {
-        let canToggle = routine.mayEdit && routine.canToggle()
-        return HStack(spacing: 0) {
-            Button {
-                Haptics.selection()
-                onOpen(routine)
-            } label: {
-                ProfileRow(
-                    icon: ProfileRowIcon(
-                        systemImage: "clock",
-                        size: 17,
-                        color: routine.enabled ? Theme.routineActive : Theme.routinePaused
-                    ),
-                    title: Text(verbatim: routine.name),
-                    subtitle: Text(verbatim: routine.enabled
-                        ? RoutineWording.subtitle(routine)
-                        : String(localized: "Paused")),
-                    height: Theme.Profile.routineRow
-                ) { EmptyView() }
-            }
-            .buttonStyle(.plain)
-            Toggle("", isOn: Binding(
-                get: { routine.enabled },
-                set: { value in
-                    Haptics.selection()
-                    onToggle(routine, value)
-                }
-            ))
-            .labelsHidden()
-            .toggleStyle(ParityToggleStyle(width: Theme.Profile.toggle.width, height: Theme.Profile.toggle.height))
-            .padding(.trailing, Theme.Profile.textInset)
-            .disabled(!canToggle)
-            .accessibilityLabel(Text("Active: \(routine.name)"))
-            .accessibilityIdentifier("panel-upcoming-active.\(routine.name)")
-        }
-        .accessibilityIdentifier("panel-upcoming.\(routine.name)")
-    }
-}
 
 // MARK: - Computer card
 
@@ -160,7 +38,10 @@ struct BotPanelComputerCard: View {
     @ObservedObject private var screen: BotScreen
     private var frame: ScreenFrame? { screen.frame ?? session.state.screens[bot.id] }
 
-    private var statusLine: String {
+    private var statusLine: String { Self.statusLine(phase) }
+
+    /// The computer's state in words (also the phone panel's Computer row).
+    static func statusLine(_ phase: BotComputerPhase) -> String {
         switch phase {
         case .off: String(localized: "Off")
         case .asleep: String(localized: "Asleep")
@@ -236,6 +117,9 @@ struct BotPanelVoiceChatCard: View {
     @Environment(\.themePalette) var themePalette
     @EnvironmentObject private var session: Session
     let bot: Bot
+    /// The "Voice chat" title over the card; off on its own page, whose bar
+    /// already says it.
+    var titled = true
 
     @State private var voices: [VoiceModeVoice]?
     @AppStorage(VoiceModeSettings.storageKey) private var voiceRaw = ""
@@ -251,10 +135,12 @@ struct BotPanelVoiceChatCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Voice chat")
-                .font(Theme.Font.label)
-                .foregroundStyle(Theme.textTertiary)
-                .padding(.horizontal, 4)
+            if titled {
+                Text("Voice chat")
+                    .font(Theme.Font.label)
+                    .foregroundStyle(Theme.textTertiary)
+                    .padding(.horizontal, 4)
+            }
             ProfileCard {
                 menuRow("Voice", value: voiceName, id: "panel-voice-chat.voice") {
                     Picker(selection: voiceBinding) {

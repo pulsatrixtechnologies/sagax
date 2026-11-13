@@ -257,6 +257,8 @@ struct BotPanelNoticesView: View {
     let bot: Bot
 
     @EnvironmentObject private var session: Session
+    /// 0 inside the phone panel's column, which holds the margin (#4101).
+    @Environment(\.profileCardMargin) private var margin
     @State private var readOnly = false
 
     var body: some View {
@@ -270,7 +272,8 @@ struct BotPanelNoticesView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(Theme.cardRaised.opacity(0.6), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .padding(.horizontal, Theme.Profile.cardMargin)
+                    .padding(.horizontal, margin)
+                    .padding(.top, 16)
                     .accessibilityIdentifier("profile-read-only")
             }
             // #196: no "The Primary Bot can propose this" hint

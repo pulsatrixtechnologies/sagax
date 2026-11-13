@@ -497,6 +497,21 @@ async function seedThroughAPI(base) {
   await api(base, "PATCH", `/api/routines/${weeklyId}`, { enabled: false });
   // The monthly routine's instruction has the reference's line count (06).
   await api(base, "PATCH", `/api/routines/${(cron.routine ?? cron).id}`, { prompt: ROUTINE_PROMPT });
+  // PARITY_MANY_ROUTINES=1 (#4101): ten more with long names, to check on the
+  // phone's Routines page that a name is cut on one line and the switches line up.
+  if (process.env.PARITY_MANY_ROUTINES === "1") {
+    for (let i = 1; i <= 10; i += 1) {
+      const made = await api(base, "POST", "/api/routines", {
+        name: `Revue hebdomadaire numéro ${i} des demandes ouvertes et des suivis à relancer auprès de l'équipe`,
+        prompt: "Texte de remplacement.",
+        botId: ara,
+        runOn: "maus",
+        schedule: { type: "daily", time: `${String(6 + i).padStart(2, "0")}:30`, weekdays: [1, 3, 5] },
+        durationMinutes: 30,
+      });
+      if (i % 3 === 0) await api(base, "PATCH", `/api/routines/${(made.routine ?? made).id}`, { enabled: false });
+    }
+  }
 
   return { ids, groupId: group.id, groupThreadId: group.threadId, routines: [(cron.routine ?? cron).id, weeklyId] };
 }

@@ -158,7 +158,7 @@ struct ComputerView: View {
         } else {
             orgImmersiveScreen {
                 localVmPanel
-                    .padding(.horizontal, Theme.Metric.screenEdge)
+                    .padding(.horizontal, Theme.PhonePanel.margin)
             }
         }
     }
@@ -180,22 +180,26 @@ struct ComputerView: View {
     private func orgImmersiveScreen<Content: View>(@ViewBuilder content: @escaping () -> Content) -> some View {
         ComputerImmersiveShell(
             top: {
-                VStack(spacing: 12) {
-                    HStack {
-                        GlassCircleButton(
-                            systemImage: "chevron.left", fill: Theme.Computer.glassFill, accessibilityLabel: "Back",
-                            glyphSize: 18, glyphOffset: CGSize(width: 0.85, height: -0.25), glyphColor: Theme.Computer.ink
-                        ) { dismiss() }
-                            .accessibilityIdentifier("computer-back")
-                        Spacer(minLength: 0)
-                    }
-                    AnyView(chooser(dark: true))
+                HStack {
+                    GlassCircleButton(
+                        systemImage: "chevron.left", fill: Theme.Computer.glassFill, accessibilityLabel: "Back",
+                        glyphSize: 18, glyphOffset: CGSize(width: 0.85, height: -0.25), glyphColor: Theme.Computer.ink
+                    ) { dismiss() }
+                        .accessibilityIdentifier("computer-back")
+                    Spacer(minLength: 0)
                 }
             },
             bottom: { EmptyView() },
             content: {
-                content()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                // under the floating back control, not behind it: the shell's
+                // bars no longer draw a band that hid the stage's top (#4101)
+                VStack(spacing: 12) {
+                    AnyView(chooser(dark: true))
+                        .padding(.horizontal, Theme.PhonePanel.margin)
+                    content()
+                }
+                .padding(.top, Theme.PhonePanel.barCentre + Theme.Metric.glassLarge / 2 + 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         )
         .toolbar(.hidden, for: .navigationBar)
@@ -228,7 +232,7 @@ struct ComputerView: View {
                     secondary: Theme.Computer.inkSecondary,
                     card: Theme.Computer.frameEmpty
                 )
-                .padding(.horizontal, Theme.Metric.screenEdge)
+                .padding(.horizontal, Theme.PhonePanel.margin)
             }
         }
     }
@@ -278,7 +282,7 @@ struct ComputerView: View {
         } else {
             orgImmersiveScreen {
                 BrowserLiveView(bot: current, secondary: Theme.Computer.ink.opacity(0.6), track: Theme.Computer.glassFill)
-                    .padding(.horizontal, Theme.Metric.screenEdge)
+                    .padding(.horizontal, Theme.PhonePanel.margin)
             }
         }
     }
@@ -314,6 +318,7 @@ struct ComputerView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             statusLine
             bottomButtons
+                .padding(.horizontal, Theme.Metric.screenEdge)
                 .padding(.vertical, 12)
             RemoteKeyboardField(
                 isActive: $keyboardUp,
@@ -463,7 +468,7 @@ struct ComputerView: View {
             moreMenu
                 .padding(.leading, Theme.Computer.trailingGap)
         }
-        .padding(.horizontal, Theme.Metric.screenEdge)
+        // the shell puts the bar on the page margin (#4101): no inner edge
         .frame(height: Theme.Metric.glassLarge)
     }
 
@@ -641,7 +646,8 @@ struct ComputerView: View {
             .disabled(controller.noComputer)
             .onLongPressGesture { specialKeys.toggle() }
         }
-        .padding(.horizontal, Theme.Metric.screenEdge)
+        // no edge of its own: the full-screen shell sets the page margin, the
+        // embedded panel its card edge (#4101: both counted made 35 pt)
     }
 
     private func toggleKeyboard() {

@@ -39,10 +39,13 @@ struct PhoneBotLibrary: View {
                         .foregroundStyle(Theme.textSecondary)
                 }
                 .buttonStyle(.plain)
-                .padding(.horizontal, Theme.Profile.cardMargin)
+                .padding(.horizontal, Theme.PhonePanel.textInset)
                 .accessibilityIdentifier("library-open-plugins")
             }
         }
+        // the Library page's one side margin (#4101): its chips, titles and
+        // cards line up with the panel's
+        .phonePanelColumn()
         .sheet(isPresented: $showingPlugins) {
             NavigationStack { ScrollView { PhoneBotPlugins(bot: bot).padding(.vertical, 16) }.navigationTitle(Text("Plugins")) }
         }
@@ -70,7 +73,6 @@ struct PhoneBotLibrary: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, Theme.Profile.cardMargin)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Library views"))
     }
@@ -100,7 +102,6 @@ private struct PhoneLibrarySkills: View {
         ThemedList { BotSkillsSection(bot: bot, model: model) }
             .frame(height: 560)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous))
-            .padding(.horizontal, Theme.Profile.cardMargin - 16)
             .sheet(item: $model.reviewing) { sheet in SkillReviewSheet(sheet: sheet, model: model) }
             .sheet(item: $model.viewing) { sheet in SkillTextSheet(sheet: sheet, model: model) }
             .sheet(isPresented: $model.showingPath) {

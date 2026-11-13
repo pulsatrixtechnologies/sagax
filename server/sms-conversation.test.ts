@@ -1,9 +1,9 @@
 // Texting your own bot (server/sms-conversation.ts): who counts as the
-// person, the answer texted back once, a card said in one text, a long
-// answer cut to one text. No network: every send is a fake.
+// person, the answer texted back once, a long answer cut to one text, and
+// no text the bot did not write (#4114). No network: every send is a fake.
 import { describe, expect, it } from "vitest";
 
-import { SMS_REPLY_MAX, SmsConversation, isCarrierKeyword, isOwnText, ownLineVia, smsReplyBody, type SmsTurnState } from "./sms-conversation.ts";
+import { SMS_REPLY_MAX, SMS_TURN_WAIT_MS, SmsConversation, isCarrierKeyword, isOwnText, ownLineVia, smsReplyBody, type SmsTurnState } from "./sms-conversation.ts";
 
 describe("whose text it is", () => {
   it("the line owner, PIN session open, words that are not a carrier keyword", () => {
@@ -51,7 +51,6 @@ function harness(script: SmsTurnState[], reply = "Trois factures, 3 en tout.", s
     state: () => script[Math.min(step, script.length - 1)]!,
     replyAfter: () => (script[Math.min(step, script.length - 1)] === "idle" ? reply : ""),
     textBack: async ({ to, body }) => { texts.push({ to, body }); return true; },
-    botName: () => "Helper",
     language: () => "fr",
     sleep: async (ms) => { step += 1; clock += ms; },
     now: () => clock,
@@ -79,11 +78,11 @@ describe("the answer by text", () => {
     expect(texts).toEqual([{ to: "+15145550100", body: "Trois factures, 3 en tout." }]);
   });
 
-  it("a card waiting on the person is said in one text, then the answer", async () => {
+  it("a card waiting on the person sends nothing; only the answer goes back (#4114)", async () => {
     const { conversation, texts } = harness(["running", "waiting", "waiting", "idle"]);
     await conversation.start(EVENT);
     await conversation.drain();
-    expect(texts.map((entry) => entry.body)).toEqual(["Helper attend ta réponse à une carte dans Sagax.", "Trois factures, 3 en tout."]);
+    expect(texts.map((entry) => entry.body)).toEqual(["Trois factures, 3 en tout."]);
   });
 
   it("a turn that could not start sends nothing and says so", async () => {
@@ -93,15 +92,30 @@ describe("the answer by text", () => {
     expect(texts).toEqual([]);
   });
 
-  it("a turn with no words sends nothing; one that never ends says the answer stays in Sagax", async () => {
+  it("a turn with no words sends nothing", async () => {
     const quiet = harness(["idle"], "");
     await quiet.conversation.start(EVENT);
     await quiet.conversation.drain();
     expect(quiet.texts).toEqual([]);
-    const slow = harness(["running"]);
-    await slow.conversation.start(EVENT);
-    await slow.conversation.drain();
-    expect(slow.texts.map((entry) => entry.body)).toEqual(["Helper travaille encore. La réponse sera dans Sagax."]);
+  });
+
+  it("the wait limit passes: nothing is sent, the loop ends, one log line without words (#4114)", async () => {
+    const logs: string[] = [];
+    let clock = 0;
+    const conversation = new SmsConversation({
+      send: async () => ({ ok: true, threadId: "t1", messageId: "m1" }),
+      state: () => "running",
+      replyAfter: () => "",
+      textBack: async () => { throw new Error("nothing may be texted"); },
+      language: () => "fr",
+      sleep: async (ms) => { clock += ms; },
+      now: () => clock,
+      log: (line) => logs.push(line),
+    });
+    await conversation.start(EVENT);
+    await conversation.drain();
+    expect(clock).toBeGreaterThanOrEqual(SMS_TURN_WAIT_MS);
+    expect(logs).toEqual([`sms-conversation: b1 wait limit reached for ***0100 after ${SMS_TURN_WAIT_MS / 1_000}s (started)`]);
   });
 });
 
@@ -133,7 +147,6 @@ function midTurn(opts: {
       .map((row) => row.text).join("\n\n"),
     ...(opts.takenStep === undefined ? {} : { receivedAt: () => (step >= opts.takenStep! ? opts.takenStep! * POLL - POLL / 2 : undefined) }),
     textBack: async ({ body }) => { texts.push({ body, step }); return true; },
-    botName: () => "Helper",
     language: () => "fr",
     sleep: async (ms) => { step += 1; clock += ms; },
     now: () => clock,
@@ -190,25 +203,22 @@ describe("a text while a turn runs (#4046)", () => {
     expect(texts.map((entry) => entry.step)).toEqual([1]);
   });
 
-  it("the running turn cannot take it: one busy text at once, then the answer when it comes", async () => {
+  it("the running turn cannot take it: nothing until the answer, which is sent once (#4114)", async () => {
     const { conversation, texts, logs } = midTurn({ delivery: "queued", script: [...LONG_TURN.slice(0, 5), "waiting", "running", "idle"], rows: [{ step: 0, text: ANSWER }] });
     await conversation.start(EVENT);
     await conversation.drain();
-    expect(texts).toEqual([
-      { body: "Helper termine une tâche en cours. La réponse à ton texto viendra une fois cette tâche finie.", step: 0 },
-      { body: ANSWER, step: 7 },
-    ]);
-    expect(logs.some((line) => line.startsWith("sms-conversation: b1 told ***0100 busy after 0s"))).toBe(true);
+    expect(texts).toEqual([{ body: ANSWER, step: 7 }]);
+    expect(logs.filter((line) => line === "sms-conversation: b1 queued for ***0100 after 0s (queued)")).toHaveLength(1);
+    expect(logs.filter((line) => line === "sms-conversation: b1 waiting on a card for ***0100 after 10s (queued)")).toHaveLength(1);
+    expect(logs.some((line) => line.includes(ANSWER) || line.includes("Quoi de neuf"))).toBe(false);
   });
 
-  it("steered into a turn blocked on a card: one notice saying so, then the answer when it comes", async () => {
-    const { conversation, texts } = midTurn({ delivery: "steered", script: ["waiting", "waiting", "waiting", "running", ...LONG_TURN], rows: [{ step: 4, text: ANSWER }], takenStep: 3 });
+  it("steered into a turn blocked on a card: nothing until the answer, which is sent once (#4114)", async () => {
+    const { conversation, texts, logs } = midTurn({ delivery: "steered", script: ["waiting", "waiting", "waiting", "running", ...LONG_TURN], rows: [{ step: 4, text: ANSWER }], takenStep: 3 });
     await conversation.start(EVENT);
     await conversation.drain();
-    expect(texts).toEqual([
-      { body: "Helper attend ta réponse à une carte dans Sagax.", step: 0 },
-      { body: ANSWER, step: 4 },
-    ]);
+    expect(texts).toEqual([{ body: ANSWER, step: 4 }]);
+    expect(logs.filter((line) => line.startsWith("sms-conversation: b1 waiting on a card for ***0100"))).toHaveLength(1);
   });
 
   it("the idle case is unchanged: a turn of its own is answered when it ends", async () => {
@@ -218,8 +228,8 @@ describe("a text while a turn runs (#4046)", () => {
     expect(texts).toEqual([{ body: ANSWER, step: 3 }]);
   });
 
-  it("says busy in English too, with no promise of when", async () => {
-    const { smsBusyBody } = await import("./sms-conversation.ts");
-    expect(smsBusyBody("Helper", "en")).toBe("Helper is finishing a task in progress. The answer to your text will come once that task is done.");
+  it("no automatic text is left to send (#4114)", async () => {
+    const mod: Record<string, unknown> = await import("./sms-conversation.ts");
+    expect(Object.keys(mod).filter((name) => /^sms(Busy|Waiting|Late)Body$/.test(name))).toEqual([]);
   });
 });

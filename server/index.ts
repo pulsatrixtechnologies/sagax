@@ -23970,7 +23970,6 @@ const smsConversation = new SmsConversation({
     const answer = await reachMeVoice(person, botId, "voice_sms", { to, body });
     return answer.ok;
   },
-  botName: (botId) => store.bot(botId)?.name ?? "Sagax",
   language: (person) => reachMeLanguage(person)
 });
 const inboundTelephony = createBotInboundTelephonyRoute({

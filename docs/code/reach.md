@@ -249,18 +249,21 @@ only wakes a routine, like bot email. Covered by
   `via: "sms"` ("via text message" under it). When the turn ends, the
   bot's own text replies after that line go back by `voice_sms` (the
   person's own access, to the number it came from), one text of at most
-  1200 characters; a card waiting on them is said in one text; after 30
-  minutes, one text says the answer stays in Sagax. Nothing retries a send.
+  1200 characters. Only the bot's own words go back (#4114): no text says
+  the bot is busy, that a card waits on the person or that the answer is
+  late; after 30 minutes the wait ends and nothing is sent (the answer stays
+  in the chat). Nothing retries a send.
   A text (or call request) that lands while a turn runs (#4046) goes through
   the send route's own mid-turn steer, like a line typed in the chat: its
   answer leaves as soon as the bot finished a reply after a model call took
   the line in (`steer.received`), while the turn carries on; an engine that
   never reports it is answered when the turn ends. When the running turn
-  cannot take it (queued behind it), one text says at once that the bot is
-  finishing a task and the answer will come once it is done; at most one
-  such notice (busy or card) per text. A relayed card is never the answer. Log lines
-  `sms-conversation: <bot> answered|told <masked number> ... after <n>s`
-  carry the delay between the text in and the text out.
+  cannot take it (queued behind it), it is answered when its turn ends.
+  A relayed card is never the answer. Log lines
+  `sms-conversation: <bot> answered <masked number> after <n>s` and, once
+  per event and with no words, `<bot> queued|waiting on a card|wait limit
+  reached for <masked number> after <n>s` carry the delay between the text
+  in and the text out.
   A carrier keyword alone (STOP, START, HELP, ARRÊT, AIDE) is never a turn.
   Anyone else's text, or a turn that could not start, goes to the phone
   triggers as before. 202 `{..., delivered: 1, conversation: true}`.

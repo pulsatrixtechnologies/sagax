@@ -33,16 +33,20 @@ import { reportBackgroundError } from "./background-error.ts";
 // it in), and its answer leaves as soon as the bot wrote it, while the turn
 // carries on (#4046): only words finished after a model call took the line
 // in (`steer.received`); an engine that never says so is answered when the
-// turn ends. A line the running turn cannot take waits in the queue: the
-// person gets one text at once saying the bot is finishing a task, then the
-// answer once it is done. A card that waits on the person is said in one text. One notice
-// at most per line. Nothing retries a send: a text costs money.
+// turn ends. A line the running turn cannot take waits in the queue and is
+// answered when its turn ends.
+//
+// Only the bot's own words go back (#4114): no text says the bot is busy, that
+// a card waits on the person, or that the answer is late. Those events are
+// logged only. When SMS_TURN_WAIT_MS passes with no answer, the wait ends and
+// nothing is sent; the answer stays in the chat. Nothing retries a send: a
+// text costs money.
 //
 // Logs carry the bot and a masked number only, never the words.
 
 /** voice_sms takes at most 1200 characters. */
 export const SMS_REPLY_MAX = 1_200;
-/** How long the answer is awaited before the person is told it stays in Sagax. */
+/** How long the answer is awaited; past it, nothing is sent and it stays in the chat. */
 export const SMS_TURN_WAIT_MS = 30 * 60_000;
 const POLL_MS = 2_000;
 
@@ -98,24 +102,6 @@ export function smsReplyBody(reply: string, language: "fr" | "en"): string {
   return `${flat.slice(0, SMS_REPLY_MAX - more.length).trimEnd()}${more}`;
 }
 
-export function smsWaitingBody(botName: string, language: "fr" | "en"): string {
-  return language === "fr"
-    ? `${botName} attend ta réponse à une carte dans Sagax.`
-    : `${botName} is waiting for you to answer a card in Sagax.`;
-}
-
-export function smsLateBody(botName: string, language: "fr" | "en"): string {
-  return language === "fr"
-    ? `${botName} travaille encore. La réponse sera dans Sagax.`
-    : `${botName} is still working. The answer will be in Sagax.`;
-}
-
-export function smsBusyBody(botName: string, language: "fr" | "en"): string {
-  return language === "fr"
-    ? `${botName} termine une tâche en cours. La réponse à ton texto viendra une fois cette tâche finie.`
-    : `${botName} is finishing a task in progress. The answer to your text will come once that task is done.`;
-}
-
 /** How the send route took the line: the start of a turn of its own, steered
  * into the running turn, or queued behind a turn that could not take it. */
 export type OwnLineDelivery = "started" | "steered" | "queued";
@@ -136,7 +122,6 @@ export interface SmsConversationDeps {
   receivedAt?(messageId: string): number | undefined;
   /** One text to the person's number, with their own access. */
   textBack(input: { person: string; botId: string; to: string; body: string }): Promise<boolean>;
-  botName(botId: string): string;
   language(person: string): "fr" | "en";
   sleep?(ms: number): Promise<void>;
   now?(): number;
@@ -198,17 +183,15 @@ export class SmsConversation {
 
   private async answer(event: OwnTextEvent, threadId: string, messageId: string, delivery: OwnLineDelivery, textedAt: number): Promise<void> {
     const language = this.deps.language(event.person);
-    const botName = this.deps.botName(event.botId);
     const to = mask(event.from);
     const after = () => `${Math.round((this.now() - textedAt) / 1_000)}s`;
-    const text = (body: string) => this.deps.textBack({ person: event.person, botId: event.botId, to: event.from, body });
     const until = this.now() + SMS_TURN_WAIT_MS;
-    // one notice at most per line: busy, or a card waiting on the person
-    let told = false;
-    const notice = async (kind: "busy" | "waiting", body: string) => {
-      told = true;
-      await text(body);
-      this.log(`sms-conversation: ${event.botId} told ${to} ${kind} after ${after()} (${delivery})`);
+    // #4114: what happened is logged once per event, never texted
+    const logged = new Set<string>();
+    const note = (what: string) => {
+      if (logged.has(what)) return;
+      logged.add(what);
+      this.log(`sms-conversation: ${event.botId} ${what} for ${to} after ${after()} (${delivery})`);
     };
     // #4046: words steered into the running turn are answered as soon as the
     // bot wrote its reply to them, without waiting for the turn to end. Only
@@ -222,14 +205,13 @@ export class SmsConversation {
     let looked = false;
     while (this.now() < until) {
       const state = this.deps.state(event.botId, threadId);
-      if (state === "waiting" && !told) await notice("waiting", smsWaitingBody(botName, language));
-      // queued behind a turn that could not take the words: say so at once
-      if (delivery === "queued" && !told && (state === "running" || state === "queued")) await notice("busy", smsBusyBody(botName, language));
+      if (state === "waiting") note("waiting on a card");
+      if (delivery === "queued" && (state === "running" || state === "queued")) note("queued");
       if (steered && takenIn === undefined) takenIn = this.deps.receivedAt?.(messageId);
       if (state === "idle" || takenIn !== undefined) {
         const reply = this.deps.replyAfter(threadId, messageId, takenIn).trim();
         if (reply) {
-          await text(smsReplyBody(reply, language));
+          await this.deps.textBack({ person: event.person, botId: event.botId, to: event.from, body: smsReplyBody(reply, language) });
           this.log(`sms-conversation: ${event.botId} answered ${to} after ${after()} (${delivery})`);
           return;
         }
@@ -238,7 +220,6 @@ export class SmsConversation {
       looked = true;
       await this.sleep(POLL_MS);
     }
-    await text(smsLateBody(botName, language));
-    this.log(`sms-conversation: ${event.botId} told ${to} late after ${after()} (${delivery})`);
+    note("wait limit reached");
   }
 }

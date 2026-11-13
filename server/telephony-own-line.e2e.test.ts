@@ -149,7 +149,6 @@ beforeEach(() => {
     state: () => "idle",
     replyAfter: (_thread, messageId) => replies.get(messageId) ?? "",
     textBack,
-    botName: () => "Helper",
     language: () => "fr",
     sleep: async () => {},
     log: () => {},

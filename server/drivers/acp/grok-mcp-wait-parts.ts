@@ -9,7 +9,10 @@
 // (50 to 100 ms plus the request) bounds the precision. Numbers and fixed
 // product names only: the person's own connections are counted, never named.
 // Sagax's own side of the same wait (its endpoints' first request and tool
-// list answer) rides the turn's trace (server/turns/turn-trace.ts).
+// list answer) rides the turn's trace (server/turns/turn-trace.ts), and so
+// does how long the server's main thread was busy meanwhile (busyMs, the
+// event loop's active time): a gap outside the mounts' answers with the
+// thread busy that long is Sagax's own, otherwise the engine's.
 import { PERSPICAX_MCP_PREFIX, RESERVED_MCP_NAMES } from "../../../shared/mcp-reserved-names.ts";
 import { closeTurnServing, openTurnServing } from "../../turns/turn-trace.ts";
 import type { TurnToolWait } from "./turn-latency.ts";
@@ -54,10 +57,20 @@ export const GROK_MCP_STALL_MS = 12_000;
 
 const normalized = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
 
+/** Whether a server of the engine's catalog is one the turn mounted (sent
+ * with session/new or load), read as the clock reads it: the catalog may
+ * spell a mount's name with other case or punctuation. */
+export function grokMountedServer(mounted: readonly string[]): (name: string) => boolean {
+  const names = new Set(mounted.map(normalized));
+  return (name) => names.has(normalized(name));
+}
+
 /** Times each server of the catalog from `start` (epoch ms). `mounted` is the
  * list of servers the turn sent with session/new or load (by name).
  * `threadId`: the turn whose own endpoints note what they served meanwhile. */
 export function grokMcpWaitClock(mounted: readonly string[], start: number, threadId?: string) {
+  // the server's main thread from here to result() (toolsGap busy)
+  const loopAtStart = performance.eventLoopUtilization();
   const mounts = new Map<string, string>();
   for (const name of mounted) mounts.set(normalized(name), name);
   if (threadId) openTurnServing(threadId, start);
@@ -121,6 +134,8 @@ export function grokMcpWaitClock(mounted: readonly string[], start: number, thre
       if (resolvedMs !== undefined) wait.resolvedMs = resolvedMs;
       const served = threadId ? closeTurnServing(threadId) : [];
       if (served.length) wait.served = served;
+      const busy = performance.eventLoopUtilization(loopAtStart).active;
+      if (Number.isFinite(busy) && busy > 0) wait.busyMs = Math.round(busy);
       return wait;
     },
   };

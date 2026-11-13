@@ -152,19 +152,20 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
           const readOnly = routine.canEdit === false;
           // 2026-10-26: paused by itself after failures in a row, until turned back on.
           const autoPaused = !routine.enabled ? routine.autoPaused : undefined;
-          // 2026-10-28: the row says only "Paused" or "Running" (live), in quiet
-          // text; "Runs as" lives in the routine's detail.
-          const runningRun = onOpenRunning && !upcoming ? runs.find((run) => run.routineId === routine.id && run.status === "running") : undefined;
-          const showPaused = !upcoming && !leadingClock && !routine.enabled && !autoPaused && !runningRun && routineScheduleState(routine) === t("routines.pausedSchedule");
-          // The line under the name is always when the routine runs, even
-          // paused: with a switch, the switch says it is off (the state stays
-          // in the tooltip). A finished one-shot keeps its word.
-          const pausedWithSwitch = toggle && !upcoming && !routine.enabled && routineScheduleState(routine) === t("routines.pausedSchedule");
+          // A live run: the panel's clock becomes the spinner (#4202), the
+          // other lists say "Running" on the last-run line's place (2026-10-28).
+          const runningRun = !upcoming && (onOpenRunning || leadingClock) ? runs.find((run) => run.routineId === routine.id && run.status === "running") : undefined;
+          // 2026-10-26 (shared/routine-watch.ts): runs only when something changes.
+          const watchWords = routine.precheck?.kind === "watch" ? t("routineWatch.badge") : null;
+          const finished = routineScheduleState(routine) === t("routines.finishedSchedule");
+          const paused = !upcoming && !routine.enabled && !finished;
           const scheduleLine = upcoming ? when : routine.schedule.type !== "once" || routine.enabled || routine.nextRunAt != null ? scheduleLabelCompact(routine.schedule) : when;
-          // Bot panel Upcoming (#2125, as Grok Bot): a paused routine says only
-          // "Paused" under its name, its switch off; the schedule moves to the tooltip.
-          const pausedOnly = leadingClock && !upcoming && !routine.enabled && routineScheduleState(routine) === t("routines.pausedSchedule");
-          const whenLine = pausedOnly ? t("routines.pausedSchedule") : scheduleLine;
+          // #4202 (as the reference's list): ONE line under the name, in every
+          // list: Paused when the routine is off (after N failures, or why the
+          // server paused it), else its schedule or trigger in words ("Runs on
+          // change" for a change trigger). Never both: the rest is the tooltip's.
+          const pauseWords = upcoming ? null : autoPaused ? routineAutoPausedText(autoPaused.failures) : routine.suspended ? routineSuspendedText(routine.suspended.reason) : paused ? t("routines.pausedSchedule") : null;
+          const whenLine = pauseWords ?? (!upcoming && watchWords && !finished ? watchWords : scheduleLine);
           // 2026-10-29: the row says how the last run went and when the next
           // one is, as cloud routines list them.
           // 2026-11-02 (JC): a live run takes the last-run line's place
@@ -174,18 +175,27 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
           const nextRun = !upcoming && routine.enabled && routine.nextRunAt != null ? routineNextRunPhrase(routine.nextRunAt) : undefined;
           // The bot panel's Upcoming (#2125): the line is only the schedule,
           // as the reference design; the next run moves to the tooltip.
-          const nextLine = leadingClock ? undefined : nextRun;
-          const whenTitle = [pausedOnly ? scheduleLine : null, leadingClock && nextRun ? t("routines.list.next", { when: nextRun }) : null, pausedWithSwitch ? routineWhenLabel(routine) : when, fullWhen !== when ? fullWhen : null].filter(Boolean).join("\n");
+          const nextLine = leadingClock || pauseWords ? undefined : nextRun;
+          // What the line leaves out, never lost: the schedule, the change
+          // trigger, the next run (the panel) and the full sentence with its zone.
+          const whenTitle = [...new Set([scheduleLine, watchWords, leadingClock && nextRun ? t("routines.list.next", { when: nextRun }) : null, upcoming ? null : scheduleLabel(routine.schedule)])].filter((line) => line && line !== whenLine).join("\n");
           const title = leadingClock ? routinePanelTitle(routine) : routine.name;
           // #4151: the panel's rows have two lines, as the reference's; the last
           // run is the clock's colour, its words the clock's tooltip and name.
           const clockLabel = leadingClock && lastRun ? routineClockLabel(lastRun) : undefined;
-          const clock = leadingClock && (
+          // #4202: while it runs, the clock is the app's spinner at the same
+          // size and place; "Running" and since when are its words.
+          const runningLabel = runningRun ? `${t("routines.status.running")} · ${routineRunAgo(runningRun.startedAt || routineRunTime(runningRun))}` : undefined;
+          const clock = leadingClock && (runningRun ? (
+            <span data-routine-clock="running" role="img" aria-label={runningLabel} title={runningLabel} className="flex size-5 shrink-0 items-center justify-center">
+              <Loader2 size={16} strokeWidth={1.5} aria-hidden="true" className="animate-spin text-ink-tertiary motion-reduce:animate-none" />
+            </span>
+          ) : (
             <span data-routine-clock={routineClockTone(lastRun)} role={clockLabel ? "img" : undefined} aria-label={clockLabel} aria-hidden={clockLabel ? undefined : true} title={clockLabel}
               className="flex size-5 shrink-0 items-center justify-center">
               <Clock size={16} strokeWidth={1.5} aria-hidden="true" className={CLOCK_TONES[routineClockTone(lastRun)]} />
             </span>
-          );
+          ));
           return (
             <div key={routine.id} data-routine-row data-routine-id={routine.id}
               onPointerDown={onRowDragStart && !readOnly ? (event) => {
@@ -212,14 +222,20 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
                   </span>
                 ) : <span data-routine-title className={cn("block truncate leading-[18px] text-ink", leadingClock ? "text-[14px]" : "text-[13px]")}>{title}</span>}
                 {upcoming ? (
-                  <span data-routine-when={when} title={[botName ? `${botName} · ${when}` : when, fullWhen !== when ? fullWhen : null].filter(Boolean).join("\n")} className="flex min-w-0 items-center gap-1.5 text-[13px] leading-[18px] text-ink-secondary">
+                  <span data-routine-when={when} title={[botName ? `${botName} · ${when}` : when, watchWords, fullWhen !== when ? fullWhen : null].filter(Boolean).join("\n")} className="flex min-w-0 items-center gap-1.5 text-[13px] leading-[18px] text-ink-secondary">
                     {bot && <BotAvatar bot={bot} size={16} animated={false} />}
                     {botName && <span data-routine-bot className="min-w-0 truncate">{botName}</span>}
                     {botName && <span aria-hidden="true" className="shrink-0">·</span>}
                     <span className="max-w-full shrink-0 truncate">{when}</span>
                   </span>
-                ) : <span data-routine-when={whenLine} title={whenTitle} className="block truncate text-[12px] leading-4 text-ink-secondary">{showBot && botName && <span data-routine-bot className="inline-flex max-w-[40%] items-center gap-1 align-bottom">{bot && <BotAvatar bot={bot} size={14} animated={false} />}<span className="truncate">{botName}</span></span>}{showBot && botName && <span aria-hidden="true">{" · "}</span>}{whenLine}{nextLine && <span data-routine-next> · {t("routines.list.next", { when: nextLine })}</span>}</span>}
-                {runningRun && (
+                ) : <span data-routine-when={whenLine} data-routine-paused={paused && !autoPaused ? "" : undefined} data-routine-watch={whenLine === watchWords ? "" : undefined} title={whenTitle || undefined} className="block truncate text-[12px] leading-4 text-ink-secondary">{showBot && botName && <span data-routine-bot className="inline-flex max-w-[40%] items-center gap-1 align-bottom">{bot && <BotAvatar bot={bot} size={14} animated={false} />}<span className="truncate">{botName}</span></span>}{showBot && botName && <span aria-hidden="true">{" · "}</span>}
+                  {autoPaused
+                    ? <span data-routine-auto-paused={autoPaused.failures} className="rounded-md bg-warning/15 px-1.5 text-warning">{whenLine}</span>
+                    : routine.suspended
+                      ? <span data-routine-suspended={routine.suspended.reason} className={`rounded-md ${PILL_INFO} px-1.5`}>{whenLine}</span>
+                      : whenLine}
+                  {nextLine && <span data-routine-next> · {t("routines.list.next", { when: nextLine })}</span>}</span>}
+                {runningRun && !leadingClock && (
                   <span data-routine-running aria-label={`${t("routines.status.running")}: ${routine.name}`} className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] leading-4 text-ink-secondary">
                     <span aria-hidden="true" className="size-1.5 shrink-0 animate-pulse rounded-full bg-success motion-reduce:animate-none" />
                     <span className="shrink-0 text-success">{t("routines.status.running")}</span>
@@ -236,16 +252,11 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
                     {lastPreview && <><span aria-hidden="true" className="shrink-0">·</span><span className="min-w-0 truncate">{lastPreview}</span></>}
                   </span>
                 )}
-                {(showPaused || routine.suspended || otherOwner || autoPaused) && (
+                {otherOwner && (
                   <span className="mt-0.5 flex flex-wrap gap-1.5">
-                    {otherOwner && <RoutineOwnerBadge owner={otherOwner} size={14} className="max-w-full rounded-md bg-inset px-1.5 text-[12px] leading-[18px] text-ink-secondary" />}
-                    {showPaused && <span data-routine-paused className="truncate text-[12px] leading-[18px] text-ink-tertiary">{t("routines.pausedSchedule")}</span>}
-                    {autoPaused && <span data-routine-auto-paused={autoPaused.failures} className="truncate rounded-md bg-warning/15 px-1.5 text-[12px] leading-[18px] text-warning">{routineAutoPausedText(autoPaused.failures)}</span>}
-                    {routine.suspended && <span data-routine-suspended={routine.suspended.reason} className={`truncate rounded-md ${PILL_INFO} px-1.5 text-[12px] leading-[18px]`}>{routineSuspendedText(routine.suspended.reason)}</span>}
+                    <RoutineOwnerBadge owner={otherOwner} size={14} className="max-w-full rounded-md bg-inset px-1.5 text-[12px] leading-[18px] text-ink-secondary" />
                   </span>
                 )}
-                {/* 2026-10-26: runs only when something changes (shared/routine-watch.ts). */}
-                {routine.precheck?.kind === "watch" && <span className="mt-0.5 flex"><span data-routine-watch className="truncate rounded-md bg-inset px-1.5 text-[12px] leading-[18px] text-ink-secondary">{t("routineWatch.badge")}</span></span>}
                 </TextColumn>
               </button>}
               {onRowMenu && !readOnly && <button type="button" data-routine-row-menu aria-label={t("routineFolders.rowMenu", { name: routine.name })} title={t("routineFolders.rowMenu", { name: routine.name })}

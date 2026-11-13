@@ -3,7 +3,9 @@
  * short or a long name and title, and routines whose last run went fine,
  * failed, ended with problems, or never ran. Synthetic data only, the server
  * answered by a fetch stub. Not shipped in the app.
- * ?skin=<id>&lang=<code>&width=<px>&long=1 */
+ * ?rows=states (#4202): a running routine, paused and active change
+ * triggers, a paused webhook, beside a plain schedule.
+ * ?skin=<id>&lang=<code>&width=<px>&long=1&rows=states */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -40,7 +42,14 @@ const routine = (id: string, name: string, expression: string, offset: number): 
   schedule: { type: "cron", expression, timeZone: "America/Toronto" }, durationMinutes: 30, nextRunAt: NOW + offset, createdAt: 1, updatedAt: 1,
 } as Routine);
 
-const routines = [
+const states = params.get("rows") === "states";
+const routines = states ? [
+  routine("r-running", fr ? "Revue des billets ouverts" : "Open tickets review", "0 * * * *", 2 * H),
+  routine("r-fine", fr ? "Résumé du matin" : "Morning summary", "30 8 * * 1-5", H),
+  { ...routine("r-watch", fr ? "Suivi des rapports" : "Reports watch", "0 9 * * *", 3 * H), precheck: { kind: "watch", source: { type: "files", path: "reports" } } } as Routine,
+  { ...routine("r-watch-off", fr ? "Tri de la boîte de réception" : "Inbox triage", "3 4 * * *", 0), enabled: false, nextRunAt: null, precheck: { kind: "watch", source: { type: "files", path: "reports" } } } as Routine,
+  { ...routine("r-hook-off", fr ? "Alerte de déploiement" : "Deploy alert", "0 0 * * *", 0), enabled: false, nextRunAt: null, schedule: { type: "webhook" } } as Routine,
+] : [
   routine("r-fine", fr ? "Résumé du matin" : "Morning summary", "30 8 * * 1-5", H),
   routine("r-failed", fr ? "Revue des billets ouverts" : "Open tickets review", "0 * * * *", 2 * H),
   routine("r-problems", fr ? "Rapport hebdomadaire des sauvegardes" : "Weekly backup report", "0 9 * * 1", 3 * H),
@@ -54,6 +63,7 @@ const run = (routineId: string, extra: Partial<RoutineRun>): RoutineRun => ({
 } as RoutineRun);
 
 const routineRuns = [
+  ...(states ? [run("r-running", { status: "running", startedAt: NOW - 3 * 60_000, createdAt: NOW - 3 * 60_000, scheduledFor: NOW - 3 * 60_000, finishedAt: undefined })] : []),
   run("r-fine", { output: fr ? "Trois messages à lire, rien d'urgent." : "Three messages to read, nothing urgent." }),
   run("r-failed", { status: "failed", error: fr ? "Le connecteur n'a pas répondu." : "The connector did not answer.", finishedAt: NOW - 5 * H, startedAt: NOW - 5 * H, scheduledFor: NOW - 5 * H, createdAt: NOW - 5 * H }),
   run("r-problems", { problems: fr ? "Deux postes n'ont pas répondu." : "Two machines did not answer.", output: fr ? "Deux postes n'ont pas répondu." : "Two machines did not answer.", finishedAt: NOW - 14 * H, startedAt: NOW - 14 * H, scheduledFor: NOW - 14 * H, createdAt: NOW - 14 * H }),

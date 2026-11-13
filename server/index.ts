@@ -32760,9 +32760,14 @@ const liveCalls = new LiveCallController({
       via: "call",
       callId,
       // a person is on the call: these are their words
-      personPresent: true
+      personPresent: true,
+      // #4216: a new request may start beside the running work; it counts in this person's parallel limit
+      ...(auth.kind === "session" ? { principalId: personKey(auth.session) } : {})
     });
-    if ("queued" in receipt) return { kind: "queued", queueId: receipt.queueId };
+    if ("queued" in receipt) return { kind: "queued", queueId: receipt.queueId, ...((receipt as { reason?: string }).reason === "capacity" ? { parallelLimit: true } : {}) };
+    // #4216: started beside the running work as its own parallel task
+    const parallel = (receipt as { parallel?: { title: string; state: string } }).parallel;
+    if (parallel) return { kind: "parallel", messageId: receipt.message.id, title: parallel.title, waiting: parallel.state === "queued" };
     return { kind: receipt.steered ? "steered" : "started", messageId: receipt.message.id };
   },
   respond: async (input) => {

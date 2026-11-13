@@ -500,6 +500,17 @@ A send that names no mode joins the running turn (the API, relays, older
 builds). Since 2026-10-18 nobody is asked (the bot orchestrates); see
 "Busy sends: the bot routes them" below.
 
+On a call (#4216), a whole spoken line is routed by `callBusyMode`
+(`server/busy-routing.ts`): a new request starts beside the running work as
+a parallel task (its own request row, task card and result, outside the
+call card), a correction or follow-up steers (the typed-send steer hints
+except "also", plus short lines that narrow the running request or point
+back at it: "only the urgent ones", "make it shorter"), a request that
+needs the running result waits; past the bot's parallel limit it waits too
+(the receipt carries `reason: "capacity"`) and the call says so. Typed
+messages keep their own routing; a typed line could opt in by sending
+`busyMode: "parallel"`, which the route already takes.
+
 ## Busy sends: the bot routes them (2026-10-18)
 
 Decision: "Le message est livré au bot tout de suite et le bot (orchestrateur)

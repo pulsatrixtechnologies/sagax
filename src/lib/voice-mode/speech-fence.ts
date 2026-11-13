@@ -108,7 +108,9 @@ export function settleReplies(
   messages: FenceMessage[],
   freshIds: Iterable<string>,
 ): { fence: SpeechFence; speak: { id: string; text: string }[]; skip: string[] } {
-  const lastUserIndex = messages.map((message) => message.role).lastIndexOf("user");
+  // #4216: a request that runs as its own parallel task is answered by its
+  // own result row; it does not make the running turn's answer an old one
+  const lastUserIndex = messages.findLastIndex((message) => message.role === "user" && message.parallelTask?.role !== "request");
   const lastUserId = lastUserIndex >= 0 ? messages[lastUserIndex]?.id : undefined;
   const speak: { id: string; text: string }[] = [];
   const skip: string[] = [];

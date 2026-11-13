@@ -24,7 +24,7 @@ import { CallProgress } from "@/lib/voice-mode/progress";
 import { voiceErrorNote, voiceKeyFallbackNote } from "@/lib/voice-mode/failure";
 import { onVoiceKeyEvent, voiceCallHeard, VoiceModeRefused, voiceFailureKind } from "@/lib/voice-mode/api";
 import { callTimers } from "@/lib/voice-mode/call-alive";
-import { callHasBackgroundWork } from "@/lib/voice-mode/voice-topics";
+import { callHasBackgroundWork, callSendWaitsForSlot } from "@/lib/voice-mode/voice-topics";
 import type { SpeakItem } from "@/lib/voice-mode/voice-speak-queue";
 import { t } from "@/lib/i18n";
 import type { Bot } from "@/state/store";
@@ -285,7 +285,11 @@ export function useLiveCallEngineSession(args: {
         threadId: current.threadId,
         sendId: utteranceId,
         onError,
-        onSent: () => call.accepted(utteranceId),
+        onSent: (receipt?: unknown) => {
+          call.accepted(utteranceId);
+          // #4216: past the bot's parallel limit the request waits its turn
+          if (callSendWaitsForSlot(receipt)) void call.say(t("voiceMode.call.taskQueued"));
+        },
         voiceCall: {
           callId,
           utteranceId,

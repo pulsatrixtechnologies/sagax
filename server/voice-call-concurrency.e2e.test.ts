@@ -1,8 +1,10 @@
-// A duplex voice call never turns the person's words into parallel tasks
-// (2026-10-13: one "Tâche en parallèle" card per partial and final, and a
-// spoken "Oui ca serait bien" run as its own failed task). While the call
-// turn only thinks, new words replace it. While its own tool runs, they join
-// that turn (steer): the work is not killed. Stop cancels it.
+// A duplex voice call never turns partials, finals of one sentence or
+// follow-ups into parallel tasks (2026-10-13: one "Tâche en parallèle" card
+// per partial and final, and a spoken "Oui ca serait bien" run as its own
+// failed task). While the call turn only thinks, new words replace it. While
+// its own tool runs, a correction joins that turn (steer) and the work is not
+// killed; a new independent request starts beside it as a parallel task
+// (#4216). Stop cancels it.
 // POSIX-gated like the other CLI e2es (the fakes are shebang scripts).
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, chmodSync } from "node:fs";
@@ -144,11 +146,33 @@ posixOnly("voice call true concurrency e2e", () => {
     expect(answers.map((m) => m.text)).toEqual([expect.stringContaining("would be able to check the ticket")]);
   }, 60_000);
 
-  it("a) B said while A runs a tool: B joins A's turn, A is not cancelled, no parallel task", async () => {
+  it("#4216: a new request B said while A runs a tool starts beside A as a parallel task, A is not cancelled", async () => {
+    const bot = await busyCall("besideA");
+    const b = await api("POST", `/api/bots/${bot.id}/messages`, {
+      threadId: bot.threadId,
+      ...voice("what time is it in Tokyo", "utt-besideB"),
+    });
+    expect(b.status, JSON.stringify(b.body)).toBe(202);
+    expect(b.body.parallel?.threadId).toBeTruthy();
+    expect(b.body.queued).toBeUndefined();
+    expect((await getBot(bot.id)).busy).toBe(true);
+    await waitFor(async () => (await messages(bot.threadId)).some((m) => m.parallelTask?.role === "result"), "B's result in the conversation");
+    // A still runs: B never waited for it
+    expect((await tasks(bot.id)).find((task) => task.threadId === bot.threadId)?.busy).toBe(true);
+    open("besideA");
+    await waitFor(async () => (await tasks(bot.id)).every((task) => !task.busy), "the call settled");
+    const thread = await messages(bot.threadId);
+    expect(thread.filter((m) => m.parallelTask?.role === "request").map((m) => m.text)).toEqual(["what time is it in Tokyo"]);
+    const answers = thread.filter((m) => m.role === "bot" && m.kind === "text" && m.text?.startsWith("reply to:") && !m.parallelTask);
+    expect(answers.map((m) => m.text).join("\n")).toContain("look up the weather");
+    expect(answers.map((m) => m.text).join("\n")).not.toContain("what time is it in Tokyo");
+  }, 60_000);
+
+  it("a) a correction B said while A runs a tool: B joins A's turn, A is not cancelled, no parallel task", async () => {
     const bot = await busyCall("joinA");
     const b = await api("POST", `/api/bots/${bot.id}/messages`, {
       threadId: bot.threadId,
-      ...voice("what time is it in Tokyo", "utt-joinB"),
+      ...voice("also for that, what time is it in Tokyo", "utt-joinB"),
     });
     expect(b.status, JSON.stringify(b.body)).toBe(202);
     expect(b.body.parallel).toBeUndefined();

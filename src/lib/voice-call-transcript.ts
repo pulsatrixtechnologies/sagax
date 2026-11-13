@@ -2,7 +2,8 @@
 // turn). The thread draws them as a single card. A person line with
 // voiceCall.callId opens the call; later bot text stays in it until the
 // next person line that is not that call. Approvals, questions and tool
-// chips stay in the thread.
+// chips stay in the thread, as do requests that run as parallel tasks and
+// their results (#4216).
 import type { CollapsedItem, ExchangeRun } from "@/lib/bot-exchange";
 import type { Message } from "@/state/store";
 
@@ -64,10 +65,12 @@ export function voiceCallPlan(messages: readonly Message[]): VoiceCallPlan {
         continue;
       }
       current = callId;
-      if (message.text?.trim()) take(callId, message);
+      // #4216: a request that runs beside the others as a parallel task
+      // keeps its own row, next to its task card and its result
+      if (message.text?.trim() && !message.parallelTask) take(callId, message);
       continue;
     }
-    if (current && spokenBotText(message)) take(current, message);
+    if (current && spokenBotText(message) && !message.parallelTask) take(current, message);
   }
   return { hidden, cards, callOf, byCall };
 }

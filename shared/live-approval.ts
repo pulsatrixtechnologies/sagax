@@ -145,6 +145,10 @@ export const LIVE_COPY = {
   saveFailed: (detail: string) => `The decision could not be saved${detail ? `: ${detail}` : "."} Ask the user to try again.`,
   noAnswer: "I'm done. The result, or what went wrong, is in the chat.",
   typedAnswerLead: (typed: string) => `About what you typed in the chat ("${brief(typed, 200)}"):`,
+  /** #4216: the result of a request that ran beside the others. */
+  parallelAnswerLead: (title: string) => `About "${brief(title, 120)}":`,
+  /** #4216: past the bot's parallel limit, a spoken request waits its turn. */
+  parallelWaiting: (title: string) => `"${brief(title, 120)}" waits for one of the requests already running to finish, then starts.`,
   progress: (spoken: string) => `Progress: ${brief(spoken, 200)}`,
   status: (workedMs: number, steps: number, lastStep: string | null, lastStepAgoMs: number) =>
     `Status note, do not announce it: you are still working on it (${duration(workedMs)} so far, ${steps} step${steps === 1 ? "" : "s"}${

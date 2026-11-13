@@ -86,10 +86,11 @@ export function isNewVoiceTopic(text: string): boolean {
   return classifyVoiceIntent(text) === "new_topic";
 }
 
+/** A finished topic's result after a short lead naming it. The result is
+ * already the spoken part of the answer (answer-budget.ts spokenAnswer):
+ * #4216, it is said whole, never clipped mid-sentence. */
 export function announceTopic(label: string, result: string): string {
-  const clip = result.replace(/\s+/g, " ").trim();
-  const short = clip.length > 160 ? `${clip.slice(0, 157).trimEnd()}...` : clip;
-  return `For ${label}: ${short}`;
+  return `For ${label}: ${result.replace(/\s+/g, " ").trim()}`;
 }
 
 export function applyTopicEvent(topics: VoiceTopic[], event: TopicEvent): VoiceTopic[] {
@@ -156,6 +157,14 @@ export function voiceCallTopicsNote(topics: VoiceTopic[]): string {
   return lines.join("\n");
 }
 
+/** #4216: the send receipt of a line said on a call says the bot's parallel
+ * limit refused it a task of its own, so it waits in the queue: the call
+ * says so, like a task card that waits for a slot. */
+export function callSendWaitsForSlot(receipt: unknown): boolean {
+  const body = receipt as { queued?: unknown; reason?: unknown } | null | undefined;
+  return body?.queued === true && body.reason === "capacity";
+}
+
 export function callHasBackgroundWork(messages: Array<{
   kind?: string;
   tool?: { name?: string; ok?: boolean };
@@ -192,6 +201,9 @@ export function howToSpeakTopicResult(opts: {
   lastUserId?: string;
   isParallelResult?: boolean;
 }): "full" | "announce" | "skip" {
+  // #4216: several requests run side by side on a call; each result says
+  // which one it answers, even the one asked last
+  if (opts.isParallelResult) return "announce";
   if (opts.replyUserId && opts.lastUserId && opts.replyUserId !== opts.lastUserId) return "announce";
   return "full";
 }

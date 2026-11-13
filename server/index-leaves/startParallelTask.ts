@@ -24,6 +24,9 @@ async function startParallelTask(input: {
   auth?: RequestAuth;
   /** Live call: the request was said on the call. */
   voiceCall?: Message["voiceCall"];
+  /** #4216: said on a call whose voice runs on the server (Message.via, Message.callId). */
+  via?: "call";
+  callId?: string;
   /** start_thread `workspace`: where its Auto turns start. */
   autoWorkspace?: AutoComputerTarget;
   /** start_thread `read_only` (server/threads/subagent-threads.ts): never wider than Ask. */
@@ -96,6 +99,7 @@ async function startParallelTask(input: {
     sendId: input.sendId,
     ...(input.sender ? { sender: input.sender } : {}),
     ...(input.voiceCall ? { voiceCall: input.voiceCall } : {}),
+    ...host.spokenLineFields(input.via, input.callId),
     parallelTask: { threadId: child.threadId, title, requestMessageId: "", role: "request" }
   });
   if (request && !existingRequest) {

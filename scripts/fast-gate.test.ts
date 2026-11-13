@@ -178,6 +178,59 @@ describe("fast-gate.sh", () => {
     expect(out).not.toContain("src/a.ts is imported by");
   });
 
+  // #4138: four tests went red on main because they reach the changed file
+  // through other files (a chat test renders a bar that renders the touched
+  // pill), and lots ran only the tests beside their files.
+  it("runs the tests that reach a touched source through other files as the related check, nearest first", () => {
+    write("tsconfig.json", JSON.stringify({ compilerOptions: { paths: { "@/*": ["./src/*"] } } }));
+    write("src/pill.tsx", "export const Pill = 1;\n");
+    write("src/bar.tsx", 'import { Pill } from "./pill";\nexport const Bar = Pill;\n');
+    write("src/chat/index.tsx", 'import { Bar } from "@/bar";\nexport const Chat = Bar;\n');
+    write("src/window.tsx", 'import { Chat } from "./chat";\nexport const Win = Chat;\n');
+    write("src/types-only.ts", 'import type { Pill } from "./pill";\nexport type P = typeof Pill;\n');
+    write("src/pill.dom.test.ts", "// its own name: the tests check\n");
+    write("tests/direct.test.ts", 'import { Pill } from "../src/pill";\n');
+    write("tests/bar.test.ts", 'import { Bar } from "../src/bar.tsx";\n');
+    write("src/chat/chat.dom.test.ts", 'const { Chat } = await import("@/chat");\n');
+    write("src/window.dom.test.ts", 'vi.mock("./chat", () => ({}));\n');
+    write("src/far.test.ts", 'import { Win } from "./window";\n');
+    write("src/types-only.test.ts", 'import { P } from "./types-only";\n');
+    write("src/known.test.ts", 'import { Chat } from "./chat";\n');
+    write("scripts/testing/known-failures.json", JSON.stringify({ tests: [{ file: "src/known.test.ts", test: "red on main" }] }));
+    git("add", "-A");
+    git("commit", "-q", "-m", "tests");
+    write("src/pill.tsx", "export const Pill = 2;\n");
+    const { out } = gate("--base", "HEAD", "--only", "tests,related", "--dry-run");
+    const tests = out.split("\n").find((l) => l.startsWith("[tests]")) ?? "";
+    const related = out.split("\n").find((l) => l.startsWith("[related]")) ?? "";
+    expect(tests).toContain("'src/pill.dom.test.ts'");
+    expect(tests).toContain("'tests/direct.test.ts'");
+    expect(related).toMatch(/vitest' run --reporter=dot --passWithNoTests 'src\/chat\/chat\.dom\.test\.ts' 'src\/window\.dom\.test\.ts' 'tests\/bar\.test\.ts'$/);
+    // four files away, a type-only import, a known failure: not this lot's
+    expect(out).not.toContain("far.test.ts");
+    expect(out).not.toContain("types-only.test.ts");
+    expect(out).not.toContain("known.test.ts");
+    expect(out).toContain("fast-gate: related: 3 test file(s) reach the touched sources through imports");
+  });
+
+  it("bounds the related check, keeps the nearest and the touched folder's tests, and says how many wait", () => {
+    write("src/ui/pill.tsx", "export const Pill = 1;\n");
+    write("src/ui/bar.tsx", 'import { Pill } from "./pill";\nexport const Bar = Pill;\n');
+    write("src/ui/bar.test.ts", 'import { Bar } from "./bar";\n');
+    write("tests/a-bar.test.ts", 'import { Bar } from "../src/ui/bar";\n');
+    write("src/ui/deeper.tsx", 'import { Bar } from "./bar";\nexport const D = Bar;\n');
+    write("src/ui/deeper.dom.test.ts", 'import { D } from "./deeper";\n');
+    git("add", "-A");
+    git("commit", "-q", "-m", "tests");
+    write("src/ui/pill.tsx", "export const Pill = 2;\n");
+    const env = { FAST_GATE_RELATED_MAX: "1" };
+    const r = spawnSync("bash", [SCRIPT, "--base", "HEAD", "--only", "related", "--dry-run"], { cwd: repo, encoding: "utf8", env: { ...process.env, ...env, PATH: `${fakeBin}:${process.env.PATH}`, FAST_GATE_LOG_DIR: join(repo, ".gate-logs") } });
+    const out = `${r.stdout}${r.stderr}`;
+    const related = out.split("\n").find((l) => l.startsWith("[related]")) ?? "";
+    expect(related).toMatch(/--passWithNoTests 'src\/ui\/bar\.test\.ts'$/);
+    expect(out).toContain("fast-gate: related: 1 test file(s) reach the touched sources through imports, 2 more wait for the run after the merge");
+  });
+
   it("runs the checks in parallel, never more than the cap, and is green", () => {
     write("src/a.ts", "export const a = 2;\n");
     const { code, out } = gate("--base", "main", "--jobs", "2");

@@ -129,11 +129,12 @@ describe("CodingChatSheet", () => {
     const sheet = column.querySelector<HTMLElement>("[data-testid=coding-chat]")!;
     const header = sheet.querySelector<HTMLElement>("[data-coding-header]")!;
     expect(header).not.toBeNull();
-    // the same bar as the bot chat (ChatHeaderBar): floating, the top fade, 40px pill centered
+    // the same bar as the bot chat (ChatHeaderBar): floating, the top fade, the one
+    // chat pill centered (36px since the reference's measure, #4093/#4119)
     expect(header.hasAttribute("data-chat-header-bar")).toBe(true);
     expect(header.className).toMatch(/absolute inset-x-0 top-0/);
     expect(header.querySelector('[data-chat-edge-fade="top"]')).not.toBeNull();
-    expect(header.querySelector("[data-chat-header-center] [data-coding-bot] [data-chat-pill]")?.className).toMatch(/h-10/);
+    expect(header.querySelector("[data-chat-header-center] [data-coding-bot] [data-chat-pill]")?.className).toMatch(/\bh-9\b/);
     expect(header.querySelector("[data-bot-header-chevron]")).toBeNull();
     expect(header.querySelector("[data-chat-header-start] [data-coding-back]")).not.toBeNull();
     expect(header.querySelector("[data-chat-header-start] [data-coding-title]")).not.toBeNull();

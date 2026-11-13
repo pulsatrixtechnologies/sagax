@@ -1326,7 +1326,7 @@ import { isInternalVoiceCallEnd } from "./routes/voice-call-internal.ts";
 import { activeCount as temporaryActiveCount, archiveMark, capInstructions, defaultIdleHours, mayDelete as mayDeleteTemporary, profileSections, quotaKey as temporaryQuotaKey, TEMP_AGENT_QUOTA, TEMP_AGENT_SWEEP_MS, temporaryOwner, type TemporaryAgent, type TemporaryCreator } from "./temporary-agents.ts";
 import { createTemporaryAgentRoutes } from "./routes/temporary-agents.ts";
 import { botCreationOffered } from "./bots/bot-creation.ts";
-import { agentPromptWithFiles, createAgentApi, formatEngineCandidates, partitionAgentSettings, plainFieldRefusalReason, refuse as agentRefuse, resolveEngineInstance, SEND_RECEIPT_TTL_MS, type AgentCaller, type SendReceipt } from "./agent-api.ts";
+import { agentPromptWithFiles, createAgentApi, formatEngineCandidates, isRefusal as isAgentRefusal, partitionAgentSettings, plainFieldRefusalReason, refuse as agentRefuse, resolveEngineInstance, routeRefusal as agentRouteRefusal, SEND_RECEIPT_TTL_MS, type AgentCaller, type AgentWorkspace, type CreateAgentInput, type Refusal as AgentRefusal, type SendReceipt } from "./agent-api.ts";
 import { parseHideList, planHiddenAgentThreads, planHiddenBotThreads } from "./threads/agent-threads.ts";
 import { backgroundIdleMs, planBackgroundSweep, RESERVED_RUN_PREFIX } from "./threads/background-sweep.ts";
 import { MemberLiveText } from "./people/member-live-text.ts";
@@ -31587,6 +31587,42 @@ function readerTimeZone(person: string | null): string | undefined {
   return (person && isPrincipalId(person) ? botSettings.person(person).timeZone : null) ?? routineTimeZone() ?? undefined;
 }
 
+/** An engine an agent tool names: the exact id first, else the one engine
+ * whose name matches; several matches refuse with the list. An unknown name
+ * stays as given, for the route to refuse with the valid choices. */
+function agentEngineId(needle: string): string | AgentRefusal {
+  const trimmed = needle.trim();
+  if (registry.get(trimmed)) return trimmed;
+  const candidates = registry.instances().map((entry) => ({
+    instanceId: entry.instanceId,
+    driverKind: entry.driverKind ?? null,
+    displayName: entry.displayName ?? null,
+  }));
+  const resolved = resolveEngineInstance(needle, candidates);
+  if (resolved.ok) return resolved.instanceId;
+  if (resolved.reason === "ambiguous") {
+    return agentRefuse(400, "ambiguous_engine", `Several engines match "${trimmed}": ${formatEngineCandidates(resolved.candidates)}. Pass the exact instance_id from list_agent_models.`);
+  }
+  return trimmed;
+}
+/** create_agent's workspace as the app's New bot sends it (settings.computer). */
+const LASTING_AGENT_COMPUTER: Record<AgentWorkspace, string> = { this_computer: "local", browser: "browser", cloud: "cloud", local_vm: "vm" };
+/** create_agent kind lasting: the model a new bot of this person starts on.
+ * What the call left out comes from the person's own default, as in the
+ * app; a named engine without a model starts on that engine's default. */
+async function lastingAgentSelection(principalId: string, wanted: NonNullable<Extract<CreateAgentInput, { kind: "lasting" }>["selection"]>): Promise<Record<string, unknown> | AgentRefusal> {
+  const instanceId = wanted.instanceId ? agentEngineId(wanted.instanceId) : undefined;
+  if (isAgentRefusal(instanceId)) return instanceId;
+  const base = await memberDefaultSelection(principalId) as { instanceId?: string; model?: string } | null;
+  const engine = instanceId || base?.instanceId || "";
+  let model = wanted.model || (engine === base?.instanceId ? base?.model : undefined);
+  if (!model && engine) model = ((await defaultSelection(null, (await registry.describe()).filter((entry) => entry.instanceId === engine))) as { model?: string } | null)?.model;
+  if (!engine || !model) {
+    return agentRefuse(400, "model_required", "No model could be chosen for this bot. Call list_agent_models (no agent_id) and pass instance_id and model, or leave both out for the person's default.");
+  }
+  return { instanceId: engine, model, ...(wanted.effort ? { effort: wanted.effort } : {}), ...(wanted.auto === true ? { auto: true } : {}) };
+}
+
 const agentApi = createAgentApi({
   guardMode: toolGuardMode(process.env.SAGAX_TOOL_GUARD),
   guard: (caller, policy, target) => guardDecision(policy, { kind: caller.kind === "bot" ? "bot" : "user", id: caller.id },
@@ -31633,19 +31669,53 @@ const agentApi = createAgentApi({
   },
   async createAgent(caller, input) {
     const now = Date.now();
+    if (input.kind === "lasting") {
+      // A bot has its own tool for a lasting bot, with the depth and
+      // own-request rules: create_bot.
+      if (caller.kind !== "person") return agentRefuse(409, "use_create_bot", "A bot creates a lasting bot with create_bot.");
+      // The app's own creation, as the person: their bot, shown in their
+      // app, judged by the route's own checks (permissions, caps, models).
+      const selection = input.selection ? await lastingAgentSelection(caller.id.trim().toLowerCase(), input.selection) : undefined;
+      if (isAgentRefusal(selection)) return selection;
+      const settings = {
+        ...(input.soul ? { soul: input.soul } : {}),
+        ...(input.workspace ? { computer: LASTING_AGENT_COMPUTER[input.workspace] } : {}),
+      };
+      const created = await performAsMember(memberForAgentCaller(caller), { method: "POST", path: "/api/bots", body: {
+        name: input.name,
+        ...(input.description ? { description: input.description } : {}),
+        ...(input.title ? { title: input.title } : {}),
+        ...(input.section ? { section: input.section } : {}),
+        ...(Object.keys(settings).length ? { settings } : {}),
+        ...(selection ? { modelSelection: selection } : {}),
+      } });
+      if (created.status >= 300) return agentRouteRefusal(created, "The bot could not be created.");
+      const made = (created.body ?? {}) as { bot?: { id?: unknown } };
+      const bot = store.bot(String(made.bot?.id ?? ""));
+      if (!bot) return agentRefuse(502, "not_created", "The bot was created but could not be read back. Call list_agents before creating it again.");
+      return agentSummary(bot);
+    }
     const idleHours = input.idleHours ?? TEMP_AGENT_DEFAULT_IDLE_HOURS;
     if (caller.kind === "person") {
       const creator: TemporaryCreator = { kind: "person", principalId: caller.id.trim().toLowerCase() };
       const record: TemporaryAgent = { via: "mcp", createdAt: now, ownerPrincipalId: temporaryOwner(creator, null), createdBy: creator, idleHours, lastActiveAt: now, ...(input.workspace ? { workspace: input.workspace } : {}) };
       if (temporaryActiveCount(store.bots.map((bot) => bot.temporary), temporaryQuotaKey(record)) >= TEMP_AGENT_QUOTA) {
-        return agentRefuse(409, "temporary_quota", `You already have ${TEMP_AGENT_QUOTA} active temporary agents. Delete one with delete_agent first.`, { quota: TEMP_AGENT_QUOTA });
+        return agentRefuse(409, "temporary_quota", `You already have ${TEMP_AGENT_QUOTA} active temporary agents. Delete one with delete_agent first, or create a lasting bot with kind lasting.`, { quota: TEMP_AGENT_QUOTA });
       }
       const temporaryToken = issueTemporaryCreateToken(record, creator.principalId);
       const created = await performAsMember(memberForAgentCaller(caller), { method: "POST", path: "/api/bots", body: { name: input.name, ...(input.description ? { description: input.description } : {}), temporaryToken } });
       temporaryCreateTokens.delete(temporaryToken);
-      const body = (created.body ?? {}) as { bot?: { id?: unknown }; id?: unknown; error?: unknown; message?: unknown };
+      const body = (created.body ?? {}) as { bot?: { id?: unknown }; id?: unknown };
+      if (created.status >= 300) {
+        // The one-use pass is checked first by the route: a refusal of it
+        // means it expired or was spent before the route ran.
+        if (created.status === 400 && (created.body as { error?: unknown } | null)?.error === "temporaryToken is not valid") {
+          return agentRefuse(503, "create_pass_expired", "The server took too long to use this creation's one-use pass, so nothing was created. Call create_agent again with the same arguments.", { retryable: true });
+        }
+        return agentRouteRefusal(created, "The agent could not be created.");
+      }
       const id = String(body.bot?.id ?? body.id ?? "");
-      if (created.status >= 300 || !store.bot(id)) return agentRefuse(created.status >= 400 ? created.status : 502, "not_created", String(body.message ?? body.error ?? "The agent could not be created."));
+      if (!store.bot(id)) return agentRefuse(502, "not_created", "The agent was created but could not be read back. Call list_agents before creating it again.");
       return agentSummary(store.bot(id)!);
     }
     const chief = agentApiCallerBot(caller);
@@ -31730,15 +31800,14 @@ const agentApi = createAgentApi({
   // Fleet writes (#1944): person's AI client reuses the same PATCH routes as
   // the Edit bot window and Automations editor (performAsMember).
   async listModels(caller, agentId) {
-    const bot = store.bot(agentId);
-    if (!bot) return agentRefuse(404, "unknown_agent", "No such agent.");
+    // agentId null: what the person may pick for a new bot (no bot yet).
+    const bot = agentId === null ? null : store.bot(agentId);
+    if (agentId !== null && !bot) return agentRefuse(404, "unknown_agent", "No such agent.");
     if (caller.kind !== "person") {
       return agentRefuse(403, "forbidden_caller", "list_agent_models is for a person's AI client. A bot uses list_team_setup.");
     }
     const listed = await performAsMember(memberForAgentCaller(caller), { method: "GET", path: "/api/instances" });
-    if (listed.status < 200 || listed.status >= 300) {
-      return agentRefuse(listed.status >= 400 ? listed.status : 502, "not_listed", String((listed.body as { error?: unknown })?.error ?? "The model list could not be read."));
-    }
+    if (listed.status < 200 || listed.status >= 300) return agentRouteRefusal(listed, "The model list could not be read.");
     const instances = ((listed.body as { instances?: Array<Record<string, unknown>> })?.instances ?? []);
     const models = instances.flatMap((instance) => {
       const instanceId = String(instance.instanceId ?? "").trim();
@@ -31747,7 +31816,8 @@ const agentApi = createAgentApi({
       const modelBag = instance.models && typeof instance.models === "object" ? instance.models as { options?: Array<{ id?: string; label?: string; keyPaid?: boolean }>; default?: string } : null;
       // #3085: pi offers the providers this bot's payer holds a key for (its
       // owner when the owner pays, else the caller), never another one
-      const piPaid = instance.driverKind === "piAgent" ? botPiKeyOptions(bot, instanceId, caller.id) : null;
+      // the person's own list (GET /api/instances) already fits a new bot
+      const piPaid = bot && instance.driverKind === "piAgent" ? botPiKeyOptions(bot, instanceId, caller.id) : null;
       const rows = piPaid ? [...(modelBag?.options ?? []).filter((option) => !option?.keyPaid && !piModelKeyProvider(String(option?.id ?? ""))), ...piPaid] : modelBag?.options;
       const options = Array.isArray(rows)
         ? rows!.filter((option) => typeof option?.id === "string" && option.id.trim()).map((option) => ({
@@ -31765,7 +31835,7 @@ const agentApi = createAgentApi({
         auto: true,
       }];
     });
-    return { models, current: agentModelSummary(bot) };
+    return { models, current: bot ? agentModelSummary(bot) : null };
   },
   async updateModel(caller, agentId, selection) {
     const bot = store.bot(agentId);
@@ -31777,19 +31847,11 @@ const agentApi = createAgentApi({
     let instanceId = selection.instanceId?.trim() || current?.instanceId || "";
     let model = selection.model?.trim() || current?.model || "";
     // Exact id first; unique fuzzy match; several matches refuse with the list.
-    if (selection.instanceId && !registry.get(instanceId)) {
-      const candidates = registry.instances().map((entry) => ({
-        instanceId: entry.instanceId,
-        driverKind: entry.driverKind ?? null,
-        displayName: entry.displayName ?? null,
-      }));
-      const resolved = resolveEngineInstance(selection.instanceId, candidates);
-      if (resolved.ok) {
-        instanceId = resolved.instanceId;
-      } else if (resolved.reason === "ambiguous") {
-        return agentRefuse(400, "ambiguous_engine", `Several engines match "${selection.instanceId.trim()}": ${formatEngineCandidates(resolved.candidates)}. Pass the exact instance_id from list_agent_models.`);
-      }
-      // unknown: keep the needle; PATCH / model check names valid choices below
+    if (selection.instanceId) {
+      // unknown: the needle stays; PATCH / model check names valid choices below
+      const resolved = agentEngineId(selection.instanceId);
+      if (isAgentRefusal(resolved)) return resolved;
+      instanceId = resolved;
     }
     if (!instanceId || (!model && selection.auto !== true)) {
       const choices = await (async () => {

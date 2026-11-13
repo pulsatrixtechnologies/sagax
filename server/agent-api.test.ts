@@ -9,7 +9,8 @@ import {
   AGENT_SETTINGS_FIELDS, AGENT_TOOL_NAMES, AGENT_TOOL_POLICY, agentPromptWithFiles, AWAIT_RECOMMENDED_WAIT_MS, AWAIT_REVIEW_WAIT_MS, AWAIT_TIMEOUT_MS_DEFAULT, AWAIT_TIMEOUT_MS_MAX, COLD_PAGE_SIZE, createAgentApi, ENTRY_TEXT_MAX, decodeCursor, encodeCursor, FIND_LIMIT_MAX,
   HANDLE_TTL_MS, matchScore, SEND_FILES_MAX, SEND_RECEIPT_TTL_MS, signHandle, signTurnHandle, turnLabel, verifyHandle,
   formatEngineCandidates, partitionAgentSettings, plainFieldRefusalReason, resolveEngineInstance,
-  type AgentApiDeps, type AgentCaller, type AgentModelChoice, type AgentModelSummary, type AgentRoutinePatch, type AgentScope, type AgentSettingsResult, type AgentSummary, type AuditEntry, type FileInput, type SendReceipt, type StoredMessage, type TurnState,
+  routeRefusal,
+  type AgentApiDeps, type AgentCaller, type CreateAgentInput, type AgentModelChoice, type AgentModelSummary, type AgentRoutinePatch, type AgentScope, type AgentSettingsResult, type AgentSummary, type AuditEntry, type FileInput, type SendReceipt, type StoredMessage, type TurnState,
 } from "./agent-api.ts";
 import { PRIORITY_DOWNGRADED_NOTE, resetPriorityWakeForTests, type PriorityDelivery } from "./proactive/priority-wake.ts";
 import { failedTurnTool } from "../shared/failed-turn.ts";
@@ -98,10 +99,18 @@ function world(options: {
   const owners = new Map<string, string>();
   const archived: string[] = [];
   const created: Array<{ name: string; idleHours?: number; workspace?: string }> = [];
+  const lasting: Array<Extract<CreateAgentInput, { kind: "lasting" }>> = [];
   const deps: AgentApiDeps = {
     agents: (caller) => agents.filter((agent) => !archived.includes(agent.id) && (options.reachable ? options.reachable(caller, agent) : true)),
     async createAgent(caller, input) {
       const owner = { principal_id: key(caller), name: "Owner" };
+      if (input.kind === "lasting") {
+        const agent = { id: `bot-${++ids}`, name: input.name, description: input.description, status: "idle" as const, owner };
+        agents.push(agent);
+        owners.set(agent.id, key(caller));
+        lasting.push(input);
+        return agent;
+      }
       const agent = { id: `bot-${++ids}`, name: input.name, description: input.description, status: "idle" as const, temporary: true, owner };
       agents.push(agent);
       owners.set(agent.id, key(caller));
@@ -125,6 +134,7 @@ function world(options: {
       };
     },
     async listModels(_caller, agentId) {
+      if (agentId === null) return { models: modelCatalog, current: null };
       const agent = agents.find((candidate) => candidate.id === agentId);
       if (!agent) return { status: 404, code: "unknown_agent", message: "No such agent." };
       return { models: modelCatalog, current: agent.model ?? null };
@@ -327,7 +337,7 @@ function world(options: {
     },
   };
   return {
-    routinePatches, deps, api: createAgentApi(deps), agents, owners, archived, created, threads, messages, state, audits, notified, interrupted, turnStateCalls, posted,
+    routinePatches, deps, api: createAgentApi(deps), agents, owners, archived, created, lasting, threads, messages, state, audits, notified, interrupted, turnStateCalls, posted,
     heldPermissions, runtimeByBot, primaryByOwner, settingsByBot,
     add, advance: (ms: number) => { clock += ms; }, settle: async () => { for (let i = 0; i < 50; i++) await deps.sleep!(400); },
   };
@@ -373,7 +383,7 @@ describe("agent API policy", () => {
 
   it("rate-limits per caller and tool", async () => {
     const w = world();
-    const caller = person("pr_1");
+    const caller = bot("bot-chief");
     for (let i = 0; i < AGENT_TOOL_POLICY.create_agent.rate; i++) {
       expect((await w.api.call(caller, "create_agent", { name: `Bot ${i}` })).status).toBe(200);
     }
@@ -381,7 +391,17 @@ describe("agent API policy", () => {
     expect(over.status).toBe(429);
     expect(over.body.retry_after_ms).toBeGreaterThan(0);
     // another caller is not affected
-    expect((await w.api.call(person("pr_2"), "create_agent", { name: "Other" })).status).toBe(200);
+    expect((await w.api.call(bot("bot-other"), "create_agent", { name: "Other" })).status).toBe(200);
+  });
+
+  it("never rate-limits a person's create_agent tighter than the app (either kind)", async () => {
+    const w = world();
+    const caller = person("pr_1");
+    for (let i = 0; i <= AGENT_TOOL_POLICY.create_agent.rate; i++) {
+      expect((await w.api.call(caller, "create_agent", { name: `Temp ${i}` })).status).toBe(200);
+    }
+    const sixth = await w.api.call(caller, "create_agent", { kind: "lasting", name: "Lasting after many" });
+    expect(sixth.status).toBe(200);
   });
 
   it("audits every call without the prompt or the reply", async () => {
@@ -457,6 +477,117 @@ describe("list_agents / find_agents", () => {
     const got = await api.call(person("pr_1"), "get_agent", { agent_id: "bot-a" });
     expect(profileCalls).toBe(1);
     expect(got.body.owner).toEqual(fromList?.owner);
+  });
+});
+
+describe("create_agent kind lasting", () => {
+  it("makes the person's own bot with the app's creation fields, not a temporary agent", async () => {
+    const w = world();
+    const r = await w.api.call(person("pr_1"), "create_agent", {
+      kind: "lasting", name: "Ledger", description: "Keeps the books", title: "Bookkeeper", soul: "Be exact.",
+      instance_id: "claude-work", model: "claude-opus", effort: "high", workspace: "cloud", section: "Finance",
+    });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ kind: "lasting", greeted: true, agent: { name: "Ledger", description: "Keeps the books" } });
+    expect((r.body.agent as Record<string, unknown>).temporary).toBe(false);
+    expect(String(r.body.note)).toContain("shown in their Sagax app");
+    // delete_agent archives temporary agents only: the note names what archives a lasting bot
+    expect(String(r.body.note)).toContain("update_agent_settings hidden true");
+    expect(String(r.body.note)).not.toContain("delete_agent");
+    expect(String(r.body.note)).not.toContain("temporary");
+    expect(w.lasting.at(-1)).toEqual({
+      kind: "lasting", name: "Ledger", description: "Keeps the books", title: "Bookkeeper", soul: "Be exact.",
+      workspace: "cloud", section: "Finance", selection: { instanceId: "claude-work", model: "claude-opus", effort: "high" },
+    });
+    expect(w.created).toHaveLength(0);
+    expect(w.audits.at(-1)!.entry).toMatchObject({ tool: "create_agent", outcome: "ok", detail: { kind: "lasting", temporary: false } });
+  });
+
+  it("leaves the model out when the call names none (the person's own default, as in the app)", async () => {
+    const w = world();
+    expect((await w.api.call(person("pr_1"), "create_agent", { kind: "lasting", name: "Plain" })).status).toBe(200);
+    expect(w.lasting.at(-1)).toEqual({ kind: "lasting", name: "Plain", description: "" });
+  });
+
+  it("does not refuse a name already in use: it names the others in same_name", async () => {
+    const w = world();
+    const r = await w.api.call(person("pr_1"), "create_agent", { kind: "lasting", name: "alpha" });
+    expect(r.status).toBe(200);
+    expect(r.body.same_name).toEqual([{ id: "bot-a", name: "Alpha" }]);
+    // the temporary kind keeps its refusal
+    expect((await w.api.call(person("pr_1"), "create_agent", { name: "alpha" })).body.code).toBe("agent_exists");
+  });
+
+  it("keeps each kind's own fields apart, with a reason the assistant can act on", async () => {
+    const w = world();
+    const idle = await w.api.call(person("pr_1"), "create_agent", { kind: "lasting", name: "X", idle_hours: 5 });
+    expect(idle.status).toBe(400);
+    expect(String(idle.body.message)).toContain("no idle expiry");
+    const soul = await w.api.call(person("pr_1"), "create_agent", { name: "Y", soul: "Be kind." });
+    expect(soul.status).toBe(400);
+    expect(String(soul.body.message)).toContain("kind lasting");
+    const kind = await w.api.call(person("pr_1"), "create_agent", { kind: "forever", name: "Z" });
+    expect(kind.status).toBe(400);
+    expect(String(kind.body.message)).toContain("lasting");
+    expect((await w.api.call(person("pr_1"), "create_agent", { kind: "lasting", name: "W", auto: "yes" })).status).toBe(400);
+    expect(w.lasting).toHaveLength(0);
+  });
+
+  it("answers a temporary creation without kind exactly as before", async () => {
+    const w = world();
+    const r = await w.api.call(person("pr_1"), "create_agent", { name: "Scratch", idle_hours: 6 });
+    expect(Object.keys(r.body).sort()).toEqual(["agent", "greeted", "note"]);
+    expect(r.body.note).toBe("The new agent is temporary: it is archived after its idle expiry unless a person pins it, and delete_agent archives it now. It greets the user itself. Do not send it a first prompt unless asked, and never quote its id to the user.");
+    const explicit = await w.api.call(person("pr_1"), "create_agent", { kind: "temporary", name: "Scratch two" });
+    expect(Object.keys(explicit.body).sort()).toEqual(["agent", "greeted", "note"]);
+  });
+
+  it("passes the creation route's refusal through with its code, sentence and permission", async () => {
+    const w = world();
+    w.deps.createAgent = async () => routeRefusal({ status: 403, body: { error: "forbidden", permission: "bots.create", message: "Your profile does not include bot creation. Ask an admin to add it in Perspicax." } }, "The bot could not be created.");
+    const api = createAgentApi(w.deps);
+    const r = await api.call(person("pr_1"), "create_agent", { kind: "lasting", name: "Nope" });
+    expect(r.status).toBe(403);
+    expect(r.body).toMatchObject({ code: "forbidden_permission", permission: "bots.create" });
+    expect(String(r.body.message)).toContain("bot creation");
+  });
+});
+
+describe("list_agent_models before a bot exists", () => {
+  it("lists what the person may pick for a new bot without agent_id", async () => {
+    const w = world();
+    const r = await w.api.call(person("pr_1"), "list_agent_models", {});
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ agent_id: null, current: null });
+    expect((r.body.models as AgentModelChoice[]).map((model) => model.instance_id)).toEqual(["claude-work", "claude-home", "grok"]);
+  });
+});
+
+describe("refusals always say why", () => {
+  it("never answers an empty message, whatever refused", async () => {
+    const w = world();
+    w.deps.createAgent = async () => ({ status: 500, code: "not_created", message: "" });
+    const api = createAgentApi(w.deps);
+    const r = await api.call(person("pr_1"), "create_agent", { name: "Empty" });
+    expect(r.status).toBe(500);
+    expect(String(r.body.message).trim()).not.toBe("");
+    expect(String(r.body.error).trim()).not.toBe("");
+    expect(String(r.body.message)).toContain("not_created");
+  });
+
+  it("reads a route's sentence from message, else error, else the fallback, and keeps its own code", () => {
+    // a thrown route error with no text answers {error: ""}
+    const empty = routeRefusal({ status: 500, body: { error: "" } }, "The agent could not be created.");
+    expect(empty).toMatchObject({ status: 500, code: "server_error", message: "The agent could not be created." });
+    const plain = routeRefusal({ status: 400, body: { error: "section must be at most 60 characters" } }, "fallback");
+    expect(plain).toMatchObject({ status: 400, code: "refused", message: "section must be at most 60 characters" });
+    const readOnly = routeRefusal({ status: 403, body: { error: "org_bots_read_only", message: "Your administrator lets you use shared bots only." } }, "fallback");
+    expect(readOnly).toMatchObject({ code: "org_bots_read_only", message: "Your administrator lets you use shared bots only." });
+    const coded = routeRefusal({ status: 403, body: { error: "Custom approval requires the desktop permission flow.", code: "approval_desktop_required" } }, "fallback");
+    expect(coded).toMatchObject({ code: "approval_desktop_required", message: "Custom approval requires the desktop permission flow." });
+    const field = routeRefusal({ status: 403, body: { error: "forbidden", permission: "folders.botWorkingFolder", message: "Your profile does not include it.", field: "cwd" } }, "fallback");
+    expect(field).toMatchObject({ code: "forbidden_permission", extra: { permission: "folders.botWorkingFolder", field: "cwd" } });
+    expect(routeRefusal({ status: 201, body: {} }, "fallback").status).toBe(502);
   });
 });
 

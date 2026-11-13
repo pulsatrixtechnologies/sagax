@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { PersonSignalGate } from "../../shared/signal-levels.ts";
+import { NOTIFY_KIND_INTERRUPTS } from "../notify.ts";
 import { pushesForFrame, type FramePushDeps } from "./frames.ts";
 
 const deps = (patch: Partial<FramePushDeps> = {}): FramePushDeps => ({
@@ -28,13 +29,35 @@ describe("frames to pushes", () => {
     expect(pushesForFrame(frame, deps({ muted: () => true }))).toEqual([]);
   });
 
-  it("maps approvals, questions, takeovers, turn failures, incidents and routines; ignores the rest", () => {
-    const kinds = [
-      "approval", "question", "takeover", "turn-failed", "incident",
-      "routine-failed", "routine-deferred", "spend", "admin-action",
-    ].map((kind) =>
-      pushesForFrame({ kind: "notify", notification: { kind, botId: "b1", threadId: "t", title: "x", body: "y" } }, deps())[0]?.kind ?? null);
-    expect(kinds).toEqual(["approval", "approval", "approval", "message", "message", "routine", "routine", null, null]);
+  it("#3719: the phone follows the one rule of server/notify.ts: every ask pushes, no quiet kind ever does", () => {
+    const pushKind = (kind: string) =>
+      pushesForFrame({ kind: "notify", notification: { kind, botId: "b1", threadId: "t", title: "x", body: "y" } }, deps())[0]?.kind ?? null;
+    for (const [kind, rule] of Object.entries(NOTIFY_KIND_INTERRUPTS)) {
+      if (rule === "quiet") expect([kind, pushKind(kind)]).toEqual([kind, null]);
+      else expect([kind, pushKind(kind)]).not.toEqual([kind, null]);
+    }
+    // a bot blocked on the person's hands wakes at once, like an approval
+    expect(["approval", "question", "takeover", "needs-you", "sign-in"].map(pushKind)).toEqual(["approval", "approval", "approval", "approval", "approval"]);
+    expect(["message", "done", "turn-failed", "proposal", "wait", "admin-action", "report", "page-comment"].map(pushKind))
+      .toEqual(["message", "message", "message", "message", "message", "message", "message", "message"]);
+    // a kind the server does not know never reaches a phone
+    expect(pushKind("something-new")).toBeNull();
+  });
+
+  it("#3719: a sign-in request reaches the phone without Allow or Deny", () => {
+    const push = pushesForFrame({
+      kind: "notify",
+      notification: { kind: "sign-in", botId: "b1", botName: "Scout", threadId: "t", title: "Scout needs you to sign in to Work", body: "" },
+    }, deps())[0];
+    expect(push).toMatchObject({ kind: "approval", personId: "pr_owner", botId: "b1", title: "Scout needs you to sign in to Work" });
+    expect(push?.prompt).toBeUndefined();
+    expect(push?.requestId).toBeUndefined();
+  });
+
+  it("#3719: a frame the rule made silent never reaches a phone, whatever its kind", () => {
+    for (const kind of Object.keys(NOTIFY_KIND_INTERRUPTS)) {
+      expect(pushesForFrame({ kind: "notify", notification: { kind, botId: "b1", threadId: "t", title: "x", body: "y", notify: false } }, deps())).toEqual([]);
+    }
   });
 
   it("a proactive report that needs the person wakes the phone at once, with Approve and Deny (#2697)", () => {

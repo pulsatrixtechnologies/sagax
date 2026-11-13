@@ -12,7 +12,7 @@ function fanoutSsePayload(payload: Record<string, unknown>, options: { adminOnly
   payload = ruleNotifyFrame(payload, options);
 
   host.observeAchievementFrame(payload);
-  host.observePushFrame(payload);
+  host.observePushFrame(payload, options);
   host.observeLiveActivityFrame(payload);
   const kind = String(payload.kind ?? "");
   // Membership may change through fleet/CLI config writes. Recheck on durable

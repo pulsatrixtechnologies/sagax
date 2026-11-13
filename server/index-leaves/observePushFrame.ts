@@ -3,7 +3,7 @@
 export type Host = Record<string, any>;
 
 export function createObservePushFrame(getHost: () => Host): any {
-function observePushFrame(payload: Record<string, unknown>) {
+function observePushFrame(payload: Record<string, unknown>, options: { adminOnly?: boolean } = {}) {
   const host = getHost();
   const { effectiveBotOwner, privateThreadOwner, store } = host;
   const kind = payload.kind;
@@ -17,6 +17,8 @@ function observePushFrame(payload: Record<string, unknown>) {
   try {
     const messages = host.pushesForFrame(payload, {
       notificationPeople: (note) => {
+        // #3719: a frame for the admins reaches the admins' phones only, never the bot's owner
+        if (options.adminOnly) return host.moderationAdminAudience();
         if (host.IDENTITY.kind !== "perspicax") return [host.localPrincipalId()];
         const bot = note.botId ? store.bot(note.botId) : note.threadId ? store.botByThread(note.threadId) : undefined;
         if (!bot) return [];
